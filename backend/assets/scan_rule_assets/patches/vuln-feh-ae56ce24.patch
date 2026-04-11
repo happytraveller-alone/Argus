@@ -1,0 +1,170 @@
+From ae56ce24b10767800b1715e7e68b41c7d3571b4c Mon Sep 17 00:00:00 2001
+From: Daniel Friesel <derf@derf.homelinux.org>
+Date: Fri, 25 Jun 2010 13:18:05 +0200
+Subject: [PATCH] Remove --wget-timestamp option (contained a remote code
+ execution hole)
+
+---
+ ChangeLog     |  4 ++++
+ man/feh.1     |  4 ----
+ src/help.raw  |  2 --
+ src/imlib.c   | 31 +++++--------------------------
+ src/options.c |  6 +-----
+ src/options.h |  1 -
+ 6 files changed, 10 insertions(+), 38 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index ca1a182..3e21695 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -11,6 +11,10 @@ git HEAD
+     * Saving the filelist from thumbnail mode caused undefined behaviour due
+       to handling of uninitialised memory. Since I consider this a rarely
+       useful action, the feature has been disabled for thumbnail mode.
++    * Remove -G/--wget-timestamp option. It was probably not working
++      correctly, plus it contained a remote code execution hole when used with
++      malicious URLs containing shell metacharacters (but only if those URLs
++      led to a valid file)
+ 
+ Thu Jun 10 12:12:04 CEST 2010
+ 
+diff --git a/man/feh.1 b/man/feh.1
+index 9bba499..6ff55bd 100644
+--- a/man/feh.1
++++ b/man/feh.1
+@@ -351,10 +351,6 @@ successfully load them.
+ output useful information, progress bars, etc.
+ .It Cm -v , --version
+ output version information and exit.
+-.It Cm -G , --wget-timestamp
+-Don't add a timestamp
+-.Pq Qq ?1234
+-to URLs when (re)loading them.
+ .It Cm --zoom Ar percent
+ Zoom images by
+ .Ar percent
+diff --git a/src/help.raw b/src/help.raw
+index 2cb4517..aab873b 100644
+--- a/src/help.raw
++++ b/src/help.raw
+@@ -40,8 +40,6 @@ OPTIONS
+  -k, --keep-http           Keep local copies when viewing HTTP/FTP files
+      --caption-path PATH   Path to caption directory, enables caption display
+  -j, --output-dir          With -k: Output directory for saved files
+- -G, --wget-timestamp      Try to only reload a file if it changed. Also,
+-                           don't add \"?1234...\" timestamp to file URL
+  -l, --list                list mode: ls-style output with image information
+  -L, --customlist FORMAT   list mode with custom output, see FORMAT SPECIFIERS
+  -U, --loadable            List all loadable files. No image display
+diff --git a/src/imlib.c b/src/imlib.c
+index eedab6a..23802db 100644
+--- a/src/imlib.c
++++ b/src/imlib.c
+@@ -231,7 +231,6 @@ int feh_load_image(Imlib_Image * im, feh_file * file)
+ char *feh_http_load_image(char *url)
+ {
+ 	char *tmpname;
+-	char *tmpname_timestamper = NULL;
+ 	char *basename;
+ 	char *newurl = NULL;
+ 	char randnum[20];
+@@ -249,19 +248,9 @@ char *feh_http_load_image(char *url)
+ 	basename = strrchr(url, '/') + 1;
+ 	tmpname = feh_unique_filename(path, basename);
+ 
+-	if (opt.wget_timestamp) {
+-		char cppid[10];
+-		pid_t ppid;
+-
+-		ppid = getpid();
+-		snprintf(cppid, sizeof(cppid), "%06ld", (long) ppid);
+-		tmpname_timestamper = estrjoin("", "/tmp/feh_", cppid, "_", basename, NULL);
+-		newurl = estrdup(url);
+-	} else {
+-		rnum = rand();
+-		snprintf(randnum, sizeof(randnum), "%d", rnum);
+-		newurl = estrjoin("?", url, randnum, NULL);
+-	}
++	rnum = rand();
++	snprintf(randnum, sizeof(randnum), "%d", rnum);
++	newurl = estrjoin("?", url, randnum, NULL);
+ 	D(3, ("newurl: %s\n", newurl));
+ 
+ 	if (opt.builtin_http) {
+@@ -474,28 +463,18 @@ char *feh_http_load_image(char *url)
+ 			if (!opt.verbose)
+ 				quiet = estrdup("-q");
+ 
+-			if (opt.wget_timestamp) {
+-				execlp("wget", "wget", "-N", "-O", tmpname_timestamper, newurl, quiet, (char *) NULL);
+-			} else {
+-				execlp("wget", "wget", "--cache=off", "-O", tmpname, newurl, quiet, NULL);
+-			}
++			execlp("wget", "wget", "--cache=off", "-O", tmpname, newurl, quiet, NULL);
+ 			eprintf("url: exec failed: wget:");
+ 		} else {
+ 			waitpid(pid, &status, 0);
+ 
+ 			if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+ 				weprintf("url: wget failed to load URL %s\n", url);
+-				unlink(opt.wget_timestamp ? tmpname_timestamper : tmpname);
++				unlink(tmpname);
+ 				free(newurl);
+ 				free(tmpname);
+ 				return(NULL);
+ 			}
+-			if (opt.wget_timestamp) {
+-				char cmd[2048];
+-
+-				snprintf(cmd, sizeof(cmd), "/bin/cp %s %s", tmpname_timestamper, tmpname);
+-				system(cmd);
+-			}
+ 			free(newurl);
+ 		}
+ 	}
+diff --git a/src/options.c b/src/options.c
+index e8c1baf..5962ca1 100644
+--- a/src/options.c
++++ b/src/options.c
+@@ -317,7 +317,7 @@ char *feh_string_normalize(char *str)
+ static void feh_parse_option_array(int argc, char **argv)
+ {
+ 	static char stropts[] =
+-	    "a:A:b:B:cC:dD:e:E:f:Fg:GhH:iIj:klL:mM:nNo:O:pqQrR:sS:tT:uUvVwW:xXy:zZ0:1:2:4:5:8:9:.@:^:~:):|:_:+:";
++	    "a:A:b:B:cC:dD:e:E:f:Fg:hH:iIj:klL:mM:nNo:O:pqQrR:sS:tT:uUvVwW:xXy:zZ0:1:2:4:5:8:9:.@:^:~:):|:_:+:";
+ 	static struct option lopts[] = {
+ 		/* actions */
+ 		{"help", 0, 0, 'h'},	/* okay */
+@@ -346,7 +346,6 @@ static void feh_parse_option_array(int argc, char **argv)
+ 		{"preload", 0, 0, 'p'},
+ 		{"reverse", 0, 0, 'n'},
+ 		{"thumbnails", 0, 0, 't'},
+-		{"wget-timestamp", 0, 0, 'G'},
+ 		{"builtin", 0, 0, 'Q'},
+ 		{"scale-down", 0, 0, '.'},	/* okay */
+ 		{"no-jump-on-resort", 0, 0, 220},
+@@ -462,9 +461,6 @@ static void feh_parse_option_array(int argc, char **argv)
+ 			opt.list = 1;
+ 			opt.display = 0;
+ 			break;
+-		case 'G':
+-			opt.wget_timestamp = 1;
+-			break;
+ 		case 'Q':
+ 			opt.builtin_http = 1;
+ 			break;
+diff --git a/src/options.h b/src/options.h
+index 4d15bac..be20687 100644
+--- a/src/options.h
++++ b/src/options.h
+@@ -61,7 +61,6 @@ struct __fehoptions {
+ 	unsigned char no_menus;
+ 	unsigned char scale_down;
+ 	unsigned char builtin_http;
+-	unsigned char wget_timestamp;
+ 	unsigned char bgmode;
+ 	unsigned char xinerama;
+ 	unsigned char screen_clip;
+-- 
+2.34.1
+

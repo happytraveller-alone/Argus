@@ -1,0 +1,67 @@
+rules:
+- id: require-request_1
+  languages:
+  - javascript
+  - typescript
+  message: If an attacker controls the x in require(x) then they can cause code to
+    load that was not intended to run on the server.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-706: Use of Incorrectly-Resolved Name or Reference'
+    impact: MEDIUM
+    interfile: true
+    likelihood: MEDIUM
+    owasp:
+    - A01:2021 - Broken Access Control
+    references:
+    - https://github.com/google/node-sec-roadmap/blob/master/chapter-2/dynamism.md#dynamism-when-you-need-it
+    source-rule-url: https://nodesecroadmap.fyi/chapter-1/threat-UIR.html
+    subcategory:
+    - vuln
+    technology:
+    - express
+  mode: taint
+  options:
+    interfile: true
+  pattern-sinks:
+  - patterns:
+    - pattern: require($SINK)
+    - focus-metavariable: $SINK
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
+      - patterns:
+        - pattern-either:
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: ^(get|post|put|head|delete|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+  - patterns:
+    - pattern-either:
+      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
+
+          {...}
+
+          '
+      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
+
+          '
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+  severity: ERROR

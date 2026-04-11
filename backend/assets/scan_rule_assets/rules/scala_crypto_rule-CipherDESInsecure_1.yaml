@@ -1,0 +1,23 @@
+rules:
+- id: scala_crypto_rule-CipherDESInsecure_1
+  languages:
+  - scala
+  message: 'DES is considered strong ciphers for modern applications. Currently, NIST
+    recommends the usage
+
+    of AES block ciphers instead of DES.
+
+    '
+  metadata:
+    category: security
+    cwe: CWE-326
+    shortDescription: Inadequate Encryption Strength
+    technology:
+    - scala
+    security-severity: Medium
+  patterns:
+  - pattern-inside: javax.crypto.Cipher.getInstance("$ALG")
+  - metavariable-regex:
+      metavariable: $ALG
+      regex: ^(DES)/.*
+  severity: WARNING

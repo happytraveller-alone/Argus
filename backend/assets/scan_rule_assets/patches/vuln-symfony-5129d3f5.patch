@@ -1,0 +1,47 @@
+From 5129d3f5d897ce876bbb22b617c1513afbc686ab Mon Sep 17 00:00:00 2001
+From: Fabien Potencier <fabien.potencier@gmail.com>
+Date: Tue, 6 Aug 2013 07:58:11 +0200
+Subject: [PATCH] [Validator] fixed metadata serialization
+
+---
+ .../Component/Validator/Mapping/MemberMetadata.php    |  1 +
+ .../Validator/Tests/Mapping/MemberMetadataTest.php    | 11 ++++++++++-
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/Symfony/Component/Validator/Mapping/MemberMetadata.php b/src/Symfony/Component/Validator/Mapping/MemberMetadata.php
+index d6e6a9bbd3..7bf12f627c 100644
+--- a/src/Symfony/Component/Validator/Mapping/MemberMetadata.php
++++ b/src/Symfony/Component/Validator/Mapping/MemberMetadata.php
+@@ -76,6 +76,7 @@ abstract class MemberMetadata extends ElementMetadata
+             'property',
+             'cascaded',
+             'collectionCascaded',
++            'collectionCascadedDeeply',
+         ));
+     }
+ 
+diff --git a/src/Symfony/Component/Validator/Tests/Mapping/MemberMetadataTest.php b/src/Symfony/Component/Validator/Tests/Mapping/MemberMetadataTest.php
+index 2606c0d663..23f5c96ff7 100644
+--- a/src/Symfony/Component/Validator/Tests/Mapping/MemberMetadataTest.php
++++ b/src/Symfony/Component/Validator/Tests/Mapping/MemberMetadataTest.php
+@@ -72,7 +72,16 @@ class MemberMetadataTest extends \PHPUnit_Framework_TestCase
+ 
+     public function testSerializeCollectionCascaded()
+     {
+-        $this->metadata->addConstraint(new Valid(array('traverse' => true)));
++        $this->metadata->addConstraint(new Valid(array('traverse' => true, 'deep' => false)));
++
++        $metadata = unserialize(serialize($this->metadata));
++
++        $this->assertEquals($this->metadata, $metadata);
++    }
++
++    public function testSerializeCollectionCascadedDeeply()
++    {
++        $this->metadata->addConstraint(new Valid(array('traverse' => true, 'deep' => true)));
+ 
+         $metadata = unserialize(serialize($this->metadata));
+ 
+-- 
+2.34.1
+

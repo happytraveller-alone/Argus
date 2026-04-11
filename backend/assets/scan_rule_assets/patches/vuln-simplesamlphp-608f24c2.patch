@@ -1,0 +1,28 @@
+From 608f24c2d5afd70c2af050785d2b12f878b33c68 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jaime=20Pe=CC=81rez=20Crespo?= <jaime.perez@uninett.no>
+Date: Wed, 28 Jun 2017 16:13:10 +0200
+Subject: [PATCH] Fix an issue with time-limited tokens.
+
+The offset is prepended in clear to the token itself, so that we can subtract it from the current time and get the original time slot. However, the time slot, salt and verification data are authenticated by means of the hash function, but not the offset. This means we can take an expired token and make it valid by simply increasing the prepended offset as much as needed to hit the time slot it was generated on. This is an important security issue as the tokens are therefore not bound to the current time at all.
+
+In order to fix it, the offset itself is added to the hash computation, so that a change in the offset produces a new hash that won't match.
+---
+ lib/SimpleSAML/Auth/TimeLimitedToken.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/SimpleSAML/Auth/TimeLimitedToken.php b/lib/SimpleSAML/Auth/TimeLimitedToken.php
+index b5f3c60e6..74e9cf44d 100644
+--- a/lib/SimpleSAML/Auth/TimeLimitedToken.php
++++ b/lib/SimpleSAML/Auth/TimeLimitedToken.php
+@@ -71,7 +71,7 @@ class TimeLimitedToken
+             $time = time();
+         }
+         // a secret salt that should be randomly generated for each installation
+-        return sha1(floor(($time - $offset) / ($this->lifetime + $this->skew)).':'.$this->secretSalt);
++        return sha1($offset.':'.floor(($time - $offset) / ($this->lifetime + $this->skew)).':'.$this->secretSalt);
+     }
+ 
+ 
+-- 
+2.34.1
+

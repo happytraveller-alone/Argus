@@ -1,0 +1,68 @@
+rules:
+- id: pg-sqli_1
+  languages:
+  - javascript
+  - typescript
+  message: 'Detected SQL statement that is tainted by `$EVENT` object. This could
+    lead to SQL injection if the variable is user-controlled and not properly sanitized.
+    In order to prevent SQL injection, use parameterized queries or prepared statements
+    instead. You can use parameterized statements like so: `connection.query(''SELECT
+    $1 from table'', [userinput])`'
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+      (''SQL Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://node-postgres.com/features/queries
+    subcategory:
+    - vuln
+    technology:
+    - aws-lambda
+    - postgres
+    - pg
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $QUERY
+    - pattern-either:
+      - pattern: $DB.query($QUERY, ...)
+    - pattern-either:
+      - pattern-inside: 'require(''pg'')
+
+          ...
+
+          '
+      - pattern-inside: 'import ''pg''
+
+          ...
+
+          '
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: "exports.handler = function ($EVENT, ...) {\n  ...\n}\n"
+      - pattern-inside: 'function $FUNC ($EVENT, ...) {...}
+
+          ...
+
+          exports.handler = $FUNC
+
+          '
+      - pattern-inside: '$FUNC = function ($EVENT, ...) {...}
+
+          ...
+
+          exports.handler = $FUNC
+
+          '
+    - pattern: $EVENT
+  severity: WARNING

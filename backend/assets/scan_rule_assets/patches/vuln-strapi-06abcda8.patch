@@ -1,0 +1,716 @@
+From 06abcda86ab96fc560b3ff5e3d72c4d5c1c5d42c Mon Sep 17 00:00:00 2001
+From: Convly <jean-sebastien.herbaux@epitech.eu>
+Date: Wed, 11 May 2022 16:30:38 +0200
+Subject: [PATCH] v4.1.10
+
+---
+ .github/actions/check-pr-status/package.json  |  2 +-
+ examples/getstarted/package.json              | 24 +++++++++----------
+ examples/kitchensink/package.json             | 14 +++++------
+ lerna.json                                    |  2 +-
+ packages/admin-test-utils/package.json        |  2 +-
+ packages/cli/create-strapi-app/package.json   |  4 ++--
+ .../cli/create-strapi-starter/package.json    |  4 ++--
+ packages/core/admin/package.json              |  8 +++----
+ packages/core/content-manager/package.json    |  4 ++--
+ .../core/content-type-builder/package.json    |  8 +++----
+ packages/core/database/package.json           |  2 +-
+ packages/core/email/package.json              |  8 +++----
+ packages/core/helper-plugin/package.json      |  2 +-
+ packages/core/strapi/package.json             | 22 ++++++++---------
+ packages/core/upload/package.json             |  8 +++----
+ packages/core/utils/package.json              |  2 +-
+ packages/generators/app/package.json          |  2 +-
+ packages/generators/generators/package.json   |  4 ++--
+ packages/plugins/documentation/package.json   |  6 ++---
+ packages/plugins/graphql/package.json         |  4 ++--
+ packages/plugins/i18n/package.json            |  4 ++--
+ packages/plugins/sentry/package.json          |  2 +-
+ .../plugins/users-permissions/package.json    |  6 ++---
+ .../providers/email-amazon-ses/package.json   |  4 ++--
+ packages/providers/email-mailgun/package.json |  4 ++--
+ .../providers/email-nodemailer/package.json   |  2 +-
+ .../providers/email-sendgrid/package.json     |  4 ++--
+ .../providers/email-sendmail/package.json     |  4 ++--
+ packages/providers/upload-aws-s3/package.json |  2 +-
+ .../providers/upload-cloudinary/package.json  |  4 ++--
+ packages/providers/upload-local/package.json  |  4 ++--
+ .../providers/upload-rackspace/package.json   |  2 +-
+ .../babel-plugin-switch-ee-ce/package.json    |  2 +-
+ packages/utils/logger/package.json            |  2 +-
+ 34 files changed, 89 insertions(+), 89 deletions(-)
+
+diff --git a/.github/actions/check-pr-status/package.json b/.github/actions/check-pr-status/package.json
+index 6e339e71d5..1684d64a29 100644
+--- a/.github/actions/check-pr-status/package.json
++++ b/.github/actions/check-pr-status/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "check-pr-status",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "main": "dist/index.js",
+   "license": "MIT",
+   "private": true,
+diff --git a/examples/getstarted/package.json b/examples/getstarted/package.json
+index 381c2d3934..5b5cbddd2b 100644
+--- a/examples/getstarted/package.json
++++ b/examples/getstarted/package.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "getstarted",
+   "private": true,
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "A Strapi application.",
+   "scripts": {
+     "develop": "strapi develop",
+@@ -12,17 +12,17 @@
+     "strapi": "strapi"
+   },
+   "dependencies": {
+-    "@strapi/admin": "4.1.9",
+-    "@strapi/plugin-documentation": "4.1.9",
+-    "@strapi/plugin-graphql": "4.1.9",
+-    "@strapi/plugin-i18n": "4.1.9",
+-    "@strapi/plugin-sentry": "4.1.9",
+-    "@strapi/plugin-users-permissions": "4.1.9",
+-    "@strapi/provider-email-mailgun": "4.1.9",
+-    "@strapi/provider-upload-aws-s3": "4.1.9",
+-    "@strapi/provider-upload-cloudinary": "4.1.9",
+-    "@strapi/strapi": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/admin": "4.1.10",
++    "@strapi/plugin-documentation": "4.1.10",
++    "@strapi/plugin-graphql": "4.1.10",
++    "@strapi/plugin-i18n": "4.1.10",
++    "@strapi/plugin-sentry": "4.1.10",
++    "@strapi/plugin-users-permissions": "4.1.10",
++    "@strapi/provider-email-mailgun": "4.1.10",
++    "@strapi/provider-upload-aws-s3": "4.1.10",
++    "@strapi/provider-upload-cloudinary": "4.1.10",
++    "@strapi/strapi": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "@vscode/sqlite3": "5.0.8",
+     "better-sqlite3": "7.4.6",
+     "lodash": "4.17.21",
+diff --git a/examples/kitchensink/package.json b/examples/kitchensink/package.json
+index 793ee30a66..5b1a031853 100644
+--- a/examples/kitchensink/package.json
++++ b/examples/kitchensink/package.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "kitchensink",
+   "private": true,
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "A Strapi application.",
+   "scripts": {
+     "develop": "strapi develop",
+@@ -12,12 +12,12 @@
+     "strapi": "strapi"
+   },
+   "dependencies": {
+-    "@strapi/admin": "4.1.9",
+-    "@strapi/provider-email-mailgun": "4.1.9",
+-    "@strapi/provider-upload-aws-s3": "4.1.9",
+-    "@strapi/provider-upload-cloudinary": "4.1.9",
+-    "@strapi/strapi": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/admin": "4.1.10",
++    "@strapi/provider-email-mailgun": "4.1.10",
++    "@strapi/provider-upload-aws-s3": "4.1.10",
++    "@strapi/provider-upload-cloudinary": "4.1.10",
++    "@strapi/strapi": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "lodash": "4.17.21",
+     "mysql": "2.18.1",
+     "passport-google-oauth2": "0.2.0",
+diff --git a/lerna.json b/lerna.json
+index 23ed519678..7e1e30ac05 100644
+--- a/lerna.json
++++ b/lerna.json
+@@ -1,5 +1,5 @@
+ {
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "packages": [
+     "packages/*",
+     "examples/*"
+diff --git a/packages/admin-test-utils/package.json b/packages/admin-test-utils/package.json
+index c0f20ddcd9..9c75b4bad5 100644
+--- a/packages/admin-test-utils/package.json
++++ b/packages/admin-test-utils/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/admin-test-utils",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "private": true,
+   "description": "Test utilities for the Strapi administration panel",
+   "license": "MIT",
+diff --git a/packages/cli/create-strapi-app/package.json b/packages/cli/create-strapi-app/package.json
+index ab471a259b..732822a283 100644
+--- a/packages/cli/create-strapi-app/package.json
++++ b/packages/cli/create-strapi-app/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "create-strapi-app",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Generate a new Strapi application.",
+   "keywords": [
+     "create-strapi-app",
+@@ -38,7 +38,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/generate-new": "4.1.9",
++    "@strapi/generate-new": "4.1.10",
+     "commander": "6.1.0",
+     "inquirer": "8.2.0"
+   },
+diff --git a/packages/cli/create-strapi-starter/package.json b/packages/cli/create-strapi-starter/package.json
+index 58c9276507..548f45c0e6 100644
+--- a/packages/cli/create-strapi-starter/package.json
++++ b/packages/cli/create-strapi-starter/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "create-strapi-starter",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Generate a new Strapi application.",
+   "keywords": [
+     "create-strapi-starter",
+@@ -38,7 +38,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/generate-new": "4.1.9",
++    "@strapi/generate-new": "4.1.10",
+     "chalk": "4.1.1",
+     "ci-info": "3.1.1",
+     "commander": "7.1.0",
+diff --git a/packages/core/admin/package.json b/packages/core/admin/package.json
+index 1705161f76..298eeed7bb 100644
+--- a/packages/core/admin/package.json
++++ b/packages/core/admin/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/admin",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Strapi Admin",
+   "repository": {
+     "type": "git",
+@@ -49,11 +49,11 @@
+     "@fortawesome/free-brands-svg-icons": "^5.15.3",
+     "@fortawesome/free-solid-svg-icons": "^5.15.3",
+     "@fortawesome/react-fontawesome": "^0.1.14",
+-    "@strapi/babel-plugin-switch-ee-ce": "4.1.9",
++    "@strapi/babel-plugin-switch-ee-ce": "4.1.10",
+     "@strapi/design-system": "1.1.0",
+-    "@strapi/helper-plugin": "4.1.9",
++    "@strapi/helper-plugin": "4.1.10",
+     "@strapi/icons": "1.1.0",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "axios": "0.24.0",
+     "babel-loader": "8.2.3",
+     "babel-plugin-styled-components": "2.0.2",
+diff --git a/packages/core/content-manager/package.json b/packages/core/content-manager/package.json
+index 075e3f9e41..121c786647 100644
+--- a/packages/core/content-manager/package.json
++++ b/packages/core/content-manager/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-content-manager",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "A powerful UI to easily manage your data.",
+   "repository": {
+     "type": "git",
+@@ -24,7 +24,7 @@
+   },
+   "dependencies": {
+     "@sindresorhus/slugify": "1.1.0",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "lodash": "4.17.21"
+   },
+   "engines": {
+diff --git a/packages/core/content-type-builder/package.json b/packages/core/content-type-builder/package.json
+index 9c6ef4e1a9..912ceeb3b4 100644
+--- a/packages/core/content-type-builder/package.json
++++ b/packages/core/content-type-builder/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-content-type-builder",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Strapi plugin to create content type",
+   "repository": {
+     "type": "git",
+@@ -28,9 +28,9 @@
+   },
+   "dependencies": {
+     "@sindresorhus/slugify": "1.1.0",
+-    "@strapi/generators": "4.1.9",
+-    "@strapi/helper-plugin": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/generators": "4.1.10",
++    "@strapi/helper-plugin": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "fs-extra": "10.0.0",
+     "lodash": "4.17.21",
+     "pluralize": "^8.0.0",
+diff --git a/packages/core/database/package.json b/packages/core/database/package.json
+index 4369263ea7..32b5911888 100644
+--- a/packages/core/database/package.json
++++ b/packages/core/database/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/database",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Strapi's database layer",
+   "homepage": "https://strapi.io",
+   "bugs": {
+diff --git a/packages/core/email/package.json b/packages/core/email/package.json
+index de30d86dfc..ce5c64b07c 100644
+--- a/packages/core/email/package.json
++++ b/packages/core/email/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-email",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Easily configure your Strapi application to send emails.",
+   "repository": {
+     "type": "git",
+@@ -26,12 +26,12 @@
+     "test:front:watch:ce": "cross-env IS_EE=false jest --config ./jest.config.front.js --watchAll"
+   },
+   "dependencies": {
+-    "@strapi/provider-email-sendmail": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/provider-email-sendmail": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "lodash": "4.17.21"
+   },
+   "devDependencies": {
+-    "@strapi/helper-plugin": "4.1.9"
++    "@strapi/helper-plugin": "4.1.10"
+   },
+   "engines": {
+     "node": ">=12.22.0 <=16.x.x",
+diff --git a/packages/core/helper-plugin/package.json b/packages/core/helper-plugin/package.json
+index f406d5db80..1961c7a226 100644
+--- a/packages/core/helper-plugin/package.json
++++ b/packages/core/helper-plugin/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/helper-plugin",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Helper for Strapi plugins development",
+   "repository": {
+     "type": "git",
+diff --git a/packages/core/strapi/package.json b/packages/core/strapi/package.json
+index ca631a2e1b..312dba6ab4 100644
+--- a/packages/core/strapi/package.json
++++ b/packages/core/strapi/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/strapi",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "An open source headless CMS solution to create and manage your own API. It provides a powerful dashboard and features to make your life easier. Databases supported: MySQL, MariaDB, PostgreSQL, SQLite",
+   "keywords": [
+     "strapi",
+@@ -80,16 +80,16 @@
+   "dependencies": {
+     "@koa/cors": "3.1.0",
+     "@koa/router": "10.1.1",
+-    "@strapi/admin": "4.1.9",
+-    "@strapi/database": "4.1.9",
+-    "@strapi/generate-new": "4.1.9",
+-    "@strapi/generators": "4.1.9",
+-    "@strapi/logger": "4.1.9",
+-    "@strapi/plugin-content-manager": "4.1.9",
+-    "@strapi/plugin-content-type-builder": "4.1.9",
+-    "@strapi/plugin-email": "4.1.9",
+-    "@strapi/plugin-upload": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/admin": "4.1.10",
++    "@strapi/database": "4.1.10",
++    "@strapi/generate-new": "4.1.10",
++    "@strapi/generators": "4.1.10",
++    "@strapi/logger": "4.1.10",
++    "@strapi/plugin-content-manager": "4.1.10",
++    "@strapi/plugin-content-type-builder": "4.1.10",
++    "@strapi/plugin-email": "4.1.10",
++    "@strapi/plugin-upload": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "bcryptjs": "2.4.3",
+     "boxen": "5.1.2",
+     "chalk": "4.1.2",
+diff --git a/packages/core/upload/package.json b/packages/core/upload/package.json
+index f32d6e5ab5..2335b38361 100644
+--- a/packages/core/upload/package.json
++++ b/packages/core/upload/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-upload",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Makes it easy to upload images and files to your Strapi Application.",
+   "license": "SEE LICENSE IN LICENSE",
+   "author": {
+@@ -23,9 +23,9 @@
+     "test:front:watch:ce": "cross-env IS_EE=false jest --config ./jest.config.front.js --watchAll"
+   },
+   "dependencies": {
+-    "@strapi/helper-plugin": "4.1.9",
+-    "@strapi/provider-upload-local": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/helper-plugin": "4.1.10",
++    "@strapi/provider-upload-local": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "byte-size": "7.0.1",
+     "cropperjs": "1.5.11",
+     "fs-extra": "10.0.0",
+diff --git a/packages/core/utils/package.json b/packages/core/utils/package.json
+index 38dfac45ec..f8caf469d4 100644
+--- a/packages/core/utils/package.json
++++ b/packages/core/utils/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/utils",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Shared utilities for the Strapi packages",
+   "keywords": [
+     "strapi",
+diff --git a/packages/generators/app/package.json b/packages/generators/app/package.json
+index 59235dd2c0..847b0921a9 100644
+--- a/packages/generators/app/package.json
++++ b/packages/generators/app/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/generate-new",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Generate a new Strapi application.",
+   "keywords": [
+     "generate",
+diff --git a/packages/generators/generators/package.json b/packages/generators/generators/package.json
+index 6fa4d6f8df..195dc4087f 100644
+--- a/packages/generators/generators/package.json
++++ b/packages/generators/generators/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/generators",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Interactive API generator.",
+   "keywords": [
+     "strapi",
+@@ -30,7 +30,7 @@
+   "main": "lib/index.js",
+   "dependencies": {
+     "@sindresorhus/slugify": "1.1.0",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "chalk": "4.1.2",
+     "fs-extra": "10.0.0",
+     "node-plop": "0.26.3",
+diff --git a/packages/plugins/documentation/package.json b/packages/plugins/documentation/package.json
+index b7cac2191b..b4beba82fa 100644
+--- a/packages/plugins/documentation/package.json
++++ b/packages/plugins/documentation/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-documentation",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Create an OpenAPI Document and visualize your API with SWAGGER UI.",
+   "repository": {
+     "type": "git",
+@@ -24,8 +24,8 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/helper-plugin": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/helper-plugin": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "bcryptjs": "2.4.3",
+     "cheerio": "^1.0.0-rc.5",
+     "fs-extra": "10.0.0",
+diff --git a/packages/plugins/graphql/package.json b/packages/plugins/graphql/package.json
+index 639969bf74..4e541944a6 100644
+--- a/packages/plugins/graphql/package.json
++++ b/packages/plugins/graphql/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-graphql",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Adds GraphQL endpoint with default API methods.",
+   "repository": {
+     "type": "git",
+@@ -30,7 +30,7 @@
+     "@apollo/federation": "^0.28.0",
+     "@graphql-tools/schema": "8.1.2",
+     "@graphql-tools/utils": "^8.0.2",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "apollo-server-core": "3.1.2",
+     "apollo-server-koa": "3.1.2",
+     "glob": "^7.1.7",
+diff --git a/packages/plugins/i18n/package.json b/packages/plugins/i18n/package.json
+index b66609d475..5978518531 100644
+--- a/packages/plugins/i18n/package.json
++++ b/packages/plugins/i18n/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-i18n",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "This plugin enables to create, to read and to update content in different languages, both from the Admin Panel and from the API",
+   "repository": {
+     "type": "git",
+@@ -24,7 +24,7 @@
+     "test:unit": "jest --verbose"
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "lodash": "4.17.21"
+   },
+   "engines": {
+diff --git a/packages/plugins/sentry/package.json b/packages/plugins/sentry/package.json
+index 2502884624..5b6bce9c43 100644
+--- a/packages/plugins/sentry/package.json
++++ b/packages/plugins/sentry/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-sentry",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Send Strapi error events to Sentry",
+   "repository": {
+     "type": "git",
+diff --git a/packages/plugins/users-permissions/package.json b/packages/plugins/users-permissions/package.json
+index f7b1fa5c1f..8020c65555 100644
+--- a/packages/plugins/users-permissions/package.json
++++ b/packages/plugins/users-permissions/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/plugin-users-permissions",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Protect your API with a full-authentication process based on JWT",
+   "repository": {
+     "type": "git",
+@@ -27,8 +27,8 @@
+     "test:front:watch:ce": "cross-env IS_EE=false jest --config ./jest.config.front.js --watchAll"
+   },
+   "dependencies": {
+-    "@strapi/helper-plugin": "4.1.9",
+-    "@strapi/utils": "4.1.9",
++    "@strapi/helper-plugin": "4.1.10",
++    "@strapi/utils": "4.1.10",
+     "bcryptjs": "2.4.3",
+     "grant-koa": "5.4.8",
+     "jsonwebtoken": "^8.1.0",
+diff --git a/packages/providers/email-amazon-ses/package.json b/packages/providers/email-amazon-ses/package.json
+index 0aaa92eb78..388e38b140 100644
+--- a/packages/providers/email-amazon-ses/package.json
++++ b/packages/providers/email-amazon-ses/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-email-amazon-ses",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Amazon SES provider for strapi email",
+   "keywords": [
+     "email",
+@@ -36,7 +36,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "node-ses": "^3.0.3"
+   },
+   "engines": {
+diff --git a/packages/providers/email-mailgun/package.json b/packages/providers/email-mailgun/package.json
+index 692fa1841a..eefe3b64f0 100644
+--- a/packages/providers/email-mailgun/package.json
++++ b/packages/providers/email-mailgun/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-email-mailgun",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Mailgun provider for strapi email plugin",
+   "keywords": [
+     "email",
+@@ -36,7 +36,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "mailgun-js": "0.22.0"
+   },
+   "engines": {
+diff --git a/packages/providers/email-nodemailer/package.json b/packages/providers/email-nodemailer/package.json
+index 943b2a1da0..1e528d5da5 100644
+--- a/packages/providers/email-nodemailer/package.json
++++ b/packages/providers/email-nodemailer/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-email-nodemailer",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Nodemailer provider for Strapi 3",
+   "keywords": [
+     "strapi",
+diff --git a/packages/providers/email-sendgrid/package.json b/packages/providers/email-sendgrid/package.json
+index 1628a7cd78..eac254edbc 100644
+--- a/packages/providers/email-sendgrid/package.json
++++ b/packages/providers/email-sendgrid/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-email-sendgrid",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Sendgrid provider for strapi email",
+   "keywords": [
+     "email",
+@@ -37,7 +37,7 @@
+   },
+   "dependencies": {
+     "@sendgrid/mail": "7.4.7",
+-    "@strapi/utils": "4.1.9"
++    "@strapi/utils": "4.1.10"
+   },
+   "engines": {
+     "node": ">=12.22.0 <=16.x.x",
+diff --git a/packages/providers/email-sendmail/package.json b/packages/providers/email-sendmail/package.json
+index c3216fff4d..0d0c4d7891 100644
+--- a/packages/providers/email-sendmail/package.json
++++ b/packages/providers/email-sendmail/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-email-sendmail",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Sendmail provider for strapi email",
+   "keywords": [
+     "email",
+@@ -35,7 +35,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "sendmail": "^1.6.1"
+   },
+   "engines": {
+diff --git a/packages/providers/upload-aws-s3/package.json b/packages/providers/upload-aws-s3/package.json
+index 9fa092d47d..2482cd9831 100644
+--- a/packages/providers/upload-aws-s3/package.json
++++ b/packages/providers/upload-aws-s3/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-upload-aws-s3",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "AWS S3 provider for strapi upload",
+   "keywords": [
+     "upload",
+diff --git a/packages/providers/upload-cloudinary/package.json b/packages/providers/upload-cloudinary/package.json
+index 6d80cbe321..7c90d06160 100644
+--- a/packages/providers/upload-cloudinary/package.json
++++ b/packages/providers/upload-cloudinary/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-upload-cloudinary",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Cloudinary provider for strapi upload",
+   "keywords": [
+     "upload",
+@@ -36,7 +36,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "cloudinary": "^1.25.1",
+     "into-stream": "^5.1.0"
+   },
+diff --git a/packages/providers/upload-local/package.json b/packages/providers/upload-local/package.json
+index 258c6dd96c..950cf544af 100644
+--- a/packages/providers/upload-local/package.json
++++ b/packages/providers/upload-local/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-upload-local",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Local provider for strapi upload",
+   "keywords": [
+     "upload",
+@@ -35,7 +35,7 @@
+     "test": "echo \"no tests yet\""
+   },
+   "dependencies": {
+-    "@strapi/utils": "4.1.9",
++    "@strapi/utils": "4.1.10",
+     "fs-extra": "10.0.0"
+   },
+   "engines": {
+diff --git a/packages/providers/upload-rackspace/package.json b/packages/providers/upload-rackspace/package.json
+index 1c26d5442e..b88622339e 100644
+--- a/packages/providers/upload-rackspace/package.json
++++ b/packages/providers/upload-rackspace/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/provider-upload-rackspace",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Rackspace provider for strapi upload",
+   "repository": {
+     "type": "git",
+diff --git a/packages/utils/babel-plugin-switch-ee-ce/package.json b/packages/utils/babel-plugin-switch-ee-ce/package.json
+index 5ca78c1789..f4abeb3dcb 100644
+--- a/packages/utils/babel-plugin-switch-ee-ce/package.json
++++ b/packages/utils/babel-plugin-switch-ee-ce/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/babel-plugin-switch-ee-ce",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "private": false,
+   "description": "Babel plugin to switch from CE to EE at runtime",
+   "repository": "git://github.com/strapi/strapi.git",
+diff --git a/packages/utils/logger/package.json b/packages/utils/logger/package.json
+index 92f868d42c..e98585afb8 100644
+--- a/packages/utils/logger/package.json
++++ b/packages/utils/logger/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@strapi/logger",
+-  "version": "4.1.9",
++  "version": "4.1.10",
+   "description": "Strapi's logger",
+   "homepage": "https://strapi.io",
+   "bugs": {
+-- 
+2.34.1
+

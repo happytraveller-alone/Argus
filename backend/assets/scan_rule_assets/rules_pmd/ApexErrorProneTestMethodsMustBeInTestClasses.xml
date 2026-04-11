@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="TestMethodsMustBeInTestClasses Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for TestMethodsMustBeInTestClasses</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="TestMethodsMustBeInTestClasses" language="apex" since="6.22.0" message="Test methods must be in test classes" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#testmethodsmustbeintestclasses">
+        <description>
+          Test methods marked as a testMethod or annotated with @IsTest,
+          but not residing in a test class should be moved to a proper
+          class or have the @IsTest annotation added to the class.
+          
+          Support for tests inside functional classes was removed in Spring-13 (API Version 27.0),
+          making classes that violate this rule fail compile-time. This rule is mostly usable when
+          dealing with legacy code.
+        </description>
+        <priority>3</priority>
+        <properties>
+          <property name="xpath">
+            <value>
+              
+        //UserClass[
+          not(./ModifierNode/Annotation[lower-case(@Name) = 'istest']) and
+          (
+            (./Method/ModifierNode/Annotation[lower-case(@Name) = 'istest']) or
+            (./Method/ModifierNode[@Test = true()])
+          )
+        ]
+
+        
+            </value>
+          </property>
+        </properties>
+        <example>
+          // Violating
+    private class TestClass {
+      @IsTest static void myTest() {
+        // Code here
+      }
+    }
+
+    private class TestClass {
+      static testMethod void myTest() {
+        // Code here
+      }
+    }
+
+    // Compliant
+    @IsTest
+    private class TestClass {
+      @IsTest static void myTest() {
+        // Code here
+      }
+    }
+
+    @IsTest
+    private class TestClass {
+      static testMethod void myTest() {
+        // Code here
+      }
+    }
+
+           </example>
+        </rule>
+
+        
+
+</ruleset>

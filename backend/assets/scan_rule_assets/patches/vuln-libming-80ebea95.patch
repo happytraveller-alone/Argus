@@ -1,0 +1,27 @@
+From 80ebea953f0da0a5206bfaf02d5396d292e91a3a Mon Sep 17 00:00:00 2001
+From: Balint Reczey <balint@balintreczey.hu>
+Date: Thu, 5 Jan 2017 16:50:25 +0100
+Subject: [PATCH] Don't try printing unknown block.
+
+This fixes the crash also known as CVE-2016-9828.
+
+Fixes: #60
+---
+ util/outputtxt.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/util/outputtxt.c b/util/outputtxt.c
+index 7783dd52..eabee846 100644
+--- a/util/outputtxt.c
++++ b/util/outputtxt.c
+@@ -2934,6 +2934,6 @@ outputBlock (int type, SWF_Parserstruct * blockp, FILE* stream)
+ 	  return;
+ 	}
+     }
+-  outputSWF_UNKNOWNBLOCK(blockp);
++  SWF_error("printing type:  %d (%s) is not implemented", type, blockName(type));
+   return;
+ }
+-- 
+2.34.1
+

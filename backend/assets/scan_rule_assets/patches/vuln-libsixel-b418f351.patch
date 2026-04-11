@@ -1,0 +1,34 @@
+From b418f351f348d8273282f3fec6425b6b4e1d91da Mon Sep 17 00:00:00 2001
+From: Hayaki Saito <saitoha@me.com>
+Date: Tue, 17 Dec 2019 19:10:42 +0900
+Subject: [PATCH] Fix for infinite recursive loop problem in load_pnm() (#85),
+ Thanks to @Loginsoft-Research
+
+---
+ src/frompnm.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/frompnm.c b/src/frompnm.c
+index 86d0c03..de73766 100644
+--- a/src/frompnm.c
++++ b/src/frompnm.c
+@@ -36,13 +36,15 @@ pnm_get_line(unsigned char *p, unsigned char *end, unsigned char *line)
+     int n;
+ 
+     do {
++        /* read the line */
+         for (n = 0 ; p < end && *p >= ' '; p++) {
+             if (n < 255) {
+                 line[n++] = *p;
+             }
+         }
+ 
+-        if (p < end && *p == '\n') {
++        /* skip invald characters */
++        if (p < end && *p < ' ') {
+             p++;
+         }
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,24 @@
+rules:
+- id: attr-mutable-initializer
+  patterns:
+  - pattern-not-inside: "def $Y(...):\n  ...\n"
+  - pattern-not-inside: "def $Y(...) -> $TYPE:\n  ...\n"
+  - pattern-inside: "@attr.s(...,auto_attribs=True, ...)\nclass $X(...):\n  ...\n"
+  - pattern-either:
+    - pattern: '$M = {...}
+
+        '
+    - pattern: $M = [...]
+    - pattern: $M = list(...)
+    - pattern: $M = set(...)
+    - pattern: $M = dict(...)
+  message: "Unsafe usage of mutable initializer with attr.s decorator. \nMultiple\
+    \ instances of this class will re-use the same data structure, which is likely\
+    \ not the desired behavior.\nConsider instead: replace assignment to mutable initializer\
+    \ (ex. dict() or {}) with attr.ib(factory=type) where type is dict, set, or list\n"
+  severity: WARNING
+  languages:
+  - python
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'

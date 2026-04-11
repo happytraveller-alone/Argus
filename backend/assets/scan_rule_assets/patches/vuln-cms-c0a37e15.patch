@@ -1,0 +1,454 @@
+From c0a37e15cc925c473e60e27fe64054993b867ac1 Mon Sep 17 00:00:00 2001
+From: brandonkelly <brandon@pixelandtonic.com>
+Date: Tue, 27 Jun 2023 16:01:14 -0700
+Subject: [PATCH] Call beforeAction() up front
+
+---
+ src/controllers/AssetIndexesController.php    |  6 +++++-
+ src/controllers/AssetSettingsController.php   |  6 +++++-
+ src/controllers/BaseElementsController.php    |  6 +++++-
+ src/controllers/ConditionsController.php      |  8 +++++++-
+ src/controllers/FieldsController.php          |  6 +++++-
+ src/controllers/FsController.php              |  6 +++++-
+ src/controllers/GraphqlController.php         | 10 +++++++---
+ src/controllers/ImageTransformsController.php |  6 +++++-
+ src/controllers/LivePreviewController.php     |  6 +++++-
+ src/controllers/PluginStoreController.php     |  6 +++++-
+ src/controllers/PluginsController.php         |  6 +++++-
+ src/controllers/RebrandController.php         |  7 ++++++-
+ src/controllers/RoutesController.php          |  6 +++++-
+ src/controllers/SectionsController.php        |  6 +++++-
+ src/controllers/SitesController.php           |  6 +++++-
+ src/controllers/StructuresController.php      |  6 +++++-
+ src/controllers/SystemMessagesController.php  |  6 +++++-
+ src/controllers/SystemSettingsController.php  |  6 +++++-
+ src/controllers/UserSettingsController.php    |  6 +++++-
+ src/controllers/VolumesController.php         |  6 +++++-
+ 20 files changed, 105 insertions(+), 22 deletions(-)
+
+diff --git a/src/controllers/AssetIndexesController.php b/src/controllers/AssetIndexesController.php
+index 89a5a0fd56..fbeb58a979 100644
+--- a/src/controllers/AssetIndexesController.php
++++ b/src/controllers/AssetIndexesController.php
+@@ -36,11 +36,15 @@ class AssetIndexesController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // No permission no bueno
+         $this->requirePermission('utility:asset-indexes');
+         $this->requireAcceptsJson();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/AssetSettingsController.php b/src/controllers/AssetSettingsController.php
+index 17b7b220cf..65ea0a4f2f 100644
+--- a/src/controllers/AssetSettingsController.php
++++ b/src/controllers/AssetSettingsController.php
+@@ -25,10 +25,14 @@ class AssetSettingsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All user settings actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/BaseElementsController.php b/src/controllers/BaseElementsController.php
+index a0058e2966..a4fb5fde4a 100644
+--- a/src/controllers/BaseElementsController.php
++++ b/src/controllers/BaseElementsController.php
+@@ -27,10 +27,14 @@ abstract class BaseElementsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All actions require control panel requests
+         $this->requireCpRequest();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/ConditionsController.php b/src/controllers/ConditionsController.php
+index ca3bb38b51..c1be139dc2 100644
+--- a/src/controllers/ConditionsController.php
++++ b/src/controllers/ConditionsController.php
+@@ -34,6 +34,12 @@ class ConditionsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
++        $this->requireCpRequest();
++
+         $baseConfig = Json::decodeIfJson($this->request->getBodyParam('config'));
+         $config = $this->request->getBodyParam($baseConfig['name']);
+         $newRuleType = ArrayHelper::remove($config, 'new-rule-type');
+@@ -48,7 +54,7 @@ class ConditionsController extends Controller
+             $this->_condition->addConditionRule($rule);
+         }
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/FieldsController.php b/src/controllers/FieldsController.php
+index 98734cd1b2..5d8f4faa55 100644
+--- a/src/controllers/FieldsController.php
++++ b/src/controllers/FieldsController.php
+@@ -38,10 +38,14 @@ class FieldsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All field actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     // Groups
+diff --git a/src/controllers/FsController.php b/src/controllers/FsController.php
+index c3c5409c51..c92e55481a 100644
+--- a/src/controllers/FsController.php
++++ b/src/controllers/FsController.php
+@@ -33,10 +33,14 @@ class FsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All asset volume actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/GraphqlController.php b/src/controllers/GraphqlController.php
+index ab77b12ed1..f2e93c1838 100644
+--- a/src/controllers/GraphqlController.php
++++ b/src/controllers/GraphqlController.php
+@@ -59,13 +59,17 @@ class GraphqlController extends Controller
+             throw new NotFoundHttpException(Craft::t('yii', 'Page not found.'));
+         }
+ 
+-        Craft::$app->requireEdition(Craft::Pro);
+-
+         if ($action->id === 'api') {
+             $this->enableCsrfValidation = false;
+         }
+ 
+-        return parent::beforeAction($action);
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
++        Craft::$app->requireEdition(Craft::Pro);
++
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/ImageTransformsController.php b/src/controllers/ImageTransformsController.php
+index 450b8f2a5e..45e581a61a 100644
+--- a/src/controllers/ImageTransformsController.php
++++ b/src/controllers/ImageTransformsController.php
+@@ -31,10 +31,14 @@ class ImageTransformsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All image transform actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/LivePreviewController.php b/src/controllers/LivePreviewController.php
+index 935539192d..59fb58bd74 100644
+--- a/src/controllers/LivePreviewController.php
++++ b/src/controllers/LivePreviewController.php
+@@ -36,12 +36,16 @@ class LivePreviewController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // Mark this as a Live Preview request
+         if ($action->id === 'preview') {
+             $this->request->setIsLivePreview(true);
+         }
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/PluginStoreController.php b/src/controllers/PluginStoreController.php
+index deab20e181..bd674e5f90 100644
+--- a/src/controllers/PluginStoreController.php
++++ b/src/controllers/PluginStoreController.php
+@@ -35,10 +35,14 @@ class PluginStoreController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All plugin store actions require an admin
+         $this->requireAdmin(false);
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/PluginsController.php b/src/controllers/PluginsController.php
+index 827a86f9af..764d2bafa1 100644
+--- a/src/controllers/PluginsController.php
++++ b/src/controllers/PluginsController.php
+@@ -28,10 +28,14 @@ class PluginsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All plugin actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/RebrandController.php b/src/controllers/RebrandController.php
+index a5b646cee3..6f2c259da1 100644
+--- a/src/controllers/RebrandController.php
++++ b/src/controllers/RebrandController.php
+@@ -35,8 +35,13 @@ class RebrandController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         Craft::$app->requireEdition(Craft::Pro);
+-        return parent::beforeAction($action);
++
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/RoutesController.php b/src/controllers/RoutesController.php
+index dd0a259bf5..38780ccfac 100644
+--- a/src/controllers/RoutesController.php
++++ b/src/controllers/RoutesController.php
+@@ -26,10 +26,14 @@ class RoutesController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All route actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/SectionsController.php b/src/controllers/SectionsController.php
+index d1161f5286..b12a55c1b9 100644
+--- a/src/controllers/SectionsController.php
++++ b/src/controllers/SectionsController.php
+@@ -36,10 +36,14 @@ class SectionsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All section actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/SitesController.php b/src/controllers/SitesController.php
+index 2e72697184..057ed5f530 100644
+--- a/src/controllers/SitesController.php
++++ b/src/controllers/SitesController.php
+@@ -36,10 +36,14 @@ class SitesController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All actions require an admin account
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/StructuresController.php b/src/controllers/StructuresController.php
+index d094d14861..1c1b7ab57c 100644
+--- a/src/controllers/StructuresController.php
++++ b/src/controllers/StructuresController.php
+@@ -41,6 +41,10 @@ class StructuresController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         $this->requirePostRequest();
+         $this->requireAcceptsJson();
+ 
+@@ -80,7 +84,7 @@ class StructuresController extends Controller
+             throw new NotFoundHttpException('Element not found');
+         }
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/SystemMessagesController.php b/src/controllers/SystemMessagesController.php
+index 6548e77f10..17579924b8 100644
+--- a/src/controllers/SystemMessagesController.php
++++ b/src/controllers/SystemMessagesController.php
+@@ -27,12 +27,16 @@ class SystemMessagesController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         Craft::$app->requireEdition(Craft::Pro);
+ 
+         // Make sure they have access to the System Messages utility
+         $this->requirePermission('utility:system-messages');
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/SystemSettingsController.php b/src/controllers/SystemSettingsController.php
+index 4cfc2b3aa0..6aa7446e88 100644
+--- a/src/controllers/SystemSettingsController.php
++++ b/src/controllers/SystemSettingsController.php
+@@ -40,10 +40,14 @@ class SystemSettingsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All system setting actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/UserSettingsController.php b/src/controllers/UserSettingsController.php
+index 3d8a6ad43c..2e9bc82770 100644
+--- a/src/controllers/UserSettingsController.php
++++ b/src/controllers/UserSettingsController.php
+@@ -28,6 +28,10 @@ class UserSettingsController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All user settings actions require an admin
+         $this->requireAdmin();
+ 
+@@ -35,7 +39,7 @@ class UserSettingsController extends Controller
+             Craft::$app->requireEdition(Craft::Pro);
+         }
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+diff --git a/src/controllers/VolumesController.php b/src/controllers/VolumesController.php
+index 87bab1a289..ecdf7ceaf3 100644
+--- a/src/controllers/VolumesController.php
++++ b/src/controllers/VolumesController.php
+@@ -35,10 +35,14 @@ class VolumesController extends Controller
+      */
+     public function beforeAction($action): bool
+     {
++        if (!parent::beforeAction($action)) {
++            return false;
++        }
++
+         // All asset volume actions require an admin
+         $this->requireAdmin();
+ 
+-        return parent::beforeAction($action);
++        return true;
+     }
+ 
+     /**
+-- 
+2.34.1
+

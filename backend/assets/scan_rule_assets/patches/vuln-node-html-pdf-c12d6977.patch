@@ -1,0 +1,65 @@
+From c12d6977778014139183c9f8da7579fd7ac65362 Mon Sep 17 00:00:00 2001
+From: Fakelag <35497506+fakelag@users.noreply.github.com>
+Date: Fri, 7 May 2021 09:15:59 +0300
+Subject: [PATCH] Invert localUrlAccess to fix
+ https://www.npmjs.com/advisories/1095
+
+---
+ lib/pdf.js    | 2 +-
+ test/index.js | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/lib/pdf.js b/lib/pdf.js
+index 05190b6..46f2ce4 100644
+--- a/lib/pdf.js
++++ b/lib/pdf.js
+@@ -36,7 +36,7 @@ function PDF (html, options) {
+   if (!this.options.phantomPath) this.options.phantomPath = phantomjs && phantomjs.path
+   this.options.phantomArgs = this.options.phantomArgs || []
+ 
+-  if (this.options.localUrlAccess) this.options.phantomArgs.push('--local-url-access=false')
++  if (!this.options.localUrlAccess) this.options.phantomArgs.push('--local-url-access=false')
+   assert(this.options.phantomPath, "html-pdf: Failed to load PhantomJS module. You have to set the path to the PhantomJS binary using 'options.phantomPath'")
+   assert(typeof this.html === 'string' && this.html.length, "html-pdf: Can't create a pdf without an html string")
+   this.options.timeout = parseInt(this.options.timeout, 10) || 30000
+diff --git a/test/index.js b/test/index.js
+index fcd0636..bf98a9b 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -229,14 +229,14 @@ test('load with cookies js', function (t) {
+   })
+ })
+ 
+-test('allows local file access with localUrlAccess=true', function (t) {
++test('does not allow localUrlAccess by default', function (t) {
+   t.plan(2)
+ 
+   pdf.create(`
+     <body>here is an iframe which receives the cookies
+       <iframe src="file://${path.join(__dirname, 'multiple-pages.html')}" width="400" height="100"></iframe>
+     </body>
+-  `, {localUrlAccess: true})
++  `)
+   .toBuffer(function (error, buffer) {
+     t.error(error)
+     const count = buffer.toString().match(/\/Type \/Page\n/g).length
+@@ -244,14 +244,14 @@ test('allows local file access with localUrlAccess=true', function (t) {
+   })
+ })
+ 
+-test('does not allow localUrlAccess by default', function (t) {
++test('allows local file access with localUrlAccess=true', function (t) {
+   t.plan(2)
+ 
+   pdf.create(`
+     <body>here is an iframe which receives the cookies
+       <iframe src="file://${path.join(__dirname, 'multiple-pages.html')}" width="400" height="100"></iframe>
+     </body>
+-  `)
++  `, {localUrlAccess: true})
+   .toBuffer(function (error, buffer) {
+     t.error(error)
+     const count = buffer.toString().match(/\/Type \/Page\n/g).length
+-- 
+2.34.1
+

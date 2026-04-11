@@ -1,0 +1,96 @@
+From a1447d9a892756af6d90f9c6d7454c9630ca03d6 Mon Sep 17 00:00:00 2001
+From: Grant Gainey <ggainey@redhat.com>
+Date: Tue, 11 Feb 2014 14:32:44 -0500
+Subject: [PATCH] 1063915, CVE-2013-4415 - Missed changing Search.do to post,
+ perl-side
+
+---
+ branding/styles/navbar_top_sat.txt | 2 +-
+ branding/templates/c.pxt           | 2 +-
+ web/html/errors/403.html           | 2 +-
+ web/html/errors/404.html           | 2 +-
+ web/html/errors/413.html           | 2 +-
+ web/html/errors/500.html           | 2 +-
+ 6 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/branding/styles/navbar_top_sat.txt b/branding/styles/navbar_top_sat.txt
+index 43bc0bc03f..f57adccb42 100644
+--- a/branding/styles/navbar_top_sat.txt
++++ b/branding/styles/navbar_top_sat.txt
+@@ -28,7 +28,7 @@ class="navPipe">|</span><a href="/rhn/Logout.do"><span>Sign Out</span></a>
+ <div id="header">
+ 	<a href="/"><img src="/img/logo.png" alt="Spacewalk" width="228" height="52" id="rhnLogo" /></a>
+  <div id="searchbar">
+-      <form name="form1" action="/rhn/Search.do" method="get">
++      <form name="form1" action="/rhn/Search.do" method="post">
+       <select name="search_type">
+ 
+             <option value="systems">Systems</option>
+diff --git a/branding/templates/c.pxt b/branding/templates/c.pxt
+index ccfdcd2b38..0f1eb807ba 100644
+--- a/branding/templates/c.pxt
++++ b/branding/templates/c.pxt
+@@ -49,7 +49,7 @@
+             </ul>
+             </rhn-display-login>
+ 
+-            <form name="form1" class="form-inline hidden-xs" role="form" action="/rhn/Search.do" method="get">
++            <form name="form1" class="form-inline hidden-xs" role="form" action="/rhn/Search.do" method="post">
+               <div class="form-group">
+                 <select name="search_type" class="form-control input-sm">
+ 
+diff --git a/web/html/errors/403.html b/web/html/errors/403.html
+index 66cff714c6..c60feb1011 100644
+--- a/web/html/errors/403.html
++++ b/web/html/errors/403.html
+@@ -28,7 +28,7 @@
+ <div id="header">
+ 	<a href="/"><img src="/img/logo.png" id="rhnLogo"></a>
+  <div id="searchbar">
+-      <form name="form1" action="/rhn/Search.do" method="get">
++      <form name="form1" action="/rhn/Search.do" method="post">
+       <select name="search_type">
+ 
+             <option value="systems">Systems</option>
+diff --git a/web/html/errors/404.html b/web/html/errors/404.html
+index e7b5fb39cc..511e31e691 100644
+--- a/web/html/errors/404.html
++++ b/web/html/errors/404.html
+@@ -28,7 +28,7 @@
+ <div id="header">
+ 	<a href="/"><img src="/img/logo.png" id="rhnLogo"></a>
+  <div id="searchbar">
+-      <form name="form1" action="/rhn/Search.do" method="get">
++      <form name="form1" action="/rhn/Search.do" method="post">
+       <select name="search_type">
+ 
+             <option value="systems">Systems</option>
+diff --git a/web/html/errors/413.html b/web/html/errors/413.html
+index 984b736b86..2cae3a474a 100644
+--- a/web/html/errors/413.html
++++ b/web/html/errors/413.html
+@@ -28,7 +28,7 @@
+ <div id="header">
+ 	<a href="/"><img src="/img/logo.png" id="rhnLogo"></a>
+  <div id="searchbar">
+-      <form name="form1" action="/rhn/Search.do" method="get">
++      <form name="form1" action="/rhn/Search.do" method="post">
+       <select name="search_type">
+ 
+             <option value="systems">Systems</option>
+diff --git a/web/html/errors/500.html b/web/html/errors/500.html
+index 10080756ea..049841adf5 100644
+--- a/web/html/errors/500.html
++++ b/web/html/errors/500.html
+@@ -28,7 +28,7 @@
+ <div id="header">
+ 	<a href="/"><img src="/img/logo.png" id="rhnLogo"></a>
+  <div id="searchbar">
+-      <form name="form1" action="/rhn/Search.do" method="get">
++      <form name="form1" action="/rhn/Search.do" method="post">
+       <select name="search_type">
+ 
+             <option value="systems">Systems</option>
+-- 
+2.34.1
+

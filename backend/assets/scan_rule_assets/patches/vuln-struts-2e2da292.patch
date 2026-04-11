@@ -1,0 +1,79 @@
+From 2e2da292166adbc78c4cb1e308b30ddb4fba6d3f Mon Sep 17 00:00:00 2001
+From: Lukasz Lenart <lukaszlenart@apache.org>
+Date: Thu, 24 Apr 2014 19:51:02 +0200
+Subject: [PATCH] Moves global exclude patterns into dedicated class
+
+---
+ core/src/main/resources/struts-default.xml    |  8 +++----
+ .../opensymphony/xwork2/ExcludedPatterns.java | 22 +++++++++++++++++++
+ 2 files changed, 26 insertions(+), 4 deletions(-)
+ create mode 100644 xwork-core/src/main/java/com/opensymphony/xwork2/ExcludedPatterns.java
+
+diff --git a/core/src/main/resources/struts-default.xml b/core/src/main/resources/struts-default.xml
+index 2f5b259d96..398dd439c6 100644
+--- a/core/src/main/resources/struts-default.xml
++++ b/core/src/main/resources/struts-default.xml
+@@ -197,7 +197,7 @@
+                 <interceptor-ref name="multiselect"/>
+                 <interceptor-ref name="actionMappingParams"/>
+                 <interceptor-ref name="params">
+-                    <param name="excludeParams">^class\..*,^dojo\..*,^struts\..*,^session\..*,^request\..*,^application\..*,^servlet(Request|Response)\..*,^parameters\..*,^action:.*,^method:.*</param>
++                    <param name="excludeParams">^action:.*,^method:.*</param>
+                 </interceptor-ref>
+                 <interceptor-ref name="conversionError"/>
+                 <interceptor-ref name="deprecation"/>
+@@ -253,7 +253,7 @@
+                 <interceptor-ref name="checkbox"/>
+                 <interceptor-ref name="multiselect"/>
+                 <interceptor-ref name="params">
+-                    <param name="excludeParams">^class\..*,^dojo\..*,^struts\..*,^session\..*,^request\..*,^application\..*,^servlet(Request|Response)\..*,^parameters\..*,^action:.*,^method:.*</param>
++                    <param name="excludeParams">^action:.*,^method:.*</param>
+                 </interceptor-ref>
+                 <interceptor-ref name="servletConfig"/>
+                 <interceptor-ref name="prepare"/>
+@@ -263,7 +263,7 @@
+                 <interceptor-ref name="staticParams"/>
+                 <interceptor-ref name="actionMappingParams"/>
+                 <interceptor-ref name="params">
+-                    <param name="excludeParams">^class\..*,^dojo\..*,^struts\..*,^session\..*,^request\..*,^application\..*,^servlet(Request|Response)\..*,^parameters\..*,^action:.*,^method:.*</param>
++                    <param name="excludeParams">^action:.*,^method:.*</param>
+                 </interceptor-ref>
+                 <interceptor-ref name="conversionError"/>
+                 <interceptor-ref name="validation">
+@@ -300,7 +300,7 @@
+                 <interceptor-ref name="staticParams"/>
+                 <interceptor-ref name="actionMappingParams"/>
+                 <interceptor-ref name="params">
+-                    <param name="excludeParams">^class\..*,^dojo\..*,^struts\..*,^session\..*,^request\..*,^application\..*,^servlet(Request|Response)\..*,^parameters\..*,^action:.*,^method:.*</param>
++                    <param name="excludeParams">^action:.*,^method:.*</param>
+                 </interceptor-ref>
+                 <interceptor-ref name="conversionError"/>
+                 <interceptor-ref name="validation">
+diff --git a/xwork-core/src/main/java/com/opensymphony/xwork2/ExcludedPatterns.java b/xwork-core/src/main/java/com/opensymphony/xwork2/ExcludedPatterns.java
+new file mode 100644
+index 0000000000..b618a52a04
+--- /dev/null
++++ b/xwork-core/src/main/java/com/opensymphony/xwork2/ExcludedPatterns.java
+@@ -0,0 +1,22 @@
++package com.opensymphony.xwork2;
++
++/**
++ * ExcludedPatterns contains hard-coded patterns that must be rejected by {@link com.opensymphony.xwork2.interceptor.ParametersInterceptor}
++ * and partially in CookInterceptor
++ */
++public class ExcludedPatterns {
++
++    public static final String CLASS_ACCESS_PATTERN = "(.*\\.|^|.*|\\[('|\"))class(\\.|('|\")]|\\[).*";
++
++    public static final String[] EXCLUDED_PATTERNS = {
++            CLASS_ACCESS_PATTERN,
++            "^dojo\\..*",
++            "^struts\\..*",
++            "^session\\..*",
++            "^request\\..*",
++            "^application\\..*",
++            "^servlet(Request|Response)\\..*",
++            "^parameters\\..*"
++    };
++
++}

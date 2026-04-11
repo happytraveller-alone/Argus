@@ -1,0 +1,79 @@
+rules:
+- id: ssrf-requests_1
+  languages:
+  - python
+  message: Data from request object is passed to a new server-side request. This could
+    lead to a server-side request forgery (SSRF). To mitigate, ensure that schemes
+    and hosts are validated against an allowlist, do not forward the response to the
+    user, and ensure proper authentication and transport-layer security in the proxied
+    request.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery (SSRF)'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    references:
+    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  pattern-either:
+  - patterns:
+    - pattern: requests.$FUNC(...)
+    - pattern-either:
+      - pattern-inside: "@$APP.$ROUTE_METHOD($ROUTE, ...)\ndef $ROUTE_FUNC(..., $ROUTEVAR,\
+          \ ...):\n  ...\n  requests.$FUNC(..., <... $ROUTEVAR ...>, ...)\n"
+      - pattern-inside: "@$APP.$ROUTE_METHOD($ROUTE, ...)\ndef $ROUTE_FUNC(..., $ROUTEVAR,\
+          \ ...):\n  ...\n  $INTERM = <... $ROUTEVAR ...>\n  ...\n  requests.$FUNC(...,\
+          \ <... $INTERM ...>, ...)\n"
+    - metavariable-regex:
+        metavariable: $ROUTE_METHOD
+        regex: ^(route|get|post|put|delete|patch)$
+  - pattern: requests.$FUNC(..., <... flask.request.$W.get(...) ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W[...] ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W(...) ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W ...>, ...)
+  - patterns:
+    - pattern-inside: '$INTERM = <... flask.request.$W.get(...) ...>
+
+        ...
+
+        requests.$FUNC(<... $INTERM ...>, ...)
+
+        '
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: '$INTERM = <... flask.request.$W[...] ...>
+
+        ...
+
+        requests.$FUNC(<... $INTERM ...>, ...)
+
+        '
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: '$INTERM = <... flask.request.$W(...) ...>
+
+        ...
+
+        requests.$FUNC(<... $INTERM ...>, ...)
+
+        '
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: '$INTERM = <... flask.request.$W ...>
+
+        ...
+
+        requests.$FUNC(<... $INTERM ...>, ...)
+
+        '
+    - pattern: requests.$FUNC(...)
+  severity: ERROR

@@ -1,0 +1,69 @@
+From 0730ce38735d146de098fc450c4420c1a3fbdf95 Mon Sep 17 00:00:00 2001
+From: cigamit <jimmy@sqmail.org>
+Date: Sun, 18 Mar 2018 09:02:03 -0500
+Subject: [PATCH] Add additional escaping #1457
+
+These discoveries were made during testing.
+---
+ lib/html_utility.php  | 6 +++---
+ lib/html_validate.php | 8 +++++---
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/lib/html_utility.php b/lib/html_utility.php
+index 5d5d0d4d1..96f2a86b2 100644
+--- a/lib/html_utility.php
++++ b/lib/html_utility.php
+@@ -436,7 +436,7 @@ function get_filter_request_var($name, $filter = FILTER_VALIDATE_INT, $options =
+ 
+ 		if ($value === false) {
+ 			if ($filter == FILTER_VALIDATE_IS_REGEX) {
+-				$_SESSION['custom_error'] = __('The search term "%s" is not valid. Error is %s', get_nfilter_request_var($name), $custom_error);
++				$_SESSION['custom_error'] = __('The search term "%s" is not valid. Error is %s', html_escape(get_nfilter_request_var($name)), html_escape($custom_error));
+ 				set_request_var($name, '');
+ 				raise_message('custom_error');
+ 			} else {
+@@ -656,11 +656,11 @@ function validate_store_request_vars($filters, $sess_prefix = '') {
+ 
+ 				if ($value === false) {
+ 					if ($options['filter'] == FILTER_VALIDATE_IS_REGEX) {
+-						$_SESSION['custom_error'] = __('The search term "%s" is not valid. Error is %s', get_nfilter_request_var($variable), $custom_error);
++						$_SESSION['custom_error'] = __('The search term "%s" is not valid. Error is %s', html_escape(get_nfilter_request_var($variable)), html_escape($custom_error));
+ 						set_request_var($variable, '');
+ 						raise_message('custom_error');
+ 					} else {
+-						die_html_input_error($variable, get_nfilter_request_var($variable), $custom_error);
++						die_html_input_error($variable, get_nfilter_request_var($variable), html_escape($custom_error));
+ 					}
+ 				} else {
+ 					set_request_var($variable, $value);
+diff --git a/lib/html_validate.php b/lib/html_validate.php
+index aaa29788f..ff0de3e10 100644
+--- a/lib/html_validate.php
++++ b/lib/html_validate.php
+@@ -47,10 +47,12 @@ function html_log_input_error($variable) {
+ function die_html_input_error($variable = '', $value = '', $message = '') {
+ 	global $config;
+ 
+-	$message = __('Validation error for variable %s with a value of %s.  See backtrace below for more details.', $variable, html_escape($value));
++	if ($message == '') {
++		$message = __('Validation error for variable %s with a value of %s.  See backtrace below for more details.', html_escape($variable), html_escape($value));
++	}
+ 
+ 	if (isset_request_var('json')) {
+-		cacti_debug_backtrace('Validation Error' . ($variable != '' ? ", Variable:$variable":'') . ($value != '' ? ", Value:$value":''), false);
++		cacti_debug_backtrace('Validation Error' . ($variable != '' ? ', Variable:' . html_escape($variable):'') . ($value != '' ? ', Value:' . html_escape($value):''), false);
+ 		print json_encode(
+ 			array(
+ 				'status' => '500',
+@@ -59,7 +61,7 @@ function die_html_input_error($variable = '', $value = '', $message = '') {
+ 			)
+ 		);
+ 	} else {
+-		cacti_debug_backtrace('Validation Error' . ($variable != '' ? ", Variable:$variable":'') . ($value != '' ? ", Value:$value":''), true);
++		cacti_debug_backtrace('Validation Error' . ($variable != '' ? ', Variable:' . html_escape($variable):'') . ($value != '' ? ', Value:' . html_escape($value):''), true);
+ 
+ 		print "<table style='width:100%;text-align:center;'><tr><td>$message</td></tr></table>";
+ 		bottom_footer();
+-- 
+2.34.1
+

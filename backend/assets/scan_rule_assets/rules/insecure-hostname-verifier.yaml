@@ -1,0 +1,18 @@
+rules:
+- id: insecure-hostname-verifier
+  message: "Insecure HostnameVerifier implementation detected. This will accept\n\
+    any SSL certificate with any hostname, which creates the possibility\nfor man-in-the-middle\
+    \ attacks. \n"
+  metadata:
+    cwe: 'CWE-295: Improper Certificate Validation'
+    owasp: 'A6: Security Misconfiguration'
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#WEAK_HOSTNAME_VERIFIER
+  severity: WARNING
+  languages:
+  - java
+  patterns:
+  - pattern-either:
+    - pattern: "class $CLASS implements HostnameVerifier {\n  ...\n  public boolean\
+        \ verify(...) { return true; }\n}\n"
+    - pattern: "new HostnameVerifier(...){ \n  public boolean verify(...) { \n   \
+        \ return true; \n  }\n}"

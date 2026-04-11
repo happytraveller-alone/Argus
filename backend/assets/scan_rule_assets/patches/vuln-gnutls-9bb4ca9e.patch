@@ -1,0 +1,61 @@
+From 9bb4ca9ec8ed504429d582ac3de28aaf8d88b1e8 Mon Sep 17 00:00:00 2001
+From: Nikos Mavrogiannopoulos <nmav@redhat.com>
+Date: Fri, 26 Aug 2016 11:35:50 +0200
+Subject: [PATCH] tools: eliminated memory leaks in deinitialization
+
+---
+ src/cli.c             | 2 +-
+ src/ocsptool-common.c | 2 +-
+ src/socket.c          | 3 +++
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/cli.c b/src/cli.c
+index 066a16b32..8e446f265 100644
+--- a/src/cli.c
++++ b/src/cli.c
+@@ -1928,7 +1928,6 @@ static int cert_verify_ocsp(gnutls_session_t session)
+ 	}
+ 
+ 	for (it = 0; it < cert_list_size; it++) {
+-		gnutls_x509_crt_init(&cert);
+ 		if (deinit_cert)
+ 			gnutls_x509_crt_deinit(cert);
+ 		gnutls_x509_crt_init(&cert);
+@@ -1975,6 +1974,7 @@ static int cert_verify_ocsp(gnutls_session_t session)
+ 
+ 		/* verify and check the response for revoked cert */
+ 		ret = check_ocsp_response(cert, issuer, &resp, &nonce, verbose);
++		free(resp.data);
+ 		if (ret == 1)
+ 			ok++;
+ 		else if (ret == 0) {
+diff --git a/src/ocsptool-common.c b/src/ocsptool-common.c
+index 8d04c7e66..19c5af7fa 100644
+--- a/src/ocsptool-common.c
++++ b/src/ocsptool-common.c
+@@ -222,7 +222,7 @@ int send_ocsp_request(const char *server,
+ 		return -1;
+ 	}
+ 
+-	socket_bye(&hd, 1);
++	socket_bye(&hd, 0);
+ 
+ 	p = memmem(ud.data, ud.size, "\r\n\r\n", 4);
+ 	if (p == NULL) {
+diff --git a/src/socket.c b/src/socket.c
+index 16c9ec6b5..1f5544552 100644
+--- a/src/socket.c
++++ b/src/socket.c
+@@ -332,6 +332,9 @@ void socket_bye(socket_st * socket, unsigned polite)
+ 				fprintf(stderr, "*** gnutls_bye() error: %s\n",
+ 					gnutls_strerror(ret));
+ 		}
++	}
++
++	if (socket->session) {
+ 		gnutls_deinit(socket->session);
+ 		socket->session = NULL;
+ 	}
+-- 
+2.34.1
+

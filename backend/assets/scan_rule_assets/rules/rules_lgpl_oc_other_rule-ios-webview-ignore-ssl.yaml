@@ -1,0 +1,45 @@
+rules:
+- id: rules_lgpl_oc_other_rule-ios-webview-ignore-ssl
+  pattern-either:
+  - pattern: allowsAnyHTTPSCertificateForHost
+  - patterns:
+    - pattern: loadingUnvalidatedHTTPSPage = $YES
+    - metavariable-regex:
+        metavariable: $YES
+        regex: YES|yes
+  - patterns:
+    - pattern: allowsAnyHTTPSCertificate = $YES
+    - metavariable-regex:
+        metavariable: $YES
+        regex: YES|yes
+  paths:
+    include:
+    - '**/*.m'
+  message: "UIWebView in App ignore SSL errors and accept any SSL Certificate. \n\
+    App is vulnerable to MITM attacks. If the app does not verify the \nauthenticity\
+    \ of the server's SSL certificate, an attacker could \nimpersonate the server\
+    \ and intercept sensitive data transmitted \nbetween the app and the server.\n\
+    To fix these security issues, you should ensure proper SSL certificate \nvalidation\
+    \ in your Objective-C code. Here's how you can do it:\n```\n- (void)loadSecureURL\
+    \ {\n  NSURL *url = [NSURL URLWithString:@\"https://example.com\"];\n  NSURLRequest\
+    \ *request = [NSURLRequest requestWithURL:url];\n  \n  // Create session configuration\n\
+    \  NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];\n\
+    \  configuration.TLSMinimumSupportedProtocol = kTLSProtocol12;\n  \n  // Create\
+    \ session with configuration\n  NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];\n\
+    \  \n  // Create data task\n  NSURLSessionDataTask *task = [session dataTaskWithRequest:request\
+    \ completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response,\
+    \ NSError * _Nullable error) {\n      if (error) {\n          NSLog(@\"Error loading\
+    \ URL: %@\", error);\n          // Handle error\n      } else {\n          //\
+    \ Handle response\n          NSLog(@\"Response: %@\", response);\n      }\n  }];\n\
+    \  \n  // Start task\n  [task resume];\n}\n```\n"
+  languages:
+  - generic
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: CWE-295
+    shortDescription: Improper certificate validation
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: CRITICAL

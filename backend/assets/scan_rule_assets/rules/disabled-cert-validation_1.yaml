@@ -1,0 +1,35 @@
+rules:
+- id: disabled-cert-validation_1
+  languages:
+  - python
+  message: certificate verification explicitly disabled, insecure connections possible
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-295: Improper Certificate Validation'
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A03:2017 - Sensitive Data Exposure
+    - A07:2021 - Identification and Authentication Failures
+    references:
+    - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures
+    subcategory:
+    - vuln
+    technology:
+    - python
+  patterns:
+  - pattern-either:
+    - pattern: urllib3.PoolManager(..., cert_reqs=$REQS, ...)
+    - pattern: urllib3.ProxyManager(..., cert_reqs=$REQS, ...)
+    - pattern: urllib3.HTTPSConnectionPool(..., cert_reqs=$REQS, ...)
+    - pattern: urllib3.connectionpool.HTTPSConnectionPool(..., cert_reqs=$REQS, ...)
+    - pattern: urllib3.connection_from_url(..., cert_reqs=$REQS, ...)
+    - pattern: urllib3.proxy_from_url(..., cert_reqs=$REQS, ...)
+    - pattern: $CONTEXT.wrap_socket(..., cert_reqs=$REQS, ...)
+    - pattern: ssl.wrap_socket(..., cert_reqs=$REQS, ...)
+  - metavariable-regex:
+      metavariable: $REQS
+      regex: (NONE|CERT_NONE|CERT_OPTIONAL|ssl\.CERT_NONE|ssl\.CERT_OPTIONAL|\'NONE\'|\"NONE\"|\'OPTIONAL\'|\"OPTIONAL\")
+  severity: ERROR

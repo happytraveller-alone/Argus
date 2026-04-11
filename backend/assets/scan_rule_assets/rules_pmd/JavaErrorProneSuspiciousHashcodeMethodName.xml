@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="SuspiciousHashcodeMethodName Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for SuspiciousHashcodeMethodName</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="SuspiciousHashcodeMethodName" language="java" since="1.5" message="The method name and return type are suspiciously close to hashCode()" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#suspicioushashcodemethodname">
+            <description>
+    The method name and return type are suspiciously close to hashCode(), which may denote an intention
+    to override the hashCode() method.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+                        
+    //MethodDeclaration[
+            lower-case(@Name) = 'hashcode'
+        and @Name != 'hashCode'
+        and @Arity = 0
+        and PrimitiveType[@Kind = 'int']
+    ]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        public int hashcode() { // oops, this probably was supposed to be 'hashCode'
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

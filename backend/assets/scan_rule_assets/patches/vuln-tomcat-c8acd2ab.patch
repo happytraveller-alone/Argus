@@ -1,0 +1,103 @@
+From c8acd2ab7371e39aeca7c306f3b5380f00afe552 Mon Sep 17 00:00:00 2001
+From: Mark Thomas <markt@apache.org>
+Date: Fri, 22 May 2020 11:27:49 +0100
+Subject: [PATCH] Fix BZ 64467. Improve performance of closing idle streams
+
+---
+ .../coyote/http2/Http2UpgradeHandler.java     | 10 +++---
+ .../coyote/http2/TestHttp2Section_5_1.java    | 31 ++++++++++++++++---
+ webapps/docs/changelog.xml                    |  4 +++
+ 3 files changed, 36 insertions(+), 9 deletions(-)
+
+diff --git a/java/org/apache/coyote/http2/Http2UpgradeHandler.java b/java/org/apache/coyote/http2/Http2UpgradeHandler.java
+index 40a379b41d..bf05d4e29b 100644
+--- a/java/org/apache/coyote/http2/Http2UpgradeHandler.java
++++ b/java/org/apache/coyote/http2/Http2UpgradeHandler.java
+@@ -1582,11 +1582,11 @@ public class Http2UpgradeHandler extends AbstractStream implements InternalHttpU
+     }
+ 
+ 
+-    private void closeIdleStreams(int newMaxActiveRemoteStreamId) throws Http2Exception {
+-        for (int i = maxActiveRemoteStreamId + 2; i < newMaxActiveRemoteStreamId; i += 2) {
+-            Stream stream = getStream(i, false);
+-            if (stream != null) {
+-                stream.closeIfIdle();
++    private void closeIdleStreams(int newMaxActiveRemoteStreamId) {
++        for (Entry<Integer,Stream> entry : streams.entrySet()) {
++            if (entry.getKey().intValue() > maxActiveRemoteStreamId &&
++                    entry.getKey().intValue() < newMaxActiveRemoteStreamId) {
++                entry.getValue().closeIfIdle();
+             }
+         }
+         maxActiveRemoteStreamId = newMaxActiveRemoteStreamId;
+diff --git a/test/org/apache/coyote/http2/TestHttp2Section_5_1.java b/test/org/apache/coyote/http2/TestHttp2Section_5_1.java
+index 78fe1d6334..e9433b7a9f 100644
+--- a/test/org/apache/coyote/http2/TestHttp2Section_5_1.java
++++ b/test/org/apache/coyote/http2/TestHttp2Section_5_1.java
+@@ -152,21 +152,44 @@ public class TestHttp2Section_5_1 extends Http2TestBase {
+ 
+     @Test
+     public void testImplicitClose() throws Exception {
++        doTestImplicitClose(5);
++    }
++
++
++    // https://bz.apache.org/bugzilla/show_bug.cgi?id=64467
++    @Test
++    public void testImplicitCloseLargeId() throws Exception {
++        doTestImplicitClose(Integer.MAX_VALUE - 8);
++    }
++
++
++    private void doTestImplicitClose(int lastStreamId) throws Exception {
++
++        long startFirst = System.nanoTime();
+         http2Connect();
++        long durationFirst = System.nanoTime() - startFirst;
+ 
+         sendPriority(3, 0, 16);
+-        sendPriority(5, 0, 16);
++        sendPriority(lastStreamId, 0, 16);
+ 
+-        sendSimpleGetRequest(5);
++        long startSecond = System.nanoTime();
++        sendSimpleGetRequest(lastStreamId);
+         readSimpleGetResponse();
+-        Assert.assertEquals(getSimpleResponseTrace(5), output.getTrace());
++        long durationSecond = System.nanoTime() - startSecond;
++
++        Assert.assertEquals(getSimpleResponseTrace(lastStreamId), output.getTrace());
+         output.clearTrace();
+ 
++        // Allow second request to take up to 5 times first request or up to 1 second - whichever is the larger - mainly
++        // to allow for CI systems under load that can exhibit significant timing variation.
++        Assert.assertTrue("First request took [" + durationFirst/1000000 + "ms], second request took [" +
++                durationSecond/1000000 + "ms]", durationSecond < 1000000000 || durationSecond < durationFirst * 3);
++
+         // Should trigger an error since stream 3 should have been implicitly
+         // closed.
+         sendSimpleGetRequest(3);
+ 
+-        handleGoAwayResponse(5);
++        handleGoAwayResponse(lastStreamId);
+     }
+ 
+ 
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index bbbecc1217..f16ad875a6 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -63,6 +63,10 @@
+       <update>
+         Add support for ALPN on recent OpenJDK 8 releases. (remm)
+       </update>
++      <fix>
++        <bug>64467</bug>: Improve performance of closing idle HTTP/2 streams.
++        (markt)
++      </fix>
+     </changelog>
+   </subsection>
+   <subsection name="WebSocket">
+-- 
+2.34.1
+

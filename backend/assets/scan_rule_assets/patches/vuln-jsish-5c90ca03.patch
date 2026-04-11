@@ -1,0 +1,26 @@
+From 5c90ca033c7cc1074ff5f3fb67c2bac498d955bc Mon Sep 17 00:00:00 2001
+From: pmacdona <>
+Date: Mon, 27 Dec 2021 00:32:56 +0000
+Subject: [PATCH] Fixes #70
+
+FossilOrigin-Name: 9602eb9e29af3601e70f82b45fc7dfdd9f06bcfcaf6b294a48dd1b66bc516659
+---
+ src/jsiValue.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/jsiValue.c b/src/jsiValue.c
+index 81b8e86..ffc12dc 100644
+--- a/src/jsiValue.c
++++ b/src/jsiValue.c
+@@ -415,7 +415,7 @@ Jsi_RC Jsi_ValueGetNumber(Jsi_Interp *interp, Jsi_Value *pv, Jsi_Number *val)
+ }
+ bool Jsi_ValueIsNumber(Jsi_Interp *interp, Jsi_Value *pv)
+ {
+-    return (pv->vt == JSI_VT_NUMBER || (pv->vt == JSI_VT_OBJECT && pv->d.obj->ot == JSI_OT_NUMBER));
++    return (pv && (pv->vt == JSI_VT_NUMBER || (pv->vt == JSI_VT_OBJECT && pv->d.obj->ot == JSI_OT_NUMBER)));
+ }
+ 
+ bool Jsi_ValueIsStringKey(Jsi_Interp* interp, Jsi_Value *key)
+-- 
+2.34.1
+

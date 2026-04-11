@@ -1,0 +1,32 @@
+From 49ecb6c2dfd6ed5078c62f4a8eeff03e3beced3b Mon Sep 17 00:00:00 2001
+From: Karol Babioch <kbabioch@suse.de>
+Date: Fri, 23 Feb 2018 16:59:44 +0100
+Subject: [PATCH] Check for $() in gplotCreate()
+
+This adds $() to the list of bad characters to look for in src/gplot.c to
+prevent `$(command)` from being executed as reported in #303.
+
+However, this should not be considered a real fix, since it violates rule 2 of
+the [Six Dumbest Ideas in Computer Security][1], namely "Enumerating badness".
+
+[1]: http://www.ranum.com/security/computer_security/editorials/dumb/
+---
+ src/gplot.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gplot.c b/src/gplot.c
+index 901d5f1..cd50252 100644
+--- a/src/gplot.c
++++ b/src/gplot.c
+@@ -153,7 +153,7 @@ GPLOT   *gplot;
+     if (outformat != GPLOT_PNG && outformat != GPLOT_PS &&
+         outformat != GPLOT_EPS && outformat != GPLOT_LATEX)
+         return (GPLOT *)ERROR_PTR("outformat invalid", procName, NULL);
+-    stringCheckForChars(rootname, "`;&|><\"?*", &badchar);
++    stringCheckForChars(rootname, "`;&|><\"?*$()", &badchar);
+     if (badchar)  /* danger of command injection */
+         return (GPLOT *)ERROR_PTR("invalid rootname", procName, NULL);
+ 
+-- 
+2.34.1
+

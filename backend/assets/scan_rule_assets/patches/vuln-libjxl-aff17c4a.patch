@@ -1,0 +1,35 @@
+From aff17c4a57eb1e4d7ef00ea728d33cdb5b2ca9da Mon Sep 17 00:00:00 2001
+From: Evgenii Kliuchnikov <eustas@google.com>
+Date: Wed, 29 Jun 2022 12:41:12 +0000
+Subject: [PATCH] Remove the check that fires in situations that should be
+ generally allowed.
+
+---
+ lib/jxl/render_pipeline/low_memory_render_pipeline.cc | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/lib/jxl/render_pipeline/low_memory_render_pipeline.cc b/lib/jxl/render_pipeline/low_memory_render_pipeline.cc
+index d60795bc..c63ef292 100644
+--- a/lib/jxl/render_pipeline/low_memory_render_pipeline.cc
++++ b/lib/jxl/render_pipeline/low_memory_render_pipeline.cc
+@@ -303,17 +303,6 @@ void LowMemoryRenderPipeline::Init() {
+     stages_[i]->SetInputSizes(input_sizes);
+   }
+ 
+-  // Check that kInput stages appear after the switch to image dimensions (if
+-  // any).
+-  for (size_t i = 0; i < stages_.size(); i++) {
+-    for (size_t c = 0; c < shifts.size(); c++) {
+-      if (stages_[i]->GetChannelMode(c) == RenderPipelineChannelMode::kInput) {
+-        JXL_ASSERT(first_image_dim_stage_ == stages_.size() ||
+-                   i >= first_image_dim_stage_);
+-      }
+-    }
+-  }
+-
+   anyc_.resize(stages_.size());
+   for (size_t i = 0; i < stages_.size(); i++) {
+     for (size_t c = 0; c < shifts.size(); c++) {
+-- 
+2.34.1
+

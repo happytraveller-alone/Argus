@@ -1,0 +1,79 @@
+From 38ba3ca2c40fc8ccccec8dc3f360c4087e7dd498 Mon Sep 17 00:00:00 2001
+From: ailin-nemui <ailin-nemui@users.noreply.github.com>
+Date: Mon, 5 Feb 2018 22:26:32 +0100
+Subject: [PATCH] Merge pull request #824 from dequis/more-netsplit-revert
+
+Revert more of the netsplit print optimisation to fix crashes
+
+(cherry picked from commit cfcc021c81eea84bd982a64764f62e163128acf3)
+---
+ src/fe-common/irc/fe-netjoin.c  | 16 +++++++---------
+ src/fe-common/irc/fe-netsplit.c | 15 ++++++---------
+ 2 files changed, 13 insertions(+), 18 deletions(-)
+
+diff --git a/src/fe-common/irc/fe-netjoin.c b/src/fe-common/irc/fe-netjoin.c
+index bc39b27c..a7a2e4fe 100644
+--- a/src/fe-common/irc/fe-netjoin.c
++++ b/src/fe-common/irc/fe-netjoin.c
+@@ -245,20 +245,18 @@ static void print_netjoins(NETJOIN_SERVER_REC *server, const char *filter_channe
+    message before it. */
+ static void sig_print_starting(TEXT_DEST_REC *dest)
+ {
+-	NETJOIN_SERVER_REC *rec;
++	GSList *tmp, *next;
+ 
+ 	if (printing_joins)
+ 		return;
+ 
+-	if (!IS_IRC_SERVER(dest->server))
+-		return;
+-
+-	if (!server_ischannel(dest->server, dest->target))
+-		return;
++	for (tmp = joinservers; tmp != NULL; tmp = next) {
++		NETJOIN_SERVER_REC *server = tmp->data;
+ 
+-	rec = netjoin_find_server(IRC_SERVER(dest->server));
+-	if (rec != NULL && rec->netjoins != NULL)
+-		print_netjoins(rec, NULL);
++		next = tmp->next;
++		if (server->netjoins != NULL)
++			print_netjoins(server, NULL);
++	}
+ }
+ 
+ static int sig_check_netjoins(void)
+diff --git a/src/fe-common/irc/fe-netsplit.c b/src/fe-common/irc/fe-netsplit.c
+index ac3330e5..edd3fc34 100644
+--- a/src/fe-common/irc/fe-netsplit.c
++++ b/src/fe-common/irc/fe-netsplit.c
+@@ -247,20 +247,17 @@ static int check_server_splits(IRC_SERVER_REC *server)
+    message before it. */
+ static void sig_print_starting(TEXT_DEST_REC *dest)
+ {
+-	IRC_SERVER_REC *rec;
++	GSList *tmp;
+ 
+ 	if (printing_splits)
+ 		return;
+ 
+-	if (!IS_IRC_SERVER(dest->server))
+-		return;
+-
+-	if (!server_ischannel(dest->server, dest->target))
+-		return;
++	for (tmp = servers; tmp != NULL; tmp = tmp->next) {
++		IRC_SERVER_REC *rec = tmp->data;
+ 
+-	rec = IRC_SERVER(dest->server);
+-	if (rec->split_servers != NULL)
+-		print_splits(rec, NULL);
++		if (IS_IRC_SERVER(rec) && rec->split_servers != NULL)
++			print_splits(rec, NULL);
++	}
+ }
+ 
+ static int sig_check_splits(void)
+-- 
+2.34.1
+

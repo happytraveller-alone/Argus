@@ -1,0 +1,103 @@
+From 2dfc98f42e117c7605b52b5020b630d98601dc22 Mon Sep 17 00:00:00 2001
+From: deraadt <deraadt@openbsd.org>
+Date: Wed, 4 Dec 2019 09:51:07 +0000
+Subject: [PATCH] libc's authentication privsep layer performed insufficient
+ username validation.  Repair work mostly by markus and millert, first of all
+ solving the primary problem, then adding some additional validation points. 
+ And then futher validation in login and su. This will be
+ 6.5/021_libcauth.patch.sig and 6.6/010_libcauth.patch.sig Reported by Qualys
+
+---
+ usr.bin/login/login.c | 13 +++++++++----
+ usr.bin/su/su.c       | 12 +++++++-----
+ 2 files changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/usr.bin/login/login.c b/usr.bin/login/login.c
+index c2cfa419c1c..e3569c5a72a 100644
+--- a/usr.bin/login/login.c
++++ b/usr.bin/login/login.c
+@@ -1,4 +1,4 @@
+-/*	$OpenBSD: login.c,v 1.71 2019/06/28 13:35:01 deraadt Exp $	*/
++/*	$OpenBSD: login.c,v 1.72 2019/12/04 09:51:07 deraadt Exp $	*/
+ /*	$NetBSD: login.c,v 1.13 1996/05/15 23:50:16 jtc Exp $	*/
+ 
+ /*-
+@@ -340,8 +340,13 @@ main(int argc, char *argv[])
+ 		}
+ 		shell = strrchr(script, '/') + 1;
+ 		auth_setstate(as, AUTH_OKAY);
+-		auth_call(as, script, shell,
+-		    fflag ? "-f" : username, fflag ? username : 0, (char *)0);
++		if (fflag) {
++			auth_call(as, script, shell, "-f", "--", username,
++			    (char *)NULL);
++		} else {
++			auth_call(as, script, shell, "--", username,
++			    (char *)NULL);
++		}
+ 		if (!(auth_getstate(as) & AUTH_ALLOW))
+ 			quickexit(1);
+ 		auth_setenv(as);
+@@ -367,7 +372,7 @@ main(int argc, char *argv[])
+ 	}
+ 
+ 	/*
+-	 * Request the things like the approval script print things
++	 * Request that things like the approval script print things
+ 	 * to stdout (in particular, the nologins files)
+ 	 */
+ 	auth_setitem(as, AUTHV_INTERACTIVE, "True");
+diff --git a/usr.bin/su/su.c b/usr.bin/su/su.c
+index 0b89b4821c2..728b3a8d34c 100644
+--- a/usr.bin/su/su.c
++++ b/usr.bin/su/su.c
+@@ -1,4 +1,4 @@
+-/*	$OpenBSD: su.c,v 1.77 2019/09/14 17:47:01 semarie Exp $	*/
++/*	$OpenBSD: su.c,v 1.78 2019/12/04 09:51:09 deraadt Exp $	*/
+ 
+ /*
+  * Copyright (c) 1988 The Regents of the University of California.
+@@ -149,11 +149,11 @@ main(int argc, char **argv)
+ 	if (pwd == NULL)
+ 		auth_errx(as, 1, "who are you?");
+ 	if ((username = strdup(pwd->pw_name)) == NULL)
+-		auth_errx(as, 1, "can't allocate memory");
++		auth_err(as, 1, NULL);
+ 	if (asme && !altshell) {
+ 		if (pwd->pw_shell && *pwd->pw_shell) {
+ 			if ((shell = strdup(pwd->pw_shell)) == NULL)
+-				auth_errx(as, 1, "can't allocate memory");
++				auth_err(as, 1, NULL);
+ 		} else {
+ 			shell = _PATH_BSHELL;
+ 			iscsh = NO;
+@@ -196,7 +196,7 @@ main(int argc, char **argv)
+ 		auth_clean(as);
+ 		if (auth_setitem(as, AUTHV_INTERACTIVE, "True") != 0 ||
+ 		    auth_setitem(as, AUTHV_NAME, user) != 0)
+-			auth_errx(as, 1, "can't allocate memory");
++			auth_err(as, 1, NULL);
+ 		if ((user = auth_getitem(as, AUTHV_NAME)) == NULL)
+ 			auth_errx(as, 1, "internal error");
+ 		if (auth_setpwd(as, NULL) || (pwd = auth_getpwd(as)) == NULL) {
+@@ -225,6 +225,8 @@ main(int argc, char **argv)
+ 		}
+ 		fprintf(stderr, "Login incorrect\n");
+ 	}
++	if (pwd == NULL)
++		auth_errx(as, 1, "internal error");
+ 
+ 	if (pledge("stdio unveil rpath getpw exec id", NULL) == -1)
+ 		err(1, "pledge");
+@@ -236,7 +238,7 @@ main(int argc, char **argv)
+ 				auth_errx(as, 1, "permission denied (shell).");
+ 		} else if (pwd->pw_shell && *pwd->pw_shell) {
+ 			if ((shell = strdup(pwd->pw_shell)) == NULL)
+-				auth_errx(as, 1, "can't allocate memory");
++				auth_err(as, 1, NULL);
+ 			iscsh = UNSET;
+ 		} else {
+ 			shell = _PATH_BSHELL;
+-- 
+2.34.1
+

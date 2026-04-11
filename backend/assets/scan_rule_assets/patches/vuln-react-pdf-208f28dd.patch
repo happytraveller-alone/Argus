@@ -1,0 +1,26 @@
+From 671e6eaa2e373e404040c13cc6b668fe39839cad Mon Sep 17 00:00:00 2001
+From: Wojciech Maj <kontakt@wojtekmaj.pl>
+Date: Tue, 7 May 2024 15:38:29 +0200
+Subject: [PATCH] Force isEvalSupported to false
+
+Fixes [GHSA-wgrm-67xf-hhpq](https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq)
+---
+ packages/react-pdf/src/Document.tsx | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/react-pdf/src/Document.tsx b/packages/react-pdf/src/Document.tsx
+index 59dcfa4..0dd7999 100644
+--- a/packages/react-pdf/src/Document.tsx
++++ b/packages/react-pdf/src/Document.tsx
+@@ -505,7 +505,7 @@ const Document = forwardRef(function Document(
+       return;
+     }
+ 
+-    const optionsWithModifiedIsEvalSupported: Options = { ...options, isEvalSupported: true };
++    const optionsWithModifiedIsEvalSupported: Options = { ...options, isEvalSupported: false };
+ 
+     const documentInitParams: Source = {
+       ...source,
+-- 
+2.34.1
+

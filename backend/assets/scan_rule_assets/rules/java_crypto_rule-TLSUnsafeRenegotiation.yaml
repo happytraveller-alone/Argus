@@ -1,0 +1,54 @@
+rules:
+- id: java_crypto_rule-TLSUnsafeRenegotiation
+  languages:
+  - java
+  patterns:
+  - pattern: 'java.lang.System.setProperty("sun.security.ssl.allowUnsafeRenegotiation",
+      $TRUE);
+
+      '
+  - metavariable-pattern:
+      metavariable: $TRUE
+      pattern-either:
+      - pattern: 'true
+
+          '
+      - pattern: '"true"
+
+          '
+      - pattern: 'Boolean.TRUE
+
+          '
+  message: "This code enables unsafe renegotiation in SSL/TLS connections, which is\n\
+    vulnerable to man-in-the-middle attacks. In such attacks, an attacker\ncould inject\
+    \ chosen plaintext at the beginning of the secure\ncommunication, potentially\
+    \ compromising the security of data transmission. If \nexploited, this vulnerability\
+    \ can lead to unauthorized access to sensitive \ndata, data manipulation, and\
+    \ potentially full system compromise depending on \nthe data and operations protected\
+    \ by the TLS session.\n\nTo mitigate this vulnerability, disable unsafe renegotiation\
+    \ in the Java \napplication. Ensure that only secure renegotiation is allowed\
+    \ by setting the \nsystem property `sun.security.ssl.allowUnsafeRenegotiation`\
+    \ to `false`. \n\nSecure code example:\n```\npublic void safe() {\n  java.lang.System.setProperty(\"\
+    sun.security.ssl.allowUnsafeRenegotiation\", false);\n}\n```\n"
+  severity: WARNING
+  metadata:
+    likelihood: LOW
+    impact: MEDIUM
+    confidence: MEDIUM
+    category: security
+    cwe: CWE-319
+    shortDescription: Cleartext transmission of sensitive information
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: MEDIUM
+    references:
+    - https://www.oracle.com/java/technologies/javase/tlsreadme.html
+    subcategory:
+    - vuln
+    technology:
+    - java
+    vulnerability: Insecure Transport
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - Mishandled Sensitive Information

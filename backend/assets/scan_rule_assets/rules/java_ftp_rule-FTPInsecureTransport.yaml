@@ -1,0 +1,28 @@
+rules:
+- id: java_ftp_rule-FTPInsecureTransport
+  message: 'Test message
+
+    '
+  severity: WARNING
+  metadata:
+    shortDescription: Cleartext transmission of sensitive information
+    category: security
+    cwe: CWE-319
+    owasp:
+    - A03:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    references:
+    - https://www.codejava.net/java-se/ftp/connect-and-login-to-a-ftp-server
+    - https://commons.apache.org/proper/commons-net/apidocs/org/apache/commons/net/ftp/FTPClient.html
+    subcategory:
+    - vuln
+    technology:
+    - java
+    vulnerability: Insecure Transport
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+  languages:
+  - java
+  pattern-either:
+  - pattern: 'print("test rules")
+
+      '

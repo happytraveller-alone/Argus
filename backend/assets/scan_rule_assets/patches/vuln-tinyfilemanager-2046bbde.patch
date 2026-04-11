@@ -1,0 +1,26 @@
+From 2046bbde72ed76af0cfdcae082de629bcc4b44c7 Mon Sep 17 00:00:00 2001
+From: febinrev <52229330+febinrev@users.noreply.github.com>
+Date: Fri, 12 Nov 2021 08:31:02 +0530
+Subject: [PATCH] Patched the RCE (#636)
+
+I have patched the file upload directory traversal to Authenticated Remote Code Execution Vulnerability.
+---
+ tinyfilemanager.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tinyfilemanager.php b/tinyfilemanager.php
+index 714524c..3d7052a 100644
+--- a/tinyfilemanager.php
++++ b/tinyfilemanager.php
+@@ -880,7 +880,7 @@ if (!empty($_FILES) && !FM_READONLY) {
+ 
+     $targetPath = $path . $ds;
+     if ( is_writable($targetPath) ) {
+-        $fullPath = $path . '/' . $_REQUEST['fullpath'];
++        $fullPath = $path . '/' . str_replace("./","_",$_REQUEST['fullpath']);
+         $folder = substr($fullPath, 0, strrpos($fullPath, "/"));
+ 
+         if(file_exists ($fullPath) && !$override_file_name) {
+-- 
+2.34.1
+

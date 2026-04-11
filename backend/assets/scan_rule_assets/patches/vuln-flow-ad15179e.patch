@@ -1,0 +1,120 @@
+From ad15179ea795fb7cda3503ec3529659e89de6dec Mon Sep 17 00:00:00 2001
+From: Vaadin Bot <vaadin-bot@users.noreply.github.com>
+Date: Thu, 4 Feb 2021 11:47:41 +0300
+Subject: [PATCH] fix: use time-constant comparison for security tokens (#9896)
+ (#9910)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is the same as #9875, but also applied for the upload security key
+and the push id since both of those are also used to protect against
+cross-site attacks. In addition, documentation for the push id is
+clarified to point out its role.
+
+Co-authored-by: Leif Åstrand <leif@vaadin.com>
+---
+ .../java/com/vaadin/flow/server/VaadinSession.java   | 12 ++++++++----
+ .../flow/server/communication/PushHandler.java       | 10 ++++++++--
+ .../server/communication/StreamReceiverHandler.java  |  6 +++++-
+ 3 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/flow-server/src/main/java/com/vaadin/flow/server/VaadinSession.java b/flow-server/src/main/java/com/vaadin/flow/server/VaadinSession.java
+index f73361e4b3..b6ddc76a8b 100644
+--- a/flow-server/src/main/java/com/vaadin/flow/server/VaadinSession.java
++++ b/flow-server/src/main/java/com/vaadin/flow/server/VaadinSession.java
+@@ -16,6 +16,10 @@
+ 
+ package com.vaadin.flow.server;
+ 
++import javax.servlet.http.HttpSession;
++import javax.servlet.http.HttpSessionBindingEvent;
++import javax.servlet.http.HttpSessionBindingListener;
++
+ import java.io.IOException;
+ import java.io.ObjectInputStream;
+ import java.io.Serializable;
+@@ -36,10 +40,6 @@ import java.util.concurrent.Future;
+ import java.util.concurrent.locks.Lock;
+ import java.util.concurrent.locks.ReentrantLock;
+ 
+-import javax.servlet.http.HttpSession;
+-import javax.servlet.http.HttpSessionBindingEvent;
+-import javax.servlet.http.HttpSessionBindingListener;
+-
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -127,6 +127,10 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
+      */
+     private final String csrfToken = UUID.randomUUID().toString();
+ 
++    /*
++     * This token should be handled with care since it's used to protect against
++     * cross-site attacks in addition to general identifier duty.
++     */
+     private final String pushId = UUID.randomUUID().toString();
+ 
+     private final Attributes attributes = new Attributes();
+diff --git a/flow-server/src/main/java/com/vaadin/flow/server/communication/PushHandler.java b/flow-server/src/main/java/com/vaadin/flow/server/communication/PushHandler.java
+index 936bedb9e1..1218cf4b39 100644
+--- a/flow-server/src/main/java/com/vaadin/flow/server/communication/PushHandler.java
++++ b/flow-server/src/main/java/com/vaadin/flow/server/communication/PushHandler.java
+@@ -18,6 +18,8 @@ package com.vaadin.flow.server.communication;
+ 
+ import java.io.IOException;
+ import java.io.Reader;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
+ import java.util.Collection;
+ 
+ import org.atmosphere.cpr.AtmosphereRequest;
+@@ -480,7 +482,9 @@ public class PushHandler {
+     }
+ 
+     /**
+-     * Checks whether a given push id matches the session's push id.
++     * Checks whether a given push id matches the session's push id. The
++     * comparison is done using a time-constant method since the push id is used
++     * to protect against cross-site attacks.
+      *
+      * @param session
+      *            the vaadin session for which the check should be done
+@@ -492,7 +496,9 @@ public class PushHandler {
+             String requestPushId) {
+ 
+         String sessionPushId = session.getPushId();
+-        if (requestPushId == null || !requestPushId.equals(sessionPushId)) {
++        if (requestPushId == null || !MessageDigest.isEqual(
++                requestPushId.getBytes(StandardCharsets.UTF_8),
++                sessionPushId.getBytes(StandardCharsets.UTF_8))) {
+             return false;
+         }
+         return true;
+diff --git a/flow-server/src/main/java/com/vaadin/flow/server/communication/StreamReceiverHandler.java b/flow-server/src/main/java/com/vaadin/flow/server/communication/StreamReceiverHandler.java
+index a452457032..f7821538bb 100644
+--- a/flow-server/src/main/java/com/vaadin/flow/server/communication/StreamReceiverHandler.java
++++ b/flow-server/src/main/java/com/vaadin/flow/server/communication/StreamReceiverHandler.java
+@@ -25,6 +25,8 @@ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+ import java.io.PrintWriter;
+ import java.io.Serializable;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
+ import java.util.Collection;
+ import java.util.Iterator;
+ 
+@@ -119,7 +121,9 @@ public class StreamReceiverHandler implements Serializable {
+         session.lock();
+         try {
+             String secKey = streamReceiver.getId();
+-            if (secKey == null || !secKey.equals(securityKey)) {
++            if (secKey == null || !MessageDigest.isEqual(
++                    secKey.getBytes(StandardCharsets.UTF_8),
++                    securityKey.getBytes(StandardCharsets.UTF_8))) {
+                 getLogger().warn(
+                         "Received incoming stream with faulty security key.");
+                 return;
+-- 
+2.34.1
+

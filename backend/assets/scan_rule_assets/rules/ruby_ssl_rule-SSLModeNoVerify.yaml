@@ -1,0 +1,27 @@
+rules:
+- id: ruby_ssl_rule-SSLModeNoVerify
+  pattern: OpenSSL::SSL::VERIFY_NONE
+  fix-regex:
+    regex: VERIFY_NONE
+    replacement: VERIFY_PEER
+  message: "The application was found using `OpenSSL::SSL::VERIFY_NONE`.\nThis effectively\
+    \ disables the validation of TLS certificates.\n\nThis allows for an adversary\
+    \ who is in between the application and the \ntarget host to intercept potentially\
+    \ sensitive information or transmit \nmalicious data.\n\nTo remediate this issue,\
+    \ use 'OpenSSL::SSL::VERIFY_PEER' instead.\n"
+  severity: WARNING
+  languages:
+  - ruby
+  metadata:
+    cwe: CWE-295
+    shortDescription: Improper certificate validation
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A07:2021-Identification and Authentication Failures
+    category: security
+    security-severity: MEDIUM
+    technology:
+    - ruby
+    references:
+    - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/ssl-mode-no-verify.yaml

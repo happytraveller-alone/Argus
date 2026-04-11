@@ -1,0 +1,40 @@
+rules:
+- id: raptor-unchecked-ret-setuid-seteuid
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/252
+    - https://lwn.net/Articles/451985/
+    - https://www.usenix.org/legacy/events/sec02/full_papers/chen/chen.pdf
+    - https://www.openwall.com/lists/oss-security/2023/12/30/4
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    - 'CWE-250: Execution with Unnecessary Privileges'
+    - 'CWE-269: Improper Privilege Management'
+    - 'CWE-284: Improper Access Control'
+  message: The software does not check the return value from a method or function,
+    which can prevent it from detecting unexpected states and conditions. If the program
+    calls a function to drop privileges but  does not check the return code to ensure
+    that privileges were  successfully dropped, then the program will continue to
+    operate with  the higher privileges.
+  severity: WARNING
+  languages:
+  - c
+  - cpp
+  patterns:
+  - pattern: $FUN(...)
+  - metavariable-pattern:
+      metavariable: $FUN
+      pattern-either:
+      - pattern: setuid
+      - pattern: seteuid
+  - pattern-not-inside: $_ = $FUN(...)
+  - pattern-not-inside: <... $FUN(...) == $_ ...>
+  - pattern-not-inside: <... $_ == $FUN(...) ...>
+  - pattern-not-inside: <... $FUN(...) != $_ ...>
+  - pattern-not-inside: <... $_ != $FUN(...) ...>
+  - pattern-not-inside: <... $FUN(...) < $_ ...>
+  - pattern-not-inside: <... $_ > $FUN(...) ...>
+  - pattern-not-inside: <... !$FUN(...) ...>
+  - pattern-not-inside: return $FUN(...);

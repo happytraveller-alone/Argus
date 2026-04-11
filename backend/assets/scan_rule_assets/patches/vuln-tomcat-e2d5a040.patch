@@ -1,0 +1,95 @@
+From e2d5a040b962a904db5264b3cb3282c6b05f823c Mon Sep 17 00:00:00 2001
+From: remm <remm@apache.org>
+Date: Wed, 22 May 2019 00:43:09 +0200
+Subject: [PATCH] Remove legacy NIO double close
+
+Closing the socket is not necessary. I found information on Java 1.4, 5
+and 6 having possible issues that needed the socket close, but this is
+now fixed. NIO2 from Java 7 doesn't give the user a choice as its
+channel doesn't expose the socket to avoid abuse and bad practices.
+---
+ java/org/apache/tomcat/util/net/NioChannel.java  | 8 ++++----
+ java/org/apache/tomcat/util/net/NioEndpoint.java | 8 --------
+ webapps/docs/changelog.xml                       | 4 ++++
+ 3 files changed, 8 insertions(+), 12 deletions(-)
+
+diff --git a/java/org/apache/tomcat/util/net/NioChannel.java b/java/org/apache/tomcat/util/net/NioChannel.java
+index 9489b72068..d3f27664f5 100644
+--- a/java/org/apache/tomcat/util/net/NioChannel.java
++++ b/java/org/apache/tomcat/util/net/NioChannel.java
+@@ -40,11 +40,10 @@ public class NioChannel implements ByteChannel, ScatteringByteChannel, Gathering
+ 
+     protected static final ByteBuffer emptyBuf = ByteBuffer.allocate(0);
+ 
++    protected final SocketBufferHandler bufHandler;
+     protected SocketChannel sc = null;
+     protected NioSocketWrapper socketWrapper = null;
+ 
+-    protected final SocketBufferHandler bufHandler;
+-
+     public NioChannel(SocketChannel channel, SocketBufferHandler bufHandler) {
+         this.sc = channel;
+         this.bufHandler = bufHandler;
+@@ -102,7 +101,6 @@ public class NioChannel implements ByteChannel, ScatteringByteChannel, Gathering
+      */
+     @Override
+     public void close() throws IOException {
+-        sc.socket().close();
+         sc.close();
+     }
+ 
+@@ -114,7 +112,9 @@ public class NioChannel implements ByteChannel, ScatteringByteChannel, Gathering
+      * @throws IOException If closing the secure channel fails.
+      */
+     public void close(boolean force) throws IOException {
+-        if (isOpen() || force ) close();
++        if (isOpen() || force) {
++            close();
++        }
+     }
+ 
+     /**
+diff --git a/java/org/apache/tomcat/util/net/NioEndpoint.java b/java/org/apache/tomcat/util/net/NioEndpoint.java
+index a23448b1ed..62dbab2e71 100644
+--- a/java/org/apache/tomcat/util/net/NioEndpoint.java
++++ b/java/org/apache/tomcat/util/net/NioEndpoint.java
+@@ -350,7 +350,6 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel>
+     protected void doCloseServerSocket() throws IOException {
+         if (!getUseInheritedChannel() && serverSock != null) {
+             // Close server socket
+-            serverSock.socket().close();
+             serverSock.close();
+         }
+         serverSock = null;
+@@ -441,13 +440,6 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel>
+     @Override
+     protected void closeSocket(SocketChannel socket) {
+         countDownConnection();
+-        try {
+-            socket.socket().close();
+-        } catch (IOException ioe)  {
+-            if (log.isDebugEnabled()) {
+-                log.debug(sm.getString("endpoint.err.close"), ioe);
+-            }
+-        }
+         try {
+             socket.close();
+         } catch (IOException ioe) {
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index 6bc0dd5c64..3155c8c92a 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -148,6 +148,10 @@
+         Add support for same-site cookie attribute. Patch provided by John
+         Kelly. (markt)
+       </add>
++      <fix>
++        Drop legacy NIO double socket close (close channel, then close
++        socket). (remm)
++      </fix>
+     </changelog>
+   </subsection>
+   <subsection name="Cluster">
+-- 
+2.34.1
+

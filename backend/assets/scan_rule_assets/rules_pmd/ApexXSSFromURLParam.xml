@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ApexXSSFromURLParam Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ApexXSSFromURLParam</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexXSSFromURLParam" language="apex" since="5.5.3" message="Apex classes should escape/sanitize Strings obtained from URL parameters" class="net.sourceforge.pmd.lang.apex.rule.security.ApexXSSFromURLParamRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexxssfromurlparam">
+            <description>
+    Makes sure that all values obtained from URL parameters are properly escaped / sanitized
+    to avoid XSS attacks.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public without sharing class Foo {
+        String unescapedstring = ApexPage.getCurrentPage().getParameters.get('url_param');
+        String usedLater = unescapedstring;
+    }
+
+            </example>
+        </rule>
+
+</ruleset>

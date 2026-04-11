@@ -1,0 +1,54 @@
+rules:
+- id: python_pyramid_rule-pyramid-csrf-origin-check
+  patterns:
+  - pattern-inside: '$CONFIG.set_default_csrf_options(..., check_origin=$CHECK_ORIGIN,
+      ...)
+
+      '
+  - pattern: '$CHECK_ORIGIN
+
+      '
+  - metavariable-comparison:
+      metavariable: $CHECK_ORIGIN
+      comparison: $CHECK_ORIGIN == False
+  message: "Automatic check of the referrer for cross-site request forgery tokens\n\
+    has been explicitly disabled globally, which might leave views unprotected\nwhen\
+    \ an unsafe CSRF storage policy is used. By passing `check_origin=False` \nto\
+    \ `set_default_csrf_options()` method, you opt out of checking the origin \nof\
+    \ the domain in the referrer header or the origin header, which can make \nthe\
+    \ application vulnerable to CSRF attacks, specially if CSRF token is not \nproperly\
+    \ implemented.\nCSRF attacks are a type of exploit where an attacker tricks a\
+    \ user into \nexecuting unwanted actions on a web application in which they are\
+    \ authenticated. \nIf a user is logged into a web application, an attacker could\
+    \ create a malicious \nlink or script on another site that causes the user's browser\
+    \ to make a request \nto the web application, carrying out an action without the\
+    \ user's consent.\n\nTo mitigate this vulnerability, use \n'pyramid.config.Configurator.set_default_csrf_options(check_origin=True)'\n\
+    to turn the automatic check for all unsafe methods (per RFC2616).\n\nSecure Code\
+    \ Example:\n```\ndef safe(config):\n  config.set_csrf_storage_policy(CookieCSRFStoragePolicy())\n\
+    \  config.set_default_csrf_options(check_origin=True)\n```\n"
+  languages:
+  - python
+  severity: WARNING
+  metadata:
+    shortDescription: Cross-site request forgery (CSRF)
+    category: security
+    cwe: CWE-352
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: MEDIUM
+    technology:
+    - pyramid
+    references:
+    - https://owasp.org/Top10/A01_2021-Broken_Access_Control
+    - https://docs.pylonsproject.org/projects/pyramid/en/latest/narr/security.html
+    cwe2022-top25: 'true'
+    cwe2021-top25: 'true'
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: LOW
+    confidence: MEDIUM
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - Cross-Site Request Forgery (CSRF)

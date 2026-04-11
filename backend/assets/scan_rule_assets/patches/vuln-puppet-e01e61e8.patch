@@ -1,0 +1,79 @@
+From 632e12d24d460b6dfd5cd3b65b2ad6397f2a2193 Mon Sep 17 00:00:00 2001
+From: Jeff McCune <jeff@puppetlabs.com>
+Date: Thu, 28 Feb 2013 16:43:32 -0800
+Subject: [PATCH] (#19531) (CVE-2013-2275) Only allow report save from the node
+ matching the certname
+
+Without this patch applied any authenticated client is able to save a
+report for any node by default.  This is a problem because the
+compliance feature of Puppet Enterprise expects reports to be submitted
+only from the node the report is associated with.
+
+This patch addresses the problem by restricting the access control rules
+in a similar manner to the catalog.  With this patch applied, the
+default behavior of the Puppet master will only allow reports to be
+saved when the node name matches the cert name.
+---
+ conf/auth.conf                            |  6 +++---
+ lib/puppet/network/rest_authconfig.rb     |  2 +-
+ spec/unit/network/rest_authconfig_spec.rb | 14 +++++++++++++-
+ 3 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/conf/auth.conf b/conf/auth.conf
+index ba389c0769..92aae2643d 100644
+--- a/conf/auth.conf
++++ b/conf/auth.conf
+@@ -63,10 +63,10 @@ path /certificate_revocation_list/ca
+ method find
+ allow *
+ 
+-# allow all nodes to store their reports
+-path /report
++# allow all nodes to store their own reports
++path ~ ^/report/([^/]+)$
+ method save
+-allow *
++allow $1
+ 
+ # inconditionnally allow access to all files services
+ # which means in practice that fileserver.conf will
+diff --git a/lib/puppet/network/rest_authconfig.rb b/lib/puppet/network/rest_authconfig.rb
+index 80167103ba..643dd2364f 100644
+--- a/lib/puppet/network/rest_authconfig.rb
++++ b/lib/puppet/network/rest_authconfig.rb
+@@ -13,7 +13,7 @@ module Puppet
+       # to fileserver.conf
+       { :acl => "/file" },
+       { :acl => "/certificate_revocation_list/ca", :method => :find, :authenticated => true },
+-      { :acl => "/report", :method => :save, :authenticated => true },
++      { :acl => "~ ^\/report\/([^\/]+)$", :method => :save, :allow => '$1', :authenticated => true },
+       # These allow `auth any`, because if you can do them anonymously you
+       # should probably also be able to do them when trusted.
+       { :acl => "/certificate/ca", :method => :find, :authenticated => :any },
+diff --git a/spec/unit/network/rest_authconfig_spec.rb b/spec/unit/network/rest_authconfig_spec.rb
+index bebbb874fc..a56acd938f 100755
+--- a/spec/unit/network/rest_authconfig_spec.rb
++++ b/spec/unit/network/rest_authconfig_spec.rb
+@@ -122,6 +122,18 @@ describe Puppet::Network::RestAuthConfig do
+       @authconfig.insert_default_acl
+     end
+ 
+-  end
++    it '(CVE-2013-2275) allows report submission only for the node matching the certname by default' do
++      acl = {
++        :acl => "~ ^\/report\/([^\/]+)$",
++        :method => :save,
++        :allow => '$1',
++        :authenticated => true
++      }
++      @authconfig.rights.stubs(:[]).returns(true)
++      @authconfig.rights.stubs(:[]).with(acl[:acl]).returns(nil)
+ 
++      @authconfig.expects(:mk_acl).with(acl)
++      @authconfig.insert_default_acl
++    end
++  end
+ end
+-- 
+2.34.1
+

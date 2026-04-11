@@ -1,0 +1,1043 @@
+From 58dfef91fa206f29e52fc5f7efeeb334eeaf37c6 Mon Sep 17 00:00:00 2001
+From: Fred Klassen <fklassen@appneta.com>
+Date: Sat, 20 Oct 2018 04:16:08 -0700
+Subject: [PATCH] Bug #488 heap overflow csum replace4 (#496)
+
+* Bug #488 check for available buffer space before any packet edits
+
+* Bug #488 update CHANGELOG
+---
+ docs/CHANGELOG                                |  1 +
+ src/bridge.c                                  |  3 +-
+ src/common/flows.c                            |  8 +-
+ src/common/get.c                              | 14 +--
+ src/common/get.h                              |  2 +-
+ src/tcpedit/edit_packet.c                     | 96 +++++++++++++------
+ src/tcpedit/edit_packet.h                     | 10 +-
+ src/tcpedit/fuzzing.c                         |  6 +-
+ src/tcpedit/plugins/dlt_en10mb/en10mb.c       | 28 +++---
+ src/tcpedit/plugins/dlt_hdlc/hdlc.c           | 10 +-
+ src/tcpedit/plugins/dlt_ieee80211/ieee80211.c | 11 +--
+ .../plugins/dlt_jnpr_ether/jnpr_ether.c       | 16 ++--
+ src/tcpedit/plugins/dlt_linuxsll/linuxsll.c   |  8 +-
+ src/tcpedit/plugins/dlt_plugins.c             | 29 +++++-
+ src/tcpedit/plugins/dlt_pppserial/pppserial.c |  8 +-
+ src/tcpedit/plugins/dlt_radiotap/radiotap.c   | 13 ++-
+ src/tcpedit/plugins/dlt_user/user.c           |  5 +-
+ src/tcpedit/portmap.c                         |  4 +-
+ src/tcpedit/tcpedit.c                         | 91 +++++++++---------
+ src/tcpedit/tcpedit.h                         |  1 -
+ 20 files changed, 213 insertions(+), 151 deletions(-)
+
+diff --git a/docs/CHANGELOG b/docs/CHANGELOG
+index 01510206..197afd19 100644
+--- a/docs/CHANGELOG
++++ b/docs/CHANGELOG
+@@ -1,5 +1,6 @@
+ 10/18/2018 Version 4.3.0 beta2
+     - fix issues identifed by Codacy (#493)
++    - CVE-2018-18407 heap-buffer-overflow csum_replace4 (#488)
+     - CVE-2018-17974 heap-buffer-overflow dlt_en10mb_encode (#486)
+     - CVE-2018-17582 heap-buffer-overflow in get_next_packet (#484)
+     - CVE-2018-13112 heap-buffer-overflow in get_l2len (#477 dup #408)
+diff --git a/src/bridge.c b/src/bridge.c
+index d84f8167..5fa4f9d7 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -339,7 +339,8 @@ live_callback(struct live_data_t *livedata, struct pcap_pkthdr *pkthdr,
+ 
+         /* look for include or exclude CIDR match */
+         if (livedata->options->xX.cidr != NULL) {
+-            if (!process_xX_by_cidr_ipv4(livedata->options->xX.mode, livedata->options->xX.cidr, ip_hdr)) {
++            if (!ip_hdr ||
++                    !process_xX_by_cidr_ipv4(livedata->options->xX.mode, livedata->options->xX.cidr, ip_hdr)) {
+                 dbg(2, "Skipping IPv4 packet due to CIDR match");
+                 return (1);
+             }
+diff --git a/src/common/flows.c b/src/common/flows.c
+index 8a32c423..1d962f88 100644
+--- a/src/common/flows.c
++++ b/src/common/flows.c
+@@ -158,7 +158,6 @@ flow_entry_type_t flow_decode(flow_hash_table_t *fht, const struct pcap_pkthdr *
+         const u_char *pktdata, const int datalink, const int expiry)
+ {
+     uint16_t ether_type = 0;
+-    vlan_hdr_t *vlan_hdr;
+     ipv4_hdr_t *ip_hdr = NULL;
+     ipv6_hdr_t *ip6_hdr = NULL;
+     tcp_hdr_t *tcp_hdr;
+@@ -231,10 +230,11 @@ flow_entry_type_t flow_decode(flow_hash_table_t *fht, const struct pcap_pkthdr *
+         if ((pktdata[3] & 0x80) == 0x80) {
+             l2_len = ntohs(*((uint16_t*)&pktdata[4]));
+             l2_len += 6;
+-        } else
++        } else {
+             l2_len = 4; /* no header extensions */
++        }
+ 
+-        /* fall through */
++        /* no break */
+     case DLT_EN10MB:
+         /* set l2_len if we did not fell through */
+         if (l2_len == 0)
+@@ -246,7 +246,7 @@ flow_entry_type_t flow_decode(flow_hash_table_t *fht, const struct pcap_pkthdr *
+         ether_type = ntohs(((eth_hdr_t*)(pktdata + l2_len))->ether_type);
+ 
+         while (ether_type == ETHERTYPE_VLAN) {
+-            vlan_hdr = (vlan_hdr_t *)(pktdata + l2_len);
++            vlan_hdr_t *vlan_hdr = (vlan_hdr_t *)(pktdata + l2_len);
+             entry.vlan = vlan_hdr->vlan_priority_c_vid & htons(0xfff);
+             ether_type = ntohs(vlan_hdr->vlan_len);
+             l2_len += 4;
+diff --git a/src/common/get.c b/src/common/get.c
+index 8407d8f0..21745ee0 100644
+--- a/src/common/get.c
++++ b/src/common/get.c
+@@ -78,7 +78,6 @@ get_pcap_version(void)
+ uint16_t
+ get_l2protocol(const u_char *pktdata, const int datalen, const int datalink)
+ {
+-    uint16_t ether_type;
+     uint16_t eth_hdr_offset = 0;
+ 
+     if (!pktdata || !datalen) {
+@@ -111,7 +110,7 @@ get_l2protocol(const u_char *pktdata, const int datalen, const int datalink)
+         if (datalen >= (sizeof(eth_hdr_t) + eth_hdr_offset)) {
+             vlan_hdr_t *vlan_hdr;
+             eth_hdr_t *eth_hdr = (eth_hdr_t *)(pktdata + eth_hdr_offset);
+-            ether_type = ntohs(eth_hdr->ether_type);
++            uint16_t ether_type = ntohs(eth_hdr->ether_type);
+             switch (ether_type) {
+             case ETHERTYPE_VLAN: /* 802.1q */
+                 vlan_hdr = (vlan_hdr_t *)pktdata;
+@@ -359,8 +358,7 @@ get_layer4_v4(const ipv4_hdr_t *ip_hdr, const int len)
+ 
+     assert(ip_hdr);
+ 
+-    ptr = (uint32_t *) ip_hdr + ip_hdr->ip_hl;
+-
++    ptr = (u_char *)ip_hdr + (ip_hdr->ip_hl << 2);
+     /* make sure we don't jump over the end of the buffer */
+     if ((u_char *)ptr > ((u_char *)ip_hdr + len))
+         return NULL;
+@@ -391,7 +389,7 @@ get_layer4_v6(const ipv6_hdr_t *ip6_hdr, const int len)
+     next = (struct tcpr_ipv6_ext_hdr_base *)((u_char *)ip6_hdr + TCPR_IPV6_H);
+     proto = ip6_hdr->ip_nh;
+ 
+-    while (TRUE) {
++    while (1) {
+         dbgx(3, "Processing proto: 0x%hx", (uint16_t)proto);
+ 
+         switch (proto) {
+@@ -502,14 +500,18 @@ get_ipv6_next(struct tcpr_ipv6_ext_hdr_base *exthdr, const int len)
+  * the extension headers
+  */
+ uint8_t 
+-get_ipv6_l4proto(const ipv6_hdr_t *ip6_hdr, const int len)
++get_ipv6_l4proto(const ipv6_hdr_t *ip6_hdr, int len)
+ {
+     u_char *ptr = (u_char *)ip6_hdr + TCPR_IPV6_H; /* jump to the end of the IPv6 header */
+     uint8_t proto;
+     struct tcpr_ipv6_ext_hdr_base *exthdr = NULL;
+ 
+     assert(ip6_hdr);
++
+     proto = ip6_hdr->ip_nh;
++    len -= TCPR_IPV6_H;
++    if (len < 0)
++        return proto;
+ 
+     while (TRUE) {
+         dbgx(3, "Processing next proto 0x%02X", proto);
+diff --git a/src/common/get.h b/src/common/get.h
+index 6cfab2b3..c2f3461f 100644
+--- a/src/common/get.h
++++ b/src/common/get.h
+@@ -33,7 +33,7 @@ u_int16_t get_l2protocol(const u_char *pktdata, const int datalen, const int dat
+ void *get_layer4_v4(const ipv4_hdr_t *ip_hdr, const int len);
+ void *get_layer4_v6(const ipv6_hdr_t *ip_hdr, const int len);
+ 
+-u_int8_t get_ipv6_l4proto(const ipv6_hdr_t *ip6_hdr, const int len);
++u_int8_t get_ipv6_l4proto(const ipv6_hdr_t *ip6_hdr, int len);
+ void *get_ipv6_next(struct tcpr_ipv6_ext_hdr_base *exthdr, const int len);
+ 
+ const u_char *get_ipv4(const u_char *pktdata, int datalen, int datalink, u_char **newbuff);
+diff --git a/src/tcpedit/edit_packet.c b/src/tcpedit/edit_packet.c
+index ea185ac5..33c0467c 100644
+--- a/src/tcpedit/edit_packet.c
++++ b/src/tcpedit/edit_packet.c
+@@ -232,18 +232,37 @@ static void ipv6_l34_csum_replace(uint8_t *data, uint8_t protocol,
+ 
+ }
+ 
+-static void ipv4_addr_csum_replace(ipv4_hdr_t *ip_hdr, uint32_t old_ip, uint32_t new_ip)
++static void ipv4_addr_csum_replace(ipv4_hdr_t *ip_hdr, uint32_t old_ip,
++        uint32_t new_ip, int len)
+ {
+-    uint8_t *l4 = NULL, protocol;
++    uint8_t *l4, protocol;
++
+     assert(ip_hdr);
+ 
++    if (len < sizeof(*ip_hdr))
++        return;
++
+     ipv4_l34_csum_replace((uint8_t*)ip_hdr, IPPROTO_IP, old_ip, new_ip);
+ 
+-      protocol = ip_hdr->ip_p;
+-    if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP)
+-        l4 = get_layer4_v4(ip_hdr, 65536);
++    protocol = ip_hdr->ip_p;
++    switch (protocol) {
++    case IPPROTO_UDP:
++        l4 = get_layer4_v4(ip_hdr, len);
++        len -= ip_hdr->ip_hl << 2;
++        len -= TCPR_UDP_H;
++        break;
++
++    case IPPROTO_TCP:
++        l4 = get_layer4_v4(ip_hdr, len);
++        len -= ip_hdr->ip_hl << 2;
++        len -= TCPR_TCP_H;
++        break;
++
++    default:
++        l4 = NULL;
++    }
+ 
+-    if (!l4)
++    if (!l4 || len < 0)
+         return;
+ 
+     /* if this is a fragment, don't attempt to checksum the Layer4 header */
+@@ -252,17 +271,34 @@ static void ipv4_addr_csum_replace(ipv4_hdr_t *ip_hdr, uint32_t old_ip, uint32_t
+ }
+ 
+ static void ipv6_addr_csum_replace(ipv6_hdr_t *ip6_hdr,
+-        struct tcpr_in6_addr *old_ip, struct tcpr_in6_addr *new_ip)
++        struct tcpr_in6_addr *old_ip, struct tcpr_in6_addr *new_ip, int len)
+ {
+-    uint8_t *l4 = NULL, protocol;
++    uint8_t *l4, protocol;
++
+     assert(ip6_hdr);
+ 
+-    protocol = get_ipv6_l4proto(ip6_hdr, 65536);
+-    if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP ||
+-            protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMP6)
+-        l4 = get_layer4_v6(ip6_hdr, 65536);
++    if (len < sizeof(*ip6_hdr))
++        return;
++
++    protocol = get_ipv6_l4proto(ip6_hdr, len);
++    switch (protocol) {
++    case IPPROTO_UDP:
++        l4 = get_layer4_v6(ip6_hdr, len);
++        len -= sizeof(*ip6_hdr);
++        len -= TCPR_UDP_H;
++        break;
++
++    case IPPROTO_TCP:
++        l4 = get_layer4_v6(ip6_hdr, len);
++        len -= sizeof(*ip6_hdr);
++        len -= TCPR_TCP_H;
++        break;
++
++    default:
++        l4 = NULL;
++    }
+ 
+-    if (!l4)
++    if (!l4 || len < 0)
+         return;
+ 
+     ipv6_l34_csum_replace(l4, protocol, (uint32_t*)old_ip, (uint32_t*)new_ip);
+@@ -317,7 +353,7 @@ randomize_ipv6_addr(tcpedit_t *tcpedit, struct tcpr_in6_addr *addr)
+  */
+ int
+ randomize_ipv4(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr, 
+-        u_char *pktdata, ipv4_hdr_t *ip_hdr)
++        u_char *pktdata, ipv4_hdr_t *ip_hdr, int len)
+ {
+ #ifdef DEBUG
+     char srcip[16], dstip[16];
+@@ -340,14 +376,14 @@ randomize_ipv4(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+             || !tcpedit->skip_broadcast) {
+         uint32_t old_ip = ip_hdr->ip_dst.s_addr;
+         ip_hdr->ip_dst.s_addr = randomize_ipv4_addr(tcpedit, ip_hdr->ip_dst.s_addr);
+-        ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr);
++        ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr, len);
+     }
+     
+     if ((tcpedit->skip_broadcast && is_unicast_ipv4(tcpedit, (u_int32_t)ip_hdr->ip_src.s_addr))
+             || !tcpedit->skip_broadcast) {
+         uint32_t old_ip = ip_hdr->ip_src.s_addr;
+         ip_hdr->ip_src.s_addr = randomize_ipv4_addr(tcpedit, ip_hdr->ip_src.s_addr);
+-        ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr);
++        ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr, len);
+     }
+ 
+ #ifdef DEBUG    
+@@ -362,7 +398,7 @@ randomize_ipv4(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+ 
+ int
+ randomize_ipv6(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+-        u_char *pktdata, ipv6_hdr_t *ip6_hdr)
++        u_char *pktdata, ipv6_hdr_t *ip6_hdr, int len)
+ {
+ #ifdef DEBUG
+     char srcip[INET6_ADDRSTRLEN], dstip[INET6_ADDRSTRLEN];
+@@ -386,7 +422,7 @@ randomize_ipv6(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+         struct tcpr_in6_addr old_ip6;
+         memcpy(&old_ip6, &ip6_hdr->ip_dst, sizeof(old_ip6));
+         randomize_ipv6_addr(tcpedit, &ip6_hdr->ip_dst);
+-        ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst);
++        ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst, len);
+     }
+ 
+     if ((tcpedit->skip_broadcast && !is_multicast_ipv6(tcpedit, &ip6_hdr->ip_src))
+@@ -394,7 +430,7 @@ randomize_ipv6(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+         struct tcpr_in6_addr old_ip6;
+         memcpy(&old_ip6, &ip6_hdr->ip_src, sizeof(old_ip6));
+         randomize_ipv6_addr(tcpedit, &ip6_hdr->ip_src);
+-        ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src);
++        ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src, len);
+     }
+ 
+ #ifdef DEBUG
+@@ -759,7 +795,8 @@ remap_ipv6(tcpedit_t *tcpedit, tcpr_cidr_t *cidr, struct tcpr_in6_addr *addr)
+  * return 0 if no change, 1 or 2 if changed
+  */
+ int
+-rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction)
++rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction,
++        int len)
+ {
+     tcpr_cidrmap_t *cidrmap1 = NULL, *cidrmap2 = NULL;
+     int didsrc = 0, diddst = 0, loop = 1;
+@@ -774,7 +811,7 @@ rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction)
+         if (ip_in_cidr(ipmap->from, ip_hdr->ip_src.s_addr)) {
+             uint32_t old_ip = ip_hdr->ip_src.s_addr;
+             ip_hdr->ip_src.s_addr = remap_ipv4(tcpedit, ipmap->to, ip_hdr->ip_src.s_addr);
+-            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr);
++            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr, len);
+             dbgx(2, "Remapped src addr to: %s", get_addr2name4(ip_hdr->ip_src.s_addr, RESOLVE));
+             break;
+         }
+@@ -786,7 +823,7 @@ rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction)
+         if (ip_in_cidr(ipmap->from, ip_hdr->ip_dst.s_addr)) {
+             uint32_t old_ip = ip_hdr->ip_dst.s_addr;
+             ip_hdr->ip_dst.s_addr = remap_ipv4(tcpedit, ipmap->to, ip_hdr->ip_dst.s_addr);
+-            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr);
++            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr, len);
+             dbgx(2, "Remapped dst addr to: %s", get_addr2name4(ip_hdr->ip_dst.s_addr, RESOLVE));
+             break;
+         }
+@@ -812,14 +849,14 @@ rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction)
+         if ((! diddst) && ip_in_cidr(cidrmap2->from, ip_hdr->ip_dst.s_addr)) {
+             uint32_t old_ip = ip_hdr->ip_dst.s_addr;
+             ip_hdr->ip_dst.s_addr = remap_ipv4(tcpedit, cidrmap2->to, ip_hdr->ip_dst.s_addr);
+-            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr);
++            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_dst.s_addr, len);
+             dbgx(2, "Remapped dst addr to: %s", get_addr2name4(ip_hdr->ip_dst.s_addr, RESOLVE));
+             diddst = 1;
+         }
+         if ((! didsrc) && ip_in_cidr(cidrmap1->from, ip_hdr->ip_src.s_addr)) {
+             uint32_t old_ip = ip_hdr->ip_src.s_addr;
+             ip_hdr->ip_src.s_addr = remap_ipv4(tcpedit, cidrmap1->to, ip_hdr->ip_src.s_addr);
+-            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr);
++            ipv4_addr_csum_replace(ip_hdr, old_ip, ip_hdr->ip_src.s_addr, len);
+             dbgx(2, "Remapped src addr to: %s", get_addr2name4(ip_hdr->ip_src.s_addr, RESOLVE));
+             didsrc = 1;
+         }
+@@ -854,7 +891,8 @@ rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction)
+ }
+ 
+ int
+-rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction)
++rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction,
++        int len)
+ {
+     tcpr_cidrmap_t *cidrmap1 = NULL, *cidrmap2 = NULL;
+     int didsrc = 0, diddst = 0, loop = 1;
+@@ -870,7 +908,7 @@ rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction)
+             struct tcpr_in6_addr old_ip6;
+             memcpy(&old_ip6, &ip6_hdr->ip_src, sizeof(old_ip6));
+             remap_ipv6(tcpedit, ipmap->to, &ip6_hdr->ip_src);
+-            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src);
++            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src, len);
+             dbgx(2, "Remapped src addr to: %s", get_addr2name6(&ip6_hdr->ip_src, RESOLVE));
+             break;
+         }
+@@ -883,7 +921,7 @@ rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction)
+             struct tcpr_in6_addr old_ip6;
+             memcpy(&old_ip6, &ip6_hdr->ip_dst, sizeof(old_ip6));
+             remap_ipv6(tcpedit, ipmap->to, &ip6_hdr->ip_dst);
+-            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst);
++            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst, len);
+             dbgx(2, "Remapped dst addr to: %s", get_addr2name6(&ip6_hdr->ip_dst, RESOLVE));
+             break;
+         }
+@@ -910,7 +948,7 @@ rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction)
+             struct tcpr_in6_addr old_ip6;
+             memcpy(&old_ip6, &ip6_hdr->ip_dst, sizeof(old_ip6));
+             remap_ipv6(tcpedit, cidrmap2->to, &ip6_hdr->ip_dst);
+-            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst);
++            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_dst, len);
+             dbgx(2, "Remapped dst addr to: %s", get_addr2name6(&ip6_hdr->ip_dst, RESOLVE));
+             diddst = 1;
+         }
+@@ -918,7 +956,7 @@ rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip6_hdr, tcpr_dir_t direction)
+             struct tcpr_in6_addr old_ip6;
+             memcpy(&old_ip6, &ip6_hdr->ip_src, sizeof(old_ip6));
+             remap_ipv6(tcpedit, cidrmap1->to, &ip6_hdr->ip_src);
+-            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src);
++            ipv6_addr_csum_replace(ip6_hdr, &old_ip6, &ip6_hdr->ip_src, len);
+             dbgx(2, "Remapped src addr to: %s", get_addr2name6(&ip6_hdr->ip_src, RESOLVE));
+             didsrc = 1;
+         }
+diff --git a/src/tcpedit/edit_packet.h b/src/tcpedit/edit_packet.h
+index 3d086685..c65ef6d4 100644
+--- a/src/tcpedit/edit_packet.h
++++ b/src/tcpedit/edit_packet.h
+@@ -28,10 +28,10 @@ int untrunc_packet(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+         u_char **pktdata, ipv4_hdr_t *ip_hdr, ipv6_hdr_t *ip6_hdr);
+ 
+ int randomize_ipv4(tcpedit_t *tcpedit, struct pcap_pkthdr *pktdhr, 
+-        u_char *pktdata, ipv4_hdr_t *ip_hdr);
++        u_char *pktdata, ipv4_hdr_t *ip_hdr, int len);
+ 
+ int randomize_ipv6(tcpedit_t *tcpedit, struct pcap_pkthdr *pktdhr,
+-        u_char *pktdata, ipv6_hdr_t *ip_hdr);
++        u_char *pktdata, ipv6_hdr_t *ip_hdr, int len);
+ 
+ int randomize_iparp(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr, 
+         u_char *pktdata, int datalink);
+@@ -49,9 +49,11 @@ void fix_ipv6_length(struct pcap_pkthdr *pkthdr, ipv6_hdr_t *ip6_hdr);
+ int extract_data(tcpedit_t *tcpedit, const u_char *pktdata, 
+         int caplen, char *l7data[]);
+ 
+-int rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction);
++int rewrite_ipv4l3(tcpedit_t *tcpedit, ipv4_hdr_t *ip_hdr, tcpr_dir_t direction,
++        int len);
+ 
+-int rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip_hdr, tcpr_dir_t direction);
++int rewrite_ipv6l3(tcpedit_t *tcpedit, ipv6_hdr_t *ip_hdr, tcpr_dir_t direction,
++        int len);
+ 
+ int rewrite_iparp(tcpedit_t *tcpedit, arp_hdr_t *arp_hdr, int direction);
+ 
+diff --git a/src/tcpedit/fuzzing.c b/src/tcpedit/fuzzing.c
+index e5149964..ba8e2384 100644
+--- a/src/tcpedit/fuzzing.c
++++ b/src/tcpedit/fuzzing.c
+@@ -106,7 +106,7 @@ fuzzing(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+     plugin = tcpedit->dlt_ctx->encoder;
+     l2len = plugin->plugin_l2len(ctx, packet, caplen);
+     l2proto = ntohs(ctx->proto);
+-    if (caplen < l2len)
++    if (l2len == -1 || caplen < l2len)
+         goto done;
+ 
+     /*
+@@ -124,7 +124,7 @@ fuzzing(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+     switch (l2proto) {
+     case (ETHERTYPE_IP):
+     {
+-        l4data = get_layer4_v4((ipv4_hdr_t*)l3data, caplen);
++        l4data = get_layer4_v4((ipv4_hdr_t*)l3data, caplen - l2len);
+         if (!l4data)
+             goto done;
+ 
+@@ -132,7 +132,7 @@ fuzzing(tcpedit_t *tcpedit, struct pcap_pkthdr *pkthdr,
+         break;
+     }
+     case (ETHERTYPE_IP6): {
+-        l4data = get_layer4_v6((ipv6_hdr_t*)l3data, caplen);
++        l4data = get_layer4_v6((ipv6_hdr_t*)l3data, caplen - l2len);
+         if (!l4data)
+             goto done;
+ 
+diff --git a/src/tcpedit/plugins/dlt_en10mb/en10mb.c b/src/tcpedit/plugins/dlt_en10mb/en10mb.c
+index 6880727f..8e18c15b 100644
+--- a/src/tcpedit/plugins/dlt_en10mb/en10mb.c
++++ b/src/tcpedit/plugins/dlt_en10mb/en10mb.c
+@@ -698,8 +698,7 @@ dlt_en10mb_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     assert(packet);
+     
+     l2len = dlt_en10mb_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -720,8 +719,7 @@ dlt_en10mb_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen, u_c
+     assert(l3data);
+     
+     l2len = dlt_en10mb_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+@@ -764,26 +762,26 @@ int
+ dlt_en10mb_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+ {
+     int l2len;
+-    struct tcpr_ethernet_hdr *eth = NULL;
++    uint16_t ether_type;
+     
+     assert(ctx);
+     assert(packet);
+ 
+-    eth = (struct tcpr_ethernet_hdr *)packet;
+-    switch (ntohs(eth->ether_type)) {
+-        case ETHERTYPE_VLAN:
+-            l2len = 18;
+-            break;
+-        
+-        default:
+-            l2len = 14;
+-            break;
++    l2len = sizeof(eth_hdr_t);
++    if (pktlen < l2len)
++        return -1;
++
++    ether_type = ntohs(((eth_hdr_t*)(packet + l2len))->ether_type);
++    while (ether_type == ETHERTYPE_VLAN) {
++        vlan_hdr_t *vlan_hdr = (vlan_hdr_t *)(packet + l2len);
++        ether_type = ntohs(vlan_hdr->vlan_len);
++        l2len += 4;
+     }
+ 
+     if (l2len > 0) {
+         if (pktlen < l2len) {
+             /* can happen if fuzzing is enabled */
+-            return 0;
++            return -1;
+         }
+ 
+         return l2len;
+diff --git a/src/tcpedit/plugins/dlt_hdlc/hdlc.c b/src/tcpedit/plugins/dlt_hdlc/hdlc.c
+index 90942d25..69c67c98 100644
+--- a/src/tcpedit/plugins/dlt_hdlc/hdlc.c
++++ b/src/tcpedit/plugins/dlt_hdlc/hdlc.c
+@@ -322,10 +322,8 @@ dlt_hdlc_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     assert(ctx);
+     assert(packet);
+ 
+-    /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_hdlc_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -345,10 +343,8 @@ dlt_hdlc_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen, u_cha
+     assert(packet);
+     assert(l3data);
+     
+-    /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_hdlc_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+@@ -364,7 +360,7 @@ dlt_hdlc_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     if (pktlen < 4)
+-        return 0;
++        return -1;
+ 
+     /* HDLC is a static 4 bytes */
+     return 4;
+diff --git a/src/tcpedit/plugins/dlt_ieee80211/ieee80211.c b/src/tcpedit/plugins/dlt_ieee80211/ieee80211.c
+index cd6ee5d3..3ef5dbad 100644
+--- a/src/tcpedit/plugins/dlt_ieee80211/ieee80211.c
++++ b/src/tcpedit/plugins/dlt_ieee80211/ieee80211.c
+@@ -187,8 +187,7 @@ dlt_ieee80211_decode(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     l2len = dlt_ieee80211_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return TCPEDIT_ERROR;
+ 
+     dbgx(3, "Decoding 802.11 packet " COUNTER_SPEC, ctx->tcpedit->runtime.packetnum);
+@@ -241,7 +240,7 @@ dlt_ieee80211_proto(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     l2len = dlt_ieee80211_l2len(ctx, packet, pktlen);
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return TCPEDIT_ERROR;
+ 
+     /* check 802.11 frame control field */
+@@ -288,8 +287,7 @@ dlt_ieee80211_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     l2len = dlt_ieee80211_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     dbgx(1, "Getting data for packet " COUNTER_SPEC " from offset: %d", ctx->tcpedit->runtime.packetnum, l2len);
+@@ -312,8 +310,7 @@ dlt_ieee80211_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen,
+     assert(l3data);
+ 
+     l2len = dlt_ieee80211_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+diff --git a/src/tcpedit/plugins/dlt_jnpr_ether/jnpr_ether.c b/src/tcpedit/plugins/dlt_jnpr_ether/jnpr_ether.c
+index ff170805..39257696 100644
+--- a/src/tcpedit/plugins/dlt_jnpr_ether/jnpr_ether.c
++++ b/src/tcpedit/plugins/dlt_jnpr_ether/jnpr_ether.c
+@@ -341,8 +341,7 @@ dlt_jnpr_ether_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     }
+ 
+     l2len = dlt_jnpr_ether_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -363,8 +362,7 @@ dlt_jnpr_ether_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen,
+     assert(l3data);
+     
+     l2len = dlt_jnpr_ether_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+@@ -405,14 +403,14 @@ dlt_jnpr_ether_get_mac(tcpeditdlt_t *ctx, tcpeditdlt_mac_type_t mac, const u_cha
+ int
+ dlt_jnpr_ether_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+ {
+-    uint16_t len;
++    uint16_t len, res;
+     jnpr_ether_config_t *config;
+ 
+     assert(ctx);
+     assert(packet);
+ 
+     if (pktlen < JUNIPER_ETHER_EXTLEN_OFFSET + 2)
+-        return 0;
++        return -1;
+     
+     config = (jnpr_ether_config_t *)ctx->encoder->config;
+ 
+@@ -423,7 +421,11 @@ dlt_jnpr_ether_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     dbgx(3, "juniper header len: %u", len);
+     
+     /* add the 802.3 length */
+-    len += tcpedit_dlt_l2len(config->subctx, DLT_EN10MB, (packet + len), (pktlen - len));
++    res = tcpedit_dlt_l2len(config->subctx, DLT_EN10MB, (packet + len), (pktlen - len));
++    if (res == -1)
++        return TCPEDIT_ERROR;
++
++    len += res;
+     dbgx(3, "total l2len: %u", len);
+     
+     /* and return that */
+diff --git a/src/tcpedit/plugins/dlt_linuxsll/linuxsll.c b/src/tcpedit/plugins/dlt_linuxsll/linuxsll.c
+index 98a9e159..c8473a82 100644
+--- a/src/tcpedit/plugins/dlt_linuxsll/linuxsll.c
++++ b/src/tcpedit/plugins/dlt_linuxsll/linuxsll.c
+@@ -241,8 +241,7 @@ dlt_linuxsll_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     l2len = dlt_linuxsll_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -263,8 +262,7 @@ dlt_linuxsll_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen, u
+     assert(l3data);
+ 
+     l2len = dlt_linuxsll_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+@@ -280,7 +278,7 @@ dlt_linuxsll_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     if (pktlen < (int)sizeof(linux_sll_header_t))
+-        return 0;
++        return -1;
+ 
+     return sizeof(linux_sll_header_t);
+ }
+diff --git a/src/tcpedit/plugins/dlt_plugins.c b/src/tcpedit/plugins/dlt_plugins.c
+index 1b1f78b2..018f5152 100644
+--- a/src/tcpedit/plugins/dlt_plugins.c
++++ b/src/tcpedit/plugins/dlt_plugins.c
+@@ -304,6 +304,8 @@ int
+ tcpedit_dlt_l2len(tcpeditdlt_t *ctx, int dlt, const u_char *packet, const int pktlen)
+ {
+     tcpeditdlt_plugin_t *plugin;
++    int res;
++
+     assert(ctx);
+     assert(dlt >= 0);
+     assert(packet);
+@@ -312,7 +314,15 @@ tcpedit_dlt_l2len(tcpeditdlt_t *ctx, int dlt, const u_char *packet, const int pk
+         tcpedit_seterr(ctx->tcpedit, "Unable to find plugin for DLT 0x%04x", dlt);
+         return -1;        
+     }
+-    return plugin->plugin_l2len(ctx, packet, pktlen);
++
++    res = plugin->plugin_l2len(ctx, packet, pktlen);
++    if (res == -1) {
++        tcpedit_seterr(ctx->tcpedit, "Packet length %d is to short to contain a layer 2 header for DLT 0x%04x",
++                pktlen, dlt);
++        return -1;
++    }
++
++    return res;
+ }
+ 
+ /**
+@@ -342,6 +352,7 @@ u_char *
+ tcpedit_dlt_l3data(tcpeditdlt_t *ctx, int dlt, u_char *packet, const int pktlen)
+ {
+     tcpeditdlt_plugin_t *plugin;
++    u_char *res;
+ 
+     assert(ctx);
+     assert(dlt >= 0);
+@@ -352,7 +363,12 @@ tcpedit_dlt_l3data(tcpeditdlt_t *ctx, int dlt, u_char *packet, const int pktlen)
+         return NULL;
+     }
+ 
+-    return plugin->plugin_get_layer3(ctx, packet, pktlen);
++    res = plugin->plugin_get_layer3(ctx, packet, pktlen);
++    if (res == NULL)
++        tcpedit_seterr(ctx->tcpedit, "Packet length %d is to short to contain a layer 3 header for DLT 0x%04x",
++                pktlen, dlt);
++
++    return res;
+ }
+ 
+ /**
+@@ -367,6 +383,8 @@ u_char *
+ tcpedit_dlt_merge_l3data(tcpeditdlt_t *ctx, int dlt, u_char *packet, const int pktlen, u_char *l3data)
+ {
+     tcpeditdlt_plugin_t *plugin;
++    u_char *res;
++
+     assert(ctx);
+     assert(dlt >= 0);
+     assert(packet);
+@@ -379,7 +397,12 @@ tcpedit_dlt_merge_l3data(tcpeditdlt_t *ctx, int dlt, u_char *packet, const int p
+         return NULL;
+     }
+ 
+-    return plugin->plugin_merge_layer3(ctx, packet, pktlen, l3data);
++    res = plugin->plugin_merge_layer3(ctx, packet, pktlen, l3data);
++    if (res == NULL)
++        tcpedit_seterr(ctx->tcpedit, "Packet length %d is to short for layer 3 merge for DLT 0x%04x",
++                pktlen, dlt);
++
++    return res;
+ }
+ 
+ 
+diff --git a/src/tcpedit/plugins/dlt_pppserial/pppserial.c b/src/tcpedit/plugins/dlt_pppserial/pppserial.c
+index a140da3f..a9e7382e 100644
+--- a/src/tcpedit/plugins/dlt_pppserial/pppserial.c
++++ b/src/tcpedit/plugins/dlt_pppserial/pppserial.c
+@@ -301,8 +301,7 @@ dlt_pppserial_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+ 
+     /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_pppserial_l2len(ctx, packet, pktlen);
+-
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -324,8 +323,7 @@ dlt_pppserial_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen,
+     
+     /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_pppserial_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+@@ -355,7 +353,7 @@ dlt_pppserial_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     if (pktlen < 4)
+-        return 0;
++        return -1;
+ 
+     return 4;
+ }
+diff --git a/src/tcpedit/plugins/dlt_radiotap/radiotap.c b/src/tcpedit/plugins/dlt_radiotap/radiotap.c
+index 7d6443aa..f4a8dc1d 100644
+--- a/src/tcpedit/plugins/dlt_radiotap/radiotap.c
++++ b/src/tcpedit/plugins/dlt_radiotap/radiotap.c
+@@ -314,7 +314,7 @@ dlt_radiotap_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     assert(packet);
+ 
+     if (pktlen < 4)
+-        return 0;
++        return -1;
+ 
+     memcpy(&radiolen, &packet[2], 2);
+     /* little endian to host */
+@@ -328,12 +328,19 @@ dlt_radiotap_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+ int
+ dlt_radiotap_80211_l2len(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+ {
+-    int radiolen;
++    int radiolen, res;
+     u_char *data;
+     
+     radiolen = dlt_radiotap_l2len(ctx, packet, pktlen);
++    if (radiolen == -1)
++        return TCPEDIT_ERROR;
++
+     data = dlt_radiotap_get_80211(ctx, packet, pktlen, radiolen);
+-    radiolen += dlt_ieee80211_l2len(ctx, data, pktlen - radiolen);
++    res = dlt_ieee80211_l2len(ctx, data, pktlen - radiolen);
++    if (res == -1)
++        return TCPEDIT_ERROR;
++
++    radiolen += res;
+     return radiolen;
+ }
+ 
+diff --git a/src/tcpedit/plugins/dlt_user/user.c b/src/tcpedit/plugins/dlt_user/user.c
+index 061f733d..2194408e 100644
+--- a/src/tcpedit/plugins/dlt_user/user.c
++++ b/src/tcpedit/plugins/dlt_user/user.c
+@@ -294,7 +294,7 @@ dlt_user_get_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen)
+     /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_user_l2len(ctx, packet, pktlen);
+ 
+-    if (l2len < 0 || pktlen < l2len)
++    if (l2len == -1 || pktlen < l2len)
+         return NULL;
+ 
+     return tcpedit_dlt_l3data_copy(ctx, packet, pktlen, l2len);
+@@ -316,8 +316,7 @@ dlt_user_merge_layer3(tcpeditdlt_t *ctx, u_char *packet, const int pktlen, u_cha
+     
+     /* FIXME: Is there anything else we need to do?? */
+     l2len = dlt_user_l2len(ctx, packet, pktlen);
+-    
+-    if (pktlen < l2len)
++    if (l2len == TCPEDIT_ERROR || pktlen < l2len)
+         return NULL;
+     
+     return tcpedit_dlt_l3data_merge(ctx, packet, pktlen, l3data, l2len);
+diff --git a/src/tcpedit/portmap.c b/src/tcpedit/portmap.c
+index 84663a06..284573d3 100644
+--- a/src/tcpedit/portmap.c
++++ b/src/tcpedit/portmap.c
+@@ -63,7 +63,7 @@ ports2PORT(char *ports)
+ {
+     tcpedit_portmap_t *portmap = NULL, *portmap_head = NULL, *portmap_last = NULL;
+     char *from_s, *to_s, *from_begin, *from_end, *badchar;
+-    long from_l, to_l, i;
++    long from_l, to_l;
+     char *token = NULL, *token2 = NULL;
+ 
+     assert(ports);
+@@ -105,6 +105,8 @@ ports2PORT(char *ports)
+ 
+     /* process a range, setting from_begin & from_end */
+     if (strchr(from_s, '-')) {
++        long i;
++
+         from_begin = strtok_r(from_s, "-", &token2);
+         from_end = strtok_r(NULL, "-", &token2);
+         long from_b = strtol(from_begin, &badchar, 10);
+diff --git a/src/tcpedit/tcpedit.c b/src/tcpedit/tcpedit.c
+index b23fadbe..1b6ec403 100644
+--- a/src/tcpedit/tcpedit.c
++++ b/src/tcpedit/tcpedit.c
+@@ -87,7 +87,8 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+     ipv4_hdr_t *ip_hdr = NULL;
+     ipv6_hdr_t *ip6_hdr = NULL;
+     arp_hdr_t *arp_hdr = NULL;
+-    int l2len = 0, l2proto, retval = 0, dst_dlt, src_dlt, pktlen, lendiff;
++    int l2len, l2proto, retval = 0;
++    int dst_dlt, src_dlt, pktlen, lendiff;
+     int ipflags = 0, tclass = 0;
+     int needtorecalc = 0;           /* did the packet change? if so, checksum */
+     u_char *packet;
+@@ -146,22 +147,54 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+     
+     dst_dlt = tcpedit_dlt_dst(tcpedit->dlt_ctx);
+     l2len = tcpedit_dlt_l2len(tcpedit->dlt_ctx, dst_dlt, packet, (*pkthdr)->caplen);
++    if (l2len == -1)
++        return TCPEDIT_ERROR;
+ 
+     dbgx(2, "dst_dlt = %04x\tsrc_dlt = %04x\tproto = %04x\tl2len = %d", dst_dlt, src_dlt, ntohs(l2proto), l2len);
+ 
+     /* does packet have an IP header?  if so set our pointer to it */
+     if (l2proto == htons(ETHERTYPE_IP)) {
++        u_char *p;
++
++        if ((*pkthdr)->caplen < l2len + sizeof(*ip_hdr)) {
++            tcpedit_seterr(tcpedit, "Packet length %d is to short to contain a layer IP header for DLT 0x%04x",
++                    pktlen, dst_dlt);
++            return TCPEDIT_ERROR;
++        }
++
+         ip_hdr = (ipv4_hdr_t *)tcpedit_dlt_l3data(tcpedit->dlt_ctx, dst_dlt, packet, (*pkthdr)->caplen);
+-        if (ip_hdr == NULL) {
++        if (ip_hdr == NULL)
+             return TCPEDIT_ERROR;
+-        }        
+-        dbgx(3, "Packet has an IPv4 header: %p...", ip_hdr);
++
++        p = get_layer4_v4(ip_hdr, (*pkthdr)->caplen - l2len);
++        if (!p) {
++            tcpedit_seterr(tcpedit, "Packet length %d is to short to contain a layer %d byte IP header for DLT 0x%04x",
++                    pktlen, ip_hdr->ip_hl << 2,  dst_dlt);
++            return TCPEDIT_ERROR;
++        }
++
++        dbgx(3, "Packet has an IPv4 header: 0x%p...", ip_hdr);
+     } else if (l2proto == htons(ETHERTYPE_IP6)) {
++        u_char *p;
++
++        if ((*pkthdr)->caplen < l2len + sizeof(*ip6_hdr)) {
++            tcpedit_seterr(tcpedit, "Packet length %d is to short to contain a layer IPv6 header for DLT 0x%04x",
++                    pktlen, dst_dlt);
++            return TCPEDIT_ERROR;
++        }
++
+         ip6_hdr = (ipv6_hdr_t *)tcpedit_dlt_l3data(tcpedit->dlt_ctx, dst_dlt, packet, (*pkthdr)->caplen);
+-        if (ip6_hdr == NULL) {
++        if (ip6_hdr == NULL)
++            return TCPEDIT_ERROR;
++
++        p = get_layer4_v6(ip6_hdr, (*pkthdr)->caplen - l2len);
++        if (!p) {
++            tcpedit_seterr(tcpedit, "Packet length %d is to short to contain a layer %d byte IPv6 header for DLT 0x%04x",
++                    pktlen, ip_hdr->ip_hl << 2,  dst_dlt);
+             return TCPEDIT_ERROR;
+         }
+-        dbgx(3, "Packet has an IPv6 header: %p...", ip6_hdr);
++
++        dbgx(3, "Packet has an IPv6 header: 0x%p...", ip6_hdr);
+     } else {
+         dbgx(3, "Packet isn't IPv4 or IPv6: 0x%04x", l2proto);
+         /* non-IP packets have a NULL ip_hdr struct */
+@@ -245,10 +278,12 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+     if (tcpedit->rewrite_ip) {
+         /* IP packets */
+         if (ip_hdr != NULL) {
+-            if ((retval = rewrite_ipv4l3(tcpedit, ip_hdr, direction)) < 0)
++            if ((retval = rewrite_ipv4l3(tcpedit, ip_hdr, direction,
++                    (*pkthdr)->caplen - l2len)) < 0)
+                 return TCPEDIT_ERROR;
+         } else if (ip6_hdr != NULL) {
+-            if ((retval = rewrite_ipv6l3(tcpedit, ip6_hdr, direction)) < 0)
++            if ((retval = rewrite_ipv6l3(tcpedit, ip6_hdr, direction,
++                    (*pkthdr)->caplen - l2len)) < 0)
+                 return TCPEDIT_ERROR;
+         }
+ 
+@@ -270,12 +305,12 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+         /* IPv4 Packets */
+         if (ip_hdr != NULL) {
+             if ((retval = randomize_ipv4(tcpedit, *pkthdr, packet, 
+-                    ip_hdr)) < 0)
++                    ip_hdr, (*pkthdr)->caplen - l2len)) < 0)
+                 return TCPEDIT_ERROR;
+ 
+         } else if (ip6_hdr != NULL) {
+             if ((retval = randomize_ipv6(tcpedit, *pkthdr, packet,
+-                    ip6_hdr)) < 0)
++                    ip6_hdr, (*pkthdr)->caplen - l2len)) < 0)
+                 return TCPEDIT_ERROR;
+ 
+         /* ARP packets */
+@@ -546,21 +581,6 @@ tcpedit_l3data(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int
+     return result;
+ }
+ 
+-/**
+- * return the length of the layer 2 header.  Returns TCPEDIT_ERROR on error
+- */
+-int 
+-tcpedit_l2len(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int pktlen)
+-{
+-    int result = 0;
+-    if (code == BEFORE_PROCESS) {
+-        result = tcpedit_dlt_l2len(tcpedit->dlt_ctx, tcpedit->dlt_ctx->decoder->dlt, packet, pktlen);
+-    } else {
+-        result = tcpedit_dlt_l2len(tcpedit->dlt_ctx, tcpedit->dlt_ctx->encoder->dlt, packet, pktlen);
+-    }
+-    return result;
+-}
+-
+ /**
+  * Returns the layer 3 type, often encoded as the layer2.proto field
+  */
+@@ -575,24 +595,3 @@ tcpedit_l3proto(tcpedit_t *tcpedit, tcpedit_coder code, const u_char *packet, co
+     }
+     return ntohs(result);
+ }
+-
+-/*
+-u_char *
+-tcpedit_srcmac(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int pktlen)
+-{
+-   
+-}
+-
+-u_char *
+-tcpedit_dstmac(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int pktlen)
+-{
+-    
+-}
+-
+-int 
+-tcpedit_maclen(tcpedit_t *tcpedit, tcpedit_coder code)
+-{
+-    
+-}
+-
+-*/
+diff --git a/src/tcpedit/tcpedit.h b/src/tcpedit/tcpedit.h
+index 58f7dd11..7030833f 100644
+--- a/src/tcpedit/tcpedit.h
++++ b/src/tcpedit/tcpedit.h
+@@ -51,7 +51,6 @@ int tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+ int tcpedit_close(tcpedit_t *tcpedit);
+ int tcpedit_get_output_dlt(tcpedit_t *tcpedit);
+ 
+-int tcpedit_l2len(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int pktlen);
+ const u_char *tcpedit_l3data(tcpedit_t *tcpedit, tcpedit_coder code, u_char *packet, const int pktlen);
+ 
+ int tcpedit_l3proto(tcpedit_t *tcpedit, tcpedit_coder code, const u_char *packet, const int pktlen);
+-- 
+2.34.1
+

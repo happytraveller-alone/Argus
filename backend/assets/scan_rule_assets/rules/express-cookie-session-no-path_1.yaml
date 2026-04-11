@@ -1,0 +1,92 @@
+rules:
+- id: express-cookie-session-no-path_1
+  languages:
+  - javascript
+  - typescript
+  message: 'Default session middleware settings: `path` not set. It indicates the
+    path of the cookie; use it to compare against the request path. If this and domain
+    match, then send the cookie in the request.'
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-522: Insufficiently Protected Credentials'
+    cwe2021-top25: true
+    impact: LOW
+    likelihood: HIGH
+    owasp:
+    - A02:2017 - Broken Authentication
+    - A04:2021 - Insecure Design
+    references:
+    - https://owasp.org/Top10/A04_2021-Insecure_Design
+    source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
+    subcategory:
+    - vuln
+    technology:
+    - express
+  patterns:
+  - pattern-either:
+    - pattern-inside: '$SESSION = require(''cookie-session'');
+
+        ...
+
+        '
+    - pattern-inside: '$SESSION = require(''express-session'');
+
+        ...
+
+        '
+  - pattern: $SESSION(...)
+  - pattern-not-inside: $SESSION(<... {cookie:{path:...}} ...>,...)
+  - pattern-not-inside: '$OPTS = <... {cookie:{path:...}} ...>;
+
+      ...
+
+      $SESSION($OPTS,...);
+
+      '
+  - pattern-not-inside: '$OPTS = ...;
+
+      ...
+
+      $COOKIE = <... {path:...} ...>;
+
+      ...
+
+      $SESSION($OPTS,...);
+
+      '
+  - pattern-not-inside: '$OPTS = ...;
+
+      ...
+
+      $OPTS.cookie = <... {path:...} ...>;
+
+      ...
+
+      $SESSION($OPTS,...);
+
+      '
+  - pattern-not-inside: '$OPTS = ...;
+
+      ...
+
+      $COOKIE.path = ...;
+
+      ...
+
+      $SESSION($OPTS,...);
+
+      '
+  - pattern-not-inside: '$OPTS = ...;
+
+      ...
+
+      $OPTS.cookie.path = ...;
+
+      ...
+
+      $SESSION($OPTS,...);
+
+      '
+  severity: WARNING

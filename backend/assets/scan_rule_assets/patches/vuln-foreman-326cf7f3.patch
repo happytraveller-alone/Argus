@@ -1,0 +1,58 @@
+From 326cf7f38139b1c6c8b8e5774d06ee0160909d6a Mon Sep 17 00:00:00 2001
+From: Shlomi Zadok <shlomi@ben-hanna.com>
+Date: Mon, 11 May 2015 21:12:22 +0300
+Subject: [PATCH] fixes #10275 - Add secure cookie when in ssl (CVE-2015-3155)
+
+(cherry picked from commit 0b03b9bdb0579559c2286b457999245ee9c218bc)
+---
+ app/assets/javascripts/application.js   | 2 +-
+ app/assets/javascripts/host_checkbox.js | 2 +-
+ config/application.rb                   | 6 ++++++
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/app/assets/javascripts/application.js b/app/assets/javascripts/application.js
+index fa36b7171..f0fa3c53f 100644
+--- a/app/assets/javascripts/application.js
++++ b/app/assets/javascripts/application.js
+@@ -109,7 +109,7 @@ function onContentLoad(){
+   });
+ 
+   var tz = jstz.determine();
+-  $.cookie('timezone', tz.name(), { path: '/' });
++  $.cookie('timezone', tz.name(), { path: '/', secure: location.protocol === 'https:' });
+ }
+ 
+ function preserve_selected_options(elem) {
+diff --git a/app/assets/javascripts/host_checkbox.js b/app/assets/javascripts/host_checkbox.js
+index 06c4a7b3c..d696f2918 100644
+--- a/app/assets/javascripts/host_checkbox.js
++++ b/app/assets/javascripts/host_checkbox.js
+@@ -9,7 +9,7 @@ function hostChecked(box) {
+     addHostId(cid);
+   else
+     rmHostId(cid);
+-  $.cookie($.cookieName, JSON.stringify($.foremanSelectedHosts));
++  $.cookie($.cookieName, JSON.stringify($.foremanSelectedHosts), { secure: location.protocol === 'https:' });
+   toggle_actions();
+   update_counter();
+   return false;
+diff --git a/config/application.rb b/config/application.rb
+index d6e9cd116..fd9157719 100644
+--- a/config/application.rb
++++ b/config/application.rb
+@@ -146,6 +146,12 @@ module Foreman
+         child.helper helpers
+       end
+     end
++
++    # Secure cookies if the connection is via SSL
++    if !!SETTINGS[:require_ssl]
++      config.session_options[:secure] = !!SETTINGS[:require_ssl]
++      middleware.use config.session_store, config.session_options
++    end
+   end
+ 
+   def self.setup_console
+-- 
+2.34.1
+

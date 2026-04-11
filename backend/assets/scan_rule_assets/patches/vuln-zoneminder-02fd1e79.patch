@@ -1,0 +1,44 @@
+From 02fd1e79b3bfa5b2e2087cb1255f9dbd921ccae8 Mon Sep 17 00:00:00 2001
+From: Matt N <github@matthew.noorenberghe.com>
+Date: Sat, 19 Jan 2019 06:46:08 -0800
+Subject: [PATCH] Fix ajax/status.php orderby sql injection (#2421)
+
+https://github.com/LoRexxar/CVE_Request/tree/master/zoneminder%20vul%20before%20v1.32.3#ajaxstatusphp-line-276-orderby-sql-injection
+---
+ web/ajax/status.php | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/web/ajax/status.php b/web/ajax/status.php
+index dbac0773b1..6717578312 100644
+--- a/web/ajax/status.php
++++ b/web/ajax/status.php
+@@ -259,13 +259,14 @@ function collectData() {
+         $index = 0;
+         $where = array();
+         $values = array();
+-        foreach( $entitySpec['selector'] as $selector ) {
++        foreach( $entitySpec['selector'] as $selIndex => $selector ) {
++          $selectorParamName = ':selector' . $selIndex;
+           if ( is_array( $selector ) ) {
+-            $where[] = $selector['selector'].' = ?';
+-            $values[] = validInt($id[$index]);
++            $where[] = $selector['selector'].' = '.$selectorParamName;
++            $values[$selectorParamName] = validInt($id[$index]);
+           } else {
+-            $where[] = $selector.' = ?';
+-            $values[] = validInt($id[$index]);
++            $where[] = $selector.' = '.$selectorParamName;
++            $values[$selectorParamName] = validInt($id[$index]);
+           }
+           $index++;
+         }
+@@ -274,7 +275,8 @@ function collectData() {
+       if ( $groupSql )
+         $sql .= ' GROUP BY '.join( ',', array_unique( $groupSql ) );
+       if ( !empty($_REQUEST['sort']) )
+-        $sql .= ' order by '.$_REQUEST['sort'];
++        $sql .= ' order by :sort';
++      $values[':sort'] = $_REQUEST['sort'];
+       if ( !empty($entitySpec['limit']) )
+         $limit = $entitySpec['limit'];
+       elseif ( !empty($_REQUEST['count']) )

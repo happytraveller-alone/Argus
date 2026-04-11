@@ -1,0 +1,83 @@
+From 0eec2a9836329051c6742549e65a94a4c24fe6f7 Mon Sep 17 00:00:00 2001
+From: Samuel Williams <samuel.williams@oriontransfer.co.nz>
+Date: Fri, 24 May 2024 09:48:48 +0900
+Subject: [PATCH] Specify a maximum number of runs to limit the request params
+ -> DoS. (#191)
+
+---
+ lib/rack/contrib/profiler.rb | 25 +++++++++++++++++++++++--
+ test/spec_rack_profiler.rb   |  7 +++++++
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/lib/rack/contrib/profiler.rb b/lib/rack/contrib/profiler.rb
+index 9367720..324cd43 100644
+--- a/lib/rack/contrib/profiler.rb
++++ b/lib/rack/contrib/profiler.rb
+@@ -35,8 +35,11 @@ module Rack
+       @profile = nil
+       @printer = parse_printer(options[:printer] || DEFAULT_PRINTER)
+       @times = (options[:times] || 1).to_i
++      @maximum_runs = options.fetch(:maximum_runs, 10)
+     end
+ 
++    attr :maximum_runs
++
+     def call(env)
+       if mode = profiling?(env)
+         profile(env, mode)
+@@ -61,14 +64,32 @@ module Rack
+         end
+       end
+ 
++      # How many times to run the request within the profiler.
++      # If the profiler_runs query parameter is set, use that.
++      # Otherwise, use the :times option passed to `#initialize`.
++      # If the profiler_runs query parameter is greater than the
++      # :maximum option passed to `#initialize`, use the :maximum
++      # option.
++      def runs(request)
++        if profiler_runs = request.params['profiler_runs']
++          profiler_runs = profiler_runs.to_i
++          if profiler_runs > @maximum_runs
++            return @maximum_runs
++          else
++            return profiler_runs
++          end
++        else
++          return @times
++        end
++      end
++
+       def profile(env, mode)
+         @profile = ::RubyProf::Profile.new(measure_mode: ::RubyProf.const_get(mode.upcase))
+ 
+         GC.enable_stats if GC.respond_to?(:enable_stats)
+         request = Rack::Request.new(env.clone)
+-        runs = (request.params['profiler_runs'] || @times).to_i
+         result = @profile.profile do
+-          runs.times { @app.call(env) }
++          runs(request).times { @app.call(env) }
+         end
+         GC.disable_stats if GC.respond_to?(:disable_stats)
+ 
+diff --git a/test/spec_rack_profiler.rb b/test/spec_rack_profiler.rb
+index d64853d..9feac63 100644
+--- a/test/spec_rack_profiler.rb
++++ b/test/spec_rack_profiler.rb
+@@ -27,6 +27,13 @@ begin
+       _(body.to_enum.to_a.join).must_match(/\[#{runs} calls, #{runs} total\]/)
+     end
+ 
++    specify 'called more than the default maximum times via query params' do
++      runs = 20
++      req = Rack::MockRequest.env_for("/", :params => "profile=process_time&profiler_runs=#{runs}")
++      body = profiler(app).call(req)[2]
++      _(body.to_enum.to_a.join).must_match(/\[10 calls, 10 total\]/)
++    end
++
+     specify 'CallStackPrinter has content-type test/html' do
+       headers = profiler(app, :printer => :call_stack).call(request)[1]
+       _(headers).must_equal "content-type"=>"text/html"
+-- 
+2.34.1
+

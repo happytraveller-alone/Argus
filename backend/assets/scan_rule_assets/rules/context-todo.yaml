@@ -1,0 +1,16 @@
+rules:
+- id: context-todo
+  patterns:
+  - pattern-either:
+    - pattern: 'context.TODO()
+
+        '
+  message: Consider to use well-defined context
+  languages:
+  - go
+  severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-401: Memory Leak'

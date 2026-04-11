@@ -1,0 +1,66 @@
+From acfaec684d71bcd85635ce8efecc43d8afd9b5b1 Mon Sep 17 00:00:00 2001
+From: Laurent Destailleur <eldy@destailleur.fr>
+Date: Sat, 10 Jun 2017 22:31:22 +0200
+Subject: [PATCH] FIX CVE-2017-7888
+
+---
+ htdocs/core/login/functions_dolibarr.php |  3 ++-
+ htdocs/install/step5.php                 | 13 +++++++++----
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/htdocs/core/login/functions_dolibarr.php b/htdocs/core/login/functions_dolibarr.php
+index 190d779d90b..d8cf78747b8 100644
+--- a/htdocs/core/login/functions_dolibarr.php
++++ b/htdocs/core/login/functions_dolibarr.php
+@@ -60,7 +60,7 @@ function check_user_password_dolibarr($usertotest,$passwordtotest,$entitytotest=
+ 		$sql.=') AND '.$entitycol." IN (0," . ($entity ? $entity : 1) . ")";
+ 		$sql.=' AND statut = 1';
+ 		// Required to first found the user into entity, then the superadmin.
+-		// For the case (TODO and that we must avoid) a user has renamed its login with same value than a user in entity 0. 
++		// For the case (TODO and that we must avoid) a user has renamed its login with same value than a user in entity 0.
+ 		$sql.=' ORDER BY entity DESC';
+ 
+ 		$resql=$db->query($sql);
+@@ -78,6 +78,7 @@ function check_user_password_dolibarr($usertotest,$passwordtotest,$entitytotest=
+ 				// Check crypted password
+ 				$cryptType='';
+ 				if (! empty($conf->global->DATABASE_PWD_ENCRYPTED)) $cryptType=$conf->global->DATABASE_PWD_ENCRYPTED;
++
+ 				// By default, we used MD5
+ 				if (! in_array($cryptType,array('md5'))) $cryptType='md5';
+ 				// Check crypted password according to crypt algorithm
+diff --git a/htdocs/install/step5.php b/htdocs/install/step5.php
+index b4bf7987547..78d29584a30 100644
+--- a/htdocs/install/step5.php
++++ b/htdocs/install/step5.php
+@@ -162,18 +162,23 @@ if ($action == "set" || empty($action) || preg_match('/upgrade/i',$action))
+         {
+             $conf->setValues($db);
+ 
+-            // Create user
++            // Create admin user
+             include_once DOL_DOCUMENT_ROOT .'/user/class/user.class.php';
+ 
+-            // Set default encryption to yes if there is no user yet into database
++            // Set default encryption to yes, generate a salt and set default encryption algorythm (but only if there is no user yet into database)
+ 		    $sql = "SELECT u.rowid, u.pass, u.pass_crypted";
+ 		    $sql.= " FROM ".MAIN_DB_PREFIX."user as u";
+-		    //$sql.= " WHERE u.pass IS NOT NULL AND LENGTH(u.pass) < 32"; // Not a MD5 value
+ 		    $resql=$db->query($sql);
+ 		    if ($resql)
+ 		    {
+ 		        $numrows=$db->num_rows($resql);
+-    			if ($numrows == 0) dolibarr_set_const($db, "DATABASE_PWD_ENCRYPTED", "1",'chaine',0,'',$conf->entity);
++    			if ($numrows == 0)
++    			{
++    			    // Define default setup for password encryption
++    			    dolibarr_set_const($db, "DATABASE_PWD_ENCRYPTED", "1", 'chaine', 0, '', $conf->entity);
++    			    dolibarr_set_const($db, "MAIN_SECURITY_SALT", dol_print_date(dol_now(), 'dayhourlog'), 'chaine', 0, '', 0);      // All entities
++    			    dolibarr_set_const($db, "MAIN_SECURITY_HASH_ALGO", 'sha1md5', 'chaine', 0, '', 0);                               // All entities
++    			}
+ 		    }
+ 
+ 		    // Create user used to create the admin user
+-- 
+2.34.1
+

@@ -1,0 +1,26 @@
+From ec3733c378a9515e4bfd0254c28238dadc020375 Mon Sep 17 00:00:00 2001
+From: Jeffrey Walton <noloader@gmail.com>
+Date: Thu, 24 Dec 2020 15:32:20 -0500
+Subject: [PATCH] Fix offset calculation in FixedSizeAllocatorWithCleanup when
+ CRYPTOPP_BOOL_ALIGN16==0 (GH #988)
+
+---
+ secblock.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/secblock.h b/secblock.h
+index 0670c6ed..721715b7 100644
+--- a/secblock.h
++++ b/secblock.h
+@@ -524,7 +524,7 @@ private:
+ 		// to be done. if m_array%16 is 8, then the buffer
+ 		// is not 16-byte aligned and we need to add 8.
+ 		CRYPTOPP_ASSERT(IsAlignedOn(m_array, 8));
+-		int off = reinterpret_cast<uintptr_t>(m_array) % 8;
++		int off = reinterpret_cast<uintptr_t>(m_array) % 16;
+ 		byte* ptr = reinterpret_cast<byte*>(m_array) + off;
+ 
+ 		// Verify the 16-byte alignment. This is the point
+-- 
+2.34.1
+

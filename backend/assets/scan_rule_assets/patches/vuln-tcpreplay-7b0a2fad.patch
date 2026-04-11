@@ -1,0 +1,555 @@
+From 7b0a2fad69cc89ce8e08c3326db7cdbe5d383a58 Mon Sep 17 00:00:00 2001
+From: Fred Klassen <fklassen@appneta.com>
+Date: Fri, 19 Jan 2018 15:15:55 -0800
+Subject: [PATCH] #409 check packet length in packet2tree functions (#440)
+
+* #409 check packet length in packet2tree functions
+
+* #409 more length checks - fix tests
+
+* #409 codacy suggested fixes
+---
+ src/common/get.c                        | 20 +++---
+ src/tcpedit/plugins/dlt_en10mb/en10mb.c | 15 ++++-
+ src/tcpedit/portmap.c                   | 17 +++--
+ src/tcpedit/portmap.h                   |  4 +-
+ src/tcpedit/tcpedit.c                   | 19 ++++--
+ src/tcpprep.c                           | 35 +++++-----
+ src/tree.c                              | 87 +++++++++++++++++--------
+ src/tree.h                              |  8 +--
+ 8 files changed, 131 insertions(+), 74 deletions(-)
+
+diff --git a/src/common/get.c b/src/common/get.c
+index 838c412b..87baa786 100644
+--- a/src/common/get.c
++++ b/src/common/get.c
+@@ -190,7 +190,7 @@ get_l2len(const u_char *pktdata, const int datalen, const int datalink)
+                 ether_type = ntohs(vlan_hdr->vlan_len);
+                 l2_len += 4;
+                 if (datalen < sizeof(vlan_hdr_t) + l2_len) {
+-                    l2_len = 0;
++                    l2_len = -1;
+                     break;
+                 }
+             }
+@@ -198,9 +198,8 @@ get_l2len(const u_char *pktdata, const int datalen, const int datalink)
+             l2_len += sizeof(eth_hdr_t);
+         }
+ 
+-        if (datalen < l2_len) {
+-            l2_len = 0;
+-        }
++        if (datalen < l2_len)
++            l2_len = -1;
+ 
+         break;
+ 
+@@ -255,7 +254,7 @@ get_ipv4(const u_char *pktdata, int datalen, int datalink, u_char **newbuff)
+     l2_len = get_l2len(pktdata, datalen, datalink);
+ 
+     /* sanity... datalen must be > l2_len + IP header len*/
+-    if (l2_len + TCPR_IPV4_H > datalen) {
++    if (l2_len < 0 || l2_len + TCPR_IPV4_H > datalen) {
+         dbg(1, "get_ipv4(): Layer 2 len > total packet len, hence no IP header");
+         return NULL;
+     }
+@@ -317,7 +316,7 @@ get_ipv6(const u_char *pktdata, int datalen, int datalink, u_char **newbuff)
+     l2_len = get_l2len(pktdata, datalen, datalink);
+ 
+     /* sanity... datalen must be > l2_len + IP header len*/
+-    if (l2_len + TCPR_IPV6_H > datalen) {
++    if (l2_len < 0 || l2_len + TCPR_IPV6_H > datalen) {
+         dbg(1, "get_ipv6(): Layer 2 len > total packet len, hence no IPv6 header");
+         return NULL;
+     }
+@@ -386,10 +385,15 @@ get_layer4_v6(const ipv6_hdr_t *ip6_hdr, const int len)
+     struct tcpr_ipv6_ext_hdr_base *next, *exthdr;
+     uint8_t proto;
+     uint32_t maxlen;
++    int min_len;
+ 
+     assert(ip6_hdr);
+ 
+-    /* jump to the end of the IPv6 header */ 
++    min_len = TCPR_IPV6_H + sizeof(struct tcpr_ipv6_ext_hdr_base);
++    if (len < min_len)
++        return NULL;
++
++    /* jump to the end of the IPv6 header */
+     next = (struct tcpr_ipv6_ext_hdr_base *)((u_char *)ip6_hdr + TCPR_IPV6_H);
+     proto = ip6_hdr->ip_nh;
+ 
+@@ -400,7 +404,7 @@ get_layer4_v6(const ipv6_hdr_t *ip6_hdr, const int len)
+         /* recurse due to v6-in-v6, need to recast next as an IPv6 Header */
+         case TCPR_IPV6_NH_IPV6:
+             dbg(3, "recursing due to v6-in-v6");
+-            return get_layer4_v6((ipv6_hdr_t *)next, len);
++            return get_layer4_v6((ipv6_hdr_t *)next, len - min_len);
+             break;
+ 
+         /* loop again */
+diff --git a/src/tcpedit/plugins/dlt_en10mb/en10mb.c b/src/tcpedit/plugins/dlt_en10mb/en10mb.c
+index b773b312..9c95d9a0 100644
+--- a/src/tcpedit/plugins/dlt_en10mb/en10mb.c
++++ b/src/tcpedit/plugins/dlt_en10mb/en10mb.c
+@@ -372,7 +372,7 @@ dlt_en10mb_decode(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     
+     assert(ctx);
+     assert(packet);
+-    if (pktlen < 14)
++    if (pktlen < TCPR_802_3_H)
+         return TCPEDIT_ERROR;
+ 
+     /* get our src & dst address */
+@@ -386,6 +386,9 @@ dlt_en10mb_decode(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+     /* get the L3 protocol type  & L2 len*/
+     switch (ntohs(eth->ether_type)) {
+         case ETHERTYPE_VLAN:
++            if (pktlen < TCPR_802_1Q_H)
++                    return TCPEDIT_ERROR;
++
+             vlan = (struct tcpr_802_1q_hdr *)packet;
+             ctx->proto = vlan->vlan_len;
+             
+@@ -402,7 +405,6 @@ dlt_en10mb_decode(tcpeditdlt_t *ctx, const u_char *packet, const int pktlen)
+         default:
+             ctx->proto = eth->ether_type;
+             ctx->l2len = TCPR_802_3_H;
+-            break;
+     }
+ 
+     return TCPEDIT_OK; /* success */
+@@ -426,7 +428,7 @@ dlt_en10mb_encode(tcpeditdlt_t *ctx, u_char *packet, int pktlen, tcpr_dir_t dir)
+     assert(ctx);
+     assert(packet);
+ 
+-    if (pktlen < 14) {
++    if (pktlen < TCPR_802_1Q_H) {
+         tcpedit_seterr(ctx->tcpedit, 
+                 "Unable to process packet #" COUNTER_SPEC " since it is less then 14 bytes.", 
+                 ctx->tcpedit->runtime.packetnum);
+@@ -454,6 +456,13 @@ dlt_en10mb_encode(tcpeditdlt_t *ctx, u_char *packet, int pktlen, tcpr_dir_t dir)
+         newl2len = config->vlan == TCPEDIT_VLAN_ADD ? TCPR_802_1Q_H : TCPR_802_3_H;
+     }
+ 
++    if (pktlen < newl2len) {
++        tcpedit_seterr(ctx->tcpedit,
++                "Unable to process packet #" COUNTER_SPEC " since its new length less then %d bytes.",
++                ctx->tcpedit->runtime.packetnum, newl2len);
++        return TCPEDIT_ERROR;
++    }
++
+     /* Make space for our new L2 header */
+     if (newl2len != ctx->l2len)
+         memmove(packet + newl2len, packet + ctx->l2len, pktlen - ctx->l2len);
+diff --git a/src/tcpedit/portmap.c b/src/tcpedit/portmap.c
+index e1da1883..20c738d4 100644
+--- a/src/tcpedit/portmap.c
++++ b/src/tcpedit/portmap.c
+@@ -346,13 +346,13 @@ rewrite_ports(tcpedit_t *tcpedit, u_char protocol, u_char *layer4)
+ 
+             udp_hdr->uh_sport = newport;
+         }
+-
+     }
++
+     return 0;
+ }
+ 
+ int
+-rewrite_ipv4_ports(tcpedit_t *tcpedit, ipv4_hdr_t **ip_hdr)
++rewrite_ipv4_ports(tcpedit_t *tcpedit, ipv4_hdr_t **ip_hdr, const int len)
+ {
+     assert(tcpedit);
+     u_char *l4;
+@@ -360,15 +360,16 @@ rewrite_ipv4_ports(tcpedit_t *tcpedit, ipv4_hdr_t **ip_hdr)
+     if (*ip_hdr == NULL) {
+         return 0;
+     } else if ((*ip_hdr)->ip_p == IPPROTO_TCP || (*ip_hdr)->ip_p == IPPROTO_UDP) {
+-        l4 = get_layer4_v4(*ip_hdr, 65536);
+-        return rewrite_ports(tcpedit, (*ip_hdr)->ip_p, l4);
++        l4 = get_layer4_v4(*ip_hdr, len);
++        if (l4)
++            return rewrite_ports(tcpedit, (*ip_hdr)->ip_p, l4);
+     }
+ 
+     return 0;
+ }
+ 
+ int
+-rewrite_ipv6_ports(tcpedit_t *tcpedit, ipv6_hdr_t **ip6_hdr)
++rewrite_ipv6_ports(tcpedit_t *tcpedit, ipv6_hdr_t **ip6_hdr, const int len)
+ {
+     assert(tcpedit);
+     u_char *l4;
+@@ -376,8 +377,10 @@ rewrite_ipv6_ports(tcpedit_t *tcpedit, ipv6_hdr_t **ip6_hdr)
+     if (*ip6_hdr == NULL) {
+         return 0;
+     } else if ((*ip6_hdr)->ip_nh == IPPROTO_TCP || (*ip6_hdr)->ip_nh == IPPROTO_UDP) {
+-        l4 = get_layer4_v6(*ip6_hdr, 65535);
+-        return rewrite_ports(tcpedit, (*ip6_hdr)->ip_nh, l4);
++        l4 = get_layer4_v6(*ip6_hdr, len);
++        if (l4)
++            return rewrite_ports(tcpedit, (*ip6_hdr)->ip_nh, l4);
+     }
++
+     return 0;
+ }
+diff --git a/src/tcpedit/portmap.h b/src/tcpedit/portmap.h
+index 5c910a43..4b583b6b 100644
+--- a/src/tcpedit/portmap.h
++++ b/src/tcpedit/portmap.h
+@@ -28,7 +28,7 @@ int parse_portmap(tcpedit_portmap_t **portmapdata, const char *ourstr);
+ void free_portmap(tcpedit_portmap_t *portmap);
+ void print_portmap(tcpedit_portmap_t *portmap);
+ long map_port(tcpedit_portmap_t *portmap , long port);
+-int rewrite_ipv4_ports(tcpedit_t *tcpedit, ipv4_hdr_t **ip_hdr);
+-int rewrite_ipv6_ports(tcpedit_t *tcpedit, ipv6_hdr_t **ip_hdr);
++int rewrite_ipv4_ports(tcpedit_t *tcpedit, ipv4_hdr_t **ip_hdr, const int len);
++int rewrite_ipv6_ports(tcpedit_t *tcpedit, ipv6_hdr_t **ip_hdr, const int len);
+ 
+ #endif
+diff --git a/src/tcpedit/tcpedit.c b/src/tcpedit/tcpedit.c
+index 28abac97..20ffcc84 100644
+--- a/src/tcpedit/tcpedit.c
++++ b/src/tcpedit/tcpedit.c
+@@ -90,28 +90,33 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+     int l2len = 0, l2proto, retval = 0, dst_dlt, src_dlt, pktlen, lendiff;
+     int ipflags = 0, tclass = 0;
+     int needtorecalc = 0;           /* did the packet change? if so, checksum */
+-    u_char *packet = *pktdata;
++    u_char *packet;
++
+     assert(tcpedit);
+     assert(pkthdr);
+     assert(*pkthdr);
+     assert(pktdata);
+-    assert(packet);
++    assert(*pktdata);
+     assert(tcpedit->validated);
+ 
++    packet = *pktdata;
+ 
+     tcpedit->runtime.packetnum++;
++
+     dbgx(3, "packet " COUNTER_SPEC " caplen %d", 
+             tcpedit->runtime.packetnum, (*pkthdr)->caplen);
+ 
+-
+     /*
+      * remove the Ethernet FCS (checksum)?
+      * note that this feature requires the end user to be smart and
+      * only set this flag IFF the pcap has the FCS.  If not, then they
+      * just removed 2 bytes of ACTUAL PACKET DATA.  Sucks to be them.
+      */
+-    if (tcpedit->efcs > 0) {
+-        (*pkthdr)->caplen -= 4;
++    if (tcpedit->efcs > 0 &&(*pkthdr)->len > 4) {
++        if ((*pkthdr)->caplen == (*pkthdr)->len) {
++            (*pkthdr)->caplen -= 4;
++        }
++
+         (*pkthdr)->len -= 4;
+     }
+ 
+@@ -179,7 +184,7 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+ 
+         /* rewrite TCP/UDP ports */
+         if (tcpedit->portmap != NULL) {
+-            if ((retval = rewrite_ipv4_ports(tcpedit, &ip_hdr)) < 0)
++            if ((retval = rewrite_ipv4_ports(tcpedit, &ip_hdr, (*pkthdr)->caplen)) < 0)
+                 return TCPEDIT_ERROR;
+         }
+     }
+@@ -216,7 +221,7 @@ tcpedit_packet(tcpedit_t *tcpedit, struct pcap_pkthdr **pkthdr,
+ 
+         /* rewrite TCP/UDP ports */
+         if (tcpedit->portmap != NULL) {
+-            if ((retval = rewrite_ipv6_ports(tcpedit, &ip6_hdr)) < 0)
++            if ((retval = rewrite_ipv6_ports(tcpedit, &ip6_hdr, (*pkthdr)->caplen)) < 0)
+                 return TCPEDIT_ERROR;
+         }
+     }
+diff --git a/src/tcpprep.c b/src/tcpprep.c
+index 638b2998..798b8456 100644
+--- a/src/tcpprep.c
++++ b/src/tcpprep.c
+@@ -290,7 +290,6 @@ check_ipv4_regex(const unsigned long ip)
+     } else {
+         return 0;
+     }
+-
+ }
+ 
+ static int
+@@ -355,9 +354,6 @@ process_raw_packets(pcap_t * pcap)
+          * it as a non-IP packet, UNLESS we're in MAC mode, in which case
+          * we should let the MAC matcher below handle it
+          */
+-
+-        eth_hdr = (eth_hdr_t *)pktdata;
+-
+         if (options->mode != MAC_MODE) {
+             dbg(3, "Looking for IPv4/v6 header in non-MAC mode");
+             
+@@ -368,17 +364,12 @@ process_raw_packets(pcap_t * pcap)
+             if ((ip_hdr = (ipv4_hdr_t *)get_ipv4(pktdata, pkthdr.caplen, 
+                     pcap_datalink(pcap), &buffptr))) {
+                 dbg(2, "Packet is IPv4");
+-                    
+-            } 
+-            
+-            /* then look for IPv6 */
+-            else if ((ip6_hdr = (ipv6_hdr_t *)get_ipv6(pktdata, pkthdr.caplen,
++            } else if ((ip6_hdr = (ipv6_hdr_t *)get_ipv6(pktdata, pkthdr.caplen,
+                     pcap_datalink(pcap), &buffptr))) {
++                /* IPv6 */
+                 dbg(2, "Packet is IPv6");    
+-            } 
+-            
+-            /* we're something else... */
+-            else {
++            } else {
++                /* we're something else... */
+                 dbg(2, "Packet isn't IPv4/v6");
+ 
+                 /* we don't want to cache these packets twice */
+@@ -392,6 +383,10 @@ process_raw_packets(pcap_t * pcap)
+             }
+     
+             l2len = get_l2len(pktdata, pkthdr.caplen, pcap_datalink(pcap));
++            if (l2len < 0) {
++                /* go to next packet */
++                continue;
++            }
+ 
+             /* look for include or exclude CIDR match */
+             if (options->xX.cidr != NULL) {
+@@ -442,6 +437,12 @@ process_raw_packets(pcap_t * pcap)
+ 
+         case MAC_MODE:
+             dbg(2, "processing mac mode...");
++            if (pkthdr.caplen < sizeof(*eth_hdr)) {
++                dbg(2, "capture length too short for mac mode processing");
++                break;
++            }
++
++            eth_hdr = (eth_hdr_t *)pktdata;
+             direction = macinstring(options->maclist, (u_char *)eth_hdr->ether_shost);
+ 
+             /* reverse direction? */
+@@ -456,15 +457,15 @@ process_raw_packets(pcap_t * pcap)
+             /* first run through in auto mode: create tree */
+             if (options->automode != FIRST_MODE) {
+                 if (ip_hdr) {
+-                    add_tree_ipv4(ip_hdr->ip_src.s_addr, pktdata);
++                    add_tree_ipv4(ip_hdr->ip_src.s_addr, pktdata, pkthdr.caplen);
+                 } else if (ip6_hdr) {
+-                    add_tree_ipv6(&ip6_hdr->ip_src, pktdata);
++                    add_tree_ipv6(&ip6_hdr->ip_src, pktdata, pkthdr.caplen);
+                 }
+             } else {
+                 if (ip_hdr) {
+-                    add_tree_first_ipv4(pktdata);
++                    add_tree_first_ipv4(pktdata, pkthdr.caplen);
+                 } else if (ip6_hdr) {
+-                    add_tree_first_ipv6(pktdata);
++                    add_tree_first_ipv6(pktdata, pkthdr.caplen);
+                 }
+             }  
+             break;
+diff --git a/src/tree.c b/src/tree.c
+index 3b1286f2..4aa0be00 100644
+--- a/src/tree.c
++++ b/src/tree.c
+@@ -41,7 +41,7 @@ extern int debug;
+ char tree_print_buff[TREEPRINTBUFFLEN]; 
+ 
+ static tcpr_tree_t *new_tree();
+-static tcpr_tree_t *packet2tree(const u_char *);
++static tcpr_tree_t *packet2tree(const u_char *, const int);
+ #ifdef DEBUG        /* prevent compile warnings */
+ static char *tree_print(tcpr_data_tree_t *);
+ static char *tree_printnode(const char *, const tcpr_tree_t *);
+@@ -370,12 +370,18 @@ return_unknown:
+  * client, if the DST IP doesn't exist in the TREE, we add it as a server
+  */
+ void
+-add_tree_first_ipv4(const u_char *data)
++add_tree_first_ipv4(const u_char *data, const int len)
+ {
+-    tcpr_tree_t *newnode = NULL, *findnode;
++    tcpr_tree_t *newnode, *findnode;
+     ipv4_hdr_t ip_hdr;
+     
+     assert(data);
++
++    if (len < (TCPR_ETH_H + TCPR_IPV4_H)) {
++        errx(-1, "Capture length %d too small for IPv4 parsing", len);
++        return;
++    }
++
+     /* 
+      * first add/find the source IP/client 
+      */
+@@ -418,12 +424,18 @@ add_tree_first_ipv4(const u_char *data)
+ }
+ 
+ void
+-add_tree_first_ipv6(const u_char *data)
++add_tree_first_ipv6(const u_char *data, const int len)
+ {
+-    tcpr_tree_t *newnode = NULL, *findnode;
++    tcpr_tree_t *newnode, *findnode;
+     ipv6_hdr_t ip6_hdr;
+ 
+     assert(data);
++
++    if (len < (TCPR_ETH_H + TCPR_IPV6_H)) {
++        errx(-1, "Capture length %d too small for IPv6 parsing", len);
++        return;
++    }
++
+     /*
+      * first add/find the source IP/client
+      */
+@@ -516,43 +528,47 @@ add_tree_node(tcpr_tree_t *newnode)
+  * - the way the host acted the first time we saw it (client or server)
+  */
+ void
+-add_tree_ipv4(const unsigned long ip, const u_char * data)
++add_tree_ipv4(const unsigned long ip, const u_char * data, const int len)
+ {
+-    tcpr_tree_t *newnode = NULL;
++    tcpr_tree_t *newnode;
+     assert(data);
+ 
+-    newnode = packet2tree(data);
++    newnode = packet2tree(data, len);
++    if (newnode) {
++        assert(ip == newnode->u.ip);
+ 
+-    assert(ip == newnode->u.ip);
++        if (newnode->type == DIR_UNKNOWN) {
++            /* couldn't figure out if packet was client or server */
+ 
+-    if (newnode->type == DIR_UNKNOWN) {
+-        /* couldn't figure out if packet was client or server */
++            dbgx(2, "%s (%lu) unknown client/server",
++                    get_addr2name4(newnode->u.ip, RESOLVE), newnode->u.ip);
+ 
+-        dbgx(2, "%s (%lu) unknown client/server",
+-            get_addr2name4(newnode->u.ip, RESOLVE), newnode->u.ip);
++        }
+ 
++        add_tree_node(newnode);
+     }
+-    add_tree_node(newnode);
+ }
+ 
+ void
+-add_tree_ipv6(const struct tcpr_in6_addr * addr, const u_char * data)
++add_tree_ipv6(const struct tcpr_in6_addr * addr, const u_char * data,
++        const int len)
+ {
+-    tcpr_tree_t *newnode = NULL;
++    tcpr_tree_t *newnode;
+     assert(data);
+ 
+-    newnode = packet2tree(data);
++    newnode = packet2tree(data, len);
++    if (newnode) {
++        assert(ipv6_cmp(addr, &newnode->u.ip6) == 0);
+ 
+-    assert(ipv6_cmp(addr, &newnode->u.ip6) == 0);
++        if (newnode->type == DIR_UNKNOWN) {
++            /* couldn't figure out if packet was client or server */
+ 
+-    if (newnode->type == DIR_UNKNOWN) {
+-        /* couldn't figure out if packet was client or server */
++            dbgx(2, "%s unknown client/server",
++                    get_addr2name6(&newnode->u.ip6, RESOLVE));
++        }
+ 
+-        dbgx(2, "%s unknown client/server",
+-            get_addr2name6(&newnode->u.ip6, RESOLVE));
++        add_tree_node(newnode);
+     }
+-
+-    add_tree_node(newnode);
+ }
+ 
+ /**
+@@ -679,8 +695,8 @@ new_tree()
+  * if it's an undefined packet, we return -1 for the type
+  * the u_char * data should be the data that is passed by pcap_dispatch()
+  */
+-tcpr_tree_t *
+-packet2tree(const u_char * data)
++static tcpr_tree_t *
++packet2tree(const u_char * data, const int len)
+ {
+     tcpr_tree_t *node = NULL;
+     eth_hdr_t *eth_hdr = NULL;
+@@ -697,6 +713,11 @@ packet2tree(const u_char * data)
+     char srcip[INET6_ADDRSTRLEN];
+ #endif
+ 
++    if (len < sizeof(*eth_hdr)) {
++        errx(-1, "packet capture length %d too small to process", len);
++        return NULL;
++    }
++
+     node = new_tree();
+ 
+     eth_hdr = (eth_hdr_t *) (data);
+@@ -714,6 +735,13 @@ packet2tree(const u_char * data)
+     }
+ 
+     if (ether_type == htons(ETHERTYPE_IP)) {
++        if (len < (TCPR_ETH_H + hl + TCPR_IPV4_H)) {
++            safe_free(node);
++            errx(-1, "packet capture length %d too small for IPv4 processing",
++                    len);
++            return NULL;
++        }
++
+         memcpy(&ip_hdr, (data + TCPR_ETH_H + hl), TCPR_IPV4_H);
+ 
+         node->family = AF_INET;
+@@ -726,6 +754,13 @@ packet2tree(const u_char * data)
+                     RESOLVE), 16);
+ #endif
+     } else if (ether_type == htons(ETHERTYPE_IP6)) {
++        if (len < (TCPR_ETH_H + hl + TCPR_IPV6_H)) {
++            safe_free(node);
++            errx(-1, "packet capture length %d too small for IPv6 processing",
++                    len);
++            return NULL;
++        }
++
+         memcpy(&ip6_hdr, (data + TCPR_ETH_H + hl), TCPR_IPV6_H);
+ 
+         node->family = AF_INET6;
+diff --git a/src/tree.h b/src/tree.h
+index f3e8c46d..f7478e77 100644
+--- a/src/tree.h
++++ b/src/tree.h
+@@ -53,10 +53,10 @@ typedef struct tcpr_buildcidr_s {
+ 
+ #define DNS_QUERY_FLAG 0x8000
+ 
+-void add_tree_ipv4(const unsigned long, const u_char *);
+-void add_tree_ipv6(const struct tcpr_in6_addr *, const u_char *);
+-void add_tree_first_ipv4(const u_char *);
+-void add_tree_first_ipv6(const u_char *);
++void add_tree_ipv4(const unsigned long, const u_char *, const int);
++void add_tree_ipv6(const struct tcpr_in6_addr *, const u_char *, const int);
++void add_tree_first_ipv4(const u_char *, const int);
++void add_tree_first_ipv6(const u_char *, const int);
+ tcpr_dir_t check_ip_tree(const int, const unsigned long);
+ tcpr_dir_t check_ip6_tree(const int, const struct tcpr_in6_addr *);
+ int process_tree();
+-- 
+2.34.1
+

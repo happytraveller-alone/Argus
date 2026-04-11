@@ -1,0 +1,71 @@
+rules:
+- id: default-mutable-list
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: "def $F(..., $D=[], ...):\n  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = []\n  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [...]\n  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list(...)\n  ...\n \
+          \ $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list.copy($D)\n  ...\n\
+          \  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D[:]\n  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [... for ... in ...]\n\
+          \  ...\n  $D.append(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D or []\n  ...\n  $D.append(...)\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D=[], ...):\n   \
+          \ ...\n    $D.append(...)\n"
+    - patterns:
+      - pattern: "def $F(..., $D=[], ...):\n  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = []\n  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [...]\n  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list(...)\n  ...\n \
+          \ $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list.copy($D)\n  ...\n\
+          \  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D[:]\n  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [... for ... in ...]\n\
+          \  ...\n  $D.extend(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D or []\n  ...\n  $D.extend(...)\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D=[], ...):\n   \
+          \ ...\n    $D.extend(...)\n"
+    - patterns:
+      - pattern: "def $F(..., $D=[], ...):\n  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = []\n  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [...]\n  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list(...)\n  ...\n \
+          \ $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = list.copy($D)\n  ...\n\
+          \  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D[:]\n  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = [... for ... in ...]\n\
+          \  ...\n  $D.insert(...)\n"
+      - pattern-not: "def $F(..., $D=[], ...):\n  ...\n  $D = $D or []\n  ...\n  $D.insert(...)\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D=[], ...):\n   \
+          \ ...\n    $D.insert(...)\n"
+  message: Function $F mutates default list $D. Instances of default function arguments
+    in Python are shared between function calls.  Mutating a default function argument
+    changes the result for all function consumers. This will most likely cause unexpected
+    results, or lead to security vulnerabilities whereby one function consumer can
+    either view or modify the data of another function consumer.
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-200: Exposure of Sensitive Information'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'

@@ -1,0 +1,56 @@
+rules:
+- id: balancer-readonly-reentrancy-getpooltokens
+  message: $VAULT.getPoolTokens() call on a Balancer pool is not protected from the
+    read-only reentrancy.
+  metadata:
+    category: security
+    technology:
+    - solidity
+    cwe: 'CWE-841: Improper Enforcement of Behavioral Workflow'
+    confidence: HIGH
+    likelihood: MEDIUM
+    impact: HIGH
+    subcategory:
+    - vuln
+    references:
+    - https://quillaudits.medium.com/decoding-sentiment-protocols-1-million-exploit-quillaudits-f36bee77d376
+    - https://hackmd.io/@sentimentxyz/SJCySo1z2
+  patterns:
+  - pattern-either:
+    - pattern: "function $F(...) {\n  ...\n  $RETURN = $VAULT.getPoolTokens(...);\n\
+        \  ...\n}\n"
+  - metavariable-pattern:
+      metavariable: $RETURN
+      pattern-regex: .*uint256\[].*
+  - pattern-not-inside: "contract $C {\n  ...\n  function $CHECKFUNC(...) {\n    ...\n\
+      \    VaultReentrancyLib.ensureNotInVaultContext(...);\n    ...\n  }\n  ...\n\
+      \  function $F(...) {\n    ...\n    $CHECKFUNC(...);\n    ...\n    $RETURN =\
+      \ $VAULT.getPoolTokens(...);\n    ...\n  }\n  ...\n}\n"
+  - pattern-not-inside: "contract $C {\n  ...\n  function $CHECKFUNC(...) {\n    ...\n\
+      \    VaultReentrancyLib.ensureNotInVaultContext(...);\n    ...\n  }\n  ...\n\
+      \  function $F(...) {\n    ...\n    $RETURN = $VAULT.getPoolTokens(...);\n \
+      \   ...\n    $CHECKFUNC(...);\n    ...\n  }\n  ...\n}\n"
+  - pattern-not-inside: "contract $C {\n  ...\n  function $CHECKFUNC(...) {\n    ...\n\
+      \    $VAULT.manageUserBalance(...);\n    ...\n  }\n  ...\n  function $F(...)\
+      \ {\n    ...\n    $RETURN = $VAULT.getPoolTokens(...);\n    ...\n    $CHECKFUNC(...);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern-not-inside: "contract $C {\n  ...\n  function $CHECKFUNC(...) {\n    ...\n\
+      \    $VAULT.manageUserBalance(...);\n    ...\n  }\n  ...\n  function $F(...)\
+      \ {\n    ...\n    $CHECKFUNC(...);\n    ...\n    $RETURN = $VAULT.getPoolTokens(...);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern-not: "function $F(...) {\n  ...\n  VaultReentrancyLib.ensureNotInVaultContext(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function $F(...) {\n  ...\n  $VAULT.manageUserBalance(...);\n  ...\n\
+      }\n"
+  - pattern-not-inside: "contract LinearPool {\n  ...\n}\n"
+  - pattern-not-inside: "contract ComposableStablePool {\n  ...\n}\n"
+  - pattern-not-inside: "contract BalancerQueries {\n  ...\n} \n"
+  - pattern-not-inside: "contract ManagedPool {\n  ...\n}\n"
+  - pattern-not-inside: "contract BaseWeightedPool {\n  ...\n} \n"
+  - pattern-not-inside: "contract ComposableStablePoolStorage {\n  ...\n}\n"
+  - pattern-not-inside: "contract RecoveryModeHelper {\n  ...\n}\n"
+  - focus-metavariable:
+    - $VAULT
+  languages:
+  - solidity
+  severity: ERROR

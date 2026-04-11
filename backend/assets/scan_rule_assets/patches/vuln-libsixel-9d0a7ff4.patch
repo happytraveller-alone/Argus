@@ -1,0 +1,44 @@
+From 9d0a7ff417b66d80a4bff714de1f27b24742f55a Mon Sep 17 00:00:00 2001
+From: Hayaki Saito <saitoha@me.com>
+Date: Mon, 16 Dec 2019 16:40:05 +0900
+Subject: [PATCH] Fix access violation problem on high color mode (#116),
+ Thanks to SuhwanSong
+
+---
+ src/tosixel.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/tosixel.c b/src/tosixel.c
+index 220940c..4ee3caa 100644
+--- a/src/tosixel.c
++++ b/src/tosixel.c
+@@ -1419,7 +1419,7 @@ next:
+                 goto end;
+             }
+         }
+-        if (dirty && mod_y == 5) {
++        if (dirty && (mod_y == 5 || y >= height)) {
+             orig_height = height;
+ 
+             if (output_count++ == 0) {
+@@ -1442,6 +1442,9 @@ next:
+             if (SIXEL_FAILED(status)) {
+                 goto error;
+             }
++            if (y >= orig_height) {
++              goto end;
++            }
+             pixels -= (6 * width * 3);
+             height = orig_height - height + 6;
+             goto next;
+@@ -1452,6 +1455,7 @@ next:
+             mod_y = 0;
+         }
+     }
++
+     goto next;
+ 
+ end:
+-- 
+2.34.1
+

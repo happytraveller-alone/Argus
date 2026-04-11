@@ -1,0 +1,37 @@
+From 6e417c28eac89664afa46b2fc1f7217622d0ef24 Mon Sep 17 00:00:00 2001
+From: Isaac Connor <isaac@zoneminder.com>
+Date: Mon, 20 Feb 2023 11:58:10 -0500
+Subject: [PATCH] use detaintPath on modal to prevent including other files
+ instead of real modals
+
+---
+ web/ajax/modal.php | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/web/ajax/modal.php b/web/ajax/modal.php
+index 2794fb0afc..04f9727109 100644
+--- a/web/ajax/modal.php
++++ b/web/ajax/modal.php
+@@ -1,11 +1,10 @@
+ <?php
+-
+-if ( empty($_REQUEST['modal']) ) {
++if (empty($_REQUEST['modal'])) {
+   ajaxError('Modal Name Not Provided');
+   return;
+ }
+ 
+-$modal = validJsStr($_REQUEST['modal']);
++$modal = detaintPath($_REQUEST['modal']);
+ $data = array();
+ 
+ ZM\Debug("Including modals/$modal.php");
+@@ -14,7 +13,7 @@
+ @$result = include('modals/'.$modal.'.php');
+ $data['html'] = ob_get_contents();
+ ob_end_clean();
+-if ( !$result ) {
++if (!$result) {
+   ajaxError("Unknown modal '".$modal."'");
+   return;
+ }

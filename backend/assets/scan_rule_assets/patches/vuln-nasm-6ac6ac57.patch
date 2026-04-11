@@ -1,0 +1,77 @@
+From 6ac6ac57e3d01ea8ed4ea47706eb724b59176461 Mon Sep 17 00:00:00 2001
+From: "H. Peter Anvin (Intel)" <hpa@zytor.com>
+Date: Thu, 30 Jul 2020 15:46:12 -0700
+Subject: [PATCH] parser: when flattening an eop, must preserve any data buffer
+
+An eop may have a data buffer associated with it as part of the same
+memory allocation. Therefore, we need to move "subexpr" up instead of
+merging it into "eop".
+
+This *partially* resolves BR 3392707, but that test case still
+triggers a violation when using -gcv8.
+
+Reported-by: Suhwan <prada960808@gmail.com>
+Signed-off-by: H. Peter Anvin (Intel) <hpa@zytor.com>
+---
+ asm/parser.c       | 16 +++++++++++-----
+ test/br3392707.asm | 21 +++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 5 deletions(-)
+ create mode 100644 test/br3392707.asm
+
+diff --git a/asm/parser.c b/asm/parser.c
+index dbd2240c..584e40c9 100644
+--- a/asm/parser.c
++++ b/asm/parser.c
+@@ -458,11 +458,17 @@ static int parse_eops(extop **result, bool critical, int elem)
+                 /* Subexpression is empty */
+                 eop->type = EOT_NOTHING;
+             } else if (!subexpr->next) {
+-                /* Subexpression is a single element, flatten */
+-                eop->val   = subexpr->val;
+-                eop->type  = subexpr->type;
+-                eop->dup  *= subexpr->dup;
+-                nasm_free(subexpr);
++                /*
++                 * Subexpression is a single element, flatten.
++                 * Note that if subexpr has an allocated buffer associated
++                 * with it, freeing it would free the buffer, too, so
++                 * we need to move subexpr up, not eop down.
++                 */
++                if (!subexpr->elem)
++                    subexpr->elem = eop->elem;
++                subexpr->dup *= eop->dup;
++                nasm_free(eop);
++                eop = subexpr;
+             } else {
+                 eop->type = EOT_EXTOP;
+             }
+diff --git a/test/br3392707.asm b/test/br3392707.asm
+new file mode 100644
+index 00000000..6e84c5b4
+--- /dev/null
++++ b/test/br3392707.asm
+@@ -0,0 +1,21 @@
++	bits 32
++
++	db 33
++	db (44)
++;	db (44,55)	-- error
++	db %(44.55)
++	db %('XX','YY')
++	db ('AA')
++	db %('BB')
++	db ?
++	db 6 dup (33)
++	db 6 dup (33, 34)
++	db 6 dup (33, 34), 35
++	db 7 dup (99)
++	db 7 dup (?,?)
++	dw byte (?,44)
++
++	dw 0xcc, 4 dup byte ('PQR'), ?, 0xabcd
++
++	dd 16 dup (0xaaaa, ?, 0xbbbbbb)
++	dd 64 dup (?)
+-- 
+2.34.1
+

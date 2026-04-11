@@ -1,0 +1,53 @@
+From 0c3f95034a91a448ae0d96d88a0d8b0f53a9b4a7 Mon Sep 17 00:00:00 2001
+From: 6543 <6543@obermui.de>
+Date: Tue, 19 Jan 2021 10:00:13 +0100
+Subject: [PATCH] Use path not filepath in routers/editor (#14390) (#14396)
+
+The incorrect use of filepath instead of path means that
+it is possible to cause a stackoverflow on Windows
+
+Signed-off-by: Andrew Thornton <art27@cantab.net>
+
+Co-authored-by: zeripath <art27@cantab.net>
+Co-authored-by: Lauris BH <lauris@nix.lv>
+---
+ routers/repo/editor.go | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/routers/repo/editor.go b/routers/repo/editor.go
+index 1ee557a4f..bbdb83d5a 100644
+--- a/routers/repo/editor.go
++++ b/routers/repo/editor.go
+@@ -9,7 +9,6 @@ import (
+ 	"fmt"
+ 	"io/ioutil"
+ 	"path"
+-	"path/filepath"
+ 	"strings"
+ 
+ 	"code.gitea.io/gitea/models"
+@@ -502,7 +501,7 @@ func DeleteFilePost(ctx *context.Context, form auth.DeleteRepoFileForm) {
+ 	if form.CommitChoice == frmCommitChoiceNewBranch && ctx.Repo.Repository.UnitEnabled(models.UnitTypePullRequests) {
+ 		ctx.Redirect(ctx.Repo.RepoLink + "/compare/" + ctx.Repo.BranchName + "..." + form.NewBranchName)
+ 	} else {
+-		treePath := filepath.Dir(ctx.Repo.TreePath)
++		treePath := path.Dir(ctx.Repo.TreePath)
+ 		if treePath == "." {
+ 			treePath = "" // the file deleted was in the root, so we return the user to the root directory
+ 		}
+@@ -805,10 +804,10 @@ func GetClosestParentWithFiles(treePath string, commit *git.Commit) string {
+ 	// see if the tree has entries
+ 	if tree, err := commit.SubTree(treePath); err != nil {
+ 		// failed to get tree, going up a dir
+-		return GetClosestParentWithFiles(filepath.Dir(treePath), commit)
++		return GetClosestParentWithFiles(path.Dir(treePath), commit)
+ 	} else if entries, err := tree.ListEntries(); err != nil || len(entries) == 0 {
+ 		// no files in this dir, going up a dir
+-		return GetClosestParentWithFiles(filepath.Dir(treePath), commit)
++		return GetClosestParentWithFiles(path.Dir(treePath), commit)
+ 	}
+ 	return treePath
+ }
+-- 
+2.34.1
+

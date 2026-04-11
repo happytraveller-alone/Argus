@@ -1,0 +1,41 @@
+rules:
+- id: url-rewriting_1
+  languages:
+  - java
+  message: URL rewriting has significant security risks. Since session ID appears
+    in the URL, it may be easily seen by third parties.
+  metadata:
+    category: security
+    confidence: LOW
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    cwe2021-top25: true
+    impact: MEDIUM
+    likelihood: LOW
+    owasp:
+    - A01:2021 - Broken Access Control
+    references:
+    - https://owasp.org/Top10/A01_2021-Broken_Access_Control
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#URL_REWRITING
+    subcategory:
+    - vuln
+    technology:
+    - java
+  pattern-either:
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...) {\n  ...\n  $RES.encodeURL(...);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...) {\n  ...\n  $RES.encodeUrl(...);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...) {\n  ...\n  $RES.encodeRedirectURL(...);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...) {\n  ...\n  $RES.encodeRedirectUrl(...);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  HttpServletResponse $RES = ...;\n  ...\n\
+      \  $RES.encodeURL(...);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  HttpServletResponse $RES = ...;\n  ...\n\
+      \  $RES.encodeUrl(...);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  HttpServletResponse $RES = ...;\n  ...\n\
+      \  $RES.encodeRedirectURL(...);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  HttpServletResponse $RES = ...;\n  ...\n\
+      \  $RES.encodeRedirectUrl(...);\n  ...\n}"
+  severity: WARNING

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidAssertAsIdentifier Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidAssertAsIdentifier</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidAssertAsIdentifier" language="java" maximumLanguageVersion="1.3" since="3.4" message="Avoid using assert as an identifier; it became a reserved word in JDK 1.4" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidassertasidentifier">
+            <description>
+    Use of the term `assert` will conflict with newer versions of Java since it is a reserved word.
+
+    Since Java 1.4, the token `assert` became a reserved word and using it as an identifier will
+    result in a compilation failure for Java 1.4 and later. This rule is therefore only useful
+    for old Java code before Java 1.4. It can be used to identify problematic code prior to a Java update.
+            </description>
+            <priority>2</priority>
+            <properties>
+                <property name="xpath">
+                    <value>//VariableId[@Name='assert']</value>
+                </property>
+            </properties>
+            <example>
+
+    public class A {
+        public class Foo {
+            String assert = "foo";
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

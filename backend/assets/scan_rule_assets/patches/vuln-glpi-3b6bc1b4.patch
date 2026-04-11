@@ -1,0 +1,315 @@
+From 3b6bc1b4aa1f3693b20ada3425d2de5108522484 Mon Sep 17 00:00:00 2001
+From: Johan Cwiklinski <jcwiklinski@teclib.com>
+Date: Wed, 13 Mar 2024 08:15:19 +0100
+Subject: [PATCH] Merge pull request from GHSA-92x4-q9w5-837w
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* Check for valid itemtype before creating objects
+
+* Restrict HTTP methods allowed by Guzzle client
+
+---------
+
+Co-authored-by: Cédric Anne <cedric.anne@gmail.com>
+---
+ ajax/comments.php                             |  2 +-
+ ajax/dropdownLocation.php                     |  2 +-
+ ajax/kanban.php                               |  2 +-
+ ajax/rule.php                                 |  2 +-
+ ajax/updateTranslationFields.php              |  2 +-
+ ajax/updateTranslationValue.php               |  2 +-
+ composer.json                                 |  6 ++--
+ front/device.php                              |  2 +-
+ front/devicemodel.form.php                    |  2 +-
+ front/devicemodel.php                         |  2 +-
+ front/devicetype.form.php                     |  2 +-
+ front/devicetype.php                          |  2 +-
+ front/item_device.php                         |  2 +-
+ front/itilfollowup.form.php                   |  2 +-
+ front/itilsolution.form.php                   |  2 +-
+ src/RuleAction.php                            |  2 +-
+ tests/web/APIRest.php                         | 16 +++------
+ ...le-http-client-restrict-http-methods.patch | 33 +++++++++++++++++++
+ 18 files changed, 57 insertions(+), 28 deletions(-)
+ create mode 100644 tools/patches/guzzle-http-client-restrict-http-methods.patch
+
+diff --git a/ajax/comments.php b/ajax/comments.php
+index 8adba3905c..f962c6f958 100644
+--- a/ajax/comments.php
++++ b/ajax/comments.php
+@@ -120,7 +120,7 @@ if (
+                 }
+ 
+                 if (isset($_POST['with_dc_position'])) {
+-                    $item = new $_POST['itemtype']();
++                    $item = getItemForItemtype($_POST['itemtype']);
+                     echo "<script type='text/javascript' >\n";
+ 
+                    //if item have a DC position (reload url to it's rack)
+diff --git a/ajax/dropdownLocation.php b/ajax/dropdownLocation.php
+index 89cbce4f62..e398cd877b 100644
+--- a/ajax/dropdownLocation.php
++++ b/ajax/dropdownLocation.php
+@@ -45,7 +45,7 @@ if (
+     throw new \RuntimeException('Required argument missing or incorrect!');
+ }
+ 
+-$item = new $_REQUEST['itemtype']();
++$item = getItemForItemtype($_REQUEST['itemtype']);
+ $item->getFromDB((int) $_REQUEST['items_id']);
+ 
+ $locations_id = $item->fields['locations_id'] ?? 0;
+diff --git a/ajax/kanban.php b/ajax/kanban.php
+index e418215fdc..f42a5490c7 100644
+--- a/ajax/kanban.php
++++ b/ajax/kanban.php
+@@ -170,7 +170,7 @@ if (($_POST['action'] ?? null) === 'update') {
+ } else if (($_POST['action'] ?? null) === 'move_item') {
+     $checkParams(['card', 'column', 'position', 'kanban']);
+     /** @var Kanban|CommonDBTM $kanban */
+-    $kanban = new $_POST['kanban']['itemtype']();
++    $kanban = getItemForItemtype($_POST['kanban']['itemtype']);
+     $can_move = $kanban->canOrderKanbanCard($_POST['kanban']['items_id']);
+     if ($can_move) {
+         Item_Kanban::moveCard(
+diff --git a/ajax/rule.php b/ajax/rule.php
+index 59adbb072c..a079dc0be9 100644
+--- a/ajax/rule.php
++++ b/ajax/rule.php
+@@ -41,7 +41,7 @@ Session::checkLoginUser();
+ switch ($_REQUEST['action']) {
+     case "move_rule":
+         if (is_subclass_of($_POST['collection_classname'], RuleCollection::getType())) {
+-            $rule_collection = new $_POST['collection_classname']();
++            $rule_collection = getItemForItemtype($_POST['collection_classname']);
+             $rule_collection->moveRule((int) $_POST['rule_id'], (int) $_POST['ref_id'], $_POST['sort_action']);
+         }
+         break;
+diff --git a/ajax/updateTranslationFields.php b/ajax/updateTranslationFields.php
+index 6c2ffe7728..a0338dd0ed 100644
+--- a/ajax/updateTranslationFields.php
++++ b/ajax/updateTranslationFields.php
+@@ -44,7 +44,7 @@ Html::header_nocache();
+ 
+ Session::checkRight("dropdown", UPDATE);
+ if (isset($_POST['itemtype']) && isset($_POST['language'])) {
+-    $item = new $_POST['itemtype']();
++    $item = getItemForItemtype($_POST['itemtype']);
+     $item->getFromDB($_POST['items_id']);
+     DropdownTranslation::dropdownFields($item, $_POST['language']);
+ }
+diff --git a/ajax/updateTranslationValue.php b/ajax/updateTranslationValue.php
+index 7c645cc5db..abae461fa4 100644
+--- a/ajax/updateTranslationValue.php
++++ b/ajax/updateTranslationValue.php
+@@ -43,7 +43,7 @@ Session::checkRight("dropdown", UPDATE);
+ $matching_field = null;
+ 
+ if (isset($_POST['itemtype'], $_POST['field']) && is_a($_POST['itemtype'], CommonDropdown::class, true)) {
+-    $itemtype = new $_POST['itemtype']();
++    $itemtype = getItemForItemtype($_POST['itemtype']);
+     $matching_field = $itemtype->getAdditionalField($_POST['field']);
+ }
+ 
+diff --git a/composer.json b/composer.json
+index 46116e572a..0a1d743362 100644
+--- a/composer.json
++++ b/composer.json
+@@ -145,7 +145,8 @@
+             "patch -f -p1 -d vendor/laminas/laminas-mail/ < tools/patches/laminas-mail-invalid-header-ignore.patch || true",
+             "patch -f -p1 -d vendor/laminas/laminas-mail/ < tools/patches/laminas-mail-address-no-length-check.patch || true",
+             "patch -f -p1 -d vendor/atoum/atoum/ < tools/patches/atoum-4.1.0...4.2.0.patch || true",
+-            "patch -f -p1 -d vendor/michelf/php-markdown/ < tools/patches/php-markdown-php8-compat.patch || true"
++            "patch -f -p1 -d vendor/michelf/php-markdown/ < tools/patches/php-markdown-php8-compat.patch || true",
++            "patch -f -p1 -d vendor/guzzlehttp/guzzle/ < tools/patches/guzzle-http-client-restrict-http-methods.patch || true"
+         ],
+         "post-update-cmd": [
+             "@php -r \"file_put_contents('.composer.hash', sha1_file('composer.lock'));\"",
+@@ -153,7 +154,8 @@
+             "patch -f -p1 -d vendor/laminas/laminas-mail/ < tools/patches/laminas-mail-invalid-header-ignore.patch || true",
+             "patch -f -p1 -d vendor/laminas/laminas-mail/ < tools/patches/laminas-mail-address-no-length-check.patch || true",
+             "patch -f -p1 -d vendor/atoum/atoum/ < tools/patches/atoum-4.1.0...4.2.0.patch || true",
+-            "patch -f -p1 -d vendor/michelf/php-markdown/ < tools/patches/php-markdown-php8-compat.patch || true"
++            "patch -f -p1 -d vendor/michelf/php-markdown/ < tools/patches/php-markdown-php8-compat.patch || true",
++            "patch -f -p1 -d vendor/guzzlehttp/guzzle/ < tools/patches/guzzle-http-client-restrict-http-methods.patch || true"
+         ],
+         "build": [
+             "bin/console dependencies install && bin/console locales:compile"
+diff --git a/front/device.php b/front/device.php
+index 079f5a53f4..1ccab567e7 100644
+--- a/front/device.php
++++ b/front/device.php
+@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$dropdown = new $_GET['itemtype']();
++$dropdown = getItemForItemtype($_GET['itemtype']);
+ include(GLPI_ROOT . "/front/dropdown.common.php");
+diff --git a/front/devicemodel.form.php b/front/devicemodel.form.php
+index bcb6761e96..bb10ea87eb 100644
+--- a/front/devicemodel.form.php
++++ b/front/devicemodel.form.php
+@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$dropdown = new $_GET['itemtype']();
++$dropdown = getItemForItemtype($_GET['itemtype']);
+ include(GLPI_ROOT . "/front/dropdown.common.form.php");
+diff --git a/front/devicemodel.php b/front/devicemodel.php
+index 079f5a53f4..1ccab567e7 100644
+--- a/front/devicemodel.php
++++ b/front/devicemodel.php
+@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$dropdown = new $_GET['itemtype']();
++$dropdown = getItemForItemtype($_GET['itemtype']);
+ include(GLPI_ROOT . "/front/dropdown.common.php");
+diff --git a/front/devicetype.form.php b/front/devicetype.form.php
+index bcb6761e96..bb10ea87eb 100644
+--- a/front/devicetype.form.php
++++ b/front/devicetype.form.php
+@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$dropdown = new $_GET['itemtype']();
++$dropdown = getItemForItemtype($_GET['itemtype']);
+ include(GLPI_ROOT . "/front/dropdown.common.form.php");
+diff --git a/front/devicetype.php b/front/devicetype.php
+index 079f5a53f4..1ccab567e7 100644
+--- a/front/devicetype.php
++++ b/front/devicetype.php
+@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$dropdown = new $_GET['itemtype']();
++$dropdown = getItemForItemtype($_GET['itemtype']);
+ include(GLPI_ROOT . "/front/dropdown.common.php");
+diff --git a/front/item_device.php b/front/item_device.php
+index 66da811114..f45c29d8f6 100644
+--- a/front/item_device.php
++++ b/front/item_device.php
+@@ -44,7 +44,7 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
+     );
+ }
+ 
+-$itemDevice = new $_GET['itemtype']();
++$itemDevice = getItemForItemtype($_GET['itemtype']);
+ if (!$itemDevice->canView()) {
+     Session::redirectIfNotLoggedIn();
+     Html::displayRightError();
+diff --git a/front/itilfollowup.form.php b/front/itilfollowup.form.php
+index a6b52f87b1..781e471b21 100644
+--- a/front/itilfollowup.form.php
++++ b/front/itilfollowup.form.php
+@@ -50,7 +50,7 @@ $handled = false;
+ if (!isset($_POST['itemtype']) || !class_exists($_POST['itemtype'])) {
+     Html::displayErrorAndDie('Lost');
+ }
+-$track = new $_POST['itemtype']();
++$track = getItemForItemtype($_POST['itemtype']);
+ 
+ 
+ if (isset($_POST["add"])) {
+diff --git a/front/itilsolution.form.php b/front/itilsolution.form.php
+index 010d60e0e4..98e2c29558 100644
+--- a/front/itilsolution.form.php
++++ b/front/itilsolution.form.php
+@@ -43,7 +43,7 @@ include('../inc/includes.php');
+ Session::checkLoginUser();
+ 
+ $solution = new ITILSolution();
+-$track = new $_POST['itemtype']();
++$track = getItemForItemtype($_POST['itemtype']);
+ $track->getFromDB($_POST['items_id']);
+ 
+ $redirect = null;
+diff --git a/src/RuleAction.php b/src/RuleAction.php
+index 20a49c2a40..c143f6e292 100644
+--- a/src/RuleAction.php
++++ b/src/RuleAction.php
+@@ -51,7 +51,7 @@ class RuleAction extends CommonDBChild
+         $forbidden[] = 'update';
+ 
+         if (isset($_POST['rule_class_name']) && is_subclass_of(\Rule::class, $_POST['rule_class_name'])) {
+-            $rule = new $_POST['rule_class_name']();
++            $rule = getItemForItemtype($_POST['rule_class_name']);
+             if ($rule->maxActionsCount() == 1) {
+                 $forbidden[] = 'clone';
+             }
+diff --git a/tests/web/APIRest.php b/tests/web/APIRest.php
+index 089287358f..650ae40ab7 100644
+--- a/tests/web/APIRest.php
++++ b/tests/web/APIRest.php
+@@ -105,17 +105,11 @@ class APIRest extends APIBaseClass
+            // Guzzle lib will automatically push the correct Content-type
+             unset($params['headers']['Content-Type']);
+         }
+-        $verb = strtolower($verb);
+-        if (in_array($verb, ['get', 'post', 'delete', 'put', 'options', 'patch'])) {
+-            try {
+-                return $this->http_client->{$verb}(
+-                    $this->base_uri . $relative_uri,
+-                    $params
+-                );
+-            } catch (\Throwable $e) {
+-                throw $e;
+-            }
+-        }
++        return $this->http_client->request(
++            $verb,
++            $this->base_uri . $relative_uri,
++            $params
++        );
+     }
+ 
+     protected function query(
+diff --git a/tools/patches/guzzle-http-client-restrict-http-methods.patch b/tools/patches/guzzle-http-client-restrict-http-methods.patch
+new file mode 100644
+index 0000000000..dd992fcd65
+--- /dev/null
++++ b/tools/patches/guzzle-http-client-restrict-http-methods.patch
+@@ -0,0 +1,33 @@
++diff --git a/src/Client.php b/src/Client.php
++index 58f1d891..7448bb49 100644
++--- a/src/Client.php
+++++ b/src/Client.php
++@@ -70,28 +70,6 @@ class Client implements ClientInterface, \Psr\Http\Client\ClientInterface
++         $this->configureDefaults($config);
++     }
++ 
++-    /**
++-     * @param string $method
++-     * @param array  $args
++-     *
++-     * @return PromiseInterface|ResponseInterface
++-     *
++-     * @deprecated Client::__call will be removed in guzzlehttp/guzzle:8.0.
++-     */
++-    public function __call($method, $args)
++-    {
++-        if (\count($args) < 1) {
++-            throw new InvalidArgumentException('Magic request methods require a URI and optional options array');
++-        }
++-
++-        $uri = $args[0];
++-        $opts = $args[1] ?? [];
++-
++-        return \substr($method, -5) === 'Async'
++-            ? $this->requestAsync(\substr($method, 0, -5), $uri, $opts)
++-            : $this->request($method, $uri, $opts);
++-    }
++-
++     /**
++      * Asynchronously send an HTTP request.
++      *
+-- 
+2.34.1
+

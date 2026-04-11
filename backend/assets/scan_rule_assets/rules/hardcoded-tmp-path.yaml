@@ -1,0 +1,16 @@
+rules:
+- id: hardcoded-tmp-path
+  pattern: open("=~/^\/tmp.*/", ...)
+  message: 'Detected hardcoded temp directory. Consider using ''tempfile.TemporaryFile''
+    instead.
+
+    '
+  metadata:
+    references:
+    - https://docs.python.org/3/library/tempfile.html#tempfile.TemporaryFile
+    cwe:
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+  severity: WARNING
+  languages:
+  - python

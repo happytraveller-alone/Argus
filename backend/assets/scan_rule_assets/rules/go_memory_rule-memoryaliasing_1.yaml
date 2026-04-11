@@ -1,0 +1,37 @@
+rules:
+- id: go_memory_rule-memoryaliasing_1
+  languages:
+  - go
+  patterns:
+  - pattern-either:
+    - pattern: "for ..., $ARG := range $SLICE {\n  <... &($ARG) ...>\n}\n"
+    - pattern: "for ..., $ARG := range $SLICE {\n  <... func() { <... &$ARG ...> }\
+        \ ...>\n}\n"
+    - pattern: "for ..., $ARG := range $SLICE {\n  <... $X(..., <... &$ARG ...>, ...)\
+        \ ...>\n}\n"
+  - pattern-not: "for ..., $ARG := range $SLICE {\n  <... *$ARG ...>\n}\n"
+  - pattern-not-inside: for ..., $ARG := range $SLICE { return ... }
+  message: "Go's `for ... range` statements create an iteration variable for each\
+    \ iteration of the loop.\nBy taking the address of this iteration variable, the\
+    \ value of the address will be re-used\nand always point to the same location\
+    \ in memory. This can have unexpected behavior if the\naddress is stored or re-used.\n\
+    \nThis can be fixed by:\n- Not referencing the address of the variable\n- Re-assigning\
+    \ the iteration variable to a new variable\n- Using the address of the indexed\
+    \ variable\n\nExample not referencing the address:\n```\ntype someStruct struct\
+    \ {\n  x int\n}\n\nfor _, n := range []someStruct{{1}, {2}, {3}, {4}} {\n  fmt.Printf(\"\
+    %d\\n\", n.x)\n}\n```\n\nExample reassigning the iteration variable to a new variable:\n\
+    ```\ntype someStruct struct {\n  x int\n}\n\nfor _, n := range []someStruct{{1},\
+    \ {2}, {3}, {4}} {\n  p := n\n  fmt.Printf(\"%p\\n\", &p)\n}\n```\n\nExample using\
+    \ the address of the indexed variable:\n```\ntype someStruct struct {\n  x int\n\
+    }\n\nstructData := []someStruct{{1}, {2}, {3}, {4}}\nfor idx := range structData\
+    \ {\n  fmt.Printf(\"%p\\n\", &structData[idx])\n}\n```\n\nFor more information\
+    \ on how the `for ... range` statement works see:\nhttps://go.dev/ref/spec#For_statements\n"
+  metadata:
+    shortDescription: Incorrect access of indexable resource ('Range Error')
+    cwe: CWE-118
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: Info
+    category: security
+  severity: WARNING

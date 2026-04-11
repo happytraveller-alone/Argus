@@ -1,0 +1,26 @@
+From 3e036aaf49dc2dc7b051f30f3ea2b88ed61e29b2 Mon Sep 17 00:00:00 2001
+From: Charles Cooper <cooper.charles.m@gmail.com>
+Date: Sat, 2 Oct 2021 14:24:28 -0700
+Subject: [PATCH] improve annotation for `in` expressions
+
+---
+ vyper/old_codegen/expr.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/vyper/old_codegen/expr.py b/vyper/old_codegen/expr.py
+index ff012f7a..d9083da5 100644
+--- a/vyper/old_codegen/expr.py
++++ b/vyper/old_codegen/expr.py
+@@ -768,7 +768,8 @@ class Expr:
+             # for `not in`, invert the result
+             compare_sequence = ["iszero", compare_sequence]
+ 
+-        return LLLnode.from_list(compare_sequence, typ="bool", annotation="in comparator")
++        annotation = self.expr.get("node_source_code")
++        return LLLnode.from_list(compare_sequence, typ="bool", annotation=annotation)
+ 
+     @staticmethod
+     def _signed_to_unsigned_comparision_op(op):
+-- 
+2.34.1
+

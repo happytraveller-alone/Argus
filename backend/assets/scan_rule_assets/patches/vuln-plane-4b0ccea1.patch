@@ -1,0 +1,201 @@
+From 4b0ccea1461b7ca38761dfe0d0f07c2f94425005 Mon Sep 17 00:00:00 2001
+From: Nikhil <118773738+pablohashescobar@users.noreply.github.com>
+Date: Mon, 8 Jan 2024 23:27:09 +0530
+Subject: [PATCH] fix: jira importer validations (#3323)
+
+* fix: jira importer validations
+
+* dev: update validation for cloud hostname
+
+* dev: update the function to be used externally
+
+* dev: update codeql workflow
+
+* dev: update repository selection api
+---
+ .github/workflows/codeql.yml                  |  4 +--
+ apiserver/plane/app/views/importer.py         | 31 ++++++++++++-------
+ apiserver/plane/utils/importers/jira.py       | 22 +++++++++++--
+ .../integration/single-integration-card.tsx   |  2 +-
+ web/services/project/project.service.ts       |  6 +++-
+ 5 files changed, 48 insertions(+), 17 deletions(-)
+
+diff --git a/.github/workflows/codeql.yml b/.github/workflows/codeql.yml
+index 29fbde453..9f6ab1bfb 100644
+--- a/.github/workflows/codeql.yml
++++ b/.github/workflows/codeql.yml
+@@ -2,10 +2,10 @@ name: "CodeQL"
+ 
+ on:
+   push:
+-    branches: [ 'develop', 'hot-fix', 'stage-release' ]
++    branches: [ 'develop', 'preview', 'master' ]
+   pull_request:
+     # The branches below must be a subset of the branches above
+-    branches: [ 'develop' ]
++    branches: [ 'develop', 'preview', 'master' ]
+   schedule:
+     - cron: '53 19 * * 5'
+ 
+diff --git a/apiserver/plane/app/views/importer.py b/apiserver/plane/app/views/importer.py
+index b99d663e2..00d698ac5 100644
+--- a/apiserver/plane/app/views/importer.py
++++ b/apiserver/plane/app/views/importer.py
+@@ -35,14 +35,13 @@ from plane.app.serializers import (
+     ModuleSerializer,
+ )
+ from plane.utils.integrations.github import get_github_repo_details
+-from plane.utils.importers.jira import jira_project_issue_summary
++from plane.utils.importers.jira import jira_project_issue_summary, is_allowed_hostname
+ from plane.bgtasks.importer_task import service_importer
+ from plane.utils.html_processor import strip_tags
+ from plane.app.permissions import WorkSpaceAdminPermission
+ 
+ 
+ class ServiceIssueImportSummaryEndpoint(BaseAPIView):
+-
+     def get(self, request, slug, service):
+         if service == "github":
+             owner = request.GET.get("owner", False)
+@@ -122,6 +121,7 @@ class ImportServiceEndpoint(BaseAPIView):
+     permission_classes = [
+         WorkSpaceAdminPermission,
+     ]
++
+     def post(self, request, slug, service):
+         project_id = request.data.get("project_id", False)
+ 
+@@ -174,6 +174,21 @@ class ImportServiceEndpoint(BaseAPIView):
+             data = request.data.get("data", False)
+             metadata = request.data.get("metadata", False)
+             config = request.data.get("config", False)
++
++            cloud_hostname = metadata.get("cloud_hostname", False)
++
++            if not cloud_hostname:
++                return Response(
++                    {"error": "Cloud hostname is required"},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++
++            if not is_allowed_hostname(cloud_hostname):
++                return Response(
++                    {"error": "Hostname is not a valid hostname."},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++
+             if not data or not metadata:
+                 return Response(
+                     {"error": "Data, config and metadata are required"},
+@@ -221,9 +236,7 @@ class ImportServiceEndpoint(BaseAPIView):
+         return Response(serializer.data)
+ 
+     def delete(self, request, slug, service, pk):
+-        importer = Importer.objects.get(
+-            pk=pk, service=service, workspace__slug=slug
+-        )
++        importer = Importer.objects.get(pk=pk, service=service, workspace__slug=slug)
+ 
+         if importer.imported_data is not None:
+             # Delete all imported Issues
+@@ -241,9 +254,7 @@ class ImportServiceEndpoint(BaseAPIView):
+         return Response(status=status.HTTP_204_NO_CONTENT)
+ 
+     def patch(self, request, slug, service, pk):
+-        importer = Importer.objects.get(
+-            pk=pk, service=service, workspace__slug=slug
+-        )
++        importer = Importer.objects.get(pk=pk, service=service, workspace__slug=slug)
+         serializer = ImporterSerializer(importer, data=request.data, partial=True)
+         if serializer.is_valid():
+             serializer.save()
+@@ -479,9 +490,7 @@ class BulkImportModulesEndpoint(BaseAPIView):
+                 [
+                     ModuleLink(
+                         module=module,
+-                        url=module_data.get("link", {}).get(
+-                            "url", "https://plane.so"
+-                        ),
++                        url=module_data.get("link", {}).get("url", "https://plane.so"),
+                         title=module_data.get("link", {}).get(
+                             "title", "Original Issue"
+                         ),
+diff --git a/apiserver/plane/utils/importers/jira.py b/apiserver/plane/utils/importers/jira.py
+index b427ba14f..3081096fe 100644
+--- a/apiserver/plane/utils/importers/jira.py
++++ b/apiserver/plane/utils/importers/jira.py
+@@ -2,13 +2,31 @@ import requests
+ from requests.auth import HTTPBasicAuth
+ from sentry_sdk import capture_exception
+ 
++from urllib.parse import urlparse
++
++def is_allowed_hostname(hostname):
++    allowed_lists = ["atl-paas.net", "atlassian.com", "atlassian.net", "jira.com"]
++    # Extract the base domain from the hostname
++    parsed_uri = urlparse(f"https://{hostname}")  # Add scheme for urlparse to work properly
++    domain = parsed_uri.netloc.split(":")[0]  # Removes port number if included
++    base_domain = ".".join(domain.split(".")[-2:])  # Extract base domain
++
++    # Check if the base domain is in the allowed list
++    return base_domain in allowed_lists
++
+ 
+ def jira_project_issue_summary(email, api_token, project_key, hostname):
+     try:
++        
++
++        if not is_allowed_hostname(hostname):
++            print("Errored Hostname")
++            return {"error": "Invalid or unauthorized hostname"}
++
+         auth = HTTPBasicAuth(email, api_token)
+         headers = {"Accept": "application/json"}
+ 
+-        issue_url = f"https://{hostname}/rest/api/3/search?jql=project={project_key} AND issuetype=Story"
++        issue_url = f"https://{hostname}/rest/api/3/search?jql=project={project_key} AND issuetype!=Epic"
+         issue_response = requests.request(
+             "GET", issue_url, headers=headers, auth=auth
+         ).json()["total"]
+@@ -18,7 +36,7 @@ def jira_project_issue_summary(email, api_token, project_key, hostname):
+             "GET", module_url, headers=headers, auth=auth
+         ).json()["total"]
+ 
+-        status_url = f"https://{hostname}/rest/api/3/status/?jql=project={project_key}"
++        status_url = f"https://{hostname}/rest/api/3/project/${project_key}/statuses"
+         status_response = requests.request(
+             "GET", status_url, headers=headers, auth=auth
+         ).json()
+diff --git a/web/components/integration/single-integration-card.tsx b/web/components/integration/single-integration-card.tsx
+index e07f580e7..6692bacd6 100644
+--- a/web/components/integration/single-integration-card.tsx
++++ b/web/components/integration/single-integration-card.tsx
+@@ -139,7 +139,7 @@ export const SingleIntegrationCard: React.FC<Props> = observer(({ integration })
+               variant="danger"
+               onClick={() => {
+                 if (!isUserAdmin) return;
+-                handleRemoveIntegration;
++                handleRemoveIntegration();
+               }}
+               disabled={!isUserAdmin}
+               loading={deletingIntegration}
+diff --git a/web/services/project/project.service.ts b/web/services/project/project.service.ts
+index 7e8821cf5..501abe676 100644
+--- a/web/services/project/project.service.ts
++++ b/web/services/project/project.service.ts
+@@ -86,7 +86,11 @@ export class ProjectService extends APIService {
+   }
+ 
+   async getGithubRepositories(url: string): Promise<GithubRepositoriesResponse> {
+-    return this.request(url)
++    return this.request({
++      method: "get",
++      url,
++      headers: this.getAccessToken() ? this.getHeaders() : {},
++    })
+       .then((response) => response?.data)
+       .catch((error) => {
+         throw error?.response?.data;
+-- 
+2.34.1
+

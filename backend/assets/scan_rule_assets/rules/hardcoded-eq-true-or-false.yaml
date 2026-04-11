@@ -1,0 +1,30 @@
+rules:
+- id: eqeq-is-bad
+  patterns:
+  - pattern-not-inside: assert(...)
+  - pattern-either:
+    - pattern: $X == $X
+    - pattern: $X != $X
+  - pattern-not: 1 == 1
+  message: useless comparison operation `$X == $X` or `$X != $X`
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True'
+    - 'CWE-570: Expression is Always False'
+    - 'CWE-561: Dead Code'
+- id: hardcoded-eq-true-or-false
+  patterns:
+  - pattern-either:
+    - pattern: if (true) { ... }
+    - pattern: if (false) { ... }
+  message: useless if statement, always the same behavior
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-570: Expression Is Always True/False'
+    - 'CWE-561: Dead Code'

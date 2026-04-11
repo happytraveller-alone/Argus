@@ -1,0 +1,482 @@
+From 875a1f07d821dc5abe737b064018a27bbc7175d2 Mon Sep 17 00:00:00 2001
+From: Madelyn Olson <34459052+madolson@users.noreply.github.com>
+Date: Wed, 19 May 2021 08:23:54 -0700
+Subject: [PATCH] Hide migrate command from slowlog if they include auth
+ (#8859)
+
+Redact commands that include sensitive data from slowlog and monitor
+
+(cherry picked from commit a59e75a475782d86d7ce2b5b9c6f5bb4a5ef0bd6)
+---
+ src/acl.c                    | 13 ++++++----
+ src/cluster.c                |  3 +++
+ src/config.c                 |  2 +-
+ src/multi.c                  | 14 ++---------
+ src/networking.c             | 15 ++++++++----
+ src/replication.c            |  1 +
+ src/scripting.c              |  6 +++++
+ src/server.c                 | 42 ++++++++++++++++----------------
+ src/server.h                 |  5 ++--
+ tests/unit/introspection.tcl | 46 ++++++++++++++++++++++++++++++++++++
+ tests/unit/other.tcl         |  3 ---
+ tests/unit/slowlog.tcl       | 25 ++++++++++++++++----
+ 12 files changed, 122 insertions(+), 53 deletions(-)
+
+diff --git a/src/acl.c b/src/acl.c
+index 6a2ade646..86f73fe7e 100644
+--- a/src/acl.c
++++ b/src/acl.c
+@@ -1892,10 +1892,6 @@ void addACLLogEntry(client *c, int reason, int argpos, sds username) {
+ void aclCommand(client *c) {
+     char *sub = c->argv[1]->ptr;
+     if (!strcasecmp(sub,"setuser") && c->argc >= 3) {
+-        /* Consider information about passwords or permissions
+-         * to be sensitive, which will be the arguments for this
+-         * subcommand. */
+-        preventCommandLogging(c); 
+         sds username = c->argv[2]->ptr;
+         /* Check username validity. */
+         if (ACLStringHasSpaces(username,sdslen(username))) {
+@@ -1912,6 +1908,12 @@ void aclCommand(client *c) {
+         user *u = ACLGetUserByName(username,sdslen(username));
+         if (u) ACLCopyUser(tempu, u);
+ 
++        /* Initially redact all of the arguments to not leak any information
++         * about the user. */
++        for (int j = 2; j < c->argc; j++) {
++            redactClientCommandArgument(c, j);
++        }
++
+         for (int j = 3; j < c->argc; j++) {
+             if (ACLSetUser(tempu,c->argv[j]->ptr,sdslen(c->argv[j]->ptr)) != C_OK) {
+                 const char *errmsg = ACLSetUserStringError();
+@@ -2245,6 +2247,8 @@ void authCommand(client *c) {
+         addReplyErrorObject(c,shared.syntaxerr);
+         return;
+     }
++    /* Always redact the second argument */
++    redactClientCommandArgument(c, 1);
+ 
+     /* Handle the two different forms here. The form with two arguments
+      * will just use "default" as username. */
+@@ -2264,6 +2268,7 @@ void authCommand(client *c) {
+     } else {
+         username = c->argv[1];
+         password = c->argv[2];
++        redactClientCommandArgument(c, 2);
+     }
+ 
+     if (ACLAuthenticateUser(c,username,password) == C_OK) {
+diff --git a/src/cluster.c b/src/cluster.c
+index ba21024be..28650b327 100644
+--- a/src/cluster.c
++++ b/src/cluster.c
+@@ -5361,13 +5361,16 @@ void migrateCommand(client *c) {
+             }
+             j++;
+             password = c->argv[j]->ptr;
++            redactClientCommandArgument(c,j);
+         } else if (!strcasecmp(c->argv[j]->ptr,"auth2")) {
+             if (moreargs < 2) {
+                 addReplyErrorObject(c,shared.syntaxerr);
+                 return;
+             }
+             username = c->argv[++j]->ptr;
++            redactClientCommandArgument(c,j);
+             password = c->argv[++j]->ptr;
++            redactClientCommandArgument(c,j);
+         } else if (!strcasecmp(c->argv[j]->ptr,"keys")) {
+             if (sdslen(c->argv[3]->ptr) != 0) {
+                 addReplyError(c,
+diff --git a/src/config.c b/src/config.c
+index 9861c5f52..e0eec2f67 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -726,7 +726,7 @@ void configSetCommand(client *c) {
+             (config->alias && !strcasecmp(c->argv[2]->ptr,config->alias))))
+         {
+             if (config->flags & SENSITIVE_CONFIG) {
+-                preventCommandLogging(c);
++                redactClientCommandArgument(c,3);
+             }
+             if (!config->interface.set(config->data,o->ptr,1,&errstr)) {
+                 goto badfmt;
+diff --git a/src/multi.c b/src/multi.c
+index 902c919c7..5fb37098a 100644
+--- a/src/multi.c
++++ b/src/multi.c
+@@ -153,8 +153,7 @@ void execCommandAbort(client *c, sds error) {
+     /* Send EXEC to clients waiting data from MONITOR. We did send a MULTI
+      * already, and didn't send any of the queued commands, now we'll just send
+      * EXEC so it is clear that the transaction is over. */
+-    if (listLength(server.monitors) && !server.loading)
+-        replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
++    replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+ }
+ 
+ void execCommand(client *c) {
+@@ -179,7 +178,7 @@ void execCommand(client *c) {
+         addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
+                                                    shared.nullarray[c->resp]);
+         discardTransaction(c);
+-        goto handle_monitor;
++        return;
+     }
+ 
+     uint64_t old_flags = c->flags;
+@@ -266,15 +265,6 @@ void execCommand(client *c) {
+     }
+ 
+     server.in_exec = 0;
+-
+-handle_monitor:
+-    /* Send EXEC to clients waiting data from MONITOR. We do it here
+-     * since the natural order of commands execution is actually:
+-     * MUTLI, EXEC, ... commands inside transaction ...
+-     * Instead EXEC is flagged as CMD_SKIP_MONITOR in the command
+-     * table, and we do it here with correct ordering. */
+-    if (listLength(server.monitors) && !server.loading)
+-        replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+ }
+ 
+ /* ===================== WATCH (CAS alike for MULTI/EXEC) ===================
+diff --git a/src/networking.c b/src/networking.c
+index 14e94b84c..9de105982 100644
+--- a/src/networking.c
++++ b/src/networking.c
+@@ -1663,9 +1663,6 @@ void resetClient(client *c) {
+         c->flags |= CLIENT_REPLY_SKIP;
+         c->flags &= ~CLIENT_REPLY_SKIP_NEXT;
+     }
+-
+-    /* Always clear the prevent logging field. */
+-    c->flags &= ~CLIENT_PREVENT_LOGGING;
+ }
+ 
+ /* This function is used when we want to re-enter the event loop but there
+@@ -2967,7 +2964,8 @@ void helloCommand(client *c) {
+         int moreargs = (c->argc-1) - j;
+         const char *opt = c->argv[j]->ptr;
+         if (!strcasecmp(opt,"AUTH") && moreargs >= 2) {
+-            preventCommandLogging(c);
++            redactClientCommandArgument(c, j+1);
++            redactClientCommandArgument(c, j+2);
+             if (ACLAuthenticateUser(c, c->argv[j+1], c->argv[j+2]) == C_ERR) {
+                 addReplyError(c,"-WRONGPASS invalid username-password pair or user is disabled.");
+                 return;
+@@ -3054,6 +3052,15 @@ static void retainOriginalCommandVector(client *c) {
+     }
+ }
+ 
++/* Redact a given argument to prevent it from being shown
++ * in the slowlog. This information is stored in the
++ * original_argv array. */
++void redactClientCommandArgument(client *c, int argc) {
++    retainOriginalCommandVector(c);
++    decrRefCount(c->argv[argc]);
++    c->original_argv[argc] = shared.redacted;
++}
++
+ /* Rewrite the command vector of the client. All the new objects ref count
+  * is incremented. The old command vector is freed, and the old objects
+  * ref count is decremented. */
+diff --git a/src/replication.c b/src/replication.c
+index 8177eb073..932ce1dee 100644
+--- a/src/replication.c
++++ b/src/replication.c
+@@ -377,6 +377,7 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
+ }
+ 
+ void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc) {
++    if (!(listLength(server.monitors) && !server.loading)) return;
+     listNode *ln;
+     listIter li;
+     int j;
+diff --git a/src/scripting.c b/src/scripting.c
+index dbbd50eaf..b0602f7df 100644
+--- a/src/scripting.c
++++ b/src/scripting.c
+@@ -1690,6 +1690,9 @@ void evalGenericCommand(client *c, int evalsha) {
+ }
+ 
+ void evalCommand(client *c) {
++    /* Explicitly feed monitor here so that lua commands appear after their
++     * script command. */
++    replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+     if (!(c->flags & CLIENT_LUA_DEBUG))
+         evalGenericCommand(c,0);
+     else
+@@ -1697,6 +1700,9 @@ void evalCommand(client *c) {
+ }
+ 
+ void evalShaCommand(client *c) {
++    /* Explicitly feed monitor here so that lua commands appear after their
++     * script command. */
++    replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+     if (sdslen(c->argv[1]->ptr) != 40) {
+         /* We know that a match is not possible if the provided SHA is
+          * not the right length. So we return an error ASAP, this way
+diff --git a/src/server.c b/src/server.c
+index 9541aada7..516bcb114 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -706,7 +706,7 @@ struct redisCommand redisCommandTable[] = {
+      0,NULL,0,0,0,0,0,0},
+ 
+     {"auth",authCommand,-2,
+-     "no-auth no-script ok-loading ok-stale fast no-monitor no-slowlog @connection",
++     "no-auth no-script ok-loading ok-stale fast @connection",
+      0,NULL,0,0,0,0,0,0},
+ 
+     /* We don't allow PING during loading since in Redis PING is used as
+@@ -749,7 +749,7 @@ struct redisCommand redisCommandTable[] = {
+      0,NULL,0,0,0,0,0,0},
+ 
+     {"exec",execCommand,1,
+-     "no-script no-monitor no-slowlog ok-loading ok-stale @transaction",
++     "no-script no-slowlog ok-loading ok-stale @transaction",
+      0,NULL,0,0,0,0,0,0},
+ 
+     {"discard",discardCommand,1,
+@@ -901,17 +901,21 @@ struct redisCommand redisCommandTable[] = {
+      0,NULL,0,0,0,0,0,0},
+ 
+     {"hello",helloCommand,-1,
+-     "no-auth no-script fast no-monitor ok-loading ok-stale @connection",
++     "no-auth no-script fast ok-loading ok-stale @connection",
+      0,NULL,0,0,0,0,0,0},
+ 
+     /* EVAL can modify the dataset, however it is not flagged as a write
+-     * command since we do the check while running commands from Lua. */
++     * command since we do the check while running commands from Lua.
++     * 
++     * EVAL and EVALSHA also feed monitors before the commands are executed,
++     * as opposed to after.
++      */
+     {"eval",evalCommand,-3,
+-     "no-script may-replicate @scripting",
++     "no-script no-monitor may-replicate @scripting",
+      0,evalGetKeys,0,0,0,0,0,0},
+ 
+     {"evalsha",evalShaCommand,-3,
+-     "no-script may-replicate @scripting",
++     "no-script no-monitor may-replicate @scripting",
+      0,evalGetKeys,0,0,0,0,0,0},
+ 
+     {"slowlog",slowlogCommand,-2,
+@@ -2604,6 +2608,7 @@ void createSharedObjects(void) {
+     shared.getack = createStringObject("GETACK",6);
+     shared.special_asterick = createStringObject("*",1);
+     shared.special_equals = createStringObject("=",1);
++    shared.redacted = makeObjectShared(createStringObject("(redacted)",10));
+ 
+     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
+         shared.integers[j] =
+@@ -3625,12 +3630,6 @@ void preventCommandPropagation(client *c) {
+     c->flags |= CLIENT_PREVENT_PROP;
+ }
+ 
+-/* Avoid logging any information about this client's arguments
+- * since they contain sensitive information. */
+-void preventCommandLogging(client *c) {
+-    c->flags |= CLIENT_PREVENT_LOGGING;
+-}
+-
+ /* AOF specific version of preventCommandPropagation(). */
+ void preventCommandAOF(client *c) {
+     c->flags |= CLIENT_PREVENT_AOF_PROP;
+@@ -3644,7 +3643,7 @@ void preventCommandReplication(client *c) {
+ /* Log the last command a client executed into the slowlog. */
+ void slowlogPushCurrentCommand(client *c, struct redisCommand *cmd, ustime_t duration) {
+     /* Some commands may contain sensitive data that should not be available in the slowlog. */
+-    if ((c->flags & CLIENT_PREVENT_LOGGING) || (cmd->flags & CMD_SKIP_SLOWLOG))
++    if (cmd->flags & CMD_SKIP_SLOWLOG)
+         return;
+ 
+     /* If command argument vector was rewritten, use the original
+@@ -3700,15 +3699,6 @@ void call(client *c, int flags) {
+ 
+     server.fixed_time_expire++;
+ 
+-    /* Send the command to clients in MONITOR mode if applicable.
+-     * Administrative commands are considered too dangerous to be shown. */
+-    if (listLength(server.monitors) &&
+-        !server.loading &&
+-        !(c->cmd->flags & (CMD_SKIP_MONITOR|CMD_ADMIN)))
+-    {
+-        replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+-    }
+-
+     /* Initialization: clear the flags that must be set by the command on
+      * demand, and initialize the array for additional commands propagation. */
+     c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP);
+@@ -3774,6 +3764,14 @@ void call(client *c, int flags) {
+     if ((flags & CMD_CALL_SLOWLOG) && !(c->flags & CLIENT_BLOCKED))
+         slowlogPushCurrentCommand(c, real_cmd, duration);
+ 
++    /* Send the command to clients in MONITOR mode if applicable.
++     * Administrative commands are considered too dangerous to be shown. */
++    if (!(c->cmd->flags & (CMD_SKIP_MONITOR|CMD_ADMIN))) {
++        robj **argv = c->original_argv ? c->original_argv : c->argv;
++        int argc = c->original_argv ? c->original_argc : c->argc;
++        replicationFeedMonitors(c,server.monitors,c->db->id,argv,argc);
++    }
++
+     /* Clear the original argv.
+      * If the client is blocked we will handle slowlog when it is unblocked. */
+     if (!(c->flags & CLIENT_BLOCKED))
+diff --git a/src/server.h b/src/server.h
+index ee87ecacf..86c926805 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -279,7 +279,6 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
+                                            and AOF client */
+ #define CLIENT_REPL_RDBONLY (1ULL<<42) /* This client is a replica that only wants
+                                           RDB without replication buffer. */
+-#define CLIENT_PREVENT_LOGGING (1ULL<<43)  /* Prevent logging of command to slowlog */
+ 
+ /* Client block type (btype field in client structure)
+  * if CLIENT_BLOCKED flag is set. */
+@@ -986,7 +985,7 @@ struct sharedObjectsStruct {
+     *script, *replconf, *eval, *persist, *set, *pexpireat, *pexpire, 
+     *time, *pxat, *px, *retrycount, *force, *justid, 
+     *lastid, *ping, *setid, *keepttl, *load, *createconsumer,
+-    *getack, *special_asterick, *special_equals, *default_username,
++    *getack, *special_asterick, *special_equals, *default_username, *redacted,
+     *select[PROTO_SHARED_SELECT_CMDS],
+     *integers[OBJ_SHARED_INTEGERS],
+     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
+@@ -1865,6 +1864,7 @@ sds getAllClientsInfoString(int type);
+ void rewriteClientCommandVector(client *c, int argc, ...);
+ void rewriteClientCommandArgument(client *c, int i, robj *newval);
+ void replaceClientCommandVector(client *c, int argc, robj **argv);
++void redactClientCommandArgument(client *c, int argc);
+ unsigned long getClientOutputBufferMemoryUsage(client *c);
+ int freeClientsInAsyncFreeQueue(void);
+ int closeClientOnOutputBufferLimitReached(client *c, int async);
+@@ -2213,7 +2213,6 @@ void redisOpArrayInit(redisOpArray *oa);
+ void redisOpArrayFree(redisOpArray *oa);
+ void forceCommandPropagation(client *c, int flags);
+ void preventCommandPropagation(client *c);
+-void preventCommandLogging(client *c);
+ void preventCommandAOF(client *c);
+ void preventCommandReplication(client *c);
+ void slowlogPushCurrentCommand(client *c, struct redisCommand *cmd, ustime_t duration);
+diff --git a/tests/unit/introspection.tcl b/tests/unit/introspection.tcl
+index 7ce89aa01..0c78edf20 100644
+--- a/tests/unit/introspection.tcl
++++ b/tests/unit/introspection.tcl
+@@ -31,6 +31,52 @@ start_server {tags {"introspection"}} {
+         assert_match {*lua*"set"*"foo"*"bar"*} [$rd read]
+     }
+ 
++    test {MONITOR supports redacting command arguments} {
++        set rd [redis_deferring_client]
++        $rd monitor
++        $rd read ; # Discard the OK
++
++        r migrate [srv 0 host] [srv 0 port] key 9 5000
++        r migrate [srv 0 host] [srv 0 port] key 9 5000 AUTH user
++        r migrate [srv 0 host] [srv 0 port] key 9 5000 AUTH2 user password
++        catch {r auth not-real} _
++        catch {r auth not-real not-a-password} _
++        catch {r hello 2 AUTH not-real not-a-password} _
++
++        assert_match {*"key"*"9"*"5000"*} [$rd read]
++        assert_match {*"key"*"9"*"5000"*"(redacted)"*} [$rd read]
++        assert_match {*"key"*"9"*"5000"*"(redacted)"*"(redacted)"*} [$rd read]
++        assert_match {*"auth"*"(redacted)"*} [$rd read]
++        assert_match {*"auth"*"(redacted)"*"(redacted)"*} [$rd read]
++        assert_match {*"hello"*"2"*"AUTH"*"(redacted)"*"(redacted)"*} [$rd read]
++        $rd close
++    }
++
++    test {MONITOR correctly handles multi-exec cases} {
++        set rd [redis_deferring_client]
++        $rd monitor
++        $rd read ; # Discard the OK
++
++        # Make sure multi-exec statements are ordered
++        # correctly
++        r multi
++        r set foo bar
++        r exec
++        assert_match {*"multi"*} [$rd read]
++        assert_match {*"set"*"foo"*"bar"*} [$rd read]
++        assert_match {*"exec"*} [$rd read]
++
++        # Make sure we close multi statements on errors
++        r multi
++        catch {r syntax error} _
++        catch {r exec} _
++
++        assert_match {*"multi"*} [$rd read]
++        assert_match {*"exec"*} [$rd read]
++
++        $rd close
++    }
++
+     test {CLIENT GETNAME should return NIL if name is not assigned} {
+         r client getname
+     } {}
+diff --git a/tests/unit/other.tcl b/tests/unit/other.tcl
+index a6b0d0132..293ee7e95 100644
+--- a/tests/unit/other.tcl
++++ b/tests/unit/other.tcl
+@@ -266,9 +266,6 @@ start_server {overrides {save ""} tags {"other"}} {
+         assert_equal [$rd read] "OK"
+ 
+         $rd reset
+-
+-        # skip reset ouptut
+-        $rd read
+         assert_equal [$rd read] "RESET"
+ 
+         assert_no_match {*flags=O*} [r client list]
+diff --git a/tests/unit/slowlog.tcl b/tests/unit/slowlog.tcl
+index eb9dfc65d..9f6e248e9 100644
+--- a/tests/unit/slowlog.tcl
++++ b/tests/unit/slowlog.tcl
+@@ -45,18 +45,35 @@ start_server {tags {"slowlog"} overrides {slowlog-log-slower-than 1000000}} {
+         r config set slowlog-log-slower-than 0
+         r slowlog reset
+         r config set masterauth ""
+-        r acl setuser slowlog-test-user
++        r acl setuser slowlog-test-user +get +set
+         r config set slowlog-log-slower-than 0
+         r config set slowlog-log-slower-than 10000
+         set slowlog_resp [r slowlog get]
+ 
+         # Make sure normal configs work, but the two sensitive
+-        # commands are omitted
+-        assert_equal 2 [llength $slowlog_resp]
+-        assert_equal {slowlog reset} [lindex [lindex [r slowlog get] 1] 3]
++        # commands are omitted or redacted
++        assert_equal 4 [llength $slowlog_resp]
++        assert_equal {slowlog reset} [lindex [lindex [r slowlog get] 3] 3]
++        assert_equal {config set masterauth (redacted)} [lindex [lindex [r slowlog get] 2] 3]
++        assert_equal {acl setuser (redacted) (redacted) (redacted)} [lindex [lindex [r slowlog get] 1] 3]
+         assert_equal {config set slowlog-log-slower-than 0} [lindex [lindex [r slowlog get] 0] 3]
+     }
+ 
++    test {SLOWLOG - Some commands can redact sensitive fields} {
++        r config set slowlog-log-slower-than 0
++        r slowlog reset
++        r migrate [srv 0 host] [srv 0 port] key 9 5000
++        r migrate [srv 0 host] [srv 0 port] key 9 5000 AUTH user
++        r migrate [srv 0 host] [srv 0 port] key 9 5000 AUTH2 user password
++
++        r config set slowlog-log-slower-than 10000
++        # Make sure all 3 commands were logged, but the sensitive fields are omitted
++        assert_equal 4 [llength [r slowlog get]]
++        assert_match {* key 9 5000} [lindex [lindex [r slowlog get] 2] 3]
++        assert_match {* key 9 5000 AUTH (redacted)} [lindex [lindex [r slowlog get] 1] 3]
++        assert_match {* key 9 5000 AUTH2 (redacted) (redacted)} [lindex [lindex [r slowlog get] 0] 3]
++    }
++
+     test {SLOWLOG - Rewritten commands are logged as their original command} {
+         r config set slowlog-log-slower-than 0
+ 
+-- 
+2.34.1
+

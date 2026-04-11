@@ -1,0 +1,25 @@
+From ceb38150767cfb18899d9f6f1def45301474e485 Mon Sep 17 00:00:00 2001
+From: David <dnewman@gopro.com>
+Date: Fri, 30 Aug 2019 10:11:10 -0700
+Subject: [PATCH] fix for index first mp4s
+
+---
+ demo/GPMF_mp4reader.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/demo/GPMF_mp4reader.c b/demo/GPMF_mp4reader.c
+index 0504470..eb1d122 100644
+--- a/demo/GPMF_mp4reader.c
++++ b/demo/GPMF_mp4reader.c
+@@ -59,7 +59,7 @@ uint32_t *GetPayload(size_t handle, uint32_t *lastpayload, uint32_t index)
+ 	uint32_t *MP4buffer = NULL;
+ 	if (index < mp4->indexcount && mp4->mediafp)
+ 	{
+-		if ((mp4->filesize > mp4->metaoffsets[index]+mp4->metasizes[index]) && (mp4->metasizes[index] > 0))
++		if ((mp4->filesize >= mp4->metaoffsets[index]+mp4->metasizes[index]) && (mp4->metasizes[index] > 0))
+ 		{
+ 			MP4buffer = (uint32_t *)realloc((void *)lastpayload, mp4->metasizes[index]);
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,113 @@
+From 619df528295ef564592a898d58b560c3f3176e21 Mon Sep 17 00:00:00 2001
+From: pmacdona <>
+Date: Mon, 27 Dec 2021 21:08:21 +0000
+Subject: [PATCH] Fixes #53
+
+FossilOrigin-Name: 82b73736b7e8564290aefb236f94c390a5284066f41d8c05d3646f6c0f1b99c4
+---
+ src/jsiFunc.c  | 36 +++++++++++++++++++++++-------------
+ src/jsiLexer.c | 30 ++++++++++++++++++++++++++++--
+ 2 files changed, 51 insertions(+), 15 deletions(-)
+
+diff --git a/src/jsiFunc.c b/src/jsiFunc.c
+index bf8c40c..85c3faf 100644
+--- a/src/jsiFunc.c
++++ b/src/jsiFunc.c
+@@ -518,24 +518,34 @@ Jsi_Func *jsi_FuncMake(jsi_Pstate *pstate, Jsi_ScopeStrs *args, Jsi_OpCodes *ops
+     if (localvar && args && (!interp->noCheck)) {
+         int i, j;
+         for (i=0; i<args->count; i++) {
++            char *anam = args->args[i].name;
++            if (Jsi_IsReserved(interp, anam, 0)) {
++                if (line)
++                    interp->parseLine = line;
++                Jsi_LogError("function %s():  reserved parameter name '%s'", name?name:"", anam);
++                if (line)
++                    interp->parseLine = NULL;
++                pstate->err_count++;
++                break;
++            }
+             for (j=0; j<args->count; j++) {
+-                if (i != j && !Jsi_Strcmp(args->args[i].name, args->args[j].name)) {
+-                        if (line)
+-                            interp->parseLine = line;
+-                        Jsi_LogError("function %s():  duplicate parameter name '%s'", name?name:"", args->args[i].name);
+-                        if (line)
+-                            interp->parseLine = NULL;
+-                        pstate->err_count++;
++                if (i != j && !Jsi_Strcmp(anam, args->args[j].name)) {
++                    if (line)
++                        interp->parseLine = line;
++                    Jsi_LogError("function %s():  duplicate parameter name '%s'", name?name:"", anam);
++                    if (line)
++                        interp->parseLine = NULL;
++                    pstate->err_count++;
+                 }
+             }
+             for (j=0; j<localvar->count; j++) {
+                 if (!Jsi_Strcmp(localvar->args[j].name, args->args[i].name)) {
+-                        if (line)
+-                            interp->parseLine = line;
+-                        Jsi_LogError("function %s():  parameter name conflicts with local '%s'", name?name:"", localvar->args[j].name);
+-                        if (line)
+-                            interp->parseLine = NULL;
+-                        pstate->err_count++;
++                    if (line)
++                        interp->parseLine = line;
++                    Jsi_LogError("function %s():  parameter name conflicts with local '%s'", name?name:"", localvar->args[j].name);
++                    if (line)
++                        interp->parseLine = NULL;
++                    pstate->err_count++;
+                 }
+             }
+         }
+diff --git a/src/jsiLexer.c b/src/jsiLexer.c
+index 8d08eef..f5fcecd 100644
+--- a/src/jsiLexer.c
++++ b/src/jsiLexer.c
+@@ -110,14 +110,40 @@ Jsi_RC jsi_InitLexer(Jsi_Interp *interp, int release)
+         { "set", OBJSET },
+         { "get", OBJGET },
+         { "...", ELLIPSIS },
+-        { "debugger", __DEBUG }
++        { "debugger", __DEBUG },
++        { "Array", 0 },
++        { "Boolean", 0 },
++        { "Channel", 0 },
++        { "Event", 0 },
++        { "File", 0 },
++        { "Function", 0 },
++        { "Info", 0 },
++        { "Interp", 0 },
++        { "JSON", 0 },
++        { "Math", 0 },
++        { "MySql", 0 },
++        { "Number", 0 },
++        { "Object", 0 },
++        { "RegExp", 0 },
++        { "Signal", 0 },
++        { "Socket", 0 },
++        { "Sqlite", 0 },
++        { "String", 0 },
++        { "System", 0 },
++        { "Util", 0 },
++        { "Vfs", 0 },
++        { "WebSocket", 0 },
++        { "Zvfs", 0 },
++        { "JSON", 0 },
++        { "console", 0 },
++
+     };
+     uint i;
+     Jsi_HashEntry *hPtr;
+     if (release) return JSI_OK;
+     if (!interp->lexkeyTbl->numEntries) {
+         bool isNew;
+-        for (i = 0; i < sizeof(keywords) / sizeof(struct st_kw); ++i) {
++        for (i = 0; i < sizeof(keywords) / sizeof(struct st_kw) && keywords[i].name; ++i) {
+             hPtr = Jsi_HashEntryNew(interp->lexkeyTbl, keywords[i].name, &isNew);
+             assert(hPtr);
+             if (hPtr)
+-- 
+2.34.1
+

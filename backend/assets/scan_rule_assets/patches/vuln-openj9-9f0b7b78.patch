@@ -1,0 +1,108 @@
+From 2645ac531cfdf128f81d1b61e280eb7eaaebfe29 Mon Sep 17 00:00:00 2001
+From: Babneet Singh <sbabneet@ca.ibm.com>
+Date: Wed, 29 Sep 2021 12:20:13 -0400
+Subject: [PATCH 1/3] Throw IllegalAccessError (IAE): Lookup.findVirtual
+
+Throw IAE for non-public virtual methods if invoked by MethodHandles created
+using Lookup.findVirtual.
+
+Signed-off-by: Babneet Singh <sbabneet@ca.ibm.com>
+---
+ runtime/vm/MHInterpreter.inc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/runtime/vm/MHInterpreter.inc b/runtime/vm/MHInterpreter.inc
+index 5abdf53f9f5..c0da5b9d692 100644
+--- a/runtime/vm/MHInterpreter.inc
++++ b/runtime/vm/MHInterpreter.inc
+@@ -188,6 +188,12 @@ VM_MHInterpreter::dispatchLoop(j9object_t methodHandle)
+ 				J9Class *interfaceClazz = J9VM_J9CLASS_FROM_HEAPCLASS(_currentThread, J9VMJAVALANGINVOKEPRIMITIVEHANDLE_REFERENCECLASS(_currentThread, methodHandle));
+ 				method = convertITableIndexToVirtualMethod(receiverClazz, interfaceClazz, getVMSlot(methodHandle));
+ 				if (NULL != method) {
++					J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
++					if (J9_ARE_NO_BITS_SET(romMethod->modifiers, J9AccPublic | J9AccPrivate)) {
++						prepareForExceptionThrow(_currentThread);
++						setIllegalAccessErrorNonPublicInvokeInterface(_currentThread, method);
++						goto throwCurrentException;
++					}
+ 					goto runMethod;
+ 				}
+ 				prepareForExceptionThrow(_currentThread);
+
+From d1aa48a2933c52b01375be5e09a1cb47b078f155 Mon Sep 17 00:00:00 2001
+From: Babneet Singh <sbabneet@ca.ibm.com>
+Date: Fri, 1 Oct 2021 16:16:45 -0400
+Subject: [PATCH 2/3] Remove the J9AccPrivate check for KIND_INTERFACE
+
+For KIND_INTERFACE, OpenJ9 MHs always get the method from the vTable. Private
+methods do not appear in the vTable. So, the check for J9AccPrivate is not
+needed.
+
+Signed-off-by: Babneet Singh <sbabneet@ca.ibm.com>
+---
+ runtime/vm/MHInterpreter.inc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/runtime/vm/MHInterpreter.inc b/runtime/vm/MHInterpreter.inc
+index c0da5b9d692..33f77612bcc 100644
+--- a/runtime/vm/MHInterpreter.inc
++++ b/runtime/vm/MHInterpreter.inc
+@@ -189,7 +189,7 @@ VM_MHInterpreter::dispatchLoop(j9object_t methodHandle)
+ 				method = convertITableIndexToVirtualMethod(receiverClazz, interfaceClazz, getVMSlot(methodHandle));
+ 				if (NULL != method) {
+ 					J9ROMMethod *romMethod = J9_ROM_METHOD_FROM_RAM_METHOD(method);
+-					if (J9_ARE_NO_BITS_SET(romMethod->modifiers, J9AccPublic | J9AccPrivate)) {
++					if (J9_ARE_NO_BITS_SET(romMethod->modifiers, J9AccPublic)) {
+ 						prepareForExceptionThrow(_currentThread);
+ 						setIllegalAccessErrorNonPublicInvokeInterface(_currentThread, method);
+ 						goto throwCurrentException;
+
+From c6e0d9296ff9a3084965d83e207403de373c0bad Mon Sep 17 00:00:00 2001
+From: Devin Papineau <devin@ajdmp.ca>
+Date: Wed, 29 Sep 2021 16:43:44 -0400
+Subject: [PATCH 3/3] Throw IAE when an InterfaceHandle thunk finds a
+ non-public method
+
+The interface dispatch implemented by InterfaceHandle is supposed to
+throw IllegalAccessError (IAE) when the dispatched callee is not public,
+just like the dispatch performed by invokeinterface.
+---
+ .../share/classes/java/lang/invoke/InterfaceHandle.java    | 6 +++++-
+ runtime/compiler/env/VMJ9.cpp                              | 7 ++++++-
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/jcl/src/java.base/share/classes/java/lang/invoke/InterfaceHandle.java b/jcl/src/java.base/share/classes/java/lang/invoke/InterfaceHandle.java
+index fe9723c3d29..abae28cfc16 100644
+--- a/jcl/src/java.base/share/classes/java/lang/invoke/InterfaceHandle.java
++++ b/jcl/src/java.base/share/classes/java/lang/invoke/InterfaceHandle.java
+@@ -80,7 +80,11 @@ protected final long vtableOffset(Object receiver) {
+ 		if (interfaceClass.isInstance(receiver)) {
+ 			long interfaceJ9Class = getJ9ClassFromClass(interfaceClass);
+ 			long receiverJ9Class = getJ9ClassFromClass(receiver.getClass());
+-			return convertITableIndexToVTableIndex(interfaceJ9Class, (int)vmSlot, receiverJ9Class) << VTABLE_ENTRY_SHIFT;
++			int result = convertITableIndexToVTableIndex(interfaceJ9Class, (int)vmSlot, receiverJ9Class) << VTABLE_ENTRY_SHIFT;
++			if (result < 0) {
++				throw new IllegalAccessError();
++			}
++			return result;
+ 		} else {
+ 			throw new IncompatibleClassChangeError();
+ 		}
+diff --git a/runtime/compiler/env/VMJ9.cpp b/runtime/compiler/env/VMJ9.cpp
+index 41d6b01631c..9575d28c064 100644
+--- a/runtime/compiler/env/VMJ9.cpp
++++ b/runtime/compiler/env/VMJ9.cpp
+@@ -9496,7 +9496,12 @@ JNIEXPORT jint JNICALL Java_java_lang_invoke_InterfaceHandle_convertITableIndexT
+          break;
+    TR_ASSERT(itableEntry, "Shouldn't call convertITableIndexToVTableIndex without first ensuring the receiver implements the interface");
+    UDATA *itableArray = (UDATA*)(itableEntry+1);
+-   return (itableArray[itableIndex] - sizeof(J9Class))/sizeof(intptr_t);
++   UDATA vTableOffset = itableArray[itableIndex];
++   J9Method *method = *(J9Method**)((UDATA)receiverClass + vTableOffset);
++   if ((J9_ROM_METHOD_FROM_RAM_METHOD(method)->modifiers & J9AccPublic) == 0)
++      return -1;
++
++   return (vTableOffset - sizeof(J9Class))/sizeof(intptr_t);
+ #if 0 // TODO:JSR292: We probably want to do something more like this instead, so it will properly handle exceptional cases
+    struct
+       {

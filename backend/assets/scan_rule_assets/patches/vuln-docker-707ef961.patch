@@ -1,0 +1,72 @@
+From 707ef9618b3b26a0534a0af732a22f159eccfaa5 Mon Sep 17 00:00:00 2001
+From: Michael Crosby <michael@docker.com>
+Date: Thu, 19 Jun 2014 11:57:09 -0700
+Subject: [PATCH] Update close fd issues for lxc
+
+Docker-DCO-1.1-Signed-off-by: Michael Crosby <michael@docker.com> (github: crosbymichael)
+---
+ daemon/execdriver/lxc/driver.go         | 7 -------
+ daemon/execdriver/lxc/lxc_init_linux.go | 9 +++++++++
+ 2 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/daemon/execdriver/lxc/driver.go b/daemon/execdriver/lxc/driver.go
+index 24144dc194..59daf1afe1 100644
+--- a/daemon/execdriver/lxc/driver.go
++++ b/daemon/execdriver/lxc/driver.go
+@@ -19,7 +19,6 @@ import (
+ 	"github.com/docker/libcontainer/label"
+ 	"github.com/docker/libcontainer/mount/nodes"
+ 	"github.com/dotcloud/docker/daemon/execdriver"
+-	"github.com/dotcloud/docker/pkg/system"
+ 	"github.com/dotcloud/docker/utils"
+ )
+ 
+@@ -37,12 +36,6 @@ func init() {
+ 		if err := setupNetworking(args); err != nil {
+ 			return err
+ 		}
+-		if err := setupWorkingDirectory(args); err != nil {
+-			return err
+-		}
+-		if err := system.CloseFdsFrom(3); err != nil {
+-			return err
+-		}
+ 		if err := finalizeNamespace(args); err != nil {
+ 			return err
+ 		}
+diff --git a/daemon/execdriver/lxc/lxc_init_linux.go b/daemon/execdriver/lxc/lxc_init_linux.go
+index 6069c4becc..3b15d096af 100644
+--- a/daemon/execdriver/lxc/lxc_init_linux.go
++++ b/daemon/execdriver/lxc/lxc_init_linux.go
+@@ -8,6 +8,7 @@ import (
+ 
+ 	"github.com/docker/libcontainer/namespaces"
+ 	"github.com/docker/libcontainer/security/capabilities"
++	"github.com/docker/libcontainer/utils"
+ 	"github.com/dotcloud/docker/daemon/execdriver"
+ 	"github.com/dotcloud/docker/daemon/execdriver/native/template"
+ 	"github.com/dotcloud/docker/pkg/system"
+@@ -18,6 +19,10 @@ func setHostname(hostname string) error {
+ }
+ 
+ func finalizeNamespace(args *execdriver.InitArgs) error {
++	if err := utils.CloseExecFrom(3); err != nil {
++		return err
++	}
++
+ 	// We use the native drivers default template so that things like caps are consistent
+ 	// across both drivers
+ 	container := template.New()
+@@ -49,5 +54,9 @@ func finalizeNamespace(args *execdriver.InitArgs) error {
+ 		}
+ 	}
+ 
++	if err := setupWorkingDirectory(args); err != nil {
++		return err
++	}
++
+ 	return nil
+ }
+-- 
+2.34.1
+

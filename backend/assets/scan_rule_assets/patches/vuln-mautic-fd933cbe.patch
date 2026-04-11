@@ -1,0 +1,96 @@
+From fd933cbef795b04cabdc50527cb18e037488fef9 Mon Sep 17 00:00:00 2001
+From: Alan Hartless <alan@devkardia.com>
+Date: Tue, 28 Nov 2017 10:20:58 -0600
+Subject: [PATCH] Prevent a disabled user from being able to login through a
+ SSO plugin using email address due to bad query.
+
+---
+ .../Authenticator/FormAuthenticator.php       |  4 +-
+ .../Security/Provider/UserProvider.php        | 37 ++++++++++++++-----
+ 2 files changed, 30 insertions(+), 11 deletions(-)
+
+diff --git a/app/bundles/UserBundle/Security/Authenticator/FormAuthenticator.php b/app/bundles/UserBundle/Security/Authenticator/FormAuthenticator.php
+index 8c1ad9cab2..dbbce31bf6 100644
+--- a/app/bundles/UserBundle/Security/Authenticator/FormAuthenticator.php
++++ b/app/bundles/UserBundle/Security/Authenticator/FormAuthenticator.php
+@@ -73,7 +73,9 @@ class FormAuthenticator implements SimpleFormAuthenticatorInterface
+      * @param UserProviderInterface $userProvider
+      * @param                       $providerKey
+      *
+-     * @return UsernamePasswordToken
++     * @return PluginToken
++     * @throws AuthenticationException
++     * @throws BadCredentialsException
+      */
+     public function authenticateToken(TokenInterface $token, UserProviderInterface $userProvider, $providerKey)
+     {
+diff --git a/app/bundles/UserBundle/Security/Provider/UserProvider.php b/app/bundles/UserBundle/Security/Provider/UserProvider.php
+index 987617cd3b..74bafe876d 100644
+--- a/app/bundles/UserBundle/Security/Provider/UserProvider.php
++++ b/app/bundles/UserBundle/Security/Provider/UserProvider.php
+@@ -96,14 +96,6 @@ class UserProvider implements UserProviderInterface
+             ->setParameter('true', true, 'boolean')
+             ->setParameter('username', $username);
+ 
+-        if (func_num_args() > 1 && $email = func_get_arg(1)) {
+-            // Checking email from an auth plugin
+-            $q->orWhere(
+-                'u.email = :email'
+-            )
+-                ->setParameter('email', $email);
+-        }
+-
+         $user = $q->getQuery()->getOneOrNullResult();
+ 
+         if (empty($user)) {
+@@ -157,15 +149,15 @@ class UserProvider implements UserProviderInterface
+      * @param bool|true $createIfNotExists
+      *
+      * @return User
++     * @throws BadCredentialsException
+      */
+     public function saveUser(User $user, $createIfNotExists = true)
+     {
+         $isNew = !$user->getId();
+ 
+         if ($isNew) {
+-            // Check if user exists and create one if applicable
+             try {
+-                $user = $this->loadUserByUsername($user->getUsername(), $user->getEmail());
++                $user = $this->findUser($user);
+             } catch (UsernameNotFoundException $exception) {
+                 if (!$createIfNotExists) {
+                     throw new BadCredentialsException();
+@@ -218,4 +210,29 @@ class UserProvider implements UserProviderInterface
+ 
+         return $user;
+     }
++
++    /**
++     * @param User $user
++     *
++     * @return User
++     */
++    public function findUser(User $user)
++    {
++        try {
++            // Try by username
++            $user = $this->loadUserByUsername($user->getUsername());
++
++            return $user;
++        } catch (UsernameNotFoundException $exception) {
++            // Try by email
++            try {
++                $user = $this->loadUserByUsername($user->getEmail());
++
++                return $user;
++            } catch (UsernameNotFoundException $exception) {
++            }
++        }
++
++        throw new UsernameNotFoundException();
++    }
+ }
+-- 
+2.34.1
+

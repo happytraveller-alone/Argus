@@ -1,0 +1,39 @@
+From 69fb0f8e7dc38075427aceaf09bcac697d0590ff Mon Sep 17 00:00:00 2001
+From: Herman van Rink <rink@initfour.nl>
+Date: Thu, 30 Jun 2011 09:59:43 +0200
+Subject: [PATCH] Fixed regexp quoting issue in Synchronize code, see
+ PMASA-2011-7
+
+---
+ ChangeLog                            | 1 +
+ libraries/server_synchronize.lib.php | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index da43382e07..e3db9229c3 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -4,6 +4,7 @@ phpMyAdmin - ChangeLog
+ 3.4.3.1 (not yet released)
+ - [security] Fixed possible session manipulation in swekey authentication, see PMASA-2011-5
+ - [security] Fixed possible code injection incase session variables are compromised, see PMASA-2011-6
++- [security] Fixed regexp quoting issue in Synchronize code, see PMASA-2011-7
+ 
+ 3.4.3.0 (2011-06-27)
+ - bug #3311170 [sync] Missing helper icons in Synchronize
+diff --git a/libraries/server_synchronize.lib.php b/libraries/server_synchronize.lib.php
+index ba6f813389..c9f1242d17 100644
+--- a/libraries/server_synchronize.lib.php
++++ b/libraries/server_synchronize.lib.php
+@@ -624,7 +624,7 @@ function PMA_createTargetTables($src_db, $trg_db, $src_link, $trg_link, &$uncomm
+         $Create_Query = PMA_DBI_fetch_value("SHOW CREATE TABLE " . PMA_backquote($src_db) . '.' . PMA_backquote($uncommon_tables[$table_index]), 0, 1, $src_link);
+ 
+         // Replace the src table name with a `dbname`.`tablename`
+-        $Create_Table_Query = preg_replace('/' . PMA_backquote($uncommon_tables[$table_index]) . '/', 
++        $Create_Table_Query = preg_replace('/' . preg_quote(PMA_backquote($uncommon_tables[$table_index]), '/') . '/', 
+                                             PMA_backquote($trg_db) . '.' .PMA_backquote($uncommon_tables[$table_index]),
+                                             $Create_Query,
+                                             $limit = 1
+-- 
+2.34.1
+

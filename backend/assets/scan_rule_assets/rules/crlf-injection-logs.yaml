@@ -1,0 +1,88 @@
+rules:
+- id: crlf-injection-logs
+  message: 'When data from an untrusted source is put into a logger and not neutralized
+    correctly,
+
+    an attacker could forge log entries or include malicious content.
+
+    '
+  metadata:
+    cwe: 'CWE-93: Improper Neutralization of CRLF Sequences (''CRLF Injection'')'
+    owasp: 'A1: Injection'
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#CRLF_INJECTION_LOGS
+  severity: WARNING
+  languages:
+  - java
+  pattern-either:
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,HttpServletRequest\
+      \ $REQ,...) {\n    ...\n    String $VAL = $REQ.getParameter(...);\n    ...\n\
+      \    $LOG.$LEVEL(<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    HttpServletRequest $REQ = ...;\n    ...\n    String $VAL = $REQ.getParameter(...);\n\
+      \    ...\n    $LOG.$LEVEL(<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  HttpServletRequest\
+      \ $REQ = ...;\n  ...\n  String $VAL = $REQ.getParameter(...);\n  ...\n  $LOG.$LEVEL(<...\
+      \ $VAL ...>);\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,HttpServletRequest\
+      \ $REQ,...) {\n    ...\n    String $VAL = $REQ.getParameter(...);\n    ...\n\
+      \    $LOG.log($LEVEL,<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    HttpServletRequest $REQ = ...;\n    ...\n    String $VAL = $REQ.getParameter(...);\n\
+      \    ...\n    $LOG.log($LEVEL,<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  HttpServletRequest\
+      \ $REQ = ...;\n  ...\n  String $VAL = $REQ.getParameter(...);\n  ...\n  $LOG.log($LEVEL,<...\
+      \ $VAL ...>);\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,ServletRequest\
+      \ $REQ,...) {\n    ...\n    String $VAL = $REQ.getParameter(...);\n    ...\n\
+      \    $LOG.$LEVEL(<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    ServletRequest $REQ = ...;\n    ...\n    String $VAL = $REQ.getParameter(...);\n\
+      \    ...\n    $LOG.$LEVEL(<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  ServletRequest\
+      \ $REQ = ...;\n  ...\n  String $VAL = $REQ.getParameter(...);\n  ...\n  $LOG.$LEVEL(<...\
+      \ $VAL ...>);\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,ServletRequest\
+      \ $REQ,...) {\n    ...\n    String $VAL = $REQ.getParameter(...);\n    ...\n\
+      \    $LOG.log($LEVEL,<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    ServletRequest $REQ = ...;\n    ...\n    String $VAL = $REQ.getParameter(...);\n\
+      \    ...\n    $LOG.log($LEVEL,<... $VAL ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  ServletRequest\
+      \ $REQ = ...;\n  ...\n  String $VAL = $REQ.getParameter(...);\n  ...\n  $LOG.log($LEVEL,<...\
+      \ $VAL ...>);\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,HttpServletRequest\
+      \ $REQ,...) {\n    ...\n    $LOG.$LEVEL(<... $REQ.getParameter(...) ...>);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    HttpServletRequest $REQ = ...;\n    ...\n    $LOG.$LEVEL(<... $REQ.getParameter(...)\
+      \ ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  HttpServletRequest\
+      \ $REQ = ...;\n  ...\n  $LOG.$LEVEL(<... $REQ.getParameter(...) ...>);\n  ...\n\
+      }\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,HttpServletRequest\
+      \ $REQ,...) {\n    ...\n    $LOG.log($LEVEL,<... $REQ.getParameter(...) ...>);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    ...\n    HttpServletRequest $REQ = ...;\n    ...\n    $LOG.log($LEVEL,<...\
+      \ $REQ.getParameter(...) ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  HttpServletRequest\
+      \ $REQ = ...;\n  ...\n  $LOG.log($LEVEL,<... $REQ.getParameter(...) ...>);\n\
+      \  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,ServletRequest\
+      \ $REQ,...) {\n    ...\n    $LOG.$LEVEL(<... $REQ.getParameter(...) ...>);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    ServletRequest $REQ = ...;\n    ...\n    $LOG.$LEVEL(<... $REQ.getParameter(...)\
+      \ ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  ServletRequest\
+      \ $REQ = ...;\n  ...\n  $LOG.$LEVEL(<... $REQ.getParameter(...) ...>);\n  ...\n\
+      }\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...,ServletRequest\
+      \ $REQ,...) {\n    ...\n    $LOG.log($LEVEL,<... $REQ.getParameter(...) ...>);\n\
+      \    ...\n  }\n  ...\n}\n"
+  - pattern: "class $CLASS {\n  ...\n  Logger $LOG = ...;\n  ...\n  $X $METHOD(...)\
+      \ {\n    ServletRequest $REQ = ...;\n    ...\n    $LOG.log($LEVEL,<... $REQ.getParameter(...)\
+      \ ...>);\n    ...\n  }\n  ...\n}\n"
+  - pattern: "$X $METHOD(...) {\n  ...\n  Logger $LOG = ...;\n  ...\n  ServletRequest\
+      \ $REQ = ...;\n  ...\n  $LOG.log($LEVEL,<... $REQ.getParameter(...) ...>);\n\
+      \  ...\n}"

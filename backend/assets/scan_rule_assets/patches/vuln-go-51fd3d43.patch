@@ -1,0 +1,219 @@
+From 51fd3d43da17fa897aa6e0bfbfdb1844f3579fbf Mon Sep 17 00:00:00 2001
+From: Ian Lance Taylor <iant@golang.org>
+Date: Tue, 13 Feb 2018 17:43:16 -0800
+Subject: [PATCH] [release-branch.go1.9] cmd/go: add options to security
+ whitelist
+
+Also permit passing flags to pkg-config, as we used to.
+
+Also change the error message to refer to https://golang.org/s/invalidflag.
+
+Fixes #23749
+
+Change-Id: I3fbeb4c346610e6fd55e8720e720b0a40e352ab5
+Reviewed-on: https://go-review.googlesource.com/93836
+Run-TryBot: Ian Lance Taylor <iant@golang.org>
+TryBot-Result: Gobot Gobot <gobot@golang.org>
+Reviewed-by: Brad Fitzpatrick <bradfitz@golang.org>
+Reviewed-on: https://go-review.googlesource.com/103135
+Run-TryBot: Andrew Bonventre <andybons@golang.org>
+Reviewed-by: Ian Lance Taylor <iant@golang.org>
+---
+ src/cmd/go/internal/work/build.go         | 15 ++++---
+ src/cmd/go/internal/work/security.go      | 50 +++++++++++++++++++++--
+ src/cmd/go/internal/work/security_test.go |  7 ++++
+ 3 files changed, 63 insertions(+), 9 deletions(-)
+
+diff --git a/src/cmd/go/internal/work/build.go b/src/cmd/go/internal/work/build.go
+index a129692d66..23946e466b 100644
+--- a/src/cmd/go/internal/work/build.go
++++ b/src/cmd/go/internal/work/build.go
+@@ -1526,15 +1526,20 @@ func splitPkgConfigOutput(out []byte) []string {
+ // Calls pkg-config if needed and returns the cflags/ldflags needed to build the package.
+ func (b *Builder) getPkgConfigFlags(p *load.Package) (cflags, ldflags []string, err error) {
+ 	if pkgs := p.CgoPkgConfig; len(pkgs) > 0 {
++		var pcflags []string
++		for len(pkgs) > 0 && strings.HasPrefix(pkgs[0], "--") {
++			pcflags = append(pcflags, pkgs[0])
++			pkgs = pkgs[1:]
++		}
+ 		for _, pkg := range pkgs {
+ 			if !load.SafeArg(pkg) {
+ 				return nil, nil, fmt.Errorf("invalid pkg-config package name: %s", pkg)
+ 			}
+ 		}
+ 		var out []byte
+-		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.PkgconfigCmd(), "--cflags", "--", pkgs)
++		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.PkgconfigCmd(), "--cflags", pcflags, "--", pkgs)
+ 		if err != nil {
+-			b.showOutput(p.Dir, b.PkgconfigCmd()+" --cflags "+strings.Join(pkgs, " "), string(out))
++			b.showOutput(p.Dir, b.PkgconfigCmd()+" --cflags "+strings.Join(pcflags, " ")+strings.Join(pkgs, " "), string(out))
+ 			b.Print(err.Error() + "\n")
+ 			return nil, nil, errPrintedOutput
+ 		}
+@@ -1544,15 +1549,15 @@ func (b *Builder) getPkgConfigFlags(p *load.Package) (cflags, ldflags []string,
+ 				return nil, nil, err
+ 			}
+ 		}
+-		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.PkgconfigCmd(), "--libs", "--", pkgs)
++		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.PkgconfigCmd(), "--libs", pcflags, "--", pkgs)
+ 		if err != nil {
+-			b.showOutput(p.Dir, b.PkgconfigCmd()+" --libs "+strings.Join(pkgs, " "), string(out))
++			b.showOutput(p.Dir, b.PkgconfigCmd()+" --libs "+strings.Join(pcflags, " ")+strings.Join(pkgs, " "), string(out))
+ 			b.Print(err.Error() + "\n")
+ 			return nil, nil, errPrintedOutput
+ 		}
+ 		if len(out) > 0 {
+ 			ldflags = strings.Fields(string(out))
+-			if err := checkLinkerFlags("CFLAGS", "pkg-config --cflags", ldflags); err != nil {
++			if err := checkLinkerFlags("LDFLAGS", "pkg-config --libs", ldflags); err != nil {
+ 				return nil, nil, err
+ 			}
+ 		}
+diff --git a/src/cmd/go/internal/work/security.go b/src/cmd/go/internal/work/security.go
+index fee5beeb15..54fd6b9782 100644
+--- a/src/cmd/go/internal/work/security.go
++++ b/src/cmd/go/internal/work/security.go
+@@ -34,6 +34,7 @@ import (
+ 	"fmt"
+ 	"os"
+ 	"regexp"
++	"strings"
+ )
+ 
+ var re = regexp.MustCompile
+@@ -45,26 +46,42 @@ var validCompilerFlags = []*regexp.Regexp{
+ 	re(`-O([^@\-].*)`),
+ 	re(`-W`),
+ 	re(`-W([^@,]+)`), // -Wall but not -Wa,-foo.
++	re(`-f(no-)?blocks`),
++	re(`-f(no-)?common`),
++	re(`-f(no-)?constant-cfstrings`),
++	re(`-f(no-)?exceptions`),
++	re(`-finput-charset=([^@\-].*)`),
++	re(`-f(no-)?lto`),
++	re(`-f(no-)?modules`),
+ 	re(`-f(no-)?objc-arc`),
+ 	re(`-f(no-)?omit-frame-pointer`),
++	re(`-f(no-)?openmp(-simd)?`),
++	re(`-f(no-)?permissive`),
+ 	re(`-f(no-)?(pic|PIC|pie|PIE)`),
++	re(`-f(no-)?rtti`),
+ 	re(`-f(no-)?split-stack`),
+ 	re(`-f(no-)?stack-(.+)`),
+ 	re(`-f(no-)?strict-aliasing`),
+ 	re(`-fsanitize=(.+)`),
+ 	re(`-g([^@\-].*)?`),
+ 	re(`-m(arch|cpu|fpu|tune)=([^@\-].*)`),
++	re(`-m(no-)?avx[0-9a-z.]*`),
++	re(`-m(no-)?ms-bitfields`),
+ 	re(`-m(no-)?stack-(.+)`),
+ 	re(`-mmacosx-(.+)`),
+ 	re(`-mnop-fun-dllimport`),
++	re(`-m(no-)?sse[0-9.]*`),
++	re(`-pedantic(-errors)?`),
++	re(`-pipe`),
+ 	re(`-pthread`),
+-	re(`-std=([^@\-].*)`),
++	re(`-?-std=([^@\-].*)`),
+ 	re(`-x([^@\-].*)`),
+ }
+ 
+ var validCompilerFlagsWithNextArg = []string{
+ 	"-D",
+ 	"-I",
++	"-isystem",
+ 	"-framework",
+ 	"-x",
+ }
+@@ -79,16 +96,29 @@ var validLinkerFlags = []*regexp.Regexp{
+ 	re(`-m(arch|cpu|fpu|tune)=([^@\-].*)`),
+ 	re(`-(pic|PIC|pie|PIE)`),
+ 	re(`-pthread`),
++	re(`-?-static([-a-z0-9+]*)`),
+ 
+ 	// Note that any wildcards in -Wl need to exclude comma,
+ 	// since -Wl splits its argument at commas and passes
+ 	// them all to the linker uninterpreted. Allowing comma
+ 	// in a wildcard would allow tunnelling arbitrary additional
+ 	// linker arguments through one of these.
++	re(`-Wl,--(no-)?as-needed`),
++	re(`-Wl,-Bdynamic`),
++	re(`-Wl,-Bstatic`),
++	re(`-Wl,--disable-new-dtags`),
++	re(`-Wl,--enable-new-dtags`),
++	re(`-Wl,--end-group`),
++	re(`-Wl,-framework,[^,@\-][^,]+`),
++	re(`-Wl,-headerpad_max_install_names`),
++	re(`-Wl,--no-undefined`),
+ 	re(`-Wl,-rpath,([^,@\-][^,]+)`),
++	re(`-Wl,-search_paths_first`),
++	re(`-Wl,--start-group`),
++	re(`-Wl,-?-unresolved-symbols=[^,]+`),
+ 	re(`-Wl,--(no-)?warn-([^,]+)`),
+ 
+-	re(`[a-zA-Z0-9_].*\.(o|obj|dll|dylib|so)`), // direct linker inputs: x.o or libfoo.so (but not -foo.o or @foo.o)
++	re(`[a-zA-Z0-9_/].*\.(a|o|obj|dll|dylib|so)`), // direct linker inputs: x.o or libfoo.so (but not -foo.o or @foo.o)
+ }
+ 
+ var validLinkerFlagsWithNextArg = []string{
+@@ -96,6 +126,7 @@ var validLinkerFlagsWithNextArg = []string{
+ 	"-l",
+ 	"-L",
+ 	"-framework",
++	"-Wl,-framework",
+ }
+ 
+ func checkCompilerFlags(name, source string, list []string) error {
+@@ -147,10 +178,21 @@ Args:
+ 					i++
+ 					continue Args
+ 				}
++
++				// Permit -Wl,-framework -Wl,name.
++				if i+1 < len(list) &&
++					strings.HasPrefix(arg, "-Wl,") &&
++					strings.HasPrefix(list[i+1], "-Wl,") &&
++					load.SafeArg(list[i+1][4:]) &&
++					!strings.Contains(list[i+1][4:], ",") {
++					i++
++					continue Args
++				}
++
+ 				if i+1 < len(list) {
+-					return fmt.Errorf("invalid flag in %s: %s %s", source, arg, list[i+1])
++					return fmt.Errorf("invalid flag in %s: %s %s (see https://golang.org/s/invalidflag)", source, arg, list[i+1])
+ 				}
+-				return fmt.Errorf("invalid flag in %s: %s without argument", source, arg)
++				return fmt.Errorf("invalid flag in %s: %s without argument (see https://golang.org/s/invalidflag)", source, arg)
+ 			}
+ 		}
+ 	Bad:
+diff --git a/src/cmd/go/internal/work/security_test.go b/src/cmd/go/internal/work/security_test.go
+index 739ab5a6ee..976501b810 100644
+--- a/src/cmd/go/internal/work/security_test.go
++++ b/src/cmd/go/internal/work/security_test.go
+@@ -132,6 +132,9 @@ var goodLinkerFlags = [][]string{
+ 	{"-l", "世界"},
+ 	{"-L", "framework"},
+ 	{"-framework", "Chocolate"},
++	{"-Wl,-framework", "-Wl,Chocolate"},
++	{"-Wl,-framework,Chocolate"},
++	{"-Wl,-unresolved-symbols=ignore-all"},
+ }
+ 
+ var badLinkerFlags = [][]string{
+@@ -185,6 +188,10 @@ var badLinkerFlags = [][]string{
+ 	{"-l", "-foo"},
+ 	{"-framework", "-Caffeine"},
+ 	{"-framework", "@Home"},
++	{"-Wl,-framework,-Caffeine"},
++	{"-Wl,-framework", "-Wl,@Home"},
++	{"-Wl,-framework", "@Home"},
++	{"-Wl,-framework,Chocolate,@Home"},
+ 	{"-x", "--c"},
+ 	{"-x", "@obj"},
+ 	{"-Wl,-rpath,@foo"},
+-- 
+2.34.1
+

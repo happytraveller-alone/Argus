@@ -1,0 +1,643 @@
+From 8e2b0c7bc81ce775da83ed1f86203b3817eb314c Mon Sep 17 00:00:00 2001
+From: Ignotus Peverell <igno.peverell@protonmail.com>
+Date: Sun, 24 Feb 2019 21:57:56 -0800
+Subject: [PATCH] Bump version to 1.0.2 (#2623)
+
+---
+ Cargo.lock          | 132 ++++++++++++++++++++++----------------------
+ Cargo.toml          |  22 ++++----
+ api/Cargo.toml      |  14 ++---
+ chain/Cargo.toml    |  10 ++--
+ config/Cargo.toml   |  12 ++--
+ core/Cargo.toml     |   6 +-
+ keychain/Cargo.toml |   4 +-
+ p2p/Cargo.toml      |  10 ++--
+ pool/Cargo.toml     |  12 ++--
+ servers/Cargo.toml  |  20 +++----
+ src/bin/grin.yml    |   2 +-
+ store/Cargo.toml    |   6 +-
+ util/Cargo.toml     |   2 +-
+ wallet/Cargo.toml   |  16 +++---
+ 14 files changed, 134 insertions(+), 134 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index abd662da..ee5925e4 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -743,7 +743,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ 
+ [[package]]
+ name = "grin"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "built 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -755,16 +755,16 @@ dependencies = [
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "flate2 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_api 1.0.1",
+- "grin_chain 1.0.1",
+- "grin_config 1.0.1",
+- "grin_core 1.0.1",
+- "grin_keychain 1.0.1",
+- "grin_p2p 1.0.1",
+- "grin_servers 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
+- "grin_wallet 1.0.1",
++ "grin_api 1.0.2",
++ "grin_chain 1.0.2",
++ "grin_config 1.0.2",
++ "grin_core 1.0.2",
++ "grin_keychain 1.0.2",
++ "grin_p2p 1.0.2",
++ "grin_servers 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
++ "grin_wallet 1.0.2",
+  "humansize 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+  "linefeed 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -779,17 +779,17 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_api"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_chain 1.0.1",
+- "grin_core 1.0.1",
+- "grin_p2p 1.0.1",
+- "grin_pool 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
++ "grin_chain 1.0.2",
++ "grin_core 1.0.2",
++ "grin_p2p 1.0.2",
++ "grin_pool 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
+  "http 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
+  "hyper 0.12.19 (registry+https://github.com/rust-lang/crates.io-index)",
+  "hyper-rustls 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -810,7 +810,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_chain"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -819,10 +819,10 @@ dependencies = [
+  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_core 1.0.1",
+- "grin_keychain 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
++ "grin_core 1.0.2",
++ "grin_keychain 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
+  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -833,14 +833,14 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_config"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "dirs 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_core 1.0.1",
+- "grin_p2p 1.0.1",
+- "grin_servers 1.0.1",
+- "grin_util 1.0.1",
+- "grin_wallet 1.0.1",
++ "grin_core 1.0.2",
++ "grin_p2p 1.0.2",
++ "grin_servers 1.0.2",
++ "grin_util 1.0.2",
++ "grin_wallet 1.0.2",
+  "pretty_assertions 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "serde 1.0.87 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -850,7 +850,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_core"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -859,8 +859,8 @@ dependencies = [
+  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_keychain 1.0.1",
+- "grin_util 1.0.1",
++ "grin_keychain 1.0.2",
++ "grin_util 1.0.2",
+  "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -876,12 +876,12 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_keychain"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+  "digest 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_util 1.0.1",
++ "grin_util 1.0.2",
+  "hmac 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -897,16 +897,16 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_p2p"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "bytes 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
+  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_core 1.0.1",
+- "grin_pool 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
++ "grin_core 1.0.2",
++ "grin_pool 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
+  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "net2 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -918,17 +918,17 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_pool"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_chain 1.0.1",
+- "grin_core 1.0.1",
+- "grin_keychain 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
++ "grin_chain 1.0.2",
++ "grin_core 1.0.2",
++ "grin_keychain 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "serde 1.0.87 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -951,22 +951,22 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_servers"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "bufstream 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
+  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_api 1.0.1",
+- "grin_chain 1.0.1",
+- "grin_core 1.0.1",
+- "grin_keychain 1.0.1",
+- "grin_p2p 1.0.1",
+- "grin_pool 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
+- "grin_wallet 1.0.1",
++ "grin_api 1.0.2",
++ "grin_chain 1.0.2",
++ "grin_core 1.0.2",
++ "grin_keychain 1.0.2",
++ "grin_p2p 1.0.2",
++ "grin_pool 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
++ "grin_wallet 1.0.2",
+  "http 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
+  "hyper 0.12.19 (registry+https://github.com/rust-lang/crates.io-index)",
+  "hyper-staticfile 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -982,7 +982,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_store"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -991,8 +991,8 @@ dependencies = [
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_core 1.0.1",
+- "grin_util 1.0.1",
++ "grin_core 1.0.2",
++ "grin_util 1.0.2",
+  "libc 0.2.48 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -1004,7 +1004,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_util"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "backtrace 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
+  "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -1024,7 +1024,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "grin_wallet"
+-version = "1.0.1"
++version = "1.0.2"
+ dependencies = [
+  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+  "byteorder 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+@@ -1032,12 +1032,12 @@ dependencies = [
+  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+- "grin_api 1.0.1",
+- "grin_chain 1.0.1",
+- "grin_core 1.0.1",
+- "grin_keychain 1.0.1",
+- "grin_store 1.0.1",
+- "grin_util 1.0.1",
++ "grin_api 1.0.2",
++ "grin_chain 1.0.2",
++ "grin_core 1.0.2",
++ "grin_keychain 1.0.2",
++ "grin_store 1.0.2",
++ "grin_util 1.0.2",
+  "hyper 0.12.19 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "prettytable-rs 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+diff --git a/Cargo.toml b/Cargo.toml
+index f1a0769a..0c03735c 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -34,14 +34,14 @@ linefeed = "0.5"
+ failure = "0.1"
+ failure_derive = "0.1"
+ 
+-grin_api = { path = "./api", version = "1.0.1" }
+-grin_config = { path = "./config", version = "1.0.1" }
+-grin_core = { path = "./core", version = "1.0.1" }
+-grin_keychain = { path = "./keychain", version = "1.0.1" }
+-grin_p2p = { path = "./p2p", version = "1.0.1" }
+-grin_servers = { path = "./servers", version = "1.0.1" }
+-grin_util = { path = "./util", version = "1.0.1" }
+-grin_wallet = { path = "./wallet", version = "1.0.1" }
++grin_api = { path = "./api", version = "1.0.2" }
++grin_config = { path = "./config", version = "1.0.2" }
++grin_core = { path = "./core", version = "1.0.2" }
++grin_keychain = { path = "./keychain", version = "1.0.2" }
++grin_p2p = { path = "./p2p", version = "1.0.2" }
++grin_servers = { path = "./servers", version = "1.0.2" }
++grin_util = { path = "./util", version = "1.0.2" }
++grin_wallet = { path = "./wallet", version = "1.0.2" }
+ 
+ [target.'cfg(windows)'.dependencies]
+ cursive = { version = "0.10.0", default-features = false, features = ["pancurses-backend"] }
+@@ -58,5 +58,5 @@ flate2 = "1.0"
+ tar = "0.4"
+ 
+ [dev-dependencies]
+-grin_chain = { path = "./chain", version = "1.0.1" }
+-grin_store = { path = "./store", version = "1.0.1" }
++grin_chain = { path = "./chain", version = "1.0.2" }
++grin_store = { path = "./store", version = "1.0.2" }
+diff --git a/api/Cargo.toml b/api/Cargo.toml
+index a71cb8c3..abad11bf 100644
+--- a/api/Cargo.toml
++++ b/api/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_api"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "APIs for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -30,9 +30,9 @@ futures = "0.1.21"
+ rustls = "0.13"
+ url = "1.7.0"
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_chain = { path = "../chain", version = "1.0.1" }
+-grin_p2p = { path = "../p2p", version = "1.0.1" }
+-grin_pool = { path = "../pool", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_chain = { path = "../chain", version = "1.0.2" }
++grin_p2p = { path = "../p2p", version = "1.0.2" }
++grin_pool = { path = "../pool", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+diff --git a/chain/Cargo.toml b/chain/Cargo.toml
+index 275af298..c4583a49 100644
+--- a/chain/Cargo.toml
++++ b/chain/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_chain"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -22,10 +22,10 @@ serde_derive = "1"
+ chrono = "0.4.4"
+ lru-cache = "0.1"
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_keychain = { path = "../keychain", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_keychain = { path = "../keychain", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+ 
+ [dev-dependencies]
+ env_logger = "0.5"
+diff --git a/config/Cargo.toml b/config/Cargo.toml
+index 0b262209..c322e175 100644
+--- a/config/Cargo.toml
++++ b/config/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_config"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Configuration for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -16,11 +16,11 @@ serde_derive = "1"
+ toml = "0.4"
+ dirs = "1.0.3"
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_servers = { path = "../servers", version = "1.0.1" }
+-grin_p2p = { path = "../p2p", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
+-grin_wallet = { path = "../wallet", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_servers = { path = "../servers", version = "1.0.2" }
++grin_p2p = { path = "../p2p", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
++grin_wallet = { path = "../wallet", version = "1.0.2" }
+ 
+ [dev-dependencies]
+ pretty_assertions = "0.5.1"
+diff --git a/core/Cargo.toml b/core/Cargo.toml
+index 071ca104..60568142 100644
+--- a/core/Cargo.toml
++++ b/core/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_core"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -28,8 +28,8 @@ uuid = { version = "0.6", features = ["serde", "v4"] }
+ log = "0.4"
+ chrono = "0.4.4"
+ 
+-grin_keychain = { path = "../keychain", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_keychain = { path = "../keychain", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+ 
+ [dev-dependencies]
+ serde_json = "1"
+diff --git a/keychain/Cargo.toml b/keychain/Cargo.toml
+index 8efa6214..bca879d3 100644
+--- a/keychain/Cargo.toml
++++ b/keychain/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_keychain"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -27,4 +27,4 @@ sha2 = "0.7"
+ pbkdf2 = "0.2"
+ 
+ 
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_util = { path = "../util", version = "1.0.2" }
+diff --git a/p2p/Cargo.toml b/p2p/Cargo.toml
+index ef09b6ca..a417b682 100644
+--- a/p2p/Cargo.toml
++++ b/p2p/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_p2p"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -22,9 +22,9 @@ serde_derive = "1"
+ log = "0.4"
+ chrono = { version = "0.4.4", features = ["serde"] }
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+ 
+ [dev-dependencies]
+-grin_pool = { path = "../pool", version = "1.0.1" }
++grin_pool = { path = "../pool", version = "1.0.2" }
+diff --git a/pool/Cargo.toml b/pool/Cargo.toml
+index 431bd753..8e9c8fb4 100644
+--- a/pool/Cargo.toml
++++ b/pool/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_pool"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -19,10 +19,10 @@ chrono = "0.4.4"
+ failure = "0.1"
+ failure_derive = "0.1"
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_keychain = { path = "../keychain", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_keychain = { path = "../keychain", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+ 
+ [dev-dependencies]
+-grin_chain = { path = "../chain", version = "1.0.1" }
++grin_chain = { path = "../chain", version = "1.0.2" }
+diff --git a/servers/Cargo.toml b/servers/Cargo.toml
+index 6b901a32..5aea4701 100644
+--- a/servers/Cargo.toml
++++ b/servers/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_servers"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -26,15 +26,15 @@ chrono = "0.4.4"
+ bufstream = "~0.1"
+ jsonrpc-core = "~8.0"
+ 
+-grin_api = { path = "../api", version = "1.0.1" }
+-grin_chain = { path = "../chain", version = "1.0.1" }
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_keychain = { path = "../keychain", version = "1.0.1" }
+-grin_p2p = { path = "../p2p", version = "1.0.1" }
+-grin_pool = { path = "../pool", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
+-grin_wallet = { path = "../wallet", version = "1.0.1" }
++grin_api = { path = "../api", version = "1.0.2" }
++grin_chain = { path = "../chain", version = "1.0.2" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_keychain = { path = "../keychain", version = "1.0.2" }
++grin_p2p = { path = "../p2p", version = "1.0.2" }
++grin_pool = { path = "../pool", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
++grin_wallet = { path = "../wallet", version = "1.0.2" }
+ 
+ [dev-dependencies]
+ blake2-rfc = "0.2"
+diff --git a/src/bin/grin.yml b/src/bin/grin.yml
+index 94a18e0a..e6d0eb94 100644
+--- a/src/bin/grin.yml
++++ b/src/bin/grin.yml
+@@ -1,5 +1,5 @@
+ name: grin
+-version: "1.0.1"
++version: "1.0.2"
+ about: Lightweight implementation of the MimbleWimble protocol.
+ author: The Grin Team
+ 
+diff --git a/store/Cargo.toml b/store/Cargo.toml
+index 2c663da3..390f6324 100644
+--- a/store/Cargo.toml
++++ b/store/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_store"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -22,8 +22,8 @@ serde = "1"
+ serde_derive = "1"
+ log = "0.4"
+ 
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
+ 
+ [dev-dependencies]
+ chrono = "0.4.4"
+diff --git a/util/Cargo.toml b/util/Cargo.toml
+index 93d443a5..05777247 100644
+--- a/util/Cargo.toml
++++ b/util/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_util"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+diff --git a/wallet/Cargo.toml b/wallet/Cargo.toml
+index 79e573a5..b5dd5cdf 100644
+--- a/wallet/Cargo.toml
++++ b/wallet/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "grin_wallet"
+-version = "1.0.1"
++version = "1.0.2"
+ authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+ description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+ license = "Apache-2.0"
+@@ -31,12 +31,12 @@ uuid = { version = "0.6", features = ["serde", "v4"] }
+ url = "1.7.0"
+ chrono = { version = "0.4.4", features = ["serde"] }
+ 
+-grin_api = { path = "../api", version = "1.0.1" }
+-grin_core = { path = "../core", version = "1.0.1" }
+-grin_keychain = { path = "../keychain", version = "1.0.1" }
+-grin_store = { path = "../store", version = "1.0.1" }
+-grin_util = { path = "../util", version = "1.0.1" }
+-grin_chain = { path = "../chain", version = "1.0.1" }
++grin_api = { path = "../api", version = "1.0.2" }
++grin_core = { path = "../core", version = "1.0.2" }
++grin_keychain = { path = "../keychain", version = "1.0.2" }
++grin_store = { path = "../store", version = "1.0.2" }
++grin_util = { path = "../util", version = "1.0.2" }
++grin_chain = { path = "../chain", version = "1.0.2" }
+ 
+ [dev-dependencies]
+-grin_store = { path = "../store", version = "1.0.1" }
++grin_store = { path = "../store", version = "1.0.2" }
+-- 
+2.34.1
+

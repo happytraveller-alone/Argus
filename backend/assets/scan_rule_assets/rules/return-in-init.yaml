@@ -1,0 +1,26 @@
+rules:
+- id: return-in-init
+  patterns:
+  - pattern-inside: "class A(...):\n    ...\n    def __init__(...):\n        ...\n"
+  - pattern: return ...
+  message: '`return` should never appear inside a class __init__ function. This will
+    cause a runtime error.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-391: Unchecked Error Condition'
+- id: yield-in-init
+  patterns:
+  - pattern-inside: "class A(...):\n    ...\n    def __init__(...):\n        ...\n"
+  - pattern: yield ...
+  message: '`yield` should never appear inside a class __init__ function. This will
+    cause a runtime error.'
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'

@@ -1,0 +1,25 @@
+From bc6ed863d1d63e79980c5ba8ff7405a6a45401b5 Mon Sep 17 00:00:00 2001
+From: 4unkur <dartelov@intelliants.com>
+Date: Tue, 6 Jun 2017 15:58:44 +0600
+Subject: [PATCH] Resolves #465
+
+---
+ includes/classes/ia.core.picture.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/includes/classes/ia.core.picture.php b/includes/classes/ia.core.picture.php
+index 3b0e260b..dfa8f597 100644
+--- a/includes/classes/ia.core.picture.php
++++ b/includes/classes/ia.core.picture.php
+@@ -138,7 +138,7 @@ class iaPicture extends abstractCore
+         try {
+             // check this is an animated GIF
+             if ('image/gif' == $mimeType) {
+-                return $this->_processAnimatedGif($sourceFile, $destinationFile, $width, $height, $applyWatermark);
++                $this->_processAnimatedGif($sourceFile, $destinationFile, $width, $height, $applyWatermark);
+             }
+ 
+             $image = ImageWorkshop::initFromPath($sourceFile, true);
+-- 
+2.34.1
+

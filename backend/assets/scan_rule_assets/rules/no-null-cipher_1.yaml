@@ -1,0 +1,33 @@
+rules:
+- id: no-null-cipher_1
+  languages:
+  - kotlin
+  - scala
+  message: 'NullCipher was detected. This will not encrypt anything; the cipher text
+    will be the same as the plain text. Use a valid, secure cipher: Cipher.getInstance("AES/CBC/PKCS7PADDING").
+    See https://owasp.org/www-community/Using_the_Java_Cryptographic_Extensions for
+    more information.'
+  metadata:
+    asvs:
+      control_id: 6.2.5 Insecure Algorithm
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x14-V6-Cryptography.md#v62-algorithms
+      section: V6 Stored Cryptography Verification Requirements
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    impact: MEDIUM
+    likelihood: LOW
+    owasp:
+    - A03:2017 - Sensitive Data Exposure
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#NULL_CIPHER
+    subcategory:
+    - vuln
+    technology:
+    - kotlin
+  pattern: NullCipher(...)
+  severity: WARNING

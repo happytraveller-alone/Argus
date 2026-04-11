@@ -207,7 +207,7 @@ pub fn discover_rule_assets() -> Result<Vec<ScanRuleAsset>> {
 }
 
 fn rule_asset_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../backend_old/app/db")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/scan_rule_assets")
 }
 
 fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
@@ -232,7 +232,6 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
                     | "bandit_builtin"
                     | "rules_phpstan"
                     | "rules_pmd"
-                    | "yasa_builtin"
             )
         ) && seen.insert(relative.clone())
         {
@@ -277,7 +276,6 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
         "bandit_builtin" => Ok(("bandit", "builtin")),
         "rules_phpstan" => Ok(("phpstan", "builtin")),
         "rules_pmd" => Ok(("pmd", "builtin")),
-        "yasa_builtin" => Ok(("yasa", "builtin")),
         _ => Err(anyhow!("unsupported rule asset root: {}", relative.display())),
     }
 }
@@ -302,7 +300,7 @@ mod tests {
         assert!(paths.iter().any(|path| path == &"gitleaks_builtin/gitleaks-default.toml"));
         assert!(paths.iter().any(|path| path == &"bandit_builtin/bandit_builtin_rules.json"));
         assert!(paths.iter().any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
-        assert!(paths.iter().any(|path| path == &"yasa_builtin/yasa_rules_snapshot.json"));
+        assert!(!paths.iter().any(|path| path.starts_with("yasa_builtin/")));
     }
 
     #[test]

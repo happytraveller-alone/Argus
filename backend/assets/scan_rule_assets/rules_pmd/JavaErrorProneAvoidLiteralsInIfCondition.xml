@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidLiteralsInIfCondition Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidLiteralsInIfCondition</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidLiteralsInIfCondition" language="java" since="4.2.6" message="Avoid using literals such as {0} in if statements" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidliteralsinifcondition">
+            <description>
+    Avoid using hard-coded literals in conditional statements. By declaring them as static variables
+    or private members with descriptive names maintainability is enhanced. By default, the literals "-1" and "0" are ignored.
+    More exceptions can be defined with the property "ignoreMagicNumbers".
+
+    The rule doesn't consider deeper expressions by default, but this can be enabled via the property `ignoreExpressions`.
+    With this property set to false, if-conditions like `i == 1 + 5` are reported as well. Note that in that case,
+    the property ignoreMagicNumbers is not taken into account, if there are multiple literals involved in such an expression.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="ignoreMagicNumbers" description="Comma-separated list of magic numbers, that should be ignored" type="String" value="-1,0" />
+                <property name="ignoreExpressions" description="If true, only literals in simple if conditions are considered. Otherwise literals in expressions are checked, too." type="Boolean" value="true" />
+                <property name="xpath">
+                    <value>
+
+    (: simple case - no deep expressions - this is always executed :)
+    //IfStatement/*[1]/*[pmd-java:nodeIs('Literal')]
+        [not(pmd-java:nodeIs('NullLiteral'))]
+        [not(pmd-java:nodeIs('BooleanLiteral'))]
+        [empty(index-of(tokenize($ignoreMagicNumbers, '\s*,\s*'), @Image))]
+    |
+    (: consider also deeper expressions :)
+    //IfStatement[$ignoreExpressions = false()]/*[1]//*[not(self::UnaryExpression[@Operator = '-'])]/*[pmd-java:nodeIs('Literal')]
+        [not(pmd-java:nodeIs('NullLiteral'))]
+        [not(pmd-java:nodeIs('BooleanLiteral'))]
+        [empty(index-of(tokenize($ignoreMagicNumbers, '\s*,\s*'), @Image))]
+    |
+    (: consider negative literals :)
+    //IfStatement[$ignoreExpressions = false()]/*[1]//UnaryExpression[@Operator = '-']/*[pmd-java:nodeIs('Literal')]
+        [not(pmd-java:nodeIs('NullLiteral'))]
+        [not(pmd-java:nodeIs('BooleanLiteral'))]
+        [empty(index-of(tokenize($ignoreMagicNumbers, '\s*,\s*'), concat('-', @Image)))]
+    |
+    (: consider multiple literals in expressions :)
+    //IfStatement[$ignoreExpressions = false()]/*[1][count(*[pmd-java:nodeIs('Literal')]
+        [not(pmd-java:nodeIs('NullLiteral'))]
+        [not(pmd-java:nodeIs('BooleanLiteral'))]) &gt; 1]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    private static final int MAX_NUMBER_OF_REQUESTS = 10;
+
+    public void checkRequests() {
+
+        if (i == 10) {                        // magic number, buried in a method
+          doSomething();
+        }
+
+        if (i == MAX_NUMBER_OF_REQUESTS) {    // preferred approach
+          doSomething();
+        }
+
+        if (aString.indexOf('.') != -1) {}     // magic number -1, by default ignored
+        if (aString.indexOf('.') &gt;= 0) { }     // alternative approach
+
+        if (aDouble &gt; 0.0) {}                  // magic number 0.0
+        if (aDouble &gt;= Double.MIN_VALUE) {}    // preferred approach
+
+        // with rule property "ignoreExpressions" set to "false"
+        if (i == pos + 5) {}  // violation: magic number 5 within an (additive) expression
+        if (i == pos + SUFFIX_LENGTH) {} // preferred approach
+        if (i == 5 &amp;&amp; "none".equals(aString)) {} // 2 violations: magic number 5 and literal "none"
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

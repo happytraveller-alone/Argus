@@ -1,0 +1,90 @@
+From 836fa4c493c3809da4bbcbbec0bf5ceb954e7410 Mon Sep 17 00:00:00 2001
+From: Paul Holzinger <paul.holzinger@web.de>
+Date: Wed, 20 Jan 2021 22:56:13 +0100
+Subject: [PATCH] Move the cni lock file into the cni config dir
+
+Commit(fe3faa517e1b) introduced a lock file for network create/rm calls.
+There is a problem with the location of the lock file. The lock file was
+stored in the tmpdir. Running multiple podman network create/remove
+commands in parallel with different tmpdirs made the lockfile inaccessible
+to the other process, and so parallel read/write operations to the cni
+config directory continued to occur. This scenario happened frequently
+during the e2e tests and caused some flakes.
+
+Fixes #9041
+
+Signed-off-by: Paul Holzinger <paul.holzinger@web.de>
+---
+ libpod/network/create.go  |  2 +-
+ libpod/network/lock.go    | 13 +++++++++++--
+ libpod/network/network.go |  3 +--
+ 3 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/libpod/network/create.go b/libpod/network/create.go
+index 094fbe349..e7f65358b 100644
+--- a/libpod/network/create.go
++++ b/libpod/network/create.go
+@@ -23,7 +23,7 @@ func Create(name string, options entities.NetworkCreateOptions, runtimeConfig *c
+ 		return nil, err
+ 	}
+ 	// Acquire a lock for CNI
+-	l, err := acquireCNILock(filepath.Join(runtimeConfig.Engine.TmpDir, LockFileName))
++	l, err := acquireCNILock(runtimeConfig)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/libpod/network/lock.go b/libpod/network/lock.go
+index 0395359eb..037f41efa 100644
+--- a/libpod/network/lock.go
++++ b/libpod/network/lock.go
+@@ -1,6 +1,10 @@
+ package network
+ 
+ import (
++	"os"
++	"path/filepath"
++
++	"github.com/containers/common/pkg/config"
+ 	"github.com/containers/storage"
+ )
+ 
+@@ -8,8 +12,13 @@ import (
+ // delete cases to avoid unwanted collisions in network names.
+ // TODO this uses a file lock and should be converted to shared memory
+ // when we have a more general shared memory lock in libpod
+-func acquireCNILock(lockPath string) (*CNILock, error) {
+-	l, err := storage.GetLockfile(lockPath)
++func acquireCNILock(config *config.Config) (*CNILock, error) {
++	cniDir := GetCNIConfDir(config)
++	err := os.MkdirAll(cniDir, 0755)
++	if err != nil {
++		return nil, err
++	}
++	l, err := storage.GetLockfile(filepath.Join(cniDir, LockFileName))
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/libpod/network/network.go b/libpod/network/network.go
+index 89f0b67ac..0fb878b18 100644
+--- a/libpod/network/network.go
++++ b/libpod/network/network.go
+@@ -6,7 +6,6 @@ import (
+ 	"encoding/json"
+ 	"net"
+ 	"os"
+-	"path/filepath"
+ 
+ 	"github.com/containernetworking/cni/pkg/types"
+ 	"github.com/containernetworking/plugins/plugins/ipam/host-local/backend/allocator"
+@@ -172,7 +171,7 @@ func ValidateUserNetworkIsAvailable(config *config.Config, userNet *net.IPNet) e
+ // RemoveNetwork removes a given network by name.  If the network has container associated with it, that
+ // must be handled outside the context of this.
+ func RemoveNetwork(config *config.Config, name string) error {
+-	l, err := acquireCNILock(filepath.Join(config.Engine.TmpDir, LockFileName))
++	l, err := acquireCNILock(config)
+ 	if err != nil {
+ 		return err
+ 	}
+-- 
+2.34.1
+

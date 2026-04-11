@@ -1,0 +1,33 @@
+From 20cb18724b0bf6c09071a3f53434c4eec53cc147 Mon Sep 17 00:00:00 2001
+From: Mihai Maruseac <mihaimaruseac@google.com>
+Date: Wed, 20 Apr 2022 12:05:26 -0700
+Subject: [PATCH] Allow 0 for number of segments in
+ `unsorted_segment_join_op.cc`
+
+Related to the fix for #55305
+
+PiperOrigin-RevId: 443157549
+---
+ tensorflow/core/kernels/unsorted_segment_join_op.cc | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/tensorflow/core/kernels/unsorted_segment_join_op.cc b/tensorflow/core/kernels/unsorted_segment_join_op.cc
+index 860cec80100..c8445ca4c4c 100644
+--- a/tensorflow/core/kernels/unsorted_segment_join_op.cc
++++ b/tensorflow/core/kernels/unsorted_segment_join_op.cc
+@@ -94,8 +94,10 @@ class UnsortedSegmentJoinOp : public OpKernel {
+                 errors::InvalidArgument("Number of segments cannot be empty."));
+     auto num_segments = num_segments_tensor.scalar<NUM_SEGMENTS_TYPE>()();
+ 
+-    OP_REQUIRES(context, num_segments > 0,
+-                errors::InvalidArgument("Number of segments must be positive"));
++    OP_REQUIRES(
++        context, num_segments >= 0,
++        errors::InvalidArgument(
++            "Number of segments must be non-negative but got ", num_segments));
+     OP_REQUIRES(context, segment_dims != 0,
+                 errors::InvalidArgument("Segment_id cannot have rank 0"));
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,31 @@
+From 6f815ceeadd2728903b83f227945769c582e5c74 Mon Sep 17 00:00:00 2001
+From: Alexander Larsson <alexl@redhat.com>
+Date: Mon, 30 Mar 2020 12:31:36 +0200
+Subject: [PATCH] drop_privs: More explicit argument name
+
+changed_uid => already_changed_uid
+---
+ bubblewrap.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/bubblewrap.c b/bubblewrap.c
+index 0db9f2c..b3d52bc 100644
+--- a/bubblewrap.c
++++ b/bubblewrap.c
+@@ -838,11 +838,11 @@ switch_to_user_with_privs (void)
+ /* Call setuid() and use capset() to adjust capabilities */
+ static void
+ drop_privs (bool keep_requested_caps,
+-            bool changed_uid)
++            bool already_changed_uid)
+ {
+   assert (!keep_requested_caps || !is_privileged);
+   /* Drop root uid */
+-  if (is_privileged && !changed_uid &&
++  if (is_privileged && !already_changed_uid &&
+       setuid (opt_sandbox_uid) < 0)
+     die_with_error ("unable to drop root uid");
+ 
+-- 
+2.34.1
+

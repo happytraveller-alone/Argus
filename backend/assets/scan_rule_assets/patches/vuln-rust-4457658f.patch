@@ -1,0 +1,34 @@
+From 214a0d1531cc74454b1af0a379b74436d73aa614 Mon Sep 17 00:00:00 2001
+From: Weihang Lo <me@weihanglo.tw>
+Date: Tue, 20 Jun 2023 22:19:38 +0100
+Subject: [PATCH] Update cargo
+
+---
+ src/tools/cargo            | 2 +-
+ src/tools/tidy/src/deps.rs | 3 ---
+ 2 files changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/src/tools/cargo b/src/tools/cargo
+index 0c14026aa84..dead4b8740c 160000
+--- a/src/tools/cargo
++++ b/src/tools/cargo
+@@ -1 +1 @@
+-Subproject commit 0c14026aa84ee2ec4c67460c0a18abc8519ca6b2
++Subproject commit dead4b8740c4b6a8ed5211e37c99cf81d01c3b1c
+diff --git a/src/tools/tidy/src/deps.rs b/src/tools/tidy/src/deps.rs
+index 0bc50c64133..8db479af286 100644
+--- a/src/tools/tidy/src/deps.rs
++++ b/src/tools/tidy/src/deps.rs
+@@ -16,9 +16,6 @@
+     "Apache-2.0 OR MIT",
+     "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT", // wasi license
+     "Apache-2.0/MIT",
+-    "BSD-2-Clause",                                        // arrayref from Cargo
+-    "CC0-1.0 OR Apache-2.0",                               // blake3 from Cargo
+-    "CC0-1.0 OR MIT-0 OR Apache-2.0",                      // constant_time_eq from cargo
+     "ISC",
+     "MIT / Apache-2.0",
+     "MIT OR Apache-2.0 OR Zlib",                           // tinyvec_macros
+-- 
+2.34.1
+

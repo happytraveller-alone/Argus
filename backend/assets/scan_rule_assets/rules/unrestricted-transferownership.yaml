@@ -1,0 +1,52 @@
+rules:
+- id: unrestricted-transferownership
+  message: Unrestricted transferOwnership
+  metadata:
+    category: security
+    technology:
+    - solidity
+    cwe: 'CWE-284: Improper Access Control'
+    confidence: LOW
+    likelihood: HIGH
+    impact: HIGH
+    subcategory:
+    - vuln
+    references:
+    - https://medium.com/quillhash/decoding-ragnarok-online-invasion-44k-exploit-quillaudits-261b7e23b55
+    - https://www.bscscan.com/address/0xe48b75dc1b131fd3a8364b0580f76efd04cf6e9c
+  patterns:
+  - pattern-either:
+    - pattern: function transferOwnership(address $X) public {...}
+    - pattern: function transferOwnership(address $X) external {...}
+  - pattern-not: 'function transferOwnership(address $X) $M {...}
+
+      '
+  - pattern-not: 'function transferOwnership(address $X) $M(...) {...}
+
+      '
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  require(<...\
+      \ msg.sender ...>, ...);\n  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  require(<...\
+      \ _msgSender ...>, ...);\n  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  if (<... msg.sender\
+      \ ...>) {\n    ...\n  }\n  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  if (<... _msgSender\
+      \ ...>) {\n    ...\n  }\n  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  onlyOwner(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  requireOwner(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  _requireOwnership(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C._enforceIsContractOwner(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C._enforceOwner(...);\n\
+      \  ...\n}\n"
+  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C.enforceIsContractOwner(...);\n\
+      \  ...\n}\n"
+  - pattern-not: 'function transferOwnership(address $X) {}
+
+      '
+  languages:
+  - solidity
+  severity: ERROR

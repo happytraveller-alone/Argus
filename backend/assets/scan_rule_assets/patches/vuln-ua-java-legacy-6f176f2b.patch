@@ -1,0 +1,63 @@
+From cea3c91106fb8be35e2f1bb3f1fe0cfddd0ec710 Mon Sep 17 00:00:00 2001
+From: Colm O hEigeartaigh <coheigea@apache.org>
+Date: Tue, 31 Jul 2012 11:13:57 +0000
+Subject: [PATCH] [SANTUARIO-334] - UnsyncByteArrayOutputStream hangs on
+ messages larger 512 MB
+
+git-svn-id: https://svn.apache.org/repos/asf/santuario/xml-security-java/trunk@1367492 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../utils/UnsyncByteArrayOutputStream.java      | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/main/java/org/apache/xml/security/utils/UnsyncByteArrayOutputStream.java b/src/main/java/org/apache/xml/security/utils/UnsyncByteArrayOutputStream.java
+index a481a9b3..a4af8691 100644
+--- a/src/main/java/org/apache/xml/security/utils/UnsyncByteArrayOutputStream.java
++++ b/src/main/java/org/apache/xml/security/utils/UnsyncByteArrayOutputStream.java
+@@ -45,6 +45,9 @@ public class UnsyncByteArrayOutputStream extends OutputStream  {
+     }
+ 
+     public void write(byte[] arg0) {
++        if ((Integer.MAX_VALUE - pos) < arg0.length) {
++            throw new OutOfMemoryError();
++        }
+         int newPos = pos + arg0.length;
+         if (newPos > size) {
+             expandSize(newPos);
+@@ -54,6 +57,9 @@ public class UnsyncByteArrayOutputStream extends OutputStream  {
+     }
+ 
+     public void write(byte[] arg0, int arg1, int arg2) {
++        if ((Integer.MAX_VALUE - pos) < arg2) {
++            throw new OutOfMemoryError();
++        }
+         int newPos = pos + arg2;
+         if (newPos > size) {
+             expandSize(newPos);
+@@ -62,7 +68,10 @@ public class UnsyncByteArrayOutputStream extends OutputStream  {
+         pos = newPos;
+     }
+ 
+-    public void write(int arg0) {		
++    public void write(int arg0) {
++        if ((Integer.MAX_VALUE - pos) == 0) {
++            throw new OutOfMemoryError();
++        }
+         int newPos = pos + 1;
+         if (newPos > size) {
+             expandSize(newPos);
+@@ -89,7 +98,11 @@ public class UnsyncByteArrayOutputStream extends OutputStream  {
+     private void expandSize(int newPos) {
+         int newSize = size;
+         while (newPos > newSize) {
+-            newSize = newSize << 2;
++            newSize = newSize << 1;
++            // Deal with overflow
++            if (newSize < 0) {
++                newSize = Integer.MAX_VALUE;
++            }
+         }
+         byte newBuf[] = new byte[newSize];
+         System.arraycopy(buf, 0, newBuf, 0, pos);
+-- 
+2.34.1
+

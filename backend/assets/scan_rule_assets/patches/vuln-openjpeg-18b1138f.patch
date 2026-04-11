@@ -1,0 +1,36 @@
+From c9380ed0f8cc4794fc71d556ea23ae61e32247af Mon Sep 17 00:00:00 2001
+From: Even Rouault <even.rouault@spatialys.com>
+Date: Tue, 1 Dec 2020 19:39:09 +0100
+Subject: [PATCH] opj_j2k_setup_encoder(): validate POC compno0 (fixes #1293)
+
+---
+ src/lib/openjp2/j2k.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib/openjp2/j2k.c b/src/lib/openjp2/j2k.c
+index d9d650e1..78d45925 100644
+--- a/src/lib/openjp2/j2k.c
++++ b/src/lib/openjp2/j2k.c
+@@ -7945,11 +7945,18 @@ OPJ_BOOL opj_j2k_setup_encoder(opj_j2k_t *p_j2k,
+                 if (tileno + 1 == parameters->POC[i].tile)  {
+                     opj_poc_t *tcp_poc = &tcp->pocs[numpocs_tile];
+ 
++                    if (parameters->POC[numpocs_tile].compno0 >= image->numcomps) {
++                        opj_event_msg(p_manager, EVT_ERROR,
++                                      "Invalid compno0 for POC %d\n", i);
++                        return OPJ_FALSE;
++                    }
++
+                     tcp_poc->resno0         = parameters->POC[numpocs_tile].resno0;
+                     tcp_poc->compno0        = parameters->POC[numpocs_tile].compno0;
+                     tcp_poc->layno1         = parameters->POC[numpocs_tile].layno1;
+                     tcp_poc->resno1         = parameters->POC[numpocs_tile].resno1;
+-                    tcp_poc->compno1        = parameters->POC[numpocs_tile].compno1;
++                    tcp_poc->compno1        = opj_uint_min(parameters->POC[numpocs_tile].compno1,
++                                                           image->numcomps);
+                     tcp_poc->prg1           = parameters->POC[numpocs_tile].prg1;
+                     tcp_poc->tile           = parameters->POC[numpocs_tile].tile;
+ 
+-- 
+2.34.1
+

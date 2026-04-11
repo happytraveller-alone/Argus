@@ -1,0 +1,108 @@
+From bb48c859c98b00320398f54f14fd9b16f4fa3cf2 Mon Sep 17 00:00:00 2001
+From: Gerald Combs <gerald@wireshark.org>
+Date: Tue, 15 Mar 2016 09:49:48 -0700
+Subject: [PATCH] Qt: Normalize timerEvents
+
+Make our timerEvent code more consistent. Make sure we use timer IDs and
+that we call our base class timerEvent everywhere.
+
+Change-Id: Ib67daa459a8a2f9b67487c3952b7b35c7f162f7e
+Reviewed-on: https://code.wireshark.org/review/14480
+Petri-Dish: Gerald Combs <gerald@wireshark.org>
+Tested-by: Petri Dish Buildbot <buildbot-no-reply@wireshark.org>
+Reviewed-by: Gerald Combs <gerald@wireshark.org>
+---
+ ui/qt/packet_list.cpp    | 23 ++++++++++++-----------
+ ui/qt/progress_frame.cpp |  2 ++
+ ui/qt/wireless_frame.cpp |  8 +++++---
+ ui/qt/wireless_frame.h   |  1 +
+ 4 files changed, 20 insertions(+), 14 deletions(-)
+
+diff --git a/ui/qt/packet_list.cpp b/ui/qt/packet_list.cpp
+index dba7f54f7f..80331d7c06 100644
+--- a/ui/qt/packet_list.cpp
++++ b/ui/qt/packet_list.cpp
+@@ -559,17 +559,18 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
+ // scrollToBottom() from rowsInserted().
+ void PacketList::timerEvent(QTimerEvent *event)
+ {
+-    QTreeView::timerEvent(event);
+-
+-    if (event->timerId() == tail_timer_id_
+-            && rows_inserted_
+-            && capture_in_progress_
+-            && tail_at_end_) {
+-        scrollToBottom();
+-        rows_inserted_ = false;
+-    } else if (event->timerId() == overlay_timer_id_ && !capture_in_progress_) {
+-        if (create_near_overlay_) drawNearOverlay();
+-        if (create_far_overlay_) drawFarOverlay();
++    if (event->timerId() == tail_timer_id_) {
++        if (rows_inserted_ && capture_in_progress_ && tail_at_end_) {
++            scrollToBottom();
++            rows_inserted_ = false;
++        }
++    } else if (event->timerId() == overlay_timer_id_) {
++        if (!capture_in_progress_) {
++            if (create_near_overlay_) drawNearOverlay();
++            if (create_far_overlay_) drawFarOverlay();
++        }
++    } else {
++        QTreeView::timerEvent(event);
+     }
+ }
+ 
+diff --git a/ui/qt/progress_frame.cpp b/ui/qt/progress_frame.cpp
+index d7cf65c3a1..98c0e7c2c1 100644
+--- a/ui/qt/progress_frame.cpp
++++ b/ui/qt/progress_frame.cpp
+@@ -257,6 +257,8 @@ void ProgressFrame::timerEvent(QTimerEvent *event)
+         animation_->start();
+ 
+         QFrame::show();
++    } else {
++        QFrame::timerEvent(event);
+     }
+ }
+ #endif
+diff --git a/ui/qt/wireless_frame.cpp b/ui/qt/wireless_frame.cpp
+index 5780cd86da..87409569f3 100644
+--- a/ui/qt/wireless_frame.cpp
++++ b/ui/qt/wireless_frame.cpp
+@@ -80,7 +80,7 @@ WirelessFrame::WirelessFrame(QWidget *parent) :
+     ui->fcsFilterFrame->setVisible(ws80211_has_fcs_filter());
+ 
+     getInterfaceInfo();
+-    startTimer(update_interval_);
++    iface_timer_id_ = startTimer(update_interval_);
+ }
+ 
+ WirelessFrame::~WirelessFrame()
+@@ -99,8 +99,10 @@ void WirelessFrame::setCaptureInProgress(bool capture_in_progress)
+ // the current selection goes away.
+ void WirelessFrame::timerEvent(QTimerEvent *event)
+ {
+-    // Probably not needed.
+-    QFrame::timerEvent(event);
++    if (event->timerId() != iface_timer_id_) {
++        QFrame::timerEvent(event);
++        return;
++    }
+ 
+     // Don't interfere with user activity.
+     if (ui->interfaceComboBox->view()->isVisible()
+diff --git a/ui/qt/wireless_frame.h b/ui/qt/wireless_frame.h
+index f3a91fa720..9e99977463 100644
+--- a/ui/qt/wireless_frame.h
++++ b/ui/qt/wireless_frame.h
+@@ -67,6 +67,7 @@ private:
+     Ui::WirelessFrame *ui;
+     GArray *interfaces_;
+     bool capture_in_progress_;
++    int iface_timer_id_;
+ };
+ 
+ #endif // WIRELESS_FRAME_H
+-- 
+2.34.1
+

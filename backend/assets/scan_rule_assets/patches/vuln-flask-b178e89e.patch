@@ -1,0 +1,166 @@
+From 0e1e9a04aaf29ab78f721cfc79ac2a691f6e3929 Mon Sep 17 00:00:00 2001
+From: David Lord <davidism@gmail.com>
+Date: Tue, 10 Apr 2018 09:29:48 -0700
+Subject: [PATCH] detect UTF encodings when loading json
+
+---
+ flask/json.py         | 49 ++++++++++++++++++++++++++++++++++++++++++-
+ flask/wrappers.py     | 13 +++---------
+ tests/test_helpers.py | 28 ++++++++++++++-----------
+ 3 files changed, 67 insertions(+), 23 deletions(-)
+
+diff --git a/flask/json.py b/flask/json.py
+index 16e0c295..114873e2 100644
+--- a/flask/json.py
++++ b/flask/json.py
+@@ -8,6 +8,7 @@
+     :copyright: (c) 2015 by Armin Ronacher.
+     :license: BSD, see LICENSE for more details.
+ """
++import codecs
+ import io
+ import uuid
+ from datetime import date
+@@ -108,6 +109,49 @@ def _load_arg_defaults(kwargs):
+         kwargs.setdefault('cls', JSONDecoder)
+ 
+ 
++def detect_encoding(data):
++    """Detect which UTF codec was used to encode the given bytes.
++
++    The latest JSON standard (:rfc:`8259`) suggests that only UTF-8 is
++    accepted. Older documents allowed 8, 16, or 32. 16 and 32 can be big
++    or little endian. Some editors or libraries may prepend a BOM.
++
++    :param data: Bytes in unknown UTF encoding.
++    :return: UTF encoding name
++    """
++    head = data[:4]
++
++    if head[:3] == codecs.BOM_UTF8:
++        return 'utf-8-sig'
++
++    if b'\x00' not in head:
++        return 'utf-8'
++
++    if head in (codecs.BOM_UTF32_BE, codecs.BOM_UTF32_LE):
++        return 'utf-32'
++
++    if head[:2] in (codecs.BOM_UTF16_BE, codecs.BOM_UTF16_LE):
++        return 'utf-16'
++
++    if len(head) == 4:
++        if head[:3] == b'\x00\x00\x00':
++            return 'utf-32-be'
++
++        if head[::2] == b'\x00\x00':
++            return 'utf-16-be'
++
++        if head[1:] == b'\x00\x00\x00':
++            return 'utf-32-le'
++
++        if head[1::2] == b'\x00\x00':
++            return 'utf-16-le'
++
++    if len(head) == 2:
++        return 'utf-16-be' if head.startswith(b'\x00') else 'utf-16-le'
++
++    return 'utf-8'
++
++
+ def dumps(obj, **kwargs):
+     """Serialize ``obj`` to a JSON formatted ``str`` by using the application's
+     configured encoder (:attr:`~flask.Flask.json_encoder`) if there is an
+@@ -142,7 +186,10 @@ def loads(s, **kwargs):
+     """
+     _load_arg_defaults(kwargs)
+     if isinstance(s, bytes):
+-        s = s.decode(kwargs.pop('encoding', None) or 'utf-8')
++        encoding = kwargs.pop('encoding', None)
++        if encoding is None:
++            encoding = detect_encoding(s)
++        s = s.decode(encoding)
+     return _json.loads(s, **kwargs)
+ 
+ 
+diff --git a/flask/wrappers.py b/flask/wrappers.py
+index 04bdcb5d..3e600fc8 100644
+--- a/flask/wrappers.py
++++ b/flask/wrappers.py
+@@ -144,17 +144,10 @@ class Request(RequestBase):
+         if not (force or self.is_json):
+             return None
+ 
+-        # We accept a request charset against the specification as
+-        # certain clients have been using this in the past.  This
+-        # fits our general approach of being nice in what we accept
+-        # and strict in what we send out.
+-        request_charset = self.mimetype_params.get('charset')
++        data = _get_data(self, cache)
++
+         try:
+-            data = _get_data(self, cache)
+-            if request_charset is not None:
+-                rv = json.loads(data, encoding=request_charset)
+-            else:
+-                rv = json.loads(data)
++            rv = json.loads(data)
+         except ValueError as e:
+             if silent:
+                 rv = None
+diff --git a/tests/test_helpers.py b/tests/test_helpers.py
+index 69350751..5057fa35 100644
+--- a/tests/test_helpers.py
++++ b/tests/test_helpers.py
+@@ -21,6 +21,8 @@ from werkzeug.datastructures import Range
+ from werkzeug.exceptions import BadRequest, NotFound
+ from werkzeug.http import parse_cache_control_header, parse_options_header
+ from werkzeug.http import http_date
++
++from flask import json
+ from flask._compat import StringIO, text_type
+ 
+ 
+@@ -34,6 +36,20 @@ def has_encoding(name):
+ 
+ 
+ class TestJSON(object):
++    @pytest.mark.parametrize('value', (
++        1, 't', True, False, None,
++        [], [1, 2, 3],
++        {}, {'foo': u'🐍'},
++    ))
++    @pytest.mark.parametrize('encoding', (
++        'utf-8', 'utf-8-sig',
++        'utf-16-le', 'utf-16-be', 'utf-16',
++        'utf-32-le', 'utf-32-be', 'utf-32',
++    ))
++    def test_detect_encoding(self, value, encoding):
++        data = json.dumps(value).encode(encoding)
++        assert json.detect_encoding(data) == encoding
++        assert json.loads(data) == value
+ 
+     def test_ignore_cached_json(self):
+         app = flask.Flask(__name__)
+@@ -85,18 +101,6 @@ class TestJSON(object):
+         rv = c.post('/json', data='"foo"', content_type='application/x+json')
+         assert rv.data == b'foo'
+ 
+-    def test_json_body_encoding(self):
+-        app = flask.Flask(__name__)
+-        app.testing = True
+-        @app.route('/')
+-        def index():
+-            return flask.request.get_json()
+-
+-        c = app.test_client()
+-        resp = c.get('/', data=u'"Hällo Wörld"'.encode('iso-8859-15'),
+-                     content_type='application/json; charset=iso-8859-15')
+-        assert resp.data == u'Hällo Wörld'.encode('utf-8')
+-
+     def test_json_as_unicode(self):
+         app = flask.Flask(__name__)
+ 
+-- 
+2.34.1
+

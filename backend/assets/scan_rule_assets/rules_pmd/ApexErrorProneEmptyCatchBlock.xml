@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="EmptyCatchBlock Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for EmptyCatchBlock</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="EmptyCatchBlock" language="apex" since="6.0.0" message="Avoid empty catch blocks" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#emptycatchblock">
+        <description>
+          Empty Catch Block finds instances where an exception is caught, but nothing is done.
+          In most circumstances, this swallows an exception which should either be acted on
+          or reported.
+        </description>
+        <priority>3</priority>
+        <properties>
+          <property name="allowCommentedBlocks" type="Boolean" description="Empty blocks containing comments will be skipped" value="false" />
+          <property name="allowExceptionNameRegex" type="Regex" description="Empty blocks catching exceptions with names matching this regular expression will be skipped" value="^(ignored|expected)$" />
+          <property name="xpath">
+            <value>
+              
+    //CatchBlockStatement[./BlockStatement[count(*) = 0] and
+        not(matches(@VariableName, $allowExceptionNameRegex)) and
+        ($allowCommentedBlocks = false() or @ContainsComment = false())]
+
+            </value>
+          </property>
+        </properties>
+        <example>
+          
+    public void doSomething() {
+        ...
+        try {
+            insert accounts;
+        } catch (DmlException dmle) {
+            // not good
+        }
+    }
+
+        </example>
+      </rule>
+      
+      
+
+</ruleset>

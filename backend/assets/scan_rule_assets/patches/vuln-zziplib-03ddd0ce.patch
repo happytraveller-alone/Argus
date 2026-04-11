@@ -1,0 +1,25 @@
+From 03ddd0ce0864e629256bc078eaadb0d21d0df6d9 Mon Sep 17 00:00:00 2001
+From: Guido Draheim <guidod@gmx.de>
+Date: Sat, 18 Apr 2020 02:11:37 +0200
+Subject: [PATCH] #58 manvolnum should be in .so (see other) manpages
+
+---
+ docs/dbk2man.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/dbk2man.py b/docs/dbk2man.py
+index 49cac4e..e0d93d2 100755
+--- a/docs/dbk2man.py
++++ b/docs/dbk2man.py
+@@ -387,7 +387,7 @@ def refentry2(man, refentry, subdirectory = ".", title = ""):
+                 refentrytitle = manpage
+             filename = "%s/man%s/%s.%s" % (subdirectory, manvolnum, manpage, manvolnum)
+             if manpage != refentrytitle:
+-                manpagetext = ".so %s.%s\n" % (refentrytitle, manvolnum)
++                manpagetext = ".so man%s/%s.%s\n" % (manvolnum, refentrytitle, manvolnum)
+                 writefile(filename, manpagetext)
+             else:
+                 manpagetext = text
+-- 
+2.34.1
+

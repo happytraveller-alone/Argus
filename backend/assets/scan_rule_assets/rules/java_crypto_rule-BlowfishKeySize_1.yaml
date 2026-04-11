@@ -1,0 +1,47 @@
+rules:
+- id: java_crypto_rule-BlowfishKeySize_1
+  languages:
+  - java
+  patterns:
+  - pattern-inside: '$KEYGEN = javax.crypto.KeyGenerator.getInstance("Blowfish", ...);
+
+      ...
+
+      $KEYGEN.init($KEY_SIZE);
+
+      '
+  - metavariable-comparison:
+      comparison: $KEY_SIZE < 128
+      metavariable: $KEY_SIZE
+  message: "The Blowfish encryption algorithm was meant as a drop-in replacement for\
+    \ DES and was created in\n1993. Smaller key sizes may make the ciphertext vulnerable\
+    \ to [birthday\nattacks](https://en.wikipedia.org/wiki/Birthday_attack). While\
+    \ no known attacks against\nBlowfish\nexist, it should never be used to encrypt\
+    \ files over 4GB in size. If possible consider\nusing AES as the instance of `KeyGenerator`\
+    \ instead of Blowfish.\n\nTo remediate the small key size, pass a value such as\
+    \ 256 to the `KeyGenerator.init(keySize)`\nmethod.\n\nExample setting a larger\
+    \ key size and changing to `KeyGenerator` to AES:\n```\npublic static void aesKeyGenerator()\
+    \ throws java.security.NoSuchAlgorithmException {\n    // Use the AES algorithm\
+    \ for key generation\n    KeyGenerator keyGenerator = KeyGenerator.getInstance(\"\
+    AES\");\n\n    // Set the key size here\n    keyGenerator.init(256);\n\n    //\
+    \ get the raw bytes of the key\n    byte[] key = keyGenerator.generateKey().getEncoded();\n\
+    \n    // pass the key bytes to create a SecretKeySpec\n    SecretKeySpec secretKeySpec\
+    \ = new SecretKeySpec(key, \"AES\");\n}\n```\n\nExample setting a larger key size\
+    \ for Blowfish:\n```\npublic static void blowFishKeyGenerator() throws java.security.NoSuchAlgorithmException\
+    \ {\n    // Use the Blowfish algorithm for key generation\n    KeyGenerator keyGenerator\
+    \ = KeyGenerator.getInstance(\"Blowfish\");\n\n    // Set the key size here\n\
+    \    keyGenerator.init(256);\n\n    // get the raw bytes of the key\n    byte[]\
+    \ key = keyGenerator.generateKey().getEncoded();\n\n    // pass the key bytes\
+    \ to create a SecretKeySpec\n    SecretKeySpec secretKeySpec = new SecretKeySpec(key,\
+    \ \"Blowfish\");\n}\n```\n\nFor more information on Java Cryptography see:\nhttps://docs.oracle.com/en/java/javase/15/security/java-cryptography-architecture-jca-reference-guide.html\n"
+  severity: WARNING
+  metadata:
+    category: security
+    shortDescription: Inadequate encryption strength
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    cwe: CWE-326
+    technology:
+    - java
+    security-severity: Medium

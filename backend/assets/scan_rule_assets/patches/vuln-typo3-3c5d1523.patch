@@ -1,0 +1,48 @@
+From 3c5d15233ca765fabeac21f0600d831595d31cd8 Mon Sep 17 00:00:00 2001
+From: Oliver Hader <oliver.hader@typo3.org>
+Date: Thu, 16 Dec 2010 13:40:06 +0000
+Subject: [PATCH] Fixed bug #15735: FORM content object is susceptible to XSS
+ (thanks to Benjamin Mack)
+
+git-svn-id: https://svn.typo3.org/TYPO3v4/Core/branches/TYPO3_4-3@9785 709f56b5-9817-0410-a4d7-c38de5d9e867
+---
+ ChangeLog                                      | 1 +
+ typo3/sysext/cms/tslib/class.tslib_content.php | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 37cbc601c15..f6fca3c9cf3 100755
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -4,6 +4,7 @@
+ 	* Fixed bug #16590: t3lib_TSparser::checkIncludeLines() does not check files to be included (thanks to Fabrizio Branca)
+ 	* Fixed bug #15737: quoteStrForLike does not properly escape strings in sql_mode NO_BACKSLASH_ESCAPES
+ 	* Fixed bug #16653: SQL injection problem in class.db_list.inc (thanks to Jigal van Hemert)
++	* Fixed bug #15735: FORM content object is susceptible to XSS (thanks to Benjamin Mack)
+ 
+ 2010-12-01  Oliver Hader  <oliver@typo3.org>
+ 
+diff --git a/typo3/sysext/cms/tslib/class.tslib_content.php b/typo3/sysext/cms/tslib/class.tslib_content.php
+index 492ccb6c092..773427953b9 100644
+--- a/typo3/sysext/cms/tslib/class.tslib_content.php
++++ b/typo3/sysext/cms/tslib/class.tslib_content.php
+@@ -1809,7 +1809,7 @@ class tslib_cObj {
+ 			}
+ 			if ($val && strcspn($val,'#/')) {
+ 					// label:
+-				$confData['label'] = trim($parts[0]);
++				$confData['label'] = t3lib_div::removeXSS(trim($parts[0]));
+ 					// field:
+ 				$fParts = explode(',',$parts[1]);
+ 				$fParts[0]=trim($fParts[0]);
+@@ -1835,6 +1835,7 @@ class tslib_cObj {
+ 				} else {
+ 					$confData['fieldname'] = str_replace(' ','_',trim($typeParts[0]));
+ 				}
++				$confData['fieldname'] = htmlspecialchars($confData['fieldname']);
+ 				$fieldCode='';
+ 
+ 				if ($conf['wrapFieldName'])	{
+-- 
+2.34.1
+

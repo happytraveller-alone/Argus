@@ -1,0 +1,43 @@
+rules:
+- id: rows-not-closed
+  patterns:
+  - pattern: $Q.QueryxContext(...)
+  - pattern-not-inside: return $X.QueryxContext(...)
+  - pattern-not-inside: '$ROWS, $ERR = $Q.QueryxContext(...)
+
+      ...
+
+      $ROWS.Close()
+
+      '
+  - pattern-not-inside: '$ROWS, $ERR = $Q.QueryxContext(...)
+
+      ...
+
+      defer $ROWS.Close()
+
+      '
+  - pattern-not-inside: '$ROWS, $ERR = $Q.QueryxContext(...)
+
+      ...
+
+      $FUNC($ROWS)
+
+      '
+  - pattern-not-inside: "if ... {\n  ...\n  $ROWS, $ERR = $Q.QueryxContext(...)\n\
+      \  ...\n} else { ... }\n$ROWS.Close()\n"
+  - pattern-not-inside: "if ... {\n  ...\n  $ROWS, $ERR = $Q.QueryxContext(...)\n\
+      \  ...\n} else { ... }\n...\ndefer $ROWS.Close()\n"
+  - pattern-not-inside: "if ... { ...  } else {\n  ...\n  $ROWS, $ERR = $Q.QueryxContext(...)\n\
+      \  ...\n}\n...\n$ROWS.Close()\n"
+  - pattern-not-inside: "if ... { ...  } else {\n  ...\n  $ROWS, $ERR = $Q.QueryxContext(...)\n\
+      \  ...\n}\n...\ndefer $ROWS.Close()\n"
+  message: QueryxContext rows must be closed (or use ExecContext)
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-404: Improper Resource Shutdown or Release'
+    - 'CWE-400: Uncontrolled Resource Consumption (Resource Exhaustion)'

@@ -1,0 +1,26 @@
+From 32e2e06a8737afb07ee83abb3eacd39f8b181216 Mon Sep 17 00:00:00 2001
+From: Michael Hawkins <michaelh@moodle.com>
+Date: Mon, 29 Jul 2019 12:01:41 +0800
+Subject: [PATCH] MDL-55451 mod_forum: Limit subscription redirect to internal
+ URLs
+
+---
+ mod/forum/subscribe.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mod/forum/subscribe.php b/mod/forum/subscribe.php
+index 0c5fbdbedbc..8d8b8f9c49d 100644
+--- a/mod/forum/subscribe.php
++++ b/mod/forum/subscribe.php
+@@ -39,7 +39,7 @@ $mode           = optional_param('mode', null, PARAM_INT);     // The forum's su
+ $user           = optional_param('user', 0, PARAM_INT);        // The userid of the user to subscribe, defaults to $USER.
+ $discussionid   = optional_param('d', null, PARAM_INT);        // The discussionid to subscribe.
+ $sesskey        = optional_param('sesskey', null, PARAM_RAW);
+-$returnurl      = optional_param('returnurl', null, PARAM_RAW);
++$returnurl      = optional_param('returnurl', null, PARAM_LOCALURL);
+ 
+ $url = new moodle_url('/mod/forum/subscribe.php', array('id'=>$id));
+ if (!is_null($mode)) {
+-- 
+2.34.1
+

@@ -1,0 +1,111 @@
+From 3092eaa684858a8201f918e992e59a2dff49025a Mon Sep 17 00:00:00 2001
+From: Gustavo Trott <gustavo@trott.com.br>
+Date: Tue, 26 Apr 2022 07:25:28 -0300
+Subject: [PATCH] Including packages-lock since packages.json was changed
+
+---
+ bigbluebutton-html5/package-lock.json | 53 +++------------------------
+ 1 file changed, 5 insertions(+), 48 deletions(-)
+
+diff --git a/bigbluebutton-html5/package-lock.json b/bigbluebutton-html5/package-lock.json
+index 258005a5a4..ed3808ff72 100644
+--- a/bigbluebutton-html5/package-lock.json
++++ b/bigbluebutton-html5/package-lock.json
+@@ -3814,6 +3814,11 @@
+             "lru-cache": "^6.0.0"
+           }
+         },
++        "trim-newlines": {
++          "version": "4.0.2",
++          "resolved": "https://registry.npmjs.org/trim-newlines/-/trim-newlines-4.0.2.tgz",
++          "integrity": "sha512-GJtWyq9InR/2HRiLZgpIKv+ufIKrVrvjQWEj7PxAXNc5dwbNJkqhAUoAGgzRmULAnoOM5EIpveYd3J2VeSAIew=="
++        },
+         "type-fest": {
+           "version": "0.18.1",
+           "resolved": "https://registry.npmjs.org/type-fest/-/type-fest-0.18.1.tgz",
+@@ -5240,11 +5245,6 @@
+         "word-wrap": "^1.2.3"
+       }
+     },
+-    "os-tmpdir": {
+-      "version": "1.0.2",
+-      "resolved": "https://registry.npmjs.org/os-tmpdir/-/os-tmpdir-1.0.2.tgz",
+-      "integrity": "sha1-u+Z0BseaqFxc/sdm/lc0VV36EnQ="
+-    },
+     "p-finally": {
+       "version": "1.0.0",
+       "resolved": "https://registry.npmjs.org/p-finally/-/p-finally-1.0.0.tgz",
+@@ -5498,11 +5498,6 @@
+         "react-is": "^16.13.1"
+       }
+     },
+-    "pseudomap": {
+-      "version": "1.0.2",
+-      "resolved": "https://registry.npmjs.org/pseudomap/-/pseudomap-1.0.2.tgz",
+-      "integrity": "sha1-8FKijacOYYkX7wqKw0wa5aaChrM="
+-    },
+     "psl": {
+       "version": "1.8.0",
+       "resolved": "https://registry.npmjs.org/psl/-/psl-1.8.0.tgz",
+@@ -6591,14 +6586,6 @@
+         "popper.js": "^1.16.0"
+       }
+     },
+-    "tmp": {
+-      "version": "0.0.33",
+-      "resolved": "https://registry.npmjs.org/tmp/-/tmp-0.0.33.tgz",
+-      "integrity": "sha512-jRCJlojKnZ3addtTOjdIqoRuPEKBvNXcGYqzO6zWZX8KfKEpnGY5jfggJQ3EjKuu8D4bJRr0y+cYJFmYbImXGw==",
+-      "requires": {
+-        "os-tmpdir": "~1.0.2"
+-      }
+-    },
+     "to-regex-range": {
+       "version": "5.0.1",
+       "resolved": "https://registry.npmjs.org/to-regex-range/-/to-regex-range-5.0.1.tgz",
+@@ -6617,11 +6604,6 @@
+         "punycode": "^2.1.1"
+       }
+     },
+-    "trim-newlines": {
+-      "version": "3.0.1",
+-      "resolved": "https://registry.npmjs.org/trim-newlines/-/trim-newlines-3.0.1.tgz",
+-      "integrity": "sha512-c1PTsA3tYrIsLGkJkzHF+w9F2EyxfXGo4UyJc4pFL++FMjnq0HJS69T3M7d//gKrFKwy429bouPescbjecU+Zw=="
+-    },
+     "triple-beam": {
+       "version": "1.3.0",
+       "resolved": "https://registry.npmjs.org/triple-beam/-/triple-beam-1.3.0.tgz",
+@@ -6722,31 +6704,6 @@
+         "punycode": "^2.1.0"
+       }
+     },
+-    "useragent": {
+-      "version": "2.3.0",
+-      "resolved": "https://registry.npmjs.org/useragent/-/useragent-2.3.0.tgz",
+-      "integrity": "sha512-4AoH4pxuSvHCjqLO04sU6U/uE65BYza8l/KKBS0b0hnUPWi+cQ2BpeTEwejCSx9SPV5/U03nniDTrWx5NrmKdw==",
+-      "requires": {
+-        "lru-cache": "4.1.x",
+-        "tmp": "0.0.x"
+-      },
+-      "dependencies": {
+-        "lru-cache": {
+-          "version": "4.1.5",
+-          "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-4.1.5.tgz",
+-          "integrity": "sha512-sWZlbEP2OsHNkXrMl5GYk/jKk70MBng6UU4YI/qGDYbgf6YbP4EvmqISbXCoJiRKs+1bSpFHVgQxvJ17F2li5g==",
+-          "requires": {
+-            "pseudomap": "^1.0.2",
+-            "yallist": "^2.1.2"
+-          }
+-        },
+-        "yallist": {
+-          "version": "2.1.2",
+-          "resolved": "https://registry.npmjs.org/yallist/-/yallist-2.1.2.tgz",
+-          "integrity": "sha1-HBH5IY8HYImkfdUS+TxmmaaoHVI="
+-        }
+-      }
+-    },
+     "util-deprecate": {
+       "version": "1.0.2",
+       "resolved": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+-- 
+2.34.1
+

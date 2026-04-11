@@ -1,0 +1,66 @@
+From 49174ab592cdfa6f1a929a2ee3d4b4976f9459fd Mon Sep 17 00:00:00 2001
+From: Michael Adams <mdadams@ece.uvic.ca>
+Date: Tue, 19 Jan 2021 22:59:33 -0800
+Subject: [PATCH] Fixes #259
+
+---
+ data/test/bad/hoob_8.jp2    | Bin 0 -> 335 bytes
+ src/libjasper/jp2/jp2_dec.c |  12 ++++++++++--
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+ create mode 100644 data/test/bad/hoob_8.jp2
+
+diff --git a/data/test/bad/hoob_8.jp2 b/data/test/bad/hoob_8.jp2
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7e71d991d05f30521c9fded4a0a326383d3759b
+GIT binary patch
+literal 335
+zcmZQzVBpCLP*C9IYUg5LV30{GsVvAUFj8Rn$-n@jvkEGbfLH-2Cs(vSwUF`04+d5S
+z#s(mtAw_{fNPt0?1H@*i2dd5h(qfqzDMfM&DS8bI3^fdl%<POHS^nhwoFYah5L*C<
+z?Fy1}iWu0L8<?5vGwXl-`n6-nj{g4sB}<mvyLa#9%a;ca9{l)GAtxvO+O=yD5fQbu
+zwf{Xm&zw0^=;sI2Es~s@SOBCE;6K>0$^ZTT2Qp}ah5rFbkWDF2MKwTL56Wg>VB{@f
+z{~yG_!@vlHtjx@x82`sG2s<cfXc$1yBQWFt1O`x`FffQSu>PNXzU4oE#-#;6Sr}$c
+eTgk|xEpX%DCmsf!<;Ob~@TMfZV5@!n|0Vzp16}g~
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/libjasper/jp2/jp2_dec.c b/src/libjasper/jp2/jp2_dec.c
+index 4acf004..60dee42 100644
+--- a/src/libjasper/jp2/jp2_dec.c
++++ b/src/libjasper/jp2/jp2_dec.c
+@@ -255,7 +255,7 @@ jas_image_t *jp2_decode(jas_stream_t *in, const char *optstr)
+ 	  with the data in the code stream? */
+ 	if ((samedtype && dec->ihdr->data.ihdr.bpc != JP2_DTYPETOBPC(dtype)) ||
+ 	  (!samedtype && dec->ihdr->data.ihdr.bpc != JP2_IHDR_BPCNULL)) {
+-		jas_eprintf("warning: component data type mismatch\n");
++		jas_eprintf("warning: component data type mismatch (IHDR)\n");
+ 	}
+ 
+ 	/* Is the compression type supported? */
+@@ -278,7 +278,7 @@ jas_image_t *jp2_decode(jas_stream_t *in, const char *optstr)
+ 			  ++i) {
+ 				if (jas_image_cmptdtype(dec->image, i) !=
+ 				  JP2_BPCTODTYPE(dec->bpcc->data.bpcc.bpcs[i])) {
+-					jas_eprintf("warning: component data type mismatch\n");
++					jas_eprintf("warning: component data type mismatch (BPCC)\n");
+ 				}
+ 			}
+ 		} else {
+@@ -409,6 +409,14 @@ jas_image_t *jp2_decode(jas_stream_t *in, const char *optstr)
+ 		}
+ 	}
+ 
++	/* Ensure that the number of channels being used by the decoder
++	  matches the number of image components. */
++	if (dec->numchans != jas_image_numcmpts(dec->image)) {
++		jas_eprintf("error: mismatch in number of components (%d != %d)\n",
++		  dec->numchans, jas_image_numcmpts(dec->image));
++		goto error;
++	}
++
+ 	/* Mark all components as being of unknown type. */
+ 
+ 	for (i = 0; i < JAS_CAST(jas_uint, jas_image_numcmpts(dec->image)); ++i) {
+-- 
+2.34.1
+

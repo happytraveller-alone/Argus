@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="MissingSerialVersionUID Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for MissingSerialVersionUID</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="MissingSerialVersionUID" language="java" since="3.0" message="Classes implementing Serializable should set a serialVersionUID" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#missingserialversionuid">
+            <description>
+    Serializable classes should provide a serialVersionUID field.
+    The serialVersionUID field is also needed for abstract base classes. Each individual class in the inheritance
+    chain needs an own serialVersionUID field. See also [Should an abstract class have a serialVersionUID](https://stackoverflow.com/questions/893259/should-an-abstract-class-have-a-serialversionuid).
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ClassDeclaration
+        [@Interface = false()]
+        [count(ClassBody/FieldDeclaration/VariableDeclarator/VariableId[@Name='serialVersionUID']) = 0]
+        [(ImplementsList | ExtendsList)/ClassType[pmd-java:typeIs('java.io.Serializable')]]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo implements java.io.Serializable {
+        String name;
+        // Define serialization id to avoid serialization related bugs
+        // i.e., public static final long serialVersionUID = 4328743;
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,23 @@
+rules:
+- id: java_crypto_rule-WeakTLSProtocol-SSLContext_1
+  languages:
+  - java
+  patterns:
+  - pattern-not: javax.net.ssl.SSLContext.getInstance("TLSv1.3", ...)
+  - pattern-not: javax.net.ssl.SSLContext.getInstance("TLSv1.2", ...)
+  - pattern: javax.net.ssl.SSLContext.getInstance("...", ...)
+  message: "Avoid initializing SSLContext with insecure protocols like `SSL`, `SSLv2`,\
+    \ or `SSLv3`. \nThese protocols are outdated and do not validate certificates\
+    \ by default. Additionally,\nthese older `SSL` versions have many known security\
+    \ issues.\n\nInstead, use secure protocols like `TLSv1.2` or `TLSv1.3`.\n```\n\
+    SSLContext context = SSLContext.getInstance(\"TLSv1.3\");\n```\nFor more information\
+    \ on see OWASP:\n   - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/01-Testing_for_Weak_SSL_TLS_Ciphers_Insufficient_Transport_Layer_Protection\n"
+  metadata:
+    shortDescription: Improper certificate validation
+    category: security
+    cwe: CWE-295
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: MEDIUM
+  severity: WARNING

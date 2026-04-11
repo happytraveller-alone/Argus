@@ -1,0 +1,21 @@
+rules:
+- id: go-fuzz-to-native-fuzzing
+  patterns:
+  - pattern: func Fuzz($DATA []byte) int { $...BODY }
+  fix: "// remove gofuzz build tag\n// rename file to _test.go\n// convert corpus\
+    \ with file2fuzz\nfunc FuzzData(f *testing.F) {\n  f.Fuzz(func(t *testing.T, $DATA\
+    \ []byte) {\n    func() int {\n      $...BODY\n    }()\n  })\n}\n"
+  message: old-style go-fuzz fuzz function found
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-476: NULL Pointer Dereference'
+    - 'CWE-416: Use After Free'

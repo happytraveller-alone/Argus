@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidDuplicateLiterals Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidDuplicateLiterals</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidDuplicateLiterals" language="java" since="1.0" message="The String literal {0} appears {1} times in this file; the first occurrence is on line {2}" class="net.sourceforge.pmd.lang.java.rule.errorprone.AvoidDuplicateLiteralsRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidduplicateliterals">
+            <description>
+    Code containing duplicate String literals can usually be improved by declaring the String as a constant field.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    private void bar() {
+         buz("Howdy");
+         buz("Howdy");
+         buz("Howdy");
+         buz("Howdy");
+    }
+    private void buz(String x) {}
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,210 @@
+From 2f1c47378e3439cb89e084cdad6b759bbc8a72b8 Mon Sep 17 00:00:00 2001
+From: Martin Hoffmann <martin@nlnetlabs.nl>
+Date: Tue, 9 Nov 2021 15:05:30 +0100
+Subject: [PATCH] Limit the depth of CAs via max-ca-depth config variable.
+
+---
+ doc/routinator.1 | 11 +++++++++++
+ src/config.rs    | 21 ++++++++++++++++++++-
+ src/engine.rs    | 40 +++++++++++++++++++++++++++++++++++-----
+ 3 files changed, 66 insertions(+), 6 deletions(-)
+
+diff --git a/doc/routinator.1 b/doc/routinator.1
+index ba59eba..0575656 100644
+--- a/doc/routinator.1
++++ b/doc/routinator.1
+@@ -347,6 +347,11 @@ Limits the size of individual objects received via either rsync or RRDP to
+ the given number of bytes. The default value if this option is not present
+ is 20,000,000 (i.e., 20 MBytes). Use a value of 0 to disable the limit.
+ 
++.TP
++.BI --max-ca-depth= count
++The maximum number of CAs a given CA may be away from a trust anchor
++certificate before it is rejected. The default value is 32.
++
+ .TP
+ .B --dirty
+ If this option is present, unused files and directories will not be deleted
+@@ -1120,6 +1125,12 @@ received via either rsync or RRDP to the given number of bytes. The default
+ value if this option is not present is 20,000,000 (i.e., 20 MBytes). A value
+ of 0 disables the limit.
+ 
++.TP
++.B max-ca-depth
++An integer value that specifies the maximum number of CAs a given CA may be
++away from a trust anchor certificate before it is rejected. If the option is
++missing, a default of 32 will be used.
++
+ .TP
+ .B dirty
+ A boolean value which, if true, specifies that unused files and directories
+diff --git a/src/config.rs b/src/config.rs
+index 01d6c79..9c6fcec 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -72,6 +72,9 @@ const DEFAULT_UNKNOWN_OBJECTS_POLICY: FilterPolicy = FilterPolicy::Warn;
+ /// The default maximum object size.
+ const DEFAULT_MAX_OBJECT_SIZE: u64 = 20_000_000;
+ 
++/// The default maximum CA depth.
++const DEFAULT_MAX_CA_DEPTH: usize = 32;
++
+ 
+ //------------ Config --------------------------------------------------------  
+ 
+@@ -209,7 +212,10 @@ pub struct Config {
+     /// Optional size limit for objects.
+     pub max_object_size: Option<u64>,
+ 
+-    /// Wether to not cleanup the repository directory after a validation run.
++    /// Maxium length of the CA chain.
++    pub max_ca_depth: usize,
++
++    /// Whether to not cleanup the repository directory after a validation run.
+     ///
+     /// If this is `false` and update has not been disabled otherwise, all
+     /// data for rsync modules (if rsync is enabled) and RRDP servers (if
+@@ -768,6 +774,11 @@ impl Config {
+             }
+         }
+ 
++        // max_ca_depth
++        if let Some(value) = from_str_value_of(matches, "max-ca-depth")? {
++            self.max_ca_depth = value;
++        }
++
+         // dirty_repository
+         if matches.is_present("dirty-repository") {
+             self.dirty_repository = true
+@@ -1074,6 +1085,10 @@ impl Config {
+                     None => Some(DEFAULT_MAX_OBJECT_SIZE),
+                 }
+             },
++            max_ca_depth: {
++                file.take_usize("max-ca-depth")?
++                    .unwrap_or(DEFAULT_MAX_CA_DEPTH)
++            },
+             dirty_repository: file.take_bool("dirty")?.unwrap_or(false),
+             validation_threads: {
+                 file.take_small_usize("validation-threads")?
+@@ -1249,6 +1264,7 @@ impl Config {
+             rrdp_keep_responses: None,
+             rrdp_disable_gzip: false,
+             max_object_size: Some(DEFAULT_MAX_OBJECT_SIZE),
++            max_ca_depth: DEFAULT_MAX_CA_DEPTH,
+             dirty_repository: DEFAULT_DIRTY_REPOSITORY,
+             validation_threads: ::num_cpus::get(),
+             refresh: Duration::from_secs(DEFAULT_REFRESH),
+@@ -1438,6 +1454,9 @@ impl Config {
+                 None => 0,
+             }.into()
+         );
++        res.insert("max-ca-depth".into(),
++            (self.max_ca_depth as i64).into()
++        );
+         res.insert("dirty".into(), self.dirty_repository.into());
+         res.insert(
+             "validation-threads".into(),
+diff --git a/src/engine.rs b/src/engine.rs
+index 180d938..ff2c75c 100644
+--- a/src/engine.rs
++++ b/src/engine.rs
+@@ -109,6 +109,9 @@ pub struct Engine {
+ 
+     /// Should we leave the repository dirty after a valiation run.
+     dirty_repository: bool,
++
++    /// Maximum depth of the CA chain.
++    max_ca_depth: usize,
+ }
+ 
+ impl Engine {
+@@ -152,6 +155,7 @@ impl Engine {
+             stale: config.stale,
+             validation_threads: config.validation_threads,
+             dirty_repository: config.dirty_repository,
++            max_ca_depth: config.max_ca_depth,
+         };
+         res.reload_tals()?;
+         Ok(res)
+@@ -1263,7 +1267,7 @@ impl<'a, P: ProcessRun> PubPoint<'a, P> {
+         }
+ 
+         let cert = match CaCert::chain(
+-            self.cert, uri.clone(), cert
++            self.cert, uri.clone(), cert, self.run.validation.max_ca_depth,
+         ) {
+             Ok(cert) => cert,
+             Err(_) => {
+@@ -1535,6 +1539,9 @@ pub struct CaCert {
+     /// This will be `None` for a trust anchor certificate.
+     parent: Option<Arc<CaCert>>,
+ 
++    /// The length of the chain of certificates from a trust anchor.
++    chain_len: usize,
++
+     /// The index of the TAL in the metrics.
+     pub(crate) // XXX
+     tal: usize,
+@@ -1551,16 +1558,38 @@ impl CaCert {
+     pub fn root(
+         cert: ResourceCert, uri: TalUri, tal: usize
+     ) -> Result<Arc<Self>, Failed> {
+-        Self::new(cert, uri, None, tal)
++        Self::new(cert, uri, None, 0, tal)
+     }
+ 
+     /// Creates a new CA cert for an issued CA.
+     pub fn chain(
+         issuer: &Arc<Self>,
+         uri: uri::Rsync,
+-        cert: ResourceCert
++        cert: ResourceCert,
++        max_depth: usize,
+     ) -> Result<Arc<Self>, Failed> {
+-        Self::new(cert, TalUri::Rsync(uri), Some(issuer.clone()), issuer.tal)
++        let chain_len = match issuer.chain_len.checked_add(1) {
++            Some(chain_len) => chain_len,
++            None => {
++                error!(
++                    "CA {}: CA depth overrun.",
++                    uri
++                );
++                return Err(Failed)
++            }
++        };
++        if chain_len > max_depth {
++            error!(
++                "CA {}: CA depth overrun.",
++                uri
++            );
++            return Err(Failed)
++        }
++        Self::new(
++            cert, TalUri::Rsync(uri),
++            Some(issuer.clone()), chain_len,
++            issuer.tal
++        )
+     }
+ 
+     /// Creates a new CA cert from its various parts.
+@@ -1568,6 +1597,7 @@ impl CaCert {
+         cert: ResourceCert,
+         uri: TalUri, 
+         parent: Option<Arc<Self>>,
++        chain_len: usize,
+         tal: usize,
+     ) -> Result<Arc<Self>, Failed> {
+         let combined_validity = match parent.as_ref() {
+@@ -1602,7 +1632,7 @@ impl CaCert {
+             }
+         };
+         Ok(Arc::new(CaCert {
+-            cert, uri, ca_repository, rpki_manifest, parent, tal,
++            cert, uri, ca_repository, rpki_manifest, parent, chain_len, tal,
+             combined_validity,
+         }))
+     }
+-- 
+2.34.1
+

@@ -1,0 +1,308 @@
+From 7a8c76b5e8eb06e6127db075cf1f6b67c436fd96 Mon Sep 17 00:00:00 2001
+From: Marco Collovati <marco@vaadin.com>
+Date: Tue, 23 May 2023 10:51:34 +0200
+Subject: [PATCH] fix: remove detach listener when javascript execution
+ completes (#16836) (#16853)
+
+A detach listener is added for pending javascript invocation owner nodes
+to clean up the queue, if the owner gets detached.
+This change also removes the detach listener when the javascript execution
+completes.
+---
+ .../flow/component/internal/UIInternals.java  |  65 +++++++-
+ .../component/internal/UIInternalsTest.java   | 149 ++++++++++++++++++
+ 2 files changed, 207 insertions(+), 7 deletions(-)
+
+diff --git a/flow-server/src/main/java/com/vaadin/flow/component/internal/UIInternals.java b/flow-server/src/main/java/com/vaadin/flow/component/internal/UIInternals.java
+index 3ae562d13e..f5f20b2d45 100644
+--- a/flow-server/src/main/java/com/vaadin/flow/component/internal/UIInternals.java
++++ b/flow-server/src/main/java/com/vaadin/flow/component/internal/UIInternals.java
+@@ -54,8 +54,10 @@ import com.vaadin.flow.dom.Element;
+ import com.vaadin.flow.dom.impl.BasicElementStateProvider;
+ import com.vaadin.flow.function.DeploymentConfiguration;
+ import com.vaadin.flow.internal.AnnotationReader;
++import com.vaadin.flow.function.SerializableConsumer;
+ import com.vaadin.flow.internal.ConstantPool;
+ import com.vaadin.flow.internal.JsonCodec;
++import com.vaadin.flow.internal.StateNode;
+ import com.vaadin.flow.internal.StateTree;
+ import com.vaadin.flow.internal.UrlUtil;
+ import com.vaadin.flow.internal.nodefeature.LoadingIndicatorConfigurationMap;
+@@ -75,6 +77,7 @@ import com.vaadin.flow.router.internal.AfterNavigationHandler;
+ import com.vaadin.flow.router.internal.BeforeEnterHandler;
+ import com.vaadin.flow.router.internal.BeforeLeaveHandler;
+ import com.vaadin.flow.server.VaadinContext;
++import com.vaadin.flow.server.Command;
+ import com.vaadin.flow.server.VaadinService;
+ import com.vaadin.flow.server.VaadinSession;
+ import com.vaadin.flow.server.WebBrowser;
+@@ -90,7 +93,7 @@ import com.vaadin.flow.theme.ThemeDefinition;
+ /**
+  * Holds UI-specific methods and data which are intended for internal use by the
+  * framework.
+- * 
++ *
+  * <p>
+  * For internal use only. May be renamed or removed in a future release.
+  *
+@@ -172,6 +175,8 @@ public class UIInternals implements Serializable {
+ 
+     private List<PendingJavaScriptInvocation> pendingJsInvocations = new ArrayList<>();
+ 
++    private final HashMap<StateNode, PendingJavaScriptInvocationDetachListener> pendingJsInvocationDetachListeners = new HashMap<>();
++
+     /**
+      * The related UI.
+      */
+@@ -550,11 +555,6 @@ public class UIInternals implements Serializable {
+             PendingJavaScriptInvocation invocation) {
+         session.checkHasLock();
+         pendingJsInvocations.add(invocation);
+-
+-        invocation.getOwner()
+-                .addDetachListener(() -> pendingJsInvocations
+-                        .removeIf(pendingInvocation -> pendingInvocation
+-                                .equals(invocation)));
+     }
+ 
+     /**
+@@ -579,10 +579,61 @@ public class UIInternals implements Serializable {
+         pendingJsInvocations = getPendingJavaScriptInvocations()
+                 .filter(invocation -> !invocation.getOwner().isVisible())
+                 .collect(Collectors.toCollection(ArrayList::new));
+-
++        pendingJsInvocations
++                .forEach(this::registerDetachListenerForPendingInvocation);
+         return readyToSend;
+     }
+ 
++    @SuppressWarnings({ "rawtypes", "unchecked" })
++    private void registerDetachListenerForPendingInvocation(
++            PendingJavaScriptInvocation invocation) {
++
++        PendingJavaScriptInvocationDetachListener listener = pendingJsInvocationDetachListeners
++                .computeIfAbsent(invocation.getOwner(), node -> {
++                    PendingJavaScriptInvocationDetachListener detachListener = new PendingJavaScriptInvocationDetachListener();
++                    detachListener.registration = Registration.combine(
++                            () -> pendingJsInvocationDetachListeners
++                                    .remove(node),
++                            node.addDetachListener(detachListener));
++                    return detachListener;
++                });
++        listener.invocationList.add(invocation);
++
++        SerializableConsumer callback = unused -> listener
++                .onInvocationCompleted(invocation);
++        invocation.then(callback, callback);
++    }
++
++    private class PendingJavaScriptInvocationDetachListener implements Command {
++        private final Set<PendingJavaScriptInvocation> invocationList = new HashSet<>();
++
++        private Registration registration;
++
++        @Override
++        public void execute() {
++            if (!invocationList.isEmpty()) {
++                List<PendingJavaScriptInvocation> copy = new ArrayList<>(
++                        invocationList);
++                invocationList.clear();
++                copy.forEach(this::removePendingInvocation);
++            }
++        }
++
++        private void removePendingInvocation(
++                PendingJavaScriptInvocation invocation) {
++            UIInternals.this.pendingJsInvocations.removeIf(
++                    pendingInvocation -> pendingInvocation.equals(invocation));
++            if (invocationList.isEmpty() && registration != null) {
++                registration.remove();
++            }
++        }
++
++        void onInvocationCompleted(PendingJavaScriptInvocation invocation) {
++            invocationList.remove(invocation);
++            removePendingInvocation(invocation);
++        }
++    }
++
+     /**
+      * Gets the pending javascript invocations added with
+      * {@link #addJavaScriptInvocation(PendingJavaScriptInvocation)} after last
+diff --git a/flow-server/src/test/java/com/vaadin/flow/component/internal/UIInternalsTest.java b/flow-server/src/test/java/com/vaadin/flow/component/internal/UIInternalsTest.java
+index db79ba8529..ef19948b76 100644
+--- a/flow-server/src/test/java/com/vaadin/flow/component/internal/UIInternalsTest.java
++++ b/flow-server/src/test/java/com/vaadin/flow/component/internal/UIInternalsTest.java
+@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
+ import org.junit.Assert;
+ import org.junit.Before;
+ import org.junit.Test;
++import org.mockito.ArgumentMatchers;
+ import org.mockito.Mock;
+ import org.mockito.Mockito;
+ import org.mockito.MockitoAnnotations;
+@@ -26,6 +27,10 @@ import com.vaadin.flow.component.page.Push;
+ import com.vaadin.flow.di.DefaultInstantiator;
+ import com.vaadin.flow.dom.Element;
+ import com.vaadin.flow.function.DeploymentConfiguration;
++import com.vaadin.flow.internal.JsonCodec;
++import com.vaadin.flow.internal.StateNode;
++import com.vaadin.flow.internal.nodefeature.ElementChildrenList;
++import com.vaadin.flow.internal.nodefeature.ElementData;
+ import com.vaadin.flow.router.Location;
+ import com.vaadin.flow.router.ParentLayout;
+ import com.vaadin.flow.router.Route;
+@@ -352,6 +357,150 @@ public class UIInternalsTest {
+                 subLayout.getElement().getChildren().count());
+     }
+ 
++    @Test
++    public void dumpPendingJavaScriptInvocations_detachListenerRegisteredOnce() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node,
++                new UIInternals.JavaScriptInvocation("")));
++        internals.dumpPendingJavaScriptInvocations();
++        internals.dumpPendingJavaScriptInvocations();
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_multipleInvocationPerNode_onlyOneDetachListenerRegistered() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node,
++                new UIInternals.JavaScriptInvocation("1")));
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node,
++                new UIInternals.JavaScriptInvocation("2")));
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node,
++                new UIInternals.JavaScriptInvocation("3")));
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_registerOneDetachListenerPerNode() {
++        StateNode node1 = Mockito.spy(new StateNode(ElementData.class));
++        node1.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node1);
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node1,
++                new UIInternals.JavaScriptInvocation("1")));
++
++        StateNode node2 = Mockito.spy(new StateNode(ElementData.class));
++        node2.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node2);
++        internals.addJavaScriptInvocation(new PendingJavaScriptInvocation(node2,
++                new UIInternals.JavaScriptInvocation("1")));
++
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node1, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++        Mockito.verify(node2, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_invocationCompletes_pendingListPurged() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        PendingJavaScriptInvocation invocation = new PendingJavaScriptInvocation(
++                node, new UIInternals.JavaScriptInvocation(""));
++        internals.addJavaScriptInvocation(invocation);
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++
++        invocation.complete(JsonCodec.encodeWithTypeInfo("OK"));
++
++        Assert.assertEquals(0,
++                internals.getPendingJavaScriptInvocations().count());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_invocationFails_pendingListPurged() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        PendingJavaScriptInvocation invocation = new PendingJavaScriptInvocation(
++                node, new UIInternals.JavaScriptInvocation(""));
++        internals.addJavaScriptInvocation(invocation);
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++
++        invocation.completeExceptionally(JsonCodec.encodeWithTypeInfo("ERROR"));
++
++        Assert.assertEquals(0,
++                internals.getPendingJavaScriptInvocations().count());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_invocationCanceled_pendingListPurged() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        PendingJavaScriptInvocation invocation = new PendingJavaScriptInvocation(
++                node, new UIInternals.JavaScriptInvocation(""));
++        internals.addJavaScriptInvocation(invocation);
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++
++        invocation.cancelExecution();
++
++        Assert.assertEquals(0,
++                internals.getPendingJavaScriptInvocations().count());
++    }
++
++    @Test
++    public void dumpPendingJavaScriptInvocations_nodeDetached_pendingListPurged() {
++        StateNode node = Mockito.spy(new StateNode(ElementData.class));
++        node.getFeature(ElementData.class).setVisible(false);
++        internals.getStateTree().getRootNode()
++                .getFeature(ElementChildrenList.class).add(0, node);
++
++        PendingJavaScriptInvocation invocation = new PendingJavaScriptInvocation(
++                node, new UIInternals.JavaScriptInvocation(""));
++        internals.addJavaScriptInvocation(invocation);
++        internals.dumpPendingJavaScriptInvocations();
++
++        Mockito.verify(node, Mockito.times(1))
++                .addDetachListener(ArgumentMatchers.any());
++
++        node.setParent(null);
++
++        Assert.assertEquals(0,
++                internals.getPendingJavaScriptInvocations().count());
++    }
++
+     private PushConfiguration setUpInitialPush() {
+         DeploymentConfiguration config = Mockito
+                 .mock(DeploymentConfiguration.class);
+-- 
+2.34.1
+

@@ -1,0 +1,27 @@
+From d03083732569126d2f21c8810d5a69554ccc5900 Mon Sep 17 00:00:00 2001
+From: Samuel Lane <samlane00@gmail.com>
+Date: Thu, 19 Oct 2023 07:50:26 -0400
+Subject: [PATCH] Resolves clockworks - fallback will use the existing
+ applet-created clockwork path in .config - fallback does not handle deletion
+ of temp files   - this is mitigated by all clockwork files being kept
+ together
+
+---
+ budgie-clockworks/cwtools.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/budgie-clockworks/cwtools.py b/budgie-clockworks/cwtools.py
+index e0d4f368..dc22ed34 100644
+--- a/budgie-clockworks/cwtools.py
++++ b/budgie-clockworks/cwtools.py
+@@ -36,8 +36,8 @@ def get(command):
+ hrs_path = os.path.join(settingsdir, "hrs")
+ mins_path = os.path.join(settingsdir, "mins")
+ misc_dir = os.path.join(settingsdir, "misc")
+-user = os.environ["USER"]
+-tmp = os.path.join("/tmp", user + "_clockworks")
++tmpdir = os.getenv("XDG_RUNTIME_DIR") if "XDG_RUNTIME_DIR" in os.environ else settingsdir
++tmp = os.path.join(tmpdir, ".clockworks")
+ clock_datafile = os.path.join(settingsdir, "clockdata")
+ key = "org.ubuntubudgie.plugins.budgie-clockworks"
+ subkeys = ["background", "hour", "minute"]

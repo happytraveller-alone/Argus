@@ -1,0 +1,85 @@
+From 8dd118eac8a3c93c2f42089e7af4d7bb8cefd0b3 Mon Sep 17 00:00:00 2001
+From: Hugo Lefeuvre <hle@debian.org>
+Date: Tue, 13 Mar 2018 22:13:07 +0100
+Subject: [PATCH] Fix null pointer dereference in getName/getString
+
+Whenever getString or getName are called with an act such that act->p.String
+is a NULL pointer, a NULL pointer dereference might happen
+(strlen(act->p.string) is called).
+
+In this commit we add checks at the beginning of the PUSH_STRING block so
+that a warning is displayed and an empty string is returned in this case.
+
+This patch fixes #121.
+---
+ NEWS             |  2 ++
+ util/decompile.c | 32 ++++++++++++++++++++++----------
+ 2 files changed, 24 insertions(+), 10 deletions(-)
+
+diff --git a/NEWS b/NEWS
+index f690f8a1..ebafd8af 100644
+--- a/NEWS
++++ b/NEWS
+@@ -39,6 +39,8 @@
+   * Fix heap buffer overflows happening when accessing the constant pool in
+     decompile.c (CVE-2018-7875, CVE-2018-7871, CVE-2018-7870, CVE-2018-7872,
+     CVE-2018-7868, issues #112, #113, #114, #117, #120, #122 and #123).
++  * Fix NULL pointer dereference happening when calling getName and getString
++    with empty acts (NULL act->p.String) (issue #121).
+ 
+ 0.4.8 - 2017-04-07
+ 
+diff --git a/util/decompile.c b/util/decompile.c
+index 878a4f84..13e3b061 100644
+--- a/util/decompile.c
++++ b/util/decompile.c
+@@ -311,6 +311,11 @@ getString(struct SWF_ACTIONPUSHPARAM *act)
+ 	switch( act->Type ) 
+ 	{
+ 	case PUSH_STRING: 
++		if (!act->p.String) /* Not a NULL string */
++		{
++		        SWF_warn("WARNING: Call to getString with NULL string.\n");
++		        break;
++		}
+ 		t=malloc(strlen(act->p.String)+3); /* 2 "'"s and a NULL */
+ 		strcpy(t,"'");
+ 		strcat(t,act->p.String);
+@@ -392,17 +397,24 @@ getName(struct SWF_ACTIONPUSHPARAM *act)
+ 	switch( act->Type ) 	
+ 	{
+ 	case PUSH_STRING: /* STRING */
+-		t=malloc(strlen(act->p.String)+3); 
+-		/*
+-		strcpy(t,"\"");
+-		strcat(t,act->p.String);
+-		strcat(t,"\"");
+-		*/
+-		strcpy(t,act->p.String);
+-		if(strlen(t)) /* Not a zero length string */
+-			return t;
++		if (!act->p.String) /* Not a NULL string */
++		{
++		        SWF_warn("WARNING: Call to getName with NULL string.\n");
++		        break;
++		}
++		else if (strlen(act->p.String)) /* Not a zero length string */
++		{
++		        t=malloc(strlen(act->p.String)+3);
++		        strcpyext(t,act->p.String);
++		        return t;
++		}
+ 		else
+-			return "this";
++		{
++		        char *return_string = "this";
++	                t=malloc(strlen(return_string)+1); /* string length + \0 */
++	                strcpyext(t,return_string);
++			return t;
++		}
+ #if 0
+ 	  case 4: /* REGISTER */
+                 t=malloc(4); /* Rdd */
+-- 
+2.34.1
+

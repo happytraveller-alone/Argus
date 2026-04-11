@@ -1,0 +1,27 @@
+From 03085c2da23b179c4a51f59a03cb40aa4e85a613 Mon Sep 17 00:00:00 2001
+From: zjubfd <baifudong@lancai.cn>
+Date: Wed, 20 Mar 2019 08:18:18 +0800
+Subject: [PATCH] rpc: client disable compression (#3430)
+
+---
+ rpc/lib/client/http_client.go | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/rpc/lib/client/http_client.go b/rpc/lib/client/http_client.go
+index 97b8dfe7b..cfa26e89c 100644
+--- a/rpc/lib/client/http_client.go
++++ b/rpc/lib/client/http_client.go
+@@ -74,7 +74,9 @@ func makeHTTPClient(remoteAddr string) (string, *http.Client) {
+ 	protocol, address, dialer := makeHTTPDialer(remoteAddr)
+ 	return protocol + "://" + address, &http.Client{
+ 		Transport: &http.Transport{
+-			Dial: dialer,
++			// Set to true to prevent GZIP-bomb DoS attacks
++			DisableCompression: true,
++			Dial:               dialer,
+ 		},
+ 	}
+ }
+-- 
+2.34.1
+

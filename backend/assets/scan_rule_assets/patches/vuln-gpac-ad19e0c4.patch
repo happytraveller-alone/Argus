@@ -1,0 +1,28 @@
+From ad19e0c4504a89ca273442b1b1483ae7adfb9491 Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@gpac.io>
+Date: Tue, 11 Jan 2022 17:11:26 +0100
+Subject: [PATCH] fixed #2038
+
+---
+ src/bifs/field_decode.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/bifs/field_decode.c b/src/bifs/field_decode.c
+index c4b34b3ea..e76ef66bd 100644
+--- a/src/bifs/field_decode.c
++++ b/src/bifs/field_decode.c
+@@ -177,7 +177,10 @@ GF_Err gf_bifs_dec_sf_field(GF_BifsDecoder * codec, GF_BitStream *bs, GF_Node *n
+ 	}
+ 	break;
+ 	case GF_SG_VRML_SFIMAGE:
+-		if (((SFImage *)field->far_ptr)->pixels) gf_free(((SFImage *)field->far_ptr)->pixels);
++		if (((SFImage *)field->far_ptr)->pixels) {
++			gf_free(((SFImage *)field->far_ptr)->pixels);
++			((SFImage *)field->far_ptr)->pixels = NULL;
++		}
+ 		w = gf_bs_read_int(bs, 12);
+ 		h = gf_bs_read_int(bs, 12);
+ 		length = gf_bs_read_int(bs, 2);
+-- 
+2.34.1
+

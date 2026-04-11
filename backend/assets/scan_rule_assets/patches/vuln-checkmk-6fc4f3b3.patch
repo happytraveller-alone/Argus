@@ -1,0 +1,84 @@
+From 6fc4f3b341bae28d741edf172812ac204d2f78f5 Mon Sep 17 00:00:00 2001
+From: Maximilian Wirtz <maximilian.wirtz@checkmk.com>
+Date: Mon, 17 Jun 2024 13:11:40 +0200
+Subject: [PATCH] 17010 SEC XSS in SQL check parameters
+
+Prior to this Werk an attacher could add HTML to one parameter of the *Check SQL database* rule which was executed on the overview page.
+
+We found this vulnerability internally.
+
+**Affected Versions**:
+LI: 2.3.0
+LI: 2.2.0
+LI: 2.1.0
+LI: 2.0.0 (probably older versions as well)
+
+**Indicators of Compromis**:
+The creation of such rules is logged in the audit log. You can therefore check the `wato_audit.log` either on the terminal or in the UI for entries that contain malicious HTML.
+
+**Vulnerability Management**:
+We have rated the issue with a CVSS Score of 6.5 (Medium) with the following CVSS vector: `CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:L`
+We assigned CVE-2024-6052 to this vulnerability.
+
+**Changes**:
+This Werk fixes the escaping.
+
+CMK-17809
+
+Change-Id: I8cf2d8218f1d6bb449beb6947d879b8a114e081a
+---
+ .werks/17010         | 28 ++++++++++++++++++++++++++++
+ cmk/gui/valuespec.py |  2 +-
+ 2 files changed, 29 insertions(+), 1 deletion(-)
+ create mode 100644 .werks/17010
+
+diff --git a/.werks/17010 b/.werks/17010
+new file mode 100644
+index 00000000000..50ccd5e9623
+--- /dev/null
++++ b/.werks/17010
+@@ -0,0 +1,28 @@
++Title: XSS in SQL check parameters
++Class: security
++Compatible: compat
++Component: wato
++Date: 1718618899
++Edition: cre
++Level: 1
++Version: 2.1.0p45
++
++Prior to this Werk an attacher could add HTML to one parameter of the <em>Check SQL database</em> rule which was executed on the overview page.
++
++We found this vulnerability internally.
++
++<strong>Affected Versions</strong>:
++* 2.3.0
++* 2.2.0
++* 2.1.0
++* 2.0.0 (probably older versions as well)
++
++<strong>Indicators of Compromis</strong>:
++The creation of such rules is logged in the audit log. You can therefore check the <code>wato_audit.log</code> either on the terminal or in the UI for entries that contain malicious HTML.
++
++<strong>Vulnerability Management</strong>:
++We have rated the issue with a CVSS Score of 6.5 (Medium) with the following CVSS vector: <code>CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:L</code>
++We assigned CVE-2024-6052 to this vulnerability.
++
++<strong>Changes</strong>:
++This Werk fixes the escaping.
+diff --git a/cmk/gui/valuespec.py b/cmk/gui/valuespec.py
+index a39aa7804ec..3cfb386de98 100644
+--- a/cmk/gui/valuespec.py
++++ b/cmk/gui/valuespec.py
+@@ -1499,7 +1499,7 @@ class TextAreaUnicode(TextInput):
+ 
+     def value_to_html(self, value: str) -> ValueSpecText:
+         if self._monospaced:
+-            return html.render_pre(HTML(value), class_="ve_textarea")
++            return html.render_pre(value, class_="ve_textarea")
+         return value.replace("\n", "<br>")
+ 
+     def render_input(self, varprefix: str, value: _Optional[str]) -> None:
+-- 
+2.34.1
+

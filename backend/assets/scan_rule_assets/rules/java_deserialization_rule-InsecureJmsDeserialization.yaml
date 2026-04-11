@@ -1,0 +1,51 @@
+rules:
+- id: java_deserialization_rule-InsecureJmsDeserialization
+  languages:
+  - java
+  patterns:
+  - pattern-inside: "class $JMS_LISTENER implements MessageListener {\n  ...\n  public\
+      \ void onMessage(Message $JMS_MSG) {\n      ...\n  }\n}\n"
+  - pattern: $Y.getObject(...);
+  message: "Deserialization of untrusted JMS ObjectMessage can lead to arbitrary \n\
+    code execution. This vulnerability occurs when `ObjectMessage.getObject()` \n\
+    is called to deserialize the payload of an ObjectMessage, potentially \nallowing\
+    \ remote attackers to execute arbitrary code with the permissions \nof the JMS\
+    \ MessageListener application. \n\nTo mitigate the issue, avoid deserialization\
+    \ of untrusted data and \nconsider alternative message formats or explicit whitelisting\
+    \ of \nallowable classes for deserialization.\n\nTo implement allowlisting, override\
+    \ the ObjectInputStream#resolveClass() \nmethod to limit deserialization to allowed\
+    \ classes only. This prevents \ndeserialization of any class except those explicitly\
+    \ permitted, such as \nin the following example that restricts deserialization\
+    \ to the Bicycle \nclass only:\n\n```\n// Code from https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html\n\
+    public class LookAheadObjectInputStream extends ObjectInputStream {\n    public\
+    \ LookAheadObjectInputStream(InputStream inputStream) throws IOException {\n \
+    \       super(inputStream);\n    }\n    /**\n    * Only deserialize instances\
+    \ of our expected Bicycle class\n    */\n    @Override\n    protected Class<?>\
+    \ resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException\
+    \ {\n        if (!desc.getName().equals(Bicycle.class.getName())) {\n        \
+    \    throw new InvalidClassException(\"Unauthorized deserialization attempt\"\
+    , desc.getName());\n        }\n        return super.resolveClass(desc);\n    }\n\
+    }\n```\n"
+  metadata:
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    category: security
+    shortDescription: Deserialization of untrusted data
+    security-severity: High
+    references:
+    - https://www.blackhat.com/docs/us-16/materials/us-16-Kaiser-Pwning-Your-Java-Messaging-With-Deserialization-Vulnerabilities-wp.pdf
+    technology:
+    - java
+    cwe2022-top25: 'true'
+    cwe2021-top25: 'true'
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: MEDIUM
+    confidence: MEDIUM
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - 'Insecure Deserialization '
+  severity: ERROR

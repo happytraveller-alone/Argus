@@ -1,0 +1,43 @@
+From 918dd4d63596ac5ea1ae5f9a55d1533e2400db5c Mon Sep 17 00:00:00 2001
+From: Alan Guo Xiang Tan <gxtan1990@gmail.com>
+Date: Thu, 5 Jan 2023 06:09:17 +0800
+Subject: [PATCH] SECURITY: use rstrip instead of regex gsub to prevent ReDOS
+ (#19737)
+
+`rstrip` implementation is much more performant than regex
+
+Co-authored-by: Krzysztof Kotlarek <kotlarek.krzysztof@gmail.com>
+---
+ lib/post_creator.rb | 2 +-
+ lib/post_revisor.rb | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/post_creator.rb b/lib/post_creator.rb
+index 2cf45b0a8f..7cded3c486 100644
+--- a/lib/post_creator.rb
++++ b/lib/post_creator.rb
+@@ -514,7 +514,7 @@ class PostCreator
+   end
+ 
+   def setup_post
+-    @opts[:raw] = TextCleaner.normalize_whitespaces(@opts[:raw] || '').gsub(/\s+\z/, "")
++    @opts[:raw] = TextCleaner.normalize_whitespaces(@opts[:raw] || '').rstrip
+ 
+     post = Post.new(raw: @opts[:raw],
+                     topic_id: @topic.try(:id),
+diff --git a/lib/post_revisor.rb b/lib/post_revisor.rb
+index 7fc1ff8144..d6dd390ec9 100644
+--- a/lib/post_revisor.rb
++++ b/lib/post_revisor.rb
+@@ -274,7 +274,7 @@ class PostRevisor
+   end
+ 
+   def cleanup_whitespaces(raw)
+-    raw.present? ? TextCleaner.normalize_whitespaces(raw).gsub(/\s+\z/, "") : ""
++    raw.present? ? TextCleaner.normalize_whitespaces(raw).rstrip : ""
+   end
+ 
+   def should_revise?
+-- 
+2.34.1
+

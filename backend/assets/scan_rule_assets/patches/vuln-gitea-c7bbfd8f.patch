@@ -1,0 +1,96 @@
+From c7bbfd8f5eb097c6910e142415fcdf48fc3c9814 Mon Sep 17 00:00:00 2001
+From: techknowlogick <matti@mdranta.net>
+Date: Tue, 12 Mar 2019 06:58:49 -0400
+Subject: [PATCH] backport 6306 (#6308)
+
+---
+ models/repo.go         |  8 ++++---
+ modules/markup/html.go | 48 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 53 insertions(+), 3 deletions(-)
+
+diff --git a/models/repo.go b/models/repo.go
+index 6777fab948..32cdfe0f6d 100644
+--- a/models/repo.go
++++ b/models/repo.go
+@@ -719,10 +719,12 @@ var (
+ 
+ // DescriptionHTML does special handles to description and return HTML string.
+ func (repo *Repository) DescriptionHTML() template.HTML {
+-	sanitize := func(s string) string {
+-		return fmt.Sprintf(`<a href="%[1]s" target="_blank" rel="noopener noreferrer">%[1]s</a>`, s)
++	desc, err := markup.RenderDescriptionHTML([]byte(repo.Description), repo.HTMLURL(), repo.ComposeMetas())
++	if err != nil {
++		log.Error(4, "Failed to render description for %s (ID: %d): %v", repo.Name, repo.ID, err)
++		return template.HTML(markup.Sanitize(repo.Description))
+ 	}
+-	return template.HTML(descPattern.ReplaceAllStringFunc(markup.Sanitize(repo.Description), sanitize))
++	return template.HTML(markup.Sanitize(string(desc)))
+ }
+ 
+ // LocalCopyPath returns the local repository copy path.
+diff --git a/modules/markup/html.go b/modules/markup/html.go
+index 9040d43e8c..94a749e6e6 100644
+--- a/modules/markup/html.go
++++ b/modules/markup/html.go
+@@ -234,6 +234,23 @@ func RenderCommitMessage(
+ 	return ctx.postProcess(rawHTML)
+ }
+ 
++// RenderDescriptionHTML will use similar logic as PostProcess, but will
++// use a single special linkProcessor.
++func RenderDescriptionHTML(
++	rawHTML []byte,
++	urlPrefix string,
++	metas map[string]string,
++) ([]byte, error) {
++	ctx := &postProcessCtx{
++		metas:     metas,
++		urlPrefix: urlPrefix,
++		procs: []processor{
++			descriptionLinkProcessor,
++		},
++	}
++	return ctx.postProcess(rawHTML)
++}
++
+ var byteBodyTag = []byte("<body>")
+ var byteBodyTagClosing = []byte("</body>")
+ 
+@@ -668,3 +685,34 @@ func genDefaultLinkProcessor(defaultLink string) processor {
+ 		node.FirstChild, node.LastChild = ch, ch
+ 	}
+ }
++
++// descriptionLinkProcessor creates links for DescriptionHTML
++func descriptionLinkProcessor(ctx *postProcessCtx, node *html.Node) {
++	m := linkRegex.FindStringIndex(node.Data)
++	if m == nil {
++		return
++	}
++	uri := node.Data[m[0]:m[1]]
++	replaceContent(node, m[0], m[1], createDescriptionLink(uri, uri))
++}
++
++func createDescriptionLink(href, content string) *html.Node {
++	textNode := &html.Node{
++		Type: html.TextNode,
++		Data: content,
++	}
++	linkNode := &html.Node{
++		FirstChild: textNode,
++		LastChild:  textNode,
++		Type:       html.ElementNode,
++		Data:       "a",
++		DataAtom:   atom.A,
++		Attr: []html.Attribute{
++			{Key: "href", Val: href},
++			{Key: "target", Val: "_blank"},
++			{Key: "rel", Val: "noopener noreferrer"},
++		},
++	}
++	textNode.Parent = linkNode
++	return linkNode
++}
+-- 
+2.34.1
+

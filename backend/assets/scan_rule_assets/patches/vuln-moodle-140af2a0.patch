@@ -1,0 +1,25 @@
+From 140af2a0f0a4598bf568b9ae182cb81eb583edeb Mon Sep 17 00:00:00 2001
+From: "Eloy Lafuente (stronk7)" <stronk7@moodle.org>
+Date: Sun, 16 Oct 2011 19:01:57 +0200
+Subject: [PATCH] MDL-29191 wiki - avoid one more username leak
+
+---
+ mod/wiki/pagelib.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mod/wiki/pagelib.php b/mod/wiki/pagelib.php
+index 7fa366f9ab8..4e19f57bee9 100644
+--- a/mod/wiki/pagelib.php
++++ b/mod/wiki/pagelib.php
+@@ -2545,7 +2545,7 @@ class page_wiki_admin extends page_wiki {
+         $creator = wiki_get_user_info($version0page->userid);
+         $a = new stdClass();
+         $a->date = userdate($this->page->timecreated, get_string('strftimedaydatetime', 'langconfig'));
+-        $a->username = $creator->username;
++        $a->username = fullname($creator);
+         echo $OUTPUT->heading(get_string('createddate', 'wiki', $a), 4, 'wiki_headingtime');
+         if ($versioncount > 0) {
+             /// If there is only one version, we don't need radios nor forms
+-- 
+2.34.1
+

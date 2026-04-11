@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="CheckSkipResult Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for CheckSkipResult</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="CheckSkipResult" language="java" since="5.0" message="Check the value returned by the skip() method of an InputStream to see if the requested number of bytes has been skipped." class="net.sourceforge.pmd.lang.java.rule.errorprone.CheckSkipResultRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#checkskipresult">
+            <description>
+    The skip() method may skip a smaller number of bytes than requested. Check the returned value to find out if it was the case or not.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Foo {
+
+       private FileInputStream _s = new FileInputStream("file");
+
+       public void skip(int n) throws IOException {
+          _s.skip(n); // You are not sure that exactly n bytes are skipped
+       }
+
+       public void skipExactly(int n) throws IOException {
+          while (n != 0) {
+             long skipped = _s.skip(n);
+             if (skipped == 0)
+                throw new EOFException();
+             n -= skipped;
+          }
+       }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

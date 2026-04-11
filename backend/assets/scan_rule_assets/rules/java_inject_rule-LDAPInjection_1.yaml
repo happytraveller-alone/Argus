@@ -1,0 +1,116 @@
+rules:
+- id: java_inject_rule-LDAPInjection_1
+  languages:
+  - java
+  mode: taint
+  pattern-sinks:
+  - pattern: javax.naming.ldap.LdapName(...)
+  - pattern: (javax.naming.directory.Context $C).lookup(...)
+  - pattern: (javax.naming.Context $C).lookup(...)
+  - patterns:
+    - pattern-inside: (com.unboundid.ldap.sdk.LDAPConnection $C).search($QUERY, ...)
+    - pattern: $QUERY
+  - patterns:
+    - pattern-either:
+      - pattern: $CTX.lookup(...)
+      - patterns:
+        - pattern-inside: $CTX.search($QUERY, ...)
+        - pattern: $QUERY
+      - patterns:
+        - pattern-inside: $CTX.search($NAME, $FILTER, ...)
+        - pattern: $FILTER
+    - metavariable-pattern:
+        metavariable: $CTX
+        pattern-either:
+        - pattern: (DirContext $C)
+        - pattern: (InitialDirContext $IDC)
+        - pattern: (LdapContext $LC)
+        - pattern: (EventDirContext $EDC)
+        - pattern: (LdapCtx $LC)
+        - pattern: (javax.naming.directory.DirContext $C)
+        - pattern: (javax.naming.directory.InitialDirContext $IDC)
+        - pattern: (javax.naming.ldap.LdapContext $LC)
+        - pattern: (javax.naming.event.EventDirContext $EDC)
+        - pattern: (com.sun.jndi.ldap.LdapCtx $LC)
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-inside: $CTX.list($QUERY, ...)
+        - pattern: $QUERY
+      - patterns:
+        - pattern-inside: $CTX.lookup($QUERY, ...)
+        - pattern: $QUERY
+      - patterns:
+        - pattern-inside: $CTX.search($QUERY, ...)
+        - pattern: $QUERY
+      - patterns:
+        - pattern-inside: $CTX.search($NAME, $FILTER, ...)
+        - pattern: $FILTER
+    - metavariable-pattern:
+        metavariable: $CTX
+        pattern-either:
+        - pattern: (LdapTemplate $LT)
+        - pattern: (LdapOperations $LO)
+        - pattern: (org.springframework.ldap.core.LdapTemplate $LT)
+        - pattern: (org.springframework.ldap.core.LdapOperations $LO)
+  pattern-sources:
+  - patterns:
+    - pattern-inside: "$FUNC(..., $VAR, ...) {\n  ...\n}\n"
+    - pattern: $VAR
+  - patterns:
+    - pattern-inside: "$FUNC(..., $X, ...) {\n  ...\n  $VAR = ... + $X;\n  ...\n}\n"
+    - pattern: $VAR
+  message: "LDAP injection attacks exploit LDAP queries to influence how data is returned\
+    \ by\nthe LDAP server.\n\nLater versions of Java's `InitialDirContext.search`\
+    \ introduced a four argument method, one of\nwhich is the `filterArg` parameter.\
+    \ The `filterArg` will be automatically encoded when\nquerying\nthe LDAP server.\
+    \ If this method signature is not available, the application must encode the\n\
+    LDAP strings manually.\n\nMore details on the four argument `search` method can\
+    \ be found here:\nhttps://docs.oracle.com/en/java/javase/20/docs/api/java.naming/javax/naming/directory/InitialDirContext.html#search(javax.naming.Name,java.lang.String,java.lang.Object[],javax.naming.directory.SearchControls)\n\
+    \nTo encode the string manually, it is recommended that all input passed to LDAP\
+    \ querying\nsystems\nencode the following values:\n\n- Any occurrence of the null\
+    \ character must be escaped as “\\00”.\n- Any occurrence of the open parenthesis\
+    \ character must be escaped as “\\28”.\n- Any occurrence of the close parenthesis\
+    \ character must be escaped as “\\29”.\n- Any occurrence of the asterisk character\
+    \ must be escaped as “\\2a”.\n- Any occurrence of the backslash character must\
+    \ be escaped as “\\5c”.\n\nExample function that safely encodes user-supplied\
+    \ input to be used in an LDAP query.\n```\npublic static String encodeLDAPString(String\
+    \ input) {\n  // Note the \\ character is replaced first\n  CharSequence[] chars\
+    \ = new CharSequence[] { \"\\\\\", \"\\0\", \"(\", \")\", \"*\" };\n  CharSequence[]\
+    \ encoded = new CharSequence[] { \"\\\\5c\", \"\\\\00\", \"\\\\28\", \"\\\\29\"\
+    , \"\\\\2a\" };\n  // Iterate over each character sequence, replacing the raw\
+    \ value with an encoded version of\nit\n  for (int i = 0; i < chars.length; i++)\n\
+    \  {\n      // re-assign to input\n      input = input.replace(chars[i], encoded[i]);\n\
+    \  }\n  // return our modified input string\n  return input;\n}\n```\n\nExample\
+    \ code that using the `filterArgs` parameter which automatically encodes for us:\n\
+    ```\n// Create a properties to hold the ldap connection details\nProperties props\
+    \ = new Properties();\n// Use the com.sun.jndi.ldap.LdapCtxFactory factory provider\n\
+    props.put(Context.INITIAL_CONTEXT_FACTORY, \"com.sun.jndi.ldap.LdapCtxFactory\"\
+    );\n// The LDAP server URL\nprops.put(Context.PROVIDER_URL, \"ldap://ldap.example.org:3889\"\
+    );\n// User details for the connection\nprops.put(Context.SECURITY_PRINCIPAL,\
+    \ \"cn=admin,dc=example,dc=org\");\n// LDAP account password\nString ldapAccountPassword\
+    \ = getAccountPasswordFromSecureStoreOrKMS();\n// Pass in the LDAP password\n\
+    props.put(Context.SECURITY_CREDENTIALS, ldapAccountPassword);\n\n// Create the\
+    \ LDAPContext\nInitialDirContext ldapContext = new InitialDirContext(props);\n\
+    // Example using SUBTREE_SCOPE SearchControls\nSearchControls searchControls =\
+    \ new SearchControls();\nsearchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);\n\
+    \n// Get user input for query\nString userQuery = someUserInput;\n// Use searchArguments\
+    \ to hold the user-supplied input\nObject[] searchArguments = new Object[]{userQuery};\n\
+    // Hardcode the BaseDN, use the {0} format specifier to use the searchArguments\
+    \ array value,\nand pass in the search controls.\n// searchArguments automatically\
+    \ encode\nNamingEnumeration answer = ldapContext.search(\"dc=example,dc=org\"\
+    , \"(cn={0})\",\nsearchArguments, searchControls);\n// Process the response answer\n\
+    while (answer.hasMoreElements()) {\n  ...\n}\n```\n\nFor more information on LDAP\
+    \ Injection see OWASP:\nhttps://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html\n"
+  severity: WARNING
+  metadata:
+    shortDescription: Improper neutralization of special elements used in an LDAP
+      query ('LDAP Injection')
+    category: security
+    cwe: CWE-90
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: Medium

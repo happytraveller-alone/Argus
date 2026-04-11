@@ -1,0 +1,97 @@
+From 2d4e6952417ec6f08b6f135d2b5d0e19b7dae30d Mon Sep 17 00:00:00 2001
+From: "H. Peter Anvin" <hpa@zytor.com>
+Date: Mon, 7 Nov 2022 10:26:03 -0800
+Subject: [PATCH] quote_for_pmake: fix counter underrun resulting in segfault
+
+while (nbs--) { ... } ends with nbs == -1. Rather than a minimal fix,
+introduce mempset() to make these kinds of errors less likely in the
+future.
+
+Fixes: https://bugzilla.nasm.us/show_bug.cgi?id=3392815
+Reported-by: <13579and24680@gmail.com>
+Signed-off-by: H. Peter Anvin <hpa@zytor.com>
+---
+ asm/nasm.c         | 12 +++++-------
+ configure.ac       |  1 +
+ include/compiler.h |  7 +++++++
+ 3 files changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/asm/nasm.c b/asm/nasm.c
+index 6af92754..1e337c7b 100644
+--- a/asm/nasm.c
++++ b/asm/nasm.c
+@@ -1,6 +1,6 @@
+ /* ----------------------------------------------------------------------- *
+  *
+- *   Copyright 1996-2020 The NASM Authors - All Rights Reserved
++ *   Copyright 1996-2022 The NASM Authors - All Rights Reserved
+  *   See the file AUTHORS included with the NASM distribution for
+  *   the specific copyright holders.
+  *
+@@ -817,8 +817,7 @@ static char *quote_for_pmake(const char *str)
+     }
+ 
+     /* Convert N backslashes at the end of filename to 2N backslashes */
+-    if (nbs)
+-        n += nbs;
++    n += nbs;
+ 
+     os = q = nasm_malloc(n);
+ 
+@@ -827,10 +826,10 @@ static char *quote_for_pmake(const char *str)
+         switch (*p) {
+         case ' ':
+         case '\t':
+-            while (nbs--)
+-                *q++ = '\\';
++            q = mempset(q, '\\', nbs);
+             *q++ = '\\';
+             *q++ = *p;
++            nbs = 0;
+             break;
+         case '$':
+             *q++ = *p;
+@@ -852,9 +851,8 @@ static char *quote_for_pmake(const char *str)
+             break;
+         }
+     }
+-    while (nbs--)
+-        *q++ = '\\';
+ 
++    q = mempset(q, '\\', nbs);
+     *q = '\0';
+ 
+     return os;
+diff --git a/configure.ac b/configure.ac
+index 04a9f648..42cd1988 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -200,6 +200,7 @@ AC_CHECK_FUNCS(strrchrnul)
+ AC_CHECK_FUNCS(iscntrl)
+ AC_CHECK_FUNCS(isascii)
+ AC_CHECK_FUNCS(mempcpy)
++AC_CHECK_FUNCS(mempset)
+ 
+ AC_CHECK_FUNCS(getuid)
+ AC_CHECK_FUNCS(getgid)
+diff --git a/include/compiler.h b/include/compiler.h
+index c5bac6e5..407c1609 100644
+--- a/include/compiler.h
++++ b/include/compiler.h
+@@ -252,6 +252,13 @@ static inline void *mempcpy(void *dst, const void *src, size_t n)
+ }
+ #endif
+ 
++#ifndef HAVE_MEMPSET
++static inline void *mempset(void *dst, int c, size_t n)
++{
++    return (char *)memset(dst, c, n) + n;
++}
++#endif
++
+ /*
+  * Hack to support external-linkage inline functions
+  */
+-- 
+2.34.1
+

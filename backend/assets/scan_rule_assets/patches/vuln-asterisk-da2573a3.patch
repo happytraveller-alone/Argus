@@ -1,0 +1,51 @@
+From da2573a3779425654543d6ac4c4dd6871ce16720 Mon Sep 17 00:00:00 2001
+From: Richard Mudgett <rmudgett@digium.com>
+Date: Mon, 7 Dec 2015 12:46:53 -0600
+Subject: [PATCH] AST-2016-003 udptl.c: Fix uninitialized values.
+
+Sending UDPTL packets to Asterisk with the right amount of missing
+sequence numbers and enough redundant 0-length IFP packets, can make
+Asterisk crash.
+
+ASTERISK-25603 #close
+Reported by: Walter Doekes
+
+ASTERISK-25742 #close
+Reported by: Torrey Searle
+
+Change-Id: I97df8375041be986f3f266ac1946a538023a5255
+---
+ main/udptl.c | 15 +++++++--------
+ 1 file changed, 7 insertions(+), 8 deletions(-)
+
+diff --git a/main/udptl.c b/main/udptl.c
+index 76fc2fbdeb..d308bffe2b 100644
+--- a/main/udptl.c
++++ b/main/udptl.c
+@@ -263,16 +263,15 @@ static int decode_open_type(uint8_t *buf, unsigned int limit, unsigned int *len,
+ 	if (decode_length(buf, limit, len, &octet_cnt) != 0)
+ 		return -1;
+ 
+-	if (octet_cnt > 0) {
+-		/* Make sure the buffer contains at least the number of bits requested */
+-		if ((*len + octet_cnt) > limit)
+-			return -1;
+-
+-		*p_num_octets = octet_cnt;
+-		*p_object = &buf[*len];
+-		*len += octet_cnt;
++	/* Make sure the buffer contains at least the number of bits requested */
++	if ((*len + octet_cnt) > limit) {
++		return -1;
+ 	}
+ 
++	*p_num_octets = octet_cnt;
++	*p_object = &buf[*len];
++	*len += octet_cnt;
++
+ 	return 0;
+ }
+ /*- End of function --------------------------------------------------------*/
+-- 
+2.34.1
+

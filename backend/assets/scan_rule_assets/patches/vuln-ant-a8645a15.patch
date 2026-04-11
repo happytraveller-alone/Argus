@@ -1,0 +1,145 @@
+From a8645a151bc706259fb1789ef587d05482d98612 Mon Sep 17 00:00:00 2001
+From: Stefan Bodewig <bodewig@apache.org>
+Date: Tue, 5 May 2020 15:32:09 +0200
+Subject: [PATCH] use nio.Files.createTempFile rather than File.createTempFile
+
+---
+ .../org/apache/tools/ant/util/FileUtils.java  | 35 ++++++++++++++++++-
+ .../apache/tools/ant/util/FileUtilsTest.java  | 13 +++++++
+ 2 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/src/main/org/apache/tools/ant/util/FileUtils.java b/src/main/org/apache/tools/ant/util/FileUtils.java
+index 565d69b6f..46671848c 100644
+--- a/src/main/org/apache/tools/ant/util/FileUtils.java
++++ b/src/main/org/apache/tools/ant/util/FileUtils.java
+@@ -36,9 +36,14 @@ import java.nio.file.NoSuchFileException;
+ import java.nio.file.Path;
+ import java.nio.file.Paths;
+ import java.nio.file.StandardOpenOption;
++import java.nio.file.attribute.FileAttribute;
++import java.nio.file.attribute.PosixFileAttributeView;
++import java.nio.file.attribute.PosixFilePermission;
++import java.nio.file.attribute.PosixFilePermissions;
+ import java.text.DecimalFormat;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.EnumSet;
+ import java.util.List;
+ import java.util.Locale;
+ import java.util.Optional;
+@@ -100,6 +105,13 @@ public class FileUtils {
+      */
+     public static final long NTFS_FILE_TIMESTAMP_GRANULARITY = 1;
+ 
++    private static final FileAttribute[] TMPFILE_ATTRIBUTES =
++        new FileAttribute[] {
++            PosixFilePermissions.asFileAttribute(EnumSet.of(PosixFilePermission.OWNER_READ,
++                PosixFilePermission.OWNER_WRITE))
++        };
++    private static final FileAttribute[] NO_TMPFILE_ATTRIBUTES = new FileAttribute[0];
++
+     /**
+      * A one item cache for fromUri.
+      * fromUri is called for each element when parsing ant build
+@@ -893,6 +905,10 @@ public class FileUtils {
+      * yield a different file name.
+      * </p>
+      *
++     * <p>If the filesystem where the temporary file is created
++     * supports POSIX permissions, the file will only be readable and
++     * writable by the current user.</p>
++     *
+      * @param prefix file name prefix.
+      * @param suffix
+      *            file extension; include the '.'.
+@@ -916,6 +932,10 @@ public class FileUtils {
+      * exist before this method was invoked, any subsequent invocation
+      * of this method will yield a different file name.</p>
+      *
++     * <p>If the filesystem where the temporary file is created
++     * supports POSIX permissions, the file will only be readable and
++     * writable by the current user.</p>
++     *
+      * @param prefix file name prefix.
+      * @param suffix file extension; include the '.'.
+      * @param parentDir Directory to create the temporary file in;
+@@ -947,6 +967,10 @@ public class FileUtils {
+      * exist before this method was invoked, any subsequent invocation
+      * of this method will yield a different file name.</p>
+      *
++     * <p>If the filesystem where the temporary file is created
++     * supports POSIX permissions, the file will only be readable and
++     * writable by the current user.</p>
++     *
+      * @param project reference to the current Ant project.
+      * @param prefix file name prefix.
+      * @param suffix file extension; include the '.'.
+@@ -984,7 +1008,12 @@ public class FileUtils {
+ 
+         if (createFile) {
+             try {
+-                result = File.createTempFile(prefix, suffix, new File(parent));
++                final Path parentPath = new File(parent).toPath();
++                final PosixFileAttributeView parentPosixAttributes =
++                    Files.getFileAttributeView(parentPath, PosixFileAttributeView.class);
++                result = Files.createTempFile(parentPath, prefix, suffix,
++                    parentPosixAttributes != null ? TMPFILE_ATTRIBUTES : NO_TMPFILE_ATTRIBUTES)
++                    .toFile();
+             } catch (IOException e) {
+                 throw new BuildException("Could not create tempfile in "
+                         + parent, e);
+@@ -1015,6 +1044,10 @@ public class FileUtils {
+      * yield a different file name.
+      * </p>
+      *
++     * <p>If the filesystem where the temporary file is created
++     * supports POSIX permissions, the file will only be readable and
++     * writable by the current user.</p>
++     *
+      * @param prefix file name prefix.
+      * @param suffix
+      *            file extension; include the '.'.
+diff --git a/src/tests/junit/org/apache/tools/ant/util/FileUtilsTest.java b/src/tests/junit/org/apache/tools/ant/util/FileUtilsTest.java
+index fc584563d..d2ea12222 100644
+--- a/src/tests/junit/org/apache/tools/ant/util/FileUtilsTest.java
++++ b/src/tests/junit/org/apache/tools/ant/util/FileUtilsTest.java
+@@ -24,8 +24,11 @@ import java.io.IOException;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
+ import java.nio.file.Paths;
++import java.nio.file.attribute.PosixFileAttributeView;
++import java.nio.file.attribute.PosixFilePermission;
+ import java.util.Locale;
+ import java.util.Optional;
++import java.util.Set;
+ 
+ import org.apache.tools.ant.BuildException;
+ import org.apache.tools.ant.MagicTestNames;
+@@ -40,7 +43,9 @@ import org.junit.rules.TemporaryFolder;
+ import static org.apache.tools.ant.util.FileUtils.getFileUtils;
+ import static org.apache.tools.ant.util.FileUtils.isCaseSensitiveFileSystem;
+ import static org.apache.tools.ant.util.FileUtils.isContextRelativePath;
++import static org.hamcrest.Matchers.containsInAnyOrder;
+ import static org.hamcrest.Matchers.endsWith;
++import static org.hamcrest.Matchers.hasSize;
+ import static org.hamcrest.Matchers.startsWith;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+@@ -370,6 +375,14 @@ public class FileUtilsTest {
+         assertTrue("File was created", tmp1.exists());
+         assertEquals((new File(tmploc, tmp1.getName())).getAbsolutePath(),
+                 tmp1.getAbsolutePath());
++        final PosixFileAttributeView attributes =
++            Files.getFileAttributeView(tmp1.toPath(), PosixFileAttributeView.class);
++        if (attributes != null) {
++            final Set<PosixFilePermission> perm = attributes.readAttributes().permissions();
++            assertThat(perm,
++                containsInAnyOrder(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
++            assertThat(perm, hasSize(2));
++        }
+         tmp1.delete();
+ 
+         // null parent dir, project without magic property
+-- 
+2.34.1
+

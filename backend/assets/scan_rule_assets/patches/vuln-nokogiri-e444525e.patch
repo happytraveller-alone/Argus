@@ -1,0 +1,49 @@
+From e444525ef1634b675cd1cf52d39f4320ef0aecfd Mon Sep 17 00:00:00 2001
+From: Mike Dalessio <mike.dalessio@gmail.com>
+Date: Sun, 10 Apr 2022 14:42:04 -0400
+Subject: [PATCH] fix(perf): HTML4::EncodingReader detection
+
+---
+ lib/nokogiri/html4/document.rb       |  2 +-
+ test/html4/test_document_encoding.rb | 12 ++++++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/lib/nokogiri/html4/document.rb b/lib/nokogiri/html4/document.rb
+index 177efc04..fbc22d20 100644
+--- a/lib/nokogiri/html4/document.rb
++++ b/lib/nokogiri/html4/document.rb
+@@ -268,7 +268,7 @@ module Nokogiri
+         end
+ 
+         def self.detect_encoding(chunk)
+-          (m = chunk.match(/\A(<\?xml[ \t\r\n]+[^>]*>)/)) &&
++          (m = chunk.match(/\A(<\?xml[ \t\r\n][^>]*>)/)) &&
+             (return Nokogiri.XML(m[1]).encoding)
+ 
+           if Nokogiri.jruby?
+diff --git a/test/html4/test_document_encoding.rb b/test/html4/test_document_encoding.rb
+index 61153017..ecb4aa9a 100644
+--- a/test/html4/test_document_encoding.rb
++++ b/test/html4/test_document_encoding.rb
+@@ -155,6 +155,18 @@ class TestNokogiriHtmlDocument < Nokogiri::TestCase
+             end
+           end
+         end
++
++        it "does not start backtracking during detection of XHTML encoding" do
++          # this test is a quick and dirty version
++          # of the more complete perf test that is on main.
++          n = 40_000
++          redos_string = "<?xml " + (" " * n)
++          redos_string.encode!("ASCII-8BIT")
++          start_time = Time.now
++          Nokogiri::HTML4(redos_string)
++          elapsed_time = Time.now - start_time
++          assert_operator(elapsed_time, :<, 1)
++        end
+       end
+     end
+   end
+-- 
+2.34.1
+

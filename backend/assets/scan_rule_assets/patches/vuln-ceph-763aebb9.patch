@@ -1,0 +1,36 @@
+From 763aebb94678018f89427137ffbc0c5205b1edc1 Mon Sep 17 00:00:00 2001
+From: Casey Bodley <cbodley@redhat.com>
+Date: Tue, 4 May 2021 08:32:58 -0400
+Subject: [PATCH] rgw: sanitize \r in s3 CORSConfiguration's ExposeHeader
+
+follows up on 1524d3c0c5cb11775313ea1e2bb36a93257947f2 to escape \r as
+well
+
+Fixes: CVE-2021-3524
+
+Reported-by: Sergey Bobrov <Sergey.Bobrov@kaspersky.com>
+Signed-off-by: Casey Bodley <cbodley@redhat.com>
+(cherry picked from commit 87806f48e7a1b8891eb90711f1cedd26f1119aac)
+---
+ src/rgw/rgw_cors.cc | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/rgw/rgw_cors.cc b/src/rgw/rgw_cors.cc
+index 0b3e4f39455..bfe83d6420e 100644
+--- a/src/rgw/rgw_cors.cc
++++ b/src/rgw/rgw_cors.cc
+@@ -148,8 +148,9 @@ void RGWCORSRule::format_exp_headers(string& s) {
+     if (s.length() > 0)
+       s.append(",");
+     // these values are sent to clients in a 'Access-Control-Expose-Headers'
+-    // response header, so we escape '\n' to avoid header injection
+-    boost::replace_all_copy(std::back_inserter(s), header, "\n", "\\n");
++    // response header, so we escape '\n' and '\r' to avoid header injection
++    std::string tmp = boost::replace_all_copy(header, "\n", "\\n");
++    boost::replace_all_copy(std::back_inserter(s), tmp, "\r", "\\r");
+   }
+ }
+ 
+-- 
+2.34.1
+

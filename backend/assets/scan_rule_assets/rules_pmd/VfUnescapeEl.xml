@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="VfUnescapeEl Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for VfUnescapeEl</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="VfUnescapeEl" language="visualforce" since="5.6.0" message="Avoid unescaped user controlled content in EL" class="net.sourceforge.pmd.lang.visualforce.rule.security.VfUnescapeElRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_visualforce_security.html#vfunescapeel">
+            <description>
+    Avoid unescaped user controlled content in EL as it results in XSS.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    &lt;apex:outputText value="Potential XSS is {! here }" escape="false" /&gt;
+
+            </example>
+        </rule>
+
+</ruleset>

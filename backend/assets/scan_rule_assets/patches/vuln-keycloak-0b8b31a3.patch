@@ -1,0 +1,47 @@
+From 0b8b31a3ea7d8d7ac8b14a020613fc32aa5e9d9d Mon Sep 17 00:00:00 2001
+From: Bill Burke <bburke@redhat.com>
+Date: Fri, 19 Sep 2014 10:00:47 -0400
+Subject: [PATCH] KEYCLOAK-705
+
+---
+ pom.xml                                                       | 2 +-
+ .../java/org/keycloak/services/resources/AccountService.java  | 4 +++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/pom.xml b/pom.xml
+index 445508e35e..d6a86f6182 100755
+--- a/pom.xml
++++ b/pom.xml
+@@ -16,7 +16,7 @@
+         <jackson.version>1.9.9</jackson.version>
+         <keycloak.apache.httpcomponents.version>4.2.1</keycloak.apache.httpcomponents.version>
+         <resteasy.version>2.3.7.Final</resteasy.version>
+-        <resteasy.version.latest>3.0.8.Final</resteasy.version.latest>
++        <resteasy.version.latest>3.0.9.Final</resteasy.version.latest>
+         <undertow.version>1.0.15.Final</undertow.version>
+         <picketlink.version>2.7.0.Beta1</picketlink.version>
+         <picketbox.ldap.version>1.0.2.Final</picketbox.ldap.version>
+diff --git a/services/src/main/java/org/keycloak/services/resources/AccountService.java b/services/src/main/java/org/keycloak/services/resources/AccountService.java
+index 3c918cfec9..4ceb9f3e60 100755
+--- a/services/src/main/java/org/keycloak/services/resources/AccountService.java
++++ b/services/src/main/java/org/keycloak/services/resources/AccountService.java
+@@ -436,13 +436,15 @@ public class AccountService {
+ 
+     @Path("totp-remove")
+     @GET
+-    public Response processTotpRemove() {
++    public Response processTotpRemove(@QueryParam("stateChecker") String stateChecker) {
+         if (auth == null) {
+             return login("totp");
+         }
+ 
+         require(AccountRoles.MANAGE_ACCOUNT);
+ 
++        csrfCheck(stateChecker);
++
+         UserModel user = auth.getUser();
+         user.setTotp(false);
+ 
+-- 
+2.34.1
+

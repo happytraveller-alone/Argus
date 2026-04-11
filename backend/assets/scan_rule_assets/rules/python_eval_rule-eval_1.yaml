@@ -1,0 +1,41 @@
+rules:
+- id: python_eval_rule-eval_1
+  languages:
+  - python
+  message: "The application was found calling the `eval` function with non-literal\
+    \ data. If the variable contains \nuser-controlled data, either partially or fully,\
+    \ an adversary could compromise the entire system by \nexecuting arbitrary Python\
+    \ code.\n\nTo remediate this issue, remove all calls to `eval` and consider alternative\
+    \ methods for executing \nthe necessary business logic. There is almost no safe\
+    \ method of calling `eval` with user-supplied input.\n\nIf the application only\
+    \ needs to convert strings into objects, consider using `json.loads`. In \nsome\
+    \ cases `ast.literal_eval` is recommended, but this should be avoided as it can\
+    \ still suffer \nfrom other issues such as the ability for malicious code to crash\
+    \ the python interpreter or application.\n\nExample using `json.loads`` to load\
+    \ in arbitrary data to create data structures:\n```\n# User supplied data as a\
+    \ blob of JSON\nuser_supplied_data = \"\"\"{\"user\": \"test\", \"metadata\":\
+    \ [1,2,3]}\"\"\"\n# Load the JSON\nuser_object = json.loads(user_supplied_data)\n\
+    # Manually add protected properties _after_ loading, never before\nuser_object[\"\
+    is_admin\"] = False\n# Work with the object\n```\n"
+  patterns:
+  - pattern: eval($X,...)
+  - pattern-not: 'eval("...")
+
+      '
+  - pattern-not: 'eval("..." % <... "..." ...>)
+
+      '
+  - pattern-not: 'eval(<... "...".format( "..." ) ...>)
+
+      '
+  - pattern-not-inside: "def eval(...):\n  ...\n...\n"
+  metadata:
+    cwe: CWE-95
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    category: security
+    shortDescription: Improper neutralization of directives in dynamically evaluated
+      code ('Eval Injection')
+    security-severity: High
+  severity: WARNING

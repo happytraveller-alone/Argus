@@ -1,0 +1,53 @@
+From 1899ebcd8aa5d534d830c1b28008749351f0c92c Mon Sep 17 00:00:00 2001
+From: Derek McGowan <derek@mcg.dev>
+Date: Thu, 1 Dec 2022 15:58:02 -0800
+Subject: [PATCH] Prepare release notes for v1.6.12
+
+Signed-off-by: Derek McGowan <derek@mcg.dev>
+---
+ releases/v1.6.12.toml | 19 +++++++++++++++++++
+ version/version.go    |  2 +-
+ 2 files changed, 20 insertions(+), 1 deletion(-)
+ create mode 100644 releases/v1.6.12.toml
+
+diff --git a/releases/v1.6.12.toml b/releases/v1.6.12.toml
+new file mode 100644
+index 000000000..cdd0819a8
+--- /dev/null
++++ b/releases/v1.6.12.toml
+@@ -0,0 +1,19 @@
++# commit to be tagged for new release
++commit = "HEAD"
++
++project_name = "containerd"
++github_repo = "containerd/containerd"
++match_deps = "^github.com/(containerd/[a-zA-Z0-9-]+)$"
++
++# previous release
++previous = "v1.6.11"
++
++pre_release = false
++
++preface = """\
++The twelfth patch release for containerd 1.6 contains a fix for CVE-2022-23471.
++
++### Notable Updates
++* **Fix goroutine leak during Exec in CRI plugin** ([GHSA-2qjp-425j-52j9](https://github.com/containerd/containerd/security/advisories/GHSA-2qjp-425j-52j9))
++
++See the changelog for complete list of changes"""
+diff --git a/version/version.go b/version/version.go
+index 476c6c4b2..6e76097d2 100644
+--- a/version/version.go
++++ b/version/version.go
+@@ -23,7 +23,7 @@ var (
+ 	Package = "github.com/containerd/containerd"
+ 
+ 	// Version holds the complete version number. Filled in at linking time.
+-	Version = "1.6.11+unknown"
++	Version = "1.6.12+unknown"
+ 
+ 	// Revision is filled with the VCS (e.g. git) revision being used to build
+ 	// the program at linking time.
+-- 
+2.34.1
+

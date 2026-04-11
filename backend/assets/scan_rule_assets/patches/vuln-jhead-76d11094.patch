@@ -1,0 +1,58 @@
+From ec67262b8e5a4b05d8ad6898a09f1dc3fc032062 Mon Sep 17 00:00:00 2001
+From: Joachim Reichel <joachim.reichel@posteo.de>
+Date: Fri, 21 Oct 2022 20:52:39 +0200
+Subject: [PATCH] Fix issue #60: Add dollar sign ($) to the list of forbidden
+ character for the mogrify command. Add similar checks to the other two
+ system() calls for autorotation and comment editing.
+
+---
+ jhead.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/jhead.c b/jhead.c
+index 049e2db..bf42316 100644
+--- a/jhead.c
++++ b/jhead.c
+@@ -166,6 +166,15 @@ static int FileEditComment(char * TempFileName, char * Comment, int CommentSize)
+         }
+         if (strlen(Editor) > PATH_MAX) ErrFatal("env too long");
+ 
++        // Disallow characters in the editor or filename that could be used to execute arbitrary
++        // shell commands with system() below.
++        if (strpbrk(TempFileName, "\";'&|`$")) {
++            ErrFatal("Filename has invalid characters");
++        }
++        if (strpbrk(Editor, "\";'&|`$")) {
++            ErrFatal("Editor has invalid characters");
++        }
++
+         sprintf(QuotedPath, "%s \"%s\"",Editor, TempFileName);
+         a = system(QuotedPath);
+     }
+@@ -761,6 +770,14 @@ static int DoAutoRotate(const char * FileName)
+                 sprintf(RotateCommand,"jpegtran -trim -%s -outfile \"%s\" \"%s\"",
+                     Argument, ThumbTempName_out, ThumbTempName_in);
+ 
++                // Disallow characters in the command that could be used to execute arbitrary
++                // shell commands with system() below.
++                if (strpbrk(RotateCommand, "\";'&|`$")) {
++                    ErrNonfatal("Command has invalid characters.", 0, 0);
++                    unlink(ThumbTempName_in);
++                    return FALSE;
++                }
++
+                 if (system(RotateCommand) == 0){
+                     // Put the thumbnail back in the header
+                     ReplaceThumbnail(ThumbTempName_out);
+@@ -788,7 +805,7 @@ static int RegenerateThumbnail(const char * FileName)
+ 
+     // Disallow characters in the filename that could be used to execute arbitrary
+     // shell commands with system() below.
+-    if(strpbrk(FileName, "\";'&|`")) {
++    if(strpbrk(FileName, "\";'&|`$")) {
+         ErrNonfatal("Filename has invalid characters.", 0, 0);
+         return FALSE;
+     }
+-- 
+2.34.1
+

@@ -1,0 +1,105 @@
+From 6078dd7aa097baf3402de9d5279f6053926a1ea7 Mon Sep 17 00:00:00 2001
+From: Kohsuke Kawaguchi <kk@kohsuke.org>
+Date: Fri, 11 Nov 2016 17:06:08 -0800
+Subject: [PATCH] [SECURITY-360] integration test
+
+Make sure LDAPAttribute gets rejected.
+---
+ pom.xml                                       |  2 +-
+ .../jenkins/security/Security218CliTest.java  |  9 +++++++
+ .../jenkins/security/security218/Payload.java |  7 +++---
+ .../security218/ysoserial/payloads/Ldap.java  | 24 +++++++++++++++++++
+ 4 files changed, 38 insertions(+), 4 deletions(-)
+ create mode 100644 test/src/test/java/jenkins/security/security218/ysoserial/payloads/Ldap.java
+
+diff --git a/pom.xml b/pom.xml
+index 9c5d559d77..a97f995fa1 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -179,7 +179,7 @@ THE SOFTWARE.
+       <dependency>
+         <groupId>org.jenkins-ci.main</groupId>
+         <artifactId>remoting</artifactId>
+-        <version>2.53.3-20160211.162333-3</version>
++        <version>2.53.2</version>
+       </dependency>
+ 
+       <dependency>
+diff --git a/test/src/test/java/jenkins/security/Security218CliTest.java b/test/src/test/java/jenkins/security/Security218CliTest.java
+index 48b35b8363..0d405fda0d 100644
+--- a/test/src/test/java/jenkins/security/Security218CliTest.java
++++ b/test/src/test/java/jenkins/security/Security218CliTest.java
+@@ -161,6 +161,15 @@ public class Security218CliTest {
+         probe(Payload.Spring2, -1);
+     }
+     
++    @PresetData(PresetData.DataSet.ANONYMOUS_READONLY)
++    @Test
++    @Issue("SECURITY-360")
++    public void ldap() throws Exception {
++        // with a proper fix, this should fail with EXIT_CODE_REJECTED
++        // otherwise this will fail with -1 exit code
++        probe(Payload.Ldap, PayloadCaller.EXIT_CODE_REJECTED);
++    }
++
+     private void probe(Payload payload, int expectedResultCode) throws Exception {
+         File file = File.createTempFile("security-218", payload + "-payload");
+         File moved = new File(file.getAbsolutePath() + "-moved");
+diff --git a/test/src/test/java/jenkins/security/security218/Payload.java b/test/src/test/java/jenkins/security/security218/Payload.java
+index ea3c30b8ac..a08186ba3d 100644
+--- a/test/src/test/java/jenkins/security/security218/Payload.java
++++ b/test/src/test/java/jenkins/security/security218/Payload.java
+@@ -24,7 +24,6 @@
+ package jenkins.security.security218;
+ 
+ import jenkins.security.security218.ysoserial.payloads.*;
+-import net.sf.json.JSON;
+ 
+ 
+ /**
+@@ -46,8 +45,10 @@ public enum Payload {
+     JRMPListener(JRMPListener.class),
+     JSON1(JSON1.class),
+     Spring1(Spring1.class),
+-    Spring2(Spring2.class);
+-    
++    Spring2(Spring2.class),
++    Ldap(Ldap.class),
++    ;
++
+     private final Class<? extends ObjectPayload> payloadClass;
+     
+     private Payload(Class<? extends ObjectPayload> payloadClass) {
+diff --git a/test/src/test/java/jenkins/security/security218/ysoserial/payloads/Ldap.java b/test/src/test/java/jenkins/security/security218/ysoserial/payloads/Ldap.java
+new file mode 100644
+index 0000000000..8124938437
+--- /dev/null
++++ b/test/src/test/java/jenkins/security/security218/ysoserial/payloads/Ldap.java
+@@ -0,0 +1,24 @@
++package jenkins.security.security218.ysoserial.payloads;
++
++import jenkins.security.security218.ysoserial.util.PayloadRunner;
++
++import java.lang.reflect.Constructor;
++
++/**
++ * @author Kohsuke Kawaguchi
++ */
++public class Ldap extends PayloadRunner implements ObjectPayload<Object> {
++
++	public Object getObject(final String command) throws Exception {
++	    // this is not a fully exploit, so we cannot honor the command,
++        // but we want to check that we are blocking LdapAttribute
++        Class<?> c = Class.forName("com.sun.jndi.ldap.LdapAttribute");
++        Constructor<?> ctr = c.getDeclaredConstructor(String.class);
++        ctr.setAccessible(true);
++        return ctr.newInstance("foo");
++	}
++
++	public static void main(final String[] args) throws Exception {
++		PayloadRunner.run(Ldap.class, args);
++	}
++}
+-- 
+2.34.1
+

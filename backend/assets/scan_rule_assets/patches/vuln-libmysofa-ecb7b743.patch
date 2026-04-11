@@ -1,0 +1,25 @@
+From f571522bfcee062b1277f6e480a90e4802b8e301 Mon Sep 17 00:00:00 2001
+From: Christian Hoene <christian.hoene@symonics.com>
+Date: Sun, 25 Aug 2019 13:39:50 +0200
+Subject: [PATCH] Replaced malloc to calloc
+
+---
+ src/hdf/dataobject.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/hdf/dataobject.c b/src/hdf/dataobject.c
+index 631cbc3..0520bca 100644
+--- a/src/hdf/dataobject.c
++++ b/src/hdf/dataobject.c
+@@ -375,7 +375,7 @@ static int readOHDRHeaderMessageDataLayout(struct READER *reader,
+ 				return errno;
+ 			if (!data->data) {
+ 				data->data_len = size;
+-				data->data = malloc(size);
++				data->data = calloc(1,size);
+ 				if (!data->data)
+ 					return MYSOFA_NO_MEMORY;
+ 			}
+-- 
+2.34.1
+

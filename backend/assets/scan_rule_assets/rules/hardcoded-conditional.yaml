@@ -1,0 +1,15 @@
+rules:
+- id: hardcoded-conditional
+  patterns:
+  - pattern-either:
+    - pattern: if (<... true ...>) { ... }
+    - pattern: if (<... false ...>) { ... }
+  message: useless if statement, always the same behavior
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-561: Dead Code'
+    - 'CWE-398: Indicator of Poor Code Quality'

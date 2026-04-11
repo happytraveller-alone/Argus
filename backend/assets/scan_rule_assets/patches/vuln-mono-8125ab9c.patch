@@ -1,0 +1,160 @@
+From 8125ab9c2a8c9b0d7da01b6909d54c47344eaa67 Mon Sep 17 00:00:00 2001
+From: Marek Habersack <grendel@twistedcode.net>
+Date: Thu, 29 Apr 2010 20:51:46 +0000
+Subject: [PATCH] 2010-04-29  Marek Habersack  <mhabersack@novell.com>
+
+	* PageParser.cs, Page.cs: do not ignore the EnableViewStateMac
+	directive attribute. Fixes bug #592428
+	Fixes cross-site scripting vulnerability (CVE: CVE-2010-1459)
+	Credits: Web Security Research Group (WSRG) of Hewlett Packard
+	(HP)
+
+2010-04-29  Marek Habersack  <mhabersack@novell.com>
+
+	* PagesConfiguration.cs: make EnableViewStateMac default to
+	true. Fixes bug #592428
+	Fixes cross-site scripting vulnerability (CVE: CVE-2010-1459)
+	Credits: Web Security Research Group (WSRG) of Hewlett Packard
+	(HP)
+
+svn path=/branches/mono-2-4-2/mcs/; revision=156450
+---
+ .../System.Web.Compilation/PageCompiler.cs          |  8 +++++---
+ .../System.Web/System.Web.Configuration/ChangeLog   |  9 ++++++++-
+ .../System.Web.Configuration/PagesConfiguration.cs  |  2 +-
+ mcs/class/System.Web/System.Web.UI/ChangeLog        |  8 ++++++++
+ mcs/class/System.Web/System.Web.UI/Page.cs          |  5 +++++
+ mcs/class/System.Web/System.Web.UI/PageParser.cs    | 13 +++++++++++--
+ 6 files changed, 38 insertions(+), 7 deletions(-)
+
+diff --git a/mcs/class/System.Web/System.Web.Compilation/PageCompiler.cs b/mcs/class/System.Web/System.Web.Compilation/PageCompiler.cs
+index 2a4642e9ea53e..22eb0fbc249a1 100644
+--- a/mcs/class/System.Web/System.Web.Compilation/PageCompiler.cs
++++ b/mcs/class/System.Web/System.Web.Compilation/PageCompiler.cs
+@@ -314,11 +314,13 @@ protected override void AddStatementsToConstructor (CodeConstructor ctor)
+ 		
+ 		protected override void AddStatementsToInitMethod (CodeMemberMethod method)
+ 		{
+-#if NET_2_0
+-			AddStatementsFromDirective (method);
+ 			ILocation directiveLocation = pageParser.DirectiveLocation;
+-
+ 			CodeArgumentReferenceExpression ctrlVar = new CodeArgumentReferenceExpression("__ctrl");
++			
++			if (pageParser.EnableViewStateMacSet)
++				method.Statements.Add (AddLinePragma (CreatePropertyAssign (ctrlVar, "EnableViewStateMac", pageParser.EnableViewStateMac), directiveLocation));
++#if NET_2_0
++			AddStatementsFromDirective (method);
+ 			if (pageParser.Title != null)
+ 				method.Statements.Add (AddLinePragma (CreatePropertyAssign (ctrlVar, "Title", pageParser.Title), directiveLocation));
+ 
+diff --git a/mcs/class/System.Web/System.Web.Configuration/ChangeLog b/mcs/class/System.Web/System.Web.Configuration/ChangeLog
+index 7e3278905146d..ab39b35c8e974 100644
+--- a/mcs/class/System.Web/System.Web.Configuration/ChangeLog
++++ b/mcs/class/System.Web/System.Web.Configuration/ChangeLog
+@@ -1,3 +1,11 @@
++2010-04-29  Marek Habersack  <mhabersack@novell.com>
++
++	* PagesConfiguration.cs: make EnableViewStateMac default to
++	true. Fixes bug #592428 
++	Fixes cross-site scripting vulnerability (CVE: CVE-2010-1459)
++	Credits: Web Security Research Group (WSRG) of Hewlett Packard
++	(HP)
++
+ 2009-05-14  Marek Habersack  <mhabersack@novell.com>
+ 
+ 	* HandlerFactoryConfiguration.cs: if we're matching a default
+@@ -943,4 +951,3 @@
+ 2002-06-03  Gonzalo Paniagua Javier <gonzalo@ximian.com>
+ 
+ 	* System.Web.Configuration/HttpCapabilitiesBase.cs: New file.
+-
+diff --git a/mcs/class/System.Web/System.Web.Configuration/PagesConfiguration.cs b/mcs/class/System.Web/System.Web.Configuration/PagesConfiguration.cs
+index 4bc4bad718f25..e9e82425eff4e 100644
+--- a/mcs/class/System.Web/System.Web.Configuration/PagesConfiguration.cs
++++ b/mcs/class/System.Web/System.Web.Configuration/PagesConfiguration.cs
+@@ -38,7 +38,7 @@ class PagesConfiguration
+ 		internal bool Buffer = true;
+ 		internal PagesEnableSessionState EnableSessionState = PagesEnableSessionState.True;
+ 		internal bool EnableViewState = true;
+-		internal bool EnableViewStateMac = false;
++		internal bool EnableViewStateMac = true;
+ 		internal bool SmartNavigation = false;
+ 		internal bool AutoEventWireup = true;
+ 		internal bool ValidateRequest = true;
+diff --git a/mcs/class/System.Web/System.Web.UI/ChangeLog b/mcs/class/System.Web/System.Web.UI/ChangeLog
+index 879652ea4cf2f..52ccee862425a 100644
+--- a/mcs/class/System.Web/System.Web.UI/ChangeLog
++++ b/mcs/class/System.Web/System.Web.UI/ChangeLog
+@@ -1,3 +1,11 @@
++2010-04-29  Marek Habersack  <mhabersack@novell.com>
++
++	* PageParser.cs, Page.cs: do not ignore the EnableViewStateMac
++	directive attribute. Fixes bug #592428
++	Fixes cross-site scripting vulnerability (CVE: CVE-2010-1459)
++	Credits: Web Security Research Group (WSRG) of Hewlett Packard
++	(HP)
++
+ 2009-09-15  Marek Habersack  <mhabersack@novell.com>
+ 
+ 	* TemplateParser.cs: FindNamespaceInAssembly must catch
+diff --git a/mcs/class/System.Web/System.Web.UI/Page.cs b/mcs/class/System.Web/System.Web.UI/Page.cs
+index 5289cc3512dc3..1f966268b62f3 100644
+--- a/mcs/class/System.Web/System.Web.UI/Page.cs
++++ b/mcs/class/System.Web/System.Web.UI/Page.cs
+@@ -192,11 +192,16 @@ public Page ()
+ 			asyncTimeout = ps.AsyncTimeout;
+ 			viewStateEncryptionMode = ps.ViewStateEncryptionMode;
+ 			_viewState = ps.EnableViewState;
++			_viewStateMac = ps.EnableViewStateMac;
+ 		} else {
+ 			asyncTimeout = TimeSpan.FromSeconds (DefaultAsyncTimeout);
+ 			viewStateEncryptionMode = ViewStateEncryptionMode.Auto;
+ 			_viewState = true;
+ 		}
++#else
++		PagesConfiguration ps = PagesConfiguration.GetInstance (HttpContext.Current);
++		if (ps != null)
++			_viewStateMac = ps.EnableViewStateMac;
+ #endif
+ 	}
+ 
+diff --git a/mcs/class/System.Web/System.Web.UI/PageParser.cs b/mcs/class/System.Web/System.Web.UI/PageParser.cs
+index 23467df38102a..54a9ed8152c14 100644
+--- a/mcs/class/System.Web/System.Web.UI/PageParser.cs
++++ b/mcs/class/System.Web/System.Web.UI/PageParser.cs
+@@ -45,7 +45,8 @@ namespace System.Web.UI
+ 	public sealed class PageParser : TemplateControlParser
+ 	{
+ 		PagesEnableSessionState enableSessionState = PagesEnableSessionState.True;
+-		bool enableViewStateMac = true;
++		bool enableViewStateMac;
++		bool enableViewStateMacSet;
+ 		bool smartNavigation;
+ 		bool haveTrace;
+ 		bool trace;
+@@ -378,8 +379,12 @@ internal override void ProcessMainAttributes (Hashtable atts)
+ 			enable_event_validation = GetBool (atts, "EnableEventValidation", enable_event_validation);
+ 			maintainScrollPositionOnPostBack = GetBool (atts, "MaintainScrollPositionOnPostBack", maintainScrollPositionOnPostBack);
+ #endif
++			if (atts.ContainsKey ("EnableViewStateMac")) {
++				enableViewStateMac = GetBool (atts, "EnableViewStateMac", enableViewStateMac);
++				enableViewStateMacSet = true;
++			}
++			
+ 			// Ignored by now
+-			GetString (atts, "EnableViewStateMac", null);
+ 			GetString (atts, "SmartNavigation", null);
+ 
+ 			base.ProcessMainAttributes (atts);
+@@ -470,6 +475,10 @@ protected override Type CompileIntoType ()
+ 		internal bool EnableViewStateMac {
+ 			get { return enableViewStateMac; }
+ 		}
++
++		internal bool EnableViewStateMacSet {
++			get { return enableViewStateMacSet; }
++		}
+ 		
+ 		internal bool SmartNavigation {
+ 			get { return smartNavigation; }

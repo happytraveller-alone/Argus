@@ -1,0 +1,80 @@
+From e384c9665ae2e72376be7cefa8e652efcee93767 Mon Sep 17 00:00:00 2001
+From: Yogesh Mahajan <yogesh.mahajan@enterprisedb.com>
+Date: Wed, 10 Apr 2024 17:58:51 +0530
+Subject: [PATCH] Fixed a XSS vulnerability in the /settings/store endpoint.
+ #7282
+
+---
+ web/pgadmin/browser/static/js/node.js             | 6 +++---
+ web/pgadmin/browser/templates/browser/js/utils.js | 3 +--
+ web/pgadmin/static/js/tree/tree.js                | 2 +-
+ 3 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/web/pgadmin/browser/static/js/node.js b/web/pgadmin/browser/static/js/node.js
+index fd25a2ca0..fa8cdc45c 100644
+--- a/web/pgadmin/browser/static/js/node.js
++++ b/web/pgadmin/browser/static/js/node.js
+@@ -139,7 +139,7 @@ define('pgadmin.browser.node', [
+           },
+           enable: _.isFunction(self.canEdit) ?
+             function() {
+-              return !!(self.canEdit(arguments));
++              return !!(self.canEdit(...arguments));
+             } : (!!self.canEdit),
+         }]);
+       }
+@@ -159,7 +159,7 @@ define('pgadmin.browser.node', [
+           },
+           enable: _.isFunction(self.canDrop) ?
+             function() {
+-              return !!(self.canDrop(arguments));
++              return !!(self.canDrop(...arguments));
+             } : (!!self.canDrop),
+         }]);
+ 
+@@ -177,7 +177,7 @@ define('pgadmin.browser.node', [
+             },
+             enable: _.isFunction(self.canDropCascade) ?
+               function() {
+-                return self.canDropCascade(arguments);
++                return self.canDropCascade(...arguments);
+               } : (!!self.canDropCascade),
+           }]);
+         }
+diff --git a/web/pgadmin/browser/templates/browser/js/utils.js b/web/pgadmin/browser/templates/browser/js/utils.js
+index 2d85a1d09..ab1d10aed 100644
+--- a/web/pgadmin/browser/templates/browser/js/utils.js
++++ b/web/pgadmin/browser/templates/browser/js/utils.js
+@@ -38,7 +38,6 @@
+ 
+ define('pgadmin.browser.utils',
+   ['sources/pgadmin'], function(pgAdmin) {
+-
+   let pgBrowser = pgAdmin.Browser = pgAdmin.Browser || {};
+ 
+   pgBrowser['MainMenus'] = [];
+@@ -86,7 +85,7 @@ define('pgadmin.browser.utils',
+   ];
+ 
+   pgBrowser.utils = {
+-    layout: '{{ layout }}',
++    layout: {{ layout|tojson }},
+     theme: '{{ theme }}',
+     pg_help_path: '{{ pg_help_path }}',
+     tabSize: '{{ editor_tab_size }}',
+diff --git a/web/pgadmin/static/js/tree/tree.js b/web/pgadmin/static/js/tree/tree.js
+index f6d9cc7de..eb940639b 100644
+--- a/web/pgadmin/static/js/tree/tree.js
++++ b/web/pgadmin/static/js/tree/tree.js
+@@ -408,7 +408,7 @@ export class Tree {
+   }
+ 
+   findNodeByDomElement(domElement) {
+-    const path = domElement.path;
++    const path = domElement?.path;
+     if (!path?.[0]) {
+       return undefined;
+     }
+-- 
+2.34.1
+

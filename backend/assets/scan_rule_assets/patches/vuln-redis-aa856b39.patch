@@ -1,0 +1,1413 @@
+From aa856b39f2ca65dbcc0eaae2d2c52f7a35291bbf Mon Sep 17 00:00:00 2001
+From: "Meir Shpilraien (Spielrein)" <meir@redis.com>
+Date: Sun, 27 Feb 2022 13:40:57 +0200
+Subject: [PATCH] Sort out the mess around Lua error messages and error stats
+ (#10329)
+
+This PR fix 2 issues on Lua scripting:
+* Server error reply statistics (some errors were counted twice).
+* Error code and error strings returning from scripts (error code was missing / misplaced).
+
+## Statistics
+a Lua script user is considered part of the user application, a sophisticated transaction,
+so we want to count an error even if handled silently by the script, but when it is
+propagated outwards from the script we don't wanna count it twice. on the other hand,
+if the script decides to throw an error on its own (using `redis.error_reply`), we wanna
+count that too.
+Besides, we do count the `calls` in command statistics for the commands the script calls,
+we we should certainly also count `failed_calls`.
+So when a simple `eval "return redis.call('set','x','y')" 0` fails, it should count the failed call
+to both SET and EVAL, but the `errorstats` and `total_error_replies` should be counted only once.
+
+The PR changes the error object that is raised on errors. Instead of raising a simple Lua
+string, Redis will raise a Lua table in the following format:
+
+```
+{
+    err='<error message (including error code)>',
+    source='<User source file name>',
+    line='<line where the error happned>',
+    ignore_error_stats_update=true/false,
+}
+```
+
+The `luaPushError` function was modified to construct the new error table as describe above.
+The `luaRaiseError` was renamed to `luaError` and is now simply called `lua_error` to raise
+the table on the top of the Lua stack as the error object.
+The reason is that since its functionality is changed, in case some Redis branch / fork uses it,
+it's better to have a compilation error than a bug.
+
+The `source` and `line` fields are enriched by the error handler (if possible) and the
+`ignore_error_stats_update` is optional and if its not present then the default value is `false`.
+If `ignore_error_stats_update` is true, the error will not be counted on the error stats.
+
+When parsing Redis call reply, each error is translated to a Lua table on the format describe
+above and the `ignore_error_stats_update` field is set to `true` so we will not count errors
+twice (we counted this error when we invoke the command).
+
+The changes in this PR might have been considered as a breaking change for users that used
+Lua `pcall` function. Before, the error was a string and now its a table. To keep backward
+comparability the PR override the `pcall` implementation and extract the error message from
+the error table and return it.
+
+Example of the error stats update:
+
+```
+127.0.0.1:6379> lpush l 1
+(integer) 2
+127.0.0.1:6379> eval "return redis.call('get', 'l')" 0
+(error) WRONGTYPE Operation against a key holding the wrong kind of value. script: e471b73f1ef44774987ab00bdf51f21fd9f7974a, on @user_script:1.
+
+127.0.0.1:6379> info Errorstats
+# Errorstats
+errorstat_WRONGTYPE:count=1
+
+127.0.0.1:6379> info commandstats
+# Commandstats
+cmdstat_eval:calls=1,usec=341,usec_per_call=341.00,rejected_calls=0,failed_calls=1
+cmdstat_info:calls=1,usec=35,usec_per_call=35.00,rejected_calls=0,failed_calls=0
+cmdstat_lpush:calls=1,usec=14,usec_per_call=14.00,rejected_calls=0,failed_calls=0
+cmdstat_get:calls=1,usec=10,usec_per_call=10.00,rejected_calls=0,failed_calls=1
+```
+
+## error message
+We can now construct the error message (sent as a reply to the user) from the error table,
+so this solves issues where the error message was malformed and the error code appeared
+in the middle of the error message:
+
+```diff
+127.0.0.1:6379> eval "return redis.call('set','x','y')" 0
+-(error) ERR Error running script (call to 71e6319f97b0fe8bdfa1c5df3ce4489946dda479): @user_script:1: OOM command not allowed when used memory > 'maxmemory'.
++(error) OOM command not allowed when used memory > 'maxmemory' @user_script:1. Error running script (call to 71e6319f97b0fe8bdfa1c5df3ce4489946dda479)
+```
+
+```diff
+127.0.0.1:6379> eval "redis.call('get', 'l')" 0
+-(error) ERR Error running script (call to f_8a705cfb9fb09515bfe57ca2bd84a5caee2cbbd1): @user_script:1: WRONGTYPE Operation against a key holding the wrong kind of value
++(error) WRONGTYPE Operation against a key holding the wrong kind of value script: 8a705cfb9fb09515bfe57ca2bd84a5caee2cbbd1, on @user_script:1.
+```
+
+Notica that `redis.pcall` was not change:
+```
+127.0.0.1:6379> eval "return redis.pcall('get', 'l')" 0
+(error) WRONGTYPE Operation against a key holding the wrong kind of value
+```
+
+
+## other notes
+Notice that Some commands (like GEOADD) changes the cmd variable on the client stats so we
+can not count on it to update the command stats. In order to be able to update those stats correctly
+we needed to promote `realcmd` variable to be located on the client struct.
+
+Tests was added and modified to verify the changes.
+
+Related PR's: #10279, #10218, #10278, #10309
+
+Co-authored-by: Oran Agra <oran@redislabs.com>
+---
+ src/eval.c                     |  31 ++--
+ src/function_lua.c             |  26 ++--
+ src/module.c                   |   2 +-
+ src/multi.c                    |   4 +-
+ src/networking.c               |  95 +++++++++----
+ src/script.c                   |  22 +--
+ src/script_lua.c               | 251 +++++++++++++++++++++++++--------
+ src/script_lua.h               |  14 +-
+ src/server.c                   |  46 ++++--
+ src/server.h                   |  17 +++
+ tests/unit/introspection-2.tcl |   9 ++
+ tests/unit/scripting.tcl       | 105 ++++++++++++--
+ 12 files changed, 472 insertions(+), 150 deletions(-)
+
+diff --git a/src/eval.c b/src/eval.c
+index c51fd2214..1a9437a09 100644
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -241,11 +241,14 @@ void scriptingInit(int setup) {
+                                 "  if i and i.what == 'C' then\n"
+                                 "    i = dbg.getinfo(3,'nSl')\n"
+                                 "  end\n"
++                                "  if type(err) ~= 'table' then\n"
++                                "    err = {err='ERR' .. tostring(err)}"
++                                "  end"
+                                 "  if i then\n"
+-                                "    return i.source .. ':' .. i.currentline .. ': ' .. err\n"
+-                                "  else\n"
+-                                "    return err\n"
+-                                "  end\n"
++                                "    err['source'] = i.source\n"
++                                "    err['line'] = i.currentline\n"
++                                "  end"
++                                "  return err\n"
+                                 "end\n";
+         luaL_loadbuffer(lua,errh_func,strlen(errh_func),"@err_handler_def");
+         lua_pcall(lua,0,0,0);
+@@ -387,7 +390,7 @@ sds luaCreateFunction(client *c, robj *body) {
+     if (luaL_loadbuffer(lctx.lua,funcdef,sdslen(funcdef),"@user_script")) {
+         if (c != NULL) {
+             addReplyErrorFormat(c,
+-                "Error compiling script (new function): %s\n",
++                "Error compiling script (new function): %s",
+                 lua_tostring(lctx.lua,-1));
+         }
+         lua_pop(lctx.lua,1);
+@@ -398,7 +401,7 @@ sds luaCreateFunction(client *c, robj *body) {
+ 
+     if (lua_pcall(lctx.lua,0,0,0)) {
+         if (c != NULL) {
+-            addReplyErrorFormat(c,"Error running script (new function): %s\n",
++            addReplyErrorFormat(c,"Error running script (new function): %s",
+                 lua_tostring(lctx.lua,-1));
+         }
+         lua_pop(lctx.lua,1);
+@@ -1474,8 +1477,8 @@ int ldbRepl(lua_State *lua) {
+         while((argv = ldbReplParseCommand(&argc, &err)) == NULL) {
+             char buf[1024];
+             if (err) {
+-                lua_pushstring(lua, err);
+-                lua_error(lua);
++                luaPushError(lua, err);
++                luaError(lua);
+             }
+             int nread = connRead(ldb.conn,buf,sizeof(buf));
+             if (nread <= 0) {
+@@ -1492,8 +1495,8 @@ int ldbRepl(lua_State *lua) {
+             if (sdslen(ldb.cbuf) > 1<<20) {
+                 sdsfree(ldb.cbuf);
+                 ldb.cbuf = sdsempty();
+-                lua_pushstring(lua, "max client buffer reached");
+-                lua_error(lua);
++                luaPushError(lua, "max client buffer reached");
++                luaError(lua);
+             }
+         }
+ 
+@@ -1553,8 +1556,8 @@ ldbLog(sdsnew("                     next line of code."));
+             ldbEval(lua,argv,argc);
+             ldbSendLogs();
+         } else if (!strcasecmp(argv[0],"a") || !strcasecmp(argv[0],"abort")) {
+-            lua_pushstring(lua, "script aborted for user request");
+-            lua_error(lua);
++            luaPushError(lua, "script aborted for user request");
++            luaError(lua);
+         } else if (argc > 1 &&
+                    (!strcasecmp(argv[0],"r") || !strcasecmp(argv[0],"redis"))) {
+             ldbRedis(lua,argv,argc);
+@@ -1635,8 +1638,8 @@ void luaLdbLineHook(lua_State *lua, lua_Debug *ar) {
+             /* If the client closed the connection and we have a timeout
+              * connection, let's kill the script otherwise the process
+              * will remain blocked indefinitely. */
+-            lua_pushstring(lua, "timeout during Lua debugging with client closing connection");
+-            lua_error(lua);
++            luaPushError(lua, "timeout during Lua debugging with client closing connection");
++            luaError(lua);
+         }
+         rctx->start_time = getMonotonicUs();
+         rctx->snapshot_time = mstime();
+diff --git a/src/function_lua.c b/src/function_lua.c
+index 3dbc8419e..8f21a1721 100644
+--- a/src/function_lua.c
++++ b/src/function_lua.c
+@@ -86,8 +86,8 @@ static void luaEngineLoadHook(lua_State *lua, lua_Debug *ar) {
+     if (duration > LOAD_TIMEOUT_MS) {
+         lua_sethook(lua, luaEngineLoadHook, LUA_MASKLINE, 0);
+ 
+-        lua_pushstring(lua,"FUNCTION LOAD timeout");
+-        lua_error(lua);
++        luaPushError(lua,"FUNCTION LOAD timeout");
++        luaError(lua);
+     }
+ }
+ 
+@@ -151,10 +151,13 @@ static int luaEngineCreate(void *engine_ctx, functionLibInfo *li, sds blob, sds
+     lua_sethook(lua,luaEngineLoadHook,LUA_MASKCOUNT,100000);
+     /* Run the compiled code to allow it to register functions */
+     if (lua_pcall(lua,0,0,0)) {
+-        *err = sdscatprintf(sdsempty(), "Error registering functions: %s", lua_tostring(lua, -1));
++        errorInfo err_info = {0};
++        luaExtractErrorInformation(lua, &err_info);
++        *err = sdscatprintf(sdsempty(), "Error registering functions: %s", err_info.msg);
+         lua_pop(lua, 2); /* pops the error and globals table */
+         lua_sethook(lua,NULL,0,0); /* Disable hook */
+         luaSaveOnRegistry(lua, REGISTRY_LOAD_CTX_NAME, NULL);
++        luaErrorInformationDiscard(&err_info);
+         return C_ERR;
+     }
+     lua_sethook(lua,NULL,0,0); /* Disable hook */
+@@ -429,11 +432,11 @@ static int luaRegisterFunction(lua_State *lua) {
+     loadCtx *load_ctx = luaGetFromRegistry(lua, REGISTRY_LOAD_CTX_NAME);
+     if (!load_ctx) {
+         luaPushError(lua, "redis.register_function can only be called on FUNCTION LOAD command");
+-        return luaRaiseError(lua);
++        return luaError(lua);
+     }
+ 
+     if (luaRegisterFunctionReadArgs(lua, &register_f_args) != C_OK) {
+-        return luaRaiseError(lua);
++        return luaError(lua);
+     }
+ 
+     sds err = NULL;
+@@ -441,7 +444,7 @@ static int luaRegisterFunction(lua_State *lua) {
+         luaRegisterFunctionArgsDispose(lua, &register_f_args);
+         luaPushError(lua, err);
+         sdsfree(err);
+-        return luaRaiseError(lua);
++        return luaError(lua);
+     }
+ 
+     return 0;
+@@ -475,11 +478,14 @@ int luaEngineInitEngine() {
+                             "  if i and i.what == 'C' then\n"
+                             "    i = dbg.getinfo(3,'nSl')\n"
+                             "  end\n"
++                            "  if type(err) ~= 'table' then\n"
++                            "    err = {err='ERR' .. tostring(err)}"
++                            "  end"
+                             "  if i then\n"
+-                            "    return i.source .. ':' .. i.currentline .. ': ' .. err\n"
+-                            "  else\n"
+-                            "    return err\n"
+-                            "  end\n"
++                            "    err['source'] = i.source\n"
++                            "    err['line'] = i.currentline\n"
++                            "  end"
++                            "  return err\n"
+                             "end\n"
+                             "return error_handler";
+     luaL_loadbuffer(lua_engine_ctx->lua, errh_func, strlen(errh_func), "@err_handler_def");
+diff --git a/src/module.c b/src/module.c
+index 6e549ac7c..7130139a6 100644
+--- a/src/module.c
++++ b/src/module.c
+@@ -5658,7 +5658,7 @@ RedisModuleCallReply *RM_Call(RedisModuleCtx *ctx, const char *cmdname, const ch
+         errno = ENOENT;
+         goto cleanup;
+     }
+-    c->cmd = c->lastcmd = cmd;
++    c->cmd = c->lastcmd = c->realcmd = cmd;
+ 
+     /* Basic arity checks. */
+     if ((cmd->arity > 0 && cmd->arity != argc) || (argc < -cmd->arity)) {
+diff --git a/src/multi.c b/src/multi.c
+index 42426a2d6..11f33f48f 100644
+--- a/src/multi.c
++++ b/src/multi.c
+@@ -189,7 +189,7 @@ void execCommand(client *c) {
+         c->argc = c->mstate.commands[j].argc;
+         c->argv = c->mstate.commands[j].argv;
+         c->argv_len = c->mstate.commands[j].argv_len;
+-        c->cmd = c->mstate.commands[j].cmd;
++        c->cmd = c->realcmd = c->mstate.commands[j].cmd;
+ 
+         /* ACL permissions are also checked at the time of execution in case
+          * they were changed after the commands were queued. */
+@@ -240,7 +240,7 @@ void execCommand(client *c) {
+     c->argv = orig_argv;
+     c->argv_len = orig_argv_len;
+     c->argc = orig_argc;
+-    c->cmd = orig_cmd;
++    c->cmd = c->realcmd = orig_cmd;
+     discardTransaction(c);
+ 
+     server.in_exec = 0;
+diff --git a/src/networking.c b/src/networking.c
+index 60d50497d..b05d02b1b 100644
+--- a/src/networking.c
++++ b/src/networking.c
+@@ -156,7 +156,7 @@ client *createClient(connection *conn) {
+     c->argv_len_sum = 0;
+     c->original_argc = 0;
+     c->original_argv = NULL;
+-    c->cmd = c->lastcmd = NULL;
++    c->cmd = c->lastcmd = c->realcmd = NULL;
+     c->multibulklen = 0;
+     c->bulklen = -1;
+     c->sentlen = 0;
+@@ -443,8 +443,10 @@ void addReplyErrorLength(client *c, const char *s, size_t len) {
+     addReplyProto(c,"\r\n",2);
+ }
+ 
+-/* Do some actions after an error reply was sent (Log if needed, updates stats, etc.) */
+-void afterErrorReply(client *c, const char *s, size_t len) {
++/* Do some actions after an error reply was sent (Log if needed, updates stats, etc.)
++ * Possible flags:
++ * * ERR_REPLY_FLAG_NO_STATS_UPDATE - indicate not to update any error stats. */
++void afterErrorReply(client *c, const char *s, size_t len, int flags) {
+     /* Module clients fall into two categories:
+      * Calls to RM_Call, in which case the error isn't being returned to a client, so should not be counted.
+      * Module thread safe context calls to RM_ReplyWithError, which will be added to a real client by the main thread later. */
+@@ -457,22 +459,30 @@ void afterErrorReply(client *c, const char *s, size_t len) {
+         return;
+     }
+ 
+-    /* Increment the global error counter */
+-    server.stat_total_error_replies++;
+-    /* Increment the error stats
+-     * If the string already starts with "-..." then the error prefix
+-     * is provided by the caller ( we limit the search to 32 chars). Otherwise we use "-ERR". */
+-    if (s[0] != '-') {
+-        incrementErrorCount("ERR", 3);
+-    } else {
+-        char *spaceloc = memchr(s, ' ', len < 32 ? len : 32);
+-        if (spaceloc) {
+-            const size_t errEndPos = (size_t)(spaceloc - s);
+-            incrementErrorCount(s+1, errEndPos-1);
+-        } else {
+-            /* Fallback to ERR if we can't retrieve the error prefix */
++    if (!(flags & ERR_REPLY_FLAG_NO_STATS_UPDATE)) {
++        /* Increment the global error counter */
++        server.stat_total_error_replies++;
++        /* Increment the error stats
++         * If the string already starts with "-..." then the error prefix
++         * is provided by the caller ( we limit the search to 32 chars). Otherwise we use "-ERR". */
++        if (s[0] != '-') {
+             incrementErrorCount("ERR", 3);
++        } else {
++            char *spaceloc = memchr(s, ' ', len < 32 ? len : 32);
++            if (spaceloc) {
++                const size_t errEndPos = (size_t)(spaceloc - s);
++                incrementErrorCount(s+1, errEndPos-1);
++            } else {
++                /* Fallback to ERR if we can't retrieve the error prefix */
++                incrementErrorCount("ERR", 3);
++            }
+         }
++    } else {
++        /* stat_total_error_replies will not be updated, which means that
++         * the cmd stats will not be updated as well, we still want this command
++         * to be counted as failed so we update it here. We update c->realcmd in
++         * case c->cmd was changed (like in GEOADD). */
++        c->realcmd->failed_calls++;
+     }
+ 
+     /* Sometimes it could be normal that a slave replies to a master with
+@@ -518,7 +528,7 @@ void afterErrorReply(client *c, const char *s, size_t len) {
+  * Unlike addReplyErrorSds and others alike which rely on addReplyErrorLength. */
+ void addReplyErrorObject(client *c, robj *err) {
+     addReply(c, err);
+-    afterErrorReply(c, err->ptr, sdslen(err->ptr)-2); /* Ignore trailing \r\n */
++    afterErrorReply(c, err->ptr, sdslen(err->ptr)-2, 0); /* Ignore trailing \r\n */
+ }
+ 
+ /* Sends either a reply or an error reply by checking the first char.
+@@ -539,34 +549,57 @@ void addReplyOrErrorObject(client *c, robj *reply) {
+ /* See addReplyErrorLength for expectations from the input string. */
+ void addReplyError(client *c, const char *err) {
+     addReplyErrorLength(c,err,strlen(err));
+-    afterErrorReply(c,err,strlen(err));
++    afterErrorReply(c,err,strlen(err),0);
++}
++
++/* Add error reply to the given client.
++ * Supported flags:
++ * * ERR_REPLY_FLAG_NO_STATS_UPDATE - indicate not to perform any error stats updates */
++void addReplyErrorSdsEx(client *c, sds err, int flags) {
++    addReplyErrorLength(c,err,sdslen(err));
++    afterErrorReply(c,err,sdslen(err),flags);
++    sdsfree(err);
+ }
+ 
+ /* See addReplyErrorLength for expectations from the input string. */
+ /* As a side effect the SDS string is freed. */
+ void addReplyErrorSds(client *c, sds err) {
+-    addReplyErrorLength(c,err,sdslen(err));
+-    afterErrorReply(c,err,sdslen(err));
+-    sdsfree(err);
++    addReplyErrorSdsEx(c, err, 0);
+ }
+ 
+-/* See addReplyErrorLength for expectations from the formatted string.
+- * The formatted string is safe to contain \r and \n anywhere. */
+-void addReplyErrorFormat(client *c, const char *fmt, ...) {
+-    va_list ap;
+-    va_start(ap,fmt);
+-    sds s = sdscatvprintf(sdsempty(),fmt,ap);
+-    va_end(ap);
++/* Internal function used by addReplyErrorFormat and addReplyErrorFormatEx.
++ * Refer to afterErrorReply for more information about the flags. */
++static void addReplyErrorFormatInternal(client *c, int flags, const char *fmt, va_list ap) {
++    va_list cpy;
++    va_copy(cpy,ap);
++    sds s = sdscatvprintf(sdsempty(),fmt,cpy);
++    va_end(cpy);
+     /* Trim any newlines at the end (ones will be added by addReplyErrorLength) */
+     s = sdstrim(s, "\r\n");
+     /* Make sure there are no newlines in the middle of the string, otherwise
+      * invalid protocol is emitted. */
+     s = sdsmapchars(s, "\r\n", "  ",  2);
+     addReplyErrorLength(c,s,sdslen(s));
+-    afterErrorReply(c,s,sdslen(s));
++    afterErrorReply(c,s,sdslen(s),flags);
+     sdsfree(s);
+ }
+ 
++void addReplyErrorFormatEx(client *c, int flags, const char *fmt, ...) {
++    va_list ap;
++    va_start(ap,fmt);
++    addReplyErrorFormatInternal(c, flags, fmt, ap);
++    va_end(ap);
++}
++
++/* See addReplyErrorLength for expectations from the formatted string.
++ * The formatted string is safe to contain \r and \n anywhere. */
++void addReplyErrorFormat(client *c, const char *fmt, ...) {
++    va_list ap;
++    va_start(ap,fmt);
++    addReplyErrorFormatInternal(c, 0, fmt, ap);
++    va_end(ap);
++}
++
+ void addReplyErrorArity(client *c) {
+     addReplyErrorFormat(c, "wrong number of arguments for '%s' command",
+                         c->cmd->fullname);
+@@ -1086,7 +1119,7 @@ void deferredAfterErrorReply(client *c, list *errors) {
+     listRewind(errors,&li);
+     while((ln = listNext(&li))) {
+         sds err = ln->value;
+-        afterErrorReply(c, err, sdslen(err));
++        afterErrorReply(c, err, sdslen(err), 0);
+     }
+ }
+ 
+diff --git a/src/script.c b/src/script.c
+index de2b6c027..d78d9fd6b 100644
+--- a/src/script.c
++++ b/src/script.c
+@@ -505,32 +505,31 @@ void scriptCall(scriptRunCtx *run_ctx, robj* *argv, int argc, sds *err) {
+     argc = c->argc;
+ 
+     struct redisCommand *cmd = lookupCommand(argv, argc);
++    c->cmd = c->lastcmd = c->realcmd = cmd;
+     if (scriptVerifyCommandArity(cmd, argc, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+-    c->cmd = c->lastcmd = cmd;
+-
+     /* There are commands that are not allowed inside scripts. */
+     if (!server.script_disable_deny_script && (cmd->flags & CMD_NOSCRIPT)) {
+         *err = sdsnew("This Redis command is not allowed from script");
+-        return;
++        goto error;
+     }
+ 
+     if (scriptVerifyAllowStale(c, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+     if (scriptVerifyACL(c, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+     if (scriptVerifyWriteCommandAllow(run_ctx, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+     if (scriptVerifyOOM(run_ctx, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+     if (cmd->flags & CMD_WRITE) {
+@@ -539,7 +538,7 @@ void scriptCall(scriptRunCtx *run_ctx, robj* *argv, int argc, sds *err) {
+     }
+ 
+     if (scriptVerifyClusterState(c, run_ctx->original_client, err) != C_OK) {
+-        return;
++        goto error;
+     }
+ 
+     int call_flags = CMD_CALL_SLOWLOG | CMD_CALL_STATS;
+@@ -551,6 +550,11 @@ void scriptCall(scriptRunCtx *run_ctx, robj* *argv, int argc, sds *err) {
+     }
+     call(c, call_flags);
+     serverAssert((c->flags & CLIENT_BLOCKED) == 0);
++    return;
++
++error:
++    afterErrorReply(c, *err, sdslen(*err), 0);
++    incrCommandStatsOnError(cmd, ERROR_COMMAND_REJECTED);
+ }
+ 
+ /* Returns the time when the script invocation started */
+diff --git a/src/script_lua.c b/src/script_lua.c
+index 82591d3fc..9a08a7e47 100644
+--- a/src/script_lua.c
++++ b/src/script_lua.c
+@@ -238,9 +238,12 @@ static void redisProtocolToLuaType_Error(void *ctx, const char *str, size_t len,
+          * to push elements to the stack. On failure, exit with panic. */
+         serverPanic("lua stack limit reach when parsing redis.call reply");
+     }
+-    lua_newtable(lua);
+-    lua_pushstring(lua,"err");
+-    lua_pushlstring(lua,str,len);
++    sds err_msg = sdscatlen(sdsnew("-"), str, len);
++    luaPushErrorBuff(lua,err_msg);
++    /* push a field indicate to ignore updating the stats on this error
++     * because it was already updated when executing the command. */
++    lua_pushstring(lua,"ignore_error_stats_update");
++    lua_pushboolean(lua, true);
+     lua_settable(lua,-3);
+ }
+ 
+@@ -428,46 +431,66 @@ static void redisProtocolToLuaType_Double(void *ctx, double d, const char *proto
+ 
+ /* This function is used in order to push an error on the Lua stack in the
+  * format used by redis.pcall to return errors, which is a lua table
+- * with a single "err" field set to the error string. Note that this
+- * table is never a valid reply by proper commands, since the returned
+- * tables are otherwise always indexed by integers, never by strings. */
+-void luaPushError(lua_State *lua, char *error) {
++ * with an "err" field set to the error string including the error code.
++ * Note that this table is never a valid reply by proper commands,
++ * since the returned tables are otherwise always indexed by integers, never by strings.
++ *
++ * The function takes ownership on the given err_buffer. */
++void luaPushErrorBuff(lua_State *lua, sds err_buffer) {
+     sds msg;
++    sds error_code;
+ 
+     /* If debugging is active and in step mode, log errors resulting from
+      * Redis commands. */
+     if (ldbIsEnabled()) {
+-        ldbLog(sdscatprintf(sdsempty(),"<error> %s",error));
++        ldbLog(sdscatprintf(sdsempty(),"<error> %s",err_buffer));
+     }
+ 
+-    lua_newtable(lua);
+-    lua_pushstring(lua,"err");
+-
+     /* There are two possible formats for the received `error` string:
+      * 1) "-CODE msg": in this case we remove the leading '-' since we don't store it as part of the lua error format.
+      * 2) "msg": in this case we prepend a generic 'ERR' code since all error statuses need some error code.
+      * We support format (1) so this function can reuse the error messages used in other places in redis.
+      * We support format (2) so it'll be easy to pass descriptive errors to this function without worrying about format.
+      */
+-    if (error[0] == '-')
+-        msg = sdsnew(error+1);
+-    else
+-        msg = sdscatprintf(sdsempty(), "ERR %s", error);
++    if (err_buffer[0] == '-') {
++        /* derive error code from the message */
++        char *err_msg = strstr(err_buffer, " ");
++        if (!err_msg) {
++            msg = sdsnew(err_buffer+1);
++            error_code = sdsnew("ERR");
++        } else {
++            *err_msg = '\0';
++            msg = sdsnew(err_msg+1);
++            error_code = sdsnew(err_buffer + 1);
++        }
++        sdsfree(err_buffer);
++    } else {
++        msg = err_buffer;
++        error_code = sdsnew("ERR");
++    }
+     /* Trim newline at end of string. If we reuse the ready-made Redis error objects (case 1 above) then we might
+      * have a newline that needs to be trimmed. In any case the lua Redis error table shouldn't end with a newline. */
+     msg = sdstrim(msg, "\r\n");
+-    lua_pushstring(lua, msg);
+-    sdsfree(msg);
++    sds final_msg = sdscatfmt(error_code, " %s", msg);
++
++    lua_newtable(lua);
++    lua_pushstring(lua,"err");
++    lua_pushstring(lua, final_msg);
+     lua_settable(lua,-3);
++
++    sdsfree(msg);
++    sdsfree(final_msg);
++}
++
++void luaPushError(lua_State *lua, const char *error) {
++    luaPushErrorBuff(lua, sdsnew(error));
+ }
+ 
+ /* In case the error set into the Lua stack by luaPushError() was generated
+  * by the non-error-trapping version of redis.pcall(), which is redis.call(),
+  * this function will raise the Lua error so that the execution of the
+  * script will be halted. */
+-int luaRaiseError(lua_State *lua) {
+-    lua_pushstring(lua,"err");
+-    lua_gettable(lua,-2);
++int luaError(lua_State *lua) {
+     return lua_error(lua);
+ }
+ 
+@@ -517,8 +540,15 @@ static void luaReplyToRedisReply(client *c, client* script_client, lua_State *lu
+         lua_gettable(lua,-2);
+         t = lua_type(lua,-1);
+         if (t == LUA_TSTRING) {
+-            addReplyErrorFormat(c,"-%s",lua_tostring(lua,-1));
+-            lua_pop(lua,2);
++            lua_pop(lua, 1); /* pop the error message, we will use luaExtractErrorInformation to get error information */
++            errorInfo err_info = {0};
++            luaExtractErrorInformation(lua, &err_info);
++            addReplyErrorFormatEx(c,
++                                  err_info.ignore_err_stats_update? ERR_REPLY_FLAG_NO_STATS_UPDATE: 0,
++                                  "-%s",
++                                  err_info.msg);
++            luaErrorInformationDiscard(&err_info);
++            lua_pop(lua,1); /* pop the result table */
+             return;
+         }
+         lua_pop(lua,1); /* Discard field name pushed before. */
+@@ -719,7 +749,7 @@ static int luaRedisGenericCommand(lua_State *lua, int raise_error) {
+     scriptRunCtx* rctx = luaGetFromRegistry(lua, REGISTRY_RUN_CTX_NAME);
+     if (!rctx) {
+         luaPushError(lua, "redis.call/pcall can only be called inside a script invocation");
+-        return luaRaiseError(lua);
++        return luaError(lua);
+     }
+     sds err = NULL;
+     client* c = rctx->c;
+@@ -728,7 +758,7 @@ static int luaRedisGenericCommand(lua_State *lua, int raise_error) {
+     int argc;
+     robj **argv = luaArgsToRedisArgv(lua, &argc);
+     if (argv == NULL) {
+-        return raise_error ? luaRaiseError(lua) : 1;
++        return raise_error ? luaError(lua) : 1;
+     }
+ 
+     static int inuse = 0;   /* Recursive calls detection. */
+@@ -767,6 +797,11 @@ static int luaRedisGenericCommand(lua_State *lua, int raise_error) {
+     if (err) {
+         luaPushError(lua, err);
+         sdsfree(err);
++        /* push a field indicate to ignore updating the stats on this error
++         * because it was already updated when executing the command. */
++        lua_pushstring(lua,"ignore_error_stats_update");
++        lua_pushboolean(lua, true);
++        lua_settable(lua,-3);
+         goto cleanup;
+     }
+ 
+@@ -811,11 +846,40 @@ cleanup:
+         /* If we are here we should have an error in the stack, in the
+          * form of a table with an "err" field. Extract the string to
+          * return the plain error. */
+-        return luaRaiseError(lua);
++        return luaError(lua);
+     }
+     return 1;
+ }
+ 
++/* Our implementation to lua pcall.
++ * We need this implementation for backward
++ * comparability with older Redis versions.
++ *
++ * On Redis 7, the error object is a table,
++ * compare to older version where the error
++ * object is a string. To keep backward
++ * comparability we catch the table object
++ * and just return the error message. */
++static int luaRedisPcall(lua_State *lua) {
++    int argc = lua_gettop(lua);
++    lua_pushboolean(lua, 1); /* result place holder */
++    lua_insert(lua, 1);
++    if (lua_pcall(lua, argc - 1, LUA_MULTRET, 0)) {
++        /* Error */
++        lua_remove(lua, 1); /* remove the result place holder, now we have room for at least one element */
++        if (lua_istable(lua, -1)) {
++            lua_getfield(lua, -1, "err");
++            if (lua_isstring(lua, -1)) {
++                lua_replace(lua, -2); /* replace the error message with the table */
++            }
++        }
++        lua_pushboolean(lua, 0); /* push result */
++        lua_insert(lua, 1);
++    }
++    return lua_gettop(lua);
++
++}
++
+ /* redis.call() */
+ static int luaRedisCallCommand(lua_State *lua) {
+     return luaRedisGenericCommand(lua,1);
+@@ -835,8 +899,8 @@ static int luaRedisSha1hexCommand(lua_State *lua) {
+     char *s;
+ 
+     if (argc != 1) {
+-        lua_pushstring(lua, "wrong number of arguments");
+-        return lua_error(lua);
++        luaPushError(lua, "wrong number of arguments");
++        return luaError(lua);
+     }
+ 
+     s = (char*)lua_tolstring(lua,1,&len);
+@@ -867,7 +931,21 @@ static int luaRedisReturnSingleFieldTable(lua_State *lua, char *field) {
+ 
+ /* redis.error_reply() */
+ static int luaRedisErrorReplyCommand(lua_State *lua) {
+-    return luaRedisReturnSingleFieldTable(lua,"err");
++    if (lua_gettop(lua) != 1 || lua_type(lua,-1) != LUA_TSTRING) {
++        luaPushError(lua, "wrong number or type of arguments");
++        return 1;
++    }
++
++    /* add '-' if not exists */
++    const char *err = lua_tostring(lua, -1);
++    sds err_buff = NULL;
++    if (err[0] != '-') {
++        err_buff = sdscatfmt(sdsempty(), "-%s", err);
++    } else {
++        err_buff = sdsnew(err);
++    }
++    luaPushErrorBuff(lua, err_buff);
++    return 1;
+ }
+ 
+ /* redis.status_reply() */
+@@ -884,19 +962,19 @@ static int luaRedisSetReplCommand(lua_State *lua) {
+ 
+     scriptRunCtx* rctx = luaGetFromRegistry(lua, REGISTRY_RUN_CTX_NAME);
+     if (!rctx) {
+-        lua_pushstring(lua, "redis.set_repl can only be called inside a script invocation");
+-        return lua_error(lua);
++        luaPushError(lua, "redis.set_repl can only be called inside a script invocation");
++        return luaError(lua);
+     }
+ 
+     if (argc != 1) {
+-         lua_pushstring(lua, "redis.set_repl() requires two arguments.");
+-         return lua_error(lua);
++        luaPushError(lua, "redis.set_repl() requires two arguments.");
++         return luaError(lua);
+     }
+ 
+     flags = lua_tonumber(lua,-1);
+     if ((flags & ~(PROPAGATE_AOF|PROPAGATE_REPL)) != 0) {
+-        lua_pushstring(lua, "Invalid replication flags. Use REPL_AOF, REPL_REPLICA, REPL_ALL or REPL_NONE.");
+-        return lua_error(lua);
++        luaPushError(lua, "Invalid replication flags. Use REPL_AOF, REPL_REPLICA, REPL_ALL or REPL_NONE.");
++        return luaError(lua);
+     }
+ 
+     scriptSetRepl(rctx, flags);
+@@ -909,8 +987,8 @@ static int luaRedisSetReplCommand(lua_State *lua) {
+ static int luaRedisAclCheckCmdPermissionsCommand(lua_State *lua) {
+     scriptRunCtx* rctx = luaGetFromRegistry(lua, REGISTRY_RUN_CTX_NAME);
+     if (!rctx) {
+-        lua_pushstring(lua, "redis.acl_check_cmd can only be called inside a script invocation");
+-        return lua_error(lua);
++        luaPushError(lua, "redis.acl_check_cmd can only be called inside a script invocation");
++        return luaError(lua);
+     }
+     int raise_error = 0;
+ 
+@@ -918,12 +996,12 @@ static int luaRedisAclCheckCmdPermissionsCommand(lua_State *lua) {
+     robj **argv = luaArgsToRedisArgv(lua, &argc);
+ 
+     /* Require at least one argument */
+-    if (argv == NULL) return lua_error(lua);
++    if (argv == NULL) return luaError(lua);
+ 
+     /* Find command */
+     struct redisCommand *cmd;
+     if ((cmd = lookupCommand(argv, argc)) == NULL) {
+-        lua_pushstring(lua, "Invalid command passed to redis.acl_check_cmd()");
++        luaPushError(lua, "Invalid command passed to redis.acl_check_cmd()");
+         raise_error = 1;
+     } else {
+         int keyidxptr;
+@@ -937,7 +1015,7 @@ static int luaRedisAclCheckCmdPermissionsCommand(lua_State *lua) {
+     while (argc--) decrRefCount(argv[argc]);
+     zfree(argv);
+     if (raise_error)
+-        return lua_error(lua);
++        return luaError(lua);
+     else
+         return 1;
+ }
+@@ -950,16 +1028,16 @@ static int luaLogCommand(lua_State *lua) {
+     sds log;
+ 
+     if (argc < 2) {
+-        lua_pushstring(lua, "redis.log() requires two arguments or more.");
+-        return lua_error(lua);
++        luaPushError(lua, "redis.log() requires two arguments or more.");
++        return luaError(lua);
+     } else if (!lua_isnumber(lua,-argc)) {
+-        lua_pushstring(lua, "First argument must be a number (log level).");
+-        return lua_error(lua);
++        luaPushError(lua, "First argument must be a number (log level).");
++        return luaError(lua);
+     }
+     level = lua_tonumber(lua,-argc);
+     if (level < LL_DEBUG || level > LL_WARNING) {
+-        lua_pushstring(lua, "Invalid debug level.");
+-        return lua_error(lua);
++        luaPushError(lua, "Invalid debug level.");
++        return luaError(lua);
+     }
+     if (level < server.verbosity) return 0;
+ 
+@@ -984,20 +1062,20 @@ static int luaLogCommand(lua_State *lua) {
+ static int luaSetResp(lua_State *lua) {
+     scriptRunCtx* rctx = luaGetFromRegistry(lua, REGISTRY_RUN_CTX_NAME);
+     if (!rctx) {
+-        lua_pushstring(lua, "redis.setresp can only be called inside a script invocation");
+-        return lua_error(lua);
++        luaPushError(lua, "redis.setresp can only be called inside a script invocation");
++        return luaError(lua);
+     }
+     int argc = lua_gettop(lua);
+ 
+     if (argc != 1) {
+-        lua_pushstring(lua, "redis.setresp() requires one argument.");
+-        return lua_error(lua);
++        luaPushError(lua, "redis.setresp() requires one argument.");
++        return luaError(lua);
+     }
+ 
+     int resp = lua_tonumber(lua,-argc);
+     if (resp != 2 && resp != 3) {
+-        lua_pushstring(lua, "RESP version must be 2 or 3.");
+-        return lua_error(lua);
++        luaPushError(lua, "RESP version must be 2 or 3.");
++        return luaError(lua);
+     }
+     scriptSetResp(rctx, resp);
+     return 0;
+@@ -1197,6 +1275,9 @@ void luaRegisterRedisAPI(lua_State* lua) {
+     luaLoadLibraries(lua);
+     luaRemoveUnsupportedFunctions(lua);
+ 
++    lua_pushcfunction(lua,luaRedisPcall);
++    lua_setglobal(lua, "pcall");
++
+     /* Register the redis commands table and fields */
+     lua_newtable(lua);
+ 
+@@ -1357,11 +1438,50 @@ static void luaMaskCountHook(lua_State *lua, lua_Debug *ar) {
+          */
+         lua_sethook(lua, luaMaskCountHook, LUA_MASKLINE, 0);
+ 
+-        lua_pushstring(lua,"Script killed by user with SCRIPT KILL...");
+-        lua_error(lua);
++        luaPushError(lua,"Script killed by user with SCRIPT KILL...");
++        luaError(lua);
+     }
+ }
+ 
++void luaErrorInformationDiscard(errorInfo *err_info) {
++    if (err_info->msg) sdsfree(err_info->msg);
++    if (err_info->source) sdsfree(err_info->source);
++    if (err_info->line) sdsfree(err_info->line);
++}
++
++void luaExtractErrorInformation(lua_State *lua, errorInfo *err_info) {
++    if (lua_isstring(lua, -1)) {
++        err_info->msg = sdscatfmt(sdsempty(), "ERR %s", lua_tostring(lua, -1));
++        err_info->line = NULL;
++        err_info->source = NULL;
++        err_info->ignore_err_stats_update = 0;
++    }
++
++    lua_getfield(lua, -1, "err");
++    if (lua_isstring(lua, -1)) {
++        err_info->msg = sdsnew(lua_tostring(lua, -1));
++    }
++    lua_pop(lua, 1);
++
++    lua_getfield(lua, -1, "source");
++    if (lua_isstring(lua, -1)) {
++        err_info->source = sdsnew(lua_tostring(lua, -1));
++    }
++    lua_pop(lua, 1);
++
++    lua_getfield(lua, -1, "line");
++    if (lua_isstring(lua, -1)) {
++        err_info->line = sdsnew(lua_tostring(lua, -1));
++    }
++    lua_pop(lua, 1);
++
++    lua_getfield(lua, -1, "ignore_error_stats_update");
++    if (lua_isboolean(lua, -1)) {
++        err_info->ignore_err_stats_update = lua_toboolean(lua, -1);
++    }
++    lua_pop(lua, 1);
++}
++
+ void luaCallFunction(scriptRunCtx* run_ctx, lua_State *lua, robj** keys, size_t nkeys, robj** args, size_t nargs, int debug_enabled) {
+     client* c = run_ctx->original_client;
+     int delhook = 0;
+@@ -1419,9 +1539,28 @@ void luaCallFunction(scriptRunCtx* run_ctx, lua_State *lua, robj** keys, size_t
+     }
+ 
+     if (err) {
+-        addReplyErrorFormat(c,"Error running script (call to %s): %s\n",
+-                run_ctx->funcname, lua_tostring(lua,-1));
+-        lua_pop(lua,1); /* Consume the Lua reply and remove error handler. */
++        /* Error object is a table of the following format:
++         * {err='<error msg>', source='<source file>', line=<line>}
++         * We can construct the error message from this information */
++        if (!lua_istable(lua, -1)) {
++            /* Should not happened, and we should considered assert it */
++            addReplyErrorFormat(c,"Error running script (call to %s)\n", run_ctx->funcname);
++        } else {
++            errorInfo err_info = {0};
++            sds final_msg = sdsempty();
++            luaExtractErrorInformation(lua, &err_info);
++            final_msg = sdscatfmt(final_msg, "-%s",
++                                  err_info.msg);
++            if (err_info.line && err_info.source) {
++                final_msg = sdscatfmt(final_msg, " script: %s, on %s:%s.",
++                                      run_ctx->funcname,
++                                      err_info.source,
++                                      err_info.line);
++            }
++            addReplyErrorSdsEx(c, final_msg, err_info.ignore_err_stats_update? ERR_REPLY_FLAG_NO_STATS_UPDATE : 0);
++            luaErrorInformationDiscard(&err_info);
++        }
++        lua_pop(lua,1); /* Consume the Lua error */
+     } else {
+         /* On success convert the Lua return value into Redis protocol, and
+          * send it to * the client. */
+diff --git a/src/script_lua.h b/src/script_lua.h
+index ac13178ca..5a4533784 100644
+--- a/src/script_lua.h
++++ b/src/script_lua.h
+@@ -58,6 +58,13 @@
+ #define REGISTRY_SET_GLOBALS_PROTECTION_NAME "__GLOBAL_PROTECTION__"
+ #define REDIS_API_NAME "redis"
+ 
++typedef struct errorInfo {
++    sds msg;
++    sds source;
++    sds line;
++    int ignore_err_stats_update;
++}errorInfo;
++
+ void luaRegisterRedisAPI(lua_State* lua);
+ sds luaGetStringSds(lua_State *lua, int index);
+ void luaEnableGlobalsProtection(lua_State *lua, int is_eval);
+@@ -65,11 +72,14 @@ void luaRegisterGlobalProtectionFunction(lua_State *lua);
+ void luaSetGlobalProtection(lua_State *lua);
+ void luaRegisterLogFunction(lua_State* lua);
+ void luaRegisterVersion(lua_State* lua);
+-void luaPushError(lua_State *lua, char *error);
+-int luaRaiseError(lua_State *lua);
++void luaPushErrorBuff(lua_State *lua, sds err_buff);
++void luaPushError(lua_State *lua, const char *error);
++int luaError(lua_State *lua);
+ void luaSaveOnRegistry(lua_State* lua, const char* name, void* ptr);
+ void* luaGetFromRegistry(lua_State* lua, const char* name);
+ void luaCallFunction(scriptRunCtx* r_ctx, lua_State *lua, robj** keys, size_t nkeys, robj** args, size_t nargs, int debug_enabled);
++void luaExtractErrorInformation(lua_State *lua, errorInfo *err_info);
++void luaErrorInformationDiscard(errorInfo *err_info);
+ unsigned long luaMemory(lua_State *lua);
+ 
+ 
+diff --git a/src/server.c b/src/server.c
+index 9bf2193f0..00c279837 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -3135,6 +3135,34 @@ void propagatePendingCommands() {
+     redisOpArrayFree(&server.also_propagate);
+ }
+ 
++/* Increment the command failure counters (either rejected_calls or failed_calls).
++ * The decision which counter to increment is done using the flags argument, options are:
++ * * ERROR_COMMAND_REJECTED - update rejected_calls
++ * * ERROR_COMMAND_FAILED - update failed_calls
++ *
++ * The function also reset the prev_err_count to make sure we will not count the same error
++ * twice, its possible to pass a NULL cmd value to indicate that the error was counted elsewhere.
++ *
++ * The function returns true if stats was updated and false if not. */
++int incrCommandStatsOnError(struct redisCommand *cmd, int flags) {
++    /* hold the prev error count captured on the last command execution */
++    static long long prev_err_count = 0;
++    int res = 0;
++    if (cmd) {
++        if ((server.stat_total_error_replies - prev_err_count) > 0) {
++            if (flags & ERROR_COMMAND_REJECTED) {
++                cmd->rejected_calls++;
++                res = 1;
++            } else if (flags & ERROR_COMMAND_FAILED) {
++                cmd->failed_calls++;
++                res = 1;
++            }
++        }
++    }
++    prev_err_count = server.stat_total_error_replies;
++    return res;
++}
++
+ /* Call() is the core of Redis execution of a command.
+  *
+  * The following flags can be passed:
+@@ -3176,8 +3204,7 @@ void call(client *c, int flags) {
+     long long dirty;
+     monotime call_timer;
+     uint64_t client_old_flags = c->flags;
+-    struct redisCommand *real_cmd = c->cmd;
+-    static long long prev_err_count;
++    struct redisCommand *real_cmd = c->realcmd;
+ 
+     /* Initialization: clear the flags that must be set by the command on
+      * demand, and initialize the array for additional commands propagation. */
+@@ -3198,7 +3225,7 @@ void call(client *c, int flags) {
+ 
+     /* Call the command. */
+     dirty = server.dirty;
+-    prev_err_count = server.stat_total_error_replies;
++    incrCommandStatsOnError(NULL, 0);
+ 
+     /* Update cache time, in case we have nested calls we want to
+      * update only on the first call*/
+@@ -3216,13 +3243,9 @@ void call(client *c, int flags) {
+ 
+     server.in_nested_call--;
+ 
+-    /* Update failed command calls if required.
+-     * We leverage a static variable (prev_err_count) to retain
+-     * the counter across nested function calls and avoid logging
+-     * the same error twice. */
+-    if ((server.stat_total_error_replies - prev_err_count) > 0) {
+-        real_cmd->failed_calls++;
+-    } else if (c->deferred_reply_errors) {
++    /* Update failed command calls if required. */
++
++    if (!incrCommandStatsOnError(real_cmd, ERROR_COMMAND_FAILED) && c->deferred_reply_errors) {
+         /* When call is used from a module client, error stats, and total_error_replies
+          * isn't updated since these errors, if handled by the module, are internal,
+          * and not reflected to users. however, the commandstats does show these calls
+@@ -3348,7 +3371,6 @@ void call(client *c, int flags) {
+ 
+     server.fixed_time_expire--;
+     server.stat_numcommands++;
+-    prev_err_count = server.stat_total_error_replies;
+ 
+     /* Record peak memory after each command and before the eviction that runs
+      * before the next command. */
+@@ -3484,7 +3506,7 @@ int processCommand(client *c) {
+ 
+     /* Now lookup the command and check ASAP about trivial error conditions
+      * such as wrong arity, bad command name and so forth. */
+-    c->cmd = c->lastcmd = lookupCommand(c->argv,c->argc);
++    c->cmd = c->lastcmd = c->realcmd = lookupCommand(c->argv,c->argc);
+     if (!c->cmd) {
+         if (isContainerCommandBySds(c->argv[0]->ptr)) {
+             /* If we can't find the command but argv[0] by itself is a command
+diff --git a/src/server.h b/src/server.h
+index 30c40f946..4da7a010f 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -1096,6 +1096,9 @@ typedef struct client {
+     robj **original_argv;   /* Arguments of original command if arguments were rewritten. */
+     size_t argv_len_sum;    /* Sum of lengths of objects in argv list. */
+     struct redisCommand *cmd, *lastcmd;  /* Last command executed. */
++    struct redisCommand *realcmd; /* The original command that was executed by the client,
++                                     Used to update error stats in case the c->cmd was modified
++                                     during the command invocation (like on GEOADD for example). */
+     user *user;             /* User associated with this connection. If the
+                                user is set to NULL the connection can do
+                                anything (admin). */
+@@ -2394,6 +2397,9 @@ int validateProcTitleTemplate(const char *template);
+ int redisCommunicateSystemd(const char *sd_notify_msg);
+ void redisSetCpuAffinity(const char *cpulist);
+ 
++/* afterErrorReply flags */
++#define ERR_REPLY_FLAG_NO_STATS_UPDATE (1ULL<<0) /* Indicating that we should not update
++                                                    error stats after sending error reply */
+ /* networking.c -- Networking and Client related operations */
+ client *createClient(connection *conn);
+ void freeClient(client *c);
+@@ -2433,6 +2439,8 @@ void addReplyBulkSds(client *c, sds s);
+ void setDeferredReplyBulkSds(client *c, void *node, sds s);
+ void addReplyErrorObject(client *c, robj *err);
+ void addReplyOrErrorObject(client *c, robj *reply);
++void afterErrorReply(client *c, const char *s, size_t len, int flags);
++void addReplyErrorSdsEx(client *c, sds err, int flags);
+ void addReplyErrorSds(client *c, sds err);
+ void addReplyError(client *c, const char *err);
+ void addReplyErrorArity(client *c);
+@@ -2505,11 +2513,14 @@ int authRequired(client *c);
+ void clientInstallWriteHandler(client *c);
+ 
+ #ifdef __GNUC__
++void addReplyErrorFormatEx(client *c, int flags, const char *fmt, ...)
++    __attribute__((format(printf, 3, 4)));
+ void addReplyErrorFormat(client *c, const char *fmt, ...)
+     __attribute__((format(printf, 2, 3)));
+ void addReplyStatusFormat(client *c, const char *fmt, ...)
+     __attribute__((format(printf, 2, 3)));
+ #else
++void addReplyErrorFormatEx(client *c, int flags, const char *fmt, ...);
+ void addReplyErrorFormat(client *c, const char *fmt, ...);
+ void addReplyStatusFormat(client *c, const char *fmt, ...);
+ #endif
+@@ -2788,6 +2799,10 @@ typedef struct {
+     int minex, maxex; /* are min or max exclusive? */
+ } zlexrangespec;
+ 
++/* flags for incrCommandFailedCalls */
++#define ERROR_COMMAND_REJECTED (1<<0) /* Indicate to update the command rejected stats */
++#define ERROR_COMMAND_FAILED (1<<1) /* Indicate to update the command failed stats */
++
+ zskiplist *zslCreate(void);
+ void zslFree(zskiplist *zsl);
+ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
+@@ -2842,6 +2857,8 @@ struct redisCommand *lookupCommandBySds(sds s);
+ struct redisCommand *lookupCommandByCStringLogic(dict *commands, const char *s);
+ struct redisCommand *lookupCommandByCString(const char *s);
+ struct redisCommand *lookupCommandOrOriginal(robj **argv, int argc);
++void startCommandExecution();
++int incrCommandStatsOnError(struct redisCommand *cmd, int flags);
+ void call(client *c, int flags);
+ void alsoPropagate(int dbid, robj **argv, int argc, int target);
+ void propagatePendingCommands();
+diff --git a/tests/unit/introspection-2.tcl b/tests/unit/introspection-2.tcl
+index 52ed54a29..46dac50b7 100644
+--- a/tests/unit/introspection-2.tcl
++++ b/tests/unit/introspection-2.tcl
+@@ -33,6 +33,15 @@ start_server {tags {"introspection"}} {
+         assert_match {} [cmdstat zadd]
+     } {} {needs:config-resetstat}
+ 
++    test {errors stats for GEOADD} {
++        r config resetstat
++        # make sure geo command will failed
++        r set foo 1
++        assert_error {WRONGTYPE Operation against a key holding the wrong kind of value*} {r GEOADD foo 0 0 bar}
++        assert_match {*calls=1*,rejected_calls=0,failed_calls=1*} [cmdstat geoadd]
++        assert_match {} [cmdstat zadd]
++    } {} {needs:config-resetstat}
++
+     test {command stats for EXPIRE} {
+         r config resetstat
+         r SET foo bar
+diff --git a/tests/unit/scripting.tcl b/tests/unit/scripting.tcl
+index cfbe60faf..6c40844c3 100644
+--- a/tests/unit/scripting.tcl
++++ b/tests/unit/scripting.tcl
+@@ -73,10 +73,10 @@ start_server {tags {"scripting"}} {
+ 
+     test {EVAL - Lua error reply -> Redis protocol type conversion} {
+         catch {
+-            run_script {return {err='this is an error'}} 0
++            run_script {return {err='ERR this is an error'}} 0
+         } e
+         set _ $e
+-    } {this is an error}
++    } {ERR this is an error}
+ 
+     test {EVAL - Lua table -> Redis protocol type conversion} {
+         run_script {return {1,2,3,'ciao',{1,2}}} 0
+@@ -378,7 +378,7 @@ start_server {tags {"scripting"}} {
+         r set foo bar
+         catch {run_script_ro {redis.call('del', KEYS[1]);} 1 foo} e
+         set e
+-    } {*Write commands are not allowed from read-only scripts*}
++    } {ERR Write commands are not allowed from read-only scripts*}
+ 
+     if {$is_eval eq 1} {
+     # script command is only relevant for is_eval Lua
+@@ -439,12 +439,12 @@ start_server {tags {"scripting"}} {
+     test {Globals protection reading an undeclared global variable} {
+         catch {run_script {return a} 0} e
+         set e
+-    } {*ERR*attempted to access * global*}
++    } {ERR*attempted to access * global*}
+ 
+     test {Globals protection setting an undeclared global*} {
+         catch {run_script {a=10} 0} e
+         set e
+-    } {*ERR*attempted to create global*}
++    } {ERR*attempted to create global*}
+ 
+     test {Test an example script DECR_IF_GT} {
+         set decr_if_gt {
+@@ -599,8 +599,8 @@ start_server {tags {"scripting"}} {
+     } {ERR Number of keys can't be negative}
+ 
+     test {Scripts can handle commands with incorrect arity} {
+-        assert_error "*Wrong number of args calling Redis command from script" {run_script "redis.call('set','invalid')" 0}
+-        assert_error "*Wrong number of args calling Redis command from script" {run_script "redis.call('incr')" 0}
++        assert_error "ERR Wrong number of args calling Redis command from script*" {run_script "redis.call('set','invalid')" 0}
++        assert_error "ERR Wrong number of args calling Redis command from script*" {run_script "redis.call('incr')" 0}
+     }
+ 
+     test {Correct handling of reused argv (issue #1939)} {
+@@ -723,7 +723,7 @@ start_server {tags {"scripting"}} {
+         } 0] {}
+ 
+         # Check error due to invalid command
+-        assert_error {ERR *Invalid command passed to redis.acl_check_cmd()} {run_script {
++        assert_error {ERR *Invalid command passed to redis.acl_check_cmd()*} {run_script {
+             return redis.acl_check_cmd('invalid-cmd','arg')
+         } 0}
+     }
+@@ -1288,7 +1288,7 @@ start_server {tags {"scripting"}} {
+         r config set maxmemory 1
+ 
+         # Fail to execute deny-oom command in OOM condition (backwards compatibility mode without flags)
+-        assert_error {ERR Error running script *OOM command not allowed when used memory > 'maxmemory'.} {
++        assert_error {OOM command not allowed when used memory > 'maxmemory'*} {
+             r eval {
+                 redis.call('set','x',1)
+                 return 1
+@@ -1319,7 +1319,7 @@ start_server {tags {"scripting"}} {
+     }
+ 
+     test "no-writes shebang flag" {
+-        assert_error {ERR Error running script *Write commands are not allowed from read-only scripts.} {
++        assert_error {ERR Write commands are not allowed from read-only scripts*} {
+             r eval {#!lua flags=no-writes
+                 redis.call('set','x',1)
+                 return 1
+@@ -1404,12 +1404,19 @@ start_server {tags {"scripting"}} {
+ # Additional eval only tests
+ start_server {tags {"scripting"}} {
+     test "Consistent eval error reporting" {
++        r config resetstat
+         r config set maxmemory 1
+         # Script aborted due to Redis state (OOM) should report script execution error with detailed internal error
+-        assert_error {ERR Error running script (call to *): @user_script:*: OOM command not allowed when used memory > 'maxmemory'.} {
++        assert_error {OOM command not allowed when used memory > 'maxmemory'*} {
+             r eval {return redis.call('set','x','y')} 1 x
+         }
++        assert_equal [errorrstat OOM r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=0*rejected_calls=1,failed_calls=0*} [cmdrstat set r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat eval r]
++
+         # redis.pcall() failure due to Redis state (OOM) returns lua error table with Redis error message without '-' prefix
++        r config resetstat
+         assert_equal [
+             r eval {
+                 local t = redis.pcall('set','x','y')
+@@ -1420,16 +1427,37 @@ start_server {tags {"scripting"}} {
+                 end
+             } 1 x
+         ] 1
++        # error stats were not incremented
++        assert_equal [errorrstat ERR r] {}
++        assert_equal [errorrstat OOM r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=0*rejected_calls=1,failed_calls=0*} [cmdrstat set r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=0*} [cmdrstat eval r]
++        
+         # Returning an error object from lua is handled as a valid RESP error result.
++        r config resetstat
+         assert_error {OOM command not allowed when used memory > 'maxmemory'.} {
+             r eval { return redis.pcall('set','x','y') } 1 x
+         }
++        assert_equal [errorrstat ERR r] {}
++        assert_equal [errorrstat OOM r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=0*rejected_calls=1,failed_calls=0*} [cmdrstat set r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat eval r]
++
+         r config set maxmemory 0
++        r config resetstat
+         # Script aborted due to error result of Redis command
+-        assert_error {ERR Error running script (call to *): @user_script:*: ERR DB index is out of range} {
++        assert_error {ERR DB index is out of range*} {
+             r eval {return redis.call('select',99)} 0
+         }
++        assert_equal [errorrstat ERR r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat select r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat eval r]
++        
+         # redis.pcall() failure due to error in Redis command returns lua error table with redis error message without '-' prefix
++        r config resetstat
+         assert_equal [
+             r eval {
+                 local t = redis.pcall('select',99)
+@@ -1440,11 +1468,23 @@ start_server {tags {"scripting"}} {
+                 end
+             } 0
+         ] 1
++        assert_equal [errorrstat ERR r] {count=1} ;
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat select r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=0*} [cmdrstat eval r]
++
+         # Script aborted due to scripting specific error state (write cmd with eval_ro) should report script execution error with detailed internal error
+-        assert_error {ERR Error running script (call to *): @user_script:*: ERR Write commands are not allowed from read-only scripts.} {
++        r config resetstat
++        assert_error {ERR Write commands are not allowed from read-only scripts*} {
+             r eval_ro {return redis.call('set','x','y')} 1 x
+         }
++        assert_equal [errorrstat ERR r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=0*rejected_calls=1,failed_calls=0*} [cmdrstat set r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat eval_ro r]
++
+         # redis.pcall() failure due to scripting specific error state (write cmd with eval_ro) returns lua error table with Redis error message without '-' prefix
++        r config resetstat
+         assert_equal [
+             r eval_ro {
+                 local t = redis.pcall('set','x','y')
+@@ -1455,20 +1495,59 @@ start_server {tags {"scripting"}} {
+                 end
+             } 1 x
+         ] 1
++        assert_equal [errorrstat ERR r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=0*rejected_calls=1,failed_calls=0*} [cmdrstat set r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=0*} [cmdrstat eval_ro r]
++
++        r config resetstat
++        # make sure geoadd will failed
++        r set Sicily 1
++        assert_error {WRONGTYPE Operation against a key holding the wrong kind of value*} {
++            r eval {return redis.call('GEOADD', 'Sicily', '13.361389', '38.115556', 'Palermo', '15.087269', '37.502669', 'Catania')} 1 x
++        }
++        assert_equal [errorrstat WRONGTYPE r] {count=1}
++        assert_equal [s total_error_replies] {1}
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat geoadd r]
++        assert_match {calls=1*rejected_calls=0,failed_calls=1*} [cmdrstat eval r]
+     } {} {cluster:skip}
+     
+     test "LUA redis.error_reply API" {
++        r config resetstat
+         assert_error {MY_ERR_CODE custom msg} {
+             r eval {return redis.error_reply("MY_ERR_CODE custom msg")} 0
+         }
++        assert_equal [errorrstat MY_ERR_CODE r] {count=1}
++    }
++
++    test "LUA redis.error_reply API with empty string" {
++        r config resetstat
++        assert_error {ERR} {
++            r eval {return redis.error_reply("")} 0
++        }
++        assert_equal [errorrstat ERR r] {count=1}
+     }
+ 
+     test "LUA redis.status_reply API" {
++        r config resetstat
+         r readraw 1
+         assert_equal [
+             r eval {return redis.status_reply("MY_OK_CODE custom msg")} 0
+         ] {+MY_OK_CODE custom msg}
+         r readraw 0
++        assert_equal [errorrstat MY_ERR_CODE r] {} ;# error stats were not incremented
++    }
++
++    test "LUA test pcall" {
++        assert_equal [
++            r eval {local status, res = pcall(function() return 1 end); return 'status: ' .. tostring(status) .. ' result: ' .. res} 0
++        ] {status: true result: 1}
++    }
++
++    test "LUA test pcall with error" {
++        assert_match {status: false result:*Script attempted to access nonexistent global variable 'foo'} [
++            r eval {local status, res = pcall(function() return foo end); return 'status: ' .. tostring(status) .. ' result: ' .. res} 0
++        ]
+     }
+ }
+ 
+-- 
+2.34.1
+

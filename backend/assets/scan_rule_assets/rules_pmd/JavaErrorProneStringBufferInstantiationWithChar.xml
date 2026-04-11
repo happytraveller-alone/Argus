@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="StringBufferInstantiationWithChar Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for StringBufferInstantiationWithChar</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="StringBufferInstantiationWithChar" language="java" since="3.9" message="Argument to `new StringBuilder()` or `new StringBuffer()` is implicitly converted from char to int" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#stringbufferinstantiationwithchar">
+            <description>
+    Individual character values provided as initialization arguments will be converted into integers.
+    This can lead to internal buffer sizes that are larger than expected. Some examples:
+
+    ```
+    new StringBuffer()      //  16
+    new StringBuffer(6)     //  6
+    new StringBuffer("hello world")  // 11 + 16 = 27
+    new StringBuffer('A')   //  chr(A) = 65
+    new StringBuffer("A")   //  1 + 16 = 17
+
+    new StringBuilder()     //  16
+    new StringBuilder(6)    //  6
+    new StringBuilder("hello world")  // 11 + 16 = 27
+    new StringBuilder('C')   //  chr(C) = 67
+    new StringBuilder("A")   //  1 + 16 = 17
+    ```
+            </description>
+            <priority>4</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ConstructorCall[ArgumentList/*[pmd-java:typeIsExactly('char')]]
+        [pmd-java:matchesSig('java.lang.StringBuilder#new(int)')
+         or pmd-java:matchesSig('java.lang.StringBuffer#new(int)')]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    // misleading instantiation, these buffers
+    // are actually sized to 99 characters long
+    StringBuffer  sb1 = new StringBuffer('c');
+    StringBuilder sb2 = new StringBuilder('c');
+
+    // in these forms, just single characters are allocated
+    StringBuffer  sb3 = new StringBuffer("c");
+    StringBuilder sb4 = new StringBuilder("c");
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

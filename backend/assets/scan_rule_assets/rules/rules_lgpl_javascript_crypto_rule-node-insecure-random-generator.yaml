@@ -1,0 +1,42 @@
+rules:
+- id: rules_lgpl_javascript_crypto_rule-node-insecure-random-generator
+  pattern-either:
+  - patterns:
+    - pattern-inside: 'require(''crypto'')
+
+        ...
+
+        '
+    - pattern: '$X.pseudoRandomBytes(...)
+
+        '
+  - pattern: 'Math.random(...)
+
+      '
+  message: "This rule identifies use of cryptographically weak random number generators.\n\
+    Using cryptographically weak random number generators like `crypto.pseudoRandomBytes()`\
+    \ \nand `Math.random()` for security-critical tasks can expose systems to significant\
+    \ \nvulnerabilities. Attackers might predict the generated random numbers, compromising\
+    \ \nthe integrity and confidentiality of cryptographic operations. This could\
+    \ lead to \nbreaches where sensitive data is accessed or manipulated, authentication\
+    \ mechanisms \nare bypassed, or secure communications are intercepted, ultimately\
+    \ undermining the \nsecurity of the entire system or application.\n\nMitigation\
+    \ strategy:\nReplace the use of these cryptographically weak random number generators\
+    \ with \n`crypto.randomBytes()`, a method provided by Node.js's `crypto` module\
+    \ that \ngenerates cryptographically secure random numbers. This method should\
+    \ be used \nfor all operations requiring secure randomness, such as generating\
+    \ keys, tokens, \nor any cryptographic material.\n\nSecure Code Example:\n```\n\
+    const crypto = require('crypto');\nconst secureBytes = crypto.randomBytes(256);\n\
+    console.log(`Secure random bytes: ${secureBytes.toString('hex')}`);\n```\n"
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    cwe: CWE-338
+    shortDescription: Use of cryptographically weak pseudo-random number generator
+      (PRNG)
+    security-severity: MEDIUM
+    category: security

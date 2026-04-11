@@ -1,0 +1,38 @@
+From f63e1bb42a37401b2fdfcd2e66cce92b7ea2025c Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Thu, 7 Jul 2011 14:50:37 -0400
+Subject: [PATCH] Local file inclusion vulnerability
+
+---
+ ChangeLog | 1 +
+ sql.php   | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 49bb8947fb..065f8411b1 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -3,6 +3,7 @@ phpMyAdmin - ChangeLog
+ 
+ 3.4.3.2 (2011-07-XX)
+ - [security] Fixed XSS vulnerability, see PMASA-2011-9
++- [security] Fixed local file inclusion vulnerability, see PMASA-2011-10
+ 
+ 3.4.3.1 (2011-07-02)
+ - [security] Fixed possible session manipulation in swekey authentication, see PMASA-2011-5
+diff --git a/sql.php b/sql.php
+index 9b19174a44..eb9254ffdd 100644
+--- a/sql.php
++++ b/sql.php
+@@ -719,7 +719,7 @@ if (0 == $num_rows || $is_affected) {
+             parse_str($_REQUEST['transform_fields_list'], $edited_values);
+ 
+             foreach($mime_map as $transformation) {
+-                $include_file = $transformation['transformation'];
++                $include_file = PMA_securePath($transformation['transformation']);
+                 $column_name = $transformation['column_name'];
+                 $column_data = $edited_values[$column_name];
+ 
+-- 
+2.34.1
+

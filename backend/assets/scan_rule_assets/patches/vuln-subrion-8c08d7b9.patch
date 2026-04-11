@@ -1,0 +1,64 @@
+From 8c08d7b92a4b7b5820a951d53c24844715439b73 Mon Sep 17 00:00:00 2001
+From: Janur Jangaraev <jjangaraev@intelliants.com>
+Date: Mon, 3 Jul 2017 10:34:49 +0600
+Subject: [PATCH] #477
+
+---
+ modules/blog/index.php   | 13 ++++++++++---
+ modules/blog/install.xml |  6 +++---
+ 2 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/modules/blog/index.php b/modules/blog/index.php
+index 705994ca..e0c524e4 100644
+--- a/modules/blog/index.php
++++ b/modules/blog/index.php
+@@ -89,8 +89,7 @@
+                     $messages[] = iaLanguage::get('title_is_empty');
+                 }
+ 
+-                $entry['body'] = iaUtil::safeHTML($_POST['body']);
+-                utf8_is_valid($entry['body']) || $entry['body'] = utf8_bad_replace($entry['body']);
++                $entry['body'] = iaUtil::safeHTML(utf8_bad_replace($_POST['body']));
+ 
+                 if (empty($entry['body'])) {
+                     $messages[] = iaLanguage::getf('field_is_empty', ['field' => iaLanguage::get('body')]);
+@@ -151,13 +150,21 @@
+                 return iaView::errorPage(iaView::ERROR_NOT_FOUND);
+             }
+ 
++            if (!iaUsers::hasIdentity()) {
++                return iaView::errorPage(iaView::ERROR_UNAUTHORIZED);
++            }
++
+             $id = (int)$iaCore->requestPath[0];
+-            $entry = $iaDb->row(iaDb::ALL_COLUMNS_SELECTION, iaDb::convertIds($id));
++            $entry = $iaBlog->getById($id);
+ 
+             if (!$entry) {
+                 return iaView::errorPage(iaView::ERROR_NOT_FOUND);
+             }
+ 
++            if ($entry['member_id'] != iaUsers::getIdentity()->id) {
++                return iaView::errorPage(iaView::ERROR_FORBIDDEN);
++            }
++
+             $result = $iaBlog->delete($id);
+ 
+             $iaView->setMessages(iaLanguage::get($result ? 'deleted' : 'db_error'), $result ? iaView::SUCCESS : iaView::ERROR);
+diff --git a/modules/blog/install.xml b/modules/blog/install.xml
+index c691a04e..2b65b47e 100644
+--- a/modules/blog/install.xml
++++ b/modules/blog/install.xml
+@@ -31,9 +31,9 @@
+ 		<object meta_object="admin_page" id="blog" action="delete" access="1">Delete blog entry</object>
+ 
+ 		<object id="blog" access="1">View blog entries</object>
+-		<object id="blog" action="add" access="0">Add blog entry</object>
+-		<object id="blog" action="edit" access="0">Edit blog entry</object>
+-		<object id="blog" action="delete" access="0">Delete blog entry</object>
++		<object id="blog" action="add" access="1">Add blog entry</object>
++		<object id="blog" action="edit" access="1">Edit blog entry</object>
++		<object id="blog" action="delete" access="1">Delete blog entry</object>
+ 	</permissions>
+ 
+ 	<phrases>

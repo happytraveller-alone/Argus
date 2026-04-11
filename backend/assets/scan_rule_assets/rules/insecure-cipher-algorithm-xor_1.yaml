@@ -1,0 +1,28 @@
+rules:
+- id: insecure-cipher-algorithm-xor_1
+  languages:
+  - python
+  message: Detected XOR cipher algorithm which is considered insecure. This algorithm
+    is not cryptographically secure and can be reversed easily. Use AES instead.
+  metadata:
+    bandit-code: B304
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    impact: MEDIUM
+    likelihood: LOW
+    owasp:
+    - A03:2017 - Sensitive Data Exposure
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://stackoverflow.com/questions/1135186/whats-wrong-with-xor-encryption
+    source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L84
+    subcategory:
+    - vuln
+    technology:
+    - pycryptodome
+  pattern-either:
+  - pattern: Cryptodome.Cipher.XOR.new(...)
+  - pattern: Crypto.Cipher.XOR.new(...)
+  severity: WARNING

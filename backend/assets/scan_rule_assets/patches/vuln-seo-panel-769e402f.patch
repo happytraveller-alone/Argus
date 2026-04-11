@@ -1,0 +1,25 @@
+From 3c72b8c6213dac978daf99a65a49151fad0afd7d Mon Sep 17 00:00:00 2001
+From: geo varghese <geo.varghese@c.thycotic.com>
+Date: Mon, 22 Mar 2021 15:59:07 +0530
+Subject: [PATCH] to fix #202
+
+---
+ themes/classic/views/common/forgot.ctp.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/themes/classic/views/common/forgot.ctp.php b/themes/classic/views/common/forgot.ctp.php
+index f19e304..6329d88 100644
+--- a/themes/classic/views/common/forgot.ctp.php
++++ b/themes/classic/views/common/forgot.ctp.php
+@@ -8,7 +8,7 @@
+ 	    <input type="hidden" name="sec" value="requestpass">
+ 		<div class="form-group">
+ 			<label for="email"><?php echo $spText['login']['Email']?>:</label> 
+-			<input type="email" name="email" value="<?php echo $post['email']?>" required="required" class="form-control">
++			<input type="email" name="email" value="<?php echo htmlentities($post['email'], ENT_QUOTES)?>" required="required" class="form-control">
+ 			<?php echo $errMsg['email']?>
+ 		</div>
+ 		<div class="form-group">
+-- 
+2.34.1
+

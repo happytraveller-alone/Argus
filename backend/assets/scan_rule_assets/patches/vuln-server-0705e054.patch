@@ -1,0 +1,55 @@
+From 0705e054cb47472c07f310b90ab26771da0199ad Mon Sep 17 00:00:00 2001
+From: Sergey Konovalov <Sergey.Konovalov@onlyoffice.com>
+Date: Thu, 12 Oct 2023 13:44:55 +0300
+Subject: [PATCH] [bug] Fix bug 64605
+
+---
+ DocService/sources/canvasservice.js |  1 +
+ FileConverter/sources/converter.js  | 19 +++++++++++--------
+ 2 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/DocService/sources/canvasservice.js b/DocService/sources/canvasservice.js
+index df5ede69..4cae113a 100644
+--- a/DocService/sources/canvasservice.js
++++ b/DocService/sources/canvasservice.js
+@@ -836,6 +836,7 @@ function* commandSaveFromOrigin(ctx, cmd, outputData, password) {
+     }
+     var queueData = getSaveTask(ctx, cmd);
+     queueData.setFromOrigin(true);
++    queueData.setFromChanges(true);
+     yield* docsCoServer.addTask(queueData, constants.QUEUE_PRIORITY_LOW);
+   }
+   outputData.setStatus('ok');
+diff --git a/FileConverter/sources/converter.js b/FileConverter/sources/converter.js
+index fdbfa77b..29982f6f 100644
+--- a/FileConverter/sources/converter.js
++++ b/FileConverter/sources/converter.js
+@@ -417,14 +417,17 @@ function* processDownloadFromStorage(ctx, dataConvert, cmd, task, tempDirs, auth
+   let concatDir;
+   let concatTemplate;
+   if (task.getFromOrigin() || task.getFromSettings()) {
+-    let changesDir = path.join(tempDirs.source, constants.CHANGES_NAME);
+-    fs.mkdirSync(changesDir);
+-    let filesCount = yield* downloadFileFromStorage(ctx, cmd.getSaveKey(), changesDir);
+-    if (filesCount > 0) {
+-      concatDir = changesDir;
+-      concatTemplate = "changes0";
+-      dataConvert.fromChanges = true;
+-      task.setFromChanges(dataConvert.fromChanges);
++    if (task.getFromChanges()) {
++      let changesDir = path.join(tempDirs.source, constants.CHANGES_NAME);
++      fs.mkdirSync(changesDir);
++      let filesCount = yield* downloadFileFromStorage(ctx, cmd.getSaveKey(), changesDir);
++      if (filesCount > 0) {
++        concatDir = changesDir;
++        concatTemplate = "changes0";
++      } else {
++        dataConvert.fromChanges = false;
++        task.setFromChanges(dataConvert.fromChanges);
++      }
+     }
+     dataConvert.fileFrom = path.join(tempDirs.source, 'origin.' + cmd.getFormat());
+   } else {
+-- 
+2.34.1
+

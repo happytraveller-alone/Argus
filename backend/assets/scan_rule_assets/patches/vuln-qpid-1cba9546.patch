@@ -1,0 +1,246 @@
+From 1cba9546cc2c521d6ee4099bed9ff1eb0d09afd5 Mon Sep 17 00:00:00 2001
+From: Andrew Stitcher <astitcher@apache.org>
+Date: Mon, 21 May 2012 23:19:02 +0000
+Subject: [PATCH] QPID-2518: Qpid C++ broker can easily be blocked by client
+ trying to connect over SSL port Implement timed disconnect for SSL
+
+git-svn-id: https://svn.apache.org/repos/asf/qpid/trunk@1341263 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../broker/windows/SslProtocolFactory.cpp     | 26 ++++++++++-----
+ qpid/cpp/src/qpid/sys/SslPlugin.cpp           |  8 ++---
+ qpid/cpp/src/qpid/sys/ssl/SslHandler.cpp      | 33 +++++++++++++++++--
+ qpid/cpp/src/qpid/sys/ssl/SslHandler.h        |  9 ++++-
+ 4 files changed, 61 insertions(+), 15 deletions(-)
+
+diff --git a/qpid/cpp/src/qpid/broker/windows/SslProtocolFactory.cpp b/qpid/cpp/src/qpid/broker/windows/SslProtocolFactory.cpp
+index b6daf515565..fb59d058f87 100644
+--- a/qpid/cpp/src/qpid/broker/windows/SslProtocolFactory.cpp
++++ b/qpid/cpp/src/qpid/broker/windows/SslProtocolFactory.cpp
+@@ -44,6 +44,9 @@
+ 
+ namespace qpid {
+ namespace sys {
++
++class Timer;
++
+ namespace windows {
+ 
+ struct SslServerOptions : qpid::Options
+@@ -77,10 +80,12 @@ struct SslServerOptions : qpid::Options
+ };
+ 
+ class SslProtocolFactory : public qpid::sys::ProtocolFactory {
+-    const bool tcpNoDelay;
+     boost::ptr_vector<Socket> listeners;
+     boost::ptr_vector<AsynchAcceptor> acceptors;
++    Timer& brokerTimer;
++    uint32_t maxNegotiateTime;
+     uint16_t listeningPort;
++    const bool tcpNoDelay;
+     std::string brokerHost;
+     const bool clientAuthSelected;
+     std::auto_ptr<qpid::sys::AsynchAcceptor> acceptor;
+@@ -88,7 +93,9 @@ class SslProtocolFactory : public qpid::sys::ProtocolFactory {
+     CredHandle credHandle;
+ 
+   public:
+-    SslProtocolFactory(const SslServerOptions&, const std::string& host, const std::string& port, int backlog, bool nodelay);
++    SslProtocolFactory(const SslServerOptions&, const std::string& host, const std::string& port,
++                       int backlog, bool nodelay,
++                       Timer& timer, uint32_t maxTime);
+     ~SslProtocolFactory();
+     void accept(sys::Poller::shared_ptr, sys::ConnectionCodec::Factory*);
+     void connect(sys::Poller::shared_ptr, const std::string& host, const std::string& port,
+@@ -125,8 +132,8 @@ static struct SslPlugin : public Plugin {
+                 const broker::Broker::Options& opts = broker->getOptions();
+                 ProtocolFactory::shared_ptr protocol(new SslProtocolFactory(options,
+                                                                             "", boost::lexical_cast<std::string>(options.port),
+-                                                                            opts.connectionBacklog,
+-                                                                            opts.tcpNoDelay));
++                                                                            opts.connectionBacklog, opts.tcpNoDelay,
++                                                                            broker->getTimer(), opts.maxNegotiateTime));
+                 QPID_LOG(notice, "Listening for SSL connections on TCP port " << protocol->getPort());
+                 broker->registerProtocolFactory("ssl", protocol);
+             } catch (const std::exception& e) {
+@@ -137,9 +144,12 @@ static struct SslPlugin : public Plugin {
+ } sslPlugin;
+ 
+ SslProtocolFactory::SslProtocolFactory(const SslServerOptions& options,
+-                                       const std::string& host, const std::string& port, int backlog,
+-                                       bool nodelay)
+-    : tcpNoDelay(nodelay),
++                                       const std::string& host, const std::string& port,
++                                       int backlog, bool nodelay,
++                                       Timer& timer, uint32_t maxTime)
++    : brokerTimer(timer),
++      maxNegotiateTime(maxTime),
++      tcpNoDelay(nodelay),
+       clientAuthSelected(options.clientAuth) {
+ 
+     // Make sure that certificate store is good before listening to sockets
+@@ -271,7 +281,7 @@ void SslProtocolFactory::established(sys::Poller::shared_ptr poller,
+                                                     boost::bind(&AsynchIOHandler::idle, async, _1));
+     }
+ 
+-    async->init(aio, 4);
++    async->init(aio, brokerTimer, maxNegotiateTime, 4);
+     aio->start(poller);
+ }
+ 
+diff --git a/qpid/cpp/src/qpid/sys/SslPlugin.cpp b/qpid/cpp/src/qpid/sys/SslPlugin.cpp
+index 7cd5059570b..3b50527c0ac 100644
+--- a/qpid/cpp/src/qpid/sys/SslPlugin.cpp
++++ b/qpid/cpp/src/qpid/sys/SslPlugin.cpp
+@@ -171,7 +171,7 @@ SslProtocolFactoryTmpl<T>::SslProtocolFactoryTmpl(const SslServerOptions& option
+ 
+ void SslEstablished(Poller::shared_ptr poller, const qpid::sys::SslSocket& s,
+                     ConnectionCodec::Factory* f, bool isClient,
+-                    bool tcpNoDelay, bool nodict) {
++                    Timer& timer, uint32_t maxTime, bool tcpNoDelay, bool nodict) {
+     qpid::sys::ssl::SslHandler* async = new qpid::sys::ssl::SslHandler(s.getFullAddress(), f, nodict);
+ 
+     if (tcpNoDelay) {
+@@ -191,7 +191,7 @@ void SslEstablished(Poller::shared_ptr poller, const qpid::sys::SslSocket& s,
+                                  boost::bind(&qpid::sys::ssl::SslHandler::nobuffs, async, _1),
+                                  boost::bind(&qpid::sys::ssl::SslHandler::idle, async, _1));
+ 
+-    async->init(aio, 4);
++    async->init(aio,timer, maxTime, 4);
+     aio->start(poller);
+ }
+ 
+@@ -200,7 +200,7 @@ void SslProtocolFactory::established(Poller::shared_ptr poller, const Socket& s,
+                                      ConnectionCodec::Factory* f, bool isClient) {
+     const SslSocket *sslSock = dynamic_cast<const SslSocket*>(&s);
+ 
+-    SslEstablished(poller, *sslSock, f, isClient, tcpNoDelay, nodict);
++    SslEstablished(poller, *sslSock, f, isClient, brokerTimer, maxNegotiateTime, tcpNoDelay, nodict);
+ }
+ 
+ template <class T>
+@@ -224,7 +224,7 @@ void SslMuxProtocolFactory::established(Poller::shared_ptr poller, const Socket&
+     const SslSocket *sslSock = dynamic_cast<const SslSocket*>(&s);
+ 
+     if (sslSock) {
+-        SslEstablished(poller, *sslSock, f, isClient, tcpNoDelay, nodict);
++        SslEstablished(poller, *sslSock, f, isClient, brokerTimer, maxNegotiateTime, tcpNoDelay, nodict);
+         return;
+     }
+ 
+diff --git a/qpid/cpp/src/qpid/sys/ssl/SslHandler.cpp b/qpid/cpp/src/qpid/sys/ssl/SslHandler.cpp
+index a512f8c1f8d..826c294c80e 100644
+--- a/qpid/cpp/src/qpid/sys/ssl/SslHandler.cpp
++++ b/qpid/cpp/src/qpid/sys/ssl/SslHandler.cpp
+@@ -19,9 +19,9 @@
+  *
+  */
+ #include "qpid/sys/ssl/SslHandler.h"
+-
+ #include "qpid/sys/ssl/SslIo.h"
+ #include "qpid/sys/ssl/SslSocket.h"
++#include "qpid/sys/Timer.h"
+ #include "qpid/framing/AMQP_HighestVersion.h"
+ #include "qpid/framing/ProtocolInitiation.h"
+ #include "qpid/log/Statement.h"
+@@ -42,6 +42,24 @@ struct Buff : public SslIO::BufferBase {
+     { delete [] bytes;}
+ };
+ 
++struct ProtocolTimeoutTask : public sys::TimerTask {
++    SslHandler& handler;
++    std::string id;
++
++    ProtocolTimeoutTask(const std::string& i, const Duration& timeout, SslHandler& h) :
++    TimerTask(timeout, "ProtocolTimeout"),
++        handler(h),
++        id(i)
++    {}
++
++    void fire() {
++        // If this fires it means that we didn't negotiate the connection in the timeout period
++        // Schedule closing the connection for the io thread
++        QPID_LOG(error, "Connection " << id << " No protocol received closing");
++        handler.abort();
++    }
++};
++
+ SslHandler::SslHandler(std::string id, ConnectionCodec::Factory* f, bool _nodict) :
+     identifier(id),
+     aio(0),
+@@ -58,9 +76,13 @@ SslHandler::~SslHandler() {
+     delete codec;
+ }
+ 
+-void SslHandler::init(SslIO* a, int numBuffs) {
++void SslHandler::init(SslIO* a, Timer& timer, uint32_t maxTime, int numBuffs) {
+     aio = a;
+ 
++    // Start timer for this connection
++    timeoutTimerTask = new ProtocolTimeoutTask(identifier, maxTime*TIME_MSEC, *this);
++    timer.add(timeoutTimerTask);
++
+     // Give connection some buffers to use
+     for (int i = 0; i < numBuffs; i++) {
+         aio->queueReadBuffer(new Buff);
+@@ -111,6 +133,9 @@ void SslHandler::readbuff(SslIO& , SslIO::BufferBase* buff) {
+         framing::Buffer in(buff->bytes+buff->dataStart, buff->dataCount);
+         framing::ProtocolInitiation protocolInit;
+         if (protocolInit.decode(in)) {
++            // We've just got the protocol negotiation so we can cancel the timeout for that
++            timeoutTimerTask->cancel();
++
+             decoded = in.getPosition();
+             QPID_LOG(debug, "RECV [" << identifier << "]: INIT(" << protocolInit << ")");
+             try {
+@@ -171,6 +196,10 @@ void SslHandler::idle(SslIO&){
+     if (isClient && codec == 0) {
+         codec = factory->create(*this, identifier, getSecuritySettings(aio));
+         write(framing::ProtocolInitiation(codec->getVersion()));
++        // We've just sent the protocol negotiation so we can cancel the timeout for that
++        // This is not ideal, because we've not received anything yet, but heartbeats will
++        // be active soon
++        timeoutTimerTask->cancel();
+         return;
+     }
+     if (codec == 0) return;
+diff --git a/qpid/cpp/src/qpid/sys/ssl/SslHandler.h b/qpid/cpp/src/qpid/sys/ssl/SslHandler.h
+index 400fa317fd5..74df2b7fb0e 100644
+--- a/qpid/cpp/src/qpid/sys/ssl/SslHandler.h
++++ b/qpid/cpp/src/qpid/sys/ssl/SslHandler.h
+@@ -25,6 +25,8 @@
+ #include "qpid/sys/ConnectionCodec.h"
+ #include "qpid/sys/OutputControl.h"
+ 
++#include <boost/intrusive_ptr.hpp>
++
+ namespace qpid {
+ 
+ namespace framing {
+@@ -32,6 +34,10 @@ namespace framing {
+ }
+ 
+ namespace sys {
++
++class Timer;
++class TimerTask;
++
+ namespace ssl {
+ 
+ class SslIO;
+@@ -46,6 +52,7 @@ class SslHandler : public OutputControl {
+     bool readError;
+     bool isClient;
+     bool nodict;
++    boost::intrusive_ptr<sys::TimerTask> timeoutTimerTask;
+ 
+     void write(const framing::ProtocolInitiation&);
+     qpid::sys::SecuritySettings getSecuritySettings(SslIO* aio);
+@@ -53,7 +60,7 @@ class SslHandler : public OutputControl {
+   public:
+     SslHandler(std::string id, ConnectionCodec::Factory* f, bool nodict);
+     ~SslHandler();
+-    void init(SslIO* a, int numBuffs);
++    void init(SslIO* a, Timer& timer, uint32_t maxTime, int numBuffs);
+ 
+     void setClient() { isClient = true; }
+ 

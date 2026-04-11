@@ -1,0 +1,50 @@
+From 1ddecf1958924b178b76a31d989ef1e05af81964 Mon Sep 17 00:00:00 2001
+From: Oran Agra <oran@redislabs.com>
+Date: Tue, 1 Jun 2021 09:12:45 +0300
+Subject: [PATCH] Fix integer overflow in STRALGO LCS (CVE-2021-32625) (#9011)
+
+An integer overflow bug in Redis version 6.0 or newer can be exploited using the
+STRALGO LCS command to corrupt the heap and potentially result with remote code
+execution. This is a result of an incomplete fix by CVE-2021-29477.
+---
+ src/t_string.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/src/t_string.c b/src/t_string.c
+index 99843c863d4..ef1a147e01f 100644
+--- a/src/t_string.c
++++ b/src/t_string.c
+@@ -800,6 +800,12 @@ void stralgoLCS(client *c) {
+         goto cleanup;
+     }
+ 
++    /* Detect string truncation or later overflows. */
++    if (sdslen(a) >= UINT32_MAX-1 || sdslen(b) >= UINT32_MAX-1) {
++        addReplyError(c, "String too long for LCS");
++        goto cleanup;
++    }
++
+     /* Compute the LCS using the vanilla dynamic programming technique of
+      * building a table of LCS(x,y) substrings. */
+     uint32_t alen = sdslen(a);
+@@ -808,9 +814,19 @@ void stralgoLCS(client *c) {
+     /* Setup an uint32_t array to store at LCS[i,j] the length of the
+      * LCS A0..i-1, B0..j-1. Note that we have a linear array here, so
+      * we index it as LCS[j+(blen+1)*j] */
+-    uint32_t *lcs = zmalloc((size_t)(alen+1)*(blen+1)*sizeof(uint32_t));
+     #define LCS(A,B) lcs[(B)+((A)*(blen+1))]
+ 
++    /* Try to allocate the LCS table, and abort on overflow or insufficient memory. */
++    unsigned long long lcssize = (unsigned long long)(alen+1)*(blen+1); /* Can't overflow due to the size limits above. */
++    unsigned long long lcsalloc = lcssize * sizeof(uint32_t);
++    uint32_t *lcs = NULL;
++    if (lcsalloc < SIZE_MAX && lcsalloc / lcssize == sizeof(uint32_t))
++        lcs = ztrymalloc(lcsalloc);
++    if (!lcs) {
++        addReplyError(c, "Insufficient memory");
++        goto cleanup;
++    }
++
+     /* Start building the LCS table. */
+     for (uint32_t i = 0; i <= alen; i++) {
+         for (uint32_t j = 0; j <= blen; j++) {

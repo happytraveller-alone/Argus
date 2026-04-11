@@ -1,0 +1,110 @@
+From 3a639859cfdfba2187c81897d44a3e33825eb0a3 Mon Sep 17 00:00:00 2001
+From: Ken McGrady <ken.mcgrady@gmail.com>
+Date: Fri, 19 Jul 2024 12:30:32 -0700
+Subject: [PATCH] Validate the path using Tornado before performing checks
+ (#8990)
+
+## Describe your changes
+
+There's a minor security vulnerability in the way we handle static file
+serving. We should validate whether the path is in the correct place
+before performing any additional checks.
+
+## Testing Plan
+
+- Updated unit tests for the 403 response
+
+---
+
+**Contribution License Agreement**
+
+By submitting this pull request you agree that all contributions to this
+project are made under the Apache 2.0 license.
+---
+ .../web/server/app_static_file_handler.py     |  4 ++-
+ .../server/app_static_file_handler_test.py    | 30 +++++++++++++++----
+ 2 files changed, 28 insertions(+), 6 deletions(-)
+
+diff --git a/lib/streamlit/web/server/app_static_file_handler.py b/lib/streamlit/web/server/app_static_file_handler.py
+index 4043c3ba9..a79c5e73a 100644
+--- a/lib/streamlit/web/server/app_static_file_handler.py
++++ b/lib/streamlit/web/server/app_static_file_handler.py
+@@ -42,6 +42,8 @@ class AppStaticFileHandler(tornado.web.StaticFileHandler):
+     def validate_absolute_path(self, root: str, absolute_path: str) -> str | None:
+         full_path = os.path.realpath(absolute_path)
+ 
++        ret_val = super().validate_absolute_path(root, absolute_path)
++
+         if os.path.isdir(full_path):
+             # we don't want to serve directories, and serve only files
+             raise tornado.web.HTTPError(404)
+@@ -64,7 +66,7 @@ class AppStaticFileHandler(tornado.web.StaticFileHandler):
+                 reason="File is too large",
+             )
+ 
+-        return super().validate_absolute_path(root, absolute_path)
++        return ret_val
+ 
+     def set_default_headers(self):
+         # CORS protection is disabled because we need access to this endpoint
+diff --git a/lib/tests/streamlit/web/server/app_static_file_handler_test.py b/lib/tests/streamlit/web/server/app_static_file_handler_test.py
+index fc484225c..7ea5637e1 100644
+--- a/lib/tests/streamlit/web/server/app_static_file_handler_test.py
++++ b/lib/tests/streamlit/web/server/app_static_file_handler_test.py
+@@ -48,6 +48,9 @@ class AppStaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
+         self._tmp_webp_image_file = tempfile.NamedTemporaryFile(
+             dir=self._tmpdir.name, suffix="image.webp", delete=False
+         )
++        self._tmp_dir_inside_static_folder = tempfile.TemporaryDirectory(
++            dir=self._tmpdir.name
++        )
+ 
+         self._symlink_outside_directory = "symlink_outside"
+         self._symlink_inside_directory = "symlink_inside"
+@@ -141,8 +144,27 @@ class AppStaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
+         responses = [
+             # Access to directory without trailing slash
+             self.fetch("/app/static"),
++            # Access to non-existent file
++            self.fetch("/app/static/nonexistent.jpg"),
++        ]
++        for r in responses:
++            assert r.code == 404
++            assert (
++                r.body == b"<html><title>404: Not Found</title>"
++                b"<body>404: Not Found</body></html>"
++            )
++
++    def test_staticfiles_403(self):
++        """files outside static directory and symlinks pointing to
++        files outside static directory and directories should return 403.
++        """
++        responses = [
+             # Access to directory with trailing slash
+             self.fetch("/app/static/"),
++            # Access to directory inside static folder without trailing slash
++            self.fetch(f"/app/static/{self._tmp_dir_inside_static_folder.name}"),
++            # Access to directory inside static folder with trailing slash
++            self.fetch(f"/app/static/{self._tmp_dir_inside_static_folder.name}/"),
+             # Access to file outside static directory
+             self.fetch("/app/static/../test_file_outside_directory.py"),
+             # Access to file outside static directory with same prefix
+@@ -151,12 +173,10 @@ class AppStaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
+             ),
+             # Access to symlink outside static directory
+             self.fetch(f"/app/static/{self._symlink_outside_directory}"),
+-            # Access to non-existent file
+-            self.fetch("/app/static/nonexistent.jpg"),
+         ]
+         for r in responses:
+-            assert r.code == 404
++            assert r.code == 403
+             assert (
+-                r.body == b"<html><title>404: Not Found</title>"
+-                b"<body>404: Not Found</body></html>"
++                r.body == b"<html><title>403: Forbidden</title>"
++                b"<body>403: Forbidden</body></html>"
+             )
+-- 
+2.34.1
+

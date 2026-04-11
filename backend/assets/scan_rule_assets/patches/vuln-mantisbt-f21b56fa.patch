@@ -1,0 +1,64 @@
+From f21b56fa9060dbae9438b0d0dfb21dff090c1dd2 Mon Sep 17 00:00:00 2001
+From: Damien Regad <dregad@mantisbt.org>
+Date: Sun, 14 May 2017 00:45:04 +0200
+Subject: [PATCH] Add form security token to permalink_page.php
+
+John Page aka hyp3rlinx / ApparitionSec http://hyp3rlinx.altervista.org
+reported a CSRF vulnerability in permalink_page.php, allowing an
+attacker to inject arbitrary links (CVE-2017-7620).
+
+The security token prevents such injection.
+
+Fixes #22702
+---
+ core/filter_api.php | 5 ++++-
+ permalink_page.php  | 4 ++++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/core/filter_api.php b/core/filter_api.php
+index ac6a630ce..bee19cdc0 100644
+--- a/core/filter_api.php
++++ b/core/filter_api.php
+@@ -2451,8 +2451,11 @@ function filter_draw_selection_area2( $p_page_number, $p_for_screen = true, $p_e
+ 							filter_print_view_type_toggle( $t_url, $t_filter['_view_type'] );
+ 
+ 							if( access_has_project_level( config_get( 'create_permalink_threshold' ) ) ) {
++								# Add CSRF protection, see #22702
++								$t_permalink_url = urlencode( filter_get_url( $t_filter ) )
++									. form_security_param( 'permalink' );
+ 								echo '<li>';
+-								echo '<a href="permalink_page.php?url=' . urlencode( filter_get_url( $t_filter ) ) . '">';
++								echo '<a href="permalink_page.php?url=' . $t_permalink_url . '">';
+ 								echo '<i class="ace-icon fa fa-link"></i>&#160;&#160;' . lang_get( 'create_filter_link' );
+ 								echo '</a>';
+ 								echo '</li>';
+diff --git a/permalink_page.php b/permalink_page.php
+index 87a905891..b73ccabf0 100644
+--- a/permalink_page.php
++++ b/permalink_page.php
+@@ -36,6 +36,7 @@
+ require_once( 'core.php' );
+ require_api( 'access_api.php' );
+ require_api( 'config_api.php' );
++require_api( 'form_api.php' );
+ require_api( 'gpc_api.php' );
+ require_api( 'html_api.php' );
+ require_api( 'lang_api.php' );
+@@ -43,6 +44,8 @@ require_api( 'print_api.php' );
+ require_api( 'string_api.php' );
+ require_api( 'utility_api.php' );
+ 
++form_security_validate( 'permalink' );
++
+ layout_page_header();
+ 
+ layout_page_begin();
+@@ -75,4 +78,5 @@ if( !is_blank( $t_create_short_url ) ) {
+ ?>
+ </div>
+ <?php
++form_security_purge( 'permalink' );
+ layout_page_end();
+-- 
+2.34.1
+

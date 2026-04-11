@@ -1,0 +1,26 @@
+From c43217a81917de03aa6ceb1aa485ae69b8bb4598 Mon Sep 17 00:00:00 2001
+From: Jeremy Daer <jeremydaer@gmail.com>
+Date: Wed, 19 Jul 2017 21:14:29 -0600
+Subject: [PATCH] Merge pull request #1192 from jkowens/master
+
+Boost multipart parsing perf by increasing buffer size from 16 KiB to 1 MiB
+---
+ lib/rack/multipart/parser.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/rack/multipart/parser.rb b/lib/rack/multipart/parser.rb
+index e324be82..cd64d444 100644
+--- a/lib/rack/multipart/parser.rb
++++ b/lib/rack/multipart/parser.rb
+@@ -5,7 +5,7 @@ module Rack
+     class MultipartPartLimitError < Errno::EMFILE; end
+ 
+     class Parser
+-      BUFSIZE = 16384
++      BUFSIZE = 1_048_576
+       TEXT_PLAIN = "text/plain"
+       TEMPFILE_FACTORY = lambda { |filename, content_type|
+         Tempfile.new(["RackMultipart", ::File.extname(filename.gsub("\0".freeze, '%00'.freeze))])
+-- 
+2.34.1
+

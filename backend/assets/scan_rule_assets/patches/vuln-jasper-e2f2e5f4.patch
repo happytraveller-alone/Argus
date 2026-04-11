@@ -1,0 +1,114 @@
+From e2f2e5f4022baef2386eec25c57b63debfe4cb20 Mon Sep 17 00:00:00 2001
+From: Max Kellermann <max.kellermann@gmail.com>
+Date: Wed, 24 Jun 2020 22:03:05 +0200
+Subject: [PATCH] jas_seq: check bounds in jas_seq2d_bindsub()
+
+Fixes CVE-2017-5503, CVE-2017-5504, CVE-2017-5505,
+
+Closes https://github.com/jasper-maint/jasper/issues/3
+Closes https://github.com/jasper-maint/jasper/issues/4
+Closes https://github.com/jasper-maint/jasper/issues/5
+Closes https://github.com/mdadams/jasper/issues/88
+Closes https://github.com/mdadams/jasper/issues/89
+Closes https://github.com/mdadams/jasper/issues/90
+---
+ src/libjasper/base/jas_seq.c           |  9 +++++++--
+ src/libjasper/include/jasper/jas_seq.h |  2 +-
+ src/libjasper/jpc/jpc_dec.c            | 12 ++++++++----
+ src/libjasper/jpc/jpc_enc.c            | 10 +++++++---
+ 4 files changed, 23 insertions(+), 10 deletions(-)
+
+diff --git a/src/libjasper/base/jas_seq.c b/src/libjasper/base/jas_seq.c
+index 91008153..6a0cf71c 100644
+--- a/src/libjasper/base/jas_seq.c
++++ b/src/libjasper/base/jas_seq.c
+@@ -203,11 +203,16 @@ jas_matrix_t *jas_matrix_copy(jas_matrix_t *x)
+ * Bind operations.
+ \******************************************************************************/
+ 
+-void jas_seq2d_bindsub(jas_matrix_t *s, jas_matrix_t *s1, jas_matind_t xstart,
++int jas_seq2d_bindsub(jas_matrix_t *s, jas_matrix_t *s1, jas_matind_t xstart,
+   jas_matind_t ystart, jas_matind_t xend, jas_matind_t yend)
+ {
++	if (xstart < s1->xstart_ || ystart < s1->ystart_ ||
++	    xend > s1->xend_ || yend > s1->yend_)
++		return -1;
++
+ 	jas_matrix_bindsub(s, s1, ystart - s1->ystart_, xstart - s1->xstart_,
+-	  yend - s1->ystart_ - 1, xend - s1->xstart_ - 1);
++			   yend - s1->ystart_ - 1, xend - s1->xstart_ - 1);
++	return 0;
+ }
+ 
+ void jas_matrix_bindsub(jas_matrix_t *mat0, jas_matrix_t *mat1,
+diff --git a/src/libjasper/include/jasper/jas_seq.h b/src/libjasper/include/jasper/jas_seq.h
+index 75e38954..a4faabde 100644
+--- a/src/libjasper/include/jasper/jas_seq.h
++++ b/src/libjasper/include/jasper/jas_seq.h
+@@ -284,7 +284,7 @@ JAS_DLLEXPORT jas_matrix_t *jas_seq2d_create(jas_matind_t xstart, jas_matind_t y
+ #define jas_seq2d_size(s) \
+ 	(jas_seq2d_width(s) * jas_seq2d_height(s))
+ 
+-JAS_DLLEXPORT void jas_seq2d_bindsub(jas_matrix_t *s, jas_matrix_t *s1, jas_matind_t xstart,
++JAS_DLLEXPORT int jas_seq2d_bindsub(jas_matrix_t *s, jas_matrix_t *s1, jas_matind_t xstart,
+   jas_matind_t ystart, jas_matind_t xend, jas_matind_t yend);
+ 
+ /******************************************************************************\
+diff --git a/src/libjasper/jpc/jpc_dec.c b/src/libjasper/jpc/jpc_dec.c
+index 32d3e607..fe7599be 100644
+--- a/src/libjasper/jpc/jpc_dec.c
++++ b/src/libjasper/jpc/jpc_dec.c
+@@ -833,8 +833,10 @@ static int jpc_dec_tileinit(jpc_dec_t *dec, jpc_dec_tile_t *tile)
+ 				if (!(band->data = jas_seq2d_create(0, 0, 0, 0))) {
+ 					return -1;
+ 				}
+-				jas_seq2d_bindsub(band->data, tcomp->data, bnd->locxstart,
+-				  bnd->locystart, bnd->locxend, bnd->locyend);
++				if (jas_seq2d_bindsub(band->data, tcomp->data, bnd->locxstart,
++						      bnd->locystart, bnd->locxend, bnd->locyend)) {
++					return -1;
++				}
+ 				jas_seq2d_setshift(band->data, bnd->xstart, bnd->ystart);
+ 
+ 				assert(rlvl->numprcs);
+@@ -914,8 +916,10 @@ static int jpc_dec_tileinit(jpc_dec_t *dec, jpc_dec_tile_t *tile)
+ 								  0))) {
+ 									return -1;
+ 								}
+-								jas_seq2d_bindsub(cblk->data, band->data,
+-								  tmpxstart, tmpystart, tmpxend, tmpyend);
++								if (jas_seq2d_bindsub(cblk->data, band->data,
++										      tmpxstart, tmpystart, tmpxend, tmpyend)) {
++									return -1;
++								}
+ 								++cblk;
+ 								--cblkcnt;
+ 							}
+diff --git a/src/libjasper/jpc/jpc_enc.c b/src/libjasper/jpc/jpc_enc.c
+index 1f1a3010..a779645e 100644
+--- a/src/libjasper/jpc/jpc_enc.c
++++ b/src/libjasper/jpc/jpc_enc.c
+@@ -2309,8 +2309,10 @@ if (bandinfo->xstart != bandinfo->xend && bandinfo->ystart != bandinfo->yend) {
+ 	if (!(band->data = jas_seq2d_create(0, 0, 0, 0))) {
+ 		goto error;
+ 	}
+-	jas_seq2d_bindsub(band->data, tcmpt->data, bandinfo->locxstart,
+-	  bandinfo->locystart, bandinfo->locxend, bandinfo->locyend);
++	if (jas_seq2d_bindsub(band->data, tcmpt->data, bandinfo->locxstart,
++			      bandinfo->locystart, bandinfo->locxend, bandinfo->locyend)) {
++		goto error;
++	}
+ 	jas_seq2d_setshift(band->data, bandinfo->xstart, bandinfo->ystart);
+ }
+ 	band->orient = bandinfo->orient;
+@@ -2586,7 +2588,9 @@ static jpc_enc_cblk_t *cblk_create(jpc_enc_cblk_t *cblk,
+ 	if (!(cblk->data = jas_seq2d_create(0, 0, 0, 0))) {
+ 		goto error;
+ 	}
+-	jas_seq2d_bindsub(cblk->data, band->data, cblktlx, cblktly, cblkbrx, cblkbry);
++	if (jas_seq2d_bindsub(cblk->data, band->data, cblktlx, cblktly, cblkbrx, cblkbry)) {
++		goto error;
++	}
+ 
+ 	return cblk;
+ 

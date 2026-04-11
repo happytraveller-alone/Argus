@@ -1,0 +1,26 @@
+From 0c229b488d3fa07b8c417bfc615614b66dae2134 Mon Sep 17 00:00:00 2001
+From: Luca Boccassi <luca.boccassi@microsoft.com>
+Date: Mon, 8 Jul 2019 16:54:55 +0100
+Subject: [PATCH] Problem: cannot modify ulimit anymore on Travis
+
+Solution: remove it from the script
+---
+ .travis.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.travis.yml b/.travis.yml
+index 619cea03..ded3fd45 100644
+--- a/.travis.yml
++++ b/.travis.yml
+@@ -29,7 +29,7 @@ before_script:
+ # ZMQ stress tests need more open socket (files) than the usual default
+ # On OSX, it seems the way to set the max files limit is constantly changing, so
+ # try to use all known knobs to ensure compatibility across various versions
+-- if [ $TRAVIS_OS_NAME == "osx" ] ; then sudo sysctl -w kern.maxfiles=64000 ; sudo sysctl -w kern.maxfilesperproc=64000 ; sudo launchctl limit maxfiles 64000 64000 ; fi ; ulimit -n 64000
++- if [ $TRAVIS_OS_NAME == "osx" ] ; then sudo sysctl -w kern.maxfiles=64000 ; sudo sysctl -w kern.maxfilesperproc=64000 ; sudo launchctl limit maxfiles 64000 64000 ; fi
+ 
+ #   Build and check this project
+ script:
+-- 
+2.34.1
+

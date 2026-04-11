@@ -1,0 +1,82 @@
+rules:
+- id: directly-returned-format-string_1
+  languages:
+  - python
+  message: Detected Flask route directly returning a formatted string. This is subject
+    to cross-site scripting if user input can reach the string. Consider using the
+    template engine instead and rendering pages with 'render_template()'.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site
+      Scripting'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A07:2017 - Cross-Site Scripting (XSS)
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern-not-inside: return "..."
+    - pattern-either:
+      - pattern: return "...".format(...)
+      - pattern: return "..." % ...
+      - pattern: return "..." + ...
+      - pattern: return ... + "..."
+      - pattern: return f"...{...}..."
+      - patterns:
+        - pattern: return $X
+        - pattern-either:
+          - pattern-inside: '$X = "...".format(...)
+
+              ...
+
+              '
+          - pattern-inside: '$X = "..." % ...
+
+              ...
+
+              '
+          - pattern-inside: '$X = "..." + ...
+
+              ...
+
+              '
+          - pattern-inside: '$X = ... + "..."
+
+              ...
+
+              '
+          - pattern-inside: '$X = f"...{...}..."
+
+              ...
+
+              '
+        - pattern-not-inside: '$X = "..."
+
+            ...
+
+            '
+  pattern-sources:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: "@$APP.route(...)\ndef $FUNC(..., $PARAM, ...):\n  ...\n"
+      - pattern: $PARAM
+    - pattern: 'request.$FUNC.get(...)
+
+        '
+    - pattern: 'request.$FUNC(...)
+
+        '
+    - pattern: request.$FUNC[...]
+  severity: WARNING

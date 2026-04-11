@@ -1,0 +1,66 @@
+From 1964d68f8500ea3c7b776fa8a2af6266ed109f84 Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Thu, 25 Nov 2021 21:32:20 +0000
+Subject: [PATCH] MDL-72772 gradereport_overview: access checks for viewing
+ grades.
+
+---
+ course/user.php               |  3 +++
+ grade/report/overview/lib.php | 25 ++++++++++++++++---------
+ 2 files changed, 19 insertions(+), 9 deletions(-)
+
+diff --git a/course/user.php b/course/user.php
+index 9c82d01db05..17477f5b1b6 100644
+--- a/course/user.php
++++ b/course/user.php
+@@ -192,6 +192,9 @@ switch ($mode) {
+         require_once $CFG->dirroot.'/grade/lib.php';
+         require_once $CFG->dirroot.'/grade/report/'.$CFG->grade_profilereport.'/lib.php';
+ 
++        // User must be able to view this grade report.
++        require_capability('gradereport/' . $CFG->grade_profilereport .':view', $coursecontext);
++
+         $functionname = 'grade_report_'.$CFG->grade_profilereport.'_profilereport';
+         if (function_exists($functionname)) {
+             $functionname($course, $user, $viewasuser);
+diff --git a/grade/report/overview/lib.php b/grade/report/overview/lib.php
+index b50c0c674a2..d1528b228bd 100644
+--- a/grade/report/overview/lib.php
++++ b/grade/report/overview/lib.php
+@@ -279,17 +279,24 @@ class grade_report_overview extends grade_report {
+                 $finalgrade = $coursedata['finalgrade'];
+                 $courseitem = $coursedata['courseitem'];
+ 
+-                $coursename = format_string(get_course_display_name_for_list($course), true, array('context' => $coursecontext));
+-                // Link to the activity report version of the user grade report.
+-                if ($activitylink) {
+-                    $courselink = html_writer::link(new moodle_url('/course/user.php', array('mode' => 'grade', 'id' => $course->id,
+-                        'user' => $this->user->id)), $coursename);
+-                } else {
+-                    $courselink = html_writer::link(new moodle_url('/grade/report/user/index.php', array('id' => $course->id,
+-                        'userid' => $this->user->id, 'group' => $this->gpr->groupid)), $coursename);
++                $coursenamelink = format_string(get_course_display_name_for_list($course), true, ['context' => $coursecontext]);
++
++                // Link to the course grade report pages (performing same capability checks as the pages themselves).
++                if ($activitylink && has_capability('gradereport/' . $CFG->grade_profilereport .':view', $coursecontext)) {
++                    $coursenamelink = html_writer::link(new moodle_url('/course/user.php', [
++                        'mode' => 'grade',
++                        'id' => $course->id,
++                        'user' => $this->user->id,
++                    ]), $coursenamelink);
++                } else if (!$activitylink && has_capability('gradereport/user:view', $coursecontext)) {
++                    $coursenamelink = html_writer::link(new moodle_url('/grade/report/user/index.php', [
++                        'id' => $course->id,
++                        'userid' => $this->user->id,
++                        'group' => $this->gpr->groupid,
++                    ]), $coursenamelink);
+                 }
+ 
+-                $data = array($courselink, grade_format_gradevalue($finalgrade, $courseitem, true));
++                $data = [$coursenamelink, grade_format_gradevalue($finalgrade, $courseitem, true)];
+ 
+                 if ($this->showrank['any']) {
+                     if ($this->showrank[$course->id] && !is_null($finalgrade)) {
+-- 
+2.34.1
+

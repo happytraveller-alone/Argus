@@ -1,0 +1,52 @@
+rules:
+- id: rules_lgpl_javascript_traversal_rule-generic-path-traversal
+  mode: taint
+  languages:
+  - javascript
+  pattern-sources:
+  - patterns:
+    - focus-metavariable: $REQ
+    - pattern: function ($REQ, $RES, ...) {...}
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: '$FS = require(''fs'')
+
+          ...
+
+          '
+      - pattern-inside: 'import $FS from ''fs''
+
+          ...
+
+          '
+    - pattern-either:
+      - pattern: $FS.createReadStream(...)
+      - patterns:
+        - pattern: $FS.readFile($REQ, ...)
+        - focus-metavariable: $REQ
+      - patterns:
+        - pattern: $FS.readFileSync($REQ,...)
+        - focus-metavariable: $REQ
+      - patterns:
+        - pattern: $FS.readFileAsync($REQ,...)
+        - focus-metavariable: $REQ
+  message: "This application is using untrusted user input with the readFile() and\n\
+    readFileSync() functions. \nThis can lead to directory traversal attacks, as reading\
+    \ files with untrusted input enables arbitrary file access.\nAn attacker could\
+    \ craft malicious input that traverses the file system and exposes sensitive files.\
+    \ \nPlease consider sanitizing and validating all user input before passing it\
+    \ to readFile() or readFileSync() to prevent unwanted file reads.\nHere is an\
+    \ example of a safer usage in readFileAsync():\n```\napp.get('/foo', function\
+    \ (req, res) {\n    var fileName = config.dirName + '/' + data;\n    fs.readFileAsync(\"\
+    fileName\")\n        .then(function (data) {\n            res.download(fileName,\
+    \ downloadFileName);\n        })\n    })\n```\nFor more details see: \nhttps://owasp.org/www-community/attacks/Path_Traversal\n"
+  severity: WARNING
+  metadata:
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    cwe: CWE-23
+    shortDescription: Relative path traversal
+    security-severity: MEDIUM
+    category: security

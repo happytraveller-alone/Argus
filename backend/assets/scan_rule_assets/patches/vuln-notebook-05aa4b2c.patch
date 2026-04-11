@@ -1,0 +1,37 @@
+From 05aa4b2cffb55896b53f0a5e50bc9bca405cb29f Mon Sep 17 00:00:00 2001
+From: Min RK <benjaminrk@gmail.com>
+Date: Fri, 8 Mar 2019 13:26:23 +0100
+Subject: [PATCH] release 5.7.6
+
+---
+ notebook/_version.py                 | 2 +-
+ notebook/static/base/js/namespace.js | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/notebook/_version.py b/notebook/_version.py
+index ca3ef3830..c8d7735b3 100644
+--- a/notebook/_version.py
++++ b/notebook/_version.py
+@@ -9,5 +9,5 @@ store the current version info of the notebook.
+ 
+ # Next beta/alpha/rc release: The version number for beta is X.Y.ZbN **without dots**.
+ 
+-version_info = (5, 7, 5)
++version_info = (5, 7, 6)
+ __version__ = '.'.join(map(str, version_info[:3])) + ''.join(version_info[3:])
+diff --git a/notebook/static/base/js/namespace.js b/notebook/static/base/js/namespace.js
+index ba194f576..c7728f88a 100644
+--- a/notebook/static/base/js/namespace.js
++++ b/notebook/static/base/js/namespace.js
+@@ -73,7 +73,7 @@ define(function(){
+     // tree
+     jglobal('SessionList','tree/js/sessionlist');
+ 
+-    Jupyter.version = "5.7.5";
++    Jupyter.version = "5.7.6";
+     Jupyter._target = '_blank';
+     return Jupyter;
+ });
+-- 
+2.34.1
+

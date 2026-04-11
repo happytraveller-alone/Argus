@@ -1,0 +1,343 @@
+From 1cfe43fd85c66a9e2b5068480b3e043c31e6b8ca Mon Sep 17 00:00:00 2001
+From: usa <usa@b2dd03c8-39d4-4d8f-98ff-823fe69b080e>
+Date: Thu, 14 Dec 2017 13:55:41 +0000
+Subject: [PATCH] merge revision(s) 61242: [Backport #14185]
+
+	Fix a command injection vulnerability in Net::FTP.
+
+git-svn-id: svn+ssh://ci.ruby-lang.org/ruby/branches/ruby_2_3@61248 b2dd03c8-39d4-4d8f-98ff-823fe69b080e
+---
+ ChangeLog                |   4 +
+ lib/net/ftp.rb           |  10 +-
+ test/net/ftp/test_ftp.rb | 234 +++++++++++++++++++++++++++++++++++++++
+ version.h                |   2 +-
+ 4 files changed, 244 insertions(+), 6 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 4197fdd585..28c9c706d5 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,7 @@
++Thu Dec 14 22:55:05 2017  Shugo Maeda  <shugo@ruby-lang.org>
++
++	Fix a command injection vulnerability in Net::FTP.
++
+ Thu Dec 14 22:35:19 2017  Eric Wong  <normalperson@yhbt.net>
+ 
+ 	webrick: compile RE correctly for beginning and end match
+diff --git a/lib/net/ftp.rb b/lib/net/ftp.rb
+index bd89956d36..0437e9504e 100644
+--- a/lib/net/ftp.rb
++++ b/lib/net/ftp.rb
+@@ -622,10 +622,10 @@ module Net
+       if localfile
+         if @resume
+           rest_offset = File.size?(localfile)
+-          f = open(localfile, "a")
++          f = File.open(localfile, "a")
+         else
+           rest_offset = nil
+-          f = open(localfile, "w")
++          f = File.open(localfile, "w")
+         end
+       elsif !block_given?
+         result = String.new
+@@ -655,7 +655,7 @@ module Net
+       f = nil
+       result = nil
+       if localfile
+-        f = open(localfile, "w")
++        f = File.open(localfile, "w")
+       elsif !block_given?
+         result = String.new
+       end
+@@ -701,7 +701,7 @@ module Net
+       else
+         rest_offset = nil
+       end
+-      f = open(localfile)
++      f = File.open(localfile)
+       begin
+         f.binmode
+         if rest_offset
+@@ -720,7 +720,7 @@ module Net
+     # passing in the transmitted data one line at a time.
+     #
+     def puttextfile(localfile, remotefile = File.basename(localfile), &block) # :yield: line
+-      f = open(localfile)
++      f = File.open(localfile)
+       begin
+         storlines("STOR #{remotefile}", f, &block)
+       ensure
+diff --git a/test/net/ftp/test_ftp.rb b/test/net/ftp/test_ftp.rb
+index ca71a918e0..ae07a59056 100644
+--- a/test/net/ftp/test_ftp.rb
++++ b/test/net/ftp/test_ftp.rb
+@@ -5,6 +5,7 @@ require "test/unit"
+ require "ostruct"
+ require "stringio"
+ require "tempfile"
++require "tmpdir"
+ 
+ class FTPTest < Test::Unit::TestCase
+   SERVER_ADDR = "127.0.0.1"
+@@ -1643,6 +1644,227 @@ EOF
+     end
+   end
+ 
++  def test_getbinaryfile_command_injection
++    skip "| is not allowed in filename on Windows" if windows?
++    [false, true].each do |resume|
++      commands = []
++      binary_data = (0..0xff).map {|i| i.chr}.join * 4 * 3
++      server = create_ftp_server { |sock|
++        sock.print("220 (test_ftp).\r\n")
++        commands.push(sock.gets)
++        sock.print("331 Please specify the password.\r\n")
++        commands.push(sock.gets)
++        sock.print("230 Login successful.\r\n")
++        commands.push(sock.gets)
++        sock.print("200 Switching to Binary mode.\r\n")
++        line = sock.gets
++        commands.push(line)
++        host, port = process_port_or_eprt(sock, line)
++        commands.push(sock.gets)
++        sock.print("150 Opening BINARY mode data connection for |echo hello (#{binary_data.size} bytes)\r\n")
++        conn = TCPSocket.new(host, port)
++        binary_data.scan(/.{1,1024}/nm) do |s|
++          conn.print(s)
++        end
++        conn.shutdown(Socket::SHUT_WR)
++        conn.read
++        conn.close
++        sock.print("226 Transfer complete.\r\n")
++      }
++      begin
++        chdir_to_tmpdir do
++          begin
++            ftp = Net::FTP.new
++            ftp.resume = resume
++            ftp.read_timeout = 0.2
++            ftp.connect(SERVER_ADDR, server.port)
++            ftp.login
++            assert_match(/\AUSER /, commands.shift)
++            assert_match(/\APASS /, commands.shift)
++            assert_equal("TYPE I\r\n", commands.shift)
++            ftp.getbinaryfile("|echo hello")
++            assert_equal(binary_data, File.binread("./|echo hello"))
++            assert_match(/\A(PORT|EPRT) /, commands.shift)
++            assert_equal("RETR |echo hello\r\n", commands.shift)
++            assert_equal(nil, commands.shift)
++          ensure
++            ftp.close if ftp
++          end
++        end
++      ensure
++        server.close
++      end
++    end
++  end
++
++  def test_gettextfile_command_injection
++    skip "| is not allowed in filename on Windows" if windows?
++    commands = []
++    text_data = <<EOF.gsub(/\n/, "\r\n")
++foo
++bar
++baz
++EOF
++    server = create_ftp_server { |sock|
++      sock.print("220 (test_ftp).\r\n")
++      commands.push(sock.gets)
++      sock.print("331 Please specify the password.\r\n")
++      commands.push(sock.gets)
++      sock.print("230 Login successful.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to Binary mode.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to ASCII mode.\r\n")
++      line = sock.gets
++      commands.push(line)
++      host, port = process_port_or_eprt(sock, line)
++      commands.push(sock.gets)
++      sock.print("150 Opening TEXT mode data connection for |echo hello (#{text_data.size} bytes)\r\n")
++      conn = TCPSocket.new(host, port)
++      text_data.each_line do |l|
++        conn.print(l)
++      end
++      conn.shutdown(Socket::SHUT_WR)
++      conn.read
++      conn.close
++      sock.print("226 Transfer complete.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to Binary mode.\r\n")
++    }
++    begin
++      chdir_to_tmpdir do
++        begin
++          ftp = Net::FTP.new
++          ftp.connect(SERVER_ADDR, server.port)
++          ftp.login
++          assert_match(/\AUSER /, commands.shift)
++          assert_match(/\APASS /, commands.shift)
++          assert_equal("TYPE I\r\n", commands.shift)
++          ftp.gettextfile("|echo hello")
++          assert_equal(text_data.gsub(/\r\n/, "\n"),
++                       File.binread("./|echo hello"))
++          assert_equal("TYPE A\r\n", commands.shift)
++          assert_match(/\A(PORT|EPRT) /, commands.shift)
++          assert_equal("RETR |echo hello\r\n", commands.shift)
++          assert_equal("TYPE I\r\n", commands.shift)
++          assert_equal(nil, commands.shift)
++        ensure
++          ftp.close if ftp
++        end
++      end
++    ensure
++      server.close
++    end
++  end
++
++  def test_putbinaryfile_command_injection
++    skip "| is not allowed in filename on Windows" if windows?
++    commands = []
++    binary_data = (0..0xff).map {|i| i.chr}.join * 4 * 3
++    received_data = nil
++    server = create_ftp_server { |sock|
++      sock.print("220 (test_ftp).\r\n")
++      commands.push(sock.gets)
++      sock.print("331 Please specify the password.\r\n")
++      commands.push(sock.gets)
++      sock.print("230 Login successful.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to Binary mode.\r\n")
++      line = sock.gets
++      commands.push(line)
++      host, port = process_port_or_eprt(sock, line)
++      commands.push(sock.gets)
++      sock.print("150 Opening BINARY mode data connection for |echo hello (#{binary_data.size} bytes)\r\n")
++      conn = TCPSocket.new(host, port)
++      received_data = conn.read
++      conn.close
++      sock.print("226 Transfer complete.\r\n")
++    }
++    begin
++      chdir_to_tmpdir do
++        File.binwrite("./|echo hello", binary_data)
++        begin
++          ftp = Net::FTP.new
++          ftp.read_timeout = 0.2
++          ftp.connect(SERVER_ADDR, server.port)
++          ftp.login
++          assert_match(/\AUSER /, commands.shift)
++          assert_match(/\APASS /, commands.shift)
++          assert_equal("TYPE I\r\n", commands.shift)
++          ftp.putbinaryfile("|echo hello")
++          assert_equal(binary_data, received_data)
++          assert_match(/\A(PORT|EPRT) /, commands.shift)
++          assert_equal("STOR |echo hello\r\n", commands.shift)
++          assert_equal(nil, commands.shift)
++        ensure
++          ftp.close if ftp
++        end
++      end
++    ensure
++      server.close
++    end
++  end
++
++  def test_puttextfile_command_injection
++    skip "| is not allowed in filename on Windows" if windows?
++    commands = []
++    received_data = nil
++    server = create_ftp_server { |sock|
++      sock.print("220 (test_ftp).\r\n")
++      commands.push(sock.gets)
++      sock.print("331 Please specify the password.\r\n")
++      commands.push(sock.gets)
++      sock.print("230 Login successful.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to Binary mode.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to ASCII mode.\r\n")
++      line = sock.gets
++      commands.push(line)
++      host, port = process_port_or_eprt(sock, line)
++      commands.push(sock.gets)
++      sock.print("150 Opening TEXT mode data connection for |echo hello\r\n")
++      conn = TCPSocket.new(host, port)
++      received_data = conn.read
++      conn.close
++      sock.print("226 Transfer complete.\r\n")
++      commands.push(sock.gets)
++      sock.print("200 Switching to Binary mode.\r\n")
++    }
++    begin
++      chdir_to_tmpdir do
++        File.open("|echo hello", "w") do |f|
++          f.puts("foo")
++          f.puts("bar")
++          f.puts("baz")
++        end
++        begin
++          ftp = Net::FTP.new
++          ftp.connect(SERVER_ADDR, server.port)
++          ftp.login
++          assert_match(/\AUSER /, commands.shift)
++          assert_match(/\APASS /, commands.shift)
++          assert_equal("TYPE I\r\n", commands.shift)
++          ftp.puttextfile("|echo hello")
++          assert_equal(<<EOF.gsub(/\n/, "\r\n"), received_data)
++foo
++bar
++baz
++EOF
++          assert_equal("TYPE A\r\n", commands.shift)
++          assert_match(/\A(PORT|EPRT) /, commands.shift)
++          assert_equal("STOR |echo hello\r\n", commands.shift)
++          assert_equal("TYPE I\r\n", commands.shift)
++          assert_equal(nil, commands.shift)
++        ensure
++          ftp.close if ftp
++        end
++      end
++    ensure
++      server.close
++    end
++  end
++
+   private
+ 
+   def create_ftp_server(sleep_time = nil)
+@@ -1666,4 +1888,16 @@ EOF
+     end
+     return server
+   end
++
++  def chdir_to_tmpdir
++    Dir.mktmpdir do |dir|
++      pwd = Dir.pwd
++      Dir.chdir(dir)
++      begin
++        yield
++      ensure
++        Dir.chdir(pwd)
++      end
++    end
++  end
+ end
+diff --git a/version.h b/version.h
+index 72ed582655..453e52ed2c 100644
+--- a/version.h
++++ b/version.h
+@@ -1,6 +1,6 @@
+ #define RUBY_VERSION "2.3.6"
+ #define RUBY_RELEASE_DATE "2017-12-14"
+-#define RUBY_PATCHLEVEL 382
++#define RUBY_PATCHLEVEL 383
+ 
+ #define RUBY_RELEASE_YEAR 2017
+ #define RUBY_RELEASE_MONTH 12
+-- 
+2.34.1
+

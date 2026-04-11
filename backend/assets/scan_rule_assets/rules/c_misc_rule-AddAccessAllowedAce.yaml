@@ -1,0 +1,19 @@
+rules:
+- id: c_misc_rule-AddAccessAllowedAce
+  languages:
+  - c
+  - cpp
+  message: 'Make sure that you set inheritance by hand if you wish it to inherit.
+
+    '
+  metadata:
+    cwe: CWE-732
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    shortDescription: This doesn't set the inheritance bits in the access control
+      entry (ACE) header (CWE-732)
+    security-severity: High
+    category: security
+  pattern: AddAccessAllowedAce(...)
+  severity: WARNING

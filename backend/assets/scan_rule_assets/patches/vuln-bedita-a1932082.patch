@@ -1,0 +1,189 @@
+From a193208207db66ed8e7c0c22ef1e61c8dc4a2670 Mon Sep 17 00:00:00 2001
+From: batopa <batopa@gmail.com>
+Date: Fri, 16 Oct 2015 13:22:58 +0200
+Subject: [PATCH]  #755 fix XSS security hole
+
+---
+ bedita-app/app_error.php                    | 14 ++++++++++---
+ bedita-app/controllers/pages_controller.php | 22 ++++++++++++++++++++-
+ bedita-app/views/elements/filters_form.tpl  |  2 +-
+ bedita-app/views/elements/quick_item.tpl    |  8 +++++---
+ bedita-app/views/pages/show_objects.tpl     | 15 +++++++-------
+ bedita-app/webroot/js/beditaUI.js           |  8 +++++++-
+ 6 files changed, 52 insertions(+), 17 deletions(-)
+
+diff --git a/bedita-app/app_error.php b/bedita-app/app_error.php
+index 035e77d93..c24276a64 100644
+--- a/bedita-app/app_error.php
++++ b/bedita-app/app_error.php
+@@ -254,7 +254,6 @@ class AppError extends ErrorHandler {
+ 		$this->checkController();
+ 		if ($this->controller->RequestHandler->isAjax() && BACKEND_APP) {
+ 			$messages['output'] = ($this->controller->ResponseHandler->getType() == 'json') ? 'json' : 'beditaMsg';
+-			$messages['headers'] = array('HTTP/1.1 500 Internal Server Error');
+ 			return $this->handleBeditaAjaxException($messages);
+ 		}
+ 		$this->restoreDebugLevel();
+@@ -307,11 +306,17 @@ class AppError extends ErrorHandler {
+ 	 *         															if it's set and empty use "HTTP/1.1 500 Internal Server Error"
+ 	 */
+ 	public function handleBeditaAjaxException(array $messages) {
+-		if (empty($messages['output'])) {
++		$isBeditaAjaxException = (get_class($this->exception) == 'BeditaAjaxException') ? true : false;
++		if (empty($messages['output']) && $isBeditaAjaxException) {
+ 			$messages['output'] = $this->exception->getOutputType();
+ 		}
+ 
+-		$headers = (!empty($messages['headers'])) ? $messages['headers'] : $this->exception->getHeaders();
++		$headers = null;
++		if (!empty($messages['headers'])) {
++			$headers = $messages['headers'];
++		} elseif ($isBeditaAjaxException) {
++			$headers = $this->exception->getHeaders();
++		}
+ 
+ 		if ($headers !== null) {
+ 			if (empty($headers)) {
+@@ -323,6 +328,9 @@ class AppError extends ErrorHandler {
+ 			foreach ($headers as $header) {
+ 				header($header);
+ 			}
++		} else {
++			$status = !empty($this->error['status']) ? $this->error['status'] : 500;
++			$this->controller->ResponseHandler->sendStatus($status);
+ 		}
+ 
+ 		$this->controller->set("output", $messages['output']);
+diff --git a/bedita-app/controllers/pages_controller.php b/bedita-app/controllers/pages_controller.php
+index 124e71f2f..2c8adb74a 100644
+--- a/bedita-app/controllers/pages_controller.php
++++ b/bedita-app/controllers/pages_controller.php
+@@ -104,6 +104,27 @@ class PagesController extends AppController {
+      **/
+     public function showObjects($main_object_id = null, $relation = null, $main_object_type_id = null, $objectType = "related") {
+         $this->ajaxCheck();
++        // check params
++        if (!empty($main_object_id) && !is_numeric($main_object_id)) {
++            throw new BeditaBadRequestException(
++                __('Bad Request', true),
++                'Requested URL path contains invalid parameters ($main_object_id)'
++            );
++        }
++        if (!empty($main_object_type_id) && !is_numeric($main_object_type_id)) {
++            throw new BeditaBadRequestException(
++                __('Bad Request', true),
++                'Requested URL path contains invalid parameters ($main_object_type_id)'
++            );
++        }
++        $conf = Configure::getInstance();
++        if (!isset($conf->objectTypes[$objectType])) {
++            throw new BeditaBadRequestException(
++                __('Bad Request', true),
++                'Requested URL path contains invalid parameters ($objectType)'
++            );
++        }
++
+         // clean session filter
+         if (empty($this->params['form']['filter'])) {
+             $this->SessionFilter->clean();
+@@ -111,7 +132,6 @@ class PagesController extends AppController {
+ 
+         $filter = array();
+         $excludeIds = array();
+-        $conf = Configure::getInstance();
+         
+         if (!empty($relation)) {
+             
+diff --git a/bedita-app/views/elements/filters_form.tpl b/bedita-app/views/elements/filters_form.tpl
+index 8a7cdef09..4e7c18996 100644
+--- a/bedita-app/views/elements/filters_form.tpl
++++ b/bedita-app/views/elements/filters_form.tpl
+@@ -18,7 +18,7 @@ available options:
+ -->
+ *}
+ 
+-<form id="formFilter" action="{$filters.url|default:$beurl->getUrl(['page', 'dim', 'dir', 'order'])}" 
++<form id="formFilter" action="{$filters.url|default:$beurl->getUrl(['page', 'dim', 'dir', 'order'])|escape:"html"}" 
+ 	method="post">
+ 	{$beForm->csrf()}
+ 	<input type="hidden" name="cleanFilter" value=""/>
+diff --git a/bedita-app/views/elements/quick_item.tpl b/bedita-app/views/elements/quick_item.tpl
+index e09cb550f..350406c17 100644
+--- a/bedita-app/views/elements/quick_item.tpl
++++ b/bedita-app/views/elements/quick_item.tpl
+@@ -14,9 +14,11 @@
+ 					{$objectTypeIds = $objectTypeIds|default:$conf->objectTypes.leafs.id}
+ 					{foreach $objectTypeIds as $typeId}
+ 						{strip}
+-						<option {if ($conf->objectTypes[$typeId].name == 'document')}selected="selected"{/if} value="{$typeId}" {if in_array($typeId, $conf->objectTypes.multimedia.id)}data-multimedia="true"{/if}>
+-							{t}{$conf->objectTypes[$typeId].name}{/t}
+-						</option>
++						{if !empty($conf->objectTypes[$typeId])}
++							<option {if ($conf->objectTypes[$typeId].name == 'document')}selected="selected"{/if} value="{$typeId}" {if in_array($typeId, $conf->objectTypes.multimedia.id)}data-multimedia="true"{/if}>
++								{t}{$conf->objectTypes[$typeId].name}{/t}
++							</option>
++						{/if}
+ 						{/strip}
+ 					{/foreach}
+ 					</select>
+diff --git a/bedita-app/views/pages/show_objects.tpl b/bedita-app/views/pages/show_objects.tpl
+index 0fcbd2ee4..26e93f2ad 100644
+--- a/bedita-app/views/pages/show_objects.tpl
++++ b/bedita-app/views/pages/show_objects.tpl
+@@ -1,20 +1,19 @@
+ <script type="text/javascript">
+ <!--
+-//var urlShowObj = "{$html->here}";
+ 
+-if (typeof urlAddObjToAss{$relation|default:'norelations'|capitalize|replace:'-':'_'} == "string") {
+-	var urlToAdd = urlAddObjToAss{$relation|default:''|capitalize|replace:'-':'_'};
+-} else if (typeof urlAddObjToAss{$objectType|default:''|capitalize} == "string") {
+-	var urlToAdd = urlAddObjToAss{$objectType|default:''|capitalize};
++if (typeof urlAddObjToAss{$relation|default:'norelations'|capitalize|replace:'-':'_'|escape:"javascript"} == "string") {
++	var urlToAdd = urlAddObjToAss{$relation|default:''|capitalize|replace:'-':'_'|escape:"javascript"};
++} else if (typeof urlAddObjToAss{$objectType|default:''|capitalize|escape:"javascript"} == "string") {
++	var urlToAdd = urlAddObjToAss{$objectType|default:''|capitalize|escape:"javascript"};
+ } else if (typeof urlAddObjToAss == "string") {
+ 	var urlToAdd = urlAddObjToAss;
+ } else {
+ 	var urlToAdd = "{$html->url('/pages/loadObjectToAssoc')}";
+ }
+ 
+-var relType = "{$relation|default:""}";
+-var suffix = "{$relation|default:""|capitalize|replace:'-':'_'}";
+-var typesuffix = "{$objectType|default:'related'|capitalize}";
++var relType = "{$relation|default:""|escape:"javascript"}";
++var suffix = "{$relation|default:""|capitalize|replace:'-':'_'|escape:"javascript"}";
++var typesuffix = "{$objectType|default:'related'|capitalize|escape:"javascript"}";
+ 
+ /**
+  * handle a list of object's ids
+diff --git a/bedita-app/webroot/js/beditaUI.js b/bedita-app/webroot/js/beditaUI.js
+index ed34277c0..d9a6af354 100644
+--- a/bedita-app/webroot/js/beditaUI.js
++++ b/bedita-app/webroot/js/beditaUI.js
+@@ -407,6 +407,7 @@ $(document).ready(function(){
+             destination: '',
+             requestData: {},
+             success: function() {},
++            error: function() {}
+         };
+ 
+         if (typeof options == 'undefined' || !$.isPlainObject(options)) {
+@@ -433,7 +434,12 @@ $(document).ready(function(){
+             $("#modal #modalmain").find('.loader').show();
+             $("#modalmain").load(destination, options.requestData, function(response, status, xhr) {
+                 $("#modal #modalmain").find('.loader').hide();
+-                options.success();
++                if (status == 'error') {
++                    $("#modalmain").html(response);
++                    options.error(response, status, xhr);
++                } else {
++                    options.success(response, status, xhr);
++                }
+             });
+         }
+ 
+-- 
+2.34.1
+

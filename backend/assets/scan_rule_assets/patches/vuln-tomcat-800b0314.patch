@@ -1,0 +1,76 @@
+From 800b03140e640f8892f27021e681645e8e320177 Mon Sep 17 00:00:00 2001
+From: Mark Thomas <markt@apache.org>
+Date: Fri, 6 Nov 2020 19:26:21 +0000
+Subject: [PATCH] Fix BZ 64871. Log if file access is blocked due to symlinks
+
+https://bz.apache.org/bugzilla/show_bug.cgi?id=64871
+---
+ .../apache/naming/resources/FileDirContext.java   | 15 ++++++++++++++-
+ .../naming/resources/LocalStrings.properties      |  2 ++
+ webapps/docs/changelog.xml                        |  4 ++++
+ 3 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/java/org/apache/naming/resources/FileDirContext.java b/java/org/apache/naming/resources/FileDirContext.java
+index 3ce44a4774..5d667fad51 100644
+--- a/java/org/apache/naming/resources/FileDirContext.java
++++ b/java/org/apache/naming/resources/FileDirContext.java
+@@ -884,6 +884,19 @@ public class FileDirContext extends BaseDirContext {
+             canPath = normalize(canPath);
+         }
+         if (!canPath.equals(absPath)) {
++            if (!canPath.equalsIgnoreCase(absPath)) {
++                // Typically means symlinks are in use but being ignored. Given
++                // the symlink was likely created for a reason, log a warning
++                // that it was ignored.
++                String msg = sm.getString("fileDirContext.canonicalfileCheckFailed",
++                        getDocBase(), absPath, canPath);
++                // Log issues with configuration files at a higher level
++                if(absPath.startsWith("/META-INF/") || absPath.startsWith("/WEB-INF/")) {
++                    log.error(msg);
++                } else {
++                    log.warn(msg);
++                }
++            }
+             return null;
+         }
+ 
+@@ -900,7 +913,7 @@ public class FileDirContext extends BaseDirContext {
+         // expression irrespective of input length.
+         for (int i = 0; i < len; i++) {
+             char c = name.charAt(i);
+-            if (c == '\"' || c == '<' || c == '>') {
++            if (c == '\"' || c == '<' || c == '>' || c == ':') {
+                 // These characters are disallowed in Windows file names and
+                 // there are known problems for file names with these characters
+                 // when using File#getCanonicalPath().
+diff --git a/java/org/apache/naming/resources/LocalStrings.properties b/java/org/apache/naming/resources/LocalStrings.properties
+index 597ee087a4..53fb81f545 100644
+--- a/java/org/apache/naming/resources/LocalStrings.properties
++++ b/java/org/apache/naming/resources/LocalStrings.properties
+@@ -15,6 +15,8 @@
+ 
+ classpathUrlStreamHandler.notFound=Unable to load the resource [{0}] using the thread context class loader or the current class''s class loader
+ 
++fileDirContext.canonicalfileCheckFailed=Resource for web application [{0}] at path [{1}] was not loaded as the canonical path [{2}] did not match. Use of symlinks is one possible cause.
++
+ fileResources.base=Document base [{0}] does not exist or is not a readable directory
+ fileResources.canonical.fail=A canonical path could not be determined for [{0}]
+ fileResources.listingNull=Could not get dir listing for [{0}]
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index 432a2497f4..035f086656 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -87,6 +87,10 @@
+         <bug>64805</bug>: Correct imports used by <code>JMXProxyServlet</code>.
+         (markt)
+       </fix>
++      <add>
++        <bug>64871</bug>: Log a warning if Tomcat blocks access to a file
++        because it uses symlinks. (markt)
++      </add>
+     </changelog>
+   </subsection>
+   <subsection name="Coyote">
+-- 
+2.34.1
+

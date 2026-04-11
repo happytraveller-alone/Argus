@@ -1,0 +1,53 @@
+From 038131c8b5614f18c14d964dc53b6960ae6c30d8 Mon Sep 17 00:00:00 2001
+From: Rajesh Taneja <rajesh@moodle.com>
+Date: Mon, 26 Mar 2012 11:54:01 +1300
+Subject: [PATCH] MDL-31745 blog: Fixed up encoding issue within blog
+
+---
+ blog/lib.php | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/blog/lib.php b/blog/lib.php
+index 401d1f0ddce..ca1bb0f4b7f 100755
+--- a/blog/lib.php
++++ b/blog/lib.php
+@@ -672,7 +672,7 @@
+             $querystring = '';
+             foreach($_GET as $var => $val) {
+                 $var = clean_param($var, PARAM_ALPHANUM);   // See MDL-22631
+-                $val = clean_param($val, PARAM_CLEAN);
++                $val = urlencode(clean_param($val, PARAM_CLEAN));
+                 if(!$first) {
+                     $first = true;
+                     if ($var != 'filterselect' && $var != 'filtertype') {
+@@ -683,13 +683,13 @@
+                     }
+                 } else {
+                     if ($var != 'filterselect' && $var != 'filtertype') {
+-                        $querystring .= '&amp;'.$var.'='.$val;
++                        $querystring .= '&'.$var.'='.$val;
+                         $hasparam = true;
+                     }
+                 }
+             }
+             if (isset($hasparam)) {
+-                $querystring .= '&amp;';
++                $querystring .= '&';
+             } else {
+                 $querystring = '?';
+             }
+@@ -697,9 +697,8 @@
+             $querystring = '?';
+         }
+ 
+-        return strip_querystring(qualified_me()) . $querystring. 'filtertype='.
+-                $filtertype.'&amp;filterselect='.$filterselect.'&amp;';
+-
++        return s(strip_querystring(qualified_me()) . $querystring. 'filtertype='.
++                $filtertype.'&filterselect='.$filterselect.'&', true);
+     }
+ 
+     /**
+-- 
+2.34.1
+

@@ -1,0 +1,70 @@
+From 7c96646de0efda16cded8491138bfefe31aca940 Mon Sep 17 00:00:00 2001
+From: Aleksander Machniak <alec@alec.pl>
+Date: Thu, 5 Feb 2015 11:27:34 +0100
+Subject: [PATCH] Fix security issue in DBMail driver of password plugin
+ (#1490261)
+
+---
+ CHANGELOG                                 |  1 +
+ plugins/password/drivers/dbmail.php       | 17 +++++++++++++++--
+ plugins/password/helpers/chgdbmailusers.c |  2 +-
+ 3 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/CHANGELOG b/CHANGELOG
+index 2b04ac290..74cd27db1 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -18,6 +18,7 @@ CHANGELOG Roundcube Webmail
+ - Fix keyboard navigation and css in datepicker widget across many Firefox versions
+ - Fix false warning when opening attached text/plain files (#1490241)
+ - Fix bug where signature could have been inserted twice after plain-to-html switch (#1490239)
++- Fix security issue in DBMail driver of password plugin (#1490261)
+ 
+ RELEASE 1.1-rc
+ --------------
+diff --git a/plugins/password/drivers/dbmail.php b/plugins/password/drivers/dbmail.php
+index d76486021..120728395 100644
+--- a/plugins/password/drivers/dbmail.php
++++ b/plugins/password/drivers/dbmail.php
+@@ -35,10 +35,23 @@ class rcube_dbmail_password
+     function save($currpass, $newpass)
+     {
+         $curdir   = RCUBE_PLUGINS_DIR . 'password/helpers';
+-        $username = escapeshellcmd($_SESSION['username']);
++        $username = escapeshellarg($_SESSION['username']);
++        $password = escapeshellarg($newpass);
+         $args     = rcmail::get_instance()->config->get('password_dbmail_args', '');
++        $command  = "$curdir/chgdbmailusers -c $username -w $password $args";
+ 
+-        exec("$curdir/chgdbmailusers -c $username -w $newpass $args", $output, $returnvalue);
++        if (strlen($command) > 1024) {
++            rcube::raise_error(array(
++                'code' => 600,
++                'type' => 'php',
++                'file' => __FILE__, 'line' => __LINE__,
++                'message' => "Password plugin: The command is too long."
++                ), true, false);
++
++            return PASSWORD_ERROR;
++        }
++
++        exec($command, $output, $returnvalue);
+ 
+         if ($returnvalue == 0) {
+             return PASSWORD_SUCCESS;
+diff --git a/plugins/password/helpers/chgdbmailusers.c b/plugins/password/helpers/chgdbmailusers.c
+index 22793857d..be237556e 100644
+--- a/plugins/password/helpers/chgdbmailusers.c
++++ b/plugins/password/helpers/chgdbmailusers.c
+@@ -16,7 +16,7 @@
+ main(int argc, char *argv[])
+ {
+   int cnt,rc,cc;
+-  char cmnd[255];
++  char cmnd[1024];
+ 
+   strcpy(cmnd, CMD);
+ 
+-- 
+2.34.1
+

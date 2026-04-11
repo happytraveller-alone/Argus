@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="FinalizeOnlyCallsSuperFinalize Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for FinalizeOnlyCallsSuperFinalize</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="FinalizeOnlyCallsSuperFinalize" language="java" since="1.5" message="Finalize should do something besides just calling super.finalize()" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#finalizeonlycallssuperfinalize">
+            <description>
+    If the finalize() is implemented, it should do something besides just calling super.finalize(). Note that Oracle has declared Object.finalize() as deprecated since JDK 9.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //MethodDeclaration[@Name='finalize'][@Arity = 0]
+       [Block[@Size=1]/ExpressionStatement/MethodCall[@MethodName = "finalize"][SuperExpression]]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    protected void finalize() {
+        super.finalize();
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

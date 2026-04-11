@@ -1,0 +1,40 @@
+From 463c1fa25d45e393dc1f1ea235286f79e872fad0 Mon Sep 17 00:00:00 2001
+From: Howard Chu <hyc@openldap.org>
+Date: Tue, 14 Feb 2012 17:29:14 -0800
+Subject: [PATCH] ITS#7143 fix attr_dup2 when no values are present (attrsOnly
+ = TRUE)
+
+---
+ servers/slapd/attr.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/servers/slapd/attr.c b/servers/slapd/attr.c
+index 9fec8955d..f2f74effc 100644
+--- a/servers/slapd/attr.c
++++ b/servers/slapd/attr.c
+@@ -232,13 +232,16 @@ attr_dup2( Attribute *tmp, Attribute *a )
+ 		if ( a->a_nvals != a->a_vals ) {
+ 
+ 			tmp->a_nvals = ch_malloc( (tmp->a_numvals + 1) * sizeof(struct berval) );
+-			for ( j = 0; !BER_BVISNULL( &a->a_nvals[j] ); j++ ) {
+-				assert( j < i );
+-				ber_dupbv( &tmp->a_nvals[j], &a->a_nvals[j] );
+-				if ( BER_BVISNULL( &tmp->a_nvals[j] ) ) break;
+-				/* FIXME: error? */
++			j = 0;
++			if ( i ) {
++				for ( ; !BER_BVISNULL( &a->a_nvals[j] ); j++ ) {
++					assert( j < i );
++					ber_dupbv( &tmp->a_nvals[j], &a->a_nvals[j] );
++					if ( BER_BVISNULL( &tmp->a_nvals[j] ) ) break;
++					/* FIXME: error? */
++				}
++				assert( j == i );
+ 			}
+-			assert( j == i );
+ 			BER_BVZERO( &tmp->a_nvals[j] );
+ 
+ 		} else {
+-- 
+2.34.1
+

@@ -1,0 +1,164 @@
+From 2344a4c0d03e307ba6b8ab6dc8b894cc8bac63f2 Mon Sep 17 00:00:00 2001
+From: Mark Thomas <markt@apache.org>
+Date: Wed, 8 May 2024 08:36:43 +0100
+Subject: [PATCH] Make counting of active streams more robust
+
+---
+ .../http2/Http2AsyncUpgradeHandler.java       |  2 +-
+ .../coyote/http2/Http2UpgradeHandler.java     | 20 +++++++++----------
+ java/org/apache/coyote/http2/Stream.java      | 16 +++++++++++++++
+ webapps/docs/changelog.xml                    |  4 ++++
+ 4 files changed, 31 insertions(+), 11 deletions(-)
+
+diff --git a/java/org/apache/coyote/http2/Http2AsyncUpgradeHandler.java b/java/org/apache/coyote/http2/Http2AsyncUpgradeHandler.java
+index 14062c98b8..afdb2617a8 100644
+--- a/java/org/apache/coyote/http2/Http2AsyncUpgradeHandler.java
++++ b/java/org/apache/coyote/http2/Http2AsyncUpgradeHandler.java
+@@ -157,7 +157,7 @@ public class Http2AsyncUpgradeHandler extends Http2UpgradeHandler {
+                 boolean active = state.isActive();
+                 state.sendReset();
+                 if (active) {
+-                    decrementActiveRemoteStreamCount();
++                    decrementActiveRemoteStreamCount(getStream(se.getStreamId()));
+                 }
+             }
+ 
+diff --git a/java/org/apache/coyote/http2/Http2UpgradeHandler.java b/java/org/apache/coyote/http2/Http2UpgradeHandler.java
+index d656a564ae..db73830d45 100644
+--- a/java/org/apache/coyote/http2/Http2UpgradeHandler.java
++++ b/java/org/apache/coyote/http2/Http2UpgradeHandler.java
+@@ -290,8 +290,8 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+     }
+ 
+ 
+-    protected void decrementActiveRemoteStreamCount() {
+-        setConnectionTimeoutForStreamCount(activeRemoteStreamCount.decrementAndGet());
++    protected void decrementActiveRemoteStreamCount(Stream stream) {
++        setConnectionTimeoutForStreamCount(stream.decrementAndGetActiveRemoteStreamCount());
+     }
+ 
+ 
+@@ -598,7 +598,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+                 boolean active = state.isActive();
+                 state.sendReset();
+                 if (active) {
+-                    decrementActiveRemoteStreamCount();
++                    decrementActiveRemoteStreamCount(getStream(se.getStreamId()));
+                 }
+             }
+             socketWrapper.write(true, rstFrame, 0, rstFrame.length);
+@@ -825,7 +825,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+     protected void sentEndOfStream(Stream stream) {
+         stream.sentEndOfStream();
+         if (!stream.isActive()) {
+-            decrementActiveRemoteStreamCount();
++            decrementActiveRemoteStreamCount(stream);
+         }
+     }
+ 
+@@ -1208,7 +1208,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+     }
+ 
+ 
+-    private Stream getStream(int streamId) {
++    Stream getStream(int streamId) {
+         Integer key = Integer.valueOf(streamId);
+         AbstractStream result = streams.get(key);
+         if (result instanceof Stream) {
+@@ -1536,6 +1536,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+             Stream stream = getStream(streamId, false);
+             if (stream == null) {
+                 stream = createRemoteStream(streamId);
++                activeRemoteStreamCount.incrementAndGet();
+             }
+             if (streamId < maxActiveRemoteStreamId) {
+                 throw new ConnectionException(sm.getString("upgradeHandler.stream.old", Integer.valueOf(streamId),
+@@ -1597,9 +1598,8 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+             Stream stream = (Stream) abstractNonZeroStream;
+             if (stream.isActive()) {
+                 if (stream.receivedEndOfHeaders()) {
+-
+-                    if (localSettings.getMaxConcurrentStreams() < activeRemoteStreamCount.incrementAndGet()) {
+-                        decrementActiveRemoteStreamCount();
++                    if (localSettings.getMaxConcurrentStreams() < activeRemoteStreamCount.get()) {
++                        decrementActiveRemoteStreamCount(stream);
+                         // Ignoring maxConcurrentStreams increases the overhead count
+                         increaseOverheadCount(FrameType.HEADERS);
+                         throw new StreamException(
+@@ -1643,7 +1643,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+     private void receivedEndOfStream(Stream stream) throws ConnectionException {
+         stream.receivedEndOfStream();
+         if (!stream.isActive()) {
+-            decrementActiveRemoteStreamCount();
++            decrementActiveRemoteStreamCount(stream);
+         }
+     }
+ 
+@@ -1669,7 +1669,7 @@ class Http2UpgradeHandler extends AbstractStream implements InternalHttpUpgradeH
+             boolean active = stream.isActive();
+             stream.receiveReset(errorCode);
+             if (active) {
+-                decrementActiveRemoteStreamCount();
++                decrementActiveRemoteStreamCount(stream);
+             }
+         }
+     }
+diff --git a/java/org/apache/coyote/http2/Stream.java b/java/org/apache/coyote/http2/Stream.java
+index 5bb4dfba0f..f8e80be5b8 100644
+--- a/java/org/apache/coyote/http2/Stream.java
++++ b/java/org/apache/coyote/http2/Stream.java
+@@ -25,6 +25,7 @@ import java.util.HashSet;
+ import java.util.Locale;
+ import java.util.Map;
+ import java.util.Set;
++import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.locks.Lock;
+ import java.util.concurrent.locks.ReentrantLock;
+ import java.util.function.Supplier;
+@@ -88,6 +89,7 @@ class Stream extends AbstractNonZeroStream implements HeaderEmitter {
+     private final StreamInputBuffer inputBuffer;
+     private final StreamOutputBuffer streamOutputBuffer = new StreamOutputBuffer();
+     private final Http2OutputBuffer http2OutputBuffer = new Http2OutputBuffer(coyoteResponse, streamOutputBuffer);
++    private final AtomicBoolean removedFromActiveCount = new AtomicBoolean(false);
+ 
+     // State machine would be too much overhead
+     private int headerState = HEADER_STATE_START;
+@@ -838,6 +840,20 @@ class Stream extends AbstractNonZeroStream implements HeaderEmitter {
+     }
+ 
+ 
++    int decrementAndGetActiveRemoteStreamCount() {
++        /*
++         * Protect against mis-counting of active streams. This method should only be called once per stream but since
++         * the count of active streams is used to enforce the maximum concurrent streams limit, make sure each stream is
++         * only removed from the active count exactly once.
++         */
++        if (removedFromActiveCount.compareAndSet(false, true)) {
++            return handler.activeRemoteStreamCount.decrementAndGet();
++        } else {
++            return handler.activeRemoteStreamCount.get();
++        }
++    }
++
++
+     class StreamOutputBuffer implements HttpOutputBuffer, WriteBuffer.Sink {
+ 
+         private final Lock writeLock = new ReentrantLock();
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index c956b10335..de09f33866 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -161,6 +161,10 @@
+         <code>Connector</code> element, similar to the <code>Executor</code>
+         element, for consistency. (remm)
+       </update>
++      <fix>
++        Make counting of active HTTP/2 streams per connection more robust.
++        (markt)
++      </fix>
+     </changelog>
+   </subsection>
+   <subsection name="Jasper">
+-- 
+2.34.1
+

@@ -1,0 +1,90 @@
+From 1377517ad69bf35b7a5da0292ce45172210aaf5d Mon Sep 17 00:00:00 2001
+From: pwd <weidangpeng@gmail.com>
+Date: Mon, 2 Dec 2019 18:42:24 +0800
+Subject: [PATCH] use function safe_addition_for_params to check integer
+ overflow
+
+---
+ src/fromsixel.c | 31 +++++++++++++++++++++++++++----
+ 1 file changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/src/fromsixel.c b/src/fromsixel.c
+index 7d8390a..07c7bff 100644
+--- a/src/fromsixel.c
++++ b/src/fromsixel.c
+@@ -52,6 +52,7 @@
+ #include <stdio.h>
+ #include <ctype.h>   /* isdigit */
+ #include <string.h>  /* memcpy */
++#include <limits.h>
+ 
+ #if defined(HAVE_INTTYPES_H)
+ # include <inttypes.h>
+@@ -367,6 +368,16 @@ parser_context_init(parser_context_t *context)
+     return status;
+ }
+ 
++SIXELSTATUS safe_addition_for_params(parser_context_t *context, unsigned char *p){
++    int x;
++
++    x = *p - '0'; /* 0 <= x <= 9 */
++    if ((context->param > INT_MAX / 10) || (x > INT_MAX - context->param * 10)) {
++        return SIXEL_BAD_INTEGER_OVERFLOW;
++    }
++    context->param = context->param * 10 + x;
++    return SIXEL_OK;
++}
+ 
+ /* convert sixel data into indexed pixel bytes and palette data */
+ SIXELAPI SIXELSTATUS
+@@ -446,7 +457,10 @@ sixel_decode_raw_impl(
+                 if (context->param < 0) {
+                     context->param = 0;
+                 }
+-                context->param = context->param * 10 + *p - '0';
++                status = safe_addition_for_params(context, p);
++                if (SIXEL_FAILED(status)) {
++                    goto end;
++                }
+                 p++;
+                 break;
+             case ';':
+@@ -647,7 +661,10 @@ sixel_decode_raw_impl(
+             case '7':
+             case '8':
+             case '9':
+-                context->param = context->param * 10 + *p - '0';
++                status = safe_addition_for_params(context, p);
++                if (SIXEL_FAILED(status)) {
++                    goto end;
++                }
+                 p++;
+                 break;
+             case ';':
+@@ -721,7 +738,10 @@ sixel_decode_raw_impl(
+             case '7':
+             case '8':
+             case '9':
+-                context->param = context->param * 10 + *p - '0';
++                status = safe_addition_for_params(context, p);
++                if (SIXEL_FAILED(status)) {
++                    goto end;
++                }
+                 p++;
+                 break;
+             default:
+@@ -753,7 +773,10 @@ sixel_decode_raw_impl(
+             case '7':
+             case '8':
+             case '9':
+-                context->param = context->param * 10 + *p - '0';
++                status = safe_addition_for_params(context, p);
++                if (SIXEL_FAILED(status)) {
++                    goto end;
++                }
+                 p++;
+                 break;
+             case ';':
+-- 
+2.34.1
+

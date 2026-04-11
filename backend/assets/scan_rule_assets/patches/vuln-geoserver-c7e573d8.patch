@@ -1,0 +1,3669 @@
+From c7e573d83a6f5982e08da4c9fc32a765bcc24a0c Mon Sep 17 00:00:00 2001
+From: aaime <jody.garnett@gmail.com>
+Date: Fri, 21 Jul 2023 05:52:25 +0000
+Subject: [PATCH] updating version numbers and release notes for 2.23.2
+
+---
+ doc/en/developer/source/conf.py                           | 2 +-
+ .../source/programming-guide/ows-services/hello/pom.xml   | 4 ++--
+ doc/en/docguide/source/conf.py                            | 2 +-
+ doc/en/pom.xml                                            | 2 +-
+ doc/en/user/source/conf.py                                | 2 +-
+ doc/zhCN/pom.xml                                          | 2 +-
+ src/community/app-schema/pom.xml                          | 2 +-
+ src/community/app-schema/webservice-test/pom.xml          | 2 +-
+ src/community/backup-restore/core/pom.xml                 | 2 +-
+ src/community/backup-restore/extension/pom.xml            | 2 +-
+ src/community/backup-restore/pom.xml                      | 2 +-
+ src/community/backup-restore/rest/pom.xml                 | 2 +-
+ src/community/backup-restore/web/pom.xml                  | 2 +-
+ src/community/cog/pom.xml                                 | 2 +-
+ src/community/colormap/pom.xml                            | 2 +-
+ src/community/cov-json/pom.xml                            | 2 +-
+ src/community/datadir-catalog-loader/pom.xml              | 2 +-
+ src/community/dds/pom.xml                                 | 2 +-
+ src/community/dyndimension/pom.xml                        | 2 +-
+ src/community/elasticsearch/pom.xml                       | 2 +-
+ .../features-templating/features-templating-core/pom.xml  | 2 +-
+ .../features-templating-ogcapi/pom.xml                    | 2 +-
+ .../features-templating/features-templating-ows/pom.xml   | 2 +-
+ .../features-templating/features-templating-rest/pom.xml  | 2 +-
+ .../features-templating/features-templating-web/pom.xml   | 2 +-
+ src/community/features-templating/pom.xml                 | 2 +-
+ src/community/flatgeobuf/pom.xml                          | 2 +-
+ src/community/gdal/gdal-wcs/pom.xml                       | 2 +-
+ src/community/gdal/gdal-wps/pom.xml                       | 2 +-
+ src/community/gdal/pom.xml                                | 2 +-
+ src/community/geomesa/pom.xml                             | 2 +-
+ src/community/geopkg/pom.xml                              | 2 +-
+ src/community/gpxppio/pom.xml                             | 2 +-
+ src/community/gsr/pom.xml                                 | 2 +-
+ src/community/gwc-azure-blob/pom.xml                      | 2 +-
+ src/community/gwc-distributed/pom.xml                     | 2 +-
+ src/community/gwc-mbtiles/pom.xml                         | 2 +-
+ src/community/gwc-sqlite/pom.xml                          | 2 +-
+ src/community/hello/pom.xml                               | 2 +-
+ src/community/hello_web/pom.xml                           | 2 +-
+ src/community/hz-cluster/pom.xml                          | 2 +-
+ src/community/importer-fgdb/pom.xml                       | 2 +-
+ src/community/importer-jdbc/pom.xml                       | 2 +-
+ src/community/jdbc-metrics/pom.xml                        | 2 +-
+ src/community/jdbcconfig/pom.xml                          | 2 +-
+ src/community/jdbcstore/pom.xml                           | 2 +-
+ src/community/jms-cluster/activemqBroker/pom.xml          | 2 +-
+ src/community/jms-cluster/jms-commons/pom.xml             | 2 +-
+ src/community/jms-cluster/jms-geoserver/pom.xml           | 2 +-
+ src/community/jms-cluster/pom.xml                         | 2 +-
+ src/community/libdeflate/pom.xml                          | 2 +-
+ src/community/mbtiles/pom.xml                             | 2 +-
+ src/community/monitor-hibernate/pom.xml                   | 2 +-
+ src/community/ncwms/pom.xml                               | 2 +-
+ src/community/netcdf-ghrsst/pom.xml                       | 2 +-
+ src/community/notification-common/pom.xml                 | 2 +-
+ src/community/notification-geonode/pom.xml                | 2 +-
+ src/community/notification/pom.xml                        | 2 +-
+ src/community/nsg-profiles/nsg-wmts-profile/pom.xml       | 2 +-
+ src/community/nsg-profiles/pom.xml                        | 2 +-
+ src/community/ogcapi/dggs/dggs-clickhouse/pom.xml         | 2 +-
+ src/community/ogcapi/dggs/dggs-core/pom.xml               | 2 +-
+ src/community/ogcapi/dggs/ogcapi-dggs/pom.xml             | 2 +-
+ src/community/ogcapi/dggs/pom.xml                         | 2 +-
+ src/community/ogcapi/dggs/web-dggs/pom.xml                | 2 +-
+ src/community/ogcapi/ogcapi-changeset/pom.xml             | 2 +-
+ src/community/ogcapi/ogcapi-core/pom.xml                  | 2 +-
+ src/community/ogcapi/ogcapi-coverages/pom.xml             | 2 +-
+ src/community/ogcapi/ogcapi-features/pom.xml              | 2 +-
+ src/community/ogcapi/ogcapi-images/pom.xml                | 2 +-
+ src/community/ogcapi/ogcapi-maps/pom.xml                  | 2 +-
+ src/community/ogcapi/ogcapi-styles/pom.xml                | 2 +-
+ src/community/ogcapi/ogcapi-tiled-features/pom.xml        | 2 +-
+ src/community/ogcapi/ogcapi-tiles/pom.xml                 | 2 +-
+ src/community/ogcapi/pom.xml                              | 2 +-
+ src/community/oseo/oseo-core/pom.xml                      | 2 +-
+ src/community/oseo/oseo-integration-tests/pom.xml         | 2 +-
+ src/community/oseo/oseo-rest/pom.xml                      | 2 +-
+ src/community/oseo/oseo-service/pom.xml                   | 2 +-
+ src/community/oseo/oseo-stac/pom.xml                      | 2 +-
+ src/community/oseo/pom.xml                                | 2 +-
+ src/community/oseo/web-oseo/pom.xml                       | 2 +-
+ src/community/ows-simulate/pom.xml                        | 2 +-
+ src/community/pgraster/pom.xml                            | 2 +-
+ src/community/pom.xml                                     | 2 +-
+ src/community/programming-guide/pom.xml                   | 2 +-
+ src/community/release/pom.xml                             | 2 +-
+ src/community/rest-ext/pom.xml                            | 4 ++--
+ src/community/rest-openapi/generated/feign-client/pom.xml | 2 +-
+ src/community/rest-openapi/generated/model/pom.xml        | 2 +-
+ src/community/rest-openapi/generated/pom.xml              | 2 +-
+ src/community/rest-openapi/java-client/pom.xml            | 2 +-
+ src/community/rest-openapi/model-mapping/pom.xml          | 2 +-
+ src/community/rest-openapi/openapi/pom.xml                | 2 +-
+ src/community/rest-openapi/pom.xml                        | 2 +-
+ src/community/rest-upload/pom.xml                         | 4 ++--
+ src/community/s3-geotiff/pom.xml                          | 2 +-
+ src/community/saml/pom.xml                                | 2 +-
+ .../schemaless-features/mongodb-schemaless/pom.xml        | 2 +-
+ src/community/schemaless-features/pom.xml                 | 2 +-
+ src/community/schemaless-features/schemaless-core/pom.xml | 2 +-
+ src/community/security/keycloak/pom.xml                   | 2 +-
+ src/community/security/oauth2-geonode/pom.xml             | 2 +-
+ src/community/security/oauth2-github/pom.xml              | 2 +-
+ src/community/security/oauth2-google/pom.xml              | 2 +-
+ .../oauth2-openid-connect-core/pom.xml                    | 2 +-
+ .../oauth2-openid-connect-web/pom.xml                     | 2 +-
+ src/community/security/oauth2-openid-connect/pom.xml      | 2 +-
+ src/community/security/oauth2/oauth2-core/pom.xml         | 2 +-
+ src/community/security/oauth2/oauth2-web/pom.xml          | 2 +-
+ src/community/security/oauth2/pom.xml                     | 2 +-
+ src/community/security/pom.xml                            | 2 +-
+ src/community/smart-data-loader/pom.xml                   | 2 +-
+ src/community/solr/pom.xml                                | 2 +-
+ src/community/spatialjson/pom.xml                         | 2 +-
+ src/community/taskmanager/core/pom.xml                    | 2 +-
+ src/community/taskmanager/metadata/pom.xml                | 4 ++--
+ src/community/taskmanager/pom.xml                         | 2 +-
+ src/community/taskmanager/s3/pom.xml                      | 2 +-
+ src/community/teradata/pom.xml                            | 2 +-
+ src/community/vector-mosaic/pom.xml                       | 2 +-
+ src/community/vsi/pom.xml                                 | 2 +-
+ src/community/web-ogr/pom.xml                             | 2 +-
+ src/community/web-service-auth/pom.xml                    | 4 ++--
+ src/community/webp/pom.xml                                | 2 +-
+ src/community/wms-eo/pom.xml                              | 2 +-
+ src/community/wmts-styles/pom.xml                         | 2 +-
+ src/community/wps-remote/pom.xml                          | 2 +-
+ src/community/wps-sextante/pom.xml                        | 2 +-
+ src/extension/app-schema/app-schema-core/pom.xml          | 2 +-
+ src/extension/app-schema/app-schema-geopkg-test/pom.xml   | 2 +-
+ src/extension/app-schema/app-schema-indexes-test/pom.xml  | 2 +-
+ src/extension/app-schema/app-schema-mongo-test/pom.xml    | 2 +-
+ src/extension/app-schema/app-schema-oracle-test/pom.xml   | 2 +-
+ src/extension/app-schema/app-schema-postgis-test/pom.xml  | 2 +-
+ src/extension/app-schema/app-schema-solr-test/pom.xml     | 2 +-
+ src/extension/app-schema/app-schema-test/pom.xml          | 2 +-
+ src/extension/app-schema/pom.xml                          | 2 +-
+ src/extension/app-schema/sample-data-access-test/pom.xml  | 2 +-
+ src/extension/authkey/pom.xml                             | 2 +-
+ src/extension/charts/pom.xml                              | 2 +-
+ src/extension/control-flow/pom.xml                        | 2 +-
+ src/extension/css/pom.xml                                 | 2 +-
+ src/extension/csw/api/pom.xml                             | 2 +-
+ src/extension/csw/core/pom.xml                            | 2 +-
+ src/extension/csw/csw-iso/pom.xml                         | 2 +-
+ src/extension/csw/pom.xml                                 | 2 +-
+ src/extension/csw/simple-store/pom.xml                    | 2 +-
+ src/extension/csw/web-csw/pom.xml                         | 2 +-
+ src/extension/db2/pom.xml                                 | 2 +-
+ src/extension/dxf/core/pom.xml                            | 2 +-
+ src/extension/dxf/pom.xml                                 | 2 +-
+ src/extension/dxf/wps/pom.xml                             | 2 +-
+ src/extension/excel/pom.xml                               | 2 +-
+ src/extension/feature-pregeneralized/pom.xml              | 2 +-
+ src/extension/gdal/pom.xml                                | 2 +-
+ src/extension/geofence/geofence-server/pom.xml            | 2 +-
+ src/extension/geofence/geofence-wps/pom.xml               | 2 +-
+ src/extension/geofence/geofence/pom.xml                   | 2 +-
+ src/extension/geofence/pom.xml                            | 2 +-
+ src/extension/geopkg-output/pom.xml                       | 2 +-
+ src/extension/grib/pom.xml                                | 2 +-
+ src/extension/gwc-s3/pom.xml                              | 2 +-
+ src/extension/h2/pom.xml                                  | 2 +-
+ src/extension/imagemap/pom.xml                            | 2 +-
+ src/extension/importer/core/pom.xml                       | 2 +-
+ src/extension/importer/pom.xml                            | 2 +-
+ src/extension/importer/rest/pom.xml                       | 2 +-
+ src/extension/importer/web/pom.xml                        | 2 +-
+ src/extension/inspire/pom.xml                             | 2 +-
+ src/extension/jp2k/pom.xml                                | 2 +-
+ src/extension/libjpeg-turbo/pom.xml                       | 2 +-
+ src/extension/mapml/pom.xml                               | 2 +-
+ src/extension/mbstyle/pom.xml                             | 2 +-
+ src/extension/metadata/pom.xml                            | 2 +-
+ src/extension/mongodb/pom.xml                             | 2 +-
+ src/extension/monitor/core/pom.xml                        | 2 +-
+ src/extension/monitor/pom.xml                             | 2 +-
+ src/extension/mysql/pom.xml                               | 2 +-
+ src/extension/netcdf-out/pom.xml                          | 2 +-
+ src/extension/netcdf/pom.xml                              | 2 +-
+ src/extension/ogr/ogr-core/pom.xml                        | 2 +-
+ src/extension/ogr/ogr-wfs/pom.xml                         | 2 +-
+ src/extension/ogr/ogr-wps/pom.xml                         | 2 +-
+ src/extension/ogr/pom.xml                                 | 2 +-
+ src/extension/oracle/pom.xml                              | 2 +-
+ src/extension/params-extractor/pom.xml                    | 2 +-
+ src/extension/pom.xml                                     | 2 +-
+ src/extension/printing/pom.xml                            | 2 +-
+ src/extension/querylayer/pom.xml                          | 2 +-
+ src/extension/security/cas/pom.xml                        | 2 +-
+ src/extension/security/pom.xml                            | 2 +-
+ src/extension/security/web/pom.xml                        | 2 +-
+ src/extension/security/web/web-cas/pom.xml                | 2 +-
+ src/extension/sldService/pom.xml                          | 2 +-
+ src/extension/sqlserver/pom.xml                           | 2 +-
+ src/extension/vectortiles/pom.xml                         | 2 +-
+ src/extension/wcs2_0-eo/core/pom.xml                      | 2 +-
+ src/extension/wcs2_0-eo/pom.xml                           | 2 +-
+ src/extension/wcs2_0-eo/web/pom.xml                       | 2 +-
+ src/extension/web-resource/pom.xml                        | 2 +-
+ src/extension/wmts-multi-dimensional/pom.xml              | 2 +-
+ src/extension/wps-download/pom.xml                        | 2 +-
+ src/extension/wps-jdbc/pom.xml                            | 2 +-
+ src/extension/wps/pom.xml                                 | 2 +-
+ src/extension/wps/web-wps/pom.xml                         | 2 +-
+ src/extension/wps/wps-cluster-hazelcast/pom.xml           | 2 +-
+ src/extension/wps/wps-core/pom.xml                        | 2 +-
+ src/extension/wps/wps-kml-ppio/pom.xml                    | 2 +-
+ src/extension/xslt/pom.xml                                | 2 +-
+ src/extension/ysld/pom.xml                                | 2 +-
+ src/gwc-rest/pom.xml                                      | 2 +-
+ src/gwc/pom.xml                                           | 2 +-
+ src/kml/pom.xml                                           | 2 +-
+ src/main/pom.xml                                          | 2 +-
+ src/maven/archetype/pom.xml                               | 2 +-
+ src/maven/archetype/webPlugin/pom.xml                     | 2 +-
+ .../src/main/resources/archetype-resources/pom.xml        | 6 +++---
+ src/maven/archetype/wfsOutputFormat/pom.xml               | 2 +-
+ .../src/main/resources/archetype-resources/pom.xml        | 6 +++---
+ src/maven/config/pom.xml                                  | 2 +-
+ src/maven/pom.xml                                         | 2 +-
+ src/ows/pom.xml                                           | 2 +-
+ src/platform/pom.xml                                      | 2 +-
+ src/pom.xml                                               | 8 ++++----
+ src/release/installer/mac/console/pom.xml                 | 2 +-
+ src/release/pom.xml                                       | 2 +-
+ src/rest/pom.xml                                          | 2 +-
+ src/restconfig-wcs/pom.xml                                | 2 +-
+ src/restconfig-wfs/pom.xml                                | 2 +-
+ src/restconfig-wms/pom.xml                                | 2 +-
+ src/restconfig-wmts/pom.xml                               | 2 +-
+ src/restconfig/pom.xml                                    | 2 +-
+ src/security/jdbc/pom.xml                                 | 2 +-
+ src/security/ldap/pom.xml                                 | 2 +-
+ src/security/pom.xml                                      | 2 +-
+ src/security/security-tests/pom.xml                       | 2 +-
+ src/wcs/pom.xml                                           | 2 +-
+ src/wcs1_0/pom.xml                                        | 2 +-
+ src/wcs1_1/pom.xml                                        | 2 +-
+ src/wcs2_0/pom.xml                                        | 2 +-
+ src/web/app/pom.xml                                       | 2 +-
+ src/web/core/pom.xml                                      | 2 +-
+ src/web/demo/pom.xml                                      | 2 +-
+ src/web/gwc/pom.xml                                       | 2 +-
+ src/web/pom.xml                                           | 2 +-
+ src/web/rest/pom.xml                                      | 2 +-
+ src/web/security/core/pom.xml                             | 2 +-
+ src/web/security/jdbc/pom.xml                             | 2 +-
+ src/web/security/ldap/pom.xml                             | 2 +-
+ src/web/security/pom.xml                                  | 2 +-
+ src/web/wcs/pom.xml                                       | 2 +-
+ src/web/wfs/pom.xml                                       | 2 +-
+ src/web/wms/pom.xml                                       | 2 +-
+ src/wfs/pom.xml                                           | 2 +-
+ src/wms/pom.xml                                           | 2 +-
+ 256 files changed, 268 insertions(+), 268 deletions(-)
+
+diff --git a/doc/en/developer/source/conf.py b/doc/en/developer/source/conf.py
+index 587aea70236..4ac18418ab0 100644
+--- a/doc/en/developer/source/conf.py
++++ b/doc/en/developer/source/conf.py
+@@ -51,7 +51,7 @@
+ version = '2.23'
+ 
+ # The full version, including alpha/beta/rc tags.
+-release = '2.23-SNAPSHOT'
++release = '2.23.2'
+ 
+ # Used in build and documentation links
+ branch = '2.23.x'
+diff --git a/doc/en/developer/source/programming-guide/ows-services/hello/pom.xml b/doc/en/developer/source/programming-guide/ows-services/hello/pom.xml
+index 9de344989c5..f322e07caa1 100644
+--- a/doc/en/developer/source/programming-guide/ows-services/hello/pom.xml
++++ b/doc/en/developer/source/programming-guide/ows-services/hello/pom.xml
+@@ -8,7 +8,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
+ <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version> <!-- change this to the proper GeoServer version -->
++    <version>2.23.2</version> <!-- change this to the proper GeoServer version -->
+ </parent>  
+ 
+ <groupId>org.geoserver</groupId>
+@@ -22,7 +22,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
+     <dependency>
+         <groupId>org.geoserver</groupId>
+         <artifactId>gs-main</artifactId>
+-        <version>2.23-SNAPSHOT</version> <!-- change this to the proper GeoServer version -->
++        <version>2.23.2</version> <!-- change this to the proper GeoServer version -->
+     </dependency>
+ </dependencies>
+ 
+diff --git a/doc/en/docguide/source/conf.py b/doc/en/docguide/source/conf.py
+index 3f35d8b3789..9250c32d586 100644
+--- a/doc/en/docguide/source/conf.py
++++ b/doc/en/docguide/source/conf.py
+@@ -50,7 +50,7 @@
+ # The short X.Y version.
+ version = '2.23'
+ # The full version, including alpha/beta/rc tags.
+-release = '2.23-SNAPSHOT'
++release = '2.23.2'
+ # Users don't need to see the "SNAPSHOT" notation when it's there
+ if release.find('SNAPSHOT') != -1:
+    release = '2.23.x'
+diff --git a/doc/en/pom.xml b/doc/en/pom.xml
+index 525580957d7..6776e9131b9 100644
+--- a/doc/en/pom.xml
++++ b/doc/en/pom.xml
+@@ -4,7 +4,7 @@
+   <modelVersion>4.0.0</modelVersion>
+   <artifactId>gs-docs</artifactId>
+   <groupId>org.geoserver.en</groupId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+   <packaging>pom</packaging>
+   <name>GeoServer English Documentation</name>
+   <description>GeoServer English documentation</description>
+diff --git a/doc/en/user/source/conf.py b/doc/en/user/source/conf.py
+index 680bd1d0d4c..3e286d4885c 100644
+--- a/doc/en/user/source/conf.py
++++ b/doc/en/user/source/conf.py
+@@ -58,7 +58,7 @@
+ # check environmental variable to see if ant build.xml passed in project.version
+ project_version = os.getenv("project.version")
+ if project_version == None: 
+-  release = '2.23-SNAPSHOT'
++  release = '2.23.2'
+ else:
+   release = project_version
+ 
+diff --git a/doc/zhCN/pom.xml b/doc/zhCN/pom.xml
+index fd1f8b462a6..5983beda1d3 100644
+--- a/doc/zhCN/pom.xml
++++ b/doc/zhCN/pom.xml
+@@ -4,7 +4,7 @@
+   <modelVersion>4.0.0</modelVersion>
+   <artifactId>gs-docs</artifactId>
+   <groupId>org.geoserver.en</groupId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+   <packaging>pom</packaging>
+   <name>GeoServer Chinese Simplified Documentation</name>
+   <description>GeoServer Chinese Simplified documentation</description>
+diff --git a/src/community/app-schema/pom.xml b/src/community/app-schema/pom.xml
+index f8cb0120a32..16f677b8b52 100644
+--- a/src/community/app-schema/pom.xml
++++ b/src/community/app-schema/pom.xml
+@@ -12,7 +12,7 @@
+     <parent>
+         <groupId>org.geoserver</groupId>
+         <artifactId>community</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/app-schema/webservice-test/pom.xml b/src/community/app-schema/webservice-test/pom.xml
+index 071e801e019..906cfe79ad7 100644
+--- a/src/community/app-schema/webservice-test/pom.xml
++++ b/src/community/app-schema/webservice-test/pom.xml
+@@ -12,7 +12,7 @@
+     <parent>
+         <groupId>org.geoserver.community</groupId>
+         <artifactId>gs-app-schema-community</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/backup-restore/core/pom.xml b/src/community/backup-restore/core/pom.xml
+index 1e0ec160b1f..1cf641244ee 100644
+--- a/src/community/backup-restore/core/pom.xml
++++ b/src/community/backup-restore/core/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-backup-restore</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.backuprestore</groupId>
+diff --git a/src/community/backup-restore/extension/pom.xml b/src/community/backup-restore/extension/pom.xml
+index 299af2b48d9..7b87802dfb7 100644
+--- a/src/community/backup-restore/extension/pom.xml
++++ b/src/community/backup-restore/extension/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-backup-restore</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.backuprestore</groupId>
+diff --git a/src/community/backup-restore/pom.xml b/src/community/backup-restore/pom.xml
+index 4db255dea34..170c716d834 100644
+--- a/src/community/backup-restore/pom.xml
++++ b/src/community/backup-restore/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/backup-restore/rest/pom.xml b/src/community/backup-restore/rest/pom.xml
+index 4a703316c36..9ba7a6ad8b7 100644
+--- a/src/community/backup-restore/rest/pom.xml
++++ b/src/community/backup-restore/rest/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-backup-restore</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.backuprestore</groupId>
+diff --git a/src/community/backup-restore/web/pom.xml b/src/community/backup-restore/web/pom.xml
+index baa76065560..c09c0880a1a 100644
+--- a/src/community/backup-restore/web/pom.xml
++++ b/src/community/backup-restore/web/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-backup-restore</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.backuprestore</groupId>
+diff --git a/src/community/cog/pom.xml b/src/community/cog/pom.xml
+index 6ab2d233023..6548b8a36c6 100644
+--- a/src/community/cog/pom.xml
++++ b/src/community/cog/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/colormap/pom.xml b/src/community/colormap/pom.xml
+index 88e23b584ca..bf3173545c9 100644
+--- a/src/community/colormap/pom.xml
++++ b/src/community/colormap/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/cov-json/pom.xml b/src/community/cov-json/pom.xml
+index f0f31673c34..1b845022696 100644
+--- a/src/community/cov-json/pom.xml
++++ b/src/community/cov-json/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/datadir-catalog-loader/pom.xml b/src/community/datadir-catalog-loader/pom.xml
+index d0cef8d455c..2f5db684dfe 100644
+--- a/src/community/datadir-catalog-loader/pom.xml
++++ b/src/community/datadir-catalog-loader/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/dds/pom.xml b/src/community/dds/pom.xml
+index d61f2aae90b..cf896ac51d4 100644
+--- a/src/community/dds/pom.xml
++++ b/src/community/dds/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/dyndimension/pom.xml b/src/community/dyndimension/pom.xml
+index a74924664e4..1edbc5cc3bf 100644
+--- a/src/community/dyndimension/pom.xml
++++ b/src/community/dyndimension/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/elasticsearch/pom.xml b/src/community/elasticsearch/pom.xml
+index 53b10dce652..dfe0cdc7e63 100644
+--- a/src/community/elasticsearch/pom.xml
++++ b/src/community/elasticsearch/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/features-templating-core/pom.xml b/src/community/features-templating/features-templating-core/pom.xml
+index e7bdcfc733a..1e7fa3d9c01 100644
+--- a/src/community/features-templating/features-templating-core/pom.xml
++++ b/src/community/features-templating/features-templating-core/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-features-templating</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/features-templating-ogcapi/pom.xml b/src/community/features-templating/features-templating-ogcapi/pom.xml
+index 54fc75db0c7..ca8f6958063 100644
+--- a/src/community/features-templating/features-templating-ogcapi/pom.xml
++++ b/src/community/features-templating/features-templating-ogcapi/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-features-templating</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/features-templating-ows/pom.xml b/src/community/features-templating/features-templating-ows/pom.xml
+index be9dd1e7a7d..7f8c8f16094 100644
+--- a/src/community/features-templating/features-templating-ows/pom.xml
++++ b/src/community/features-templating/features-templating-ows/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-features-templating</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/features-templating-rest/pom.xml b/src/community/features-templating/features-templating-rest/pom.xml
+index 1385172dbcb..9b4f0169ade 100644
+--- a/src/community/features-templating/features-templating-rest/pom.xml
++++ b/src/community/features-templating/features-templating-rest/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-features-templating</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/features-templating-web/pom.xml b/src/community/features-templating/features-templating-web/pom.xml
+index 3fdb60be6f6..05525a731a8 100644
+--- a/src/community/features-templating/features-templating-web/pom.xml
++++ b/src/community/features-templating/features-templating-web/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-features-templating</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/features-templating/pom.xml b/src/community/features-templating/pom.xml
+index bc410274fb9..9d7eabf2451 100644
+--- a/src/community/features-templating/pom.xml
++++ b/src/community/features-templating/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/flatgeobuf/pom.xml b/src/community/flatgeobuf/pom.xml
+index d561c3857fe..ed7f7c3fd8a 100644
+--- a/src/community/flatgeobuf/pom.xml
++++ b/src/community/flatgeobuf/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gdal/gdal-wcs/pom.xml b/src/community/gdal/gdal-wcs/pom.xml
+index 08d1135214c..bbcbcdb51c7 100644
+--- a/src/community/gdal/gdal-wcs/pom.xml
++++ b/src/community/gdal/gdal-wcs/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-gdal</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gdal/gdal-wps/pom.xml b/src/community/gdal/gdal-wps/pom.xml
+index f1533bb89e5..2b4d9551c00 100644
+--- a/src/community/gdal/gdal-wps/pom.xml
++++ b/src/community/gdal/gdal-wps/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-gdal</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gdal/pom.xml b/src/community/gdal/pom.xml
+index d7f27634147..42d7fd7e834 100644
+--- a/src/community/gdal/pom.xml
++++ b/src/community/gdal/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/geomesa/pom.xml b/src/community/geomesa/pom.xml
+index 7f8bdbd705a..ebd4cbbdb51 100644
+--- a/src/community/geomesa/pom.xml
++++ b/src/community/geomesa/pom.xml
+@@ -12,7 +12,7 @@ application directory.
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/geopkg/pom.xml b/src/community/geopkg/pom.xml
+index eecb5866e19..daf3cc62a0d 100644
+--- a/src/community/geopkg/pom.xml
++++ b/src/community/geopkg/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-geopkg</artifactId>
+diff --git a/src/community/gpxppio/pom.xml b/src/community/gpxppio/pom.xml
+index 023407c329d..b0604a9b4ae 100644
+--- a/src/community/gpxppio/pom.xml
++++ b/src/community/gpxppio/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-gpxppio</artifactId>
+diff --git a/src/community/gsr/pom.xml b/src/community/gsr/pom.xml
+index a92e001573f..5e624184359 100644
+--- a/src/community/gsr/pom.xml
++++ b/src/community/gsr/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gwc-azure-blob/pom.xml b/src/community/gwc-azure-blob/pom.xml
+index 22c6f69462f..e72bec618c3 100644
+--- a/src/community/gwc-azure-blob/pom.xml
++++ b/src/community/gwc-azure-blob/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gwc-distributed/pom.xml b/src/community/gwc-distributed/pom.xml
+index 422f91f2308..a5a6ddf09ce 100644
+--- a/src/community/gwc-distributed/pom.xml
++++ b/src/community/gwc-distributed/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-gwc-distributed</artifactId>
+diff --git a/src/community/gwc-mbtiles/pom.xml b/src/community/gwc-mbtiles/pom.xml
+index 6edd53fc7bd..dd13e31457a 100644
+--- a/src/community/gwc-mbtiles/pom.xml
++++ b/src/community/gwc-mbtiles/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/gwc-sqlite/pom.xml b/src/community/gwc-sqlite/pom.xml
+index 90e150c6641..e72d16df151 100644
+--- a/src/community/gwc-sqlite/pom.xml
++++ b/src/community/gwc-sqlite/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-gwc-sqlite</artifactId>
+diff --git a/src/community/hello/pom.xml b/src/community/hello/pom.xml
+index 85c190f83d8..ec96e3733f2 100644
+--- a/src/community/hello/pom.xml
++++ b/src/community/hello/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>		
+ 	<artifactId>community</artifactId>
+-	<version>2.23-SNAPSHOT</version>
++	<version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/community/hello_web/pom.xml b/src/community/hello_web/pom.xml
+index c2ab6e8580b..cd87b90f2c1 100644
+--- a/src/community/hello_web/pom.xml
++++ b/src/community/hello_web/pom.xml
+@@ -6,7 +6,7 @@
+    <parent>
+      <groupId>org.geoserver</groupId>
+      <artifactId>gs-web2</artifactId>
+-     <version>2.23-SNAPSHOT</version>
++     <version>2.23.2</version>
+    </parent>
+ 
+    <groupId>org.geoserver</groupId>
+diff --git a/src/community/hz-cluster/pom.xml b/src/community/hz-cluster/pom.xml
+index ddbca2a3da6..dedaaff7777 100644
+--- a/src/community/hz-cluster/pom.xml
++++ b/src/community/hz-cluster/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/importer-fgdb/pom.xml b/src/community/importer-fgdb/pom.xml
+index 6901eb64686..a43eed1b096 100644
+--- a/src/community/importer-fgdb/pom.xml
++++ b/src/community/importer-fgdb/pom.xml
+@@ -7,7 +7,7 @@
+   <parent>
+         <groupId>org.geoserver</groupId>
+         <artifactId>community</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/importer-jdbc/pom.xml b/src/community/importer-jdbc/pom.xml
+index 1b1c9b0c809..ec9a66db781 100644
+--- a/src/community/importer-jdbc/pom.xml
++++ b/src/community/importer-jdbc/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-importer-jdbc</artifactId>
+diff --git a/src/community/jdbc-metrics/pom.xml b/src/community/jdbc-metrics/pom.xml
+index 3202e37733e..3a45ae7c228 100644
+--- a/src/community/jdbc-metrics/pom.xml
++++ b/src/community/jdbc-metrics/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/jdbcconfig/pom.xml b/src/community/jdbcconfig/pom.xml
+index 2626748a3fd..7aa7df65eb3 100644
+--- a/src/community/jdbcconfig/pom.xml
++++ b/src/community/jdbcconfig/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-jdbcconfig</artifactId>
+diff --git a/src/community/jdbcstore/pom.xml b/src/community/jdbcstore/pom.xml
+index c80c86a2add..d388213f766 100644
+--- a/src/community/jdbcstore/pom.xml
++++ b/src/community/jdbcstore/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-jdbcstore</artifactId>
+diff --git a/src/community/jms-cluster/activemqBroker/pom.xml b/src/community/jms-cluster/activemqBroker/pom.xml
+index 997b4bad31d..6a73504c24c 100644
+--- a/src/community/jms-cluster/activemqBroker/pom.xml
++++ b/src/community/jms-cluster/activemqBroker/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-jms-cluster-container</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/jms-cluster/jms-commons/pom.xml b/src/community/jms-cluster/jms-commons/pom.xml
+index bb922562c28..26a08e8848d 100644
+--- a/src/community/jms-cluster/jms-commons/pom.xml
++++ b/src/community/jms-cluster/jms-commons/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-jms-cluster-container</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/jms-cluster/jms-geoserver/pom.xml b/src/community/jms-cluster/jms-geoserver/pom.xml
+index 24cbfe0a3ff..27c9d74d186 100644
+--- a/src/community/jms-cluster/jms-geoserver/pom.xml
++++ b/src/community/jms-cluster/jms-geoserver/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-jms-cluster-container</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/jms-cluster/pom.xml b/src/community/jms-cluster/pom.xml
+index ca4e676bcdd..0d628c978a1 100644
+--- a/src/community/jms-cluster/pom.xml
++++ b/src/community/jms-cluster/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/libdeflate/pom.xml b/src/community/libdeflate/pom.xml
+index 68a31104b8d..7d15e55e7a2 100644
+--- a/src/community/libdeflate/pom.xml
++++ b/src/community/libdeflate/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/mbtiles/pom.xml b/src/community/mbtiles/pom.xml
+index 348baf96eed..1fe6b98dab3 100644
+--- a/src/community/mbtiles/pom.xml
++++ b/src/community/mbtiles/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-mbtiles</artifactId>
+diff --git a/src/community/monitor-hibernate/pom.xml b/src/community/monitor-hibernate/pom.xml
+index e7993df2c89..30c21fed4c1 100644
+--- a/src/community/monitor-hibernate/pom.xml
++++ b/src/community/monitor-hibernate/pom.xml
+@@ -8,7 +8,7 @@
+     <parent>
+         <groupId>org.geoserver</groupId>
+         <artifactId>community</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-monitor-hibernate</artifactId>
+diff --git a/src/community/ncwms/pom.xml b/src/community/ncwms/pom.xml
+index 9eb5418f982..fb372d3b434 100644
+--- a/src/community/ncwms/pom.xml
++++ b/src/community/ncwms/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/netcdf-ghrsst/pom.xml b/src/community/netcdf-ghrsst/pom.xml
+index 402e6f0580b..5dbeca22aae 100644
+--- a/src/community/netcdf-ghrsst/pom.xml
++++ b/src/community/netcdf-ghrsst/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/notification-common/pom.xml b/src/community/notification-common/pom.xml
+index 2efe32a6195..b7faf54d36d 100644
+--- a/src/community/notification-common/pom.xml
++++ b/src/community/notification-common/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-notification-common</artifactId>
+diff --git a/src/community/notification-geonode/pom.xml b/src/community/notification-geonode/pom.xml
+index 6da303175af..8e104cc05bb 100644
+--- a/src/community/notification-geonode/pom.xml
++++ b/src/community/notification-geonode/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-notification-geonode</artifactId>
+diff --git a/src/community/notification/pom.xml b/src/community/notification/pom.xml
+index 5d40168fe49..aa230254d91 100644
+--- a/src/community/notification/pom.xml
++++ b/src/community/notification/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/nsg-profiles/nsg-wmts-profile/pom.xml b/src/community/nsg-profiles/nsg-wmts-profile/pom.xml
+index 00a0360734d..84ab5b15174 100644
+--- a/src/community/nsg-profiles/nsg-wmts-profile/pom.xml
++++ b/src/community/nsg-profiles/nsg-wmts-profile/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-nsg-profiles</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-nsg-wmts-profile</artifactId>
+diff --git a/src/community/nsg-profiles/pom.xml b/src/community/nsg-profiles/pom.xml
+index 0eada81c7a1..5f974d319b6 100644
+--- a/src/community/nsg-profiles/pom.xml
++++ b/src/community/nsg-profiles/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-nsg-profiles</artifactId>
+diff --git a/src/community/ogcapi/dggs/dggs-clickhouse/pom.xml b/src/community/ogcapi/dggs/dggs-clickhouse/pom.xml
+index 8db1b28f8d6..c3f76e605f7 100644
+--- a/src/community/ogcapi/dggs/dggs-clickhouse/pom.xml
++++ b/src/community/ogcapi/dggs/dggs-clickhouse/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-dggs</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/dggs/dggs-core/pom.xml b/src/community/ogcapi/dggs/dggs-core/pom.xml
+index 6abedc86f1e..52e6ff25627 100644
+--- a/src/community/ogcapi/dggs/dggs-core/pom.xml
++++ b/src/community/ogcapi/dggs/dggs-core/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-dggs</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/dggs/ogcapi-dggs/pom.xml b/src/community/ogcapi/dggs/ogcapi-dggs/pom.xml
+index c00e63d4ce2..9b7e89f92eb 100644
+--- a/src/community/ogcapi/dggs/ogcapi-dggs/pom.xml
++++ b/src/community/ogcapi/dggs/ogcapi-dggs/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-dggs</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/dggs/pom.xml b/src/community/ogcapi/dggs/pom.xml
+index adae34b988a..f76bf92f930 100644
+--- a/src/community/ogcapi/dggs/pom.xml
++++ b/src/community/ogcapi/dggs/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/dggs/web-dggs/pom.xml b/src/community/ogcapi/dggs/web-dggs/pom.xml
+index 29f19cd94ca..4ce385d1f99 100644
+--- a/src/community/ogcapi/dggs/web-dggs/pom.xml
++++ b/src/community/ogcapi/dggs/web-dggs/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-dggs</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-changeset/pom.xml b/src/community/ogcapi/ogcapi-changeset/pom.xml
+index 24cfb406c7c..a220b67c820 100644
+--- a/src/community/ogcapi/ogcapi-changeset/pom.xml
++++ b/src/community/ogcapi/ogcapi-changeset/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-core/pom.xml b/src/community/ogcapi/ogcapi-core/pom.xml
+index b2fc0efec51..3ba99f9cd06 100644
+--- a/src/community/ogcapi/ogcapi-core/pom.xml
++++ b/src/community/ogcapi/ogcapi-core/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-coverages/pom.xml b/src/community/ogcapi/ogcapi-coverages/pom.xml
+index 21dfc0760a6..17ae0f37c1d 100644
+--- a/src/community/ogcapi/ogcapi-coverages/pom.xml
++++ b/src/community/ogcapi/ogcapi-coverages/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-features/pom.xml b/src/community/ogcapi/ogcapi-features/pom.xml
+index 314185047a1..00269c3acfd 100644
+--- a/src/community/ogcapi/ogcapi-features/pom.xml
++++ b/src/community/ogcapi/ogcapi-features/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-images/pom.xml b/src/community/ogcapi/ogcapi-images/pom.xml
+index 1057da8900b..affedb616c3 100644
+--- a/src/community/ogcapi/ogcapi-images/pom.xml
++++ b/src/community/ogcapi/ogcapi-images/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-maps/pom.xml b/src/community/ogcapi/ogcapi-maps/pom.xml
+index b6383b7d7b4..576ff92f09e 100644
+--- a/src/community/ogcapi/ogcapi-maps/pom.xml
++++ b/src/community/ogcapi/ogcapi-maps/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-styles/pom.xml b/src/community/ogcapi/ogcapi-styles/pom.xml
+index 962e31a60d4..7fb274e8e78 100644
+--- a/src/community/ogcapi/ogcapi-styles/pom.xml
++++ b/src/community/ogcapi/ogcapi-styles/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-tiled-features/pom.xml b/src/community/ogcapi/ogcapi-tiled-features/pom.xml
+index 1781bce6475..26cc15f2399 100644
+--- a/src/community/ogcapi/ogcapi-tiled-features/pom.xml
++++ b/src/community/ogcapi/ogcapi-tiled-features/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/ogcapi-tiles/pom.xml b/src/community/ogcapi/ogcapi-tiles/pom.xml
+index 0001e97f20c..5dff95dc3ac 100644
+--- a/src/community/ogcapi/ogcapi-tiles/pom.xml
++++ b/src/community/ogcapi/ogcapi-tiles/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-ogcapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ogcapi/pom.xml b/src/community/ogcapi/pom.xml
+index 1b15a9431e9..ffa0d7215ed 100644
+--- a/src/community/ogcapi/pom.xml
++++ b/src/community/ogcapi/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/oseo-core/pom.xml b/src/community/oseo/oseo-core/pom.xml
+index 352bb62f5e7..221335fbd37 100644
+--- a/src/community/oseo/oseo-core/pom.xml
++++ b/src/community/oseo/oseo-core/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/oseo-integration-tests/pom.xml b/src/community/oseo/oseo-integration-tests/pom.xml
+index 561b3109d7c..2827d1c895c 100644
+--- a/src/community/oseo/oseo-integration-tests/pom.xml
++++ b/src/community/oseo/oseo-integration-tests/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/oseo-rest/pom.xml b/src/community/oseo/oseo-rest/pom.xml
+index 06bc590d2c8..5383fff556d 100644
+--- a/src/community/oseo/oseo-rest/pom.xml
++++ b/src/community/oseo/oseo-rest/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/oseo-service/pom.xml b/src/community/oseo/oseo-service/pom.xml
+index 139444cc2e5..d93c14f53d9 100644
+--- a/src/community/oseo/oseo-service/pom.xml
++++ b/src/community/oseo/oseo-service/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/oseo-stac/pom.xml b/src/community/oseo/oseo-stac/pom.xml
+index 4eb39d8eb0f..bf5a7dba412 100644
+--- a/src/community/oseo/oseo-stac/pom.xml
++++ b/src/community/oseo/oseo-stac/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/pom.xml b/src/community/oseo/pom.xml
+index 0457eaacaac..76922b9f63c 100644
+--- a/src/community/oseo/pom.xml
++++ b/src/community/oseo/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/oseo/web-oseo/pom.xml b/src/community/oseo/web-oseo/pom.xml
+index f72c489e4fd..76e91855fff 100644
+--- a/src/community/oseo/web-oseo/pom.xml
++++ b/src/community/oseo/web-oseo/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-oseo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/ows-simulate/pom.xml b/src/community/ows-simulate/pom.xml
+index 54373a6b173..45e73bdb07b 100644
+--- a/src/community/ows-simulate/pom.xml
++++ b/src/community/ows-simulate/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/pgraster/pom.xml b/src/community/pgraster/pom.xml
+index 77e2f95b114..4847029048b 100644
+--- a/src/community/pgraster/pom.xml
++++ b/src/community/pgraster/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/pom.xml b/src/community/pom.xml
+index 6c74f085b4c..feced470e31 100644
+--- a/src/community/pom.xml
++++ b/src/community/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/community/programming-guide/pom.xml b/src/community/programming-guide/pom.xml
+index 5add81f1cdd..14895db0783 100644
+--- a/src/community/programming-guide/pom.xml
++++ b/src/community/programming-guide/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>		
+ 	<artifactId>community</artifactId>
+-	<version>2.23-SNAPSHOT</version>
++	<version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/release/pom.xml b/src/community/release/pom.xml
+index 819a7bb1a6f..c2f7aeff54d 100644
+--- a/src/community/release/pom.xml
++++ b/src/community/release/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-release</artifactId>
+diff --git a/src/community/rest-ext/pom.xml b/src/community/rest-ext/pom.xml
+index c5527597495..272b2eaf74f 100644
+--- a/src/community/rest-ext/pom.xml
++++ b/src/community/rest-ext/pom.xml
+@@ -6,11 +6,11 @@
+ 	<parent>
+ 		<groupId>org.geoserver</groupId>
+ 		<artifactId>community</artifactId>
+-		<version>2.23-SNAPSHOT</version>
++		<version>2.23.2</version>
+ 	</parent>
+ 	<groupId>org.geoserver.community</groupId>
+ 	<artifactId>gs-rest-ext</artifactId>
+-	<version>2.23-SNAPSHOT</version>
++	<version>2.23.2</version>
+ 	<name>REST plugin community module</name>
+ 	<url>http://maven.apache.org</url>
+ 	<properties>
+diff --git a/src/community/rest-openapi/generated/feign-client/pom.xml b/src/community/rest-openapi/generated/feign-client/pom.xml
+index 5de1abcfda7..cd7aad6ea0e 100644
+--- a/src/community/rest-openapi/generated/feign-client/pom.xml
++++ b/src/community/rest-openapi/generated/feign-client/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi-generated</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-generated-feign-client</artifactId>
+   <packaging>jar</packaging>
+diff --git a/src/community/rest-openapi/generated/model/pom.xml b/src/community/rest-openapi/generated/model/pom.xml
+index 30792430f45..9b7ea295d2c 100644
+--- a/src/community/rest-openapi/generated/model/pom.xml
++++ b/src/community/rest-openapi/generated/model/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi-generated</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-generated-model</artifactId>
+   <packaging>jar</packaging>
+diff --git a/src/community/rest-openapi/generated/pom.xml b/src/community/rest-openapi/generated/pom.xml
+index 5d95c4d486a..557dc449520 100644
+--- a/src/community/rest-openapi/generated/pom.xml
++++ b/src/community/rest-openapi/generated/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-generated</artifactId>
+   <packaging>pom</packaging>
+diff --git a/src/community/rest-openapi/java-client/pom.xml b/src/community/rest-openapi/java-client/pom.xml
+index 0b1ff1b1df4..254d272cdcc 100644
+--- a/src/community/rest-openapi/java-client/pom.xml
++++ b/src/community/rest-openapi/java-client/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-java-client</artifactId>
+   <packaging>jar</packaging>
+diff --git a/src/community/rest-openapi/model-mapping/pom.xml b/src/community/rest-openapi/model-mapping/pom.xml
+index 66a5e293fca..66b019a6bc6 100644
+--- a/src/community/rest-openapi/model-mapping/pom.xml
++++ b/src/community/rest-openapi/model-mapping/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-model-mapping</artifactId>
+   <packaging>jar</packaging>
+diff --git a/src/community/rest-openapi/openapi/pom.xml b/src/community/rest-openapi/openapi/pom.xml
+index 2237e96a6a8..399381e6276 100644
+--- a/src/community/rest-openapi/openapi/pom.xml
++++ b/src/community/rest-openapi/openapi/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-openapi</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <artifactId>gs-rest-openapi-spec</artifactId>
+   <packaging>jar</packaging>
+diff --git a/src/community/rest-openapi/pom.xml b/src/community/rest-openapi/pom.xml
+index 2bedd0a453f..36e7a5a024e 100644
+--- a/src/community/rest-openapi/pom.xml
++++ b/src/community/rest-openapi/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/rest-upload/pom.xml b/src/community/rest-upload/pom.xml
+index e84cfe70225..50a2184e87d 100644
+--- a/src/community/rest-upload/pom.xml
++++ b/src/community/rest-upload/pom.xml
+@@ -10,13 +10,13 @@
+     <parent>
+         <groupId>org.geoserver</groupId>
+         <artifactId>community</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-rest-upload</artifactId>
+     <packaging>jar</packaging>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+     <name>Resumable REST Upload module</name>
+ 
+     <dependencies>
+diff --git a/src/community/s3-geotiff/pom.xml b/src/community/s3-geotiff/pom.xml
+index 750ecb86d61..d665788d15e 100644
+--- a/src/community/s3-geotiff/pom.xml
++++ b/src/community/s3-geotiff/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/saml/pom.xml b/src/community/saml/pom.xml
+index 1fa92daf39c..4b2c30a84ce 100644
+--- a/src/community/saml/pom.xml
++++ b/src/community/saml/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/schemaless-features/mongodb-schemaless/pom.xml b/src/community/schemaless-features/mongodb-schemaless/pom.xml
+index 22aa581bd68..c7a30530a83 100644
+--- a/src/community/schemaless-features/mongodb-schemaless/pom.xml
++++ b/src/community/schemaless-features/mongodb-schemaless/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-schemaless-features</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/schemaless-features/pom.xml b/src/community/schemaless-features/pom.xml
+index e13862bd141..1f221f610c6 100644
+--- a/src/community/schemaless-features/pom.xml
++++ b/src/community/schemaless-features/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/schemaless-features/schemaless-core/pom.xml b/src/community/schemaless-features/schemaless-core/pom.xml
+index 137c3fcdcef..0a7e8add5cd 100644
+--- a/src/community/schemaless-features/schemaless-core/pom.xml
++++ b/src/community/schemaless-features/schemaless-core/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-schemaless-features</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/security/keycloak/pom.xml b/src/community/security/keycloak/pom.xml
+index bf1159907a6..ae5701784c1 100644
+--- a/src/community/security/keycloak/pom.xml
++++ b/src/community/security/keycloak/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/security/oauth2-geonode/pom.xml b/src/community/security/oauth2-geonode/pom.xml
+index 4f1ce9324f9..2aa78d64691 100644
+--- a/src/community/security/oauth2-geonode/pom.xml
++++ b/src/community/security/oauth2-geonode/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/security/oauth2-github/pom.xml b/src/community/security/oauth2-github/pom.xml
+index 4376a5e2819..992521ea371 100644
+--- a/src/community/security/oauth2-github/pom.xml
++++ b/src/community/security/oauth2-github/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/security/oauth2-google/pom.xml b/src/community/security/oauth2-google/pom.xml
+index 91f2e0f4b22..4176b297231 100644
+--- a/src/community/security/oauth2-google/pom.xml
++++ b/src/community/security/oauth2-google/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/security/oauth2-openid-connect/oauth2-openid-connect-core/pom.xml b/src/community/security/oauth2-openid-connect/oauth2-openid-connect-core/pom.xml
+index f5cd4d14995..0c352d95578 100644
+--- a/src/community/security/oauth2-openid-connect/oauth2-openid-connect-core/pom.xml
++++ b/src/community/security/oauth2-openid-connect/oauth2-openid-connect-core/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community.security</groupId>
+     <artifactId>gs-sec-oauth2-openid-connect</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-sec-oauth2-openid-connect-core</artifactId>
+diff --git a/src/community/security/oauth2-openid-connect/oauth2-openid-connect-web/pom.xml b/src/community/security/oauth2-openid-connect/oauth2-openid-connect-web/pom.xml
+index c51aca315b7..d4019abdbdc 100644
+--- a/src/community/security/oauth2-openid-connect/oauth2-openid-connect-web/pom.xml
++++ b/src/community/security/oauth2-openid-connect/oauth2-openid-connect-web/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community.security</groupId>
+     <artifactId>gs-sec-oauth2-openid-connect</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-sec-oauth2-openid-connect-web</artifactId>
+diff --git a/src/community/security/oauth2-openid-connect/pom.xml b/src/community/security/oauth2-openid-connect/pom.xml
+index d86e97dca7a..1b97381c3f7 100644
+--- a/src/community/security/oauth2-openid-connect/pom.xml
++++ b/src/community/security/oauth2-openid-connect/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.security</groupId>
+diff --git a/src/community/security/oauth2/oauth2-core/pom.xml b/src/community/security/oauth2/oauth2-core/pom.xml
+index 317cc3c6574..b76b0186bd2 100644
+--- a/src/community/security/oauth2/oauth2-core/pom.xml
++++ b/src/community/security/oauth2/oauth2-core/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community.security</groupId>
+     <artifactId>gs-sec-oauth2</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-sec-oauth2-core</artifactId>
+diff --git a/src/community/security/oauth2/oauth2-web/pom.xml b/src/community/security/oauth2/oauth2-web/pom.xml
+index 6717ea087a2..e390550a7b4 100644
+--- a/src/community/security/oauth2/oauth2-web/pom.xml
++++ b/src/community/security/oauth2/oauth2-web/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community.security</groupId>
+     <artifactId>gs-sec-oauth2</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-sec-oauth2-web</artifactId>
+diff --git a/src/community/security/oauth2/pom.xml b/src/community/security/oauth2/pom.xml
+index 91ac2e805a3..b32af201cc4 100644
+--- a/src/community/security/oauth2/pom.xml
++++ b/src/community/security/oauth2/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community.security</groupId>
+diff --git a/src/community/security/pom.xml b/src/community/security/pom.xml
+index 1e901b91dad..3646b67a787 100644
+--- a/src/community/security/pom.xml
++++ b/src/community/security/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/smart-data-loader/pom.xml b/src/community/smart-data-loader/pom.xml
+index fc678c68dd8..08c2108e837 100644
+--- a/src/community/smart-data-loader/pom.xml
++++ b/src/community/smart-data-loader/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/solr/pom.xml b/src/community/solr/pom.xml
+index 86e3298cda8..f525eeacf04 100644
+--- a/src/community/solr/pom.xml
++++ b/src/community/solr/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/spatialjson/pom.xml b/src/community/spatialjson/pom.xml
+index fddf07c326d..98edeaa7fef 100644
+--- a/src/community/spatialjson/pom.xml
++++ b/src/community/spatialjson/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/taskmanager/core/pom.xml b/src/community/taskmanager/core/pom.xml
+index b6396ee45a6..8927a0666df 100644
+--- a/src/community/taskmanager/core/pom.xml
++++ b/src/community/taskmanager/core/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-taskmanager</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/taskmanager/metadata/pom.xml b/src/community/taskmanager/metadata/pom.xml
+index 639b3f90aa8..18e45472fd3 100644
+--- a/src/community/taskmanager/metadata/pom.xml
++++ b/src/community/taskmanager/metadata/pom.xml
+@@ -6,12 +6,12 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-taskmanager</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-taskmanager-metadata</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+   <packaging>jar</packaging>
+ 
+   <name>GeoServer Task Manager Metadata</name>
+diff --git a/src/community/taskmanager/pom.xml b/src/community/taskmanager/pom.xml
+index 1d3aa8b3e29..10c48752d82 100644
+--- a/src/community/taskmanager/pom.xml
++++ b/src/community/taskmanager/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/taskmanager/s3/pom.xml b/src/community/taskmanager/s3/pom.xml
+index 3bd8b4eb484..c814ea08e60 100644
+--- a/src/community/taskmanager/s3/pom.xml
++++ b/src/community/taskmanager/s3/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver.community</groupId>
+     <artifactId>gs-taskmanager</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/teradata/pom.xml b/src/community/teradata/pom.xml
+index 77acf1d65a4..75e10b5aef2 100644
+--- a/src/community/teradata/pom.xml
++++ b/src/community/teradata/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/vector-mosaic/pom.xml b/src/community/vector-mosaic/pom.xml
+index 46646e3f472..790bf53be3c 100644
+--- a/src/community/vector-mosaic/pom.xml
++++ b/src/community/vector-mosaic/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/vsi/pom.xml b/src/community/vsi/pom.xml
+index c95a7069088..2fd784ef571 100644
+--- a/src/community/vsi/pom.xml
++++ b/src/community/vsi/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/web-ogr/pom.xml b/src/community/web-ogr/pom.xml
+index 1562034cf71..6e87954d6c7 100644
+--- a/src/community/web-ogr/pom.xml
++++ b/src/community/web-ogr/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-web-ogr</artifactId>
+diff --git a/src/community/web-service-auth/pom.xml b/src/community/web-service-auth/pom.xml
+index f2b7dc859ef..336eba33b77 100644
+--- a/src/community/web-service-auth/pom.xml
++++ b/src/community/web-service-auth/pom.xml
+@@ -4,11 +4,11 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-web-service-auth</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+   <packaging>jar</packaging>
+   <name>Web Service Authentication Provider</name>
+   <dependencies>
+diff --git a/src/community/webp/pom.xml b/src/community/webp/pom.xml
+index b03f3dee734..f66673adb72 100644
+--- a/src/community/webp/pom.xml
++++ b/src/community/webp/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/wms-eo/pom.xml b/src/community/wms-eo/pom.xml
+index d487686ccb3..5f70fe4a1c1 100644
+--- a/src/community/wms-eo/pom.xml
++++ b/src/community/wms-eo/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/wmts-styles/pom.xml b/src/community/wmts-styles/pom.xml
+index 82e72639ebb..c72b55e641d 100644
+--- a/src/community/wmts-styles/pom.xml
++++ b/src/community/wmts-styles/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.community</groupId>
+   <artifactId>gs-wmts-styles</artifactId>
+diff --git a/src/community/wps-remote/pom.xml b/src/community/wps-remote/pom.xml
+index 9e61cfd9895..080652b1668 100644
+--- a/src/community/wps-remote/pom.xml
++++ b/src/community/wps-remote/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>community</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.community</groupId>
+diff --git a/src/community/wps-sextante/pom.xml b/src/community/wps-sextante/pom.xml
+index 8498f6d29ed..fca1974f85d 100644
+--- a/src/community/wps-sextante/pom.xml
++++ b/src/community/wps-sextante/pom.xml
+@@ -12,7 +12,7 @@
+     <parent>
+       <groupId>org.geoserver</groupId>
+       <artifactId>community</artifactId>
+-      <version>2.23-SNAPSHOT</version>
++      <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.community</groupId>
+diff --git a/src/extension/app-schema/app-schema-core/pom.xml b/src/extension/app-schema/app-schema-core/pom.xml
+index e3b6da379b3..5154bb659cb 100644
+--- a/src/extension/app-schema/app-schema-core/pom.xml
++++ b/src/extension/app-schema/app-schema-core/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-app-schema</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/app-schema-geopkg-test/pom.xml b/src/extension/app-schema/app-schema-geopkg-test/pom.xml
+index d69549ae48b..5967783aa24 100644
+--- a/src/extension/app-schema/app-schema-geopkg-test/pom.xml
++++ b/src/extension/app-schema/app-schema-geopkg-test/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-app-schema</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/app-schema-indexes-test/pom.xml b/src/extension/app-schema/app-schema-indexes-test/pom.xml
+index f7dd24e6217..1779b33f676 100644
+--- a/src/extension/app-schema/app-schema-indexes-test/pom.xml
++++ b/src/extension/app-schema/app-schema-indexes-test/pom.xml
+@@ -7,7 +7,7 @@
+     <parent>
+         <groupId>org.geoserver.extension</groupId>
+         <artifactId>gs-app-schema</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <artifactId>gs-app-schema-indexes-test</artifactId>
+diff --git a/src/extension/app-schema/app-schema-mongo-test/pom.xml b/src/extension/app-schema/app-schema-mongo-test/pom.xml
+index 2bc70112a2f..5214d461475 100644
+--- a/src/extension/app-schema/app-schema-mongo-test/pom.xml
++++ b/src/extension/app-schema/app-schema-mongo-test/pom.xml
+@@ -12,7 +12,7 @@
+     <parent>
+         <groupId>org.geoserver.extension</groupId>
+         <artifactId>gs-app-schema</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/app-schema-oracle-test/pom.xml b/src/extension/app-schema/app-schema-oracle-test/pom.xml
+index 53ed2f55410..8d817637b78 100644
+--- a/src/extension/app-schema/app-schema-oracle-test/pom.xml
++++ b/src/extension/app-schema/app-schema-oracle-test/pom.xml
+@@ -12,7 +12,7 @@
+     <parent>
+         <groupId>org.geoserver.extension</groupId>
+         <artifactId>gs-app-schema</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/app-schema-postgis-test/pom.xml b/src/extension/app-schema/app-schema-postgis-test/pom.xml
+index ef7629fabae..7ff148d5db3 100644
+--- a/src/extension/app-schema/app-schema-postgis-test/pom.xml
++++ b/src/extension/app-schema/app-schema-postgis-test/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-app-schema</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/app-schema-solr-test/pom.xml b/src/extension/app-schema/app-schema-solr-test/pom.xml
+index a170d6aa049..ff8187af9b6 100644
+--- a/src/extension/app-schema/app-schema-solr-test/pom.xml
++++ b/src/extension/app-schema/app-schema-solr-test/pom.xml
+@@ -7,7 +7,7 @@
+     <parent>
+         <groupId>org.geoserver.extension</groupId>
+         <artifactId>gs-app-schema</artifactId>
+-        <version>2.23-SNAPSHOT</version>
++        <version>2.23.2</version>
+     </parent>
+ 
+     <artifactId>gs-app-schema-solr-test</artifactId>
+diff --git a/src/extension/app-schema/app-schema-test/pom.xml b/src/extension/app-schema/app-schema-test/pom.xml
+index 1070b8809ba..c6c5e1e5057 100644
+--- a/src/extension/app-schema/app-schema-test/pom.xml
++++ b/src/extension/app-schema/app-schema-test/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-app-schema</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/pom.xml b/src/extension/app-schema/pom.xml
+index 86c4ca454c2..3cf6afb85f4 100644
+--- a/src/extension/app-schema/pom.xml
++++ b/src/extension/app-schema/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/app-schema/sample-data-access-test/pom.xml b/src/extension/app-schema/sample-data-access-test/pom.xml
+index 9746c23aa5b..6d0160a92ab 100644
+--- a/src/extension/app-schema/sample-data-access-test/pom.xml
++++ b/src/extension/app-schema/sample-data-access-test/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-app-schema</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/authkey/pom.xml b/src/extension/authkey/pom.xml
+index 3c6cae31247..62867928806 100644
+--- a/src/extension/authkey/pom.xml
++++ b/src/extension/authkey/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/charts/pom.xml b/src/extension/charts/pom.xml
+index bd4f73fcaef..aa94fe4cfb9 100644
+--- a/src/extension/charts/pom.xml
++++ b/src/extension/charts/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-charts</artifactId>
+diff --git a/src/extension/control-flow/pom.xml b/src/extension/control-flow/pom.xml
+index 54007322e73..aa726718702 100644
+--- a/src/extension/control-flow/pom.xml
++++ b/src/extension/control-flow/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-control-flow</artifactId>
+diff --git a/src/extension/css/pom.xml b/src/extension/css/pom.xml
+index c0c712a8296..4bc233ff94d 100644
+--- a/src/extension/css/pom.xml
++++ b/src/extension/css/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-css</artifactId>
+diff --git a/src/extension/csw/api/pom.xml b/src/extension/csw/api/pom.xml
+index bf57cd63060..c77d4e7f8c1 100644
+--- a/src/extension/csw/api/pom.xml
++++ b/src/extension/csw/api/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-csw</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.csw</groupId>
+diff --git a/src/extension/csw/core/pom.xml b/src/extension/csw/core/pom.xml
+index 18677386791..69f523c570d 100644
+--- a/src/extension/csw/core/pom.xml
++++ b/src/extension/csw/core/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-csw</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.csw</groupId>
+diff --git a/src/extension/csw/csw-iso/pom.xml b/src/extension/csw/csw-iso/pom.xml
+index ed6c78d13b6..3b829db32a8 100644
+--- a/src/extension/csw/csw-iso/pom.xml
++++ b/src/extension/csw/csw-iso/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-csw</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.csw</groupId>
+diff --git a/src/extension/csw/pom.xml b/src/extension/csw/pom.xml
+index 5380c263fd1..bfcea024a0d 100644
+--- a/src/extension/csw/pom.xml
++++ b/src/extension/csw/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/extension/csw/simple-store/pom.xml b/src/extension/csw/simple-store/pom.xml
+index 8afbd32e3b0..e596e39bd6e 100644
+--- a/src/extension/csw/simple-store/pom.xml
++++ b/src/extension/csw/simple-store/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-csw</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.csw</groupId>
+diff --git a/src/extension/csw/web-csw/pom.xml b/src/extension/csw/web-csw/pom.xml
+index 39ffed5855a..b3b119bae09 100644
+--- a/src/extension/csw/web-csw/pom.xml
++++ b/src/extension/csw/web-csw/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-csw</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.csw</groupId>
+diff --git a/src/extension/db2/pom.xml b/src/extension/db2/pom.xml
+index f153a6b5a13..48845fe2c00 100644
+--- a/src/extension/db2/pom.xml
++++ b/src/extension/db2/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/dxf/core/pom.xml b/src/extension/dxf/core/pom.xml
+index 02b579af96a..b124c2e8df1 100644
+--- a/src/extension/dxf/core/pom.xml
++++ b/src/extension/dxf/core/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-dxf</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/dxf/pom.xml b/src/extension/dxf/pom.xml
+index 8a486c9c682..636826d1b0f 100644
+--- a/src/extension/dxf/pom.xml
++++ b/src/extension/dxf/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/dxf/wps/pom.xml b/src/extension/dxf/wps/pom.xml
+index eac3126f8cd..abd63d0fbcc 100644
+--- a/src/extension/dxf/wps/pom.xml
++++ b/src/extension/dxf/wps/pom.xml
+@@ -12,7 +12,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-dxf</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/excel/pom.xml b/src/extension/excel/pom.xml
+index 9f9664cea03..a54952bd93c 100644
+--- a/src/extension/excel/pom.xml
++++ b/src/extension/excel/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-excel</artifactId>
+diff --git a/src/extension/feature-pregeneralized/pom.xml b/src/extension/feature-pregeneralized/pom.xml
+index 52b221ea46f..ed2e4892d6b 100644
+--- a/src/extension/feature-pregeneralized/pom.xml
++++ b/src/extension/feature-pregeneralized/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/gdal/pom.xml b/src/extension/gdal/pom.xml
+index 1eeadf48a78..bff8149fe35 100644
+--- a/src/extension/gdal/pom.xml
++++ b/src/extension/gdal/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/geofence/geofence-server/pom.xml b/src/extension/geofence/geofence-server/pom.xml
+index d31e6113080..d66ee815a00 100644
+--- a/src/extension/geofence/geofence-server/pom.xml
++++ b/src/extension/geofence/geofence-server/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-geofence-root</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/geofence/geofence-wps/pom.xml b/src/extension/geofence/geofence-wps/pom.xml
+index 27cd10bcf48..594221f6d27 100644
+--- a/src/extension/geofence/geofence-wps/pom.xml
++++ b/src/extension/geofence/geofence-wps/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-geofence-root</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/geofence/geofence/pom.xml b/src/extension/geofence/geofence/pom.xml
+index 9fba9575f55..2860a1ad4d4 100644
+--- a/src/extension/geofence/geofence/pom.xml
++++ b/src/extension/geofence/geofence/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-geofence-root</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/geofence/pom.xml b/src/extension/geofence/pom.xml
+index c8b2a096d30..11ef38af561 100644
+--- a/src/extension/geofence/pom.xml
++++ b/src/extension/geofence/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/geopkg-output/pom.xml b/src/extension/geopkg-output/pom.xml
+index 7fb9db78987..5d5f851b46c 100644
+--- a/src/extension/geopkg-output/pom.xml
++++ b/src/extension/geopkg-output/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/grib/pom.xml b/src/extension/grib/pom.xml
+index f421a9a98df..8f9303a1a1d 100644
+--- a/src/extension/grib/pom.xml
++++ b/src/extension/grib/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/gwc-s3/pom.xml b/src/extension/gwc-s3/pom.xml
+index 2270abe117e..7bf752f648c 100644
+--- a/src/extension/gwc-s3/pom.xml
++++ b/src/extension/gwc-s3/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/h2/pom.xml b/src/extension/h2/pom.xml
+index 8cc40cc0532..6f6f6450016 100644
+--- a/src/extension/h2/pom.xml
++++ b/src/extension/h2/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/imagemap/pom.xml b/src/extension/imagemap/pom.xml
+index 3ec0cefa937..cf06ef6a857 100644
+--- a/src/extension/imagemap/pom.xml
++++ b/src/extension/imagemap/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/importer/core/pom.xml b/src/extension/importer/core/pom.xml
+index 919ec59e3e4..5723f77e14b 100644
+--- a/src/extension/importer/core/pom.xml
++++ b/src/extension/importer/core/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-importer</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.importer</groupId>
+diff --git a/src/extension/importer/pom.xml b/src/extension/importer/pom.xml
+index 909896cbeda..c26d7fd58a3 100644
+--- a/src/extension/importer/pom.xml
++++ b/src/extension/importer/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/extension/importer/rest/pom.xml b/src/extension/importer/rest/pom.xml
+index ff2702620b9..dc7d9dbc4c0 100644
+--- a/src/extension/importer/rest/pom.xml
++++ b/src/extension/importer/rest/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-importer</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.importer</groupId>
+   <artifactId>gs-importer-rest</artifactId>
+diff --git a/src/extension/importer/web/pom.xml b/src/extension/importer/web/pom.xml
+index 07ee53ea780..55e6b57b36f 100644
+--- a/src/extension/importer/web/pom.xml
++++ b/src/extension/importer/web/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-importer</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.importer</groupId>
+diff --git a/src/extension/inspire/pom.xml b/src/extension/inspire/pom.xml
+index c029742c8ba..0e608b2c8db 100644
+--- a/src/extension/inspire/pom.xml
++++ b/src/extension/inspire/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/jp2k/pom.xml b/src/extension/jp2k/pom.xml
+index e0345861f94..94ddd6988dc 100644
+--- a/src/extension/jp2k/pom.xml
++++ b/src/extension/jp2k/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/libjpeg-turbo/pom.xml b/src/extension/libjpeg-turbo/pom.xml
+index 23923da48e8..00037366d60 100644
+--- a/src/extension/libjpeg-turbo/pom.xml
++++ b/src/extension/libjpeg-turbo/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/mapml/pom.xml b/src/extension/mapml/pom.xml
+index df3cc3cfcbe..db35f77a007 100644
+--- a/src/extension/mapml/pom.xml
++++ b/src/extension/mapml/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/mbstyle/pom.xml b/src/extension/mbstyle/pom.xml
+index a2847c9efbc..26477f177db 100644
+--- a/src/extension/mbstyle/pom.xml
++++ b/src/extension/mbstyle/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/metadata/pom.xml b/src/extension/metadata/pom.xml
+index 0cc11d0a133..6c34b8ead76 100644
+--- a/src/extension/metadata/pom.xml
++++ b/src/extension/metadata/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/mongodb/pom.xml b/src/extension/mongodb/pom.xml
+index af326fa7729..15ff1cac52b 100644
+--- a/src/extension/mongodb/pom.xml
++++ b/src/extension/mongodb/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-mongodb</artifactId>
+diff --git a/src/extension/monitor/core/pom.xml b/src/extension/monitor/core/pom.xml
+index d8d6ef5925d..5ad3ed2ecc1 100644
+--- a/src/extension/monitor/core/pom.xml
++++ b/src/extension/monitor/core/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-monitor</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-monitor-core</artifactId>
+diff --git a/src/extension/monitor/pom.xml b/src/extension/monitor/pom.xml
+index 4c43f8b6d48..a5ec201e02f 100644
+--- a/src/extension/monitor/pom.xml
++++ b/src/extension/monitor/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-monitor</artifactId>
+diff --git a/src/extension/mysql/pom.xml b/src/extension/mysql/pom.xml
+index 9eedc5fb805..4d8dca6d2d1 100644
+--- a/src/extension/mysql/pom.xml
++++ b/src/extension/mysql/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/netcdf-out/pom.xml b/src/extension/netcdf-out/pom.xml
+index 9ace568be3d..7461be5144c 100644
+--- a/src/extension/netcdf-out/pom.xml
++++ b/src/extension/netcdf-out/pom.xml
+@@ -20,7 +20,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/netcdf/pom.xml b/src/extension/netcdf/pom.xml
+index faabe4786bc..f94e22052be 100644
+--- a/src/extension/netcdf/pom.xml
++++ b/src/extension/netcdf/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/ogr/ogr-core/pom.xml b/src/extension/ogr/ogr-core/pom.xml
+index 707e4167c49..b564912be9c 100644
+--- a/src/extension/ogr/ogr-core/pom.xml
++++ b/src/extension/ogr/ogr-core/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-ogr</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/ogr/ogr-wfs/pom.xml b/src/extension/ogr/ogr-wfs/pom.xml
+index 77265ff9780..c209e340338 100644
+--- a/src/extension/ogr/ogr-wfs/pom.xml
++++ b/src/extension/ogr/ogr-wfs/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-ogr</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/ogr/ogr-wps/pom.xml b/src/extension/ogr/ogr-wps/pom.xml
+index 8e5c05cd847..c5b18dba6f5 100644
+--- a/src/extension/ogr/ogr-wps/pom.xml
++++ b/src/extension/ogr/ogr-wps/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-ogr</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/ogr/pom.xml b/src/extension/ogr/pom.xml
+index 3fe6ace15d5..98ac61675aa 100644
+--- a/src/extension/ogr/pom.xml
++++ b/src/extension/ogr/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/oracle/pom.xml b/src/extension/oracle/pom.xml
+index 1bfa45a3832..03bdbc77047 100644
+--- a/src/extension/oracle/pom.xml
++++ b/src/extension/oracle/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/params-extractor/pom.xml b/src/extension/params-extractor/pom.xml
+index c605617a5de..11abdf15e0e 100644
+--- a/src/extension/params-extractor/pom.xml
++++ b/src/extension/params-extractor/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/pom.xml b/src/extension/pom.xml
+index d0bb1a6051c..33ce8fc0481 100644
+--- a/src/extension/pom.xml
++++ b/src/extension/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/extension/printing/pom.xml b/src/extension/printing/pom.xml
+index 326e244d6e3..5852a5f461a 100644
+--- a/src/extension/printing/pom.xml
++++ b/src/extension/printing/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/querylayer/pom.xml b/src/extension/querylayer/pom.xml
+index 2713d3e046a..dd9c6965e75 100644
+--- a/src/extension/querylayer/pom.xml
++++ b/src/extension/querylayer/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-querylayer</artifactId>
+diff --git a/src/extension/security/cas/pom.xml b/src/extension/security/cas/pom.xml
+index 3161eeed62b..fd47856bb65 100644
+--- a/src/extension/security/cas/pom.xml
++++ b/src/extension/security/cas/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.security</groupId>
+diff --git a/src/extension/security/pom.xml b/src/extension/security/pom.xml
+index 1f5bcd60f13..ce176eb84c9 100644
+--- a/src/extension/security/pom.xml
++++ b/src/extension/security/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/security/web/pom.xml b/src/extension/security/web/pom.xml
+index bce89109274..33fb9b5a923 100644
+--- a/src/extension/security/web/pom.xml
++++ b/src/extension/security/web/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/security/web/web-cas/pom.xml b/src/extension/security/web/web-cas/pom.xml
+index ffb02935c6b..f1adcf1cde6 100644
+--- a/src/extension/security/web/web-cas/pom.xml
++++ b/src/extension/security/web/web-cas/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-web-sec</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.security</groupId>
+diff --git a/src/extension/sldService/pom.xml b/src/extension/sldService/pom.xml
+index 1b8009a14d1..bcd2256016c 100644
+--- a/src/extension/sldService/pom.xml
++++ b/src/extension/sldService/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/sqlserver/pom.xml b/src/extension/sqlserver/pom.xml
+index 9fafeb9c84b..189bb7534c2 100644
+--- a/src/extension/sqlserver/pom.xml
++++ b/src/extension/sqlserver/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/vectortiles/pom.xml b/src/extension/vectortiles/pom.xml
+index bffdf4f765e..b7c578306b8 100644
+--- a/src/extension/vectortiles/pom.xml
++++ b/src/extension/vectortiles/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wcs2_0-eo/core/pom.xml b/src/extension/wcs2_0-eo/core/pom.xml
+index 0b5eb297315..ad19801a1b8 100644
+--- a/src/extension/wcs2_0-eo/core/pom.xml
++++ b/src/extension/wcs2_0-eo/core/pom.xml
+@@ -10,7 +10,7 @@ application directory.
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wcs2_0-eo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wcs2_0-eo/pom.xml b/src/extension/wcs2_0-eo/pom.xml
+index 1ad0bdf0e21..ddf7eff43a5 100644
+--- a/src/extension/wcs2_0-eo/pom.xml
++++ b/src/extension/wcs2_0-eo/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-wcs2_0-eo</artifactId>
+diff --git a/src/extension/wcs2_0-eo/web/pom.xml b/src/extension/wcs2_0-eo/web/pom.xml
+index 151ed32c09f..f5bea48463b 100644
+--- a/src/extension/wcs2_0-eo/web/pom.xml
++++ b/src/extension/wcs2_0-eo/web/pom.xml
+@@ -10,7 +10,7 @@ application directory.
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wcs2_0-eo</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/web-resource/pom.xml b/src/extension/web-resource/pom.xml
+index a6dce6a3a90..00fcf433771 100644
+--- a/src/extension/web-resource/pom.xml
++++ b/src/extension/web-resource/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-web-resource</artifactId>
+diff --git a/src/extension/wmts-multi-dimensional/pom.xml b/src/extension/wmts-multi-dimensional/pom.xml
+index ad29810e525..e14017dfcde 100644
+--- a/src/extension/wmts-multi-dimensional/pom.xml
++++ b/src/extension/wmts-multi-dimensional/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-wmts-multi-dimensional</artifactId>
+diff --git a/src/extension/wps-download/pom.xml b/src/extension/wps-download/pom.xml
+index a95478df438..5a99fcdc65f 100644
+--- a/src/extension/wps-download/pom.xml
++++ b/src/extension/wps-download/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wps-jdbc/pom.xml b/src/extension/wps-jdbc/pom.xml
+index ce8bcfcb8bd..94a822d90d1 100644
+--- a/src/extension/wps-jdbc/pom.xml
++++ b/src/extension/wps-jdbc/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.extension</groupId>
+   <artifactId>gs-wps-jdbc</artifactId>
+diff --git a/src/extension/wps/pom.xml b/src/extension/wps/pom.xml
+index b87f85189a0..ef88975a3f0 100644
+--- a/src/extension/wps/pom.xml
++++ b/src/extension/wps/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wps/web-wps/pom.xml b/src/extension/wps/web-wps/pom.xml
+index 2231a247392..77f414b8790 100644
+--- a/src/extension/wps/web-wps/pom.xml
++++ b/src/extension/wps/web-wps/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wps</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wps/wps-cluster-hazelcast/pom.xml b/src/extension/wps/wps-cluster-hazelcast/pom.xml
+index 722eddcf86e..f57232cf456 100644
+--- a/src/extension/wps/wps-cluster-hazelcast/pom.xml
++++ b/src/extension/wps/wps-cluster-hazelcast/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wps</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wps/wps-core/pom.xml b/src/extension/wps/wps-core/pom.xml
+index 8630e145d0a..cdc004862cc 100644
+--- a/src/extension/wps/wps-core/pom.xml
++++ b/src/extension/wps/wps-core/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wps</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/wps/wps-kml-ppio/pom.xml b/src/extension/wps/wps-kml-ppio/pom.xml
+index 57e455902f0..1e241a1c428 100644
+--- a/src/extension/wps/wps-kml-ppio/pom.xml
++++ b/src/extension/wps/wps-kml-ppio/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver.extension</groupId>
+     <artifactId>gs-wps</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/extension/xslt/pom.xml b/src/extension/xslt/pom.xml
+index 46b886fb088..2875c1650cb 100644
+--- a/src/extension/xslt/pom.xml
++++ b/src/extension/xslt/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/extension/ysld/pom.xml b/src/extension/ysld/pom.xml
+index 09d90d4b78c..eb2afbaa835 100644
+--- a/src/extension/ysld/pom.xml
++++ b/src/extension/ysld/pom.xml
+@@ -6,7 +6,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>extension</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.extension</groupId>
+diff --git a/src/gwc-rest/pom.xml b/src/gwc-rest/pom.xml
+index 58f2c1d1d8b..dc6d25dd090 100644
+--- a/src/gwc-rest/pom.xml
++++ b/src/gwc-rest/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/gwc/pom.xml b/src/gwc/pom.xml
+index 6c8473a4e24..1da0db14233 100644
+--- a/src/gwc/pom.xml
++++ b/src/gwc/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/kml/pom.xml b/src/kml/pom.xml
+index f0e8e8d7c91..a34318375ec 100644
+--- a/src/kml/pom.xml
++++ b/src/kml/pom.xml
+@@ -8,7 +8,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/main/pom.xml b/src/main/pom.xml
+index fe1576f5aee..3116265d982 100644
+--- a/src/main/pom.xml
++++ b/src/main/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/maven/archetype/pom.xml b/src/maven/archetype/pom.xml
+index 88ff75514f4..4caf1f69ddd 100644
+--- a/src/maven/archetype/pom.xml
++++ b/src/maven/archetype/pom.xml
+@@ -11,7 +11,7 @@ txsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/m
+  <parent>
+   <groupId>org.geoserver</groupId>
+   <artifactId>gs-maven</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+  </parent>
+ 
+  <groupId>org.geoserver.maven</groupId>
+diff --git a/src/maven/archetype/webPlugin/pom.xml b/src/maven/archetype/webPlugin/pom.xml
+index aeec0cc38f6..865e7795713 100644
+--- a/src/maven/archetype/webPlugin/pom.xml
++++ b/src/maven/archetype/webPlugin/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.maven</groupId>
+     <artifactId>gs-archetype</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.maven</groupId>
+diff --git a/src/maven/archetype/webPlugin/src/main/resources/archetype-resources/pom.xml b/src/maven/archetype/webPlugin/src/main/resources/archetype-resources/pom.xml
+index 23c44b8c74d..e98ce952025 100644
+--- a/src/maven/archetype/webPlugin/src/main/resources/archetype-resources/pom.xml
++++ b/src/maven/archetype/webPlugin/src/main/resources/archetype-resources/pom.xml
+@@ -24,12 +24,12 @@
+   <dependency>
+    <groupId>org.geoserver.web</groupId>
+    <artifactId>web-core</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+   </dependency>
+   <dependency>
+    <groupId>org.geoserver.web</groupId>
+    <artifactId>web-core</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+    <classifier>tests</classifier>
+    <scope>test</scope>
+   </dependency>
+@@ -42,7 +42,7 @@
+   <dependency>
+    <groupId>org.geoserver</groupId>
+    <artifactId>main</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+    <classifier>tests</classifier>
+    <scope>test</scope>
+   </dependency>
+diff --git a/src/maven/archetype/wfsOutputFormat/pom.xml b/src/maven/archetype/wfsOutputFormat/pom.xml
+index 2e414bdfa9d..fe189354fdd 100644
+--- a/src/maven/archetype/wfsOutputFormat/pom.xml
++++ b/src/maven/archetype/wfsOutputFormat/pom.xml
+@@ -5,7 +5,7 @@
+   <parent>
+     <groupId>org.geoserver.maven</groupId>
+     <artifactId>gs-archetype</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.maven</groupId>
+diff --git a/src/maven/archetype/wfsOutputFormat/src/main/resources/archetype-resources/pom.xml b/src/maven/archetype/wfsOutputFormat/src/main/resources/archetype-resources/pom.xml
+index d665c3fc24f..d13586a9c45 100644
+--- a/src/maven/archetype/wfsOutputFormat/src/main/resources/archetype-resources/pom.xml
++++ b/src/maven/archetype/wfsOutputFormat/src/main/resources/archetype-resources/pom.xml
+@@ -11,7 +11,7 @@
+   <dependency>
+    <groupId>org.geoserver</groupId>
+    <artifactId>wfs</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+   </dependency>
+   <dependency>
+    <groupId>junit</groupId>
+@@ -22,14 +22,14 @@
+   <dependency>
+    <groupId>org.geoserver</groupId>
+    <artifactId>wfs</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+    <classifier>tests</classifier>
+    <scope>test</scope>
+   </dependency>
+   <dependency>
+    <groupId>org.geoserver</groupId>
+    <artifactId>main</artifactId>
+-   <version>2.23-SNAPSHOT</version>
++   <version>2.23.2</version>
+    <classifier>tests</classifier>
+    <scope>test</scope>
+   </dependency>
+diff --git a/src/maven/config/pom.xml b/src/maven/config/pom.xml
+index db06a6ebe94..9007197fa9d 100644
+--- a/src/maven/config/pom.xml
++++ b/src/maven/config/pom.xml
+@@ -11,7 +11,7 @@
+  <parent>
+   <groupId>org.geoserver</groupId>
+   <artifactId>gs-maven</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+  </parent>
+  
+  <groupId>org.geoserver.maven</groupId>
+diff --git a/src/maven/pom.xml b/src/maven/pom.xml
+index ece666ecb90..0b071272d91 100644
+--- a/src/maven/pom.xml
++++ b/src/maven/pom.xml
+@@ -11,7 +11,7 @@
+  <parent>
+   <groupId>org.geoserver</groupId>
+   <artifactId>geoserver</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+  </parent>
+  
+  <groupId>org.geoserver</groupId>
+diff --git a/src/ows/pom.xml b/src/ows/pom.xml
+index 573bbea594b..024cd3dc1bf 100644
+--- a/src/ows/pom.xml
++++ b/src/ows/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/platform/pom.xml b/src/platform/pom.xml
+index 35a7163942d..06b8c3a351b 100644
+--- a/src/platform/pom.xml
++++ b/src/platform/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-platform</artifactId>
+diff --git a/src/pom.xml b/src/pom.xml
+index 639169a0ce3..9dae61666da 100644
+--- a/src/pom.xml
++++ b/src/pom.xml
+@@ -9,7 +9,7 @@
+   <modelVersion>4.0.0</modelVersion>
+   <groupId>org.geoserver</groupId>
+   <artifactId>geoserver</artifactId>
+-  <version>2.23-SNAPSHOT</version>
++  <version>2.23.2</version>
+   <packaging>pom</packaging>
+   <name>GeoServer</name>
+   <inceptionYear>2006</inceptionYear>
+@@ -88,9 +88,9 @@
+   </distributionManagement>
+ 
+   <properties>
+-    <gs.version>2.23-SNAPSHOT</gs.version>
+-    <gt.version>29-SNAPSHOT</gt.version>
+-    <gwc.version>1.23-SNAPSHOT</gwc.version>
++    <gs.version>2.23.2</gs.version>
++    <gt.version>29.2</gt.version>
++    <gwc.version>1.23.1</gwc.version>
+     <jts.version>1.19.0</jts.version>
+     <spring.version>5.3.27</spring.version>
+     <spring.security.version>5.7.8</spring.security.version>
+diff --git a/src/release/installer/mac/console/pom.xml b/src/release/installer/mac/console/pom.xml
+index a7620813074..691e528d915 100644
+--- a/src/release/installer/mac/console/pom.xml
++++ b/src/release/installer/mac/console/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver</groupId>
+   <artifactId>console</artifactId>
+diff --git a/src/release/pom.xml b/src/release/pom.xml
+index 2dfae4289a0..9847560ad12 100644
+--- a/src/release/pom.xml
++++ b/src/release/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver</groupId>
+   <artifactId>gs-release</artifactId>
+diff --git a/src/rest/pom.xml b/src/rest/pom.xml
+index 78e4d728b08..4b2b3fbbef5 100644
+--- a/src/rest/pom.xml
++++ b/src/rest/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-rest</artifactId>
+diff --git a/src/restconfig-wcs/pom.xml b/src/restconfig-wcs/pom.xml
+index 6782f8d54ed..33e89d120f7 100644
+--- a/src/restconfig-wcs/pom.xml
++++ b/src/restconfig-wcs/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-restconfig-wcs</artifactId>
+diff --git a/src/restconfig-wfs/pom.xml b/src/restconfig-wfs/pom.xml
+index 61e07971bdd..b183f7fc868 100644
+--- a/src/restconfig-wfs/pom.xml
++++ b/src/restconfig-wfs/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-restconfig-wfs</artifactId>
+diff --git a/src/restconfig-wms/pom.xml b/src/restconfig-wms/pom.xml
+index eb58b7315e8..1bfbdcd7a36 100644
+--- a/src/restconfig-wms/pom.xml
++++ b/src/restconfig-wms/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-restconfig-wms</artifactId>
+diff --git a/src/restconfig-wmts/pom.xml b/src/restconfig-wmts/pom.xml
+index 614b7aaca03..69c33c7bbc3 100644
+--- a/src/restconfig-wmts/pom.xml
++++ b/src/restconfig-wmts/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/restconfig/pom.xml b/src/restconfig/pom.xml
+index 5fe7182c45f..963458f717f 100644
+--- a/src/restconfig/pom.xml
++++ b/src/restconfig/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <artifactId>gs-restconfig</artifactId>
+diff --git a/src/security/jdbc/pom.xml b/src/security/jdbc/pom.xml
+index 42efd1490ab..4499fb63b57 100644
+--- a/src/security/jdbc/pom.xml
++++ b/src/security/jdbc/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.security</groupId>
+   <artifactId>gs-sec-jdbc</artifactId>
+diff --git a/src/security/ldap/pom.xml b/src/security/ldap/pom.xml
+index ca6b82d50ae..9084e990240 100644
+--- a/src/security/ldap/pom.xml
++++ b/src/security/ldap/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.security</groupId>
+diff --git a/src/security/pom.xml b/src/security/pom.xml
+index 46dfd6fef5b..45840993b66 100644
+--- a/src/security/pom.xml
++++ b/src/security/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/security/security-tests/pom.xml b/src/security/security-tests/pom.xml
+index 083610f5cdb..ff0fa484457 100644
+--- a/src/security/security-tests/pom.xml
++++ b/src/security/security-tests/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>gs-security</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.security</groupId>
+   <artifactId>gs-security-tests</artifactId>
+diff --git a/src/wcs/pom.xml b/src/wcs/pom.xml
+index 054a8bd476f..d58cf521b5d 100644
+--- a/src/wcs/pom.xml
++++ b/src/wcs/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/wcs1_0/pom.xml b/src/wcs1_0/pom.xml
+index e4e028f9f64..24c29667a04 100644
+--- a/src/wcs1_0/pom.xml
++++ b/src/wcs1_0/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/wcs1_1/pom.xml b/src/wcs1_1/pom.xml
+index 3e871787382..1248f20e86a 100644
+--- a/src/wcs1_1/pom.xml
++++ b/src/wcs1_1/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/wcs2_0/pom.xml b/src/wcs2_0/pom.xml
+index 7ffe4c60a5c..8c699651ce5 100644
+--- a/src/wcs2_0/pom.xml
++++ b/src/wcs2_0/pom.xml
+@@ -10,7 +10,7 @@ application directory.
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/web/app/pom.xml b/src/web/app/pom.xml
+index e659f42ce14..0bd8b358c21 100644
+--- a/src/web/app/pom.xml
++++ b/src/web/app/pom.xml
+@@ -9,7 +9,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.web</groupId>
+   <artifactId>gs-web-app</artifactId>
+diff --git a/src/web/core/pom.xml b/src/web/core/pom.xml
+index ffd6d54cbaf..0f846fc7f3f 100644
+--- a/src/web/core/pom.xml
++++ b/src/web/core/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/demo/pom.xml b/src/web/demo/pom.xml
+index 64b9e22c3ef..f81c8844037 100644
+--- a/src/web/demo/pom.xml
++++ b/src/web/demo/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/gwc/pom.xml b/src/web/gwc/pom.xml
+index 55364bfb944..693d701454c 100644
+--- a/src/web/gwc/pom.xml
++++ b/src/web/gwc/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/pom.xml b/src/web/pom.xml
+index 7b76bb54c79..cab7977babb 100644
+--- a/src/web/pom.xml
++++ b/src/web/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/web/rest/pom.xml b/src/web/rest/pom.xml
+index d10588cfef1..f8c5ea5e7ab 100644
+--- a/src/web/rest/pom.xml
++++ b/src/web/rest/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+   <groupId>org.geoserver.web</groupId>
+   <artifactId>gs-web-rest</artifactId>
+diff --git a/src/web/security/core/pom.xml b/src/web/security/core/pom.xml
+index 5dd4a3a2d05..06ef5b75e2d 100644
+--- a/src/web/security/core/pom.xml
++++ b/src/web/security/core/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.web</groupId>
+     <artifactId>gs-web-sec</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/security/jdbc/pom.xml b/src/web/security/jdbc/pom.xml
+index 98f0bb8b20b..ec5beb48d43 100644
+--- a/src/web/security/jdbc/pom.xml
++++ b/src/web/security/jdbc/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.web</groupId>
+     <artifactId>gs-web-sec</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/security/ldap/pom.xml b/src/web/security/ldap/pom.xml
+index 1bf422e966a..13272973077 100644
+--- a/src/web/security/ldap/pom.xml
++++ b/src/web/security/ldap/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver.web</groupId>
+     <artifactId>gs-web-sec</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/security/pom.xml b/src/web/security/pom.xml
+index 845c2a8144c..a11338765fa 100644
+--- a/src/web/security/pom.xml
++++ b/src/web/security/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/wcs/pom.xml b/src/web/wcs/pom.xml
+index 1cfaa1c04ee..9300b2422db 100644
+--- a/src/web/wcs/pom.xml
++++ b/src/web/wcs/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/wfs/pom.xml b/src/web/wfs/pom.xml
+index 30e6d0c9b2a..1ef1c307ada 100644
+--- a/src/web/wfs/pom.xml
++++ b/src/web/wfs/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/web/wms/pom.xml b/src/web/wms/pom.xml
+index 8afb5d3b4f7..dfac540a2c8 100644
+--- a/src/web/wms/pom.xml
++++ b/src/web/wms/pom.xml
+@@ -11,7 +11,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>web</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver.web</groupId>
+diff --git a/src/wfs/pom.xml b/src/wfs/pom.xml
+index e0cc78943a9..8add310cb2b 100644
+--- a/src/wfs/pom.xml
++++ b/src/wfs/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>
+diff --git a/src/wms/pom.xml b/src/wms/pom.xml
+index caa49a251b2..1c3b61f9d3f 100644
+--- a/src/wms/pom.xml
++++ b/src/wms/pom.xml
+@@ -10,7 +10,7 @@
+   <parent>
+     <groupId>org.geoserver</groupId>
+     <artifactId>geoserver</artifactId>
+-    <version>2.23-SNAPSHOT</version>
++    <version>2.23.2</version>
+   </parent>
+ 
+   <groupId>org.geoserver</groupId>

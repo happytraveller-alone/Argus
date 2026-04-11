@@ -1,0 +1,53 @@
+From d4985a77391123c5959db432c076328f8d5e3624 Mon Sep 17 00:00:00 2001
+From: Juan Leyva <juanleyvadelgado@gmail.com>
+Date: Tue, 27 Aug 2019 13:35:21 +0100
+Subject: [PATCH] MDL-66501 tool_mobile: Prevent URLs in custom scheme
+
+---
+ admin/tool/mobile/lang/en/tool_mobile.php | 2 +-
+ admin/tool/mobile/launch.php              | 2 +-
+ admin/tool/mobile/settings.php            | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/admin/tool/mobile/lang/en/tool_mobile.php b/admin/tool/mobile/lang/en/tool_mobile.php
+index b1344cc2395..b02ff9e44fd 100644
+--- a/admin/tool/mobile/lang/en/tool_mobile.php
++++ b/admin/tool/mobile/lang/en/tool_mobile.php
+@@ -58,7 +58,7 @@ $string['downloadcourse'] = 'Download course';
+ $string['downloadcourses'] = 'Download courses';
+ $string['enablesmartappbanners'] = 'Enable App Banners';
+ $string['enablesmartappbanners_desc'] = 'If enabled, a banner promoting the mobile app will be displayed when accessing the site using a mobile browser.';
+-$string['forcedurlscheme'] = 'If you want to allow only your custom branded app to be opened via a browser window, then specify its URL scheme here; otherwise leave the field empty.';
++$string['forcedurlscheme'] = 'If you want to allow only your custom branded app to be opened via a browser window, then specify its URL scheme here. If you want to allow only the official app, then set the default value. Leave the field empty if you want to allow any app.';
+ $string['forcedurlscheme_key'] = 'URL scheme';
+ $string['forcelogout'] = 'Force log out';
+ $string['forcelogout_desc'] = 'If enabled, the app option \'Change site\' is replaced by \'Log out\'. This results in the user being completely logged out. They must then re-enter their password the next time they wish to access the site.';
+diff --git a/admin/tool/mobile/launch.php b/admin/tool/mobile/launch.php
+index 1e74e37fc32..2c5fc181b50 100644
+--- a/admin/tool/mobile/launch.php
++++ b/admin/tool/mobile/launch.php
+@@ -30,7 +30,7 @@ require_once($CFG->libdir . '/externallib.php');
+ 
+ $serviceshortname  = required_param('service',  PARAM_ALPHANUMEXT);
+ $passport          = required_param('passport',  PARAM_RAW);    // Passport send from the app to validate the response URL.
+-$urlscheme         = optional_param('urlscheme', 'moodlemobile', PARAM_NOTAGS); // The URL scheme the app supports.
++$urlscheme         = optional_param('urlscheme', 'moodlemobile', PARAM_ALPHANUM); // The URL scheme the app supports.
+ $confirmed         = optional_param('confirmed', false, PARAM_BOOL);  // If we are being redirected after user confirmation.
+ $oauthsso          = optional_param('oauthsso', 0, PARAM_INT); // Id of the OpenID issuer (for OAuth direct SSO).
+ 
+diff --git a/admin/tool/mobile/settings.php b/admin/tool/mobile/settings.php
+index 5a313ed3b1a..b5033d889db 100644
+--- a/admin/tool/mobile/settings.php
++++ b/admin/tool/mobile/settings.php
+@@ -63,7 +63,7 @@ if ($hassiteconfig) {
+ 
+         $temp->add(new admin_setting_configtext('tool_mobile/forcedurlscheme',
+                     new lang_string('forcedurlscheme_key', 'tool_mobile'),
+-                    new lang_string('forcedurlscheme', 'tool_mobile'), '', PARAM_NOTAGS));
++                    new lang_string('forcedurlscheme', 'tool_mobile'), 'moodlemobile', PARAM_ALPHANUM));
+ 
+         $ADMIN->add('mobileapp', $temp);
+ 
+-- 
+2.34.1
+

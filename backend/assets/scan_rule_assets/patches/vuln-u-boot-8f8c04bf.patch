@@ -1,0 +1,32 @@
+From 75c3aab479cbd52943c47d7f47122cdf7763c80a Mon Sep 17 00:00:00 2001
+From: Sebastian Pipping <sebastian@pipping.org>
+Date: Fri, 6 Mar 2015 16:51:06 +0100
+Subject: [PATCH] Source cmdlineopts.clp from same folder as grml-debootstrap
+ file (issue #59)
+
+Simplified, this fixes CVE-2015-1378 for everyone but grml-debootstrap developers.
+
+(cherry picked from commit 7b07013305bea95e8d6db7239c82be09624a11b8)
+---
+ grml-debootstrap | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/grml-debootstrap b/grml-debootstrap
+index 0a752e7..c568b06 100755
+--- a/grml-debootstrap
++++ b/grml-debootstrap
+@@ -289,8 +289,9 @@ fi
+ 
+ # cmdline handling {{{
+ # source external command line parameter-processing script
+-if [ -r ./cmdlineopts.clp ] ; then
+-   . ./cmdlineopts.clp
++self_dir="$(dirname "$(which "$0")")"
++if [ -r "${self_dir}"/cmdlineopts.clp ] ; then
++   . "${self_dir}"/cmdlineopts.clp
+ elif [ -r /usr/share/grml-debootstrap/functions/cmdlineopts.clp ] ; then
+    . /usr/share/grml-debootstrap/functions/cmdlineopts.clp
+ else
+-- 
+2.34.1
+

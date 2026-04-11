@@ -1,0 +1,25 @@
+From 5b8f8fc41a5d7d7d6a5d767e48464c60884d3aee Mon Sep 17 00:00:00 2001
+From: Hiroshi SHIBATA <hsbt@ruby-lang.org>
+Date: Mon, 22 Jul 2019 10:23:43 +0900
+Subject: [PATCH] Use File.open explicitly.
+
+---
+ lib/rake/file_list.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/rake/file_list.rb b/lib/rake/file_list.rb
+index 15ea4b3..22c339f 100644
+--- a/lib/rake/file_list.rb
++++ b/lib/rake/file_list.rb
+@@ -294,7 +294,7 @@ module Rake
+       matched = 0
+       each do |fn|
+         begin
+-          open(fn, "r", *options) do |inf|
++          File.open(fn, "r", *options) do |inf|
+             count = 0
+             inf.each do |line|
+               count += 1
+-- 
+2.34.1
+

@@ -1,0 +1,26 @@
+From 4827ed31c226dc5ed93603bd649e0e387a1778da Mon Sep 17 00:00:00 2001
+From: matthias wandel <matthias@woodgears.ca>
+Date: Fri, 23 Oct 2020 10:05:36 -0300
+Subject: [PATCH] A 'fix' to satisfy pednatic debian fuzzers.  This one read
+ ONE byte past allocated.
+
+---
+ jpgfile.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/jpgfile.c b/jpgfile.c
+index 3bf757f..45d97dc 100644
+--- a/jpgfile.c
++++ b/jpgfile.c
+@@ -48,7 +48,7 @@ static void process_COM (const uchar * Data, int length)
+     for (a=2;a<length;a++){
+         ch = Data[a];
+ 
+-        if (ch == '\r' && Data[a+1] == '\n') continue; // Remove cr followed by lf.
++        if (ch == '\r' && a < length-1 && Data[a+1] == '\n') continue; // Remove cr followed by lf.
+ 
+         if (ch >= 32 || ch == '\n' || ch == '\t'){
+             Comment[nch++] = (char)ch;
+-- 
+2.34.1
+

@@ -1,0 +1,190 @@
+From ff7d4f37260e379fb38740c63d52a9165b057e4d Mon Sep 17 00:00:00 2001
+From: Martin Hoffmann <martin@nlnetlabs.nl>
+Date: Tue, 9 Nov 2021 15:44:23 +0100
+Subject: [PATCH] Remove support for gzip transfer encoding in RRDP client.
+ (#667)
+
+---
+ Cargo.lock            | 15 ---------------
+ Cargo.toml            |  2 +-
+ doc/routinator.1      | 10 ----------
+ src/collector/rrdp.rs |  1 -
+ src/config.rs         | 25 ++++++-------------------
+ 5 files changed, 7 insertions(+), 46 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 2d89211..00a99cf 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -32,19 +32,6 @@ version = "1.3.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "e906254e445520903e7fc9da4f709886c84ae4bc4ddaf0e093188d66df4dc820"
+ 
+-[[package]]
+-name = "async-compression"
+-version = "0.3.8"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "5443ccbb270374a2b1055fc72da40e1f237809cd6bb0e97e66d264cd138473a6"
+-dependencies = [
+- "flate2",
+- "futures-core",
+- "memchr",
+- "pin-project-lite",
+- "tokio",
+-]
+-
+ [[package]]
+ name = "atty"
+ version = "0.2.14"
+@@ -931,7 +918,6 @@ version = "0.11.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "246e9f61b9bb77df069a947682be06e31ac43ea37862e244a69f177694ea6d22"
+ dependencies = [
+- "async-compression",
+  "base64",
+  "bytes",
+  "encoding_rs",
+@@ -957,7 +943,6 @@ dependencies = [
+  "tokio-native-tls",
+  "tokio-rustls",
+  "tokio-socks",
+- "tokio-util",
+  "url",
+  "wasm-bindgen",
+  "wasm-bindgen-futures",
+diff --git a/Cargo.toml b/Cargo.toml
+index 38edabc..48b6b65 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -27,7 +27,7 @@ log             = "0.4.8"
+ log-reroute     = "0.1.5"
+ num_cpus        = "1.12.0"
+ rand            = "0.8.1"
+-reqwest         = { version = "0.11.0", default-features = false, features = ["blocking", "gzip", "rustls-tls" ] }
++reqwest         = { version = "0.11.0", default-features = false, features = ["blocking", "rustls-tls" ] }
+ ring            = "0.16.12"
+ rpki            = { version = "0.12.2", features = [ "repository", "rrdp", "rtr", "serde" ] }
+ serde           = { version = "1.0.95", features = [ "derive" ] }
+diff --git a/doc/routinator.1 b/doc/routinator.1
+index 0575656..fff6a53 100644
+--- a/doc/routinator.1
++++ b/doc/routinator.1
+@@ -337,10 +337,6 @@ For the responses to the notification files, the timestamp is appended to
+ the path to make it possible to distinguish the series of requests made over
+ time.
+ 
+-.TP
+-.B --rrdp-disable-gzip
+-If this option is present, the gzip transfer encoding is disabled.
+-
+ .TP
+ .BI --max-object-size= bytes
+ Limits the size of individual objects received via either rsync or RRDP to
+@@ -1111,12 +1107,6 @@ responses received from RRDP servers will be stored.
+ The sub-path will be constructed using the components of the requested URI.
+ For the responses to the notification files, the timestamp is appended to
+ the path to make it possible to distinguish the series of requests made over
+-time.
+-
+-.TP
+-.B rrdp-disable-gzip
+-A boolean value that determines whether the gzip transfer encoding should be
+-disabled in RRDP requests. If the option is missing, gzip will be used.
+ 
+ .TP
+ .B max-object-size
+diff --git a/src/collector/rrdp.rs b/src/collector/rrdp.rs
+index 929609e..5a08c73 100644
+--- a/src/collector/rrdp.rs
++++ b/src/collector/rrdp.rs
+@@ -1301,7 +1301,6 @@ impl HttpClient {
+ 
+         let mut builder = create_builder();
+         builder = builder.user_agent(&config.rrdp_user_agent);
+-        builder = builder.gzip(!config.rrdp_disable_gzip);
+         builder = builder.timeout(None); // Set per request.
+         if let Some(timeout) = config.rrdp_connect_timeout {
+             builder = builder.connect_timeout(timeout);
+diff --git a/src/config.rs b/src/config.rs
+index 9c6fcec..47c173b 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -206,9 +206,6 @@ pub struct Config {
+     /// Should we keep RRDP responses and if so where?
+     pub rrdp_keep_responses: Option<PathBuf>,
+ 
+-    /// Disable the use if the gzip transfer encoding in the RRDP client.
+-    pub rrdp_disable_gzip: bool,
+-
+     /// Optional size limit for objects.
+     pub max_object_size: Option<u64>,
+ 
+@@ -427,9 +424,10 @@ impl Config {
+             .help("Keep RRDP responses in the given directory")
+             .takes_value(true)
+         )
++        // XXX Remove in next breaking release
+         .arg(Arg::with_name("rrdp-disable-gzip")
+             .long("rrdp-disable-gzip")
+-            .help("Disable the gzip transfer encoding in RRDP")
++            .hidden(true)
+         )
+         .arg(Arg::with_name("max-object-size")
+             .long("max-object-size")
+@@ -759,11 +757,6 @@ impl Config {
+             self.rrdp_keep_responses = Some(path.into())
+         }
+ 
+-        // rrdp_disable_gzip
+-        if matches.is_present("rrdp-disable-gzip") {
+-            self.rrdp_disable_gzip = true;
+-        }
+-
+         // max_object_size
+         if let Some(value) = from_str_value_of(matches, "max-object-size")? {
+             if value == 0 {
+@@ -1075,9 +1068,6 @@ impl Config {
+             },
+             rrdp_user_agent: DEFAULT_RRDP_USER_AGENT.to_string(),
+             rrdp_keep_responses: file.take_path("rrdp-keep-responses")?,
+-            rrdp_disable_gzip: {
+-                file.take_bool("rrdp-disable-gzip")?.unwrap_or(false)
+-            },
+             max_object_size: {
+                 match file.take_u64("max-object-size")? {
+                     Some(0) => None,
+@@ -1143,6 +1133,10 @@ impl Config {
+             group: file.take_string("group")?,
+             tal_labels: file.take_string_map("tal-labels")?.unwrap_or_default(),
+         };
++        
++        // XXX Remove in next breaking release.
++        let _ = file.take_bool("rrdp-disable-gzip")?;
++
+         file.check_exhausted()?;
+         Ok(res)
+     }
+@@ -1262,7 +1256,6 @@ impl Config {
+             rrdp_proxies: Vec::new(),
+             rrdp_user_agent: DEFAULT_RRDP_USER_AGENT.to_string(),
+             rrdp_keep_responses: None,
+-            rrdp_disable_gzip: false,
+             max_object_size: Some(DEFAULT_MAX_OBJECT_SIZE),
+             max_ca_depth: DEFAULT_MAX_CA_DEPTH,
+             dirty_repository: DEFAULT_DIRTY_REPOSITORY,
+@@ -1442,12 +1435,6 @@ impl Config {
+                 format!("{}", path.display()).into()
+             );
+         }
+-        if self.rrdp_disable_gzip {
+-            res.insert(
+-                "rrdp-disable-gzip".into(),
+-                true.into()
+-            );
+-        }
+         res.insert("max-object-size".into(),
+             match self.max_object_size {
+                 Some(value) => value as i64,
+-- 
+2.34.1
+

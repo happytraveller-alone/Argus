@@ -1,0 +1,20 @@
+rules:
+- id: use-json-response
+  patterns:
+  - pattern-inside: "def $X(...):\n  ...\n"
+  - pattern-either:
+    - pattern: '$Y = json.dumps(...)
+
+        ...
+
+        django.http.HttpResponse($Y, ...)
+
+        '
+  message: Use JsonResponse instead
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-116: Improper Encoding or Escaping of Output'

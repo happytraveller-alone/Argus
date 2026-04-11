@@ -1,0 +1,51 @@
+From 3381cba6a9e36b01ed0ab0acfd41b00487966cb5 Mon Sep 17 00:00:00 2001
+From: cigamit <jimmy@sqmail.org>
+Date: Wed, 5 Jul 2017 06:45:03 -0500
+Subject: [PATCH] Resolving Issue #838
+
+Cross-site Scripting (XSS) issue with link.php
+---
+ docs/CHANGELOG        | 3 +++
+ lib/html_validate.php | 6 +++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/docs/CHANGELOG b/docs/CHANGELOG
+index d2e09e838..d5220e9e3 100644
+--- a/docs/CHANGELOG
++++ b/docs/CHANGELOG
+@@ -1,5 +1,8 @@
+ Cacti CHANGELOG
+ 
++1.2
++-issue#838: SECURITY: XSS Issue in link.php
++
+ 1.1.12
+ -issue#822: Aggregate Graph Items are incorrectly editable
+ -issue#823: Allow Filters to be hidden
+diff --git a/lib/html_validate.php b/lib/html_validate.php
+index 3d5e97fad..d5cb6168f 100644
+--- a/lib/html_validate.php
++++ b/lib/html_validate.php
+@@ -48,16 +48,16 @@ function die_html_input_error($variable = '', $value = '', $message = '') {
+ 	global $config;
+ 
+ 	?>
+-	<table style="width:100%;text-align:center;">
++	<table style='width:100%;text-align:center;'>
+ 		<tr>
+ 			<td>
+-				Validation error<?php print ($variable != '' ? ' for variable ' . $variable . ', with value of "' . $value . '"' . ($message != '' ? ', and error:' . $message : '') : '');?>.  See backtrace below for more details.
++				<?php print __('Validation error for variable %s with a value of %s.  See backtrace below for more details.', $variable, htmlspecialchars($value));?>
+ 			</td>
+ 		</tr>
+ 	</table>
+ 	<?php
+ 
+-	cacti_debug_backtrace('Validation Error' . ($variable != '' ? ", Variable:$variable":"") . ($value != '' ? ", Value:$value":""), true);
++	cacti_debug_backtrace('Validation Error' . ($variable != '' ? ", Variable:$variable":'') . ($value != '' ? ", Value:$value":''), true);
+ 
+ 	bottom_footer();
+ 	exit;
+-- 
+2.34.1
+

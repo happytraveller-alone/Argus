@@ -1,0 +1,2621 @@
+From dbd3a5f4e52d3baa2f823e67274c2e8a9b31fb88 Mon Sep 17 00:00:00 2001
+From: Patrick Soquet <ps@moddable.tech>
+Date: Sun, 14 Mar 2021 12:27:33 +0100
+Subject: [PATCH] XS: #586 & #587
+
+---
+ xs/sources/xsCode.c       |  64 +++++----
+ xs/sources/xsLexical.c    |  83 +++++------
+ xs/sources/xsMarshall.c   |  10 +-
+ xs/sources/xsPlatforms.c  |  10 +-
+ xs/sources/xsScope.c      |  60 ++++----
+ xs/sources/xsScript.c     | 114 ++++++---------
+ xs/sources/xsScript.h     |  38 +++--
+ xs/sources/xsSourceMap.c  |   9 +-
+ xs/sources/xsSyntaxical.c | 285 +++++++++++++++++++-------------------
+ xs/sources/xsTree.c       |  79 +++++------
+ xs/tools/xsc.c            | 224 +++++++++++++++---------------
+ xs/tools/xst.c            |  13 +-
+ 12 files changed, 492 insertions(+), 497 deletions(-)
+
+diff --git a/xs/sources/xsCode.c b/xs/sources/xsCode.c
+index 64f2576d2..530bfd5e1 100644
+--- a/xs/sources/xsCode.c
++++ b/xs/sources/xsCode.c
+@@ -182,17 +182,26 @@ txScript* fxParserCode(txParser* parser)
+ 
+     c_memset(&coder, 0, sizeof(txCoder));
+ 	coder.parser = parser;
+-	if (parser->errorCount == 0)
+-		fxNodeDispatchCode(parser->root, &coder);
++	if (parser->errorCount == 0) {
++		mxTryParser(parser) {
++			fxNodeDispatchCode(parser->root, &coder);
++		}
++		mxCatchParser(parser) {
++		}
++	}
+ 	if (parser->errorCount) {
+-		coder.firstCode = NULL;
+-		coder.lastCode = NULL;
+-		fxCoderAddByte(&coder, 1, XS_CODE_GLOBAL);
+-		fxCoderAddSymbol(&coder, 0, XS_CODE_GET_VARIABLE, parser->errorSymbol);
+-		fxCoderAddByte(&coder, 2, XS_CODE_NEW);
+-		fxCoderAddString(&coder, 1, XS_CODE_STRING_1, c_strlen(parser->errorMessage), parser->errorMessage);
+-		fxCoderAddInteger(&coder, -3, XS_CODE_RUN_1, 1);
+-		fxCoderAddByte(&coder, -1, XS_CODE_THROW);
++		if (parser->console) {
++			coder.firstCode = NULL;
++			coder.lastCode = NULL;
++			fxCoderAddByte(&coder, 1, XS_CODE_GLOBAL);
++			fxCoderAddSymbol(&coder, 0, XS_CODE_GET_VARIABLE, parser->errorSymbol);
++			fxCoderAddByte(&coder, 2, XS_CODE_NEW);
++			fxCoderAddString(&coder, 1, XS_CODE_STRING_1, c_strlen(parser->errorMessage), parser->errorMessage);
++			fxCoderAddInteger(&coder, -3, XS_CODE_RUN_1, 1);
++			fxCoderAddByte(&coder, -1, XS_CODE_THROW);
++		}
++		else
++			return C_NULL;
+ 	}
+ 	
+ 	fxCoderOptimize(&coder);
+@@ -1514,7 +1523,7 @@ void fxScopeCodingParams(txScope* self, txCoder* coder)
+ 		if ((token == XS_TOKEN_ARG) || (token == XS_TOKEN_VAR) || (token == XS_TOKEN_CONST)) {
+ 			if (node->flags & mxDeclareNodeClosureFlag) {
+ 				if (node->flags & mxDeclareNodeUseClosureFlag) {
+-					fxReportLineError(self->parser, node->line, "argument %s use closure", node->symbol->string);
++					fxReportParserError(self->parser, node->line, "argument %s use closure", node->symbol->string);
+ 				}
+ 				node->index = coder->scopeLevel++;
+ 				fxCoderAddVariable(coder, 0, XS_CODE_NEW_CLOSURE, node->symbol, node->index);
+@@ -1734,6 +1743,7 @@ void fxNodeDispatchCode(void* it, void* param)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
++	fxCheckParserStack(coder->parser, self->line);
+ 	if (self->line >= 0)
+ 		fxCoderAddLine(coder, 0, XS_CODE_LINE, self); 
+ 	(*self->description->dispatch->code)(it, param);
+@@ -1743,6 +1753,7 @@ void fxNodeDispatchCodeAssign(void* it, void* param, txFlag flag)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
++	fxCheckParserStack(coder->parser, self->line);
+ 	if (self->line >= 0)
+ 		fxCoderAddLine(coder, 0, XS_CODE_LINE, self); 
+ 	(*self->description->dispatch->codeAssign)(self, param, flag);
+@@ -1752,6 +1763,7 @@ void fxNodeDispatchCodeDelete(void* it, void* param)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
++	fxCheckParserStack(coder->parser, self->line);
+ 	if (self->line >= 0)
+ 		fxCoderAddLine(coder, 0, XS_CODE_LINE, self); 
+ 	(*self->description->dispatch->codeDelete)(self, param);
+@@ -1761,6 +1773,7 @@ void fxNodeDispatchCodeReference(void* it, void* param)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
++	fxCheckParserStack(coder->parser, self->line);
+ 	if (self->line >= 0)
+ 		fxCoderAddLine(coder, 0, XS_CODE_LINE, self); 
+ 	(*self->description->dispatch->codeReference)(self, param);
+@@ -1770,6 +1783,7 @@ txFlag fxNodeDispatchCodeThis(void* it, void* param, txFlag flag)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
++	fxCheckParserStack(coder->parser, self->line);
+ 	if (self->line >= 0)
+ 		fxCoderAddLine(coder, 0, XS_CODE_LINE, self); 
+ 	return (*self->description->dispatch->codeThis)(self, param, flag);
+@@ -1779,7 +1793,7 @@ void fxNodeCode(void* it, void* param)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
+-	fxReportLineError(coder->parser, self->line, "no value");
++	fxReportParserError(coder->parser, self->line, "no value");
+ 	fxCoderAddByte(param, 1, XS_CODE_UNDEFINED);
+ }
+ 
+@@ -1787,7 +1801,7 @@ void fxNodeCodeAssign(void* it, void* param, txFlag flag)
+ {
+ 	txNode* self = it;
+ 	txCoder* coder = param;
+-	fxReportLineError(coder->parser, self->line, "no reference");
++	fxReportParserError(coder->parser, self->line, "no reference");
+ }
+ 
+ void fxNodeCodeDelete(void* it, void* param) 
+@@ -1840,7 +1854,7 @@ void fxAccessNodeCodeDelete(void* it, void* param)
+ 	txCoder* coder = param;
+ 	txDeclareNode* declaration = self->declaration;
+ 	if (self->flags & mxStrictFlag)
+-		fxReportLineError(coder->parser, self->line, "delete identifier (strict code)");
++		fxReportParserError(coder->parser, self->line, "delete identifier (strict code)");
+ 	if (!declaration) {
+ 		fxAccessNodeCodeReference(it, param);
+ 		fxCoderAddSymbol(param, 0, XS_CODE_DELETE_PROPERTY, self->symbol);
+@@ -2246,7 +2260,7 @@ void fxBindingNodeCode(void* it, void* param)
+ 	txCoder* coder = param;
+ 	
+ 	if (self->target->description->token == XS_TOKEN_ACCESS) {
+-		fxReportLineError(coder->parser, self->line, "invalid initializer");
++		fxReportParserError(coder->parser, self->line, "invalid initializer");
+ 		fxNodeDispatchCode(self->initializer, param);
+ 		return;
+ 	}
+@@ -2320,9 +2334,9 @@ void fxBreakContinueNodeCode(void* it, void* param)
+ 		target = target->nextTarget;
+ 	}
+ 	if (self->description->token == XS_TOKEN_BREAK)
+-		fxReportLineError(coder->parser, self->line, "invalid break");
++		fxReportParserError(coder->parser, self->line, "invalid break");
+ 	else
+-		fxReportLineError(coder->parser, self->line, "invalid continue");
++		fxReportParserError(coder->parser, self->line, "invalid continue");
+ }
+ 
+ void fxCallNodeCode(void* it, void* param) 
+@@ -2609,7 +2623,7 @@ void fxDeclareNodeCode(void* it, void* param)
+ 	txDeclareNode* self = it;
+ 	txCoder* coder = param;
+ 	if (self->description->token == XS_TOKEN_CONST)
+-		fxReportLineError(coder->parser, self->line, "invalid const");
++		fxReportParserError(coder->parser, self->line, "invalid const");
+ 	else if (self->description->token == XS_TOKEN_LET) {
+ 		fxNodeDispatchCodeReference(self, param);
+ 		fxCoderAddByte(coder, 1, XS_CODE_UNDEFINED);
+@@ -3324,7 +3338,7 @@ void fxLabelNodeCode(void* it, void* param)
+ 			txLabelNode* current = self;
+ 			while (current) {
+ 				if (former->symbol && current->symbol && (former->symbol == current->symbol)) {
+-					fxReportLineError(coder->parser, current->line, "duplicate label %s", current->symbol->string);
++					fxReportParserError(coder->parser, current->line, "duplicate label %s", current->symbol->string);
+ 				}
+ 				current = current->nextLabel;
+ 			}
+@@ -3548,7 +3562,7 @@ void fxObjectNodeCode(void* it, void* param)
+ 			if (item->description->token == XS_TOKEN_PROPERTY) {
+ 				if (!(item->flags & mxShorthandFlag) && (((txPropertyNode*)item)->symbol == coder->parser->__proto__Symbol)) {
+ 					if (flag)
+-						fxReportLineError(coder->parser, item->line, "invalid __proto__");
++						fxReportParserError(coder->parser, item->line, "invalid __proto__");
+ 					flag = 1;
+ 					fxNodeDispatchCode(((txPropertyNode*)item)->value, param);
+ 					fxCoderAddByte(param, 0, XS_CODE_INSTANTIATE);
+@@ -3843,7 +3857,7 @@ void fxPrivateMemberNodeCodeDelete(void* it, void* param)
+ 	txPrivateMemberNode* self = it;
+ 	txCoder* coder = param;
+ 	fxNodeDispatchCode(self->reference, param);
+-	fxReportLineError(coder->parser, self->line, "delete private property");
++	fxReportParserError(coder->parser, self->line, "delete private property");
+ }
+ 
+ void fxPrivateMemberNodeCodeReference(void* it, void* param) 
+@@ -3921,7 +3935,7 @@ void fxReturnNodeCode(void* it, void* param)
+ 	txStatementNode* self = it;
+ 	txCoder* coder = param;
+ 	if (coder->programFlag)
+-		fxReportLineError(coder->parser, self->line, "invalid return");
++		fxReportParserError(coder->parser, self->line, "invalid return");
+ 	if (self->expression) {	
+ 		if (((self->flags & (mxStrictFlag | mxGeneratorFlag)) == mxStrictFlag) && (coder->returnTarget->original == NULL))
+ 			self->expression->flags |= mxTailRecursionFlag;
+@@ -4160,13 +4174,13 @@ void fxTemplateNodeCode(void* it, void* param)
+ 	}
+ 	else {
+         if (((txTemplateItemNode*)item)->string->flags & mxStringErrorFlag)
+-            fxReportLineError(parser, item->line, "invalid escape sequence");
++            fxReportParserError(parser, item->line, "invalid escape sequence");
+ 		fxNodeDispatchCode(((txTemplateItemNode*)item)->string, param);
+ 		item = item->next;
+ 		while (item) {
+ 			if (item->description->token == XS_TOKEN_TEMPLATE_MIDDLE) {
+ 				if (((txTemplateItemNode*)item)->string->flags & mxStringErrorFlag)
+-					fxReportLineError(parser, item->line, "invalid escape sequence");
++					fxReportParserError(parser, item->line, "invalid escape sequence");
+ 				fxNodeDispatchCode(((txTemplateItemNode*)item)->string, param);
+ 			}
+ 			else {
+@@ -4291,7 +4305,7 @@ void fxUndefinedNodeCodeDelete(void* it, void* param)
+ 	txNode* self = it;
+ 	txCoder* coder = param;
+ 	if (self->flags & mxStrictFlag)
+-		fxReportLineError(coder->parser, self->line, "delete identifier (strict code)");
++		fxReportParserError(coder->parser, self->line, "delete identifier (strict code)");
+ 	fxCoderAddByte(param, 1, XS_CODE_FALSE);
+ }
+ 
+diff --git a/xs/sources/xsLexical.c b/xs/sources/xsLexical.c
+index 28b7fa588..13efbaa46 100644
+--- a/xs/sources/xsLexical.c
++++ b/xs/sources/xsLexical.c
+@@ -110,8 +110,7 @@ static const txKeyword ICACHE_RODATA_ATTR gxStrictKeywords[XS_STRICT_KEYWORD_COU
+ static txString fxUTF8Buffer(txParser* parser, txInteger character, txString string, txString limit)
+ {
+ 	if (string + fxUTF8Length(character) > limit) {
+-		fxReportParserError(parser, "buffer overflow");
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "buffer overflow");
+ 	}
+ 	return fxUTF8Encode(string, character);
+ } 
+@@ -130,7 +129,7 @@ void fxCheckStrictKeyword(txParser* parser)
+ 	}
+ bail:
+ 	if (parser->escaped2)
+-		fxReportParserError(parser, "escaped keyword");			
++		fxReportParserError(parser, parser->line, "escaped keyword");			
+ }
+ 
+ void fxGetNextCharacter(txParser* parser)
+@@ -149,7 +148,7 @@ void fxGetNextCharacter(txParser* parser)
+ 						break;
+ 				}
+ 				if (aSequence->size == 0) {
+-					fxReportParserError(parser, "invalid character %d", aResult);
++					fxReportParserError(parser, parser->line, "invalid character %d", aResult);
+ 					aResult = (txU4)C_EOF;
+ 				}
+ 				else {
+@@ -188,7 +187,7 @@ txString fxGetNextDigits(txParser* parser, txString (*f)(txParser*, txString, tx
+ 			break;
+ 	}
+ 	if (empty || separator)
+-		fxReportParserError(parser, "invalid number");	
++		fxReportParserError(parser, parser->line, "invalid number");	
+ 	return p;
+ }
+ 
+@@ -333,14 +332,12 @@ void fxGetNextNumberB(txParser* parser)
+ 	p = fxGetNextDigits(parser, fxGetNextDigitsB, p, q, 1);
+ 	c = parser->character;
+ 	if (p == q) {
+-		fxReportParserError(parser, "number overflow");	
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "number overflow");
+ 	}
+ 	if (c == 'n')
+ 		fxGetNextCharacter(parser);
+ 	if (fxIsIdentifierFirst(parser->character)) {
+-		fxReportParserError(parser, "invalid number");			
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportParserError(parser, parser->line, "invalid number");
+ 	}
+ 	*p = 0;
+ 	q = parser->buffer;
+@@ -400,14 +397,12 @@ void fxGetNextNumberE(txParser* parser, int dot)
+ 		c = parser->character;
+ 	}
+ 	if (p == q) {
+-		fxReportParserError(parser, "number overflow");	
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "number overflow");
+ 	}
+ 	if (c == 'n')
+ 		fxGetNextCharacter(parser);
+ 	if (fxIsIdentifierFirst(parser->character)) {
+-		fxReportParserError(parser, "invalid number");			
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportParserError(parser, parser->line, "invalid number");
+ 	}
+ 	*p = 0;
+ 	q = parser->buffer;
+@@ -418,7 +413,7 @@ void fxGetNextNumberE(txParser* parser, int dot)
+ 			parser->token2 = XS_TOKEN_BIGINT;
+ 		}
+ 		else
+-			fxReportParserError(parser, "invalid number");			
++			fxReportParserError(parser, parser->line, "invalid number");			
+ 	}	
+ 	else
+ 		fxGetNextNumber(parser, fxStringToNumber(parser->dtoa, parser->buffer, 1));
+@@ -431,9 +426,9 @@ void fxGetNextNumberO(txParser* parser, int c, int legacy)
+ 	if (legacy) {
+ 		p = fxGetNextDigitsO(parser, p, q);
+ 		if (parser->character == '_')
+-			fxReportParserError(parser, "invalid number");			
++			fxReportParserError(parser, parser->line, "invalid number");			
+ 		if (parser->character == 'n')
+-			fxReportParserError(parser, "invalid number");			
++			fxReportParserError(parser, parser->line, "invalid number");			
+ 	}
+ 	else {
+ 		fxGetNextCharacter(parser);
+@@ -441,14 +436,12 @@ void fxGetNextNumberO(txParser* parser, int c, int legacy)
+ 	}
+ 	c = parser->character;
+ 	if (p == q) {
+-		fxReportParserError(parser, "number overflow");	
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "number overflow");
+ 	}
+ 	if (c == 'n')
+ 		fxGetNextCharacter(parser);
+ 	if (fxIsIdentifierFirst(parser->character)) {
+-		fxReportParserError(parser, "invalid number");			
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportParserError(parser, parser->line, "invalid number");
+ 	}
+ 	*p = 0;
+ 	q = parser->buffer;
+@@ -474,14 +467,12 @@ void fxGetNextNumberX(txParser* parser)
+ 	p = fxGetNextDigits(parser, fxGetNextDigitsX, p, q, 1);
+ 	c = parser->character;
+ 	if (p == q) {
+-		fxReportParserError(parser, "number overflow");	
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "number overflow");
+ 	}
+ 	if (c == 'n')
+ 		fxGetNextCharacter(parser);
+ 	if (fxIsIdentifierFirst(parser->character)) {
+-		fxReportParserError(parser, "invalid number");			
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportParserError(parser, parser->line, "invalid number");
+ 	}
+ 	*p = 0;
+ 	q = parser->buffer;
+@@ -520,16 +511,16 @@ void fxGetNextRegExp(txParser* parser, txU4 c)
+     }
+ 	for (;;) {
+ 		if (c == (txU4)C_EOF) {
+-			fxReportParserError(parser, "end of file in regular expression");			
++			fxReportParserError(parser, parser->line, "end of file in regular expression");			
+ 			break;
+ 		}
+ 		else if ((c == 10) || (c == 13) || (c == 0x2028) || (c == 0x2029)) {
+-			fxReportParserError(parser, "end of line in regular expression");			
++			fxReportParserError(parser, parser->line, "end of line in regular expression");			
+ 			break;
+ 		}
+ 		else if (c == '*') {
+ 			if (first) {
+-				fxReportParserError(parser, "invalid regular expression");
++				fxReportParserError(parser, parser->line, "invalid regular expression");
+ 				break;
+ 			}
+ 			backslash = 0;
+@@ -582,7 +573,7 @@ void fxGetNextRegExp(txParser* parser, txU4 c)
+ 	parser->modifierLength = p - parser->buffer;
+ 	parser->modifier = fxNewParserString(parser, parser->buffer, parser->modifierLength);
+ 	if (!fxCompileRegExp(C_NULL, parser->string, parser->modifier, C_NULL, C_NULL, parser->buffer, parser->bufferSize))
+-		fxReportParserError(parser, parser->buffer);
++		fxReportParserError(parser, parser->line, parser->buffer);
+ 	parser->token = XS_TOKEN_REGEXP;
+ }
+ 
+@@ -592,7 +583,7 @@ void fxGetNextString(txParser* parser, int c)
+ 	txString q = p + parser->bufferSize - 1;
+ 	for (;;) {
+ 		if (parser->character == (txU4)C_EOF) {
+-			fxReportParserError(parser, "end of file in string");			
++			fxReportParserError(parser, parser->line, "end of file in string");			
+ 			break;
+ 		}
+ 		else if (parser->character == 10) {
+@@ -602,7 +593,7 @@ void fxGetNextString(txParser* parser, int c)
+ 				fxGetNextCharacter(parser);
+ 			}
+ 			else {
+-				fxReportParserError(parser, "end of line in string");			
++				fxReportParserError(parser, parser->line, "end of line in string");			
+ 				break;
+ 			}
+ 		}
+@@ -615,7 +606,7 @@ void fxGetNextString(txParser* parser, int c)
+ 					fxGetNextCharacter(parser);
+ 			}
+ 			else {
+-				fxReportParserError(parser, "end of line in string");			
++				fxReportParserError(parser, parser->line, "end of line in string");			
+ 				break;
+ 			}
+ 		}
+@@ -665,8 +656,7 @@ void fxGetNextString(txParser* parser, int c)
+ 	}	
+ 	*p = 0;
+ 	if (p == q) {
+-		fxReportParserError(parser, "string overflow");	
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportMemoryError(parser, parser->line, "string overflow");
+ 	}
+ 	parser->rawLength2 = p - parser->buffer;
+ 	parser->raw2 = fxNewParserString(parser, parser->buffer, parser->rawLength2);
+@@ -680,8 +670,7 @@ void fxGetNextString(txParser* parser, int c)
+ 		s = parser->raw2;
+ 		while (*s) {
+ 			if (p == q) {
+-				fxReportParserError(parser, "buffer overflow");	
+-				fxThrowParserError(parser, parser->errorCount);
++				fxReportMemoryError(parser, parser->line, "buffer overflow");
+ 			}
+ 			if (*s == '\\') {
+ 				s++;
+@@ -782,7 +771,7 @@ void fxGetNextString(txParser* parser, int c)
+ 			if (c == '`')
+ 				parser->escaped2 |= mxStringErrorFlag;
+ 			else
+-				fxReportParserError(parser, "invalid escape sequence");	
++				fxReportParserError(parser, parser->line, "invalid escape sequence");	
+ 		}	
+ 	}
+ 	else {
+@@ -920,7 +909,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 			}
+ 			else if (('0' <= c) && (c <= '7')) {
+ 				if ((parser->flags & mxStrictFlag))
+-					fxReportParserError(parser, "octal number (strict mode)");			
++					fxReportParserError(parser, parser->line, "octal number (strict mode)");			
+ 				fxGetNextNumberO(parser, c, 1);
+ 			}
+ 			else {
+@@ -949,7 +938,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 					fxGetNextCharacter(parser);
+ 				}
+ 				else {
+-					fxReportParserError(parser, "invalid character %d", parser->character);
++					fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 				}		
+ 			}		
+ 			else if (('0' <= c) && (c <= '9'))
+@@ -1188,7 +1177,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 				fxGetNextCharacter(parser);
+ 				for (;;) {
+ 					if (parser->character == (txU4)C_EOF) {
+-						fxReportParserError(parser, "end of file in comment");			
++						fxReportParserError(parser, parser->line, "end of file in comment");			
+ 						break;
+ 					}
+ 					else if ((parser->character == 10) || (parser->character == 0x2028) || (parser->character == 0x2029)) {
+@@ -1301,7 +1290,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 			if (parser->flags & mxCFlag)
+ 				parser->token2 = XS_TOKEN_HOST;
+             else
+-                fxReportParserError(parser, "invalid character @");
++                fxReportParserError(parser, parser->line, "invalid character @");
+             fxGetNextCharacter(parser);
+ 			break;
+ 			
+@@ -1329,8 +1318,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 			if (p) {
+ 				for (;;) {
+ 					if (p == q) {
+-						fxReportParserError(parser, "identifier overflow");			
+-						fxThrowParserError(parser, parser->errorCount);
++						fxReportMemoryError(parser, parser->line, "identifier overflow");
+ 					}
+ 					if (fxIsIdentifierNext(parser->character)) {
+ 						p = fxUTF8Buffer(parser, parser->character, p, q);				
+@@ -1360,7 +1348,7 @@ void fxGetNextTokenAux(txParser* parser)
+ 				}
+ 			}
+ 			if (!p) {
+-				fxReportParserError(parser, "invalid character %d", parser->character);
++				fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 				fxGetNextCharacter(parser);
+ 			}
+ 			break;
+@@ -1539,8 +1527,7 @@ void fxGetNextTokenJSON(txParser* parser)
+ 				q = p + parser->bufferSize - 1;
+ 				for (;;) {
+ 					if (p == q) {
+-						fxReportParserError(parser, "identifier overflow");			
+-						fxThrowParserError(parser, parser->errorCount);
++						fxReportMemoryError(parser, parser->line, "identifier overflow");
+ 					}
+ 					*p++ = (char)parser->character;
+ 					fxGetNextCharacter(parser);
+@@ -1560,7 +1547,7 @@ void fxGetNextTokenJSON(txParser* parser)
+ 				}
+ 			}
+ 			else {
+-				fxReportParserError(parser, "invalid character %d", parser->character);
++				fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 				fxGetNextCharacter(parser);
+ 			}
+ 			break;
+@@ -1742,7 +1729,7 @@ void fxGetNextTokenJSXAttribute(txParser* parser)
+ 			if (quote)
+ 				p = fxGetNextEntity(parser, p, q);
+ 			else {
+-				fxReportParserError(parser, "invalid character %d", parser->character);
++				fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 				fxGetNextCharacter(parser);
+ 			}
+ 			break;
+@@ -1751,7 +1738,7 @@ void fxGetNextTokenJSXAttribute(txParser* parser)
+ 			if (quote)
+ 				p = fxUTF8Buffer(parser, parser->character, p, q);
+ 			else
+-				fxReportParserError(parser, "invalid character %d", parser->character);
++				fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 			fxGetNextCharacter(parser);
+ 			break;	
+ 		}	
+diff --git a/xs/sources/xsMarshall.c b/xs/sources/xsMarshall.c
+index 372c0c479..321e75463 100644
+--- a/xs/sources/xsMarshall.c
++++ b/xs/sources/xsMarshall.c
+@@ -69,8 +69,8 @@ static void fxMeasureThrow(txMachine* the, txMarshallBuffer* theBuffer, txString
+ void fxDemarshall(txMachine* the, void* theData, txBoolean alien)
+ {
+ 	txFlag aFlag;
+-	txByte* p = (txByte*)theData;
+-	txByte* q = p + *((txSize*)(p));
++	txByte* p;
++	txByte* q;
+ 	txID aSymbolCount;
+ 	txID aSymbolLength;
+ 	txID* aSymbolMap;
+@@ -80,6 +80,12 @@ void fxDemarshall(txMachine* the, void* theData, txBoolean alien)
+ 	txInteger skipped;
+ 	txIndex aLength;
+ 	
++	if (!theData) {
++		the->stack->kind = XS_UNDEFINED_KIND;
++		return;
++	}
++	p = (txByte*)theData;
++	q = p + *((txSize*)(p));
+ 	aFlag = (txFlag)the->collectFlag;
+ 	the->collectFlag &= ~(XS_COLLECTING_FLAG | XS_SKIPPED_COLLECT_FLAG);
+ 	{
+diff --git a/xs/sources/xsPlatforms.c b/xs/sources/xsPlatforms.c
+index d7eb12036..ede00ae3c 100644
+--- a/xs/sources/xsPlatforms.c
++++ b/xs/sources/xsPlatforms.c
+@@ -395,10 +395,12 @@ txScript* fxLoadScript(txMachine* the, txString path, txUnsigned flags)
+ 			fxParserSourceMap(parser, file, (txGetter)fgetc, flags, &name);
+ 			fclose(file);
+ 			file = NULL;
+-			if (slash) *slash = 0;
+-			c_strcat(path, name);
+-			mxParserThrowElse(c_realpath(path, map));
+-			parser->path = fxNewParserSymbol(parser, map);
++			if (parser->errorCount == 0) {
++				if (slash) *slash = 0;
++				c_strcat(path, name);
++				mxParserThrowElse(c_realpath(path, map));
++				parser->path = fxNewParserSymbol(parser, map);
++			}
+ 		}
+ 		fxParserHoist(parser);
+ 		fxParserBind(parser);
+diff --git a/xs/sources/xsScope.c b/xs/sources/xsScope.c
+index e2680bae0..45809720c 100644
+--- a/xs/sources/xsScope.c
++++ b/xs/sources/xsScope.c
+@@ -85,20 +85,28 @@ static void fxFunctionNodeRename(void* it, txSymbol* symbol);
+ void fxParserBind(txParser* parser)
+ {
+ 	txBinder binder;
++	c_memset(&binder, 0, sizeof(txBinder));
++	binder.parser = parser;
+ 	if (parser->errorCount == 0) {
+-		c_memset(&binder, 0, sizeof(txBinder));
+-		binder.parser = parser;
+-		fxNodeDispatchBind(parser->root, &binder);
++		mxTryParser(parser) {
++			fxNodeDispatchBind(parser->root, &binder);
++		}
++		mxCatchParser(parser) {
++		}
+ 	}
+ }
+ 
+ void fxParserHoist(txParser* parser)
+ {
+ 	txHoister hoister;
++	c_memset(&hoister, 0, sizeof(txHoister));
++	hoister.parser = parser;
+ 	if (parser->errorCount == 0) {
+-		c_memset(&hoister, 0, sizeof(txHoister));
+-		hoister.parser = parser;
+-		fxNodeDispatchHoist(parser->root, &hoister);
++		mxTryParser(parser) {
++			fxNodeDispatchHoist(parser->root, &hoister);
++		}
++		mxCatchParser(parser) {
++		}
+ 	}
+ }
+ 
+@@ -109,7 +117,7 @@ void fxHoisterAddExportLink(txHoister* self, txSpecifierNode* specifier)
+     if (symbol) {
+         while (link) {
+             if (link->symbol == symbol) {
+-                fxReportLineError(self->parser, specifier->line, "duplicate export %s", symbol->string);
++                fxReportParserError(self->parser, specifier->line, "duplicate export %s", symbol->string);
+                 return;
+             }
+             link = link->next;
+@@ -358,6 +366,7 @@ void fxNodeHoist(void* it, void* param)
+ void fxNodeDispatchHoist(void* it, void* param)
+ {
+ 	txNode* node = it;
++	fxCheckParserStack(((txHoister*)param)->parser, node->line);
+ 	(*node->description->dispatch->hoist)(it, param);
+ }
+ 
+@@ -414,7 +423,7 @@ void fxCatchNodeHoist(void* it, void* param)
+ 		node = self->statementScope->firstDeclareNode;
+ 		while (node) {
+ 		   if (fxScopeGetDeclareNode(self->scope, node->symbol))
+-			   fxReportLineError(hoister->parser, node->line, "duplicate variable %s", node->symbol->string);
++			   fxReportParserError(hoister->parser, node->line, "duplicate variable %s", node->symbol->string);
+ 		   node = node->nextDeclareNode;
+ 		}
+ 	}
+@@ -461,7 +470,7 @@ void fxClassNodeHoist(void* it, void* param)
+ 			if (node) {
+                 txUnsigned flags = (node->flags & (mxStaticFlag | mxGetterFlag | mxSetterFlag)) ^ (item->flags & (mxStaticFlag | mxGetterFlag | mxSetterFlag));
+ 				if ((flags != (mxGetterFlag | mxSetterFlag)))
+-					fxReportLineError(hoister->parser, item->line, "duplicate %s", symbol->string);
++					fxReportParserError(hoister->parser, item->line, "duplicate %s", symbol->string);
+ 			}
+ 			node = fxDeclareNodeNew(hoister->parser, XS_TOKEN_CONST, symbol);
+ 			node->flags |= mxDeclareNodeClosureFlag | (item->flags & (mxStaticFlag | mxGetterFlag | mxSetterFlag));
+@@ -506,9 +515,9 @@ void fxCoalesceExpressionNodeHoist(void* it, void* param)
+ 	txToken leftToken = self->left->description->token;
+ 	txToken rightToken = self->right->description->token;
+ 	if ((leftToken == XS_TOKEN_AND) || (rightToken == XS_TOKEN_AND))
+-		fxReportLineError(hoister->parser, self->line, "missing () around &&");
++		fxReportParserError(hoister->parser, self->line, "missing () around &&");
+ 	else if ((leftToken == XS_TOKEN_OR) || (rightToken == XS_TOKEN_OR))
+-		fxReportLineError(hoister->parser, self->line, "missing () around ||");
++		fxReportParserError(hoister->parser, self->line, "missing () around ||");
+ 	fxNodeDispatchHoist(self->left, param);
+ 	fxNodeDispatchHoist(self->right, param);
+ }
+@@ -523,7 +532,7 @@ void fxDeclareNodeHoist(void* it, void* param)
+ 		node = fxScopeGetDeclareNode(hoister->functionScope, self->symbol);
+ 		if (node) {
+ 			if ((node->description->token == XS_TOKEN_ARG) && (hoister->functionScope->node->flags & (mxArrowFlag | mxAsyncFlag | mxMethodFlag | mxNotSimpleParametersFlag | mxStrictFlag)))
+-				fxReportLineError(hoister->parser, self->line, "duplicate argument %s", self->symbol->string);
++				fxReportParserError(hoister->parser, self->line, "duplicate argument %s", self->symbol->string);
+ 		}
+ 		else {
+ 			fxScopeAddDeclareNode(hoister->functionScope, self);
+@@ -537,7 +546,7 @@ void fxDeclareNodeHoist(void* it, void* param)
+ 				node = C_NULL;
+ 		}
+ 		if (node)
+-			fxReportLineError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
++			fxReportParserError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
+ 		else
+ 			fxScopeAddDeclareNode(hoister->scope, self);
+ 	}
+@@ -561,7 +570,7 @@ void fxDeclareNodeHoist(void* it, void* param)
+ 			}
+ 		}
+ 		if (node)
+-			fxReportLineError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
++			fxReportParserError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
+ 		else {
+ 			node = fxScopeGetDeclareNode(hoister->functionScope, self->symbol);
+ 			if (!node || ((node->description->token != XS_TOKEN_ARG) && (node->description->token != XS_TOKEN_VAR)))
+@@ -582,13 +591,13 @@ void fxDefineNodeHoist(void* it, void* param)
+ 	txDeclareNode* node;
+ 	if (self->flags & mxStrictFlag) {
+ 		if ((self->symbol == hoister->parser->argumentsSymbol) || (self->symbol == hoister->parser->evalSymbol) || (self->symbol == hoister->parser->yieldSymbol))
+-			fxReportLineError(hoister->parser, self->line, "invalid definition %s", self->symbol->string);
++			fxReportParserError(hoister->parser, self->line, "invalid definition %s", self->symbol->string);
+ 	}
+ 	if ((hoister->scope == hoister->bodyScope) && (hoister->scope->token != XS_TOKEN_MODULE)) {
+ 		node = fxScopeGetDeclareNode(hoister->bodyScope, self->symbol);
+ 		if (node) {
+ 			if ((node->description->token == XS_TOKEN_CONST) || (node->description->token == XS_TOKEN_LET))
+-				fxReportLineError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
++				fxReportParserError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
+ 		}
+ 		else {
+ 			if (hoister->functionScope != hoister->bodyScope)
+@@ -601,7 +610,7 @@ void fxDefineNodeHoist(void* it, void* param)
+ 	else {
+ 		node = fxScopeGetDeclareNode(hoister->scope, self->symbol);
+ 		if (node)
+-			fxReportLineError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
++			fxReportParserError(hoister->parser, self->line, "duplicate variable %s", self->symbol->string);
+ 		else
+ 			fxScopeAddDeclareNode(hoister->scope, (txDeclareNode*)self);
+ 		fxScopeAddDefineNode(hoister->scope, self);
+@@ -704,7 +713,7 @@ void fxHostNodeHoist(void* it, void* param)
+ 	txHoister* hoister = param;
+ 	txScope* scope = hoister->bodyScope;
+ 	if ((scope->token != XS_TOKEN_MODULE) && (scope->token != XS_TOKEN_PROGRAM))
+-		fxReportLineError(hoister->parser, self->line, "invalid host");
++		fxReportParserError(hoister->parser, self->line, "invalid host");
+ 	else {
+ 		// @@ check simple parameters
+ 	}
+@@ -721,11 +730,11 @@ void fxImportNodeHoist(void* it, void* param)
+ 			txSymbol* symbol = specifier->asSymbol ? specifier->asSymbol : specifier->symbol;
+ 			if (self->flags & mxStrictFlag) {
+ 				if ((symbol == hoister->parser->argumentsSymbol) || (symbol == hoister->parser->evalSymbol))
+-					fxReportLineError(hoister->parser, self->line, "invalid import %s", symbol->string);
++					fxReportParserError(hoister->parser, self->line, "invalid import %s", symbol->string);
+ 			}
+ 			node = fxScopeGetDeclareNode(hoister->scope, symbol);
+ 			if (node)
+-				fxReportLineError(hoister->parser, self->line, "duplicate variable %s", symbol->string);
++				fxReportParserError(hoister->parser, self->line, "duplicate variable %s", symbol->string);
+ 			else {
+ 				specifier->declaration = node = fxDeclareNodeNew(hoister->parser, XS_TOKEN_LET, symbol);
+ 				specifier->from = self->from;
+@@ -810,6 +819,7 @@ void fxWithNodeHoist(void* it, void* param)
+ void fxNodeDispatchBind(void* it, void* param)
+ {
+ 	txNode* node = it;
++	fxCheckParserStack(((txBinder*)param)->parser, node->line);
+ 	(*node->description->dispatch->bind)(it, param);
+ }
+ 
+@@ -966,7 +976,7 @@ void fxExportNodeBind(void* it, void* param)
+ 				specifier->declaration->firstExportSpecifier = specifier;
+ 			}
+ 			else
+-				fxReportLineError(binder->parser, specifier->line, "unknown variable %s", specifier->symbol->string);
++				fxReportParserError(binder->parser, specifier->line, "unknown variable %s", specifier->symbol->string);
+ 			specifier = (txSpecifierNode*)specifier->next;
+ 		}
+ 	}
+@@ -1137,15 +1147,15 @@ void fxParamsBindingNodeBind(void* it, void* param)
+ 	txInteger count = self->items->length;
+ 	if (functionNode->flags & mxGetterFlag) {
+ 		if (count != 0)
+-			fxReportLineError(binder->parser, self->line, "invalid getter arguments");
++			fxReportParserError(binder->parser, self->line, "invalid getter arguments");
+ 	}
+ 	else if (functionNode->flags & mxSetterFlag) {
+ 		if ((count != 1) || (self->items->first->description->token == XS_TOKEN_REST_BINDING))
+-			fxReportLineError(binder->parser, self->line, "invalid setter arguments");
++			fxReportParserError(binder->parser, self->line, "invalid setter arguments");
+ 	}
+ 	else {
+ 		if (count > 255)
+-			fxReportLineError(binder->parser, self->line, "too many arguments");
++			fxReportParserError(binder->parser, self->line, "too many arguments");
+ 	}
+ 	if (functionNode->flags & mxArgumentsFlag) {
+ 		txNode* item;
+@@ -1183,7 +1193,7 @@ void fxPrivateMemberNodeBind(void* it, void* param)
+ 	txPrivateMemberNode* self = it;
+ 	fxScopeLookup(binder->scope, (txAccessNode*)self, 0);
+ 	if (!self->declaration)
+-		fxReportLineError(binder->parser, self->line, "invalid private identifier");
++		fxReportParserError(binder->parser, self->line, "invalid private identifier");
+ 	fxNodeDispatchBind(self->reference, param);
+ }
+ 
+diff --git a/xs/sources/xsScript.c b/xs/sources/xsScript.c
+index 0f7419cfc..126da3ea5 100644
+--- a/xs/sources/xsScript.c
++++ b/xs/sources/xsScript.c
+@@ -35,8 +35,18 @@
+  *       limitations under the License.
+  */
+ 
++#define _GNU_SOURCE
+ #include "xsScript.h"
+ 
++void fxCheckParserStack(txParser* parser, txInteger line)
++{
++    char x;
++    char *stack = &x;
++    if (stack <= parser->stackLimit) {
++    	fxReportMemoryError(parser, line, "stack overflow");
++    }
++}
++
+ void fxDisposeParserChunks(txParser* parser)
+ {
+ 	txParserChunk** address = &parser->first;
+@@ -52,6 +62,27 @@ void fxInitializeParser(txParser* parser, void* console, txSize bufferSize, txSi
+ 	c_memset(parser, 0, sizeof(txParser));
+ 	parser->first = C_NULL;
+ 	parser->console = console;
++	{
++	#if mxWindows
++		ULONG_PTR low, high;
++		GetCurrentThreadStackLimits(&low, &high);
++		parser->stackLimit = (char*)low + (32 * 1024);
++	#elif mxMacOSX
++		pthread_t self = pthread_self();
++    	void* stackAddr = pthread_get_stackaddr_np(self);
++   		size_t stackSize = pthread_get_stacksize_np(self);
++		parser->stackLimit = (char*)stackAddr - stackSize + (4 * 1024);
++	#elif mxLinux
++		pthread_attr_t attrs;
++		if (pthread_getattr_np(pthread_self(), &attrs) == 0) {
++    		void* stackAddr;
++   			size_t stackSize;
++			if (pthread_attr_getstack(&attrs, &stackAddr, &stackSize) == 0) {
++				parser->stackLimit = (char*)stackAddr + (4 * 1024);
++			}
++		}
++	#endif
++	}
+ 
+ 	parser->buffer = fxNewParserChunk(parser, bufferSize);
+ 	parser->bufferSize = bufferSize;
+@@ -78,6 +109,7 @@ void fxInitializeParser(txParser* parser, void* console, txSize bufferSize, txSi
+ 	parser->constructorSymbol = fxNewParserSymbol(parser, "constructor");
+ 	parser->defaultSymbol = fxNewParserSymbol(parser, "default");
+ 	parser->doneSymbol = fxNewParserSymbol(parser, "done");
++	parser->ErrorSymbol = fxNewParserSymbol(parser, "Error");
+ 	parser->evalSymbol = fxNewParserSymbol(parser, "eval");
+ 	parser->exportsSymbol = fxNewParserSymbol(parser, "exports");
+ 	parser->fillSymbol = fxNewParserSymbol(parser, "fill");
+@@ -99,7 +131,6 @@ void fxInitializeParser(txParser* parser, void* console, txSize bufferSize, txSi
+ 	parser->privateConstructorSymbol = fxNewParserSymbol(parser, "#constructor");
+ 	parser->prototypeSymbol = fxNewParserSymbol(parser, "prototype");
+ 	parser->rawSymbol = fxNewParserSymbol(parser, "raw");
+-	parser->ReferenceErrorSymbol = fxNewParserSymbol(parser, "ReferenceError");
+ 	parser->returnSymbol = fxNewParserSymbol(parser, "return");
+ 	parser->setSymbol = fxNewParserSymbol(parser, "set");
+ 	parser->sliceSymbol = fxNewParserSymbol(parser, "slice");
+@@ -125,7 +156,7 @@ void* fxNewParserChunk(txParser* parser, txSize size)
+ {
+ 	txParserChunk* block = c_malloc(sizeof(txParserChunk) + size);
+ 	if (!block)
+-		fxThrowMemoryError(parser);
++		fxReportMemoryError(parser, parser->line, "heap overflow");
+ 	parser->total += sizeof(txParserChunk) + size;
+ 	block->next = parser->first;
+ 	parser->first = block;
+@@ -184,32 +215,16 @@ txSymbol* fxNewParserSymbol(txParser* parser, txString theString)
+ 	return aSymbol;
+ }
+ 
+-void fxReportParserError(txParser* parser, txString theFormat, ...)
++void fxReportMemoryError(txParser* parser, txInteger line, txString theFormat, ...)
+ {
+ 	c_va_list arguments;
++	parser->error = C_ENOMEM;
+ 	parser->errorCount++;
+-	if (!parser->errorSymbol)
+-		parser->errorSymbol = parser->SyntaxErrorSymbol;
+-	if (!parser->errorMessage) {
+-		if (parser->buffer != theFormat) {
+-			c_va_start(arguments, theFormat);
+-			c_vsnprintf(parser->buffer, parser->bufferSize, theFormat, arguments);
+-			c_va_end(arguments);
+-		}
+-		parser->errorMessage = fxNewParserString(parser, parser->buffer, c_strlen(parser->buffer));
+-	}
+ 	c_va_start(arguments, theFormat);
+-    (*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, parser->line, theFormat, arguments);
++    (*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, line, theFormat, arguments);
+ 	c_va_end(arguments);
+-}
+-
+-void fxReportReferenceError(txParser* parser, txString theFormat, ...)
+-{
+-	c_va_list arguments;
+-	parser->errorCount++;
+-	if (!parser->errorSymbol)
+-		parser->errorSymbol = parser->ReferenceErrorSymbol;
+-	if (!parser->errorMessage) {
++	if (parser->console) {
++		parser->errorSymbol = parser->ErrorSymbol;
+ 		if (parser->buffer != theFormat) {
+ 			c_va_start(arguments, theFormat);
+ 			c_vsnprintf(parser->buffer, parser->bufferSize, theFormat, arguments);
+@@ -217,56 +232,27 @@ void fxReportReferenceError(txParser* parser, txString theFormat, ...)
+ 		}
+ 		parser->errorMessage = fxNewParserString(parser, parser->buffer, c_strlen(parser->buffer));
+ 	}
+-	c_va_start(arguments, theFormat);
+-    (*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, parser->line, theFormat, arguments);
+-	c_va_end(arguments);
+-}
+-
+-void fxReportParserWarning(txParser* parser, txString theFormat, ...)
+-{
+-	c_va_list arguments;
+-	parser->warningCount++;
+-	c_va_start(arguments, theFormat);
+-	(*parser->reportWarning)(parser->console, parser->path ? parser->path->string : C_NULL, parser->line, theFormat, arguments);
+-	c_va_end(arguments);
++	c_longjmp(parser->firstJump->jmp_buf, 1);
+ }
+ 
+-void fxReportLineReferenceError(txParser* parser, txInteger line, txString theFormat, ...)
++void fxReportParserError(txParser* parser, txInteger line, txString theFormat, ...)
+ {
+ 	c_va_list arguments;
++	parser->error = C_EINVAL;
+ 	parser->errorCount++;
+-	if (!parser->errorSymbol)
+-		parser->errorSymbol = parser->ReferenceErrorSymbol;
+-	if (!parser->errorMessage) {
+-		if (parser->buffer != theFormat) {
+-			c_va_start(arguments, theFormat);
+-			c_vsnprintf(parser->buffer, parser->bufferSize, theFormat, arguments);
+-			c_va_end(arguments);
+-		}
+-		parser->errorMessage = fxNewParserString(parser, parser->buffer, c_strlen(parser->buffer));
+-	}
+ 	c_va_start(arguments, theFormat);
+-	(*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, line, theFormat, arguments);
++    (*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, line, theFormat, arguments);
+ 	c_va_end(arguments);
+-}
+-
+-void fxReportLineError(txParser* parser, txInteger line, txString theFormat, ...)
+-{
+-	c_va_list arguments;
+-	parser->errorCount++;
+-	if (!parser->errorSymbol)
++	if (parser->console) {
+ 		parser->errorSymbol = parser->SyntaxErrorSymbol;
+-	if (!parser->errorMessage) {
+ 		if (parser->buffer != theFormat) {
+ 			c_va_start(arguments, theFormat);
+ 			c_vsnprintf(parser->buffer, parser->bufferSize, theFormat, arguments);
+ 			c_va_end(arguments);
+ 		}
+ 		parser->errorMessage = fxNewParserString(parser, parser->buffer, c_strlen(parser->buffer));
++		c_longjmp(parser->firstJump->jmp_buf, 1);
+ 	}
+-	c_va_start(arguments, theFormat);
+-	(*parser->reportError)(parser->console, parser->path ? parser->path->string : C_NULL, line, theFormat, arguments);
+-	c_va_end(arguments);
+ }
+ 
+ void fxTerminateParser(txParser* parser)
+@@ -276,18 +262,6 @@ void fxTerminateParser(txParser* parser)
+ 		fxDelete_dtoa(parser->dtoa);
+ }
+ 
+-void fxThrowMemoryError(txParser* parser)
+-{
+-	parser->error = C_ENOMEM;
+-	c_longjmp(parser->firstJump->jmp_buf, 1);
+-}
+-
+-void fxThrowParserError(txParser* parser, txInteger count)
+-{
+-	parser->error = C_EINVAL;
+-	c_longjmp(parser->firstJump->jmp_buf, 1);
+-}
+-
+ 
+ 
+ 
+diff --git a/xs/sources/xsScript.h b/xs/sources/xsScript.h
+index 3de4552e3..5b9f2f33f 100644
+--- a/xs/sources/xsScript.h
++++ b/xs/sources/xsScript.h
+@@ -589,6 +589,7 @@ struct sxParser {
+ 	txParserJump* firstJump;
+ 	void* console;
+ 	int error;
++	char* stackLimit;
+ 	
+ 	void* dtoa;
+ 	
+@@ -674,6 +675,7 @@ struct sxParser {
+ 	txSymbol* constructorSymbol;
+ 	txSymbol* defaultSymbol;
+ 	txSymbol* doneSymbol;
++	txSymbol* ErrorSymbol;
+ 	txSymbol* evalSymbol;
+ 	txSymbol* exportsSymbol;
+ 	txSymbol* fillSymbol;
+@@ -695,7 +697,6 @@ struct sxParser {
+ 	txSymbol* privateConstructorSymbol;
+ 	txSymbol* prototypeSymbol;
+ 	txSymbol* rawSymbol;
+-	txSymbol* ReferenceErrorSymbol;
+ 	txSymbol* returnSymbol;
+ 	txSymbol* setSymbol;
+ 	txSymbol* sliceSymbol;
+@@ -940,20 +941,16 @@ enum {
+ 
+ /* xsScript.c */
+ 
++extern void fxCheckParserStack(txParser* parser, txInteger line);
+ extern void fxDisposeParserChunks(txParser* parser);
+ extern void fxInitializeParser(txParser* parser, void* console, txSize bufferSize, txSize symbolModulo);
+ extern void* fxNewParserChunk(txParser* parser, txSize size);
+ extern void* fxNewParserChunkClear(txParser* parser, txSize size);
+ extern txString fxNewParserString(txParser* parser, txString buffer, txSize size);
+ extern txSymbol* fxNewParserSymbol(txParser* parser, txString buffer);
+-extern void fxReportReferenceError(txParser* parser, txString theFormat, ...);
+-extern void fxReportParserError(txParser* parser, txString theFormat, ...);
+-extern void fxReportParserWarning(txParser* parser, txString theFormat, ...);
+-extern void fxReportLineReferenceError(txParser* parser, txInteger line, txString theFormat, ...);
+-extern void fxReportLineError(txParser* parser, txInteger line, txString theFormat, ...);
++extern void fxReportMemoryError(txParser* parser, txInteger line, txString theFormat, ...);
++extern void fxReportParserError(txParser* parser, txInteger line, txString theFormat, ...);
+ extern void fxTerminateParser(txParser* parser);
+-extern void fxThrowMemoryError(txParser* parser);
+-extern void fxThrowParserError(txParser* parser, txInteger count);
+ 
+ /* xsLexical.c */
+ 
+@@ -1163,18 +1160,19 @@ extern void fxWhileNodeCode(void* it, void* param);
+ extern void fxWithNodeCode(void* it, void* param);
+ extern void fxYieldNodeCode(void* it, void* param); 
+ 
+-#endif /* __XS6SCRIPT__ */
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
++#define mxTryParser(PARSER) \
++	txParserJump __JUMP__; \
++	__JUMP__.nextJump = (PARSER)->firstJump; \
++	(PARSER)->firstJump = &__JUMP__; \
++	if (c_setjmp(__JUMP__.jmp_buf) == 0) {
+ 
++#define mxCatchParser(PARSER) \
++		(PARSER)->firstJump = __JUMP__.nextJump; \
++	} \
++	else for ( \
++		(PARSER)->firstJump = __JUMP__.nextJump; \
++		(__JUMP__.nextJump); \
++		__JUMP__.nextJump = NULL)
+ 
++#endif /* __XS6SCRIPT__ */
+ 
+diff --git a/xs/sources/xsSourceMap.c b/xs/sources/xsSourceMap.c
+index 27fe1d6f7..6313fa1f1 100644
+--- a/xs/sources/xsSourceMap.c
++++ b/xs/sources/xsSourceMap.c
+@@ -40,7 +40,7 @@
+ static void fxSourceMapLines(txParser* parser, txString mappings);
+ static txInteger fxSourceMapValue(txParser* parser, txString* p);
+ 
+-#define mxAssert(ASSERTION,MESSAGE) if (!(ASSERTION)) { fxReportParserError(parser, MESSAGE); goto bail; }
++#define mxAssert(ASSERTION,MESSAGE) if (!(ASSERTION)) { fxReportParserError(parser, parser->line, MESSAGE); return; }
+ 
+ void fxParserSourceMap(txParser* parser, void* theStream, txGetter theGetter, txUnsigned flags, txString* name)
+ {
+@@ -79,7 +79,7 @@ void fxParserSourceMap(txParser* parser, void* theStream, txGetter theGetter, tx
+ 	fxGetNextTokenJSON(parser);
+ 	fxJSONValue(parser);
+ 	if (parser->errorCount)
+-		fxThrowParserError(parser, parser->errorCount);
++		return;
+ 	object = parser->root;
+ 	parser->line = line;
+ 	parser->root = root;
+@@ -116,9 +116,6 @@ void fxParserSourceMap(txParser* parser, void* theStream, txGetter theGetter, tx
+ 
+ 	fxSourceMapLines(parser, mappings);
+ 	*name = source;
+-bail:
+-	if (parser->errorCount)
+-		fxThrowParserError(parser, parser->errorCount);
+ }
+ 
+ void fxSourceMapLines(txParser* parser, txString mappings)
+@@ -199,7 +196,7 @@ txInteger fxSourceMapValue(txParser* parser, txString* p)
+ 		else if (c == '/')
+ 			digit = 63;
+ 		else
+-			fxReportParserError(parser, "source map: unexpected character"); 
++			fxReportParserError(parser, parser->line, "source map: unexpected character"); 
+ 		continuation = digit & VLQ_CONTINUATION_BIT;
+ 		digit &= VLQ_MASK_BITS;
+ 		result += (digit << shift);
+diff --git a/xs/sources/xsSyntaxical.c b/xs/sources/xsSyntaxical.c
+index 15f18d1cd..ae73abaa2 100644
+--- a/xs/sources/xsSyntaxical.c
++++ b/xs/sources/xsSyntaxical.c
+@@ -512,7 +512,7 @@ txBoolean fxIsKeyword(txParser* parser, txSymbol* keyword)
+ 	txBoolean result = ((parser->token == XS_TOKEN_IDENTIFIER) && (parser->symbol == keyword)) ? 1 : 0;
+ 	if (result) {
+ 		if (parser->escaped)
+-			fxReportParserError(parser, "escaped keyword");
++			fxReportParserError(parser, parser->line, "escaped keyword");
+ 	}
+ 	return result;
+ }
+@@ -522,7 +522,7 @@ txBoolean fxIsToken(txParser* parser, txToken theToken)
+ 	txBoolean result = (parser->token == theToken) ? 1 : 0;
+ 	if (result) {
+ 		if (parser->escaped)
+-			fxReportParserError(parser, "escaped keyword");
++			fxReportParserError(parser, parser->line, "escaped keyword");
+ 	}
+ 	return result;
+ }
+@@ -531,11 +531,11 @@ void fxMatchToken(txParser* parser, txToken theToken)
+ {
+ 	if (parser->token == theToken) {
+ 		if (parser->escaped)
+-			fxReportParserError(parser, "escaped keyword");
++			fxReportParserError(parser, parser->line, "escaped keyword");
+ 		fxGetNextToken(parser);
+ 	}
+ 	else
+-		fxReportParserError(parser, "missing %s", gxTokenNames[theToken]);
++		fxReportParserError(parser, parser->line, "missing %s", gxTokenNames[theToken]);
+ }
+ 
+ txNode* fxPopNode(txParser* parser)
+@@ -589,8 +589,7 @@ void fxPushNodeStruct(txParser* parser, txInteger count, txToken token, txIntege
+ 	const txNodeDescription* description = &gxTokenDescriptions[token];
+ 	txNode* node;
+ 	if ((count > parser->nodeCount) || ((sizeof(txNode) + (count * sizeof(txNode*))) > (size_t)(description->size))) {
+-		fxReportParserError(parser, "invalid %s", gxTokenNames[token]);
+-		fxThrowParserError(parser, parser->errorCount);
++		fxReportParserError(parser, parser->line, "invalid %s", gxTokenNames[token]);
+ 	}
+     node = fxNewParserChunkClear(parser, description->size);
+ 	node->description = description;
+@@ -697,11 +696,11 @@ void fxModule(txParser* parser)
+ 				fxImport(parser);
+ 		}
+ 		else if (parser->token == XS_TOKEN_RETURN) {
+-			fxReportParserError(parser, "invalid return");
++			fxReportParserError(parser, parser->line, "invalid return");
+ 			fxGetNextToken(parser);
+ 		}
+ 		else if (parser->token == XS_TOKEN_YIELD) {
+-			fxReportParserError(parser, "invalid yield");
++			fxReportParserError(parser, parser->line, "invalid yield");
+ 			fxGetNextToken(parser);
+ 		}
+ 		else {
+@@ -741,7 +740,7 @@ void fxExport(txParser* parser)
+ 			}
+ 			else {
+ 				fxPushNULL(parser);
+-				fxReportParserError(parser, "missing identifier");
++				fxReportParserError(parser, parser->line, "missing identifier");
+ 			}
+ 		}
+ 		else {
+@@ -758,15 +757,15 @@ void fxExport(txParser* parser)
+ 				fxSemicolon(parser);
+ 			}
+ 			else
+-				fxReportParserError(parser, "missing module");
++				fxReportParserError(parser, parser->line, "missing module");
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing from");
++			fxReportParserError(parser, parser->line, "missing from");
+ 		break;
+ 	case XS_TOKEN_DEFAULT:
+ 		fxMatchToken(parser, XS_TOKEN_DEFAULT);
+ 		if (parser->flags & mxDefaultFlag)
+-			fxReportParserError(parser, "invalid default");
++			fxReportParserError(parser, parser->line, "invalid default");
+ 		parser->flags |= mxDefaultFlag;
+ 		if (parser->token == XS_TOKEN_CLASS) {
+ 			fxClassExpression(parser, line, &symbol);
+@@ -845,7 +844,7 @@ void fxExport(txParser* parser)
+ 			fxPushNodeStruct(parser, 2, XS_TOKEN_EXPORT, line);
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 		break;
+ 	case XS_TOKEN_FUNCTION:
+ 	again2:
+@@ -868,7 +867,7 @@ void fxExport(txParser* parser)
+ 			fxPushNodeStruct(parser, 2, XS_TOKEN_EXPORT, line);
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 		break;
+ 	case XS_TOKEN_CONST:
+ 	case XS_TOKEN_LET:
+@@ -894,7 +893,7 @@ void fxExport(txParser* parser)
+ 			}
+ 			else {
+ 				fxPushNULL(parser);
+-				fxReportParserError(parser, "missing module");
++				fxReportParserError(parser, parser->line, "missing module");
+ 			}
+ 		}
+ 		else
+@@ -911,7 +910,7 @@ void fxExport(txParser* parser)
+ 				goto again2;					
+ 			}
+ 		}
+-		fxReportParserError(parser, "invalid export %s", gxTokenNames[parser->token]);
++		fxReportParserError(parser, parser->line, "invalid export %s", gxTokenNames[parser->token]);
+ 		fxGetNextToken(parser);
+ 		break;
+ 	}
+@@ -987,11 +986,11 @@ void fxImport(txParser* parser)
+ 					fxGetNextToken(parser);
+ 				}
+ 				else {
+-					fxReportParserError(parser, "missing identifier");
++					fxReportParserError(parser, parser->line, "missing identifier");
+ 				}
+ 			}
+ 			else {
+-				fxReportParserError(parser, "missing as");
++				fxReportParserError(parser, parser->line, "missing as");
+ 			}
+ 			fromFlag = 1;
+ 		}
+@@ -1010,12 +1009,12 @@ void fxImport(txParser* parser)
+ 			}
+ 			else {
+ 				fxPushNULL(parser);
+-				fxReportParserError(parser, "missing module");
++				fxReportParserError(parser, parser->line, "missing module");
+ 			}
+ 		}
+ 		else {
+ 			fxPushNULL(parser);
+-			fxReportParserError(parser, "missing from");
++			fxReportParserError(parser, parser->line, "missing from");
+ 		}
+ 	}
+ 	else if (parser->token == XS_TOKEN_STRING) {
+@@ -1024,7 +1023,7 @@ void fxImport(txParser* parser)
+ 	}
+ 	else {
+ 		fxPushNULL(parser);
+-		fxReportParserError(parser, "missing module");
++		fxReportParserError(parser, parser->line, "missing module");
+ 	}
+ 	fxPushNodeStruct(parser, 2, XS_TOKEN_IMPORT, parser->line);
+ 	fxSemicolon(parser);
+@@ -1045,7 +1044,7 @@ void fxSpecifiers(txParser* parser)
+ 			}
+ 			else {
+ 				fxPushNULL(parser);
+-				fxReportParserError(parser, "missing identifier");
++				fxReportParserError(parser, parser->line, "missing identifier");
+ 			}
+ 		}
+ 		else
+@@ -1095,7 +1094,7 @@ void fxProgram(txParser* parser)
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_PROGRAM, line);
+ 	if (parser->flags & mxFieldFlag)
+ 		if (parser->flags & mxArgumentsFlag)
+-			fxReportParserError(parser, "invalid arguments");
++			fxReportParserError(parser, parser->line, "invalid arguments");
+ 	parser->root->flags = parser->flags & mxStrictFlag;
+ }
+ 
+@@ -1114,7 +1113,7 @@ void fxBody(txParser* parser)
+ 			break;
+ 		if (!(node->flags & mxStringEscapeFlag) && (c_strcmp(((txStringNode*)node)->value, "use strict") == 0)) {
+ 			if (parser->flags & mxNotSimpleParametersFlag)
+-				fxReportParserError(parser, "invalid directive");
++				fxReportParserError(parser, parser->line, "invalid directive");
+ 			if (!(parser->flags & mxStrictFlag)) {
+ 				parser->flags |= mxStrictFlag;
+ 				if (parser->token == XS_TOKEN_IDENTIFIER)
+@@ -1177,7 +1176,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 		break;
+ 	case XS_TOKEN_CLASS:
+ 		if (!blockIt)
+-			fxReportParserError(parser, "no block");
++			fxReportParserError(parser, parser->line, "no block");
+ 		fxClassExpression(parser, line, &symbol);
+ 		if (symbol) {
+ 			fxPushSymbol(parser, symbol);
+@@ -1186,11 +1185,11 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 			fxPushNodeStruct(parser, 2, XS_TOKEN_BINDING, line);
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 		break;
+ 	case XS_TOKEN_CONST:
+ 		if (!blockIt)
+-			fxReportParserError(parser, "no block");
++			fxReportParserError(parser, parser->line, "no block");
+ 		fxVariableStatement(parser, XS_TOKEN_CONST);
+ 		fxSemicolon(parser);
+ 		break;
+@@ -1212,7 +1211,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 		//if ((parser->flags & mxStrictFlag) && !blockIt) BROWSER
+ 	again:
+ 		if (!blockIt)
+-			fxReportParserError(parser, "no block (strict code)");
++			fxReportParserError(parser, parser->line, "no block (strict code)");
+ 		fxMatchToken(parser, XS_TOKEN_FUNCTION);
+ 		if (parser->token == XS_TOKEN_MULTIPLY) {
+ 			fxGetNextToken(parser);
+@@ -1226,7 +1225,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 			fxPushNode(parser, (txNode*)node);
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 		break;
+ 	case XS_TOKEN_IF:
+ 		fxIfStatement(parser);
+@@ -1240,7 +1239,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 		break;
+ 	case XS_TOKEN_LET:
+ 		if (!blockIt)
+-			fxReportParserError(parser, "no block");
++			fxReportParserError(parser, parser->line, "no block");
+ 		fxVariableStatement(parser, XS_TOKEN_LET);
+ 		fxSemicolon(parser);
+ 		break;
+@@ -1263,7 +1262,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 		break;
+ 	case XS_TOKEN_WITH:
+ 		if (parser->flags & mxStrictFlag)
+-			fxReportParserError(parser, "with (strict code)");
++			fxReportParserError(parser, parser->line, "with (strict code)");
+ 		fxWithStatement(parser);
+ 		break;
+ 	case XS_TOKEN_IDENTIFIER:
+@@ -1273,9 +1272,9 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 			fxGetNextToken(parser);
+ 			fxMatchToken(parser, XS_TOKEN_COLON);
+ 			//if ((parser->flags & mxStrictFlag) && (parser->token == XS_TOKEN_FUNCTION)) BROWSER
+-			//	fxReportParserError(parser, "labeled function (strict code)");
++			//	fxReportParserError(parser, parser->line, "labeled function (strict code)");
+ 			if (parser->token == XS_TOKEN_FUNCTION)
+-				fxReportParserError(parser, "labeled function");
++				fxReportParserError(parser, parser->line, "labeled function");
+ 			fxStatement(parser, 0);
+ 			fxPushNodeStruct(parser, 2, XS_TOKEN_LABEL, line);
+ 			break;
+@@ -1291,7 +1290,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 				&& (blockIt || (!parser->crlf2) || (parser->token2 == XS_TOKEN_LEFT_BRACKET))) {
+ 			parser->token = XS_TOKEN_LET;
+ 			if (!blockIt)
+-				fxReportParserError(parser, "no block");
++				fxReportParserError(parser, parser->line, "no block");
+ 			fxVariableStatement(parser, XS_TOKEN_LET);
+ 			fxSemicolon(parser);
+ 			break;
+@@ -1304,7 +1303,7 @@ void fxStatement(txParser* parser, txBoolean blockIt)
+ 			fxSemicolon(parser);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "invalid token %s", gxTokenNames[parser->token]);
++			fxReportParserError(parser, parser->line, "invalid token %s", gxTokenNames[parser->token]);
+ 			fxPushNULL(parser);
+ 			fxGetNextToken(parser);
+ 		}
+@@ -1319,7 +1318,7 @@ void fxSemicolon(txParser* parser)
+ 			fxGetNextToken(parser);
+ 	}
+ 	else
+-		fxReportParserError(parser, "missing ;");
++		fxReportParserError(parser, parser->line, "missing ;");
+ }
+ 
+ void fxBreakStatement(txParser* parser)
+@@ -1410,29 +1409,29 @@ void fxForStatement(txParser* parser)
+ 	}
+ 	parser->flags &= ~mxForFlag;
+ 	if (awaitFlag && !fxIsKeyword(parser, parser->ofSymbol))
+-		fxReportParserError(parser, "invalid for await");
++		fxReportParserError(parser, parser->line, "invalid for await");
+ 	if (fxIsToken(parser, XS_TOKEN_IN) || fxIsKeyword(parser, parser->ofSymbol)) {
+ 		if (expressionFlag) {
+ 			if (!fxCheckReference(parser, XS_TOKEN_ASSIGN)) {
+-				fxReportParserError(parser, "no reference");
++				fxReportParserError(parser, parser->line, "no reference");
+ 			}
+ 		}
+ 		else {
+ 			aToken = parser->root->description->token;
+ 			if (aToken == XS_TOKEN_BINDING) {
+ 				if (((txBindingNode*)(parser->root))->initializer)
+-					fxReportParserError(parser, "invalid binding initializer");
++					fxReportParserError(parser, parser->line, "invalid binding initializer");
+ 			}
+ // 			else if (aToken == XS_TOKEN_ARRAY_BINDING) {
+ // 				if (((txArrayBindingNode*)(parser->root))->initializer)
+-// 					fxReportParserError(parser, "invalid array binding initializer");
++// 					fxReportParserError(parser, parser->line, "invalid array binding initializer");
+ // 			}
+ // 			else if (aToken == XS_TOKEN_OBJECT_BINDING) {
+ // 				if (((txObjectBindingNode*)(parser->root))->initializer)
+-// 					fxReportParserError(parser, "invalid object binding initializer");
++// 					fxReportParserError(parser, parser->line, "invalid object binding initializer");
+ // 			}
+ // 			else
+-// 				fxReportParserError(parser, "no reference %s", gxTokenNames[aToken]);
++// 				fxReportParserError(parser, parser->line, "no reference %s", gxTokenNames[aToken]);
+ 		}
+ 		aToken = parser->token;
+ 		fxGetNextToken(parser);
+@@ -1537,7 +1536,7 @@ void fxSwitchStatement(txParser* parser)
+ 		else {
+ 			fxMatchToken(parser, XS_TOKEN_DEFAULT);
+ 			if (aDefaultFlag) 
+-				fxReportParserError(parser, "invalid default");
++				fxReportParserError(parser, parser->line, "invalid default");
+ 			fxPushNULL(parser);
+ 			fxMatchToken(parser, XS_TOKEN_COLON);
+ 			aCaseCount = parser->nodeCount;
+@@ -1569,7 +1568,7 @@ void fxThrowStatement(txParser* parser)
+ 		fxCommaExpression(parser);
+ 	}
+ 	else {
+-		fxReportParserError(parser, "missing expression");
++		fxReportParserError(parser, parser->line, "missing expression");
+ 		fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aLine);
+ 	}
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_THROW, aLine);
+@@ -1634,7 +1633,7 @@ void fxVariableStatement(txParser* parser, txToken theToken)
+ 		fxPushNULL(parser);
+ 		fxPushNULL(parser);
+ 		fxPushNodeStruct(parser, 2, theToken, aLine);
+-		fxReportParserError(parser, "missing identifier");
++		fxReportParserError(parser, parser->line, "missing identifier");
+ 	}
+ 	if (aCount > 1) {
+ 		fxPushNodeList(parser, aCount);
+@@ -1685,7 +1684,7 @@ void fxCommaExpression(txParser* parser)
+ 	}
+ 	else if (aCount == 0) {
+ 		fxPushNULL(parser);
+-		fxReportParserError(parser, "missing expression");
++		fxReportParserError(parser, parser->line, "missing expression");
+ 	}
+ }
+ 
+@@ -1699,7 +1698,7 @@ void fxAssignmentExpression(txParser* parser)
+ 			txToken aToken = parser->token;
+ 			txInteger aLine = parser->line;
+ 			if (!fxCheckReference(parser, aToken)) 
+-				fxReportParserError(parser, "no reference");
++				fxReportParserError(parser, parser->line, "no reference");
+ 			fxGetNextToken(parser);
+ 			fxAssignmentExpression(parser);
+ 			fxPushNodeStruct(parser, 2, aToken, aLine);
+@@ -1870,11 +1869,11 @@ void fxExponentiationExpression(txParser* parser)
+ 		fxUnaryExpression(parser);
+ 	else {
+ 		fxPrefixExpression(parser);
+-		while (gxTokenFlags[parser->token] & XS_TOKEN_EXPONENTIATION_EXPRESSION) {
++		if (gxTokenFlags[parser->token] & XS_TOKEN_EXPONENTIATION_EXPRESSION) {
+ 			txToken aToken = parser->token;
+ 			txInteger aLine = parser->line;
+ 			fxGetNextToken(parser);
+-			fxExponentiationExpression(parser);
++            fxExponentiationExpression(parser);
+ 			fxCheckArrowFunction(parser, 2);
+ 			fxPushNodeStruct(parser, 2, aToken, aLine);
+ 		}
+@@ -1895,15 +1894,15 @@ void fxUnaryExpression(txParser* parser)
+ 			fxPushNodeStruct(parser, 1, XS_TOKEN_MINUS, aLine);
+ 		else if (aToken == XS_TOKEN_DELETE) {
+ 			//if ((parser->flags & mxStrictFlag) && (parser->root->description->token == XS_TOKEN_ACCESS)) {
+-			//	fxReportParserError(parser, "no reference (strict mode)");
++			//	fxReportParserError(parser, parser->line, "no reference (strict mode)");
+ 			//}
+ 			if (!fxCheckReference(parser, aToken)) 
+-				fxReportParserError(parser, "no reference");
++				fxReportParserError(parser, parser->line, "no reference");
+ 			fxPushNodeStruct(parser, 1, aToken, aLine);
+ 		}
+ 		else if (aToken == XS_TOKEN_AWAIT) {
+ 			if ((parser->flags & mxGeneratorFlag) && !(parser->flags & mxYieldFlag))
+-				fxReportParserError(parser, "invalid await");
++				fxReportParserError(parser, parser->line, "invalid await");
+ 			else
+ 				parser->flags |= mxAwaitingFlag;
+ 			fxPushNodeStruct(parser, 1, aToken, aLine);
+@@ -1925,7 +1924,7 @@ void fxPrefixExpression(txParser* parser)
+ 		fxPrefixExpression(parser);
+ 		fxCheckArrowFunction(parser, 1);
+ 		if (!fxCheckReference(parser, aToken)) 
+-			fxReportParserError(parser, "no reference");
++			fxReportParserError(parser, parser->line, "no reference");
+ 		fxPushNodeStruct(parser, 1, aToken, aLine);
+ 		parser->root->flags = mxExpressionNoValue;
+ 	}
+@@ -1939,7 +1938,7 @@ void fxPostfixExpression(txParser* parser)
+ 	if ((!parser->crlf) && (gxTokenFlags[parser->token] & XS_TOKEN_POSTFIX_EXPRESSION)) {
+ 		fxCheckArrowFunction(parser, 1);
+ 		if (!fxCheckReference(parser, parser->token)) 
+-			fxReportParserError(parser, "no reference");
++			fxReportParserError(parser, parser->line, "no reference");
+ 		fxPushNodeStruct(parser, 1, parser->token, parser->line);
+ 		fxGetNextToken(parser);
+ 	}
+@@ -1963,14 +1962,14 @@ void fxCallExpression(txParser* parser)
+ 				}
+ 				else if (parser->token == XS_TOKEN_PRIVATE_IDENTIFIER) {
+ 					if (parser->root->flags & mxSuperFlag)
+-						fxReportParserError(parser, "invalid super");
++						fxReportParserError(parser, parser->line, "invalid super");
+ 					fxPushSymbol(parser, parser->symbol);
+ 					fxSwapNodes(parser);
+ 					fxPushNodeStruct(parser, 2, XS_TOKEN_PRIVATE_MEMBER, aLine);
+ 					fxGetNextToken(parser);
+ 				}
+ 				else
+-					fxReportParserError(parser, "missing property");
++					fxReportParserError(parser, parser->line, "missing property");
+ 			}
+ 			//else if (parser->crlf)
+ 			//	break;
+@@ -1992,7 +1991,7 @@ void fxCallExpression(txParser* parser)
+ 			}
+ 			else if (parser->token == XS_TOKEN_TEMPLATE) {
+ 				if (chainFlag)
+-					fxReportParserError(parser, "invalid template");
++					fxReportParserError(parser, parser->line, "invalid template");
+ 				fxPushStringNode(parser, parser->stringLength, parser->string, aLine);
+ 				fxPushStringNode(parser, parser->rawLength, parser->raw, aLine);
+ 				fxPushNodeStruct(parser, 2, XS_TOKEN_TEMPLATE_MIDDLE, aLine);
+@@ -2002,7 +2001,7 @@ void fxCallExpression(txParser* parser)
+ 			}
+ 			else if (parser->token == XS_TOKEN_TEMPLATE_HEAD) {
+ 				if (chainFlag)
+-					fxReportParserError(parser, "invalid template");
++					fxReportParserError(parser, parser->line, "invalid template");
+ 				fxTemplateExpression(parser);
+ 				fxPushNodeStruct(parser, 2, XS_TOKEN_TEMPLATE, aLine);
+ 			}
+@@ -2035,7 +2034,7 @@ void fxCallExpression(txParser* parser)
+ 					fxPushNodeStruct(parser, 2, XS_TOKEN_CALL, aLine);
+ 				}
+ 				else
+-					fxReportParserError(parser, "invalid ?.");
++					fxReportParserError(parser, parser->line, "invalid ?.");
+ 			}
+ 			else
+ 				break;
+@@ -2072,15 +2071,15 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 			if ((parser->token == XS_TOKEN_IDENTIFIER) && (parser->symbol == parser->metaSymbol) && (!parser->escaped)) {	
+ 				fxGetNextToken(parser);
+ 				if (parser->flags & mxProgramFlag)
+-					fxReportParserError(parser, "invalid import.meta");
++					fxReportParserError(parser, parser->line, "invalid import.meta");
+ 				else
+ 					fxPushNodeStruct(parser, 0, XS_TOKEN_IMPORT_META, aLine);
+ 			}
+ 			else
+-				fxReportParserError(parser, "invalid import.");
++				fxReportParserError(parser, parser->line, "invalid import.");
+ 		}
+ 		else
+-			fxReportParserError(parser, "invalid import");
++			fxReportParserError(parser, parser->line, "invalid import");
+ 		break;
+ 	case XS_TOKEN_SUPER:
+ 		fxMatchToken(parser, XS_TOKEN_SUPER);
+@@ -2091,7 +2090,7 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 			}
+ 			else {
+ 				fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aLine);
+-				fxReportParserError(parser, "invalid super");
++				fxReportParserError(parser, parser->line, "invalid super");
+ 			}
+ 		}
+ 		else if ((parser->token == XS_TOKEN_DOT) || (parser->token == XS_TOKEN_LEFT_BRACKET)) {
+@@ -2101,11 +2100,11 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 			}
+ 			else {
+ 				fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aLine);
+-				fxReportParserError(parser, "invalid super");
++				fxReportParserError(parser, parser->line, "invalid super");
+ 			}
+ 		}
+ 		else
+-			fxReportParserError(parser, "invalid super");
++			fxReportParserError(parser, parser->line, "invalid super");
+ 		parser->flags |= mxSuperFlag;
+ 		break;
+ 	case XS_TOKEN_THIS:
+@@ -2172,7 +2171,7 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 		if ((!parser->crlf) && (parser->token == XS_TOKEN_ARROW)) {
+ 			fxCheckStrictSymbol(parser, aSymbol);
+ 			if (flags && (aSymbol == parser->awaitSymbol))
+-				fxReportParserError(parser, "invalid await");
++				fxReportParserError(parser, parser->line, "invalid await");
+ 			fxPushSymbol(parser, aSymbol);
+ 			fxPushNULL(parser);
+ 			fxPushNodeStruct(parser, 2, XS_TOKEN_ARG, aLine);
+@@ -2242,7 +2241,7 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 			fxGetNextToken(parser);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "invalid host object");
++			fxReportParserError(parser, parser->line, "invalid host object");
+ 			fxPushNULL(parser);
+ 		}
+ 		fxPushNodeStruct(parser, 3, XS_TOKEN_HOST, aLine);
+@@ -2254,7 +2253,7 @@ void fxLiteralExpression(txParser* parser, txUnsigned flag)
+ 		break;
+ 	default:
+ 		fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aLine);
+-		fxReportParserError(parser, "missing expression");
++		fxReportParserError(parser, parser->line, "missing expression");
+ 		break;
+ 	}
+ }
+@@ -2280,7 +2279,7 @@ void fxArrayExpression(txParser* parser)
+ 		else if (parser->token == XS_TOKEN_SPREAD) {
+ 			fxGetNextToken(parser);
+ 			if (!elision)
+-				fxReportParserError(parser, "missing ,");
++				fxReportParserError(parser, parser->line, "missing ,");
+ 			fxAssignmentExpression(parser);
+ 			fxPushNodeStruct(parser, 1, XS_TOKEN_SPREAD, anItemLine);
+ 			aCount++;
+@@ -2289,7 +2288,7 @@ void fxArrayExpression(txParser* parser)
+ 		}
+ 		else {
+ 			if (!elision)
+-				fxReportParserError(parser, "missing ,");
++				fxReportParserError(parser, parser->line, "missing ,");
+ 			fxAssignmentExpression(parser);
+ 			aCount++;
+ 			elision = 0;
+@@ -2366,7 +2365,7 @@ void fxClassExpression(txParser* parser, txInteger theLine, txSymbol** theSymbol
+ 			fxGetNextToken(parser);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "invalid host class");
++			fxReportParserError(parser, parser->line, "invalid host class");
+ 			fxPushNULL(parser);
+ 		}
+ 		fxPushNodeStruct(parser, 3, XS_TOKEN_HOST, aLine);
+@@ -2403,15 +2402,15 @@ void fxClassExpression(txParser* parser, txInteger theLine, txSymbol** theSymbol
+ 			if ((aStaticFlag == 0) && (aSymbol == parser->constructorSymbol)) {
+ 				fxPopNode(parser); // symbol
+ 				if (constructor || (aToken2 == XS_TOKEN_GENERATOR) || (aToken2 == XS_TOKEN_GETTER) || (aToken2 == XS_TOKEN_SETTER) || (flag & mxAsyncFlag)) 
+-					fxReportParserError(parser, "invalid constructor");
++					fxReportParserError(parser, parser->line, "invalid constructor");
+ 				fxFunctionExpression(parser, aPropertyLine, C_NULL, mxSuperFlag | ((heritageFlag) ? mxDerivedFlag : mxBaseFlag));
+ 				constructor = fxPopNode(parser);
+ 			}
+ 			else if (parser->token == XS_TOKEN_LEFT_PARENTHESIS) {
+ 				if ((aToken1 == XS_TOKEN_PRIVATE_PROPERTY) && (aSymbol == parser->privateConstructorSymbol))
+-					fxReportParserError(parser, "invalid method: #constructor");
++					fxReportParserError(parser, parser->line, "invalid method: #constructor");
+ 				if (aStaticFlag && (aSymbol == parser->prototypeSymbol))
+-					fxReportParserError(parser, "invalid static method: prototype");
++					fxReportParserError(parser, parser->line, "invalid static method: prototype");
+ 				if (aStaticFlag)
+ 					flag |= mxStaticFlag;
+ 				if (aToken2 == XS_TOKEN_GETTER) 
+@@ -2436,11 +2435,11 @@ void fxClassExpression(txParser* parser, txInteger theLine, txSymbol** theSymbol
+ 			}
+ 			else {
+ 				if ((aToken1 == XS_TOKEN_PRIVATE_PROPERTY) && (aSymbol == parser->privateConstructorSymbol))
+-					fxReportParserError(parser, "invalid field: #constructor");
++					fxReportParserError(parser, parser->line, "invalid field: #constructor");
+ 				if (aSymbol == parser->constructorSymbol)
+-					fxReportParserError(parser, "invalid field: constructor");
++					fxReportParserError(parser, parser->line, "invalid field: constructor");
+ 				if (aSymbol == parser->prototypeSymbol)
+-					fxReportParserError(parser, "invalid field: prototype");
++					fxReportParserError(parser, parser->line, "invalid field: prototype");
+ 			field:
+ 				if (parser->token == XS_TOKEN_ASSIGN) {
+ 					txUnsigned flags = parser->flags;
+@@ -2448,7 +2447,7 @@ void fxClassExpression(txParser* parser, txInteger theLine, txSymbol** theSymbol
+ 					fxGetNextToken(parser);
+ 					fxAssignmentExpression(parser);
+ 					if (parser->flags & mxArgumentsFlag)
+-						fxReportParserError(parser, "invalid arguments");
++						fxReportParserError(parser, parser->line, "invalid arguments");
+ 					parser->flags = flags;
+ 				}
+ 				else {
+@@ -2625,7 +2624,7 @@ void fxFunctionExpression(txParser* parser, txInteger theLine, txSymbol** theSym
+ 			fxGetNextToken(parser);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "invalid host function");
++			fxReportParserError(parser, parser->line, "invalid host function");
+ 			fxPushNULL(parser);
+ 		}
+ 		fxPushNodeStruct(parser, 3, XS_TOKEN_HOST, theLine);
+@@ -2656,9 +2655,9 @@ void fxGeneratorExpression(txParser* parser, txInteger theLine, txSymbol** theSy
+ 		if (theSymbol)
+ 			*theSymbol = parser->symbol;
+ 		else if (parser->symbol == parser->yieldSymbol)
+- 			fxReportParserError(parser, "invalid yield");
++ 			fxReportParserError(parser, parser->line, "invalid yield");
+ 		else if ((parser->flags & mxAsyncFlag) && (parser->symbol == parser->awaitSymbol))
+- 			fxReportParserError(parser, "invalid await");
++ 			fxReportParserError(parser, parser->line, "invalid await");
+ 		fxCheckStrictSymbol(parser, parser->symbol);
+ 		fxGetNextToken(parser);
+ 	}
+@@ -2710,19 +2709,19 @@ void fxGroupExpression(txParser* parser, txUnsigned flag)
+ 		fxPushNodeList(parser, aCount);
+ 		fxPushNodeStruct(parser, 1, XS_TOKEN_EXPRESSIONS, aLine);
+ 		if (!fxParametersBindingFromExpressions(parser, parser->root))
+-			fxReportParserError(parser, "no parameters");
++			fxReportParserError(parser, parser->line, "no parameters");
+ 		fxCheckStrictBinding(parser, parser->root);
+ 		parser->root->flags |= flag;
+ 		if (parser->flags & mxAwaitingFlag)
+-			fxReportParserError(parser, "invalid await");
++			fxReportParserError(parser, parser->line, "invalid await");
+ 		if (parser->flags & mxYieldingFlag)
+-			fxReportParserError(parser, "invalid yield");
++			fxReportParserError(parser, parser->line, "invalid yield");
+ 		fxArrowExpression(parser, flag);
+ 	}
+ 	else {
+         if (aCount == 0) {
+             fxPushNULL(parser);
+-			fxReportParserError(parser, "missing expression");
++			fxReportParserError(parser, parser->line, "missing expression");
+         }
+ 		else /*if (aCount > 1)*/ {
+ 			fxPushNodeList(parser, aCount);
+@@ -2739,12 +2738,12 @@ void fxNewExpression(txParser* parser)
+ 		fxGetNextToken(parser);
+ 		if (fxIsKeyword(parser, parser->targetSymbol)) {
+ 			if (!(parser->flags & mxTargetFlag))
+-				fxReportParserError(parser, "invalid new.target");
++				fxReportParserError(parser, parser->line, "invalid new.target");
+ 			fxGetNextToken(parser);
+ 			fxPushNodeStruct(parser, 0, XS_TOKEN_TARGET, aLine);
+ 		}
+ 		else
+-			fxReportParserError(parser, "missing target");
++			fxReportParserError(parser, parser->line, "missing target");
+ 		return;
+ 	}
+ 	fxLiteralExpression(parser, 1);
+@@ -2765,7 +2764,7 @@ void fxNewExpression(txParser* parser)
+ 				fxGetNextToken(parser);
+ 			}
+ 			else
+-				fxReportParserError(parser, "missing property");
++				fxReportParserError(parser, parser->line, "missing property");
+ 		}
+ 		else if (parser->token == XS_TOKEN_LEFT_BRACKET) {
+ 			fxGetNextToken(parser);
+@@ -2820,7 +2819,7 @@ void fxObjectExpression(txParser* parser)
+         else {
+ 			fxPropertyName(parser, &aSymbol, &aToken0, &aToken1, &aToken2, &flags);
+ 			if (aToken1 == XS_TOKEN_PRIVATE_PROPERTY) {
+-				fxReportParserError(parser, "invalid private property");
++				fxReportParserError(parser, parser->line, "invalid private property");
+ 			}
+ 			else if ((aToken2 == XS_TOKEN_GETTER) || (aToken2 == XS_TOKEN_SETTER)) {
+ 				flags |= mxShorthandFlag;
+@@ -2831,21 +2830,21 @@ void fxObjectExpression(txParser* parser)
+ 				if (parser->token == XS_TOKEN_LEFT_PARENTHESIS)
+ 					fxFunctionExpression(parser, aPropertyLine, C_NULL, mxSuperFlag);
+ 				else
+-					fxReportParserError(parser, "missing (");
++					fxReportParserError(parser, parser->line, "missing (");
+ 			}
+ 			else if (aToken2 == XS_TOKEN_GENERATOR) {
+ 				flags |= mxShorthandFlag | mxMethodFlag;
+ 				if (parser->token == XS_TOKEN_LEFT_PARENTHESIS)
+ 					fxGeneratorExpression(parser, aPropertyLine, C_NULL, mxSuperFlag | flags);
+ 				else
+-					fxReportParserError(parser, "missing (");
++					fxReportParserError(parser, parser->line, "missing (");
+ 			}
+ 			else if (aToken2 == XS_TOKEN_FUNCTION) {
+ 				flags |= mxShorthandFlag | mxMethodFlag;
+ 				if (parser->token == XS_TOKEN_LEFT_PARENTHESIS)
+ 					fxFunctionExpression(parser, aPropertyLine, C_NULL, mxSuperFlag | flags);
+ 				else
+-					fxReportParserError(parser, "missing (");
++					fxReportParserError(parser, parser->line, "missing (");
+ 			}
+ 			else if (parser->token == XS_TOKEN_LEFT_PARENTHESIS) {
+ 				flags |= mxShorthandFlag | mxMethodFlag;
+@@ -2868,12 +2867,12 @@ void fxObjectExpression(txParser* parser)
+ 					fxPushNodeStruct(parser, 1, XS_TOKEN_ACCESS, aPropertyLine);
+ 				}
+ 				else {
+-					fxReportParserError(parser, "invalid identifier");
++					fxReportParserError(parser, parser->line, "invalid identifier");
+ 					fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aPropertyLine);
+ 				}
+ 			}
+ 			else {
+-				fxReportParserError(parser, "missing :");
++				fxReportParserError(parser, parser->line, "missing :");
+ 				fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, aPropertyLine);
+ 			}
+ 			fxPushNodeStruct(parser, 2, aToken1, aPropertyLine);
+@@ -2905,7 +2904,7 @@ void fxTemplateExpression(txParser* parser)
+             aCount++;
+         }
+ 		if (parser->token != XS_TOKEN_RIGHT_BRACE) {
+-			fxReportParserError(parser, "missing }");
++			fxReportParserError(parser, parser->line, "missing }");
+ 		}
+ 		fxGetNextTokenTemplate(parser);
+ 		fxPushStringNode(parser, parser->stringLength, parser->string, aLine);
+@@ -2924,7 +2923,7 @@ void fxYieldExpression(txParser* parser)
+ {
+ 	txInteger aLine = parser->line;
+ 	if (!(parser->flags & mxYieldFlag))
+-		fxReportParserError(parser, "invalid yield");
++		fxReportParserError(parser, parser->line, "invalid yield");
+ 	else
+ 		parser->flags |= mxYieldingFlag;
+ 	fxMatchToken(parser, XS_TOKEN_YIELD);
+@@ -3056,12 +3055,12 @@ void fxPropertyName(txParser* parser, txSymbol** theSymbol, txToken* theToken0,
+ 		fxGetNextToken(parser);
+ 		fxCommaExpression(parser);
+ 		if (parser->token != XS_TOKEN_RIGHT_BRACKET) {
+-			fxReportParserError(parser, "missing ]");
++			fxReportParserError(parser, parser->line, "missing ]");
+ 		}
+ 		aToken1 = XS_TOKEN_PROPERTY_AT;
+ 	}
+ 	else {
+-		fxReportParserError(parser, "missing identifier");
++		fxReportParserError(parser, parser->line, "missing identifier");
+ 		fxPushNULL(parser);
+ 	}
+ 	if (aToken2 != XS_NO_TOKEN) {
+@@ -3117,7 +3116,7 @@ void fxPropertyName(txParser* parser, txSymbol** theSymbol, txToken* theToken0,
+ 			fxGetNextToken(parser);
+ 			fxCommaExpression(parser);
+ 			if (parser->token != XS_TOKEN_RIGHT_BRACKET) {
+-				fxReportParserError(parser, "missing ]");
++				fxReportParserError(parser, parser->line, "missing ]");
+ 			}
+ 			aToken1 = XS_TOKEN_PROPERTY_AT;
+ 			fxGetNextToken(parser);
+@@ -3133,7 +3132,7 @@ void fxPropertyName(txParser* parser, txSymbol** theSymbol, txToken* theToken0,
+ 			aToken2 = XS_NO_TOKEN;
+ 		}
+ 		else {
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 			fxPushNULL(parser);
+ 		}
+ 	}
+@@ -3151,7 +3150,7 @@ void fxBinding(txParser* parser, txToken theToken, txFlag initializeIt)
+ 	if (parser->token == XS_TOKEN_IDENTIFIER) {
+ 		fxCheckStrictSymbol(parser, parser->symbol);
+ 		if (((theToken == XS_TOKEN_CONST) || (theToken == XS_TOKEN_LET)) && (parser->symbol == parser->letSymbol))
+-			fxReportParserError(parser, "invalid identifier");
++			fxReportParserError(parser, parser->line, "invalid identifier");
+ 		fxPushSymbol(parser, parser->symbol);
+ 		fxPushNodeStruct(parser, 1, theToken, aLine);
+ 		fxGetNextToken(parser);
+@@ -3163,7 +3162,7 @@ void fxBinding(txParser* parser, txToken theToken, txFlag initializeIt)
+ 		fxArrayBinding(parser, theToken);
+ 	}
+ 	else {
+-		fxReportParserError(parser, "missing identifier");
++		fxReportParserError(parser, parser->line, "missing identifier");
+ 		fxPushNULL(parser);
+ 	}
+ 	if (initializeIt && (parser->token == XS_TOKEN_ASSIGN)) {
+@@ -3288,7 +3287,7 @@ void fxArrayBinding(txParser* parser, txToken theToken)
+ 		}
+ 		else {
+ 			if (!elision)
+-				fxReportParserError(parser, "missing ,");
++				fxReportParserError(parser, parser->line, "missing ,");
+ 			if (parser->token == XS_TOKEN_SPREAD) {
+ 				fxRestBinding(parser, theToken, 0);
+ 				aCount++;
+@@ -3407,7 +3406,7 @@ txUnsigned fxObjectBinding(txParser* parser, txToken theToken)
+ 			fxGetNextToken(parser);
+ 			fxCommaExpression(parser);
+ 			if (parser->token != XS_TOKEN_RIGHT_BRACKET) {
+-				fxReportParserError(parser, "missing ]");
++				fxReportParserError(parser, parser->line, "missing ]");
+ 			}
+ 			aToken = XS_TOKEN_PROPERTY_BINDING_AT;
+ 		}
+@@ -3418,7 +3417,7 @@ txUnsigned fxObjectBinding(txParser* parser, txToken theToken)
+             break;
+ 		}
+ 		else {
+-			fxReportParserError(parser, "missing identifier");
++			fxReportParserError(parser, parser->line, "missing identifier");
+ 			fxPushNULL(parser);
+ 		}
+ 		fxGetNextToken2(parser);
+@@ -3431,7 +3430,7 @@ txUnsigned fxObjectBinding(txParser* parser, txToken theToken)
+ 			fxBinding(parser, theToken, 1);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "missing :");
++			fxReportParserError(parser, parser->line, "missing :");
+ 			fxPushNULL(parser);
+ 		}
+ 		fxPushNodeStruct(parser, 2, aToken, aPropertyLine);
+@@ -3521,7 +3520,7 @@ void fxParametersBinding(txParser* parser)
+ 		fxMatchToken(parser, XS_TOKEN_RIGHT_PARENTHESIS);
+ 	}
+ 	else
+-		fxReportParserError(parser, "missing (");
++		fxReportParserError(parser, parser->line, "missing (");
+ 	fxPushNodeList(parser, aCount);
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_PARAMS_BINDING, aLine);
+ }
+@@ -3566,7 +3565,7 @@ void fxRestBinding(txParser* parser, txToken theToken, txUnsigned flag)
+ 	fxMatchToken(parser, XS_TOKEN_SPREAD);
+ 	fxBinding(parser, theToken, 0);
+ 	if (flag && ((parser->root->description->token == XS_TOKEN_ARRAY_BINDING) || (parser->root->description->token == XS_TOKEN_OBJECT_BINDING))) {
+-		fxReportParserError(parser, "invalid rest");
++		fxReportParserError(parser, parser->line, "invalid rest");
+ 	}
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_REST_BINDING, aLine);
+ }
+@@ -3590,11 +3589,11 @@ txNode* fxRestBindingFromExpression(txParser* parser, txNode* theNode, txToken t
+ 			return NULL;
+ 		}
+ 		if (binding->description->token == XS_TOKEN_BINDING) {
+-			fxReportParserError(parser, "invalid rest");
++			fxReportParserError(parser, parser->line, "invalid rest");
+ 			return NULL;
+ 		}
+ 		if (flag && ((binding->description->token == XS_TOKEN_ARRAY_BINDING) || (binding->description->token == XS_TOKEN_OBJECT_BINDING))) {
+-			fxReportParserError(parser, "invalid rest");
++			fxReportParserError(parser, parser->line, "invalid rest");
+ 			return NULL;
+ 		}
+ // 	}
+@@ -3608,7 +3607,7 @@ void fxCheckArrowFunction(txParser* parser, txInteger count)
+ 	txNode* node = parser->root;
+ 	while (count) {
+ 		if (node->flags & mxArrowFlag)
+-			fxReportParserError(parser, "invalid arrow function");
++			fxReportParserError(parser, parser->line, "invalid arrow function");
+ 		count--;
+ 		node = node->next;
+ 	}
+@@ -3722,15 +3721,15 @@ void fxCheckStrictSymbol(txParser* parser, txSymbol* symbol)
+ {
+ 	if (parser->flags & mxStrictFlag) {
+ 		if (symbol == parser->argumentsSymbol)
+-			fxReportParserError(parser, "invalid arguments (strict mode)");
++			fxReportParserError(parser, parser->line, "invalid arguments (strict mode)");
+ 		else if (symbol == parser->evalSymbol)
+-			fxReportParserError(parser, "invalid eval (strict mode)");
++			fxReportParserError(parser, parser->line, "invalid eval (strict mode)");
+ 		else if (symbol == parser->yieldSymbol)
+-			fxReportParserError(parser, "invalid yield (strict mode)");
++			fxReportParserError(parser, parser->line, "invalid yield (strict mode)");
+ 	}
+ 	else if (parser->flags & mxYieldFlag) {
+ 		if (symbol == parser->yieldSymbol)
+-			fxReportParserError(parser, "invalid yield");
++			fxReportParserError(parser, parser->line, "invalid yield");
+ 	}
+ }
+ 
+@@ -3773,23 +3772,23 @@ void fxCheckUniquePropertyAux(txParser* parser, txNode* baseNode, txNode* curren
+ {
+ 	if (currentNode->flags & mxGetterFlag) {
+ 		if (baseNode->flags & mxGetterFlag)
+-			fxReportParserError(parser, "getter already defined");
++			fxReportParserError(parser, parser->line, "getter already defined");
+ 		else if (!(baseNode->flags & mxSetterFlag))
+-			fxReportParserError(parser, "property already defined");
++			fxReportParserError(parser, parser->line, "property already defined");
+ 	}
+ 	else if (currentNode->flags & mxSetterFlag) {
+ 		if (baseNode->flags & mxSetterFlag)
+-			fxReportParserError(parser, "setter already defined");
++			fxReportParserError(parser, parser->line, "setter already defined");
+ 		else if (!(baseNode->flags & mxGetterFlag))
+-			fxReportParserError(parser, "property already defined");
++			fxReportParserError(parser, parser->line, "property already defined");
+ 	}
+ 	else {
+ 		if (baseNode->flags & mxGetterFlag)
+-			fxReportParserError(parser, "getter already defined");
++			fxReportParserError(parser, parser->line, "getter already defined");
+ 		else if (baseNode->flags & mxSetterFlag)
+-			fxReportParserError(parser, "setter already defined");
++			fxReportParserError(parser, parser->line, "setter already defined");
+ 		else if (parser->flags & mxStrictFlag)
+-			fxReportParserError(parser, "property already defined (strict mode)");
++			fxReportParserError(parser, parser->line, "property already defined (strict mode)");
+ 	}
+ }
+ 
+@@ -3829,7 +3828,7 @@ void fxJSONValue(txParser* parser)
+ 		break;
+ 	default:
+ 		fxPushNULL(parser);
+-		fxReportParserError(parser, "invalid value");
++		fxReportParserError(parser, parser->line, "invalid value");
+ 		break;
+ 	}
+ }
+@@ -3843,13 +3842,13 @@ void fxJSONObject(txParser* parser)
+ 		if (parser->token == XS_TOKEN_RIGHT_BRACE)
+ 			break;
+ 		if (parser->token != XS_TOKEN_STRING) {
+-			fxReportParserError(parser, "missing name");
++			fxReportParserError(parser, parser->line, "missing name");
+ 			break;
+ 		}
+ 		fxPushStringNode(parser, parser->stringLength, parser->string, parser->line);
+ 		fxGetNextTokenJSON(parser);
+ 		if (parser->token != XS_TOKEN_COLON) {
+-			fxReportParserError(parser, "missing :");
++			fxReportParserError(parser, parser->line, "missing :");
+ 			break;
+ 		}
+ 		fxGetNextTokenJSON(parser);
+@@ -3861,7 +3860,7 @@ void fxJSONObject(txParser* parser)
+ 		fxGetNextTokenJSON(parser);
+ 	}
+ 	if (parser->token != XS_TOKEN_RIGHT_BRACE)
+-		fxReportParserError(parser, "missing }");
++		fxReportParserError(parser, parser->line, "missing }");
+ 	fxGetNextTokenJSON(parser);
+ 	fxPushNodeList(parser, aLength);
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_OBJECT, aLine);
+@@ -3882,7 +3881,7 @@ void fxJSONArray(txParser* parser)
+ 		fxGetNextTokenJSON(parser);
+ 	}
+ 	if (parser->token != XS_TOKEN_RIGHT_BRACKET)
+-		fxReportParserError(parser, "missing ]");
++		fxReportParserError(parser, parser->line, "missing ]");
+ 	fxGetNextTokenJSON(parser);
+ 	fxPushNodeList(parser, aLength);
+ 	fxPushNodeStruct(parser, 1, XS_TOKEN_ARRAY, aLine);
+@@ -3897,7 +3896,7 @@ void fxJSXAttributeName(txParser* parser)
+ 		if (gxTokenFlags[parser->token] & XS_TOKEN_IDENTIFIER_NAME)
+ 			symbol = fxJSXNamespace(parser, symbol, parser->symbol);
+ 		else
+-			fxReportParserError(parser, "missing name");
++			fxReportParserError(parser, parser->line, "missing name");
+ 	}
+ 	fxPushSymbol(parser, symbol);
+ }
+@@ -3914,7 +3913,7 @@ void fxJSXAttributeValue(txParser* parser)
+ 		fxGetNextToken(parser);
+ 		if (parser->token == XS_TOKEN_RIGHT_BRACE) {
+ 			fxGetNextToken(parser);
+-			fxReportParserError(parser, "missing expression");
++			fxReportParserError(parser, parser->line, "missing expression");
+ 			fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, line);
+ 		}
+ 		else {
+@@ -3922,11 +3921,11 @@ void fxJSXAttributeValue(txParser* parser)
+ 			if (parser->token == XS_TOKEN_RIGHT_BRACE)
+ 				fxGetNextToken(parser);
+ 			else
+-				fxReportParserError(parser, "missing }");
++				fxReportParserError(parser, parser->line, "missing }");
+ 		}
+ 	}
+ 	else {
+-		fxReportParserError(parser, "invalid %s", gxTokenNames[parser->token]);
++		fxReportParserError(parser, parser->line, "invalid %s", gxTokenNames[parser->token]);
+ 		fxPushNodeStruct(parser, 0, XS_TOKEN_UNDEFINED, line);
+ 	}
+ }
+@@ -3945,7 +3944,7 @@ void fxJSXElement(txParser* parser)
+ 		name = parser->root;
+ 	}
+ 	else {
+-		fxReportParserError(parser, "missing identifier");
++		fxReportParserError(parser, parser->line, "missing identifier");
+ 		fxPushNULL(parser);
+ 	}
+ 	for (;;) {
+@@ -3954,7 +3953,7 @@ void fxJSXElement(txParser* parser)
+ 		if (parser->token == XS_TOKEN_DIVIDE) {
+ 			fxGetNextToken(parser);
+ 			if (parser->token != XS_TOKEN_MORE)
+-				fxReportParserError(parser, "missing >");
++				fxReportParserError(parser, parser->line, "missing >");
+ 			closed = 1;
+ 			break;
+ 		}
+@@ -3975,15 +3974,15 @@ void fxJSXElement(txParser* parser)
+ 				if (parser->token == XS_TOKEN_RIGHT_BRACE)
+ 					fxGetNextToken(parser);
+ 				else
+-					fxReportParserError(parser, "missing }");
++					fxReportParserError(parser, parser->line, "missing }");
+ 				fxPushNodeStruct(parser, 1, XS_TOKEN_SPREAD, parser->line);
+ 				propertyCount++;
+ 			}
+ 			else
+-				fxReportParserError(parser, "invalid %s", gxTokenNames[parser->token]);
++				fxReportParserError(parser, parser->line, "invalid %s", gxTokenNames[parser->token]);
+ 		}
+ 		else {
+-			fxReportParserError(parser, "invalid %s", gxTokenNames[parser->token]);
++			fxReportParserError(parser, parser->line, "invalid %s", gxTokenNames[parser->token]);
+ 			break;
+ 		}
+ 	}
+@@ -4005,7 +4004,7 @@ void fxJSXElement(txParser* parser)
+ 				else {
+ 					fxAssignmentExpression(parser);
+ 					if (parser->token != XS_TOKEN_RIGHT_BRACE)
+-						fxReportParserError(parser, "missing }");
++						fxReportParserError(parser, parser->line, "missing }");
+ 				}
+ 			}
+ 			else if (parser->token == XS_TOKEN_LESS) {
+@@ -4015,16 +4014,16 @@ void fxJSXElement(txParser* parser)
+ 					if (parser->token == XS_TOKEN_IDENTIFIER) {
+ 						fxJSXElementName(parser);
+ 						if (!fxJSXMatch(parser, name, parser->root)) {
+-							fxReportParserError(parser, "invalid element");
++							fxReportParserError(parser, parser->line, "invalid element");
+ 							fxPushNULL(parser);
+ 						}
+ 					}
+ 					else {
+-						fxReportParserError(parser, "missing identifier");
++						fxReportParserError(parser, parser->line, "missing identifier");
+ 						fxPushNULL(parser);
+ 					}
+ 					if (parser->token != XS_TOKEN_MORE)
+-						fxReportParserError(parser, "missing >");
++						fxReportParserError(parser, parser->line, "missing >");
+ 					fxPopNode(parser);
+ 					break;
+ 				}
+@@ -4032,7 +4031,7 @@ void fxJSXElement(txParser* parser)
+ 					fxJSXElement(parser);
+ 			}
+ 			else {
+-				fxReportParserError(parser, "invalid %s", gxTokenNames[parser->token]);
++				fxReportParserError(parser, parser->line, "invalid %s", gxTokenNames[parser->token]);
+ 				break;
+ 			}
+ 		}
+@@ -4052,7 +4051,7 @@ void fxJSXElementName(txParser* parser)
+ 		if (parser->token == XS_TOKEN_IDENTIFIER)
+ 			symbol = fxJSXNamespace(parser, symbol, parser->symbol);
+ 		else
+-			fxReportParserError(parser, "missing name");
++			fxReportParserError(parser, parser->line, "missing name");
+ 		fxPushSymbol(parser, symbol);
+ 		fxPushNodeStruct(parser, 1, XS_TOKEN_ACCESS, line);
+ 		fxGetNextToken(parser);
+@@ -4068,7 +4067,7 @@ void fxJSXElementName(txParser* parser)
+ 				fxGetNextToken(parser);
+ 			}
+ 			else
+-				fxReportParserError(parser, "missing property");
++				fxReportParserError(parser, parser->line, "missing property");
+ 		}
+ 	}
+ }
+diff --git a/xs/sources/xsTree.c b/xs/sources/xsTree.c
+index 4e91f4f12..83d9ef30a 100644
+--- a/xs/sources/xsTree.c
++++ b/xs/sources/xsTree.c
+@@ -135,53 +135,54 @@ void fxIncludeTree(txParser* parser, void* stream, txGetter getter, txUnsigned f
+ 
+ void fxParserTree(txParser* parser, void* theStream, txGetter theGetter, txUnsigned flags, txString* name)
+ {
+-	parser->stream = theStream;
+-	parser->getter = theGetter;
+-	parser->line = 1;
+-	parser->flags = flags;
+-	parser->modifier = parser->emptyString;
+-	parser->string = parser->emptyString;
+-	parser->line2 = 1;
+-	parser->modifier2 = parser->emptyString;
+-	parser->string2 = parser->emptyString;
++	mxTryParser(parser) {
++		parser->stream = theStream;
++		parser->getter = theGetter;
++		parser->line = 1;
++		parser->flags = flags;
++		parser->modifier = parser->emptyString;
++		parser->string = parser->emptyString;
++		parser->line2 = 1;
++		parser->modifier2 = parser->emptyString;
++		parser->string2 = parser->emptyString;
+ 	
+-	parser->root = NULL;
++		parser->root = NULL;
+ 	
+-	parser->flags &= ~mxEvalFlag;
+-	if (!(parser->flags & mxProgramFlag))
+-		parser->flags |= mxStrictFlag | mxAsyncFlag;
+-	fxGetNextCharacter(parser);
+-	fxGetNextCharacter(parser);
+-	if (parser->character == '#') {
++		parser->flags &= ~mxEvalFlag;
++		if (!(parser->flags & mxProgramFlag))
++			parser->flags |= mxStrictFlag | mxAsyncFlag;
+ 		fxGetNextCharacter(parser);
+-		if (parser->character == '!') {
++		fxGetNextCharacter(parser);
++		if (parser->character == '#') {
+ 			fxGetNextCharacter(parser);
+-			while ((parser->character != (txU4)C_EOF) && (parser->character != 10) && (parser->character != 13) && (parser->character != 0x2028) && (parser->character != 0x2029)) {
++			if (parser->character == '!') {
+ 				fxGetNextCharacter(parser);
+-			}	
++				while ((parser->character != (txU4)C_EOF) && (parser->character != 10) && (parser->character != 13) && (parser->character != 0x2028) && (parser->character != 0x2029)) {
++					fxGetNextCharacter(parser);
++				}	
++			}
++			else
++				fxReportParserError(parser, parser->line, "invalid character %d", parser->character);
+ 		}
+-		else
+-			fxReportParserError(parser, "invalid character %d", parser->character);
+-	}
+-	fxGetNextToken(parser);
+-	if (parser->flags & mxProgramFlag) {
+-		fxProgram(parser);
+-	}
+-	else {
+-		fxModule(parser);
+-	}
+-	parser->flags &= ~mxEvalFlag;
+-	
+-	parser->flags |= flags & mxEvalFlag;
++		fxGetNextToken(parser);
++		if (parser->flags & mxProgramFlag) {
++			fxProgram(parser);
++		}
++		else {
++			fxModule(parser);
++		}
++		parser->flags &= ~mxEvalFlag;
+ 	
+-#ifdef mxTreePrint
+-	fxTreePrint(parser, parser->root);
+-#endif
++		parser->flags |= flags & mxEvalFlag;
+ 	
+-	if (parser->errorCount)
+-		return;
+-	if (name)
+-		*name = parser->name;
++	#ifdef mxTreePrint
++		fxTreePrint(parser, parser->root);
++	#endif
++		if ((parser->errorCount == 0) && name)
++			*name = parser->name;
++	}
++	mxCatchParser(parser) {
++	}
+ }
+ 
+ void fxNodeListDistribute(txNodeList* list, txNodeCall call, void* param)
+diff --git a/xs/tools/xsc.c b/xs/tools/xsc.c
+index ab690382c..7cae59396 100644
+--- a/xs/tools/xsc.c
++++ b/xs/tools/xsc.c
+@@ -319,9 +319,9 @@ int main(int argc, char* argv[])
+ 			else if (!strcmp(argv[argi], "-o")) {
+ 				argi++;
+ 				if (argi >= argc)
+-					fxReportParserError(parser, "no output directory");
++					fxReportParserError(parser, 0, "no output directory");
+ 				else if (output)
+-					fxReportParserError(parser, "too many output directories");
++					fxReportParserError(parser, 0, "too many output directories");
+ 				else
+ 					output = fxRealDirectoryPath(parser, argv[argi]);
+ 			}
+@@ -330,36 +330,36 @@ int main(int argc, char* argv[])
+ 			else if (!strcmp(argv[argi], "-r")) {
+ 				argi++;
+ 				if (argi >= argc)
+-					fxReportParserError(parser, "no name");
++					fxReportParserError(parser, 0, "no name");
+ 				else if (rename)
+-					fxReportParserError(parser, "too many names");
++					fxReportParserError(parser, 0, "too many names");
+ 				else
+ 					rename = fxNewParserString(parser, argv[argi], strlen(argv[argi]));
+ 			}
+ 			else if (!strcmp(argv[argi], "-t")) {
+ 				argi++;
+ 				if (argi >= argc)
+-					fxReportParserError(parser, "no temporary directory");
++					fxReportParserError(parser, 0, "no temporary directory");
+ 				else if (output)
+-					fxReportParserError(parser, "too many temporary directories");
++					fxReportParserError(parser, 0, "too many temporary directories");
+ 				else
+ 					temporary = fxRealDirectoryPath(parser, argv[argi]);
+ 			}
+ 			else {
+ 				if (input)
+-					fxReportParserError(parser, "too many files");
++					fxReportParserError(parser, 0, "too many files");
+ 				else
+ 					input = fxRealFilePath(parser, argv[argi]);
+ 			}
+ 		}
+ 		if (!input)
+-			fxReportParserError(parser, "no file");
++			fxReportParserError(parser, 0, "no file");
+ 		if (!output)
+ 			output = fxRealDirectoryPath(parser, ".");
+ 		if (!temporary)
+ 			temporary = output;
+-		if (parser->errorCount)
+-			fxThrowParserError(parser, parser->errorCount);
++		if (parser->errorCount > 0)
++			c_longjmp(parser->firstJump->jmp_buf, 1);
+ 			
+ 		name = NULL;
+ 		parser->origin = parser->path = fxNewParserSymbol(parser, input);
+@@ -376,121 +376,121 @@ int main(int argc, char* argv[])
+ 			fxParserSourceMap(parser, file, (txGetter)fgetc, flags, &name);
+ 			fclose(file);
+ 			file = NULL;
+-			map = fxCombinePath(parser, map, name);
+-			parser->path = fxNewParserSymbol(parser, map);
++			if (parser->errorCount == 0) {
++				map = fxCombinePath(parser, map, name);
++				parser->path = fxNewParserSymbol(parser, map);
++			}
+ 		}
+ 		fxParserHoist(parser);
+ 		fxParserBind(parser);
+ 		script = fxParserCode(parser);
+ 		if (parser->errorCount > 0) {
+ 			fprintf(stderr, "### %d error(s)\n", parser->errorCount);
+-			parser->error = C_EINVAL;
++			c_longjmp(parser->firstJump->jmp_buf, 1);
++		}
++		if (rename) {
++			name = rename;
+ 		}
+ 		else {
+-			if (rename) {
+-				name = rename;
+-			}
+-			else {
+-				name = strrchr(input, mxSeparator);
+-				name++;
+-				dot = strrchr(name, '.');
+-				*dot = 0;
+-			}
+-			if (embed) {
+-				strcpy(path, output);
+-				strcat(path, name);
+-				strcat(path, ".xsb");
+-				file = fopen(path, "wb");
+-				mxParserThrowElse(file);
+-		
+-				size = 8 + 8 + 4 + 8 + script->symbolsSize + 8 + script->codeSize;
+-				if (script->hostsBuffer)
+-					size += 8 + script->hostsSize;
+-				size = htonl(size);
+-				mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite("XS_B", 4, 1, file) == 1);
+-		
+-				size = 8 + 4;
+-				size = htonl(size);
+-				mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite("VERS", 4, 1, file) == 1);
+-				byte = XS_MAJOR_VERSION;
+-				mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
+-				byte = XS_MINOR_VERSION;
+-				mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
+-				byte = XS_PATCH_VERSION;
+-				mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
+-				byte = (script->hostsBuffer) ? -1 : 0;
+-				mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
+-		
+-				size = 8 + script->symbolsSize;
+-				size = htonl(size);
+-				mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite("SYMB", 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite(script->symbolsBuffer, script->symbolsSize, 1, file) == 1);
+-		
+-				size = 8 + script->codeSize;
++			name = strrchr(input, mxSeparator);
++			name++;
++			dot = strrchr(name, '.');
++			*dot = 0;
++		}
++		if (embed) {
++			strcpy(path, output);
++			strcat(path, name);
++			strcat(path, ".xsb");
++			file = fopen(path, "wb");
++			mxParserThrowElse(file);
++	
++			size = 8 + 8 + 4 + 8 + script->symbolsSize + 8 + script->codeSize;
++			if (script->hostsBuffer)
++				size += 8 + script->hostsSize;
++			size = htonl(size);
++			mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
++			mxParserThrowElse(fwrite("XS_B", 4, 1, file) == 1);
++	
++			size = 8 + 4;
++			size = htonl(size);
++			mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
++			mxParserThrowElse(fwrite("VERS", 4, 1, file) == 1);
++			byte = XS_MAJOR_VERSION;
++			mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
++			byte = XS_MINOR_VERSION;
++			mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
++			byte = XS_PATCH_VERSION;
++			mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
++			byte = (script->hostsBuffer) ? -1 : 0;
++			mxParserThrowElse(fwrite(&byte, 1, 1, file) == 1);
++	
++			size = 8 + script->symbolsSize;
++			size = htonl(size);
++			mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
++			mxParserThrowElse(fwrite("SYMB", 4, 1, file) == 1);
++			mxParserThrowElse(fwrite(script->symbolsBuffer, script->symbolsSize, 1, file) == 1);
++	
++			size = 8 + script->codeSize;
++			size = htonl(size);
++			mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
++			mxParserThrowElse(fwrite("CODE", 4, 1, file) == 1);
++			mxParserThrowElse(fwrite(script->codeBuffer, script->codeSize, 1, file) == 1);
++	
++			if (script->hostsBuffer) {
++				size = 8 + script->hostsSize;
+ 				size = htonl(size);
+ 				mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite("CODE", 4, 1, file) == 1);
+-				mxParserThrowElse(fwrite(script->codeBuffer, script->codeSize, 1, file) == 1);
+-		
+-				if (script->hostsBuffer) {
+-					size = 8 + script->hostsSize;
+-					size = htonl(size);
+-					mxParserThrowElse(fwrite(&size, 4, 1, file) == 1);
+-					mxParserThrowElse(fwrite("HOST", 4, 1, file) == 1);
+-					mxParserThrowElse(fwrite(script->hostsBuffer, script->hostsSize, 1, file) == 1);
+-				}
+-				fclose(file);
+-				file = NULL;
++				mxParserThrowElse(fwrite("HOST", 4, 1, file) == 1);
++				mxParserThrowElse(fwrite(script->hostsBuffer, script->hostsSize, 1, file) == 1);
+ 			}
+-			else {
+-				strcpy(path, temporary);
+-				strcat(path, name);
+-				strcat(path, ".xs.h");
+-				file = fopen(path, "w");
+-				mxParserThrowElse(file);
+-				fprintf(file, "/* XS GENERATED FILE; DO NOT EDIT! */\n\n");
+-				fprintf(file, "#include <xsAll.h>\n");
+-				fprintf(file, "#include <xs.h>\n\n");
+-				fprintf(file, "extern txScript xsScript;\n\n");
+-				if (script->hostsBuffer) {
+-					fxWriteExterns(script, file);
+-					fprintf(file, "\n");
+-				}
+-				fxWriteIDs(script, file);
++			fclose(file);
++			file = NULL;
++		}
++		else {
++			strcpy(path, temporary);
++			strcat(path, name);
++			strcat(path, ".xs.h");
++			file = fopen(path, "w");
++			mxParserThrowElse(file);
++			fprintf(file, "/* XS GENERATED FILE; DO NOT EDIT! */\n\n");
++			fprintf(file, "#include <xsAll.h>\n");
++			fprintf(file, "#include <xs.h>\n\n");
++			fprintf(file, "extern txScript xsScript;\n\n");
++			if (script->hostsBuffer) {
++				fxWriteExterns(script, file);
+ 				fprintf(file, "\n");
+-				fclose(file);
+-				file = NULL;
+-		
+-				strcpy(path, temporary);
+-				strcat(path, name);
+-				strcat(path, ".xs.c");
+-				file = fopen(path, "w");
+-				mxParserThrowElse(file);
+-				fprintf(file, "/* XS GENERATED FILE; DO NOT EDIT! */\n\n");
+-				fprintf(file, "#include \"%s.xs.h\"\n\n", name);
+-				if (script->hostsBuffer) {
+-					fxWriteHosts(script, file);
+-				}
+-				fxWriteBuffer(script, file, "xsSymbols", (txU1*)script->symbolsBuffer, script->symbolsSize);
+-				fxWriteBuffer(script, file, "xsCode", (txU1*)script->codeBuffer, script->codeSize);
+-				fprintf(file, "txScript xsScript = { ");
+-				if (script->hostsBuffer)
+-					fprintf(file, "xsHostModule, ");
+-				else
+-					fprintf(file, "NULL, ");
+-				fprintf(file, "xsSymbols, %d, ", script->symbolsSize);
+-				fprintf(file, "xsCode, %d, ", script->codeSize);
+-				fprintf(file, "NULL, 0, ");
+-				fprintf(file, "NULL, ");
+-				fprintf(file, "{ XS_MAJOR_VERSION, XS_MINOR_VERSION, XS_PATCH_VERSION, 0 } ");
+-				fprintf(file, " };\n\n");
+-			
+-				fclose(file);
+-				file = NULL;
+ 			}
++			fxWriteIDs(script, file);
++			fprintf(file, "\n");
++			fclose(file);
++			file = NULL;
++	
++			strcpy(path, temporary);
++			strcat(path, name);
++			strcat(path, ".xs.c");
++			file = fopen(path, "w");
++			mxParserThrowElse(file);
++			fprintf(file, "/* XS GENERATED FILE; DO NOT EDIT! */\n\n");
++			fprintf(file, "#include \"%s.xs.h\"\n\n", name);
++			if (script->hostsBuffer) {
++				fxWriteHosts(script, file);
++			}
++			fxWriteBuffer(script, file, "xsSymbols", (txU1*)script->symbolsBuffer, script->symbolsSize);
++			fxWriteBuffer(script, file, "xsCode", (txU1*)script->codeBuffer, script->codeSize);
++			fprintf(file, "txScript xsScript = { ");
++			if (script->hostsBuffer)
++				fprintf(file, "xsHostModule, ");
++			else
++				fprintf(file, "NULL, ");
++			fprintf(file, "xsSymbols, %d, ", script->symbolsSize);
++			fprintf(file, "xsCode, %d, ", script->codeSize);
++			fprintf(file, "NULL, 0, ");
++			fprintf(file, "NULL, ");
++			fprintf(file, "{ XS_MAJOR_VERSION, XS_MINOR_VERSION, XS_PATCH_VERSION, 0 } ");
++			fprintf(file, " };\n\n");
++		
++			fclose(file);
++			file = NULL;
+ 		}
+ 	}
+ 	else {
+diff --git a/xs/tools/xst.c b/xs/tools/xst.c
+index 19d71730a..b46d83bab 100644
+--- a/xs/tools/xst.c
++++ b/xs/tools/xst.c
+@@ -184,6 +184,7 @@ static void fx_setTimerCallback(txJob* job);
+ 
+ static txAgentCluster gxAgentCluster;
+ 
++static int gx262 = 0;
+ static int gxError = 0;
+ static int gxUnhandledErrors = 0;
+ 
+@@ -228,8 +229,10 @@ int main(int argc, char* argv[])
+ 		if (c_realpath(harnessPath, path))
+ 			option  = 4;
+ 	}
+-	if (option == 4)
++	if (option == 4) {
++		gx262 = 1;
+ 		gxError = main262(argc, argv);
++	}
+ 	else {
+ 		xsCreation _creation = {
+ 			16 * 1024 * 1024, 	/* initialChunkSize */
+@@ -1343,8 +1346,12 @@ void fxFulfillModuleFile(txMachine* the)
+ 
+ void fxRejectModuleFile(txMachine* the)
+ {
+-	fprintf(stderr, "%s\n", xsToString(xsArg(0)));
+-	gxError = 1;
++	if (gx262)
++		xsException = xsArg(0);
++	else {
++		fprintf(stderr, "%s\n", xsToString(xsArg(0)));
++		gxError = 1;
++	}
+ }
+ 
+ void fxRunModuleFile(txMachine* the, txString path)
+-- 
+2.34.1
+

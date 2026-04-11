@@ -1,0 +1,140 @@
+From 804e91140a83cdc1e2d8477b690a756162fd8102 Mon Sep 17 00:00:00 2001
+From: Daniel Huigens <d.huigens@protonmail.com>
+Date: Mon, 17 Dec 2018 12:12:01 -0500
+Subject: [PATCH] Add config values to preferred algorithms
+
+---
+ src/key.js          | 53 ++++++++++++++++++++++++++++++---------------
+ test/general/key.js | 43 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 78 insertions(+), 18 deletions(-)
+
+diff --git a/src/key.js b/src/key.js
+index a7b83c66..7b98420f 100644
+--- a/src/key.js
++++ b/src/key.js
+@@ -1451,6 +1451,19 @@ async function wrapKeyObject(secretKeyPacket, secretSubkeyPackets, options) {
+   packetlist.push(secretKeyPacket);
+ 
+   await Promise.all(options.userIds.map(async function(userId, index) {
++    function createdPreferredAlgos(algos, configAlgo) {
++      if (configAlgo) { // Not `uncompressed` / `plaintext`
++        const configIndex = algos.indexOf(configAlgo);
++        if (configIndex >= 1) { // If it is included and not in first place,
++          algos.splice(configIndex, 1); // remove it.
++        }
++        if (configIndex !== 0) { // If it was included and not in first place, or wasn't included,
++          algos.unshift(configAlgo); // add it to the front.
++        }
++      }
++      return algos;
++    }
++
+     const userIdPacket = new packet.Userid();
+     userIdPacket.format(userId);
+ 
+@@ -1462,26 +1475,30 @@ async function wrapKeyObject(secretKeyPacket, secretSubkeyPackets, options) {
+     signaturePacket.publicKeyAlgorithm = secretKeyPacket.algorithm;
+     signaturePacket.hashAlgorithm = await getPreferredHashAlgo(null, secretKeyPacket);
+     signaturePacket.keyFlags = [enums.keyFlags.certify_keys | enums.keyFlags.sign_data];
+-    signaturePacket.preferredSymmetricAlgorithms = [];
+-    // prefer aes256, aes128, then aes192 (no WebCrypto support: https://www.chromium.org/blink/webcrypto#TOC-AES-support)
+-    signaturePacket.preferredSymmetricAlgorithms.push(enums.symmetric.aes256);
+-    signaturePacket.preferredSymmetricAlgorithms.push(enums.symmetric.aes128);
+-    signaturePacket.preferredSymmetricAlgorithms.push(enums.symmetric.aes192);
+-    signaturePacket.preferredSymmetricAlgorithms.push(enums.symmetric.cast5);
+-    signaturePacket.preferredSymmetricAlgorithms.push(enums.symmetric.tripledes);
++    signaturePacket.preferredSymmetricAlgorithms = createdPreferredAlgos([
++      // prefer aes256, aes128, then aes192 (no WebCrypto support: https://www.chromium.org/blink/webcrypto#TOC-AES-support)
++      enums.symmetric.aes256,
++      enums.symmetric.aes128,
++      enums.symmetric.aes192,
++      enums.symmetric.cast5,
++      enums.symmetric.tripledes
++    ], config.encryption_cipher);
+     if (config.aead_protect && config.aead_protect_version === 4) {
+-      signaturePacket.preferredAeadAlgorithms = [];
+-      signaturePacket.preferredAeadAlgorithms.push(enums.aead.eax);
+-      signaturePacket.preferredAeadAlgorithms.push(enums.aead.ocb);
++      signaturePacket.preferredAeadAlgorithms = createdPreferredAlgos([
++        enums.aead.eax,
++        enums.aead.ocb
++      ], config.aead_mode);
+     }
+-    signaturePacket.preferredHashAlgorithms = [];
+-    // prefer fast asm.js implementations (SHA-256). SHA-1 will not be secure much longer...move to bottom of list
+-    signaturePacket.preferredHashAlgorithms.push(enums.hash.sha256);
+-    signaturePacket.preferredHashAlgorithms.push(enums.hash.sha512);
+-    signaturePacket.preferredHashAlgorithms.push(enums.hash.sha1);
+-    signaturePacket.preferredCompressionAlgorithms = [];
+-    signaturePacket.preferredCompressionAlgorithms.push(enums.compression.zlib);
+-    signaturePacket.preferredCompressionAlgorithms.push(enums.compression.zip);
++    signaturePacket.preferredHashAlgorithms = createdPreferredAlgos([
++      // prefer fast asm.js implementations (SHA-256). SHA-1 will not be secure much longer...move to bottom of list
++      enums.hash.sha256,
++      enums.hash.sha512,
++      enums.hash.sha1
++    ], config.prefer_hash_algorithm);
++    signaturePacket.preferredCompressionAlgorithms = createdPreferredAlgos([
++      enums.compression.zlib,
++      enums.compression.zip
++    ], config.compression);
+     if (index === 0) {
+       signaturePacket.isPrimaryUserID = true;
+     }
+diff --git a/test/general/key.js b/test/general/key.js
+index 9734b3aa..bc84ba4f 100644
+--- a/test/general/key.js
++++ b/test/general/key.js
+@@ -1357,6 +1357,49 @@ function versionSpecificTests() {
+     });
+   });
+ 
++  it('Preferences of generated key - with config values', async function() {
++    const encryption_cipherVal = openpgp.config.encryption_cipher;
++    const prefer_hash_algorithmVal = openpgp.config.prefer_hash_algorithm;
++    const compressionVal = openpgp.config.compression;
++    const aead_modeVal = openpgp.config.aead_mode;
++    openpgp.config.encryption_cipher = openpgp.enums.symmetric.aes192;
++    openpgp.config.prefer_hash_algorithm = openpgp.enums.hash.sha384;
++    openpgp.config.compression = openpgp.enums.compression.zlib;
++    openpgp.config.aead_mode = openpgp.enums.aead.experimental_gcm;
++
++    const testPref = function(key) {
++      // key flags
++      const keyFlags = openpgp.enums.keyFlags;
++      expect(key.users[0].selfCertifications[0].keyFlags[0] & keyFlags.certify_keys).to.equal(keyFlags.certify_keys);
++      expect(key.users[0].selfCertifications[0].keyFlags[0] & keyFlags.sign_data).to.equal(keyFlags.sign_data);
++      expect(key.subKeys[0].bindingSignatures[0].keyFlags[0] & keyFlags.encrypt_communication).to.equal(keyFlags.encrypt_communication);
++      expect(key.subKeys[0].bindingSignatures[0].keyFlags[0] & keyFlags.encrypt_storage).to.equal(keyFlags.encrypt_storage);
++      const sym = openpgp.enums.symmetric;
++      expect(key.users[0].selfCertifications[0].preferredSymmetricAlgorithms).to.eql([sym.aes192, sym.aes256, sym.aes128, sym.cast5, sym.tripledes]);
++      if (openpgp.config.aead_protect && openpgp.config.aead_protect_version === 4) {
++        const aead = openpgp.enums.aead;
++        expect(key.users[0].selfCertifications[0].preferredAeadAlgorithms).to.eql([aead.experimental_gcm, aead.eax, aead.ocb]);
++      }
++      const hash = openpgp.enums.hash;
++      expect(key.users[0].selfCertifications[0].preferredHashAlgorithms).to.eql([hash.sha384, hash.sha256, hash.sha512, hash.sha1]);
++      const compr = openpgp.enums.compression;
++      expect(key.users[0].selfCertifications[0].preferredCompressionAlgorithms).to.eql([compr.zlib, compr.zip]);
++      expect(key.users[0].selfCertifications[0].features).to.eql(openpgp.config.aead_protect && openpgp.config.aead_protect_version === 4 ? [7] : [1]);
++    };
++    const opt = {numBits: 512, userIds: 'test <a@b.com>', passphrase: 'hello'};
++    if (openpgp.util.getWebCryptoAll()) { opt.numBits = 2048; } // webkit webcrypto accepts minimum 2048 bit keys
++    try {
++      const key = await openpgp.generateKey(opt);
++      testPref(key.key);
++      testPref((await openpgp.key.readArmored(key.publicKeyArmored)).keys[0]);
++    } finally {
++      openpgp.config.encryption_cipher = encryption_cipherVal;
++      openpgp.config.prefer_hash_algorithm = prefer_hash_algorithmVal;
++      openpgp.config.compression = compressionVal;
++      openpgp.config.aead_mode = aead_modeVal;
++    }
++  });
++
+   it('Generated key is not unlocked by default', function() {
+     const opt = {numBits: 512, userIds: 'test <a@b.com>', passphrase: '123'};
+     if (openpgp.util.getWebCryptoAll()) { opt.numBits = 2048; } // webkit webcrypto accepts minimum 2048 bit keys
+-- 
+2.34.1
+

@@ -1,0 +1,408 @@
+From 6e11754642a59d83d7a575b78e6c3e988d3b6c93 Mon Sep 17 00:00:00 2001
+From: Mateusz Mandera <mateusz.mandera@zulip.com>
+Date: Thu, 25 Mar 2021 15:42:51 +0100
+Subject: [PATCH] CVE-2021-30478: Prevent API super users from forging messages
+ to other organizations.
+
+A bug in the implementation of the can_forge_sender permission
+(previously is_api_super_user) resulted in users with this permission
+being able to send messages appearing as if sent by a system bots,
+including to other organizations hosted by the same Zulip installation.
+
+- The send message API had a bug allowing an api super user to
+  use forging to send messages to other realms' streams, as a
+  cross-realm bot. We fix this most directly by eliminating the
+  realm_str parameter - it is not necessary for any valid current use
+  case. The email gateway doesn't use this API despite the comment in
+  that block suggesting otherwise.
+- The conditionals inside access_stream_for_send_message are changed up
+  to improve security. They were generally not ordered very well,
+  allowing the function to successfully return due to very weak
+  acceptance conditions - skipping the higher importance checks that
+  should lead to raising an error.
+- The query count in test_subs is decreased because
+  access_stream_for_send_message returns earlier when doing its check
+  for a cross-realm bot sender - some subscription checking queries are
+  skipped.
+- A linkifier test in test_message_dict needs to be changed. It didn't
+  make much sense in the first place, because it was creating a message
+  by a normal user, to a stream outside of the user's realm. That
+  shouldn't even be allowed.
+---
+ zerver/lib/streams.py             |  32 ++++--
+ zerver/tests/test_message_dict.py |  28 ++---
+ zerver/tests/test_message_send.py | 166 ++++++++++++++++++++++++++++--
+ zerver/tests/test_subs.py         |   2 +-
+ zerver/views/message_send.py      |  12 +--
+ 5 files changed, 198 insertions(+), 42 deletions(-)
+
+diff --git a/zerver/lib/streams.py b/zerver/lib/streams.py
+index a9d91ce98a..b2bac1cbdb 100644
+--- a/zerver/lib/streams.py
++++ b/zerver/lib/streams.py
+@@ -1,6 +1,5 @@
+ from typing import Iterable, List, Optional, Tuple, Union
+ 
+-from django.conf import settings
+ from django.db.models.query import QuerySet
+ from django.utils.timezone import now as timezone_now
+ from django.utils.translation import ugettext as _
+@@ -225,6 +224,26 @@ def access_stream_for_send_message(
+         else:
+             raise JsonableError(e.msg)
+ 
++    # forwarder_user_profile cases should be analyzed first, as incorrect
++    # message forging is cause for denying access regardless of any other factors.
++    if forwarder_user_profile is not None and forwarder_user_profile != sender:
++        if (
++            forwarder_user_profile.can_forge_sender
++            and forwarder_user_profile.realm_id == sender.realm_id
++            and sender.realm_id == stream.realm_id
++        ):
++            return
++        else:
++            raise JsonableError(_("User not authorized for this query"))
++
++    if is_cross_realm_bot_email(sender.delivery_email):
++        return
++
++    if stream.realm_id != sender.realm_id:
++        # Sending to other realm's streams is always disallowed,
++        # with the exception of cross-realm bots.
++        raise JsonableError(_("User not authorized for this query"))
++
+     if stream.is_web_public:
+         # Even guest users can write to web-public streams.
+         return
+@@ -238,9 +257,7 @@ def access_stream_for_send_message(
+         return
+ 
+     if sender.can_forge_sender:
+-        return
+-
+-    if forwarder_user_profile is not None and forwarder_user_profile.can_forge_sender:
++        # can_forge_sender allows sending to any stream in the realm.
+         return
+ 
+     if sender.is_bot and (
+@@ -249,13 +266,6 @@ def access_stream_for_send_message(
+         # Bots can send to any stream their owner can.
+         return
+ 
+-    if sender.delivery_email == settings.WELCOME_BOT:
+-        # The welcome bot welcomes folks to the stream.
+-        return
+-
+-    if sender.delivery_email == settings.NOTIFICATION_BOT:
+-        return
+-
+     # All other cases are an error.
+     raise JsonableError(_("Not authorized to send to stream '{}'").format(stream.name))
+ 
+diff --git a/zerver/tests/test_message_dict.py b/zerver/tests/test_message_dict.py
+index 6b2c08ab05..054f721115 100644
+--- a/zerver/tests/test_message_dict.py
++++ b/zerver/tests/test_message_dict.py
+@@ -13,6 +13,7 @@ from zerver.lib.types import DisplayRecipientT, UserDisplayRecipient
+ from zerver.models import (
+     Message,
+     Reaction,
++    Realm,
+     RealmFilter,
+     Recipient,
+     Stream,
+@@ -241,10 +242,10 @@ class MessageDictTest(ZulipTestCase):
+ 
+     def test_topic_links_use_stream_realm(self) -> None:
+         # Set up a realm filter on 'zulip' and assert that messages
+-        # sent to a stream on 'zulip' have the topic linkified from
+-        # senders in both the 'zulip' and 'lear' realms as well as
+-        # the notification bot.
++        # sent to a stream on 'zulip' have the topic linkified,
++        # and not linkified when sent to a stream in 'lear'.
+         zulip_realm = get_realm("zulip")
++        lear_realm = get_realm("lear")
+         url_format_string = r"https://trac.example.com/ticket/%(id)s"
+         links = {"url": "https://trac.example.com/ticket/123", "text": "#123"}
+         topic_name = "test #123"
+@@ -257,10 +258,11 @@ class MessageDictTest(ZulipTestCase):
+             "<RealmFilter(zulip): #(?P<id>[0-9]{2,8}) https://trac.example.com/ticket/%(id)s>",
+         )
+ 
+-        def get_message(sender: UserProfile) -> Message:
+-            msg_id = self.send_stream_message(
+-                sender, "Denmark", "hello world", topic_name, zulip_realm
+-            )
++        def get_message(sender: UserProfile, realm: Realm) -> Message:
++            stream_name = "Denmark"
++            if not Stream.objects.filter(realm=realm, name=stream_name).exists():
++                self.make_stream(stream_name, realm)
++            msg_id = self.send_stream_message(sender, "Denmark", "hello world", topic_name, realm)
+             return Message.objects.get(id=msg_id)
+ 
+         def assert_topic_links(links: List[Dict[str, str]], msg: Message) -> None:
+@@ -268,13 +270,13 @@ class MessageDictTest(ZulipTestCase):
+             self.assertEqual(dct[TOPIC_LINKS], links)
+ 
+         # Send messages before and after saving the realm filter from each user.
+-        assert_topic_links([], get_message(self.example_user("othello")))
+-        assert_topic_links([], get_message(self.lear_user("cordelia")))
+-        assert_topic_links([], get_message(self.notification_bot()))
++        assert_topic_links([], get_message(self.example_user("othello"), zulip_realm))
++        assert_topic_links([], get_message(self.lear_user("cordelia"), lear_realm))
++        assert_topic_links([], get_message(self.notification_bot(), zulip_realm))
+         linkifier.save()
+-        assert_topic_links([links], get_message(self.example_user("othello")))
+-        assert_topic_links([links], get_message(self.lear_user("cordelia")))
+-        assert_topic_links([links], get_message(self.notification_bot()))
++        assert_topic_links([links], get_message(self.example_user("othello"), zulip_realm))
++        assert_topic_links([], get_message(self.lear_user("cordelia"), lear_realm))
++        assert_topic_links([links], get_message(self.notification_bot(), zulip_realm))
+ 
+     def test_reaction(self) -> None:
+         sender = self.example_user("othello")
+diff --git a/zerver/tests/test_message_send.py b/zerver/tests/test_message_send.py
+index e35cc7ff86..6b1efa3984 100644
+--- a/zerver/tests/test_message_send.py
++++ b/zerver/tests/test_message_send.py
+@@ -15,6 +15,7 @@ from zerver.lib.actions import (
+     build_message_send_dict,
+     check_message,
+     check_send_stream_message,
++    do_add_realm_domain,
+     do_change_can_forge_sender,
+     do_change_stream_post_policy,
+     do_create_realm,
+@@ -971,12 +972,10 @@ class MessagePOSTTest(ZulipTestCase):
+         )
+         self.assert_json_error(result, "User not authorized for this query")
+ 
+-    def test_send_message_as_superuser_to_domain_that_dont_exist(self) -> None:
++    def test_send_message_with_can_forge_sender_to_different_domain(self) -> None:
+         user = self.example_user("default_bot")
+-        password = "test_password"
+-        user.set_password(password)
+-        user.can_forge_sender = True
+-        user.save()
++        do_change_can_forge_sender(user, True)
++        # To a non-existing realm:
+         result = self.api_post(
+             user,
+             "/api/v1/messages",
+@@ -989,9 +988,52 @@ class MessagePOSTTest(ZulipTestCase):
+                 "realm_str": "non-existing",
+             },
+         )
+-        user.can_forge_sender = False
+-        user.save()
+-        self.assert_json_error(result, "Unknown organization 'non-existing'")
++        self.assert_json_error(result, "User not authorized for this query")
++
++        # To an existing realm:
++        zephyr_realm = get_realm("zephyr")
++        result = self.api_post(
++            user,
++            "/api/v1/messages",
++            {
++                "type": "stream",
++                "to": "Verona",
++                "client": "test suite",
++                "content": "Test message",
++                "topic": "Test topic",
++                "realm_str": zephyr_realm.string_id,
++            },
++        )
++        self.assert_json_error(result, "User not authorized for this query")
++
++    def test_send_message_forging_message_to_another_realm(self) -> None:
++        """
++        Test for a specific vulnerability that allowed a .can_forge_sender
++        user to forge a message as a cross-realm bot to a stream in another realm,
++        by setting up an appropriate RealmDomain and specifying JabberMirror as client
++        to cause the vulnerable codepath to be executed.
++        """
++        user = self.example_user("default_bot")
++        do_change_can_forge_sender(user, True)
++
++        zephyr_realm = get_realm("zephyr")
++        self.make_stream("Verona", zephyr_realm)
++        do_add_realm_domain(zephyr_realm, "zulip.com", False)
++        result = self.api_post(
++            user,
++            "/api/v1/messages",
++            {
++                "type": "stream",
++                "to": "Verona",
++                "client": "JabberMirror",
++                "content": "Test message",
++                "topic": "Test topic",
++                "forged": "true",
++                "sender": "notification-bot@zulip.com",
++                "realm_str": zephyr_realm.string_id,
++            },
++        )
++        self.assert_json_error(result, "User not authorized for this query")
+ 
+     def test_send_message_when_sender_is_not_set(self) -> None:
+         result = self.api_post(
+@@ -2421,6 +2463,114 @@ class CheckMessageTest(ZulipTestCase):
+         ret = check_message(sender, client, addressee, message_content)
+         self.assertEqual(ret.message.sender.id, sender.id)
+ 
++    def test_check_message_normal_user_cant_send_to_stream_in_another_realm(self) -> None:
++        mit_user = self.mit_user("sipbtest")
++
++        client = make_client(name="test suite")
++        stream = get_stream("Denmark", get_realm("zulip"))
++        topic_name = "issue"
++        message_content = "whatever"
++        addressee = Addressee.for_stream(stream, topic_name)
++
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                mit_user,
++                client,
++                addressee,
++                message_content,
++            )
++
++    def test_check_message_cant_forge_message_as_other_realm_user(self) -> None:
++        """
++        Verifies that the .can_forge_sender permission doesn't allow
++        forging another realm's user as sender of a message to a stream
++        in the forwarder's realm.
++        """
++        forwarder_user_profile = self.example_user("othello")
++        do_change_can_forge_sender(forwarder_user_profile, True)
++
++        mit_user = self.mit_user("sipbtest")
++        notification_bot = self.notification_bot()
++
++        client = make_client(name="test suite")
++        stream = get_stream("Denmark", forwarder_user_profile.realm)
++        topic_name = "issue"
++        message_content = "whatever"
++        addressee = Addressee.for_stream(stream, topic_name)
++
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                mit_user,
++                client,
++                addressee,
++                message_content,
++                forged=True,
++                forwarder_user_profile=forwarder_user_profile,
++            )
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                notification_bot,
++                client,
++                addressee,
++                message_content,
++                forged=True,
++                forwarder_user_profile=forwarder_user_profile,
++            )
++
++    def test_check_message_cant_forge_message_to_stream_in_different_realm(self) -> None:
++        """
++        Verifies that the .can_forge_sender permission doesn't allow
++        forging another realm's user as sender of a message to a stream
++        in the forged user's realm..
++        """
++        forwarder_user_profile = self.example_user("othello")
++        do_change_can_forge_sender(forwarder_user_profile, True)
++
++        mit_user = self.mit_user("sipbtest")
++        notification_bot = self.notification_bot()
++
++        client = make_client(name="test suite")
++        stream_name = "España y Francia"
++        stream = self.make_stream(stream_name, realm=mit_user.realm)
++        self.subscribe(mit_user, stream_name)
++        topic_name = "issue"
++        message_content = "whatever"
++        addressee = Addressee.for_stream(stream, topic_name)
++
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                mit_user,
++                client,
++                addressee,
++                message_content,
++                forged=True,
++                forwarder_user_profile=forwarder_user_profile,
++            )
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                notification_bot,
++                client,
++                addressee,
++                message_content,
++                forged=True,
++                forwarder_user_profile=forwarder_user_profile,
++            )
++
++        # Make sure the special case of sending a message forged as cross-realm bot
++        # to a stream in the bot's realm isn't allowed either.
++        stream = self.make_stream(stream_name, realm=notification_bot.realm)
++        self.subscribe(notification_bot, stream_name)
++        addressee = Addressee.for_stream(stream, topic_name)
++        with self.assertRaisesRegex(JsonableError, "User not authorized for this query"):
++            check_message(
++                notification_bot,
++                client,
++                addressee,
++                message_content,
++                forged=True,
++                forwarder_user_profile=forwarder_user_profile,
++            )
++
+     def test_guest_user_can_send_message(self) -> None:
+         # Guest users can write to web_public streams.
+         sender = self.example_user("polonius")
+diff --git a/zerver/tests/test_subs.py b/zerver/tests/test_subs.py
+index bae0a4f0da..bdf885518b 100644
+--- a/zerver/tests/test_subs.py
++++ b/zerver/tests/test_subs.py
+@@ -4430,7 +4430,7 @@ class SubscriptionAPITest(ZulipTestCase):
+                 dict(principals=orjson.dumps([user1.id, user2.id]).decode()),
+                 invite_only=True,
+             )
+-        self.assert_length(queries, 37)
++        self.assert_length(queries, 34)
+ 
+         # Test creating a public stream with announce when realm has a notification stream.
+         notifications_stream = get_stream(self.streams[0], self.test_realm)
+diff --git a/zerver/views/message_send.py b/zerver/views/message_send.py
+index 6a7f54e8e3..fa6284f130 100644
+--- a/zerver/views/message_send.py
++++ b/zerver/views/message_send.py
+@@ -31,7 +31,6 @@ from zerver.models import (
+     RealmDomain,
+     UserProfile,
+     email_to_domain,
+-    get_realm,
+     get_user_including_cross_realm,
+ )
+ 
+@@ -228,14 +227,9 @@ def send_message_backend(
+ 
+     realm = None
+     if realm_str and realm_str != user_profile.realm.string_id:
+-        if not can_forge_sender:
+-            # The email gateway bot needs to be able to send messages in
+-            # any realm.
+-            return json_error(_("User not authorized for this query"))
+-        try:
+-            realm = get_realm(realm_str)
+-        except Realm.DoesNotExist:
+-            return json_error(_("Unknown organization '{}'").format(realm_str))
++        # The realm_str parameter does nothing, because it has to match
++        # the user's realm - but we keep it around for backward compatibility.
++        return json_error(_("User not authorized for this query"))
+ 
+     if client.name in ["zephyr_mirror", "irc_mirror", "jabber_mirror", "JabberMirror"]:
+         # Here's how security works for mirroring:
+-- 
+2.34.1
+

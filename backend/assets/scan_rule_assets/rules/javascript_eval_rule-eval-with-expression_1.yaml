@@ -1,0 +1,131 @@
+rules:
+- id: javascript_eval_rule-eval-with-expression_1
+  languages:
+  - javascript
+  - typescript
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: 'eval($OBJ)
+
+          '
+      - pattern-not: 'eval("...")
+
+          '
+    - patterns:
+      - pattern: '$A.eval($OBJ)
+
+          '
+      - pattern-not: '$A.eval("...")
+
+          '
+    - patterns:
+      - pattern: '(..., eval)($OBJ)
+
+          '
+      - pattern-not: '(..., eval)("...")
+
+          '
+    - patterns:
+      - pattern: '$ALIAS = eval;
+
+          ...
+
+          $ALIAS($OBJ)
+
+          '
+      - pattern-not: '$ALIAS = eval;
+
+          ...
+
+          $ALIAS("...")
+
+          '
+    - pattern: 'new Function(..., "..." + $OBJ + "...")
+
+        '
+    - pattern: '$BODY = "..." + $OBJ + "..."
+
+        ...
+
+        new Function(..., $BODY)
+
+        '
+    - pattern: 'new Function(..., `...${...}...`)
+
+        '
+    - pattern: '$BODY = `...${...}...`
+
+        ...
+
+        new Function(..., $BODY)
+
+        '
+    - pattern: 'Function(..., "..." + $OBJ + "...")
+
+        '
+    - pattern: '$BODY = "..." + $OBJ + "..."
+
+        ...
+
+        Function(..., $BODY)
+
+        '
+    - pattern: '$BODY = `...${...}...`
+
+        ...
+
+        Function(..., $BODY)
+
+        '
+    - pattern: 'Function(..., `...${...}...`)
+
+        '
+    - pattern: 'setTimeout("..." + $OBJ + "...", ...)
+
+        '
+    - pattern: 'setTimeout(`...${...}...`, ...)
+
+        '
+    - pattern: 'setInterval("..." + $OBJ + "...", ...)
+
+        '
+    - pattern: 'setInterval(`...${...}...`, ...)
+
+        '
+  - pattern-not: 'setTimeout("...", ...)
+
+      '
+  - pattern-not: 'setInterval("...", ...)
+
+      '
+  severity: WARNING
+  message: "The application was found calling the `eval` function OR Function()\n\
+    \  constructor OR setTimeout() OR setInterval() methods. If the\n\n  variables\
+    \ or strings or functions passed to these methods contains user-supplied input,\
+    \ an adversary could attempt to execute arbitrary\n\n  JavaScript\n\n  code. This\
+    \ could lead to a full system compromise in Node applications or Cross-site Scripting\n\
+    \n  (XSS) in web applications.\n\n\n  To remediate this issue, remove all calls\
+    \ to above methods and consider alternative methods for\n\n  executing\n\n  the\
+    \ necessary business logic. There is almost no safe method of calling `eval` or\
+    \ other above stated sinks with\n\n  user-supplied input.\n\n  Instead, consider\
+    \ alternative methods such as using property accessors to dynamically access\n\
+    \n  values.\n\n\n  Example using property accessors to dynamically access an object's\
+    \ property:\n\n  ```\n\n  // Define an object\n\n  const obj = {key1: 'value1',\
+    \ key2: 'value2'};\n\n  // Get key dynamically from user input\n\n  const key\
+    \ = getUserInput();\n\n  // Check if the key exists in our object and return it,\
+    \ or a default empty string\n\n  const value = (obj.hasOwnProperty(key)) ? obj[key]\
+    \ : '';\n\n  // Work with the value\n\n  ```\n\n\n  For more information on why\
+    \ not to use `eval`, and alternatives see:\n\n  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval#never_use_eval!\n\
+    \n  Other References:\n\n  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function\n\
+    \n  - https://developer.mozilla.org/en-US/docs/Web/API/setTimeout\n\n  - https://developer.mozilla.org/en-US/docs/Web/API/setInterval\n"
+  metadata:
+    cwe: CWE-95
+    shortDescription: Improper neutralization of directives in dynamically evaluated
+      code ('Eval Injection')
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    source-rule-url: https://github.com/nodesecurity/eslint-plugin-security/blob/master/rules/detect-eval-with-expression.js
+    security-severity: High

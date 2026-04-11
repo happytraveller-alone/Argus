@@ -1,0 +1,30 @@
+From d3b5aeae94bc71bae97977d05cd12c3e0550905c Mon Sep 17 00:00:00 2001
+From: ThinkPHP <liuchen@topthink.net>
+Date: Fri, 7 Jan 2022 12:09:13 +0800
+Subject: [PATCH] =?UTF-8?q?=E6=94=B9=E8=BF=9B=E7=BC=93=E5=AD=98=E9=A9=B1?=
+ =?UTF-8?q?=E5=8A=A8unserialize=E6=96=B9=E6=B3=95=E5=8F=82=E6=95=B0?=
+ =?UTF-8?q?=E7=B1=BB=E5=9E=8B=E9=99=90=E5=88=B6?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ src/think/cache/Driver.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/think/cache/Driver.php b/src/think/cache/Driver.php
+index 5813c7b3..37ffbc9e 100644
+--- a/src/think/cache/Driver.php
++++ b/src/think/cache/Driver.php
+@@ -249,7 +249,7 @@ abstract class Driver implements CacheInterface, CacheHandlerInterface
+      * @param string $data 缓存数据
+      * @return mixed
+      */
+-    protected function unserialize(string $data)
++    protected function unserialize($data)
+     {
+         if (is_numeric($data)) {
+             return $data;
+-- 
+2.34.1
+

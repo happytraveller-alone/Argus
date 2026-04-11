@@ -1,0 +1,136 @@
+From eae0eaf86eb462746e4867352126f6c1dd43302f Mon Sep 17 00:00:00 2001
+From: Charles Cooper <cooper.charles.m@gmail.com>
+Date: Mon, 25 Oct 2021 07:58:52 -0700
+Subject: [PATCH] Fix unused storage slots (#2439)
+
+* fix: don't alloc slots for repeated nonreentrancy keys
+
+this is not a semantic bug but an optimization bug since we allocate
+more slots than we actually need, leading to "holes" in the slot
+allocator -- slots which are allocated but unused.
+
+* make the test for nonreentrant slots harder
+---
+ tests/cli/outputs/test_storage_layout.py     | 29 ++++++++++----
+ vyper/semantics/validation/data_positions.py | 40 ++++++++++++--------
+ 2 files changed, 45 insertions(+), 24 deletions(-)
+
+diff --git a/tests/cli/outputs/test_storage_layout.py b/tests/cli/outputs/test_storage_layout.py
+index b2d84f03..e284652e 100644
+--- a/tests/cli/outputs/test_storage_layout.py
++++ b/tests/cli/outputs/test_storage_layout.py
+@@ -1,26 +1,39 @@
+ from vyper.compiler import compile_code
+ 
+ 
+-def test_method_identifiers():
++def test_storage_layout():
+     code = """
+ foo: HashMap[address, uint256]
+-baz: Bytes[65]
+-bar: uint256
+ 
+ @external
+ @nonreentrant("foo")
+-def public_foo():
++def public_foo1():
+     pass
+ 
++@external
++@nonreentrant("foo")
++def public_foo2():
++    pass
++
++
+ @internal
+ @nonreentrant("bar")
+ def _bar():
+     pass
+ 
++# mix it up a little
++baz: Bytes[65]
++bar: uint256
++
+ @external
+ @nonreentrant("bar")
+ def public_bar():
+     pass
++
++@external
++@nonreentrant("foo")
++def public_foo3():
++    pass
+     """
+ 
+     out = compile_code(
+@@ -30,12 +43,12 @@ def public_bar():
+ 
+     assert out["layout"] == {
+         "nonreentrant.foo": {"type": "nonreentrant lock", "location": "storage", "slot": 0},
+-        "nonreentrant.bar": {"type": "nonreentrant lock", "location": "storage", "slot": 2},
++        "nonreentrant.bar": {"type": "nonreentrant lock", "location": "storage", "slot": 1},
+         "foo": {
+             "type": "HashMap[address, uint256][address, uint256]",
+             "location": "storage",
+-            "slot": 3,
++            "slot": 2,
+         },
+-        "baz": {"type": "Bytes[65]", "location": "storage", "slot": 4},
+-        "bar": {"type": "uint256", "location": "storage", "slot": 8},
++        "baz": {"type": "Bytes[65]", "location": "storage", "slot": 3},
++        "bar": {"type": "uint256", "location": "storage", "slot": 7},
+     }
+diff --git a/vyper/semantics/validation/data_positions.py b/vyper/semantics/validation/data_positions.py
+index 19220cb0..53853890 100644
+--- a/vyper/semantics/validation/data_positions.py
++++ b/vyper/semantics/validation/data_positions.py
+@@ -32,22 +32,30 @@ def set_storage_slots(vyper_module: vy_ast.Module) -> StorageLayout:
+ 
+     for node in vyper_module.get_children(vy_ast.FunctionDef):
+         type_ = node._metadata["type"]
+-        if type_.nonreentrant is not None:
+-            type_.set_reentrancy_key_position(StorageSlot(storage_slot))
+-
+-            # TODO this could have better typing but leave it untyped until
+-            # we nail down the format better
+-            variable_name = f"nonreentrant.{type_.nonreentrant}"
+-            ret[variable_name] = {
+-                "type": "nonreentrant lock",
+-                "location": "storage",
+-                "slot": storage_slot,
+-            }
+-
+-            # TODO use one byte - or bit - per reentrancy key
+-            # requires either an extra SLOAD or caching the value of the
+-            # location in memory at entrance
+-            storage_slot += 1
++        if type_.nonreentrant is None:
++            continue
++
++        variable_name = f"nonreentrant.{type_.nonreentrant}"
++
++        # a nonreentrant key can appear many times in a module but it
++        # only takes one slot. ignore it after the first time we see it.
++        if variable_name in ret:
++            continue
++
++        type_.set_reentrancy_key_position(StorageSlot(storage_slot))
++
++        # TODO this could have better typing but leave it untyped until
++        # we nail down the format better
++        ret[variable_name] = {
++            "type": "nonreentrant lock",
++            "location": "storage",
++            "slot": storage_slot,
++        }
++
++        # TODO use one byte - or bit - per reentrancy key
++        # requires either an extra SLOAD or caching the value of the
++        # location in memory at entrance
++        storage_slot += 1
+ 
+     for node in vyper_module.get_children(vy_ast.AnnAssign):
+         type_ = node.target._metadata["type"]
+-- 
+2.34.1
+

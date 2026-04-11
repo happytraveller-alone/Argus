@@ -1,0 +1,39 @@
+rules:
+- id: ruby_error_rule-DivideByZero
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $VAR
+    - metavariable-regex:
+        metavariable: $VAR
+        regex: ^\d*(?!\.)$
+  pattern-sinks:
+  - patterns:
+    - pattern-inside: $NUMBER / 0
+    - pattern: $NUMBER
+  message: "A ZeroDivisionError exception has been detected, this occurs when an arithmetic\
+    \ operation attempts to \ndivide a number by zero. This can happen in various\
+    \ contexts, such as \nprocessing user inputs, performing calculations with variables,\
+    \ or \nworking with data from external sources. Such errors not only disrupt \n\
+    the normal flow of the application but also can be exploited in certain \nscenarios\
+    \ to cause harm (eg. possible dos) or extract information based \non the application's\
+    \ response to the error.\n\nTo prevent ZeroDivisionError exceptions and ensure\
+    \ application robustness:\n- Error handling: Implement error handling around division\
+    \ operations to \ncatch and manage ZeroDivisionError gracefully.\n- Validation:\
+    \ Always validate inputs that are used in division operations \nto ensure they\
+    \ are not zero or unexpected values.\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    shortDescription: Divide a number by zero
+    category: security
+    cwe: CWE-369
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A04:2021-Insecure Design
+    security-severity: LOW
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/divide-by-zero.yaml
+    technology:
+    - ruby

@@ -1,0 +1,28 @@
+From 67ef84fd7aab789a535b137e5e506fd29d212455 Mon Sep 17 00:00:00 2001
+From: Emmanuel Hugonnet <ehugonne@redhat.com>
+Date: Mon, 30 Nov 2020 08:40:54 +0100
+Subject: [PATCH] [WFLY-14094]: Potential memory leak when using opentracing.
+
+* Upgrade opentracing-interceptors to 0.0.4.1
+
+Jira: https://issues.redhat.com/browse/WFLY-14094
+---
+ pom.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pom.xml b/pom.xml
+index 5a9b38c493..f9dea8a359 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -291,7 +291,7 @@
+         <version.io.netty>4.1.51.Final</version.io.netty>
+         <version.io.opentracing>0.31.0</version.io.opentracing>
+         <version.io.opentracing.concurrent>0.2.1</version.io.opentracing.concurrent>
+-        <version.io.opentracing.interceptors>0.0.4</version.io.opentracing.interceptors>
++        <version.io.opentracing.interceptors>0.0.4.1</version.io.opentracing.interceptors>
+         <version.io.opentracing.jaxrs2>0.4.1</version.io.opentracing.jaxrs2>
+         <version.io.opentracing.tracerresolver>0.1.5</version.io.opentracing.tracerresolver>
+         <version.io.opentracing.servlet>0.2.3</version.io.opentracing.servlet>
+-- 
+2.34.1
+

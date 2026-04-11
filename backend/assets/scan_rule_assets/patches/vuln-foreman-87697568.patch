@@ -1,0 +1,27 @@
+From 8769756840f31d808a2d2d93f0992291cce9ea22 Mon Sep 17 00:00:00 2001
+From: Martin Povolny <mpovolny@redhat.com>
+Date: Tue, 27 Mar 2018 18:22:02 +0200
+Subject: [PATCH] Fixes #23028 - Properly escape params passed to where
+ (CVE-2018-1096) (#5363)
+
+(cherry picked from commit 274665e24373de670a9107d4565c10ec41dd5f65)
+---
+ app/controllers/dashboard_controller.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/app/controllers/dashboard_controller.rb b/app/controllers/dashboard_controller.rb
+index d87c853bb..78e806c63 100644
+--- a/app/controllers/dashboard_controller.rb
++++ b/app/controllers/dashboard_controller.rb
+@@ -56,7 +56,7 @@ class DashboardController < ApplicationController
+     errors = []
+     filter = self.class.widget_params_filter
+     params.fetch(:widgets, []).each do |id, values|
+-      widget = User.current.widgets.where("id = #{id}").first
++      widget = User.current.widgets.where(:id => id).first
+       values = filter.filter_params(values, parameter_filter_context, :none)
+       errors << widget.errors unless widget.update_attributes(values)
+     end
+-- 
+2.34.1
+

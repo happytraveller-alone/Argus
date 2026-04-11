@@ -1,0 +1,27 @@
+From ff32475f5f4a84ebf9619e7eef5bf8b4c075d0e2 Mon Sep 17 00:00:00 2001
+From: Claire <claire.github-309c@sitedethib.com>
+Date: Tue, 19 Sep 2023 16:53:21 +0200
+Subject: [PATCH] Merge pull request from GHSA-2693-xr3m-jhqr
+
+---
+ app/services/translate_status_service.rb | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/app/services/translate_status_service.rb b/app/services/translate_status_service.rb
+index c2b40433e..9ad146ae7 100644
+--- a/app/services/translate_status_service.rb
++++ b/app/services/translate_status_service.rb
+@@ -75,7 +75,9 @@ class TranslateStatusService < BaseService
+ 
+       case source
+       when :content
+-        status_translation.content = unwrap_emoji_shortcodes(translation.text).to_html
++        node = unwrap_emoji_shortcodes(translation.text)
++        Sanitize.node!(node, Sanitize::Config::MASTODON_STRICT)
++        status_translation.content = node.to_html
+       when :spoiler_text
+         status_translation.spoiler_text = unwrap_emoji_shortcodes(translation.text).content
+       when Poll::Option
+-- 
+2.34.1
+

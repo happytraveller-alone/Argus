@@ -1,0 +1,605 @@
+From d4d8832b11f02bd334b42af07f598ce904bf7736 Mon Sep 17 00:00:00 2001
+From: Joakim Erdfelt <joakim.erdfelt@gmail.com>
+Date: Mon, 14 Aug 2023 15:37:02 -0500
+Subject: [PATCH] Issue #10066 - Allow customization of `SAXParserFactory` and
+ `SAXParser` in `XmlParser` (#10299)
+
+Backports of
+* Issue #10066 - Allow customization of `SAXParserFactory` and `SAXParser` in `XmlParser` (#10067)
+* Updating various old/moved URL references found across project (`jetty-10.0.x`) (#10098)
+
+Consisting of
+* Allow customization of SAXParserFactory / SAXParser in XmlParser
+* Introduce method `.getSAXParser()`
+* Prepending doctype in testcases
+* More comprehensive changes to redirectEntity config
+* Updating various old/moved URL references found across project (`jetty-10.0.x`) (#10098)
+* Now that the migration of `https://eclipse.org/jetty/` to `https://eclipse.dev/jetty/` has occurred, it is time to review the URI use in our project
+* Added more URIs to XmlConfiguration
+* Better SAXParseException handling to report resource that is causing the problem
+* Add missing DOCTYPE declarations
+* Enforcing unique XML ids
+
+---------
+
+Signed-off-by: Joakim Erdfelt <joakim.erdfelt@gmail.com>
+Co-authored-by: Greg Wilkins <gregw@webtide.com>
+---
+ .../jetty/deploy/DeploymentTempDirTest.java   | 10 +++-
+ .../test/resources/context-binding-test-1.xml |  2 +
+ jetty-deploy/src/test/resources/jetty.xml     |  3 +-
+ .../configuring/what-to-configure.adoc        | 18 +++---
+ .../beer-server/src/config/jetty.xml          |  3 +-
+ .../src/main/jettyconf/context.xml            |  3 +
+ jetty-start/src/test/resources/bogus.xml      |  1 +
+ .../eclipse/jetty/xml/XmlConfiguration.java   | 53 ++++++++++++++---
+ .../java/org/eclipse/jetty/xml/XmlParser.java | 35 +++++++-----
+ .../jetty/xml/XmlConfigurationTest.java       | 57 ++++++++++++++++++-
+ .../org/eclipse/jetty/xml/XmlParserTest.java  | 37 +++++++++++-
+ .../org/eclipse/jetty/xml/mortbay.xml         |  3 +-
+ .../src/test/resources/RFC2616Base.xml        |  4 +-
+ .../src/test/resources/ssl.xml                |  2 +
+ .../src/main/webapp/WEB-INF/jetty-web-owb.xml |  4 +-
+ 15 files changed, 192 insertions(+), 43 deletions(-)
+
+diff --git a/jetty-deploy/src/test/java/org/eclipse/jetty/deploy/DeploymentTempDirTest.java b/jetty-deploy/src/test/java/org/eclipse/jetty/deploy/DeploymentTempDirTest.java
+index 175efbe162..1c1978f7a7 100644
+--- a/jetty-deploy/src/test/java/org/eclipse/jetty/deploy/DeploymentTempDirTest.java
++++ b/jetty-deploy/src/test/java/org/eclipse/jetty/deploy/DeploymentTempDirTest.java
+@@ -101,7 +101,10 @@ public class DeploymentTempDirTest
+     public void testTmpDirectory() throws Exception
+     {
+         Path warPath = MavenTestingUtils.getTestResourcePath("webapps/foo-webapp-1.war");
+-        String deploymentXml = "<Configure class=\"org.eclipse.jetty.webapp.WebAppContext\">\n" +
++        String deploymentXml =
++            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
++            "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"https://eclipse.dev/jetty/configure.dtd\">\n" +
++            "<Configure class=\"org.eclipse.jetty.webapp.WebAppContext\">\n" +
+             "<Set name=\"war\">" + warPath + "</Set>\n" +
+             "<Set name=\"tempDirectory\">" + tmpDir + "</Set>\n" +
+             "<Set name=\"persistTempDirectory\">false</Set>\n" +
+@@ -141,7 +144,10 @@ public class DeploymentTempDirTest
+     public void testPersistentTmpDirectory() throws Exception
+     {
+         Path warPath = MavenTestingUtils.getTestResourcePath("webapps/foo-webapp-1.war");
+-        String deploymentXml = "<Configure class=\"org.eclipse.jetty.webapp.WebAppContext\">\n" +
++        String deploymentXml =
++            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
++            "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"https://eclipse.dev/jetty/configure.dtd\">\n" +
++            "<Configure class=\"org.eclipse.jetty.webapp.WebAppContext\">\n" +
+             "<Set name=\"war\">" + warPath + "</Set>\n" +
+             "<Set name=\"tempDirectory\">" + tmpDir + "</Set>\n" +
+             "<Set name=\"persistTempDirectory\">true</Set>\n" +
+diff --git a/jetty-deploy/src/test/resources/context-binding-test-1.xml b/jetty-deploy/src/test/resources/context-binding-test-1.xml
+index ae997ac5b7..01af022288 100644
+--- a/jetty-deploy/src/test/resources/context-binding-test-1.xml
++++ b/jetty-deploy/src/test/resources/context-binding-test-1.xml
+@@ -1,3 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
+ <Configure class="org.eclipse.jetty.webapp.WebAppContext">
+ 
+   <Call name="addServerClass">
+diff --git a/jetty-deploy/src/test/resources/jetty.xml b/jetty-deploy/src/test/resources/jetty.xml
+index 5178d3aa2b..8ad626d9d8 100644
+--- a/jetty-deploy/src/test/resources/jetty.xml
++++ b/jetty-deploy/src/test/resources/jetty.xml
+@@ -1,4 +1,5 @@
+-<?xml version="1.0"?><!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.org/jetty/configure_9_3.dtd">
+ 
+ <!-- =============================================================== -->
+ <!-- Documentation of this file format can be found at:              -->
+diff --git a/jetty-documentation/src/main/asciidoc/quick-start/configuring/what-to-configure.adoc b/jetty-documentation/src/main/asciidoc/quick-start/configuring/what-to-configure.adoc
+index 8417dde7f0..2c0e65668d 100644
+--- a/jetty-documentation/src/main/asciidoc/quick-start/configuring/what-to-configure.adoc
++++ b/jetty-documentation/src/main/asciidoc/quick-start/configuring/what-to-configure.adoc
+@@ -141,10 +141,10 @@ The deployer discovers and hot deploys context IoC descriptors like the followin
+ 
+ [source, xml]
+ ----
+-<?xml version="1.0"  encoding="UTF-8"?>
++<?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE Configure PUBLIC
+-    "-//Mort Bay Consulting//DTD Configure//EN"
+-    "http://www.eclipse.org/jetty/configure_9_3.dtd">
++    "-//Jetty//Configure//EN"
++    "https://eclipse.org/jetty/configure_9_3.dtd">
+ 
+ <!--
+   Configure a custom context for serving javadoc as static resources
+@@ -202,10 +202,10 @@ To set the contextPath from within the WAR file, you can include a `WEB-INF/jett
+ 
+ [source, xml]
+ ----
+-<?xml version="1.0"  encoding="UTF-8"?>
++<?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE Configure PUBLIC
+-    "-//Mort Bay Consulting//DTD Configure//EN"
+-    "http://www.eclipse.org/jetty/configure_9_3.dtd">
++    "-//Jetty//Configure//EN"
++    "https://eclipse.org/jetty/configure_9_3.dtd">
+ 
+ <Configure class="org.eclipse.jetty.webapp.WebAppContext">
+     <Set name="contextPath">/contextpath</Set>
+@@ -217,10 +217,10 @@ Instead of allowing the WAR file to be discovered by the deployer, an IoC XML fi
+ 
+ [source, xml]
+ ----
+-<?xml version="1.0"  encoding="UTF-8"?>
++<?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE Configure PUBLIC
+-    "-//Mort Bay Consulting//DTD Configure//EN"
+-    "http://www.eclipse.org/jetty/configure_9_3.dtd">
++    "-//Jetty//Configure//EN"
++    "https://eclipse.org/jetty/configure_9_3.dtd">
+ 
+ <Configure class="org.eclipse.jetty.webapp.WebAppContext">
+   <Set name="war"><SystemProperty name="jetty.home" default="."/>/webapps/test.war</Set>
+diff --git a/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/config/jetty.xml b/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/config/jetty.xml
+index 9193b42df9..c15d2da11e 100644
+--- a/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/config/jetty.xml
++++ b/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/config/jetty.xml
+@@ -1,4 +1,5 @@
+-<?xml version="1.0"?><!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
+ 
+ <Configure id="Server" class="org.eclipse.jetty.server.Server">
+   <New id="httpConfig" class="org.eclipse.jetty.server.HttpConfiguration">
+diff --git a/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/main/jettyconf/context.xml b/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/main/jettyconf/context.xml
+index eaea86d15c..fe882ce30b 100644
+--- a/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/main/jettyconf/context.xml
++++ b/jetty-maven-plugin/src/it/run-mojo-gwt-it/beer-server/src/main/jettyconf/context.xml
+@@ -1,3 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
++
+ <Configure class="org.eclipse.jetty.webapp.WebAppContext">
+   <Call name="setInitParameter">
+     <Arg>org.eclipse.jetty.servlet.Default.useFileMappedBuffer</Arg>
+diff --git a/jetty-start/src/test/resources/bogus.xml b/jetty-start/src/test/resources/bogus.xml
+index 6660498d7f..56bab38c88 100644
+--- a/jetty-start/src/test/resources/bogus.xml
++++ b/jetty-start/src/test/resources/bogus.xml
+@@ -1,2 +1,3 @@
+ <?xml version="1.0"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
+ <Configure />
+\ No newline at end of file
+diff --git a/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlConfiguration.java b/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlConfiguration.java
+index dee6c4b67e..e920dc1e9c 100644
+--- a/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlConfiguration.java
++++ b/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlConfiguration.java
+@@ -18,6 +18,7 @@
+ 
+ package org.eclipse.jetty.xml;
+ 
++import java.io.Closeable;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.StringReader;
+@@ -67,6 +68,7 @@ import org.eclipse.jetty.util.log.Logger;
+ import org.eclipse.jetty.util.resource.Resource;
+ import org.xml.sax.InputSource;
+ import org.xml.sax.SAXException;
++import org.xml.sax.SAXParseException;
+ 
+ /**
+  * <p>Configures objects from XML.</p>
+@@ -203,7 +205,7 @@ public class XmlConfiguration
+     private final String _dtd;
+     private ConfigurationProcessor _processor;
+ 
+-    ConfigurationParser getParser()
++    public XmlParser getXmlParser()
+     {
+         Pool<ConfigurationParser>.Entry entry = __parsers.acquire(ConfigurationParser::new);
+         if (entry == null)
+@@ -220,12 +222,22 @@ public class XmlConfiguration
+      */
+     public XmlConfiguration(Resource resource) throws SAXException, IOException
+     {
+-        try (ConfigurationParser parser = getParser(); InputStream inputStream = resource.getInputStream())
++        XmlParser parser = getXmlParser();
++        try (InputStream inputStream = resource.getInputStream())
+         {
+             _location = resource;
+             setConfig(parser.parse(inputStream));
+             _dtd = parser.getDTD();
+         }
++        catch (SAXParseException e)
++        {
++            throw new SAXParseException("Unable to parse: " + resource, null, e);
++        }
++        finally
++        {
++            if (parser instanceof Closeable)
++                ((Closeable)parser).close();
++        }
+     }
+ 
+     /**
+@@ -257,13 +269,19 @@ public class XmlConfiguration
+         configuration = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+             "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"http://www.eclipse.org/jetty/configure_9_3.dtd\">" +
+             configuration;
+-        try (ConfigurationParser parser = getParser(); StringReader reader = new StringReader(configuration))
++        XmlParser parser = getXmlParser();
++        try (StringReader reader = new StringReader(configuration))
+         {
+             InputSource source = new InputSource(reader);
+             _location = null;
+             setConfig(parser.parse(source));
+             _dtd = parser.getDTD();
+         }
++        finally
++        {
++            if (parser instanceof Closeable)
++                ((Closeable)parser).close();
++        }
+     }
+ 
+     /**
+@@ -278,12 +296,18 @@ public class XmlConfiguration
+     public XmlConfiguration(InputStream configuration) throws SAXException, IOException
+     {
+         InputSource source = new InputSource(configuration);
+-        try (ConfigurationParser parser = getParser())
++        XmlParser parser = getXmlParser();
++        try
+         {
+             _location = null;
+             setConfig(parser.parse(source));
+             _dtd = parser.getDTD();
+         }
++        finally
++        {
++            if (parser instanceof Closeable)
++                ((Closeable)parser).close();
++        }
+     }
+ 
+     @Override
+@@ -1918,7 +1942,7 @@ public class XmlConfiguration
+         }
+     }
+ 
+-    private static class ConfigurationParser extends XmlParser implements AutoCloseable
++    private static class ConfigurationParser extends XmlParser implements Closeable
+     {
+         private final Pool<ConfigurationParser>.Entry _entry;
+ 
+@@ -1942,8 +1966,23 @@ public class XmlConfiguration
+             redirectEntity("http://jetty.mortbay.org/configure.dtd", config93);
+             redirectEntity("http://jetty.eclipse.org/configure.dtd", config93);
+             redirectEntity("https://jetty.eclipse.org/configure.dtd", config93);
+-            redirectEntity("http://www.eclipse.org/jetty/configure.dtd", config93);
+-            redirectEntity("https://www.eclipse.org/jetty/configure.dtd", config93);
++            redirectEntity("http://jetty.mortbay.org/configure.dtd", config93);
++
++            // Register all variations of DOCTYPE entity references for Config 9.3
++            String[] schemes = {"http", "https"};
++            String[] hosts = {"www.eclipse.org", "eclipse.org", "www.eclipse.dev", "eclipse.dev"};
++            String[] paths = {"/jetty/configure.dtd", "/jetty/configure_9_3.dtd"};
++
++            for (String scheme : schemes)
++            {
++                for (String host : hosts)
++                {
++                    for (String path : paths)
++                    {
++                        redirectEntity(String.format("%s://%s%s", scheme, host, path), config93);
++                    }
++                }
++            }
+             redirectEntity("-//Mort Bay Consulting//DTD Configure//EN", config93);
+             redirectEntity("-//Jetty//Configure//EN", config93);
+         }
+diff --git a/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlParser.java b/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlParser.java
+index ea7004a2a0..5208944557 100644
+--- a/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlParser.java
++++ b/jetty-xml/src/main/java/org/eclipse/jetty/xml/XmlParser.java
+@@ -69,9 +69,9 @@ public class XmlParser
+      */
+     public XmlParser()
+     {
+-        SAXParserFactory factory = SAXParserFactory.newInstance();
+-        boolean validatingDft = factory.getClass().toString().startsWith("org.apache.xerces.");
+-        String validatingProp = System.getProperty("org.eclipse.jetty.xml.XmlParser.Validating", validatingDft ? "true" : "false");
++        SAXParserFactory factory = newSAXParserFactory();
++        boolean validatingDefault = factory.getClass().toString().contains("org.apache.xerces.");
++        String validatingProp = System.getProperty("org.eclipse.jetty.xml.XmlParser.Validating", validatingDefault ? "true" : "false");
+         boolean validating = Boolean.valueOf(validatingProp).booleanValue();
+         setValidating(validating);
+     }
+@@ -81,11 +81,16 @@ public class XmlParser
+         setValidating(validating);
+     }
+ 
++    protected SAXParserFactory newSAXParserFactory()
++    {
++        return SAXParserFactory.newInstance();
++    }
++
+     public void setValidating(boolean validating)
+     {
+         try
+         {
+-            SAXParserFactory factory = SAXParserFactory.newInstance();
++            SAXParserFactory factory = newSAXParserFactory();
+             factory.setValidating(validating);
+             _parser = factory.newSAXParser();
+ 
+@@ -127,6 +132,11 @@ public class XmlParser
+         return _parser.isValidating();
+     }
+ 
++    public SAXParser getSAXParser()
++    {
++        return _parser;
++    }
++
+     public synchronized void redirectEntity(String name, URL entity)
+     {
+         if (entity != null)
+@@ -261,18 +271,10 @@ public class XmlParser
+         if (pid != null)
+             entity = _redirectMap.get(pid);
+         if (entity == null)
+-            entity = _redirectMap.get(sid);
+-        if (entity == null)
+-        {
+-            String dtd = sid;
+-            if (dtd.lastIndexOf('/') >= 0)
+-                dtd = dtd.substring(dtd.lastIndexOf('/') + 1);
+-
+-            if (LOG.isDebugEnabled())
+-                LOG.debug("Can't exact match entity in redirect map, trying " + dtd);
+-            entity = _redirectMap.get(dtd);
+-        }
++            entity = (URL)_redirectMap.get(sid);
+ 
++        // Only serve entity if found.
++        // We don't want to serve from unknown hosts or random paths.
+         if (entity != null)
+         {
+             try
+@@ -289,6 +291,9 @@ public class XmlParser
+                 LOG.ignore(e);
+             }
+         }
++
++        if (LOG.isDebugEnabled())
++            LOG.debug("Entity not found for PID:{} / SID:{}", pid, sid);
+         return null;
+     }
+ 
+diff --git a/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlConfigurationTest.java b/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlConfigurationTest.java
+index 4c3db7bdff..604519ca47 100644
+--- a/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlConfigurationTest.java
++++ b/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlConfigurationTest.java
+@@ -28,6 +28,7 @@ import java.lang.reflect.Method;
+ import java.net.URL;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
++import java.nio.file.StandardOpenOption;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collections;
+@@ -47,7 +48,6 @@ import org.eclipse.jetty.util.log.Logger;
+ import org.eclipse.jetty.util.log.StdErrLog;
+ import org.eclipse.jetty.util.resource.PathResource;
+ import org.hamcrest.Matchers;
+-import org.junit.jupiter.api.Disabled;
+ import org.junit.jupiter.api.RepeatedTest;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.extension.ExtendWith;
+@@ -57,6 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
+ import org.junit.jupiter.params.provider.ArgumentsProvider;
+ import org.junit.jupiter.params.provider.ArgumentsSource;
+ import org.junit.jupiter.params.provider.MethodSource;
++import org.xml.sax.InputSource;
+ import org.xml.sax.SAXException;
+ 
+ import static java.nio.charset.StandardCharsets.UTF_8;
+@@ -105,8 +106,16 @@ public class XmlConfigurationTest
+         configuration.configure();
+     }
+ 
++    public static Stream<Arguments> xmlConfigs()
++    {
++        return Stream.of(
++            Arguments.of("org/eclipse/jetty/xml/configureWithAttr.xml"),
++            Arguments.of("org/eclipse/jetty/xml/configureWithElements.xml")
++        );
++    }
++
+     @ParameterizedTest
+-    @ArgumentsSource(ScenarioProvider.class)
++    @MethodSource("xmlConfigs")
+     public void testPassedObject(String configure) throws Exception
+     {
+         Map<String, String> properties = new HashMap<>();
+@@ -274,10 +283,15 @@ public class XmlConfigurationTest
+ 
+     public XmlConfiguration asXmlConfiguration(String filename, String rawXml) throws IOException, SAXException
+     {
++        if (!rawXml.contains("!DOCTYPE"))
++            rawXml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
++                "<!DOCTYPE Configure PUBLIC \"-//Jetty//Configure//EN\" \"https://eclipse.org/jetty/configure.dtd\">\n" +
++                rawXml;
+         Path testFile = workDir.getEmptyPathDir().resolve(filename);
+-        try (BufferedWriter writer = Files.newBufferedWriter(testFile, UTF_8))
++        try (BufferedWriter writer = Files.newBufferedWriter(testFile, UTF_8, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))
+         {
+             writer.write(rawXml);
++            writer.flush();
+         }
+         return new XmlConfiguration(new PathResource(testFile));
+     }
+@@ -1723,6 +1737,43 @@ public class XmlConfigurationTest
+         }
+     }
+ 
++    public static Stream<Arguments> xmlSystemIdSource()
++    {
++        List<Arguments> ids = new ArrayList<>();
++
++        String[] schemes = {"http", "https"};
++        String[] hosts = {"eclipse.org", "www.eclipse.org", "eclipse.dev", "www.eclipse.dev"};
++        String[] paths = {"/jetty/configure.dtd", "/jetty/configure_9_3.dtd"};
++
++        for (String scheme: schemes)
++        {
++            for (String host: hosts)
++            {
++                for (String path: paths)
++                {
++                    ids.add(Arguments.of(String.format("%s://%s%s", scheme, host, path)));
++                }
++            }
++        }
++
++        return ids.stream();
++    }
++
++    /**
++     * Test to ensure that all the XML System ID variants are covered in the
++     * {@link XmlConfiguration} internals.
++     */
++    @ParameterizedTest
++    @MethodSource("xmlSystemIdSource")
++    public void testSystemIdVariants(String xmlSystemId) throws IOException, SAXException
++    {
++        // empty raw xml, just to instantiate XmlConfiguration, so we can access the XmlParser / ConfigurationParser.
++        XmlConfiguration xmlConfiguration = asXmlConfiguration("<Configure class=\"org.eclipse.jetty.xml.TestConfiguration\" />");
++        XmlParser configurationProcessor = xmlConfiguration.getXmlParser();
++        InputSource inputSource = configurationProcessor.resolveEntity(null, xmlSystemId);
++        assertNotNull(inputSource, "SystemID: " + xmlSystemId + " does not exist");
++    }
++
+     private void assertHasExpectedLines(String type, List<String> actualLines, String[] expectedLines)
+     {
+         assertThat("Count of " + type, actualLines.size(), is(expectedLines.length));
+diff --git a/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlParserTest.java b/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlParserTest.java
+index 49a15a7051..c2e95fcafd 100644
+--- a/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlParserTest.java
++++ b/jetty-xml/src/test/java/org/eclipse/jetty/xml/XmlParserTest.java
+@@ -19,10 +19,17 @@
+ package org.eclipse.jetty.xml;
+ 
+ import java.net.URL;
++import javax.xml.parsers.SAXParser;
++import javax.xml.parsers.SAXParserFactory;
+ 
+ import org.junit.jupiter.api.Test;
++import org.xml.sax.SAXException;
++import org.xml.sax.XMLReader;
+ 
++import static org.junit.jupiter.api.Assertions.assertFalse;
++import static org.junit.jupiter.api.Assertions.assertNotNull;
+ import static org.junit.jupiter.api.Assertions.assertTrue;
++import static org.junit.jupiter.api.Assumptions.assumeTrue;
+ 
+ public class XmlParserTest
+ {
+@@ -34,7 +41,7 @@ public class XmlParserTest
+         URL configURL = XmlConfiguration.class.getClassLoader().getResource("org/eclipse/jetty/xml/configure_9_3.dtd");
+         parser.redirectEntity("configure.dtd", configURL);
+         parser.redirectEntity("configure_9_3.dtd", configURL);
+-        //parser.redirectEntity("http://www.eclipse.org/jetty/configure_9_3.dtd", configURL);
++        parser.redirectEntity("http://www.eclipse.org/jetty/configure_9_3.dtd", configURL);
+         parser.redirectEntity("http://jetty.eclipse.org/configure.dtd", configURL);
+         parser.redirectEntity("-//Mort Bay Consulting//DTD Configure//EN", configURL);
+ 
+@@ -45,4 +52,32 @@ public class XmlParserTest
+         assertTrue(testDocStr.startsWith("<Configure"));
+         assertTrue(testDocStr.endsWith("</Configure>"));
+     }
++
++    /**
++     * Customize SAXParserFactory behavior.
++     */
++    @Test
++    public void testNewSAXParserFactory() throws SAXException
++    {
++        XmlParser xmlParser = new XmlParser()
++        {
++            @Override
++            protected SAXParserFactory newSAXParserFactory()
++            {
++                SAXParserFactory saxParserFactory = super.newSAXParserFactory();
++                // Configure at factory level
++                saxParserFactory.setXIncludeAware(false);
++                return saxParserFactory;
++            }
++        };
++
++        SAXParser saxParser = xmlParser.getSAXParser();
++        assertNotNull(saxParser);
++
++        XMLReader xmlReader = saxParser.getXMLReader();
++        // Only run testcase if Xerces is being used.
++        assumeTrue(xmlReader.getClass().getName().contains("org.apache.xerces."));
++        // look to see it was set at XMLReader level
++        assertFalse(xmlReader.getFeature("http://apache.org/xml/features/xinclude"));
++    }
+ }
+diff --git a/jetty-xml/src/test/resources/org/eclipse/jetty/xml/mortbay.xml b/jetty-xml/src/test/resources/org/eclipse/jetty/xml/mortbay.xml
+index 472ede6373..b5f5aa1b2c 100644
+--- a/jetty-xml/src/test/resources/org/eclipse/jetty/xml/mortbay.xml
++++ b/jetty-xml/src/test/resources/org/eclipse/jetty/xml/mortbay.xml
+@@ -1,2 +1,3 @@
+-<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE Configure PUBLIC "-//Mort Bay Consulting//DTD Configure//EN" "http://jetty.mortbay.org/configure_9_3.dtd">
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.org/jetty/configure_9_3.dtd">
+ <Configure class="java.lang.Object"></Configure>
+diff --git a/tests/test-integration/src/test/resources/RFC2616Base.xml b/tests/test-integration/src/test/resources/RFC2616Base.xml
+index dfa62d87e0..1e542f2da2 100644
+--- a/tests/test-integration/src/test/resources/RFC2616Base.xml
++++ b/tests/test-integration/src/test/resources/RFC2616Base.xml
+@@ -47,7 +47,7 @@
+                  </Array>
+                </Set>
+                <Set name="ResourceBase"><Property name="test.docroot.base"/>/virtualhost</Set>
+-               <Set name="Handler"><New id="reshandler" class="org.eclipse.jetty.server.handler.ResourceHandler"/></Set>
++               <Set name="Handler"><New id="reshandlervirt" class="org.eclipse.jetty.server.handler.ResourceHandler"/></Set>
+                <Set name="DisplayName">virtual</Set>
+              </New>
+            </Item>
+@@ -55,7 +55,7 @@
+              <New id="defcontext" class="org.eclipse.jetty.server.handler.ContextHandler">
+                <Set name="contextPath">/tests</Set>
+                <Set name="ResourceBase"><Property name="test.docroot.base"/>/default</Set>
+-               <Set name="Handler"><New id="reshandler" class="org.eclipse.jetty.server.handler.ResourceHandler"/></Set>
++               <Set name="Handler"><New id="reshandlerdefault" class="org.eclipse.jetty.server.handler.ResourceHandler"/></Set>
+                <Set name="DisplayName">default</Set>
+              </New>
+            </Item>
+diff --git a/tests/test-integration/src/test/resources/ssl.xml b/tests/test-integration/src/test/resources/ssl.xml
+index b85cff469c..d2b55a83d2 100644
+--- a/tests/test-integration/src/test/resources/ssl.xml
++++ b/tests/test-integration/src/test/resources/ssl.xml
+@@ -1,3 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
+ <Configure id="sslContextFactory" class="org.eclipse.jetty.util.ssl.SslContextFactory$Server">
+   <Set name="KeyStorePath"><Property name="jetty.home" default="." />/<Property name="jetty.sslContext.keyStorePath" default="keystore"/></Set>
+   <Set name="KeyStorePassword"><Property name="jetty.sslContext.keyStorePassword" default="OBF:1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4"/></Set>
+diff --git a/tests/test-webapps/test-owb-cdi-webapp/src/main/webapp/WEB-INF/jetty-web-owb.xml b/tests/test-webapps/test-owb-cdi-webapp/src/main/webapp/WEB-INF/jetty-web-owb.xml
+index 4c5b8dcd53..bb0f526cc7 100644
+--- a/tests/test-webapps/test-owb-cdi-webapp/src/main/webapp/WEB-INF/jetty-web-owb.xml
++++ b/tests/test-webapps/test-owb-cdi-webapp/src/main/webapp/WEB-INF/jetty-web-owb.xml
+@@ -1,4 +1,6 @@
+-<!DOCTYPE Configure PUBLIC "-//Mort Bay Consulting//DTD Configure//EN" "http://www.eclipse.org/jetty/configure_9_3.dtd">
++<?xml version="1.0" encoding="utf-8"?>
++<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://eclipse.dev/jetty/configure_9_3.dtd">
++
+ <Configure id="wac" class="org.eclipse.jetty.webapp.WebAppContext">
+   <!-- Rename this file to jetty-web.xml if the cdi-spi module is not used-->
+   <Get id="wal" name="classLoader"/>
+-- 
+2.34.1
+

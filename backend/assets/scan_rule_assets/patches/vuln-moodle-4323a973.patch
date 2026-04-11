@@ -1,0 +1,155 @@
+From 4323a973d57a41e19e039a850ad71ebcabae73c1 Mon Sep 17 00:00:00 2001
+From: Juan Leyva <juanleyvadelgado@gmail.com>
+Date: Mon, 16 Nov 2015 16:01:53 +0100
+Subject: [PATCH] MDL-52072 enrol: Fix course visibility checks in external
+ functions
+
+---
+ enrol/externallib.php                 | 13 ++++++++++---
+ enrol/self/externallib.php            | 12 +++++++++---
+ enrol/self/tests/externallib_test.php | 14 +++++++++++++-
+ enrol/tests/externallib_test.php      | 15 ++++++++++++++-
+ 4 files changed, 46 insertions(+), 8 deletions(-)
+
+diff --git a/enrol/externallib.php b/enrol/externallib.php
+index 331ee3dbeba..959df2104da 100644
+--- a/enrol/externallib.php
++++ b/enrol/externallib.php
+@@ -645,14 +645,21 @@ class core_enrol_external extends external_api {
+      *
+      * @param int $courseid
+      * @return array of course enrolment methods
++     * @throws moodle_exception
+      */
+     public static function get_course_enrolment_methods($courseid) {
++        global $DB;
+ 
+         $params = self::validate_parameters(self::get_course_enrolment_methods_parameters(), array('courseid' => $courseid));
+ 
+-        $coursecontext = context_course::instance($params['courseid']);
+-        $categorycontext = $coursecontext->get_parent_context();
+-        self::validate_context($categorycontext);
++        // Note that we can't use validate_context because the user is not enrolled in the course.
++        require_login(null, false, null, false, true);
++
++        $course = $DB->get_record('course', array('id' => $params['courseid']), '*', MUST_EXIST);
++        $context = context_course::instance($course->id);
++        if (!$course->visible and !has_capability('moodle/course:viewhiddencourses', $context)) {
++            throw new moodle_exception('coursehidden');
++        }
+ 
+         $result = array();
+         $enrolinstances = enrol_get_instances($params['courseid'], true);
+diff --git a/enrol/self/externallib.php b/enrol/self/externallib.php
+index ad61b0ce075..b72fb3bd016 100644
+--- a/enrol/self/externallib.php
++++ b/enrol/self/externallib.php
+@@ -52,6 +52,7 @@ class enrol_self_external extends external_api {
+      *
+      * @param int $instanceid instance id of self enrolment plugin.
+      * @return array instance information.
++     * @throws moodle_exception
+      */
+     public static function get_instance_info($instanceid) {
+         global $DB, $CFG;
+@@ -66,10 +67,15 @@ class enrol_self_external extends external_api {
+             throw new moodle_exception('invaliddata', 'error');
+         }
+ 
++        // Note that we can't use validate_context because the user is not enrolled in the course.
++        require_login(null, false, null, false, true);
++
+         $enrolinstance = $DB->get_record('enrol', array('id' => $params['instanceid']), '*', MUST_EXIST);
+-        $coursecontext = context_course::instance($enrolinstance->courseid);
+-        $categorycontext = $coursecontext->get_parent_context();
+-        self::validate_context($categorycontext);
++        $course = $DB->get_record('course', array('id' => $enrolinstance->courseid), '*', MUST_EXIST);
++        $context = context_course::instance($course->id);
++        if (!$course->visible and !has_capability('moodle/course:viewhiddencourses', $context)) {
++            throw new moodle_exception('coursehidden');
++        }
+ 
+         $instanceinfo = (array) $enrolplugin->get_enrol_info($enrolinstance);
+         if (isset($instanceinfo['requiredparam']->enrolpassword)) {
+diff --git a/enrol/self/tests/externallib_test.php b/enrol/self/tests/externallib_test.php
+index 74b1cbe9c3d..662120252bd 100644
+--- a/enrol/self/tests/externallib_test.php
++++ b/enrol/self/tests/externallib_test.php
+@@ -47,7 +47,9 @@ class enrol_self_external_testcase extends externallib_advanced_testcase {
+         $studentrole = $DB->get_record('role', array('shortname'=>'student'));
+         $this->assertNotEmpty($studentrole);
+ 
+-        $course = self::getDataGenerator()->create_course();
++        $coursedata = new stdClass();
++        $coursedata->visible = 0;
++        $course = self::getDataGenerator()->create_course($coursedata);
+ 
+         // Add enrolment methods for course.
+         $instanceid1 = $selfplugin->add_instance($course, array('status' => ENROL_INSTANCE_ENABLED,
+@@ -68,6 +70,7 @@ class enrol_self_external_testcase extends externallib_advanced_testcase {
+         $enrolmentmethods = $DB->get_records('enrol', array('courseid' => $course->id, 'status' => ENROL_INSTANCE_ENABLED));
+         $this->assertCount(3, $enrolmentmethods);
+ 
++        $this->setAdminUser();
+         $instanceinfo1 = enrol_self_external::get_instance_info($instanceid1);
+         $instanceinfo1 = external_api::clean_returnvalue(enrol_self_external::get_instance_info_returns(), $instanceinfo1);
+ 
+@@ -95,6 +98,15 @@ class enrol_self_external_testcase extends externallib_advanced_testcase {
+         $this->assertEquals('Test instance 3', $instanceinfo3['name']);
+         $this->assertTrue($instanceinfo3['status']);
+         $this->assertEquals(get_string('password', 'enrol_self'), $instanceinfo3['enrolpassword']);
++
++        // Try to retrieve information using a normal user for a hidden course.
++        $user = self::getDataGenerator()->create_user();
++        $this->setUser($user);
++        try {
++            enrol_self_external::get_instance_info($instanceid3);
++        } catch (moodle_exception $e) {
++            $this->assertEquals('coursehidden', $e->errorcode);
++        }
+     }
+ 
+     /**
+diff --git a/enrol/tests/externallib_test.php b/enrol/tests/externallib_test.php
+index db61fe9c908..21ad04d8bdf 100644
+--- a/enrol/tests/externallib_test.php
++++ b/enrol/tests/externallib_test.php
+@@ -428,7 +428,9 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
+         $this->assertNotEmpty($studentrole);
+ 
+         $course1 = self::getDataGenerator()->create_course();
+-        $course2 = self::getDataGenerator()->create_course();
++        $coursedata = new stdClass();
++        $coursedata->visible = 0;
++        $course2 = self::getDataGenerator()->create_course($coursedata);
+ 
+         // Add enrolment methods for course.
+         $instanceid1 = $selfplugin->add_instance($course1, array('status' => ENROL_INSTANCE_ENABLED,
+@@ -445,6 +447,8 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
+         $enrolmentmethods = $DB->get_records('enrol', array('courseid' => $course1->id, 'status' => ENROL_INSTANCE_ENABLED));
+         $this->assertCount(2, $enrolmentmethods);
+ 
++        $this->setAdminUser();
++
+         // Check if information is returned.
+         $enrolmentmethods = core_enrol_external::get_course_enrolment_methods($course1->id);
+         $enrolmentmethods = external_api::clean_returnvalue(core_enrol_external::get_course_enrolment_methods_returns(),
+@@ -474,6 +478,15 @@ class core_enrol_externallib_testcase extends externallib_advanced_testcase {
+         $this->assertEquals('self', $enrolmentmethod['type']);
+         $this->assertTrue($enrolmentmethod['status']);
+         $this->assertEquals('enrol_self_get_instance_info', $enrolmentmethod['wsfunction']);
++
++        // Try to retrieve information using a normal user for a hidden course.
++        $user = self::getDataGenerator()->create_user();
++        $this->setUser($user);
++        try {
++            core_enrol_external::get_course_enrolment_methods($course2->id);
++        } catch (moodle_exception $e) {
++            $this->assertEquals('coursehidden', $e->errorcode);
++        }
+     }
+ 
+     public function get_enrolled_users_setup($capability) {
+-- 
+2.34.1
+

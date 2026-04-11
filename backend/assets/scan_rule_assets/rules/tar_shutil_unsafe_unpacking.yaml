@@ -1,0 +1,52 @@
+rules:
+- id: tar_shutil_unsafe_unpacking
+  languages:
+  - python
+  severity: ERROR
+  message: Unsafe Tar Unpacking
+  patterns:
+  - pattern-either:
+    - pattern: shutil.copyfileobj($SOURCE, $DESTINATION)
+  - pattern-inside: 'import tarfile
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern-inside: "with tarfile.open($FILE, ...) as $FD:\n  ...\n"
+    - pattern-inside: '$FD = tarfile.open($FILE, ...)
+
+        ...
+
+        '
+  - pattern-either:
+    - pattern-inside: "$FILELIST = $FD.getmembers()\n...\nfor $FILENAME in $FILELIST:\n\
+        \  ...\n"
+    - pattern-inside: "for $FILENAME in $FD.getmembers():\n  ...\n"
+  - pattern-either:
+    - pattern-inside: "with open($FILENAME.name, ...) as $DESTINATION:\n  ...\n"
+    - pattern-inside: '$DESTINATION = open($FILENAME.name, ...)
+
+        ...
+
+        '
+    - pattern-inside: "$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)\n...\n\
+        with open($DESTINATION_PATH, ...) as $DESTINATION:\n  ...\n"
+    - pattern-inside: '$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
+
+        ...
+
+        $DESTINATION = open($DESTINATION_PATH, ...)
+
+        ...
+
+        '
+    - pattern-inside: '$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
+
+        ...'
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-59: Link Following'

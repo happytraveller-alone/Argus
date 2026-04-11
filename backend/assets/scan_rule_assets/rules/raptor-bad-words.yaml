@@ -1,0 +1,28 @@
+rules:
+- id: raptor-bad-words
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/546
+    - https://cwe.mitre.org/data/definitions/615
+    - https://btlr.dev/blog/how-to-find-vulnerabilities-in-code-bad-words
+    confidence: LOW
+    cwe:
+    - 'CWE-546: Suspicious Comment'
+    - 'CWE-615: Information Exposure by Comment'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-259: Use of Hard-coded Password'
+    - 'CWE-321: Use of Hard-coded Cryptographic Key'
+    - 'CWE-798: Use of Hard-coded Credentials'
+  message: The code contains comments that suggest the presence of bugs, incomplete
+    functionality, or weaknesses. Many suspicious comments, such as BUG, HACK, FIXME,
+    LATER, LATER2, TODO, in the code indicate missing security functionality and checking.
+    Others indicate code problems that programmers should fix, such as hard-coded
+    variables, error handling, not using stored procedures, and performance issues.
+  severity: INFO
+  languages:
+  - generic
+  pattern-either:
+  - pattern-regex: (TODO|XXX|FIXME|BUG|HACK|LATER|CVE-)
+  - pattern-regex: (?i)(unsafe|insecure|dangerous|warning|overflow)
+  - pattern-regex: (?i)(password|private|token|secret)

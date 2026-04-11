@@ -1,0 +1,158 @@
+From e6c8d5a838b49f94616be14753aa5c89d64605b5 Mon Sep 17 00:00:00 2001
+From: Max Kellermann <max.kellermann@gmail.com>
+Date: Thu, 18 Jun 2020 19:13:51 +0200
+Subject: [PATCH] jpc_math: split jpc_firstone() in int/jpc_fix_t overloads
+
+Fixes CVE-2018-9055 (denial of service via a reachable assertion due
+to integer overflow).
+
+Based on a patch from Fridrich Strba <fstrba@suse.com>.  Instead of
+switching to `int_fast32_t`, this patch splits jpc_firstone() into two
+overloads, one for `int` and one for `jpc_fix_t`.  This is safer
+against future changes on `jpc_fix_t`.  To avoid the overhead of 64
+bit integer math on 32 bit CPUs, this leaves the `int` overload
+around.
+
+Closes https://github.com/jasper-maint/jasper/issues/9
+---
+ src/libjasper/jpc/jpc_enc.c   | 12 ++++++------
+ src/libjasper/jpc/jpc_math.c  | 17 ++++++++++++++++-
+ src/libjasper/jpc/jpc_math.h  |  5 ++++-
+ src/libjasper/jpc/jpc_t1enc.c |  2 +-
+ src/libjasper/jpc/jpc_t2enc.c |  4 ++--
+ 5 files changed, 29 insertions(+), 11 deletions(-)
+
+diff --git a/src/libjasper/jpc/jpc_enc.c b/src/libjasper/jpc/jpc_enc.c
+index ff8a78f..698b772 100644
+--- a/src/libjasper/jpc/jpc_enc.c
++++ b/src/libjasper/jpc/jpc_enc.c
+@@ -176,8 +176,8 @@ static uint_fast32_t jpc_abstorelstepsize(jpc_fix_t absdelta, int scaleexpn)
+ 		abort();
+ 	}
+ 
+-	p = jpc_firstone(absdelta) - JPC_FIX_FRACBITS;
+-	n = 11 - jpc_firstone(absdelta);
++	p = jpc_fix_firstone(absdelta) - JPC_FIX_FRACBITS;
++	n = 11 - jpc_fix_firstone(absdelta);
+ 	mant = ((n < 0) ? (absdelta >> (-n)) : (absdelta << n)) & 0x7ff;
+ 	expn = scaleexpn - p;
+ 	if (scaleexpn < p) {
+@@ -875,7 +875,7 @@ static int jpc_calcssmant(jpc_fix_t stepsize)
+ 	int e;
+ 	int m;
+ 
+-	n = jpc_firstone(stepsize);
++	n = jpc_fix_firstone(stepsize);
+ 	e = n - JPC_FIX_FRACBITS;
+ 	if (n >= 11) {
+ 		m = (stepsize >> (n - 11)) & 0x7ff;
+@@ -887,7 +887,7 @@ static int jpc_calcssmant(jpc_fix_t stepsize)
+ 
+ static int jpc_calcssexp(jpc_fix_t stepsize)
+ {
+-	return jpc_firstone(stepsize) - JPC_FIX_FRACBITS;
++	return jpc_fix_firstone(stepsize) - JPC_FIX_FRACBITS;
+ }
+ 
+ static int jpc_enc_encodemainhdr(jpc_enc_t *enc)
+@@ -1238,9 +1238,9 @@ assert(jas_image_numcmpts(enc->image) == 3);
+ 						}
+ 					}
+ 					if (tile->intmode) {
+-						actualnumbps = jpc_firstone(mxmag) + 1;
++						actualnumbps = jpc_fix_firstone(mxmag) + 1;
+ 					} else {
+-						actualnumbps = jpc_firstone(mxmag) + 1 - JPC_FIX_FRACBITS;
++						actualnumbps = jpc_fix_firstone(mxmag) + 1 - JPC_FIX_FRACBITS;
+ 					}
+ 					numgbits = actualnumbps - (cp->ccps[cmptno].prec - 1 +
+ 					  band->analgain);
+diff --git a/src/libjasper/jpc/jpc_math.c b/src/libjasper/jpc/jpc_math.c
+index 2b70844..f4a1924 100644
+--- a/src/libjasper/jpc/jpc_math.c
++++ b/src/libjasper/jpc/jpc_math.c
+@@ -105,7 +105,22 @@ int jpc_floorlog2(int x)
+   integer. */
+ /* This function is the basically the same as ceillog2(x), except that the
+   allowable range for x is slightly different. */
+-int jpc_firstone(int x)
++int jpc_int_firstone(int x)
++{
++	int n;
++
++	/* The argument must be nonnegative. */
++	assert(x >= 0);
++
++	n = -1;
++	while (x > 0) {
++		x >>= 1;
++		++n;
++	}
++	return n;
++}
++
++int jpc_fix_firstone(jpc_fix_t x)
+ {
+ 	int n;
+ 
+diff --git a/src/libjasper/jpc/jpc_math.h b/src/libjasper/jpc/jpc_math.h
+index e8e0978..74dac56 100644
+--- a/src/libjasper/jpc/jpc_math.h
++++ b/src/libjasper/jpc/jpc_math.h
+@@ -66,6 +66,8 @@
+ * Includes
+ \******************************************************************************/
+ 
++#include "jpc_fix.h"
++
+ #include	<assert.h>
+ 
+ /******************************************************************************\
+@@ -90,7 +92,8 @@
+ 
+ /* Calculate the bit position of the first leading one in a nonnegative
+   integer. */
+-int jpc_firstone(int x);
++int jpc_int_firstone(int x);
++int jpc_fix_firstone(jpc_fix_t x);
+ 
+ /* Calculate the integer quantity floor(log2(x)), where x is a positive
+   integer. */
+diff --git a/src/libjasper/jpc/jpc_t1enc.c b/src/libjasper/jpc/jpc_t1enc.c
+index ea521ed..1438da0 100644
+--- a/src/libjasper/jpc/jpc_t1enc.c
++++ b/src/libjasper/jpc/jpc_t1enc.c
+@@ -157,7 +157,7 @@ int jpc_enc_enccblks(jpc_enc_t *enc)
+ 						if (mx > bmx) {
+ 							bmx = mx;
+ 						}
+-						cblk->numbps = JAS_MAX(jpc_firstone(mx) + 1 - JPC_NUMEXTRABITS, 0);
++						cblk->numbps = JAS_MAX(jpc_fix_firstone(mx) + 1 - JPC_NUMEXTRABITS, 0);
+ 					}
+ 
+ 					for (cblk = prc->cblks; cblk != endcblks; ++cblk) {
+diff --git a/src/libjasper/jpc/jpc_t2enc.c b/src/libjasper/jpc/jpc_t2enc.c
+index 4c2e4fa..5a5e2ce 100644
+--- a/src/libjasper/jpc/jpc_t2enc.c
++++ b/src/libjasper/jpc/jpc_t2enc.c
+@@ -299,7 +299,7 @@ int jpc_enc_encpkt(jpc_enc_t *enc, jas_stream_t *out, int compno, int lvlno, int
+ 			for (pass = startpass; pass != endpass; ++pass) {
+ 				if (pass->term || pass == lastpass) {
+ 					datalen = pass->end - n;
+-					t1 = jpc_firstone(datalen) + 1;
++					t1 = jpc_int_firstone(datalen) + 1;
+ 					t2 = cblk->numlenbits + jpc_floorlog2(passcount);
+ 					adjust = JAS_MAX(t1 - t2, 0);
+ 					maxadjust = JAS_MAX(adjust, maxadjust);
+@@ -320,7 +320,7 @@ int jpc_enc_encpkt(jpc_enc_t *enc, jas_stream_t *out, int compno, int lvlno, int
+ 			for (pass = startpass; pass != endpass; ++pass) {
+ 				if (pass->term || pass == lastpass) {
+ 					datalen = pass->end - n;
+-					assert(jpc_firstone(datalen) < cblk->numlenbits +
++					assert(jpc_int_firstone(datalen) < cblk->numlenbits +
+ 					  jpc_floorlog2(passcount));
+ 					if (jpc_bitstream_putbits(outb, cblk->numlenbits +
+ 					  jpc_floorlog2(passcount), datalen) == EOF) {
+-- 
+2.34.1
+

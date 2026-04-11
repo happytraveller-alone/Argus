@@ -1,0 +1,29 @@
+From 0674fae039bbc79bfe3f7e42b12ec9015b9b879b Mon Sep 17 00:00:00 2001
+From: Chris <398094+phuzion@users.noreply.github.com>
+Date: Thu, 17 Jun 2021 21:34:57 -0400
+Subject: [PATCH] Add link to certificate FAQ in --require-ssl error
+
+Include a link to the FAQ page explaining how to set up SSL support on the quassel-irc.org website.
+
+Co-authored-by: Shane Synan <digitalcircuit36939@gmail.com>
+---
+ src/core/sslserver.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/sslserver.cpp b/src/core/sslserver.cpp
+index c93f4861..1c1f05cd 100644
+--- a/src/core/sslserver.cpp
++++ b/src/core/sslserver.cpp
+@@ -53,7 +53,8 @@ SslServer::SslServer(QObject* parent)
+         // do not proceed, throw an exception and quit. This prevents the core from falling
+         // back to a plaintext-only core when they should be expecting SSL/TLS only.
+         if (Quassel::isOptionSet("require-ssl")) {
+-            throw ExitException{EXIT_FAILURE, tr("--require-ssl is set, but no SSL certificate is available. Exiting.")};
++            throw ExitException{EXIT_FAILURE, tr("--require-ssl is set, but no SSL certificate is available. Exiting.\n"
++                                                 "Please see https://quassel-irc.org/faq/cert to learn how to enable SSL support.")};
+         }
+         if (!sslWarningShown) {
+             qWarning() << "SslServer: Unable to set certificate file\n"
+-- 
+2.34.1
+

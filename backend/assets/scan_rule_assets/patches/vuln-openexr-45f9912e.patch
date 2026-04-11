@@ -1,0 +1,124 @@
+From 45f9912e6cfa0617ec2054d96d1e1e73fad4a62a Mon Sep 17 00:00:00 2001
+From: Kimball Thurston <kdt3rd@gmail.com>
+Date: Thu, 27 Jun 2019 23:36:09 +1200
+Subject: [PATCH] Fix part of #232, issue with pointer overflows
+
+This addresses pointer overflow in exr2aces with large datawindow
+offsets. It also fixes similar issues in exrenvmap and exrmakepreview.
+
+This addresses the crashes in CVE-2017-9111, CVE-2017-9113,
+CVE-2017-9115
+
+Signed-off-by: Kimball Thurston <kdt3rd@gmail.com>
+---
+ OpenEXR/IlmImf/ImfScanLineInputFile.cpp | 16 ++++++++--------
+ OpenEXR/exr2aces/main.cpp               |  4 ++--
+ OpenEXR/exrenvmap/readInputImage.cpp    |  2 +-
+ OpenEXR/exrmakepreview/makePreview.cpp  |  2 +-
+ 4 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/OpenEXR/IlmImf/ImfScanLineInputFile.cpp b/OpenEXR/IlmImf/ImfScanLineInputFile.cpp
+index c3eadb79..6f7925a2 100644
+--- a/OpenEXR/IlmImf/ImfScanLineInputFile.cpp
++++ b/OpenEXR/IlmImf/ImfScanLineInputFile.cpp
+@@ -524,14 +524,14 @@ LineBufferTask::execute ()
+     
+         if (_lineBuffer->uncompressedData == 0)
+         {
+-            int uncompressedSize = 0;
++            size_t uncompressedSize = 0;
+             int maxY = min (_lineBuffer->maxY, _ifd->maxY);
+     
+             for (int i = _lineBuffer->minY - _ifd->minY;
+                  i <= maxY - _ifd->minY;
+ 		 ++i)
+ 	    {
+-                uncompressedSize += (int) _ifd->bytesPerLine[i];
++                uncompressedSize += _ifd->bytesPerLine[i];
+ 	    }
+     
+             if (_lineBuffer->compressor &&
+@@ -628,11 +628,11 @@ LineBufferTask::execute ()
+                     //
+     
+                     char *linePtr  = slice.base +
+-                                        divp (y, slice.ySampling) *
+-                                        slice.yStride;
++                                        intptr_t( divp (y, slice.ySampling) ) *
++                                        intptr_t( slice.yStride );
+     
+-                    char *writePtr = linePtr + dMinX * slice.xStride;
+-                    char *endPtr   = linePtr + dMaxX * slice.xStride;
++                    char *writePtr = linePtr + intptr_t( dMinX ) * intptr_t( slice.xStride );
++                    char *endPtr   = linePtr + intptr_t( dMaxX ) * intptr_t( slice.xStride );
+                     
+                     copyIntoFrameBuffer (readPtr, writePtr, endPtr,
+                                          slice.xStride, slice.fill,
+@@ -838,14 +838,14 @@ LineBufferTaskIIF::execute()
+         
+         if (_lineBuffer->uncompressedData == 0)
+         {
+-            int uncompressedSize = 0;
++            size_t uncompressedSize = 0;
+             int maxY = min (_lineBuffer->maxY, _ifd->maxY);
+             
+             for (int i = _lineBuffer->minY - _ifd->minY;
+             i <= maxY - _ifd->minY;
+             ++i)
+             {
+-                uncompressedSize += (int) _ifd->bytesPerLine[i];
++                uncompressedSize += _ifd->bytesPerLine[i];
+             }
+             
+             if (_lineBuffer->compressor &&
+diff --git a/OpenEXR/exr2aces/main.cpp b/OpenEXR/exr2aces/main.cpp
+index 16e300f2..6d07e2b8 100644
+--- a/OpenEXR/exr2aces/main.cpp
++++ b/OpenEXR/exr2aces/main.cpp
+@@ -124,7 +124,7 @@ exr2aces (const char inFileName[],
+ 	height = dw.max.y - dw.min.y + 1;
+ 	p.resizeErase (height, width);
+ 
+-	in.setFrameBuffer (&p[0][0] - dw.min.x - dw.min.y * width, 1, width);
++	in.setFrameBuffer (&p[0][0] - intptr_t( dw.min.x ) - intptr_t( dw.min.y ) * intptr_t( width ), 1, width);
+ 	in.readPixels (dw.min.y, dw.max.y);
+     }
+ 
+@@ -147,7 +147,7 @@ exr2aces (const char inFileName[],
+ 
+ 	AcesOutputFile out (outFileName, h, ch);
+ 
+-	out.setFrameBuffer (&p[0][0] - dw.min.x - dw.min.y * width, 1, width);
++	out.setFrameBuffer (&p[0][0] - intptr_t( dw.min.x ) - intptr_t( dw.min.y ) * intptr_t( width ), 1, width);
+ 	out.writePixels (height);
+     }
+ }
+diff --git a/OpenEXR/exrenvmap/readInputImage.cpp b/OpenEXR/exrenvmap/readInputImage.cpp
+index 79cd6aad..41cefa81 100644
+--- a/OpenEXR/exrenvmap/readInputImage.cpp
++++ b/OpenEXR/exrenvmap/readInputImage.cpp
+@@ -194,7 +194,7 @@ readSixImages (const char inFileName[],
+                    "from the data window of other cube faces.");
+         }
+ 
+-        in.setFrameBuffer (pixels - dw.min.x - dw.min.y * w, 1, w);
++        in.setFrameBuffer (pixels - intptr_t( dw.min.x ) - intptr_t( dw.min.y ) * intptr_t( w ), 1, w);
+         in.readPixels (dw.min.y, dw.max.y);
+ 
+         pixels += w * h;
+diff --git a/OpenEXR/exrmakepreview/makePreview.cpp b/OpenEXR/exrmakepreview/makePreview.cpp
+index 8df77ef6..633e876b 100644
+--- a/OpenEXR/exrmakepreview/makePreview.cpp
++++ b/OpenEXR/exrmakepreview/makePreview.cpp
+@@ -110,7 +110,7 @@ generatePreview (const char inFileName[],
+     int h = dw.max.y - dw.min.y + 1;
+ 
+     Array2D <Rgba> pixels (h, w);
+-    in.setFrameBuffer (&pixels[0][0] - dw.min.y * w - dw.min.x, 1, w);
++    in.setFrameBuffer (&pixels[0][0] - intptr_t( dw.min.y ) * intptr_t( w ) - intptr_t( dw.min.x ), 1, w);
+     in.readPixels (dw.min.y, dw.max.y);
+ 
+     //
+-- 
+2.34.1
+

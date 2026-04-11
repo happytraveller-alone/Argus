@@ -1,0 +1,34 @@
+From f6aa35c6fbf2aac3c1bb83d4750041b769f61cbf Mon Sep 17 00:00:00 2001
+From: Alexey Sokolov <alexey+znc@asokolov.org>
+Date: Fri, 30 Oct 2015 01:09:13 +0000
+Subject: [PATCH] Really fix #528
+
+The previous fix (5e6e3be3) left a possibility to use-after-delete,
+though it has been much harder to accidentally trigger.
+
+If AddChan(pChan) fails, it deletes pChan, so the new crash was
+happening during showing of error message.
+
+Test for this is at master branch: 9777a1a667
+
+Thanks to https://scan.coverity.com/ for pointing at this.
+---
+ modules/webadmin.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/webadmin.cpp b/modules/webadmin.cpp
+index 17980699..639be021 100644
+--- a/modules/webadmin.cpp
++++ b/modules/webadmin.cpp
+@@ -707,7 +707,7 @@ public:
+ 			}
+ 
+ 			if (!pNetwork->AddChan(pChan)) {
+-				WebSock.PrintErrorPage("Could not add channel [" + pChan->GetName() + "]");
++				WebSock.PrintErrorPage("Could not add channel [" + sChanName + "]");
+ 				return true;
+ 			}
+ 		}
+-- 
+2.34.1
+

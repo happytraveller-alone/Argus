@@ -1,0 +1,46 @@
+From 6832ed139134dc85deb0f15e370c8b0ae9aacf7a Mon Sep 17 00:00:00 2001
+From: AM-SoFT Support <support@am-soft.de>
+Date: Tue, 11 May 2021 09:30:53 +0200
+Subject: [PATCH] Prevent shell injection in the search string like reported by
+ cmaloney3030@gmail.com.
+
+---
+ include/svnlook.php | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/include/svnlook.php b/include/svnlook.php
+index 54531d8..bac9622 100644
+--- a/include/svnlook.php
++++ b/include/svnlook.php
+@@ -862,7 +862,7 @@ class SVNRepository {
+ 	}
+ 
+ 	// }}}
+-	
++
+ 	// {{{ listReadmeContents
+ 	//
+ 	// Parse the README.md file
+@@ -895,7 +895,7 @@ class SVNRepository {
+ 		}
+ 
+ 		echo('<div id="wrap">');
+-		while (!feof($result)) 
++		while (!feof($result))
+ 		{
+ 			$line = fgets($result, 1024);
+ 			echo $mdParser->text($line);
+@@ -1134,7 +1134,9 @@ class SVNRepository {
+ 				$rev = $headlog->entries[0]->rev;
+ 		}
+ 
+-		$cmd = $this->svnCommandString('list -R --search '. '"'.$searchstring.'"'.' --xml', $path, $rev, $peg);
++		$searchstring = escapeshellarg($searchstring);
++		$cmd = 'list -R --search ' . $searchstring . ' --xml';
++		$cmd = $this->svnCommandString($cmd, $path, $rev, $peg);
+ 		$this->_xmlParseCmdOutput($cmd, 'listStartElement', 'listEndElement', 'listCharacterData');
+ 
+ 		return $curList;
+-- 
+2.34.1
+

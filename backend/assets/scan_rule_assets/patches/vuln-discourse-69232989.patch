@@ -1,0 +1,35 @@
+From 692329896ac64d8581947e977202c243eef3b5a2 Mon Sep 17 00:00:00 2001
+From: Alan Guo Xiang Tan <gxtan1990@gmail.com>
+Date: Thu, 5 Jan 2023 06:08:32 +0800
+Subject: [PATCH] SECURITY: escape quotes in tag description when rendering
+ (#19730)
+
+Co-authored-by: Daniel Waterworth <me@danielwaterworth.com>
+---
+ app/assets/javascripts/discourse/app/lib/render-tag.js | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/app/assets/javascripts/discourse/app/lib/render-tag.js b/app/assets/javascripts/discourse/app/lib/render-tag.js
+index 418b37f1b4..d0fbb81515 100644
+--- a/app/assets/javascripts/discourse/app/lib/render-tag.js
++++ b/app/assets/javascripts/discourse/app/lib/render-tag.js
+@@ -2,6 +2,7 @@ import User from "discourse/models/user";
+ import { escapeExpression } from "discourse/lib/utilities";
+ import getURL from "discourse-common/lib/get-url";
+ import { helperContext } from "discourse-common/lib/helpers";
++import { escape } from "pretty-text/sanitizer";
+ 
+ let _renderer = defaultRenderTag;
+ 
+@@ -44,7 +45,7 @@ export function defaultRenderTag(tag, params) {
+     href +
+     " data-tag-name=" +
+     tag +
+-    (params.description ? ' title="' + params.description + '" ' : "") +
++    (params.description ? ' title="' + escape(params.description) + '" ' : "") +
+     " class='" +
+     classes.join(" ") +
+     "'>" +
+-- 
+2.34.1
+

@@ -1,0 +1,108 @@
+From 6d3181406d87503dbd15e4a7c764c8963f13977f Mon Sep 17 00:00:00 2001
+From: zeripath <art27@cantab.net>
+Date: Sun, 21 Aug 2022 14:28:15 +0100
+Subject: [PATCH] Double check CloneURL is acceptable (#20869)
+
+Some Migration Downloaders provide re-writing of CloneURLs that may point to
+unallowed urls. Recheck after the CloneURL is rewritten.
+
+Signed-off-by: Andrew Thornton <art27@cantab.net>
+---
+ services/migrations/dump.go                |  8 ++++++--
+ services/migrations/gitea_uploader_test.go |  2 +-
+ services/migrations/migrate.go             | 19 +++++++++++++++++--
+ 3 files changed, 24 insertions(+), 5 deletions(-)
+
+diff --git a/services/migrations/dump.go b/services/migrations/dump.go
+index a9ec45951..f040c6c66 100644
+--- a/services/migrations/dump.go
++++ b/services/migrations/dump.go
+@@ -560,6 +560,10 @@ func (g *RepositoryDumper) Finish() error {
+ 
+ // DumpRepository dump repository according MigrateOptions to a local directory
+ func DumpRepository(ctx context.Context, baseDir, ownerName string, opts base.MigrateOptions) error {
++	doer, err := user_model.GetAdminUser()
++	if err != nil {
++		return err
++	}
+ 	downloader, err := newDownloader(ctx, ownerName, opts)
+ 	if err != nil {
+ 		return err
+@@ -569,7 +573,7 @@ func DumpRepository(ctx context.Context, baseDir, ownerName string, opts base.Mi
+ 		return err
+ 	}
+ 
+-	if err := migrateRepository(downloader, uploader, opts, nil); err != nil {
++	if err := migrateRepository(doer, downloader, uploader, opts, nil); err != nil {
+ 		if err1 := uploader.Rollback(); err1 != nil {
+ 			log.Error("rollback failed: %v", err1)
+ 		}
+@@ -641,7 +645,7 @@ func RestoreRepository(ctx context.Context, baseDir, ownerName, repoName string,
+ 		return err
+ 	}
+ 
+-	if err = migrateRepository(downloader, uploader, migrateOpts, nil); err != nil {
++	if err = migrateRepository(doer, downloader, uploader, migrateOpts, nil); err != nil {
+ 		if err1 := uploader.Rollback(); err1 != nil {
+ 			log.Error("rollback failed: %v", err1)
+ 		}
+diff --git a/services/migrations/gitea_uploader_test.go b/services/migrations/gitea_uploader_test.go
+index 9fb3d6ffd..1f1c4bde6 100644
+--- a/services/migrations/gitea_uploader_test.go
++++ b/services/migrations/gitea_uploader_test.go
+@@ -46,7 +46,7 @@ func TestGiteaUploadRepo(t *testing.T) {
+ 		uploader   = NewGiteaLocalUploader(graceful.GetManager().HammerContext(), user, user.Name, repoName)
+ 	)
+ 
+-	err := migrateRepository(downloader, uploader, base.MigrateOptions{
++	err := migrateRepository(user, downloader, uploader, base.MigrateOptions{
+ 		CloneAddr:    "https://github.com/go-xorm/builder",
+ 		RepoName:     repoName,
+ 		AuthUsername: "",
+diff --git a/services/migrations/migrate.go b/services/migrations/migrate.go
+index 9460c66db..a5715072c 100644
+--- a/services/migrations/migrate.go
++++ b/services/migrations/migrate.go
+@@ -128,7 +128,7 @@ func MigrateRepository(ctx context.Context, doer *user_model.User, ownerName str
+ 	uploader := NewGiteaLocalUploader(ctx, doer, ownerName, opts.RepoName)
+ 	uploader.gitServiceType = opts.GitServiceType
+ 
+-	if err := migrateRepository(downloader, uploader, opts, messenger); err != nil {
++	if err := migrateRepository(doer, downloader, uploader, opts, messenger); err != nil {
+ 		if err1 := uploader.Rollback(); err1 != nil {
+ 			log.Error("rollback failed: %v", err1)
+ 		}
+@@ -177,7 +177,7 @@ func newDownloader(ctx context.Context, ownerName string, opts base.MigrateOptio
+ // migrateRepository will download information and then upload it to Uploader, this is a simple
+ // process for small repository. For a big repository, save all the data to disk
+ // before upload is better
+-func migrateRepository(downloader base.Downloader, uploader base.Uploader, opts base.MigrateOptions, messenger base.Messenger) error {
++func migrateRepository(doer *user_model.User, downloader base.Downloader, uploader base.Uploader, opts base.MigrateOptions, messenger base.Messenger) error {
+ 	if messenger == nil {
+ 		messenger = base.NilMessenger
+ 	}
+@@ -198,6 +198,21 @@ func migrateRepository(downloader base.Downloader, uploader base.Uploader, opts
+ 		return err
+ 	}
+ 
++	// If the downloader is not a RepositoryRestorer then we need to recheck the CloneURL
++	if _, ok := downloader.(*RepositoryRestorer); !ok {
++		// Now the clone URL can be rewritten by the downloader so we must recheck
++		if err := IsMigrateURLAllowed(repo.CloneURL, doer); err != nil {
++			return err
++		}
++
++		// And so can the original URL too so again we must recheck
++		if repo.OriginalURL != "" {
++			if err := IsMigrateURLAllowed(repo.OriginalURL, doer); err != nil {
++				return err
++			}
++		}
++	}
++
+ 	log.Trace("migrating git data from %s", repo.CloneURL)
+ 	messenger("repo.migrate.migrating_git")
+ 	if err = uploader.CreateRepo(repo, opts); err != nil {
+-- 
+2.34.1
+

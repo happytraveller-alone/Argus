@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="CloneMethodMustBePublic Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for CloneMethodMustBePublic</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="CloneMethodMustBePublic" language="java" since="5.4.0" message="clone() method must be public if the class implements Cloneable" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#clonemethodmustbepublic">
+            <description>
+    The java manual says "By convention, classes that implement this interface should override
+    Object.clone (which is protected) with a public method."
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //MethodDeclaration[not(pmd-java:modifiers() = "public")]
+        [@Name = 'clone']
+        [@Arity = 0]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo implements Cloneable {
+        @Override
+        protected Object clone() throws CloneNotSupportedException { // Violation, must be public
+        }
+    }
+
+    public class Foo implements Cloneable {
+        @Override
+        protected Foo clone() { // Violation, must be public
+        }
+    }
+
+    public class Foo implements Cloneable {
+        @Override
+        public Object clone() // Ok
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

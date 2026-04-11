@@ -1,0 +1,25 @@
+From 133a77fac7d31a38703db2099a90c1b49de62e37 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <mcihar@novell.com>
+Date: Mon, 23 Aug 2010 17:05:53 +0200
+Subject: [PATCH] Escape backtrace listing to avoid possible XSS on this.
+
+---
+ libraries/Error.class.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libraries/Error.class.php b/libraries/Error.class.php
+index 849287e43c..9f0ae9a2c2 100644
+--- a/libraries/Error.class.php
++++ b/libraries/Error.class.php
+@@ -319,7 +319,7 @@ class PMA_Error extends PMA_Message
+         if (in_array($function, $include_functions)) {
+             echo PMA_Error::relPath($arg);
+         } elseif (is_scalar($arg)) {
+-            echo gettype($arg) . ' ' . $arg;
++            echo gettype($arg) . ' ' . htmlspecialchars($arg);
+         } else {
+             echo gettype($arg);
+         }
+-- 
+2.34.1
+

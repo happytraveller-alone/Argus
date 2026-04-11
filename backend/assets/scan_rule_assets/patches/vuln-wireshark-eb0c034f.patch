@@ -1,0 +1,29 @@
+From eb0c034f6e4cdbf5ae36dd9ba8e2743630b7bd38 Mon Sep 17 00:00:00 2001
+From: Michael Mann <mmann78@netscape.net>
+Date: Fri, 11 Dec 2015 21:48:58 -0500
+Subject: [PATCH] Increase ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT to match
+ ZBEE_ZCL_APPL_EVTALT_COUNT_NUM_MASK, to prevent invalid ett_ array access.
+
+Change-Id: I67e79e97e13081a77bb5202cbbc1e4f1ee872c95
+Reviewed-on: https://code.wireshark.org/review/12556
+Reviewed-by: Michael Mann <mmann78@netscape.net>
+---
+ epan/dissectors/packet-zbee-zcl-ha.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/epan/dissectors/packet-zbee-zcl-ha.c b/epan/dissectors/packet-zbee-zcl-ha.c
+index 1fba2c2b09..db51c03bbb 100644
+--- a/epan/dissectors/packet-zbee-zcl-ha.c
++++ b/epan/dissectors/packet-zbee-zcl-ha.c
+@@ -621,7 +621,7 @@ proto_reg_handoff_zbee_zcl_met_idt(void)
+ /*************************/
+ 
+ #define ZBEE_ZCL_APPL_EVTALT_NUM_GENERIC_ETT              1
+-#define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               8
++#define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               15
+ #define ZBEE_ZCL_APPL_EVTALT_NUM_ETT                      (ZBEE_ZCL_APPL_EVTALT_NUM_GENERIC_ETT + \
+                                                           ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT)
+ /* Attributes - None */
+-- 
+2.34.1
+

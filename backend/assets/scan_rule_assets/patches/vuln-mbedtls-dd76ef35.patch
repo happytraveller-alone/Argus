@@ -1,0 +1,207 @@
+From dd76ef359df0ffd321de56863ebf82c72c4a75ba Mon Sep 17 00:00:00 2001
+From: Werner Lewis <Werner.Lewis@arm.com>
+Date: Mon, 30 May 2022 12:00:21 +0100
+Subject: [PATCH] Refactor AES context to be shallow-copyable
+
+Replace RK pointer in AES context with a buffer offset, to allow
+shallow copying. Fixes #2147.
+
+Signed-off-by: Werner Lewis <werner.lewis@arm.com>
+---
+ ChangeLog.d/fix-aes-shallow-copying.txt |  2 ++
+ include/mbedtls/aes.h                   |  2 +-
+ library/aes.c                           | 23 ++++++++++----------
+ library/aesni.c                         |  2 +-
+ library/padlock.c                       |  4 ++--
+ tests/suites/test_suite_aes.ecb.data    |  3 +++
+ tests/suites/test_suite_aes.function    | 29 +++++++++++++++++++++++++
+ 7 files changed, 50 insertions(+), 15 deletions(-)
+ create mode 100644 ChangeLog.d/fix-aes-shallow-copying.txt
+
+diff --git a/ChangeLog.d/fix-aes-shallow-copying.txt b/ChangeLog.d/fix-aes-shallow-copying.txt
+new file mode 100644
+index 000000000000..0c119d6283cc
+--- /dev/null
++++ b/ChangeLog.d/fix-aes-shallow-copying.txt
+@@ -0,0 +1,2 @@
++Bugfix
++   * Refactor mbedtls_aes_context to support shallow-copying. Fixes #2147.
+diff --git a/include/mbedtls/aes.h b/include/mbedtls/aes.h
+index 144bd89e24fb..d64d59067dba 100644
+--- a/include/mbedtls/aes.h
++++ b/include/mbedtls/aes.h
+@@ -80,7 +80,7 @@ extern "C" {
+ typedef struct mbedtls_aes_context
+ {
+     int MBEDTLS_PRIVATE(nr);                     /*!< The number of rounds. */
+-    uint32_t *MBEDTLS_PRIVATE(rk);               /*!< AES round keys. */
++    size_t MBEDTLS_PRIVATE(rk_offset);           /*!< Buffer offset for AES round keys. */
+     uint32_t MBEDTLS_PRIVATE(buf)[68];           /*!< Unaligned data buffer. This buffer can
+                                      hold 32 extra Bytes, which can be used for
+                                      one of the following purposes:
+diff --git a/library/aes.c b/library/aes.c
+index bf5d43212968..af13d63104e3 100644
+--- a/library/aes.c
++++ b/library/aes.c
+@@ -555,14 +555,15 @@ int mbedtls_aes_setkey_enc( mbedtls_aes_context *ctx, const unsigned char *key,
+         aes_padlock_ace = mbedtls_padlock_has_support( MBEDTLS_PADLOCK_ACE );
+ 
+     if( aes_padlock_ace )
+-        ctx->rk = RK = MBEDTLS_PADLOCK_ALIGN16( ctx->buf );
++        ctx->rk_offset = MBEDTLS_PADLOCK_ALIGN16( ctx->buf ) - ctx->buf;
+     else
+ #endif
+-    ctx->rk = RK = ctx->buf;
++    ctx->rk_offset = 0;
++    RK = ctx->buf + ctx->rk_offset;
+ 
+ #if defined(MBEDTLS_AESNI_C) && defined(MBEDTLS_HAVE_X86_64)
+     if( mbedtls_aesni_has_support( MBEDTLS_AESNI_AES ) )
+-        return( mbedtls_aesni_setkey_enc( (unsigned char *) ctx->rk, key, keybits ) );
++        return( mbedtls_aesni_setkey_enc( (unsigned char *) RK, key, keybits ) );
+ #endif
+ 
+     for( i = 0; i < ( keybits >> 5 ); i++ )
+@@ -659,10 +660,11 @@ int mbedtls_aes_setkey_dec( mbedtls_aes_context *ctx, const unsigned char *key,
+         aes_padlock_ace = mbedtls_padlock_has_support( MBEDTLS_PADLOCK_ACE );
+ 
+     if( aes_padlock_ace )
+-        ctx->rk = RK = MBEDTLS_PADLOCK_ALIGN16( ctx->buf );
++        ctx->rk_offset = MBEDTLS_PADLOCK_ALIGN16( ctx->buf ) - ctx->buf;
+     else
+ #endif
+-    ctx->rk = RK = ctx->buf;
++    ctx->rk_offset = 0;
++    RK = ctx->buf + ctx->rk_offset;
+ 
+     /* Also checks keybits */
+     if( ( ret = mbedtls_aes_setkey_enc( &cty, key, keybits ) ) != 0 )
+@@ -673,13 +675,13 @@ int mbedtls_aes_setkey_dec( mbedtls_aes_context *ctx, const unsigned char *key,
+ #if defined(MBEDTLS_AESNI_C) && defined(MBEDTLS_HAVE_X86_64)
+     if( mbedtls_aesni_has_support( MBEDTLS_AESNI_AES ) )
+     {
+-        mbedtls_aesni_inverse_key( (unsigned char *) ctx->rk,
+-                           (const unsigned char *) cty.rk, ctx->nr );
++        mbedtls_aesni_inverse_key( (unsigned char *) RK,
++                           (const unsigned char *) ( cty.buf + cty.rk_offset ), ctx->nr );
+         goto exit;
+     }
+ #endif
+ 
+-    SK = cty.rk + cty.nr * 4;
++    SK = cty.buf + cty.rk_offset + cty.nr * 4;
+ 
+     *RK++ = *SK++;
+     *RK++ = *SK++;
+@@ -843,7 +845,7 @@ int mbedtls_internal_aes_encrypt( mbedtls_aes_context *ctx,
+                                   unsigned char output[16] )
+ {
+     int i;
+-    uint32_t *RK = ctx->rk;
++    uint32_t *RK = ctx->buf + ctx->rk_offset;
+     struct
+     {
+         uint32_t X[4];
+@@ -907,7 +909,7 @@ int mbedtls_internal_aes_decrypt( mbedtls_aes_context *ctx,
+                                   unsigned char output[16] )
+ {
+     int i;
+-    uint32_t *RK = ctx->rk;
++    uint32_t *RK = ctx->buf + ctx->rk_offset;
+     struct
+     {
+         uint32_t X[4];
+@@ -971,7 +973,6 @@ int mbedtls_aes_crypt_ecb( mbedtls_aes_context *ctx,
+                            unsigned char output[16] )
+ {
+     AES_VALIDATE_RET( ctx != NULL );
+-    AES_VALIDATE_RET( ctx->rk != NULL );
+     AES_VALIDATE_RET( input != NULL );
+     AES_VALIDATE_RET( output != NULL );
+     AES_VALIDATE_RET( mode == MBEDTLS_AES_ENCRYPT ||
+diff --git a/library/aesni.c b/library/aesni.c
+index be226c9c00ce..87d818af711f 100644
+--- a/library/aesni.c
++++ b/library/aesni.c
+@@ -127,7 +127,7 @@ int mbedtls_aesni_crypt_ecb( mbedtls_aes_context *ctx,
+          "3:                        \n\t"
+          "movdqu    %%xmm0, (%4)    \n\t" // export output
+          :
+-         : "r" (ctx->nr), "r" (ctx->rk), "r" (mode), "r" (input), "r" (output)
++         : "r" (ctx->nr), "r" (ctx->buf + ctx->rk_offset), "r" (mode), "r" (input), "r" (output)
+          : "memory", "cc", "xmm0", "xmm1" );
+ 
+ 
+diff --git a/library/padlock.c b/library/padlock.c
+index b8ba1058a8b8..2fb4e8342313 100644
+--- a/library/padlock.c
++++ b/library/padlock.c
+@@ -82,7 +82,7 @@ int mbedtls_padlock_xcryptecb( mbedtls_aes_context *ctx,
+     uint32_t *ctrl;
+     unsigned char buf[256];
+ 
+-    rk  = ctx->rk;
++    rk  = ctx->buf + ctx->rk_offset;
+     blk = MBEDTLS_PADLOCK_ALIGN16( buf );
+     memcpy( blk, input, 16 );
+ 
+@@ -129,7 +129,7 @@ int mbedtls_padlock_xcryptcbc( mbedtls_aes_context *ctx,
+         ( (long) output & 15 ) != 0 )
+         return( MBEDTLS_ERR_PADLOCK_DATA_MISALIGNED );
+ 
+-    rk = ctx->rk;
++    rk = ctx->buf + ctx->rk_offset;
+     iw = MBEDTLS_PADLOCK_ALIGN16( buf );
+     memcpy( iw, iv, 16 );
+ 
+diff --git a/tests/suites/test_suite_aes.ecb.data b/tests/suites/test_suite_aes.ecb.data
+index 6349034a6930..b468ac30b7ac 100644
+--- a/tests/suites/test_suite_aes.ecb.data
++++ b/tests/suites/test_suite_aes.ecb.data
+@@ -228,3 +228,6 @@ aes_decrypt_ecb:"000000000000000000000000000000000000000000000000000000000000000
+ 
+ AES-256-ECB Decrypt NIST KAT #12
+ aes_decrypt_ecb:"0000000000000000000000000000000000000000000000000000000000000000":"9b80eefb7ebe2d2b16247aa0efc72f5d":"e0000000000000000000000000000000":0
++
++AES-256-ECB Copy Context NIST KAT #1
++aes_ecb_copy_context:"c1cc358b449909a19436cfbb3f852ef8bcb5ed12ac7058325f56e6099aab1a1c":"00000000000000000000000000000000"
+diff --git a/tests/suites/test_suite_aes.function b/tests/suites/test_suite_aes.function
+index 52af8e02f209..0c321cdb7268 100644
+--- a/tests/suites/test_suite_aes.function
++++ b/tests/suites/test_suite_aes.function
+@@ -460,6 +460,35 @@ void aes_misc_params( )
+ }
+ /* END_CASE */
+ 
++/* BEGIN_CASE */
++void aes_ecb_copy_context( data_t * key_str, data_t * src_str )
++{
++    unsigned char output1[16], output2[16], plain[16];
++    mbedtls_aes_context ctx1, ctx2;
++
++    // Set key and encrypt with original context
++    mbedtls_aes_init( &ctx1 );
++    TEST_ASSERT( mbedtls_aes_setkey_enc( &ctx1, key_str->x,
++                                         key_str->len * 8 ) == 0 );
++    TEST_ASSERT( mbedtls_aes_crypt_ecb( &ctx1, MBEDTLS_AES_ENCRYPT,
++                                        src_str->x, output1 ) == 0 );
++
++    ctx2 = ctx1;
++    memset( &ctx1, 0, sizeof( ctx1 ) );
++
++    // Encrypt with copied context and decrypt
++    TEST_ASSERT( mbedtls_aes_crypt_ecb( &ctx2, MBEDTLS_AES_ENCRYPT,
++                                        src_str->x, output2 ) == 0 );
++    TEST_ASSERT( mbedtls_aes_setkey_dec( &ctx2, key_str->x,
++                                         key_str->len * 8) == 0 );
++    TEST_ASSERT( mbedtls_aes_crypt_ecb( &ctx2, MBEDTLS_AES_DECRYPT,
++                                        output1, plain ) == 0 );
++
++    TEST_ASSERT( mbedtls_test_hexcmp( output1, output2, 16, 16 ) == 0 );
++    TEST_ASSERT( mbedtls_test_hexcmp( src_str->x, plain, src_str->len, 16) == 0 );
++}
++/* END_CASE */
++
+ /* BEGIN_CASE depends_on:MBEDTLS_SELF_TEST */
+ void aes_selftest(  )
+ {

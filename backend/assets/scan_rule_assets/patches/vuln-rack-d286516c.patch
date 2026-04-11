@@ -1,0 +1,88 @@
+From d286516cbd58fbb2ad6944ce9040e9ba96d9371a Mon Sep 17 00:00:00 2001
+From: Aaron Patterson <tenderlove@ruby-lang.org>
+Date: Thu, 26 May 2022 13:26:25 -0700
+Subject: [PATCH] Restrict broken mime parsing
+
+This commit restricts broken mime parsing to deal with a ReDOS
+vulnerability.
+
+[CVE-2022-30122]
+---
+ lib/rack/multipart/parser.rb                      |  6 +++---
+ ...ame_with_escaped_quotes_and_modification_param |  2 +-
+ test/spec_multipart.rb                            | 15 +--------------
+ 3 files changed, 5 insertions(+), 18 deletions(-)
+
+diff --git a/lib/rack/multipart/parser.rb b/lib/rack/multipart/parser.rb
+index 6fcfd487..ef9637fc 100644
+--- a/lib/rack/multipart/parser.rb
++++ b/lib/rack/multipart/parser.rb
+@@ -21,8 +21,7 @@ module Rack
+     TOKEN = /[^\s()<>,;:\\"\/\[\]?=]+/
+     CONDISP = /Content-Disposition:\s*#{TOKEN}\s*/i
+     VALUE = /"(?:\\"|[^"])*"|#{TOKEN}/
+-    BROKEN_QUOTED = /^#{CONDISP}.*;\s*filename="(.*?)"(?:\s*$|\s*;\s*#{TOKEN}=)/i
+-    BROKEN_UNQUOTED = /^#{CONDISP}.*;\s*filename=(#{TOKEN})/i
++    BROKEN = /^#{CONDISP}.*;\s*filename=(#{VALUE})/i
+     MULTIPART_CONTENT_TYPE = /Content-Type: (.*)#{EOL}/ni
+     MULTIPART_CONTENT_DISPOSITION = /Content-Disposition:.*;\s*name=(#{VALUE})/ni
+     MULTIPART_CONTENT_ID = /Content-ID:\s*([^#{EOL}]*)/ni
+@@ -341,8 +340,9 @@ module Rack
+           elsif filename = params['filename']
+             filename = $1 if filename =~ /^"(.*)"$/
+           end
+-        when BROKEN_QUOTED, BROKEN_UNQUOTED
++        when BROKEN
+           filename = $1
++          filename = $1 if filename =~ /^"(.*)"$/
+         end
+ 
+         return unless filename
+diff --git a/test/multipart/filename_with_escaped_quotes_and_modification_param b/test/multipart/filename_with_escaped_quotes_and_modification_param
+index 706a5ecb..a1b1ed0c 100644
+--- a/test/multipart/filename_with_escaped_quotes_and_modification_param
++++ b/test/multipart/filename_with_escaped_quotes_and_modification_param
+@@ -1,6 +1,6 @@
+ --AaB03x
+ content-type: image/jpeg
+-content-disposition: attachment; name="files"; filename=""human" genome.jpeg"; modification-date="Wed, 12 Feb 1997 16:29:51 -0500";
++content-disposition: attachment; name="files"; filename="\"human\" genome.jpeg"; modification-date="Wed, 12 Feb 1997 16:29:51 -0500";
+ Content-Description: a complete map of the human genome
+ 
+ contents
+diff --git a/test/spec_multipart.rb b/test/spec_multipart.rb
+index d921a4b9..53787cb7 100644
+--- a/test/spec_multipart.rb
++++ b/test/spec_multipart.rb
+@@ -461,19 +461,6 @@ describe Rack::Multipart do
+     params["files"][:tempfile].read.must_equal "contents"
+   end
+ 
+-  it "parse filename with unescaped quotes" do
+-    env = Rack::MockRequest.env_for("/", multipart_fixture(:filename_with_unescaped_quotes))
+-    params = Rack::Multipart.parse_multipart(env)
+-    params["files"][:type].must_equal "application/octet-stream"
+-    params["files"][:filename].must_equal "escape \"quotes"
+-    params["files"][:head].must_equal "content-disposition: form-data; " +
+-      "name=\"files\"; " +
+-      "filename=\"escape \"quotes\"\r\n" +
+-      "content-type: application/octet-stream\r\n"
+-    params["files"][:name].must_equal "files"
+-    params["files"][:tempfile].read.must_equal "contents"
+-  end
+-
+   it "parse filename with escaped quotes and modification param" do
+     env = Rack::MockRequest.env_for("/", multipart_fixture(:filename_with_escaped_quotes_and_modification_param))
+     params = Rack::Multipart.parse_multipart(env)
+@@ -482,7 +469,7 @@ describe Rack::Multipart do
+     params["files"][:head].must_equal "content-type: image/jpeg\r\n" +
+       "content-disposition: attachment; " +
+       "name=\"files\"; " +
+-      "filename=\"\"human\" genome.jpeg\"; " +
++      "filename=\"\\\"human\\\" genome.jpeg\"; " +
+       "modification-date=\"Wed, 12 Feb 1997 16:29:51 -0500\";\r\n" +
+       "Content-Description: a complete map of the human genome\r\n"
+     params["files"][:name].must_equal "files"
+-- 
+2.34.1
+

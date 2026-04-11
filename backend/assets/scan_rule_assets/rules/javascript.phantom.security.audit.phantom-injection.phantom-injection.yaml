@@ -1,0 +1,47 @@
+rules:
+- id: javascript.phantom.security.audit.phantom-injection.phantom-injection
+  message: If unverified user data can reach the `phantom` page methods it can result
+    in Server-Side Request Forgery vulnerabilities
+  severity: WARNING
+  languages:
+  - javascript
+  patterns:
+  - pattern: '...
+
+      $PHANTOM = require(''phantom'');
+
+      ...
+
+      '
+  - pattern-not-inside: 'var $INPUT = "...";
+
+      ...
+
+      '
+  metadata:
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery'
+    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code'
+    - 'CWE-20: Improper Input Validation'
+- id: javascript.playwright.security.audit.playwright-evaluate-arg-injection.playwright-evaluate-arg-injection
+  message: If unverified user data can reach the `evaluate` method it can result in
+    Server-Side Request Forgery vulnerabilities
+  severity: WARNING
+  languages:
+  - javascript
+  patterns:
+  - pattern-inside: '...
+
+      require(''playwright'');
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern-inside: function $FUNC (...,$INPUT,...) {...}
+    - pattern-inside: function (...,$INPUT,...) {...}
+  metadata:
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery (SSRF)'
+    - 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'
+    - 'CWE-20: Improper Input Validation'

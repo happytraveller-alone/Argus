@@ -462,7 +462,7 @@
       - `seed_project_archive_download`
       - `legacy_user_config_backfill`
   - Rust 新增 `rust_scan_rule_assets` 规则资产库：
-    - 会把 `backend_old/app/db` 下扫描引擎规则资产导入 Rust 自己维护的数据库
+    - 会把 `backend/assets/scan_rule_assets/` 下扫描引擎规则资产导入 Rust 自己维护的数据库
     - 当前覆盖：
       - `rules/`
       - `rules_from_patches/`
@@ -471,7 +471,6 @@
       - `bandit_builtin/`
       - `rules_phpstan/`
       - `rules_pmd/`
-      - `yasa_builtin/`
   - 已打通首条规则消费链路：
     - Gitleaks 会从 Rust 规则资产库读取 builtin TOML
     - Rust 会 materialize 成 `gitleaks.toml`
@@ -498,7 +497,7 @@
   - Rust DB 启动检查已经和 Python 旧 DB 语义解耦，Python 只保留参考价值
   - Rust 已开始 owner startup init / recovery / preflight 的 orchestration 外壳
   - Rust 在 file-mode 下已经能独立自举最小 control-plane 状态
-  - `backend_old/app/db` 中仍有价值的扫描引擎规则资产，已经开始迁入 Rust 自有库，不再依赖 Python 侧灌库
+  - 扫描引擎规则资产现在以 `backend/assets/scan_rule_assets/` 为 Rust owner root，不再依赖 `backend_old/app/db`
   - Rust startup init 的“该做/不该做”已经是自己的 policy，不再让 Python demo/user 初始化影子带偏设计
   - 至少已有一个扫描引擎开始真正消费 Rust 自己维护的规则资产
   - `opengrep` 已进入 Rust 真消费阶段，最大的规则资产源开始脱离 Python 旧链路

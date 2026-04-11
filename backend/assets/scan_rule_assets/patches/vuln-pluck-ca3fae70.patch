@@ -1,0 +1,25 @@
+From ca3fae7001e2db17deca5128a9e4d758266624aa Mon Sep 17 00:00:00 2001
+From: Bas Steelooper <github@bas.steelooper.com>
+Date: Mon, 26 Apr 2021 19:10:39 +0200
+Subject: [PATCH] disable option to disable certcheck issue #101
+
+---
+ data/inc/update_applet.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/data/inc/update_applet.php b/data/inc/update_applet.php
+index 377fc31..b36ae29 100644
+--- a/data/inc/update_applet.php
++++ b/data/inc/update_applet.php
+@@ -41,7 +41,7 @@ if (!file_exists('data/settings/update_lastcheck.php') || (file_exists('data/set
+ 		$geturl = curl_init();
+ 		curl_setopt($geturl, CURLOPT_URL, $url);
+ 		// Dont check ssl certifical
+-		curl_setopt($geturl, CURLOPT_SSL_VERIFYPEER, false);
++		//curl_setopt($geturl, CURLOPT_SSL_VERIFYPEER, false);
+ 		// Go redirect
+ 		curl_setopt($geturl, CURLOPT_FOLLOWLOCATION, true);
+ 		// Return data
+-- 
+2.34.1
+

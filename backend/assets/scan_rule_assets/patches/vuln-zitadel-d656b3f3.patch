@@ -1,0 +1,366 @@
+From d656b3f3c97d4ba46b97ef5a7ab45aa3989b98e0 Mon Sep 17 00:00:00 2001
+From: Livio Spring <livio.a@gmail.com>
+Date: Wed, 17 Aug 2022 08:07:41 +0200
+Subject: [PATCH] fix: instance interceptors return NotFound (404) error for
+ unknown hosts (#4184)
+
+* fix: instance interceptors return "NotFound" (404) error for unknown hosts
+
+* fix tests
+---
+ .../server/middleware/instance_interceptor.go | 19 ++++--
+ .../middleware/instance_interceptor_test.go   |  2 +-
+ .../http/middleware/instance_interceptor.go   | 62 ++++++++++++-------
+ .../middleware/instance_interceptor_test.go   |  8 +--
+ internal/api/ui/console/console.go            | 14 ++---
+ internal/query/instance.go                    |  6 +-
+ internal/static/i18n/de.yaml                  |  1 +
+ internal/static/i18n/en.yaml                  |  1 +
+ internal/static/i18n/fr.yaml                  |  1 +
+ internal/static/i18n/it.yaml                  |  1 +
+ internal/static/mock/storage_mock.go          |  2 +-
+ 11 files changed, 71 insertions(+), 46 deletions(-)
+
+diff --git a/internal/api/grpc/server/middleware/instance_interceptor.go b/internal/api/grpc/server/middleware/instance_interceptor.go
+index 73a417fcb..3fd1727c0 100644
+--- a/internal/api/grpc/server/middleware/instance_interceptor.go
++++ b/internal/api/grpc/server/middleware/instance_interceptor.go
+@@ -2,15 +2,20 @@ package middleware
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"fmt"
+ 	"strings"
+ 
++	"github.com/zitadel/logging"
++	"golang.org/x/text/language"
+ 	"google.golang.org/grpc"
+ 	"google.golang.org/grpc/codes"
+ 	"google.golang.org/grpc/metadata"
+ 	"google.golang.org/grpc/status"
+ 
+ 	"github.com/zitadel/zitadel/internal/api/authz"
++	caos_errors "github.com/zitadel/zitadel/internal/errors"
++	"github.com/zitadel/zitadel/internal/i18n"
+ 	"github.com/zitadel/zitadel/internal/telemetry/tracing"
+ )
+ 
+@@ -23,12 +28,14 @@ type InstanceVerifier interface {
+ }
+ 
+ func InstanceInterceptor(verifier authz.InstanceVerifier, headerName string, ignoredServices ...string) grpc.UnaryServerInterceptor {
++	translator, err := newZitadelTranslator(language.English)
++	logging.OnError(err).Panic("unable to get translator")
+ 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+-		return setInstance(ctx, req, info, handler, verifier, headerName, ignoredServices...)
++		return setInstance(ctx, req, info, handler, verifier, headerName, translator, ignoredServices...)
+ 	}
+ }
+ 
+-func setInstance(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler, verifier authz.InstanceVerifier, headerName string, ignoredServices ...string) (_ interface{}, err error) {
++func setInstance(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler, verifier authz.InstanceVerifier, headerName string, translator *i18n.Translator, ignoredServices ...string) (_ interface{}, err error) {
+ 	interceptorCtx, span := tracing.NewServerInterceptorSpan(ctx)
+ 	defer func() { span.EndWithError(err) }()
+ 	for _, service := range ignoredServices {
+@@ -42,11 +49,15 @@ func setInstance(ctx context.Context, req interface{}, info *grpc.UnaryServerInf
+ 
+ 	host, err := hostFromContext(interceptorCtx, headerName)
+ 	if err != nil {
+-		return nil, status.Error(codes.PermissionDenied, err.Error())
++		return nil, status.Error(codes.NotFound, err.Error())
+ 	}
+ 	instance, err := verifier.InstanceByHost(interceptorCtx, host)
+ 	if err != nil {
+-		return nil, status.Error(codes.PermissionDenied, err.Error())
++		caosErr := new(caos_errors.NotFoundError)
++		if errors.As(err, &caosErr) {
++			caosErr.Message = translator.LocalizeFromCtx(ctx, caosErr.GetMessage(), nil)
++		}
++		return nil, status.Error(codes.NotFound, err.Error())
+ 	}
+ 	span.End()
+ 	return handler(authz.WithInstance(ctx, instance), req)
+diff --git a/internal/api/grpc/server/middleware/instance_interceptor_test.go b/internal/api/grpc/server/middleware/instance_interceptor_test.go
+index b8a9342a0..96da6cffb 100644
+--- a/internal/api/grpc/server/middleware/instance_interceptor_test.go
++++ b/internal/api/grpc/server/middleware/instance_interceptor_test.go
+@@ -135,7 +135,7 @@ func Test_setInstance(t *testing.T) {
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			got, err := setInstance(tt.args.ctx, tt.args.req, tt.args.info, tt.args.handler, tt.args.verifier, tt.args.headerName)
++			got, err := setInstance(tt.args.ctx, tt.args.req, tt.args.info, tt.args.handler, tt.args.verifier, tt.args.headerName, nil)
+ 			if (err != nil) != tt.res.err {
+ 				t.Errorf("setInstance() error = %v, wantErr %v", err, tt.res.err)
+ 				return
+diff --git a/internal/api/http/middleware/instance_interceptor.go b/internal/api/http/middleware/instance_interceptor.go
+index 17e08e64a..70edd7b5c 100644
+--- a/internal/api/http/middleware/instance_interceptor.go
++++ b/internal/api/http/middleware/instance_interceptor.go
+@@ -2,11 +2,18 @@ package middleware
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"fmt"
+ 	"net/http"
+ 	"strings"
+ 
++	"github.com/rakyll/statik/fs"
++	"github.com/zitadel/logging"
++	"golang.org/x/text/language"
++
+ 	"github.com/zitadel/zitadel/internal/api/authz"
++	caos_errors "github.com/zitadel/zitadel/internal/errors"
++	"github.com/zitadel/zitadel/internal/i18n"
+ 	"github.com/zitadel/zitadel/internal/telemetry/tracing"
+ )
+ 
+@@ -14,6 +21,7 @@ type instanceInterceptor struct {
+ 	verifier        authz.InstanceVerifier
+ 	headerName      string
+ 	ignoredPrefixes []string
++	translator      *i18n.Translator
+ }
+ 
+ func InstanceInterceptor(verifier authz.InstanceVerifier, headerName string, ignoredPrefixes ...string) *instanceInterceptor {
+@@ -21,43 +29,40 @@ func InstanceInterceptor(verifier authz.InstanceVerifier, headerName string, ign
+ 		verifier:        verifier,
+ 		headerName:      headerName,
+ 		ignoredPrefixes: ignoredPrefixes,
++		translator:      newZitadelTranslator(),
+ 	}
+ }
+ 
+ func (a *instanceInterceptor) Handler(next http.Handler) http.Handler {
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		for _, prefix := range a.ignoredPrefixes {
+-			if strings.HasPrefix(r.URL.Path, prefix) {
+-				next.ServeHTTP(w, r)
+-				return
+-			}
+-		}
+-		ctx, err := setInstance(r, a.verifier, a.headerName)
+-		if err != nil {
+-			http.Error(w, err.Error(), http.StatusUnauthorized)
+-			return
+-		}
+-		r = r.WithContext(ctx)
+-		next.ServeHTTP(w, r)
++		a.handleInstance(w, r, next)
+ 	})
+ }
+ 
+ func (a *instanceInterceptor) HandlerFunc(next http.HandlerFunc) http.HandlerFunc {
+ 	return func(w http.ResponseWriter, r *http.Request) {
+-		for _, prefix := range a.ignoredPrefixes {
+-			if strings.HasPrefix(r.URL.Path, prefix) {
+-				next.ServeHTTP(w, r)
+-				return
+-			}
+-		}
+-		ctx, err := setInstance(r, a.verifier, a.headerName)
+-		if err != nil {
+-			http.Error(w, err.Error(), http.StatusForbidden)
++		a.handleInstance(w, r, next)
++	}
++}
++
++func (a *instanceInterceptor) handleInstance(w http.ResponseWriter, r *http.Request, next http.Handler) {
++	for _, prefix := range a.ignoredPrefixes {
++		if strings.HasPrefix(r.URL.Path, prefix) {
++			next.ServeHTTP(w, r)
+ 			return
+ 		}
+-		r = r.WithContext(ctx)
+-		next.ServeHTTP(w, r)
+ 	}
++	ctx, err := setInstance(r, a.verifier, a.headerName)
++	if err != nil {
++		caosErr := new(caos_errors.NotFoundError)
++		if errors.As(err, &caosErr) {
++			caosErr.Message = a.translator.LocalizeFromRequest(r, caosErr.GetMessage(), nil)
++		}
++		http.Error(w, err.Error(), http.StatusNotFound)
++		return
++	}
++	r = r.WithContext(ctx)
++	next.ServeHTTP(w, r)
+ }
+ 
+ func setInstance(r *http.Request, verifier authz.InstanceVerifier, headerName string) (_ context.Context, err error) {
+@@ -89,3 +94,12 @@ func HostFromRequest(r *http.Request, headerName string) (string, error) {
+ 	}
+ 	return host, nil
+ }
++
++func newZitadelTranslator() *i18n.Translator {
++	dir, err := fs.NewWithNamespace("zitadel")
++	logging.WithFields("namespace", "zitadel").OnError(err).Panic("unable to get namespace")
++
++	translator, err := i18n.NewTranslator(dir, language.English, "")
++	logging.OnError(err).Panic("unable to get translator")
++	return translator
++}
+diff --git a/internal/api/http/middleware/instance_interceptor_test.go b/internal/api/http/middleware/instance_interceptor_test.go
+index bc5b55bba..6780b3841 100644
+--- a/internal/api/http/middleware/instance_interceptor_test.go
++++ b/internal/api/http/middleware/instance_interceptor_test.go
+@@ -42,7 +42,7 @@ func Test_instanceInterceptor_Handler(t *testing.T) {
+ 				request: httptest.NewRequest("", "/url", nil),
+ 			},
+ 			res{
+-				statusCode: 403,
++				statusCode: 404,
+ 				context:    nil,
+ 			},
+ 		},
+@@ -109,7 +109,7 @@ func Test_instanceInterceptor_HandlerFunc(t *testing.T) {
+ 				request: httptest.NewRequest("", "/url", nil),
+ 			},
+ 			res{
+-				statusCode: 403,
++				statusCode: 404,
+ 				context:    nil,
+ 			},
+ 		},
+@@ -229,7 +229,7 @@ type testHandler struct {
+ 	context context.Context
+ }
+ 
+-func (t *testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
++func (t *testHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
+ 	t.context = r.Context()
+ }
+ 
+@@ -237,7 +237,7 @@ type mockInstanceVerifier struct {
+ 	host string
+ }
+ 
+-func (m *mockInstanceVerifier) InstanceByHost(ctx context.Context, host string) (authz.Instance, error) {
++func (m *mockInstanceVerifier) InstanceByHost(_ context.Context, host string) (authz.Instance, error) {
+ 	if host != m.host {
+ 		return nil, fmt.Errorf("invalid host")
+ 	}
+diff --git a/internal/api/ui/console/console.go b/internal/api/ui/console/console.go
+index 04785576f..5b299f166 100644
+--- a/internal/api/ui/console/console.go
++++ b/internal/api/ui/console/console.go
+@@ -98,22 +98,18 @@ func Start(config Config, externalSecure bool, issuer op.IssuerFromRequest, inst
+ 	security := middleware.SecurityHeaders(csp(), nil)
+ 
+ 	handler := mux.NewRouter()
+-	handler.Use(security)
+-	handler.Handle(envRequestPath, middleware.TelemetryHandler()(instanceHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		instance := authz.GetInstance(r.Context())
+-		if instance.InstanceID() == "" {
+-			http.Error(w, "empty instanceID", http.StatusInternalServerError)
+-			return
+-		}
++
++	handler.Use(security, instanceHandler)
++	handler.Handle(envRequestPath, middleware.TelemetryHandler()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		url := http_util.BuildOrigin(r.Host, externalSecure)
+-		environmentJSON, err := createEnvironmentJSON(url, issuer(r), instance.ConsoleClientID(), customerPortal)
++		environmentJSON, err := createEnvironmentJSON(url, issuer(r), authz.GetInstance(r.Context()).ConsoleClientID(), customerPortal)
+ 		if err != nil {
+ 			http.Error(w, fmt.Sprintf("unable to marshal env for console: %v", err), http.StatusInternalServerError)
+ 			return
+ 		}
+ 		_, err = w.Write(environmentJSON)
+ 		logging.OnError(err).Error("error serving environment.json")
+-	}))))
++	})))
+ 	handler.SkipClean(true).PathPrefix("").Handler(cache(http.FileServer(&spaHandler{http.FS(fSys)})))
+ 	return handler, nil
+ }
+diff --git a/internal/query/instance.go b/internal/query/instance.go
+index ced139aed..2ff17a05c 100644
+--- a/internal/query/instance.go
++++ b/internal/query/instance.go
+@@ -400,9 +400,6 @@ func prepareInstanceDomainQuery(host string) (sq.SelectBuilder, func(*sql.Rows)
+ 					&sequence,
+ 				)
+ 				if err != nil {
+-					if errs.Is(err, sql.ErrNoRows) {
+-						return nil, errors.ThrowNotFound(err, "QUERY-n0wng", "Errors.IAM.NotFound")
+-					}
+ 					return nil, errors.ThrowInternal(err, "QUERY-d9nw", "Errors.Internal")
+ 				}
+ 				if !domain.Valid {
+@@ -418,6 +415,9 @@ func prepareInstanceDomainQuery(host string) (sq.SelectBuilder, func(*sql.Rows)
+ 					InstanceID:   instance.ID,
+ 				})
+ 			}
++			if instance.ID == "" {
++				return nil, errors.ThrowNotFound(nil, "QUERY-n0wng", "Errors.IAM.NotFound")
++			}
+ 			instance.DefaultLang = language.Make(lang)
+ 			if err := rows.Close(); err != nil {
+ 				return nil, errors.ThrowInternal(err, "QUERY-Dfbe2", "Errors.Query.CloseRows")
+diff --git a/internal/static/i18n/de.yaml b/internal/static/i18n/de.yaml
+index d9a8eb774..2f6ad67f4 100644
+--- a/internal/static/i18n/de.yaml
++++ b/internal/static/i18n/de.yaml
+@@ -265,6 +265,7 @@ Errors:
+       NotActive: Projekt Grant ist nicht aktiv
+       NotInactive: Projekt Grant ist nicht inaktiv
+   IAM:
++    NotFound: Instanz nicht gefunden
+     Member:
+       RolesNotChanged: Rollen wurden nicht verändert
+     MemberInvalid: Member ist ungültig
+diff --git a/internal/static/i18n/en.yaml b/internal/static/i18n/en.yaml
+index 01a0bac69..4058bd401 100644
+--- a/internal/static/i18n/en.yaml
++++ b/internal/static/i18n/en.yaml
+@@ -265,6 +265,7 @@ Errors:
+       NotActive: Project grant is not active
+       NotInactive: Project grant is not inactive
+   IAM:
++    NotFound: Instance not found
+     Member:
+       RolesNotChanged: Roles have not been changed
+     MemberInvalid: Member is invalid
+diff --git a/internal/static/i18n/fr.yaml b/internal/static/i18n/fr.yaml
+index efab49a8f..4492e0a13 100644
+--- a/internal/static/i18n/fr.yaml
++++ b/internal/static/i18n/fr.yaml
+@@ -265,6 +265,7 @@ Errors:
+       NotActive: La subvention de projet n'est pas active
+       NotInactive: La subvention du projet n'est pas inactive
+   IAM:
++    NotFound: Instance non trouvée
+     Member:
+       RolesNotChanged: Les rôles n'ont pas été modifiés
+     MemberInvalid: Le membre n'est pas valide
+diff --git a/internal/static/i18n/it.yaml b/internal/static/i18n/it.yaml
+index b8223a249..e7ef4751d 100644
+--- a/internal/static/i18n/it.yaml
++++ b/internal/static/i18n/it.yaml
+@@ -265,6 +265,7 @@ Errors:
+       NotActive: Grant del progetto non è attivo
+       NotInactive: Grant del progetto non è inattivo
+   IAM:
++    NotFound: Istanza non trovata
+     Member:
+       RolesNotChanged: I ruoli non sono stati cambiati
+     MemberInvalid: Il membro non è valido
+diff --git a/internal/static/mock/storage_mock.go b/internal/static/mock/storage_mock.go
+index c6d35d259..e0d5156a5 100644
+--- a/internal/static/mock/storage_mock.go
++++ b/internal/static/mock/storage_mock.go
+@@ -9,8 +9,8 @@ import (
+ 	io "io"
+ 	reflect "reflect"
+ 
+-	static "github.com/zitadel/zitadel/internal/static"
+ 	gomock "github.com/golang/mock/gomock"
++	static "github.com/zitadel/zitadel/internal/static"
+ )
+ 
+ // MockStorage is a mock of Storage interface.
+-- 
+2.34.1
+

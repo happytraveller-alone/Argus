@@ -1,0 +1,485 @@
+From 6827e97ec583b2534cdc1c2f33fa44973a0c2bf5 Mon Sep 17 00:00:00 2001
+From: Andrew Bastin <andrewbastin.k@gmail.com>
+Date: Fri, 23 Feb 2024 01:05:20 +0530
+Subject: [PATCH] refactor: possible links in email templates do not highlight
+ (#3851)
+
+---
+ .../src/mailer/mailer.service.ts              |   2 +-
+ .../src/mailer/templates/team-invitation.hbs  |  10 +-
+ .../src/mailer/templates/user-invitation.hbs  | 120 +++++++++---------
+ 3 files changed, 72 insertions(+), 60 deletions(-)
+
+diff --git a/packages/hoppscotch-backend/src/mailer/mailer.service.ts b/packages/hoppscotch-backend/src/mailer/mailer.service.ts
+index b6151422..f71d65fe 100644
+--- a/packages/hoppscotch-backend/src/mailer/mailer.service.ts
++++ b/packages/hoppscotch-backend/src/mailer/mailer.service.ts
+@@ -25,7 +25,7 @@ export class MailerService {
+   ): string {
+     switch (mailDesc.template) {
+       case 'team-invitation':
+-        return `${mailDesc.variables.invitee} invited you to join ${mailDesc.variables.invite_team_name} in Hoppscotch`;
++        return `A user has invited you to join a team workspace in Hoppscotch`;
+ 
+       case 'user-invitation':
+         return 'Sign in to Hoppscotch';
+diff --git a/packages/hoppscotch-backend/src/mailer/templates/team-invitation.hbs b/packages/hoppscotch-backend/src/mailer/templates/team-invitation.hbs
+index 3618686e..32032b45 100644
+--- a/packages/hoppscotch-backend/src/mailer/templates/team-invitation.hbs
++++ b/packages/hoppscotch-backend/src/mailer/templates/team-invitation.hbs
+@@ -27,6 +27,12 @@
+       color: #3869D4;
+     }
+ 
++    a.nohighlight {
++      color: inherit !important;
++      text-decoration: none !important;
++      cursor: default !important;
++    }
++
+     a img {
+       border: none;
+     }
+@@ -458,7 +464,7 @@
+                     <td class="content-cell">
+                       <div class="f-fallback">
+ <h1>Hi there,</h1>
+-<p>{{invitee}} with {{invite_team_name}} has invited you to use Hoppscotch to collaborate with them. Click the button below to set up your account and get started:</p>
++<p><a class="nohighlight" name="invitee" href="#">{{invitee}}</a> with <a class="nohighlight" name="invite_team_name" href="#">{{invite_team_name}}</a> has invited you to use Hoppscotch to collaborate with them. Click the button below to set up your account and get started:</p>
+ <!-- Action -->
+ <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
+   <tr>
+@@ -484,7 +490,7 @@
+   Welcome aboard, <br />
+   Your friends at Hoppscotch
+ </p>
+-<p><strong>P.S.</strong> If you don't associate with {{invitee}} or {{invite_team_name}}, just ignore this email.</p>
++<p><strong>P.S.</strong> If you don't associate with <a class="nohighlight" name="invitee" href="#">{{invitee}}</a> or <a class="nohighlight" name="invite_team_name" href="#">{{invite_team_name}}</a>, just ignore this email.</p>
+ <!-- Sub copy -->
+ <table class="body-sub">
+   <tr>
+diff --git a/packages/hoppscotch-backend/src/mailer/templates/user-invitation.hbs b/packages/hoppscotch-backend/src/mailer/templates/user-invitation.hbs
+index c1a252e8..3505f2ee 100644
+--- a/packages/hoppscotch-backend/src/mailer/templates/user-invitation.hbs
++++ b/packages/hoppscotch-backend/src/mailer/templates/user-invitation.hbs
+@@ -14,7 +14,7 @@
+   -->
+     <style type="text/css" rel="stylesheet" media="all">
+     /* Base ------------------------------ */
+-    
++
+     @import url("https://fonts.googleapis.com/css?family=Nunito+Sans:400,700&display=swap");
+     body {
+       width: 100% !important;
+@@ -22,19 +22,25 @@
+       margin: 0;
+       -webkit-text-size-adjust: none;
+     }
+-    
++
+     a {
+       color: #3869D4;
+     }
+-    
++
++    a.nohighlight {
++      color: inherit !important;
++      text-decoration: none !important;
++      cursor: default !important;
++    }
++
+     a img {
+       border: none;
+     }
+-    
++
+     td {
+       word-break: break-word;
+     }
+-    
++
+     .preheader {
+       display: none !important;
+       visibility: hidden;
+@@ -47,13 +53,13 @@
+       overflow: hidden;
+     }
+     /* Type ------------------------------ */
+-    
++
+     body,
+     td,
+     th {
+       font-family: "Nunito Sans", Helvetica, Arial, sans-serif;
+     }
+-    
++
+     h1 {
+       margin-top: 0;
+       color: #333333;
+@@ -61,7 +67,7 @@
+       font-weight: bold;
+       text-align: left;
+     }
+-    
++
+     h2 {
+       margin-top: 0;
+       color: #333333;
+@@ -69,7 +75,7 @@
+       font-weight: bold;
+       text-align: left;
+     }
+-    
++
+     h3 {
+       margin-top: 0;
+       color: #333333;
+@@ -77,12 +83,12 @@
+       font-weight: bold;
+       text-align: left;
+     }
+-    
++
+     td,
+     th {
+       font-size: 16px;
+     }
+-    
++
+     p,
+     ul,
+     ol,
+@@ -91,25 +97,25 @@
+       font-size: 16px;
+       line-height: 1.625;
+     }
+-    
++
+     p.sub {
+       font-size: 13px;
+     }
+     /* Utilities ------------------------------ */
+-    
++
+     .align-right {
+       text-align: right;
+     }
+-    
++
+     .align-left {
+       text-align: left;
+     }
+-    
++
+     .align-center {
+       text-align: center;
+     }
+     /* Buttons ------------------------------ */
+-    
++
+     .button {
+       background-color: #3869D4;
+       border-top: 10px solid #3869D4;
+@@ -124,7 +130,7 @@
+       -webkit-text-size-adjust: none;
+       box-sizing: border-box;
+     }
+-    
++
+     .button--green {
+       background-color: #22BC66;
+       border-top: 10px solid #22BC66;
+@@ -132,7 +138,7 @@
+       border-bottom: 10px solid #22BC66;
+       border-left: 18px solid #22BC66;
+     }
+-    
++
+     .button--red {
+       background-color: #FF6136;
+       border-top: 10px solid #FF6136;
+@@ -140,7 +146,7 @@
+       border-bottom: 10px solid #FF6136;
+       border-left: 18px solid #FF6136;
+     }
+-    
++
+     @media only screen and (max-width: 500px) {
+       .button {
+         width: 100% !important;
+@@ -148,21 +154,21 @@
+       }
+     }
+     /* Attribute list ------------------------------ */
+-    
++
+     .attributes {
+       margin: 0 0 21px;
+     }
+-    
++
+     .attributes_content {
+       background-color: #F4F4F7;
+       padding: 16px;
+     }
+-    
++
+     .attributes_item {
+       padding: 0;
+     }
+     /* Related Items ------------------------------ */
+-    
++
+     .related {
+       width: 100%;
+       margin: 0;
+@@ -171,31 +177,31 @@
+       -premailer-cellpadding: 0;
+       -premailer-cellspacing: 0;
+     }
+-    
++
+     .related_item {
+       padding: 10px 0;
+       color: #CBCCCF;
+       font-size: 15px;
+       line-height: 18px;
+     }
+-    
++
+     .related_item-title {
+       display: block;
+       margin: .5em 0 0;
+     }
+-    
++
+     .related_item-thumb {
+       display: block;
+       padding-bottom: 10px;
+     }
+-    
++
+     .related_heading {
+       border-top: 1px solid #CBCCCF;
+       text-align: center;
+       padding: 25px 0 10px;
+     }
+     /* Discount Code ------------------------------ */
+-    
++
+     .discount {
+       width: 100%;
+       margin: 0;
+@@ -206,33 +212,33 @@
+       background-color: #F4F4F7;
+       border: 2px dashed #CBCCCF;
+     }
+-    
++
+     .discount_heading {
+       text-align: center;
+     }
+-    
++
+     .discount_body {
+       text-align: center;
+       font-size: 15px;
+     }
+     /* Social Icons ------------------------------ */
+-    
++
+     .social {
+       width: auto;
+     }
+-    
++
+     .social td {
+       padding: 0;
+       width: auto;
+     }
+-    
++
+     .social_icon {
+       height: 20px;
+       margin: 0 8px 10px 8px;
+       padding: 0;
+     }
+     /* Data table ------------------------------ */
+-    
++
+     .purchase {
+       width: 100%;
+       margin: 0;
+@@ -241,7 +247,7 @@
+       -premailer-cellpadding: 0;
+       -premailer-cellspacing: 0;
+     }
+-    
++
+     .purchase_content {
+       width: 100%;
+       margin: 0;
+@@ -250,50 +256,50 @@
+       -premailer-cellpadding: 0;
+       -premailer-cellspacing: 0;
+     }
+-    
++
+     .purchase_item {
+       padding: 10px 0;
+       color: #51545E;
+       font-size: 15px;
+       line-height: 18px;
+     }
+-    
++
+     .purchase_heading {
+       padding-bottom: 8px;
+       border-bottom: 1px solid #EAEAEC;
+     }
+-    
++
+     .purchase_heading p {
+       margin: 0;
+       color: #85878E;
+       font-size: 12px;
+     }
+-    
++
+     .purchase_footer {
+       padding-top: 15px;
+       border-top: 1px solid #EAEAEC;
+     }
+-    
++
+     .purchase_total {
+       margin: 0;
+       text-align: right;
+       font-weight: bold;
+       color: #333333;
+     }
+-    
++
+     .purchase_total--label {
+       padding: 0 15px 0 0;
+     }
+-    
++
+     body {
+       background-color: #F2F4F6;
+       color: #51545E;
+     }
+-    
++
+     p {
+       color: #51545E;
+     }
+-    
++
+     .email-wrapper {
+       width: 100%;
+       margin: 0;
+@@ -303,7 +309,7 @@
+       -premailer-cellspacing: 0;
+       background-color: #F2F4F6;
+     }
+-    
++
+     .email-content {
+       width: 100%;
+       margin: 0;
+@@ -313,16 +319,16 @@
+       -premailer-cellspacing: 0;
+     }
+     /* Masthead ----------------------- */
+-    
++
+     .email-masthead {
+       padding: 25px 0;
+       text-align: center;
+     }
+-    
++
+     .email-masthead_logo {
+       width: 94px;
+     }
+-    
++
+     .email-masthead_name {
+       font-size: 16px;
+       font-weight: bold;
+@@ -331,7 +337,7 @@
+       text-shadow: 0 1px 0 white;
+     }
+     /* Body ------------------------------ */
+-    
++
+     .email-body {
+       width: 100%;
+       margin: 0;
+@@ -340,7 +346,7 @@
+       -premailer-cellpadding: 0;
+       -premailer-cellspacing: 0;
+     }
+-    
++
+     .email-body_inner {
+       width: 570px;
+       margin: 0 auto;
+@@ -350,7 +356,7 @@
+       -premailer-cellspacing: 0;
+       background-color: #FFFFFF;
+     }
+-    
++
+     .email-footer {
+       width: 570px;
+       margin: 0 auto;
+@@ -360,11 +366,11 @@
+       -premailer-cellspacing: 0;
+       text-align: center;
+     }
+-    
++
+     .email-footer p {
+       color: #A8AAAF;
+     }
+-    
++
+     .body-action {
+       width: 100%;
+       margin: 30px auto;
+@@ -374,25 +380,25 @@
+       -premailer-cellspacing: 0;
+       text-align: center;
+     }
+-    
++
+     .body-sub {
+       margin-top: 25px;
+       padding-top: 25px;
+       border-top: 1px solid #EAEAEC;
+     }
+-    
++
+     .content-cell {
+       padding: 45px;
+     }
+     /*Media Queries ------------------------------ */
+-    
++
+     @media only screen and (max-width: 600px) {
+       .email-body_inner,
+       .email-footer {
+         width: 100% !important;
+       }
+     }
+-    
++
+     @media (prefers-color-scheme: dark) {
+       body,
+       .email-body,
+-- 
+2.34.1
+

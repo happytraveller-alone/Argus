@@ -1,0 +1,116 @@
+rules:
+- id: java_xxe_rule-SAXParserFactoryDisallowDoctypeDeclMissing
+  severity: WARNING
+  languages:
+  - java
+  metadata:
+    cwe: CWE-611
+    shortDescription: Improper restriction of XML external entity reference
+    owasp:
+    - A4:2017-XML External Entities (XXE)
+    - A05:2021-Security Misconfiguration
+    security-severity: MEDIUM
+    references:
+    - https://semgrep.dev/blog/2022/xml-security-in-java
+    - https://semgrep.dev/docs/cheat-sheets/java-xxe/
+    - https://blog.sonarsource.com/secure-xml-processor
+    - https://xerces.apache.org/xerces2-j/features.html
+    category: security
+    technology:
+    - java
+    - xml
+    cwe2022-top25: 'true'
+    cwe2021-top25: 'true'
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - XML Injection
+  message: "DOCTYPE declarations are enabled for this SAXParserFactory. Enabling DOCTYPE\
+    \ \ndeclarations without proper restrictions can make your application vulnerable\
+    \ to \nXML External Entity (XXE) attacks. \nIn an XXE attack, an attacker can\
+    \ exploit the processing of external entity \nreferences within an XML document\
+    \ to access internal files, conduct \ndenial-of-service attacks, or SSRF (Server\
+    \ Side Request Forgery), potentially \nleading to sensitive information disclosure\
+    \ or system compromise.\n\nTo mitigate this vulnerability, disable DOCTYPE declarations\
+    \ by setting the\nfeature `http://apache.org/xml/features/disallow-doctype-decl`\
+    \ to true.\nAlternatively, allow DOCTYPE declarations and only prohibit external\n\
+    entities declarations. This can be done by setting the features\n`http://xml.org/sax/features/external-general-entities`\
+    \ and\n`http://xml.org/sax/features/external-parameter-entities` to false. \n\
+    NOTE: The previous links are not meant to be clicked. They are the literal\nconfig\
+    \ key values that are supposed to be used to disable these features.\n\nSecure\
+    \ Code Example (You can do either of the following):\n```\npublic void GoodSAXParserFactory()\
+    \ throws  ParserConfigurationException {\n  SAXParserFactory spf = SAXParserFactory.newInstance();\n\
+    \  spf.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\n\
+    \  spf.newSAXParser();\n}\n\npublic void GoodSAXParserFactory2() throws  ParserConfigurationException\
+    \ {\n  SAXParserFactory spf = SAXParserFactory.newInstance();\n  spf.setFeature(\"\
+    http://xml.org/sax/features/external-parameter-entities\", false);\n  spf.setFeature(\"\
+    http://xml.org/sax/features/external-general-entities\", false);\n  spf.newSAXParser();\n\
+    }      \n```\nFor more information, see\nhttps://semgrep.dev/docs/cheat-sheets/java-xxe/#3a-documentbuilderfactory.\n"
+  mode: taint
+  pattern-sources:
+  - by-side-effect: true
+    patterns:
+    - pattern-either:
+      - pattern: '$FACTORY = SAXParserFactory.newInstance();
+
+          '
+      - patterns:
+        - pattern: $FACTORY
+        - pattern-inside: "class $C {\n  ...\n  $V $FACTORY = SAXParserFactory.newInstance();\n\
+            \  ...\n}\n"
+        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = SAXParserFactory.newInstance();\n\
+            \  static {\n    ...\n    $FACTORY.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\"\
+            , true);\n    ...\n  }\n  ...\n}\n"
+        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = SAXParserFactory.newInstance();\n\
+            \  static {\n    ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-parameter-entities\"\
+            , false);\n    ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-general-entities\"\
+            , false);\n    ...\n  }\n  ...\n}\n"
+        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = SAXParserFactory.newInstance();\n\
+            \  static {\n    ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-general-entities\"\
+            , false);\n    ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-parameter-entities\"\
+            , false);\n    ...\n  }\n  ...\n}\n"
+  pattern-sinks:
+  - patterns:
+    - pattern: $FACTORY.newSAXParser();
+  pattern-sanitizers:
+  - by-side-effect: true
+    pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: '$FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl",
+            true);
+
+            '
+        - pattern: '$FACTORY.setFeature("http://xml.org/sax/features/external-general-entities",
+            false);
+
+            ...
+
+            $FACTORY.setFeature("http://xml.org/sax/features/external-parameter-entities",
+            false);
+
+            '
+        - pattern: '$FACTORY.setFeature("http://xml.org/sax/features/external-parameter-entities",
+            false);
+
+            ...
+
+            $FACTORY.setFeature("http://xml.org/sax/features/external-general-entities",
+            false);
+
+            '
+      - focus-metavariable: $FACTORY
+    - patterns:
+      - pattern-either:
+        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setFeature(\"\
+            http://apache.org/xml/features/disallow-doctype-decl\",\n    true);\n\
+            \    ...\n  }\n  ...\n}\n"
+        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setFeature(\"\
+            http://xml.org/sax/features/external-general-entities\", false);\n   \
+            \ ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-parameter-entities\"\
+            , false);\n    ...\n  }\n  ...\n}\n"
+        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setFeature(\"\
+            http://xml.org/sax/features/external-parameter-entities\", false);\n \
+            \   ...\n    $FACTORY.setFeature(\"http://xml.org/sax/features/external-general-entities\"\
+            ,false);\n    ...\n  }\n  ...\n}\n"
+      - pattern: $M($X)
+      - focus-metavariable: $X

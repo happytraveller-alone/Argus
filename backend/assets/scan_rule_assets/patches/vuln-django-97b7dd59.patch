@@ -1,0 +1,109 @@
+From 97b7dd59bb8d6163239061e2022153c3415d146d Mon Sep 17 00:00:00 2001
+From: Tim Graham <timograham@gmail.com>
+Date: Sat, 24 Feb 2018 16:22:43 -0500
+Subject: [PATCH] Fixed CVE-2018-7537 -- Fixed catastrophic backtracking in
+ django.utils.text.Truncator.
+
+Thanks James Davis for suggesting the fix.
+---
+ django/utils/text.py           |  2 +-
+ docs/releases/1.11.11.txt      | 12 ++++++++++++
+ docs/releases/1.8.19.txt       | 12 ++++++++++++
+ docs/releases/2.0.3.txt        | 12 ++++++++++++
+ tests/utils_tests/test_text.py |  4 ++++
+ 5 files changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/django/utils/text.py b/django/utils/text.py
+index e69f1e16c8..746a67ee00 100644
+--- a/django/utils/text.py
++++ b/django/utils/text.py
+@@ -20,7 +20,7 @@ def capfirst(x):
+ # Set up regular expressions
+ re_words = re.compile(r'<.*?>|((?:\w[-\w]*|&.*?;)+)', re.S)
+ re_chars = re.compile(r'<.*?>|(.)', re.S)
+-re_tag = re.compile(r'<(/)?([^ ]+?)(?:(\s*/)| .*?)?>', re.S)
++re_tag = re.compile(r'<(/)?(\S+?)(?:(\s*/)|\s.*?)?>', re.S)
+ re_newlines = re.compile(r'\r\n|\r')  # Used in normalize_newlines
+ re_camel_case = re.compile(r'(((?<=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))')
+ 
+diff --git a/docs/releases/1.11.11.txt b/docs/releases/1.11.11.txt
+index 696465fd47..314338a541 100644
+--- a/docs/releases/1.11.11.txt
++++ b/docs/releases/1.11.11.txt
+@@ -16,3 +16,15 @@ expressions. The ``urlize()`` function is used to implement the ``urlize`` and
+ 
+ The problematic regular expressions are replaced with parsing logic that
+ behaves similarly.
++
++CVE-2018-7537: Denial-of-service possibility in ``truncatechars_html`` and ``truncatewords_html`` template filters
++==================================================================================================================
++
++If ``django.utils.text.Truncator``'s ``chars()`` and ``words()`` methods were
++passed the ``html=True`` argument, they were extremely slow to evaluate certain
++inputs due to a catastrophic backtracking vulnerability in a regular
++expression. The ``chars()`` and ``words()`` methods are used to implement the
++``truncatechars_html`` and ``truncatewords_html`` template filters, which were
++thus vulnerable.
++
++The backtracking problem in the regular expression is fixed.
+diff --git a/docs/releases/1.8.19.txt b/docs/releases/1.8.19.txt
+index ae509f11c4..96410a331c 100644
+--- a/docs/releases/1.8.19.txt
++++ b/docs/releases/1.8.19.txt
+@@ -16,3 +16,15 @@ expression. The ``urlize()`` function is used to implement the ``urlize`` and
+ 
+ The problematic regular expression is replaced with parsing logic that behaves
+ similarly.
++
++CVE-2018-7537: Denial-of-service possibility in ``truncatechars_html`` and ``truncatewords_html`` template filters
++==================================================================================================================
++
++If ``django.utils.text.Truncator``'s ``chars()`` and ``words()`` methods were
++passed the ``html=True`` argument, they were extremely slow to evaluate certain
++inputs due to a catastrophic backtracking vulnerability in a regular
++expression. The ``chars()`` and ``words()`` methods are used to implement the
++``truncatechars_html`` and ``truncatewords_html`` template filters, which were
++thus vulnerable.
++
++The backtracking problem in the regular expression is fixed.
+diff --git a/docs/releases/2.0.3.txt b/docs/releases/2.0.3.txt
+index a4c01302d1..a7c712c83f 100644
+--- a/docs/releases/2.0.3.txt
++++ b/docs/releases/2.0.3.txt
+@@ -18,6 +18,18 @@ expressions. The ``urlize()`` function is used to implement the ``urlize`` and
+ The problematic regular expressions are replaced with parsing logic that
+ behaves similarly.
+ 
++CVE-2018-7537: Denial-of-service possibility in ``truncatechars_html`` and ``truncatewords_html`` template filters
++==================================================================================================================
++
++If ``django.utils.text.Truncator``'s ``chars()`` and ``words()`` methods were
++passed the ``html=True`` argument, they were extremely slow to evaluate certain
++inputs due to a catastrophic backtracking vulnerability in a regular
++expression. The ``chars()`` and ``words()`` methods are used to implement the
++``truncatechars_html`` and ``truncatewords_html`` template filters, which were
++thus vulnerable.
++
++The backtracking problem in the regular expression is fixed.
++
+ Bugfixes
+ ========
+ 
+diff --git a/tests/utils_tests/test_text.py b/tests/utils_tests/test_text.py
+index 89f9716bb5..693c436eb8 100644
+--- a/tests/utils_tests/test_text.py
++++ b/tests/utils_tests/test_text.py
+@@ -136,6 +136,10 @@ class TestUtilsText(SimpleTestCase):
+         truncator = text.Truncator('<p>I &lt;3 python, what about you?</p>')
+         self.assertEqual('<p>I &lt;3 python...</p>', truncator.words(3, '...', html=True))
+ 
++        re_tag_catastrophic_test = ('</a' + '\t' * 50000) + '//>'
++        truncator = text.Truncator(re_tag_catastrophic_test)
++        self.assertEqual(re_tag_catastrophic_test, truncator.words(500, html=True))
++
+     def test_wrap(self):
+         digits = '1234 67 9'
+         self.assertEqual(text.wrap(digits, 100), '1234 67 9')
+-- 
+2.34.1
+

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="CloseResource Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for CloseResource</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="CloseResource" language="java" since="1.2.2" message="Ensure that resources like this {0} object are closed after use" class="net.sourceforge.pmd.lang.java.rule.errorprone.CloseResourceRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#closeresource">
+            <description>
+    Ensure that resources (like `java.sql.Connection`, `java.sql.Statement`, and `java.sql.ResultSet` objects
+    and any subtype of `java.lang.AutoCloseable`) are always closed after use.
+    Failing to do so might result in resource leaks.
+
+    Note: It suffices to configure the super type, e.g. `java.lang.AutoCloseable`, so that this rule automatically triggers
+    on any subtype (e.g. `java.io.FileInputStream`). Additionally specifying `java.sql.Connection` helps in detecting
+    the types, if the type resolution / auxclasspath is not correctly setup.
+
+    Note: Since PMD 6.16.0 the default value for the property `types` contains `java.lang.AutoCloseable` and detects
+    now cases where the standard `java.io.*Stream` classes are involved. In order to restore the old behaviour,
+    just remove "AutoCloseable" from the types.
+
+    The property `allowedResourceMethodPatterns` can be used to specify method invocation patterns that return
+    resources which are managed externally and don't need to be closed by the caller. This is useful for
+    servlet-related streams like `HttpServletRequest.getReader()` or `HttpServletResponse.getWriter()`,
+    which are managed by the servlet container. The patterns use InvocationMatcher syntax
+    (e.g., `javax.servlet.ServletRequest#getReader()`).
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Bar {
+        public void withSQL() {
+            Connection c = pool.getConnection();
+            try {
+                // do stuff
+            } catch (SQLException ex) {
+               // handle exception
+            } finally {
+                // oops, should close the connection using 'close'!
+                // c.close();
+            }
+        }
+
+        public void withFile() {
+            InputStream file = new FileInputStream(new File("/tmp/foo"));
+            try {
+                int c = file.in();
+            } catch (IOException e) {
+                // handle exception
+            } finally {
+                // TODO: close file
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

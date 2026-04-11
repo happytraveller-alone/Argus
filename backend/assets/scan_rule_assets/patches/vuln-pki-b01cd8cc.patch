@@ -1,0 +1,49 @@
+From b01cd8cc7d3e391e69ed2c8161f7e15fa84553e6 Mon Sep 17 00:00:00 2001
+From: "Endi S. Dewata" <edewata@redhat.com>
+Date: Mon, 17 May 2021 15:39:44 -0500
+Subject: [PATCH] Fix permission for new installation logs
+
+The enable_pki_logger() has been updated to disable
+world access for new installation logs to be created
+in /var/log/pki.
+
+Resolves: CVE-2021-3551
+---
+ .../python/pki/server/deployment/pkilogging.py       | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/base/server/python/pki/server/deployment/pkilogging.py b/base/server/python/pki/server/deployment/pkilogging.py
+index f864cb8c9..80afb679d 100644
+--- a/base/server/python/pki/server/deployment/pkilogging.py
++++ b/base/server/python/pki/server/deployment/pkilogging.py
+@@ -21,8 +21,12 @@
+ # System Imports
+ from __future__ import absolute_import
+ import logging
++import os
++import pathlib
+ import pprint
+ 
++import pki
++
+ sensitive_parameters = []
+ 
+ # Initialize 'pretty print' for objects
+@@ -51,8 +55,12 @@ def enable_pki_logger(filename):
+     console_format = logging.Formatter('%(levelname)s: %(message)s')
+     console.setFormatter(console_format)
+ 
+-    # Configure file handler
+-    log_file = logging.FileHandler(filename, 'w')
++    # Create an empty file with the proper permission
++    pathlib.Path(filename).touch()
++    os.chmod(filename, pki.server.DEFAULT_FILE_MODE)
++
++    # Configure file handler with append mode to preserve the permission
++    log_file = logging.FileHandler(filename)
+     file_format = logging.Formatter('%(asctime)s %(levelname)s: %(message)s',
+                                     '%Y-%m-%d %H:%M:%S')
+     log_file.setFormatter(file_format)
+-- 
+2.34.1
+

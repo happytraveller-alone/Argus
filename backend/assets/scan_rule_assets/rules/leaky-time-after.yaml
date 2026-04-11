@@ -1,0 +1,15 @@
+rules:
+- id: leaky-time-after
+  patterns:
+  - pattern-either:
+    - pattern: "for {\n    ...\n    select {\n    case <- time.After(...):\n     \
+        \   ...\n    }\n    ...\n}\n"
+  message: 'Leaky use of time.After in for-select, see: https://groups.google.com/g/golang-nuts/c/cCdm0Ixwi9A/m/jMiJJScAEAAJ'
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-401: Memory Leak'
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-400: Uncontrolled Resource Consumption'

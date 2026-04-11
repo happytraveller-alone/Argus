@@ -1,0 +1,419 @@
+From 35a69050922692e3aa69dae74bff981f30ee7689 Mon Sep 17 00:00:00 2001
+From: Feras Al-Kassar <en.feras@hotmail.com>
+Date: Wed, 24 Nov 2021 17:00:25 +0100
+Subject: [PATCH] Fix security vuls (#13554)
+
+* Fix XSS vulnerabilities
+
+* fix XSS vulnerabilities in alerts.inc.php
+
+* fix XSS vulnerability in poller-groups.inc.php
+
+* small fix for the integration
+
+* another fix for the inegration
+
+* another fix for the inegration
+
+* change the sanitizer at sources instead of json_encode sinks
+
+* another change sanitizer at sources instead of json_encode sinks
+
+* another change sanitizer at sources instead of common_output and current_config sinks
+
+* fix path manipulation vulnerability
+---
+ includes/html/common/alert-log.inc.php           |  6 +++---
+ includes/html/forms/poller-groups.inc.php        |  2 +-
+ includes/html/forms/rediscover-device.inc.php    |  4 ++--
+ includes/html/forms/reset-port-state.inc.php     |  2 +-
+ includes/html/forms/sensor-alert-update.inc.php  |  4 ++--
+ includes/html/pages/adduser.inc.php              |  2 +-
+ includes/html/pages/api-access.inc.php           |  4 ++--
+ includes/html/pages/bill.inc.php                 |  6 +++---
+ includes/html/pages/delhost.inc.php              |  4 ++--
+ includes/html/pages/device/showconfig.inc.php    |  6 +++---
+ includes/html/pages/inventory.inc.php            | 14 +++++++-------
+ includes/html/pages/search/arp.inc.php           |  6 +++---
+ includes/html/pages/search/mac.inc.php           |  6 +++---
+ includes/html/pages/search/packages.inc.php      | 16 ++++++++--------
+ .../html/pages/tools/oxidized-cfg-check.inc.php  |  2 +-
+ includes/html/print-alert-rules.php              |  4 ++--
+ includes/html/print-customoid.php                |  4 ++--
+ 17 files changed, 46 insertions(+), 46 deletions(-)
+
+diff --git a/includes/html/common/alert-log.inc.php b/includes/html/common/alert-log.inc.php
+index 370a66b40..4f1376c0c 100644
+--- a/includes/html/common/alert-log.inc.php
++++ b/includes/html/common/alert-log.inc.php
+@@ -62,14 +62,14 @@ if (isset($_POST['device_id'])) {
+     $_POST['device_id'] = $device_id;
+ }
+ if (isset($_POST['state'])) {
+-    $selected_state = '<option value="' . $_POST['state'] . '" selected="selected">';
++    $selected_state = '<option value="' . htmlspecialchars($_POST['state']) . '" selected="selected">';
+     $selected_state .= array_search((int) $_POST['state'], $alert_states) . '</option>';
+ } else {
+     $selected_state = '';
+     $_POST['state'] = -1;
+ }
+ if (isset($_POST['min_severity'])) {
+-    $selected_min_severity = '<option value="' . $_POST['min_severity'] . '" selected="selected">';
++    $selected_min_severity = '<option value="' . htmlspecialchars($_POST['min_severity']) . '" selected="selected">';
+     $selected_min_severity .= array_search((int) $_POST['min_severity'], $alert_severities) . '</option>';
+ } else {
+     $selected_min_severity = '';
+@@ -167,7 +167,7 @@ $common_output[] = '<div class="form-group"> \
+         max = high - low;
+         search = $(\'.search-field\').val();
+ 
+-        $(".pdf-export").html("<a href=\'pdf.php?report=alert-log&device_id=' . $_POST['device_id'] . '&string=" + search + "&results=" + max + "&start=" + low + "\'><i class=\'fa fa-heartbeat fa-lg icon-theme\' aria-hidden=\'true\'></i> Export to pdf</a>");
++        $(".pdf-export").html("<a href=\'pdf.php?report=alert-log&device_id=' . htmlspecialchars($_POST['device_id']) . '&string=" + search + "&results=" + max + "&start=" + low + "\'><i class=\'fa fa-heartbeat fa-lg icon-theme\' aria-hidden=\'true\'></i> Export to pdf</a>");
+ 
+         grid.find(".incident-toggle").each(function () {
+             $(this).parent().addClass(\'incident-toggle-td\');
+diff --git a/includes/html/forms/poller-groups.inc.php b/includes/html/forms/poller-groups.inc.php
+index f7bec45be..e4ee69212 100644
+--- a/includes/html/forms/poller-groups.inc.php
++++ b/includes/html/forms/poller-groups.inc.php
+@@ -44,5 +44,5 @@ if (! empty($group_name)) {
+ if (! empty($ok)) {
+     exit("$ok");
+ } else {
+-    exit("ERROR: $error");
++    exit('ERROR: ' . htmlspecialchars($error));
+ }
+diff --git a/includes/html/forms/rediscover-device.inc.php b/includes/html/forms/rediscover-device.inc.php
+index 962dfbad1..55542e94c 100644
+--- a/includes/html/forms/rediscover-device.inc.php
++++ b/includes/html/forms/rediscover-device.inc.php
+@@ -48,10 +48,10 @@ if (isset($_POST['device_id'])) {
+ 
+         if (! empty($update) || $update == '0') {
+             $status = 'ok';
+-            $message = 'Devices of group ' . $_POST['device_group_id'] . ' will be rediscovered';
++            $message = 'Devices of group ' . htmlspecialchars($_POST['device_group_id']) . ' will be rediscovered';
+         } else {
+             $status = 'error';
+-            $message = 'Error rediscovering devices of group ' . $_POST['device_group_id'];
++            $message = 'Error rediscovering devices of group ' . htmlspecialchars($_POST['device_group_id']);
+         }
+     }
+ } else {
+diff --git a/includes/html/forms/reset-port-state.inc.php b/includes/html/forms/reset-port-state.inc.php
+index eaab6ea0f..685080fa9 100644
+--- a/includes/html/forms/reset-port-state.inc.php
++++ b/includes/html/forms/reset-port-state.inc.php
+@@ -38,7 +38,7 @@ if (! Auth::user()->hasGlobalAdmin()) {
+ if (isset($_POST['device_id'])) {
+     if (! is_numeric($_POST['device_id'])) {
+         $status = 'error';
+-        $message = 'Invalid device id ' . $_POST['device_id'];
++        $message = 'Invalid device id ' . htmlspecialchars($_POST['device_id']);
+     } else {
+         $device = Device::find($_POST['device_id']);
+ 
+diff --git a/includes/html/forms/sensor-alert-update.inc.php b/includes/html/forms/sensor-alert-update.inc.php
+index 5939cc2cc..be050fbe6 100644
+--- a/includes/html/forms/sensor-alert-update.inc.php
++++ b/includes/html/forms/sensor-alert-update.inc.php
+@@ -49,10 +49,10 @@ if (isset($_POST['sub_type']) && ! empty($_POST['sub_type'])) {
+         }
+         if (dbUpdate(['sensor_alert' => $state], 'sensors', '`sensor_id` = ? AND `device_id` = ?', [$_POST['sensor_id'], $_POST['device_id']]) >= 0) {
+             $status = ($state == 0) ? 'info' : 'ok';
+-            $message = 'Alerts ' . $state_string . ' for sensor ' . $_POST['sensor_desc'];
++            $message = 'Alerts ' . $state_string . ' for sensor ' . htmlspecialchars($_POST['sensor_desc']);
+         } else {
+             $status = 'error';
+-            $message = 'Couldn\'t ' . substr($state_string, 0, -1) . ' alerts for sensor ' . $_POST['sensor_desc'] . '. Enable debug and check librenms.log';
++            $message = 'Couldn\'t ' . substr($state_string, 0, -1) . ' alerts for sensor ' . htmlspecialchars($_POST['sensor_desc']) . '. Enable debug and check librenms.log';
+         }
+     }
+ }
+diff --git a/includes/html/pages/adduser.inc.php b/includes/html/pages/adduser.inc.php
+index 2e8f5eee9..4a620d581 100644
+--- a/includes/html/pages/adduser.inc.php
++++ b/includes/html/pages/adduser.inc.php
+@@ -26,7 +26,7 @@ if (! Auth::user()->hasGlobalAdmin()) {
+ 
+                     // FIXME: missing email field here on the form
+                     if (LegacyAuth::get()->addUser($_POST['new_username'], $_POST['new_password'], $_POST['new_level'], $_POST['new_email'], $_POST['new_realname'], $_POST['can_modify_passwd'])) {
+-                        echo '<span class=info>User ' . $_POST['new_username'] . ' added!</span>';
++                        echo '<span class=info>User ' . htmlspecialchars($_POST['new_username']) . ' added!</span>';
+                     }
+                 } else {
+                     echo '<div class="red">User with this name already exists!</div>';
+diff --git a/includes/html/pages/api-access.inc.php b/includes/html/pages/api-access.inc.php
+index 0e39b6b76..8e3f34c34 100644
+--- a/includes/html/pages/api-access.inc.php
++++ b/includes/html/pages/api-access.inc.php
+@@ -67,7 +67,7 @@ if (Auth::user()->hasGlobalAdmin()) {
+             <div class="form-group">
+               <label for="token" class="col-sm-2 control-label">Token: </label>
+               <div class="col-sm-8">
+-                <input type="text" class="form-control" id="token" name="token" value="<?php echo $_POST['token']; ?>" readonly>
++                <input type="text" class="form-control" id="token" name="token" value="<?php echo htmlspecialchars($_POST['token']); ?>" readonly>
+               </div>
+               <div class="col-sm-2">
+               </div>
+@@ -75,7 +75,7 @@ if (Auth::user()->hasGlobalAdmin()) {
+             <div class="form-group">
+               <label for="description" class="col-sm-2 control-label">Descr: </label>
+               <div class="col-sm-10">
+-                <input type="text" class="form-control" id="description" name="description" value="<?php echo $_POST['description']; ?>">
++                <input type="text" class="form-control" id="description" name="description" value="<?php echo htmlspecialchars($_POST['description']); ?>">
+               </div>
+             </div>
+         </div>
+diff --git a/includes/html/pages/bill.inc.php b/includes/html/pages/bill.inc.php
+index 313446d4b..ce631ad48 100644
+--- a/includes/html/pages/bill.inc.php
++++ b/includes/html/pages/bill.inc.php
+@@ -211,7 +211,7 @@ if (bill_permitted($bill_id)) {
+         $rightnow = date('U');
+ 
+         if ($vars['view'] == 'accurate') {
+-            $bi = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . $_GET['bill_code'];
++            $bi = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . htmlspecialchars($_GET['bill_code']);
+             $bi .= '&amp;from=' . $unixfrom . '&amp;to=' . $unixto;
+             $bi .= '&amp;x=1190&amp;y=250';
+             $bi .= "$type'>";
+@@ -221,12 +221,12 @@ if (bill_permitted($bill_id)) {
+             $li .= '&amp;x=1190&amp;y=250';
+             $li .= "$type'>";
+ 
+-            $di = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . $_GET['bill_code'];
++            $di = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . htmlspecialchars($_GET['bill_code']);
+             $di .= '&amp;from=' . \LibreNMS\Config::get('time.day') . '&amp;to=' . \LibreNMS\Config::get('time.now');
+             $di .= '&amp;x=1190&amp;y=250';
+             $di .= "$type'>";
+ 
+-            $mi = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . $_GET['bill_code'];
++            $mi = "<img src='billing-graph.php?bill_id=" . $bill_id . '&amp;bill_code=' . htmlspecialchars($_GET['bill_code']);
+             $mi .= '&amp;from=' . $lastmonth . '&amp;to=' . $rightnow;
+             $mi .= '&amp;x=1190&amp;y=250';
+             $mi .= "$type'>";
+diff --git a/includes/html/pages/delhost.inc.php b/includes/html/pages/delhost.inc.php
+index 8d62b630c..7065407f3 100644
+--- a/includes/html/pages/delhost.inc.php
++++ b/includes/html/pages/delhost.inc.php
+@@ -27,9 +27,9 @@ if (Auth::user()->isDemo()) {
+   <form name="form1" method="post" action="" class="form-horizontal" role="form">
+             <?php echo csrf_field() ?>
+     <div class="form-group">
+-      <input type="hidden" name="id" value="<?php echo $_REQUEST['id'] ?>" />
++      <input type="hidden" name="id" value="<?php echo htmlspecialchars($_REQUEST['id']) ?>" />
+       <input type="hidden" name="confirm" value="1" />
+-      <!--<input type="hidden" name="remove_rrd" value="<?php echo $_POST['remove_rrd']; ?>">-->
++      <!--<input type="hidden" name="remove_rrd" value="<?php echo htmlspecialchars($_POST['remove_rrd']); ?>">-->
+       <button type="submit" class="btn btn-danger">Confirm device deletion</button>
+     </div>
+   </form>
+diff --git a/includes/html/pages/device/showconfig.inc.php b/includes/html/pages/device/showconfig.inc.php
+index 041d6787a..adc80da7d 100644
+--- a/includes/html/pages/device/showconfig.inc.php
++++ b/includes/html/pages/device/showconfig.inc.php
+@@ -166,7 +166,7 @@ if (Auth::user()->hasGlobalAdmin()) {
+         if ($config_total > 1) {
+             // populate current_version
+             if (isset($_POST['config'])) {
+-                [$oid,$date,$version] = explode('|', $_POST['config']);
++                [$oid,$date,$version] = explode('|', htmlspecialchars($_POST['config']));
+                 $current_config = ['oid'=>$oid, 'date'=>$date, 'version'=>$version];
+             } else { // no version selected
+                 $current_config = ['oid' => $config_versions[0]['oid'], 'date' => $config_versions[0]['date'], 'version' => $config_total];
+@@ -197,12 +197,12 @@ if (Auth::user()->hasGlobalAdmin()) {
+                 if (! empty($node_info['group'])) {
+                     $url .= '&group=' . $node_info['group'];
+                 }
+-                $url .= '&oid=' . $current_config['oid'] . '&date=' . urlencode($current_config['date']) . '&num=' . $current_config['version'] . '&oid2=' . $previous_config['oid'] . '&format=text';
++                $url .= '&oid=' . urlencode($current_config['oid']) . '&date=' . urlencode($current_config['date']) . '&num=' . urlencode($current_config['version']) . '&oid2=' . $previous_config['oid'] . '&format=text';
+ 
+                 $text = file_get_contents($url); // fetch diff
+             } else {
+                 // fetch current_version
+-                $text = file_get_contents(Config::get('oxidized.url') . '/node/version/view?node=' . $oxidized_hostname . (! empty($node_info['group']) ? '&group=' . $node_info['group'] : '') . '&oid=' . $current_config['oid'] . '&date=' . urlencode($current_config['date']) . '&num=' . $current_config['version'] . '&format=text');
++                $text = file_get_contents(Config::get('oxidized.url') . '/node/version/view?node=' . $oxidized_hostname . (! empty($node_info['group']) ? '&group=' . $node_info['group'] : '') . '&oid=' . urlencode($current_config['oid']) . '&date=' . urlencode($current_config['date']) . '&num=' . urlencode($current_config['version']) . '&format=text');
+             }
+         } else {  // just fetch the only version
+             $text = file_get_contents(Config::get('oxidized.url') . '/node/fetch/' . (! empty($node_info['group']) ? $node_info['group'] . '/' : '') . $oxidized_hostname);
+diff --git a/includes/html/pages/inventory.inc.php b/includes/html/pages/inventory.inc.php
+index 53b11953d..125d9df6f 100644
+--- a/includes/html/pages/inventory.inc.php
++++ b/includes/html/pages/inventory.inc.php
+@@ -31,7 +31,7 @@ var grid = $("#inventory").bootgrid({
+                 "<div class=\"col-sm-9 actionBar\"><span class=\"pull-left\"><form method=\"post\" action=\"\" class=\"form-inline\" role=\"form\">"+
+                 "<?php echo addslashes(csrf_field()) ?>"+
+                 "<div class=\"form-group\">"+
+-                "<input type=\"text\" name=\"string\" id=\"string\" value=\"<?php echo $_POST['string']; ?>\" placeholder=\"Description\" class=\"form-control input-sm\" />"+
++                "<input type=\"text\" name=\"string\" id=\"string\" value=\"<?php echo htmlspecialchars($_POST['string']); ?>\" placeholder=\"Description\" class=\"form-control input-sm\" />"+
+                 "</div>"+
+                 "<div class=\"form-group\">"+
+                 "<strong>&nbsp;Part No&nbsp;</strong>"+
+@@ -50,7 +50,7 @@ foreach (dbFetchRows('SELECT `entPhysicalModelName` FROM `entPhysical` GROUP BY
+                  "</select>"+
+                  "</div>"+
+                  "<div class=\"form-group\">"+
+-                 "<input type=\"text\" name=\"serial\" id=\"serial\" value=\"<?php echo $_POST['serial']; ?>\" placeholder=\"Serial\" class=\"form-control input-sm\"/>"+
++                 "<input type=\"text\" name=\"serial\" id=\"serial\" value=\"<?php echo htmlspecialchars($_POST['serial']); ?>\" placeholder=\"Serial\" class=\"form-control input-sm\"/>"+
+                  "</div>"+
+                  "<div class=\"form-group\">"+
+                  "<strong>&nbsp;Device&nbsp;</strong>"+
+@@ -74,7 +74,7 @@ foreach (dbFetchRows('SELECT * FROM `devices` ORDER BY `hostname`') as $data) {
+                  "<input type=\"text\" size=24 name=\"device_string\" id=\"device_string\" value=\""+
+                     <?php
+                     if ($_POST['device_string']) {
+-                        echo $_POST['device_string'];
++                        echo htmlspecialchars($_POST['device_string']);
+                     }
+                     ?>
+                  "\" placeholder=\"Description\" class=\"form-control input-sm\"/>"+
+@@ -88,10 +88,10 @@ foreach (dbFetchRows('SELECT * FROM `devices` ORDER BY `hostname`') as $data) {
+         return {
+             id: "inventory",
+             device: '<?php echo htmlspecialchars($_POST['device']); ?>',
+-            string: '<?php echo $_POST['string']; ?>',
+-            device_string: '<?php echo $_POST['device_string']; ?>',
+-            part: '<?php echo $_POST['part']; ?>',
+-            serial: '<?php echo $_POST['serial']; ?>'
++            string: '<?php echo htmlspecialchars($_POST['string']); ?>',
++            device_string: '<?php echo htmlspecialchars($_POST['device_string']); ?>',
++            part: '<?php echo htmlspecialchars($_POST['part']); ?>',
++            serial: '<?php echo htmlspecialchars($_POST['serial']); ?>'
+         };
+     },
+     url: "ajax_table.php"
+diff --git a/includes/html/pages/search/arp.inc.php b/includes/html/pages/search/arp.inc.php
+index 1a5972f1c..2e6623bab 100644
+--- a/includes/html/pages/search/arp.inc.php
++++ b/includes/html/pages/search/arp.inc.php
+@@ -77,7 +77,7 @@ if ($_POST['searchby'] == 'ip') {
+                 "<div class=\"form-group\">"+
+                 "<input type=\"text\" name=\"searchPhrase\" id=\"address\" value=\""+
+ <?php
+-echo '"' . $_POST['searchPhrase'] . '"+';
++echo '"' . htmlspecialchars($_POST['searchPhrase']) . '"+';
+ ?>
+ 
+                 "\" class=\"form-control input-sm\" placeholder=\"Address\" />"+
+@@ -91,8 +91,8 @@ echo '"' . $_POST['searchPhrase'] . '"+';
+         return {
+             id: "arp-search",
+             device_id: '<?php echo htmlspecialchars($_POST['device_id']); ?>',
+-            searchby: '<?php echo $_POST['searchby']; ?>',
+-            searchPhrase: '<?php echo $_POST['searchPhrase']; ?>'
++            searchby: '<?php echo htmlspecialchars($_POST['searchby']); ?>',
++            searchPhrase: '<?php echo htmlspecialchars($_POST['searchPhrase']); ?>'
+         };
+     },
+     url: "ajax_table.php",
+diff --git a/includes/html/pages/search/mac.inc.php b/includes/html/pages/search/mac.inc.php
+index 075bffdaa..84d243b82 100644
+--- a/includes/html/pages/search/mac.inc.php
++++ b/includes/html/pages/search/mac.inc.php
+@@ -77,7 +77,7 @@ if ($_POST['interface'] == 'Vlan%') {
+                "<div class=\"form-group\">"+
+                "<input type=\"text\" name=\"address\" id=\"address\" value=\""+
+ <?php
+-echo '"' . $_POST['address'] . '"+';
++echo '"' . htmlspecialchars($_POST['address']) . '"+';
+ ?>
+ 
+                "\" class=\"form-control input-sm\" placeholder=\"Mac Address\"/>"+
+@@ -92,8 +92,8 @@ echo '"' . $_POST['address'] . '"+';
+             id: "address-search",
+             search_type: "mac",
+             device_id: '<?php echo htmlspecialchars($_POST['device_id']); ?>',
+-            interface: '<?php echo $_POST['interface']; ?>',
+-            address: '<?php echo $_POST['address']; ?>'
++            interface: '<?php echo htmlspecialchars($_POST['interface']); ?>',
++            address: '<?php echo htmlspecialchars($_POST['address']); ?>'
+         };
+     },
+     url: "ajax_table.php",
+diff --git a/includes/html/pages/search/packages.inc.php b/includes/html/pages/search/packages.inc.php
+index 11ef61e6e..3b03f5863 100644
+--- a/includes/html/pages/search/packages.inc.php
++++ b/includes/html/pages/search/packages.inc.php
+@@ -27,15 +27,15 @@ print_optionbar_start(28);
+     <?php echo csrf_field() ?>
+     <div class="form-group">
+         <label for="package">Package</label>
+-        <input type="text" name="package" id="package" size=20 value="<?php echo $_POST['package']; ?>" class="form-control input-sm" placeholder="Any" />
++        <input type="text" name="package" id="package" size=20 value="<?php echo htmlspecialchars($_POST['package']); ?>" class="form-control input-sm" placeholder="Any" />
+     </div>
+     <div class="form-group">
+         <label for="version">Version</label>
+-        <input type="text" name="version" id="version" size=20 value="<?php echo $_POST['version']; ?>" class="form-control input-sm" placeholder="Any" />
++        <input type="text" name="version" id="version" size=20 value="<?php echo htmlspecialchars($_POST['version']); ?>" class="form-control input-sm" placeholder="Any" />
+     </div>
+     <div class="form-group">
+         <label for="version">Arch</label>
+-        <input type="text" name="arch" id="arch" size=20 value="<?php echo $_POST['arch']; ?>" class="form-control input-sm" placeholder="Any" />
++        <input type="text" name="arch" id="arch" size=20 value="<?php echo htmlspecialchars($_POST['arch']); ?>" class="form-control input-sm" placeholder="Any" />
+     </div>
+     <button type="submit" class="btn btn-default input-sm">Search</button>
+ </form>
+@@ -172,11 +172,11 @@ if ((int) ($count / $results) > 0 && $count != $results) {
+ ?>
+ 
+     </table>
+-    <input type="hidden" name="page_number" id="page_number" value="<?php echo $page_number; ?>">
+-    <input type="hidden" name="results_amount" id="results_amount" value="<?php echo $results; ?>">
+-    <input type="hidden" name="package" id="results_packages" value="<?php echo $_POST['package']; ?>">
+-    <input type="hidden" name="version" id="results_version" value="<?php echo $_POST['version']; ?>">
+-    <input type="hidden" name="arch" id="results_arch" value="<?php echo $_POST['arch']; ?>">
++    <input type="hidden" name="page_number" id="page_number" value="<?php echo htmlspecialchars($page_number); ?>">
++    <input type="hidden" name="results_amount" id="results_amount" value="<?php echo htmlspecialchars($results); ?>">
++    <input type="hidden" name="package" id="results_packages" value="<?php echo htmlspecialchars($_POST['package']); ?>">
++    <input type="hidden" name="version" id="results_version" value="<?php echo htmlspecialchars($_POST['version']); ?>">
++    <input type="hidden" name="arch" id="results_arch" value="<?php echo htmlspecialchars($_POST['arch']); ?>">
+ </form>
+ <script type="text/javascript">
+     function updateResults(results) {
+diff --git a/includes/html/pages/tools/oxidized-cfg-check.inc.php b/includes/html/pages/tools/oxidized-cfg-check.inc.php
+index 8cf05906d..e79c7baaa 100644
+--- a/includes/html/pages/tools/oxidized-cfg-check.inc.php
++++ b/includes/html/pages/tools/oxidized-cfg-check.inc.php
+@@ -23,7 +23,7 @@ if (isset($_POST['config'])) {
+         <?php echo csrf_field() ?>
+         <div class="form-group">
+             <label for="exampleInputEmail1">Paste your Oxidized yaml config:</label>
+-            <textarea name="config" value="config" rows="20" class="form-control" placeholder="Paste your Oxidized yaml config"><?php echo $_POST['config']; ?></textarea>
++            <textarea name="config" value="config" rows="20" class="form-control" placeholder="Paste your Oxidized yaml config"><?php echo htmlspecialchars($_POST['config']); ?></textarea>
+         </div>
+         <button type="submit" class="btn btn-default btn-primary">Validate YAML</button>
+     </form>
+diff --git a/includes/html/print-alert-rules.php b/includes/html/print-alert-rules.php
+index 1b7d65bb3..2cb27d160 100644
+--- a/includes/html/print-alert-rules.php
++++ b/includes/html/print-alert-rules.php
+@@ -446,8 +446,8 @@ if (($count % $results) > 0) {
+     echo '</div>';
+ }
+ 
+-echo '<input type="hidden" name="page_number" id="page_number" value="' . $page_number . '">
+-    <input type="hidden" name="results_amount" id="results_amount" value="' . $results . '">
++echo '<input type="hidden" name="page_number" id="page_number" value="' . htmlspecialchars($page_number) . '">
++    <input type="hidden" name="results_amount" id="results_amount" value="' . htmlspecialchars($results) . '">
+     </form>';
+ 
+ if ($count < 1) {
+diff --git a/includes/html/print-customoid.php b/includes/html/print-customoid.php
+index 2dc3e314d..1a6329a86 100644
+--- a/includes/html/print-customoid.php
++++ b/includes/html/print-customoid.php
+@@ -111,8 +111,8 @@ if (($count % $rows) > 0) {
+ 
+ echo '</table>
+ </div>
+-<input type="hidden" name="page_num" id="page_num" value="' . $page_num . '">
+-<input type="hidden" name="num_of_rows" id="num_of_rows" value="' . $rows . '">
++<input type="hidden" name="page_num" id="page_num" value="' . htmlspecialchars($page_num) . '">
++<input type="hidden" name="num_of_rows" id="num_of_rows" value="' . htmlspecialchars($rows) . '">
+ </form>';
+ 
+ ?>
+-- 
+2.34.1
+

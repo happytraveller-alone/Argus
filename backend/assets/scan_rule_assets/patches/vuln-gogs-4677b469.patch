@@ -1,0 +1,149 @@
+From 4677b469044bc23e98b4cd265495dbffb9be335a Mon Sep 17 00:00:00 2001
+From: Unknwon <u@gogs.io>
+Date: Tue, 6 Nov 2018 22:22:02 -0500
+Subject: [PATCH] vendor: update github.com/go-macaron/session (#5469)
+
+Fix security flaw reported by c957861129d62331c5704d2f04d11e41.
+---
+ .../github.com/go-macaron/session/session.go  | 40 +++++++++++++++----
+ vendor/github.com/go-macaron/session/utils.go |  5 ++-
+ vendor/vendor.json                            | 10 ++---
+ 3 files changed, 41 insertions(+), 14 deletions(-)
+
+diff --git a/vendor/github.com/go-macaron/session/session.go b/vendor/github.com/go-macaron/session/session.go
+index d9bbae20..6bd5bdb1 100644
+--- a/vendor/github.com/go-macaron/session/session.go
++++ b/vendor/github.com/go-macaron/session/session.go
+@@ -22,13 +22,12 @@ import (
+ 	"fmt"
+ 	"net/http"
+ 	"net/url"
+-	"strings"
+ 	"time"
+ 
+ 	"gopkg.in/macaron.v1"
+ )
+ 
+-const _VERSION = "0.4.0"
++const _VERSION = "0.5.0"
+ 
+ func Version() string {
+ 	return _VERSION
+@@ -252,12 +251,30 @@ func (m *Manager) sessionID() string {
+ 	return hex.EncodeToString(generateRandomKey(m.opt.IDLength / 2))
+ }
+ 
++// validSessionID tests whether a provided session ID is a valid session ID.
++func (m *Manager) validSessionID(sid string) (bool, error) {
++	if len(sid) != m.opt.IDLength {
++		return false, errors.New("invalid 'sid': " + sid)
++	}
++
++	for i := range sid {
++		switch {
++		case '0' <= sid[i] && sid[i] <= '9':
++		case 'a' <= sid[i] && sid[i] <= 'f':
++		default:
++			return false, errors.New("invalid 'sid': " + sid)
++		}
++	}
++	return true, nil
++}
++
+ // Start starts a session by generating new one
+ // or retrieve existence one by reading session ID from HTTP request if it's valid.
+ func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
+ 	sid := ctx.GetCookie(m.opt.CookieName)
+-	if len(sid) > 0 && m.provider.Exist(sid) {
+-		return m.Read(sid)
++	valid, _ := m.validSessionID(sid)
++	if len(sid) > 0 && valid && m.provider.Exist(sid) {
++		return m.provider.Read(sid)
+ 	}
+ 
+ 	sid = m.sessionID()
+@@ -284,10 +301,9 @@ func (m *Manager) Start(ctx *macaron.Context) (RawStore, error) {
+ 
+ // Read returns raw session store by session ID.
+ func (m *Manager) Read(sid string) (RawStore, error) {
+-	// No slashes or dots "./" should ever occur in the sid and to prevent session file forgery bug.
+-	// See https://github.com/gogs/gogs/issues/5469
+-	if strings.ContainsAny(sid, "./") {
+-		return nil, errors.New("invalid 'sid': " + sid)
++	// Ensure we're trying to read a valid session ID
++	if _, err := m.validSessionID(sid); err != nil {
++		return nil, err
+ 	}
+ 
+ 	return m.provider.Read(sid)
+@@ -300,6 +316,10 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
+ 		return nil
+ 	}
+ 
++	if _, err := m.validSessionID(sid); err != nil {
++		return err
++	}
++
+ 	if err := m.provider.Destory(sid); err != nil {
+ 		return err
+ 	}
+@@ -318,6 +338,10 @@ func (m *Manager) Destory(ctx *macaron.Context) error {
+ func (m *Manager) RegenerateId(ctx *macaron.Context) (sess RawStore, err error) {
+ 	sid := m.sessionID()
+ 	oldsid := ctx.GetCookie(m.opt.CookieName)
++	_, err = m.validSessionID(oldsid)
++	if err != nil {
++		return nil, err
++	}
+ 	sess, err = m.provider.Regenerate(oldsid, sid)
+ 	if err != nil {
+ 		return nil, err
+diff --git a/vendor/github.com/go-macaron/session/utils.go b/vendor/github.com/go-macaron/session/utils.go
+index 07a1283d..90ca3806 100644
+--- a/vendor/github.com/go-macaron/session/utils.go
++++ b/vendor/github.com/go-macaron/session/utils.go
+@@ -50,11 +50,14 @@ func DecodeGob(encoded []byte) (out map[interface{}]interface{}, err error) {
+ 	return out, err
+ }
+ 
++// NOTE: A local copy in case of underlying package change
++var alphanum = []byte("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
++
+ // generateRandomKey creates a random key with the given strength.
+ func generateRandomKey(strength int) []byte {
+ 	k := make([]byte, strength)
+ 	if n, err := io.ReadFull(rand.Reader, k); n != strength || err != nil {
+-		return com.RandomCreateBytes(strength)
++		return com.RandomCreateBytes(strength, alphanum...)
+ 	}
+ 	return k
+ }
+diff --git a/vendor/vendor.json b/vendor/vendor.json
+index 2116553b..44de4d8c 100644
+--- a/vendor/vendor.json
++++ b/vendor/vendor.json
+@@ -135,16 +135,16 @@
+ 			"revisionTime": "2016-06-27T17:00:12Z"
+ 		},
+ 		{
+-			"checksumSHA1": "GKW4VF4zp39yj16pd412H9uZyCk=",
++			"checksumSHA1": "qLY+SEQlwlFlpUwT2ZyUv+UlsxA=",
+ 			"path": "github.com/go-macaron/session",
+-			"revision": "330e4e4d8beb7b00111ac34539561f46f94c4458",
+-			"revisionTime": "2018-10-24T13:54:22Z"
++			"revision": "068d408f9c54c7fa7fcc5e2bdd3241ab21280c9e",
++			"revisionTime": "2018-11-07T03:18:28Z"
+ 		},
+ 		{
+ 			"checksumSHA1": "jVW5CmzplA0UDjai0AFYJFVXAJk=",
+ 			"path": "github.com/go-macaron/session/redis",
+-			"revision": "330e4e4d8beb7b00111ac34539561f46f94c4458",
+-			"revisionTime": "2018-10-24T13:54:22Z"
++			"revision": "068d408f9c54c7fa7fcc5e2bdd3241ab21280c9e",
++			"revisionTime": "2018-11-07T03:18:28Z"
+ 		},
+ 		{
+ 			"checksumSHA1": "VMRkwnbl0mKWWvK/62CnIlv1oOg=",
+-- 
+2.34.1
+

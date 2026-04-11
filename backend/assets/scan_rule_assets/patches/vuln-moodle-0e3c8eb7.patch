@@ -1,0 +1,32 @@
+From 0e3c8eb740e1e49a62a5f452cda7e06258712bbf Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Thu, 2 Feb 2023 22:35:17 +0000
+Subject: [PATCH] MDL-77129 tool_lp: remove redundant call to set page header.
+
+---
+ admin/tool/lp/classes/page_helper.php | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/admin/tool/lp/classes/page_helper.php b/admin/tool/lp/classes/page_helper.php
+index d4d2a56c858..8ffa8e768d3 100644
+--- a/admin/tool/lp/classes/page_helper.php
++++ b/admin/tool/lp/classes/page_helper.php
+@@ -229,7 +229,6 @@ class page_helper {
+         $PAGE->set_pagelayout('standard');
+         $PAGE->set_url($url);
+         $PAGE->set_title($title);
+-        $PAGE->set_heading(fullname($user));
+ 
+         if (!empty($plan)) {
+             $PAGE->navbar->add($title, $planurl);
+@@ -303,7 +302,6 @@ class page_helper {
+         $PAGE->set_pagelayout('standard');
+         $PAGE->set_url($url);
+         $PAGE->set_title($title);
+-        $PAGE->set_heading(fullname($user));
+ 
+         if (!empty($evidence)) {
+             $PAGE->navbar->add($title, $evidenceurl);
+-- 
+2.34.1
+

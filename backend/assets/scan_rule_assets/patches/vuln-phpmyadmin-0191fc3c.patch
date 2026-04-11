@@ -1,0 +1,41 @@
+From 0191fc3c33feb809cf668f018ad53dc35061fe4c Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Thu, 21 Jul 2005 11:55:25 +0000
+Subject: [PATCH] bug #1240880, XSS on the cookie-based login panel
+
+---
+ ChangeLog                          | 4 ++++
+ libraries/auth/cookie.auth.lib.php | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 655e70af9a..66fa1c6a12 100755
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -5,6 +5,10 @@ phpMyAdmin - Changelog
+ $Id$
+ $Source$
+ 
++2005-07-21 Marc Delisle  <lem9@users.sourceforge.net>
++    * libraries/auth/cookie.auth.lib.php: bug #1240880, XSS on the
++	  cookie-based login panel
++
+ 2005-07-20 Marc Delisle  <lem9@users.sourceforge.net>
+     * ChangeLog: automatic utf-8 encoding modeline, thanks to Michal
+ 
+diff --git a/libraries/auth/cookie.auth.lib.php b/libraries/auth/cookie.auth.lib.php
+index 9e81da0e9c..7de67f8136 100644
+--- a/libraries/auth/cookie.auth.lib.php
++++ b/libraries/auth/cookie.auth.lib.php
+@@ -618,7 +618,7 @@ global $conn_error, $server;
+     } else if (isset($GLOBALS['no_activity']) && $GLOBALS['no_activity']) {
+         $conn_error = sprintf($GLOBALS['strNoActivity'],$GLOBALS['cfg']['LoginCookieValidity']);
+     } else if (PMA_DBI_getError()) {
+-        $conn_error = PMA_DBI_getError();
++        $conn_error = PMA_sanitize(PMA_DBI_getError());
+     } else if (isset($php_errormsg)) {
+         $conn_error = $php_errormsg;
+     } else {
+-- 
+2.34.1
+

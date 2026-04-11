@@ -1,0 +1,49 @@
+From 37e64539cd29fcfb814c4451152a60f5d107b0f0 Mon Sep 17 00:00:00 2001
+From: Mihai Maruseac <mihaimaruseac@google.com>
+Date: Thu, 19 May 2022 16:17:45 -0700
+Subject: [PATCH] Fix overflow issue
+
+We're also decreasing the test numbers by 1 as the overflow threshold is 1 less.
+
+PiperOrigin-RevId: 449856148
+---
+ tensorflow/core/ops/math_ops.cc | 23 ++++++++++++-----------
+ 1 file changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/tensorflow/core/ops/math_ops.cc b/tensorflow/core/ops/math_ops.cc
+index 89af24cee24..26347788305 100644
+--- a/tensorflow/core/ops/math_ops.cc
++++ b/tensorflow/core/ops/math_ops.cc
+@@ -1487,17 +1487,18 @@ Status RangeSize(const Tensor* start_t, const Tensor* limit_t,
+     return errors::InvalidArgument("Requires delta != 0");
+   }
+ 
+-  auto size = (std::is_integral<T>::value
+-                   ? ((Eigen::numext::abs(limit - start) +
+-                       Eigen::numext::abs(delta) - T(1)) /
+-                      Eigen::numext::abs(delta))
+-                   : (Eigen::numext::ceil(
+-                         Eigen::numext::abs((limit - start) / delta))));
+-
+-  // Undefined behaviour if size will not fit into int64_t
+-  if (size > std::numeric_limits<int64_t>::max()) {
+-    return errors::InvalidArgument("Requires ((limit - start) / delta) <= ",
+-                                   std::numeric_limits<int64_t>::max());
++  int64_t size;
++  if (std::is_integral<T>::value) {
++    size = Eigen::divup(static_cast<int64_t>(Eigen::numext::abs(limit - start)),
++                        static_cast<int64_t>(Eigen::numext::abs(delta)));
++  } else {
++    auto size_auto =
++        Eigen::numext::ceil(Eigen::numext::abs((limit - start) / delta));
++    if (size_auto > std::numeric_limits<int64_t>::max()) {
++      return errors::InvalidArgument("Requires ((limit - start) / delta) <= ",
++                                     std::numeric_limits<int64_t>::max());
++    }
++    size = static_cast<int64_t>(size_auto);
+   }
+ 
+   c->set_output(0, c->Vector(static_cast<int64_t>(size)));
+-- 
+2.34.1
+

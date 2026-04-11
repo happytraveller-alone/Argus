@@ -1,0 +1,22 @@
+From 9cf38a0a837bedb441c6a9fe538932d58f6adfec Mon Sep 17 00:00:00 2001
+From: Adam Hopkins <adam@amhopkins.com>
+Date: Sun, 31 Jul 2022 15:50:46 +0300
+Subject: [PATCH] MERGEBACK (#2495) (#2512)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-authored-by: Adam Hopkins <adam@amhopkins.com>
+Co-authored-by: Zhiwei Liang <zhi.wei.liang@outlook.com>
+Co-authored-by: Néstor Pérez <25409753+prryplatypus@users.noreply.github.com>
+---
+ sanic/__version__.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sanic/__version__.py b/sanic/__version__.py
+index ac0f77e8f..8c1ade033 100644
+--- a/sanic/__version__.py
++++ b/sanic/__version__.py
+@@ -1 +1 @@
+-__version__ = "22.6.0"
++__version__ = "22.6.1"

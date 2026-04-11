@@ -1,0 +1,231 @@
+From 13d815e6983003d181f47d827dade49154e1cf25 Mon Sep 17 00:00:00 2001
+From: Chris Darroch <chrisd8088@github.com>
+Date: Tue, 15 Feb 2022 16:47:43 -0800
+Subject: [PATCH] Makefile,debian,rpm: build man pages into dirs
+
+We currently build our manual pages and the HTML versions of
+them into a single "man" directory, which results in release
+package archives on GitHub that contain all of these files
+interleaved with each other in that one directory.
+
+When we build Linux RPM and Debian packages, though, the man
+pages are installed into their conventional locations under
+/usr/share/man/man{1,5}.  (The HTML versions are not included
+at all.)
+
+For those downloading the release package archives and not using
+the RPM or Debian packages, we can improve their experience by
+placing the roff man pages into "man1" and "man5" subdirectories
+corresponding to their respective sections of the manual, and the
+HTML versions of the pages into an "html" subdirectory.
+---
+ Makefile                | 144 ++++++++++++++++++++--------------------
+ debian/git-lfs.manpages |   4 +-
+ rpm/SPECS/git-lfs.spec  |   4 +-
+ 3 files changed, 76 insertions(+), 76 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 1a86be46..bfdee20e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -382,7 +382,7 @@ $(RELEASE_INCLUDES) bin/git-lfs-darwin-% script/install.sh
+ 	mkdir -p $$dir && \
+ 	cp -R $^ $$dir && mv $$dir/git-lfs-darwin-$* $$dir/git-lfs && \
+ 	zip -j $@ $$dir/* && \
+-	zip -u $@ man/* && \
++	zip -ur $@ man && \
+ 	$(RM) -r $$dir
+ 
+ # bin/releases/git-lfs-windows-$(VERSION).zip generates a ZIP compression of all
+@@ -394,7 +394,7 @@ bin/releases/git-lfs-windows-%-$(VERSION).zip : $(RELEASE_INCLUDES) bin/git-lfs-
+ 	@mkdir -p bin/releases
+ 	rm -f $@
+ 	zip -j -l $@ $^
+-	zip -u $@ man/*
++	zip -ur $@ man
+ 
+ # bin/releases/git-lfs-$(VERSION).tar.gz generates a tarball of the source code.
+ #
+@@ -620,85 +620,85 @@ index.txt :
+ 	)
+ 
+ # MAN_ROFF_TARGETS is a list of all ROFF-style targets in the man pages.
+-MAN_ROFF_TARGETS = man/git-lfs-checkout.1 \
+-  man/git-lfs-clean.1 \
+-  man/git-lfs-clone.1 \
+-  man/git-lfs-config.5 \
+-  man/git-lfs-dedup.1 \
+-  man/git-lfs-env.1 \
+-  man/git-lfs-ext.1 \
+-  man/git-lfs-fetch.1 \
+-  man/git-lfs-filter-process.1 \
+-  man/git-lfs-fsck.1 \
+-  man/git-lfs-install.1 \
+-  man/git-lfs-lock.1 \
+-  man/git-lfs-locks.1 \
+-  man/git-lfs-logs.1 \
+-  man/git-lfs-ls-files.1 \
+-  man/git-lfs-migrate.1 \
+-  man/git-lfs-pointer.1 \
+-  man/git-lfs-post-checkout.1 \
+-  man/git-lfs-post-commit.1 \
+-  man/git-lfs-post-merge.1 \
+-  man/git-lfs-pre-push.1 \
+-  man/git-lfs-prune.1 \
+-  man/git-lfs-pull.1 \
+-  man/git-lfs-push.1 \
+-  man/git-lfs-smudge.1 \
+-  man/git-lfs-standalone-file.1 \
+-  man/git-lfs-status.1 \
+-  man/git-lfs-track.1 \
+-  man/git-lfs-uninstall.1 \
+-  man/git-lfs-unlock.1 \
+-  man/git-lfs-untrack.1 \
+-  man/git-lfs-update.1 \
+-  man/git-lfs.1
++MAN_ROFF_TARGETS = man/man1/git-lfs-checkout.1 \
++  man/man1/git-lfs-clean.1 \
++  man/man1/git-lfs-clone.1 \
++  man/man5/git-lfs-config.5 \
++  man/man1/git-lfs-dedup.1 \
++  man/man1/git-lfs-env.1 \
++  man/man1/git-lfs-ext.1 \
++  man/man1/git-lfs-fetch.1 \
++  man/man1/git-lfs-filter-process.1 \
++  man/man1/git-lfs-fsck.1 \
++  man/man1/git-lfs-install.1 \
++  man/man1/git-lfs-lock.1 \
++  man/man1/git-lfs-locks.1 \
++  man/man1/git-lfs-logs.1 \
++  man/man1/git-lfs-ls-files.1 \
++  man/man1/git-lfs-migrate.1 \
++  man/man1/git-lfs-pointer.1 \
++  man/man1/git-lfs-post-checkout.1 \
++  man/man1/git-lfs-post-commit.1 \
++  man/man1/git-lfs-post-merge.1 \
++  man/man1/git-lfs-pre-push.1 \
++  man/man1/git-lfs-prune.1 \
++  man/man1/git-lfs-pull.1 \
++  man/man1/git-lfs-push.1 \
++  man/man1/git-lfs-smudge.1 \
++  man/man1/git-lfs-standalone-file.1 \
++  man/man1/git-lfs-status.1 \
++  man/man1/git-lfs-track.1 \
++  man/man1/git-lfs-uninstall.1 \
++  man/man1/git-lfs-unlock.1 \
++  man/man1/git-lfs-untrack.1 \
++  man/man1/git-lfs-update.1 \
++  man/man1/git-lfs.1
+ 
+ # MAN_HTML_TARGETS is a list of all HTML-style targets in the man pages.
+-MAN_HTML_TARGETS = man/git-lfs-checkout.1.html \
+-  man/git-lfs-clean.1.html \
+-  man/git-lfs-clone.1.html \
+-  man/git-lfs-config.5.html \
+-  man/git-lfs-dedup.1.html \
+-  man/git-lfs-env.1.html \
+-  man/git-lfs-ext.1.html \
+-  man/git-lfs-fetch.1.html \
+-  man/git-lfs-filter-process.1.html \
+-  man/git-lfs-fsck.1.html \
+-  man/git-lfs-install.1.html \
+-  man/git-lfs-lock.1.html \
+-  man/git-lfs-locks.1.html \
+-  man/git-lfs-logs.1.html \
+-  man/git-lfs-ls-files.1.html \
+-  man/git-lfs-migrate.1.html \
+-  man/git-lfs-pointer.1.html \
+-  man/git-lfs-post-checkout.1.html \
+-  man/git-lfs-post-commit.1.html \
+-  man/git-lfs-post-merge.1.html \
+-  man/git-lfs-pre-push.1.html \
+-  man/git-lfs-prune.1.html \
+-  man/git-lfs-pull.1.html \
+-  man/git-lfs-push.1.html \
+-  man/git-lfs-smudge.1.html \
+-  man/git-lfs-standalone-file.1.html \
+-  man/git-lfs-status.1.html \
+-  man/git-lfs-track.1.html \
+-  man/git-lfs-uninstall.1.html \
+-  man/git-lfs-unlock.1.html \
+-  man/git-lfs-untrack.1.html \
+-  man/git-lfs-update.1.html \
+-  man/git-lfs.1.html
++MAN_HTML_TARGETS = man/html/git-lfs-checkout.1.html \
++  man/html/git-lfs-clean.1.html \
++  man/html/git-lfs-clone.1.html \
++  man/html/git-lfs-config.5.html \
++  man/html/git-lfs-dedup.1.html \
++  man/html/git-lfs-env.1.html \
++  man/html/git-lfs-ext.1.html \
++  man/html/git-lfs-fetch.1.html \
++  man/html/git-lfs-filter-process.1.html \
++  man/html/git-lfs-fsck.1.html \
++  man/html/git-lfs-install.1.html \
++  man/html/git-lfs-lock.1.html \
++  man/html/git-lfs-locks.1.html \
++  man/html/git-lfs-logs.1.html \
++  man/html/git-lfs-ls-files.1.html \
++  man/html/git-lfs-migrate.1.html \
++  man/html/git-lfs-pointer.1.html \
++  man/html/git-lfs-post-checkout.1.html \
++  man/html/git-lfs-post-commit.1.html \
++  man/html/git-lfs-post-merge.1.html \
++  man/html/git-lfs-pre-push.1.html \
++  man/html/git-lfs-prune.1.html \
++  man/html/git-lfs-pull.1.html \
++  man/html/git-lfs-push.1.html \
++  man/html/git-lfs-smudge.1.html \
++  man/html/git-lfs-standalone-file.1.html \
++  man/html/git-lfs-status.1.html \
++  man/html/git-lfs-track.1.html \
++  man/html/git-lfs-uninstall.1.html \
++  man/html/git-lfs-unlock.1.html \
++  man/html/git-lfs-untrack.1.html \
++  man/html/git-lfs-update.1.html \
++  man/html/git-lfs.1.html
+ 
+ # man generates all ROFF- and HTML-style manpage targets.
+ .PHONY : man
+ man : index.txt $(MAN_ROFF_TARGETS) $(MAN_HTML_TARGETS)
+ 
+ # man/% generates ROFF-style man pages from the corresponding .ronn file.
+-man/% : docs/man/%.ronn
+-	@mkdir -p man
++man/man1/% man/man5/% : docs/man/%.ronn
++	@mkdir -p man/man1 man/man5
+ 	$(RONN) $(RONN_EXTRA_ARGS) -r --pipe < $^ > $@
+ 
+ # man/%.html generates HTML-style man pages from the corresponding .ronn file.
+-man/%.html : docs/man/%.ronn
+-	@mkdir -p man
++man/html/%.html : docs/man/%.ronn
++	@mkdir -p man/html
+ 	$(RONN) $(RONN_EXTRA_ARGS) -5 --pipe < $^ > $@
+diff --git a/debian/git-lfs.manpages b/debian/git-lfs.manpages
+index 2e40bb06..b45e15f5 100644
+--- a/debian/git-lfs.manpages
++++ b/debian/git-lfs.manpages
+@@ -1,2 +1,2 @@
+-man/*.1
+-man/*.5
++man/man1/*.1
++man/man5/*.5
+diff --git a/rpm/SPECS/git-lfs.spec b/rpm/SPECS/git-lfs.spec
+index 4d05b08b..d8434384 100644
+--- a/rpm/SPECS/git-lfs.spec
++++ b/rpm/SPECS/git-lfs.spec
+@@ -46,8 +46,8 @@ make man
+ install -D bin/git-lfs ${RPM_BUILD_ROOT}/usr/bin/git-lfs
+ mkdir -p -m 755 ${RPM_BUILD_ROOT}/usr/share/man/man1
+ mkdir -p -m 755 ${RPM_BUILD_ROOT}/usr/share/man/man5
+-install -D man/*.1 ${RPM_BUILD_ROOT}/usr/share/man/man1
+-install -D man/*.5 ${RPM_BUILD_ROOT}/usr/share/man/man5
++install -D man/man1/*.1 ${RPM_BUILD_ROOT}/usr/share/man/man1
++install -D man/man5/*.5 ${RPM_BUILD_ROOT}/usr/share/man/man5
+ 
+ %post
+ # The --skip-repo option prevents failure if / is a Git repository with existing
+-- 
+2.34.1
+

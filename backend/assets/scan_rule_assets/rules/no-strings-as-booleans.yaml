@@ -1,0 +1,19 @@
+rules:
+- id: no-strings-as-booleans
+  patterns:
+  - pattern-either:
+    - pattern: "if <... \"...\" and ... ...>:\n    ...\n"
+    - pattern: "if <... \"...\" or ... ...>:\n    ...\n"
+    - patterns:
+      - pattern-not: "if $X in \"...\":\n  ...\n"
+      - pattern: "if \"...\":\n    ...\n"
+  message: "Using strings as booleans in Python has unexpected results.\n`\"one\"\
+    \ and \"two\"` will return \"two\".\n`\"one\" or \"two\"` will return \"one\"\
+    .\n In Python, strings are truthy, evaluating to True.\n"
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    - 'CWE-843: Access of Resource Using Incompatible Type'

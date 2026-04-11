@@ -1,0 +1,22 @@
+From c8e41bfee75cb0a70e69d8f1488aa948fc31831a Mon Sep 17 00:00:00 2001
+From: Matthew Noorenberghe <github@matthew.noorenberghe.com>
+Date: Sun, 10 Feb 2019 00:10:39 -0800
+Subject: [PATCH] log.php: Ensure 'line' is an integer. Helps with #2466
+
+---
+ web/ajax/log.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/web/ajax/log.php b/web/ajax/log.php
+index 282303a879..2a5aa039eb 100644
+--- a/web/ajax/log.php
++++ b/web/ajax/log.php
+@@ -15,7 +15,7 @@
+ 
+       $file = !empty($_POST['file']) ? preg_replace( '/\w+:\/\/[\w.:]+\//', '', $_POST['file'] ) : '';
+       if ( !empty( $_POST['line'] ) )
+-        $line = $_POST['line'];
++        $line = validInt($_POST['line']);
+       else
+         $line = NULL;
+ 

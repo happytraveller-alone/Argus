@@ -1,0 +1,35 @@
+From 8d9102aa088c780ca2f1cc0f39b224d735dc8569 Mon Sep 17 00:00:00 2001
+From: DerLinkman <derlinkman@gmail.com>
+Date: Thu, 19 May 2022 14:41:21 +0200
+Subject: [PATCH] [Imapsync] Case sensitive PIPEMESS removal
+
+(cherry picked from commit 33e5ad2b5c43140529a83580f88c850d051debd7)
+---
+ data/web/inc/functions.mailbox.inc.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/data/web/inc/functions.mailbox.inc.php b/data/web/inc/functions.mailbox.inc.php
+index 1c6e5b40..88ee1ca6 100644
+--- a/data/web/inc/functions.mailbox.inc.php
++++ b/data/web/inc/functions.mailbox.inc.php
+@@ -337,7 +337,7 @@ function mailbox($_action, $_type, $_data = null, $_extra = null) {
+           $enc1                 = $_data['enc1'];
+           $custom_params        = (empty(trim($_data['custom_params']))) ? '' : trim($_data['custom_params']);
+           // Workaround, fixme
+-          if (strpos($custom_params, 'pipemess')) {
++          if (stripos($custom_params, 'pipemess')) {
+             $custom_params = '';
+           }
+           if (empty($subfolder2)) {
+@@ -1746,7 +1746,7 @@ function mailbox($_action, $_type, $_data = null, $_extra = null) {
+               );
+               continue;
+             }
+-            if (strpos($custom_params, 'pipemess')) {
++            if (stripos($custom_params, 'pipemess')) {
+               $custom_params = '';
+             }
+             if (empty($subfolder2)) {
+-- 
+2.34.1
+

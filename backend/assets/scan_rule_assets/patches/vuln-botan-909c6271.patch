@@ -1,0 +1,39 @@
+From 909c62717855402e04dbaf8ffc085f444d547aae Mon Sep 17 00:00:00 2001
+From: Rene Meusel <rene.meusel@rohde-schwarz.com>
+Date: Thu, 3 Nov 2022 09:27:45 +0100
+Subject: [PATCH] references to CVE-2022-43705
+
+---
+ src/lib/x509/ocsp.cpp        | 2 +-
+ src/tests/test_x509_path.cpp | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib/x509/ocsp.cpp b/src/lib/x509/ocsp.cpp
+index fc952f67e..2cc5ebc15 100644
+--- a/src/lib/x509/ocsp.cpp
++++ b/src/lib/x509/ocsp.cpp
+@@ -291,7 +291,7 @@ Certificate_Status_Code Response::check_signature(const std::vector<Certificate_
+             return Certificate_Status_Code::OCSP_ISSUER_NOT_FOUND;
+             }
+ 
+-         // Sub-optimal fix for a vulnerability found in Botan 2.19.2 and older.
++         // Sub-optimal fix for CVE-2022-43705 found in Botan 2.19.2 and older.
+          //
+          // This certificate validation is incomplete. Missing checks:
+          //  * validity check against the reference time
+diff --git a/src/tests/test_x509_path.cpp b/src/tests/test_x509_path.cpp
+index 7348e25ba..85e5044cb 100644
+--- a/src/tests/test_x509_path.cpp
++++ b/src/tests/test_x509_path.cpp
+@@ -1122,7 +1122,7 @@ class Path_Validation_With_OCSP_Tests final : public Test
+ 
+       Test::Result validate_with_forged_ocsp_using_self_signed_cert()
+          {
+-         Test::Result result("path check with forged ocsp using self-signed certificate");
++         Test::Result result("path check with forged ocsp using self-signed certificate (CVE-2022-43705)");
+          Botan::Certificate_Store_In_Memory trusted;
+ 
+          auto restrictions = Botan::Path_Validation_Restrictions(true,   // require revocation info
+-- 
+2.34.1
+

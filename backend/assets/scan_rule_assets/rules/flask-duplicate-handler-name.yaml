@@ -1,0 +1,13 @@
+rules:
+- id: flask-duplicate-handler-name
+  pattern: "@app.route(\"...\", ...)\ndef $R(...):\n    ...\n...\n@app.route(\"...\"\
+    , ...)\ndef $R(...):\n    ...\n"
+  message: Looks like `$R` is a flask function handler that registered to two different
+    routes. This will cause a runtime error
+  languages:
+  - python
+  severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-285: Improper Authorization'

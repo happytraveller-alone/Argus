@@ -1,0 +1,56 @@
+From bf7d416c68d970ce837469516a52aad1641d9c92 Mon Sep 17 00:00:00 2001
+From: Cesar Gonzalez <cesar.a.gonzalezcs@gmail.com>
+Date: Wed, 20 Sep 2023 10:25:58 -0500
+Subject: [PATCH] [PM-4011] Remove Autofill Injection in All Frames (#6348)
+
+* [PM-4011] Remove Autofill Injection in All Frames
+
+* [PM-4011] Adding jest tests for the fix
+---
+ apps/browser/src/autofill/services/autofill.service.spec.ts | 4 +++-
+ apps/browser/src/autofill/services/autofill.service.ts      | 2 +-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/apps/browser/src/autofill/services/autofill.service.spec.ts b/apps/browser/src/autofill/services/autofill.service.spec.ts
+index 5fc4b76c4..e6a629cfc 100644
+--- a/apps/browser/src/autofill/services/autofill.service.spec.ts
++++ b/apps/browser/src/autofill/services/autofill.service.spec.ts
+@@ -75,7 +75,7 @@ describe("AutofillService", () => {
+     const autofillV1Script = "autofill.js";
+     const autofillV2Script = "autofill-init.js";
+     const defaultAutofillScripts = ["autofiller.js", "notificationBar.js", "contextMenuHandler.js"];
+-    const defaultExecuteScriptOptions = { allFrames: true, runAt: "document_start" };
++    const defaultExecuteScriptOptions = { runAt: "document_start" };
+     let tabMock: chrome.tabs.Tab;
+     let sender: chrome.runtime.MessageSender;
+ 
+@@ -91,11 +91,13 @@ describe("AutofillService", () => {
+       [autofillV1Script, ...defaultAutofillScripts].forEach((scriptName) => {
+         expect(BrowserApi.executeScriptInTab).toHaveBeenCalledWith(tabMock.id, {
+           file: `content/${scriptName}`,
++          frameId: sender.frameId,
+           ...defaultExecuteScriptOptions,
+         });
+       });
+       expect(BrowserApi.executeScriptInTab).not.toHaveBeenCalledWith(tabMock.id, {
+         file: `content/${autofillV2Script}`,
++        frameId: sender.frameId,
+         ...defaultExecuteScriptOptions,
+       });
+     });
+diff --git a/apps/browser/src/autofill/services/autofill.service.ts b/apps/browser/src/autofill/services/autofill.service.ts
+index dc2a4918c..fcf4dffd4 100644
+--- a/apps/browser/src/autofill/services/autofill.service.ts
++++ b/apps/browser/src/autofill/services/autofill.service.ts
+@@ -62,7 +62,7 @@ export default class AutofillService implements AutofillServiceInterface {
+     for (const injectedScript of injectedScripts) {
+       await BrowserApi.executeScriptInTab(sender.tab.id, {
+         file: `content/${injectedScript}`,
+-        allFrames: true,
++        frameId: sender.frameId,
+         runAt: "document_start",
+       });
+     }
+-- 
+2.34.1
+

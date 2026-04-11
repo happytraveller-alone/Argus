@@ -1,0 +1,1250 @@
+From d7d415b8ae9652e1aeadb80508b0f9cf91306a60 Mon Sep 17 00:00:00 2001
+From: Andrew Cagney <cagney@gnu.org>
+Date: Fri, 16 Apr 2021 09:39:41 -0400
+Subject: [PATCH] logging: log_diag() -> llog_diag()
+
+since name and parameters corrolate with llog()
+---
+ include/diag.h                     |  4 ++--
+ lib/libswan/diag.c                 |  4 ++--
+ lib/libswan/proposals.c            |  8 ++++----
+ programs/pluto/connections.c       | 14 ++++++-------
+ programs/pluto/crypt_dh.c          |  2 +-
+ programs/pluto/demux.c             |  2 +-
+ programs/pluto/ikev1.c             |  8 ++++----
+ programs/pluto/ikev1_aggr.c        |  2 +-
+ programs/pluto/ikev1_main.c        |  6 +++---
+ programs/pluto/ikev1_message.c     |  6 +++---
+ programs/pluto/ikev1_quick.c       | 14 ++++++-------
+ programs/pluto/ikev1_spdb_struct.c | 28 +++++++++++++-------------
+ programs/pluto/ikev1_xauth.c       | 32 +++++++++++++++---------------
+ programs/pluto/ikev2.c             |  8 ++++----
+ programs/pluto/ikev2_child.c       |  8 ++++----
+ programs/pluto/ikev2_delete.c      |  2 +-
+ programs/pluto/ikev2_message.c     | 12 +++++------
+ programs/pluto/ikev2_parent.c      | 26 ++++++++++++------------
+ programs/pluto/ikev2_peer_id.c     |  4 ++--
+ programs/pluto/ikev2_ppk.c         |  4 ++--
+ programs/pluto/ikev2_redirect.c    |  8 ++++----
+ programs/pluto/ikev2_send.c        | 12 +++++------
+ programs/pluto/ikev2_spdb_struct.c | 10 +++++-----
+ programs/pluto/ikev2_ts.c          | 12 +++++------
+ programs/pluto/nat_traversal.c     |  4 ++--
+ programs/pluto/nss_cert_reread.c   |  2 +-
+ programs/pluto/packet.c            |  4 ++--
+ programs/pluto/packet.h            |  2 +-
+ programs/pluto/x509.c              |  6 +++---
+ 29 files changed, 127 insertions(+), 127 deletions(-)
+
+diff --git a/include/diag.h b/include/diag.h
+index 2316338917..591638a1ed 100644
+--- a/include/diag.h
++++ b/include/diag.h
+@@ -31,8 +31,8 @@ diag_t diag(const char *message, ...) PRINTF_LIKE(1) MUST_USE_RESULT;
+ diag_t diag_va_list(const char *fmt, va_list ap) PRINTF_LIKE_VA(1) MUST_USE_RESULT;
+ diag_t diag_jambuf(struct jambuf *buf);
+ 
+-void log_diag(lset_t rc_flags, struct logger *logger, diag_t *diag,
+-	      const char *fmt, ...) PRINTF_LIKE(4);
++void llog_diag(lset_t rc_flags, struct logger *logger, diag_t *diag,
++	       const char *fmt, ...) PRINTF_LIKE(4);
+ 
+ void fatal_diag(enum pluto_exit_code rc, struct logger *logger, diag_t *diag,
+ 		const char *message, ...) PRINTF_LIKE(4) NEVER_RETURNS;
+diff --git a/lib/libswan/diag.c b/lib/libswan/diag.c
+index 3d2da2f0ea..1daf59de46 100644
+--- a/lib/libswan/diag.c
++++ b/lib/libswan/diag.c
+@@ -71,8 +71,8 @@ size_t jam_diag(struct jambuf *buf, diag_t diag)
+ 	return jam_string(buf, str_diag(diag));
+ }
+ 
+-void log_diag(lset_t rc_flags, struct logger *logger, diag_t *diag,
+-	      const char *fmt, ...)
++void llog_diag(lset_t rc_flags, struct logger *logger, diag_t *diag,
++	       const char *fmt, ...)
+ {
+ 	LLOG_JAMBUF(rc_flags, logger, buf) {
+ 		va_list ap;
+diff --git a/lib/libswan/proposals.c b/lib/libswan/proposals.c
+index 826d686392..9477e43982 100644
+--- a/lib/libswan/proposals.c
++++ b/lib/libswan/proposals.c
+@@ -616,10 +616,10 @@ bool impair_proposal_errors(struct proposal_parser *parser)
+ {
+ 	passert(parser->diag != NULL);
+ 	if (impair.proposal_parser) {
+-		log_diag(parser->policy->logger_rc_flags,
+-			 parser->policy->logger,
+-			 &parser->diag,
+-			 "IMPAIR: ignoring proposal error: ");
++		llog_diag(parser->policy->logger_rc_flags,
++			  parser->policy->logger,
++			  &parser->diag,
++			  "IMPAIR: ignoring proposal error: ");
+ 		return true;
+ 	} else {
+ 		return false;
+diff --git a/programs/pluto/connections.c b/programs/pluto/connections.c
+index 27e5f1bed7..544e620ad9 100644
+--- a/programs/pluto/connections.c
++++ b/programs/pluto/connections.c
+@@ -888,7 +888,7 @@ static int extract_end(struct connection *c,
+ 								   same_ca/*preserve_ca*/,
+ 								   logger);
+ 		if (diag != NULL) {
+-			log_diag(RC_FATAL, logger, &diag, "failed to add connection: ");
++			llog_diag(RC_FATAL, logger, &diag, "failed to add connection: ");
+ 			CERT_DestroyCertificate(cert);
+ 			return -1;
+ 		}
+@@ -968,7 +968,7 @@ static int extract_end(struct connection *c,
+ 									   same_ca/*preserve_ca*/,
+ 									   logger);
+ 			if (diag != NULL) {
+-				log_diag(RC_FATAL, logger, &diag, "failed to add connection: ");
++				llog_diag(RC_FATAL, logger, &diag, "failed to add connection: ");
+ 				CERT_DestroyCertificate(cert);
+ 				return -1;
+ 			}
+@@ -1087,7 +1087,7 @@ static int extract_end(struct connection *c,
+ 		}
+ 		diag_t d = install_addresspool(src->pool_range, &c->pool);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, c->logger, &d,
++			llog_diag(RC_LOG_SERIOUS, c->logger, &d,
+ 				 "invalid %saddresspool: ", leftright);
+ 			return -1;
+ 		}
+@@ -1567,12 +1567,12 @@ static bool extract_connection(const struct whack_message *wm,
+ 
+ 	d = check_connection_end(&wm->right, &wm->left, wm);
+ 	if (d != NULL) {
+-		log_diag(RC_FATAL, c->logger, &d, "failed to add connection: ");
++		llog_diag(RC_FATAL, c->logger, &d, "failed to add connection: ");
+ 		return false;
+ 	}
+ 	d = check_connection_end(&wm->left, &wm->right, wm);
+ 	if (d != NULL) {
+-		log_diag(RC_FATAL, c->logger, &d, "failed to add connection: ");
++		llog_diag(RC_FATAL, c->logger, &d, "failed to add connection: ");
+ 		return false;
+ 	}
+ 
+@@ -1679,7 +1679,7 @@ static bool extract_connection(const struct whack_message *wm,
+ 
+ 			if (c->ike_proposals.p == NULL) {
+ 				pexpect(parser->diag != NULL); /* something */
+-				log_diag(RC_FATAL, c->logger, &parser->diag,
++				llog_diag(RC_FATAL, c->logger, &parser->diag,
+ 					 "failed to add connection: ");
+ 				free_proposal_parser(&parser);
+ 				/* caller will free C */
+@@ -1738,7 +1738,7 @@ static bool extract_connection(const struct whack_message *wm,
+ 			c->child_proposals.p = proposals_from_str(parser, wm->esp);
+ 			if (c->child_proposals.p == NULL) {
+ 				pexpect(parser->diag != NULL);
+-				log_diag(RC_FATAL, c->logger, &parser->diag,
++				llog_diag(RC_FATAL, c->logger, &parser->diag,
+ 					 "failed to add connection: ");
+ 				free_proposal_parser(&parser);
+ 				/* caller will free C */
+diff --git a/programs/pluto/crypt_dh.c b/programs/pluto/crypt_dh.c
+index cf1d673f09..3d774051bd 100644
+--- a/programs/pluto/crypt_dh.c
++++ b/programs/pluto/crypt_dh.c
+@@ -154,7 +154,7 @@ static void compute_dh_shared_secret(struct logger *logger,
+ 								&task->shared_secret,
+ 								logger);
+ 	if (diag != NULL) {
+-		log_diag(RC_LOG_SERIOUS, logger, &diag, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, logger, &diag, "%s", "");
+ 		return;
+ 	}
+ 	/*
+diff --git a/programs/pluto/demux.c b/programs/pluto/demux.c
+index d591a2c648..6cb942d219 100644
+--- a/programs/pluto/demux.c
++++ b/programs/pluto/demux.c
+@@ -152,7 +152,7 @@ void process_packet(struct msg_digest **mdp)
+ 		 * of any content - not even to look for major version
+ 		 * number!  So we'll just drop it.
+ 		 */
+-		log_diag(RC_LOG, md->md_logger, &d,
++		llog_diag(RC_LOG, md->md_logger, &d,
+ 			 "dropping packet with mangled IKE header: ");
+ 		return;
+ 	}
+diff --git a/programs/pluto/ikev1.c b/programs/pluto/ikev1.c
+index 2606c415a0..3dec78da9a 100644
+--- a/programs/pluto/ikev1.c
++++ b/programs/pluto/ikev1.c
+@@ -1691,7 +1691,7 @@ void process_v1_packet(struct msg_digest *md)
+ 		diag_t d = pbs_in_struct(&md->message_pbs, &isakmp_ikefrag_desc,
+ 					 &fraghdr, sizeof(fraghdr), &frag_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			SEND_NOTIFICATION(PAYLOAD_MALFORMED);
+ 			return;
+ 		}
+@@ -2102,7 +2102,7 @@ void process_packet_tail(struct msg_digest *md)
+ 					diag_t d = pbs_in_struct(&md->message_pbs, &isakmp_ignore_desc,
+ 								 &pd->payload, sizeof(pd->payload), &pd->pbs);
+ 					if (d != NULL) {
+-						log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++						llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 						LOG_PACKET(RC_LOG_SERIOUS,
+ 							   "%smalformed payload in packet",
+ 							   excuse);
+@@ -2171,7 +2171,7 @@ void process_packet_tail(struct msg_digest *md)
+ 						 &pd->payload, sizeof(pd->payload),
+ 						 &pd->pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				LOG_PACKET(RC_LOG_SERIOUS,
+ 					   "%smalformed payload in packet",
+ 					   excuse);
+@@ -3090,7 +3090,7 @@ bool ikev1_decode_peer_id(struct msg_digest *md, bool initiator, bool aggrmode)
+ 
+ 	diag_t d = unpack_peer_id(id->isaid_idtype, &peer, &id_pld->pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+diff --git a/programs/pluto/ikev1_aggr.c b/programs/pluto/ikev1_aggr.c
+index 1541b7de88..8167223ac1 100644
+--- a/programs/pluto/ikev1_aggr.c
++++ b/programs/pluto/ikev1_aggr.c
+@@ -867,7 +867,7 @@ stf_status aggr_inI2(struct state *st, struct msg_digest *md)
+ 		diag_t d = pbs_in_struct(&id_pbs, &isakmp_identification_desc,
+ 					 &id_pd.payload, sizeof(id_pd.payload), &id_pd.pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			return STF_FAIL + PAYLOAD_MALFORMED;
+ 		}
+ 	}
+diff --git a/programs/pluto/ikev1_main.c b/programs/pluto/ikev1_main.c
+index 2178811758..6c53db563a 100644
+--- a/programs/pluto/ikev1_main.c
++++ b/programs/pluto/ikev1_main.c
+@@ -2248,13 +2248,13 @@ bool accept_delete(struct msg_digest *md,
+ 
+ 			d = pbs_in_raw(&p->pbs, &cookies.initiator, COOKIE_SIZE, "iCookie");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 
+ 			d = pbs_in_raw(&p->pbs, &cookies.responder, COOKIE_SIZE, "rCookie");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 
+@@ -2293,7 +2293,7 @@ bool accept_delete(struct msg_digest *md,
+ 			ipsec_spi_t spi;	/* network order */
+ 			diag_t dt = pbs_in_raw(&p->pbs, &spi, sizeof(spi), "SPI");
+ 			if (dt != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &dt, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &dt, "%s", "");
+ 				return false;
+ 			}
+ 
+diff --git a/programs/pluto/ikev1_message.c b/programs/pluto/ikev1_message.c
+index 8443e2c2f3..6d5bc3b182 100644
+--- a/programs/pluto/ikev1_message.c
++++ b/programs/pluto/ikev1_message.c
+@@ -37,7 +37,7 @@ bool out_zero(size_t len, pb_stream *outs, const char *name)
+ {
+ 	diag_t d = pbs_out_zero(outs, len, name);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -48,7 +48,7 @@ bool out_repeated_byte(uint8_t byte, size_t len, pb_stream *outs, const char *na
+ {
+ 	diag_t d = pbs_out_repeated_byte(outs, byte, len, name);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -59,7 +59,7 @@ bool out_raw(const void *bytes, size_t len, pb_stream *outs, const char *name)
+ {
+ 	diag_t d = pbs_out_raw(outs, bytes, len, name);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+diff --git a/programs/pluto/ikev1_quick.c b/programs/pluto/ikev1_quick.c
+index 379fa8646a..1d7323e30f 100644
+--- a/programs/pluto/ikev1_quick.c
++++ b/programs/pluto/ikev1_quick.c
+@@ -171,7 +171,7 @@ static bool emit_subnet_id(const ip_subnet net,
+ 	ip_address tp = subnet_prefix(net);
+ 	diag_t d = pbs_out_address(&id_pbs, tp, "client network");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -179,7 +179,7 @@ static bool emit_subnet_id(const ip_subnet net,
+ 		ip_address tm = subnet_prefix_mask(net);
+ 		diag_t d = pbs_out_address(&id_pbs, tm, "client mask");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 	}
+@@ -413,7 +413,7 @@ static bool decode_net_id(struct isakmp_ipsec_id *id,
+ 		ip_address temp_address;
+ 		diag_t d = pbs_in_address(id_pbs, &temp_address, afi, "ID address");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 		/* i.e., "zero" */
+@@ -439,14 +439,14 @@ static bool decode_net_id(struct isakmp_ipsec_id *id,
+ 		ip_address temp_address;
+ 		d = pbs_in_address(id_pbs, &temp_address, afi, "ID address");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 
+ 		ip_address temp_mask;
+ 		d = pbs_in_address(id_pbs, &temp_mask, afi, "ID mask");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 
+@@ -475,14 +475,14 @@ static bool decode_net_id(struct isakmp_ipsec_id *id,
+ 		ip_address temp_address_from;
+ 		d = pbs_in_address(id_pbs, &temp_address_from, afi, "ID from address");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 
+ 		ip_address temp_address_to;
+ 		d = pbs_in_address(id_pbs, &temp_address_to, afi, "ID to address");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 
+diff --git a/programs/pluto/ikev1_spdb_struct.c b/programs/pluto/ikev1_spdb_struct.c
+index 15b8338ce4..6b205af728 100644
+--- a/programs/pluto/ikev1_spdb_struct.c
++++ b/programs/pluto/ikev1_spdb_struct.c
+@@ -77,7 +77,7 @@ static bool parse_secctx_attr(struct pbs_in *pbs, struct state *st)
+ 	struct xfrm_user_sec_ctx_ike uctx;
+ 	diag_t d = pbs_in_struct(pbs, &sec_ctx_desc, &uctx.ctx, sizeof(uctx.ctx), NULL);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -1659,7 +1659,7 @@ notification_t parse_isakmp_sa_body(pb_stream *sa_pbs,		/* body of input SA Payl
+ 
+ 	d = pbs_in_struct(sa_pbs, &ipsec_sit_desc, &ipsecdoisit, sizeof(ipsecdoisit), NULL);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return SITUATION_NOT_SUPPORTED;	/* reject whole SA */
+ 	}
+ 
+@@ -1683,7 +1683,7 @@ notification_t parse_isakmp_sa_body(pb_stream *sa_pbs,		/* body of input SA Payl
+ 			  &proposal, sizeof(proposal),
+ 			  &proposal_pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return PAYLOAD_MALFORMED;	/* reject whole SA */
+ 	}
+ 
+@@ -1731,7 +1731,7 @@ notification_t parse_isakmp_sa_body(pb_stream *sa_pbs,		/* body of input SA Payl
+ 		uint8_t junk_spi[MAX_ISAKMP_SPI_SIZE];
+ 		diag_t d = pbs_in_raw(&proposal_pbs, junk_spi, proposal.isap_spisize, "Oakley SPI");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, st->st_logger, &d, "%s", "");
+ 			return PAYLOAD_MALFORMED;	/* reject whole SA */
+ 		}
+ 	} else {
+@@ -1773,7 +1773,7 @@ notification_t parse_isakmp_sa_body(pb_stream *sa_pbs,		/* body of input SA Payl
+ 		diag_t d = pbs_in_struct(&proposal_pbs, &isakmp_isakmp_transform_desc,
+ 					 &trans, sizeof(trans), &trans_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			return BAD_PROPOSAL_SYNTAX;	/* reject whole SA */
+ 		}
+ 
+@@ -1821,7 +1821,7 @@ notification_t parse_isakmp_sa_body(pb_stream *sa_pbs,		/* body of input SA Payl
+ 			diag_t d = pbs_in_struct(&trans_pbs, &isakmp_oakley_attribute_desc,
+ 						 &a, sizeof(a), &attr_pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG_SERIOUS, st->st_logger, &d, "invalid transform: ");
++				llog_diag(RC_LOG_SERIOUS, st->st_logger, &d, "invalid transform: ");
+ 				return BAD_PROPOSAL_SYNTAX;	/* reject whole SA */
+ 			}
+ 
+@@ -2382,7 +2382,7 @@ static bool parse_ipsec_transform(struct isakmp_transform *trans,
+ 
+ 	diag_t d = pbs_in_struct(prop_pbs, trans_desc, trans, sizeof(*trans), trans_pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -2448,7 +2448,7 @@ static bool parse_ipsec_transform(struct isakmp_transform *trans,
+ 		diag_t d = pbs_in_struct(trans_pbs, &isakmp_ipsec_attribute_desc,
+ 					 &a, sizeof(a), &attr_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			return FALSE;
+ 		}
+ 
+@@ -2876,7 +2876,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 	/* Situation */
+ 	d = pbs_in_struct(sa_pbs, &ipsec_sit_desc, &ipsecdoisit, sizeof(ipsecdoisit), NULL);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return SITUATION_NOT_SUPPORTED;	/* reject whole SA */
+ 	}
+ 
+@@ -2905,7 +2905,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 			  &next_proposal, sizeof(next_proposal),
+ 			  &next_proposal_pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return BAD_PROPOSAL_SYNTAX;	/* reject whole SA */
+ 	}
+ 
+@@ -2967,7 +2967,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 							      filler, sizeof(filler),
+ 							      "CPI filler");
+ 					if (d != NULL) {
+-						log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++						llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 						return INVALID_SPI;	/* reject whole SA */
+ 					}
+ 					if (!all_zero(filler, sizeof(filler))) {
+@@ -2992,7 +2992,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 						      IPCOMP_CPI_SIZE,
+ 						      "CPI");
+ 				if (d != NULL) {
+-					log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++					llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 					return INVALID_SPI;	/* reject whole SA */
+ 				}
+ 
+@@ -3042,7 +3042,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 						      sizeof(next_spi),
+ 						      "SPI");
+ 				if (d != NULL) {
+-					log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++					llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 					return INVALID_SPI;	/* reject whole SA */
+ 				}
+ 
+@@ -3128,7 +3128,7 @@ notification_t parse_ipsec_sa_body(pb_stream *sa_pbs,           /* body of input
+ 						 &next_proposal, sizeof(next_proposal),
+ 						 &next_proposal_pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				return BAD_PROPOSAL_SYNTAX;	/* reject whole SA */
+ 			}
+ 		} while (next_proposal.isap_proposal == propno);
+diff --git a/programs/pluto/ikev1_xauth.c b/programs/pluto/ikev1_xauth.c
+index 2dfccb9451..6abe09d700 100644
+--- a/programs/pluto/ikev1_xauth.c
++++ b/programs/pluto/ikev1_xauth.c
+@@ -209,7 +209,7 @@ static stf_status isakmp_add_attr(pb_stream *strattr,
+ 	{
+ 		diag_t d = pbs_out_address(&attrval, ia, "IP_addr");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 		break;
+@@ -220,7 +220,7 @@ static stf_status isakmp_add_attr(pb_stream *strattr,
+ 		ip_address client_addr = selector_prefix(c->spd.this.client);
+ 		diag_t d = pbs_out_address(&attrval, client_addr, "IP4_subnet");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 	}
+@@ -257,7 +257,7 @@ static stf_status isakmp_add_attr(pb_stream *strattr,
+ 			/* emit attribute's value */
+ 			diag_t d = pbs_out_address(&attrval, dnsip, "IP4_dns");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
++				llog_diag(RC_LOG_SERIOUS, attrval.outs_logger, &d, "%s", "");
+ 				return STF_INTERNAL_ERROR;
+ 			}
+ 
+@@ -906,7 +906,7 @@ static bool add_xauth_addresspool(struct connection *c,
+ 
+ 	diag_t d = install_addresspool(pool_range, &c->pool);
+ 	if (d != NULL) {
+-		log_diag(RC_CLASH, logger, &d, "XAUTH: invalid addresspool for the conn %s user %s: ",
++		llog_diag(RC_CLASH, logger, &d, "XAUTH: invalid addresspool for the conn %s user %s: ",
+ 			 c->name, userid);
+ 		return false;
+ 	}
+@@ -1284,7 +1284,7 @@ stf_status xauth_inR0(struct state *st, struct msg_digest *md)
+ 		diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 					 &attr, sizeof(attr), &strattr);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			/* fail if malformed */
+ 			return STF_FAIL;
+ 		}
+@@ -1462,7 +1462,7 @@ stf_status modecfg_inR0(struct state *st, struct msg_digest *md)
+ 			diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 						 &attr, sizeof(attr), &strattr);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				/* reject malformed */
+ 				return STF_FAIL;
+ 			}
+@@ -1542,7 +1542,7 @@ static stf_status modecfg_inI2(struct msg_digest *md, pb_stream *rbody)
+ 		diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 					 &attr, sizeof(attr), &strattr);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			/* reject malformed */
+ 			return STF_FAIL;
+ 		}
+@@ -1555,7 +1555,7 @@ static stf_status modecfg_inI2(struct msg_digest *md, pb_stream *rbody)
+ 			ip_address a;
+ 			diag_t d = pbs_in_address(&strattr, &a, &ipv4_info, "addr");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				return STF_FATAL;
+ 			}
+ 			c->spd.this.client = selector_from_address(a);
+@@ -1664,7 +1664,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 			diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 						 &attr, sizeof(attr), NULL);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				/* reject malformed */
+ 				return STF_FAIL;
+ 			}
+@@ -1701,7 +1701,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 			diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 						 &attr, sizeof(attr), &strattr);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				/* reject malformed */
+ 				return STF_FAIL;
+ 			}
+@@ -1714,7 +1714,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 				ip_address a;
+ 				diag_t d = pbs_in_address(&strattr, &a, &ipv4_info, "addr");
+ 				if (d != NULL) {
+-					log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++					llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 					return STF_FATAL;
+ 				}
+ 				c->spd.this.client = selector_from_address(a);
+@@ -1740,7 +1740,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 				ip_address a;
+ 				diag_t d = pbs_in_address(&strattr, &a, &ipv4_info, "addr");
+ 				if (d != NULL) {
+-					log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++					llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 					return STF_FATAL;
+ 				}
+ 
+@@ -1755,7 +1755,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 				ip_address a;
+ 				diag_t d = pbs_in_address(&strattr, &a, &ipv4_info, "addr");
+ 				if (d != NULL) {
+-					log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++					llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 					return STF_FATAL;
+ 				}
+ 
+@@ -1805,7 +1805,7 @@ stf_status modecfg_inR1(struct state *st, struct msg_digest *md)
+ 					diag_t d = pbs_in_struct(&strattr, &CISCO_split_desc,
+ 								 &i, sizeof(i), NULL);
+ 					if (d != NULL) {
+-						log_diag(RC_INFORMATIONAL, st->st_logger, &d,
++						llog_diag(RC_INFORMATIONAL, st->st_logger, &d,
+ 							 "ignoring malformed CISCO_SPLIT_INC payload");
+ 						break;
+ 					}
+@@ -2188,7 +2188,7 @@ stf_status xauth_inI0(struct state *st, struct msg_digest *md)
+ 		diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 					 &attr, sizeof(attr), &strattr);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			/* reject malformed */
+ 			return STF_FAIL;
+ 		}
+@@ -2434,7 +2434,7 @@ stf_status xauth_inI1(struct state *st, struct msg_digest *md)
+ 			diag_t d = pbs_in_struct(attrs, &isakmp_xauth_attribute_desc,
+ 						 &attr, sizeof(attr), &strattr);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				/* reject malformed */
+ 				return STF_FAIL;
+ 			}
+diff --git a/programs/pluto/ikev2.c b/programs/pluto/ikev2.c
+index d6f5179351..998aac8be4 100644
+--- a/programs/pluto/ikev2.c
++++ b/programs/pluto/ikev2.c
+@@ -798,7 +798,7 @@ static struct payload_summary ikev2_decode_payloads(struct logger *log,
+ 			diag_t d = pbs_in_struct(in_pbs, &ikev2_generic_desc,
+ 						 &pd->payload, sizeof(pd->payload), &pd->pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG_SERIOUS, log, &d,
++				llog_diag(RC_LOG_SERIOUS, log, &d,
+ 					 "malformed payload in packet");
+ 				summary.n = v2N_INVALID_SYNTAX;
+ 				break;
+@@ -854,7 +854,7 @@ static struct payload_summary ikev2_decode_payloads(struct logger *log,
+ 					 &pd->payload, sizeof(pd->payload),
+ 					 &pd->pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, log, &d,
++			llog_diag(RC_LOG_SERIOUS, log, &d,
+ 				 "malformed payload in packet");
+ 			summary.n = v2N_INVALID_SYNTAX;
+ 			break;
+@@ -1118,7 +1118,7 @@ static bool is_duplicate_request(struct ike_sa *ike,
+ 			diag_t d = pbs_in_struct(&in_pbs, &ikev2_skf_desc,
+ 						 &skf, sizeof(skf), NULL);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
+ 				return true;
+ 			}
+ 			fragment = skf.isaskf_number;
+@@ -1192,7 +1192,7 @@ static bool is_duplicate_request(struct ike_sa *ike,
+ 			pb_stream in_pbs = md->message_pbs; /* copy */
+ 			diag_t d = pbs_in_struct(&skf, &ikev2_skf_desc, &in_pbs, NULL);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 				return true;
+ 			}
+ 			fragment = skf.isaskf_number;
+diff --git a/programs/pluto/ikev2_child.c b/programs/pluto/ikev2_child.c
+index 9e7dea6446..45f994f0a2 100644
+--- a/programs/pluto/ikev2_child.c
++++ b/programs/pluto/ikev2_child.c
+@@ -174,7 +174,7 @@ stf_status ikev2_child_sa_respond(struct ike_sa *ike,
+ 			diag_t d = pbs_in_struct(&pbs, &ikev2notify_ipcomp_data_desc,
+ 						 &n_ipcomp, sizeof(n_ipcomp), NULL);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, child->sa.st_logger, &d, "%s", "");
++				llog_diag(RC_LOG, child->sa.st_logger, &d, "%s", "");
+ 				return STF_FATAL;
+ 			}
+ 
+@@ -367,7 +367,7 @@ static bool ikev2_set_dns(pb_stream *cp_a_pbs, struct state *st,
+ 	ip_address ip;
+ 	diag_t d = pbs_in_address(cp_a_pbs, &ip, af, "INTERNAL_IP_DNS CP payload");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -405,7 +405,7 @@ static bool ikev2_set_ia(pb_stream *cp_a_pbs, struct state *st,
+ 	ip_address ip;
+ 	diag_t d = pbs_in_address(cp_a_pbs, &ip, af, "INTERNAL_IP_ADDRESS");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -503,7 +503,7 @@ bool ikev2_parse_cp_r_body(struct payload_digest *cp_pd, struct state *st)
+ 		diag_t d = pbs_in_struct(attrs, &ikev2_cp_attribute_desc,
+ 					 &cp_a, sizeof(cp_a), &cp_a_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, st->st_logger, &d,
++			llog_diag(RC_LOG_SERIOUS, st->st_logger, &d,
+ 				 "ERROR malformed CP attribute");
+ 			return false;
+ 		}
+diff --git a/programs/pluto/ikev2_delete.c b/programs/pluto/ikev2_delete.c
+index 37d32e4f5b..fb30c899bf 100644
+--- a/programs/pluto/ikev2_delete.c
++++ b/programs/pluto/ikev2_delete.c
+@@ -76,7 +76,7 @@ bool record_v2_delete(struct ike_sa *ike, struct state *st)
+ 			diag_t d = pbs_out_raw(&del_pbs, &st->st_esp.our_spi,
+ 					       sizeof(ipsec_spi_t), "local spis");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG_SERIOUS, st->st_logger, &d, "%s", "");
++				llog_diag(RC_LOG_SERIOUS, st->st_logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 		}
+diff --git a/programs/pluto/ikev2_message.c b/programs/pluto/ikev2_message.c
+index 9b9119fbb9..fd4334aa0a 100644
+--- a/programs/pluto/ikev2_message.c
++++ b/programs/pluto/ikev2_message.c
+@@ -209,7 +209,7 @@ struct pbs_out open_v2_message(struct pbs_out *message,
+ 	struct pbs_out body;
+ 	diag_t d = pbs_out_struct(message, &isakmp_hdr_desc, &hdr, sizeof(hdr), &body);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d, "%s", "");
+ 		return empty_pbs;
+ 	}
+ 	if (impair.add_unknown_v2_payload_to == exchange_type &&
+@@ -233,7 +233,7 @@ static bool emit_v2SK_iv(v2SK_payload_t *sk)
+ 	/* make space */
+ 	diag_t d = pbs_out_zero(&sk->pbs, sk->iv.len, "IV");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, sk->logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, sk->logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 	/* scribble on it */
+@@ -310,7 +310,7 @@ bool close_v2SK_payload(v2SK_payload_t *sk)
+ 	for (unsigned i = 0; i < padding; i++) {
+ 		diag_t d = pbs_out_repeated_byte(&sk->pbs, i, 1, "padding and length");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, sk->logger, &d,
++			llog_diag(RC_LOG_SERIOUS, sk->logger, &d,
+ 				 "error initializing padding for encrypted %s payload: ",
+ 				 sk->pbs.container->name);
+ 			return false;
+@@ -331,7 +331,7 @@ bool close_v2SK_payload(v2SK_payload_t *sk)
+ 	sk->integrity = chunk2(sk->pbs.cur, integ_size);
+ 	diag_t d = pbs_out_zero(&sk->pbs, integ_size, "length of truncated HMAC/KEY");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, sk->logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, sk->logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -1278,7 +1278,7 @@ static bool record_outbound_fragments(const pb_stream *body,
+ 		init_pbs(&pbs, body->start, pbs_offset(body), "sk hdr");
+ 		diag_t d = pbs_in_struct(&pbs, &isakmp_hdr_desc, &hdr, sizeof(hdr), NULL);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, sk->logger, &d, "%s", "");
++			llog_diag(RC_LOG, sk->logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 	}
+@@ -1295,7 +1295,7 @@ static bool record_outbound_fragments(const pb_stream *body,
+ 		struct ikev2_generic e;
+ 		diag_t d = pbs_in_struct(&pbs, &ikev2_sk_desc, &e, sizeof(e), NULL);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, sk->logger, &d, "%s", "");
++			llog_diag(RC_LOG, sk->logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 		skf_np = e.isag_np;
+diff --git a/programs/pluto/ikev2_parent.c b/programs/pluto/ikev2_parent.c
+index ad4005432b..a129e10755 100644
+--- a/programs/pluto/ikev2_parent.c
++++ b/programs/pluto/ikev2_parent.c
+@@ -158,7 +158,7 @@ static bool negotiate_hash_algo_from_notification(const struct pbs_in *payload_p
+ 		diag_t d = pbs_in_raw(&pbs, &nh_value, sizeof(nh_value),
+ 				      "hash algorithm identifier (network ordered)");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 		uint16_t h_value = ntohs(nh_value);
+@@ -490,14 +490,14 @@ bool emit_v2KE(chunk_t *g, const struct dh_desc *group,
+ 		/* Only used to test sending/receiving bogus g^x */
+ 		diag_t d = pbs_out_repeated_byte(&kepbs, byte, g->len, "ikev2 impair KE (g^x) == 0");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 	} else if (impair.ke_payload == IMPAIR_EMIT_EMPTY) {
+ 		llog(RC_LOG, outs->outs_logger, "IMPAIR: sending an empty KE value");
+ 		diag_t d = pbs_out_zero(&kepbs, 0, "ikev2 impair KE (g^x) == empty");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 	} else {
+@@ -1081,7 +1081,7 @@ stf_status ikev2_in_IKE_SA_INIT_R_v2N_INVALID_KE_PAYLOAD(struct ike_sa *ike,
+ 	diag_t d = pbs_in_struct(&invalid_ke_pbs, &suggested_group_desc,
+ 				 &sg, sizeof(sg), NULL);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
+ 		return STF_IGNORE;
+ 	}
+ 
+@@ -1601,7 +1601,7 @@ static stf_status ikev2_ship_cp_attr_ip(uint16_t type, ip_address *ip,
+ 	if (attr.len > 0) {
+ 		diag_t d = pbs_out_address(&a_pbs, *ip, story);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, a_pbs.outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, a_pbs.outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 	}
+@@ -1610,7 +1610,7 @@ static stf_status ikev2_ship_cp_attr_ip(uint16_t type, ip_address *ip,
+ 		uint8_t ipv6_prefix_len = INTERNL_IP6_PREFIX_LEN;
+ 		diag_t d = pbs_out_raw(&a_pbs, &ipv6_prefix_len, sizeof(uint8_t), "INTERNL_IP6_PREFIX_LEN");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 	}
+@@ -1635,7 +1635,7 @@ static stf_status ikev2_ship_cp_attr_str(uint16_t type, char *str,
+ 	if (attr.len > 0) {
+ 		diag_t d = pbs_out_raw(&a_pbs, str, attr.len, story);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 	}
+@@ -2781,7 +2781,7 @@ stf_status ikev2_in_IKE_AUTH_I_out_IKE_AUTH_R_id_tail(struct msg_digest *md)
+ 			chunk_t no_ppk_auth = alloc_chunk(len, "NO_PPK_AUTH");
+ 			diag_t d = pbs_in_raw(&pbs, no_ppk_auth.ptr, len, "NO_PPK_AUTH extract");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG_SERIOUS, st->st_logger, &d,
++				llog_diag(RC_LOG_SERIOUS, st->st_logger, &d,
+ 					 "failed to extract %zd bytes of NO_PPK_AUTH from Notify payload", len);
+ 				free_chunk_content(&no_ppk_auth);
+ 				return STF_FATAL;
+@@ -2803,7 +2803,7 @@ stf_status ikev2_in_IKE_AUTH_I_out_IKE_AUTH_R_id_tail(struct msg_digest *md)
+ 		null_auth = alloc_chunk(len, "NULL_AUTH");
+ 		diag_t d = pbs_in_raw(&pbs, null_auth.ptr, len, "NULL_AUTH extract");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d,
++			llog_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d,
+ 				 "failed to extract %zd bytes of NULL_AUTH from Notify payload: ", len);
+ 			free_chunk_content(&null_auth);
+ 			return STF_FATAL;
+@@ -3579,7 +3579,7 @@ static stf_status ikev2_process_ts_and_rest(struct msg_digest *md)
+ 		diag_t d = pbs_in_struct(&pbs, &ikev2notify_ipcomp_data_desc,
+ 					 &n_ipcomp, sizeof(n_ipcomp), NULL);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, st->st_logger, &d, "%s", "");
++			llog_diag(RC_LOG, st->st_logger, &d, "%s", "");
+ 			return STF_FATAL;
+ 		}
+ 
+@@ -3977,7 +3977,7 @@ static bool ikev2_rekey_child_resp(struct ike_sa *ike, struct child_sa *child,
+ 	ipsec_spi_t spi = 0;
+ 	diag_t d = pbs_in_raw(&rekey_sa_payload->pbs, &spi, sizeof(spi), "SPI");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, child->sa.st_logger, &d, "%s", "");
++		llog_diag(RC_LOG, child->sa.st_logger, &d, "%s", "");
+ 		record_v2N_response(child->sa.st_logger, ike, md, v2N_INVALID_SYNTAX,
+ 				    NULL/*empty data*/, ENCRYPTED_PAYLOAD);
+ 		return false; /* cannot happen; XXX: why? */
+@@ -5533,7 +5533,7 @@ stf_status process_encrypted_informational_ikev2(struct ike_sa *ike,
+ 
+ 					diag_t d = pbs_in_raw( &p->pbs, &spi, sizeof(spi),"SPI");
+ 					if (d != NULL) {
+-						log_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
++						llog_diag(RC_LOG, ike->sa.st_logger, &d, "%s", "");
+ 						return STF_INTERNAL_ERROR;	/* cannot happen */
+ 					}
+ 
+@@ -5620,7 +5620,7 @@ stf_status process_encrypted_informational_ikev2(struct ike_sa *ike,
+ 							       j * sizeof(spi_buf[0]),
+ 							       "local SPIs");
+ 					if (d != NULL) {
+-						log_diag(RC_LOG_SERIOUS, sk.logger, &d, "%s", "");
++						llog_diag(RC_LOG_SERIOUS, sk.logger, &d, "%s", "");
+ 						return STF_INTERNAL_ERROR;
+ 					}
+ 
+diff --git a/programs/pluto/ikev2_peer_id.c b/programs/pluto/ikev2_peer_id.c
+index 185c0a7221..697c0a288a 100644
+--- a/programs/pluto/ikev2_peer_id.c
++++ b/programs/pluto/ikev2_peer_id.c
+@@ -63,7 +63,7 @@ static bool decode_peer_id_counted(struct ike_sa *ike,
+ 
+ 	diag_t d = unpack_peer_id(hik, &peer_id, &id_peer->pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, ike->sa.st_logger, &d,
++		llog_diag(RC_LOG, ike->sa.st_logger, &d,
+ 			 "IKEv2 mode peer ID extraction failed");
+ 		return false;
+ 	}
+@@ -80,7 +80,7 @@ static bool decode_peer_id_counted(struct ike_sa *ike,
+ 			diag_t d = unpack_peer_id(tarzan_pld->payload.v2id.isai_type,
+ 						  &tarzan_id, &tarzan_pld->pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, ike->sa.st_logger, &d, "IDr payload extraction failed");
++				llog_diag(RC_LOG, ike->sa.st_logger, &d, "IDr payload extraction failed");
+ 				return false;
+ 			}
+ 			tip = &tarzan_id;
+diff --git a/programs/pluto/ikev2_ppk.c b/programs/pluto/ikev2_ppk.c
+index 4a4b9e0c53..c7449ea422 100644
+--- a/programs/pluto/ikev2_ppk.c
++++ b/programs/pluto/ikev2_ppk.c
+@@ -57,7 +57,7 @@ bool emit_unified_ppk_id(struct ppk_id_payload *payl, pb_stream *outs)
+ 	uint8_t type = PPK_ID_FIXED;
+ 	d = pbs_out_raw(outs, &type, sizeof(type), "PPK_ID_FIXED");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 	return out_hunk(payl->ppk_id, outs, "PPK_ID");
+@@ -87,7 +87,7 @@ bool extract_v2N_ppk_identity(const struct pbs_in *notify_pbs,
+ 	uint8_t dst[PPK_ID_MAXLEN];
+ 	diag_t d = pbs_in_raw(&pbs, dst, len, "Unified PPK_ID Payload");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d,
++		llog_diag(RC_LOG_SERIOUS, ike->sa.st_logger, &d,
+ 			 "PPK ID data could not be read: ");
+ 		return false;
+ 	}
+diff --git a/programs/pluto/ikev2_redirect.c b/programs/pluto/ikev2_redirect.c
+index 95b2af5320..e7d8aa5bd2 100644
+--- a/programs/pluto/ikev2_redirect.c
++++ b/programs/pluto/ikev2_redirect.c
+@@ -157,7 +157,7 @@ static chunk_t build_redirect_notification_data_common(enum gw_identity_type gwi
+ 	}
+ 	diag_t d = pbs_out_hunk(&gwid_pbs, id, "redirect ID");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
+ 		return empty_chunk;
+ 	}
+ 	if (nonce == NULL || out_hunk(*nonce, &gwid_pbs, "nonce in redirect notify"))
+@@ -343,7 +343,7 @@ err_t parse_redirect_payload(const struct pbs_in *notify_pbs,
+ 	diag_t d = pbs_in_struct(&input_pbs, &ikev2_redirect_desc,
+ 				 &gw_info, sizeof(gw_info), NULL);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
+ 		return "received malformed REDIRECT payload";
+ 	}
+ 
+@@ -378,7 +378,7 @@ err_t parse_redirect_payload(const struct pbs_in *notify_pbs,
+ 
+ 		diag_t d = pbs_in_raw(&input_pbs, &gw_str, gw_info.gw_identity_len, "GW Identity");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, logger, &d, "%s", "");
+ 			return "error while extracting GW Identity from variable part of IKEv2_REDIRECT Notify payload";
+ 		}
+ 
+@@ -392,7 +392,7 @@ err_t parse_redirect_payload(const struct pbs_in *notify_pbs,
+ 		}
+ 		diag_t d = pbs_in_address(&input_pbs, redirect_ip, af, "REDIRECT address");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			return "variable part of payload does not match transferred GW Identity Length";
+ 		}
+ 		address_buf b;
+diff --git a/programs/pluto/ikev2_send.c b/programs/pluto/ikev2_send.c
+index 036a3616db..aaef250355 100644
+--- a/programs/pluto/ikev2_send.c
++++ b/programs/pluto/ikev2_send.c
+@@ -107,7 +107,7 @@ bool emit_v2UNKNOWN(const char *victim, enum isakmp_xchg_types exchange_type,
+ 	struct pbs_out pbs;
+ 	d = pbs_out_struct(outs, &ikev2_unknown_payload_desc, &gen, sizeof(gen), &pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 	close_output_pbs(&pbs);
+@@ -129,12 +129,12 @@ bool emit_v2V(const char *string, pb_stream *outs)
+ 	struct pbs_out pbs;
+ 	d = pbs_out_struct(outs, &ikev2_vendor_id_desc, &gen, sizeof(gen), &pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 	d = pbs_out_raw(&pbs, string, strlen(string), string);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 	close_output_pbs(&pbs);
+@@ -207,7 +207,7 @@ bool emit_v2Nsa_pl(v2_notification_t ntype,
+ 	if (spi != NULL) {
+ 		diag_t d = pbs_out_raw(&pls, spi, sizeof(*spi), "SPI");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 			return false;
+ 		}
+ 	}
+@@ -239,7 +239,7 @@ bool emit_v2N_bytes(v2_notification_t ntype,
+ 
+ 	diag_t d = pbs_out_raw(&pl, bytes, size, "Notify data");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -271,7 +271,7 @@ bool emit_v2N_signature_hash_algorithms(lset_t sighash_policy,
+ 		diag_t d = pbs_out_raw(&n_pbs, &hash_id, sizeof(hash_id), \
+ 				       "hash algorithm identifier "#ID);\
+ 		if (d != NULL) {					\
+-			log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", ""); \
++			llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", ""); \
+ 			return false;					\
+ 		}							\
+ 	}
+diff --git a/programs/pluto/ikev2_spdb_struct.c b/programs/pluto/ikev2_spdb_struct.c
+index fa3b004ab8..78235ff7d0 100644
+--- a/programs/pluto/ikev2_spdb_struct.c
++++ b/programs/pluto/ikev2_spdb_struct.c
+@@ -482,7 +482,7 @@ static int process_transforms(pb_stream *prop_pbs, struct jambuf *remote_jam_buf
+ 					 &remote_trans, sizeof(remote_trans),
+ 					 &trans_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d,
++			llog_diag(RC_LOG, logger, &d,
+ 				 "remote proposal %u transform %d is corrupt",
+ 				 remote_propnum, remote_transform_nr);
+ 			jam_string(remote_jam_buf, "[corrupt-transform]");
+@@ -510,7 +510,7 @@ static int process_transforms(pb_stream *prop_pbs, struct jambuf *remote_jam_buf
+ 			diag_t d = pbs_in_struct(&trans_pbs, &ikev2_trans_attr_desc,
+ 						 &attr, sizeof(attr), &attr_pbs);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d,
++				llog_diag(RC_LOG, logger, &d,
+ 					 "remote proposal %u transform %d contains corrupt attribute",
+ 					 remote_propnum, remote_transform_nr);
+ 				jam_string(remote_jam_buf, "[corrupt-attribute]");
+@@ -907,7 +907,7 @@ static int ikev2_process_proposals(pb_stream *sa_payload,
+ 					 &remote_proposal, sizeof(remote_proposal),
+ 					 &proposal_pbs);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "proposal %d corrupt", next_propnum);
++			llog_diag(RC_LOG, logger, &d, "proposal %d corrupt", next_propnum);
+ 			jam_string(remote_jam_buf, " [corrupt-proposal]");
+ 			matching_local_propnum = -(STF_FAIL + v2N_INVALID_SYNTAX);
+ 			break;
+@@ -1008,7 +1008,7 @@ static int ikev2_process_proposals(pb_stream *sa_payload,
+ 		if (remote_spi.size > 0) {
+ 			diag_t d = pbs_in_raw(&proposal_pbs, remote_spi.bytes, remote_spi.size, "remote SPI");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d, "proposal %d contains corrupt SPI",
++				llog_diag(RC_LOG, logger, &d, "proposal %d contains corrupt SPI",
+ 					 remote_proposal.isap_propnum);
+ 				matching_local_propnum = -(STF_FAIL + v2N_INVALID_SYNTAX);
+ 				jam_string(remote_jam_buf, "[corrupt-spi]");
+@@ -1241,7 +1241,7 @@ static bool emit_transform_header(struct pbs_out *proposal_pbs,
+ 	diag_t d = pbs_out_struct(proposal_pbs, &ikev2_trans_desc,
+ 				  &trans, sizeof(trans), transform_pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, proposal_pbs->outs_logger, &d,
++		llog_diag(RC_LOG_SERIOUS, proposal_pbs->outs_logger, &d,
+ 			 "out_struct() of transform failed: ");
+ 		return false;
+ 	}
+diff --git a/programs/pluto/ikev2_ts.c b/programs/pluto/ikev2_ts.c
+index 978d075ba8..546b0e3dbb 100644
+--- a/programs/pluto/ikev2_ts.c
++++ b/programs/pluto/ikev2_ts.c
+@@ -224,12 +224,12 @@ static stf_status ikev2_emit_ts(pb_stream *outpbs,
+ 		diag_t d;
+ 		d = pbs_out_address(&ts_range_pbs, range_start(ts->net), "IP start");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 		d = pbs_out_address(&ts_range_pbs, range_end(ts->net), "IP end");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 		close_output_pbs(&ts_range_pbs);
+@@ -260,7 +260,7 @@ static stf_status ikev2_emit_ts(pb_stream *outpbs,
+ 
+ 		diag_t d = pbs_out_hunk(&ts_label_pbs, out_label, "output Security label");
+ 		if (d != NULL) {
+-			log_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
++			llog_diag(RC_LOG_SERIOUS, outpbs->outs_logger, &d, "%s", "");
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 		close_output_pbs(&ts_label_pbs);
+@@ -441,7 +441,7 @@ static bool v2_parse_ts(struct payload_digest *const ts_pd,
+ 			d = pbs_in_struct(&ts_body_pbs, &ikev2_ts_portrange_desc,
+ 				  &pr, sizeof(pr), NULL);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d, "%s", "");
++				llog_diag(RC_LOG, logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 
+@@ -471,14 +471,14 @@ static bool v2_parse_ts(struct payload_digest *const ts_pd,
+ 			ip_address start;
+ 			d = pbs_in_address(&ts_body_pbs, &start, ipv, "TS IP start");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d, "%s", "");
++				llog_diag(RC_LOG, logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 
+ 			ip_address end;
+ 			d = pbs_in_address(&ts_body_pbs, &end, ipv, "TS IP end");
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d, "%s", "");
++				llog_diag(RC_LOG, logger, &d, "%s", "");
+ 				return false;
+ 			}
+ 
+diff --git a/programs/pluto/nat_traversal.c b/programs/pluto/nat_traversal.c
+index 1039473f40..d31cafe3c2 100644
+--- a/programs/pluto/nat_traversal.c
++++ b/programs/pluto/nat_traversal.c
+@@ -522,7 +522,7 @@ void nat_traversal_natoa_lookup(struct msg_digest *md,
+ 
+ 	diag_t d = pbs_in_address(&pbs, &ip, ipv, "NAT-Traversal: NAT-OA IP");
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, logger, &d, "%s", "");
++		llog_diag(RC_LOG, logger, &d, "%s", "");
+ 		return;
+ 	}
+ 
+@@ -553,7 +553,7 @@ static bool emit_one_natoa(struct pbs_out *outs,
+ 
+ 	diag_t d = pbs_out_address(&pbs, ip, nm);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+diff --git a/programs/pluto/nss_cert_reread.c b/programs/pluto/nss_cert_reread.c
+index 52efd82d45..e24d9111b5 100644
+--- a/programs/pluto/nss_cert_reread.c
++++ b/programs/pluto/nss_cert_reread.c
+@@ -40,7 +40,7 @@ static bool nss_reread_cert(struct end *dst, struct logger *logger)
+ 							   true/*preserve existing ca?!?*/,
+ 							   logger);
+ 	if (diag != NULL) {
+-		log_diag(RC_BADID, logger, &diag,
++		llog_diag(RC_BADID, logger, &diag,
+ 			 "rereading certificate failed for nickname '%s': ", nickname);
+ 		return false;
+ 	}
+diff --git a/programs/pluto/packet.c b/programs/pluto/packet.c
+index 7bf094074b..646211b02f 100644
+--- a/programs/pluto/packet.c
++++ b/programs/pluto/packet.c
+@@ -2648,7 +2648,7 @@ bool out_struct(const void *struct_ptr, struct_desc *sd,
+ {
+ 	diag_t d = pbs_out_struct(outs, sd, struct_ptr, 0, obj_pbs);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+@@ -2677,7 +2677,7 @@ bool ikev1_out_generic_raw(struct_desc *sd,
+ 	}
+ 	diag_t d = pbs_out_raw(&pbs, bytes, len, name);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
++		llog_diag(RC_LOG_SERIOUS, outs->outs_logger, &d, "%s", "");
+ 		return false;
+ 	}
+ 
+diff --git a/programs/pluto/packet.h b/programs/pluto/packet.h
+index e58e82b1d7..f904d2b63b 100644
+--- a/programs/pluto/packet.h
++++ b/programs/pluto/packet.h
+@@ -298,7 +298,7 @@ diag_t pbs_out_raw(struct pbs_out *outs, const void *bytes, size_t len,
+ 		struct pbs_out *outs_ = OUTS;				\
+ 		diag_t d_ = pbs_out_raw(outs_, hunk_.ptr, hunk_.len, (NAME)); \
+ 		if (d_ != NULL) {					\
+-			log_diag(RC_LOG_SERIOUS, outs_->outs_logger, &d_, "%s", ""); \
++			llog_diag(RC_LOG_SERIOUS, outs_->outs_logger, &d_, "%s", ""); \
+ 		}							\
+ 		d_ == NULL;						\
+ 	})
+diff --git a/programs/pluto/x509.c b/programs/pluto/x509.c
+index 0758e229b7..269b450d86 100644
+--- a/programs/pluto/x509.c
++++ b/programs/pluto/x509.c
+@@ -482,7 +482,7 @@ static void add_cert_san_pubkeys(struct pubkey_list **pubkey_db,
+ 			struct pubkey *pk = NULL;
+ 			diag_t d = create_pubkey_from_cert(&id, cert, &pk, logger);
+ 			if (d != NULL) {
+-				log_diag(RC_LOG, logger, &d, "%s", "");
++				llog_diag(RC_LOG, logger, &d, "%s", "");
+ 				passert(pk == NULL);
+ 				return;
+ 			}
+@@ -509,7 +509,7 @@ bool add_pubkey_from_nss_cert(struct pubkey_list **pubkey_db,
+ 	struct pubkey *pk = NULL;
+ 	diag_t d = create_cert_subjectdn_pubkey(cert, &pk, logger);
+ 	if (d != NULL) {
+-		log_diag(RC_LOG, logger, &d, "%s", "");
++		llog_diag(RC_LOG, logger, &d, "%s", "");
+ 		dbg("failed to create subjectdn_pubkey from cert");
+ 		return false;
+ 	}
+@@ -525,7 +525,7 @@ bool add_pubkey_from_nss_cert(struct pubkey_list **pubkey_db,
+ 		struct pubkey *pk2 = NULL;
+ 		diag_t d = create_pubkey_from_cert(keyid, cert, &pk2, logger);
+ 		if (d != NULL) {
+-			log_diag(RC_LOG, logger, &d, "%s", "");
++			llog_diag(RC_LOG, logger, &d, "%s", "");
+ 			/* ignore? */
+ 		} else {
+ 			replace_public_key(pubkey_db, &pk2);
+-- 
+2.34.1
+

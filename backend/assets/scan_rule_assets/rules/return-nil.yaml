@@ -1,0 +1,14 @@
+rules:
+- id: return-nil
+  patterns:
+  - pattern-either:
+    - pattern: "if $X == nil {\n        return $X\n}\n"
+    - pattern: "if $X != nil {\n        return ...\n}\nreturn $X\n"
+  message: return nil instead of nil value
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-476: NULL Pointer Dereference'

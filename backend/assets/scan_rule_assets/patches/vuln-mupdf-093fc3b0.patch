@@ -1,0 +1,31 @@
+From 093fc3b098dc5fadef5d8ad4b225db9fb124758b Mon Sep 17 00:00:00 2001
+From: Sebastian Rasmussen <sebras@gmail.com>
+Date: Tue, 23 Jan 2018 03:06:24 +0100
+Subject: [PATCH] Assert node range conditions when checking cmap splay trees.
+
+---
+ source/pdf/pdf-cmap.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/source/pdf/pdf-cmap.c b/source/pdf/pdf-cmap.c
+index bedc13045..29d9c5069 100644
+--- a/source/pdf/pdf-cmap.c
++++ b/source/pdf/pdf-cmap.c
+@@ -445,8 +445,12 @@ do_check(cmap_splay *node, void *arg)
+ {
+ 	cmap_splay *tree = arg;
+ 	unsigned int num = node - tree;
+-	assert(node->left == EMPTY || tree[node->left].parent == num);
+-	assert(node->right == EMPTY || tree[node->right].parent == num);
++	assert(!node->many || node->low == node->high);
++	assert(node->low <= node->high);
++	assert((node->left == EMPTY) || (tree[node->left].parent == num &&
++		tree[node->left].high < node->low));
++	assert(node->right == EMPTY || (tree[node->right].parent == num &&
++		node->high < tree[node->right].low));
+ }
+ 
+ static void
+-- 
+2.34.1
+

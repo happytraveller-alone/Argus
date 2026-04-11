@@ -1,0 +1,297 @@
+From e87348884bb05ae25a56d320c9ccff8c08f9628d Mon Sep 17 00:00:00 2001
+From: Jason Coward <jason@opengeek.com>
+Date: Wed, 19 Apr 2017 08:43:10 -0600
+Subject: [PATCH] Improve local file inclusion protections
+
+The existing protections would not work on Windows platforms with backslash path delimiters. This commit improves the LFI protections throughout the core to remove any sequence of 2 or more `.` characters regardless of the path delimiter that precedes or follows it.
+---
+ core/model/modx/modconnectorresponse.class.php                | 2 +-
+ core/model/modx/modx.class.php                                | 2 +-
+ core/model/modx/processors/browser/directory/chmod.class.php  | 2 +-
+ core/model/modx/processors/browser/directory/create.class.php | 4 ++--
+ .../modx/processors/browser/directory/getfiles.class.php      | 2 +-
+ .../model/modx/processors/browser/directory/getlist.class.php | 2 +-
+ core/model/modx/processors/browser/directory/remove.class.php | 2 +-
+ core/model/modx/processors/browser/directory/rename.class.php | 4 ++--
+ core/model/modx/processors/browser/directory/sort.class.php   | 4 ++--
+ core/model/modx/processors/browser/directory/update.class.php | 4 ++--
+ core/model/modx/processors/browser/file/create.class.php      | 4 ++--
+ core/model/modx/processors/browser/file/download.class.php    | 2 +-
+ core/model/modx/processors/browser/file/get.class.php         | 2 +-
+ core/model/modx/processors/browser/file/remove.class.php      | 2 +-
+ core/model/modx/processors/browser/file/rename.class.php      | 4 ++--
+ core/model/modx/processors/browser/file/unpack.class.php      | 2 +-
+ core/model/modx/processors/browser/file/update.class.php      | 2 +-
+ core/model/modx/processors/browser/file/upload.class.php      | 2 +-
+ setup/includes/modinstall.class.php                           | 2 +-
+ 19 files changed, 25 insertions(+), 25 deletions(-)
+
+diff --git a/core/model/modx/modconnectorresponse.class.php b/core/model/modx/modconnectorresponse.class.php
+index 265411b4a..5e5c23fba 100644
+--- a/core/model/modx/modconnectorresponse.class.php
++++ b/core/model/modx/modconnectorresponse.class.php
+@@ -90,7 +90,7 @@ class modConnectorResponse extends modResponse {
+         /* backwards compat */
+         $error =& $this->modx->error;
+         /* prevent browsing of subdirectories for security */
+-        $target = preg_replace('/(\.+\/)+/', '', htmlspecialchars($options['action']));
++        $target = preg_replace('/[\.]{2,}/', '', htmlspecialchars($options['action']));
+ 
+         $siteId = $this->modx->user->getUserToken($this->modx->context->get('key'));
+         $isLogin = $target == 'login' || $target == 'security/login';
+diff --git a/core/model/modx/modx.class.php b/core/model/modx/modx.class.php
+index 7c1ba8fd6..15c282c93 100644
+--- a/core/model/modx/modx.class.php
++++ b/core/model/modx/modx.class.php
+@@ -1663,7 +1663,7 @@ class modX extends xPDO {
+         if (isset($options['location']) && !empty($options['location'])) $processorsPath .= ltrim($options['location'],'/') . '/';
+ 
+         // Prevent path traversal through the action
+-        $action = preg_replace('/(\.+\/)+/', '', htmlspecialchars($action));
++        $action = preg_replace('/[\.]{2,}/', '', htmlspecialchars($action));
+ 
+         // Find the processor file, preferring class based processors over old-style processors
+         $processorFile = $processorsPath.ltrim($action . '.class.php','/');
+diff --git a/core/model/modx/processors/browser/directory/chmod.class.php b/core/model/modx/processors/browser/directory/chmod.class.php
+index 3f0ded35c..d75992e9f 100644
+--- a/core/model/modx/processors/browser/directory/chmod.class.php
++++ b/core/model/modx/processors/browser/directory/chmod.class.php
+@@ -39,7 +39,7 @@ class modBrowserFolderChmodProcessor extends modProcessor {
+         $this->source->initialize();
+ 
+         $dir = $this->getProperty('dir');
+-        $dir = preg_replace('/(\.+\/)+/', '', htmlspecialchars($dir));
++        $dir = preg_replace('/[\.]{2,}/', '', htmlspecialchars($dir));
+         $success = $this->source->chmodContainer($dir, $this->getProperty('mode'));
+ 
+         if (empty($success)) {
+diff --git a/core/model/modx/processors/browser/directory/create.class.php b/core/model/modx/processors/browser/directory/create.class.php
+index b33427275..647ad4055 100644
+--- a/core/model/modx/processors/browser/directory/create.class.php
++++ b/core/model/modx/processors/browser/directory/create.class.php
+@@ -41,10 +41,10 @@ class modBrowserFolderCreateProcessor extends modProcessor {
+         }
+ 
+         $parent = rawurldecode($this->getProperty('parent',''));
+-        $parent = ltrim(strip_tags(preg_replace('/(\.+\/)+/', '', htmlspecialchars($parent))),'/');
++        $parent = ltrim(strip_tags(preg_replace('/[\.]{2,}/', '', htmlspecialchars($parent))),'/');
+ 
+         $name = $this->getProperty('name');
+-        $name = ltrim(strip_tags(preg_replace('/(\.+\/)+/', '', htmlspecialchars($name))),'/');
++        $name = ltrim(strip_tags(preg_replace('/[\.]{2,}/', '', htmlspecialchars($name))),'/');
+         $success = $this->source->createContainer($name, $parent);
+ 
+         if (empty($success)) {
+diff --git a/core/model/modx/processors/browser/directory/getfiles.class.php b/core/model/modx/processors/browser/directory/getfiles.class.php
+index 652366beb..ac7157250 100644
+--- a/core/model/modx/processors/browser/directory/getfiles.class.php
++++ b/core/model/modx/processors/browser/directory/getfiles.class.php
+@@ -49,7 +49,7 @@ class modBrowserFolderGetFilesProcessor extends modProcessor {
+         }
+ 
+         $dir = $this->getProperty('dir');
+-        $dir = preg_replace('/(\.+\/)+/', '', htmlspecialchars($dir));
++        $dir = preg_replace('/[\.]{2,}/', '', htmlspecialchars($dir));
+         if ($dir === 'root') {
+             $dir = '';
+         }
+diff --git a/core/model/modx/processors/browser/directory/getlist.class.php b/core/model/modx/processors/browser/directory/getlist.class.php
+index e3a50c0e2..344bf2d0c 100644
+--- a/core/model/modx/processors/browser/directory/getlist.class.php
++++ b/core/model/modx/processors/browser/directory/getlist.class.php
+@@ -29,7 +29,7 @@ class modBrowserFolderGetListProcessor extends modProcessor {
+             'id' => '',
+         ));
+         $dir = $this->getProperty('id');
+-        $dir = preg_replace('/(\.+\/)+/', '', htmlspecialchars($dir));
++        $dir = preg_replace('/[\.]{2,}/', '', htmlspecialchars($dir));
+         if (empty($dir) || $dir === 'root') {
+             $this->setProperty('id','');
+         } else if (strpos($dir, 'n_') === 0) {
+diff --git a/core/model/modx/processors/browser/directory/remove.class.php b/core/model/modx/processors/browser/directory/remove.class.php
+index c7e7d2984..ddd60648b 100644
+--- a/core/model/modx/processors/browser/directory/remove.class.php
++++ b/core/model/modx/processors/browser/directory/remove.class.php
+@@ -41,7 +41,7 @@ class modBrowserFolderRemoveProcessor extends modProcessor {
+         }
+ 
+         $dir = $this->getProperty('dir');
+-        $dir = preg_replace('/(\.+\/)+/', '', htmlspecialchars($dir));
++        $dir = preg_replace('/[\.]{2,}/', '', htmlspecialchars($dir));
+         $success = $this->source->removeContainer($dir);
+ 
+         if (empty($success)) {
+diff --git a/core/model/modx/processors/browser/directory/rename.class.php b/core/model/modx/processors/browser/directory/rename.class.php
+index 9d8603111..3b5537c51 100644
+--- a/core/model/modx/processors/browser/directory/rename.class.php
++++ b/core/model/modx/processors/browser/directory/rename.class.php
+@@ -45,9 +45,9 @@ class modBrowserFolderRenameProcessor extends modProcessor {
+         }
+ 
+         $path = $this->getProperty('path');
+-        $path = preg_replace('/(\.+\/)+/', '', htmlspecialchars($path));
++        $path = preg_replace('/[\.]{2,}/', '', htmlspecialchars($path));
+         $name = $this->getProperty('name');
+-        $name = preg_replace('/(\.+\/)+/', '', htmlspecialchars($name));
++        $name = preg_replace('/[\.]{2,}/', '', htmlspecialchars($name));
+         $response = $this->source->renameContainer($path, $name);
+         return $this->handleResponse($response);
+     }
+diff --git a/core/model/modx/processors/browser/directory/sort.class.php b/core/model/modx/processors/browser/directory/sort.class.php
+index eebc77e64..27d9d7425 100644
+--- a/core/model/modx/processors/browser/directory/sort.class.php
++++ b/core/model/modx/processors/browser/directory/sort.class.php
+@@ -18,9 +18,9 @@ class modBrowserFolderSortProcessor extends modProcessor {
+     }
+     public function process() {
+         $from = $this->getProperty('from');
+-        $from = preg_replace('/(\.+\/)+/', '', htmlspecialchars($from));
++        $from = preg_replace('/[\.]{2,}/', '', htmlspecialchars($from));
+         $to = $this->getProperty('to');
+-        $to = preg_replace('/(\.+\/)+/', '', htmlspecialchars($to));
++        $to = preg_replace('/[\.]{2,}/', '', htmlspecialchars($to));
+         $point = $this->getProperty('point','append');
+         if (empty($from)) return $this->failure($this->modx->lexicon('file_folder_err_ns'));
+         if (empty($to)) return $this->failure($this->modx->lexicon('file_folder_err_ns'));
+diff --git a/core/model/modx/processors/browser/directory/update.class.php b/core/model/modx/processors/browser/directory/update.class.php
+index d8777c997..a7d9b167f 100644
+--- a/core/model/modx/processors/browser/directory/update.class.php
++++ b/core/model/modx/processors/browser/directory/update.class.php
+@@ -38,8 +38,8 @@ class modBrowserFolderUpdateProcessor extends modProcessor {
+             return $this->failure($this->modx->lexicon('permission_denied'));
+         }
+ 
+-        $dir = preg_replace('/(\.+\/)+/', '', htmlspecialchars($this->getProperty('dir')));
+-        $name = preg_replace('/(\.+\/)+/', '', htmlspecialchars($this->getProperty('name')));
++        $dir = preg_replace('/[\.]{2,}/', '', htmlspecialchars($this->getProperty('dir')));
++        $name = preg_replace('/[\.]{2,}/', '', htmlspecialchars($this->getProperty('name')));
+         $success = $source->renameContainer($dir, $name);
+ 
+         if (!$success) {
+diff --git a/core/model/modx/processors/browser/file/create.class.php b/core/model/modx/processors/browser/file/create.class.php
+index f154d3a42..f30d5c3cc 100644
+--- a/core/model/modx/processors/browser/file/create.class.php
++++ b/core/model/modx/processors/browser/file/create.class.php
+@@ -21,10 +21,10 @@ class modBrowserFileCreateProcessor extends modProcessor {
+     public function process() {
+         /* get base paths and sanitize incoming paths */
+         $directory = rawurldecode($this->getProperty('directory',''));
+-        $directory = ltrim(strip_tags(preg_replace('/(\.+\/)+/', '', htmlspecialchars($directory))),'/');
++        $directory = ltrim(strip_tags(preg_replace('/[\.]{2,}/', '', htmlspecialchars($directory))),'/');
+ 
+         $name = $this->getProperty('name');
+-        $name = ltrim(strip_tags(preg_replace('/(\.+\/)+/', '', htmlspecialchars($name))),'/');
++        $name = ltrim(strip_tags(preg_replace('/[\.]{2,}/', '', htmlspecialchars($name))),'/');
+ 
+         $loaded = $this->getSource();
+         if (!($this->source instanceof modMediaSource)) {
+diff --git a/core/model/modx/processors/browser/file/download.class.php b/core/model/modx/processors/browser/file/download.class.php
+index d349ca4a3..f38fe6839 100644
+--- a/core/model/modx/processors/browser/file/download.class.php
++++ b/core/model/modx/processors/browser/file/download.class.php
+@@ -28,7 +28,7 @@ class modBrowserFileDownloadProcessor extends modProcessor {
+     public function getObjectUrl() {
+         /* format filename */
+         $file = rawurldecode($this->getProperty('file',''));
+-        $file = preg_replace('/(\.+\/)+/', '', htmlspecialchars($file));
++        $file = preg_replace('/[\.]{2,}/', '', htmlspecialchars($file));
+         $url = $this->source->getObjectUrl($file);
+         return $this->success('',array('url' => $url));
+     }
+diff --git a/core/model/modx/processors/browser/file/get.class.php b/core/model/modx/processors/browser/file/get.class.php
+index 3819847d0..651af3c81 100644
+--- a/core/model/modx/processors/browser/file/get.class.php
++++ b/core/model/modx/processors/browser/file/get.class.php
+@@ -20,7 +20,7 @@ class modBrowserFileGetProcessor extends modProcessor {
+     public function process() {
+         /* format filename */
+         $file = rawurldecode($this->getProperty('file',''));
+-        $file = preg_replace('/(\.+\/)+/', '', htmlspecialchars($file));
++        $file = preg_replace('/[\.]{2,}/', '', htmlspecialchars($file));
+ 
+         $loaded = $this->getSource();
+         if ($loaded !== true) {
+diff --git a/core/model/modx/processors/browser/file/remove.class.php b/core/model/modx/processors/browser/file/remove.class.php
+index 854a45153..0bbd45f61 100644
+--- a/core/model/modx/processors/browser/file/remove.class.php
++++ b/core/model/modx/processors/browser/file/remove.class.php
+@@ -24,7 +24,7 @@ class modBrowserFileRemoveProcessor extends modProcessor {
+         if (empty($file)) {
+             return $this->modx->error->failure($this->modx->lexicon('file_err_ns'));
+         }
+-        $file = preg_replace('/(\.+\/)+/', '', htmlspecialchars($file));
++        $file = preg_replace('/[\.]{2,}/', '', htmlspecialchars($file));
+ 
+         $loaded = $this->getSource();
+         if (!($this->source instanceof modMediaSource)) {
+diff --git a/core/model/modx/processors/browser/file/rename.class.php b/core/model/modx/processors/browser/file/rename.class.php
+index f191de6d3..fbedcb708 100644
+--- a/core/model/modx/processors/browser/file/rename.class.php
++++ b/core/model/modx/processors/browser/file/rename.class.php
+@@ -31,9 +31,9 @@ class modBrowserFileRenameProcessor extends modProcessor {
+         }
+ 
+         $oldFile = $this->getProperty('path');
+-        $oldFile = preg_replace('/(\.+\/)+/', '', htmlspecialchars($oldFile));
++        $oldFile = preg_replace('/[\.]{2,}/', '', htmlspecialchars($oldFile));
+         $name = $this->getProperty('name');
+-        $name = preg_replace('/(\.+\/)+/', '', htmlspecialchars($name));
++        $name = preg_replace('/[\.]{2,}/', '', htmlspecialchars($name));
+         $success = $this->source->renameObject($oldFile, $name);
+ 
+         if (empty($success)) {
+diff --git a/core/model/modx/processors/browser/file/unpack.class.php b/core/model/modx/processors/browser/file/unpack.class.php
+index 0d176078c..661af4bd1 100644
+--- a/core/model/modx/processors/browser/file/unpack.class.php
++++ b/core/model/modx/processors/browser/file/unpack.class.php
+@@ -30,7 +30,7 @@ class modUnpackProcessor extends modProcessor {
+         $this->modx->getService('fileHandler', 'modFileHandler');
+ 
+         $target = $this->modx->getOption('base_path') . $this->properties['path'] . $this->properties['file'];
+-        $target = preg_replace('/(\.+\/)+/', '', htmlspecialchars($target));
++        $target = preg_replace('/[\.]{2,}/', '', htmlspecialchars($target));
+         $fileobj = $this->modx->fileHandler->make($target);
+ 
+         if (!$this->validate($fileobj)) {
+diff --git a/core/model/modx/processors/browser/file/update.class.php b/core/model/modx/processors/browser/file/update.class.php
+index aeac46926..2aa90c3da 100644
+--- a/core/model/modx/processors/browser/file/update.class.php
++++ b/core/model/modx/processors/browser/file/update.class.php
+@@ -21,7 +21,7 @@ class modBrowserFileUpdateProcessor extends modProcessor {
+     public function process() {
+         /* get base paths and sanitize incoming paths */
+         $filePath = rawurldecode($this->getProperty('file',''));
+-        $filePath = preg_replace('/(\.+\/)+/', '', htmlspecialchars($filePath));
++        $filePath = preg_replace('/[\.]{2,}/', '', htmlspecialchars($filePath));
+ 
+         $loaded = $this->getSource();
+         if (!($this->source instanceof modMediaSource)) {
+diff --git a/core/model/modx/processors/browser/file/upload.class.php b/core/model/modx/processors/browser/file/upload.class.php
+index 441a98102..bd9a44e55 100644
+--- a/core/model/modx/processors/browser/file/upload.class.php
++++ b/core/model/modx/processors/browser/file/upload.class.php
+@@ -37,7 +37,7 @@ class modBrowserFileUploadProcessor extends modProcessor {
+             return $this->failure($this->modx->lexicon('permission_denied'));
+         }
+ 
+-        $path = preg_replace('/(\.+\/)+/', '', htmlspecialchars($this->getProperty('path')));
++        $path = preg_replace('/[\.]{2,}/', '', htmlspecialchars($this->getProperty('path')));
+         $success = $this->source->uploadObjectsToContainer($path,$_FILES);
+ 
+         if (empty($success)) {
+diff --git a/setup/includes/modinstall.class.php b/setup/includes/modinstall.class.php
+index 89c96cadb..d93738cd7 100644
+--- a/setup/includes/modinstall.class.php
++++ b/setup/includes/modinstall.class.php
+@@ -52,7 +52,7 @@ class modInstall {
+      */
+     function __construct(array $options = array()) {
+         if (isset ($_REQUEST['action'])) {
+-            $this->action = preg_replace('/(\.+\/)+/', '', htmlspecialchars($_REQUEST['action']));
++            $this->action = preg_replace('/[\.]{2,}/', '', htmlspecialchars($_REQUEST['action']));
+         }
+         if (is_array($options)) {
+             $this->options = $options;
+-- 
+2.34.1
+

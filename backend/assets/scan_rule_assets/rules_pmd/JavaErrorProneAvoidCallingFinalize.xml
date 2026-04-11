@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidCallingFinalize Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidCallingFinalize</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidCallingFinalize" language="java" since="3.0" message="Avoid calling finalize() explicitly" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidcallingfinalize">
+            <description>
+    The method Object.finalize() is called by the garbage collector on an object when garbage collection determines
+    that there are no more references to the object. It should not be invoked by application logic.
+
+    Note that Oracle has declared Object.finalize() as deprecated since JDK 9.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //MethodCall[pmd-java:matchesSig("java.lang.Object#finalize()")]
+        (: it's ok inside finalize :)
+        [not(SuperExpression and ancestor::*[self::MethodDeclaration or self::Initializer][1][@Name = 'finalize'][@Arity = 0][VoidType])]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    void foo() {
+        Bar b = new Bar();
+        b.finalize();
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

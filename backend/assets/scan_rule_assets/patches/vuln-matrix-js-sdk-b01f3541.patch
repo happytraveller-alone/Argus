@@ -1,0 +1,272 @@
+From fc55c4c72a7be246130a0189fd1c9538156322f6 Mon Sep 17 00:00:00 2001
+From: Patrick Cloke <clokep@users.noreply.github.com>
+Date: Wed, 22 Mar 2023 16:22:34 -0400
+Subject: [PATCH] Implement MSC3952: intentional mentions (#3092)
+
+* Add experimental push rules.
+
+* Update for changes to MSC3952: Use event_property_is and event_property_contains.
+
+* Revert custom user/room mention conditions.
+
+* Skip legacy rule processing if mentions exist.
+
+* Add client option for intentional mentions.
+
+* Fix tests.
+
+* Test leagcy behavior with intentional mentions.
+
+* Handle simple review comments.
+---
+ spec/unit/pushprocessor.spec.ts | 34 +++++++++++++++++-
+ src/@types/PushRules.ts         |  2 ++
+ src/client.ts                   | 16 ++++++++-
+ src/models/event.ts             |  7 ++++
+ src/pushprocessor.ts            | 63 +++++++++++++++++++++++++++++++--
+ 5 files changed, 117 insertions(+), 5 deletions(-)
+
+diff --git a/spec/unit/pushprocessor.spec.ts b/spec/unit/pushprocessor.spec.ts
+index 2f219b307..141e34445 100644
+--- a/spec/unit/pushprocessor.spec.ts
++++ b/spec/unit/pushprocessor.spec.ts
+@@ -1,6 +1,6 @@
+ import * as utils from "../test-utils/test-utils";
+ import { IActionsObject, PushProcessor } from "../../src/pushprocessor";
+-import { ConditionKind, EventType, IContent, MatrixClient, MatrixEvent, PushRuleActionName } from "../../src";
++import { ConditionKind, EventType, IContent, MatrixClient, MatrixEvent, PushRuleActionName, RuleId } from "../../src";
+ 
+ describe("NotificationService", function () {
+     const testUserId = "@ali:matrix.org";
+@@ -48,6 +48,7 @@ describe("NotificationService", function () {
+         credentials: {
+             userId: testUserId,
+         },
++        supportsIntentionalMentions: () => true,
+         pushRules: {
+             device: {},
+             global: {
+@@ -712,6 +713,37 @@ describe("NotificationService", function () {
+             });
+         });
+     });
++
++    describe("test intentional mentions behaviour", () => {
++        it.each([RuleId.ContainsUserName, RuleId.ContainsDisplayName, RuleId.AtRoomNotification])(
++            "Rule %s matches unless intentional mentions are enabled",
++            (ruleId) => {
++                const rule = {
++                    rule_id: ruleId,
++                    actions: [],
++                    conditions: [],
++                    default: false,
++                    enabled: true,
++                };
++                expect(pushProcessor.ruleMatchesEvent(rule, testEvent)).toBe(true);
++
++                // Add the mentions property to the event and the rule is now disabled.
++                testEvent = utils.mkEvent({
++                    type: "m.room.message",
++                    room: testRoomId,
++                    user: "@alfred:localhost",
++                    event: true,
++                    content: {
++                        "body": "",
++                        "msgtype": "m.text",
++                        "org.matrix.msc3952.mentions": {},
++                    },
++                });
++
++                expect(pushProcessor.ruleMatchesEvent(rule, testEvent)).toBe(false);
++            },
++        );
++    });
+ });
+ 
+ describe("Test PushProcessor.partsForDottedKey", function () {
+diff --git a/src/@types/PushRules.ts b/src/@types/PushRules.ts
+index 2234a62c2..da3b01b6d 100644
+--- a/src/@types/PushRules.ts
++++ b/src/@types/PushRules.ts
+@@ -137,6 +137,8 @@ export enum PushRuleKind {
+ 
+ export enum RuleId {
+     Master = ".m.rule.master",
++    IsUserMention = ".org.matrix.msc3952.is_user_mention",
++    IsRoomMention = ".org.matrix.msc3952.is_room_mention",
+     ContainsDisplayName = ".m.rule.contains_display_name",
+     ContainsUserName = ".m.rule.contains_user_name",
+     AtRoomNotification = ".m.rule.roomnotif",
+diff --git a/src/client.ts b/src/client.ts
+index 132be9550..ef2517a44 100644
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -461,6 +461,11 @@ export interface IStartClientOpts {
+      * @experimental
+      */
+     slidingSync?: SlidingSync;
++
++    /**
++     * @experimental
++     */
++    intentionalMentions?: boolean;
+ }
+ 
+ export interface IStoredClientOpts extends IStartClientOpts {}
+@@ -8575,7 +8580,7 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
+      */
+     public setPushRules(rules: IPushRules): void {
+         // Fix-up defaults, if applicable.
+-        this.pushRules = PushProcessor.rewriteDefaultRules(rules);
++        this.pushRules = PushProcessor.rewriteDefaultRules(rules, this.getUserId()!);
+         // Pre-calculate any necessary caches.
+         this.pushProcessor.updateCachedPushRuleKeys(this.pushRules);
+     }
+@@ -9472,6 +9477,15 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
+         return this.clientOpts?.threadSupport || false;
+     }
+ 
++    /**
++     * A helper to determine intentional mentions support
++     * @returns a boolean to determine if intentional mentions are enabled
++     * @experimental
++     */
++    public supportsIntentionalMentions(): boolean {
++        return this.clientOpts?.intentionalMentions || false;
++    }
++
+     /**
+      * Fetches the summary of a room as defined by an initial version of MSC3266 and implemented in Synapse
+      * Proposed at https://github.com/matrix-org/matrix-doc/pull/3266
+diff --git a/src/models/event.ts b/src/models/event.ts
+index 0ad2b5c18..2db3479cd 100644
+--- a/src/models/event.ts
++++ b/src/models/event.ts
+@@ -48,6 +48,8 @@ export interface IContent {
+     "avatar_url"?: string;
+     "displayname"?: string;
+     "m.relates_to"?: IEventRelation;
++
++    "org.matrix.msc3952.mentions"?: IMentions;
+ }
+ 
+ type StrippedState = Required<Pick<IEvent, "content" | "state_key" | "type" | "sender">>;
+@@ -114,6 +116,11 @@ export interface IEventRelation {
+     "key"?: string;
+ }
+ 
++export interface IMentions {
++    user_ids?: string[];
++    room?: boolean;
++}
++
+ /**
+  * When an event is a visibility change event, as per MSC3531,
+  * the visibility change implied by the event.
+diff --git a/src/pushprocessor.ts b/src/pushprocessor.ts
+index 46546e3c6..78d26fe5a 100644
+--- a/src/pushprocessor.ts
++++ b/src/pushprocessor.ts
+@@ -36,6 +36,7 @@ import {
+     PushRuleCondition,
+     PushRuleKind,
+     PushRuleSet,
++    RuleId,
+     TweakName,
+ } from "./@types/PushRules";
+ import { EventType } from "./@types/event";
+@@ -70,6 +71,36 @@ const DEFAULT_OVERRIDE_RULES: IPushRule[] = [
+         ],
+         actions: [PushRuleActionName.DontNotify],
+     },
++    {
++        rule_id: RuleId.IsUserMention,
++        default: true,
++        enabled: true,
++        conditions: [
++            {
++                kind: ConditionKind.EventPropertyContains,
++                key: "content.org\\.matrix\\.msc3952\\.mentions.user_ids",
++                value: "", // The user ID is dynamically added in rewriteDefaultRules.
++            },
++        ],
++        actions: [PushRuleActionName.Notify, { set_tweak: TweakName.Highlight }],
++    },
++    {
++        rule_id: RuleId.IsRoomMention,
++        default: true,
++        enabled: true,
++        conditions: [
++            {
++                kind: ConditionKind.EventPropertyIs,
++                key: "content.org\\.matrix\\.msc3952\\.mentions.room",
++                value: true,
++            },
++            {
++                kind: ConditionKind.SenderNotificationPermission,
++                key: "room",
++            },
++        ],
++        actions: [PushRuleActionName.Notify, { set_tweak: TweakName.Highlight }],
++    },
+     {
+         // For homeservers which don't support MSC3786 yet
+         rule_id: ".org.matrix.msc3786.rule.room.server_acl",
+@@ -160,9 +191,10 @@ export class PushProcessor {
+      * where applicable. Useful for upgrading push rules to more strict
+      * conditions when the server is falling behind on defaults.
+      * @param incomingRules - The client's existing push rules
++     * @param userId - The Matrix ID of the client.
+      * @returns The rewritten rules
+      */
+-    public static rewriteDefaultRules(incomingRules: IPushRules): IPushRules {
++    public static rewriteDefaultRules(incomingRules: IPushRules, userId: string | undefined = undefined): IPushRules {
+         let newRules: IPushRules = JSON.parse(JSON.stringify(incomingRules)); // deep clone
+ 
+         // These lines are mostly to make the tests happy. We shouldn't run into these
+@@ -174,8 +206,22 @@ export class PushProcessor {
+ 
+         // Merge the client-level defaults with the ones from the server
+         const globalOverrides = newRules.global.override;
+-        for (const override of DEFAULT_OVERRIDE_RULES) {
+-            const existingRule = globalOverrides.find((r) => r.rule_id === override.rule_id);
++        for (const originalOverride of DEFAULT_OVERRIDE_RULES) {
++            const existingRule = globalOverrides.find((r) => r.rule_id === originalOverride.rule_id);
++
++            // Dynamically add the user ID as the value for the is_user_mention rule.
++            let override: IPushRule;
++            if (originalOverride.rule_id === RuleId.IsUserMention) {
++                // If the user ID wasn't provided, skip the rule.
++                if (!userId) {
++                    continue;
++                }
++
++                override = JSON.parse(JSON.stringify(originalOverride)); // deep clone
++                override.conditions![0].value = userId;
++            } else {
++                override = originalOverride;
++            }
+ 
+             if (existingRule) {
+                 // Copy over the actions, default, and conditions. Don't touch the user's preference.
+@@ -668,6 +714,17 @@ export class PushProcessor {
+     }
+ 
+     public ruleMatchesEvent(rule: Partial<IPushRule> & Pick<IPushRule, "conditions">, ev: MatrixEvent): boolean {
++        // Disable the deprecated mentions push rules if the new mentions property exists.
++        if (
++            this.client.supportsIntentionalMentions() &&
++            ev.getContent()["org.matrix.msc3952.mentions"] !== undefined &&
++            (rule.rule_id === RuleId.ContainsUserName ||
++                rule.rule_id === RuleId.ContainsDisplayName ||
++                rule.rule_id === RuleId.AtRoomNotification)
++        ) {
++            return false;
++        }
++
+         return !rule.conditions?.some((cond) => !this.eventFulfillsCondition(cond, ev));
+     }
+ 
+-- 
+2.34.1
+

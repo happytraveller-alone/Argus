@@ -1,0 +1,86 @@
+rules:
+- id: ruby_file_rule-AvoidTaintedFileAccess
+  mode: taint
+  pattern-sources:
+  - pattern: params
+  - pattern: cookies
+  - pattern: request.env
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: Dir.$X(...)
+      - pattern: File.$X(...)
+      - pattern: IO.$X(...)
+      - pattern: Kernel.$X(...)
+      - pattern: PStore.$X(...)
+      - pattern: Pathname.$X(...)
+    - metavariable-pattern:
+        metavariable: $X
+        patterns:
+        - pattern-either:
+          - pattern: chdir
+          - pattern: chroot
+          - pattern: delete
+          - pattern: entries
+          - pattern: foreach
+          - pattern: glob
+          - pattern: install
+          - pattern: lchmod
+          - pattern: lchown
+          - pattern: link
+          - pattern: load
+          - pattern: load_file
+          - pattern: makedirs
+          - pattern: move
+          - pattern: new
+          - pattern: open
+          - pattern: read
+          - pattern: readlines
+          - pattern: rename
+          - pattern: rmdir
+          - pattern: safe_unlink
+          - pattern: symlink
+          - pattern: syscopy
+          - pattern: sysopen
+          - pattern: truncate
+          - pattern: unlink
+  message: "The application dynamically constructs file or path information with user\
+    \ input. When an application uses data from \nuntrusted sources (like `params`,\
+    \ `cookies`, or `request.env`) to perform \nactions on the file system, it opens\
+    \ up potential vulnerabilities. \nA malicious actor could exploit this to access,\
+    \ modify, or delete \nfiles they shouldn't have access to, leading to information\
+    \ disclosure, \ndata loss, or server compromise. This type of vulnerability is\
+    \ often \nreferred to as a File Inclusion vulnerability or Path Traversal attack,\
+    \ \ndepending on the nature of the exploit.\n\nTo mitigate these risks, follow\
+    \ these best practices:\n- Validate and sanitize input: Ensure all user inputs\
+    \ are strictly \nvalidated and sanitized to prevent path traversal characters\
+    \ (like `../`) \nor other malicious patterns. Only allow filenames or paths that\
+    \ match \nspecific, safe patterns.\n- Use secure libraries: Utilize libraries\
+    \ or frameworks that abstract \nfile access in a secure manner, automatically\
+    \ handling the risks \nassociated with raw user input.\n- Least privilege principle:\
+    \ Run your application with the minimum \nnecessary file system permissions. Restrict\
+    \ the application's access \nto only those directories and files it absolutely\
+    \ needs.\n- Directory whitelisting: Maintain an allow list of permitted directories\
+    \ \nfor file operations, rejecting any requests for paths outside of these \n\
+    directories.\n\nSecure Code Example:\n```\ndef safe_file_read(filename)\n  # Define\
+    \ a list of allowed files or use regex to validate the filename format\n  allowed_files\
+    \ = ['allowed_file.txt', 'another_safe_file.txt']\n  \n  if allowed_files.include?(filename)\n\
+    \    file_path = Rails.root.join('safe_directory', filename)\n    content = File.read(file_path)\n\
+    \    return content\n  else\n    raise \"Access to the requested file is not allowed.\"\
+    \n  end\nend\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    cwe: CWE-22
+    shortDescription: Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/audit/avoid-tainted-file-access.yaml
+    category: security
+    security-severity: MEDIUM
+    technology:
+    - rails

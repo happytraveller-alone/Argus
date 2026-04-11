@@ -1,0 +1,78 @@
+rules:
+- id: ruby_deserialization_rule-BadDeserializationYAML
+  patterns:
+  - pattern: 'YAML.$LOAD($...ARGS)
+
+      '
+  - pattern-not: 'YAML.$LOAD(..., safe: true, ...)
+
+      '
+  - pattern-not: 'YAML.$LOAD("...", ...)
+
+      '
+  - pattern-not-inside: '$FILE = File.read("...", ...)
+
+      ...
+
+      YAML.$LOAD(..., $FILE, ...)
+
+      '
+  - pattern-not-inside: '$FILENAME = "..."
+
+      ...
+
+      $FILE = File.read($FILENAME, ...)
+
+      ...
+
+      YAML.$LOAD(..., $FILE, ...)
+
+      '
+  - pattern-not-inside: 'YAML.$LOAD(..., File.read("...", ...), ...)
+
+      '
+  - metavariable-regex:
+      metavariable: $LOAD
+      regex: load(?:_stream)?\b|parse_stream
+  fix: Psych.safe_load($...ARGS)
+  message: "Unsafe deserialization from YAML. \nYAML is a popular format for configuration\
+    \ files in Ruby applications \ndue to its readability and simplicity. However,\
+    \ the `load` method \nprovided by Ruby's YAML module can be dangerous when used\
+    \ to deserialize \ndata from untrusted sources. The method can instantiate objects\
+    \ based \non the YAML input, which can lead to remote code execution (RCE) if\
+    \ the \ninput contains malicious code. \n\nTo mitigate the risk of RCE through\
+    \ unsafe deserialization practices, \nconsider the following recommendations:\n\
+    - Prefer JSON for untrusted data: JSON is generally safer for \ndeserializing\
+    \ untrusted data because, by design, it does not support \nthe execution of arbitrary\
+    \ code. Ensure that any JSON deserialization \nis performed with caution, validating\
+    \ and sanitizing the input before \nuse.\n- Use safe YAML loading methods: If\
+    \ you must use YAML, prefer safe \nloading methods like `safe_load` instead of\
+    \ `load`. The `safe_load` method \nlimits the objects that can be deserialized,\
+    \ reducing the risk of \nexecuting arbitrary code.\n- Static YAML files: Loading\
+    \ YAML from static, trusted files (like \nconfiguration files that are not exposed\
+    \ to user input) is generally \nsafe. Ensure these files are securely managed\
+    \ and not modifiable by \nuntrusted sources.\n\nSecure Code Example:\n```\nrequire\
+    \ 'yaml'\nrequire 'json'\n\n# Safe YAML deserialization\ndef safe_load_yaml(file_path)\n\
+    \    YAML.safe_load(File.read(file_path), [Date, Time], [], true)\nend\n\n# Example\
+    \ of safely loading a static YAML file\nconfig_data = safe_load_yaml('config.yml')\n\
+    puts config_data.inspect\n\n# Safe JSON deserialization\ndef safe_load_json(json_input)\n\
+    \    # Always validate and sanitize input before deserialization\n    JSON.parse(json_input)\n\
+    end\n\n# Example JSON input\njson_input = '{\"name\": \"Jack Monroe\", \"age\"\
+    : 30}'\nuser_data = safe_load_json(json_input)\nputs user_data.inspect\n```\n"
+  languages:
+  - ruby
+  severity: ERROR
+  metadata:
+    shortDescription: Deserialization of untrusted data
+    category: security
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    security-severity: HIGH
+    technology:
+    - ruby
+    - yaml
+    references:
+    - https://groups.google.com/g/rubyonrails-security/c/61bkgvnSGTQ/m/nehwjA8tQ8EJ
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/bad-deserialization-yaml.yaml

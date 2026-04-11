@@ -1,0 +1,48 @@
+rules:
+- fix: 'crypto/rand
+
+    '
+  id: math-random-used_1
+  languages:
+  - go
+  message: Do not use `math/rand`. Use `crypto/rand` instead.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-338: Use of Cryptographically Weak Pseudo-Random Number Generator (PRNG)'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp:
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#secure-random-number-generation
+    subcategory:
+    - vuln
+    technology:
+    - go
+  patterns:
+  - pattern-either:
+    - pattern: 'import $RAND "$MATH"
+
+        '
+    - pattern: 'import "$MATH"
+
+        '
+  - metavariable-regex:
+      metavariable: $MATH
+      regex: ^(math/rand(\/v[0-9]+)*)$
+  - pattern-either:
+    - pattern-inside: '...
+
+        rand.$FUNC(...)
+
+        '
+    - pattern-inside: '...
+
+        $RAND.$FUNC(...)
+
+        '
+  - focus-metavariable:
+    - $MATH
+  severity: WARNING

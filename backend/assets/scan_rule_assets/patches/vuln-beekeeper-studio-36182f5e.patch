@@ -1,0 +1,127 @@
+From 36182f5e2d4c787a2d17868504e315685c779dec Mon Sep 17 00:00:00 2001
+From: Matthew Rathbone <matthew.rathbone@gmail.com>
+Date: Mon, 21 Feb 2022 10:39:02 -0600
+Subject: [PATCH] Fixes to remote code execution in table headers.
+
+Fix #1051
+---
+ apps/studio/package.json                       |  1 -
+ .../src/components/editor/ResultTable.vue      |  5 +++--
+ .../src/components/tableview/TableTable.vue    |  4 ++--
+ shared/src/lib/tabulator.ts                    | 18 +++++++++++++-----
+ yarn.lock                                      |  5 -----
+ 5 files changed, 18 insertions(+), 15 deletions(-)
+
+diff --git a/apps/studio/package.json b/apps/studio/package.json
+index b52e932b..e0310349 100644
+--- a/apps/studio/package.json
++++ b/apps/studio/package.json
+@@ -40,7 +40,6 @@
+     "core-js": "3",
+     "dateformat": "^3.0.3",
+     "diff-match-patch": "^1.0.5",
+-    "dompurify": "^2.2.8",
+     "electron-log": "^4.2.2",
+     "electron-util": "^0.14.1",
+     "flexsearch": "beekeeper-studio/flexsearch#2e6c65dc03acf378cbeef5c700658d9b26a3e09d",
+diff --git a/apps/studio/src/components/editor/ResultTable.vue b/apps/studio/src/components/editor/ResultTable.vue
+index d351c8ce..7d17ad43 100644
+--- a/apps/studio/src/components/editor/ResultTable.vue
++++ b/apps/studio/src/components/editor/ResultTable.vue
+@@ -9,7 +9,7 @@
+   import _ from 'lodash'
+   import dateFormat from 'dateformat'
+   import Converter from '../../mixins/data_converter'
+-  import Mutators from '../../mixins/data_mutators'
++  import Mutators, { escapeHtml } from '../../mixins/data_mutators'
+ import globals from '@/common/globals'
+ 
+   export default {
+@@ -59,8 +59,9 @@ import globals from '@/common/globals'
+         return this.result.fields.map((column) => {
+           const result = {
+             title: column.name,
++            titleFormatter: 'plaintext',
+             field: column.id,
+-            titleDownload: column.name,
++            titleDownload: escapeHtml(column.name),
+             dataType: column.dataType,
+             width: columnWidth,
+             maxInitialWidth: globals.maxInitialWidth,
+diff --git a/apps/studio/src/components/tableview/TableTable.vue b/apps/studio/src/components/tableview/TableTable.vue
+index 1e0f9e41..44256ec9 100644
+--- a/apps/studio/src/components/tableview/TableTable.vue
++++ b/apps/studio/src/components/tableview/TableTable.vue
+@@ -187,7 +187,7 @@ import pluralize from 'pluralize'
+ import Tabulator from "tabulator-tables";
+ // import pluralize from 'pluralize'
+ import data_converter from "../../mixins/data_converter";
+-import DataMutators from '../../mixins/data_mutators'
++import DataMutators, { escapeHtml } from '../../mixins/data_mutators'
+ import Statusbar from '../common/StatusBar.vue'
+ import rawLog from 'electron-log'
+ import _ from 'lodash'
+@@ -395,7 +395,7 @@ export default Vue.extend({
+           undefined
+ 
+         const formatter = () => {
+-          return `<span class="tabletable-title">${column.columnName} <span class="badge">${slimDataType}</span></span>`
++          return `<span class="tabletable-title">${escapeHtml(column.columnName)} <span class="badge">${escapeHtml(slimDataType)}</span></span>`
+         }
+ 
+         let headerTooltip = `${column.columnName} ${column.dataType}`
+diff --git a/shared/src/lib/tabulator.ts b/shared/src/lib/tabulator.ts
+index d7521a1f..20653e58 100644
+--- a/shared/src/lib/tabulator.ts
++++ b/shared/src/lib/tabulator.ts
+@@ -1,10 +1,18 @@
+-import Purify from 'dompurify'
+ import _ from 'lodash'
+ import Tabulator from 'tabulator-tables'
+ 
+-function sanitizeHtml(value) {
+-  if (!value) return null
+-  return Purify.sanitize(value)
++
++const htmlMap = {
++  '&': '&amp;',
++  '<': '&lt;',
++  '>': '&gt;',
++  '"': '&quot;',
++  "'": '&#039;'
++};
++
++export function escapeHtml(text: string): string | null {
++  if (!text) return null
++  return text.replace(/[&<>"']/g, function (m) { return htmlMap[m]; });
+ }
+ 
+ export interface YesNoParams {
+@@ -30,7 +38,7 @@ export default {
+ 
+     let cellValue = cell.getValue().toString();
+     cellValue = cellValue.replace(/\n/g, ' ↩ ');
+-    cellValue = sanitizeHtml(cellValue);
++    cellValue = escapeHtml(cellValue);
+     // removing the <pre> will break selection / copy paste, see ResultTable
+     const result = `<pre>${cellValue}</pre>`
+     return result;
+diff --git a/yarn.lock b/yarn.lock
+index 94604430..5c5bb030 100644
+--- a/yarn.lock
++++ b/yarn.lock
+@@ -5317,11 +5317,6 @@ domhandler@^4.0.0, domhandler@^4.2.0:
+   dependencies:
+     domelementtype "^2.2.0"
+ 
+-dompurify@^2.2.8:
+-  version "2.2.9"
+-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.2.9.tgz#4b42e244238032d9286a0d2c87b51313581d9624"
+-  integrity sha512-+9MqacuigMIZ+1+EwoEltogyWGFTJZWU3258Rupxs+2CGs4H914G9er6pZbsme/bvb5L67o2rade9n21e4RW/w==
+-
+ domutils@^1.7.0:
+   version "1.7.0"
+   resolved "https://registry.yarnpkg.com/domutils/-/domutils-1.7.0.tgz#56ea341e834e06e6748af7a1cb25da67ea9f8c2a"
+-- 
+2.34.1
+

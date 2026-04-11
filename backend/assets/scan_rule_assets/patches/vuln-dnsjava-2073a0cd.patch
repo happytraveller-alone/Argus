@@ -1,0 +1,4256 @@
+From 2073a0cdea2c560465f7ac0cc56f202e6fc39705 Mon Sep 17 00:00:00 2001
+From: Ingo Bauersachs <ingo@jitsi.org>
+Date: Sun, 7 Apr 2024 13:47:14 +0200
+Subject: [PATCH] CVE-2024-25638: Message normalization
+
+---
+ README.adoc                                   |   7 +
+ pom.xml                                       |  45 +-
+ src/main/java/org/xbill/DNS/Cache.java        | 115 +++-
+ src/main/java/org/xbill/DNS/Lookup.java       |   8 +-
+ src/main/java/org/xbill/DNS/Message.java      | 465 ++++++++++++-
+ src/main/java/org/xbill/DNS/RRset.java        |  13 +-
+ src/main/java/org/xbill/DNS/Record.java       |  12 +
+ src/main/java/org/xbill/DNS/Section.java      |   9 +
+ src/main/java/org/xbill/DNS/SetResponse.java  |  18 +-
+ .../java/org/xbill/DNS/SetResponseType.java   |   1 +
+ .../xbill/DNS/dnssec/ValidatingResolver.java  |   1 -
+ .../DNS/lookup/IrrelevantRecordMode.java      |  10 +
+ .../org/xbill/DNS/lookup/LookupResult.java    |  66 ++
+ .../org/xbill/DNS/lookup/LookupSession.java   | 117 +++-
+ .../DNS/lookup/NoSuchDomainException.java     |   3 -
+ .../DNS/lookup/NoSuchRRSetException.java      |   3 -
+ .../DNS/lookup/RedirectOverflowException.java |   2 +-
+ src/test/java/org/xbill/DNS/LookupTest.java   |  20 +
+ src/test/java/org/xbill/DNS/MessageTest.java  |  19 +-
+ .../java/org/xbill/DNS/SetResponseTest.java   |  43 ++
+ src/test/java/org/xbill/DNS/dnssec/Rpl.java   |   1 +
+ .../java/org/xbill/DNS/dnssec/RplParser.java  |   4 +-
+ .../java/org/xbill/DNS/dnssec/TestBase.java   |  13 +-
+ .../org/xbill/DNS/dnssec/UnboundTests.java    | 447 ++++++++++---
+ .../xbill/DNS/lookup/LookupResultTest.java    |  79 ++-
+ .../xbill/DNS/lookup/LookupSessionTest.java   | 630 ++++++++++++++----
+ src/test/resources/unbound/val_adcopy.rpl     |   6 +-
+ .../resources/unbound/val_unalgo_anchor.rpl   |   8 +-
+ 28 files changed, 1817 insertions(+), 348 deletions(-)
+ create mode 100644 src/main/java/org/xbill/DNS/lookup/IrrelevantRecordMode.java
+
+diff --git a/README.adoc b/README.adoc
+index 23e519f1..77533993 100644
+--- a/README.adoc
++++ b/README.adoc
+@@ -108,6 +108,13 @@ Do NOT use it.
+ |1000
+ |700
+ 
++.2+|dnsjava.harden_unknown_additional
++3+|Harden against unknown records in the authority section and additional section.
++If disabled, such records are copied from the upstream and presented to the client together with the answer.
++|Boolean
++|True
++|False
++
+ 4+h|dnssec options
+ .2+|dnsjava.dnssec.keycache.max_ttl
+ 3+|Maximum time-to-live (TTL) of entries in the key cache in seconds.
+diff --git a/pom.xml b/pom.xml
+index 0b5f8e43..fdb636af 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -75,7 +75,7 @@
+             <plugin>
+                 <groupId>org.apache.maven.plugins</groupId>
+                 <artifactId>maven-gpg-plugin</artifactId>
+-                <version>3.2.2</version>
++                <version>3.2.4</version>
+                 <executions>
+                     <execution>
+                         <id>sign-artifacts</id>
+@@ -265,7 +265,7 @@
+             <plugin>
+                 <groupId>com.github.siom79.japicmp</groupId>
+                 <artifactId>japicmp-maven-plugin</artifactId>
+-                <version> 0.20.0</version>
++                <version>0.20.0</version>
+                 <configuration>
+                     <newVersion>
+                         <file>
+@@ -528,6 +528,18 @@
+             <version>${org.junit.version}</version>
+             <scope>test</scope>
+         </dependency>
++        <dependency>
++            <groupId>org.assertj</groupId>
++            <artifactId>assertj-core</artifactId>
++            <version>3.25.3</version>
++            <scope>test</scope>
++        </dependency>
++        <dependency>
++            <groupId>org.junit-pioneer</groupId>
++            <artifactId>junit-pioneer</artifactId>
++            <version>2.2.0</version>
++            <scope>test</scope>
++        </dependency>
+         <dependency>
+             <groupId>org.mockito</groupId>
+             <artifactId>mockito-core</artifactId>
+@@ -540,6 +552,12 @@
+             <version>${mockito.version}</version>
+             <scope>test</scope>
+         </dependency>
++        <dependency>
++            <groupId>net.bytebuddy</groupId>
++            <artifactId>byte-buddy-agent</artifactId>
++            <version>1.14.14</version>
++            <scope>test</scope>
++        </dependency>
+         <dependency>
+             <groupId>org.slf4j</groupId>
+             <artifactId>slf4j-simple</artifactId>
+@@ -676,7 +694,9 @@
+                         <artifactId>maven-surefire-plugin</artifactId>
+                         <configuration>
+                             <argLine>
+-                                ${argLine} --add-opens java.base/sun.net.dns=ALL-UNNAMED
++                                @{argLine}
++                                --add-opens java.base/sun.net.dns=ALL-UNNAMED
++                                --add-opens java.base/sun.net.dns=org.dnsjava
+                             </argLine>
+                             <additionalClasspathElements>
+                                 <additionalClasspathElement>${project.build.outputDirectory}/META-INF/versions/11</additionalClasspathElement>
+@@ -784,12 +804,29 @@
+                         </executions>
+                     </plugin>
+ 
++                    <plugin>
++                        <groupId>org.apache.maven.plugins</groupId>
++                        <artifactId>maven-dependency-plugin</artifactId>
++                        <version>3.6.1</version>
++                        <executions>
++                            <execution>
++                                <phase>initialize</phase>
++                                <goals>
++                                    <goal>properties</goal>
++                                </goals>
++                            </execution>
++                        </executions>
++                    </plugin>
++
+                     <plugin>
+                         <groupId>org.apache.maven.plugins</groupId>
+                         <artifactId>maven-surefire-plugin</artifactId>
+                         <configuration>
+                             <argLine>
+-                                ${argLine} --add-opens java.base/sun.net.dns=ALL-UNNAMED
++                                @{argLine}
++                                --add-opens java.base/sun.net.dns=ALL-UNNAMED
++                                --add-opens java.base/sun.net.dns=org.dnsjava
++                                -javaagent:${net.bytebuddy:byte-buddy-agent:jar}
+                             </argLine>
+                             <additionalClasspathElements>
+                                 <additionalClasspathElement>${project.build.outputDirectory}/META-INF/versions/11</additionalClasspathElement>
+diff --git a/src/main/java/org/xbill/DNS/Cache.java b/src/main/java/org/xbill/DNS/Cache.java
+index a4619d89..b399ea61 100644
+--- a/src/main/java/org/xbill/DNS/Cache.java
++++ b/src/main/java/org/xbill/DNS/Cache.java
+@@ -31,6 +31,8 @@ private interface Element {
+     int compareCredibility(int cred);
+ 
+     int getType();
++
++    boolean isAuthenticated();
+   }
+ 
+   private static int limitExpire(long ttl, long maxttl) {
+@@ -44,23 +46,23 @@ private static int limitExpire(long ttl, long maxttl) {
+     return (int) expire;
+   }
+ 
+-  private static class CacheRRset extends RRset implements Element {
+-    private static final long serialVersionUID = 5971755205903597024L;
+-
++  static class CacheRRset extends RRset implements Element {
+     int credibility;
+     int expire;
++    boolean isAuthenticated;
+ 
+-    public CacheRRset(Record rec, int cred, long maxttl) {
+-      super();
++    public CacheRRset(Record rec, int cred, long maxttl, boolean isAuthenticated) {
+       this.credibility = cred;
+       this.expire = limitExpire(rec.getTTL(), maxttl);
++      this.isAuthenticated = isAuthenticated;
+       addRR(rec);
+     }
+ 
+-    public CacheRRset(RRset rrset, int cred, long maxttl) {
++    public CacheRRset(RRset rrset, int cred, long maxttl, boolean isAuthenticated) {
+       super(rrset);
+       this.credibility = cred;
+       this.expire = limitExpire(rrset.getTTL(), maxttl);
++      this.isAuthenticated = isAuthenticated;
+     }
+ 
+     @Override
+@@ -78,6 +80,11 @@ public final int compareCredibility(int cred) {
+     public String toString() {
+       return super.toString() + " cl = " + credibility;
+     }
++
++    @Override
++    public boolean isAuthenticated() {
++      return isAuthenticated;
++    }
+   }
+ 
+   private static class NegativeElement implements Element {
+@@ -85,8 +92,10 @@ private static class NegativeElement implements Element {
+     Name name;
+     int credibility;
+     int expire;
++    boolean isAuthenticated;
+ 
+-    public NegativeElement(Name name, int type, SOARecord soa, int cred, long maxttl) {
++    public NegativeElement(
++        Name name, int type, SOARecord soa, int cred, long maxttl, boolean isAuthenticated) {
+       this.name = name;
+       this.type = type;
+       long cttl = 0;
+@@ -95,6 +104,7 @@ public NegativeElement(Name name, int type, SOARecord soa, int cred, long maxttl
+       }
+       this.credibility = cred;
+       this.expire = limitExpire(cttl, maxttl);
++      this.isAuthenticated = isAuthenticated;
+     }
+ 
+     @Override
+@@ -113,6 +123,11 @@ public final int compareCredibility(int cred) {
+       return credibility - cred;
+     }
+ 
++    @Override
++    public boolean isAuthenticated() {
++      return isAuthenticated;
++    }
++
+     @Override
+     public String toString() {
+       StringBuilder sb = new StringBuilder();
+@@ -327,7 +342,7 @@ public synchronized void clearCache() {
+    */
+   @Deprecated
+   public synchronized void addRecord(Record r, int cred, Object o) {
+-    addRecord(r, cred);
++    addRecord(r, cred, false);
+   }
+ 
+   /**
+@@ -338,6 +353,10 @@ public synchronized void addRecord(Record r, int cred, Object o) {
+    * @see Record
+    */
+   public synchronized void addRecord(Record r, int cred) {
++    addRecord(r, cred, false);
++  }
++
++  private synchronized void addRecord(Record r, int cred, boolean isAuthenticated) {
+     Name name = r.getName();
+     int type = r.getRRsetType();
+     if (!Type.isRR(type)) {
+@@ -345,8 +364,8 @@ public synchronized void addRecord(Record r, int cred) {
+     }
+     Element element = findElement(name, type, cred);
+     if (element == null) {
+-      CacheRRset crrset = new CacheRRset(r, cred, maxcache);
+-      addRRset(crrset, cred);
++      CacheRRset crrset = new CacheRRset(r, cred, maxcache, isAuthenticated);
++      addRRset(crrset, cred, isAuthenticated);
+     } else if (element.compareCredibility(cred) == 0) {
+       if (element instanceof CacheRRset) {
+         CacheRRset crrset = (CacheRRset) element;
+@@ -363,6 +382,11 @@ public synchronized void addRecord(Record r, int cred) {
+    * @see RRset
+    */
+   public synchronized <T extends Record> void addRRset(RRset rrset, int cred) {
++    addRRset(rrset, cred, false);
++  }
++
++  private synchronized <T extends Record> void addRRset(
++      RRset rrset, int cred, boolean isAuthenticated) {
+     long ttl = rrset.getTTL();
+     Name name = rrset.getName();
+     int type = rrset.getType();
+@@ -380,7 +404,7 @@ public synchronized <T extends Record> void addRRset(RRset rrset, int cred) {
+         if (rrset instanceof CacheRRset) {
+           crrset = (CacheRRset) rrset;
+         } else {
+-          crrset = new CacheRRset(rrset, cred, maxcache);
++          crrset = new CacheRRset(rrset, cred, maxcache, isAuthenticated);
+         }
+         addElement(name, crrset);
+       }
+@@ -397,6 +421,11 @@ public synchronized <T extends Record> void addRRset(RRset rrset, int cred) {
+    * @param cred The credibility of the negative entry
+    */
+   public synchronized void addNegative(Name name, int type, SOARecord soa, int cred) {
++    addNegative(name, type, soa, cred, false);
++  }
++
++  private synchronized void addNegative(
++      Name name, int type, SOARecord soa, int cred, boolean isAuthenticated) {
+     long ttl = 0;
+     if (soa != null) {
+       ttl = Math.min(soa.getMinimum(), soa.getTTL());
+@@ -411,7 +440,7 @@ public synchronized void addNegative(Name name, int type, SOARecord soa, int cre
+         element = null;
+       }
+       if (element == null) {
+-        addElement(name, new NegativeElement(name, type, soa, cred, maxncache));
++        addElement(name, new NegativeElement(name, type, soa, cred, maxncache, isAuthenticated));
+       }
+     }
+   }
+@@ -536,7 +565,7 @@ private List<RRset> findRecords(Name name, int type, int minCred) {
+    *
+    * @param name The name to look up
+    * @param type The type to look up
+-   * @return An array of RRsets, or null
++   * @return A list of matching RRsets, or {@code null}.
+    * @see Credibility
+    */
+   public List<RRset> findRecords(Name name, int type) {
+@@ -549,7 +578,7 @@ public List<RRset> findRecords(Name name, int type) {
+    *
+    * @param name The name to look up
+    * @param type The type to look up
+-   * @return An array of RRsets, or null
++   * @return A list of matching RRsets, or {@code null}.
+    * @see Credibility
+    */
+   public List<RRset> findAnyRecords(Name name, int type) {
+@@ -600,7 +629,8 @@ private static void markAdditional(RRset rrset, Set<Name> names) {
+    * @see Message
+    */
+   public SetResponse addMessage(Message in) {
+-    boolean isAuth = in.getHeader().getFlag(Flags.AA);
++    boolean isAuthoritative = in.getHeader().getFlag(Flags.AA);
++    boolean isAuthenticated = in.getHeader().getFlag(Flags.AD);
+     Record question = in.getQuestion();
+     Name qname;
+     Name curname;
+@@ -626,15 +656,16 @@ public SetResponse addMessage(Message in) {
+     additionalNames = new HashSet<>();
+ 
+     answers = in.getSectionRRsets(Section.ANSWER);
+-    for (RRset answer : answers) {
++    for (int i = 0; i < answers.size(); i++) {
++      RRset answer = answers.get(i);
+       if (answer.getDClass() != qclass) {
+         continue;
+       }
+       int type = answer.getType();
+       Name name = answer.getName();
+-      cred = getCred(Section.ANSWER, isAuth);
++      cred = getCred(Section.ANSWER, isAuthoritative);
+       if ((type == qtype || qtype == Type.ANY) && name.equals(curname)) {
+-        addRRset(answer, cred);
++        addRRset(answer, cred, isAuthenticated);
+         completed = true;
+         if (curname == qname) {
+           if (response == null) {
+@@ -643,26 +674,36 @@ public SetResponse addMessage(Message in) {
+           response.addRRset(answer);
+         }
+         markAdditional(answer, additionalNames);
+-      } else if (type == Type.CNAME && name.equals(curname)) {
+-        CNAMERecord cname;
+-        addRRset(answer, cred);
+-        if (curname == qname) {
+-          response = SetResponse.ofType(SetResponseType.CNAME, answer);
+-        }
+-        cname = (CNAMERecord) answer.first();
+-        curname = cname.getTarget();
+       } else if (type == Type.DNAME && curname.subdomain(name)) {
+         DNAMERecord dname;
+-        addRRset(answer, cred);
++        addRRset(answer, cred, isAuthenticated);
+         if (curname == qname) {
+-          response = SetResponse.ofType(SetResponseType.DNAME, answer);
++          response = SetResponse.ofType(SetResponseType.DNAME, answer, isAuthenticated);
++        }
++
++        if (i + 1 < answers.size()) {
++          RRset next = answers.get(i + 1);
++          if (next.getType() == Type.CNAME && next.getName().equals(curname)) {
++            // Skip generating the next name from the current DNAME, the synthesized CNAME did that
++            // for us
++            continue;
++          }
+         }
++
+         dname = (DNAMERecord) answer.first();
+         try {
+           curname = curname.fromDNAME(dname);
+         } catch (NameTooLongException e) {
+           break;
+         }
++      } else if (type == Type.CNAME && name.equals(curname)) {
++        CNAMERecord cname;
++        addRRset(answer, cred, isAuthenticated);
++        if (curname == qname) {
++          response = SetResponse.ofType(SetResponseType.CNAME, answer, isAuthenticated);
++        }
++        cname = (CNAMERecord) answer.first();
++        curname = cname.getTarget();
+       }
+     }
+ 
+@@ -681,12 +722,12 @@ public SetResponse addMessage(Message in) {
+       int cachetype = (rcode == Rcode.NXDOMAIN) ? 0 : qtype;
+       if (rcode == Rcode.NXDOMAIN || soa != null || ns == null) {
+         /* Negative response */
+-        cred = getCred(Section.AUTHORITY, isAuth);
++        cred = getCred(Section.AUTHORITY, isAuthoritative);
+         SOARecord soarec = null;
+         if (soa != null) {
+           soarec = (SOARecord) soa.first();
+         }
+-        addNegative(curname, cachetype, soarec, cred);
++        addNegative(curname, cachetype, soarec, cred, isAuthenticated);
+         if (response == null) {
+           SetResponseType responseType;
+           if (rcode == Rcode.NXDOMAIN) {
+@@ -699,17 +740,17 @@ public SetResponse addMessage(Message in) {
+         /* DNSSEC records are not cached. */
+       } else {
+         /* Referral response */
+-        cred = getCred(Section.AUTHORITY, isAuth);
+-        addRRset(ns, cred);
++        cred = getCred(Section.AUTHORITY, isAuthoritative);
++        addRRset(ns, cred, isAuthenticated);
+         markAdditional(ns, additionalNames);
+         if (response == null) {
+-          response = SetResponse.ofType(SetResponseType.DELEGATION, ns);
++          response = SetResponse.ofType(SetResponseType.DELEGATION, ns, isAuthenticated);
+         }
+       }
+     } else if (rcode == Rcode.NOERROR && ns != null) {
+       /* Cache the NS set from a positive response. */
+-      cred = getCred(Section.AUTHORITY, isAuth);
+-      addRRset(ns, cred);
++      cred = getCred(Section.AUTHORITY, isAuthoritative);
++      addRRset(ns, cred, isAuthenticated);
+       markAdditional(ns, additionalNames);
+     }
+ 
+@@ -723,8 +764,8 @@ public SetResponse addMessage(Message in) {
+       if (!additionalNames.contains(name)) {
+         continue;
+       }
+-      cred = getCred(Section.ADDITIONAL, isAuth);
+-      addRRset(rRset, cred);
++      cred = getCred(Section.ADDITIONAL, isAuthoritative);
++      addRRset(rRset, cred, isAuthenticated);
+     }
+ 
+     log.debug(
+diff --git a/src/main/java/org/xbill/DNS/Lookup.java b/src/main/java/org/xbill/DNS/Lookup.java
+index d895cae1..d3d40b66 100644
+--- a/src/main/java/org/xbill/DNS/Lookup.java
++++ b/src/main/java/org/xbill/DNS/Lookup.java
+@@ -433,12 +433,18 @@ public void setSearchPath(String... domains) throws TextParseException {
+    * results of this lookup should not be permanently cached, null can be provided here.
+    *
+    * @param cache The cache to use.
++   * @throws IllegalArgumentException If the DClass of the cache doesn't match this Lookup's DClass.
+    */
+   public void setCache(Cache cache) {
+     if (cache == null) {
+       this.cache = new Cache(dclass);
+       this.temporary_cache = true;
+     } else {
++      if (cache.getDClass() != dclass) {
++        throw new IllegalArgumentException(
++            "DClass of cache doesn't match DClass of this Lookup instance");
++      }
++
+       this.cache = cache;
+       this.temporary_cache = false;
+     }
+@@ -571,7 +577,7 @@ private void lookup(Name current) {
+     Message query = Message.newQuery(question);
+     Message response;
+     try {
+-      response = resolver.send(query);
++      response = resolver.send(query).normalize(query);
+     } catch (IOException e) {
+       log.debug(
+           "Lookup for {}/{}, id={} failed using resolver {}",
+diff --git a/src/main/java/org/xbill/DNS/Message.java b/src/main/java/org/xbill/DNS/Message.java
+index 1cdfa483..909570a2 100644
+--- a/src/main/java/org/xbill/DNS/Message.java
++++ b/src/main/java/org/xbill/DNS/Message.java
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ // Copyright (c) 1999-2004 Brian Wellington (bwelling@xbill.org)
++// Copyright (c) 2007-2023 NLnet Labs
+ 
+ package org.xbill.DNS;
+ 
+@@ -7,12 +8,11 @@
+ import java.nio.ByteBuffer;
+ import java.util.ArrayList;
+ import java.util.Collections;
+-import java.util.HashSet;
+ import java.util.LinkedList;
+ import java.util.List;
+ import java.util.Optional;
+-import java.util.Set;
+ import lombok.SneakyThrows;
++import lombok.extern.slf4j.Slf4j;
+ 
+ /**
+  * A DNS Message. A message is the basic unit of communication between the client and server of a
+@@ -23,6 +23,7 @@
+  * @see Section
+  * @author Brian Wellington
+  */
++@Slf4j
+ public class Message implements Cloneable {
+ 
+   /** The maximum length of a message in wire format. */
+@@ -192,6 +193,7 @@ public void addRecord(Record r, int section) {
+    * @see Section
+    */
+   public boolean removeRecord(Record r, int section) {
++    Section.check(section);
+     if (sections[section] != null && sections[section].remove(r)) {
+       header.decCount(section);
+       return true;
+@@ -207,6 +209,7 @@ public boolean removeRecord(Record r, int section) {
+    * @see Section
+    */
+   public void removeAllRecords(int section) {
++    Section.check(section);
+     sections[section] = null;
+     header.setCount(section, 0);
+   }
+@@ -218,6 +221,7 @@ public void removeAllRecords(int section) {
+    * @see Section
+    */
+   public boolean findRecord(Record r, int section) {
++    Section.check(section);
+     return sections[section] != null && sections[section].contains(r);
+   }
+ 
+@@ -243,6 +247,8 @@ public boolean findRecord(Record r) {
+    * @see Section
+    */
+   public boolean findRRset(Name name, int type, int section) {
++    Type.check(type);
++    Section.check(section);
+     if (sections[section] == null) {
+       return false;
+     }
+@@ -364,6 +370,7 @@ public int getRcode() {
+    */
+   @Deprecated
+   public Record[] getSectionArray(int section) {
++    Section.check(section);
+     if (sections[section] == null) {
+       return emptyRecordArray;
+     }
+@@ -378,51 +385,43 @@ public Record[] getSectionArray(int section) {
+    * @see Section
+    */
+   public List<Record> getSection(int section) {
++    Section.check(section);
+     if (sections[section] == null) {
+       return Collections.emptyList();
+     }
+     return Collections.unmodifiableList(sections[section]);
+   }
+ 
+-  private static boolean sameSet(Record r1, Record r2) {
+-    return r1.getRRsetType() == r2.getRRsetType()
+-        && r1.getDClass() == r2.getDClass()
+-        && r1.getName().equals(r2.getName());
+-  }
+-
+   /**
+    * Returns an array containing all records in the given section grouped into RRsets.
+    *
+    * @see RRset
+    * @see Section
+    */
++  @SuppressWarnings("java:S1119") // label
+   public List<RRset> getSectionRRsets(int section) {
++    Section.check(section);
+     if (sections[section] == null) {
+       return Collections.emptyList();
+     }
++
+     List<RRset> sets = new LinkedList<>();
+-    Set<Name> hash = new HashSet<>();
+-    for (Record rec : getSection(section)) {
+-      Name name = rec.getName();
+-      boolean newset = true;
+-      if (hash.contains(name)) {
+-        for (int j = sets.size() - 1; j >= 0; j--) {
+-          RRset set = sets.get(j);
+-          if (set.getType() == rec.getRRsetType()
+-              && set.getDClass() == rec.getDClass()
+-              && set.getName().equals(name)) {
+-            set.addRR(rec);
+-            newset = false;
+-            break;
+-          }
++    record_iteration:
++    for (Record rec : sections[section]) {
++      for (int j = sets.size() - 1; j >= 0; j--) {
++        RRset set = sets.get(j);
++        if (rec.sameRRset(set)) {
++          set.addRR(rec);
++
++          // Existing set found, continue with the next record
++          continue record_iteration;
+         }
+       }
+-      if (newset) {
+-        RRset set = new RRset(rec);
+-        sets.add(set);
+-        hash.add(name);
+-      }
++
++      // No existing set found, create a new one
++      sets.add(new RRset(rec));
+     }
++
+     return sets;
+   }
+ 
+@@ -453,7 +452,7 @@ private int sectionToWire(DNSOutput out, int section, Compression c, int maxLeng
+         continue;
+       }
+ 
+-      if (lastrec != null && !sameSet(rec, lastrec)) {
++      if (lastrec != null && !rec.sameRRset(lastrec)) {
+         pos = out.current();
+         rendered = count;
+       }
+@@ -604,13 +603,10 @@ public int numBytes() {
+    *
+    * @see Section
+    */
+-  public String sectionToString(int i) {
+-    if (i > 3) {
+-      return null;
+-    }
+-
++  public String sectionToString(int section) {
++    Section.check(section);
+     StringBuilder sb = new StringBuilder();
+-    sectionToString(sb, i);
++    sectionToString(sb, section);
+     return sb.toString();
+   }
+ 
+@@ -677,10 +673,10 @@ public String toString() {
+    */
+   @Override
+   @SneakyThrows(CloneNotSupportedException.class)
+-  @SuppressWarnings("unchecked")
++  @SuppressWarnings({"unchecked", "java:S2975"})
+   public Message clone() {
+     Message m = (Message) super.clone();
+-    m.sections = (List<Record>[]) new List[sections.length];
++    m.sections = new List[sections.length];
+     for (int i = 0; i < sections.length; i++) {
+       if (sections[i] != null) {
+         m.sections[i] = new LinkedList<>(sections[i]);
+@@ -705,4 +701,401 @@ public void setResolver(Resolver resolver) {
+   public Optional<Resolver> getResolver() {
+     return Optional.ofNullable(resolver);
+   }
++
++  /**
++   * Checks if a record {@link Type} is allowed within a {@link Section}.
++   *
++   * @return {@code true} if the type is allowed, {@code false} otherwise.
++   */
++  boolean isTypeAllowedInSection(int type, int section) {
++    Type.check(type);
++    Section.check(section);
++    switch (section) {
++      case Section.AUTHORITY:
++        if (type == Type.SOA
++            || type == Type.NS
++            || type == Type.DS
++            || type == Type.NSEC
++            || type == Type.NSEC3) {
++          return true;
++        }
++        break;
++      case Section.ADDITIONAL:
++        if (type == Type.A || type == Type.AAAA) {
++          return true;
++        }
++        break;
++    }
++
++    return !Boolean.parseBoolean(System.getProperty("dnsjava.harden_unknown_additional", "true"));
++  }
++
++  /**
++   * Creates a normalized copy of this message by following xNAME chains, synthesizing CNAMEs from
++   * DNAMEs if necessary, and removing illegal RRsets from {@link Section#AUTHORITY} and {@link
++   * Section#ADDITIONAL}.
++   *
++   * <p>Normalization is only applied to {@link Rcode#NOERROR} and {@link Rcode#NXDOMAIN} responses.
++   *
++   * <p>This method is equivalent to calling {@link #normalize(Message, boolean)} with {@code
++   * false}.
++   *
++   * @param query The query that produced this message.
++   * @return {@code null} if the message could not be normalized or is otherwise invalid.
++   * @since 3.6
++   */
++  public Message normalize(Message query) {
++    try {
++      return normalize(query, false);
++    } catch (WireParseException e) {
++      // Cannot happen with 'false'
++    }
++
++    return null;
++  }
++
++  /**
++   * Creates a normalized copy of this message by following xNAME chains, synthesizing CNAMEs from
++   * DNAMEs if necessary, and removing illegal RRsets from {@link Section#AUTHORITY} and {@link
++   * Section#ADDITIONAL}.
++   *
++   * <p>Normalization is only applied to {@link Rcode#NOERROR} and {@link Rcode#NXDOMAIN} responses.
++   *
++   * @param query The query that produced this message.
++   * @param throwOnIrrelevantRecord If {@code true}, throw an exception instead of silently ignoring
++   *     irrelevant records.
++   * @return {@code null} if the message could not be normalized or is otherwise invalid.
++   * @throws WireParseException when {@code throwOnIrrelevantRecord} is {@code true} and an invalid
++   *     or irrelevant record was found.
++   * @since 3.6
++   */
++  public Message normalize(Message query, boolean throwOnIrrelevantRecord)
++      throws WireParseException {
++    if (getRcode() != Rcode.NOERROR && getRcode() != Rcode.NXDOMAIN) {
++      return this;
++    }
++
++    Name sname = query.getQuestion().getName();
++    List<RRset> answerSectionSets = getSectionRRsets(Section.ANSWER);
++    List<RRset> additionalSectionSets = getSectionRRsets(Section.ADDITIONAL);
++    List<RRset> authoritySectionSets = getSectionRRsets(Section.AUTHORITY);
++
++    List<RRset> cleanedAnswerSection = new ArrayList<>();
++    List<RRset> cleanedAuthoritySection = new ArrayList<>();
++    List<RRset> cleanedAdditionalSection = new ArrayList<>();
++    boolean hadNsInAuthority = false;
++
++    // For the ANSWER section, remove all "irrelevant" records and add synthesized CNAMEs from
++    // DNAMEs. This will strip out-of-order CNAMEs as well.
++    for (int i = 0; i < answerSectionSets.size(); i++) {
++      RRset rrset = answerSectionSets.get(i);
++      Name oldSname = sname;
++
++      if (rrset.getType() == Type.DNAME && sname.subdomain(rrset.getName())) {
++        if (rrset.size() > 1) {
++          String template =
++              "Normalization failed in response to <{}/{}/{}> (id {}), found {} entries (instead of just one) in DNAME RRSet <{}/{}>";
++          if (throwOnIrrelevantRecord) {
++            throw new WireParseException(template.replace("{}", "%s"));
++          }
++          log.warn(
++              template,
++              sname,
++              Type.string(query.getQuestion().getType()),
++              DClass.string(query.getQuestion().getDClass()),
++              getHeader().getID(),
++              rrset.size(),
++              rrset.getName(),
++              DClass.string(rrset.getDClass()));
++          return null;
++        }
++
++        // If DNAME was queried, don't attempt to synthesize CNAME
++        if (query.getQuestion().getType() != Type.DNAME) {
++          // The DNAME is valid, accept it
++          cleanedAnswerSection.add(rrset);
++
++          // Check if the next rrset is correct CNAME, otherwise synthesize a CNAME
++          RRset nextRRSet = answerSectionSets.size() >= i + 2 ? answerSectionSets.get(i + 1) : null;
++          DNAMERecord dname = ((DNAMERecord) rrset.first());
++          try {
++            // Validate that an existing CNAME matches what we would synthesize
++            if (nextRRSet != null
++                && nextRRSet.getType() == Type.CNAME
++                && nextRRSet.getName().equals(sname)) {
++              Name expected =
++                  Name.concatenate(
++                      nextRRSet.getName().relativize(dname.getName()), dname.getTarget());
++              if (expected.equals(((CNAMERecord) nextRRSet.first()).getTarget())) {
++                continue;
++              }
++            }
++
++            // Add a synthesized CNAME; TTL=0 to avoid caching
++            Name dnameTarget = sname.fromDNAME(dname);
++            cleanedAnswerSection.add(
++                new RRset(new CNAMERecord(sname, dname.getDClass(), 0, dnameTarget)));
++            sname = dnameTarget;
++
++            // In DNAME ANY response, can have data after DNAME
++            if (query.getQuestion().getType() == Type.ANY) {
++              for (i++; i < answerSectionSets.size(); i++) {
++                rrset = answerSectionSets.get(i);
++                if (rrset.getName().equals(oldSname)) {
++                  cleanedAnswerSection.add(rrset);
++                } else {
++                  break;
++                }
++              }
++            }
++
++            continue;
++          } catch (NameTooLongException e) {
++            String template =
++                "Normalization failed in response to <{}/{}/{}> (id {}), could not synthesize CNAME for DNAME <{}/{}>";
++            if (throwOnIrrelevantRecord) {
++              throw new WireParseException(template.replace("{}", "%s"), e);
++            }
++            log.warn(
++                template,
++                sname,
++                Type.string(query.getQuestion().getType()),
++                DClass.string(query.getQuestion().getDClass()),
++                getHeader().getID(),
++                rrset.getName(),
++                DClass.string(rrset.getDClass()));
++            return null;
++          }
++        }
++      }
++
++      // Ignore irrelevant records
++      if (!sname.equals(rrset.getName())) {
++        logOrThrow(
++            throwOnIrrelevantRecord,
++            "Ignoring irrelevant RRset <{}/{}/{}> in response to <{}/{}/{}> (id {})",
++            rrset,
++            sname,
++            query);
++        continue;
++      }
++
++      // Follow CNAMEs
++      if (rrset.getType() == Type.CNAME && query.getQuestion().getType() != Type.CNAME) {
++        if (rrset.size() > 1) {
++          String template =
++              "Found {} CNAMEs in <{}/{}> response to <{}/{}/{}> (id {}), removing all but the first";
++          if (throwOnIrrelevantRecord) {
++            throw new WireParseException(
++                String.format(
++                    template.replace("{}", "%s"),
++                    rrset.rrs(false).size(),
++                    rrset.getName(),
++                    DClass.string(rrset.getDClass()),
++                    sname,
++                    Type.string(query.getQuestion().getType()),
++                    DClass.string(query.getQuestion().getDClass()),
++                    getHeader().getID()));
++          }
++          log.warn(
++              template,
++              rrset.rrs(false).size(),
++              rrset.getName(),
++              DClass.string(rrset.getDClass()),
++              sname,
++              Type.string(query.getQuestion().getType()),
++              DClass.string(query.getQuestion().getDClass()),
++              getHeader().getID());
++          List<Record> cnameRRset = rrset.rrs(false);
++          for (int cnameIndex = 1; cnameIndex < cnameRRset.size(); cnameIndex++) {
++            rrset.deleteRR(cnameRRset.get(i));
++          }
++        }
++
++        sname = ((CNAMERecord) rrset.first()).getTarget();
++        cleanedAnswerSection.add(rrset);
++
++        // In CNAME ANY response, can have data after CNAME
++        if (query.getQuestion().getType() == Type.ANY) {
++          for (i++; i < answerSectionSets.size(); i++) {
++            rrset = answerSectionSets.get(i);
++            if (rrset.getName().equals(oldSname)) {
++              cleanedAnswerSection.add(rrset);
++            } else {
++              break;
++            }
++          }
++        }
++
++        continue;
++      }
++
++      // Remove records that don't match the queried type
++      int qtype = getQuestion().getType();
++      if (qtype != Type.ANY && rrset.getActualType() != qtype) {
++        logOrThrow(
++            throwOnIrrelevantRecord,
++            "Ignoring irrelevant RRset <{}/{}/{}> in ANSWER section response to <{}/{}/{}> (id {})",
++            rrset,
++            sname,
++            query);
++        continue;
++      }
++
++      // Mark the additional names from relevant RRset as OK
++      cleanedAnswerSection.add(rrset);
++      if (sname.equals(rrset.getName())) {
++        addAdditionalRRset(rrset, additionalSectionSets, cleanedAdditionalSection);
++      }
++    }
++
++    for (RRset rrset : authoritySectionSets) {
++      switch (rrset.getType()) {
++        case Type.DNAME:
++        case Type.CNAME:
++        case Type.A:
++        case Type.AAAA:
++          logOrThrow(
++              throwOnIrrelevantRecord,
++              "Ignoring forbidden RRset <{}/{}/{}> in AUTHORITY section response to <{}/{}/{}> (id {})",
++              rrset,
++              sname,
++              query);
++          continue;
++      }
++
++      if (!isTypeAllowedInSection(rrset.getType(), Section.AUTHORITY)) {
++        logOrThrow(
++            throwOnIrrelevantRecord,
++            "Ignoring disallowed RRset <{}/{}/{}> in AUTHORITY section response to <{}/{}/{}> (id {})",
++            rrset,
++            sname,
++            query);
++        continue;
++      }
++
++      if (rrset.getType() == Type.NS) {
++        // NS set must be pertinent to the query
++        if (!sname.subdomain(rrset.getName())) {
++          logOrThrow(
++              throwOnIrrelevantRecord,
++              "Ignoring disallowed RRset <{}/{}/{}> in AUTHORITY section response to <{}/{}/{}> (id {}), not a subdomain of the query",
++              rrset,
++              sname,
++              query);
++          continue;
++        }
++
++        // We don't want NS sets for NODATA or NXDOMAIN answers, because they could contain
++        // poisonous contents, from e.g. fragmentation attacks, inserted after long RRSIGs in the
++        // packet get to the packet border and such
++        if (getRcode() == Rcode.NXDOMAIN
++            || (getRcode() == Rcode.NOERROR
++                && authoritySectionSets.stream().anyMatch(set -> set.getType() == Type.SOA)
++                && sections[Section.ANSWER] == null)) {
++          logOrThrow(
++              throwOnIrrelevantRecord,
++              "Ignoring disallowed RRset <{}/{}/{}> in AUTHORITY section response to <{}/{}/{}> (id {}), NXDOMAIN or NODATA",
++              rrset,
++              sname,
++              query);
++          continue;
++        }
++
++        if (!hadNsInAuthority) {
++          hadNsInAuthority = true;
++        } else {
++          logOrThrow(
++              throwOnIrrelevantRecord,
++              "Ignoring disallowed RRset <{}/{}/{}> in AUTHORITY section response to <{}/{}/{}> (id {}), already seen another NS",
++              rrset,
++              sname,
++              query);
++          continue;
++        }
++      }
++
++      cleanedAuthoritySection.add(rrset);
++      addAdditionalRRset(rrset, additionalSectionSets, cleanedAdditionalSection);
++    }
++
++    Message cleanedMessage = new Message(this.getHeader());
++    cleanedMessage.sections[Section.QUESTION] = this.sections[Section.QUESTION];
++    cleanedMessage.sections[Section.ANSWER] = rrsetListToRecords(cleanedAnswerSection);
++    cleanedMessage.sections[Section.AUTHORITY] = rrsetListToRecords(cleanedAuthoritySection);
++    cleanedMessage.sections[Section.ADDITIONAL] = rrsetListToRecords(cleanedAdditionalSection);
++    return cleanedMessage;
++  }
++
++  private void logOrThrow(
++      boolean throwOnIrrelevantRecord, String format, RRset rrset, Name sname, Message query)
++      throws WireParseException {
++    if (throwOnIrrelevantRecord) {
++      throw new WireParseException(
++          String.format(
++              format.replace("{}", "%s") + this,
++              rrset.getName(),
++              DClass.string(rrset.getDClass()),
++              Type.string(rrset.getType()),
++              sname,
++              Type.string(query.getQuestion().getType()),
++              DClass.string(query.getQuestion().getDClass()),
++              getHeader().getID()));
++    }
++    log.debug(
++        format,
++        rrset.getName(),
++        DClass.string(rrset.getDClass()),
++        Type.string(rrset.getType()),
++        sname,
++        Type.string(query.getQuestion().getType()),
++        DClass.string(query.getQuestion().getDClass()),
++        getHeader().getID());
++  }
++
++  private List<Record> rrsetListToRecords(List<RRset> rrsets) {
++    if (rrsets.isEmpty()) {
++      return null;
++    }
++
++    List<Record> result = new ArrayList<>(rrsets.size());
++    for (RRset set : rrsets) {
++      result.addAll(set.rrs(false));
++      result.addAll(set.sigs());
++    }
++
++    return result;
++  }
++
++  private void addAdditionalRRset(
++      RRset rrset, List<RRset> additionalSectionSets, List<RRset> cleanedAdditionalSection) {
++    if (!doesTypeHaveAdditionalRecords(rrset.getType())) {
++      return;
++    }
++
++    for (Record r : rrset.rrs(false)) {
++      for (RRset set : additionalSectionSets) {
++        if (set.getName().equals(r.getAdditionalName())
++            && isTypeAllowedInSection(set.getType(), Section.ADDITIONAL)) {
++          cleanedAdditionalSection.add(set);
++        }
++      }
++    }
++  }
++
++  private boolean doesTypeHaveAdditionalRecords(int type) {
++    switch (type) {
++      case Type.MB:
++      case Type.MD:
++      case Type.MF:
++      case Type.NS:
++      case Type.MX:
++      case Type.KX:
++      case Type.SRV:
++      case Type.NAPTR:
++        return true;
++    }
++
++    return false;
++  }
+ }
+diff --git a/src/main/java/org/xbill/DNS/RRset.java b/src/main/java/org/xbill/DNS/RRset.java
+index b0dc86c6..be480235 100644
+--- a/src/main/java/org/xbill/DNS/RRset.java
++++ b/src/main/java/org/xbill/DNS/RRset.java
+@@ -206,7 +206,8 @@ public Name getName() {
+   }
+ 
+   /**
+-   * Returns the type of the records
++   * Returns the type of the records. If this set contains only signatures, it returns the covered
++   * type.
+    *
+    * @see Type
+    */
+@@ -214,6 +215,16 @@ public int getType() {
+     return first().getRRsetType();
+   }
+ 
++  /**
++   * Returns the actual type of the records, i.e. for signatures not the type covered but {@link
++   * Type#RRSIG}.
++   *
++   * @see Type
++   */
++  int getActualType() {
++    return first().getType();
++  }
++
+   /**
+    * Returns the class of the records
+    *
+diff --git a/src/main/java/org/xbill/DNS/Record.java b/src/main/java/org/xbill/DNS/Record.java
+index b9c74828..90ebc195 100644
+--- a/src/main/java/org/xbill/DNS/Record.java
++++ b/src/main/java/org/xbill/DNS/Record.java
+@@ -566,6 +566,18 @@ public boolean sameRRset(Record rec) {
+     return getRRsetType() == rec.getRRsetType() && dclass == rec.dclass && name.equals(rec.name);
+   }
+ 
++  /**
++   * Determines if this Record could be part of the passed RRset. This compares the name, type, and
++   * class of the Record and the set.
++   *
++   * @since 3.6
++   */
++  public boolean sameRRset(RRset set) {
++    return getRRsetType() == set.getType()
++        && dclass == set.getDClass()
++        && name.equals(set.getName());
++  }
++
+   /**
+    * Determines if two Records are identical. This compares the name, type, class, and rdata (with
+    * names canonicalized). The TTLs are not compared.
+diff --git a/src/main/java/org/xbill/DNS/Section.java b/src/main/java/org/xbill/DNS/Section.java
+index a72f6eec..75483a06 100644
+--- a/src/main/java/org/xbill/DNS/Section.java
++++ b/src/main/java/org/xbill/DNS/Section.java
+@@ -79,4 +79,13 @@ public static String updString(int i) {
+   public static int value(String s) {
+     return sections.getValue(s);
+   }
++
++  /**
++   * Checks that a numeric section value is valid.
++   *
++   * @since 3.6
++   */
++  public static void check(int section) {
++    sections.check(section);
++  }
+ }
+diff --git a/src/main/java/org/xbill/DNS/SetResponse.java b/src/main/java/org/xbill/DNS/SetResponse.java
+index 76bb77b2..589bd226 100644
+--- a/src/main/java/org/xbill/DNS/SetResponse.java
++++ b/src/main/java/org/xbill/DNS/SetResponse.java
+@@ -13,6 +13,7 @@
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import lombok.AccessLevel;
+ import lombok.Getter;
+ 
+ /**
+@@ -33,10 +34,8 @@ public class SetResponse {
+ 
+   private final SetResponseType type;
+ 
+-  /**
+-   * @since 3.6
+-   */
+-  @Getter private boolean isAuthenticated;
++  @Getter(AccessLevel.PACKAGE)
++  private boolean isAuthenticated;
+ 
+   private List<RRset> data;
+ 
+@@ -56,6 +55,10 @@ static SetResponse ofType(SetResponseType type, RRset rrset) {
+     return ofType(type, rrset, false);
+   }
+ 
++  static SetResponse ofType(SetResponseType type, Cache.CacheRRset rrset) {
++    return ofType(type, rrset, rrset.isAuthenticated());
++  }
++
+   static SetResponse ofType(SetResponseType type, RRset rrset, boolean isAuthenticated) {
+     switch (type) {
+       case UNKNOWN:
+@@ -81,6 +84,13 @@ void addRRset(RRset rrset) {
+ 
+     if (data == null) {
+       data = new ArrayList<>();
++      if (rrset instanceof Cache.CacheRRset) {
++        isAuthenticated = ((Cache.CacheRRset) rrset).isAuthenticated();
++      }
++    } else {
++      if (rrset instanceof Cache.CacheRRset && isAuthenticated) {
++        isAuthenticated = ((Cache.CacheRRset) rrset).isAuthenticated();
++      }
+     }
+ 
+     data.add(rrset);
+diff --git a/src/main/java/org/xbill/DNS/SetResponseType.java b/src/main/java/org/xbill/DNS/SetResponseType.java
+index 791c774f..9e8411a3 100644
+--- a/src/main/java/org/xbill/DNS/SetResponseType.java
++++ b/src/main/java/org/xbill/DNS/SetResponseType.java
+@@ -1,3 +1,4 @@
++// SPDX-License-Identifier: BSD-3-Clause
+ package org.xbill.DNS;
+ 
+ import lombok.Getter;
+diff --git a/src/main/java/org/xbill/DNS/dnssec/ValidatingResolver.java b/src/main/java/org/xbill/DNS/dnssec/ValidatingResolver.java
+index af04fa10..19b3d354 100644
+--- a/src/main/java/org/xbill/DNS/dnssec/ValidatingResolver.java
++++ b/src/main/java/org/xbill/DNS/dnssec/ValidatingResolver.java
+@@ -221,7 +221,6 @@ public void loadTrustAnchors(InputStream data) throws IOException {
+    * Gets the store with the loaded trust anchors.
+    *
+    * @return The store with the loaded trust anchors.
+-   * @since 3.6
+    */
+   public TrustAnchorStore getTrustAnchors() {
+     return this.trustAnchors;
+diff --git a/src/main/java/org/xbill/DNS/lookup/IrrelevantRecordMode.java b/src/main/java/org/xbill/DNS/lookup/IrrelevantRecordMode.java
+new file mode 100644
+index 00000000..2ff81290
+--- /dev/null
++++ b/src/main/java/org/xbill/DNS/lookup/IrrelevantRecordMode.java
+@@ -0,0 +1,10 @@
++// SPDX-License-Identifier: BSD-3-Clause
++package org.xbill.DNS.lookup;
++
++/** Defines the handling of irrelevant records during messages normalization. */
++enum IrrelevantRecordMode {
++  /** Irrelevant records are removed from the message, but otherwise ignored. */
++  REMOVE,
++  /** Throws an error when an irrelevant record is found. */
++  THROW,
++}
+diff --git a/src/main/java/org/xbill/DNS/lookup/LookupResult.java b/src/main/java/org/xbill/DNS/lookup/LookupResult.java
+index 0281739d..8911afd3 100644
+--- a/src/main/java/org/xbill/DNS/lookup/LookupResult.java
++++ b/src/main/java/org/xbill/DNS/lookup/LookupResult.java
+@@ -3,8 +3,15 @@
+ 
+ import java.util.ArrayList;
+ import java.util.Collections;
++import java.util.HashMap;
+ import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import lombok.AccessLevel;
+ import lombok.Data;
++import lombok.Getter;
++import org.xbill.DNS.Flags;
++import org.xbill.DNS.Message;
+ import org.xbill.DNS.Name;
+ import org.xbill.DNS.Record;
+ 
+@@ -26,18 +33,77 @@ public final class LookupResult {
+    */
+   private final List<Name> aliases;
+ 
++  /** The queries and responses that made up the result. */
++  @Getter(AccessLevel.PACKAGE)
++  private final Map<Record, Message> queryResponsePairs;
++
++  /**
++   * Gets an indication if the message(s) that provided this result were authenticated, e.g. by
++   * using {@link org.xbill.DNS.dnssec.ValidatingResolver} or when the upstream resolver has set the
++   * {@link org.xbill.DNS.Flags#AD} flag.
++   *
++   * <p><b>IMPORTANT</b>: Note that in the latter case, the flag cannot be trusted unless the {@link
++   * org.xbill.DNS.Resolver} used by the {@link LookupSession} that created this result:
++   *
++   * <ul>
++   *   <li>has TSIG enabled
++   *   <li>uses an externally secured transport, e.g. with IPSec or DNS over TLS.
++   * </ul>
++   */
++  @Getter(AccessLevel.PACKAGE)
++  private final boolean isAuthenticated;
++
+   /**
+    * Construct an instance with the provided records and, in the case of a CNAME or DNAME
+    * indirection a List of aliases.
+    *
+    * @param records a list of records to return.
+    * @param aliases a list of aliases discovered during lookup, or null if there was no indirection.
++   * @deprecated This class is not intended for public instantiation.
+    */
++  @Deprecated
+   public LookupResult(List<Record> records, List<Name> aliases) {
+     this.records = Collections.unmodifiableList(new ArrayList<>(records));
+     this.aliases =
+         aliases == null
+             ? Collections.emptyList()
+             : Collections.unmodifiableList(new ArrayList<>(aliases));
++    queryResponsePairs = Collections.emptyMap();
++    isAuthenticated = false;
++  }
++
++  LookupResult(boolean isAuthenticated) {
++    queryResponsePairs = Collections.emptyMap();
++    this.isAuthenticated = isAuthenticated;
++    records = Collections.emptyList();
++    aliases = Collections.emptyList();
++  }
++
++  LookupResult(Record query, boolean isAuthenticated, Record record) {
++    this.queryResponsePairs = Collections.singletonMap(query, null);
++    this.isAuthenticated = isAuthenticated;
++    this.records = Collections.singletonList(record);
++    this.aliases = Collections.emptyList();
++  }
++
++  LookupResult(
++      LookupResult previous,
++      Record query,
++      Message answer,
++      boolean isAuthenticated,
++      List<Record> records,
++      List<Name> aliases) {
++    Map<Record, Message> map = new HashMap<>(previous.queryResponsePairs.size() + 1);
++    map.putAll(previous.queryResponsePairs);
++    map.put(query, answer);
++    this.queryResponsePairs = Collections.unmodifiableMap(map);
++    this.isAuthenticated =
++        previous.isAuthenticated
++            && isAuthenticated
++            && this.queryResponsePairs.values().stream()
++                .filter(Objects::nonNull)
++                .allMatch(a -> a.getHeader().getFlag(Flags.AD));
++    this.records = Collections.unmodifiableList(new ArrayList<>(records));
++    this.aliases = Collections.unmodifiableList(new ArrayList<>(aliases));
+   }
+ }
+diff --git a/src/main/java/org/xbill/DNS/lookup/LookupSession.java b/src/main/java/org/xbill/DNS/lookup/LookupSession.java
+index 369c33e1..f188d113 100644
+--- a/src/main/java/org/xbill/DNS/lookup/LookupSession.java
++++ b/src/main/java/org/xbill/DNS/lookup/LookupSession.java
+@@ -43,6 +43,7 @@
+ import org.xbill.DNS.SetResponse;
+ import org.xbill.DNS.SimpleResolver;
+ import org.xbill.DNS.Type;
++import org.xbill.DNS.WireParseException;
+ import org.xbill.DNS.hosts.HostsFileParser;
+ 
+ /**
+@@ -65,6 +66,7 @@ public class LookupSession {
+   private final Map<Integer, Cache> caches;
+   private final HostsFileParser hostsFileParser;
+   private final Executor executor;
++  private IrrelevantRecordMode irrelevantRecordMode;
+ 
+   private LookupSession(
+       @NonNull Resolver resolver,
+@@ -74,7 +76,8 @@ private LookupSession(
+       boolean cycleResults,
+       List<Cache> caches,
+       HostsFileParser hostsFileParser,
+-      Executor executor) {
++      Executor executor,
++      IrrelevantRecordMode irrelevantRecordMode) {
+     this.resolver = resolver;
+     this.maxRedirects = maxRedirects;
+     this.ndots = ndots;
+@@ -86,6 +89,7 @@ private LookupSession(
+             : caches.stream().collect(Collectors.toMap(Cache::getDClass, e -> e));
+     this.hostsFileParser = hostsFileParser;
+     this.executor = executor == null ? ForkJoinPool.commonPool() : executor;
++    this.irrelevantRecordMode = irrelevantRecordMode;
+   }
+ 
+   /**
+@@ -104,6 +108,7 @@ public static class LookupSessionBuilder {
+     private List<Cache> caches;
+     private HostsFileParser hostsFileParser;
+     private Executor executor;
++    private IrrelevantRecordMode irrelevantRecordMode = IrrelevantRecordMode.REMOVE;
+ 
+     private LookupSessionBuilder() {}
+ 
+@@ -210,6 +215,17 @@ public LookupSessionBuilder executor(Executor executor) {
+       return this;
+     }
+ 
++    /**
++     * Sets how irrelevant records in a {@link Message} returned from the {@link
++     * #resolver(Resolver)} is handled. The default is {@link IrrelevantRecordMode#REMOVE}.
++     *
++     * @return {@code this}.
++     */
++    LookupSessionBuilder irrelevantRecordMode(IrrelevantRecordMode irrelevantRecordMode) {
++      this.irrelevantRecordMode = irrelevantRecordMode;
++      return this;
++    }
++
+     /**
+      * Enable querying the local hosts database using the system defaults.
+      *
+@@ -322,7 +338,8 @@ public LookupSession build() {
+           cycleResults,
+           caches,
+           hostsFileParser,
+-          executor);
++          executor,
++          irrelevantRecordMode);
+     }
+   }
+ 
+@@ -360,6 +377,22 @@ public static LookupSessionBuilder defaultBuilder() {
+         .defaultHostsFileParser();
+   }
+ 
++  // Visible for testing only
++  Cache getCache(int dclass) {
++    return caches.get(dclass);
++  }
++
++  /**
++   * Make an asynchronous lookup with the provided {@link Record}.
++   *
++   * @param question the name, type and DClass to look up.
++   * @return A {@link CompletionStage} what will yield the eventual lookup result.
++   * @since 3.6
++   */
++  public CompletionStage<LookupResult> lookupAsync(Record question) {
++    return lookupAsync(question.getName(), question.getType(), question.getDClass());
++  }
++
+   /**
+    * Make an asynchronous lookup of the provided name using the default {@link DClass#IN}.
+    *
+@@ -434,7 +467,8 @@ private LookupResult lookupWithHosts(List<Name> names, int type) {
+             } else {
+               r = new AAAARecord(name, DClass.IN, 0, result.get());
+             }
+-            return new LookupResult(Collections.singletonList(r), Collections.emptyList());
++
++            return new LookupResult(Record.newRecord(name, type, DClass.IN), true, r);
+           }
+         }
+       } catch (IOException e) {
+@@ -458,10 +492,10 @@ private CompletionStage<LookupResult> lookupUntilSuccess(
+                 if (names.hasNext()) {
+                   return lookupUntilSuccess(names, type, dclass);
+                 } else {
+-                  return completeExceptionally(cause);
++                  return this.<Throwable, LookupResult>completeExceptionally(cause);
+                 }
+               } else if (cause != null) {
+-                return completeExceptionally(cause);
++                return this.<Throwable, LookupResult>completeExceptionally(cause);
+               } else {
+                 return CompletableFuture.completedFuture(result);
+               }
+@@ -471,14 +505,54 @@ private CompletionStage<LookupResult> lookupUntilSuccess(
+ 
+   private CompletionStage<LookupResult> lookupWithCache(Record queryRecord, List<Name> aliases) {
+     return Optional.ofNullable(caches.get(queryRecord.getDClass()))
+-        .map(c -> c.lookupRecords(queryRecord.getName(), queryRecord.getType(), Credibility.NORMAL))
++        .map(
++            c -> {
++              log.debug(
++                  "Looking for <{}/{}/{}> in cache",
++                  queryRecord.getName(),
++                  Type.string(queryRecord.getType()),
++                  DClass.string(queryRecord.getDClass()));
++              return c.lookupRecords(
++                  queryRecord.getName(), queryRecord.getType(), Credibility.NORMAL);
++            })
+         .map(setResponse -> setResponseToMessageFuture(setResponse, queryRecord, aliases))
+         .orElseGet(() -> lookupWithResolver(queryRecord, aliases));
+   }
+ 
+   private CompletionStage<LookupResult> lookupWithResolver(Record queryRecord, List<Name> aliases) {
++    Message query = Message.newQuery(queryRecord);
++    log.debug(
++        "Asking {} for <{}/{}/{}>",
++        resolver,
++        queryRecord.getName(),
++        Type.string(queryRecord.getType()),
++        DClass.string(queryRecord.getDClass()));
+     return resolver
+-        .sendAsync(Message.newQuery(queryRecord), executor)
++        .sendAsync(query, executor)
++        .thenCompose(
++            m -> {
++              try {
++                Message normalized =
++                    m.normalize(query, irrelevantRecordMode == IrrelevantRecordMode.THROW);
++
++                log.trace(
++                    "Normalized response for <{}/{}/{}> from \n{}\ninto\n{}",
++                    queryRecord.getName(),
++                    Type.string(queryRecord.getType()),
++                    DClass.string(queryRecord.getDClass()),
++                    m,
++                    normalized);
++                if (normalized == null) {
++                  return completeExceptionally(
++                      new InvalidZoneDataException("Failed to normalize message"));
++                }
++                return CompletableFuture.completedFuture(normalized);
++              } catch (WireParseException e) {
++                return completeExceptionally(
++                    new LookupFailedException(
++                        "Message normalization failed, refusing to return it", e));
++              }
++            })
+         .thenApply(this::maybeAddToCache)
+         .thenApply(answer -> buildResult(answer, aliases, queryRecord));
+   }
+@@ -494,16 +568,19 @@ private Message maybeAddToCache(Message message) {
+     return message;
+   }
+ 
++  @SuppressWarnings("deprecated")
+   private CompletionStage<LookupResult> setResponseToMessageFuture(
+       SetResponse setResponse, Record queryRecord, List<Name> aliases) {
+     if (setResponse.isNXDOMAIN()) {
+       return completeExceptionally(
+           new NoSuchDomainException(queryRecord.getName(), queryRecord.getType()));
+     }
++
+     if (setResponse.isNXRRSET()) {
+       return completeExceptionally(
+           new NoSuchRRSetException(queryRecord.getName(), queryRecord.getType()));
+     }
++
+     if (setResponse.isSuccessful()) {
+       List<Record> records =
+           setResponse.answers().stream()
+@@ -511,17 +588,18 @@ private CompletionStage<LookupResult> setResponseToMessageFuture(
+               .collect(Collectors.toList());
+       return CompletableFuture.completedFuture(new LookupResult(records, aliases));
+     }
++
+     return null;
+   }
+ 
+-  private <T extends Throwable> CompletionStage<LookupResult> completeExceptionally(T failure) {
+-    CompletableFuture<LookupResult> future = new CompletableFuture<>();
++  private <T extends Throwable, R> CompletionStage<R> completeExceptionally(T failure) {
++    CompletableFuture<R> future = new CompletableFuture<>();
+     future.completeExceptionally(failure);
+     return future;
+   }
+ 
+   private CompletionStage<LookupResult> resolveRedirects(LookupResult response, Record query) {
+-    return maybeFollowRedirect(response, query, 1);
++    return maybeFollowRedirect(response, query, 0);
+   }
+ 
+   private CompletionStage<LookupResult> maybeFollowRedirect(
+@@ -540,13 +618,20 @@ private CompletionStage<LookupResult> maybeFollowRedirect(
+     }
+   }
+ 
++  @SuppressWarnings("deprecated")
+   private CompletionStage<LookupResult> maybeFollowRedirectsInAnswer(
+       LookupResult response, Record query, int redirectCount) {
+     List<Name> aliases = new ArrayList<>(response.getAliases());
+     List<Record> results = new ArrayList<>();
+     Name current = query.getName();
+     for (Record r : response.getRecords()) {
+-      if (redirectCount > maxRedirects) {
++      // Abort with a dedicated exception for loops instead of simply trying until reaching the max
++      // redirects
++      if (aliases.contains(current)) {
++        return completeExceptionally(new RedirectLoopException(maxRedirects));
++      }
++
++      if (redirectCount >= maxRedirects) {
+         throw new RedirectOverflowException(maxRedirects);
+       }
+ 
+@@ -576,11 +661,17 @@ private CompletionStage<LookupResult> maybeFollowRedirectsInAnswer(
+       return CompletableFuture.completedFuture(new LookupResult(results, aliases));
+     }
+ 
+-    if (redirectCount > maxRedirects) {
++    // Abort with a dedicated exception for loops instead of simply trying until reaching the max
++    // redirects
++    if (aliases.contains(current)) {
++      return completeExceptionally(new RedirectLoopException(maxRedirects));
++    }
++
++    if (redirectCount >= maxRedirects) {
+       throw new RedirectOverflowException(maxRedirects);
+     }
+ 
+-    int finalRedirectCount = redirectCount + 1;
++    int finalRedirectCount = redirectCount;
+     Record redirectQuery = Record.newRecord(current, query.getType(), query.getDClass());
+     return lookupWithCache(redirectQuery, aliases)
+         .thenCompose(
+diff --git a/src/main/java/org/xbill/DNS/lookup/NoSuchDomainException.java b/src/main/java/org/xbill/DNS/lookup/NoSuchDomainException.java
+index f6a870db..48f2f419 100644
+--- a/src/main/java/org/xbill/DNS/lookup/NoSuchDomainException.java
++++ b/src/main/java/org/xbill/DNS/lookup/NoSuchDomainException.java
+@@ -14,9 +14,6 @@ public NoSuchDomainException(Name name, int type) {
+     this(name, type, false);
+   }
+ 
+-  /**
+-   * @since 3.6
+-   */
+   NoSuchDomainException(Name name, int type, boolean isAuthenticated) {
+     super(null, null, name, type, isAuthenticated);
+   }
+diff --git a/src/main/java/org/xbill/DNS/lookup/NoSuchRRSetException.java b/src/main/java/org/xbill/DNS/lookup/NoSuchRRSetException.java
+index acc51e1b..1cc178ff 100644
+--- a/src/main/java/org/xbill/DNS/lookup/NoSuchRRSetException.java
++++ b/src/main/java/org/xbill/DNS/lookup/NoSuchRRSetException.java
+@@ -14,9 +14,6 @@ public NoSuchRRSetException(Name name, int type) {
+     this(name, type, false);
+   }
+ 
+-  /**
+-   * @since 3.6
+-   */
+   NoSuchRRSetException(Name name, int type, boolean isAuthenticated) {
+     super(null, null, name, type, isAuthenticated);
+   }
+diff --git a/src/main/java/org/xbill/DNS/lookup/RedirectOverflowException.java b/src/main/java/org/xbill/DNS/lookup/RedirectOverflowException.java
+index 6ba56fd8..2276aa96 100644
+--- a/src/main/java/org/xbill/DNS/lookup/RedirectOverflowException.java
++++ b/src/main/java/org/xbill/DNS/lookup/RedirectOverflowException.java
+@@ -24,9 +24,9 @@ public RedirectOverflowException(String message) {
+   }
+ 
+   /**
+-   * @since 3.4.2
+    * @param maxRedirects Informational, indicates the after how many redirects following was
+    *     aborted.
++   * @since 3.4.2
+    */
+   public RedirectOverflowException(int maxRedirects) {
+     super("Refusing to follow more than " + maxRedirects + " redirects");
+diff --git a/src/test/java/org/xbill/DNS/LookupTest.java b/src/test/java/org/xbill/DNS/LookupTest.java
+index 3ff2c192..1e03a9a9 100644
+--- a/src/test/java/org/xbill/DNS/LookupTest.java
++++ b/src/test/java/org/xbill/DNS/LookupTest.java
+@@ -445,8 +445,28 @@ public static Message answer(Message query, Function<Name, Record> recordMaker)
+       if (DUMMY_NAME.equals(response.getName())) {
+         response = response.withName(query.getQuestion().getName());
+       }
++      response.setTTL(120);
+       answer.addRecord(response, Section.ANSWER);
+     }
+     return answer;
+   }
++
++  public static Message multiAnswer(Message query, Function<Name, Record[]> recordMaker) {
++    Message answer = new Message(query.getHeader().getID());
++    answer.addRecord(query.getQuestion(), Section.QUESTION);
++    Name questionName = query.getQuestion().getName();
++    Record[] response = recordMaker.apply(questionName);
++    if (response == null) {
++      answer.getHeader().setRcode(Rcode.NXDOMAIN);
++    } else {
++      for (Record r : response) {
++        if (DUMMY_NAME.equals(r.getName())) {
++          r = r.withName(query.getQuestion().getName());
++        }
++        r.setTTL(120);
++        answer.addRecord(r, Section.ANSWER);
++      }
++    }
++    return answer;
++  }
+ }
+diff --git a/src/test/java/org/xbill/DNS/MessageTest.java b/src/test/java/org/xbill/DNS/MessageTest.java
+index 86100147..54e32d5c 100644
+--- a/src/test/java/org/xbill/DNS/MessageTest.java
++++ b/src/test/java/org/xbill/DNS/MessageTest.java
+@@ -53,9 +53,9 @@ void ctor_0arg() {
+     Message m = new Message();
+     assertTrue(m.getSection(0).isEmpty());
+     assertTrue(m.getSection(1).isEmpty());
+-    assertTrue(m.getSection(3).isEmpty());
+     assertTrue(m.getSection(2).isEmpty());
+-    assertThrows(IndexOutOfBoundsException.class, () -> m.getSection(4));
++    assertTrue(m.getSection(3).isEmpty());
++    assertThrows(IllegalArgumentException.class, () -> m.getSection(4));
+     Header h = m.getHeader();
+     assertEquals(0, h.getCount(0));
+     assertEquals(0, h.getCount(1));
+@@ -71,7 +71,7 @@ void ctor_1arg() {
+     assertTrue(m.getSection(1).isEmpty());
+     assertTrue(m.getSection(2).isEmpty());
+     assertTrue(m.getSection(3).isEmpty());
+-    assertThrows(IndexOutOfBoundsException.class, () -> m.getSection(4));
++    assertThrows(IllegalArgumentException.class, () -> m.getSection(4));
+     Header h = m.getHeader();
+     assertEquals(0, h.getCount(0));
+     assertEquals(0, h.getCount(1));
+@@ -167,4 +167,17 @@ void testResponseClone() throws UnknownHostException {
+     assertEquals(clone.getQuestion(), response.getQuestion());
+     assertEquals(clone.getSection(Section.ANSWER), response.getSection(Section.ANSWER));
+   }
++
++  @Test
++  void normalize() throws WireParseException {
++    Record queryRecord =
++        Record.newRecord(Name.fromConstantString("example.com."), Type.MX, DClass.IN);
++    Message query = Message.newQuery(queryRecord);
++    Message response = new Message();
++    response.addRecord(queryRecord, Section.QUESTION);
++    response.addRecord(queryRecord, Section.ADDITIONAL);
++    response = response.normalize(query, true);
++    assertTrue(response.getSection(Section.ANSWER).isEmpty());
++    assertTrue(response.getSection(Section.ADDITIONAL).isEmpty());
++  }
+ }
+diff --git a/src/test/java/org/xbill/DNS/SetResponseTest.java b/src/test/java/org/xbill/DNS/SetResponseTest.java
+index 19876db6..2f91302a 100644
+--- a/src/test/java/org/xbill/DNS/SetResponseTest.java
++++ b/src/test/java/org/xbill/DNS/SetResponseTest.java
+@@ -46,7 +46,9 @@
+ import java.net.UnknownHostException;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.CsvSource;
+ import org.junit.jupiter.params.provider.EnumSource;
++import org.junit.jupiter.params.provider.ValueSource;
+ 
+ class SetResponseTest {
+   private static final ARecord A_RECORD_1 =
+@@ -129,6 +131,47 @@ void addRRset() {
+     assertArrayEquals(exp, sr.answers().toArray());
+   }
+ 
++  @ParameterizedTest
++  @ValueSource(booleans = {false, true})
++  void ofTypeWithCachedRRset(boolean isAuthenticated) {
++    SetResponse sr =
++        SetResponse.ofType(
++            SetResponseType.SUCCESSFUL,
++            new Cache.CacheRRset(new RRset(A_RECORD_1), 0, 0, isAuthenticated));
++    assertEquals(isAuthenticated, sr.isAuthenticated());
++  }
++
++  @ParameterizedTest
++  @CsvSource({
++    "false,true,true,true,true",
++    "false,false,true,false,false",
++    "true,true,false,true,false",
++    "true,false,false,false,false",
++  })
++  void addRRsetAuthenticated(
++      boolean addInitial,
++      boolean first,
++      boolean second,
++      boolean firstResult,
++      boolean secondResult) {
++    RRset rrs = new RRset(A_RECORD_1);
++    SetResponse sr;
++    if (addInitial) {
++      sr = SetResponse.ofType(SetResponseType.SUCCESSFUL, rrs, first);
++    } else {
++      sr = SetResponse.ofType(SetResponseType.SUCCESSFUL);
++      sr.addRRset(new Cache.CacheRRset(rrs, 0, 0, first));
++    }
++
++    RRset[] exp = new RRset[] {rrs};
++    assertArrayEquals(exp, sr.answers().toArray());
++    assertEquals(firstResult, sr.isAuthenticated());
++
++    sr.addRRset(new Cache.CacheRRset(new RRset(A_RECORD_1), 0, 0, second));
++    assertEquals(secondResult, sr.isAuthenticated());
++    assertEquals(2, sr.answers().size());
++  }
++
+   @Test
+   void addRRset_multiple() throws TextParseException, UnknownHostException {
+     RRset rrs = new RRset();
+diff --git a/src/test/java/org/xbill/DNS/dnssec/Rpl.java b/src/test/java/org/xbill/DNS/dnssec/Rpl.java
+index 71562e38..b8651017 100644
+--- a/src/test/java/org/xbill/DNS/dnssec/Rpl.java
++++ b/src/test/java/org/xbill/DNS/dnssec/Rpl.java
+@@ -17,6 +17,7 @@ class Rpl {
+   TreeMap<Integer, Integer> nsec3iterations;
+   String digestPreference;
+   boolean hardenAlgoDowngrade;
++  boolean hardenUnknownAdditional = true;
+   boolean enableSha1;
+   boolean enableDsa;
+   boolean loadBouncyCastle;
+diff --git a/src/test/java/org/xbill/DNS/dnssec/RplParser.java b/src/test/java/org/xbill/DNS/dnssec/RplParser.java
+index 59a4de0e..c6d68c01 100644
+--- a/src/test/java/org/xbill/DNS/dnssec/RplParser.java
++++ b/src/test/java/org/xbill/DNS/dnssec/RplParser.java
+@@ -73,7 +73,7 @@ Rpl parse() throws ParseException, IOException {
+           if (line.startsWith("server:")) {
+             state = ParseState.Server;
+           } else if (line.startsWith("SCENARIO_BEGIN")) {
+-            rpl.scenario = line.substring(line.indexOf(" "));
++            rpl.scenario = line.substring(line.indexOf(" ")).trim();
+             rpl.replays = new LinkedList<>();
+             rpl.checks = new TreeMap<>();
+           } else if (line.startsWith("ENTRY_BEGIN")) {
+@@ -128,6 +128,8 @@ Rpl parse() throws ParseException, IOException {
+             rpl.enableSha1 = "yes".equalsIgnoreCase(line.split(":")[1].trim());
+           } else if (line.matches("\\s*fake-dsa:.*")) {
+             rpl.enableDsa = "yes".equalsIgnoreCase(line.split(":")[1].trim());
++          } else if (line.matches("\\s*harden-unknown-additional:.*")) {
++            rpl.hardenUnknownAdditional = "yes".equalsIgnoreCase(line.split(":")[1].trim());
+           } else if (line.matches("\\s*bouncycastle:.*")) {
+             rpl.loadBouncyCastle = "yes".equalsIgnoreCase(line.split(":")[1].trim());
+           } else if (line.startsWith("CONFIG_END")) {
+diff --git a/src/test/java/org/xbill/DNS/dnssec/TestBase.java b/src/test/java/org/xbill/DNS/dnssec/TestBase.java
+index 7616553d..5b2e4f27 100644
+--- a/src/test/java/org/xbill/DNS/dnssec/TestBase.java
++++ b/src/test/java/org/xbill/DNS/dnssec/TestBase.java
+@@ -28,12 +28,11 @@
+ import java.util.concurrent.CompletionStage;
+ import java.util.concurrent.ExecutionException;
+ import java.util.concurrent.Executor;
++import lombok.extern.slf4j.Slf4j;
+ import org.junit.jupiter.api.AfterEach;
+ import org.junit.jupiter.api.BeforeAll;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.TestInfo;
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
+ import org.xbill.DNS.ARecord;
+ import org.xbill.DNS.DClass;
+ import org.xbill.DNS.DNSSEC.DNSSECException;
+@@ -49,9 +48,8 @@
+ import org.xbill.DNS.TXTRecord;
+ import org.xbill.DNS.Type;
+ 
++@Slf4j
+ public abstract class TestBase {
+-  private static final Logger logger = LoggerFactory.getLogger(TestBase.class);
+-
+   private static final boolean offline = !Boolean.getBoolean("dnsjava.dnssec.online");
+   private static final boolean partialOffline =
+       "partial".equals(System.getProperty("dnsjava.dnssec.offline"));
+@@ -126,6 +124,7 @@ private void starting(TestInfo description) {
+ 
+           Message m;
+           while ((m = messageReader.readMessage(r)) != null) {
++            m = m.normalize(Message.newQuery(m.getQuestion()), true);
+             queryResponsePairs.put(key(m), m);
+           }
+ 
+@@ -163,9 +162,13 @@ private void setup() throws NumberFormatException, IOException, DNSSECException
+             new SimpleResolver("8.8.4.4") {
+               @Override
+               public CompletionStage<Message> sendAsync(Message query, Executor executor) {
+-                logger.info("---{}", key(query));
+                 Message response = queryResponsePairs.get(key(query));
+                 if (response != null) {
++                  if (!log.isTraceEnabled()) {
++                    log.debug("---{}", key(query));
++                  }
++
++                  log.trace("---{}\n{}", key(query), response);
+                   return CompletableFuture.completedFuture(response);
+                 } else if ((offline && !partialOffline) || unboundTest || alwaysOffline) {
+                   fail("Response for " + key(query) + " not found.");
+diff --git a/src/test/java/org/xbill/DNS/dnssec/UnboundTests.java b/src/test/java/org/xbill/DNS/dnssec/UnboundTests.java
+index 11f9bdf5..d709fd49 100644
+--- a/src/test/java/org/xbill/DNS/dnssec/UnboundTests.java
++++ b/src/test/java/org/xbill/DNS/dnssec/UnboundTests.java
+@@ -5,6 +5,7 @@
+ import static org.mockito.Mockito.when;
+ 
+ import java.io.File;
++import java.io.FileInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.security.Security;
+@@ -15,10 +16,13 @@
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.Properties;
++import lombok.extern.slf4j.Slf4j;
+ import org.bouncycastle.jce.provider.BouncyCastleProvider;
+ import org.junit.jupiter.api.Disabled;
++import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.xbill.DNS.CNAMERecord;
++import org.xbill.DNS.DClass;
+ import org.xbill.DNS.DNAMERecord;
+ import org.xbill.DNS.DNSSEC;
+ import org.xbill.DNS.Flags;
+@@ -31,133 +35,150 @@
+ import org.xbill.DNS.Section;
+ import org.xbill.DNS.Type;
+ 
++@Slf4j
+ class UnboundTests extends TestBase {
+   void runUnboundTest() throws ParseException, IOException {
+-    InputStream data = getClass().getResourceAsStream("/unbound/" + testName + ".rpl");
+-    RplParser p = new RplParser(data);
+-    Rpl rpl = p.parse();
+-    Properties config = new Properties();
+-    if (rpl.nsec3iterations != null) {
+-      for (Entry<Integer, Integer> e : rpl.nsec3iterations.entrySet()) {
+-        config.put("dnsjava.dnssec.nsec3.iterations." + e.getKey(), e.getValue());
++    try {
++      InputStream data = getClass().getResourceAsStream("/unbound/" + testName + ".rpl");
++      RplParser p = new RplParser(data);
++      Rpl rpl = p.parse();
++      Properties config = new Properties();
++      if (rpl.nsec3iterations != null) {
++        for (Entry<Integer, Integer> e : rpl.nsec3iterations.entrySet()) {
++          config.put("dnsjava.dnssec.nsec3.iterations." + e.getKey(), e.getValue());
++        }
+       }
+-    }
+ 
+-    if (rpl.digestPreference != null) {
+-      config.put(ValUtils.DIGEST_PREFERENCE, rpl.digestPreference);
+-    }
++      if (rpl.digestPreference != null) {
++        config.put(ValUtils.DIGEST_PREFERENCE, rpl.digestPreference);
++      }
+ 
+-    config.put(ValUtils.DIGEST_HARDEN_DOWNGRADE, Boolean.toString(rpl.hardenAlgoDowngrade));
++      config.put(ValUtils.DIGEST_HARDEN_DOWNGRADE, Boolean.toString(rpl.hardenAlgoDowngrade));
+ 
+-    if (rpl.enableSha1) {
+-      config.put(ValUtils.DIGEST_ENABLED + "." + DNSSEC.Digest.SHA1, Boolean.TRUE.toString());
+-    }
++      if (rpl.enableSha1) {
++        config.put(ValUtils.DIGEST_ENABLED + "." + DNSSEC.Digest.SHA1, Boolean.TRUE.toString());
++      }
+ 
+-    if (rpl.enableDsa || rpl.enableSha1) {
+-      config.put(ValUtils.ALGORITHM_ENABLED + "." + DNSSEC.Algorithm.DSA, Boolean.TRUE.toString());
+-      config.put(
+-          ValUtils.ALGORITHM_ENABLED + "." + DNSSEC.Algorithm.DSA_NSEC3_SHA1,
+-          Boolean.TRUE.toString());
+-    }
++      if (rpl.enableDsa || rpl.enableSha1) {
++        config.put(
++            ValUtils.ALGORITHM_ENABLED + "." + DNSSEC.Algorithm.DSA, Boolean.TRUE.toString());
++        config.put(
++            ValUtils.ALGORITHM_ENABLED + "." + DNSSEC.Algorithm.DSA_NSEC3_SHA1,
++            Boolean.TRUE.toString());
++      }
+ 
+-    if (rpl.loadBouncyCastle) {
+-      Security.addProvider(new BouncyCastleProvider());
+-    }
++      if (!rpl.hardenUnknownAdditional) {
++        System.setProperty("dnsjava.harden_unknown_additional", Boolean.TRUE.toString());
++      }
+ 
+-    for (Message m : rpl.replays) {
+-      add(m);
+-    }
++      if (rpl.loadBouncyCastle) {
++        Security.addProvider(new BouncyCastleProvider());
++      }
+ 
+-    // merge xNAME queries into one
+-    List<Message> copy = new ArrayList<>(rpl.replays.size());
+-    copy.addAll(rpl.replays);
+-    List<Name> copiedTargets = new ArrayList<>(5);
+-    for (Message m : copy) {
+-      Name target = null;
+-      for (RRset s : m.getSectionRRsets(Section.ANSWER)) {
+-        if (s.getType() == Type.CNAME) {
+-          target = ((CNAMERecord) s.first()).getTarget();
+-        } else if (s.getType() == Type.DNAME) {
+-          target = ((DNAMERecord) s.first()).getTarget();
+-        }
++      for (Message m : rpl.replays) {
++        add(m);
++      }
+ 
+-        while (target != null) {
+-          Message a = get(target, m.getQuestion().getType());
+-          if (a == null) {
+-            a = get(target, Type.CNAME);
++      // merge xNAME queries into one
++      List<Message> copy = new ArrayList<>(rpl.replays.size());
++      copy.addAll(rpl.replays);
++      List<Name> copiedTargets = new ArrayList<>(5);
++      for (Message m : copy) {
++        Name target = null;
++        for (RRset s : m.getSectionRRsets(Section.ANSWER)) {
++          if (s.getType() == Type.CNAME) {
++            target = ((CNAMERecord) s.first()).getTarget();
++          } else if (s.getType() == Type.DNAME) {
++            target = ((DNAMERecord) s.first()).getTarget();
+           }
+ 
+-          if (a == null) {
+-            a = get(target, Type.DNAME);
+-          }
++          while (target != null) {
++            Message a = get(target, m.getQuestion().getType());
++            if (a == null) {
++              a = get(target, Type.CNAME);
++            }
+ 
+-          if (a != null) {
+-            target = add(m, a);
+-            if (copiedTargets.contains(target)) {
+-              break;
++            if (a == null) {
++              a = get(target, Type.DNAME);
+             }
+ 
+-            copiedTargets.add(target);
+-            rpl.replays.remove(a);
+-          } else {
+-            target = null;
++            if (a != null) {
++              target = add(m, a);
++              if (copiedTargets.contains(target)) {
++                break;
++              }
++
++              copiedTargets.add(target);
++              rpl.replays.remove(a);
++            } else {
++              target = null;
++            }
+           }
+         }
+       }
+-    }
+ 
+-    // promote any DS records in auth. sections to real queries
+-    copy = new ArrayList<>(rpl.replays.size());
+-    copy.addAll(rpl.replays);
+-    for (Message m : copy) {
+-      for (RRset s : m.getSectionRRsets(Section.AUTHORITY)) {
+-        if (s.getType() == Type.DS) {
+-          Message ds = new Message();
+-          ds.addRecord(Record.newRecord(s.getName(), s.getType(), s.getDClass()), Section.QUESTION);
+-          for (Record rr : s.rrs()) {
+-            ds.addRecord(rr, Section.ANSWER);
+-          }
++      // promote any DS records in auth. sections to real queries
++      copy = new ArrayList<>(rpl.replays.size());
++      copy.addAll(rpl.replays);
++      for (Message m : copy) {
++        for (RRset s : m.getSectionRRsets(Section.AUTHORITY)) {
++          if (s.getType() == Type.DS) {
++            Message ds = new Message();
++            ds.addRecord(
++                Record.newRecord(s.getName(), s.getType(), s.getDClass()), Section.QUESTION);
++            for (Record rr : s.rrs()) {
++              ds.addRecord(rr, Section.ANSWER);
++            }
+ 
+-          for (RRSIGRecord sig : s.sigs()) {
+-            ds.addRecord(sig, Section.ANSWER);
+-          }
++            for (RRSIGRecord sig : s.sigs()) {
++              ds.addRecord(sig, Section.ANSWER);
++            }
+ 
+-          rpl.replays.add(ds);
++            rpl.replays.add(ds);
++          }
+         }
+       }
+-    }
+-
+-    clear();
+-    for (Message m : rpl.replays) {
+-      add(m);
+-    }
+ 
+-    if (rpl.date != null) {
+-      try {
+-        when(resolverClock.instant()).thenReturn(rpl.date);
+-      } catch (Exception e) {
+-        throw new RuntimeException(e);
++      clear();
++      for (Message m : rpl.replays) {
++        add(m);
+       }
+-    }
+ 
+-    if (rpl.trustAnchors != null) {
+-      resolver.getTrustAnchors().clear();
+-      for (SRRset rrset : rpl.trustAnchors) {
+-        resolver.getTrustAnchors().store(rrset);
++      if (rpl.date != null) {
++        try {
++          when(resolverClock.instant()).thenReturn(rpl.date);
++        } catch (Exception e) {
++          throw new RuntimeException(e);
++        }
+       }
+-    }
+ 
+-    resolver.init(config);
++      if (rpl.trustAnchors != null) {
++        resolver.getTrustAnchors().clear();
++        for (SRRset rrset : rpl.trustAnchors) {
++          resolver.getTrustAnchors().store(rrset);
++        }
++      }
+ 
+-    for (Check c : rpl.checks.values()) {
+-      Message s = resolver.send(c.query);
++      resolver.init(config);
++
++      for (Check c : rpl.checks.values()) {
++        Message s = resolver.send(c.query).normalize(c.query, true);
++        log.trace(
++            "{}/{}/{} ---> \n{}",
++            c.query.getQuestion().getName(),
++            Type.string(c.query.getQuestion().getType()),
++            DClass.string(c.query.getQuestion().getDClass()),
++            s);
++        assertEquals(
++            c.response.getHeader().getFlag(Flags.AD),
++            s.getHeader().getFlag(Flags.AD),
++            "AD Flag must match");
++        assertEquals(
++            Rcode.string(c.response.getRcode()), Rcode.string(s.getRcode()), "RCode must match");
++      }
++    } finally {
+       Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+-      assertEquals(
+-          c.response.getHeader().getFlag(Flags.AD),
+-          s.getHeader().getFlag(Flags.AD),
+-          "AD Flag must match");
+-      assertEquals(
+-          Rcode.string(c.response.getRcode()), Rcode.string(s.getRcode()), "RCode must match");
++      System.clearProperty("dnsjava.harden_unknown_additional");
+     }
+   }
+ 
+@@ -182,7 +203,7 @@ private Name add(Message target, Message source) {
+     return next;
+   }
+ 
+-  static void xmain(String[] xargs) {
++  static void main(String[] xargs) throws IOException, ParseException {
+     Map<String, String> ignored =
+         new HashMap<String, String>() {
+           {
+@@ -207,8 +228,12 @@ static void xmain(String[] xargs) {
+             put("val_cnametoinsecure.rpl", "incomplete CNAME answer");
+             put("val_nsec3_optout_cache.rpl", "more cache stuff");
+             put("val_unsecds_qtypeds.rpl", "tests the iterative resolver");
+-            put("val_anchor_nx.rpl", "tests caching of NX from a parent resolver");
+-            put("val_anchor_nx_nosig.rpl", "tests caching of NX from a parent resolver");
++            put(
++                "val_anchor_nx.rpl",
++                "tests resolving conflicting responses in a recursive resolver");
++            put(
++                "val_anchor_nx_nosig.rpl",
++                "tests resolving conflicting responses in a recursive resolver");
+             put("val_negcache_nta.rpl", "tests unbound option domain-insecure, not available here");
+           }
+         };
+@@ -219,7 +244,9 @@ static void xmain(String[] xargs) {
+         System.out.println("    @Disabled(\"" + comment + "\")");
+       }
+ 
++      Rpl rpl = new RplParser(new FileInputStream("./src/test/resources/unbound/" + f)).parse();
+       System.out.println("    @Test");
++      System.out.println("    @DisplayName(\"" + f + ": " + rpl.scenario + "\")");
+       System.out.println(
+           "    void " + f.split("\\.")[0] + "() throws ParseException, IOException {");
+       System.out.println("        runUnboundTest();");
+@@ -229,798 +256,1010 @@ static void xmain(String[] xargs) {
+   }
+ 
+   @Test
++  @DisplayName("val_adbit.rpl: Test validator AD bit signaling")
+   void val_adbit() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_adcopy.rpl: Test validator AD bit sent by untrusted upstream")
+   void val_adcopy() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+-  @Disabled("tests caching of NX from a parent resolver")
++  @Disabled("tests resolving conflicting responses in a recursive resolver")
+   @Test
++  @DisplayName("val_anchor_nx.rpl: Test validator with secure proof of trust anchor nxdomain")
+   void val_anchor_nx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+-  @Disabled("tests caching of NX from a parent resolver")
++  @Disabled("tests resolving conflicting responses in a recursive resolver")
+   @Test
++  @DisplayName("val_anchor_nx_nosig.rpl: Test validator with unsigned denial of trust anchor")
+   void val_anchor_nx_nosig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ans_dsent.rpl: Test validator with empty nonterminals on the trust chain.")
+   void val_ans_dsent() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ans_nx.rpl: Test validator with DS nodata as nxdomain on trust chain")
+   void val_ans_nx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_any.rpl: Test validator with response to qtype ANY")
+   void val_any() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_any_cname.rpl: Test validator with response to qtype ANY that includes CNAME")
+   void val_any_cname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_any_dname.rpl: Test validator with response to qtype ANY that includes DNAME")
+   void val_any_dname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnameinsectopos.rpl: Test validator with an insecure cname to positive cached")
+   void val_cnameinsectopos() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_cnamenx_dblnsec.rpl: Test validator with cname-nxdomain for duplicate NSEC detection")
+   void val_cnamenx_dblnsec() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnamenx_rcodenx.rpl: Test validator with cname-nxdomain with rcode nxdomain")
+   void val_cnamenx_rcodenx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnameqtype.rpl: Test validator with a query for type cname")
+   void val_cnameqtype() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametocloser.rpl: Test validator with CNAME to closer anchor under optout.")
+   void val_cnametocloser() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_cnametocloser_nosig.rpl: Test validator with CNAME to closer anchor optout missing sigs.")
+   void val_cnametocloser_nosig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_cnametocnamewctoposwc.rpl: Test validator with a regular cname to wildcard cname to wildcard response")
+   void val_cnametocnamewctoposwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametodname.rpl: Test validator with a cname to a dname")
+   void val_cnametodname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_cnametodnametocnametopos.rpl: Test validator with cname, dname, cname, positive answer")
+   void val_cnametodnametocnametopos() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("incomplete CNAME answer")
+   @Test
++  @DisplayName("val_cnametoinsecure.rpl: Test validator with CNAME to insecure NSEC or NSEC3.")
+   void val_cnametoinsecure() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametonodata.rpl: Test validator with cname to nodata")
+   void val_cnametonodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametonodata_nonsec.rpl: Test validator with cname to nodata")
+   void val_cnametonodata_nonsec() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("incomplete CNAME answer")
+   @Test
++  @DisplayName("val_cnametonsec.rpl: Test validator with CNAME to insecure NSEC delegation")
+   void val_cnametonsec() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametonx.rpl: Test validator with cname to nxdomain")
+   void val_cnametonx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("incomplete CNAME answer")
+   @Test
++  @DisplayName("val_cnametooptin.rpl: Test validator with CNAME to insecure optin NSEC3")
+   void val_cnametooptin() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametooptout.rpl: Test validator with CNAME to optout NSEC3 span NODATA")
+   void val_cnametooptout() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametopos.rpl: Test validator with a cname to positive")
+   void val_cnametopos() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_cnametoposnowc.rpl: Test validator with a cname to positive wildcard without proof")
+   void val_cnametoposnowc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnametoposwc.rpl: Test validator with a cname to positive wildcard")
+   void val_cnametoposwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnamewctonodata.rpl: Test validator with wildcard cname to nodata")
+   void val_cnamewctonodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnamewctonx.rpl: Test validator with wildcard cname to nxdomain")
+   void val_cnamewctonx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cnamewctoposwc.rpl: Test validator with wildcard cname to positive wildcard")
+   void val_cnamewctoposwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cname_loop1.rpl: Test validator with cname loop")
+   void val_cname_loop1() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cname_loop2.rpl: Test validator with cname 2 step loop")
+   void val_cname_loop2() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_cname_loop3.rpl: Test validator with cname 3 step loop")
+   void val_cname_loop3() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_deleg_nons.rpl: Test validator with unsigned delegation with no NS bit in NSEC")
++  void val_deleg_nons() throws ParseException, IOException {
++    runUnboundTest();
++  }
++
++  @Test
++  @DisplayName("val_dnametoolong.rpl: Test validator with a dname too long response")
+   void val_dnametoolong() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_dnametopos.rpl: Test validator with a dname to positive")
+   void val_dnametopos() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_dnametoposwc.rpl: Test validator with a dname to positive wildcard")
+   void val_dnametoposwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_dnamewc.rpl: Test validator with a wildcarded dname")
+   void val_dnamewc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName("val_dsnsec.rpl: Test pickup of DS NSEC from the cache.")
+   void val_dsnsec() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_afterprime.rpl: Test DS lookup after key prime is done.")
+   void val_ds_afterprime() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_cname.rpl: Test validator with CNAME response to DS")
+   void val_ds_cname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_cnamesub.rpl: Test validator with CNAME response to DS in chain of trust")
+   void val_ds_cnamesub() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_ds_cnamesubbogus.rpl: Test validator with bogus CNAME response to DS in chain of trust")
+   void val_ds_cnamesubbogus() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_gost.rpl: Test validator with GOST DS digest")
+   void val_ds_gost() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_gost_downgrade.rpl: Test validator with GOST DS digest downgrade attack")
+   void val_ds_gost_downgrade() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_sha2.rpl: Test validator with SHA256 DS digest")
+   void val_ds_sha2() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_sha2_downgrade.rpl: Test validator with SHA256 DS downgrade to SHA1")
+   void val_ds_sha2_downgrade() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_ds_sha2_downgrade_override.rpl: Test validator with SHA256 DS downgrade to SHA1")
+   void val_ds_sha2_downgrade_override() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ds_sha2_lenient.rpl: Test validator with SHA256 DS downgrade to SHA1 lenience")
+   void val_ds_sha2_lenient() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_entds.rpl: Test validator with lots of ENTs in the chain of trust")
+   void val_entds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_faildnskey.rpl: Test validator with failed DNSKEY request")
+   void val_faildnskey() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("tests an unbound specific config option")
+   @Test
++  @DisplayName(
++      "val_faildnskey_ok.rpl: Test validator with failed DNSKEY request, but not hardened.")
+   void val_faildnskey_ok() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("irrelevant, we're not a recursive resolver")
+   @Test
++  @DisplayName("val_fwdds.rpl: Test forward-zone with DS query")
+   void val_fwdds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_keyprefetch.rpl: Test validator with key prefetch")
+   void val_keyprefetch() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_keyprefetch_verify.rpl: Test validator with key prefetch and verify with the anchor")
+   void val_keyprefetch_verify() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_mal_wc.rpl: Test validator with nodata, wildcards and ENT")
+   void val_mal_wc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_negcache_ds.rpl: Test validator with negative cache DS response")
+   void val_negcache_ds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName(
++      "val_negcache_dssoa.rpl: Test validator with negative cache DS response with cached SOA")
+   void val_negcache_dssoa() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("aggressive NSEC is not supported")
+   @Test
++  @DisplayName(
++      "val_negcache_nodata.rpl: Test validator with negative cache NXDOMAIN response (aggressive NSEC)")
+   void val_negcache_nodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("tests unbound option domain-insecure, not available here")
+   @Test
++  @DisplayName("val_negcache_nta.rpl: Test to not do aggressive NSEC for domains under NTA")
+   void val_negcache_nta() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("aggressive NSEC is not supported")
+   @Test
++  @DisplayName(
++      "val_negcache_nxdomain.rpl: Test validator with negative cache NXDOMAIN response (aggressive NSEC)")
+   void val_negcache_nxdomain() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("irrelevant - if we wouldn't want AD, we wouldn't be using this stuff")
+   @Test
++  @DisplayName("val_noadwhennodo.rpl: Test if AD bit is returned on non-DO query.")
+   void val_noadwhennodo() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodata.rpl: Test validator with nodata response")
+   void val_nodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodatawc.rpl: Test validator with wildcard nodata response")
+   void val_nodatawc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodatawc_badce.rpl: Test validator with wildcard nodata, bad closest encloser")
+   void val_nodatawc_badce() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodatawc_nodeny.rpl: Test validator with wildcard nodata response without qdenial")
+   void val_nodatawc_nodeny() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodatawc_one.rpl: Test validator with wildcard nodata response with one NSEC")
+   void val_nodatawc_one() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodatawc_wcns.rpl: Test validator with wildcard nodata response from parent zone with SOA")
+   void val_nodatawc_wcns() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodatawc_wrongdeleg.rpl: Test validator with wildcard nodata response from parent zone")
+   void val_nodatawc_wrongdeleg() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodata_ent.rpl: Test validator with nodata on empty nonterminal response")
+   void val_nodata_ent() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodata_entnx.rpl: Test validator with nodata on empty nonterminal response with rcode NXDOMAIN")
+   void val_nodata_entnx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodata_entwc.rpl: Test validator with wildcard nodata on empty nonterminal response")
+   void val_nodata_entwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodata_failsig.rpl: Test validator with nodata response with bogus RRSIG")
+   void val_nodata_failsig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodata_failwc.rpl: Test validator with nodata response with wildcard expanded NSEC record, original NSEC owner does not provide proof for QNAME. CVE-2017-15105 test.")
+   void val_nodata_failwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nodata_hasdata.rpl: Test validator with nodata response, that proves the data.")
+   void val_nodata_hasdata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nodata_zonecut.rpl: Test validator with nodata response from wrong side of zonecut")
+   void val_nodata_zonecut() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nokeyprime.rpl: Test validator with failed key prime, no keys.")
+   void val_nokeyprime() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b1_nameerror.rpl: Test validator NSEC3 B.1 name error.")
+   void val_nsec3_b1_nameerror() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b1_nameerror_noce.rpl: Test validator NSEC3 B.1 name error without ce NSEC3.")
+   void val_nsec3_b1_nameerror_noce() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b1_nameerror_nonc.rpl: Test validator NSEC3 B.1 name error without nc NSEC3.")
+   void val_nsec3_b1_nameerror_nonc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b1_nameerror_nowc.rpl: Test validator NSEC3 B.1 name error without wc NSEC3.")
+   void val_nsec3_b1_nameerror_nowc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b21_nodataent.rpl: Test validator NSEC3 B.2.1 no data empty nonterminal.")
+   void val_nsec3_b21_nodataent() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b21_nodataent_wr.rpl: Test validator NSEC3 B.2.1 no data empty nonterminal, wrong rr.")
+   void val_nsec3_b21_nodataent_wr() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b2_nodata.rpl: Test validator NSEC3 B.2 no data.")
+   void val_nsec3_b2_nodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b2_nodata_nons.rpl: Test validator NSEC3 B.2 no data, without NSEC3.")
+   void val_nsec3_b2_nodata_nons() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b3_optout.rpl: Test validator NSEC3 B.3 referral to optout unsigned zone.")
+   void val_nsec3_b3_optout() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName(
++      "val_nsec3_b3_optout_negcache.rpl: Test validator NSEC3 B.3 referral optout with negative cache.")
+   void val_nsec3_b3_optout_negcache() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b3_optout_noce.rpl: Test validator NSEC3 B.3 optout unsigned, without ce.")
+   void val_nsec3_b3_optout_noce() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b3_optout_nonc.rpl: Test validator NSEC3 B.3 optout unsigned, without nc.")
+   void val_nsec3_b3_optout_nonc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b4_wild.rpl: Test validator NSEC3 B.4 wildcard expansion.")
+   void val_nsec3_b4_wild() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b4_wild_wr.rpl: Test validator NSEC3 B.4 wildcard expansion, wrong NSEC3.")
+   void val_nsec3_b4_wild_wr() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_b5_wcnodata.rpl: Test validator NSEC3 B.5 wildcard nodata.")
+   void val_nsec3_b5_wcnodata() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b5_wcnodata_noce.rpl: Test validator NSEC3 B.5 wildcard nodata, without ce.")
+   void val_nsec3_b5_wcnodata_noce() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b5_wcnodata_nonc.rpl: Test validator NSEC3 B.5 wildcard nodata, without nc.")
+   void val_nsec3_b5_wcnodata_nonc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_b5_wcnodata_nowc.rpl: Test validator NSEC3 B.5 wildcard nodata, without wc.")
+   void val_nsec3_b5_wcnodata_nowc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_cnametocnamewctoposwc.rpl: Test validator with a regular cname to wildcard cname to wildcard response")
+   void val_nsec3_cnametocnamewctoposwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_cname_ds.rpl: Test validator with NSEC3 CNAME for qtype DS.")
+   void val_nsec3_cname_ds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_cname_par.rpl: Test validator with NSEC3 wildcard CNAME to parent.")
+   void val_nsec3_cname_par() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_cname_sub.rpl: Test validator with NSEC3 wildcard CNAME to subzone.")
+   void val_nsec3_cname_sub() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_entnodata_optout.rpl: Test validator with NSEC3 response for NODATA ENT with optout.")
+   void val_nsec3_entnodata_optout() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_entnodata_optout_badopt.rpl: Test validator with NSEC3 response for NODATA ENT with optout.")
+   void val_nsec3_entnodata_optout_badopt() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_entnodata_optout_match.rpl: Test validator NODATA ENT with nsec3 optout matches the ent.")
+   void val_nsec3_entnodata_optout_match() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_iter_high.rpl: Test validator with nxdomain NSEC3 with too high iterations")
+   void val_nsec3_iter_high() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_nodatawccname.rpl: Test validator with nodata NSEC3 abused wildcarded CNAME.")
+   void val_nsec3_nodatawccname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_nods.rpl: Test validator with NSEC3 with no DS referral.")
+   void val_nsec3_nods() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_nods_badopt.rpl: Test validator with NSEC3 with no DS with wrong optout bit.")
+   void val_nsec3_nods_badopt() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_nods_badsig.rpl: Test validator with NSEC3 with no DS referral with bad signature.")
+   void val_nsec3_nods_badsig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName(
++      "val_nsec3_nods_negcache.rpl: Test validator with NSEC3 with no DS referral from neg cache.")
+   void val_nsec3_nods_negcache() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_nods_soa.rpl: Test validator with NSEC3 with no DS referral abuse of apex.")
+   void val_nsec3_nods_soa() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_optout_ad.rpl: Test validator with optout NSEC3 response that gets no AD.")
+   void val_nsec3_optout_ad() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("more cache stuff")
+   @Test
++  @DisplayName(
++      "val_nsec3_optout_cache.rpl: Test validator with NSEC3 span change and cache effects.")
+   void val_nsec3_optout_cache() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nsec3_wcany.rpl: Test validator with NSEC3 wildcard qtype ANY response.")
+   void val_nsec3_wcany() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nsec3_wcany_nodeny.rpl: Test validator with NSEC3 wildcard qtype ANY without denial.")
+   void val_nsec3_wcany_nodeny() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx.rpl: Test validator with nxdomain response")
+   void val_nx() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nx_failwc.rpl: Test validator with nxdomain response with wildcard expanded NSEC record, original NSEC owner does not provide proof for QNAME. CVE-2017-15105 test.")
+   void val_nx_failwc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nodeny.rpl: Test validator with nxdomain response missing qname denial")
+   void val_nx_nodeny() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nowc.rpl: Test validator with nxdomain response missing wildcard denial")
+   void val_nx_nowc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nsec3_collision.rpl: Test validator with nxdomain NSEC3 with a collision.")
+   void val_nx_nsec3_collision() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nx_nsec3_collision2.rpl: Test validator with nxdomain NSEC3 with a salt mismatch.")
+   void val_nx_nsec3_collision2() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nsec3_collision3.rpl: Test validator with nxdomain NSEC3 with a collision.")
+   void val_nx_nsec3_collision3() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nsec3_collision4.rpl: Test validator with nxdomain NSEC3 with a collision.")
+   void val_nx_nsec3_collision4() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nsec3_hashalg.rpl: Test validator with unknown NSEC3 hash algorithm.")
+   void val_nx_nsec3_hashalg() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_nx_nsec3_nsecmix.rpl: Test validator with NSEC3 responses that has an NSEC mixed in.")
+   void val_nx_nsec3_nsecmix() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_nsec3_params.rpl: Test validator with nxdomain NSEC3 several parameters.")
+   void val_nx_nsec3_params() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_nx_overreach.rpl: Test validator with overreaching NSEC record")
+   void val_nx_overreach() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_positive.rpl: Test validator with positive response")
+   void val_positive() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_positive_nosigs.rpl: Test validator with positive response, signatures removed.")
+   void val_positive_nosigs() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_positive_wc.rpl: Test validator with positive wildcard response")
+   void val_positive_wc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_positive_wc_nodeny.rpl: Test validator with positive wildcard without qname denial")
+   void val_positive_wc_nodeny() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_pos_truncns.rpl: Test validator with badly truncated positive response")
+   void val_pos_truncns() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_qds_badanc.rpl: Test validator with DS query and a bad anchor")
+   void val_qds_badanc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_qds_oneanc.rpl: Test validator with DS query and one anchor")
+   void val_qds_oneanc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_qds_twoanc.rpl: Test validator with DS query and two anchors")
+   void val_qds_twoanc() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("NSEC records missing for validation, tests caching stuff")
+   @Test
++  @DisplayName("val_referd.rpl: Test validator with cache referral")
+   void val_referd() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName("val_referglue.rpl: Test validator with cache referral with unsigned glue")
+   void val_referglue() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName("val_refer_unsignadd.rpl: Test validator with a referral with unsigned additional")
+   void val_refer_unsignadd() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_rrsig.rpl: Test validator with qtype RRSIG response")
+   void val_rrsig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_secds.rpl: Test validator with secure delegation")
+   void val_secds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_secds_nosig.rpl: Test validator with no signatures after secure delegation")
+   void val_secds_nosig() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+-  @Disabled("tests unbound specific config (stub zones)")
+   @Test
+-  void val_stubds() throws ParseException, IOException {
++  @DisplayName("val_spurious_ns.rpl: Test validator with spurious unsigned NS in auth section")
++  void val_spurious_ns() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
++  @Disabled("tests unbound specific config (stub zones)")
+   @Test
+-  void val_spurious_ns() throws ParseException, IOException {
++  @DisplayName("val_stubds.rpl: Test stub with DS query")
++  void val_stubds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_stub_noroot.rpl: Test validation of stub zone without root prime.")
+   void val_stub_noroot() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ta_algo_dnskey.rpl: Test validator with multiple algorithm trust anchor")
+   void val_ta_algo_dnskey() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName(
++      "val_ta_algo_dnskey_dp.rpl: Test validator with multiple algorithm trust anchor without harden")
+   void val_ta_algo_dnskey_dp() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ta_algo_missing.rpl: Test validator with multiple algorithm missing one")
+   void val_ta_algo_missing() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_ta_algo_missing_dp.rpl: Test validator with multiple algorithm missing one")
+   void val_ta_algo_missing_dp() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_twocname.rpl: Test validator with unsigned CNAME to signed CNAME to data")
+   void val_twocname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_unalgo_anchor.rpl: Test validator with unsupported algorithm trust anchor")
+   void val_unalgo_anchor() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_unalgo_dlv.rpl: Test validator with unknown algorithm DLV anchor")
+   void val_unalgo_dlv() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_unalgo_ds.rpl: Test validator with unknown algorithm delegation")
+   void val_unalgo_ds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_unsecds.rpl: Test validator with insecure delegation")
+   void val_unsecds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("we don't do negative caching")
+   @Test
++  @DisplayName(
++      "val_unsecds_negcache.rpl: Test validator with insecure delegation and DS negative cache")
+   void val_unsecds_negcache() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Disabled("tests the iterative resolver")
+   @Test
++  @DisplayName("val_unsecds_qtypeds.rpl: Test validator with insecure delegation and qtype DS.")
+   void val_unsecds_qtypeds() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_unsec_cname.rpl: Test validator with DS, unsec, cname sequence.")
+   void val_unsec_cname() throws ParseException, IOException {
+     runUnboundTest();
+   }
+ 
+   @Test
++  @DisplayName("val_wild_pos.rpl: Test validator with direct wildcard positive response")
+   void val_wild_pos() throws ParseException, IOException {
+     runUnboundTest();
+   }
+diff --git a/src/test/java/org/xbill/DNS/lookup/LookupResultTest.java b/src/test/java/org/xbill/DNS/lookup/LookupResultTest.java
+index 2ce793de..b571f271 100644
+--- a/src/test/java/org/xbill/DNS/lookup/LookupResultTest.java
++++ b/src/test/java/org/xbill/DNS/lookup/LookupResultTest.java
+@@ -3,34 +3,101 @@
+ 
+ import static java.util.Collections.singletonList;
+ import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertNull;
+ import static org.junit.jupiter.api.Assertions.assertThrows;
+ 
+ import java.net.InetAddress;
++import java.util.Collections;
+ import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.ValueSource;
+ import org.xbill.DNS.ARecord;
++import org.xbill.DNS.CNAMERecord;
+ import org.xbill.DNS.DClass;
+ import org.xbill.DNS.Name;
+ import org.xbill.DNS.Record;
+ 
+ class LookupResultTest {
++  private static final LookupResult PREVIOUS = new LookupResult(false);
++  private static final ARecord A_RECORD =
++      new ARecord(Name.fromConstantString("a."), DClass.IN, 0, InetAddress.getLoopbackAddress());
++
+   @Test
+   void ctor_nullRecords() {
+-    assertThrows(NullPointerException.class, () -> new LookupResult(null, null));
++    assertThrows(
++        NullPointerException.class,
++        () -> new LookupResult(PREVIOUS, null, null, false, null, Collections.emptyList()));
++  }
++
++  @Test
++  void ctor_nullAliases() {
++    assertThrows(
++        NullPointerException.class,
++        () -> new LookupResult(PREVIOUS, null, null, false, Collections.emptyList(), null));
++  }
++
++  @ParameterizedTest
++  @ValueSource(booleans = {false, true})
++  void ctor_authOnly(boolean isAuthenticated) {
++    LookupResult lookupResult = new LookupResult(isAuthenticated);
++    assertEquals(isAuthenticated, lookupResult.isAuthenticated());
++    assertEquals(0, lookupResult.getAliases().size());
++    assertEquals(0, lookupResult.getRecords().size());
++    assertEquals(0, lookupResult.getQueryResponsePairs().size());
++  }
++
++  @ParameterizedTest
++  @ValueSource(booleans = {false, true})
++  void ctor_singleRecord(boolean isAuthenticated) {
++    LookupResult lookupResult = new LookupResult(A_RECORD, isAuthenticated, A_RECORD);
++    assertEquals(isAuthenticated, lookupResult.isAuthenticated());
++    assertEquals(0, lookupResult.getAliases().size());
++    assertEquals(1, lookupResult.getRecords().size());
++    assertEquals(1, lookupResult.getQueryResponsePairs().size());
++    assertNull(lookupResult.getQueryResponsePairs().get(A_RECORD));
+   }
+ 
+   @Test
+   void getResult() {
+-    Record record =
+-        new ARecord(Name.fromConstantString("a."), DClass.IN, 0, InetAddress.getLoopbackAddress());
+-    LookupResult lookupResult = new LookupResult(singletonList(record), null);
+-    assertEquals(singletonList(record), lookupResult.getRecords());
++    LookupResult lookupResult =
++        new LookupResult(
++            PREVIOUS, null, null, false, singletonList(A_RECORD), Collections.emptyList());
++    assertEquals(singletonList(A_RECORD), lookupResult.getRecords());
+   }
+ 
+   @Test
+   void getAliases() {
+     Name name = Name.fromConstantString("b.");
+     Record record = new ARecord(name, DClass.IN, 0, InetAddress.getLoopbackAddress());
+-    LookupResult lookupResult = new LookupResult(singletonList(record), singletonList(name));
++    LookupResult lookupResult =
++        new LookupResult(PREVIOUS, null, null, false, singletonList(record), singletonList(name));
+     assertEquals(singletonList(name), lookupResult.getAliases());
+   }
++
++  @ParameterizedTest
++  @ValueSource(booleans = {false, true})
++  void isAuthenticated(boolean isAuthenticated) {
++    LookupResult lookupResult =
++        new LookupResult(
++            new LookupResult(isAuthenticated),
++            null,
++            null,
++            isAuthenticated,
++            singletonList(A_RECORD),
++            Collections.emptyList());
++    assertEquals(isAuthenticated, lookupResult.isAuthenticated());
++  }
++
++  @ParameterizedTest
++  @ValueSource(booleans = {false, true})
++  void isAuthenticatedRequiresAllForTrue(boolean isAuthenticated) {
++    Name nameA = Name.fromConstantString("a.");
++    Name nameB = Name.fromConstantString("b.");
++    Record cname = new CNAMERecord(nameA, DClass.IN, 0, nameB);
++    Record a = new ARecord(nameB, DClass.IN, 0, InetAddress.getLoopbackAddress());
++    LookupResult lookupResult1 = new LookupResult(isAuthenticated);
++    LookupResult lookupResult2 =
++        new LookupResult(lookupResult1, cname, null, true, singletonList(a), singletonList(nameA));
++    assertEquals(isAuthenticated, lookupResult2.isAuthenticated());
++  }
+ }
+diff --git a/src/test/java/org/xbill/DNS/lookup/LookupSessionTest.java b/src/test/java/org/xbill/DNS/lookup/LookupSessionTest.java
+index d945395d..b7a4376f 100644
+--- a/src/test/java/org/xbill/DNS/lookup/LookupSessionTest.java
++++ b/src/test/java/org/xbill/DNS/lookup/LookupSessionTest.java
+@@ -5,12 +5,19 @@
+ import static java.util.Arrays.asList;
+ import static java.util.Collections.emptyList;
+ import static java.util.Collections.singletonList;
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.junit.jupiter.api.Assertions.assertAll;
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+-import static org.junit.jupiter.api.Assertions.assertThrows;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++import static org.junitpioneer.jupiter.cartesian.CartesianTest.Enum;
++import static org.junitpioneer.jupiter.cartesian.CartesianTest.Values;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.anyInt;
+ import static org.mockito.Mockito.inOrder;
++import static org.mockito.Mockito.lenient;
+ import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.spy;
+ import static org.mockito.Mockito.times;
+ import static org.mockito.Mockito.verify;
+ import static org.mockito.Mockito.verifyNoMoreInteractions;
+@@ -20,9 +27,11 @@
+ import static org.xbill.DNS.LookupTest.LONG_LABEL;
+ import static org.xbill.DNS.LookupTest.answer;
+ import static org.xbill.DNS.LookupTest.fail;
++import static org.xbill.DNS.LookupTest.multiAnswer;
+ import static org.xbill.DNS.Type.A;
+ import static org.xbill.DNS.Type.AAAA;
+ import static org.xbill.DNS.Type.CNAME;
++import static org.xbill.DNS.Type.DNAME;
+ import static org.xbill.DNS.Type.MX;
+ 
+ import java.io.IOException;
+@@ -44,11 +53,12 @@
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.extension.ExtendWith;
+-import org.junit.jupiter.api.function.Executable;
+ import org.junit.jupiter.api.io.TempDir;
+ import org.junit.jupiter.params.ParameterizedTest;
+ import org.junit.jupiter.params.provider.CsvSource;
++import org.junit.jupiter.params.provider.EnumSource;
+ import org.junit.jupiter.params.provider.ValueSource;
++import org.junitpioneer.jupiter.cartesian.CartesianTest;
+ import org.mockito.ArgumentCaptor;
+ import org.mockito.InOrder;
+ import org.mockito.Mock;
+@@ -70,6 +80,7 @@
+ import org.xbill.DNS.Section;
+ import org.xbill.DNS.SetResponse;
+ import org.xbill.DNS.Type;
++import org.xbill.DNS.WireParseException;
+ import org.xbill.DNS.hosts.HostsFileParser;
+ 
+ @ExtendWith(MockitoExtension.class)
+@@ -80,7 +91,9 @@ class LookupSessionTest {
+ 
+   private static final ARecord LOOPBACK_A =
+       new ARecord(DUMMY_NAME, IN, 3600, InetAddress.getLoopbackAddress());
++  private static final ARecord EXAMPLE_A = (ARecord) LOOPBACK_A.withName(name("example.com."));
+   private static final AAAARecord LOOPBACK_AAAA;
++  private static final String INVALID_SERVER_RESPONSE_MESSAGE = "refusing to return it";
+   private HostsFileParser lookupSessionTestHostsFileParser;
+ 
+   static {
+@@ -124,6 +137,31 @@ void lookupAsync_absoluteQuery() throws InterruptedException, ExecutionException
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_absoluteQueryNoExtra(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    wireUpMockResolver(
++        mockResolver, query -> multiAnswer(query, name -> new Record[] {LOOPBACK_A, EXAMPLE_A}));
++
++    LookupSession lookupSession = lookupSession(useCache).irrelevantRecordMode(mode).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(name("a.b."), A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).isEmpty();
++      assertThat(result.getRecords()).containsExactly(LOOPBACK_A.withName(name("a.b.")));
++    }
++
++    assertCacheUnused(useCache, mode, lookupSession);
++    verify(mockResolver).sendAsync(any(), any(Executor.class));
++  }
++
+   @Test
+   void lookupAsync_absoluteQuery_defaultClass() throws InterruptedException, ExecutionException {
+     wireUpMockResolver(mockResolver, query -> answer(query, name -> LOOPBACK_A));
+@@ -160,10 +198,14 @@ void lookupAsync_absoluteQueryWithFailedHosts() throws IOException {
+     when(mockHosts.getAddressForHost(any(), anyInt())).thenThrow(IOException.class);
+     LookupSession lookupSession =
+         LookupSession.builder().resolver(mockResolver).hostsFileParser(mockHosts).build();
+-    CompletionStage<LookupResult> resultFuture =
+-        lookupSession.lookupAsync(name("kubernetes.docker.internal."), A, IN);
+ 
+-    assertThrowsCause(NoSuchDomainException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(
++            lookupSession
++                    .lookupAsync(name("kubernetes.docker.internal."), A, IN)
++                    .toCompletableFuture()
++                ::get)
++        .cause()
++        .isInstanceOf(NoSuchDomainException.class);
+   }
+ 
+   @Test
+@@ -174,10 +216,14 @@ void lookupAsync_absoluteQueryWithHostsInvalidType() {
+             .resolver(mockResolver)
+             .hostsFileParser(lookupSessionTestHostsFileParser)
+             .build();
+-    CompletionStage<LookupResult> resultFuture =
+-        lookupSession.lookupAsync(name("kubernetes.docker.internal."), MX, IN);
+ 
+-    assertThrowsCause(NoSuchDomainException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(
++            lookupSession
++                    .lookupAsync(name("kubernetes.docker.internal."), MX, IN)
++                    .toCompletableFuture()
++                ::get)
++        .cause()
++        .isInstanceOf(NoSuchDomainException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -355,11 +401,12 @@ void lookupAsync_searchPathWithCacheMissAndHit() throws InterruptedException, Ex
+     when(mockCache.lookupRecords(name("host.tld."), A, Credibility.NORMAL))
+         .thenReturn(mock(SetResponse.class));
+ 
+-    SetResponse second = mock(SetResponse.class);
+-    when(second.isSuccessful()).thenReturn(true);
+-    when(second.answers())
++    SetResponse anotherTldResponse = mock(SetResponse.class);
++    when(anotherTldResponse.isSuccessful()).thenReturn(true);
++    when(anotherTldResponse.answers())
+         .thenReturn(singletonList(new RRset(LOOPBACK_A.withName(name("another.tld.")))));
+-    when(mockCache.lookupRecords(name("another.tld."), A, Credibility.NORMAL)).thenReturn(second);
++    when(mockCache.lookupRecords(name("another.tld."), A, Credibility.NORMAL))
++        .thenReturn(anotherTldResponse);
+ 
+     LookupSession lookupSession =
+         LookupSession.builder()
+@@ -432,11 +479,7 @@ void lookupAsync_twoCnameRedirectMultipleQueries(boolean useCache) throws Except
+         };
+     wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
+ 
+-    LookupSession lookupSession =
+-        useCache
+-            ? LookupSession.builder().cache(new Cache()).resolver(mockResolver).build()
+-            : LookupSession.builder().resolver(mockResolver).build();
+-
++    LookupSession lookupSession = lookupSession(useCache).build();
+     CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("cname.a."), A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+@@ -444,17 +487,17 @@ void lookupAsync_twoCnameRedirectMultipleQueries(boolean useCache) throws Except
+     assertEquals(
+         Stream.of(name("cname.a."), name("cname.b.")).collect(Collectors.toList()),
+         result.getAliases());
++    if (useCache) {
++      assertEquals(3, lookupSession.getCache(IN).getSize());
++    }
+     verify(mockResolver, times(3)).sendAsync(any(), any(Executor.class));
+   }
+ 
+-  @ParameterizedTest
+-  @CsvSource({
+-    "false,false",
+-    "true,false",
+-    "false,true",
+-    "true,true",
+-  })
+-  void lookupAsync_twoDnameRedirectOneQuery(boolean useCache, boolean includeSyntheticCnames)
++  @CartesianTest(name = "useCache={0}, includeSyntheticCnames={1}, irrelevantRecordMode={2}")
++  void lookupAsync_twoDnameRedirectOneQuery(
++      @Values(booleans = {true, false}) boolean useCache,
++      @Values(booleans = {true, false}) boolean includeSyntheticCnames,
++      @Enum IrrelevantRecordMode mode)
+       throws Exception {
+     wireUpMockResolver(
+         mockResolver,
+@@ -474,11 +517,7 @@ void lookupAsync_twoDnameRedirectOneQuery(boolean useCache, boolean includeSynth
+           return answer;
+         });
+ 
+-    LookupSession lookupSession =
+-        useCache
+-            ? LookupSession.builder().cache(new Cache()).resolver(mockResolver).build()
+-            : LookupSession.builder().resolver(mockResolver).build();
+-
++    LookupSession lookupSession = lookupSession(useCache).irrelevantRecordMode(mode).build();
+     CompletionStage<LookupResult> resultFuture =
+         lookupSession.lookupAsync(name("www.example.org."), A, IN);
+ 
+@@ -488,6 +527,9 @@ void lookupAsync_twoDnameRedirectOneQuery(boolean useCache, boolean includeSynth
+         Stream.of(name("www.example.org."), name("www.example.net."), name("www.example.com."))
+             .collect(Collectors.toList()),
+         result.getAliases());
++    if (useCache) {
++      assertEquals(4 + (includeSyntheticCnames ? 2 : 0), lookupSession.getCache(IN).getSize());
++    }
+     verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -505,11 +547,7 @@ void lookupAsync_twoCnameRedirectOneQuery(boolean useCache) throws Exception {
+           return answer;
+         });
+ 
+-    LookupSession lookupSession =
+-        useCache
+-            ? LookupSession.builder().cache(new Cache()).resolver(mockResolver).build()
+-            : LookupSession.builder().resolver(mockResolver).build();
+-
++    LookupSession lookupSession = lookupSession(useCache).build();
+     CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("cname.a."), A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+@@ -545,11 +583,7 @@ void lookupAsync_twoCnameRedirectIncompleteResponse(boolean useCache, int firstR
+           return answer;
+         });
+ 
+-    LookupSession lookupSession =
+-        useCache
+-            ? LookupSession.builder().cache(new Cache()).resolver(mockResolver).build()
+-            : LookupSession.builder().resolver(mockResolver).build();
+-
++    LookupSession lookupSession = lookupSession(useCache).build();
+     CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("cname.a."), A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+@@ -557,6 +591,9 @@ void lookupAsync_twoCnameRedirectIncompleteResponse(boolean useCache, int firstR
+     assertEquals(
+         Stream.of(name("cname.a."), name("cname.b.")).collect(Collectors.toList()),
+         result.getAliases());
++    if (useCache) {
++      assertEquals(3, lookupSession.getCache(IN).getSize());
++    }
+     verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -601,37 +638,69 @@ void lookupAsync_simpleCnameRedirect(boolean useCache, String rcode, String type
+           }
+         });
+ 
+-    LookupSession lookupSession =
+-        useCache
+-            ? LookupSession.builder().cache(new Cache()).resolver(mockResolver).build()
+-            : LookupSession.builder().resolver(mockResolver).build();
+-
+-    CompletionStage<LookupResult> resultFuture =
+-        lookupSession.lookupAsync(name("cname.r."), Type.value(type), IN);
++    LookupSession lookupSession = lookupSession(useCache).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(name("cname.r."), Type.value(type), IN).toCompletableFuture();
+ 
+-    CompletableFuture<LookupResult> future = resultFuture.toCompletableFuture();
+     if (rcode.equals("NXDOMAIN")) {
+-      assertThrowsCause(NoSuchDomainException.class, future::get);
++      assertThatThrownBy(future::get).cause().isInstanceOf(NoSuchDomainException.class);
+     } else {
+       LookupResult result = future.get();
+-      assertEquals(0, result.getRecords().size());
++      assertThat(result.getRecords()).isEmpty();
+     }
+     verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
+   }
+ 
+   @Test
+   void lookupAsync_simpleCnameRedirect() throws Exception {
++    Name cname = name("cname.r.");
++    Name target = name("a.b.");
+     Function<Name, Record> nameToRecord =
+-        name -> name("cname.r.").equals(name) ? cname("cname.r.", "a.b.") : LOOPBACK_A;
++        name -> cname.equals(name) ? cname(cname, target) : LOOPBACK_A;
+     wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+ 
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("cname.r."), A, IN);
++    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(cname, A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+     assertEquals(singletonList(LOOPBACK_A.withName(name("a.b."))), result.getRecords());
+-    assertEquals(singletonList(name("cname.r.")), result.getAliases());
++    assertEquals(singletonList(cname), result.getAliases());
++    verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
++  }
++
++  @ParameterizedTest
++  @EnumSource(value = IrrelevantRecordMode.class)
++  void lookupAsync_simpleCnameRedirectNoExtra(IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("cname.r.");
++    Name target = name("a.b.");
++    Function<Name, Record[]> nameToRecord =
++        name ->
++            query.equals(name)
++                ? new Record[] {cname(query, target)}
++                : new Record[] {
++                  LOOPBACK_A, EXAMPLE_A,
++                };
++    wireUpMockResolver(mockResolver, q -> multiAnswer(q, nameToRecord));
++
++    LookupSession lookupSession =
++        LookupSession.builder().resolver(mockResolver).irrelevantRecordMode(mode).build();
++
++    CompletableFuture<LookupResult> f =
++        lookupSession.lookupAsync(query, A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.REMOVE) {
++      LookupResult result = f.get();
++      assertThat(result.getRecords()).hasSize(1).containsExactly(LOOPBACK_A.withName(target));
++    } else {
++      assertThatThrownBy(f::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE)
++          .rootCause()
++          .isInstanceOf(WireParseException.class);
++    }
++
+     verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -652,16 +721,95 @@ void lookupAsync_cnameQuery() throws Exception {
+     verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
+   }
+ 
++  @Test
++  void lookupAsync_dnameQuery() throws Exception {
++    Name query = name("dname.r.");
++    DNAMERecord response = dname(query, "a.b.");
++    Function<Name, Record> nameToRecord = name -> name.equals(query) ? response : LOOPBACK_A;
++    wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
++
++    LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
++
++    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(query, DNAME, IN);
++
++    LookupResult result = resultFuture.toCompletableFuture().get();
++    assertEquals(singletonList(response), result.getRecords());
++    assertEquals(emptyList(), result.getAliases());
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_cnameQueryExtra(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("cname.r.");
++    Name target = name("a.b.");
++    CNAMERecord response1 = cname(query, target);
++    CNAMERecord response2 = cname(name("additional.r."), target);
++    Function<Name, Record[]> nameToRecord =
++        name ->
++            query.equals(name) ? new Record[] {response1, response2} : new Record[] {LOOPBACK_A};
++    wireUpMockResolver(mockResolver, q -> multiAnswer(q, nameToRecord));
++
++    LookupSession lookupSession = lookupSession(useCache, mode).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(query, CNAME, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).isEmpty();
++      assertThat(result.getRecords()).containsExactly(cname(query, target));
++    }
++
++    assertCacheUnused(useCache, mode, lookupSession);
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_dnameQueryExtra(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("cname.r.");
++    Name target = name("a.b.");
++    DNAMERecord response1 = dname(query, target);
++    DNAMERecord response2 = dname(name("additional.r."), target);
++    Function<Name, Record[]> nameToRecord =
++        name ->
++            query.equals(name) ? new Record[] {response1, response2} : new Record[] {LOOPBACK_A};
++    wireUpMockResolver(mockResolver, q -> multiAnswer(q, nameToRecord));
++
++    LookupSession lookupSession = lookupSession(useCache, mode).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(query, DNAME, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).isEmpty();
++      assertThat(result.getRecords()).containsExactly(response1);
++    }
++
++    assertCacheUnused(useCache, mode, lookupSession);
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
+   @Test
+   void lookupAsync_simpleDnameRedirect() throws Exception {
++    Name query = name("x.y.to.dname.");
+     Function<Name, Record> nameToRecord =
+-        n -> name("x.y.to.dname.").equals(n) ? dname("to.dname.", "to.a.") : LOOPBACK_A;
++        name -> name.equals(query) ? dname("to.dname.", "to.a.") : LOOPBACK_A;
+     wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+ 
+-    CompletionStage<LookupResult> resultFuture =
+-        lookupSession.lookupAsync(name("x.y.to.dname."), A, IN);
++    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(query, A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+     assertEquals(singletonList(LOOPBACK_A.withName(name("x.y.to.a."))), result.getRecords());
+@@ -669,23 +817,228 @@ void lookupAsync_simpleDnameRedirect() throws Exception {
+   }
+ 
+   @Test
+-  void lookupAsync_redirectLoop() {
+-    Function<Name, Record> nameToRecord =
+-        name -> name("a.b.").equals(name) ? cname("a.", "b.") : cname("b.", "a.");
+-    wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
++  void lookupAsync_simpleDnameRedirectSynthesizedCname() throws Exception {
++    Name query = name("x.y.example.org.");
++    wireUpMockResolver(
++        mockResolver,
++        q ->
++            multiAnswer(
++                q,
++                name ->
++                    new Record[] {
++                      dname("example.org.", "example.net."),
++                      cname("x.y.example.org.", "x.y.example.net."),
++                      LOOPBACK_A.withName(name("x.y.example.net.")),
++                    }));
+ 
+-    LookupSession lookupSession =
+-        LookupSession.builder().resolver(mockResolver).maxRedirects(2).build();
++    LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+ 
+-    CompletionStage<LookupResult> resultFuture =
+-        lookupSession.lookupAsync(name("first.example.com."), A, IN);
++    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(query, A, IN);
+ 
+-    assertThrowsCause(
+-        RedirectOverflowException.class, () -> resultFuture.toCompletableFuture().get());
+-    verify(mockResolver, times(3)).sendAsync(any(), any(Executor.class));
++    LookupResult result = resultFuture.toCompletableFuture().get();
++    assertEquals(singletonList(LOOPBACK_A.withName(name("x.y.example.net."))), result.getRecords());
++    assertEquals(singletonList(name("x.y.example.org.")), result.getAliases());
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
+   }
+ 
+   @ParameterizedTest
++  @CsvSource(
++      value = {
++        "x.y.example.com.,x.y.example.org.,REMOVE",
++        "x.y.example.com.,x.y.example.org.,THROW",
++        "x.y.example.org.,x.y.example.com.,REMOVE",
++        "x.y.example.org.,x.y.example.com.,THROW",
++      })
++  void lookupAsync_simpleDnameRedirectWrongSynthesizedCname(
++      String from, String to, IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("x.y.example.org.");
++    wireUpMockResolver(
++        mockResolver,
++        q ->
++            multiAnswer(
++                q,
++                name ->
++                    new Record[] {
++                      // Correct
++                      dname("example.org.", "example.net."),
++                      // Extra and wrong
++                      cname(from, to),
++                      // Correct
++                      LOOPBACK_A.withName(name("x.y.example.net.")),
++                      // Extra and wrong
++                      LOOPBACK_A.withName(name(to)),
++                    }));
++
++    LookupSession lookupSession =
++        LookupSession.builder().resolver(mockResolver).irrelevantRecordMode(mode).build();
++
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(query, A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).containsExactly(name("x.y.example.org."));
++      assertThat(result.getRecords())
++          .containsExactly(LOOPBACK_A.withName(name("x.y.example.net.")));
++    }
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_simpleDnameRedirectNoExtra(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name queryName = name("x.y.to.dname.");
++    wireUpMockResolver(
++        mockResolver,
++        question ->
++            multiAnswer(
++                question,
++                name ->
++                    name.equals(queryName)
++                        ? new Record[] {dname("to.dname.", "to.a.")}
++                        : new Record[] {
++                          // LOOPBACK_A will be transformed to 'x.y.to.a.'
++                          LOOPBACK_A, EXAMPLE_A,
++                        }));
++
++    LookupSession lookupSession = lookupSession(useCache, mode).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(queryName, A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertAll(
++          () -> {
++            assertThat(result.getAliases()).containsExactly(name("x.y.to.dname."));
++            assertThat(result.getRecords()).containsExactly(LOOPBACK_A.withName(name("x.y.to.a.")));
++          });
++    }
++
++    if (useCache && mode == IrrelevantRecordMode.THROW) {
++      // Verify that the invalid response didn't end up in the cache
++      Cache cache = lookupSession.getCache(IN);
++      verify(cache, times(1)).addMessage(any(Message.class));
++      assertEquals(1, cache.getSize());
++      assertTrue(cache.lookupRecords(name("example.com."), A, Credibility.NORMAL).isUnknown());
++    }
++
++    verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
++  }
++
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_simpleCnameWrongInitial(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("first.example.com.");
++    wireUpMockResolver(mockResolver, q -> answer(q, name -> cname("a.", "b.")));
++
++    LookupSession lookupSession = lookupSession(useCache).irrelevantRecordMode(mode).build();
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(query, A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).isEmpty();
++      assertThat(result.getRecords()).isEmpty();
++    }
++
++    assertCacheUnused(useCache, mode, lookupSession);
++
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
++  @CartesianTest(name = "useCache={0}, irrelevantRecordMode={1}")
++  void lookupAsync_simpleDnameWrongInitial(
++      @Values(booleans = {true, false}) boolean useCache, @Enum IrrelevantRecordMode mode)
++      throws ExecutionException, InterruptedException {
++    Name query = name("first.example.com.");
++    wireUpMockResolver(mockResolver, q -> answer(q, name -> dname("a.", "b.")));
++
++    LookupSession lookupSession =
++        lookupSession(useCache, mode == IrrelevantRecordMode.THROW)
++            .irrelevantRecordMode(mode)
++            .build();
++
++    CompletableFuture<LookupResult> future =
++        lookupSession.lookupAsync(query, A, IN).toCompletableFuture();
++    if (mode == IrrelevantRecordMode.THROW) {
++      assertThatThrownBy(future::get)
++          .cause()
++          .isInstanceOf(LookupFailedException.class)
++          .hasMessageContaining(INVALID_SERVER_RESPONSE_MESSAGE);
++    } else {
++      LookupResult result = future.get();
++      assertThat(result.getAliases()).isEmpty();
++      assertThat(result.getRecords()).isEmpty();
++    }
++
++    assertCacheUnused(useCache, mode, lookupSession);
++    verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
++  }
++
++  private static void assertCacheUnused(
++      boolean useCache, IrrelevantRecordMode mode, LookupSession lookupSession) {
++    if (useCache && mode == IrrelevantRecordMode.THROW) {
++      // Verify that the invalid response didn't end up in the cache
++      Cache cache = lookupSession.getCache(IN);
++      verify(cache, times(0)).addMessage(any(Message.class));
++      assertEquals(0, cache.getSize());
++    }
++  }
++
++  @CartesianTest(name = "maxRedirects={0}, irrelevantRecordMode={1}")
++  void lookupAsync_redirectLoop(
++      @Values(ints = {3, 4}) int maxRedirects, @Enum IrrelevantRecordMode mode) {
++    CNAMERecord cnameA = cname("a.", "b.");
++    CNAMERecord cnameB = cname("b.", "c.");
++    CNAMERecord cnameC = cname("c.", "d.");
++    CNAMERecord cnameD = cname("d.", "a.");
++    Function<Name, Record> nameToRecord =
++        name -> {
++          if (name.equals(cnameA.getName())) {
++            return cnameA;
++          } else if (name.equals(cnameB.getName())) {
++            return cnameB;
++          } else if (name.equals(cnameC.getName())) {
++            return cnameC;
++          } else if (name.equals(cnameD.getName())) {
++            return cnameD;
++          } else {
++            throw new RuntimeException("Unexpected query");
++          }
++        };
++    wireUpMockResolver(mockResolver, q -> answer(q, nameToRecord));
++    LookupSession lookupSession =
++        LookupSession.builder()
++            .maxRedirects(maxRedirects)
++            .resolver(mockResolver)
++            .irrelevantRecordMode(mode)
++            .build();
++
++    Class<? extends Throwable> expected =
++        maxRedirects == 3 ? RedirectOverflowException.class : RedirectLoopException.class;
++    assertThatThrownBy(
++            lookupSession.lookupAsync(cnameA.getName(), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(expected);
++    verify(mockResolver, times(maxRedirects)).sendAsync(any(), any(Executor.class));
++  }
++
++  @ParameterizedTest(name = "maxRedirects={0}")
+   @ValueSource(ints = {3, 4})
+   void lookupAsync_redirectLoopOneAnswer(int maxRedirects) {
+     wireUpMockResolver(
+@@ -703,10 +1056,11 @@ void lookupAsync_redirectLoopOneAnswer(int maxRedirects) {
+     LookupSession lookupSession =
+         LookupSession.builder().resolver(mockResolver).maxRedirects(maxRedirects).build();
+ 
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a."), A, IN);
+-
+-    assertThrowsCause(
+-        RedirectOverflowException.class, () -> resultFuture.toCompletableFuture().get());
++    Class<? extends Throwable> expected =
++        maxRedirects == 3 ? RedirectOverflowException.class : RedirectLoopException.class;
++    assertThatThrownBy(lookupSession.lookupAsync(name("a."), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(expected);
+     verify(mockResolver, times(1)).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -718,7 +1072,7 @@ void lookupAsync_NODATA() throws ExecutionException, InterruptedException {
+     CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
+ 
+     LookupResult result = resultFuture.toCompletableFuture().get();
+-    assertEquals(0, result.getRecords().size());
++    assertThat(result.getRecords()).isEmpty();
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -727,9 +1081,9 @@ void lookupAsync_NXDOMAIN() {
+     wireUpMockResolver(mockResolver, q -> fail(q, Rcode.NXDOMAIN));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
+-
+-    assertThrowsCause(NoSuchDomainException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(lookupSession.lookupAsync(name("a.b."), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(NoSuchDomainException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -738,9 +1092,9 @@ void lookupAsync_SERVFAIL() {
+     wireUpMockResolver(mockResolver, q -> fail(q, Rcode.SERVFAIL));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
+-
+-    assertThrowsCause(ServerFailedException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(lookupSession.lookupAsync(name("a.b."), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(ServerFailedException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -749,9 +1103,9 @@ void lookupAsync_unknownFailure() {
+     wireUpMockResolver(mockResolver, q -> fail(q, Rcode.NOTIMP));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
+-
+-    assertThrowsCause(LookupFailedException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(lookupSession.lookupAsync(name("a.b."), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(LookupFailedException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -760,9 +1114,9 @@ void lookupAsync_NXRRSET() {
+     wireUpMockResolver(mockResolver, q -> fail(q, Rcode.NXRRSET));
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
+-
+-    assertThrowsCause(NoSuchRRSetException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(lookupSession.lookupAsync(name("a.b."), A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(NoSuchRRSetException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+@@ -773,36 +1127,35 @@ void lookupAsync_TooLongNameDNAME() {
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+     Name toLookup = name(format("%s.%s.%s.to.dname.", LONG_LABEL, LONG_LABEL, LONG_LABEL));
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(toLookup, A, IN);
+-
+-    assertThrowsCause(
+-        InvalidZoneDataException.class, () -> resultFuture.toCompletableFuture().get());
++    assertThatThrownBy(lookupSession.lookupAsync(toLookup, A, IN).toCompletableFuture()::get)
++        .cause()
++        .isInstanceOf(InvalidZoneDataException.class);
+     verify(mockResolver).sendAsync(any(), any(Executor.class));
+   }
+ 
+   @Test
+-  void lookupAsync_MultipleCNAMEs() {
++  void lookupAsync_MultipleCNAMEs() throws ExecutionException, InterruptedException {
++    Record testQuestion = Record.newRecord(name("a.b."), A, IN);
+     // According to https://docstore.mik.ua/orelly/networking_2ndEd/dns/ch10_07.htm this is
+-    // apparently something that BIND 4 did.
+-    wireUpMockResolver(mockResolver, LookupSessionTest::multipleCNAMEs);
++    // apparently something that BIND 4 / BIND 9 before 9.1 could do.
++    wireUpMockResolver(
++        mockResolver,
++        query -> {
++          Message answer = new Message(query.getHeader().getID());
++          answer.addRecord(testQuestion, Section.QUESTION);
++          answer.addRecord(cname(testQuestion.getName(), "target1."), Section.ANSWER);
++          answer.addRecord(cname(testQuestion.getName(), "target2."), Section.ANSWER);
++          return answer;
++        });
+ 
+     LookupSession lookupSession = LookupSession.builder().resolver(mockResolver).build();
+-    CompletionStage<LookupResult> resultFuture = lookupSession.lookupAsync(name("a.b."), A, IN);
++    LookupResult result = lookupSession.lookupAsync(testQuestion).toCompletableFuture().get();
+ 
+-    assertThrowsCause(
+-        InvalidZoneDataException.class, () -> resultFuture.toCompletableFuture().get());
+-    verify(mockResolver).sendAsync(any(), any(Executor.class));
+-  }
++    assertTrue(result.getRecords().isEmpty());
++    assertThat(result.getAliases()).containsExactly(testQuestion.getName());
+ 
+-  private static Message multipleCNAMEs(Message query) {
+-    Message answer = new Message(query.getHeader().getID());
+-    Record question = query.getQuestion();
+-    answer.addRecord(question, Section.QUESTION);
+-    answer.addRecord(
+-        new CNAMERecord(question.getName(), CNAME, IN, name("target1.")), Section.ANSWER);
+-    answer.addRecord(
+-        new CNAMERecord(question.getName(), CNAME, IN, name("target2.")), Section.ANSWER);
+-    return answer;
++    // Two invocations as the result doesn't include an actual answer
++    verify(mockResolver, times(2)).sendAsync(any(), any(Executor.class));
+   }
+ 
+   @Test
+@@ -821,12 +1174,11 @@ void lookupAsync_searchAppended() throws Exception {
+     ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+     verify(mockResolver).sendAsync(messageCaptor.capture(), any(Executor.class));
+ 
+-    assertEquals(
+-        Record.newRecord(name("host.example.com."), Type.A, DClass.IN, 0L),
+-        messageCaptor.getValue().getSection(Section.QUESTION).get(0));
++    assertThat(messageCaptor.getValue().getSection(Section.QUESTION))
++        .containsExactly(Record.newRecord(name("host.example.com."), Type.A, DClass.IN, 0L));
+ 
+-    assertEquals(
+-        singletonList(LOOPBACK_A.withName(name("host.example.com."))), lookupResult.getRecords());
++    assertThat(lookupResult.getRecords())
++        .containsExactly(LOOPBACK_A.withName(name("host.example.com.")));
+   }
+ 
+   @Test
+@@ -999,26 +1351,68 @@ void expandName_ndotsMoreThanOne() {
+   }
+ 
+   private static CNAMERecord cname(String name, String target) {
+-    return cname(name(name), target);
++    return cname(name(name), name(target));
+   }
+ 
++  @SuppressWarnings("SameParameterValue")
+   private static CNAMERecord cname(Name name, String target) {
+-    return new CNAMERecord(name, IN, 0, name(target));
++    return cname(name, name(target));
++  }
++
++  private static CNAMERecord cname(Name name, Name target) {
++    return new CNAMERecord(name, IN, 120, target);
+   }
+ 
+-  @SuppressWarnings("SameParameterValue")
+   private static DNAMERecord dname(String name, String target) {
+-    return new DNAMERecord(name(name), IN, 0, name(target));
++    return dname(name(name), name(target));
++  }
++
++  @SuppressWarnings("SameParameterValue")
++  private static DNAMERecord dname(Name name, String target) {
++    return dname(name, name(target));
++  }
++
++  private static DNAMERecord dname(Name name, Name target) {
++    return new DNAMERecord(name, IN, 120, target);
+   }
+ 
+   private static Name name(String name) {
+     return Name.fromConstantString(name);
+   }
+ 
+-  @SuppressWarnings("SameParameterValue")
+-  private <T extends Throwable> void assertThrowsCause(Class<T> ex, Executable executable) {
+-    Throwable outerException = assertThrows(Throwable.class, executable);
+-    assertEquals(ex, outerException.getCause().getClass());
++  private LookupSession.LookupSessionBuilder lookupSession(boolean useCache) {
++    return lookupSession(useCache, false);
++  }
++
++  private LookupSession.LookupSessionBuilder lookupSession(
++      boolean useCache, IrrelevantRecordMode mode) {
++    return lookupSession(useCache, mode, false);
++  }
++
++  private LookupSession.LookupSessionBuilder lookupSession(boolean useCache, boolean throwOnUse) {
++    return lookupSession(useCache, IrrelevantRecordMode.REMOVE, throwOnUse);
++  }
++
++  private LookupSession.LookupSessionBuilder lookupSession(
++      boolean useCache, IrrelevantRecordMode mode, boolean throwOnUse) {
++    LookupSession.LookupSessionBuilder builder =
++        LookupSession.builder().resolver(mockResolver).irrelevantRecordMode(mode);
++    if (useCache) {
++      Cache cache = spy(new Cache());
++      builder.cache(cache);
++      if (throwOnUse) {
++        lenient()
++            .doThrow(new RuntimeException("Unexpected addMessage"))
++            .when(cache)
++            .addMessage(any(Message.class));
++        lenient()
++            .doThrow(new RuntimeException("Unexpected addRecord"))
++            .when(cache)
++            .addRecord(any(Record.class), anyInt());
++      }
++    }
++
++    return builder;
+   }
+ 
+   private void wireUpMockResolver(Resolver mockResolver, Function<Message, Message> handler) {
+diff --git a/src/test/resources/unbound/val_adcopy.rpl b/src/test/resources/unbound/val_adcopy.rpl
+index 604fd57f..aeb8bfd7 100644
+--- a/src/test/resources/unbound/val_adcopy.rpl
++++ b/src/test/resources/unbound/val_adcopy.rpl
+@@ -17,7 +17,7 @@ SCENARIO_BEGIN Test validator AD bit sent by untrusted upstream
+ 
+ ; K.ROOT-SERVERS.NET.
+ RANGE_BEGIN 0 100
+-	ADDRESS 193.0.14.129 
++	ADDRESS 193.0.14.129
+ ENTRY_BEGIN
+ MATCH opcode qtype qname
+ ADJUST copy_id
+@@ -115,13 +115,13 @@ SECTION QUESTION
+ www.example.com. IN A
+ SECTION ANSWER
+ www.example.com. IN A	10.20.30.40
+-ns.example.com. 3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCQMyTjn7WWwpwAR1LlVeLpRgZGuQIUCcJDEkwAuzytTDRlYK7nIMwH1CM= ;{id = 2854}
++www.example.com.        3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFC99iE9K5y2WNgI0gFvBWaTi9wm6AhUAoUqOpDtG5Zct+Qr9F3mSdnbc6V4= ;{id = 2854}
+ SECTION AUTHORITY
+ example.com.	IN NS	ns.example.com.
+ example.com.    3600    IN      RRSIG   NS 3 2 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCN+qHdJxoI/2tNKwsb08pra/G7aAIUAWA5sDdJTbrXA1/3OaesGBAO3sI= ;{id = 2854}
+ SECTION ADDITIONAL
+ ns.example.com.		IN 	A	1.2.3.4
+-www.example.com.        3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFC99iE9K5y2WNgI0gFvBWaTi9wm6AhUAoUqOpDtG5Zct+Qr9F3mSdnbc6V4= ;{id = 2854}
++ns.example.com. 3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCQMyTjn7WWwpwAR1LlVeLpRgZGuQIUCcJDEkwAuzytTDRlYK7nIMwH1CM= ;{id = 2854}
+ ENTRY_END
+ RANGE_END
+ 
+diff --git a/src/test/resources/unbound/val_unalgo_anchor.rpl b/src/test/resources/unbound/val_unalgo_anchor.rpl
+index fbbf288a..de6b2810 100644
+--- a/src/test/resources/unbound/val_unalgo_anchor.rpl
++++ b/src/test/resources/unbound/val_unalgo_anchor.rpl
+@@ -13,11 +13,11 @@ stub-zone:
+ 	stub-addr: 193.0.14.129 	# K.ROOT-SERVERS.NET.
+ CONFIG_END
+ 
+-SCENARIO_BEGIN Test validator with unsupported algorithm trust anchor 
++SCENARIO_BEGIN Test validator with unsupported algorithm trust anchor
+ 
+ ; K.ROOT-SERVERS.NET.
+ RANGE_BEGIN 0 100
+-	ADDRESS 193.0.14.129 
++	ADDRESS 193.0.14.129
+ ENTRY_BEGIN
+ MATCH opcode qtype qname
+ ADJUST copy_id
+@@ -115,13 +115,13 @@ SECTION QUESTION
+ www.example.com. IN A
+ SECTION ANSWER
+ www.example.com. IN A	10.20.30.40
+-ns.example.com. 3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCQMyTjn7WWwpwAR1LlVeLpRgZGuQIUCcJDEkwAuzytTDRlYK7nIMwH1CM= ;{id = 2854}
++www.example.com.        3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFC99iE9K5y2WNgI0gFvBWaTi9wm6AhUAoUqOpDtG5Zct+Qr9F3mSdnbc6V4= ;{id = 2854}
+ SECTION AUTHORITY
+ example.com.	IN NS	ns.example.com.
+ example.com.    3600    IN      RRSIG   NS 3 2 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCN+qHdJxoI/2tNKwsb08pra/G7aAIUAWA5sDdJTbrXA1/3OaesGBAO3sI= ;{id = 2854}
+ SECTION ADDITIONAL
+ ns.example.com.		IN 	A	1.2.3.4
+-www.example.com.        3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFC99iE9K5y2WNgI0gFvBWaTi9wm6AhUAoUqOpDtG5Zct+Qr9F3mSdnbc6V4= ;{id = 2854}
++ns.example.com. 3600    IN      RRSIG   A 3 3 3600 20070926134150 20070829134150 2854 example.com. MC0CFQCQMyTjn7WWwpwAR1LlVeLpRgZGuQIUCcJDEkwAuzytTDRlYK7nIMwH1CM= ;{id = 2854}
+ ENTRY_END
+ RANGE_END
+ 

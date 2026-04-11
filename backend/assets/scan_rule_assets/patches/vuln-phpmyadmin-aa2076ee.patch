@@ -1,0 +1,1130 @@
+From aa2076eedc7e3664b09681d6fe9dd019eca98647 Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Tue, 17 Jun 2008 21:32:48 +0000
+Subject: [PATCH] protection against XSS when register_globals is on and
+ .htaccess has no effect
+
+---
+ ChangeLog                                 | 2 ++
+ libraries/auth/cookie.auth.lib.php        | 8 ++------
+ libraries/charset_conversion.lib.php      | 4 +++-
+ libraries/check_user_privileges.lib.php   | 3 +++
+ libraries/common.inc.php                  | 8 +++++---
+ libraries/database_interface.lib.php      | 3 +++
+ libraries/db_common.inc.php               | 3 +++
+ libraries/db_info.inc.php                 | 3 +++
+ libraries/db_links.inc.php                | 3 +++
+ libraries/db_routines.inc.php             | 3 +++
+ libraries/db_table_exists.lib.php         | 3 +++
+ libraries/dbg/setup.php                   | 5 ++++-
+ libraries/dbi/mysql.dbi.lib.php           | 3 +++
+ libraries/dbi/mysqli.dbi.lib.php          | 3 +++
+ libraries/display_change_password.lib.php | 3 +++
+ libraries/display_create_database.lib.php | 3 +++
+ libraries/display_create_table.lib.php    | 3 +++
+ libraries/display_export.lib.php          | 3 +++
+ libraries/display_import.lib.php          | 3 +++
+ libraries/display_select_lang.lib.php     | 3 +++
+ libraries/display_tbl_links.lib.php       | 3 +++
+ libraries/export/csv.php                  | 3 +++
+ libraries/export/excel.php                | 3 +++
+ libraries/export/htmlexcel.php            | 3 +++
+ libraries/export/htmlword.php             | 3 +++
+ libraries/export/latex.php                | 3 +++
+ libraries/export/ods.php                  | 3 +++
+ libraries/export/odt.php                  | 3 +++
+ libraries/export/pdf.php                  | 3 +++
+ libraries/export/sql.php                  | 3 +++
+ libraries/export/xls.php                  | 3 +++
+ libraries/export/xml.php                  | 3 +++
+ libraries/export/yaml.php                 | 3 +++
+ libraries/footer.inc.php                  | 5 ++++-
+ libraries/get_foreign.lib.php             | 3 +++
+ libraries/grab_globals.lib.php            | 3 +++
+ libraries/header.inc.php                  | 3 +++
+ libraries/header_http.inc.php             | 3 +++
+ libraries/header_meta_style.inc.php       | 3 +++
+ libraries/header_printview.inc.php        | 3 +++
+ libraries/iconv_wrapper.lib.php           | 3 +++
+ libraries/import.lib.php                  | 3 +++
+ libraries/import/csv.php                  | 3 +++
+ libraries/import/docsql.php               | 3 +++
+ libraries/import/ldi.php                  | 3 +++
+ libraries/import/sql.php                  | 3 +++
+ libraries/kanji-encoding.lib.php          | 3 +++
+ libraries/language.lib.php                | 3 +++
+ libraries/mcrypt.lib.php                  | 3 +++
+ libraries/mult_submits.inc.php            | 3 +++
+ libraries/mysql_charsets.lib.php          | 3 +++
+ libraries/navigation_header.inc.php       | 4 ++++
+ libraries/opendocument.lib.php            | 3 +++
+ libraries/parse_analyze.lib.php           | 3 +++
+ libraries/relation.lib.php                | 3 +++
+ libraries/relation_cleanup.lib.php        | 3 +++
+ libraries/select_lang.lib.php             | 5 ++++-
+ libraries/server_common.inc.php           | 3 +++
+ libraries/server_links.inc.php            | 3 +++
+ libraries/session.inc.php                 | 3 +++
+ libraries/sql_query_form.lib.php          | 3 +++
+ libraries/sqlparser.data.php              | 3 +++
+ libraries/sqlparser.lib.php               | 3 +++
+ libraries/sqlvalidator.class.php          | 3 +++
+ libraries/sqlvalidator.lib.php            | 3 +++
+ libraries/string.lib.php                  | 3 +++
+ libraries/tbl_common.php                  | 3 +++
+ libraries/tbl_info.inc.php                | 3 +++
+ libraries/tbl_links.inc.php               | 3 +++
+ libraries/tbl_properties.inc.php          | 3 +++
+ libraries/tbl_replace_fields.inc.php      | 3 +++
+ libraries/tbl_triggers.lib.php            | 3 +++
+ 72 files changed, 220 insertions(+), 13 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 45f2e92e01..9f1220dee7 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -24,6 +24,8 @@ $HeadURL: https://phpmyadmin.svn.sourceforge.net/svnroot/phpmyadmin/trunk/phpMyA
+ - bug #1981043 [export] HTML in exports getting corrupted,
+   thanks to Jason Judge - jasonjudge
+ - bug #1936761 [interface] BINARY not treated as BLOB: update/delete issues 
++- protection against XSS when register_globals is on and .htaccess has
++  no effect, thanks to Tim Starling
+   
+ 2.11.6.0 (2008-04-29)
+ - bug #1903724 [interface] Displaying of very large queries in error message 
+diff --git a/libraries/auth/cookie.auth.lib.php b/libraries/auth/cookie.auth.lib.php
+index 3746fe0e51..653ae1e3c2 100644
+--- a/libraries/auth/cookie.auth.lib.php
++++ b/libraries/auth/cookie.auth.lib.php
+@@ -8,12 +8,8 @@
+  * @version $Id$
+  */
+ 
+-/**
+- * @todo replace by constant
+- * $coming_from_common can be set from outside with register_globals on
+- */
+-if (!isset($coming_from_common)) {
+-   exit;
++if (! defined('PHPMYADMIN')) {
++    exit;
+ }
+ 
+ if (function_exists('mcrypt_encrypt') || PMA_dl('mcrypt')) {
+diff --git a/libraries/charset_conversion.lib.php b/libraries/charset_conversion.lib.php
+index 8ec0fa3b9c..7adeb90ae6 100644
+--- a/libraries/charset_conversion.lib.php
++++ b/libraries/charset_conversion.lib.php
+@@ -5,7 +5,9 @@
+  *
+  * @version $Id$
+  */
+-
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Loads the recode or iconv extensions if any of it is not loaded yet
+diff --git a/libraries/check_user_privileges.lib.php b/libraries/check_user_privileges.lib.php
+index 977d85460d..1164e76efb 100644
+--- a/libraries/check_user_privileges.lib.php
++++ b/libraries/check_user_privileges.lib.php
+@@ -7,6 +7,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/common.inc.php b/libraries/common.inc.php
+index f602897f23..7bf04a032c 100644
+--- a/libraries/common.inc.php
++++ b/libraries/common.inc.php
+@@ -52,6 +52,11 @@ if (version_compare(phpversion(), '6', 'lt')) {
+     @ini_set('magic_quotes_runtime', false);
+ }
+ 
++/**
++ * for verification in all procedural scripts under libraries
++ */
++define('PHPMYADMIN', true);
++
+ /**
+  * core functions
+  */
+@@ -730,9 +735,6 @@ if (! defined('PMA_MINIMUM_COMMON')) {
+         // Gets the authentication library that fits the $cfg['Server'] settings
+         // and run authentication
+ 
+-        // (for a quick check of path disclosure in auth/cookies:)
+-        $coming_from_common = true;
+-
+         // to allow HTTP or http
+         $cfg['Server']['auth_type'] = strtolower($cfg['Server']['auth_type']);
+         if (! file_exists('./libraries/auth/' . $cfg['Server']['auth_type'] . '.auth.lib.php')) {
+diff --git a/libraries/database_interface.lib.php b/libraries/database_interface.lib.php
+index 96467074df..b32274c3cf 100644
+--- a/libraries/database_interface.lib.php
++++ b/libraries/database_interface.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/db_common.inc.php b/libraries/db_common.inc.php
+index f21437acb2..693d28aec7 100644
+--- a/libraries/db_common.inc.php
++++ b/libraries/db_common.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Gets some core libraries
+diff --git a/libraries/db_info.inc.php b/libraries/db_info.inc.php
+index 2717bf4d1c..adc5465272 100644
+--- a/libraries/db_info.inc.php
++++ b/libraries/db_info.inc.php
+@@ -34,6 +34,9 @@
+  * @uses    addslashes()
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * requirements
+diff --git a/libraries/db_links.inc.php b/libraries/db_links.inc.php
+index d22e59e114..417392d433 100644
+--- a/libraries/db_links.inc.php
++++ b/libraries/db_links.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/db_routines.inc.php b/libraries/db_routines.inc.php
+index 873d3eb2ee..f3d24741f8 100644
+--- a/libraries/db_routines.inc.php
++++ b/libraries/db_routines.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * @todo Support seeing the "results" of the called procedure or
+diff --git a/libraries/db_table_exists.lib.php b/libraries/db_table_exists.lib.php
+index 8486cc7d73..19a5827b99 100644
+--- a/libraries/db_table_exists.lib.php
++++ b/libraries/db_table_exists.lib.php
+@@ -6,6 +6,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/dbg/setup.php b/libraries/dbg/setup.php
+index 30d8700008..af4f34aa00 100644
+--- a/libraries/dbg/setup.php
++++ b/libraries/dbg/setup.php
+@@ -3,6 +3,9 @@
+ /**
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * checks for DBG extension and trys to load if not loaded
+@@ -24,4 +27,4 @@ if ($GLOBALS['cfg']['DBG']['enable']) {
+         $GLOBALS['DBG'] = true;
+     }
+ }
+-?>
+\ No newline at end of file
++?>
+diff --git a/libraries/dbi/mysql.dbi.lib.php b/libraries/dbi/mysql.dbi.lib.php
+index bd4bd1227c..3ae84b803a 100644
+--- a/libraries/dbi/mysql.dbi.lib.php
++++ b/libraries/dbi/mysql.dbi.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/dbi/mysqli.dbi.lib.php b/libraries/dbi/mysqli.dbi.lib.php
+index 0aa5184509..705477ebf2 100644
+--- a/libraries/dbi/mysqli.dbi.lib.php
++++ b/libraries/dbi/mysqli.dbi.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ // MySQL client API
+ if (!defined('PMA_MYSQL_CLIENT_API')) {
+diff --git a/libraries/display_change_password.lib.php b/libraries/display_change_password.lib.php
+index b1fdc3abc6..550f271c71 100644
+--- a/libraries/display_change_password.lib.php
++++ b/libraries/display_change_password.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ // loic1: autocomplete feature of IE kills the "onchange" event handler and it
+ //        must be replaced by the "onpropertychange" one in this case
+diff --git a/libraries/display_create_database.lib.php b/libraries/display_create_database.lib.php
+index 65c37d6c8f..b5b5ba4854 100644
+--- a/libraries/display_create_database.lib.php
++++ b/libraries/display_create_database.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/display_create_table.lib.php b/libraries/display_create_table.lib.php
+index 62d522b687..f31fcfe8e8 100644
+--- a/libraries/display_create_table.lib.php
++++ b/libraries/display_create_table.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/display_export.lib.php b/libraries/display_export.lib.php
+index 60fe0dd4ce..858c265721 100644
+--- a/libraries/display_export.lib.php
++++ b/libraries/display_export.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/display_import.lib.php b/libraries/display_import.lib.php
+index d77280422d..9f1b0eec7a 100644
+--- a/libraries/display_import.lib.php
++++ b/libraries/display_import.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/display_select_lang.lib.php b/libraries/display_select_lang.lib.php
+index e7a48ab474..6f7a5215d2 100644
+--- a/libraries/display_select_lang.lib.php
++++ b/libraries/display_select_lang.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Sorts available languages by their true english names
+diff --git a/libraries/display_tbl_links.lib.php b/libraries/display_tbl_links.lib.php
+index f9a42ec2fe..a851484d0b 100644
+--- a/libraries/display_tbl_links.lib.php
++++ b/libraries/display_tbl_links.lib.php
+@@ -9,6 +9,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/csv.php b/libraries/export/csv.php
+index 0c6f525e58..b1f5a6ef49 100644
+--- a/libraries/export/csv.php
++++ b/libraries/export/csv.php
+@@ -3,6 +3,9 @@
+ /**
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Set of functions used to build CSV dumps of tables
+diff --git a/libraries/export/excel.php b/libraries/export/excel.php
+index efa8598713..5df0b3fe39 100644
+--- a/libraries/export/excel.php
++++ b/libraries/export/excel.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/htmlexcel.php b/libraries/export/htmlexcel.php
+index b380cd52e8..5edc684b4a 100644
+--- a/libraries/export/htmlexcel.php
++++ b/libraries/export/htmlexcel.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/htmlword.php b/libraries/export/htmlword.php
+index 94d0add9cb..9141f81926 100644
+--- a/libraries/export/htmlword.php
++++ b/libraries/export/htmlword.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/latex.php b/libraries/export/latex.php
+index 4ea8188d6e..3711d37ebc 100644
+--- a/libraries/export/latex.php
++++ b/libraries/export/latex.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/ods.php b/libraries/export/ods.php
+index 09ba825059..51cf28eca7 100644
+--- a/libraries/export/ods.php
++++ b/libraries/export/ods.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/odt.php b/libraries/export/odt.php
+index c4a106ab05..c4439471f7 100644
+--- a/libraries/export/odt.php
++++ b/libraries/export/odt.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/pdf.php b/libraries/export/pdf.php
+index 12bfd79873..6cc2b902f4 100644
+--- a/libraries/export/pdf.php
++++ b/libraries/export/pdf.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/sql.php b/libraries/export/sql.php
+index a65ff6a872..e78ac948a0 100644
+--- a/libraries/export/sql.php
++++ b/libraries/export/sql.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/xls.php b/libraries/export/xls.php
+index c9ec6ca5b9..7f7ef27e69 100644
+--- a/libraries/export/xls.php
++++ b/libraries/export/xls.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/xml.php b/libraries/export/xml.php
+index 9f3da10219..bc99eb0063 100644
+--- a/libraries/export/xml.php
++++ b/libraries/export/xml.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/export/yaml.php b/libraries/export/yaml.php
+index e5850ae9fa..f55e9153a8 100644
+--- a/libraries/export/yaml.php
++++ b/libraries/export/yaml.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/footer.inc.php b/libraries/footer.inc.php
+index 26fed37560..e02c69ac6f 100644
+--- a/libraries/footer.inc.php
++++ b/libraries/footer.inc.php
+@@ -1,7 +1,7 @@
+ <?php
+ /* vim: set expandtab sw=4 ts=4 sts=4: */
+ /**
+- * finishs HTML output
++ * finishes HTML output
+  *
+  * updates javascript variables in index.php for coorect working with querywindow
+  * and navigation frame refreshing
+@@ -44,6 +44,9 @@
+  * @uses    file_exists()
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * for PMA_setHistory()
+diff --git a/libraries/get_foreign.lib.php b/libraries/get_foreign.lib.php
+index 4d4e1a7be1..0c2bcee7a9 100644
+--- a/libraries/get_foreign.lib.php
++++ b/libraries/get_foreign.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/grab_globals.lib.php b/libraries/grab_globals.lib.php
+index d191d8a55a..3b2ceb7a99 100644
+--- a/libraries/grab_globals.lib.php
++++ b/libraries/grab_globals.lib.php
+@@ -8,6 +8,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * copy values from one array to another, usally from a superglobal into $GLOBALS
+diff --git a/libraries/header.inc.php b/libraries/header.inc.php
+index 2b166e1a8e..e9cbf22fef 100644
+--- a/libraries/header.inc.php
++++ b/libraries/header.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/header_http.inc.php b/libraries/header_http.inc.php
+index ab1207638e..a75c3488ec 100644
+--- a/libraries/header_http.inc.php
++++ b/libraries/header_http.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/header_meta_style.inc.php b/libraries/header_meta_style.inc.php
+index 12cc1313dd..2aa4ba1dbc 100644
+--- a/libraries/header_meta_style.inc.php
++++ b/libraries/header_meta_style.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/header_printview.inc.php b/libraries/header_printview.inc.php
+index 73724ffcfe..1a89dde3a9 100644
+--- a/libraries/header_printview.inc.php
++++ b/libraries/header_printview.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Gets a core script and starts output buffering work
+diff --git a/libraries/iconv_wrapper.lib.php b/libraries/iconv_wrapper.lib.php
+index 6104e82d47..26566e7286 100644
+--- a/libraries/iconv_wrapper.lib.php
++++ b/libraries/iconv_wrapper.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/import.lib.php b/libraries/import.lib.php
+index 4a259c9b83..861a239f29 100644
+--- a/libraries/import.lib.php
++++ b/libraries/import.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * We need to know something about user
+diff --git a/libraries/import/csv.php b/libraries/import/csv.php
+index eeaa35a147..7acb3eeea2 100644
+--- a/libraries/import/csv.php
++++ b/libraries/import/csv.php
+@@ -6,6 +6,9 @@
+  * @todo    add an option for handling NULL values
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/import/docsql.php b/libraries/import/docsql.php
+index 6b8d46c0fa..5c051f6f91 100644
+--- a/libraries/import/docsql.php
++++ b/libraries/import/docsql.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ require_once './libraries/relation.lib.php';
+ $cfgRelation = PMA_getRelationsParam();
+diff --git a/libraries/import/ldi.php b/libraries/import/ldi.php
+index 393a43e318..00a5df8e0f 100644
+--- a/libraries/import/ldi.php
++++ b/libraries/import/ldi.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/import/sql.php b/libraries/import/sql.php
+index 4a6168e7da..047f23a3c5 100644
+--- a/libraries/import/sql.php
++++ b/libraries/import/sql.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/kanji-encoding.lib.php b/libraries/kanji-encoding.lib.php
+index 2e5b9f83fa..f9e58b2660 100644
+--- a/libraries/kanji-encoding.lib.php
++++ b/libraries/kanji-encoding.lib.php
+@@ -11,6 +11,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Gets the php internal encoding codes and sets the available encoding
+diff --git a/libraries/language.lib.php b/libraries/language.lib.php
+index cc2a606bb6..522be4ee49 100644
+--- a/libraries/language.lib.php
++++ b/libraries/language.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * lang detection is done here
+diff --git a/libraries/mcrypt.lib.php b/libraries/mcrypt.lib.php
+index 7d6d21cc37..e6b7277dc9 100644
+--- a/libraries/mcrypt.lib.php
++++ b/libraries/mcrypt.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Initialization
+diff --git a/libraries/mult_submits.inc.php b/libraries/mult_submits.inc.php
+index fb9cb85a24..b9cff104d8 100644
+--- a/libraries/mult_submits.inc.php
++++ b/libraries/mult_submits.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Prepares the work and runs some other scripts if required
+diff --git a/libraries/mysql_charsets.lib.php b/libraries/mysql_charsets.lib.php
+index b4a6d3b078..e5f20f011f 100644
+--- a/libraries/mysql_charsets.lib.php
++++ b/libraries/mysql_charsets.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/navigation_header.inc.php b/libraries/navigation_header.inc.php
+index 6a8748e9d7..9d5b39c84a 100644
+--- a/libraries/navigation_header.inc.php
++++ b/libraries/navigation_header.inc.php
+@@ -6,6 +6,10 @@
+  * @version $Id$
+  */
+ 
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
++
+ /**
+  *
+  */
+diff --git a/libraries/opendocument.lib.php b/libraries/opendocument.lib.php
+index 116655607a..dfa27ffc88 100644
+--- a/libraries/opendocument.lib.php
++++ b/libraries/opendocument.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/parse_analyze.lib.php b/libraries/parse_analyze.lib.php
+index 7885b253b8..ad05fb0d38 100644
+--- a/libraries/parse_analyze.lib.php
++++ b/libraries/parse_analyze.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/relation.lib.php b/libraries/relation.lib.php
+index 272bcda1cc..7b4be9225a 100644
+--- a/libraries/relation.lib.php
++++ b/libraries/relation.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/relation_cleanup.lib.php b/libraries/relation_cleanup.lib.php
+index 62ecce9447..a82ba67978 100644
+--- a/libraries/relation_cleanup.lib.php
++++ b/libraries/relation_cleanup.lib.php
+@@ -5,6 +5,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/select_lang.lib.php b/libraries/select_lang.lib.php
+index 454c44e301..540cab282c 100644
+--- a/libraries/select_lang.lib.php
++++ b/libraries/select_lang.lib.php
+@@ -5,9 +5,12 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+- * trys to find the language to use
++ * tries to find the language to use
+  *
+  * @uses    $GLOBALS['cfg']['lang']
+  * @uses    $GLOBALS['cfg']['DefaultLang']
+diff --git a/libraries/server_common.inc.php b/libraries/server_common.inc.php
+index b1ed96c0ac..07005ffe2f 100644
+--- a/libraries/server_common.inc.php
++++ b/libraries/server_common.inc.php
+@@ -9,6 +9,9 @@
+  * @uses    $userlink
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Gets some core libraries
+diff --git a/libraries/server_links.inc.php b/libraries/server_links.inc.php
+index 96ad5bb1fd..ee35efd010 100644
+--- a/libraries/server_links.inc.php
++++ b/libraries/server_links.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Check parameters
+diff --git a/libraries/session.inc.php b/libraries/session.inc.php
+index c1b30197a1..bcc8993e0b 100644
+--- a/libraries/session.inc.php
++++ b/libraries/session.inc.php
+@@ -13,6 +13,9 @@
+  * @uses    version_compare()
+  * @uses    PHP_VERSION
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ // verify if PHP supports session, die if it does not
+ 
+diff --git a/libraries/sql_query_form.lib.php b/libraries/sql_query_form.lib.php
+index c4af277c34..a085951375 100644
+--- a/libraries/sql_query_form.lib.php
++++ b/libraries/sql_query_form.lib.php
+@@ -10,6 +10,9 @@
+  * @usedby  tbl_structure.php
+  * @usedby  querywindow.php
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/sqlparser.data.php b/libraries/sqlparser.data.php
+index 69c99f8c04..6dbe5b3f97 100644
+--- a/libraries/sqlparser.data.php
++++ b/libraries/sqlparser.data.php
+@@ -21,6 +21,9 @@
+  *
+  * @version$Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * @global array MySQL function names
+diff --git a/libraries/sqlparser.lib.php b/libraries/sqlparser.lib.php
+index d7d4d6cd20..e5dee59fdf 100644
+--- a/libraries/sqlparser.lib.php
++++ b/libraries/sqlparser.lib.php
+@@ -29,6 +29,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ 
+ /**
+diff --git a/libraries/sqlvalidator.class.php b/libraries/sqlvalidator.class.php
+index 8f46b07373..19fc46a5f4 100644
+--- a/libraries/sqlvalidator.class.php
++++ b/libraries/sqlvalidator.class.php
+@@ -27,6 +27,9 @@
+ *
+ * @version  $Id$
+ */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ @include_once 'SOAP/Client.php';
+ 
+diff --git a/libraries/sqlvalidator.lib.php b/libraries/sqlvalidator.lib.php
+index a2d61e1541..4c75f3d0ec 100644
+--- a/libraries/sqlvalidator.lib.php
++++ b/libraries/sqlvalidator.lib.php
+@@ -29,6 +29,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * We need the PEAR libraries, so do a minimum version check first
+diff --git a/libraries/string.lib.php b/libraries/string.lib.php
+index 2f76bd3f70..550bd5f382 100644
+--- a/libraries/string.lib.php
++++ b/libraries/string.lib.php
+@@ -22,6 +22,9 @@
+  * @uses    defined()
+  * @todo a .lib filename should not have code in main(), split or rename file
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /* Try to load mbstring, unless we're using buggy php version */
+ if (PMA_PHP_INT_VERSION != 40203) {
+diff --git a/libraries/tbl_common.php b/libraries/tbl_common.php
+index 75dab272a5..ec0eb032cc 100644
+--- a/libraries/tbl_common.php
++++ b/libraries/tbl_common.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Gets some core libraries
+diff --git a/libraries/tbl_info.inc.php b/libraries/tbl_info.inc.php
+index 9aeb9ceea1..30a7aec8d1 100644
+--- a/libraries/tbl_info.inc.php
++++ b/libraries/tbl_info.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  *
+diff --git a/libraries/tbl_links.inc.php b/libraries/tbl_links.inc.php
+index 9887728b31..85e515d6c0 100644
+--- a/libraries/tbl_links.inc.php
++++ b/libraries/tbl_links.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Check parameters
+diff --git a/libraries/tbl_properties.inc.php b/libraries/tbl_properties.inc.php
+index 3b1018aa7a..e933ed32a4 100644
+--- a/libraries/tbl_properties.inc.php
++++ b/libraries/tbl_properties.inc.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * Check parameters
+diff --git a/libraries/tbl_replace_fields.inc.php b/libraries/tbl_replace_fields.inc.php
+index 06fdfc0572..64a9d1b34b 100644
+--- a/libraries/tbl_replace_fields.inc.php
++++ b/libraries/tbl_replace_fields.inc.php
+@@ -29,6 +29,9 @@
+  * @uses PMA_NO_VARIABLES_IMPORT
+  * @uses PMA_sqlAddslashes()
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ /**
+  * do not import request variable into global scope
+diff --git a/libraries/tbl_triggers.lib.php b/libraries/tbl_triggers.lib.php
+index af6f0b235f..659cc2c406 100644
+--- a/libraries/tbl_triggers.lib.php
++++ b/libraries/tbl_triggers.lib.php
+@@ -4,6 +4,9 @@
+  *
+  * @version $Id$
+  */
++if (! defined('PHPMYADMIN')) {
++    exit;
++}
+ 
+ $url_query .= '&amp;goto=tbl_structure.php';
+ 
+-- 
+2.34.1
+

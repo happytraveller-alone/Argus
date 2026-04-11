@@ -1,0 +1,47 @@
+From 083c34f06ca927b16e781bae3ae324f450c35ea4 Mon Sep 17 00:00:00 2001
+From: David Hicks <hickseydr@optusnet.com.au>
+Date: Wed, 4 Aug 2010 23:17:54 +1000
+Subject: [PATCH] Fix #12230: XSS vulnerability when deleting maliciously named
+ categories
+
+As reported by Secunia, SA40832, there is an XSS vulnerability when
+deleting project categories that have been maliciously named. The chance
+of attack is low due to requiring project manager access to create
+malicious project categories in the first place.
+
+Thanks to John Reese for debugging this issue.
+---
+ manage_proj_cat_delete.php | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/manage_proj_cat_delete.php b/manage_proj_cat_delete.php
+index b6d1d8319..6438a19e1 100644
+--- a/manage_proj_cat_delete.php
++++ b/manage_proj_cat_delete.php
+@@ -48,12 +48,13 @@ require_api( 'helper_api.php' );
+ require_api( 'html_api.php' );
+ require_api( 'lang_api.php' );
+ require_api( 'print_api.php' );
++require_api( 'string_api.php' );
+ 
+ form_security_validate( 'manage_proj_cat_delete' );
+ 
+ auth_reauthenticate();
+ 
+-$f_category_id = gpc_get_string( 'id' );
++$f_category_id = gpc_get_int( 'id' );
+ $f_project_id = gpc_get_int( 'project_id' );
+ 
+ access_ensure_project_level( config_get( 'manage_project_threshold' ), $f_project_id );
+@@ -68,7 +69,7 @@ $t_query = "SELECT COUNT(id) FROM $t_bug_table WHERE category_id=" . db_param();
+ $t_bug_count = db_result( db_query_bound( $t_query, array( $f_category_id ) ) );
+ 
+ # Confirm with the user
+-helper_ensure_confirmed( sprintf( lang_get( 'category_delete_sure_msg' ), $t_name, $t_bug_count ),
++helper_ensure_confirmed( sprintf( lang_get( 'category_delete_sure_msg' ), string_display_line( $t_name ), $t_bug_count ),
+ 	lang_get( 'delete_category_button' ) );
+ 
+ category_remove( $f_category_id );
+-- 
+2.34.1
+

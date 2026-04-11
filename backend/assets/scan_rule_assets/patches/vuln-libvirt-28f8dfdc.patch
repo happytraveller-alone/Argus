@@ -1,0 +1,381 @@
+From 28f8dfdcccd4c0f69063ef741545b37d8a7f7935 Mon Sep 17 00:00:00 2001
+From: Jiri Denemark <jdenemar@redhat.com>
+Date: Mon, 8 Oct 2012 11:58:05 +0200
+Subject: [PATCH] Add MIGRATABLE flag for virDomainGetXMLDesc
+
+Using VIR_DOMAIN_XML_MIGRATABLE flag, one can request domain's XML
+configuration that is suitable for migration or save/restore. Such XML
+may contain extra run-time stuff internal to libvirt and some default
+configuration may be removed for better compatibility of the XML with
+older libvirt releases.
+
+This flag may serve as an easy way to get the XML that can be passed
+(after desired modifications) to APIs that accept custom XMLs, such as
+virDomainMigrate{,ToURI}2 or virDomainSaveFlags.
+---
+ include/libvirt/libvirt.h.in |  1 +
+ src/conf/domain_conf.c       |  3 ++-
+ src/qemu/qemu_domain.c       | 21 ++++++++-------------
+ src/qemu/qemu_domain.h       | 11 ++++++-----
+ src/qemu/qemu_driver.c       | 16 +++++++++-------
+ src/qemu/qemu_migration.c    | 11 +++++------
+ src/qemu/qemu_process.c      | 14 +++++++-------
+ tools/virsh-domain.c         |  4 ++++
+ tools/virsh.pod              |  7 +++++--
+ 9 files changed, 47 insertions(+), 41 deletions(-)
+
+diff --git a/include/libvirt/libvirt.h.in b/include/libvirt/libvirt.h.in
+index 81f12a486c..b1a3e2525d 100644
+--- a/include/libvirt/libvirt.h.in
++++ b/include/libvirt/libvirt.h.in
+@@ -1651,6 +1651,7 @@ typedef enum {
+     VIR_DOMAIN_XML_SECURE       = (1 << 0), /* dump security sensitive information too */
+     VIR_DOMAIN_XML_INACTIVE     = (1 << 1), /* dump inactive domain information */
+     VIR_DOMAIN_XML_UPDATE_CPU   = (1 << 2), /* update guest CPU requirements according to host CPU */
++    VIR_DOMAIN_XML_MIGRATABLE   = (1 << 3), /* dump XML suitable for migration */
+ } virDomainXMLFlags;
+ 
+ char *                  virDomainGetXMLDesc     (virDomainPtr domain,
+diff --git a/src/conf/domain_conf.c b/src/conf/domain_conf.c
+index 3b07cdf64c..2b6ac66f00 100644
+--- a/src/conf/domain_conf.c
++++ b/src/conf/domain_conf.c
+@@ -13314,7 +13314,8 @@ virDomainHubDefFormat(virBufferPtr buf,
+ #define DUMPXML_FLAGS                           \
+     (VIR_DOMAIN_XML_SECURE |                    \
+      VIR_DOMAIN_XML_INACTIVE |                  \
+-     VIR_DOMAIN_XML_UPDATE_CPU)
++     VIR_DOMAIN_XML_UPDATE_CPU |                \
++     VIR_DOMAIN_XML_MIGRATABLE)
+ 
+ verify(((VIR_DOMAIN_XML_INTERNAL_STATUS |
+          VIR_DOMAIN_XML_INTERNAL_ACTUAL_NET |
+diff --git a/src/qemu/qemu_domain.c b/src/qemu/qemu_domain.c
+index 17ae3b9297..ff56c463a5 100644
+--- a/src/qemu/qemu_domain.c
++++ b/src/qemu/qemu_domain.c
+@@ -46,10 +46,6 @@
+ 
+ #define QEMU_NAMESPACE_HREF "http://libvirt.org/schemas/domain/qemu/1.0"
+ 
+-#define QEMU_DOMAIN_FORMAT_LIVE_FLAGS       \
+-    (VIR_DOMAIN_XML_SECURE |                \
+-     VIR_DOMAIN_XML_UPDATE_CPU)
+-
+ VIR_ENUM_IMPL(qemuDomainJob, QEMU_JOB_LAST,
+               "none",
+               "query",
+@@ -1220,7 +1216,6 @@ int
+ qemuDomainDefFormatBuf(struct qemud_driver *driver,
+                        virDomainDefPtr def,
+                        unsigned int flags,
+-                       bool compatible,
+                        virBuffer *buf)
+ {
+     int ret = -1;
+@@ -1245,7 +1240,7 @@ qemuDomainDefFormatBuf(struct qemud_driver *driver,
+         def->cpu = cpu;
+     }
+ 
+-    if (compatible) {
++    if ((flags & VIR_DOMAIN_XML_MIGRATABLE)) {
+         int i;
+         virDomainControllerDefPtr usb = NULL;
+ 
+@@ -1297,12 +1292,11 @@ cleanup:
+ 
+ char *qemuDomainDefFormatXML(struct qemud_driver *driver,
+                              virDomainDefPtr def,
+-                             unsigned int flags,
+-                             bool compatible)
++                             unsigned int flags)
+ {
+     virBuffer buf = VIR_BUFFER_INITIALIZER;
+ 
+-    if (qemuDomainDefFormatBuf(driver, def, flags, compatible, &buf) < 0) {
++    if (qemuDomainDefFormatBuf(driver, def, flags, &buf) < 0) {
+         virBufferFreeAndReset(&buf);
+         return NULL;
+     }
+@@ -1318,8 +1312,7 @@ char *qemuDomainDefFormatXML(struct qemud_driver *driver,
+ 
+ char *qemuDomainFormatXML(struct qemud_driver *driver,
+                           virDomainObjPtr vm,
+-                          unsigned int flags,
+-                          bool compatible)
++                          unsigned int flags)
+ {
+     virDomainDefPtr def;
+ 
+@@ -1328,7 +1321,7 @@ char *qemuDomainFormatXML(struct qemud_driver *driver,
+     else
+         def = vm->def;
+ 
+-    return qemuDomainDefFormatXML(driver, def, flags, compatible);
++    return qemuDomainDefFormatXML(driver, def, flags);
+ }
+ 
+ char *
+@@ -1341,8 +1334,10 @@ qemuDomainDefFormatLive(struct qemud_driver *driver,
+ 
+     if (inactive)
+         flags |= VIR_DOMAIN_XML_INACTIVE;
++    if (compatible)
++        flags |= VIR_DOMAIN_XML_MIGRATABLE;
+ 
+-    return qemuDomainDefFormatXML(driver, def, flags, compatible);
++    return qemuDomainDefFormatXML(driver, def, flags);
+ }
+ 
+ 
+diff --git a/src/qemu/qemu_domain.h b/src/qemu/qemu_domain.h
+index 97e4346d9d..26b6c557c0 100644
+--- a/src/qemu/qemu_domain.h
++++ b/src/qemu/qemu_domain.h
+@@ -39,6 +39,10 @@
+      (1 << VIR_DOMAIN_VIRT_KVM) |      \
+      (1 << VIR_DOMAIN_VIRT_XEN))
+ 
++# define QEMU_DOMAIN_FORMAT_LIVE_FLAGS      \
++    (VIR_DOMAIN_XML_SECURE |                \
++     VIR_DOMAIN_XML_UPDATE_CPU)
++
+ # if ULONG_MAX == 4294967295
+ /* Qemu has a 64-bit limit, but we are limited by our historical choice of
+  * representing bandwidth in a long instead of a 64-bit int.  */
+@@ -253,18 +257,15 @@ void qemuDomainObjExitRemoteWithDriver(struct qemud_driver *driver,
+ int qemuDomainDefFormatBuf(struct qemud_driver *driver,
+                            virDomainDefPtr vm,
+                            unsigned int flags,
+-                           bool compatible,
+                            virBuffer *buf);
+ 
+ char *qemuDomainDefFormatXML(struct qemud_driver *driver,
+                              virDomainDefPtr vm,
+-                             unsigned int flags,
+-                             bool compatible);
++                             unsigned int flags);
+ 
+ char *qemuDomainFormatXML(struct qemud_driver *driver,
+                           virDomainObjPtr vm,
+-                          unsigned int flags,
+-                          bool compatible);
++                          unsigned int flags);
+ 
+ char *qemuDomainDefFormatLive(struct qemud_driver *driver,
+                               virDomainDefPtr def,
+diff --git a/src/qemu/qemu_driver.c b/src/qemu/qemu_driver.c
+index decf0fbb7e..555e56d45d 100644
+--- a/src/qemu/qemu_driver.c
++++ b/src/qemu/qemu_driver.c
+@@ -4966,7 +4966,7 @@ qemuDomainSaveImageGetXMLDesc(virConnectPtr conn, const char *path,
+     if (fd < 0)
+         goto cleanup;
+ 
+-    ret = qemuDomainDefFormatXML(driver, def, flags, false);
++    ret = qemuDomainDefFormatXML(driver, def, flags);
+ 
+ cleanup:
+     virDomainDefFree(def);
+@@ -5010,8 +5010,8 @@ qemuDomainSaveImageDefineXML(virConnectPtr conn, const char *path,
+ 
+     xml = qemuDomainDefFormatXML(driver, def,
+                                  VIR_DOMAIN_XML_INACTIVE |
+-                                 VIR_DOMAIN_XML_SECURE,
+-                                 true);
++                                 VIR_DOMAIN_XML_SECURE |
++                                 VIR_DOMAIN_XML_MIGRATABLE);
+     if (!xml)
+         goto cleanup;
+     len = strlen(xml) + 1;
+@@ -5161,7 +5161,10 @@ endjob:
+         }
+     }
+ 
+-    ret = qemuDomainFormatXML(driver, vm, flags, false);
++    if ((flags & VIR_DOMAIN_XML_MIGRATABLE))
++        flags |= QEMU_DOMAIN_FORMAT_LIVE_FLAGS;
++
++    ret = qemuDomainFormatXML(driver, vm, flags);
+ 
+ cleanup:
+     if (vm)
+@@ -5201,7 +5204,7 @@ static char *qemuDomainXMLFromNative(virConnectPtr conn,
+         goto cleanup;
+     }
+ 
+-    xml = qemuDomainDefFormatXML(driver, def, VIR_DOMAIN_XML_INACTIVE, false);
++    xml = qemuDomainDefFormatXML(driver, def, VIR_DOMAIN_XML_INACTIVE);
+ 
+ cleanup:
+     virDomainDefFree(def);
+@@ -11732,8 +11735,7 @@ static int qemuDomainRevertToSnapshot(virDomainSnapshotPtr snapshot,
+         if (!(xml = qemuDomainDefFormatXML(driver,
+                                            snap->def->dom,
+                                            VIR_DOMAIN_XML_INACTIVE |
+-                                           VIR_DOMAIN_XML_SECURE,
+-                                           false)))
++                                           VIR_DOMAIN_XML_SECURE)))
+             goto cleanup;
+         config = virDomainDefParseString(driver->caps, xml,
+                                          QEMU_EXPECTED_VIRT_TYPES,
+diff --git a/src/qemu/qemu_migration.c b/src/qemu/qemu_migration.c
+index db69a0aa4a..7cc1f9848c 100644
+--- a/src/qemu/qemu_migration.c
++++ b/src/qemu/qemu_migration.c
+@@ -432,8 +432,8 @@ qemuMigrationCookieXMLFormat(struct qemud_driver *driver,
+         if (qemuDomainDefFormatBuf(driver,
+                                    mig->persistent,
+                                    VIR_DOMAIN_XML_INACTIVE |
+-                                   VIR_DOMAIN_XML_SECURE,
+-                                   true,
++                                   VIR_DOMAIN_XML_SECURE |
++                                   VIR_DOMAIN_XML_MIGRATABLE,
+                                    buf) < 0)
+             return -1;
+         virBufferAdjustIndent(buf, -2);
+@@ -1264,7 +1264,7 @@ qemuMigrationPrepareAny(struct qemud_driver *driver,
+         int hookret;
+ 
+         if (!(xml = qemuDomainDefFormatXML(driver, def,
+-                                           VIR_DOMAIN_XML_SECURE, false)))
++                                           VIR_DOMAIN_XML_SECURE)))
+             goto cleanup;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, def->name,
+@@ -2213,9 +2213,8 @@ static int doPeer2PeerMigrate2(struct qemud_driver *driver,
+      * and pass it to Prepare2.
+      */
+     if (!(dom_xml = qemuDomainFormatXML(driver, vm,
+-                                        VIR_DOMAIN_XML_SECURE |
+-                                        VIR_DOMAIN_XML_UPDATE_CPU,
+-                                        true)))
++                                        QEMU_DOMAIN_FORMAT_LIVE_FLAGS |
++                                        VIR_DOMAIN_XML_MIGRATABLE)))
+         return -1;
+ 
+     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED)
+diff --git a/src/qemu/qemu_process.c b/src/qemu/qemu_process.c
+index bc3e1482aa..3bec799530 100644
+--- a/src/qemu/qemu_process.c
++++ b/src/qemu/qemu_process.c
+@@ -3139,7 +3139,7 @@ qemuProcessReconnect(void *opaque)
+ 
+     /* Run an hook to allow admins to do some magic */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, obj->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, obj->def, 0);
+         int hookret;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, obj->def->name,
+@@ -3367,7 +3367,7 @@ int qemuProcessStart(virConnectPtr conn,
+ 
+     /* Run an early hook to set-up missing devices */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+         int hookret;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+@@ -3584,7 +3584,7 @@ int qemuProcessStart(virConnectPtr conn,
+ 
+     /* now that we know it is about to start call the hook if present */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+         int hookret;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+@@ -3825,7 +3825,7 @@ int qemuProcessStart(virConnectPtr conn,
+ 
+     /* finally we can call the 'started' hook script if any */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+         int hookret;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+@@ -4005,7 +4005,7 @@ void qemuProcessStop(struct qemud_driver *driver,
+ 
+     /* now that we know it's stopped call the hook if present */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+ 
+         /* we can't stop the operation even if the script raised an error */
+         virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+@@ -4100,7 +4100,7 @@ retry:
+ 
+     /* The "release" hook cleans up additional resources */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+ 
+         /* we can't stop the operation even if the script raised an error */
+         virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+@@ -4302,7 +4302,7 @@ int qemuProcessAttach(virConnectPtr conn ATTRIBUTE_UNUSED,
+ 
+     /* Run an hook to allow admins to do some magic */
+     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
+-        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0, false);
++        char *xml = qemuDomainDefFormatXML(driver, vm->def, 0);
+         int hookret;
+ 
+         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, vm->def->name,
+diff --git a/tools/virsh-domain.c b/tools/virsh-domain.c
+index 505169bddf..1df0872df2 100644
+--- a/tools/virsh-domain.c
++++ b/tools/virsh-domain.c
+@@ -6399,6 +6399,7 @@ static const vshCmdOptDef opts_dumpxml[] = {
+     {"inactive", VSH_OT_BOOL, 0, N_("show inactive defined XML")},
+     {"security-info", VSH_OT_BOOL, 0, N_("include security sensitive information in XML dump")},
+     {"update-cpu", VSH_OT_BOOL, 0, N_("update guest CPU according to host CPU")},
++    {"migratable", VSH_OT_BOOL, 0, N_("provide XML suitable for migrations")},
+     {NULL, 0, 0, NULL}
+ };
+ 
+@@ -6412,6 +6413,7 @@ cmdDumpXML(vshControl *ctl, const vshCmd *cmd)
+     bool inactive = vshCommandOptBool(cmd, "inactive");
+     bool secure = vshCommandOptBool(cmd, "security-info");
+     bool update = vshCommandOptBool(cmd, "update-cpu");
++    bool migratable = vshCommandOptBool(cmd, "migratable");
+ 
+     if (inactive)
+         flags |= VIR_DOMAIN_XML_INACTIVE;
+@@ -6419,6 +6421,8 @@ cmdDumpXML(vshControl *ctl, const vshCmd *cmd)
+         flags |= VIR_DOMAIN_XML_SECURE;
+     if (update)
+         flags |= VIR_DOMAIN_XML_UPDATE_CPU;
++    if (migratable)
++        flags |= VIR_DOMAIN_XML_MIGRATABLE;
+ 
+     if (!(dom = vshCommandOptDomain(ctl, cmd, NULL)))
+         return false;
+diff --git a/tools/virsh.pod b/tools/virsh.pod
+index ac8a00f2a9..ea5060c848 100644
+--- a/tools/virsh.pod
++++ b/tools/virsh.pod
+@@ -948,7 +948,7 @@ NOTE: Some hypervisors may require the user to manually ensure proper
+ permissions on file and path specified by argument I<corefilepath>.
+ 
+ =item B<dumpxml> I<domain> [I<--inactive>] [I<--security-info>]
+-[I<--update-cpu>]
++[I<--update-cpu>] [I<--migratable>]
+ 
+ Output the domain information as an XML dump to stdout, this format can be used
+ by the B<create> command. Additional options affecting the XML dump may be
+@@ -956,7 +956,10 @@ used. I<--inactive> tells virsh to dump domain configuration that will be used
+ on next start of the domain as opposed to the current domain configuration.
+ Using I<--security-info> will also include security sensitive information
+ in the XML dump. I<--update-cpu> updates domain CPU requirements according to
+-host CPU.
++host CPU. With I<--migratable> one can request an XML that is suitable for
++migrations, i.e., compatible with older libvirt releases and possibly amended
++with internal run-time options. This option may automatically enable other
++options (I<--update-cpu>, I<--security-info>, ...) as necessary.
+ 
+ =item B<edit> I<domain>
+ 
+-- 
+2.34.1
+

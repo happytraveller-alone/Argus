@@ -1,0 +1,25 @@
+From 362fc486b5c0eea04f26793d5623f6a9272bd85a Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@gpac.io>
+Date: Mon, 7 Sep 2020 09:12:09 +0200
+Subject: [PATCH] fixed #1586
+
+---
+ src/isomedia/box_code_base.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/isomedia/box_code_base.c b/src/isomedia/box_code_base.c
+index 0e5c9de54..36b54ccb0 100644
+--- a/src/isomedia/box_code_base.c
++++ b/src/isomedia/box_code_base.c
+@@ -11574,7 +11574,7 @@ void vwid_box_del(GF_Box *s)
+ {
+ 	u32 i;
+ 	GF_ViewIdentifierBox *ptr = (GF_ViewIdentifierBox *) s;
+-	if (ptr->num_views) {
++	if (ptr->views) {
+ 		for (i=0; i<ptr->num_views; i++) {
+ 			if (ptr->views[i].view_refs)
+ 				gf_free(ptr->views[i].view_refs);
+-- 
+2.34.1
+

@@ -1,0 +1,36 @@
+rules:
+- id: tarfile_unsafe_unpacking
+  languages:
+  - python
+  severity: ERROR
+  message: Unsafe Tarfile Unpacking
+  patterns:
+  - pattern-inside: 'import tarfile
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern-inside: "with tarfile.open($FILE, ...) as $FD:\n  ...\n"
+    - pattern-inside: '$FD = tarfile.open($FILE, ...)
+
+        ...
+
+        '
+  - pattern-either:
+    - patterns:
+      - pattern: $FD.extract($MEMBER, ...)
+      - pattern: $FD.extract($MEMBER, ..., ...)
+      - pattern: $FD.extract($MEMBER, ..., ..., ...)
+      - pattern: $FD.extract($MEMBER, ..., ..., ..., ...)
+      - pattern-either:
+        - pattern-inside: "$FILELIST = $FD.getmembers()\n...\nfor $MEMBER in $FILELIST:\n\
+            \  ...\n"
+        - pattern-inside: "for $MEMBER in $FD.getmembers():\n  ...\n"
+    - pattern: $FD.extractall(..., ..., ..., ..., ...)
+  metadata:
+    cwe:
+    - 'CWE-22: Path Traversal'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-20: Improper Input Validation'

@@ -1,0 +1,623 @@
+From 97e7905a8b90fcbd5e8c440ad7d55bf8ffe007e5 Mon Sep 17 00:00:00 2001
+From: Robin Mills <robin@clanmills.com>
+Date: Tue, 30 Aug 2016 16:33:57 +0000
+Subject: [PATCH] #1060  Thank you to Thomas B for working on this and
+ providing the patch.
+
+---
+ src/easyaccess.cpp        |  70 ++++++++-
+ test/Makefile             |   3 +-
+ test/data/iso65k-test.out | 297 ++++++++++++++++++++++++++++++++++++++
+ test/iso65k-test.sh       | 181 +++++++++++++++++++++++
+ 4 files changed, 547 insertions(+), 4 deletions(-)
+ create mode 100644 test/data/iso65k-test.out
+ create mode 100755 test/iso65k-test.sh
+
+diff --git a/src/easyaccess.cpp b/src/easyaccess.cpp
+index 623ac40d5..2fdef2550 100644
+--- a/src/easyaccess.cpp
++++ b/src/easyaccess.cpp
+@@ -112,21 +112,85 @@ namespace Exiv2 {
+             "Exif.Casio2.ISOSpeed"
+         };
+ 
++        struct SensKeyNameList {
++            int count;
++            const char* keys[3];
++        };
++
++        // covers Exif.Phot.SensitivityType values 1-7. Note that SOS, REI and
++        // ISO do differ in their meaning. Values coming first in a list (and
++        // existing as a tag) are picked up first and used as the "ISO" value.
++        static const SensKeyNameList sensitivityKey[] = {
++            { 1, { "Exif.Photo.StandardOutputSensitivity" }},
++            { 1, { "Exif.Photo.RecommendedExposureIndex" }},
++            { 1, { "Exif.Photo.ISOSpeed" }},
++            { 2, { "Exif.Photo.RecommendedExposureIndex", "Exif.Photo.StandardOutputSensitivity" }},
++            { 2, { "Exif.Photo.ISOSpeed", "Exif.Photo.StandardOutputSensitivity" }},
++            { 2, { "Exif.Photo.ISOSpeed", "Exif.Photo.RecommendedExposureIndex" }},
++            { 3, { "Exif.Photo.ISOSpeed", "Exif.Photo.RecommendedExposureIndex", "Exif.Photo.StandardOutputSensitivity" }}
++        };
++
++        static const char* sensitivityType[] = {
++            "Exif.Photo.SensitivityType"
++        };
++
+         // Find the first ISO value which is not "0"
+         const int cnt = EXV_COUNTOF(keys);
+         ExifData::const_iterator md = ed.end();
++        long iso_val = -1;
+         for (int idx = 0; idx < cnt; ) {
+             md = findMetadatum(ed, keys + idx, cnt - idx);
+             if (md == ed.end()) break;
+             std::ostringstream os;
+             md->write(os, &ed);
+             bool ok = false;
+-            long v = parseLong(os.str(), ok);
+-            if (ok && v != 0) break;
++            iso_val = parseLong(os.str(), ok);
++            if (ok && iso_val > 0) break;
+             while (strcmp(keys[idx++], md->key().c_str()) != 0 && idx < cnt) {}
+             md = ed.end();
+         }
+ 
++        // there is either a possible ISO "overflow" or no legacy
++        // ISO tag at all. Check for SensitivityType tag and the referenced
++        // ISO value (see EXIF 2.3 Annex G)
++        long iso_tmp_val = -1;
++        while (iso_tmp_val == -1 && (iso_val == 65535 || md == ed.end())) {
++            ExifData::const_iterator md_st = ed.end();
++            md_st = findMetadatum(ed, sensitivityType, 1);
++            // no SensitivityType? exit with existing data
++            if (md_st == ed.end())
++                break;
++            // otherwise pick up actual value and grab value accordingly
++            const char *st_key = 0; // nullptr
++            std::ostringstream os;
++            md_st->write(os, &ed);
++            bool ok = false;
++            long st_val = parseLong(os.str(), ok);
++            // SensivityType out of range or cannot be parsed properly
++            if (!ok || st_val < 1 || st_val > 7)
++                break;
++            // pick up list of ISO tags, and check for at least one of
++            // them available.
++            const SensKeyNameList *sensKeys = &sensitivityKey[st_val - 1];
++            md_st = ed.end();
++            for (int idx = 0; idx < sensKeys->count; md_st = ed.end()) {
++                md_st = findMetadatum(ed, const_cast<const char**>(sensKeys->keys), sensKeys->count);
++                if (md_st == ed.end())
++                    break;
++                std::ostringstream os_iso;
++                md_st->write(os_iso, &ed);
++                ok = false;
++                iso_tmp_val = parseLong(os_iso.str(), ok);
++                // something wrong with the value
++                if (ok || iso_tmp_val > 0) {
++                    md = md_st;
++                    break;
++                }
++                while (strcmp(sensKeys->keys[idx++], md_st->key().c_str()) != 0 && idx < cnt) {}
++            }
++            break;
++        }
++
+         return md;
+     }
+ 
+@@ -266,7 +330,7 @@ namespace Exiv2 {
+     {
+         static const char* keys[] = {
+             // Exif.Canon.LensModel only reports focal length.
+-            // Try Exif.CanonCs.LensType first. 
++            // Try Exif.CanonCs.LensType first.
+             "Exif.CanonCs.LensType",
+             "Exif.Photo.LensModel",
+             "Exif.NikonLd1.LensIDNumber",
+diff --git a/test/Makefile b/test/Makefile
+index 8957db970..b7cb05bbc 100644
+--- a/test/Makefile
++++ b/test/Makefile
+@@ -78,7 +78,8 @@ TESTS  = addmoddel.sh         \
+          write-test.sh        \
+          write2-test.sh       \
+          xmpparser-test.sh    \
+-         conversions.sh
++         conversions.sh       \
++         iso65k-test.sh
+ 
+ # video tests
+ TESTV  = video-test.sh
+diff --git a/test/data/iso65k-test.out b/test/data/iso65k-test.out
+new file mode 100644
+index 000000000..dbb8fe07b
+--- /dev/null
++++ b/test/data/iso65k-test.out
+@@ -0,0 +1,297 @@
++------> iso65k test 0001 <-------
++File name       : exiv2-iso65k-0001.jpg
++File size       : 4799 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 60001
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0002 <-------
++File name       : exiv2-iso65k-0002.jpg
++File size       : 4823 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 60002
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0003 <-------
++File name       : exiv2-iso65k-0003.jpg
++File size       : 4799 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65534
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0004 <-------
++File name       : exiv2-iso65k-0004.jpg
++File size       : 4799 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65535
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0005 <-------
++File name       : exiv2-iso65k-0005.jpg
++File size       : 4811 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65535
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0006 <-------
++File name       : exiv2-iso65k-0006.jpg
++File size       : 4811 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65535
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0007 <-------
++File name       : exiv2-iso65k-0007.jpg
++File size       : 4811 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65535
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0008 <-------
++File name       : exiv2-iso65k-0008.jpg
++File size       : 4823 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65530
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0009 <-------
++File name       : exiv2-iso65k-0009.jpg
++File size       : 4823 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 65536
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0010 <-------
++File name       : exiv2-iso65k-0010.jpg
++File size       : 4811 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 60010
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
++------> iso65k test 0011 <-------
++File name       : exiv2-iso65k-0011.jpg
++File size       : 4811 Bytes
++MIME type       : image/jpeg
++Image size      : 150 x 91
++Camera make     : 
++Camera model    : 
++Image timestamp : 
++Image number    : 
++Exposure time   : 
++Aperture        : 
++Exposure bias   : 
++Flash           : 
++Flash bias      : 
++Focal length    : 
++Subject distance: 
++ISO speed       : 100011
++Exposure mode   : 
++Metering mode   : 
++Macro mode      : 
++Image quality   : 
++Exif Resolution : 
++White balance   : 
++Thumbnail       : None
++Copyright       : 
++Exif comment    : 
++
+diff --git a/test/iso65k-test.sh b/test/iso65k-test.sh
+new file mode 100755
+index 000000000..03bc04987
+--- /dev/null
++++ b/test/iso65k-test.sh
+@@ -0,0 +1,181 @@
++#!/bin/bash
++# test for ISOs which follow Annex G of EXIF 2.3 spec, i.e. ISOs,
++# which cannot be represented by Exif.Photo.ISOSpeedRatings due to
++# being larger than 65k
++
++# All tests use the summary view as a result-check, because it uses
++# the isoSpeed() "easyaccess" function, which handles the higher ISO
++# readout.
++#
++# Tests getting executed:
++# 
++
++source ./functions.source
++
++(	cd "$testdir"
++
++	num=0001
++	# Checks for old way of ISO readout based on the 16bit value
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to something <65k
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 60001'            $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0002
++	# Old ISO is read out first, so if it doesn't indicate that
++	# some higher ISO is used, the 16bit value should be returned,
++	# ignoring the other tags (for now)
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to something <65k
++	# - Exif.Photo.SensitivityType being set to "REI"
++	# - Exif.Photo.RecommendedExposureIndex being set to != ISOSpeedRatings
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 60002'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -M'set Exif.Photo.RecommendedExposureIndex 444444'  $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0003
++	# Corner case check (highest ISO value not indicating possible
++	# 16bit overflow in ISO)
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65534
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65534'            $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0004
++	# Corner case check (ISO value indicating possible overflow,
++	# but no additional informations available)
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType NOT SET
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0005
++	# possible ISO value overflow, but additional information not valid
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType being set to 0
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 0'                $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0006
++	# possible ISO value overflow, but additional information not valid
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType being set to 8
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 8'                $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0007
++	# possible ISO value overflow, but additional information partially valid
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType being set to 2 ("REI")
++	# - Exif.Photo.RecommendedExposureIndex NOT SET
++	# output:
++	# - value of Exif.Photo.ISOSpeedRatings
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0008
++	# ISO value overflow, REI contains same value as 16bit ISO, though
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType being set to 2 ("REI")
++	# - Exif.Photo.RecommendedExposureIndex set to 65530
++	# output:
++	# - value of Exif.Photo.RecommendedExposureIndex
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -M'set Exif.Photo.RecommendedExposureIndex 65530'   $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0009
++	# ISO value overflow, REI contains 16bit ISO value +1
++	# input:
++	# - Exif.Photo.ISOSpeedRatings being set to 65535
++	# - Exif.Photo.SensitivityType being set to 2 ("REI")
++	# - Exif.Photo.RecommendedExposureIndex set to 65536
++	# output:
++	# - value of Exif.Photo.RecommendedExposureIndex
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.ISOSpeedRatings 65535'            $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -M'set Exif.Photo.RecommendedExposureIndex 65536'   $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0010
++	# old ISO not set
++	# input:
++	# - Exif.Photo.ISOSpeedRatings is NOT SET
++	# - Exif.Photo.SensitivityType being set to 2 ("REI")
++	# - Exif.Photo.RecommendedExposureIndex set to <65k
++	# output:
++	# - value of Exif.Photo.RecommendedExposureIndex
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -M'set Exif.Photo.RecommendedExposureIndex 60010'   $filename
++	runTest exiv2 -ps                                                 $filename
++
++	num=0011
++	# old ISO not set
++	# input:
++	# - Exif.Photo.ISOSpeedRatings is NOT SET
++	# - Exif.Photo.SensitivityType being set to 2 ("REI")
++	# - Exif.Photo.RecommendedExposureIndex set to >65k
++	# output:
++	# - value of Exif.Photo.RecommendedExposureIndex
++	echo '------>' iso65k test $num '<-------' >&2
++	filename=exiv2-iso65k-$num.jpg
++	copyTestFile exiv2-empty.jpg $filename
++	runTest exiv2 -M'set Exif.Photo.SensitivityType 2'                $filename
++	runTest exiv2 -M'set Exif.Photo.RecommendedExposureIndex 100011'  $filename
++	runTest exiv2 -ps                                                 $filename
++
++) > $testdir/iso65k-test.out 2>&1
++
++reportTest
+-- 
+2.34.1
+

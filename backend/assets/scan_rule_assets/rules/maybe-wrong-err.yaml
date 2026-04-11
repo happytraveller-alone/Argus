@@ -1,0 +1,15 @@
+rules:
+- id: maybe-wrong-err
+  patterns:
+  - pattern-either:
+    - pattern: "if $F.Err() != nil {\n        return ..., <... err ...>\n}\n"
+    - pattern: "if $F.Err() != nil {\n        return <... err ...>\n}\n"
+  message: maybe returning wrong error
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-253: Incorrect Check of Function Return Value'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-209: Generation of Error Message Containing Sensitive Information'

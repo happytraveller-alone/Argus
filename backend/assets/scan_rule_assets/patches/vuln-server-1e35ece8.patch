@@ -1,0 +1,29 @@
+From 1e35ece8e59ed31c0ae7a578aced99d257e97e67 Mon Sep 17 00:00:00 2001
+From: Joas Schilling <coding@schilljs.com>
+Date: Wed, 20 Jan 2021 10:09:45 +0100
+Subject: [PATCH] Fix potential empty result
+
+Signed-off-by: Joas Schilling <coding@schilljs.com>
+---
+ apps/files_external/lib/Listener/StorePasswordListener.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/apps/files_external/lib/Listener/StorePasswordListener.php b/apps/files_external/lib/Listener/StorePasswordListener.php
+index a2c359e58db..27de4ada465 100644
+--- a/apps/files_external/lib/Listener/StorePasswordListener.php
++++ b/apps/files_external/lib/Listener/StorePasswordListener.php
+@@ -51,9 +51,9 @@ class StorePasswordListener implements IEventListener {
+ 		}
+ 
+ 		$stored = $this->credentialsManager->retrieve($event->getUser()->getUID(), LoginCredentials::CREDENTIALS_IDENTIFIER);
+-		$update = $stored['password'] !== $event->getPassword();
++		$update = isset($stored['password']) && $stored['password'] !== $event->getPassword();
+ 		if (!$update && $event instanceof UserLoggedInEvent) {
+-			$update = $stored['user'] !== $event->getLoginName();
++			$update = isset($stored['user']) && $stored['user'] !== $event->getLoginName();
+ 		}
+ 
+ 		if ($stored && $update) {
+-- 
+2.34.1
+

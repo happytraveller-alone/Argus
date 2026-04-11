@@ -1,0 +1,142 @@
+From 1aa6bc94c763023bc3fc5849c2a1e8cab3bf6766 Mon Sep 17 00:00:00 2001
+From: Vaadin Bot <vaadin-bot@users.noreply.github.com>
+Date: Tue, 3 Aug 2021 10:31:41 +0200
+Subject: [PATCH] fix: allow changing checkboxgroup value if disabled checkbox
+ value doesn't change (#1903) (#1970)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-authored-by: Sascha Ißbrücker <sascha.issbruecker@googlemail.com>
+Co-authored-by: Guille <alvarezguille@users.noreply.github.com>
+
+Co-authored-by: David Sosa <76832183+sosa-vaadin@users.noreply.github.com>
+Co-authored-by: Sascha Ißbrücker <sascha.issbruecker@googlemail.com>
+Co-authored-by: Guille <alvarezguille@users.noreply.github.com>
+---
+ .../tests/CheckboxGroupDisabledItemPage.java  | 16 +++++++-
+ .../tests/CheckboxGroupDisabledItemIT.java    | 41 +++++++++++++++++++
+ .../component/checkbox/CheckboxGroup.java     | 16 +++++---
+ 3 files changed, 66 insertions(+), 7 deletions(-)
+
+diff --git a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/main/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemPage.java b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/main/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemPage.java
+index 98f0f53881..f559425f25 100644
+--- a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/main/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemPage.java
++++ b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/main/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemPage.java
+@@ -1,6 +1,8 @@
+ package com.vaadin.flow.component.checkbox.tests;
+ 
+ import com.vaadin.flow.component.checkbox.CheckboxGroup;
++import com.vaadin.flow.component.html.Div;
++import com.vaadin.flow.component.html.NativeButton;
+ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+ import com.vaadin.flow.router.Route;
+ 
+@@ -18,6 +20,18 @@ public class CheckboxGroupDisabledItemPage extends VerticalLayout {
+         group.select("bar");
+         group.setItemEnabledProvider(item -> !"bar".equals(item));
+         group.setId("checkbox-group-disabled-item");
+-        add(group);
++
++        NativeButton toggleBarButton = new NativeButton("Toggle \"bar\"",
++                event -> {
++                    boolean isBarSelected = group.isSelected("bar");
++                    if (isBarSelected) {
++                        group.deselect("bar");
++                    } else {
++                        group.select("bar");
++                    }
++                });
++        toggleBarButton.setId("toggle-bar-button");
++
++        add(group, new Div(toggleBarButton));
+     }
+ }
+diff --git a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/test/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemIT.java b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/test/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemIT.java
+index db7bfd2003..73d331ba3f 100644
+--- a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/test/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemIT.java
++++ b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow-integration-tests/src/test/java/com/vaadin/flow/component/checkbox/tests/CheckboxGroupDisabledItemIT.java
+@@ -37,4 +37,45 @@ public class CheckboxGroupDisabledItemIT extends AbstractComponentIT {
+         Assert.assertEquals(Boolean.TRUE.toString(),
+                 checkboxes.get(1).getAttribute("checked"));
+     }
++
++    @Test
++    public void disabledItemCanBeCheckedProgrammatically() {
++        open();
++        TestBenchElement group = $(TestBenchElement.class)
++                .id("checkbox-group-disabled-item");
++        List<TestBenchElement> checkboxes = group.$("vaadin-checkbox").all();
++        TestBenchElement secondCheckbox = checkboxes.get(1);
++        TestBenchElement toggleBarButton = $("button").id("toggle-bar-button");
++
++        // Deselect
++        toggleBarButton.click();
++        Assert.assertNull(secondCheckbox.getAttribute("checked"));
++
++        // Reselect
++        toggleBarButton.click();
++        Assert.assertEquals(Boolean.TRUE.toString(),
++                secondCheckbox.getAttribute("checked"));
++    }
++
++    /**
++     * Regression test for:
++     * https://github.com/vaadin/flow-components/issues/1185
++     */
++    @Test
++    public void enabledItemCanBeCheckedManuallyWhenSettingItemEnabledProviderAfterSelectingValue() {
++        open();
++        TestBenchElement group = $(TestBenchElement.class)
++                .id("checkbox-group-disabled-item");
++        List<TestBenchElement> checkboxes = group.$("vaadin-checkbox").all();
++        TestBenchElement firstCheckbox = checkboxes.get(0);
++
++        // Select
++        firstCheckbox.click();
++        Assert.assertEquals(Boolean.TRUE.toString(),
++                firstCheckbox.getAttribute("checked"));
++
++        // Deselect
++        firstCheckbox.click();
++        Assert.assertNull(firstCheckbox.getAttribute("checked"));
++    }
+ }
+diff --git a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow/src/main/java/com/vaadin/flow/component/checkbox/CheckboxGroup.java b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow/src/main/java/com/vaadin/flow/component/checkbox/CheckboxGroup.java
+index edf2337303..3dc28a9312 100644
+--- a/vaadin-checkbox-flow-parent/vaadin-checkbox-flow/src/main/java/com/vaadin/flow/component/checkbox/CheckboxGroup.java
++++ b/vaadin-checkbox-flow-parent/vaadin-checkbox-flow/src/main/java/com/vaadin/flow/component/checkbox/CheckboxGroup.java
+@@ -325,12 +325,16 @@ public class CheckboxGroup<T>
+ 
+     @Override
+     protected boolean hasValidValue() {
+-        Set<T> selectedItems = presentationToModel(this,
++        // we need to compare old value with new value to see if any disabled
++        // items changed their value
++        Set<T> value = presentationToModel(this,
+                 (JsonArray) getElement().getPropertyRaw(VALUE));
+-        if (selectedItems == null || selectedItems.isEmpty()) {
+-            return true;
+-        }
+-        return selectedItems.stream().allMatch(itemEnabledProvider);
++        Set<T> oldValue = getValue();
++
++        // disabled items cannot change their value
++        return getCheckboxItems().filter(CheckBoxItem::isDisabledBoolean)
++                .noneMatch(item -> oldValue.contains(item.getItem()) != value
++                        .contains(item.getItem()));
+     }
+ 
+     private void reset() {
+@@ -401,7 +405,7 @@ public class CheckboxGroup<T>
+             } finally {
+                 registerValidation();
+             }
+-            // Now make sure that the button is still in the correct state
++            // Now make sure that the checkbox is still in the correct state
+             Set<T> value = presentationToModel(this,
+                     (JsonArray) event.getValue());
+             getCheckboxItems()
+-- 
+2.34.1
+

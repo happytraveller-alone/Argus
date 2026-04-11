@@ -1,0 +1,599 @@
+From 3bf9b9be40661f9024083962ee9660cc45ac5dbc Mon Sep 17 00:00:00 2001
+From: Brent <brent.dearth@gmail.com>
+Date: Thu, 26 Sep 2019 11:01:25 -0600
+Subject: [PATCH] fix(omniauth): fix CVE-2019-16751 (#1342)
+
+---
+ .../application_controller.rb                 |   4 +-
+ .../omniauth_callbacks_controller.rb          |  28 +++-
+ .../devise_token_auth/passwords_controller.rb |   2 +-
+ .../registrations_controller.rb               |   2 +-
+ config/locales/da-DK.yml                      |   2 +
+ config/locales/de.yml                         |   2 +
+ config/locales/en.yml                         |   2 +
+ config/locales/es.yml                         |   2 +
+ config/locales/fr.yml                         |   2 +
+ config/locales/he.yml                         |   2 +
+ config/locales/it.yml                         |   2 +
+ config/locales/ja.yml                         |   2 +
+ config/locales/nl.yml                         |   2 +
+ config/locales/pl.yml                         |   2 +
+ config/locales/pt-BR.yml                      |   2 +
+ config/locales/pt.yml                         |   2 +
+ config/locales/ro.yml                         |   2 +
+ config/locales/ru.yml                         |   2 +
+ config/locales/sq.yml                         |   2 +
+ config/locales/sv.yml                         |   2 +
+ config/locales/uk.yml                         |   2 +
+ config/locales/vi.yml                         |   2 +
+ config/locales/zh-CN.yml                      |   2 +
+ config/locales/zh-HK.yml                      |   2 +
+ config/locales/zh-TW.yml                      |   2 +
+ .../omniauth_callbacks_controller_test.rb     | 149 +++++++++++++-----
+ 26 files changed, 178 insertions(+), 49 deletions(-)
+
+diff --git a/app/controllers/devise_token_auth/application_controller.rb b/app/controllers/devise_token_auth/application_controller.rb
+index 3098ed0..0cc4cbf 100644
+--- a/app/controllers/devise_token_auth/application_controller.rb
++++ b/app/controllers/devise_token_auth/application_controller.rb
+@@ -16,8 +16,8 @@ module DeviseTokenAuth
+ 
+     protected
+ 
+-    def blacklisted_redirect_url?
+-      DeviseTokenAuth.redirect_whitelist && !DeviseTokenAuth::Url.whitelisted?(@redirect_url)
++    def blacklisted_redirect_url?(redirect_url)
++      DeviseTokenAuth.redirect_whitelist && !DeviseTokenAuth::Url.whitelisted?(redirect_url)
+     end
+ 
+     def build_redirect_headers(access_token, client, redirect_header_options = {})
+diff --git a/app/controllers/devise_token_auth/omniauth_callbacks_controller.rb b/app/controllers/devise_token_auth/omniauth_callbacks_controller.rb
+index df04273..37bea09 100644
+--- a/app/controllers/devise_token_auth/omniauth_callbacks_controller.rb
++++ b/app/controllers/devise_token_auth/omniauth_callbacks_controller.rb
+@@ -3,6 +3,9 @@
+ module DeviseTokenAuth
+   class OmniauthCallbacksController < DeviseTokenAuth::ApplicationController
+     attr_reader :auth_params
++
++    before_action :validate_auth_origin_url_param
++
+     skip_before_action :set_user_by_token, raise: false
+     skip_after_action :update_auth_header
+ 
+@@ -75,6 +78,11 @@ module DeviseTokenAuth
+       render_data_or_redirect('authFailure', error: @error)
+     end
+ 
++    def validate_auth_origin_url_param 
++      return render_error_not_allowed_auth_origin_url if auth_origin_url && blacklisted_redirect_url?(auth_origin_url)
++    end
++  
++
+     protected
+ 
+     # this will be determined differently depending on the action that calls
+@@ -137,10 +145,18 @@ module DeviseTokenAuth
+       omniauth_params['omniauth_window_type']
+     end
+ 
+-    def auth_origin_url
++    def unsafe_auth_origin_url
+       omniauth_params['auth_origin_url'] || omniauth_params['origin']
+     end
+ 
++
++    def auth_origin_url
++      if unsafe_auth_origin_url && blacklisted_redirect_url?(unsafe_auth_origin_url)
++        return nil
++      end
++      return unsafe_auth_origin_url
++    end
++
+     # in the success case, omniauth_window_type is in the omniauth_params.
+     # in the failure case, it is in a query param.  See monkey patch above
+     def omniauth_window_type
+@@ -186,8 +202,13 @@ module DeviseTokenAuth
+       @token  = @resource.create_token
+     end
+ 
++    def render_error_not_allowed_auth_origin_url
++      message = I18n.t('devise_token_auth.omniauth.not_allowed_redirect_url', redirect_url: unsafe_auth_origin_url)
++      render_data_or_redirect('authFailure', error: message)
++    end
++
+     def render_data(message, data)
+-      @data = data.merge(message: message)
++      @data = data.merge(message: ActionController::Base.helpers.sanitize(message))
+       render layout: nil, template: 'devise_token_auth/omniauth_external_window'
+     end
+ 
+@@ -224,7 +245,7 @@ module DeviseTokenAuth
+             <html>
+                     <head></head>
+                     <body>
+-                            #{text}
++                            #{ActionController::Base.helpers.sanitize(text)}
+                     </body>
+             </html>)
+     end
+@@ -261,4 +282,5 @@ module DeviseTokenAuth
+       @resource
+     end
+   end
++
+ end
+diff --git a/app/controllers/devise_token_auth/passwords_controller.rb b/app/controllers/devise_token_auth/passwords_controller.rb
+index bf83402..e2dcd68 100644
+--- a/app/controllers/devise_token_auth/passwords_controller.rb
++++ b/app/controllers/devise_token_auth/passwords_controller.rb
+@@ -192,7 +192,7 @@ module DeviseTokenAuth
+       )
+ 
+       return render_create_error_missing_redirect_url unless @redirect_url
+-      return render_error_not_allowed_redirect_url if blacklisted_redirect_url?
++      return render_error_not_allowed_redirect_url if blacklisted_redirect_url?(@redirect_url)
+     end
+ 
+     def reset_password_token_as_raw?(recoverable)
+diff --git a/app/controllers/devise_token_auth/registrations_controller.rb b/app/controllers/devise_token_auth/registrations_controller.rb
+index 217a3f9..df1bd36 100644
+--- a/app/controllers/devise_token_auth/registrations_controller.rb
++++ b/app/controllers/devise_token_auth/registrations_controller.rb
+@@ -28,7 +28,7 @@ module DeviseTokenAuth
+       end
+ 
+       # if whitelist is set, validate redirect_url against whitelist
+-      return render_create_error_redirect_url_not_allowed if blacklisted_redirect_url?
++      return render_create_error_redirect_url_not_allowed if blacklisted_redirect_url?(@redirect_url)
+ 
+       # override email confirmation, must be sent manually from ctrl
+       callback_name = defined?(ActiveRecord) && resource_class < ActiveRecord::Base ? :commit : :create
+diff --git a/config/locales/da-DK.yml b/config/locales/da-DK.yml
+index 004b069..633690e 100644
+--- a/config/locales/da-DK.yml
++++ b/config/locales/da-DK.yml
+@@ -14,6 +14,8 @@ da-DK:
+       account_with_uid_destroyed: "Kontoen med UID '%{uid}' er slettet."
+       account_to_destroy_not_found: "Kan ikke finde kontoen som skal slettes."
+       user_not_found: "Brugeren ikke fundet."
++    omniauth:
++      not_allowed_redirect_url: "Omdirigering til '%{redirect_url}' er ikke tilladt."
+     passwords:
+       missing_email: "Du skal udfylde email feltet."
+       missing_redirect_url: "Der er ingen omdirigeringsadresse."
+diff --git a/config/locales/de.yml b/config/locales/de.yml
+index ff03e35..1a53ce6 100644
+--- a/config/locales/de.yml
++++ b/config/locales/de.yml
+@@ -14,6 +14,8 @@ de:
+       account_with_uid_destroyed: "Account mit der uid '%{uid}' wurde gelöscht."
+       account_to_destroy_not_found: "Der zu löschende Account kann nicht gefunden werden."
+       user_not_found: "Benutzer kann nicht gefunden werden."
++    omniauth:
++      not_allowed_redirect_url: "Weiterleitung zu '%{redirect_url}' ist nicht gestattet."
+     passwords:
+       missing_email: "Sie müssen eine E-Mail-Adresse angeben."
+       missing_redirect_url: "Es fehlt die URL zu Weiterleitung."
+diff --git a/config/locales/en.yml b/config/locales/en.yml
+index 993da3b..fbb49bb 100644
+--- a/config/locales/en.yml
++++ b/config/locales/en.yml
+@@ -14,6 +14,8 @@ en:
+       account_with_uid_destroyed: "Account with UID '%{uid}' has been destroyed."
+       account_to_destroy_not_found: "Unable to locate account for destruction."
+       user_not_found: "User not found."
++    omniauth:
++      not_allowed_redirect_url: "Redirect to '%{redirect_url}' not allowed."
+     passwords:
+       missing_email: "You must provide an email address."
+       missing_redirect_url: "Missing redirect URL."
+diff --git a/config/locales/es.yml b/config/locales/es.yml
+index 93360f3..ae41019 100644
+--- a/config/locales/es.yml
++++ b/config/locales/es.yml
+@@ -14,6 +14,8 @@ es:
+       account_with_uid_destroyed: "La cuenta con el identificador '%{uid}' se ha eliminado."
+       account_to_destroy_not_found: "No se puede encontrar la cuenta a borrar."
+       user_not_found: "Usuario no encontrado."
++    omniauth:
++      not_allowed_redirect_url: "Redirección hacia '%{redirect_url}' no esta permitida."
+     passwords:
+       missing_email: "Debe incluir un correo electrónico."
+       missing_redirect_url: "Falta el Url de redirección."
+diff --git a/config/locales/fr.yml b/config/locales/fr.yml
+index c3f6d5e..41d4ac5 100644
+--- a/config/locales/fr.yml
++++ b/config/locales/fr.yml
+@@ -14,6 +14,8 @@ fr:
+       account_with_uid_destroyed: "Le compte avec l'identifiant '%{uid}' a été supprimé."
+       account_to_destroy_not_found: "Le compte à supprimer est introuvable."
+       user_not_found: "Utilisateur introuvable."
++    omniauth:
++      not_allowed_redirect_url: "Redirection vers '%{redirect_url}' n'est pas autorisée."
+     passwords:
+       missing_email: "Vous devez soumettre un e-mail."
+       missing_redirect_url: "URL de redirection manquante."
+diff --git a/config/locales/he.yml b/config/locales/he.yml
+index 91ba181..c79489e 100644
+--- a/config/locales/he.yml
++++ b/config/locales/he.yml
+@@ -14,6 +14,8 @@ he:
+       account_with_uid_destroyed: "חשבון עם UID '%{uid}' הושמד."
+       account_to_destroy_not_found: "לא ניתן לאתר חשבון להשמדה."
+       user_not_found: "המשתמש לא נמצא."
++    omniauth:
++      not_allowed_redirect_url: "הפניה אל '%{redirect_url}' אינה מותרת."
+     passwords:
+       missing_email: "עליך לספק כתובת דוא\"ל."
+       missing_redirect_url: "כתובת אתר להפניה מחדש חסרה."
+diff --git a/config/locales/it.yml b/config/locales/it.yml
+index dfd0eb5..608216b 100644
+--- a/config/locales/it.yml
++++ b/config/locales/it.yml
+@@ -14,6 +14,8 @@ it:
+       account_with_uid_destroyed: "L'account con UID '%{uid}' è stato eliminato."
+       account_to_destroy_not_found: "Impossibile trovare l'account da eliminare."
+       user_not_found: "Utente non trovato."
++    omniauth:
++      not_allowed_redirect_url: "Redirezione a '%{redirect_url}' non consentita."
+     passwords:
+       missing_email: "Devi fornire un indirizzo email."
+       missing_redirect_url: "Redirect URL mancante."
+diff --git a/config/locales/ja.yml b/config/locales/ja.yml
+index 099d5f4..4bde7ed 100644
+--- a/config/locales/ja.yml
++++ b/config/locales/ja.yml
+@@ -14,6 +14,8 @@ ja:
+       account_with_uid_destroyed: "'%{uid}' のアカウントは削除されました。"
+       account_to_destroy_not_found: "削除するアカウントが見つかりません。"
+       user_not_found: "ユーザーが見つかりません。"
++    omniauth:
++      not_allowed_redirect_url:  "'%{redirect_url}' へのリダイレクトは許可されていません。"
+     passwords:
+       missing_email: "メールアドレスが与えられていません。"
+       missing_redirect_url: "リダイレクト URL が与えられていません。"
+diff --git a/config/locales/nl.yml b/config/locales/nl.yml
+index 7b39022..5f2a5ea 100644
+--- a/config/locales/nl.yml
++++ b/config/locales/nl.yml
+@@ -14,6 +14,8 @@ nl:
+       account_with_uid_destroyed: "Account met id '%{uid}' is verwijderd."
+       account_to_destroy_not_found: "Te verwijderen account niet gevonden."
+       user_not_found: "Gebruiker niet gevonden."
++    omniauth:
++      not_allowed_redirect_url: "Redirect naar '%{redirect_url}' niet toegestaan."
+     passwords:
+       missing_email: "Je moet een e-mailadres opgeven."
+       missing_redirect_url: "Redirect URL ontbreekt."
+diff --git a/config/locales/pl.yml b/config/locales/pl.yml
+index 1facd4f..418fd7a 100644
+--- a/config/locales/pl.yml
++++ b/config/locales/pl.yml
+@@ -14,6 +14,8 @@ pl:
+       account_with_uid_destroyed: "Konto z uid '%{uid}' zostało usunięte."
+       account_to_destroy_not_found: "Nie odnaleziono konta do usunięcia."
+       user_not_found: "Użytkownik nie został odnaleziony."
++    omniauth:
++      not_allowed_redirect_url: "Przekierowanie na adres '%{redirect_url}' nie jest dozwolone."
+     passwords:
+       missing_email: "Musisz wprowadzić adres e-mail."
+       missing_redirect_url: "Brak adresu zwrotnego."
+diff --git a/config/locales/pt-BR.yml b/config/locales/pt-BR.yml
+index c87cfb4..d2d5971 100644
+--- a/config/locales/pt-BR.yml
++++ b/config/locales/pt-BR.yml
+@@ -14,6 +14,8 @@ pt-BR:
+       account_with_uid_destroyed: "A conta com uid '%{uid}' foi excluída."
+       account_to_destroy_not_found: "Não foi possível encontrar a conta para exclusão."
+       user_not_found: "Usuário não encontrado."
++    omniauth:
++      not_allowed_redirect_url: "Redirecionamento para '%{redirect_url}' não permitido."
+     passwords:
+       missing_email: "Informe o endereço de e-mail."
+       missing_redirect_url: "URL para redirecionamento não informada."
+diff --git a/config/locales/pt.yml b/config/locales/pt.yml
+index 9b6152a..9abf58a 100644
+--- a/config/locales/pt.yml
++++ b/config/locales/pt.yml
+@@ -14,6 +14,8 @@ pt:
+       account_with_uid_destroyed: "A conta com uid '%{uid}' foi excluída."
+       account_to_destroy_not_found: "Não foi possível encontrar a conta para exclusão."
+       user_not_found: "Utilizador não encontrado."
++    omniauth:
++      not_allowed_redirect_url: "Redirecionamento para '%{redirect_url}' não permitido."
+     passwords:
+       missing_email: "Informe o endereço de e-mail."
+       missing_redirect_url: "URL para redirecionamento não informada."
+diff --git a/config/locales/ro.yml b/config/locales/ro.yml
+index 516b5c1..fba429d 100644
+--- a/config/locales/ro.yml
++++ b/config/locales/ro.yml
+@@ -14,6 +14,8 @@ ro:
+       account_with_uid_destroyed: "Contul cu UID '%{uid}' a fost șters."
+       account_to_destroy_not_found: "Nu se poate localiza contul pentru ștergere."
+       user_not_found: "Utilizatorul nu a fost găsit."
++    omniauth:
++      not_allowed_redirect_url: "Redirecționarea către '%{redirect_url}' nu este permisă."
+     passwords:
+       missing_email: "Trebuie să introduci o adresă de e-mail."
+       missing_redirect_url: "URL-ul pentru redirecționare lipsește."
+diff --git a/config/locales/ru.yml b/config/locales/ru.yml
+index 13dba21..ba10681 100644
+--- a/config/locales/ru.yml
++++ b/config/locales/ru.yml
+@@ -14,6 +14,8 @@ ru:
+       account_with_uid_destroyed: "Учетная запись с uid '%{uid}' удалена."
+       account_to_destroy_not_found: "Не удается найти учетную запись для удаления."
+       user_not_found: "Пользователь не найден."
++    omniauth:
++      not_allowed_redirect_url: "Переадресация на '%{redirect_url}' не разрешена."
+     passwords:
+       missing_email: "Вы должны указать адрес электронной почты."
+       missing_redirect_url: "Отсутствует адрес переадресации."
+diff --git a/config/locales/sq.yml b/config/locales/sq.yml
+index cf1f0b2..33a8f5b 100644
+--- a/config/locales/sq.yml
++++ b/config/locales/sq.yml
+@@ -14,6 +14,8 @@ sq:
+       account_with_uid_destroyed: "Llogaria me UID-në '%{uid}' është fshirë."
+       account_to_destroy_not_found: "Nuk u gjet llogaria për fshirje."
+       user_not_found: "Përdoruesi nuk u gjet."
++    omniauth:
++      not_allowed_redirect_url: "Nuk lejohet shkuarja tek URL-ja '%{redirect_url}'."
+     passwords:
+       missing_email: "Ju duhet të jepni një email adresë."
+       missing_redirect_url: "Mungon URL-ja për ridërgim."
+diff --git a/config/locales/sv.yml b/config/locales/sv.yml
+index fcfd710..e3e7af8 100644
+--- a/config/locales/sv.yml
++++ b/config/locales/sv.yml
+@@ -14,6 +14,8 @@ sv:
+       account_with_uid_destroyed: "Kontot med UID '%{uid}' har tagits bort."
+       account_to_destroy_not_found: "Kunde inte hitta kontot för borttagning."
+       user_not_found: "Användaren hittades ej."
++    omniauth:
++      not_allowed_redirect_url: "Omdirigering till '%{redirect_url}' ej tillåten."
+     passwords:
+       missing_email: "Du måste ange en emailadress."
+       missing_redirect_url: "Saknar en omdirigerings-URL."
+diff --git a/config/locales/uk.yml b/config/locales/uk.yml
+index c5e662f..657a215 100644
+--- a/config/locales/uk.yml
++++ b/config/locales/uk.yml
+@@ -14,6 +14,8 @@ uk:
+       account_with_uid_destroyed: "Акаунт з UID '%{uid}' було видалено."
+       account_to_destroy_not_found: "Неможливо знайти акаунт для видалення."
+       user_not_found: "Користувача не знайдено"
++    omniauth:
++      not_allowed_redirect_url: "Перенаправлення до '%{redirect_url}' не дозволено."
+     passwords:
+       missing_email: "Ви маєте ввести email адресу."
+       missing_redirect_url: "Немає URL для перенаправлення."
+diff --git a/config/locales/vi.yml b/config/locales/vi.yml
+index 62ed94b..da7e4b6 100644
+--- a/config/locales/vi.yml
++++ b/config/locales/vi.yml
+@@ -14,6 +14,8 @@ vi:
+       account_with_uid_destroyed: "Tài khoản với UID '%{uid}' vừa bị phá hủy."
+       account_to_destroy_not_found: "Không thể xác định tài khoản cho việc phá hủy."
+       user_not_found: "Người dùng không tìm thấy."
++    omniauth:
++      not_allowed_redirect_url: "Chuyển hướng tới '%{redirect_url}' không được phép."
+     passwords:
+       missing_email: "Bạn cần cung cấp địa chỉ email."
+       missing_redirect_url: "Thiếu đường đẫn URL."
+diff --git a/config/locales/zh-CN.yml b/config/locales/zh-CN.yml
+index 8a34f5f..1b6caeb 100644
+--- a/config/locales/zh-CN.yml
++++ b/config/locales/zh-CN.yml
+@@ -14,6 +14,8 @@ zh-CN:
+       account_with_uid_destroyed: "账号 '%{uid}' 已被移除。"
+       account_to_destroy_not_found: "无法找到目标帐号。"
+       user_not_found: "找不到帐号。"
++    omniauth:
++      not_allowed_redirect_url: "不支持转向到 '%{redirect_url}'"
+     passwords:
+       missing_email: "必需提供邮箱。"
+       missing_redirect_url: "欠缺 redirect URL."
+diff --git a/config/locales/zh-HK.yml b/config/locales/zh-HK.yml
+index b541f84..ac8438f 100644
+--- a/config/locales/zh-HK.yml
++++ b/config/locales/zh-HK.yml
+@@ -16,6 +16,8 @@ zh-TW:
+       account_with_uid_destroyed: "帳號 '%{uid}' 已被移除。"
+       account_to_destroy_not_found: "無法找到目標帳號。"
+       user_not_found: "找不到帳號。"
++    omniauth:
++      not_allowed_redirect_url: "不支援轉向到 '%{redirect_url}'"
+     passwords:
+       missing_email: "必需提供電郵。"
+       missing_redirect_url: "欠缺 redirect URL."
+diff --git a/config/locales/zh-TW.yml b/config/locales/zh-TW.yml
+index b541f84..ac8438f 100644
+--- a/config/locales/zh-TW.yml
++++ b/config/locales/zh-TW.yml
+@@ -16,6 +16,8 @@ zh-TW:
+       account_with_uid_destroyed: "帳號 '%{uid}' 已被移除。"
+       account_to_destroy_not_found: "無法找到目標帳號。"
+       user_not_found: "找不到帳號。"
++    omniauth:
++      not_allowed_redirect_url: "不支援轉向到 '%{redirect_url}'"
+     passwords:
+       missing_email: "必需提供電郵。"
+       missing_redirect_url: "欠缺 redirect URL."
+diff --git a/test/controllers/devise_token_auth/omniauth_callbacks_controller_test.rb b/test/controllers/devise_token_auth/omniauth_callbacks_controller_test.rb
+index a6d9254..c3471c5 100644
+--- a/test/controllers/devise_token_auth/omniauth_callbacks_controller_test.rb
++++ b/test/controllers/devise_token_auth/omniauth_callbacks_controller_test.rb
+@@ -317,60 +317,125 @@ class OmniauthTest < ActionDispatch::IntegrationTest
+   end
+ 
+   describe 'Using redirect_whitelist' do
+-    before do
+-      @user_email = 'slemp.diggler@sillybandz.gov'
+-      OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(
+-        provider: 'facebook',
+-        uid: '123545',
+-        info: {
+-          name: 'chong',
+-          email: @user_email
+-        }
+-      )
+-      @good_redirect_url = Faker::Internet.url
+-      @bad_redirect_url = Faker::Internet.url
+-      DeviseTokenAuth.redirect_whitelist = [@good_redirect_url]
+-    end
+ 
+-    teardown do
+-      DeviseTokenAuth.redirect_whitelist = nil
+-    end
++    describe "newWindow" do
++      before do
++        @user_email = 'slemp.diggler@sillybandz.gov'
++        OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(
++          provider: 'facebook',
++          uid: '123545',
++          info: {
++            name: 'chong',
++            email: @user_email
++          }
++        )
++        @good_redirect_url = Faker::Internet.url
++        @bad_redirect_url = Faker::Internet.url
++        DeviseTokenAuth.redirect_whitelist = [@good_redirect_url]
++      end
+ 
+-    test 'request using non-whitelisted redirect fail' do
+-      get '/auth/facebook',
+-          params: { auth_origin_url: @bad_redirect_url,
+-                    omniauth_window_type: 'newWindow' }
++      teardown do
++        DeviseTokenAuth.redirect_whitelist = nil
++      end
+ 
+-      follow_all_redirects!
++      test 'request using non-whitelisted redirect fail' do
++        get '/auth/facebook',
++            params: { auth_origin_url: @bad_redirect_url,
++                      omniauth_window_type: 'newWindow' }
+ 
+-      data = get_parsed_data_json
+-      assert_equal "Redirect to &#39;#{@bad_redirect_url}&#39; not allowed.",
+-                   data['error']
++        follow_all_redirects!
++
++        data = get_parsed_data_json
++        assert_equal "Redirect to &#39;#{@bad_redirect_url}&#39; not allowed.",
++                    data['error']
++      end
++
++      test 'request to whitelisted redirect should succeed' do
++        get '/auth/facebook',
++            params: {
++              auth_origin_url: @good_redirect_url,
++              omniauth_window_type: 'newWindow'
++            }
++
++        follow_all_redirects!
++
++        data = get_parsed_data_json
++        assert_equal @user_email, data['email']
++      end
++
++      test 'should support wildcards' do
++        DeviseTokenAuth.redirect_whitelist = ["#{@good_redirect_url[0..8]}*"]
++        get '/auth/facebook',
++            params: { auth_origin_url: @good_redirect_url,
++                      omniauth_window_type: 'newWindow' }
++
++        follow_all_redirects!
++
++        data = get_parsed_data_json
++        assert_equal @user_email, data['email']
++      end
+     end
+ 
+-    test 'request to whitelisted redirect should succeed' do
+-      get '/auth/facebook',
+-          params: {
+-            auth_origin_url: @good_redirect_url,
+-            omniauth_window_type: 'newWindow'
++    describe "sameWindow" do
++      before do
++        @user_email = 'slemp.diggler@sillybandz.gov'
++        OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(
++          provider: 'facebook',
++          uid: '123545',
++          info: {
++            name: 'chong',
++            email: @user_email
+           }
++        )
++        @good_redirect_url = '/auth_origin'
++        @bad_redirect_url = Faker::Internet.url
++        DeviseTokenAuth.redirect_whitelist = [@good_redirect_url]
++      end
+ 
+-      follow_all_redirects!
++      teardown do
++        DeviseTokenAuth.redirect_whitelist = nil
++      end
+ 
+-      data = get_parsed_data_json
+-      assert_equal @user_email, data['email']
+-    end
++      test 'request using non-whitelisted redirect fail' do
++        get '/auth/facebook',
++            params: { auth_origin_url: @bad_redirect_url,
++                      omniauth_window_type: 'sameWindow' }
+ 
+-    test 'should support wildcards' do
+-      DeviseTokenAuth.redirect_whitelist = ["#{@good_redirect_url[0..8]}*"]
+-      get '/auth/facebook',
+-          params: { auth_origin_url: @good_redirect_url,
+-                    omniauth_window_type: 'newWindow' }
++        follow_all_redirects!
++
++        assert_equal 200, response.status
++        assert_equal true, response.body.include?("Redirect to '#{@bad_redirect_url}' not allowed")
++      end
++
++      test 'request to whitelisted redirect should succeed' do
++        get '/auth/facebook',
++            params: {
++              auth_origin_url: '/auth_origin',
++              omniauth_window_type: 'sameWindow'
++            }
++
++        follow_all_redirects!
++
++        assert_equal 200, response.status
++        assert_equal false, response.body.include?("Redirect to '#{@good_redirect_url}' not allowed")
++      end
++
++      test 'should support wildcards' do
++        DeviseTokenAuth.redirect_whitelist = ["#{@good_redirect_url[0..8]}*"]
++        get '/auth/facebook',
++            params: {
++              auth_origin_url: '/auth_origin',
++              omniauth_window_type: 'sameWindow'
++            }
++
++        follow_all_redirects!
++
++        assert_equal 200, response.status
++        assert_equal false, response.body.include?("Redirect to '#{@good_redirect_url}' not allowed")
++      end
+ 
+-      follow_all_redirects!
+ 
+-      data = get_parsed_data_json
+-      assert_equal @user_email, data['email']
+     end
++
+   end
+ end
+-- 
+2.34.1
+

@@ -1,0 +1,27 @@
+From 48b86dbeb287dca8e5451cb6d6a60e98156c5c8b Mon Sep 17 00:00:00 2001
+From: pmacdona <>
+Date: Sun, 26 Dec 2021 23:20:25 +0000
+Subject: [PATCH] Fixes #51
+
+FossilOrigin-Name: ddb4e585955ade541e0a96228fa0f301fe141a81374aef03bd4636396c2efceb
+---
+ src/jsiEval.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/jsiEval.c b/src/jsiEval.c
+index 477c588..9609e91 100644
+--- a/src/jsiEval.c
++++ b/src/jsiEval.c
+@@ -1017,7 +1017,8 @@ static Jsi_RC jsiEvalSubscript(Jsi_Interp *interp, Jsi_Value *src, Jsi_Value *id
+             else
+                 Jsi_ValueCopy(interp, src, vp);
+         } else {
+-            assert(vp != resPtr);
++            if (vp == resPtr)
++              return Jsi_LogError("bad eval");
+             res.vt = JSI_VT_VARIABLE;
+             res.d.lval = vp;
+             if (ro)
+-- 
+2.34.1
+

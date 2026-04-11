@@ -1,0 +1,25 @@
+From 31b937298c8067e6b0c3217c95edceb983dfc4a2 Mon Sep 17 00:00:00 2001
+From: NickSampanis <nicksampanis@gmail.com>
+Date: Fri, 17 Oct 2014 21:10:14 +0300
+Subject: [PATCH] Fix cvs signed pointer
+
+---
+ src/dissectors/ec_cvs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/dissectors/ec_cvs.c b/src/dissectors/ec_cvs.c
+index ff19b608..bb71981b 100644
+--- a/src/dissectors/ec_cvs.c
++++ b/src/dissectors/ec_cvs.c
+@@ -69,7 +69,7 @@ FUNC_DECODER(dissector_cvs)
+ {
+    DECLARE_DISP_PTR_END(ptr, end);
+    char tmp[MAX_ASCII_ADDR_LEN];
+-   char *p;
++   u_char *p;
+    size_t i;
+ 
+    /* don't complain about unused var */
+-- 
+2.34.1
+

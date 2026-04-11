@@ -1,0 +1,26 @@
+From 8525ad0b9fd596f4b251bb3d7b114e6dc7ce1ee8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Sergi=20=C3=80lvarez=20i=20Capilla?= <pancake@nowsecure.com>
+Date: Mon, 7 Feb 2022 21:35:54 +0100
+Subject: [PATCH] Fix bins/*/rep8 - UAF crash in pyc parser ##crash
+
+* Reported by Cen Zhang via huntr.dev
+---
+ libr/bin/format/pyc/marshal.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libr/bin/format/pyc/marshal.c b/libr/bin/format/pyc/marshal.c
+index 4245a17824..728bf73701 100644
+--- a/libr/bin/format/pyc/marshal.c
++++ b/libr/bin/format/pyc/marshal.c
+@@ -1098,7 +1098,7 @@ static pyc_object *get_object(RBuffer *buffer) {
+ 		break;
+ 	case TYPE_UNKNOWN:
+ 		eprintf ("Get not implemented for type 0x%x\n", type);
+-		r_list_pop (refs);
++		// r_list_pop (refs);
+ 		free_object (ret);
+ 		return NULL;
+ 	case 0:
+-- 
+2.34.1
+

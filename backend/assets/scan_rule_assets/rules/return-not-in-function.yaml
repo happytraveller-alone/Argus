@@ -1,0 +1,30 @@
+rules:
+- id: code-after-unconditional-return
+  patterns:
+  - pattern: 'return ...
+
+      $S
+
+      '
+  message: code after return statement will not be executed
+  languages:
+  - python
+  severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-561: Dead Code'
+    - 'CWE-398: Indicator of Poor Code Quality'
+    - 'CWE-710: Improper Adherence to Coding Standards'
+- id: return-not-in-function
+  patterns:
+  - pattern-not-inside: "def $F(...):\n    ...\n# TODO: first pattern should just\
+      \ automatically include this one\n"
+  - pattern-not-inside: "def $F(...) ->  $Y:\n    ...\n"
+  - pattern: return ...
+  message: '`return` only makes sense inside a function'
+  languages:
+  - python
+  severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'

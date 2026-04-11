@@ -1,0 +1,26 @@
+From 6abe964bbac41b5e40a81b40962f7044b0dc201e Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Tue, 15 Mar 2022 00:10:25 +0000
+Subject: [PATCH] MDL-74204 mod_assign: escape identity fields in allocate
+ marker form.
+
+---
+ mod/assign/classes/output/renderer.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mod/assign/classes/output/renderer.php b/mod/assign/classes/output/renderer.php
+index 45e60caf347..098fd15c419 100644
+--- a/mod/assign/classes/output/renderer.php
++++ b/mod/assign/classes/output/renderer.php
+@@ -168,7 +168,7 @@ class renderer extends \plugin_renderer_base {
+             $fullname = fullname($summary->user, $summary->viewfullnames);
+             $extrainfo = array();
+             foreach ($summary->extrauserfields as $extrafield) {
+-                $extrainfo[] = $summary->user->$extrafield;
++                $extrainfo[] = s($summary->user->$extrafield);
+             }
+             if (count($extrainfo)) {
+                 $fullname .= ' (' . implode(', ', $extrainfo) . ')';
+-- 
+2.34.1
+

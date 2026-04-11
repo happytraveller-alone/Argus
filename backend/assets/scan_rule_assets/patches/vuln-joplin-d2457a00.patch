@@ -1,0 +1,53 @@
+From d2457a007976c8378d22c147e3e08591c0ad4c3d Mon Sep 17 00:00:00 2001
+From: "renovate[bot]" <29139614+renovate[bot]@users.noreply.github.com>
+Date: Tue, 15 Nov 2022 08:10:13 +0000
+Subject: [PATCH] Update postgres Docker tag to v15 (#7288)
+
+---
+ docker-compose.db-dev.yml     | 2 +-
+ docker-compose.server-dev.yml | 2 +-
+ docker-compose.server.yml     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/docker-compose.db-dev.yml b/docker-compose.db-dev.yml
+index b4d52a386..15f6231c1 100644
+--- a/docker-compose.db-dev.yml
++++ b/docker-compose.db-dev.yml
+@@ -6,7 +6,7 @@ version: '3'
+ 
+ services:
+     db:
+-        image: postgres:13
++        image: postgres:15
+         command: postgres -c work_mem=100000
+         ports:
+             - "5432:5432"
+diff --git a/docker-compose.server-dev.yml b/docker-compose.server-dev.yml
+index fd5b9501f..9c61b91cd 100644
+--- a/docker-compose.server-dev.yml
++++ b/docker-compose.server-dev.yml
+@@ -18,7 +18,7 @@ services:
+             - POSTGRES_PORT=5432
+             - POSTGRES_HOST=localhost
+     db:
+-        image: postgres:13
++        image: postgres:15
+         ports:
+             - "5432:5432"
+         environment:
+diff --git a/docker-compose.server.yml b/docker-compose.server.yml
+index e89dc6b0a..04d220f7a 100644
+--- a/docker-compose.server.yml
++++ b/docker-compose.server.yml
+@@ -19,7 +19,7 @@ version: '3'
+ 
+ services:
+     db:
+-        image: postgres:13
++        image: postgres:15
+         volumes:
+             - ./data/postgres:/var/lib/postgresql/data
+         ports:
+-- 
+2.34.1
+

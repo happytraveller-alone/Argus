@@ -1,0 +1,17 @@
+rules:
+- id: simple-sql-injection
+  patterns:
+  - pattern-regex: (.*orderByRaw(.*).*|DB::raw.)
+  message: "Without sufficient removal or quoting of SQL syntax in user-controllable\
+    \ inputs,\nthe generated SQL query can cause those inputs to be interpreted as\
+    \ SQL instead \nof ordinary user data. This can be used to alter query logic to\
+    \ bypass security checks,\nor to insert additional statements that modify the\
+    \ back-end database, possibly\nincluding execution of system commands.\n"
+  metadata:
+    cwe: CWE-89
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/89.html
+  languages:
+  - php
+  severity: ERROR

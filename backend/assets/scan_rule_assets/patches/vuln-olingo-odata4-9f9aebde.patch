@@ -1,0 +1,87 @@
+From 5948974ad28271818e2afe747c71cde56a7f2c63 Mon Sep 17 00:00:00 2001
+From: mibo <mibo@apache.org>
+Date: Tue, 12 Nov 2019 04:59:33 +0100
+Subject: [PATCH] [OLINGO-1409] XML serializer defaults
+
+---
+ .../olingo/server/core/MetadataParser.java    | 21 ++++++++++++-------
+ .../xml/ODataXmlDeserializer.java             |  2 ++
+ 2 files changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/lib/server-core-ext/src/main/java/org/apache/olingo/server/core/MetadataParser.java b/lib/server-core-ext/src/main/java/org/apache/olingo/server/core/MetadataParser.java
+index 150c49ca7..3eeaef307 100644
+--- a/lib/server-core-ext/src/main/java/org/apache/olingo/server/core/MetadataParser.java
++++ b/lib/server-core-ext/src/main/java/org/apache/olingo/server/core/MetadataParser.java
+@@ -162,7 +162,7 @@ public class MetadataParser {
+   }
+ 
+   public SchemaBasedEdmProvider buildEdmProvider(Reader csdl) throws XMLStreamException {
+-    XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
++    XMLInputFactory xmlInputFactory = createXmlInputFactory();
+     XMLEventReader reader = xmlInputFactory.createXMLEventReader(csdl);    
+     return buildEdmProvider(reader, this.referenceResolver, this.implicitlyLoadCoreVocabularies,
+             this.useLocalCoreVocabularies, true, null);
+@@ -170,17 +170,17 @@ public class MetadataParser {
+   
+   public SchemaBasedEdmProvider addToEdmProvider(SchemaBasedEdmProvider existing, Reader csdl)
+       throws XMLStreamException {
+-    XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
++    XMLInputFactory xmlInputFactory = createXmlInputFactory();
+     XMLEventReader reader = xmlInputFactory.createXMLEventReader(csdl);
+     return addToEdmProvider(existing, reader, this.referenceResolver, this.implicitlyLoadCoreVocabularies,
+         this.useLocalCoreVocabularies, true, null);
+   }
+-  
++
+   protected SchemaBasedEdmProvider buildEdmProvider(Reader csdl, ReferenceResolver resolver,
+                                                     boolean loadCore, boolean useLocal,
+                                                     boolean loadReferenceSchemas, String namespace)
+           throws XMLStreamException {
+-    XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
++    XMLInputFactory xmlInputFactory = createXmlInputFactory();
+     XMLEventReader reader = xmlInputFactory.createXMLEventReader(csdl);
+     return buildEdmProvider(reader, resolver, loadCore, useLocal, loadReferenceSchemas, namespace);
+   }
+@@ -189,7 +189,7 @@ public class MetadataParser {
+                                                     boolean loadCore, boolean useLocal,
+                                                     boolean loadReferenceSchemas, String namespace)
+           throws XMLStreamException {
+-    XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
++    XMLInputFactory xmlInputFactory = createXmlInputFactory();
+     XMLEventReader reader = xmlInputFactory.createXMLEventReader(csdl);
+     return buildEdmProvider(reader, resolver, loadCore, useLocal, loadReferenceSchemas, namespace);
+   } 
+@@ -249,8 +249,15 @@ public class MetadataParser {
+           : fixXmlBase(xmlBase.toString()), resolver, loadCore, useLocal);
+     }
+     return provider;
+-  }  
+-  
++  }
++
++  private XMLInputFactory createXmlInputFactory() {
++    XMLInputFactory factory = XMLInputFactory.newInstance();
++    factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
++    factory.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
++    return factory;
++  }
++
+   private void loadReferencesSchemas(SchemaBasedEdmProvider provider,
+       String xmlBase, ReferenceResolver resolver, boolean loadCore,
+       boolean useLocal) {    
+diff --git a/lib/server-core/src/main/java/org/apache/olingo/server/core/deserializer/xml/ODataXmlDeserializer.java b/lib/server-core/src/main/java/org/apache/olingo/server/core/deserializer/xml/ODataXmlDeserializer.java
+index c8a1fcb24..8356cba61 100644
+--- a/lib/server-core/src/main/java/org/apache/olingo/server/core/deserializer/xml/ODataXmlDeserializer.java
++++ b/lib/server-core/src/main/java/org/apache/olingo/server/core/deserializer/xml/ODataXmlDeserializer.java
+@@ -94,6 +94,8 @@ public class ODataXmlDeserializer implements ODataDeserializer {
+   }
+   
+   protected XMLEventReader getReader(final InputStream input) throws XMLStreamException {
++    FACTORY.setProperty(XMLInputFactory.SUPPORT_DTD, false);
++    FACTORY.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+     return FACTORY.createXMLEventReader(input);
+   }
+ 
+-- 
+2.34.1
+

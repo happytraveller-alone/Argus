@@ -1,0 +1,274 @@
+From 85b531e8beae3497ec2075e07e59c581fccb317c Mon Sep 17 00:00:00 2001
+From: Juan Leyva <juanleyvadelgado@gmail.com>
+Date: Tue, 2 May 2017 10:04:55 +0200
+Subject: [PATCH] MDL-58762 report: Check group permissions in course user
+ reports
+
+Teachers were able to see any student report even with forced separated
+groups and capability moodle/course:accessallgroups off.
+---
+ report/completion/lib.php                 | 25 +++++++++++--------
+ report/completion/user.php                |  2 +-
+ report/log/lang/en/report_log.php         |  1 +
+ report/log/lib.php                        | 30 +++++++++++------------
+ report/log/user.php                       |  4 +++
+ report/outline/lang/en/report_outline.php |  1 +
+ report/outline/lib.php                    | 23 ++++++++++-------
+ report/outline/user.php                   |  4 +--
+ report/stats/lib.php                      | 22 ++++++++++-------
+ report/stats/user.php                     |  2 +-
+ 10 files changed, 67 insertions(+), 47 deletions(-)
+
+diff --git a/report/completion/lib.php b/report/completion/lib.php
+index a98d2ce174b..d60a5cc18bb 100644
+--- a/report/completion/lib.php
++++ b/report/completion/lib.php
+@@ -80,25 +80,30 @@ function report_completion_can_access_user_report($user, $course) {
+     }
+ 
+     if ($course->id != SITEID and !$course->enablecompletion) {
+-        return;
++        return false;
+     }
+ 
+     $coursecontext = context_course::instance($course->id);
+     $personalcontext = context_user::instance($user->id);
+ 
+-    if (has_capability('report/completion:view', $coursecontext)) {
+-        return true;
+-    }
+-
+-    if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
+-        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
++    if ($user->id == $USER->id) {
++        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
+             return true;
+         }
+-
+-    } else if ($user->id == $USER->id) {
+-        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
++    } else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
++        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
+             return true;
+         }
++
++    }
++
++    // Check if $USER shares group with $user (in case separated groups are enabled and 'moodle/site:accessallgroups' is disabled).
++    if (!groups_user_groups_visible($course, $user->id)) {
++        return false;
++    }
++
++    if (has_capability('report/completion:view', $coursecontext)) {
++        return true;
+     }
+ 
+     return false;
+diff --git a/report/completion/user.php b/report/completion/user.php
+index b73c9be1756..47af8428958 100644
+--- a/report/completion/user.php
++++ b/report/completion/user.php
+@@ -45,7 +45,7 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
+     require_login($course);
+ }
+ 
+-if (!report_completion_can_access_user_report($user, $course, true)) {
++if (!report_completion_can_access_user_report($user, $course)) {
+     // this should never happen
+     print_error('nocapability', 'report_completion');
+ }
+diff --git a/report/log/lang/en/report_log.php b/report/log/lang/en/report_log.php
+index f37d48f9220..82d6f238242 100644
+--- a/report/log/lang/en/report_log.php
++++ b/report/log/lang/en/report_log.php
+@@ -37,6 +37,7 @@ $string['log:view'] = 'View course logs';
+ $string['log:viewtoday'] = 'View today\'s logs';
+ $string['page'] = 'Page {$a}';
+ $string['logsformat'] = 'Logs format';
++$string['nocapability'] = 'Can not access user log report';
+ $string['nologreaderenabled'] = 'No log reader enabled';
+ $string['origin'] = 'Source';
+ $string['other'] = 'Other';
+diff --git a/report/log/lib.php b/report/log/lib.php
+index 6a53182a78e..5c4d38ed3c1 100644
+--- a/report/log/lib.php
++++ b/report/log/lib.php
+@@ -89,6 +89,21 @@ function report_log_can_access_user_report($user, $course) {
+     $coursecontext = context_course::instance($course->id);
+     $personalcontext = context_user::instance($user->id);
+ 
++    if ($user->id == $USER->id) {
++        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
++            return array(true, true);
++        }
++    } else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
++        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
++            return array(true, true);
++        }
++    }
++
++    // Check if $USER shares group with $user (in case separated groups are enabled and 'moodle/site:accessallgroups' is disabled).
++    if (!groups_user_groups_visible($course, $user->id)) {
++        return array(false, false);
++    }
++
+     $today = false;
+     $all = false;
+ 
+@@ -99,21 +114,6 @@ function report_log_can_access_user_report($user, $course) {
+         $all = true;
+     }
+ 
+-    if ($today and $all) {
+-        return array(true, true);
+-    }
+-
+-    if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
+-        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
+-            return array(true, true);
+-        }
+-
+-    } else if ($user->id == $USER->id) {
+-        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
+-            return array(true, true);
+-        }
+-    }
+-
+     return array($all, $today);
+ }
+ 
+diff --git a/report/log/user.php b/report/log/user.php
+index 3fdd4b356fc..f8426e79469 100644
+--- a/report/log/user.php
++++ b/report/log/user.php
+@@ -58,6 +58,10 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
+ 
+ list($all, $today) = report_log_can_access_user_report($user, $course);
+ 
++if (!$today && !$all) {
++    print_error('nocapability', 'report_log');
++}
++
+ if ($mode === 'today') {
+     if (!$today) {
+         require_capability('report/log:viewtoday', $coursecontext);
+diff --git a/report/outline/lang/en/report_outline.php b/report/outline/lang/en/report_outline.php
+index 36e44fd8846..245838f5b07 100644
+--- a/report/outline/lang/en/report_outline.php
++++ b/report/outline/lang/en/report_outline.php
+@@ -26,6 +26,7 @@
+ $string['eventactivityreportviewed'] = 'Activity report viewed';
+ $string['eventoutlinereportviewed'] = 'Outline report viewed';
+ $string['neverseen'] = 'Never seen';
++$string['nocapability'] = 'Can not access user outline report';
+ $string['nologreaderenabled'] = 'No log reader enabled';
+ $string['numviews'] = '{$a->numviews} by {$a->distinctusers} users';
+ $string['outline:view'] = 'View activity report';
+diff --git a/report/outline/lib.php b/report/outline/lib.php
+index 876e3498835..996e10a7d30 100644
+--- a/report/outline/lib.php
++++ b/report/outline/lib.php
+@@ -70,19 +70,24 @@ function report_outline_can_access_user_report($user, $course) {
+     $coursecontext = context_course::instance($course->id);
+     $personalcontext = context_user::instance($user->id);
+ 
+-    if (has_capability('report/outline:view', $coursecontext)) {
+-        return true;
+-    }
+-
+-    if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
+-        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
++    if ($user->id == $USER->id) {
++        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
+             return true;
+         }
+-
+-    } else if ($user->id == $USER->id) {
+-        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
++    } else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
++        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
+             return true;
+         }
++
++    }
++
++    // Check if $USER shares group with $user (in case separated groups are enabled and 'moodle/site:accessallgroups' is disabled).
++    if (!groups_user_groups_visible($course, $user->id)) {
++        return false;
++    }
++
++    if (has_capability('report/outline:view', $coursecontext)) {
++        return true;
+     }
+ 
+     return false;
+diff --git a/report/outline/user.php b/report/outline/user.php
+index 162453e1831..a1e6515389a 100644
+--- a/report/outline/user.php
++++ b/report/outline/user.php
+@@ -55,8 +55,8 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
+ }
+ $PAGE->set_url('/report/outline/user.php', array('id'=>$userid, 'course'=>$courseid, 'mode'=>$mode));
+ 
+-if (!report_outline_can_access_user_report($user, $course, true)) {
+-    require_capability('report/outline:view', $coursecontext);
++if (!report_outline_can_access_user_report($user, $course)) {
++    print_error('nocapability', 'report_outline');
+ }
+ 
+ $stractivityreport = get_string('activityreport');
+diff --git a/report/stats/lib.php b/report/stats/lib.php
+index f0a069b2df2..aec2a9d6f04 100644
+--- a/report/stats/lib.php
++++ b/report/stats/lib.php
+@@ -78,21 +78,25 @@ function report_stats_can_access_user_report($user, $course) {
+     $coursecontext = context_course::instance($course->id);
+     $personalcontext = context_user::instance($user->id);
+ 
+-    if (has_capability('report/stats:view', $coursecontext)) {
+-        return true;
+-    }
+-
+-    if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
+-        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
++    if ($user->id == $USER->id) {
++        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
+             return true;
+         }
+-
+-    } else if ($user->id == $USER->id) {
+-        if ($course->showreports and (is_viewing($coursecontext, $USER) or is_enrolled($coursecontext, $USER))) {
++    } else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
++        if ($course->showreports and (is_viewing($coursecontext, $user) or is_enrolled($coursecontext, $user))) {
+             return true;
+         }
+     }
+ 
++    // Check if $USER shares group with $user (in case separated groups are enabled and 'moodle/site:accessallgroups' is disabled).
++    if (!groups_user_groups_visible($course, $user->id)) {
++        return false;
++    }
++
++    if (has_capability('report/stats:view', $coursecontext)) {
++        return true;
++    }
++
+     return false;
+ }
+ 
+diff --git a/report/stats/user.php b/report/stats/user.php
+index 2d5a5c846af..547714234f0 100644
+--- a/report/stats/user.php
++++ b/report/stats/user.php
+@@ -51,7 +51,7 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
+     require_login($course);
+ }
+ 
+-if (!report_stats_can_access_user_report($user, $course, true)) {
++if (!report_stats_can_access_user_report($user, $course)) {
+     // this should never happen
+     print_error('nocapability', 'report_stats');
+ }
+-- 
+2.34.1
+

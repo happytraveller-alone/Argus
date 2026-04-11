@@ -174,12 +174,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     let mut cleanup_dirs = Vec::new();
     let mut specs = vec![
         RunnerPreflightSpec {
-            name: "yasa",
-            image: config.scanner_yasa_image.clone(),
-            command: vec!["/opt/yasa/bin/yasa".to_string(), "--version".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
             name: "opengrep",
             image: config.scanner_opengrep_image.clone(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
@@ -383,7 +377,6 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "yasa",
                 "opengrep",
                 "bandit",
                 "gitleaks",

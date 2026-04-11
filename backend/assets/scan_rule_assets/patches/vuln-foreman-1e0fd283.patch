@@ -1,0 +1,83 @@
+From 1e0fd283180dc6bda30c880898cdea69cb579194 Mon Sep 17 00:00:00 2001
+From: Dominic Cleal <dcleal@redhat.com>
+Date: Wed, 5 Feb 2014 17:48:51 +0000
+Subject: [PATCH] fixes #4268 - don't search for host with nil IP on hostname
+ spoofing
+
+---
+ app/controllers/unattended_controller.rb        |  8 ++++----
+ test/fixtures/hosts.yml                         | 15 +++++++++++++++
+ test/functional/api/v2/hosts_controller_test.rb |  2 +-
+ test/functional/unattended_controller_test.rb   |  1 +
+ 4 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/app/controllers/unattended_controller.rb b/app/controllers/unattended_controller.rb
+index 2ee9f6008..0b7529fea 100644
+--- a/app/controllers/unattended_controller.rb
++++ b/app/controllers/unattended_controller.rb
+@@ -102,10 +102,10 @@ class UnattendedController < ApplicationController
+   end
+ 
+   def find_host_by_spoof
+-    ip, name = params.delete('spoof'), params.delete('hostname')
+-    return nil if ip.blank? && name.blank?
+-    @spoof = true
+-    Host.find_by_ip(ip) || Host.find_by_name(name)
++    host   = Host.find_by_ip(params.delete('spoof')) if params['spoof'].present?
++    host ||= Host.find_by_name(params.delete('hostname')) if params['hostname'].present?
++    @spoof = host.present?
++    host
+   end
+ 
+   def find_host_by_token
+diff --git a/test/fixtures/hosts.yml b/test/fixtures/hosts.yml
+index 58998fbef..ba3962aca 100644
+--- a/test/fixtures/hosts.yml
++++ b/test/fixtures/hosts.yml
+@@ -249,3 +249,18 @@ owned_by_restricted:
+   owner: restricted
+   owner_type: User
+   root_pass: xybxa6JUkz63w
++
++noip:
++  type: Host::Managed
++  name: noip.yourdomain.net
++  mac: ac:bb:cc:dd:ee:ff
++  environment: production
++  architecture: x86_64
++  operatingsystem: ubuntu1010
++  build: true
++  ptable: ubuntu
++  domain: yourdomain
++  medium: ubuntu
++  subnet: one
++  puppet_proxy: puppetmaster
++  compute_resource: one
+diff --git a/test/functional/api/v2/hosts_controller_test.rb b/test/functional/api/v2/hosts_controller_test.rb
+index 091b0a887..17d368d0c 100644
+--- a/test/functional/api/v2/hosts_controller_test.rb
++++ b/test/functional/api/v2/hosts_controller_test.rb
+@@ -366,7 +366,7 @@ class Api::V2::HostsControllerTest < ActionController::TestCase
+       get :index, {:search => 'my5name.mydomain.net' }
+       assert_response :success
+       response = ActiveSupport::JSON.decode(@response.body)
+-      assert_equal 15, response['total']
++      assert_equal 16, response['total']
+       assert_equal  1, response['subtotal']
+       assert_equal 'my5name.mydomain.net', response['search']
+     end
+diff --git a/test/functional/unattended_controller_test.rb b/test/functional/unattended_controller_test.rb
+index 19a990580..65558cdf8 100644
+--- a/test/functional/unattended_controller_test.rb
++++ b/test/functional/unattended_controller_test.rb
+@@ -70,6 +70,7 @@ class UnattendedControllerTest < ActionController::TestCase
+    test "should support spoof using hostname" do
+     get :provision, {:hostname => hosts(:ubuntu).name}, set_session_user
+     assert_response :success
++    assert_equal hosts(:ubuntu).name, assigns(:host).name
+   end
+ 
+   test "should provide pxe config for redhat" do
+-- 
+2.34.1
+

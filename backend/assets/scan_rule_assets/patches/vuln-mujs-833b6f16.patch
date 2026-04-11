@@ -1,0 +1,35 @@
+From 833b6f1672b4f2991a63c4d05318f0b84ef4d550 Mon Sep 17 00:00:00 2001
+From: Tor Andersson <tor.andersson@artifex.com>
+Date: Wed, 21 Apr 2021 12:25:48 +0200
+Subject: [PATCH] Issue #148: Check for overflow when reading floating point
+ exponent.
+
+GCC with -O2 optimizes away the if(exp<-maxExponent) branch completely,
+so we don't end up with the expected '512' value for overflowing
+exponents. Limit the exponent parsing to MAX_INT instead to prevent
+signed overflow from tripping up over-eager optimizing compilers.
+---
+ jsdtoa.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/jsdtoa.c b/jsdtoa.c
+index 858017d..97cac11 100644
+--- a/jsdtoa.c
++++ b/jsdtoa.c
+@@ -691,10 +691,12 @@ js_strtod(const char *string, char **endPtr)
+ 			}
+ 			expSign = FALSE;
+ 		}
+-		while ((*p >= '0') && (*p <= '9')) {
++		while ((*p >= '0') && (*p <= '9') && exp < INT_MAX/10) {
+ 			exp = exp * 10 + (*p - '0');
+ 			p += 1;
+ 		}
++		while ((*p >= '0') && (*p <= '9'))
++			p += 1;
+ 	}
+ 	if (expSign) {
+ 		exp = fracExp - exp;
+-- 
+2.34.1
+

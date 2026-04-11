@@ -1,0 +1,15 @@
+rules:
+- id: err-nil-check
+  patterns:
+  - pattern-either:
+    - pattern: "if err != nil {\n        return err\n}\nreturn nil\n"
+    - pattern: "if err != nil {\n        return $X, err\n}\nreturn $X, nil\n"
+  message: superfluous nil err check before return
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-398: Indicator of Poor Code Quality'
+    - 'CWE-570: Expression Is Always True/False'

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="TypeShadowsBuiltInNamespace Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for TypeShadowsBuiltInNamespace</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="TypeShadowsBuiltInNamespace" language="apex" since="7.13.0" message="This name causes a collision with a class, enum, or interface used in the `{0}` namespace. Please choose a different name." class="net.sourceforge.pmd.lang.apex.rule.errorprone.TypeShadowsBuiltInNamespaceRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#typeshadowsbuiltinnamespace">
+            <description>
+                This rule finds Apex classes, enums, and interfaces that have the same name as a class, enum, or interface in the `System`
+                or `Schema` namespace.
+                Shadowing these namespaces in this way can lead to confusion and unexpected behavior.
+                Code that intends to reference a `System` or `Schema` class, enum, or interface may inadvertently reference the locally defined type instead.
+                This can result in ambiguous code and unexpected runtime behavior.
+                It is best to avoid naming your types the same as those in the `System` or `Schema` namespace to prevent these issues.
+
+                Note that the list of classes, enums, and interfaces in the `System` and `Schema` namespaces are determined through
+                [io.github.apex-dev-tools:standard-types](https://github.com/apex-dev-tools/standard-types). It is based on the contents of
+                Salesforce's [Apex Reference Guide / System Namespace](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_namespace_System.htm)
+                and [Apex Reference Guide / Schema Namespace](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_namespace_Schema.htm).
+                As Salesforce introduces new types into the `System` and `Schema` namespaces, the rule might not always recognize
+                the new types and produce false-negatives und the standard types are updated.
+            </description>
+            <priority>1</priority>
+            <example>
+                
+    // Violation: Causes a collision with the `System.Database` class.
+    public class Database {
+        public static String query() {
+            return 'Hello World';
+        }
+    }
+
+            </example>
+        </rule>
+
+</ruleset>

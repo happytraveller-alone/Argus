@@ -1,0 +1,17 @@
+rules:
+- id: java-base64-detected
+  languages:
+  - java
+  pattern: 'import java.util.Base64;
+
+    '
+  message: '"Found Base64 import"
+
+    '
+  severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-311: Missing Encryption of Sensitive Data'
+    - 'CWE-319: Cleartext Transmission of Sensitive Information'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'

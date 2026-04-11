@@ -1,0 +1,19 @@
+rules:
+- id: rules_lgpl_javascript_ssrf_rule-wkhtmltoimage-ssrf
+  patterns:
+  - pattern-inside: 'require(''wkhtmltoimage'')
+
+      ...
+
+      '
+  message: 'User controlled URL reached to `wkhtmltoimage` can result in Server Side
+    Request Forgery (SSRF).
+
+    '
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp: A1:2017-Injection
+    cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
+    security-severity: CRITICAL

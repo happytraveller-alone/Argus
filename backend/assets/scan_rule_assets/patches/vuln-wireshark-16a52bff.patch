@@ -1,0 +1,62 @@
+From 16a52bff6cf8ddfec8126bd40c50b65465ede0cd Mon Sep 17 00:00:00 2001
+From: Peter Wu <peter@lekensteyn.nl>
+Date: Thu, 3 May 2018 23:15:46 +0200
+Subject: [PATCH] rtmpt: fix dissection of multiple packets on second pass
+
+The previous fix for the infinite loop in bug 13347 resulted in loop
+termination after one round, resulting in ignoring all but the last
+packet in a TCP segment.
+
+Observe that the purpose of this loop is to collect all packets where
+"tp->seq" refers to the first offset and "tcp->lastseq" refers to the
+last position of the packet. If a full packet "tp" is found, then the
+previous packet ends at "tp->seq-1" instead of "tp->lastseq-1" (assuming
+no overlapping TCP segments).
+
+The infinite loop from bug 13347 occured because of a single packet of
+length 1 (tp->seq=0, tp->lastseq=0) and lastseq-1 overflowed. To address
+that, terminate the loop once the begin is reached (tp->seq == 0).
+
+Bug: 14650
+Change-Id: Ibef382a09c6481b1024dd64dbc8bde904025f057
+Fixes: v2.3.0rc0-2153-gee185445f4 ("rtmpt: Ensure sequence count is incremented for stored fragments")
+Reviewed-on: https://code.wireshark.org/review/27319
+Petri-Dish: Peter Wu <peter@lekensteyn.nl>
+Tested-by: Petri Dish Buildbot
+Reviewed-by: Peter Wu <peter@lekensteyn.nl>
+---
+ epan/dissectors/packet-rtmpt.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/epan/dissectors/packet-rtmpt.c b/epan/dissectors/packet-rtmpt.c
+index 3b1e52fa4f..304dbcaaca 100644
+--- a/epan/dissectors/packet-rtmpt.c
++++ b/epan/dissectors/packet-rtmpt.c
+@@ -1865,7 +1865,6 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
+         guint8  cmd;
+         guint32 src;
+         int     chunk_size;
+-        guint32 save_seq = 0;
+ 
+         rtmpt_frag_t   *tf;
+         rtmpt_id_t     *ti;
+@@ -1888,10 +1887,13 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
+                 wmem_stack_push(packets, 0);
+ 
+                 tp = (rtmpt_packet_t *)wmem_tree_lookup32_le(rconv->packets[cdir], seq+remain-1);
+-                while (tp && tp->lastseq >= seq && tp->lastseq >= save_seq) {
++                while (tp && tp->lastseq >= seq) {
+                         wmem_stack_push(packets, tp);
+-                        save_seq = tp->lastseq+1; /* Ensure sequence is increasing */
+-                        tp = (rtmpt_packet_t *)wmem_tree_lookup32_le(rconv->packets[cdir], tp->lastseq-1);
++                        if (tp->seq == 0) {
++                                // reached first segment.
++                                break;
++                        }
++                        tp = (rtmpt_packet_t *)wmem_tree_lookup32_le(rconv->packets[cdir], tp->seq-1);
+                 }
+ 
+                 /* Dissect the generated list in reverse order (beginning to end) */
+-- 
+2.34.1
+

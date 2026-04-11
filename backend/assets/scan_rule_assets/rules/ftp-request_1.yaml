@@ -1,0 +1,46 @@
+rules:
+- id: ftp-request_1
+  languages:
+  - javascript
+  - typescript
+  message: 'Checks for lack of usage of the "secure: true" option when sending ftp
+    requests through the nodejs ftp module. This leads to unencrypted traffic being
+    sent to the ftp server. There are other options such as "implicit" that still
+    does not encrypt all traffic. ftp is the most utilized npm ftp module.'
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe: 'CWE-319: Cleartext Transmission of Sensitive Information'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp: A03:2017 - Sensitive Data Exposure
+    references:
+    - https://www.npmjs.com/package/ftp
+    - https://openbase.io/js/ftp
+    subcategory:
+    - vuln
+    technology:
+    - node.js
+    vulnerability: Insecure Transport
+  patterns:
+  - pattern-inside: '$X = require(''ftp'');
+
+      ...
+
+      $C = new $X();
+
+      ...
+
+      '
+  - pattern-not-inside: '$OPTIONS = {secure: true};
+
+      ...
+
+      '
+  - pattern: '$C.connect($OPTIONS,...);
+
+      '
+  - pattern-not: '$C.connect({...,secure: true});
+
+      '
+  severity: WARNING

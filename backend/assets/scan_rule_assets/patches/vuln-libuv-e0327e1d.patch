@@ -1,0 +1,27 @@
+From e0327e1d508b8207c9150b6e582f0adf26213c39 Mon Sep 17 00:00:00 2001
+From: Santiago Gimeno <santiago.gimeno@gmail.com>
+Date: Wed, 7 Feb 2024 20:27:58 +0100
+Subject: [PATCH] test: empty strings are not valid IDNA
+
+Fixes: https://github.com/libuv/libuv/security/advisories/GHSA-f74f-cvh7-c6q6
+---
+ test/test-idna.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/test-idna.c b/test/test-idna.c
+index 3c4820f7..28f9eaaa 100644
+--- a/test/test-idna.c
++++ b/test/test-idna.c
+@@ -151,8 +151,8 @@ TEST_IMPL(idna_toascii) {
+   /* Illegal inputs. */
+   F("\xC0\x80\xC1\x80", UV_EINVAL);  /* Overlong UTF-8 sequence. */
+   F("\xC0\x80\xC1\x80.com", UV_EINVAL);  /* Overlong UTF-8 sequence. */
++  F("", UV_EINVAL);
+   /* No conversion. */
+-  T("", "");
+   T(".", ".");
+   T(".com", ".com");
+   T("example", "example");
+-- 
+2.34.1
+

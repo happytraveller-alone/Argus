@@ -1,0 +1,35 @@
+From 09147ffad2b3046ed21af0f524c5088e2ac551e6 Mon Sep 17 00:00:00 2001
+From: James Mitchell <jmitchell@apache.org>
+Date: Thu, 24 Jan 2008 07:39:45 +0000
+Subject: [PATCH] WW-2414 - failsafe sanitization of querystring params
+
+git-svn-id: https://svn.apache.org/repos/asf/struts/struts2/trunk@614814 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../java/org/apache/struts2/views/util/UrlHelper.java  | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/core/src/main/java/org/apache/struts2/views/util/UrlHelper.java b/core/src/main/java/org/apache/struts2/views/util/UrlHelper.java
+index 019b28872..5b6ca1f53 100644
+--- a/core/src/main/java/org/apache/struts2/views/util/UrlHelper.java
++++ b/core/src/main/java/org/apache/struts2/views/util/UrlHelper.java
+@@ -174,10 +174,14 @@ public class UrlHelper {
+             buildParametersString(params, link, "&");
+         } 
+ 
+-        String result;
+-
++        String result = link.toString();
++        
++        if (result.indexOf("<script>") >= 0){
++        	result = result.replaceAll("<script>", "script");
++        }
++        
+         try {
+-            result = encodeResult ? response.encodeURL(link.toString()) : link.toString();
++            result = encodeResult ? response.encodeURL(result) : result;
+         } catch (Exception ex) {
+             // Could not encode the URL for some reason
+             // Use it unchanged
+-- 
+2.34.1
+

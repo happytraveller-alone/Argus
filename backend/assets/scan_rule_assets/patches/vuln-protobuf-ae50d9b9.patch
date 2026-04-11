@@ -1,0 +1,290 @@
+From ae50d9b9902526efd6c7a1907d09739f959c6297 Mon Sep 17 00:00:00 2001
+From: Adam Cozzette <acozzette@google.com>
+Date: Thu, 18 Feb 2021 10:36:22 -0800
+Subject: [PATCH] Update protobuf version
+
+---
+ Protobuf-C++.podspec                          |  2 +-
+ Protobuf.podspec                              |  2 +-
+ configure.ac                                  |  2 +-
+ csharp/Google.Protobuf.Tools.nuspec           |  2 +-
+ .../Google.Protobuf/Google.Protobuf.csproj    |  2 +-
+ java/bom/pom.xml                              |  2 +-
+ java/core/pom.xml                             |  2 +-
+ java/lite/pom.xml                             |  2 +-
+ java/pom.xml                                  |  2 +-
+ java/util/pom.xml                             |  2 +-
+ js/package.json                               |  2 +-
+ php/ext/google/protobuf/package.xml           | 25 +++++++++++++++----
+ php/ext/google/protobuf/protobuf.h            |  2 +-
+ protoc-artifacts/pom.xml                      |  2 +-
+ python/google/protobuf/__init__.py            |  2 +-
+ ruby/google-protobuf.gemspec                  |  2 +-
+ src/google/protobuf/port_def.inc              |  2 +-
+ src/google/protobuf/stubs/common.h            |  2 +-
+ 18 files changed, 37 insertions(+), 22 deletions(-)
+
+diff --git a/Protobuf-C++.podspec b/Protobuf-C++.podspec
+index 2020d507f..e794cb2a4 100644
+--- a/Protobuf-C++.podspec
++++ b/Protobuf-C++.podspec
+@@ -1,6 +1,6 @@
+ Pod::Spec.new do |s|
+   s.name     = 'Protobuf-C++'
+-  s.version  = '3.15.0-rc2'
++  s.version  = '3.15.0'
+   s.summary  = 'Protocol Buffers v3 runtime library for C++.'
+   s.homepage = 'https://github.com/google/protobuf'
+   s.license  = '3-Clause BSD License'
+diff --git a/Protobuf.podspec b/Protobuf.podspec
+index 88bcbe701..d982b9de8 100644
+--- a/Protobuf.podspec
++++ b/Protobuf.podspec
+@@ -5,7 +5,7 @@
+ # dependent projects use the :git notation to refer to the library.
+ Pod::Spec.new do |s|
+   s.name     = 'Protobuf'
+-  s.version  = '3.15.0-rc2'
++  s.version  = '3.15.0'
+   s.summary  = 'Protocol Buffers v.3 runtime library for Objective-C.'
+   s.homepage = 'https://github.com/protocolbuffers/protobuf'
+   s.license  = '3-Clause BSD License'
+diff --git a/configure.ac b/configure.ac
+index 1d15829a1..fed7095bb 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -17,7 +17,7 @@ AC_PREREQ(2.59)
+ # In the SVN trunk, the version should always be the next anticipated release
+ # version with the "-pre" suffix.  (We used to use "-SNAPSHOT" but this pushed
+ # the size of one file name in the dist tarfile over the 99-char limit.)
+-AC_INIT([Protocol Buffers],[3.15.0-rc-2],[protobuf@googlegroups.com],[protobuf])
++AC_INIT([Protocol Buffers],[3.15.0],[protobuf@googlegroups.com],[protobuf])
+ 
+ AM_MAINTAINER_MODE([enable])
+ 
+diff --git a/csharp/Google.Protobuf.Tools.nuspec b/csharp/Google.Protobuf.Tools.nuspec
+index ec7fedf43..0e8b54d9a 100644
+--- a/csharp/Google.Protobuf.Tools.nuspec
++++ b/csharp/Google.Protobuf.Tools.nuspec
+@@ -5,7 +5,7 @@
+     <title>Google Protocol Buffers tools</title>
+     <summary>Tools for Protocol Buffers - Google's data interchange format.</summary>
+     <description>See project site for more info.</description>
+-    <version>3.15.0-rc2</version>
++    <version>3.15.0</version>
+     <authors>Google Inc.</authors>
+     <owners>protobuf-packages</owners>
+     <licenseUrl>https://github.com/protocolbuffers/protobuf/blob/master/LICENSE</licenseUrl>
+diff --git a/csharp/src/Google.Protobuf/Google.Protobuf.csproj b/csharp/src/Google.Protobuf/Google.Protobuf.csproj
+index 456a9bb5c..4a3dca20c 100644
+--- a/csharp/src/Google.Protobuf/Google.Protobuf.csproj
++++ b/csharp/src/Google.Protobuf/Google.Protobuf.csproj
+@@ -4,7 +4,7 @@
+     <Description>C# runtime library for Protocol Buffers - Google's data interchange format.</Description>
+     <Copyright>Copyright 2015, Google Inc.</Copyright>
+     <AssemblyTitle>Google Protocol Buffers</AssemblyTitle>
+-    <VersionPrefix>3.15.0-rc2</VersionPrefix>
++    <VersionPrefix>3.15.0</VersionPrefix>
+     <!-- C# 7.2 is required for Span/BufferWriter/ReadOnlySequence -->
+     <LangVersion>7.2</LangVersion>
+     <Authors>Google Inc.</Authors>
+diff --git a/java/bom/pom.xml b/java/bom/pom.xml
+index 4f6d400d3..7fbd41da5 100644
+--- a/java/bom/pom.xml
++++ b/java/bom/pom.xml
+@@ -4,7 +4,7 @@
+ 
+   <groupId>com.google.protobuf</groupId>
+   <artifactId>protobuf-bom</artifactId>
+-  <version>3.15.0-rc-2</version>
++  <version>3.15.0</version>
+   <packaging>pom</packaging>
+ 
+   <name>Protocol Buffers [BOM]</name>
+diff --git a/java/core/pom.xml b/java/core/pom.xml
+index ab75b577f..79b967bb0 100644
+--- a/java/core/pom.xml
++++ b/java/core/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>com.google.protobuf</groupId>
+     <artifactId>protobuf-parent</artifactId>
+-    <version>3.15.0-rc-2</version>
++    <version>3.15.0</version>
+   </parent>
+ 
+   <artifactId>protobuf-java</artifactId>
+diff --git a/java/lite/pom.xml b/java/lite/pom.xml
+index 53f05e646..fd313daf5 100644
+--- a/java/lite/pom.xml
++++ b/java/lite/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>com.google.protobuf</groupId>
+     <artifactId>protobuf-parent</artifactId>
+-    <version>3.15.0-rc-2</version>
++    <version>3.15.0</version>
+   </parent>
+ 
+   <artifactId>protobuf-javalite</artifactId>
+diff --git a/java/pom.xml b/java/pom.xml
+index 012f70294..550737829 100644
+--- a/java/pom.xml
++++ b/java/pom.xml
+@@ -4,7 +4,7 @@
+ 
+   <groupId>com.google.protobuf</groupId>
+   <artifactId>protobuf-parent</artifactId>
+-  <version>3.15.0-rc-2</version>
++  <version>3.15.0</version>
+   <packaging>pom</packaging>
+ 
+   <name>Protocol Buffers [Parent]</name>
+diff --git a/java/util/pom.xml b/java/util/pom.xml
+index c63a6fbbe..9c089dfb7 100644
+--- a/java/util/pom.xml
++++ b/java/util/pom.xml
+@@ -4,7 +4,7 @@
+   <parent>
+     <groupId>com.google.protobuf</groupId>
+     <artifactId>protobuf-parent</artifactId>
+-    <version>3.15.0-rc-2</version>
++    <version>3.15.0</version>
+   </parent>
+ 
+   <artifactId>protobuf-java-util</artifactId>
+diff --git a/js/package.json b/js/package.json
+index a992b3964..768b37a4d 100644
+--- a/js/package.json
++++ b/js/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "google-protobuf",
+-  "version": "3.15.0-rc.2",
++  "version": "3.15.0",
+   "description": "Protocol Buffers for JavaScript",
+   "main": "google-protobuf.js",
+   "files": [
+diff --git a/php/ext/google/protobuf/package.xml b/php/ext/google/protobuf/package.xml
+index 77005b3d0..805c071f7 100644
+--- a/php/ext/google/protobuf/package.xml
++++ b/php/ext/google/protobuf/package.xml
+@@ -10,15 +10,15 @@
+   <email>protobuf-opensource@google.com</email>
+   <active>yes</active>
+  </lead>
+- <date>2021-02-17</date>
+- <time>09:10:33</time>
++ <date>2021-02-18</date>
++ <time>10:33:10</time>
+  <version>
+-  <release>3.15.0RC2</release>
++  <release>3.15.0</release>
+   <api>3.15.0</api>
+  </version>
+  <stability>
+-  <release>beta</release>
+-  <api>beta</api>
++  <release>stable</release>
++  <api>stable</api>
+  </stability>
+  <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+  <notes>
+@@ -790,5 +790,20 @@ G  A release.
+    <notes>
+    </notes>
+   </release>
++  <release>
++   <version>
++    <release>3.15.0</release>
++    <api>3.15.0</api>
++   </version>
++   <stability>
++    <release>stable</release>
++    <api>stable</api>
++   </stability>
++   <date>2021-02-18</date>
++   <time>10:33:10</time>
++   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
++   <notes>
++   </notes>
++  </release>
+  </changelog>
+ </package>
+diff --git a/php/ext/google/protobuf/protobuf.h b/php/ext/google/protobuf/protobuf.h
+index 16887b965..7e63ca095 100644
+--- a/php/ext/google/protobuf/protobuf.h
++++ b/php/ext/google/protobuf/protobuf.h
+@@ -76,7 +76,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_setter, 0, 0, 1)
+   ZEND_ARG_INFO(0, value)
+ ZEND_END_ARG_INFO()
+ 
+-#define PHP_PROTOBUF_VERSION "3.15.0RC2"
++#define PHP_PROTOBUF_VERSION "3.15.0"
+ 
+ // ptr -> PHP object cache. This is a weak map that caches lazily-created
+ // wrapper objects around upb types:
+diff --git a/protoc-artifacts/pom.xml b/protoc-artifacts/pom.xml
+index 0916f713e..cbe84bb43 100644
+--- a/protoc-artifacts/pom.xml
++++ b/protoc-artifacts/pom.xml
+@@ -8,7 +8,7 @@
+   </parent>
+   <groupId>com.google.protobuf</groupId>
+   <artifactId>protoc</artifactId>
+-  <version>3.15.0-rc-2</version>
++  <version>3.15.0</version>
+   <packaging>pom</packaging>
+   <name>Protobuf Compiler</name>
+   <description>
+diff --git a/python/google/protobuf/__init__.py b/python/google/protobuf/__init__.py
+index f9190c4ba..6c20545fa 100644
+--- a/python/google/protobuf/__init__.py
++++ b/python/google/protobuf/__init__.py
+@@ -30,4 +30,4 @@
+ 
+ # Copyright 2007 Google Inc. All Rights Reserved.
+ 
+-__version__ = '3.15.0rc2'
++__version__ = '3.15.0'
+diff --git a/ruby/google-protobuf.gemspec b/ruby/google-protobuf.gemspec
+index 99c1d14fb..6420dfc05 100644
+--- a/ruby/google-protobuf.gemspec
++++ b/ruby/google-protobuf.gemspec
+@@ -1,6 +1,6 @@
+ Gem::Specification.new do |s|
+   s.name        = "google-protobuf"
+-  s.version     = "3.15.0.rc.2"
++  s.version     = "3.15.0"
+   git_tag       = "v#{s.version.to_s.sub('.rc.', '-rc')}" # Converts X.Y.Z.rc.N to vX.Y.Z-rcN, used for the git tag
+   s.licenses    = ["BSD-3-Clause"]
+   s.summary     = "Protocol Buffers"
+diff --git a/src/google/protobuf/port_def.inc b/src/google/protobuf/port_def.inc
+index 41b428412..3dc0ca7f9 100644
+--- a/src/google/protobuf/port_def.inc
++++ b/src/google/protobuf/port_def.inc
+@@ -338,7 +338,7 @@
+ #define PROTOBUF_VERSION 3015000
+ #define PROTOBUF_MIN_HEADER_VERSION_FOR_PROTOC 3015000
+ #define PROTOBUF_MIN_PROTOC_VERSION 3015000
+-#define PROTOBUF_VERSION_SUFFIX "-rc2"
++#define PROTOBUF_VERSION_SUFFIX ""
+ 
+ // The minimum library version which works with the current version of the
+ // headers.
+diff --git a/src/google/protobuf/stubs/common.h b/src/google/protobuf/stubs/common.h
+index b24da744d..c2edf7c9c 100644
+--- a/src/google/protobuf/stubs/common.h
++++ b/src/google/protobuf/stubs/common.h
+@@ -85,7 +85,7 @@ namespace internal {
+ #define GOOGLE_PROTOBUF_VERSION 3015000
+ 
+ // A suffix string for alpha, beta or rc releases. Empty for stable releases.
+-#define GOOGLE_PROTOBUF_VERSION_SUFFIX "-rc2"
++#define GOOGLE_PROTOBUF_VERSION_SUFFIX ""
+ 
+ // The minimum header version which works with the current version of
+ // the library.  This constant should only be used by protoc's C++ code
+-- 
+2.34.1
+

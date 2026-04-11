@@ -1,0 +1,108 @@
+From fc3d8e1138cd0c843d6fd75272633a31be6554ef Mon Sep 17 00:00:00 2001
+From: John Snow <jsnow@redhat.com>
+Date: Fri, 27 Mar 2015 15:48:11 -0400
+Subject: [PATCH] AHCI: Protect cmd register
+
+Many bits in the CMD register are supposed to be strictly read-only.
+We should not be deleting them on every write.
+
+As a side-effect: pay explicit attention to when a guest marks off
+the FIS Receive or Start bits, and disable the status bits ourselves,
+instead of letting them implicitly fall off.
+
+Signed-off-by: John Snow <jsnow@redhat.com>
+Reviewed-by: Stefan Hajnoczi <stefanha@redhat.com>
+Message-id: 1426283454-15590-3-git-send-email-jsnow@redhat.com
+---
+ hw/ide/ahci.c | 26 +++++++++++++++++++++++++-
+ hw/ide/ahci.h |  2 ++
+ 2 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/hw/ide/ahci.c b/hw/ide/ahci.c
+index 4ccfcf3311..833fd45faf 100644
+--- a/hw/ide/ahci.c
++++ b/hw/ide/ahci.c
+@@ -53,6 +53,8 @@ static int ahci_dma_prepare_buf(IDEDMA *dma, int is_write);
+ static void ahci_commit_buf(IDEDMA *dma, uint32_t tx_bytes);
+ static bool ahci_map_clb_address(AHCIDevice *ad);
+ static bool ahci_map_fis_address(AHCIDevice *ad);
++static void ahci_unmap_clb_address(AHCIDevice *ad);
++static void ahci_unmap_fis_address(AHCIDevice *ad);
+ 
+ 
+ static uint32_t  ahci_port_read(AHCIState *s, int port, int offset)
+@@ -223,7 +225,9 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
+             ahci_check_irq(s);
+             break;
+         case PORT_CMD:
+-            pr->cmd = val & ~(PORT_CMD_LIST_ON | PORT_CMD_FIS_ON);
++            /* Block any Read-only fields from being set;
++             * including LIST_ON and FIS_ON. */
++            pr->cmd = (pr->cmd & PORT_CMD_RO_MASK) | (val & ~PORT_CMD_RO_MASK);
+ 
+             if (pr->cmd & PORT_CMD_START) {
+                 if (ahci_map_clb_address(&s->dev[port])) {
+@@ -232,6 +236,9 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
+                     error_report("AHCI: Failed to start DMA engine: "
+                                  "bad command list buffer address");
+                 }
++            } else if (pr->cmd & PORT_CMD_LIST_ON) {
++                ahci_unmap_clb_address(&s->dev[port]);
++                pr->cmd = pr->cmd & ~(PORT_CMD_LIST_ON);
+             }
+ 
+             if (pr->cmd & PORT_CMD_FIS_RX) {
+@@ -241,6 +248,9 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
+                     error_report("AHCI: Failed to start FIS receive engine: "
+                                  "bad FIS receive buffer address");
+                 }
++            } else if (pr->cmd & PORT_CMD_FIS_ON) {
++                ahci_unmap_fis_address(&s->dev[port]);
++                pr->cmd = pr->cmd & ~(PORT_CMD_FIS_ON);
+             }
+ 
+             /* XXX usually the FIS would be pending on the bus here and
+@@ -575,6 +585,13 @@ static bool ahci_map_fis_address(AHCIDevice *ad)
+     return ad->res_fis != NULL;
+ }
+ 
++static void ahci_unmap_fis_address(AHCIDevice *ad)
++{
++    dma_memory_unmap(ad->hba->as, ad->res_fis, 256,
++                     DMA_DIRECTION_FROM_DEVICE, 256);
++    ad->res_fis = NULL;
++}
++
+ static bool ahci_map_clb_address(AHCIDevice *ad)
+ {
+     AHCIPortRegs *pr = &ad->port_regs;
+@@ -584,6 +601,13 @@ static bool ahci_map_clb_address(AHCIDevice *ad)
+     return ad->lst != NULL;
+ }
+ 
++static void ahci_unmap_clb_address(AHCIDevice *ad)
++{
++    dma_memory_unmap(ad->hba->as, ad->lst, 1024,
++                     DMA_DIRECTION_FROM_DEVICE, 1024);
++    ad->lst = NULL;
++}
++
+ static void ahci_write_fis_sdb(AHCIState *s, int port, uint32_t finished)
+ {
+     AHCIDevice *ad = &s->dev[port];
+diff --git a/hw/ide/ahci.h b/hw/ide/ahci.h
+index 99aa0c967f..501c002c31 100644
+--- a/hw/ide/ahci.h
++++ b/hw/ide/ahci.h
+@@ -132,6 +132,8 @@
+ #define PORT_CMD_ICC_PARTIAL      (0x2 << 28) /* Put i/f in partial state */
+ #define PORT_CMD_ICC_SLUMBER      (0x6 << 28) /* Put i/f in slumber state */
+ 
++#define PORT_CMD_RO_MASK          0x007dffe0 /* Which CMD bits are read only? */
++
+ /* ap->flags bits */
+ #define AHCI_FLAG_NO_NCQ                  (1 << 24)
+ #define AHCI_FLAG_IGN_IRQ_IF_ERR          (1 << 25) /* ignore IRQ_IF_ERR */
+-- 
+2.34.1
+

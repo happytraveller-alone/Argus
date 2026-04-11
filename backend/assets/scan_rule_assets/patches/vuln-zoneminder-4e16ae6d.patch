@@ -1,0 +1,71 @@
+From 4e16ae6d19d82603b79cf39b8fdb37da4425f678 Mon Sep 17 00:00:00 2001
+From: Andy Bauer <knnniggett@hotmail.com>
+Date: Tue, 28 Mar 2017 17:29:36 -0500
+Subject: [PATCH] add ZM_ENABLE_CSRF_MAGIC toggle
+
+---
+ .../lib/ZoneMinder/ConfigData.pm.in           | 20 +++++++++++++++++++
+ web/includes/csrf/csrf-magic.php              |  2 +-
+ web/index.php                                 |  5 +++++
+ 3 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/scripts/ZoneMinder/lib/ZoneMinder/ConfigData.pm.in b/scripts/ZoneMinder/lib/ZoneMinder/ConfigData.pm.in
+index 3f80748db8..607152542f 100644
+--- a/scripts/ZoneMinder/lib/ZoneMinder/ConfigData.pm.in
++++ b/scripts/ZoneMinder/lib/ZoneMinder/ConfigData.pm.in
+@@ -345,6 +345,26 @@ our @options = (
+     type        => $types{boolean},
+     category    => "system",
+   },
++  {
++    name        => "ZM_ENABLE_CSRF_MAGIC",
++    default     => "no",
++    description => "Enable csrf-magic library",
++    help        => qqq("
++      CSRF stands for Cross-Site Request Forgery which, under specific
++      circumstances, can allow an attacker to perform any task your
++      ZoneMinder user account has permission to perform. To accomplish
++      this, the attacker must write a very specific web page and get
++      you to navigate to it, while you are logged into the ZoneMinder
++      web console at the same time. Enabling ZM_ENABLE_CSRF_MAGIC will
++      help mitigate these kinds of attackes. Be warned this feature
++      is experimental and may cause problems, particularly with the API.
++      If you find a false positive and can document how to reproduce it,
++      then please report it. This feature defaults to OFF currently due to
++      its experimental nature.
++    "),
++    type        => $types{boolean},
++    category    => "system",
++  },
+   {
+     name        => "ZM_OPT_USE_API",
+     default     => "yes",
+diff --git a/web/includes/csrf/csrf-magic.php b/web/includes/csrf/csrf-magic.php
+index 65db19f3d2..153417f4e4 100644
+--- a/web/includes/csrf/csrf-magic.php
++++ b/web/includes/csrf/csrf-magic.php
+@@ -23,7 +23,7 @@
+  * a boolean false if the CSRF check failed. This allows for tighter integration
+  * with your system.
+  */
+-$GLOBALS['csrf']['defer'] = false;
++$GLOBALS['csrf']['defer'] = true;
+ 
+ /**
+  * This is the amount of seconds you wish to allow before any token becomes
+diff --git a/web/index.php b/web/index.php
+index adbec5ee4d..04e018d3c0 100644
+--- a/web/index.php
++++ b/web/index.php
+@@ -170,6 +170,11 @@
+ foreach ( getSkinIncludes( 'skin.php' ) as $includeFile )
+     require_once $includeFile;
+ 
++if ( ZM_ENABLE_CSRF_MAGIC && $action != 'login' ) {
++    Debug("Calling csrf_check with the following values: \$request = \"$request\", \$view = \"$view\", \$action = \"$action\"");
++    csrf_check();
++}
++
+ require_once( 'includes/actions.php' );
+ 
+ # If I put this here, it protects all views and popups, but it has to go after actions.php because actions.php does the actual logging in.

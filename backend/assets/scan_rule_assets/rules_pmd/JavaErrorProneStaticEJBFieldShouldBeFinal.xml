@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="StaticEJBFieldShouldBeFinal Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for StaticEJBFieldShouldBeFinal</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="StaticEJBFieldShouldBeFinal" language="java" since="4.1" message="EJB's shouldn't have non-final static fields" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#staticejbfieldshouldbefinal">
+            <description>
+    According to the J2EE specification, an EJB should not have any static fields
+    with write access. However, static read-only fields are allowed. This ensures proper
+    behavior especially when instances are distributed by the container on several JREs.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ClassDeclaration[ImplementsList/ClassType[
+            pmd-java:typeIs('javax.ejb.SessionBean')
+         or pmd-java:typeIs('javax.ejb.EJBHome')
+         or pmd-java:typeIs('javax.ejb.EJBLocalObject')
+         or pmd-java:typeIs('javax.ejb.EJBLocalHome')
+         or pmd-java:typeIs('javax.ejb.EJBObject')
+        ]]
+        /ClassBody/FieldDeclaration
+            [pmd-java:modifiers() = 'static']
+            [not(pmd-java:modifiers() = 'final')]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class SomeEJB extends EJBObject implements EJBLocalHome {
+
+        private static int CountA;          // poor, field can be edited
+
+        private static final int CountB;    // preferred, read-only access
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

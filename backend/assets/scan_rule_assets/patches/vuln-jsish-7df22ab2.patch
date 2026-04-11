@@ -1,0 +1,31 @@
+From 7df22ab2fad6bf7cecf96465caede6401b9b451c Mon Sep 17 00:00:00 2001
+From: pmacdona <>
+Date: Sun, 26 Dec 2021 20:57:19 +0000
+Subject: [PATCH] Fixes #88
+
+FossilOrigin-Name: 3fbe05bcd5bf8a80e48a9de3fdf3fbb1b4c720aff71a90c1da87cf1b03c81187
+---
+ src/jsiString.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/jsiString.c b/src/jsiString.c
+index 49d8af8..59122de 100644
+--- a/src/jsiString.c
++++ b/src/jsiString.c
+@@ -28,11 +28,12 @@ static Jsi_RC StringConstructor(Jsi_Interp *interp, Jsi_Value *args, Jsi_Value *
+             }
+         }
+         if (_this->vt == JSI_VT_OBJECT && _this->d.obj->ot == JSI_OT_STRING) {
++            char *nstr = Jsi_StrdupLen(nv, len);
+             if (_this->d.obj->d.s.str)
+                 if (!_this->d.obj->isstrkey)
+                     Jsi_Free(_this->d.obj->d.s.str);
+             _this->d.obj->isstrkey = 0;
+-            _this->d.obj->d.s.str = Jsi_StrdupLen(nv, len);
++            _this->d.obj->d.s.str = nstr;
+             _this->d.obj->d.s.len = len;
+         } else
+             jsi_ValueMakeBlobDup(interp, &_this, (uchar*)nv, len);
+-- 
+2.34.1
+

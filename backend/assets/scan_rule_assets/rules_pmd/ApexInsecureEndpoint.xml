@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ApexInsecureEndpoint Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ApexInsecureEndpoint</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexInsecureEndpoint" language="apex" since="5.5.3" message="Apex callouts should use encrypted communication channels" class="net.sourceforge.pmd.lang.apex.rule.security.ApexInsecureEndpointRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexinsecureendpoint">
+            <description>
+    Checks against accessing endpoints under plain **http**. You should always use
+    **https** for security.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public without sharing class Foo {
+        void foo() {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint('http://localhost:com');
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,35 @@
+From a37b20878592951f4e8e7274b38bbb6e94af7e42 Mon Sep 17 00:00:00 2001
+From: windrunner414 <windrunner414@outlook.com>
+Date: Wed, 16 Jan 2019 20:15:45 +0800
+Subject: [PATCH] fix bug
+
+---
+ src/network/port.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/network/port.c b/src/network/port.c
+index 1271217f9..c3c35c6dd 100644
+--- a/src/network/port.c
++++ b/src/network/port.c
+@@ -612,10 +612,16 @@ static int swPort_http_static_handler(swServer *serv, swHttpRequest *request, sw
+ 
+     memcpy(p, serv->document_root, serv->document_root_len);
+     p += serv->document_root_len;
+-    uint32_t n = params ? params - url : request->url_length;
++    size_t n = params ? params - url : request->url_length;
++
++    if (serv->document_root_len + n >= PATH_MAX)
++    {
++        return SW_FALSE;
++    }
++
+     memcpy(p, url, n);
+     p += n;
+-    *p = 0;
++    *p = '\0';
+ 
+     char real_path[PATH_MAX];
+     if (!realpath(buffer.filename, real_path))
+-- 
+2.34.1
+

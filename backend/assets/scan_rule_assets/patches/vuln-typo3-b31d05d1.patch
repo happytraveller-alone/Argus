@@ -1,0 +1,143 @@
+From b31d05d1da3eeaeead2d19eb43b1c3f9c88e15ee Mon Sep 17 00:00:00 2001
+From: Oliver Hader <oliver@typo3.org>
+Date: Tue, 14 May 2024 10:02:19 +0200
+Subject: [PATCH] [SECURITY] Encode all file properties in tx_cms_showpic
+ output
+
+Resolves: #103303
+Releases: main, 13.1, 12.4, 11.5
+Change-Id: I2842cefd5dfc0aff920e61b5fd16f029db8ada4c
+Security-Bulletin: TYPO3-CORE-SA-2024-009
+Security-References: CVE-2024-34357
+Reviewed-on: https://review.typo3.org/c/Packages/TYPO3.CMS/+/84262
+Tested-by: Oliver Hader <oliver.hader@typo3.org>
+Reviewed-by: Oliver Hader <oliver.hader@typo3.org>
+---
+ .../Controller/ShowImageController.php        | 23 +++++-------
+ .../Controller/ShowImageControllerTest.php    | 37 +++++++++++++------
+ 2 files changed, 34 insertions(+), 26 deletions(-)
+
+diff --git a/typo3/sysext/frontend/Classes/Controller/ShowImageController.php b/typo3/sysext/frontend/Classes/Controller/ShowImageController.php
+index 77bf545c22e..6caf36e0b4c 100644
+--- a/typo3/sysext/frontend/Classes/Controller/ShowImageController.php
++++ b/typo3/sysext/frontend/Classes/Controller/ShowImageController.php
+@@ -106,11 +106,6 @@ class ShowImageController
+ </html>
+ EOF;
+ 
+-    /**
+-     * @var string
+-     */
+-    protected $imageTag = '<img src="###publicUrl###" alt="###alt###" title="###title###" width="###width###" height="###height###" />';
+-
+     /**
+      * Init function, setting the input vars in the global space.
+      *
+@@ -166,17 +161,17 @@ EOF;
+     public function main()
+     {
+         $processedImage = $this->processImage();
+-        $imageTagMarkers = [
+-            '###publicUrl###' => htmlspecialchars($processedImage->getPublicUrl() ?? ''),
+-            '###alt###' => htmlspecialchars($this->file->getProperty('alternative') ?: $this->title),
+-            '###title###' => htmlspecialchars($this->file->getProperty('title') ?: $this->title),
+-            '###width###' => $processedImage->getProperty('width'),
+-            '###height###' => $processedImage->getProperty('height'),
++        $imageAttributes = [
++            'src' => $processedImage->getPublicUrl() ?? '',
++            'alt' => $this->file->getProperty('alternative') ?: $this->title,
++            'title' => $this->file->getProperty('title') ?: $this->title,
++            'width' => (string)$processedImage->getProperty('width'),
++            'height' => (string)$processedImage->getProperty('height'),
+         ];
+-        $this->imageTag = str_replace(array_keys($imageTagMarkers), array_values($imageTagMarkers), $this->imageTag);
++
+         $markerArray = [
+-            '###TITLE###' => $this->file->getProperty('title') ?: $this->title,
+-            '###IMAGE###' => $this->imageTag,
++            '###TITLE###' => htmlspecialchars($this->file->getProperty('title') ?: $this->title),
++            '###IMAGE###' => sprintf('<img %s>', GeneralUtility::implodeAttributes($imageAttributes, true)),
+             '###BODY###' => $this->bodyTag,
+         ];
+ 
+diff --git a/typo3/sysext/frontend/Tests/Functional/Controller/ShowImageControllerTest.php b/typo3/sysext/frontend/Tests/Functional/Controller/ShowImageControllerTest.php
+index 179ce6f755b..7a77d957bba 100644
+--- a/typo3/sysext/frontend/Tests/Functional/Controller/ShowImageControllerTest.php
++++ b/typo3/sysext/frontend/Tests/Functional/Controller/ShowImageControllerTest.php
+@@ -96,12 +96,14 @@ final class ShowImageControllerTest extends FunctionalTestCase
+     public function contentIsGeneratedForLocalFiles(int $fileId, array $queryParams): void
+     {
+         $storageDriver = 'Local';
++        $expectedSrc = '/fileadmin/local-file/' . $fileId . '?&test=""';
++        $expectedTitle = '</title></head></html><!-- "fileProperty::title" -->';
+ 
+         $this->storage->expects(self::atLeastOnce())
+             ->method('getDriverType')
+             ->willReturn($storageDriver);
+         $file = $this->buildFile('/local-file/' . $fileId, $this->storage);
+-        $processedFile = $this->buildProcessedFile('/fileadmin/local-file/' . $fileId);
++        $processedFile = $this->buildProcessedFile($expectedSrc);
+         $this->resourceFactory->expects(self::atLeastOnce())
+             ->method('getFileObject')
+             ->with($fileId)
+@@ -112,16 +114,17 @@ final class ShowImageControllerTest extends FunctionalTestCase
+ 
+         $request = $this->buildRequest($queryParams);
+         $response = $this->subject->processRequest($request);
+-        $document = (new HTML5())->loadHTML((string)$response->getBody());
++        $responseBody = (string)$response->getBody();
++        $document = (new HTML5())->loadHTML($responseBody);
+ 
+         $titles = $document->getElementsByTagName('title');
+         $images = $document->getElementsByTagName('img');
+-        self::assertSame('fileProperty::title', $titles->item(0)->nodeValue);
+-        self::assertSame('/fileadmin/local-file/13', $images->item(0)->getAttribute('src'));
+-        self::assertSame('fileProperty::alternative', $images->item(0)->getAttribute('alt'));
+-        self::assertSame('fileProperty::title', $images->item(0)->getAttribute('title'));
+-        self::assertSame('processedProperty::width', $images->item(0)->getAttribute('width'));
+-        self::assertSame('processedProperty::height', $images->item(0)->getAttribute('height'));
++        self::assertSame($expectedTitle, $titles->item(0)->nodeValue);
++        self::assertSame($expectedSrc, $images->item(0)->getAttribute('src'));
++        self::assertSame($expectedTitle, $images->item(0)->getAttribute('title'));
++        self::assertSame('<!-- "fileProperty::alternative" -->', $images->item(0)->getAttribute('alt'));
++        self::assertSame('<!-- "processedProperty::width" -->', $images->item(0)->getAttribute('width'));
++        self::assertSame('<!-- "processedProperty::height" -->', $images->item(0)->getAttribute('height'));
+     }
+ 
+     /**
+@@ -144,7 +147,12 @@ final class ShowImageControllerTest extends FunctionalTestCase
+         $file->method('getIdentifier')
+             ->willReturn($identifier);
+         $file->method('getProperty')
+-            ->willReturnCallback($this->buildRoundTripClosure('fileProperty'));
++            ->willReturnCallback(
++                $this->buildRoundTripClosure(
++                    'fileProperty',
++                    ['title' => '</title></head></html>']
++                )
++            );
+ 
+         return $file;
+     }
+@@ -165,10 +173,15 @@ final class ShowImageControllerTest extends FunctionalTestCase
+         return $processedFile;
+     }
+ 
+-    private function buildRoundTripClosure(string $prefix): \Closure
++    private function buildRoundTripClosure(string $prefix, array $prependMap = []): \Closure
+     {
+-        return static function (string ...$args) use ($prefix): string {
+-            return sprintf('%s::%s', $prefix, implode(',', $args));
++        return static function (string $name) use ($prefix, $prependMap): string {
++            return sprintf(
++                '%s<!-- "%s::%s" -->',
++                $prependMap[$name] ?? '',
++                $prefix,
++                $name
++            );
+         };
+     }
+ }
+-- 
+2.34.1
+

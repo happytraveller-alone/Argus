@@ -1,0 +1,35 @@
+rules:
+- id: insecure-smtp-connection_1
+  languages:
+  - java
+  message: Insecure SMTP connection detected. This connection will trust any SSL certificate.
+    Enable certificate verification by setting 'email.setSSLCheckServerIdentity(true)'.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-297: Improper Validation of Certificate with Host Mismatch'
+    impact: MEDIUM
+    likelihood: LOW
+    owasp:
+    - A07:2021 - Identification and Authentication Failures
+    references:
+    - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#INSECURE_SMTP_SSL
+    subcategory:
+    - vuln
+    technology:
+    - java
+  patterns:
+  - pattern-not-inside: '$EMAIL.setSSLCheckServerIdentity(true);
+
+      ...
+
+      '
+  - pattern-inside: '$EMAIL = new SimpleEmail(...);
+
+      ...
+
+      '
+  - pattern: $EMAIL.send(...);
+  severity: WARNING

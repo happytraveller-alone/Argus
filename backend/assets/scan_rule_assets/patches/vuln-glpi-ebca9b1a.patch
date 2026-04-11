@@ -1,0 +1,34 @@
+From ebca9b1a7e6a347e30273f281e3518f34e42c8c4 Mon Sep 17 00:00:00 2001
+From: adelaunay <delaunay.alexandre@gmail.com>
+Date: Thu, 16 Apr 2020 09:31:16 +0200
+Subject: [PATCH] escape fields when using addme_[assign|observer]
+
+---
+ front/ticket.form.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/front/ticket.form.php b/front/ticket.form.php
+index eb6e75d6ca..ddfc9bba92 100644
+--- a/front/ticket.form.php
++++ b/front/ticket.form.php
+@@ -155,7 +155,7 @@ if (isset($_POST["add"])) {
+ 
+ } else if (isset($_POST['addme_observer'])) {
+    $track->check($_POST['tickets_id'], READ);
+-   $input = array_merge($track->fields, [
++   $input = array_merge(Toolbox::addslashes_deep($track->fields), [
+       'id' => $_POST['tickets_id'],
+       '_itil_observer' => [
+          '_type' => "user",
+@@ -171,7 +171,7 @@ if (isset($_POST["add"])) {
+ 
+ } else if (isset($_POST['addme_assign'])) {
+    $track->check($_POST['tickets_id'], READ);
+-   $input = array_merge($track->fields, [
++   $input = array_merge(Toolbox::addslashes_deep($track->fields), [
+       'id' => $_POST['tickets_id'],
+       '_itil_assign' => [
+          '_type' => "user",
+-- 
+2.34.1
+

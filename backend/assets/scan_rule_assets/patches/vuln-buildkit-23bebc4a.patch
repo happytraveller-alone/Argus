@@ -1,0 +1,72 @@
+From 23bebc4a180b84ba18733f545e7559e10c439ac3 Mon Sep 17 00:00:00 2001
+From: Tonis Tiigi <tonistiigi@gmail.com>
+Date: Tue, 12 Dec 2023 18:41:21 -0800
+Subject: [PATCH] executor: recheck mount stub path within root after container
+ run
+
+Signed-off-by: Tonis Tiigi <tonistiigi@gmail.com>
+(cherry picked from commit 96ccaec09c51176a6d954fd7c4ce57d519bae1b2)
+---
+ executor/stubs.go | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/executor/stubs.go b/executor/stubs.go
+index e2ac460e2..e85f10fed 100644
+--- a/executor/stubs.go
++++ b/executor/stubs.go
+@@ -5,6 +5,7 @@ import (
+ 	"errors"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"syscall"
+ 
+ 	"github.com/containerd/continuity/fs"
+@@ -43,7 +44,7 @@ func MountStubsCleaner(ctx context.Context, dir string, mounts []Mount, recursiv
+ 			}
+ 
+ 			realPathNext := filepath.Dir(realPath)
+-			if realPath == realPathNext {
++			if realPath == realPathNext || realPathNext == dir {
+ 				break
+ 			}
+ 			realPath = realPathNext
+@@ -52,6 +53,11 @@ func MountStubsCleaner(ctx context.Context, dir string, mounts []Mount, recursiv
+ 
+ 	return func() {
+ 		for _, p := range paths {
++			p, err := fs.RootPath(dir, strings.TrimPrefix(p, dir))
++			if err != nil {
++				continue
++			}
++
+ 			st, err := os.Lstat(p)
+ 			if err != nil {
+ 				continue
+@@ -70,8 +76,12 @@ func MountStubsCleaner(ctx context.Context, dir string, mounts []Mount, recursiv
+ 
+ 			// Back up the timestamps of the dir for reproducible builds
+ 			// https://github.com/moby/buildkit/issues/3148
+-			dir := filepath.Dir(p)
+-			dirSt, err := os.Stat(dir)
++			parent := filepath.Dir(p)
++			if realPath, err := fs.RootPath(dir, strings.TrimPrefix(parent, dir)); err != nil || realPath != parent {
++				continue
++			}
++
++			dirSt, err := os.Stat(parent)
+ 			if err != nil {
+ 				bklog.G(ctx).WithError(err).Warnf("Failed to stat %q (parent of mount stub %q)", dir, p)
+ 				continue
+@@ -88,7 +98,7 @@ func MountStubsCleaner(ctx context.Context, dir string, mounts []Mount, recursiv
+ 			}
+ 
+ 			// Restore the timestamps of the dir
+-			if err := os.Chtimes(dir, atime, mtime); err != nil {
++			if err := os.Chtimes(parent, atime, mtime); err != nil {
+ 				bklog.G(ctx).WithError(err).Warnf("Failed to restore time time mount stub timestamp (os.Chtimes(%q, %v, %v))", dir, atime, mtime)
+ 			}
+ 		}
+-- 
+2.34.1
+

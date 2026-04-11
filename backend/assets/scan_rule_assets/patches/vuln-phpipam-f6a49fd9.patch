@@ -1,0 +1,188 @@
+From f6a49fd9f93b7d7e0a4fbf1d35338502eed35953 Mon Sep 17 00:00:00 2001
+From: Gary Allan <github@gallan.co.uk>
+Date: Sat, 26 Mar 2022 23:38:50 +0000
+Subject: [PATCH] Bugfix: Incorrect privilege assignments. Fixes #3506
+
+Reported by faisalfs10x@gmail.com
+---
+ app/admin/import-export/generate-hosts.php |  1 +
+ app/admin/import-export/generate-mysql.php |  1 +
+ app/admin/import-export/generate-xls.php   |  1 +
+ app/dashboard/widgets/access_logs.php      |  1 +
+ app/dashboard/widgets/error_logs.php       |  1 +
+ app/subnets/addresses/export-subnet.php    | 11 ++++++++---
+ app/tools/logs/show-logs.php               |  1 +
+ functions/classes/class.Admin.php          | 18 ++++++++----------
+ functions/classes/class.Result.php         | 16 ++++++++++++++++
+ misc/CHANGELOG                             |  4 ++++
+ 10 files changed, 42 insertions(+), 13 deletions(-)
+
+diff --git a/app/admin/import-export/generate-hosts.php b/app/admin/import-export/generate-hosts.php
+index 524138f0..b8d565d9 100644
+--- a/app/admin/import-export/generate-hosts.php
++++ b/app/admin/import-export/generate-hosts.php
+@@ -15,6 +15,7 @@ $Sections	= new Sections ($Database);
+ $Subnets	= new Subnets ($Database);
+ $Addresses	= new Addresses ($Database);
+ $Tools		= new Tools ($Database);
++$Admin		= new Admin ($Database);
+ $Result 	= new Result ();
+ 
+ # verify that user is logged in
+diff --git a/app/admin/import-export/generate-mysql.php b/app/admin/import-export/generate-mysql.php
+index 9b963c7c..1175af71 100644
+--- a/app/admin/import-export/generate-mysql.php
++++ b/app/admin/import-export/generate-mysql.php
+@@ -10,6 +10,7 @@ require_once( dirname(__FILE__) . '/../../../functions/functions.php' );
+ # initialize user object
+ $Database 	= new Database_PDO;
+ $User 		= new User ($Database);
++$Admin		= new Admin ($Database);
+ 
+ # verify that user is logged in
+ $User->check_user_session();
+diff --git a/app/admin/import-export/generate-xls.php b/app/admin/import-export/generate-xls.php
+index e0a8ee42..963eb285 100644
+--- a/app/admin/import-export/generate-xls.php
++++ b/app/admin/import-export/generate-xls.php
+@@ -16,6 +16,7 @@ $Sections	= new Sections ($Database);
+ $Subnets	= new Subnets ($Database);
+ $Addresses	= new Addresses ($Database);
+ $Tools		= new Tools ($Database);
++$Admin		= new Admin ($Database);
+ $Result 	= new Result ();
+ 
+ # verify that user is logged in
+diff --git a/app/dashboard/widgets/access_logs.php b/app/dashboard/widgets/access_logs.php
+index 0aaf0b1f..bc5399c0 100755
+--- a/app/dashboard/widgets/access_logs.php
++++ b/app/dashboard/widgets/access_logs.php
+@@ -8,6 +8,7 @@ if(!is_object(@$User)) {
+ 	$User 		= new User ($Database);
+ 	$Tools 		= new Tools ($Database);
+ 	$Log		= new Logging ($Database);
++	$Admin		= new Admin ($Database);
+ 	$Result		= new Result ();
+ }
+ 
+diff --git a/app/dashboard/widgets/error_logs.php b/app/dashboard/widgets/error_logs.php
+index d57b0775..deb11448 100755
+--- a/app/dashboard/widgets/error_logs.php
++++ b/app/dashboard/widgets/error_logs.php
+@@ -8,6 +8,7 @@ if(!is_object(@$User)) {
+ 	$User 		= new User ($Database);
+ 	$Tools 		= new Tools ($Database);
+ 	$Log		= new Logging ($Database);
++	$Admin		= new Admin ($Database);
+ 	$Result		= new Result ();
+ }
+ 
+diff --git a/app/subnets/addresses/export-subnet.php b/app/subnets/addresses/export-subnet.php
+index cb7e8bee..d14861ed 100755
+--- a/app/subnets/addresses/export-subnet.php
++++ b/app/subnets/addresses/export-subnet.php
+@@ -25,10 +25,15 @@ ini_set('display_startup_errors', 0);
+ error_reporting(E_ALL ^ E_NOTICE ^ E_STRICT);
+ 
+ # fetch subnet details
+-$subnet = (array) $Tools->fetch_object ("subnets", "id", $_GET['subnetId']);
++$subnet = $Tools->fetch_object("subnets", "id", $_GET['subnetId']);
++if (!is_object($subnet) || $Subnets->check_permission($User->user, $_GET['subnetId'], $subnet) == User::ACCESS_NONE) {
++	$Result->fatal_http_error(404, _("Subnet not found"));
++}
++$subnet = (array) $subnet;
++
+ # fetch all IP addresses in subnet
+-$addresses = $Addresses->fetch_subnet_addresses ($_GET['subnetId'], "ip_addr", "asc");
+-if (!is_array($addresses)) { $addresses = array(); }
++$addresses = $Addresses->fetch_subnet_addresses ($_GET['subnetId'], "ip_addr", "asc") ? : [];
++
+ # get all custom fields
+ $custom_fields = $Tools->fetch_custom_fields ('ipaddresses');
+ 
+diff --git a/app/tools/logs/show-logs.php b/app/tools/logs/show-logs.php
+index a3340594..f848da04 100755
+--- a/app/tools/logs/show-logs.php
++++ b/app/tools/logs/show-logs.php
+@@ -25,6 +25,7 @@ if(!isset($User) || !is_object($User)) {
+ 	$Database 	= new Database_PDO;
+ 	$User 		= new User ($Database);
+ 	$Tools	 	= new Tools ($Database);
++	$Admin		= new Admin ($Database);
+ 	$Result 	= new Result ();
+ 	$Log		= new Logging ($Database);
+ 
+diff --git a/functions/classes/class.Admin.php b/functions/classes/class.Admin.php
+index 133df1c4..b5f67198 100644
+--- a/functions/classes/class.Admin.php
++++ b/functions/classes/class.Admin.php
+@@ -107,17 +107,15 @@ class Admin extends Common_functions {
+ 	 */
+ 	public function is_admin () {
+ 		// user not required for cli
+-		if (php_sapi_name()!="cli") {
++		if (php_sapi_name() != "cli") {
+ 			# initialize user class
+-			$this->User = new User ($this->Database);
+-    		# save settings
+-    		$this->settings = $this->User->settings;
+-    		# if required die !
+-    		if($this->User->is_admin(false)!==true && $this->admin_required===true) {
+-    			// popup ?
+-    			if(@$_SERVER['HTTP_X_REQUESTED_WITH'] == "XMLHttpRequest") 	{ $this->Result->show("danger", _("Administrative privileges required"),true, true); }
+-    			else 														{ $this->Result->show("danger", _("Administrative privileges required"),true); }
+-    		}
++			$this->User = new User($this->Database);
++			# save settings
++			$this->settings = $this->User->settings;
++			# if required die !
++			if ($this->User->is_admin(false) !== true && $this->admin_required === true) {
++				$this->Result->fatal_http_error(403, _("Administrative privileges required"));
++			}
+ 		}
+ 	}
+ 
+diff --git a/functions/classes/class.Result.php b/functions/classes/class.Result.php
+index 00e03a61..9fb2fe48 100644
+--- a/functions/classes/class.Result.php
++++ b/functions/classes/class.Result.php
+@@ -71,6 +71,22 @@ class Result extends Common_functions {
+ 		}
+ 	}
+ 
++	/**
++	 * Return HTTP status code and message. eg 404 not found/permission denied error
++	 *
++	 * @param int $code
++	 * @param string $message
++	 * @return void
++	 */
++	public function fatal_http_error($code, $message = "") {
++		http_response_code($code);
++		if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] == "XMLHttpRequest") {
++			$this->show("danger", $message, true, true);
++		} else {
++			$this->show("danger", $message, true);
++		}
++	}
++
+ 	/**
+ 	 * Alias for show method for backwards compatibility
+ 	 *
+diff --git a/misc/CHANGELOG b/misc/CHANGELOG
+index 14c4f856..270465d6 100755
+--- a/misc/CHANGELOG
++++ b/misc/CHANGELOG
+@@ -1,5 +1,9 @@
+ == 1.4.6
+ 
++    Security Fixes:
++    ----------------------------
++    + Incorrect privilege assignments (#3506);
++
+     Bugfixes:
+     ----------------------------
+     + Require unique subnets not working as intended (#3529);
+-- 
+2.34.1
+

@@ -1,0 +1,84 @@
+From 05be3084460e46282ee63f04c72c451f3271fd28 Mon Sep 17 00:00:00 2001
+From: Young Xiao <YangX92@hotmail.com>
+Date: Wed, 28 Nov 2018 14:44:06 +0800
+Subject: [PATCH] [JPWL] tgatoimage(): avoid excessive memory allocation
+ attempt, and fixes unaligned load
+
+Signed-off-by: Young Xiao <YangX92@hotmail.com>
+---
+ src/bin/jpwl/convert.c | 41 +++++++++++++++++++++++++++--------------
+ 1 file changed, 27 insertions(+), 14 deletions(-)
+
+diff --git a/src/bin/jpwl/convert.c b/src/bin/jpwl/convert.c
+index 4f636c17..a4aa8d04 100644
+--- a/src/bin/jpwl/convert.c
++++ b/src/bin/jpwl/convert.c
+@@ -99,15 +99,10 @@ struct tga_header {
+ };
+ #endif /* INFORMATION_ONLY */
+ 
+-static unsigned short get_ushort(unsigned short val)
++/* Returns a ushort from a little-endian serialized value */
++static unsigned short get_tga_ushort(const unsigned char *data)
+ {
+-
+-#ifdef OPJ_BIG_ENDIAN
+-    return (((val & 0xff) << 8) + (val >> 8));
+-#else
+-    return (val);
+-#endif
+-
++    return data[0] | (data[1] << 8);
+ }
+ 
+ #define TGA_HEADER_SIZE 18
+@@ -136,15 +131,15 @@ static int tga_readheader(FILE *fp, unsigned int *bits_per_pixel,
+     id_len = (unsigned char)tga[0];
+     cmap_type = (unsigned char)tga[1];
+     image_type = (unsigned char)tga[2];
+-    cmap_index = get_ushort(*(unsigned short*)(&tga[3]));
+-    cmap_len = get_ushort(*(unsigned short*)(&tga[5]));
++    cmap_index = get_tga_ushort(*(unsigned short*)(&tga[3]));
++    cmap_len = get_tga_ushort(*(unsigned short*)(&tga[5]));
+     cmap_entry_size = (unsigned char)tga[7];
+ 
+ 
+-    x_origin = get_ushort(*(unsigned short*)(&tga[8]));
+-    y_origin = get_ushort(*(unsigned short*)(&tga[10]));
+-    image_w = get_ushort(*(unsigned short*)(&tga[12]));
+-    image_h = get_ushort(*(unsigned short*)(&tga[14]));
++    x_origin = get_tga_ushort(*(unsigned short*)(&tga[8]));
++    y_origin = get_tga_ushort(*(unsigned short*)(&tga[10]));
++    image_w = get_tga_ushort(*(unsigned short*)(&tga[12]));
++    image_h = get_tga_ushort(*(unsigned short*)(&tga[14]));
+     pixel_depth = (unsigned char)tga[16];
+     image_desc  = (unsigned char)tga[17];
+ 
+@@ -334,6 +329,24 @@ opj_image_t* tgatoimage(const char *filename, opj_cparameters_t *parameters)
+         color_space = CLRSPC_SRGB;
+     }
+ 
++    /* If the declared file size is > 10 MB, check that the file is big */
++    /* enough to avoid excessive memory allocations */
++    if (image_height != 0 && image_width > 10000000 / image_height / numcomps) {
++        char ch;
++        OPJ_UINT64 expected_file_size =
++            (OPJ_UINT64)image_width * image_height * numcomps;
++        long curpos = ftell(f);
++        if (expected_file_size > (OPJ_UINT64)INT_MAX) {
++            expected_file_size = (OPJ_UINT64)INT_MAX;
++        }
++        fseek(f, (long)expected_file_size - 1, SEEK_SET);
++        if (fread(&ch, 1, 1, f) != 1) {
++            fclose(f);
++            return NULL;
++        }
++        fseek(f, curpos, SEEK_SET);
++    }
++
+     subsampling_dx = parameters->subsampling_dx;
+     subsampling_dy = parameters->subsampling_dy;
+ 
+-- 
+2.34.1
+

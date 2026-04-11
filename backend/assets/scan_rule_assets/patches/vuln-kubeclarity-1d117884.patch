@@ -1,0 +1,27 @@
+From 1d1178840703a72d9082b7fc4aea0a3326c5d294 Mon Sep 17 00:00:00 2001
+From: abdou <b-abderrahmane@outlook.com>
+Date: Thu, 11 Jul 2024 19:33:34 +0200
+Subject: [PATCH] Merge pull request from GHSA-5248-h45p-9pgw
+
+---
+ backend/pkg/database/id_view.go | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/backend/pkg/database/id_view.go b/backend/pkg/database/id_view.go
+index fa7dbc7..e71274d 100644
+--- a/backend/pkg/database/id_view.go
++++ b/backend/pkg/database/id_view.go
+@@ -76,8 +76,8 @@ func (i *IDsViewHandler) GetIDs(params GetIDsParams, idsShouldMatch bool) ([]str
+ 	if idsShouldMatch {
+ 		for _, id := range params.FilterIDs {
+ 			// for each OR filter we need to verify that lookup id column is not null to avoid failing during Find
+-			tx.Or(fmt.Sprintf("%s = '%s' AND %s is not null", filterIDColumnName, id,
+-				lookupIDColumnName))
++			tx.Or("? = ? AND ? is not null", filterIDColumnName, id,
++				lookupIDColumnName)
+ 		}
+ 	} else {
+ 		for _, id := range params.FilterIDs {
+-- 
+2.34.1
+

@@ -1,0 +1,941 @@
+From 3ba1e2685f89bcd631b66748f70f69a5eecf741b Mon Sep 17 00:00:00 2001
+From: Brian Neradt <brian.neradt@gmail.com>
+Date: Tue, 23 Jul 2024 17:22:20 -0500
+Subject: [PATCH] proxy.config.http.drop_chunked_trailers (#11603)
+
+This adds the proxy.config.http.drop_chunked_trailers configuration that
+allows dropping of chunked trailers.
+---
+ doc/admin-guide/files/records.yaml.en.rst     |  12 ++
+ doc/admin-guide/plugins/lua.en.rst            |   1 +
+ .../functions/TSHttpOverridableConfig.en.rst  |   1 +
+ .../api/types/TSOverridableConfigKey.en.rst   |   1 +
+ include/proxy/http/HttpConfig.h               |   7 +-
+ include/proxy/http/HttpTunnel.h               |  40 ++++--
+ include/ts/apidefs.h.in                       |   1 +
+ plugins/lua/ts_lua_http_config.cc             |   3 +
+ src/api/InkAPI.cc                             |   3 +
+ src/api/InkAPITest.cc                         |   2 +-
+ src/proxy/FetchSM.cc                          |   2 +-
+ src/proxy/http/HttpConfig.cc                  |   2 +
+ src/proxy/http/HttpSM.cc                      |  26 ++--
+ src/proxy/http/HttpTunnel.cc                  | 117 ++++++++++++------
+ src/records/RecordsConfig.cc                  |   2 +
+ src/shared/overridable_txn_vars.cc            |   1 +
+ .../chunked_encoding/chunked_encoding.test.py |  96 ++++++++++++++
+ .../chunked_trailer_dropped.replay.yaml       |  68 ++++++++++
+ .../chunked_trailer_proxied.replay.yaml       |  68 ++++++++++
+ .../gold_tests/records/gold/full_records.yaml |   1 +
+ .../records/legacy_config/full_records.config |   1 +
+ 21 files changed, 397 insertions(+), 58 deletions(-)
+ create mode 100644 tests/gold_tests/chunked_encoding/replays/chunked_trailer_dropped.replay.yaml
+ create mode 100644 tests/gold_tests/chunked_encoding/replays/chunked_trailer_proxied.replay.yaml
+
+diff --git a/doc/admin-guide/files/records.yaml.en.rst b/doc/admin-guide/files/records.yaml.en.rst
+index 4c202c656..bc5b89ef4 100644
+--- a/doc/admin-guide/files/records.yaml.en.rst
++++ b/doc/admin-guide/files/records.yaml.en.rst
+@@ -1013,6 +1013,18 @@ allow-plain
+    request, this option determines the size of the chunks, in bytes, to use
+    when sending content to an HTTP/1.1 client.
+ 
++.. ts:cv:: CONFIG proxy.config.http.drop_chunked_trailers INT 1
++   :reloadable:
++   :overridable:
++
++   Specifies whether |TS| should drop chunked trailers. If enabled (``1``), |TS|
++   will drop any chunked trailers in a ``Transfer-Encoded: chunked`` request or
++   response body. If disabled (``0``), |TS| will pass the chunked trailers
++   unmodified to the receiving peer.  See `RFC 9112, section 7.1.2
++   <https://www.rfc-editor.org/rfc/rfc9112.html#name-chunked-trailer-section>`_
++   for details about chunked trailers. By default, this option is enabled
++   and therefore |TS| will drop chunked trailers.
++
+ .. ts:cv:: CONFIG proxy.config.http.send_http11_requests INT 1
+    :reloadable:
+    :overridable:
+diff --git a/doc/admin-guide/plugins/lua.en.rst b/doc/admin-guide/plugins/lua.en.rst
+index cbef95f3c..c720d640c 100644
+--- a/doc/admin-guide/plugins/lua.en.rst
++++ b/doc/admin-guide/plugins/lua.en.rst
+@@ -4115,6 +4115,7 @@ Http config constants
+     TS_LUA_CONFIG_NET_SOCK_PACKET_TOS_OUT
+     TS_LUA_CONFIG_HTTP_INSERT_AGE_IN_RESPONSE
+     TS_LUA_CONFIG_HTTP_CHUNKING_SIZE
++    TS_LUA_CONFIG_HTTP_DROP_CHUNKED_TRAILERS
+     TS_LUA_CONFIG_HTTP_FLOW_CONTROL_ENABLED
+     TS_LUA_CONFIG_HTTP_FLOW_CONTROL_LOW_WATER_MARK
+     TS_LUA_CONFIG_HTTP_FLOW_CONTROL_HIGH_WATER_MARK
+diff --git a/doc/developer-guide/api/functions/TSHttpOverridableConfig.en.rst b/doc/developer-guide/api/functions/TSHttpOverridableConfig.en.rst
+index e5adee5b7..8e2e4b428 100644
+--- a/doc/developer-guide/api/functions/TSHttpOverridableConfig.en.rst
++++ b/doc/developer-guide/api/functions/TSHttpOverridableConfig.en.rst
+@@ -112,6 +112,7 @@ TSOverridableConfigKey Value                                              Config
+ :enumerator:`TS_CONFIG_HTTP_CACHE_WHEN_TO_REVALIDATE`                   :ts:cv:`proxy.config.http.cache.when_to_revalidate`
+ :enumerator:`TS_CONFIG_HTTP_CHUNKING_ENABLED`                           :ts:cv:`proxy.config.http.chunking_enabled`
+ :enumerator:`TS_CONFIG_HTTP_CHUNKING_SIZE`                              :ts:cv:`proxy.config.http.chunking.size`
++:enumerator:`TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS`                      :ts:cv:`proxy.config.http.drop_chunked_trailers`
+ :enumerator:`TS_CONFIG_HTTP_CONNECT_ATTEMPTS_MAX_RETRIES_DOWN_SERVER`   :ts:cv:`proxy.config.http.connect_attempts_max_retries_down_server`
+ :enumerator:`TS_CONFIG_HTTP_CONNECT_ATTEMPTS_MAX_RETRIES`               :ts:cv:`proxy.config.http.connect_attempts_max_retries`
+ :enumerator:`TS_CONFIG_HTTP_CONNECT_ATTEMPTS_RR_RETRIES`                :ts:cv:`proxy.config.http.connect_attempts_rr_retries`
+diff --git a/doc/developer-guide/api/types/TSOverridableConfigKey.en.rst b/doc/developer-guide/api/types/TSOverridableConfigKey.en.rst
+index 2e51f3070..efdb71eca 100644
+--- a/doc/developer-guide/api/types/TSOverridableConfigKey.en.rst
++++ b/doc/developer-guide/api/types/TSOverridableConfigKey.en.rst
+@@ -91,6 +91,7 @@ Enumeration Members
+ .. enumerator:: TS_CONFIG_NET_SOCK_PACKET_TOS_OUT
+ .. enumerator:: TS_CONFIG_HTTP_INSERT_AGE_IN_RESPONSE
+ .. enumerator:: TS_CONFIG_HTTP_CHUNKING_SIZE
++.. enumerator:: TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS
+ .. enumerator:: TS_CONFIG_HTTP_FLOW_CONTROL_ENABLED
+ .. enumerator:: TS_CONFIG_HTTP_FLOW_CONTROL_LOW_WATER_MARK
+ .. enumerator:: TS_CONFIG_HTTP_FLOW_CONTROL_HIGH_WATER_MARK
+diff --git a/include/proxy/http/HttpConfig.h b/include/proxy/http/HttpConfig.h
+index dace26722..1b1f2cac9 100644
+--- a/include/proxy/http/HttpConfig.h
++++ b/include/proxy/http/HttpConfig.h
+@@ -631,9 +631,10 @@ struct OverridableHttpConfigParams {
+ 
+   MgmtInt background_fill_active_timeout = 60;
+ 
+-  MgmtInt http_chunking_size   = 4096; // Maximum chunk size for chunked output.
+-  MgmtInt flow_high_water_mark = 0;    ///< Flow control high water mark.
+-  MgmtInt flow_low_water_mark  = 0;    ///< Flow control low water mark.
++  MgmtInt  http_chunking_size         = 4096; ///< Maximum chunk size for chunked output.
++  MgmtByte http_drop_chunked_trailers = 1;    ///< Whether to drop chunked trailers.
++  MgmtInt  flow_high_water_mark       = 0;    ///< Flow control high water mark.
++  MgmtInt  flow_low_water_mark        = 0;    ///< Flow control low water mark.
+ 
+   MgmtInt default_buffer_size_index = 8;
+   MgmtInt default_buffer_water_mark = 32768;
+diff --git a/include/proxy/http/HttpTunnel.h b/include/proxy/http/HttpTunnel.h
+index 853edc74d..73a683ce9 100644
+--- a/include/proxy/http/HttpTunnel.h
++++ b/include/proxy/http/HttpTunnel.h
+@@ -104,15 +104,22 @@ struct ChunkedHandler {
+   MIOBuffer      *chunked_buffer   = nullptr;
+   int64_t         chunked_size     = 0;
+ 
++  /** When passing through chunked content, filter out chunked trailers.
++   *
++   * @note this is only true when: (1) we are passing through chunked content
++   * and (2) we are configured to filter out chunked trailers.
++   */
++  bool drop_chunked_trailers = false;
++
+   bool    truncation = false;
+   int64_t skip_bytes = 0;
+ 
+-  ChunkedState state             = CHUNK_READ_CHUNK;
+-  int64_t      cur_chunk_size    = 0;
+-  int64_t      bytes_left        = 0;
+-  int          last_server_event = VC_EVENT_NONE;
++  ChunkedState state                = CHUNK_READ_CHUNK;
++  int64_t      cur_chunk_size       = 0;
++  int64_t      cur_chunk_bytes_left = 0;
++  int          last_server_event    = VC_EVENT_NONE;
+ 
+-  // Parsing Info
++  // Chunked header size parsing info.
+   int running_sum = 0;
+   int num_digits  = 0;
+ 
+@@ -129,8 +136,8 @@ struct ChunkedHandler {
+   //@}
+   ChunkedHandler();
+ 
+-  void init(IOBufferReader *buffer_in, HttpTunnelProducer *p);
+-  void init_by_action(IOBufferReader *buffer_in, Action action);
++  void init(IOBufferReader *buffer_in, HttpTunnelProducer *p, bool drop_chunked_trailers);
++  void init_by_action(IOBufferReader *buffer_in, Action action, bool drop_chunked_trailers);
+   void clear();
+ 
+   /// Set the max chunk @a size.
+@@ -146,6 +153,8 @@ private:
+   void    read_chunk();
+   void    read_trailer();
+   int64_t transfer_bytes();
++
++  constexpr static std::string_view FINAL_CRLF = "\r\n";
+ };
+ 
+ struct HttpTunnelConsumer {
+@@ -286,7 +295,19 @@ public:
+   HttpTunnelProducer *add_producer(VConnection *vc, int64_t nbytes, IOBufferReader *reader_start, HttpProducerHandler sm_handler,
+                                    HttpTunnelType_t vc_type, const char *name);
+ 
+-  void set_producer_chunking_action(HttpTunnelProducer *p, int64_t skip_bytes, TunnelChunkingAction_t action);
++  /// A named variable for the @a drop_chunked_trailers parameter to @a set_producer_chunking_action.
++  static constexpr bool DROP_CHUNKED_TRAILERS = true;
++
++  /** Configure how the producer should behave with chunked content.
++   * @param[in] p Producer to configure.
++   * @param[in] skip_bytes Number of bytes to skip at the beginning of the stream (typically the headers).
++   * @param[in] action Action to take with the chunked content.
++   * @param[in] drop_chunked_trailers If @c true, chunked trailers are filtered
++   *   out. Logically speaking, this is only applicable when proxying chunked
++   *   content, thus only when @a action is @c TCA_PASSTHRU_CHUNKED_CONTENT.
++   */
++  void set_producer_chunking_action(HttpTunnelProducer *p, int64_t skip_bytes, TunnelChunkingAction_t action,
++                                    bool drop_chunked_trailers);
+   /// Set the maximum (preferred) chunk @a size of chunked output for @a producer.
+   void set_producer_chunking_size(HttpTunnelProducer *producer, int64_t size);
+ 
+@@ -361,6 +382,9 @@ private:
+ private:
+   int  reentrancy_count = 0;
+   bool call_sm          = false;
++
++  /// Corresponds to proxy.config.http.drop_chunked_trailers having a value of 1.
++  bool http_drop_chunked_trailers = false;
+ };
+ 
+ ////
+diff --git a/include/ts/apidefs.h.in b/include/ts/apidefs.h.in
+index b74309a47..886191fc0 100644
+--- a/include/ts/apidefs.h.in
++++ b/include/ts/apidefs.h.in
+@@ -892,6 +892,7 @@ enum TSOverridableConfigKey {
+   TS_CONFIG_NET_DEFAULT_INACTIVITY_TIMEOUT,
+   TS_CONFIG_HTTP_NO_DNS_JUST_FORWARD_TO_PARENT,
+   TS_CONFIG_HTTP_CACHE_IGNORE_QUERY,
++  TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS,
+   TS_CONFIG_LAST_ENTRY,
+ };
+ 
+diff --git a/plugins/lua/ts_lua_http_config.cc b/plugins/lua/ts_lua_http_config.cc
+index 29e2eed7a..4278e0d0f 100644
+--- a/plugins/lua/ts_lua_http_config.cc
++++ b/plugins/lua/ts_lua_http_config.cc
+@@ -16,6 +16,7 @@
+   limitations under the License.
+ */
+ 
++#include "ts/apidefs.h"
+ #include "ts_lua_util.h"
+ 
+ typedef enum {
+@@ -82,6 +83,7 @@ typedef enum {
+   TS_LUA_CONFIG_NET_SOCK_PACKET_TOS_OUT                       = TS_CONFIG_NET_SOCK_PACKET_TOS_OUT,
+   TS_LUA_CONFIG_HTTP_INSERT_AGE_IN_RESPONSE                   = TS_CONFIG_HTTP_INSERT_AGE_IN_RESPONSE,
+   TS_LUA_CONFIG_HTTP_CHUNKING_SIZE                            = TS_CONFIG_HTTP_CHUNKING_SIZE,
++  TS_LUA_CONFIG_HTTP_DROP_CHUNKED_TRAILERS                    = TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS,
+   TS_LUA_CONFIG_HTTP_FLOW_CONTROL_ENABLED                     = TS_CONFIG_HTTP_FLOW_CONTROL_ENABLED,
+   TS_LUA_CONFIG_HTTP_FLOW_CONTROL_LOW_WATER_MARK              = TS_CONFIG_HTTP_FLOW_CONTROL_LOW_WATER_MARK,
+   TS_LUA_CONFIG_HTTP_FLOW_CONTROL_HIGH_WATER_MARK             = TS_CONFIG_HTTP_FLOW_CONTROL_HIGH_WATER_MARK,
+@@ -218,6 +220,7 @@ ts_lua_var_item ts_lua_http_config_vars[] = {
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_NET_SOCK_PACKET_TOS_OUT),
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_INSERT_AGE_IN_RESPONSE),
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_CHUNKING_SIZE),
++  TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_DROP_CHUNKED_TRAILERS),
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_FLOW_CONTROL_ENABLED),
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_FLOW_CONTROL_LOW_WATER_MARK),
+   TS_LUA_MAKE_VAR_ITEM(TS_LUA_CONFIG_HTTP_FLOW_CONTROL_HIGH_WATER_MARK),
+diff --git a/src/api/InkAPI.cc b/src/api/InkAPI.cc
+index c3afec906..56e3c34ba 100644
+--- a/src/api/InkAPI.cc
++++ b/src/api/InkAPI.cc
+@@ -7221,6 +7221,9 @@ _conf_to_memberp(TSOverridableConfigKey conf, OverridableHttpConfigParams *overr
+   case TS_CONFIG_HTTP_CHUNKING_SIZE:
+     ret = _memberp_to_generic(&overridableHttpConfig->http_chunking_size, conv);
+     break;
++  case TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS:
++    ret = _memberp_to_generic(&overridableHttpConfig->http_drop_chunked_trailers, conv);
++    break;
+   case TS_CONFIG_HTTP_FLOW_CONTROL_ENABLED:
+     ret = _memberp_to_generic(&overridableHttpConfig->flow_control_enabled, conv);
+     break;
+diff --git a/src/api/InkAPITest.cc b/src/api/InkAPITest.cc
+index 8aaf9d06f..4788d9118 100644
+--- a/src/api/InkAPITest.cc
++++ b/src/api/InkAPITest.cc
+@@ -8740,7 +8740,7 @@ std::array<std::string_view, TS_CONFIG_LAST_ENTRY> SDK_Overridable_Configs = {
+    "proxy.config.body_factory.response_suppression_mode", "proxy.config.http.parent_proxy.enable_parent_timeout_markdowns",
+    "proxy.config.http.parent_proxy.disable_parent_markdowns", "proxy.config.net.default_inactivity_timeout",
+    "proxy.config.http.no_dns_just_forward_to_parent", "proxy.config.http.cache.ignore_query",
+-   }
++   "proxy.config.http.drop_chunked_trailers", }
+ };
+ 
+ extern ClassAllocator<HttpSM> httpSMAllocator;
+diff --git a/src/proxy/FetchSM.cc b/src/proxy/FetchSM.cc
+index 09d8e96d0..a4522a5e1 100644
+--- a/src/proxy/FetchSM.cc
++++ b/src/proxy/FetchSM.cc
+@@ -227,7 +227,7 @@ FetchSM::check_chunked()
+ 
+     if (resp_is_chunked && (fetch_flags & TS_FETCH_FLAGS_DECHUNK)) {
+       ChunkedHandler *ch = &chunked_handler;
+-      ch->init_by_action(resp_reader, ChunkedHandler::ACTION_DECHUNK);
++      ch->init_by_action(resp_reader, ChunkedHandler::ACTION_DECHUNK, HttpTunnel::DROP_CHUNKED_TRAILERS);
+       ch->dechunked_reader = ch->dechunked_buffer->alloc_reader();
+       ch->state            = ChunkedHandler::CHUNK_READ_SIZE;
+       resp_reader->dealloc();
+diff --git a/src/proxy/http/HttpConfig.cc b/src/proxy/http/HttpConfig.cc
+index 2f72be0c1..9f126ec94 100644
+--- a/src/proxy/http/HttpConfig.cc
++++ b/src/proxy/http/HttpConfig.cc
+@@ -783,6 +783,7 @@ HttpConfig::startup()
+   HttpEstablishStaticConfigByte(c.oride.keep_alive_enabled_out, "proxy.config.http.keep_alive_enabled_out");
+   HttpEstablishStaticConfigByte(c.oride.chunking_enabled, "proxy.config.http.chunking_enabled");
+   HttpEstablishStaticConfigLongLong(c.oride.http_chunking_size, "proxy.config.http.chunking.size");
++  HttpEstablishStaticConfigByte(c.oride.http_drop_chunked_trailers, "proxy.config.http.drop_chunked_trailers");
+   HttpEstablishStaticConfigByte(c.oride.flow_control_enabled, "proxy.config.http.flow_control.enabled");
+   HttpEstablishStaticConfigLongLong(c.oride.flow_high_water_mark, "proxy.config.http.flow_control.high_water");
+   HttpEstablishStaticConfigLongLong(c.oride.flow_low_water_mark, "proxy.config.http.flow_control.low_water");
+@@ -1078,6 +1079,7 @@ HttpConfig::reconfigure()
+   params->oride.keep_alive_enabled_in       = INT_TO_BOOL(m_master.oride.keep_alive_enabled_in);
+   params->oride.keep_alive_enabled_out      = INT_TO_BOOL(m_master.oride.keep_alive_enabled_out);
+   params->oride.chunking_enabled            = INT_TO_BOOL(m_master.oride.chunking_enabled);
++  params->oride.http_drop_chunked_trailers  = m_master.oride.http_drop_chunked_trailers;
+   params->oride.auth_server_session_private = INT_TO_BOOL(m_master.oride.auth_server_session_private);
+ 
+   params->oride.http_chunking_size = m_master.oride.http_chunking_size;
+diff --git a/src/proxy/http/HttpSM.cc b/src/proxy/http/HttpSM.cc
+index e28f5c838..95a806c0c 100644
+--- a/src/proxy/http/HttpSM.cc
++++ b/src/proxy/http/HttpSM.cc
+@@ -817,7 +817,8 @@ HttpSM::wait_for_full_body()
+   p = tunnel.add_producer(_ua.get_entry()->vc, post_bytes, buf_start, &HttpSM::tunnel_handler_post_ua, HT_BUFFER_READ,
+                           "ua post buffer");
+   if (chunked) {
+-    tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_CHUNKED_CONTENT);
++    bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
++    tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_CHUNKED_CONTENT, drop_chunked_trailers);
+   }
+   _ua.get_entry()->in_tunnel = true;
+   _ua.get_txn()->set_inactivity_timeout(HRTIME_SECONDS(t_state.txn_conf->transaction_no_activity_timeout_in));
+@@ -2886,7 +2887,8 @@ HttpSM::tunnel_handler_cache_fill(int event, void *data)
+   HttpTunnelProducer *p =
+     tunnel.add_producer(server_entry->vc, nbytes, buf_start, &HttpSM::tunnel_handler_server, HT_HTTP_SERVER, "http server");
+ 
+-  tunnel.set_producer_chunking_action(p, 0, action);
++  bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
++  tunnel.set_producer_chunking_action(p, 0, action, drop_chunked_trailers);
+   tunnel.set_producer_chunking_size(p, t_state.txn_conf->http_chunking_size);
+ 
+   setup_cache_write_transfer(&cache_sm, server_entry->vc, &t_state.cache_info.object_store, 0, "cache write");
+@@ -6296,19 +6298,20 @@ HttpSM::do_setup_client_request_body_tunnel(HttpVC_t to_vc_type)
+ 
+   // The user agent and origin  may support chunked (HTTP/1.1) or not (HTTP/2)
+   if (chunked) {
++    bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
+     if (_ua.get_txn()->is_chunked_encoding_supported()) {
+       if (server_txn->is_chunked_encoding_supported()) {
+-        tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_CHUNKED_CONTENT);
++        tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_CHUNKED_CONTENT, drop_chunked_trailers);
+       } else {
+-        tunnel.set_producer_chunking_action(p, 0, TCA_DECHUNK_CONTENT);
++        tunnel.set_producer_chunking_action(p, 0, TCA_DECHUNK_CONTENT, drop_chunked_trailers);
+         tunnel.set_producer_chunking_size(p, 0);
+       }
+     } else {
+       if (server_txn->is_chunked_encoding_supported()) {
+-        tunnel.set_producer_chunking_action(p, 0, TCA_CHUNK_CONTENT);
++        tunnel.set_producer_chunking_action(p, 0, TCA_CHUNK_CONTENT, drop_chunked_trailers);
+         tunnel.set_producer_chunking_size(p, 0);
+       } else {
+-        tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_DECHUNKED_CONTENT);
++        tunnel.set_producer_chunking_action(p, 0, TCA_PASSTHRU_DECHUNKED_CONTENT, drop_chunked_trailers);
+       }
+     }
+   }
+@@ -6713,7 +6716,8 @@ HttpSM::setup_cache_read_transfer()
+   // this only applies to read-while-write cases where origin server sends a dynamically generated chunked content
+   // w/o providing a Content-Length header
+   if (t_state.client_info.receive_chunked_response) {
+-    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_CHUNK_CONTENT);
++    bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
++    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_CHUNK_CONTENT, drop_chunked_trailers);
+     tunnel.set_producer_chunking_size(p, t_state.txn_conf->http_chunking_size);
+   }
+   _ua.get_entry()->in_tunnel = true;
+@@ -7030,7 +7034,7 @@ HttpSM::setup_server_transfer_to_transform()
+ 
+   if (t_state.current.server->transfer_encoding == HttpTransact::CHUNKED_ENCODING) {
+     client_response_hdr_bytes = 0; // fixed by YTS Team, yamsat
+-    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_DECHUNK_CONTENT);
++    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_DECHUNK_CONTENT, HttpTunnel::DROP_CHUNKED_TRAILERS);
+   }
+ 
+   return p;
+@@ -7069,7 +7073,8 @@ HttpSM::setup_transfer_from_transform()
+   this->setup_client_response_plugin_agents(p, client_response_hdr_bytes);
+ 
+   if (t_state.client_info.receive_chunked_response) {
+-    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_CHUNK_CONTENT);
++    bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
++    tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, TCA_CHUNK_CONTENT, drop_chunked_trailers);
+     tunnel.set_producer_chunking_size(p, t_state.txn_conf->http_chunking_size);
+   }
+ 
+@@ -7161,7 +7166,8 @@ HttpSM::setup_server_transfer()
+ 
+   this->setup_client_response_plugin_agents(p, client_response_hdr_bytes);
+ 
+-  tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, action);
++  bool const drop_chunked_trailers = t_state.http_config_param->oride.http_drop_chunked_trailers == 1;
++  tunnel.set_producer_chunking_action(p, client_response_hdr_bytes, action, drop_chunked_trailers);
+   tunnel.set_producer_chunking_size(p, t_state.txn_conf->http_chunking_size);
+   return p;
+ }
+diff --git a/src/proxy/http/HttpTunnel.cc b/src/proxy/http/HttpTunnel.cc
+index ccc32c6c3..a72ad36fc 100644
+--- a/src/proxy/http/HttpTunnel.cc
++++ b/src/proxy/http/HttpTunnel.cc
+@@ -60,27 +60,27 @@ int const CHUNK_IOBUFFER_SIZE_INDEX = MIN_IOBUFFER_SIZE;
+ ChunkedHandler::ChunkedHandler() : max_chunk_size(DEFAULT_MAX_CHUNK_SIZE) {}
+ 
+ void
+-ChunkedHandler::init(IOBufferReader *buffer_in, HttpTunnelProducer *p)
++ChunkedHandler::init(IOBufferReader *buffer_in, HttpTunnelProducer *p, bool drop_chunked_trailers)
+ {
+   if (p->do_chunking) {
+-    init_by_action(buffer_in, ACTION_DOCHUNK);
++    init_by_action(buffer_in, ACTION_DOCHUNK, drop_chunked_trailers);
+   } else if (p->do_dechunking) {
+-    init_by_action(buffer_in, ACTION_DECHUNK);
++    init_by_action(buffer_in, ACTION_DECHUNK, drop_chunked_trailers);
+   } else {
+-    init_by_action(buffer_in, ACTION_PASSTHRU);
++    init_by_action(buffer_in, ACTION_PASSTHRU, drop_chunked_trailers);
+   }
+   return;
+ }
+ 
+ void
+-ChunkedHandler::init_by_action(IOBufferReader *buffer_in, Action action)
++ChunkedHandler::init_by_action(IOBufferReader *buffer_in, Action action, bool drop_chunked_trailers)
+ {
+-  running_sum    = 0;
+-  num_digits     = 0;
+-  cur_chunk_size = 0;
+-  bytes_left     = 0;
+-  truncation     = false;
+-  this->action   = action;
++  running_sum          = 0;
++  num_digits           = 0;
++  cur_chunk_size       = 0;
++  cur_chunk_bytes_left = 0;
++  truncation           = false;
++  this->action         = action;
+ 
+   switch (action) {
+   case ACTION_DOCHUNK:
+@@ -96,6 +96,18 @@ ChunkedHandler::init_by_action(IOBufferReader *buffer_in, Action action)
+     break;
+   case ACTION_PASSTHRU:
+     chunked_reader = buffer_in->mbuf->clone_reader(buffer_in);
++    if (drop_chunked_trailers) {
++      // Note that dropping chunked trailers only applies in the passthrough
++      // case in which we are filtering out chunked trailers as we proxy.
++      this->drop_chunked_trailers = drop_chunked_trailers;
++
++      // We only need an intermediate buffer when modifying the chunks by
++      // filtering out the trailers. Otherwise, a simple passthrough needs no
++      // intermediary buffer as consumers will simply read directly from
++      // chunked_reader.
++      chunked_buffer = new_MIOBuffer(CHUNK_IOBUFFER_SIZE_INDEX);
++      chunked_size   = 0;
++    }
+     break;
+   default:
+     ink_release_assert(!"Unknown action");
+@@ -109,12 +121,14 @@ ChunkedHandler::clear()
+ {
+   switch (action) {
+   case ACTION_DOCHUNK:
+-    free_MIOBuffer(chunked_buffer);
++  case ACTION_PASSTHRU:
++    if (chunked_buffer) {
++      free_MIOBuffer(chunked_buffer);
++    }
+     break;
+   case ACTION_DECHUNK:
+     free_MIOBuffer(dechunked_buffer);
+     break;
+-  case ACTION_PASSTHRU:
+   default:
+     break;
+   }
+@@ -178,9 +192,9 @@ ChunkedHandler::read_size()
+       } else if (state == CHUNK_READ_SIZE_CRLF) { // Scan for a linefeed
+         if (ParseRules::is_lf(*tmp)) {
+           Dbg(dbg_ctl_http_chunk, "read chunk size of %d bytes", running_sum);
+-          bytes_left = (cur_chunk_size = running_sum);
+-          state      = (running_sum == 0) ? CHUNK_READ_TRAILER_BLANK : CHUNK_READ_CHUNK;
+-          done       = true;
++          cur_chunk_bytes_left = (cur_chunk_size = running_sum);
++          state                = (running_sum == 0) ? CHUNK_READ_TRAILER_BLANK : CHUNK_READ_CHUNK;
++          done                 = true;
+           break;
+         }
+       } else if (state == CHUNK_READ_SIZE_START) {
+@@ -199,15 +213,19 @@ ChunkedHandler::read_size()
+       tmp++;
+       data_size--;
+     }
++    if (drop_chunked_trailers) {
++      chunked_buffer->write(chunked_reader, bytes_used);
++      chunked_size += bytes_used;
++    }
+     chunked_reader->consume(bytes_used);
+   }
+ }
+ 
+ // int ChunkedHandler::transfer_bytes()
+ //
+-//   Transfer bytes from chunked_reader to dechunked buffer
++//   Transfer bytes from chunked_reader to dechunked buffer.
+ //   Use block reference method when there is a sufficient
+-//   size to move.  Otherwise, uses memcpy method
++//   size to move.  Otherwise, uses memcpy method.
+ //
+ int64_t
+ ChunkedHandler::transfer_bytes()
+@@ -216,22 +234,26 @@ ChunkedHandler::transfer_bytes()
+ 
+   // Handle the case where we are doing chunked passthrough.
+   if (!dechunked_buffer) {
+-    moved = std::min(bytes_left, chunked_reader->read_avail());
++    moved = std::min(cur_chunk_bytes_left, chunked_reader->read_avail());
++    if (drop_chunked_trailers) {
++      chunked_buffer->write(chunked_reader, moved);
++      chunked_size += moved;
++    }
+     chunked_reader->consume(moved);
+-    bytes_left = bytes_left - moved;
++    cur_chunk_bytes_left = cur_chunk_bytes_left - moved;
+     return moved;
+   }
+ 
+-  while (bytes_left > 0) {
++  while (cur_chunk_bytes_left > 0) {
+     block_read_avail = chunked_reader->block_read_avail();
+ 
+-    to_move = std::min(bytes_left, block_read_avail);
++    to_move = std::min(cur_chunk_bytes_left, block_read_avail);
+     if (to_move <= 0) {
+       break;
+     }
+ 
+     if (to_move >= min_block_transfer_bytes) {
+-      moved = dechunked_buffer->write(chunked_reader, bytes_left);
++      moved = dechunked_buffer->write(chunked_reader, cur_chunk_bytes_left);
+     } else {
+       // Small amount of data available.  We want to copy the
+       // data rather than block reference to prevent the buildup
+@@ -242,9 +264,9 @@ ChunkedHandler::transfer_bytes()
+ 
+     if (moved > 0) {
+       chunked_reader->consume(moved);
+-      bytes_left      = bytes_left - moved;
+-      dechunked_size += moved;
+-      total_moved    += moved;
++      cur_chunk_bytes_left  = cur_chunk_bytes_left - moved;
++      dechunked_size       += moved;
++      total_moved          += moved;
+     } else {
+       break;
+     }
+@@ -257,12 +279,12 @@ ChunkedHandler::read_chunk()
+ {
+   int64_t b = transfer_bytes();
+ 
+-  ink_assert(bytes_left >= 0);
+-  if (bytes_left == 0) {
++  ink_assert(cur_chunk_bytes_left >= 0);
++  if (cur_chunk_bytes_left == 0) {
+     Dbg(dbg_ctl_http_chunk, "completed read of chunk of %" PRId64 " bytes", cur_chunk_size);
+ 
+     state = CHUNK_READ_SIZE_START;
+-  } else if (bytes_left > 0) {
++  } else if (cur_chunk_bytes_left > 0) {
+     Dbg(dbg_ctl_http_chunk, "read %" PRId64 " bytes of an %" PRId64 " chunk", b, cur_chunk_size);
+   }
+ }
+@@ -293,6 +315,13 @@ ChunkedHandler::read_trailer()
+         if (state == CHUNK_READ_TRAILER_CR || state == CHUNK_READ_TRAILER_BLANK) {
+           state = CHUNK_READ_DONE;
+           Dbg(dbg_ctl_http_chunk, "completed read of trailers");
++
++          if (this->drop_chunked_trailers) {
++            // We skip passing through chunked trailers to the peer and only write
++            // the final CRLF that ends all chunked content.
++            chunked_buffer->write(FINAL_CRLF.data(), FINAL_CRLF.size());
++            chunked_size += FINAL_CRLF.size();
++          }
+           done = true;
+           break;
+         } else {
+@@ -608,10 +637,12 @@ HttpTunnel::deallocate_buffers()
+ }
+ 
+ void
+-HttpTunnel::set_producer_chunking_action(HttpTunnelProducer *p, int64_t skip_bytes, TunnelChunkingAction_t action)
++HttpTunnel::set_producer_chunking_action(HttpTunnelProducer *p, int64_t skip_bytes, TunnelChunkingAction_t action,
++                                         bool drop_chunked_trailers)
+ {
+-  p->chunked_handler.skip_bytes = skip_bytes;
+-  p->chunking_action            = action;
++  this->http_drop_chunked_trailers = drop_chunked_trailers;
++  p->chunked_handler.skip_bytes    = skip_bytes;
++  p->chunking_action               = action;
+ 
+   switch (action) {
+   case TCA_CHUNK_CONTENT:
+@@ -822,9 +853,11 @@ HttpTunnel::producer_run(HttpTunnelProducer *p)
+   ink_assert(p->vc != nullptr);
+   active = true;
+ 
+-  IOBufferReader *chunked_buffer_start = nullptr, *dechunked_buffer_start = nullptr;
++  IOBufferReader *chunked_buffer_start     = nullptr;
++  IOBufferReader *dechunked_buffer_start   = nullptr;
++  IOBufferReader *passthrough_buffer_start = nullptr;
+   if (p->do_chunking || p->do_dechunking || p->do_chunked_passthru) {
+-    p->chunked_handler.init(p->buffer_start, p);
++    p->chunked_handler.init(p->buffer_start, p, this->http_drop_chunked_trailers);
+ 
+     // Copy the header into the chunked/dechunked buffers.
+     if (p->do_chunking) {
+@@ -848,6 +881,11 @@ HttpTunnel::producer_run(HttpTunnelProducer *p)
+         Dbg(dbg_ctl_http_tunnel, "[producer_run] do_dechunking::Copied header of size %" PRId64 "", p->chunked_handler.skip_bytes);
+       }
+     }
++    if (p->chunked_handler.drop_chunked_trailers) {
++      // initialize a reader to passthrough buffer start before writing to keep ref count
++      passthrough_buffer_start = p->chunked_handler.chunked_buffer->alloc_reader();
++      p->chunked_handler.chunked_buffer->write(p->buffer_start, p->chunked_handler.skip_bytes);
++    }
+   }
+ 
+   int64_t read_start_pos = 0;
+@@ -887,7 +925,13 @@ HttpTunnel::producer_run(HttpTunnelProducer *p)
+       c->buffer_reader = p->chunked_handler.chunked_buffer->clone_reader(chunked_buffer_start);
+     } else if (action == TCA_DECHUNK_CONTENT) {
+       c->buffer_reader = p->chunked_handler.dechunked_buffer->clone_reader(dechunked_buffer_start);
+-    } else {
++    } else if (action == TCA_PASSTHRU_CHUNKED_CONTENT) {
++      if (p->chunked_handler.drop_chunked_trailers) {
++        c->buffer_reader = p->chunked_handler.chunked_buffer->clone_reader(passthrough_buffer_start);
++      } else {
++        c->buffer_reader = p->read_buffer->clone_reader(p->buffer_start);
++      }
++    } else { // TCA_PASSTHRU_DECHUNKED_CONTENT
+       c->buffer_reader = p->read_buffer->clone_reader(p->buffer_start);
+     }
+ 
+@@ -932,6 +976,9 @@ HttpTunnel::producer_run(HttpTunnelProducer *p)
+     if (p->do_dechunking && dechunked_buffer_start) {
+       p->chunked_handler.dechunked_buffer->dealloc_reader(dechunked_buffer_start);
+     }
++    if (p->do_chunked_passthru && passthrough_buffer_start) {
++      p->chunked_handler.chunked_buffer->dealloc_reader(passthrough_buffer_start);
++    }
+ 
+     // bz57413
+     // If there is no transformation plugin, then we didn't add the header, hence no need to consume it
+diff --git a/src/records/RecordsConfig.cc b/src/records/RecordsConfig.cc
+index 0bf968740..d4dd74eb5 100644
+--- a/src/records/RecordsConfig.cc
++++ b/src/records/RecordsConfig.cc
+@@ -323,6 +323,8 @@ static const RecordElement RecordsConfig[] =
+   ,
+   {RECT_CONFIG, "proxy.config.http.chunking.size", RECD_INT, "4096", RECU_DYNAMIC, RR_NULL, RECC_NULL, nullptr, RECA_NULL}
+   ,
++  {RECT_CONFIG, "proxy.config.http.drop_chunked_trailers", RECD_INT, "1", RECU_DYNAMIC, RR_NULL, RECC_NULL, "[0-1]", RECA_NULL}
++  ,
+   {RECT_CONFIG, "proxy.config.http.flow_control.enabled", RECD_INT, "0", RECU_DYNAMIC, RR_NULL, RECC_NULL, nullptr, RECA_NULL}
+   ,
+   {RECT_CONFIG, "proxy.config.http.flow_control.high_water", RECD_INT, "0", RECU_DYNAMIC, RR_NULL, RECC_NULL, nullptr, RECA_NULL}
+diff --git a/src/shared/overridable_txn_vars.cc b/src/shared/overridable_txn_vars.cc
+index 5390fe5eb..0181c32bb 100644
+--- a/src/shared/overridable_txn_vars.cc
++++ b/src/shared/overridable_txn_vars.cc
+@@ -32,6 +32,7 @@ const std::unordered_map<std::string_view, std::tuple<const TSOverridableConfigK
+     {"proxy.config.ssl.hsts_max_age",                                  {TS_CONFIG_SSL_HSTS_MAX_AGE, TS_RECORDDATATYPE_INT}                      },
+     {"proxy.config.http.normalize_ae",                                 {TS_CONFIG_HTTP_NORMALIZE_AE, TS_RECORDDATATYPE_INT}                     },
+     {"proxy.config.http.chunking.size",                                {TS_CONFIG_HTTP_CHUNKING_SIZE, TS_RECORDDATATYPE_INT}                    },
++    {"proxy.config.http.drop_chunked_trailers",                        {TS_CONFIG_HTTP_DROP_CHUNKED_TRAILERS, TS_RECORDDATATYPE_INT}            },
+     {"proxy.config.ssl.client.cert.path",                              {TS_CONFIG_SSL_CERT_FILEPATH, TS_RECORDDATATYPE_STRING}                  },
+     {"proxy.config.http.allow_half_open",                              {TS_CONFIG_HTTP_ALLOW_HALF_OPEN, TS_RECORDDATATYPE_INT}                  },
+     {"proxy.config.http.chunking_enabled",                             {TS_CONFIG_HTTP_CHUNKING_ENABLED, TS_RECORDDATATYPE_INT}                 },
+diff --git a/tests/gold_tests/chunked_encoding/chunked_encoding.test.py b/tests/gold_tests/chunked_encoding/chunked_encoding.test.py
+index 13926cb5b..2f3672312 100644
+--- a/tests/gold_tests/chunked_encoding/chunked_encoding.test.py
++++ b/tests/gold_tests/chunked_encoding/chunked_encoding.test.py
+@@ -148,3 +148,99 @@ tr.Processes.Default.ReturnCode = 0
+ tr.Processes.Default.Streams.All = Testers.ExcludesExpression("content-length:", "Response should not include content length")
+ # Transfer encoding to origin, but no content-length
+ # No extra bytes in body seen by origin
++
++
++class TestChunkedTrailers:
++    """Verify chunked trailer proxy behavior."""
++
++    _chunked_dropped_replay: str = "replays/chunked_trailer_dropped.replay.yaml"
++    _proxied_dropped_replay: str = "replays/chunked_trailer_proxied.replay.yaml"
++
++    def __init__(self, configure_drop_trailers: bool):
++        """Create a test to verify chunked trailer behavior.
++
++        :param configure_drop_trailers: Whether to configure ATS to drop
++        trailers or not.
++        """
++        self._configure_drop_trailers = configure_drop_trailers
++        self._replay_file = self._chunked_dropped_replay if configure_drop_trailers else self._proxied_dropped_replay
++        behavior_description = "drop" if configure_drop_trailers else "proxy"
++        tr = Test.AddTestRun(f'Verify chunked tailers behavior: {behavior_description}')
++        self._configure_dns(tr)
++        self._configure_server(tr)
++        self._configure_ts(tr)
++        self._configure_client(tr)
++
++    def _configure_dns(self, tr: 'TestRun') -> "Process":
++        """Configure DNS for the test run.
++
++        :param tr: The TestRun to configure DNS for.
++        :return: The DNS process.
++        """
++        name = 'dns-drop-trailers' if self._configure_drop_trailers else 'dns-proxy-trailers'
++        self._dns = tr.MakeDNServer(name, default='127.0.0.1')
++        return self._dns
++
++    def _configure_server(self, tr: 'TestRun') -> 'Process':
++        """Configure the origin server for the test run.
++
++        :param tr: The TestRun to configure the server for.
++        :return: The origin server process.
++        """
++        name = 'server-drop-trailers' if self._configure_drop_trailers else 'server-proxy-trailers'
++        self._server = tr.AddVerifierServerProcess(name, self._replay_file)
++        if self._configure_drop_trailers:
++            self._server.Streams.All += Testers.ExcludesExpression('Client: ATS', 'Verify the Client trailer was dropped.')
++            self._server.Streams.All += Testers.ExcludesExpression('ETag: "abc"', 'Verify the ETag trailer was dropped.')
++        else:
++            self._server.Streams.All += Testers.ContainsExpression('Client: ATS', 'Verify the Client trailer was proxied.')
++            self._server.Streams.All += Testers.ContainsExpression('ETag: "abc"', 'Verify the ETag trailer was proxied.')
++        return self._server
++
++    def _configure_ts(self, tr: 'TestRun') -> 'Process':
++        """Configure ATS for the test run.
++
++        :param tr: The TestRun to configure ATS for.
++        :return: The ATS process.
++        """
++        name = 'ts-drop-trailers' if self._configure_drop_trailers else 'ts-proxy-trailers'
++        ts = tr.MakeATSProcess(name, enable_cache=False)
++        self._ts = ts
++        port = self._server.Variables.http_port
++        ts.Disk.remap_config.AddLine(f'map / http://backend.example.com:{port}/')
++        ts.Disk.records_config.update(
++            {
++                'proxy.config.diags.debug.enabled': 1,
++                'proxy.config.diags.debug.tags': 'http',
++                'proxy.config.dns.nameservers': f'127.0.0.1:{self._dns.Variables.Port}',
++                'proxy.config.dns.resolv_conf': 'NULL'
++            })
++        if not self._configure_drop_trailers:
++            ts.Disk.records_config.update({
++                'proxy.config.http.drop_chunked_trailers': 0,
++            })
++        return ts
++
++    def _configure_client(self, tr: 'TestRun') -> 'Process':
++        """Configure the client for the test run.
++
++        :param tr: The TestRun to configure the client for.
++        :return: The client process.
++        """
++        name = 'client-drop-trailers' if self._configure_drop_trailers else 'client-proxy-trailers'
++        self._client = tr.AddVerifierClientProcess(name, self._replay_file, http_ports=[self._ts.Variables.port])
++        self._client.StartBefore(self._dns)
++        self._client.StartBefore(self._server)
++        self._client.StartBefore(self._ts)
++
++        if self._configure_drop_trailers:
++            self._client.Streams.All += Testers.ExcludesExpression('Sever: ATS', 'Verify the Server trailer was dropped.')
++            self._client.Streams.All += Testers.ExcludesExpression('ETag: "def"', 'Verify the ETag trailer was dropped.')
++        else:
++            self._client.Streams.All += Testers.ContainsExpression('Sever: ATS', 'Verify the Server trailer was proxied.')
++            self._client.Streams.All += Testers.ContainsExpression('ETag: "def"', 'Verify the ETag trailer was proxied.')
++        return self._client
++
++
++TestChunkedTrailers(configure_drop_trailers=True)
++TestChunkedTrailers(configure_drop_trailers=False)
+diff --git a/tests/gold_tests/chunked_encoding/replays/chunked_trailer_dropped.replay.yaml b/tests/gold_tests/chunked_encoding/replays/chunked_trailer_dropped.replay.yaml
+new file mode 100644
+index 000000000..9dcc5cf8b
+--- /dev/null
++++ b/tests/gold_tests/chunked_encoding/replays/chunked_trailer_dropped.replay.yaml
+@@ -0,0 +1,68 @@
++#  Licensed to the Apache Software Foundation (ASF) under one
++#  or more contributor license agreements.  See the NOTICE file
++#  distributed with this work for additional information
++#  regarding copyright ownership.  The ASF licenses this file
++#  to you under the Apache License, Version 2.0 (the
++#  "License"); you may not use this file except in compliance
++#  with the License.  You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++#  Unless required by applicable law or agreed to in writing, software
++#  distributed under the License is distributed on an "AS IS" BASIS,
++#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#  See the License for the specific language governing permissions and
++#  limitations under the License.
++
++meta:
++  version: "1.0"
++
++# Verify that we handle dropping chunked trailers correctly. This assumes ATS is
++# configured to drop chunked trailers.
++
++sessions:
++- transactions:
++  - client-request:
++      method: "POST"
++      version: "1.1"
++      url: /some/path
++      headers:
++        fields:
++        - [ Host, example.com ]
++        - [ Transfer-Encoding, chunked ]
++        - [ uuid, 1 ]
++      content:
++        transfer: plain
++        encoding: uri
++        # 3-byte chunk, abc.
++        # Then chunked trailers between 0\r\n and a final \r\n (per specification).
++        data: 3%0D%0Aabc%0D%0A0%0D%0AClient%3A%20ATS%0D%0AETag%3A%20%22abc%22%0D%0A%0D%0A
++
++    proxy-request:
++      content:
++        transfer: plain
++        encoding: uri
++        # Note: same as client-request, but the trailer is dropped.
++        data: 3%0D%0Aabc%0D%0A0%0D%0A%0D%0A
++        verify: { as: equal }
++
++    server-response:
++      status: 200
++      reason: OK
++      headers:
++        fields:
++        - [ Transfer-Encoding, chunked ]
++        - [ Content-Type, text/html ]
++      content:
++        transfer: plain
++        encoding: uri
++        # Note: same content as the client-request.
++        data: 3%0D%0Aabc%0D%0A0%0D%0ASever%3A%20ATS%0D%0AETag%3A%20%22def%22%0D%0A%0D%0A
++
++    proxy-request:
++      content:
++        transfer: plain
++        encoding: uri
++        # Note: same as server-response, but the trailer is dropped.
++        data: 3%0D%0Aabc%0D%0A0%0D%0A%0D%0A
++        verify: { as: equal }
+diff --git a/tests/gold_tests/chunked_encoding/replays/chunked_trailer_proxied.replay.yaml b/tests/gold_tests/chunked_encoding/replays/chunked_trailer_proxied.replay.yaml
+new file mode 100644
+index 000000000..8ecf513ff
+--- /dev/null
++++ b/tests/gold_tests/chunked_encoding/replays/chunked_trailer_proxied.replay.yaml
+@@ -0,0 +1,68 @@
++#  Licensed to the Apache Software Foundation (ASF) under one
++#  or more contributor license agreements.  See the NOTICE file
++#  distributed with this work for additional information
++#  regarding copyright ownership.  The ASF licenses this file
++#  to you under the Apache License, Version 2.0 (the
++#  "License"); you may not use this file except in compliance
++#  with the License.  You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++#  Unless required by applicable law or agreed to in writing, software
++#  distributed under the License is distributed on an "AS IS" BASIS,
++#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#  See the License for the specific language governing permissions and
++#  limitations under the License.
++
++meta:
++  version: "1.0"
++
++# Verify that we handle passing through chunked trailers correctly. This assumes
++# ATS is configured to pass through (i.e., not drop) chunked trailers.
++
++sessions:
++- transactions:
++  - client-request:
++      method: "POST"
++      version: "1.1"
++      url: /some/path
++      headers:
++        fields:
++        - [ Host, example.com ]
++        - [ Transfer-Encoding, chunked ]
++        - [ uuid, 1 ]
++      content:
++        transfer: plain
++        encoding: uri
++        # 3-byte chunk, abc.
++        # Then chunked trailers between 0\r\n and a final \r\n (per specification).
++        data: 3%0D%0Aabc%0D%0A0%0D%0AClient%3A%20ATS%0D%0AETag%3A%20%22abc%22%0D%0A%0D%0A
++
++    proxy-request:
++      content:
++        transfer: plain
++        encoding: uri
++        # Same content as client-request above.
++        data: 3%0D%0Aabc%0D%0A0%0D%0AClient%3A%20ATS%0D%0AETag%3A%20%22abc%22%0D%0A%0D%0A
++        verify: { as: equal }
++
++    server-response:
++      status: 200
++      reason: OK
++      headers:
++        fields:
++        - [ Transfer-Encoding, chunked ]
++        - [ Content-Type, text/html ]
++      content:
++        transfer: plain
++        encoding: uri
++        # Note: same content as the client-request.
++        data: 3%0D%0Aabc%0D%0A0%0D%0ASever%3A%20ATS%0D%0AETag%3A%20%22def%22%0D%0A%0D%0A
++
++    proxy-request:
++      content:
++        transfer: plain
++        encoding: uri
++        # Same content as server-response above.
++        data: 3%0D%0Aabc%0D%0A0%0D%0ASever%3A%20ATS%0D%0AETag%3A%20%22def%22%0D%0A%0D%0A
++        verify: { as: equal }
+diff --git a/tests/gold_tests/records/gold/full_records.yaml b/tests/gold_tests/records/gold/full_records.yaml
+index 99a7e0673..cc23d51f1 100644
+--- a/tests/gold_tests/records/gold/full_records.yaml
++++ b/tests/gold_tests/records/gold/full_records.yaml
+@@ -188,6 +188,7 @@ records:
+     doc_in_cache_skip_dns: 1
+     down_server:
+       cache_time: 60
++    drop_chunked_trailers: 1
+     enable_http_stats: 1
+     enabled: 1
+     errors:
+diff --git a/tests/gold_tests/records/legacy_config/full_records.config b/tests/gold_tests/records/legacy_config/full_records.config
+index 96376c704..8b1d13c82 100644
+--- a/tests/gold_tests/records/legacy_config/full_records.config
++++ b/tests/gold_tests/records/legacy_config/full_records.config
+@@ -85,6 +85,7 @@ CONFIG proxy.config.http.keep_alive_post_out INT 1
+ CONFIG proxy.config.http.request_buffer_enabled INT 0
+ CONFIG proxy.config.http.chunking_enabled INT 1
+ CONFIG proxy.config.http.chunking.size INT 4096
++CONFIG proxy.config.http.drop_chunked_trailers INT 1
+ CONFIG proxy.config.http.flow_control.enabled INT 0
+ CONFIG proxy.config.http.flow_control.high_water INT 0
+ CONFIG proxy.config.http.flow_control.low_water INT 0
+-- 
+2.34.1
+

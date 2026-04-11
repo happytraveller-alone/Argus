@@ -1,0 +1,20 @@
+rules:
+- id: raise-not-base-exception
+  patterns:
+  - pattern-either:
+    - pattern: raise "..."
+    - pattern: '$X: BaseException
+
+        raise $X(...)
+
+        '
+  message: In Python3, a runtime `TypeError` will be thrown if you attempt to raise
+    an object or class which does not inherit from `BaseException`
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-248: Uncaught Exception'
+    - 'CWE-20: Improper Input Validation'

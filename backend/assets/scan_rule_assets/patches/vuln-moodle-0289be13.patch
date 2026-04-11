@@ -1,0 +1,89 @@
+From 0289be1321babfa588fb5b18ebb08a296eed9eee Mon Sep 17 00:00:00 2001
+From: Damyon Wiese <damyon@moodle.com>
+Date: Tue, 27 Jan 2015 23:16:10 +0800
+Subject: [PATCH] MDL-48980 Security: Always clean the result from
+ min_get_slash_argument
+
+The result from this function is used in send_file calls and if unclean
+(windows dir separators, or .. path components) it could expose sensitive
+files (e.g. .php files). Now we always clean the result from this function
+even if it means double cleaning.
+
+I also fixed the unit test for this function and added a new test for this cleaning.
+
+I also updated the comments to point to get_file_argument as the full version of
+min_get_slash_argument.
+---
+ lib/configonlylib.php            | 10 ++++++----
+ lib/tests/configonlylib_test.php | 14 ++++++++++++--
+ 2 files changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/lib/configonlylib.php b/lib/configonlylib.php
+index 36af200b59b..86568ed0cf3 100644
+--- a/lib/configonlylib.php
++++ b/lib/configonlylib.php
+@@ -171,15 +171,16 @@ function min_enable_zlib_compression() {
+  * @return string
+  */
+ function min_get_slash_argument() {
+-    // Note: This code has to work in the same cases as normal get_slash_argument(),
++    // Note: This code has to work in the same cases as normal get_file_argument(),
+     //       but at the same time it may be simpler because we do not have to deal
+     //       with encodings and other tricky stuff.
+ 
+     $relativepath = '';
+ 
+     if (!empty($_GET['file']) and strpos($_GET['file'], '/') === 0) {
+-        // server is using url rewriting, most probably IIS
+-        return $_GET['file'];
++        // Server is using url rewriting, most probably IIS.
++        // Always clean the result of this function as it may be used in unsafe calls to send_file.
++        return min_clean_param($_GET['file'], 'SAFEPATH');
+ 
+     } else if (stripos($_SERVER['SERVER_SOFTWARE'], 'iis') !== false) {
+         if (isset($_SERVER['PATH_INFO']) and $_SERVER['PATH_INFO'] !== '') {
+@@ -197,5 +198,6 @@ function min_get_slash_argument() {
+         $relativepath = $matches[1];
+     }
+ 
+-    return $relativepath;
++    // Always clean the result of this function as it may be used in unsafe calls to send_file.
++    return min_clean_param($relativepath, 'SAFEPATH');
+ }
+diff --git a/lib/tests/configonlylib_test.php b/lib/tests/configonlylib_test.php
+index ea46e3ab4bc..ef2be8247f9 100644
+--- a/lib/tests/configonlylib_test.php
++++ b/lib/tests/configonlylib_test.php
+@@ -89,11 +89,11 @@ class core_configonlylib_testcase extends advanced_testcase {
+     /**
+      * Test fail-safe minimalistic slashargument processing.
+      */
+-    public function min_get_slash_argument() {
++    public function test_min_get_slash_argument() {
+         global $CFG;
+ 
+         $this->resetAfterTest();
+-        $this->assertEquals('http://www.example.com/moode', $CFG->wwwroot);
++        $this->assertEquals('http://www.example.com/moodle', $CFG->wwwroot);
+ 
+         $_SERVER = array();
+         $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.2.22 (Unix)';
+@@ -140,5 +140,15 @@ class core_configonlylib_testcase extends advanced_testcase {
+         $_SERVER['SCRIPT_NAME'] = '/moodle/theme/image.php';
+         $_GET = array();
+         $this->assertSame('/standard/core/5/u/f1', min_get_slash_argument());
++
++        $_SERVER = array();
++        $_SERVER['SERVER_SOFTWARE'] = 'Hacker server';
++        $_SERVER['QUERY_STRING'] = '';
++        $_SERVER['REQUEST_URI'] = '/moodle/theme/image.php/standard/core/5/u/f1';
++        $_SERVER['PATH_INFO'] = '/moodle/theme/image.php/standard\\core/..\\../5/u/f1';
++        $_SERVER['SCRIPT_NAME'] = '/moodle/theme/image.php';
++        $_GET = array();
++        // Windows dir separators are removed, multiple ... gets collapsed to one .
++        $this->assertSame('/standardcore/./5/u/f1', min_get_slash_argument());
+     }
+ }
+-- 
+2.34.1
+

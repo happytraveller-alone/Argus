@@ -1,0 +1,25 @@
+From 3fbdcd81566bc72e319ec05c77cf8a4120b87b8f Mon Sep 17 00:00:00 2001
+From: Anton Tananaev <anton@traccar.org>
+Date: Thu, 4 Apr 2024 07:41:50 -0700
+Subject: [PATCH] Update device id check
+
+---
+ src/main/java/org/traccar/model/Device.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/main/java/org/traccar/model/Device.java b/src/main/java/org/traccar/model/Device.java
+index a3088a613..c2da9be79 100644
+--- a/src/main/java/org/traccar/model/Device.java
++++ b/src/main/java/org/traccar/model/Device.java
+@@ -53,7 +53,7 @@ public class Device extends GroupedModel implements Disableable, Schedulable {
+     }
+ 
+     public void setUniqueId(String uniqueId) {
+-        if (uniqueId.contains("../") || uniqueId.contains("..\\")) {
++        if (uniqueId.contains("..")) {
+             throw new IllegalArgumentException("Invalid unique id");
+         }
+         this.uniqueId = uniqueId.trim();
+-- 
+2.34.1
+

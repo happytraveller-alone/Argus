@@ -1,0 +1,61 @@
+From 5f13c2276c8b753ceb76b31d1034a47c781d302a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Sebastian=20Kurf=C3=BCrst?= <sebastian@typo3.org>
+Date: Mon, 26 Jul 2010 13:31:42 +0000
+Subject: [PATCH] [+BUGFIX] Fluid (ViewHelpers): Fixed a possible security
+ issue where the content inside the Fluid a is not properly HTML escaped.
+
+---
+ .../ViewHelpers/Form/TextareaViewHelper.php   |  2 +-
+ .../Form/TextareaViewHelperTest_testcase.php  | 23 +++++++++++++++++++
+ 2 files changed, 24 insertions(+), 1 deletion(-)
+
+diff --git a/typo3/sysext/fluid/Classes/ViewHelpers/Form/TextareaViewHelper.php b/typo3/sysext/fluid/Classes/ViewHelpers/Form/TextareaViewHelper.php
+index 55994b5a936..bd1d673ff1f 100644
+--- a/typo3/sysext/fluid/Classes/ViewHelpers/Form/TextareaViewHelper.php
++++ b/typo3/sysext/fluid/Classes/ViewHelpers/Form/TextareaViewHelper.php
+@@ -77,7 +77,7 @@ class Tx_Fluid_ViewHelpers_Form_TextareaViewHelper extends Tx_Fluid_ViewHelpers_
+ 
+ 		$this->tag->forceClosingTag(TRUE);
+ 		$this->tag->addAttribute('name', $name);
+-		$this->tag->setContent($this->getValue());
++		$this->tag->setContent(htmlspecialchars($this->getValue()));
+ 
+ 		$this->setErrorClassAttribute();
+ 
+diff --git a/typo3/sysext/fluid/Tests/Unit/ViewHelpers/Form/TextareaViewHelperTest_testcase.php b/typo3/sysext/fluid/Tests/Unit/ViewHelpers/Form/TextareaViewHelperTest_testcase.php
+index 1ffa162e6d2..5c064f67a76 100644
+--- a/typo3/sysext/fluid/Tests/Unit/ViewHelpers/Form/TextareaViewHelperTest_testcase.php
++++ b/typo3/sysext/fluid/Tests/Unit/ViewHelpers/Form/TextareaViewHelperTest_testcase.php
+@@ -89,6 +89,29 @@ class Tx_Fluid_ViewHelpers_Form_TextareaViewHelperTest_testcase extends Tx_Fluid
+ 		$this->viewHelper->expects($this->once())->method('setErrorClassAttribute');
+ 		$this->viewHelper->render();
+ 	}
++
++	/**
++	 * @test
++	 * @author Bastian Waidelich <bastian@typo3.org>
++	 */
++	public function renderEscapesTextareaContent() {
++		$mockTagBuilder = $this->getMock('Tx_Fluid_Core_ViewHelper_TagBuilder', array('addAttribute', 'setContent', 'render'), array(), '', FALSE);
++		$mockTagBuilder->expects($this->once())->method('addAttribute')->with('name', 'NameOfTextarea');
++		$this->viewHelper->expects($this->once())->method('registerFieldNameForFormTokenGeneration')->with('NameOfTextarea');
++		$mockTagBuilder->expects($this->once())->method('setContent')->with('some &lt;tag&gt; &amp; &quot;quotes&quot;');
++		$mockTagBuilder->expects($this->once())->method('render');
++		$this->viewHelper->injectTagBuilder($mockTagBuilder);
++
++		$arguments = new Tx_Fluid_Core_ViewHelper_Arguments(array(
++			'name' => 'NameOfTextarea',
++			'value' => 'some <tag> & "quotes"'
++		));
++		$this->viewHelper->setArguments($arguments);
++
++		$this->viewHelper->setViewHelperNode(new Tx_Fluid_ViewHelpers_Fixtures_EmptySyntaxTreeNode());
++		$this->viewHelper->initialize();
++		$this->viewHelper->render();
++	}
+ }
+ 
+ ?>
+-- 
+2.34.1
+

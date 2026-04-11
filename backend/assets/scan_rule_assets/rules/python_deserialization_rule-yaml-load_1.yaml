@@ -1,0 +1,52 @@
+rules:
+- id: python_deserialization_rule-yaml-load_1
+  languages:
+  - python
+  message: "The application was found using an unsafe version of `yaml` load which\
+    \ is vulnerable to\ndeserialization attacks. Deserialization attacks exploit the\
+    \ process of reading serialized\ndata and turning it back\ninto an object. By\
+    \ constructing malicious objects and serializing them, an adversary may\nattempt\
+    \ to:\n\n- Inject code that is executed upon object construction, which occurs\
+    \ during the\ndeserialization process.\n- Exploit mass assignment by including\
+    \ fields that are not normally a part of the serialized\ndata but are read in\
+    \ during deserialization.\n\nTo remediate this issue, use `safe_load()` or call\
+    \ `yaml.load()` with the `Loader` argument\nset to\n`yaml.SafeLoader`.\n\nExample\
+    \ loading YAML using `safe_load`:\n```\nimport yaml\n\n# Use safe_load to load\
+    \ data into an intermediary object\nintermediary_object = yaml.safe_load(\"\"\"\
+    user:\n    name: 'test user'\"\"\"\n)\n# Create our real object, copying over\
+    \ only the necessary fields\nuser_object = {'user': {\n        # Assign the deserialized\
+    \ data from intermediary object\n        'name': intermediary_object['user']['name'],\n\
+    \        # Add in protected data in object definition (or set it from a class\
+    \ constructor)\n        'is_admin': False,\n    }\n}\n# Work with user_object\n\
+    # ...\n```\n\nFor more details on deserialization attacks in general, see OWASP's\
+    \ guide:\n- https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html\n"
+  patterns:
+  - pattern-inside: 'import yaml
+
+      ...
+
+      '
+  - pattern-not-inside: 'from ruamel.yaml import YAML
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern: yaml.unsafe_load(...)
+    - pattern: yaml.$LD(..., Loader=yaml.$LOADER, ...)
+    - pattern: yaml.$LD($DATA)
+  - metavariable-regex:
+      metavariable: $LOADER
+      regex: (Loader|UnsafeLoader|CLoader|FullLoader)
+  - metavariable-regex:
+      metavariable: $LD
+      regex: (load|load_all)
+  metadata:
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    category: security
+    shortDescription: Deserialization of untrusted data
+    security-severity: High
+  severity: ERROR

@@ -1,0 +1,29 @@
+From 002886be0998c74c386e04f0b43688a8a45d7a96 Mon Sep 17 00:00:00 2001
+From: gondoh <gondoh@catchup.co.jp>
+Date: Fri, 10 Mar 2023 13:56:48 +0900
+Subject: [PATCH] fix CVE-2023-25654
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+戻り値が変更されてしまう挙動を修正
+---
+ lib/Baser/Model/BcAppModel.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/Baser/Model/BcAppModel.php b/lib/Baser/Model/BcAppModel.php
+index b7f967bb6..c6158a5d1 100755
+--- a/lib/Baser/Model/BcAppModel.php
++++ b/lib/Baser/Model/BcAppModel.php
+@@ -945,7 +945,7 @@ class BcAppModel extends Model
+ 		}
+ 
+ 		// 更新時の文字列チェック
+-		if (is_string($file)) {
++		if (!empty($file) && is_string($file)) {
+ 			$ext = pathinfo($file, PATHINFO_EXTENSION);
+ 			if (!in_array($ext, $exts)) {
+ 				return false;
+-- 
+2.34.1
+

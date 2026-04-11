@@ -1,0 +1,138 @@
+From 3af4fe22831be38d28df667145b0d80f471ffb7e Mon Sep 17 00:00:00 2001
+From: Sandy Maguire <sandy@sandymaguire.me>
+Date: Tue, 25 Jan 2022 13:28:49 -0800
+Subject: [PATCH] Spar Polysemy: Rename ScimTokenStore.GetByTeam ->
+ ScimTokenStore.LookupByTeam (#2068)
+
+* Rename ScimTokenStore.GetByTeam -> ScimTokenStore.LookupByTeam
+
+* changelog
+
+* CI
+---
+ changelog.d/5-internal/scimtokenstore-lookup           | 1 +
+ services/spar/src/Spar/API.hs                          | 4 ++--
+ services/spar/src/Spar/App.hs                          | 2 +-
+ services/spar/src/Spar/Scim/Auth.hs                    | 4 ++--
+ services/spar/src/Spar/Sem/ScimTokenStore.hs           | 2 +-
+ services/spar/src/Spar/Sem/ScimTokenStore/Cassandra.hs | 2 +-
+ services/spar/src/Spar/Sem/ScimTokenStore/Mem.hs       | 2 +-
+ services/spar/test-integration/Test/Spar/DataSpec.hs   | 2 +-
+ 8 files changed, 10 insertions(+), 9 deletions(-)
+ create mode 100644 changelog.d/5-internal/scimtokenstore-lookup
+
+diff --git a/changelog.d/5-internal/scimtokenstore-lookup b/changelog.d/5-internal/scimtokenstore-lookup
+new file mode 100644
+index 000000000..33fe17784
+--- /dev/null
++++ b/changelog.d/5-internal/scimtokenstore-lookup
+@@ -0,0 +1 @@
++Rename Spar.Sem.ScimTokenStore.GetByTeam to LookupByTeam
+diff --git a/services/spar/src/Spar/API.hs b/services/spar/src/Spar/API.hs
+index 023bae339..a5759c754 100644
+--- a/services/spar/src/Spar/API.hs
++++ b/services/spar/src/Spar/API.hs
+@@ -473,7 +473,7 @@ idpDelete zusr idpid (fromMaybe False -> purge) = withDebugLog "idpDelete" (cons
+   -- Delete tokens associated with given IdP (we rely on the fact that
+   -- each IdP has exactly one team so we can look up all tokens
+   -- associated with the team and then filter them)
+-  tokens <- ScimTokenStore.getByTeam team
++  tokens <- ScimTokenStore.lookupByTeam team
+   for_ tokens $ \ScimTokenInfo {..} ->
+     when (stiIdP == Just idpid) $ ScimTokenStore.delete team stiId
+   -- Delete IdP config
+@@ -565,7 +565,7 @@ assertNoScimOrNoIdP ::
+   TeamId ->
+   Sem r ()
+ assertNoScimOrNoIdP teamid = do
+-  numTokens <- length <$> ScimTokenStore.getByTeam teamid
++  numTokens <- length <$> ScimTokenStore.lookupByTeam teamid
+   numIdps <- length <$> IdPEffect.getConfigsByTeam teamid
+   when (numTokens > 0 && numIdps > 0) $ do
+     throwSparSem $
+diff --git a/services/spar/src/Spar/App.hs b/services/spar/src/Spar/App.hs
+index 3273037ea..1c0fdcc4e 100644
+--- a/services/spar/src/Spar/App.hs
++++ b/services/spar/src/Spar/App.hs
+@@ -294,7 +294,7 @@ autoprovisionSamlUserWithId mbteam buid suid = do
+     guardScimTokens :: IdP -> Sem r ()
+     guardScimTokens idp = do
+       let teamid = idp ^. idpExtraInfo . wiTeam
+-      scimtoks <- ScimTokenStore.getByTeam teamid
++      scimtoks <- ScimTokenStore.lookupByTeam teamid
+       unless (null scimtoks) $ do
+         throwSparSem SparSamlCredentialsNotFound
+ 
+diff --git a/services/spar/src/Spar/Scim/Auth.hs b/services/spar/src/Spar/Scim/Auth.hs
+index 1ec68979f..3b48bbccc 100644
+--- a/services/spar/src/Spar/Scim/Auth.hs
++++ b/services/spar/src/Spar/Scim/Auth.hs
+@@ -128,7 +128,7 @@ createScimToken zusr CreateScimToken {..} = do
+   let descr = createScimTokenDescr
+   teamid <- Intra.Brig.authorizeScimTokenManagement zusr
+   BrigAccess.ensureReAuthorised zusr createScimTokenPassword
+-  tokenNumber <- fmap length $ ScimTokenStore.getByTeam teamid
++  tokenNumber <- fmap length $ ScimTokenStore.lookupByTeam teamid
+   maxTokens <- inputs maxScimTokens
+   unless (tokenNumber < maxTokens) $
+     throwSparSem E.SparProvisioningTokenLimitReached
+@@ -190,4 +190,4 @@ listScimTokens ::
+   Sem r ScimTokenList
+ listScimTokens zusr = do
+   teamid <- Intra.Brig.authorizeScimTokenManagement zusr
+-  ScimTokenList <$> ScimTokenStore.getByTeam teamid
++  ScimTokenList <$> ScimTokenStore.lookupByTeam teamid
+diff --git a/services/spar/src/Spar/Sem/ScimTokenStore.hs b/services/spar/src/Spar/Sem/ScimTokenStore.hs
+index 9389a4990..0cafcfd29 100644
+--- a/services/spar/src/Spar/Sem/ScimTokenStore.hs
++++ b/services/spar/src/Spar/Sem/ScimTokenStore.hs
+@@ -25,7 +25,7 @@ import Wire.API.User.Scim
+ data ScimTokenStore m a where
+   Insert :: ScimToken -> ScimTokenInfo -> ScimTokenStore m ()
+   Lookup :: ScimToken -> ScimTokenStore m (Maybe ScimTokenInfo)
+-  GetByTeam :: TeamId -> ScimTokenStore m [ScimTokenInfo]
++  LookupByTeam :: TeamId -> ScimTokenStore m [ScimTokenInfo]
+   Delete :: TeamId -> ScimTokenId -> ScimTokenStore m ()
+   DeleteByTeam :: TeamId -> ScimTokenStore m ()
+ 
+diff --git a/services/spar/src/Spar/Sem/ScimTokenStore/Cassandra.hs b/services/spar/src/Spar/Sem/ScimTokenStore/Cassandra.hs
+index b3bc39982..4b9b7a1ee 100644
+--- a/services/spar/src/Spar/Sem/ScimTokenStore/Cassandra.hs
++++ b/services/spar/src/Spar/Sem/ScimTokenStore/Cassandra.hs
+@@ -45,7 +45,7 @@ scimTokenStoreToCassandra =
+     embed @m . \case
+       Insert st sti -> insertScimToken st sti
+       Lookup st -> lookupScimToken st
+-      GetByTeam tid -> getScimTokens tid
++      LookupByTeam tid -> getScimTokens tid
+       Delete tid ur -> deleteScimToken tid ur
+       DeleteByTeam tid -> deleteTeamScimTokens tid
+ 
+diff --git a/services/spar/src/Spar/Sem/ScimTokenStore/Mem.hs b/services/spar/src/Spar/Sem/ScimTokenStore/Mem.hs
+index 211a27b65..c815f8230 100644
+--- a/services/spar/src/Spar/Sem/ScimTokenStore/Mem.hs
++++ b/services/spar/src/Spar/Sem/ScimTokenStore/Mem.hs
+@@ -33,6 +33,6 @@ scimTokenStoreToMem = (runState mempty .) $
+   reinterpret $ \case
+     Insert st sti -> modify $ M.insert st sti
+     Lookup st -> gets $ M.lookup st
+-    GetByTeam tid -> gets $ filter ((== tid) . stiTeam) . M.elems
++    LookupByTeam tid -> gets $ filter ((== tid) . stiTeam) . M.elems
+     Delete tid stid -> modify $ M.filter $ \sti -> not $ stiTeam sti == tid && stiId sti == stid
+     DeleteByTeam tid -> modify $ M.filter (not . (== tid) . stiTeam)
+diff --git a/services/spar/test-integration/Test/Spar/DataSpec.hs b/services/spar/test-integration/Test/Spar/DataSpec.hs
+index 6457dd529..c29b402ba 100644
+--- a/services/spar/test-integration/Test/Spar/DataSpec.hs
++++ b/services/spar/test-integration/Test/Spar/DataSpec.hs
+@@ -285,7 +285,7 @@ testDeleteTeam = it "cleans up all the right tables after deletion" $ do
+     liftIO $ tokenInfo `shouldBe` Nothing
+   -- The team from 'team_provisioning_by_team':
+   do
+-    tokens <- runSpar $ ScimTokenStore.getByTeam tid
++    tokens <- runSpar $ ScimTokenStore.lookupByTeam tid
+     liftIO $ tokens `shouldBe` []
+   -- The users from 'user':
+   do
+-- 
+2.34.1
+

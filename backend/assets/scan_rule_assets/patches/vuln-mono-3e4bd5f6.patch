@@ -1,0 +1,89 @@
+From 3e4bd5f6e0dfc74907b40cdefcf91ee3a791876b Mon Sep 17 00:00:00 2001
+From: Marek Habersack <grendel@twistedcode.net>
+Date: Wed, 17 Oct 2007 21:27:58 +0000
+Subject: [PATCH] 2007-10-17  Marek Habersack  <mhabersack@novell.com>
+
+	* StaticFileHandler.cs: fixed an bug with Mono running under
+	Windows operating systems which caused XSP to return source of the
+	requested page if the file name used in the request ended in any
+	number of spaces or dots. The problem lies in the way the Win32
+	subsystem treats such file names - it ignores the trailing
+	characters and allows the calling application to open a file on
+	disk even when its name does not contain the trailing characters
+	used in the open request. Such file names may be supported by the
+	underlying filesystem (e.g. NTFS) but they are not supported by
+	the I/O Win32 subsystem. The security issue is reported in
+	CVE security report CVE-2007-5473. Fixes bug #332401
+
+svn path=/trunk/mcs/; revision=87715
+---
+ mcs/class/System.Web/System.Web/ChangeLog     | 14 ++++++++++++
+ .../System.Web/StaticFileHandler.cs           | 22 ++++++++++++++++++-
+ 2 files changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/mcs/class/System.Web/System.Web/ChangeLog b/mcs/class/System.Web/System.Web/ChangeLog
+index b41df27f60697..7613e306371b3 100644
+--- a/mcs/class/System.Web/System.Web/ChangeLog
++++ b/mcs/class/System.Web/System.Web/ChangeLog
+@@ -1,3 +1,17 @@
++2007-10-17  Marek Habersack  <mhabersack@novell.com>
++
++	* StaticFileHandler.cs: fixed an bug with Mono running under
++	Windows operating systems which caused XSP to return source of the
++	requested page if the file name used in the request ended in any
++	number of spaces or dots. The problem lies in the way the Win32
++	subsystem treats such file names - it ignores the trailing
++	characters and allows the calling application to open a file on
++	disk even when its name does not contain the trailing characters
++	used in the open request. Such file names may be supported by the
++	underlying filesystem (e.g. NTFS) but they are not supported by
++	the I/O Win32 subsystem. The security issue is reported in
++	CVE security report CVE-2007-5473. Fixes bug #332401
++	
+ 2007-10-17  Igor Zelmanovich <igorz@mainsoft.com>
+ 
+ 	* HttpResponse.cs:
+diff --git a/mcs/class/System.Web/System.Web/StaticFileHandler.cs b/mcs/class/System.Web/System.Web/StaticFileHandler.cs
+index 2d90e43ba2ae1..224fab57e5720 100644
+--- a/mcs/class/System.Web/System.Web/StaticFileHandler.cs
++++ b/mcs/class/System.Web/System.Web/StaticFileHandler.cs
+@@ -31,18 +31,38 @@
+ using System;
+ using System.Globalization;
+ using System.IO;
++using System.Web.Util;
+ 
+ namespace System.Web
+ {
+ 	class StaticFileHandler : IHttpHandler
+ 	{
++		static bool runningWindows = RunningOnWindows ();
++
++		static bool RunningOnWindows ()
++		{
++			int pid = (int)Environment.OSVersion.Platform;
++			return (pid != 4 && pid != 128);
++		}
++
++		static bool ValidFileName (string fileName)
++		{
++			if (!runningWindows)
++				return true;
++
++			if (fileName == null || fileName.Length == 0)
++				return false;
++
++			return (!StrUtils.EndsWith (fileName, " ") && !StrUtils.EndsWith (fileName, "."));
++		}
++		
+ 		public void ProcessRequest (HttpContext context)
+ 		{
+ 			HttpRequest request = context.Request;
+ 			HttpResponse response = context.Response;
+ 			string fileName = request.PhysicalPath;
+ 			FileInfo fi = new FileInfo (fileName);
+-			if (!fi.Exists)
++			if (!fi.Exists || !ValidFileName (fileName))
+ 				throw new HttpException (404, "File '" + request.FilePath + "' not found.");
+ 
+ 			if ((fi.Attributes & FileAttributes.Directory) != 0) {

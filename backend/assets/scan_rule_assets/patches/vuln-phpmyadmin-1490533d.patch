@@ -1,0 +1,39 @@
+From 1490533d91e9d3820e78ca4eac7981886eaea2cb Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Mon, 21 Nov 2011 18:08:49 -0500
+Subject: [PATCH] [security] Self-XSS on database names (Operations/rename),
+ see PMASA-2011-18
+
+---
+ ChangeLog           | 1 +
+ js/db_operations.js | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index e1bae5965b..be1e9ead4e 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -20,6 +20,7 @@ phpMyAdmin - ChangeLog
+ - bug #3425156 [interface] Add column after drop
+ - [interface] Avoid showing the password in phpinfo()'s output
+ - [security] Self-XSS on database names (Synchronize), see PMASA-2011-18
++- [security] Self-XSS on database names (Operations/rename), see PMASA-2011-18
+ 
+ 3.4.7.1 (2011-11-10)
+ - [security] Fixed possible local file inclusion in XML import
+diff --git a/js/db_operations.js b/js/db_operations.js
+index b0536942c9..ad39635354 100644
+--- a/js/db_operations.js
++++ b/js/db_operations.js
+@@ -32,7 +32,7 @@ $(document).ready(function() {
+ 
+         var $form = $(this);
+ 
+-        var question = 'CREATE DATABASE ' + $('#new_db_name').val() + ' / DROP DATABASE ' + window.parent.db;
++        var question = escapeHtml('CREATE DATABASE ' + $('#new_db_name').val() + ' / DROP DATABASE ' + window.parent.db);
+ 
+         PMA_prepareForAjaxRequest($form);
+         /**
+-- 
+2.34.1
+

@@ -1,0 +1,112 @@
+rules:
+- id: vm2-context-injection
+  message: 'Make sure that unverified user data can not reach `vm2`.
+
+    '
+  severity: WARNING
+  languages:
+  - javascript
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-94: Improper Control of Generation of Code (Code Injection)'
+  patterns:
+  - pattern-inside: '...
+
+      $VM = require(''vm2'');
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  new VM({sandbox: <... $INPUT\
+        \ ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... {$NAME:$INPUT}\
+        \ ...>;\n  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n \
+        \ ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  new VM({sandbox: <...\
+        \ $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $OPTS = {sandbox: <... $INPUT\
+        \ ...>};\n  ...\n  new VM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n \
+        \ ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  $OPTS = {sandbox: <...\
+        \ $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  new VM({sandbox: <... $INPUT\
+        \ ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... {$NAME:$INPUT}\
+        \ ...>;\n  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  new VM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n\
+        \  ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  new VM({sandbox: <...\
+        \ $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $OPTS = {sandbox: <... $INPUT\
+        \ ...>};\n  ...\n  new VM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n\
+        \  ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  $OPTS = {sandbox:\
+        \ <... $CONTEXT ...>};\n  ...\n  new VM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  new NodeVM({sandbox: <... $INPUT\
+        \ ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... {$NAME:$INPUT}\
+        \ ...>;\n  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n\
+        }\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n\
+        }\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n \
+        \ ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  new NodeVM({sandbox:\
+        \ <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $OPTS = {sandbox: <... $INPUT\
+        \ ...>};\n  ...\n  new NodeVM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function (...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n \
+        \ ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  $OPTS = {sandbox: <...\
+        \ $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  new NodeVM({sandbox: <...\
+        \ $INPUT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... {$NAME:$INPUT}\
+        \ ...>;\n  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n\
+        }\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  new NodeVM({sandbox: <... $CONTEXT ...>},...);\n  ...\n\
+        }\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n\
+        \  ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  new NodeVM({sandbox:\
+        \ <... $CONTEXT ...>},...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $OPTS = {sandbox: <... $INPUT\
+        \ ...>};\n  ...\n  new NodeVM($OPTS,...);\n  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = <... $INPUT ...>;\n\
+        \  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $CONTEXT = {$NAME: <... $INPUT\
+        \ ...>};\n  ...\n  $OPTS = {sandbox: <... $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n\
+        \  ...\n}\n"
+    - pattern: "function $F(...,$INPUT,...) {\n  ...\n  $VAR = <... $INPUT ...>;\n\
+        \  ...\n  $CONTEXT = {$NAME: <... $VAR ...>};\n  ...\n  $OPTS = {sandbox:\
+        \ <... $CONTEXT ...>};\n  ...\n  new NodeVM($OPTS,...);\n  ...\n}"

@@ -1,0 +1,168 @@
+From 020fdac4abc50fa410fc7ad3255f68d871c651ad Mon Sep 17 00:00:00 2001
+From: Daniel Lobato <elobatocs@gmail.com>
+Date: Tue, 12 Jul 2016 20:42:38 +0200
+Subject: [PATCH] Fixes #15653 - CVE-2016-5390 fix permissions for host API
+
+Non-admin users with the view_hosts permission containing a filter are
+able to access API routes beneath "hosts" such as GET
+/api/v2/hosts/secrethost/interfaces without the filter being taken into
+account. This allows users to access network interface details
+(including BMC login details) for any host.
+
+The filter is only correctly used when accessing the main host details
+(/api/v2/hosts/secrethost). Access to the "nested" routes, which
+includes interfaces, reports, parameters, audits, facts and Puppet
+classes, is not authorized beyond requiring any view_hosts permission.
+
+(cherry picked from commit 7a86dcfe6b36dd43cd6163ce70599e53f09cc217)
+---
+ app/controllers/concerns/find_common.rb       | 10 ++--
+ .../api/base_controller_subclass_test.rb      | 53 +++++++++++++------
+ .../api/v2/interfaces_controller_test.rb      | 14 +++++
+ .../api/v2/parameters_controller_test.rb      | 16 ++++++
+ 4 files changed, 71 insertions(+), 22 deletions(-)
+
+diff --git a/app/controllers/concerns/find_common.rb b/app/controllers/concerns/find_common.rb
+index 390ba0419..fd2f7b320 100644
+--- a/app/controllers/concerns/find_common.rb
++++ b/app/controllers/concerns/find_common.rb
+@@ -48,10 +48,10 @@ module FindCommon
+   end
+ 
+   def resource_class_for(resource)
+-    begin
+-      return resource.classify.constantize
+-    rescue NameError
+-      return nil
+-    end
++    klass = resource.classify.constantize
++    return Host::Managed if klass == Host
++    klass
++  rescue NameError
++    nil
+   end
+ end
+diff --git a/test/functional/api/base_controller_subclass_test.rb b/test/functional/api/base_controller_subclass_test.rb
+index 4b9ac2c96..5a031b783 100644
+--- a/test/functional/api/base_controller_subclass_test.rb
++++ b/test/functional/api/base_controller_subclass_test.rb
+@@ -220,32 +220,51 @@ class Api::TestableControllerTest < ActionController::TestCase
+         @testable_scope2.stubs(:merge).returns(@testable_scope1)
+         @child_associacion.stubs(:merge).returns(@testable_scope1)
+         @testable_scope1.stubs(:readonly).returns(@testable_scope1)
+-        @testable_scope1.expects(:find).with('1').returns(@testable_obj)
+-        @testable_scope1.expects(:empty?).returns(false)
+         Testable.stubs(:joins).returns(@child_associacion)
+       end
+ 
+-      it 'should return nested resource for unauthorized resource' do
+-        Testable.stubs(:where).returns(@testable_scope2)
+-        Testable.stubs(:scoped).returns(@testable_scope2)
++      context 'resouce scope mocks' do
++        setup do
++          @testable_scope1.expects(:find).with('1').returns(@testable_obj)
++          @testable_scope1.expects(:empty?).returns(false)
++        end
+ 
+-        get :nested_values, :domain_id => 1, :id => 1
++        it 'should return nested resource for unauthorized resource' do
++          Testable.stubs(:where).returns(@testable_scope2)
++          Testable.stubs(:scoped).returns(@testable_scope2)
+ 
+-        assert_equal @testable_obj, @controller.instance_variable_get('@testable')
+-        assert_equal @nested_obj, @controller.instance_variable_get('@nested_obj')
+-      end
++          get :nested_values, :domain_id => 1, :id => 1
++
++          assert_equal @testable_obj, @controller.instance_variable_get('@testable')
++          assert_equal @nested_obj, @controller.instance_variable_get('@nested_obj')
++        end
+ 
+-      it 'should return nested resource scope for authorized resource' do
+-        child_auth_scope = mock('child_auth_scope')
++        it 'should return nested resource scope for authorized resource' do
++          child_auth_scope = mock('child_auth_scope')
+ 
+-        Testable.stubs(:authorized).returns(child_auth_scope)
+-        child_auth_scope.stubs(:where).returns(@testable_scope2)
+-        child_auth_scope.stubs(:scoped).returns(@testable_scope2)
++          Testable.stubs(:authorized).returns(child_auth_scope)
++          child_auth_scope.stubs(:where).returns(@testable_scope2)
++          child_auth_scope.stubs(:scoped).returns(@testable_scope2)
+ 
+-        get :nested_values, :domain_id => 1, :id => 1
++          get :nested_values, :domain_id => 1, :id => 1
++
++          assert_equal @testable_obj, @controller.instance_variable_get('@testable')
++          assert_equal @nested_obj, @controller.instance_variable_get('@nested_obj')
++        end
++      end
+ 
+-        assert_equal @testable_obj, @controller.instance_variable_get('@testable')
+-        assert_equal @nested_obj, @controller.instance_variable_get('@nested_obj')
++      context 'check authorized for nested resources' do
++        it 'checks Host::Managed scope when :host_id is passed' do
++          Host::Managed.expects(:authorized)
++          get :nested_values, :host_id => 1, :id => 1
++        end
++
++        it 'determines class properly from resource_id parameter' do
++          Domain.expects(:authorized)
++          get :nested_values, :domain_id => 1, :id => 1
++          Subnet.expects(:authorized)
++          get :nested_values, :subnet_id => 1, :id => 1
++        end
+       end
+     end
+   end
+diff --git a/test/functional/api/v2/interfaces_controller_test.rb b/test/functional/api/v2/interfaces_controller_test.rb
+index b0ec10184..60049d7c7 100644
+--- a/test/functional/api/v2/interfaces_controller_test.rb
++++ b/test/functional/api/v2/interfaces_controller_test.rb
+@@ -64,4 +64,18 @@ class Api::V2::InterfacesControllerTest < ActionController::TestCase
+     end
+     assert_response :success
+   end
++
++  context 'permissions' do
++    test 'user with permissions to view host can also view its interfaces' do
++      setup_user 'view', 'hosts', "name = #{@host.name}"
++      get :index, { :host_id => @host.name }, set_session_user
++      assert_response :success
++    end
++
++    test 'user without permissions to view host cannot view interfaces' do
++      setup_user 'view', 'hosts', "name = some.other.host"
++      get :index, { :host_id => @host.name }, set_session_user
++      assert_response :not_found
++    end
++  end
+ end
+diff --git a/test/functional/api/v2/parameters_controller_test.rb b/test/functional/api/v2/parameters_controller_test.rb
+index b67a71599..cdd4de2f9 100644
+--- a/test/functional/api/v2/parameters_controller_test.rb
++++ b/test/functional/api/v2/parameters_controller_test.rb
+@@ -246,4 +246,20 @@ class Api::V2::ParametersControllerTest < ActionController::TestCase
+       assert_filtering_works :operatingsystem, operatingsystems(:redhat).to_param
+     end
+   end
++
++  context 'permissions' do
++    test 'user with permissions to view host can also view its parameters' do
++      setup_user 'view', 'domains'
++      setup_user 'view', 'hosts', "name = #{@host.name}"
++      get :index, { :host_id => @host.name }, set_session_user
++      assert_response :success
++    end
++
++    test 'user without permissions to view host cannot view parameters' do
++      setup_user 'view', 'domains'
++      setup_user 'view', 'hosts', "name = some.other.host"
++      get :index, { :host_id => @host.name }, set_session_user
++      assert_response :not_found
++    end
++  end
+ end
+-- 
+2.34.1
+

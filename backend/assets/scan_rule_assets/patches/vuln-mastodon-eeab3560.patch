@@ -1,0 +1,38 @@
+From eeab3560fc0516070b3fb97e089b15ecab1938c8 Mon Sep 17 00:00:00 2001
+From: Claire <claire.github-309c@sitedethib.com>
+Date: Tue, 19 Sep 2023 16:53:58 +0200
+Subject: [PATCH] Merge pull request from GHSA-v3xf-c9qf-j667
+
+---
+ app/lib/tag_manager.rb | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/app/lib/tag_manager.rb b/app/lib/tag_manager.rb
+index f1b61ff4f..c1bd2973e 100644
+--- a/app/lib/tag_manager.rb
++++ b/app/lib/tag_manager.rb
+@@ -7,18 +7,18 @@ class TagManager
+   include RoutingHelper
+ 
+   def web_domain?(domain)
+-    domain.nil? || domain.delete('/').casecmp(Rails.configuration.x.web_domain).zero?
++    domain.nil? || domain.delete_suffix('/').casecmp(Rails.configuration.x.web_domain).zero?
+   end
+ 
+   def local_domain?(domain)
+-    domain.nil? || domain.delete('/').casecmp(Rails.configuration.x.local_domain).zero?
++    domain.nil? || domain.delete_suffix('/').casecmp(Rails.configuration.x.local_domain).zero?
+   end
+ 
+   def normalize_domain(domain)
+     return if domain.nil?
+ 
+     uri = Addressable::URI.new
+-    uri.host = domain.delete('/')
++    uri.host = domain.delete_suffix('/')
+     uri.normalized_host
+   end
+ 
+-- 
+2.34.1
+

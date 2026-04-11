@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="NullAssignment Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for NullAssignment</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="NullAssignment" language="java" since="1.02" message="Assigning an Object to null is a code smell.  Consider refactoring." class="net.sourceforge.pmd.lang.java.rule.errorprone.NullAssignmentRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#nullassignment">
+            <description>
+    Assigning a "null" to a variable (outside of its declaration) is usually bad form.  Sometimes, this type
+    of assignment is an indication that the programmer doesn't completely understand what is going on in the code.
+
+    NOTE: This sort of assignment may used in some cases to dereference objects and encourage garbage collection.
+            </description>
+            <priority>3</priority>
+            <example>
+     
+    public void bar() {
+      Object x = null; // this is OK
+      x = new Object();
+         // big, complex piece of code here
+      x = null; // this is not required
+         // big, complex piece of code here
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

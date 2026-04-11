@@ -1,0 +1,57 @@
+From efc75c28e89fe864cf0412d5a5f0b4a451e14509 Mon Sep 17 00:00:00 2001
+From: Hugo Lefeuvre <hle@debian.org>
+Date: Fri, 25 May 2018 22:39:12 -0400
+Subject: [PATCH] decompile: fix buffer-overflow in getString
+
+getString prints a 32 bit integer to a 10 char buffer, but the number
+itself has 10 digits so there's an overflow.
+
+Similar to #116, same fix.
+
+Fixes #111, CVE-2018-7873.
+---
+ NEWS             |  1 +
+ util/decompile.c | 14 ++++++++++++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/NEWS b/NEWS
+index 0a946b00..a40acd69 100644
+--- a/NEWS
++++ b/NEWS
+@@ -46,6 +46,7 @@
+   * Fix null pointer dereference in getInt (CVE-2018-9132, issue #133).
+   * Fix heap-use-after-free in decompileJUMP (CVE-2018-9009, issue #131).
+   * Fix memory exhaustion in parseSWF_ACTIONRECORD (CVE-2018-7876, #109).
++  * Fix heap-buffer-overflow in function getString (CVE-2018-7873, #111).
+ 
+ 0.4.8 - 2017-04-07
+ 
+diff --git a/util/decompile.c b/util/decompile.c
+index fa6ba168..00bcc514 100644
+--- a/util/decompile.c
++++ b/util/decompile.c
+@@ -358,9 +358,19 @@ getString(struct SWF_ACTIONPUSHPARAM *act)
+ 		return t;
+ 	}
+ 	case PUSH_INT: /* INTEGER */
+-		t=malloc(10); /* 32-bit decimal */
+-		sprintf(t,"%ld", act->p.Integer );
++	{
++		char length_finder[1];
++		int needed_length = snprintf(length_finder, 1, "%ld", act->p.Integer) + 1;
++		if (needed_length <= 0)
++		{
++		        SWF_warn("WARNING: could not evaluate size of buffer (memory issue ?).\n");
++		        break;
++		}
++
++		t = malloc(needed_length);
++		sprintf(t, "%ld", act->p.Integer );
+ 		return t;
++	}
+ 	case PUSH_CONSTANT: /* CONSTANT8 */
+ 		if (act->p.Constant8 > poolcounter)
+ 		{
+-- 
+2.34.1
+

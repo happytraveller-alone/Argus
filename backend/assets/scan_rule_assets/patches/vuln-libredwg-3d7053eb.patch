@@ -1,0 +1,35 @@
+From 3d7053eb248036dd9a724d08a17523d35617dcf3 Mon Sep 17 00:00:00 2001
+From: Reini Urban <rurban@cpan.org>
+Date: Tue, 23 Apr 2019 08:19:36 +0200
+Subject: [PATCH] dxf: protect invalid LTYPE_BYBLOCK
+
+check LTYPE header reference for the correct type.
+Fixes case dwg_dxf_LTYPE@dwg.spec:2523-11___heap-buffer-overflow at #99
+---
+ src/out_dxf.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/out_dxf.c b/src/out_dxf.c
+index 5983f22f..4e66f69e 100644
+--- a/src/out_dxf.c
++++ b/src/out_dxf.c
+@@ -1805,11 +1805,13 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
+         COMMON_TABLE_CONTROL_FLAGS;
+         error |= dwg_dxf_LTYPE_CONTROL (dat, ctrl);
+         // first the 2 builtin ltypes: ByBlock, ByLayer
+-        if ((obj = dwg_ref_object (dwg, dwg->header_vars.LTYPE_BYBLOCK)))
++        if ((obj = dwg_ref_object (dwg, dwg->header_vars.LTYPE_BYBLOCK))
++            && obj->type == DWG_TYPE_LTYPE)
+           {
+-            dwg_dxf_LTYPE (dat, obj);
++            error |= dwg_dxf_LTYPE (dat, obj);
+           }
+-        if ((obj = dwg_ref_object (dwg, dwg->header_vars.LTYPE_BYLAYER)))
++        if ((obj = dwg_ref_object (dwg, dwg->header_vars.LTYPE_BYLAYER))
++            && obj->type == DWG_TYPE_LTYPE)
+           {
+             error |= dwg_dxf_LTYPE (dat, obj);
+           }
+-- 
+2.34.1
+

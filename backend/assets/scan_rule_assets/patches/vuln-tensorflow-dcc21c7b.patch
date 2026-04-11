@@ -1,0 +1,31 @@
+From dcc21c7bc972b10b6fb95c2fb0f4ab5a59680ec2 Mon Sep 17 00:00:00 2001
+From: Mihai Maruseac <mihaimaruseac@google.com>
+Date: Fri, 12 Nov 2021 08:19:38 -0800
+Subject: [PATCH] Eliminate debug `CHECK`-fail from `function.cc`
+
+PiperOrigin-RevId: 409416119
+Change-Id: I8376ee464d434e9b970ff0ad49edfdaa2a273cfe
+---
+ tensorflow/core/framework/function.cc | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/tensorflow/core/framework/function.cc b/tensorflow/core/framework/function.cc
+index 492d9d54fe6..b8318ef346a 100644
+--- a/tensorflow/core/framework/function.cc
++++ b/tensorflow/core/framework/function.cc
+@@ -191,7 +191,11 @@ class FunctionInstantiationHelper {
+     for (size_t i = 0; i < dtypes.size(); ++i) {
+       TF_RETURN_IF_ERROR(AddItem(strings::StrCat(arg_def.name(), ":", i),
+                                  {true, arg_index, 0, false, {dtypes[i]}}));
+-      DCHECK_EQ(arg_index, result_.nodes.size());
++      if (arg_index != result_.nodes.size()) {
++        return errors::Internal(
++            "Expected arg_index to be equal to the number of nodes in result.",
++            " Got ", arg_index, " and ", result_.nodes.size());
++      }
+       string name = arg_def.name();
+       if (dtypes.size() > 1) {
+         strings::StrAppend(&name, "_", i);
+-- 
+2.34.1
+

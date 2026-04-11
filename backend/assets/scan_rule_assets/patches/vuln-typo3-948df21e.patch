@@ -1,0 +1,182 @@
+From 948df21e45cf8beffa3d472e5c06f2f84833e432 Mon Sep 17 00:00:00 2001
+From: Frank Naegler <frank.naegler@typo3.org>
+Date: Tue, 17 Dec 2019 10:53:17 +0100
+Subject: [PATCH] [SECURITY] Prevent SQLi in ext:lowlevel QueryGenerator
+
+Resolves: #89452
+Releases: master, 9.5, 8.7
+Security-Commit: d73e50f02afc5459f737282ede6cc70579fe7181
+Security-Bulletin: TYPO3-CORE-SA-2019-025
+Change-Id: I55afb17f4b1509a3dfc945e28e5d35671f6c28f3
+Reviewed-on: https://review.typo3.org/c/Packages/TYPO3.CMS/+/62719
+Tested-by: Oliver Hader <oliver.hader@typo3.org>
+Reviewed-by: Oliver Hader <oliver.hader@typo3.org>
+---
+ .../core/Classes/Database/QueryGenerator.php  |  8 +-
+ .../core/Classes/Database/QueryView.php       |  2 +-
+ .../Database/QueryGeneratorTest.php           | 98 +++++++++++++++++++
+ 3 files changed, 105 insertions(+), 3 deletions(-)
+
+diff --git a/typo3/sysext/core/Classes/Database/QueryGenerator.php b/typo3/sysext/core/Classes/Database/QueryGenerator.php
+index b18343a5d6..ebde4ec803 100644
+--- a/typo3/sysext/core/Classes/Database/QueryGenerator.php
++++ b/typo3/sysext/core/Classes/Database/QueryGenerator.php
+@@ -1312,14 +1312,18 @@ class QueryGenerator
+         $prefix = $this->enablePrefix ? $this->table . '.' : '';
+         if (!$first) {
+             // Is it OK to insert the AND operator if none is set?
+-            $qs .= trim($conf['operator'] ?: 'AND') . ' ';
++            $operator = strtoupper(trim($conf['operator']));
++            if (!in_array($operator, ['AND', 'OR'], true)) {
++                $operator = 'AND';
++            }
++            $qs .= $operator . ' ';
+         }
+         $qsTmp = str_replace('#FIELD#', $prefix . trim(substr($conf['type'], 6)), $this->compSQL[$conf['comparison']]);
+         $inputVal = $this->cleanInputVal($conf);
+         if ($conf['comparison'] === 68 || $conf['comparison'] === 69) {
+             $inputVal = explode(',', $inputVal);
+             foreach ($inputVal as $key => $fileName) {
+-                $inputVal[$key] = '\'' . $fileName . '\'';
++                $inputVal[$key] = $queryBuilder->quote($fileName);
+             }
+             $inputVal = implode(',', $inputVal);
+             $qsTmp = str_replace('#VALUE#', $inputVal, $qsTmp);
+diff --git a/typo3/sysext/core/Classes/Database/QueryView.php b/typo3/sysext/core/Classes/Database/QueryView.php
+index 188ed67def..9ad2356f85 100644
+--- a/typo3/sysext/core/Classes/Database/QueryView.php
++++ b/typo3/sysext/core/Classes/Database/QueryView.php
+@@ -254,7 +254,7 @@ class QueryView
+             }
+             // Show query
+             if ($saveArr['queryTable']) {
+-                /** @var \TYPO3\CMS\Core\Database\QueryGenerator */
++                /** @var $queryGenerator \TYPO3\CMS\Core\Database\QueryGenerator */
+                 $queryGenerator = GeneralUtility::makeInstance(QueryGenerator::class);
+                 $queryGenerator->init('queryConfig', $saveArr['queryTable']);
+                 $queryGenerator->makeSelectorTable($saveArr);
+diff --git a/typo3/sysext/core/Tests/Functional/Database/QueryGeneratorTest.php b/typo3/sysext/core/Tests/Functional/Database/QueryGeneratorTest.php
+index 7eabb70bce..267b335c2f 100644
+--- a/typo3/sysext/core/Tests/Functional/Database/QueryGeneratorTest.php
++++ b/typo3/sysext/core/Tests/Functional/Database/QueryGeneratorTest.php
+@@ -16,7 +16,10 @@ namespace TYPO3\CMS\Core\Tests\Functional\Database;
+  * The TYPO3 project - inspiring people to share!
+  */
+ 
++use TYPO3\CMS\Core\Database\ConnectionPool;
+ use TYPO3\CMS\Core\Database\QueryGenerator;
++use TYPO3\CMS\Core\Localization\LanguageService;
++use TYPO3\CMS\Core\Utility\GeneralUtility;
+ use TYPO3\TestingFramework\Core\Functional\FunctionalTestCase;
+ 
+ /**
+@@ -24,6 +27,13 @@ use TYPO3\TestingFramework\Core\Functional\FunctionalTestCase;
+  */
+ class QueryGeneratorTest extends FunctionalTestCase
+ {
++    protected function setUp(): void
++    {
++        parent::setUp();
++        $this->setUpBackendUserFromFixture(1);
++        $GLOBALS['LANG'] = new LanguageService();
++    }
++
+     /**
+      * @test
+      */
+@@ -326,4 +336,92 @@ class QueryGeneratorTest extends FunctionalTestCase
+         $queryGenerator->init('queryConfig', 'aTable');
+         self::assertSame($expected, trim($queryGenerator->getQuery($inputConf), "\n\r"));
+     }
++
++    public function arbitraryDataIsEscapedDataProvider(): array
++    {
++        $dataSet = [];
++        $injectors = [
++            // INJ'ECT
++            'INJ%quoteCharacter%ECT',
++            // INJ '--
++            // ' ECT
++            'INJ %quoteCharacter%%commentStart% %commentEnd%%quoteCharacter% ECT'
++        ];
++        $comparisons = array_keys((new QueryGenerator())->compSQL);
++        foreach ($injectors as $injector) {
++            foreach ($comparisons as $comparison) {
++                $dataSet[] = [
++                    $injector,
++                    [
++                        'queryTable' => 'tt_content',
++                        'queryFields' => 'uid,' . $injector,
++                        'queryGroup' => $injector,
++                        'queryOrder' => $injector,
++                        'queryLimit' => $injector,
++                        'queryConfig' => serialize([
++                            [
++                                'operator' => $injector,
++                                'type' => 'FIELD_category_field', // falls back to CType (first field)
++                                'comparison' => $comparison,
++                                'inputValue' => $injector,
++
++                            ],
++                            [
++                                'operator' => $injector,
++                                'type' => 'FIELD_category_field',
++                                'comparison' => $comparison,
++                                'inputValue' => $injector,
++
++                            ],
++                        ]),
++                    ],
++                ];
++            }
++        }
++        return $dataSet;
++    }
++
++    /**
++     * @param string $injector
++     * @param array $settings
++     *
++     * @test
++     * @dataProvider arbitraryDataIsEscapedDataProvider
++     * @throws \Doctrine\DBAL\DBALException
++     */
++    public function arbitraryDataIsEscaped(string $injector, array $settings)
++    {
++        $databasePlatform = GeneralUtility::makeInstance(ConnectionPool::class)
++            ->getConnectionForTable('tt_content')->getDatabasePlatform();
++        $replacements = [
++            '%quoteCharacter%' => $databasePlatform->getStringLiteralQuoteCharacter(),
++            '%commentStart%' => $databasePlatform->getSqlCommentStartString(),
++            '%commentEnd%' => $databasePlatform->getSqlCommentEndString()
++        ];
++        $injector = str_replace(array_keys($replacements), $replacements, $injector);
++        $settings = $this->prepareSettings($settings, $replacements);
++
++        $queryGenerator = new QueryGenerator();
++        $queryGenerator->init('queryConfig', $settings['queryTable']);
++        $queryGenerator->makeSelectorTable($settings);
++        $queryGenerator->enablePrefix = true;
++
++        $queryString = $queryGenerator->getQuery($queryGenerator->queryConfig);
++        $query = $queryGenerator->getSelectQuery($queryString);
++
++        self::assertStringNotContainsString($injector, $query);
++    }
++
++    protected function prepareSettings(array $settings, array $replacements): array
++    {
++        foreach ($settings as $settingKey => &$settingValue) {
++            if (is_string($settingValue)) {
++                $settingValue = str_replace(array_keys($replacements), $replacements, $settingValue);
++            }
++            if (is_array($settingValue)) {
++                $settingValue = $this->prepareSettings($settingValue, $replacements);
++            }
++        }
++        return $settings;
++    }
+ }
+-- 
+2.34.1
+

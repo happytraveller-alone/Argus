@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ReturnFromFinallyBlock Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ReturnFromFinallyBlock</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ReturnFromFinallyBlock" language="java" since="1.05" message="Avoid returning from a finally block" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#returnfromfinallyblock">
+            <description>
+    Avoid returning from a finally block, this can discard exceptions.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>//FinallyClause//ReturnStatement except //FinallyClause//(MethodDeclaration|LambdaExpression)//ReturnStatement</value>
+                </property>
+            </properties>
+            <example>
+
+    public class Bar {
+        public String foo() {
+            try {
+                throw new Exception( "My Exception" );
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                return "A. O. K."; // return not recommended here
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

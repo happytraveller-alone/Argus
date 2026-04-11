@@ -1,0 +1,16 @@
+rules:
+- id: unsafe_unpacking
+  languages:
+  - swift
+  severity: ERROR
+  message: Unsafe unpacking method
+  pattern-either:
+  - pattern: Zip.unzipFile(..., ..., ..., ...)
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path
+      Traversal'')'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-59: Link Following'
+    - 'CWE-400: Uncontrolled Resource Consumption (Resource Exhaustion)'
+    - 'CWE-276: Incorrect Default Permissions for Critical Resource'

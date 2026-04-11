@@ -1,0 +1,25 @@
+rules:
+- id: rules_lgpl_javascript_electronjs_rule-electron-blink-integration
+  patterns:
+  - pattern-either:
+    - pattern: 'new BrowserWindow({webPreferences: {enableBlinkFeatures: ''...''}})
+
+        '
+    - pattern: 'var $X = {webPreferences: {enableBlinkFeatures: ''...''}};
+
+        '
+  message: 'Blink''s expirimental features are enabled in this application. Some of
+    the features may affect the security of the application.
+
+    '
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    cwe: CWE-272
+    shortDescription: Least privilege violation
+    security-severity: MEDIUM
+    category: security

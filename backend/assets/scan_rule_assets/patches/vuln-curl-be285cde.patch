@@ -1,0 +1,1316 @@
+From be285cde3f52571087816759220a68cb994d9307 Mon Sep 17 00:00:00 2001
+From: Daniel Stenberg <daniel@haxx.se>
+Date: Wed, 5 Apr 2006 12:35:48 +0000
+Subject: [PATCH] Michele Bini modified the NTLM code to work for his "weird
+ IIS case" (http://curl.haxx.se/mail/lib-2006-02/0154.html) by adding the NTLM
+ hash function in addition to the LM one and making some other adjustments in
+ the order the different parts of the data block are sent in the Type-2 reply.
+ Inspiration for this work was taken from the Firefox NTLM implementation.
+
+I edited the existing 21(!) NTLM test cases to run fine with these news. Due
+to the fact that we now properly include the host name in the Type-2 message
+the test cases now only compare parts of that chunk.
+---
+ CHANGES            |  11 ++
+ RELEASE-NOTES      |   3 +-
+ lib/http_ntlm.c    | 415 ++++++++++++++++++++++++++++++++-------------
+ lib/urldata.h      |   1 +
+ tests/data/test150 |   9 +-
+ tests/data/test155 |   9 +-
+ tests/data/test159 |   9 +-
+ tests/data/test162 |   2 +-
+ tests/data/test169 |   9 +-
+ tests/data/test170 |   2 +-
+ tests/data/test176 |   2 +-
+ tests/data/test209 |   9 +-
+ tests/data/test213 |   9 +-
+ tests/data/test239 |   9 +-
+ tests/data/test243 |   9 +-
+ tests/data/test265 |   9 +-
+ tests/data/test267 |   9 +-
+ tests/data/test67  |   9 +-
+ tests/data/test68  |   9 +-
+ tests/data/test69  |   9 +-
+ tests/data/test81  |   9 +-
+ tests/data/test89  |  13 +-
+ tests/data/test90  |  13 +-
+ tests/data/test91  |   9 +-
+ 24 files changed, 439 insertions(+), 158 deletions(-)
+
+diff --git a/CHANGES b/CHANGES
+index e55edd4d0..098ef6ecf 100644
+--- a/CHANGES
++++ b/CHANGES
+@@ -6,6 +6,17 @@
+ 
+                                   Changelog
+ 
++Daniel (5 April 2006)
++- Michele Bini modified the NTLM code to work for his "weird IIS case"
++  (http://curl.haxx.se/mail/lib-2006-02/0154.html) by adding the NTLM hash
++  function in addition to the LM one and making some other adjustments in the
++  order the different parts of the data block are sent in the Type-2 reply.
++  Inspiration for this work was taken from the Firefox NTLM implementation.
++
++  I edited the existing 21(!) NTLM test cases to run fine with these news. Due
++  to the fact that we now properly include the host name in the Type-2 message
++  the test cases now only compare parts of that chunk.
++
+ Daniel (28 March 2006)
+ - #1451929 (http://curl.haxx.se/bug/view.cgi?id=1451929) detailed a bug that
+   occurred when asking libcurl to follow HTTP redirects and the original URL
+diff --git a/RELEASE-NOTES b/RELEASE-NOTES
+index e7bfc8010..9036a0091 100644
+--- a/RELEASE-NOTES
++++ b/RELEASE-NOTES
+@@ -16,6 +16,7 @@ This release includes the following changes:
+ 
+ This release includes the following bugfixes:
+ 
++ o Improved NTLM functionality
+  o following redirects with more than one question mark in source URL
+  o fixed debug build crash with -d
+  o TFTP works on more systems
+@@ -32,6 +33,6 @@ This release would not have looked like this without help, code, reports and
+ advice from friends like these:
+ 
+  Dan Fandrich, Ilja van Sprundel, David McCreedy, Tor Arntsen, Xavier Bouchoux,
+- David Byron
++ David Byron, Michele Bini
+ 
+         Thanks! (and sorry if I forgot to mention someone)
+diff --git a/lib/http_ntlm.c b/lib/http_ntlm.c
+index 816a4fc42..b15c3bf67 100644
+--- a/lib/http_ntlm.c
++++ b/lib/http_ntlm.c
+@@ -5,7 +5,7 @@
+  *                            | (__| |_| |  _ <| |___
+  *                             \___|\___/|_| \_\_____|
+  *
+- * Copyright (C) 1998 - 2005, Daniel Stenberg, <daniel@haxx.se>, et al.
++ * Copyright (C) 1998 - 2006, Daniel Stenberg, <daniel@haxx.se>, et al.
+  *
+  * This software is licensed as described in the file COPYING, which
+  * you should have received as part of this distribution. The terms
+@@ -27,11 +27,16 @@
+    http://davenport.sourceforge.net/ntlm.html
+    http://www.innovation.ch/java/ntlm.html
+ 
++   Another implementation:
++   http://lxr.mozilla.org/mozilla/source/security/manager/ssl/src/nsNTLMAuthModule.cpp
++
+ */
+ 
+ #ifndef CURL_DISABLE_HTTP
+ #ifdef USE_NTLM
+ 
++#define DEBUG_ME 0
++
+ /* -- WIN32 approved -- */
+ #include <stdio.h>
+ #include <string.h>
+@@ -89,6 +94,96 @@ static PSecurityFunctionTable s_pSecFn = NULL;
+ /* Define this to make the type-3 message include the NT response message */
+ #define USE_NTRESPONSES 1
+ 
++/* this function converts from the little endian format used in the incoming
++   package to whatever endian format we're using natively */
++static unsigned int readint_le(unsigned char *buf) /* must point to a
++                                                      4 bytes buffer*/
++{
++  return ((unsigned int)buf[0]) | ((unsigned int)buf[1] << 8) |
++    ((unsigned int)buf[2] << 16) | ((unsigned int)buf[3] << 24);
++}
++
++#if DEBUG_ME
++# define DEBUG_OUT(x) x
++static void print_flags(FILE *handle, unsigned long flags)
++{
++  if(flags & NTLMFLAG_NEGOTIATE_UNICODE)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_UNICODE ");
++  if(flags & NTLMFLAG_NEGOTIATE_OEM)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_OEM ");
++  if(flags & NTLMFLAG_REQUEST_TARGET)
++    fprintf(handle, "NTLMFLAG_REQUEST_TARGET ");
++  if(flags & (1<<3))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_3 ");
++  if(flags & NTLMFLAG_NEGOTIATE_SIGN)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_SIGN ");
++  if(flags & NTLMFLAG_NEGOTIATE_SEAL)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_SEAL ");
++  if(flags & NTLMFLAG_NEGOTIATE_DATAGRAM_STYLE)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_DATAGRAM_STYLE ");
++  if(flags & NTLMFLAG_NEGOTIATE_LM_KEY)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_LM_KEY ");
++  if(flags & NTLMFLAG_NEGOTIATE_NETWARE)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_NETWARE ");
++  if(flags & NTLMFLAG_NEGOTIATE_NTLM_KEY)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_NTLM_KEY ");
++  if(flags & (1<<10))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_10 ");
++  if(flags & (1<<11))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_11 ");
++  if(flags & NTLMFLAG_NEGOTIATE_DOMAIN_SUPPLIED)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_DOMAIN_SUPPLIED ");
++  if(flags & NTLMFLAG_NEGOTIATE_WORKSTATION_SUPPLIED)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_WORKSTATION_SUPPLIED ");
++  if(flags & NTLMFLAG_NEGOTIATE_LOCAL_CALL)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_LOCAL_CALL ");
++  if(flags & NTLMFLAG_NEGOTIATE_ALWAYS_SIGN)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_ALWAYS_SIGN ");
++  if(flags & NTLMFLAG_TARGET_TYPE_DOMAIN)
++    fprintf(handle, "NTLMFLAG_TARGET_TYPE_DOMAIN ");
++  if(flags & NTLMFLAG_TARGET_TYPE_SERVER)
++    fprintf(handle, "NTLMFLAG_TARGET_TYPE_SERVER ");
++  if(flags & NTLMFLAG_TARGET_TYPE_SHARE)
++    fprintf(handle, "NTLMFLAG_TARGET_TYPE_SHARE ");
++  if(flags & NTLMFLAG_NEGOTIATE_NTLM2_KEY)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_NTLM2_KEY ");
++  if(flags & NTLMFLAG_REQUEST_INIT_RESPONSE)
++    fprintf(handle, "NTLMFLAG_REQUEST_INIT_RESPONSE ");
++  if(flags & NTLMFLAG_REQUEST_ACCEPT_RESPONSE)
++    fprintf(handle, "NTLMFLAG_REQUEST_ACCEPT_RESPONSE ");
++  if(flags & NTLMFLAG_REQUEST_NONNT_SESSION_KEY)
++    fprintf(handle, "NTLMFLAG_REQUEST_NONNT_SESSION_KEY ");
++  if(flags & NTLMFLAG_NEGOTIATE_TARGET_INFO)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_TARGET_INFO ");
++  if(flags & (1<<24))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_24 ");
++  if(flags & (1<<25))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_25 ");
++  if(flags & (1<<26))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_26 ");
++  if(flags & (1<<27))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_27 ");
++  if(flags & (1<<28))
++    fprintf(handle, "NTLMFLAG_UNKNOWN_28 ");
++  if(flags & NTLMFLAG_NEGOTIATE_128)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_128 ");
++  if(flags & NTLMFLAG_NEGOTIATE_KEY_EXCHANGE)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_KEY_EXCHANGE ");
++  if(flags & NTLMFLAG_NEGOTIATE_56)
++    fprintf(handle, "NTLMFLAG_NEGOTIATE_56 ");
++}
++
++static void print_hex(FILE *handle, const char *buf, size_t len)
++{
++  const char *p = buf;
++  fprintf(stderr, "0x");
++  while (len-- > 0)
++    fprintf(stderr, "%02.2x", (unsigned int)*p++);
++}
++#else
++# define DEBUG_OUT(x)
++#endif
++
+ /*
+   (*) = A "security buffer" is a triplet consisting of two shorts and one
+   long:
+@@ -107,6 +202,9 @@ CURLntlm Curl_input_ntlm(struct connectdata *conn,
+ {
+   /* point to the correct struct with this */
+   struct ntlmdata *ntlm;
++#ifndef USE_WINDOWS_SSPI
++  static const char type2_marker[] = { 0x02, 0x00, 0x00, 0x00 };
++#endif
+ 
+   ntlm = proxy?&conn->proxyntlm:&conn->ntlm;
+ 
+@@ -143,19 +241,34 @@ CURLntlm Curl_input_ntlm(struct connectdata *conn,
+       ntlm->state = NTLMSTATE_TYPE2; /* we got a type-2 */
+ 
+ #ifdef USE_WINDOWS_SSPI
+-      if ((ntlm->type_2 = malloc(size+1)) == NULL) {
++      ntlm->type_2 = malloc(size+1);
++      if (ntlm->type_2 == NULL) {
+         free(buffer);
+         return CURLE_OUT_OF_MEMORY;
+       }
+       ntlm->n_type_2 = size;
+       memcpy(ntlm->type_2, buffer, size);
+ #else
+-      if(size >= 48)
+-        /* the nonce of interest is index [24 .. 31], 8 bytes */
+-        memcpy(ntlm->nonce, &buffer[24], 8);
+-      /* FIX: add an else here! */
++      ntlm->flags = 0;
+ 
+-      /* at index decimal 20, there's a 32bit NTLM flag field */
++      if((size < 32) ||
++         (memcmp(buffer, "NTLMSSP", 8) != 0) ||
++         (memcmp(buffer+8, type2_marker, sizeof(type2_marker)) != 0)) {
++        /* This was not a good enough type-2 message */
++        free(buffer);
++        return CURLNTLM_BAD;
++      }
++
++      ntlm->flags = readint_le(&buffer[20]);
++      memcpy(ntlm->nonce, &buffer[24], 8);
++
++      DEBUG_OUT({
++        fprintf(stderr, "**** TYPE2 header flags=0x%08.8lx ", ntlm->flags);
++        print_flags(stderr, ntlm->flags);
++        fprintf(stderr, "\n                  nonce=");
++        print_hex(stderr, ntlm->nonce, 8);
++        fprintf(stderr, "\n****\n");
++      });
+ 
+       free(buffer);
+ #endif
+@@ -199,7 +312,7 @@ static void setup_des_key(unsigned char *key_56,
+   * 8 byte plaintext is encrypted with each key and the resulting 24
+   * bytes are stored in the results array.
+   */
+-static void calc_resp(unsigned char *keys,
++static void lm_resp(unsigned char *keys,
+                       unsigned char *plaintext,
+                       unsigned char *results)
+ {
+@@ -218,35 +331,19 @@ static void calc_resp(unsigned char *keys,
+                   DESKEY(ks), DES_ENCRYPT);
+ }
+ 
++
+ /*
+- * Set up lanmanager and nt hashed passwords
++ * Set up lanmanager hashed password
+  */
+-static void mkhash(char *password,
+-                   unsigned char *nonce,  /* 8 bytes */
+-                   unsigned char *lmresp  /* must fit 0x18 bytes */
+-#ifdef USE_NTRESPONSES
+-                   , unsigned char *ntresp  /* must fit 0x18 bytes */
+-#endif
+-  )
++static void mk_lm_hash(char *password, unsigned char *lmbuffer /* 21 bytes */)
+ {
+-  /* 21 bytes fits 3 7-bytes chunks, as we use 56 bit (7 bytes) as DES input,
+-     and we add three different ones, see the calc_resp() function */
+-  unsigned char lmbuffer[21];
+-#ifdef USE_NTRESPONSES
+-  unsigned char ntbuffer[21];
+-#endif
+-  unsigned char *pw;
++  unsigned char pw[14];
+   static const unsigned char magic[] = {
+-    0x4B, 0x47, 0x53, 0x21, 0x40, 0x23, 0x24, 0x25
++    0x4B, 0x47, 0x53, 0x21, 0x40, 0x23, 0x24, 0x25 /* i.e. KGS!@#$% */
+   };
+   unsigned int i;
+   size_t len = strlen(password);
+ 
+-  /* make it fit at least 14 bytes */
+-  pw = malloc(len<7?14:len*2);
+-  if(!pw)
+-    return; /* this will lead to a badly generated package */
+-
+   if (len > 14)
+     len = 14;
+ 
+@@ -257,7 +354,8 @@ static void mkhash(char *password,
+     pw[i] = 0;
+ 
+   {
+-    /* create LanManager hashed password */
++    /* Create LanManager hashed password. */
++
+     DES_key_schedule ks;
+ 
+     setup_des_key(pw, DESKEY(ks));
+@@ -268,35 +366,46 @@ static void mkhash(char *password,
+     DES_ecb_encrypt((DES_cblock *)magic, (DES_cblock *)(lmbuffer+8),
+                     DESKEY(ks), DES_ENCRYPT);
+ 
+-    memset(lmbuffer+16, 0, sizeof(lmbuffer)-16);
++    memset(lmbuffer + 16, 0, 21 - 16);
++  }
+   }
+-  /* create LM responses */
+-  calc_resp(lmbuffer, nonce, lmresp);
+ 
+-#ifdef USE_NTRESPONSES
+-  {
+-    /* create NT hashed password */
+-    MD4_CTX MD4;
++#if USE_NTRESPONSES
++static void utf8_to_unicode_le(unsigned char *dest, const char *src,
++                               size_t srclen)
++{
++  size_t i;
++  for (i=0; i<srclen; i++) {
++    dest[2*i]   = (unsigned char)src[i];
++    dest[2*i+1] =   '\0';
++  }
++}
+ 
+-    len = strlen(password);
++/*
++ * Set up nt hashed passwords
++ */
++static void mk_nt_hash(char *password, unsigned char *ntbuffer /* 21 bytes */)
++{
++  size_t len = strlen(password);
++  unsigned char *pw = malloc(len*2);
+ 
+-    for (i=0; i<len; i++) {
+-      pw[2*i]   = password[i];
+-      pw[2*i+1] = 0;
+-    }
++  utf8_to_unicode_le(pw, password, len);
++
++  {
++    /* Create NT hashed password. */
++    MD4_CTX MD4;
+ 
+     MD4_Init(&MD4);
+     MD4_Update(&MD4, pw, 2*len);
+     MD4_Final(ntbuffer, &MD4);
+ 
+-    memset(ntbuffer+16, 0, sizeof(ntbuffer)-16);
++    memset(ntbuffer + 16, 0, 21 - 16);
+   }
+ 
+-  calc_resp(ntbuffer, nonce, ntresp);
+-#endif
+-
+   free(pw);
+ }
++#endif
++
+ 
+ #endif
+ 
+@@ -324,25 +433,28 @@ ntlm_sspi_cleanup(struct ntlmdata *ntlm)
+ 
+ #endif
+ 
+-#define SHORTPAIR(x) ((x) & 0xff), ((x) >> 8)
++#define SHORTPAIR(x) ((x) & 0xff), (((x) >> 8) & 0xff)
+ #define LONGQUARTET(x) ((x) & 0xff), (((x) >> 8)&0xff), \
+-  (((x) >>16)&0xff), ((x)>>24)
++  (((x) >>16)&0xff), (((x)>>24) & 0xff)
++
++#define HOSTNAME_MAX 1024
+ 
+ /* this is for creating ntlm header output */
+ CURLcode Curl_output_ntlm(struct connectdata *conn,
+                           bool proxy)
+ {
+   const char *domain=""; /* empty */
+-  const char *host=""; /* empty */
++  char host [HOSTNAME_MAX+ 1] = ""; /* empty */
+ #ifndef USE_WINDOWS_SSPI
+-  int domlen=(int)strlen(domain);
+-  int hostlen = (int)strlen(host);
+-  int hostoff; /* host name offset */
+-  int domoff;  /* domain name offset */
++  size_t domlen = strlen(domain);
++  size_t hostlen = strlen(host);
++  size_t hostoff; /* host name offset */
++  size_t domoff;  /* domain name offset */
+ #endif
+   size_t size;
+   char *base64=NULL;
+-  unsigned char ntlmbuf[512]; /* enough, unless the host/domain is very long */
++  unsigned char ntlmbuf[1024]; /* enough, unless the user+host+domain is very
++                                  long */
+ 
+   /* point to the address of the pointer that holds the string to sent to the
+      server, which is for a plain host or for a HTTP proxy */
+@@ -399,11 +511,11 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+       s_hSecDll = LoadLibrary("secur32.dll");
+     if (s_hSecDll != NULL) {
+       INIT_SECURITY_INTERFACE pInitSecurityInterface;
+-  	pInitSecurityInterface =
+-  	  (INIT_SECURITY_INTERFACE)GetProcAddress(s_hSecDll,
+-                                                  "InitSecurityInterfaceA");
+-  	if (pInitSecurityInterface != NULL)
+-  	  s_pSecFn = pInitSecurityInterface();
++      pInitSecurityInterface =
++        (INIT_SECURITY_INTERFACE)GetProcAddress(s_hSecDll,
++                                                "InitSecurityInterfaceA");
++      if (pInitSecurityInterface != NULL)
++        s_pSecFn = pInitSecurityInterface();
+     }
+   }
+   if (s_pSecFn == NULL)
+@@ -500,8 +612,9 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+     size = buf.cbBuffer;
+   }
+ #else
+-    hostoff = 32;
+-    domoff = hostoff + hostlen;
++    hostoff = 0;
++    domoff = hostoff + hostlen; /* This is 0: remember that host and domain
++                                   are empty */
+ 
+     /* Create and send a type-1 message:
+ 
+@@ -533,9 +646,10 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+              0,0,0, /* part of type-1 long */
+ 
+              LONGQUARTET(
+-               NTLMFLAG_NEGOTIATE_OEM|      /*   2 */
+-               NTLMFLAG_NEGOTIATE_NTLM_KEY  /* 200 */
+-               /* equals 0x0202 */
++               NTLMFLAG_NEGOTIATE_OEM|
++               NTLMFLAG_REQUEST_TARGET|
++               NTLMFLAG_NEGOTIATE_NTLM_KEY|
++               NTLMFLAG_NEGOTIATE_ALWAYS_SIGN
+                ),
+              SHORTPAIR(domlen),
+              SHORTPAIR(domlen),
+@@ -545,13 +659,31 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+              SHORTPAIR(hostlen),
+              SHORTPAIR(hostoff),
+              0,0,
+-             host, domain);
++             host /* this is empty */, domain /* this is empty */);
+ 
+     /* initial packet length */
+     size = 32 + hostlen + domlen;
+ #endif
+ 
+-    /* now keeper of the base64 encoded package size */
++    DEBUG_OUT({
++      fprintf(stderr, "**** TYPE1 header flags=0x%02.2x%02.2x%02.2x%02.2x 0x%08.8x ",
++              LONGQUARTET(NTLMFLAG_NEGOTIATE_OEM|
++                          NTLMFLAG_REQUEST_TARGET|
++                          NTLMFLAG_NEGOTIATE_NTLM_KEY|
++                          NTLMFLAG_NEGOTIATE_ALWAYS_SIGN),
++              NTLMFLAG_NEGOTIATE_OEM|
++              NTLMFLAG_REQUEST_TARGET|
++              NTLMFLAG_NEGOTIATE_NTLM_KEY|
++              NTLMFLAG_NEGOTIATE_ALWAYS_SIGN);
++      print_flags(stderr,
++                  NTLMFLAG_NEGOTIATE_OEM|
++                  NTLMFLAG_REQUEST_TARGET|
++                  NTLMFLAG_NEGOTIATE_NTLM_KEY|
++                  NTLMFLAG_NEGOTIATE_ALWAYS_SIGN);
++      fprintf(stderr, "\n****\n");
++    });
++
++    /* now size is the size of the base64 encoded package size */
+     size = Curl_base64_encode((char *)ntlmbuf, size, &base64);
+ 
+     if(size >0 ) {
+@@ -567,7 +699,7 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+     break;
+ 
+   case NTLMSTATE_TYPE2:
+-    /* We received the type-2 already, create a type-3 message:
++    /* We received the type-2 message already, create a type-3 message:
+ 
+     Index   Description            Content
+     0       NTLMSSP Signature      Null-terminated ASCII "NTLMSSP"
+@@ -622,14 +754,14 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+ 
+ #else
+     int lmrespoff;
++    unsigned char lmresp[24]; /* fixed-size */
++#if USE_NTRESPONSES
+     int ntrespoff;
+-    int useroff;
+-    unsigned char lmresp[0x18]; /* fixed-size */
+-#ifdef USE_NTRESPONSES
+-    unsigned char ntresp[0x18]; /* fixed-size */
++    unsigned char ntresp[24]; /* fixed-size */
+ #endif
++    size_t useroff;
+     const char *user;
+-    int userlen;
++    size_t userlen;
+ 
+     user = strchr(userp, '\\');
+     if(!user)
+@@ -637,31 +769,56 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+ 
+     if (user) {
+       domain = userp;
+-      domlen = (int)(user - domain);
++      domlen = (user - domain);
+       user++;
+     }
+     else
+       user = userp;
+-    userlen = (int)strlen(user);
++    userlen = strlen(user);
+ 
+-    mkhash(passwdp, &ntlm->nonce[0], lmresp
+-#ifdef USE_NTRESPONSES
+-           , ntresp
++    if (gethostname(host, HOSTNAME_MAX)) {
++      infof(conn->data, "gethostname() failed, continuing without!");
++      hostlen = 0;
++    }
++    else {
++      hostlen = strlen(host);
++    }
++
++    {
++#if USE_NTRESPONSES
++      unsigned char ntbuffer[0x18];
++#endif
++      unsigned char lmbuffer[0x18];
++
++#if USE_NTRESPONSES
++      mk_nt_hash(passwdp, ntbuffer);
++      lm_resp(ntbuffer, &ntlm->nonce[0], ntresp);
+ #endif
+-      );
+ 
+-    domoff = 64; /* always */
++      mk_lm_hash(passwdp, lmbuffer);
++      lm_resp(lmbuffer, &ntlm->nonce[0], lmresp);
++      /* A safer but less compatible alternative is:
++       *   lm_resp(ntbuffer, &ntlm->nonce[0], lmresp);
++       * See http://davenport.sourceforge.net/ntlm.html#ntlmVersion2 */
++    }
++
++    lmrespoff = 64; /* size of the message header */
++#if USE_NTRESPONSES
++    ntrespoff = lmrespoff + 0x18;
++    domoff = ntrespoff + 0x18;
++#else
++    domoff = lmrespoff + 0x18;
++#endif
+     useroff = domoff + domlen;
+     hostoff = useroff + userlen;
+-    lmrespoff = hostoff + hostlen;
+-    ntrespoff = lmrespoff + 0x18;
+ 
+     /* Create the big type-3 message binary blob */
+     size = snprintf((char *)ntlmbuf, sizeof(ntlmbuf),
+                     "NTLMSSP%c"
+                     "\x03%c%c%c" /* type-3, 32 bits */
+ 
+-                    "%c%c%c%c" /* LanManager length + allocated space */
++                    "%c%c" /* LanManager length */
++                    "%c%c" /* LanManager allocated space */
+                     "%c%c" /* LanManager offset */
+                     "%c%c" /* 2 zeroes */
+ 
+@@ -683,14 +840,15 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+                     "%c%c"  /* host length */
+                     "%c%c"  /* host allocated space */
+                     "%c%c"  /* host offset */
+-                    "%c%c%c%c%c%c"  /* 6 zeroes */
+-
+-                    "\xff\xff"  /* message length */
+                     "%c%c"  /* 2 zeroes */
+ 
+-                    "\x01\x82" /* flags */
++                    "%c%c"  /* session key length (unknown purpose) */
++                    "%c%c"  /* session key allocated space (unknown purpose) */
++                    "%c%c"  /* session key offset (unknown purpose) */
+                     "%c%c"  /* 2 zeroes */
+ 
++                    "%c%c%c%c" /* flags */
++
+                     /* domain string */
+                     /* user string */
+                     /* host string */
+@@ -705,16 +863,17 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+                     SHORTPAIR(lmrespoff),
+                     0x0, 0x0,
+ 
+-#ifdef USE_NTRESPONSES
++#if USE_NTRESPONSES
+                     SHORTPAIR(0x18),  /* NT-response length, twice */
+                     SHORTPAIR(0x18),
++                    SHORTPAIR(ntrespoff),
++                    0x0, 0x0,
+ #else
+                     0x0, 0x0,
+                     0x0, 0x0,
+-#endif
+-                    SHORTPAIR(ntrespoff),
+                     0x0, 0x0,
+-
++                    0x0, 0x0,
++#endif
+                     SHORTPAIR(domlen),
+                     SHORTPAIR(domlen),
+                     SHORTPAIR(domoff),
+@@ -728,44 +887,68 @@ CURLcode Curl_output_ntlm(struct connectdata *conn,
+                     SHORTPAIR(hostlen),
+                     SHORTPAIR(hostlen),
+                     SHORTPAIR(hostoff),
+-                    0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
++                    0x0, 0x0,
+ 
++                    0x0, 0x0,
++                    0x0, 0x0,
++                    0x0, 0x0,
+                     0x0, 0x0,
+ 
+-                    0x0, 0x0);
++                    LONGQUARTET(ntlm->flags));
++    DEBUG_OUT(assert(size==64));
+ 
+-    /* size is now 64 */
+-    size=64;
+-    ntlmbuf[62]=ntlmbuf[63]=0;
++    DEBUG_OUT(assert(size == lmrespoff));
++    /* We append the binary hashes */
++    if(size < (sizeof(ntlmbuf) - 0x18)) {
++      memcpy(&ntlmbuf[size], lmresp, 0x18);
++      size += 0x18;
++    }
++
++    DEBUG_OUT({
++        fprintf(stderr, "**** TYPE3 header lmresp=");
++        print_hex(stderr, &ntlmbuf[lmrespoff], 0x18);
++    });
++
++#if USE_NTRESPONSES
++    if(size < (sizeof(ntlmbuf) - 0x18)) {
++      DEBUG_OUT(assert(size == ntrespoff));
++      memcpy(&ntlmbuf[size], ntresp, 0x18);
++      size += 0x18;
++    }
++
++    DEBUG_OUT({
++        fprintf(stderr, "\n                  ntresp=");
++        print_hex(stderr, &ntlmbuf[ntrespoff], 0x18);
++    });
++
++#endif
+ 
+-    /* Make sure that the user and domain strings fit in the target buffer
+-       before we copy them there. */
+-    if(size + userlen + domlen >= sizeof(ntlmbuf)) {
+-      failf(conn->data, "user + domain name too big");
++    DEBUG_OUT({
++        fprintf(stderr, "\n                  flags=0x%02.2x%02.2x%02.2x%02.2x 0x%08.8x ",
++                LONGQUARTET(ntlm->flags), ntlm->flags);
++        print_flags(stderr, ntlm->flags);
++        fprintf(stderr, "\n****\n");
++    });
++
++
++    /* Make sure that the domain, user and host strings fit in the target
++       buffer before we copy them there. */
++    if(size + userlen + domlen + hostlen >= sizeof(ntlmbuf)) {
++      failf(conn->data, "user + domain + host name too big");
+       return CURLE_OUT_OF_MEMORY;
+     }
+ 
++    curlassert(size == domoff);
+     memcpy(&ntlmbuf[size], domain, domlen);
+     size += domlen;
+ 
++    curlassert(size == useroff);
+     memcpy(&ntlmbuf[size], user, userlen);
+     size += userlen;
+ 
+-    /* we append the binary hashes to the end of the blob */
+-    if(size < ((int)sizeof(ntlmbuf) - 0x18)) {
+-      memcpy(&ntlmbuf[size], lmresp, 0x18);
+-      size += 0x18;
+-    }
+-
+-#ifdef USE_NTRESPONSES
+-    if(size < ((int)sizeof(ntlmbuf) - 0x18)) {
+-      memcpy(&ntlmbuf[size], ntresp, 0x18);
+-      size += 0x18;
+-    }
+-#endif
+-
+-    ntlmbuf[56] = (unsigned char)(size & 0xff);
+-    ntlmbuf[57] = (unsigned char)(size >> 8);
++    curlassert(size == hostoff);
++    memcpy(&ntlmbuf[size], host, hostlen);
++    size += hostlen;
+ 
+ #endif
+ 
+@@ -810,8 +993,8 @@ Curl_ntlm_cleanup(struct connectdata *conn)
+   ntlm_sspi_cleanup(&conn->proxyntlm);
+   if (s_hSecDll != NULL) {
+     FreeLibrary(s_hSecDll);
+-	s_hSecDll = NULL;
+-	s_pSecFn = NULL;
++    s_hSecDll = NULL;
++    s_pSecFn = NULL;
+   }
+ #else
+   (void)conn;
+diff --git a/lib/urldata.h b/lib/urldata.h
+index fb7382ad8..1d6bab2a0 100644
+--- a/lib/urldata.h
++++ b/lib/urldata.h
+@@ -231,6 +231,7 @@ struct ntlmdata {
+   void *type_2;
+   int n_type_2;
+ #else
++  unsigned int flags;
+   unsigned char nonce[8];
+ #endif
+ };
+diff --git a/tests/data/test150 b/tests/data/test150
+index 301c0eb43..49ca2a66f 100644
+--- a/tests/data/test150
++++ b/tests/data/test150
+@@ -62,15 +62,20 @@ http://%HOSTIP:%HTTPPORT/150 -u testuser:testpass --ntlm --fail
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /150 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /150 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test155 b/tests/data/test155
+index 57826c828..501979eed 100644
+--- a/tests/data/test155
++++ b/tests/data/test155
+@@ -88,6 +88,11 @@ four is the number of lines
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ PUT /155 HTTP/1.1
+ Host: 127.0.0.1:%HTTPPORT
+@@ -96,14 +101,14 @@ Content-Length: 85
+ Expect: 100-continue
+ 
+ PUT /155 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ Content-Length: 0
+ Expect: 100-continue
+ 
+ PUT /155 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.5 (i686-pc-linux-gnu) libcurl/7.10.5 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test159 b/tests/data/test159
+index 007a10c60..aa07888c2 100644
+--- a/tests/data/test159
++++ b/tests/data/test159
+@@ -62,15 +62,20 @@ http://%HOSTIP:%HTTPPORT/159 -u testuser:testpass --ntlm -0
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /159 HTTP/1.0
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /159 HTTP/1.0
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test162 b/tests/data/test162
+index 679832b7f..c987c4a21 100644
+--- a/tests/data/test162
++++ b/tests/data/test162
+@@ -35,7 +35,7 @@ http://%HOSTIP:%HTTPPORT/162 --proxy http://%HOSTIP:%HTTPPORT --proxy-user foo:b
+ </strip>
+ <protocol>
+ GET http://127.0.0.1:%HTTPPORT/162 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.8.1-pre3 (sparc-sun-solaris2.7) libcurl 7.8.1-pre3 (OpenSSL 0.9.6a) (krb4 enabled)
+ Host: 127.0.0.1:%HTTPPORT
+ Pragma: no-cache
+diff --git a/tests/data/test169 b/tests/data/test169
+index 3f377f401..5f6d5b428 100644
+--- a/tests/data/test169
++++ b/tests/data/test169
+@@ -80,9 +80,14 @@ http://data.from.server.requiring.digest.hohoho.com/169 --proxy http://%HOSTIP:%
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAAAwADAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET http://data.from.server.requiring.digest.hohoho.com/169 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.12.0-CVS (i686-pc-linux-gnu) libcurl/7.12.0-CVS OpenSSL/0.9.6b ipv6 zlib/1.1.4 GSS libidn/0.4.3
+ Host: data.from.server.requiring.digest.hohoho.com
+ Pragma: no-cache
+@@ -90,7 +95,7 @@ Accept: */*
+ Proxy-Connection: Keep-Alive
+ 
+ GET http://data.from.server.requiring.digest.hohoho.com/169 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEMAAAAYABgAWwAAAAAAAABAAAAAAwADAEAAAAAAAAAAQwAAAAAAAABzAAAAAYIAAGZvb4P6B+XVQ6vQsx3DfDXUVhd9436GAxPu0IYcl2Z7LxHmNeOAWQ+vxUmhuCFJBUgXCQ==
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAAAwADAHAAAAAEAA
+ User-Agent: curl/7.12.0-CVS (i686-pc-linux-gnu) libcurl/7.12.0-CVS OpenSSL/0.9.6b ipv6 zlib/1.1.4 GSS libidn/0.4.3
+ Host: data.from.server.requiring.digest.hohoho.com
+ Pragma: no-cache
+diff --git a/tests/data/test170 b/tests/data/test170
+index 9f42f1ea5..556b2ab2a 100644
+--- a/tests/data/test170
++++ b/tests/data/test170
+@@ -25,7 +25,7 @@ http://a.galaxy.far.far.away/170 --proxy http://%HOSTIP:%HTTPPORT --proxy-user f
+ </strip>
+ <protocol>
+ POST http://a.galaxy.far.far.away/170 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.12.0-CVS (i686-pc-linux-gnu) libcurl/7.12.0-CVS OpenSSL/0.9.6b ipv6 zlib/1.1.4 libidn/0.4.3
+ Host: a.galaxy.far.far.away
+ Pragma: no-cache
+diff --git a/tests/data/test176 b/tests/data/test176
+index 82f5574d9..a92c65e8d 100644
+--- a/tests/data/test176
++++ b/tests/data/test176
+@@ -56,7 +56,7 @@ http://%HOSTIP:%HTTPPORT/176 -u auser:apasswd --ntlm -d "junkelijunk"
+ </strip>
+ <protocol nonewline=yes>
+ POST /176 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.12.1-CVS (i686-pc-linux-gnu) libcurl/7.12.1-CVS OpenSSL/0.9.6b ipv6 zlib/1.1.4 GSS libidn/0.4.6
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test209 b/tests/data/test209
+index bc699fb4a..e42074943 100644
+--- a/tests/data/test209
++++ b/tests/data/test209
+@@ -78,15 +78,20 @@ http://test.remote.server.com:209/path/2090002 --proxy http://%HOSTIP:%HTTPPORT
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ CONNECT test.remote.server.com:209 HTTP/1.0
+ Host: test.remote.server.com:209
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ Proxy-Connection: Keep-Alive
+ 
+ CONNECT test.remote.server.com:209 HTTP/1.0
+ Host: test.remote.server.com:209
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEUAAAAYABgAXQAAAAAAAABAAAAABQAFAEAAAAAAAAAARQAAAAAAAAB1AAAAAYIAAHNpbGx5oB5CPMq0JDu5tbxLow3sHn3jfoYDE+7QJVE7DA0GyDEwvj2BxsBctP9tT4fnCtL1
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAAEAA
+ Proxy-Connection: Keep-Alive
+ 
+ GET /path/2090002 HTTP/1.1
+diff --git a/tests/data/test213 b/tests/data/test213
+index 836fdd36d..453d5d96b 100644
+--- a/tests/data/test213
++++ b/tests/data/test213
+@@ -78,15 +78,20 @@ http://test.remote.server.com:213/path/2130002 --proxy http://%HOSTIP:%HTTPPORT
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA).*/$1/
++</strippart)
+ <protocol nonewline=yes>
+ CONNECT test.remote.server.com:213 HTTP/1.0
+ Host: test.remote.server.com:213
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ Proxy-Connection: Keep-Alive
+ 
+ CONNECT test.remote.server.com:213 HTTP/1.0
+ Host: test.remote.server.com:213
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEUAAAAYABgAXQAAAAAAAABAAAAABQAFAEAAAAAAAAAARQAAAAAAAAB1AAAAAYIAAHNpbGx5oB5CPMq0JDu5tbxLow3sHn3jfoYDE+7QJVE7DA0GyDEwvj2BxsBctP9tT4fnCtL1
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA
+ Proxy-Connection: Keep-Alive
+ 
+ POST /path/2130002 HTTP/1.1
+diff --git a/tests/data/test239 b/tests/data/test239
+index 591da70b8..9b2ef9eff 100644
+--- a/tests/data/test239
++++ b/tests/data/test239
+@@ -56,9 +56,14 @@ http://%HOSTIP:%HTTPPORT/239 --proxy http://%HOSTIP:%HTTPPORT --proxy-user silly
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA).*/$1/
++</strippart)
+ <protocol nonewline=yes>
+ POST http://%HOSTIP:%HTTPPORT/239 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.13.2-CVS (i686-pc-linux-gnu) libcurl/7.13.2-CVS OpenSSL/0.9.7e zlib/1.2.2 libidn/0.5.13
+ Host: %HOSTIP:%HTTPPORT
+ Pragma: no-cache
+@@ -68,7 +73,7 @@ Content-Length: 0
+ Content-Type: application/x-www-form-urlencoded
+ 
+ POST http://127.0.0.1:8990/239 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEUAAAAYABgAXQAAAAAAAABAAAAABQAFAEAAAAAAAAAARQAAAAAAAAB1AAAAAYIAAHNpbGx5oB5CPMq0JDu5tbxLow3sHn3jfoYDE+7QJVE7DA0GyDEwvj2BxsBctP9tT4fnCtL1
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA
+ User-Agent: curl/7.13.2-CVS (i686-pc-linux-gnu) libcurl/7.13.2-CVS OpenSSL/0.9.7e zlib/1.2.2 libidn/0.5.13
+ Host: 127.0.0.1:8990
+ Pragma: no-cache
+diff --git a/tests/data/test243 b/tests/data/test243
+index e284a725e..ab209d0ad 100644
+--- a/tests/data/test243
++++ b/tests/data/test243
+@@ -84,6 +84,11 @@ http://%HOSTIP:%HTTPPORT/243 --proxy http://%HOSTIP:%HTTPPORT --proxy-user silly
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA).*/$1/
++</strippart)
+ <protocol nonewline=yes>
+ POST http://127.0.0.1:8990/243 HTTP/1.1
+ User-Agent: curl/7.13.2-CVS (i686-pc-linux-gnu) libcurl/7.13.2-CVS OpenSSL/0.9.7e zlib/1.2.2 libidn/0.5.13
+@@ -95,7 +100,7 @@ Content-Length: 6
+ Content-Type: application/x-www-form-urlencoded
+ 
+ postitPOST http://%HOSTIP:%HTTPPORT/243 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.13.2-CVS (i686-pc-linux-gnu) libcurl/7.13.2-CVS OpenSSL/0.9.7e zlib/1.2.2 libidn/0.5.13
+ Host: %HOSTIP:%HTTPPORT
+ Pragma: no-cache
+@@ -105,7 +110,7 @@ Content-Length: 0
+ Content-Type: application/x-www-form-urlencoded
+ 
+ POST http://127.0.0.1:8990/243 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEUAAAAYABgAXQAAAAAAAABAAAAABQAFAEAAAAAAAAAARQAAAAAAAAB1AAAAAYIAAHNpbGx5oB5CPMq0JDu5tbxLow3sHn3jfoYDE+7QJVE7DA0GyDEwvj2BxsBctP9tT4fnCtL1
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA
+ User-Agent: curl/7.13.2-CVS (i686-pc-linux-gnu) libcurl/7.13.2-CVS OpenSSL/0.9.7e zlib/1.2.2 libidn/0.5.13
+ Host: 127.0.0.1:8990
+ Pragma: no-cache
+diff --git a/tests/data/test265 b/tests/data/test265
+index 9848f46a7..1e97d07e1 100644
+--- a/tests/data/test265
++++ b/tests/data/test265
+@@ -81,15 +81,20 @@ http://test.remote.server.com:265/path/2650002 --proxy http://%HOSTIP:%HTTPPORT
+ <strip>
+ ^User-Agent: curl/.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA).*/$1/
++</strippart)
+ <protocol nonewline=yes>
+ CONNECT test.remote.server.com:265 HTTP/1.0
+ Host: test.remote.server.com:265
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ Proxy-Connection: Keep-Alive
+ 
+ CONNECT test.remote.server.com:265 HTTP/1.0
+ Host: test.remote.server.com:265
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEUAAAAYABgAXQAAAAAAAABAAAAABQAFAEAAAAAAAAAARQAAAAAAAAB1AAAAAYIAAHNpbGx5oB5CPMq0JDu5tbxLow3sHn3jfoYDE+7QJVE7DA0GyDEwvj2BxsBctP9tT4fnCtL1
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAABQAFAHAAAAA
+ Proxy-Connection: Keep-Alive
+ 
+ POST /path/2650002 HTTP/1.1
+diff --git a/tests/data/test267 b/tests/data/test267
+index 03b99f36e..a96799ef0 100644
+--- a/tests/data/test267
++++ b/tests/data/test267
+@@ -69,9 +69,14 @@ http://%HOSTIP:%HTTPPORT/267 -u testuser:testpass --ntlm -d "data" -H "Header1:
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol nonewline=yes>
+ POST /267 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+@@ -81,7 +86,7 @@ Content-Length: 0
+ Content-Type: application/x-www-form-urlencoded
+ 
+ POST /267 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test67 b/tests/data/test67
+index 69023fa50..aa2500e34 100644
+--- a/tests/data/test67
++++ b/tests/data/test67
+@@ -69,15 +69,20 @@ http://%HOSTIP:%HTTPPORT/67 -u testuser:testpass --ntlm
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /67 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /67 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test68 b/tests/data/test68
+index 8a0adcf9f..b3b94faa0 100644
+--- a/tests/data/test68
++++ b/tests/data/test68
+@@ -71,15 +71,20 @@ http://%HOSTIP:%HTTPPORT/68 -u testuser:testpass --ntlm
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /68 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /68 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test69 b/tests/data/test69
+index 0cfafd94a..00e8a8c4d 100644
+--- a/tests/data/test69
++++ b/tests/data/test69
+@@ -84,6 +84,11 @@ http://%HOSTIP:%HTTPPORT/69 -u testuser:testpass --anyauth
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /69 HTTP/1.1
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+@@ -91,13 +96,13 @@ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /69 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /69 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test81 b/tests/data/test81
+index 056571bed..a07513a3e 100644
+--- a/tests/data/test81
++++ b/tests/data/test81
+@@ -67,9 +67,14 @@ http://%HOSTIP:%HTTPPORT/81 --proxy-user testuser:testpass -x http://%HOSTIP:%HT
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET http://127.0.0.1:%HTTPPORT/81 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Proxy-Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Pragma: no-cache
+@@ -77,7 +82,7 @@ Accept: */*
+ Proxy-Connection: Keep-Alive
+ 
+ GET http://127.0.0.1:%HTTPPORT/81 HTTP/1.1
+-Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Proxy-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Pragma: no-cache
+diff --git a/tests/data/test89 b/tests/data/test89
+index 89904d748..73e045eb3 100644
+--- a/tests/data/test89
++++ b/tests/data/test89
+@@ -102,27 +102,32 @@ http://%HOSTIP:%HTTPPORT/89 -u testuser:testpass --ntlm -L
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /89 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /89 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /you/890010 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.8-pre1 (i686-pc-linux-gnu) libcurl/7.10.8-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3 GSS
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /you/890010 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.8-pre1 (i686-pc-linux-gnu) libcurl/7.10.8-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3 GSS
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test90 b/tests/data/test90
+index 5a9dc3479..1a9782bde 100644
+--- a/tests/data/test90
++++ b/tests/data/test90
+@@ -137,19 +137,24 @@ http://%HOSTIP:%HTTPPORT/90 -u testuser:testpass --anyauth -L
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /90 HTTP/1.1
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /90 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /90 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+@@ -159,13 +164,13 @@ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /you/900010 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.8-pre1 (i686-pc-linux-gnu) libcurl/7.10.8-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3 GSS
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /you/900010 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEgAAAAYABgAYAAAAAAAAABAAAAACAAIAEAAAAAAAAAASAAAAAAAAAB4AAAAAYIAAHRlc3R1c2VyWmRDApEJkUyGOPS3DjvASModEeW/N/FBqYVyF4y6/y/7F6qmEQ7lXjXFF3tH1145
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAAAAABwAAAACAAIAHAAAAAEAA
+ User-Agent: curl/7.10.8-pre1 (i686-pc-linux-gnu) libcurl/7.10.8-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3 GSS
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+diff --git a/tests/data/test91 b/tests/data/test91
+index bad4f3a57..ec0ca38ec 100644
+--- a/tests/data/test91
++++ b/tests/data/test91
+@@ -87,6 +87,11 @@ http://%HOSTIP:%HTTPPORT/91 --anyauth -u mydomain\\myself:secret
+ <strip>
+ ^User-Agent:.*
+ </strip>
++# We strip off a large chunk of the type-2 NTLM message since it depends on
++# the local host name and thus differs on different machines!
++<strippart>
++s/^(Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAgACABwAAAABgAGAHgAAAAEAA).*/$1/
++</strippart)
+ <protocol>
+ GET /91 HTTP/1.1
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+@@ -94,13 +99,13 @@ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /91 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAABAAAAAgIAAAAAAAAgAAAAAAAAACAAAAA=
++Authorization: NTLM TlRMTVNTUAABAAAABoIAAAAAAAAAAAAAAAAAAAAAAAA=
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+ 
+ GET /91 HTTP/1.1
+-Authorization: NTLM TlRMTVNTUAADAAAAGAAYAE4AAAAYABgAZgAAAAgACABAAAAABgAGAEgAAAAAAAAATgAAAAAAAAB+AAAAAYIAAG15ZG9tYWlubXlzZWxmwjImlHmYemDYVmFrmRFoVn3jfoYDE+7QLmWXF7FJDlDNWSItJ+RylXJGAJdepH4C
++Authorization: NTLM TlRMTVNTUAADAAAAGAAYAEAAAAAYABgAWAAAAAgACABwAAAABgAGAHgAAAAEAA
+ User-Agent: curl/7.10.6-pre1 (i686-pc-linux-gnu) libcurl/7.10.6-pre1 OpenSSL/0.9.7a ipv6 zlib/1.1.3
+ Host: 127.0.0.1:%HTTPPORT
+ Accept: */*
+-- 
+2.34.1
+

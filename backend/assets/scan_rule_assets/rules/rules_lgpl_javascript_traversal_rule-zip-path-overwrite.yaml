@@ -1,0 +1,61 @@
+rules:
+- id: rules_lgpl_javascript_traversal_rule-zip-path-overwrite
+  patterns:
+  - pattern-either:
+    - pattern-inside: 'import $X from ''unzipper''
+
+        ...
+
+        '
+    - pattern-inside: '$X = require(''unzipper'')
+
+        ...
+
+        '
+  - pattern-inside: "$Y.pipe($X.Parse(...)).on('entry', function $FUNC(...) {\n  \
+      \  ...\n}, ...)\n"
+  - pattern-not-inside: "if (<... $FILENAME.indexOf(...) ...>){ \n...\n}\n"
+  - pattern-not-inside: '$BASE = $PATH.basename($FILENAME, ...)
+
+      ...
+
+      $JOIN = $PATH.join(..., $BASE)
+
+      ...
+
+      '
+  - pattern-not: '$FS.$MTD($PATH.join(..., $PATH.basename($FILENAME, ...)))
+
+      '
+  - pattern: '$FS.$MTD($FIL, ...)
+
+      '
+  - metavariable-regex:
+      metavariable: $MTD
+      regex: ^(writeFileSync|writeFile|createWriteStream)$
+  message: "This application is extracting ZIP archives without sanitizing paths or\
+    \ writing files to a dedicated extraction directory. \nThis allows attackers to\
+    \ overwrite sensitive files or inject malicious code by manipulating TAR archive\
+    \ contents.\n\nTo fix, sanitize all paths from ZIP archives before writing extracted\
+    \ files using path.basename and path.join.\n\nExample  of extracting tar files\
+    \ safely:\n```\napp.get(\"/extract\", async (req, res) => {\n        fs.createReadStream(zipPath)\n\
+    \        .pipe(unzipper.Parse())\n        .on('entry', entry => {\n          \
+    \  const directory = 'assets/tar/extracted/';\n            const filename = entry.path;\n\
+    \            entry.pipe(fs.createWriteStream(path.join(directory, filename)));\n\
+    \        });\n});\n```\n\nWrite extracted files only to a dedicated extraction\
+    \ directory, not the global filesystem. Limit extracts to allowed file type.\n\
+    \nSee OWASP Path Traversal (https://owasp.org/www-community/attacks/Path_Traversal)\
+    \ and Unrestricted Upload of File with \nDangerous Type (https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload)\
+    \ for more details.\n"
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    shortDescription: Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')
+    cwe: CWE-22
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: MEDIUM
+    category: security

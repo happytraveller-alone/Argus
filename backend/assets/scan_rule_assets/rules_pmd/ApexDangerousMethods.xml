@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ApexDangerousMethods Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ApexDangerousMethods</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexDangerousMethods" language="apex" since="5.5.3" message="Calling potentially dangerous method" class="net.sourceforge.pmd.lang.apex.rule.security.ApexDangerousMethodsRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexdangerousmethods">
+            <description>
+    Checks against calling dangerous methods.
+
+    For the time being, it reports:
+
+    * Against `FinancialForce`'s `Configuration.disableTriggerCRUDSecurity()`. Disabling CRUD security
+    opens the door to several attacks and requires manual validation, which is unreliable.
+    * Calling `System.debug` passing sensitive data as parameter, which could lead to exposure
+    of private data.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Foo {
+        public Foo() {
+            Configuration.disableTriggerCRUDSecurity();
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

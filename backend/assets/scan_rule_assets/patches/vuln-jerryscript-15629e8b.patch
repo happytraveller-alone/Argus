@@ -1,0 +1,113 @@
+From 15629e8ba5bdbb4e92a81f327d532968343ae376 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?D=C3=A1niel=20B=C3=A1tyai?= <dbatyai@inf.u-szeged.hu>
+Date: Tue, 26 May 2020 09:44:38 +0200
+Subject: [PATCH] Add stack limit check to proxy operations (#3796)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes #3785.
+
+JerryScript-DCO-1.0-Signed-off-by: Dániel Bátyai dbatyai@inf.u-szeged.hu
+---
+ .travis.yml                                   |  2 +-
+ .../ecma/operations/ecma-proxy-object.c       |  4 ++
+ .../es2015/regression-test-issue-3785.js      | 37 +++++++++++++++++++
+ 3 files changed, 42 insertions(+), 1 deletion(-)
+ create mode 100644 tests/jerry/es2015/regression-test-issue-3785.js
+
+diff --git a/.travis.yml b/.travis.yml
+index b43755c7..e40b3c20 100644
+--- a/.travis.yml
++++ b/.travis.yml
+@@ -77,7 +77,7 @@ matrix:
+       env:
+         # Skipping maximum stack usage related tests due to 'detect_stack_use_after_return=1' ASAN option.
+         # For more detailed description: https://github.com/google/sanitizers/wiki/AddressSanitizerUseAfterReturn#compatibility
+-        - OPTS="--quiet --jerry-tests --jerry-test-suite --skip-list=parser-oom.js,parser-oom2.js,stack-limit.js,regression-test-issue-2190.js,regression-test-issue-2258-2963.js,regression-test-issue-2448.js,regression-test-issue-2905.js --buildoptions=--stack-limit=0,--compile-flag=-fsanitize=address,--compile-flag=-m32,--compile-flag=-fno-omit-frame-pointer,--compile-flag=-fno-common,--compile-flag=-O2,--debug,--system-allocator=on,--linker-flag=-fuse-ld=gold"
++        - OPTS="--quiet --jerry-tests --jerry-test-suite --skip-list=parser-oom.js,parser-oom2.js,stack-limit.js,regression-test-issue-2190.js,regression-test-issue-2258-2963.js,regression-test-issue-2448.js,regression-test-issue-2905.js,regression-test-issue-3785.js --buildoptions=--stack-limit=0,--compile-flag=-fsanitize=address,--compile-flag=-m32,--compile-flag=-fno-omit-frame-pointer,--compile-flag=-fno-common,--compile-flag=-O2,--debug,--system-allocator=on,--linker-flag=-fuse-ld=gold"
+         - ASAN_OPTIONS=detect_stack_use_after_return=1:check_initialization_order=true:strict_init_order=true
+         - TIMEOUT=600
+       addons:
+diff --git a/jerry-core/ecma/operations/ecma-proxy-object.c b/jerry-core/ecma/operations/ecma-proxy-object.c
+index 3e831b85..6e75c5d2 100644
+--- a/jerry-core/ecma/operations/ecma-proxy-object.c
++++ b/jerry-core/ecma/operations/ecma-proxy-object.c
+@@ -25,6 +25,7 @@
+ #include "ecma-objects.h"
+ #include "ecma-objects-general.h"
+ #include "ecma-proxy-object.h"
++#include "jcontext.h"
+ 
+ /** \addtogroup ecma ECMA
+  * @{
+@@ -994,6 +995,7 @@ ecma_proxy_object_has (ecma_object_t *obj_p, /**< proxy object */
+                        ecma_string_t *prop_name_p) /**< property name */
+ {
+   JERRY_ASSERT (ECMA_OBJECT_IS_PROXY (obj_p));
++  ECMA_CHECK_STACK_USAGE ();
+ 
+   ecma_proxy_object_t *proxy_obj_p = (ecma_proxy_object_t *) obj_p;
+ 
+@@ -1097,6 +1099,7 @@ ecma_proxy_object_get (ecma_object_t *obj_p, /**< proxy object */
+                        ecma_value_t receiver) /**< receiver to invoke getter function */
+ {
+   JERRY_ASSERT (ECMA_OBJECT_IS_PROXY (obj_p));
++  ECMA_CHECK_STACK_USAGE ();
+ 
+   ecma_proxy_object_t *proxy_obj_p = (ecma_proxy_object_t *) obj_p;
+ 
+@@ -1201,6 +1204,7 @@ ecma_proxy_object_set (ecma_object_t *obj_p, /**< proxy object */
+                        ecma_value_t receiver) /**< receiver to invoke setter function */
+ {
+   JERRY_ASSERT (ECMA_OBJECT_IS_PROXY (obj_p));
++  ECMA_CHECK_STACK_USAGE ();
+ 
+   ecma_proxy_object_t *proxy_obj_p = (ecma_proxy_object_t *) obj_p;
+ 
+diff --git a/tests/jerry/es2015/regression-test-issue-3785.js b/tests/jerry/es2015/regression-test-issue-3785.js
+new file mode 100644
+index 00000000..be034a84
+--- /dev/null
++++ b/tests/jerry/es2015/regression-test-issue-3785.js
+@@ -0,0 +1,37 @@
++// Copyright JS Foundation and other contributors, http://js.foundation
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++var a = new Proxy({length:2}, {});
++a.__proto__ = a;
++
++try {
++  a[1];
++  assert (false);
++} catch (e) {
++  assert (e instanceof RangeError);
++}
++
++try {
++  a[1] = 2;
++  assert (false);
++} catch (e) {
++  assert (e instanceof RangeError);
++}
++
++try {
++  Array.prototype.forEach.call(a, ()=>{});
++  assert (false);
++} catch (e) {
++  assert (e instanceof RangeError);
++}
+-- 
+2.34.1
+

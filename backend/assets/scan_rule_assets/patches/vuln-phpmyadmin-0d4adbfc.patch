@@ -1,0 +1,40 @@
+From 0d4adbfc1996c7d715b0ac9fa39a2ac14d8b28ad Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <michal@cihar.com>
+Date: Tue, 9 Dec 2008 13:45:32 +0000
+Subject: [PATCH] [security] possible XSRF on several pages
+
+---
+ ChangeLog                         | 3 +++
+ libraries/db_table_exists.lib.php | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index d649c929ae..19722b6c58 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -11,6 +11,9 @@ $HeadURL: https://phpmyadmin.svn.sourceforge.net/svnroot/phpmyadmin/trunk/phpMyA
+ - [core] do not automatically set and create TempDir, it might lead to security
+   issue (thanks to Thijs Kinkhorst)
+ 
++2.11.9.4 (2008-12-09)
++- [security] possible XSRF on several pages
++
+ 2.11.9.3 (2008-10-30)
+ - [security] XSS in a Designer component 
+ 
+diff --git a/libraries/db_table_exists.lib.php b/libraries/db_table_exists.lib.php
+index 19a5827b99..0f8e60d593 100644
+--- a/libraries/db_table_exists.lib.php
++++ b/libraries/db_table_exists.lib.php
+@@ -64,7 +64,7 @@ if (empty($is_table) && !defined('PMA_SUBMIT_MULT')) {
+                  * @todo should this check really only happen if IS_TRANSFORMATION_WRAPPER?
+                  */
+                 $_result = PMA_DBI_try_query(
+-                    'SELECT COUNT(*) FROM `' . PMA_sqlAddslashes($table, true) . '`;',
++                    'SELECT COUNT(*) FROM ' . PMA_backquote($table) . ';',
+                     null, PMA_DBI_QUERY_STORE);
+                 $is_table = ($_result && @PMA_DBI_num_rows($_result));
+                 PMA_DBI_free_result($_result);
+-- 
+2.34.1
+

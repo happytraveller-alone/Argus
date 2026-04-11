@@ -1,0 +1,179 @@
+From 12294990c90e043862be9eb7eb22c3784b526340 Mon Sep 17 00:00:00 2001
+From: Johannes Schindelin <johannes.schindelin@gmx.de>
+Date: Fri, 24 Apr 2020 22:35:49 +0000
+Subject: [PATCH] credential: handle `credential.<partial-URL>.<key>` again
+
+In the patches for CVE-2020-11008, the ability to specify credential
+settings in the config for partial URLs got lost. For example, it used
+to be possible to specify a credential helper for a specific protocol:
+
+	[credential "https://"]
+		helper = my-https-helper
+
+Likewise, it used to be possible to configure settings for a specific
+host, e.g.:
+
+	[credential "dev.azure.com"]
+		useHTTPPath = true
+
+Let's reinstate this behavior.
+
+While at it, increase the test coverage to document and verify the
+behavior with a couple other categories of partial URLs.
+
+Signed-off-by: Johannes Schindelin <johannes.schindelin@gmx.de>
+Signed-off-by: Junio C Hamano <gitster@pobox.com>
+---
+ credential.c           | 27 +++++++++++++++++++++++++++
+ t/t0300-credentials.sh | 38 ++++++++++++++++++++++++++++++++++++++
+ urlmatch.c             | 10 +++++++---
+ urlmatch.h             |  5 +++++
+ 4 files changed, 77 insertions(+), 3 deletions(-)
+
+diff --git a/credential.c b/credential.c
+index b8f693fa28..4e7197d97a 100644
+--- a/credential.c
++++ b/credential.c
+@@ -37,6 +37,10 @@ int credential_match(const struct credential *want,
+ #undef CHECK
+ }
+ 
++
++static int credential_from_potentially_partial_url(struct credential *c,
++						   const char *url);
++
+ static int credential_config_callback(const char *var, const char *value,
+ 				      void *data)
+ {
+@@ -82,6 +86,22 @@ static int select_all(const struct urlmatch_item *a,
+ 	return 0;
+ }
+ 
++static int match_partial_url(const char *url, void *cb)
++{
++	struct credential *c = cb;
++	struct credential want = CREDENTIAL_INIT;
++	int matches = 0;
++
++	if (credential_from_potentially_partial_url(&want, url) < 0)
++		warning(_("skipping credential lookup for key: credential.%s"),
++			url);
++	else
++		matches = credential_match(&want, c);
++	credential_clear(&want);
++
++	return matches;
++}
++
+ static void credential_apply_config(struct credential *c)
+ {
+ 	char *normalized_url;
+@@ -101,6 +121,7 @@ static void credential_apply_config(struct credential *c)
+ 	config.collect_fn = credential_config_callback;
+ 	config.cascade_fn = NULL;
+ 	config.select_fn = select_all;
++	config.fallback_match_fn = match_partial_url;
+ 	config.cb = c;
+ 
+ 	credential_format(c, &url);
+@@ -468,6 +489,12 @@ static int credential_from_url_1(struct credential *c, const char *url,
+ 	return 0;
+ }
+ 
++static int credential_from_potentially_partial_url(struct credential *c,
++						   const char *url)
++{
++	return credential_from_url_1(c, url, 1, 0);
++}
++
+ int credential_from_url_gently(struct credential *c, const char *url, int quiet)
+ {
+ 	return credential_from_url_1(c, url, 0, quiet);
+diff --git a/t/t0300-credentials.sh b/t/t0300-credentials.sh
+index 5555a1524f..c6643288ed 100755
+--- a/t/t0300-credentials.sh
++++ b/t/t0300-credentials.sh
+@@ -575,4 +575,42 @@ test_expect_success 'credential system refuses to work with missing protocol' '
+ 	test_i18ncmp expect stderr
+ '
+ 
++test_expect_success 'credential config with partial URLs' '
++	echo "echo password=yep" | write_script git-credential-yep &&
++	test_write_lines url=https://user@example.com/repo.git >stdin &&
++	for partial in \
++		example.com \
++		user@example.com \
++		https:// \
++		https://example.com \
++		https://example.com/ \
++		https://user@example.com \
++		https://user@example.com/ \
++		https://example.com/repo.git \
++		https://user@example.com/repo.git \
++		/repo.git
++	do
++		git -c credential.$partial.helper=yep \
++			credential fill <stdin >stdout &&
++		grep yep stdout ||
++		return 1
++	done &&
++
++	for partial in \
++		dont.use.this \
++		http:// \
++		/repo
++	do
++		git -c credential.$partial.helper=yep \
++			credential fill <stdin >stdout &&
++		! grep yep stdout ||
++		return 1
++	done &&
++
++	git -c credential.$partial.helper=yep \
++		-c credential.with%0anewline.username=uh-oh \
++		credential fill <stdin >stdout 2>stderr &&
++	test_i18ngrep "skipping credential lookup for key" stderr
++'
++
+ test_done
+diff --git a/urlmatch.c b/urlmatch.c
+index 29272a5c4f..33a2ccd306 100644
+--- a/urlmatch.c
++++ b/urlmatch.c
+@@ -572,10 +572,14 @@ int urlmatch_config_entry(const char *var, const char *value, void *cb)
+ 
+ 		config_url = xmemdupz(key, dot - key);
+ 		norm_url = url_normalize_1(config_url, &norm_info, 1);
++		if (norm_url)
++			retval = match_urls(url, &norm_info, &matched);
++		else if (collect->fallback_match_fn)
++			retval = collect->fallback_match_fn(config_url,
++							    collect->cb);
++		else
++			retval = 0;
+ 		free(config_url);
+-		if (!norm_url)
+-			return 0;
+-		retval = match_urls(url, &norm_info, &matched);
+ 		free(norm_url);
+ 		if (!retval)
+ 			return 0;
+diff --git a/urlmatch.h b/urlmatch.h
+index 2407520731..6ff42f81b0 100644
+--- a/urlmatch.h
++++ b/urlmatch.h
+@@ -59,6 +59,11 @@ struct urlmatch_config {
+ 	 * specificity rules) than existing.
+ 	 */
+ 	int (*select_fn)(const struct urlmatch_item *found, const struct urlmatch_item *existing);
++	/*
++	 * An optional callback to allow e.g. for partial URLs; it shall
++	 * return 1 or 0 depending whether `url` matches or not.
++	 */
++	int (*fallback_match_fn)(const char *url, void *cb);
+ };
+ 
+ int urlmatch_config_entry(const char *var, const char *value, void *cb);
+-- 
+2.34.1
+

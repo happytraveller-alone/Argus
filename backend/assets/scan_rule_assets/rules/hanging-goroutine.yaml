@@ -1,0 +1,49 @@
+rules:
+- id: hanging-goroutine
+  message: Potential goroutine leak due to unbuffered channel send inside loop or
+    unbuffered channel receive in select block
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-833: Deadlock'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: LOW
+    technology:
+    - --no-technology--
+    description: Goroutine leaks
+    references:
+    - https://blog.trailofbits.com/2021/11/08/discovering-goroutine-leaks-with-semgrep
+  patterns:
+  - pattern-either:
+    - pattern: "for ... {\n  ...\n  go func(...) {\n    ...\n    $CHANNEL <- $VAL\n\
+        \    ...\n  }(...)\n}\n...\n$Y = <- $CHANNEL\n...\n"
+    - pattern: "for ... {\n  ...\n  go func(...) {\n    ...\n    $CHANNEL <- $VAL\n\
+        \    ...\n  }(...)\n}\n...\nreturn <- $CHANNEL\n"
+    - pattern: "for ... {\n  ...\n  go func(...) {\n    ...\n    select {\n      case\
+        \ ...\n      case $CHANNEL <- $VAL: ...\n      case ...\n    }\n    ...\n\
+        \  }(...)\n...\n}\n...\nreturn <- $CHANNEL\n"
+    - pattern: "go func(...){\n  ...\n  $CHANNEL <- $X\n  ...\n}(...)\n...\nselect\
+        \ {\ncase ...\ncase $Y = <- $CHANNEL: \n...\n}\n"
+    - pattern: "go func(...){\n  ...\n  $CHANNEL <- $X\n  ...\n}(...)\n...\nselect\
+        \ {\ncase ...\ncase <- $CHANNEL: \n...\n}\n"
+    - pattern: "go func(...){\n  ...\n  $CHANNEL <- $X\n  ...\n}(...)\n...\nselect\
+        \ {\ncase ...\ncase $Y <- $CHANNEL: \n...\n}\n"
+  - pattern-inside: '$CHANNEL := make(...)
+
+      ...
+
+      '
+  - pattern-not-inside: '$CHANNEL := make(..., $T)
+
+      ...
+
+      '
+  - pattern-not: "go func(...){\n  ...\n  $CHANNEL <- $X\n  ...\n}(...)\n...\nselect\
+      \ {\ncase ...\ncase ...: \n  ...\n  ... = <- $CHANNEL\n  ...\n}\n"
+  - pattern-not: "go func(...){\n  ...\n  $CHANNEL <- $X\n  ...\n}(...)\n...\nselect\
+      \ {\ncase ...\ncase ...: \n  ...\n  <-$CHANNEL\n  ...\n}\n"

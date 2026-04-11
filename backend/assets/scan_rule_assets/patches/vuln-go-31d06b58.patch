@@ -1,0 +1,110 @@
+From 31d06b58fa2448c8e98ac78a97cc9a52dc2aa035 Mon Sep 17 00:00:00 2001
+From: Damien Neil <dneil@google.com>
+Date: Wed, 7 Sep 2022 16:36:41 -0700
+Subject: [PATCH] [release-branch.go1.18] all: upgrade golang.org/x/net to
+ v0.0.0-20220907013725-0a43f88f7ef0
+
+Restore vendoring after go1.18.6 security release.
+
+For #53977
+
+Change-Id: Ifff04582aa3d5fce40606265db42af3415c3c0b4
+Reviewed-on: https://go-review.googlesource.com/c/go/+/429316
+Reviewed-by: Carlos Amedee <carlos@golang.org>
+Run-TryBot: Damien Neil <dneil@google.com>
+TryBot-Result: Gopher Robot <gobot@golang.org>
+---
+ src/cmd/internal/moddeps/moddeps_test.go |  2 --
+ src/go.mod                               |  2 +-
+ src/go.sum                               |  4 ++--
+ src/net/http/h2_bundle.go                | 13 ++++++-------
+ src/vendor/modules.txt                   |  2 +-
+ 5 files changed, 10 insertions(+), 13 deletions(-)
+
+diff --git a/src/cmd/internal/moddeps/moddeps_test.go b/src/cmd/internal/moddeps/moddeps_test.go
+index 3306e29431..56c3b2585c 100644
+--- a/src/cmd/internal/moddeps/moddeps_test.go
++++ b/src/cmd/internal/moddeps/moddeps_test.go
+@@ -34,8 +34,6 @@ import (
+ // See issues 36852, 41409, and 43687.
+ // (Also see golang.org/issue/27348.)
+ func TestAllDependencies(t *testing.T) {
+-	t.Skip("TODO(#53977): 1.18.5 contains unreleased changes from vendored modules")
+-
+ 	goBin := testenv.GoToolPath(t)
+ 
+ 	// Ensure that all packages imported within GOROOT
+diff --git a/src/go.mod b/src/go.mod
+index 8ca3c5fb70..4613bb6825 100644
+--- a/src/go.mod
++++ b/src/go.mod
+@@ -4,7 +4,7 @@ go 1.18
+ 
+ require (
+ 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3
+-	golang.org/x/net v0.0.0-20211209124913-491a49abca63
++	golang.org/x/net v0.0.0-20220907013725-0a43f88f7ef0
+ )
+ 
+ require (
+diff --git a/src/go.sum b/src/go.sum
+index 7c93a59725..07cb8d82d5 100644
+--- a/src/go.sum
++++ b/src/go.sum
+@@ -1,7 +1,7 @@
+ golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3 h1:0es+/5331RGQPcXlMfP+WrnIIS6dNnNRe0WB02W0F4M=
+ golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
+-golang.org/x/net v0.0.0-20211209124913-491a49abca63 h1:iocB37TsdFuN6IBRZ+ry36wrkoV51/tl5vOWqkcPGvY=
+-golang.org/x/net v0.0.0-20211209124913-491a49abca63/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
++golang.org/x/net v0.0.0-20220907013725-0a43f88f7ef0 h1:XXaSUSplyi6wsRNJGB7vUBvDjbxc8UPYBsf9ukBQ3KA=
++golang.org/x/net v0.0.0-20220907013725-0a43f88f7ef0/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
+ golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5 h1:y/woIyUBFbpQGKS0u1aHF/40WUDnek3fPOyD08H5Vng=
+ golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/text v0.3.8-0.20211105212822-18b340fc7af2 h1:GLw7MR8AfAG2GmGcmVgObFOHXYypgGjnGno25RDwn3Y=
+diff --git a/src/net/http/h2_bundle.go b/src/net/http/h2_bundle.go
+index 1e78f6cdb9..292dded28d 100644
+--- a/src/net/http/h2_bundle.go
++++ b/src/net/http/h2_bundle.go
+@@ -3384,11 +3384,10 @@ func (s http2SettingID) String() string {
+ // name (key). See httpguts.ValidHeaderName for the base rules.
+ //
+ // Further, http2 says:
+-//
+-//	"Just as in HTTP/1.x, header field names are strings of ASCII
+-//	characters that are compared in a case-insensitive
+-//	fashion. However, header field names MUST be converted to
+-//	lowercase prior to their encoding in HTTP/2. "
++//   "Just as in HTTP/1.x, header field names are strings of ASCII
++//   characters that are compared in a case-insensitive
++//   fashion. However, header field names MUST be converted to
++//   lowercase prior to their encoding in HTTP/2. "
+ func http2validWireHeaderFieldName(v string) bool {
+ 	if len(v) == 0 {
+ 		return false
+@@ -3579,8 +3578,8 @@ func (s *http2sorter) SortStrings(ss []string) {
+ // validPseudoPath reports whether v is a valid :path pseudo-header
+ // value. It must be either:
+ //
+-//	*) a non-empty string starting with '/'
+-//	*) the string '*', for OPTIONS requests.
++//     *) a non-empty string starting with '/'
++//     *) the string '*', for OPTIONS requests.
+ //
+ // For now this is only used a quick check for deciding when to clean
+ // up Opaque URLs before sending requests from the Transport.
+diff --git a/src/vendor/modules.txt b/src/vendor/modules.txt
+index 4714b1d386..109a99e44a 100644
+--- a/src/vendor/modules.txt
++++ b/src/vendor/modules.txt
+@@ -9,7 +9,7 @@ golang.org/x/crypto/curve25519/internal/field
+ golang.org/x/crypto/hkdf
+ golang.org/x/crypto/internal/poly1305
+ golang.org/x/crypto/internal/subtle
+-# golang.org/x/net v0.0.0-20211209124913-491a49abca63
++# golang.org/x/net v0.0.0-20220907013725-0a43f88f7ef0
+ ## explicit; go 1.17
+ golang.org/x/net/dns/dnsmessage
+ golang.org/x/net/http/httpguts
+-- 
+2.34.1
+

@@ -1,0 +1,37 @@
+rules:
+- id: raptor-incorrect-unsigned-comparison
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/697
+    - https://g.co/kgs/PCHQjJ
+    confidence: HIGH
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-697: Incorrect Comparison'
+    - 'CWE-681: Incorrect Conversion between Numeric Types'
+  message: Checking if an unsigned variable is negative makes no sense and is usually
+    a good indication that something is probably wrong with the code.
+  severity: WARNING
+  languages:
+  - c
+  - cpp
+  pattern-either:
+  - pattern: (unsigned short $_) < 0
+  - pattern: (unsigned short int $_) < 0
+  - pattern: (unsigned int $_) < 0
+  - pattern: (unsigned long $_) < 0
+  - pattern: (unsigned long int $_) < 0
+  - pattern: (size_t $_) < 0
+  - pattern: (unsigned short $_) <= 0
+  - pattern: (unsigned short int $_) <= 0
+  - pattern: (unsigned int $_) <= 0
+  - pattern: (unsigned long $_) <= 0
+  - pattern: (unsigned long int $_) <= 0
+  - pattern: (size_t $_) <= 0
+  - pattern: (unsigned short $_) >= 0
+  - pattern: (unsigned short int $_) >= 0
+  - pattern: (unsigned int $_) >= 0
+  - pattern: (unsigned long $_) >= 0
+  - pattern: (unsigned long int $_) >= 0
+  - pattern: (size_t $_) >= 0

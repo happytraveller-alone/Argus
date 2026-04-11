@@ -1,0 +1,27 @@
+rules:
+- id: bad-sort-slice-function
+  patterns:
+  - pattern-either:
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I]\
+        \ < $SLICE[$I]\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J]\
+        \ < $SLICE[$I]\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I].$FIELD\
+        \ < $SLICE[$I].$FIELD\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J].$FIELD\
+        \ < $SLICE[$J].$FIELD\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I]\
+        \ > $SLICE[$I]\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J]\
+        \ > $SLICE[$I]\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I].$FIELD\
+        \ > $SLICE[$I].$FIELD\n})\n"
+    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J].$FIELD\
+        \ > $SLICE[$J].$FIELD\n})\n"
+  message: Maybe bad sort.Slice() less function
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-697: Incorrect Comparison'

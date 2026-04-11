@@ -44,7 +44,7 @@
   - Rust DB bootstrap 只检查 Rust 自己依赖的表，不再盯 Python `alembic_version`
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
   - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
-  - `backend_old/app/db` 下的扫描引擎规则资产已开始导入 `rust_scan_rule_assets`
+  - `backend/assets/scan_rule_assets/` 已成为 Rust 规则资产 root，并导入 `rust_scan_rule_assets`
   - startup init allowlist / denylist / defer-list 已显式写入 Rust policy
   - Gitleaks 已开始实际消费 Rust 规则资产库中的 builtin config
   - Opengrep 已开始实际消费 Rust 规则资产库中的 internal / patch 规则目录
@@ -57,7 +57,7 @@
   - runner preflight 后续与 Rust runtime 的进一步打通
   - 扫描引擎对 Rust 规则资产库的完整消费链路
   - `phpstan` 的规则消费接入
-  - `yasa` 已从后续 Rust 迁移目标中移除
+  - `yasa` 已从后续 Rust 迁移目标中移除，Rust 侧不再维护其规则资产和引擎调用
 - owner: Rust migration
 - target phase:
   - A now in progress

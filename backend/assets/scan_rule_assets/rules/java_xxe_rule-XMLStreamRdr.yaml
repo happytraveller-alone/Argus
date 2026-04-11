@@ -1,0 +1,68 @@
+rules:
+- id: java_xxe_rule-XMLStreamRdr
+  languages:
+  - java
+  message: "External XML entities are a feature of XML parsers that allow \ndocuments\
+    \ to contain references to other documents or data. This \nfeature can be abused\
+    \ to read files, communicate with external\nhosts, exfiltrate data, or cause a\
+    \ Denial of Service (DoS).\nIn most XML parsers, the recommendation to protect\
+    \ against XXE is \nto disable the doctype feature.\nUnfortunately use of the `XMLInputFactory`\
+    \ requires that the doctypes \nfeature be enabled. Instead the application can\
+    \ set the `ACCESS_EXTERNAL_DTD` \nto an empty string and disable `javax.xml.stream.isSupportingExternalEntities`.\n\
+    \nSecure Code Example:\n```\n// Create an XMLInputFactory\nXMLInputFactory factory\
+    \ = XMLInputFactory.newFactory();\n// Set the ACCESS_EXTERNAL_DTD property to\
+    \ an empty string so it won't access\n// entities using protocols\n// (ref:\n\
+    https://docs.oracle.com/javase/8/docs/api/javax/xml/XMLConstants.html#ACCESS_EXTERNAL_DTD)\n\
+    factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n// Additionally,\
+    \ disable support for resolving external entities\nfactory.setProperty(\"javax.xml.stream.isSupportingExternalEntities\"\
+    , false);\n// Continue to work with the factory/stream parser\n```\n\nFor more\
+    \ information on XML security see OWASP's guide:\nhttps://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java\n"
+  patterns:
+  - pattern-not-inside: '(javax.xml.stream.XMLInputFactory $FAC).setProperty(XMLConstants.ACCESS_EXTERNAL_DTD,
+      "");
+
+      ...
+
+      '
+  - pattern-not-inside:
+      patterns:
+      - pattern-either:
+        - pattern: '(javax.xml.stream.XMLInputFactory $FAC).setProperty(XMLInputFactory.SUPPORT_DTD,
+            $FALSE);
+
+            ...
+
+            '
+        - pattern: '(javax.xml.stream.XMLInputFactory $FAC).setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES,
+            $FALSE);
+
+            ...
+
+            '
+        - pattern: '(javax.xml.stream.XMLInputFactory $FAC).setProperty("javax.xml.stream.isSupportingExternalEntities",
+            $FALSE);
+
+            ...
+
+            '
+      - metavariable-pattern:
+          metavariable: $FALSE
+          pattern-either:
+          - pattern: 'false
+
+              '
+          - pattern: 'Boolean.FALSE
+
+              '
+  - pattern: '(javax.xml.stream.XMLInputFactory $FAC).createXMLStreamReader(...)
+
+      '
+  metadata:
+    shortDescription: Improper restriction of XML external entity reference ('XXE')
+    category: security
+    cwe: CWE-611
+    owasp:
+    - A4:2017-XML External Entities (XXE)
+    - A05:2021-Security Misconfiguration
+    security-severity: MEDIUM
+  severity: WARNING

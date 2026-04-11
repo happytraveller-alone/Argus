@@ -1,0 +1,48 @@
+rules:
+- id: http-response-splitting_1
+  languages:
+  - java
+  message: Older Java application servers are vulnerable to HTTP response splitting,
+    which may occur if an HTTP request can be injected with CRLF characters. This
+    finding is reported for completeness; it is recommended to ensure your environment
+    is not affected by testing this yourself.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-113: Improper Neutralization of CRLF Sequences in HTTP Headers (''HTTP
+      Request/Response Splitting'')'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://www.owasp.org/index.php/HTTP_Response_Splitting
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#HTTP_RESPONSE_SPLITTING
+    subcategory:
+    - vuln
+    technology:
+    - java
+  pattern-either:
+  - pattern: '$VAR = $REQ.getParameter(...);
+
+      ...
+
+      $COOKIE = new Cookie(..., $VAR, ...);
+
+      ...
+
+      $RESP.addCookie($COOKIE, ...);
+
+      '
+  - patterns:
+    - pattern-inside: "$RETTYPE $FUNC(...,@PathVariable $TYPE $VAR, ...) {\n  ...\n\
+        }\n"
+    - pattern: '$COOKIE = new Cookie(..., $VAR, ...);
+
+        ...
+
+        $RESP.addCookie($COOKIE, ...);
+
+        '
+  severity: INFO

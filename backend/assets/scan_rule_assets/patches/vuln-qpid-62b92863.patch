@@ -1,0 +1,292 @@
+From 62b928632b4779ec841070bfe0b7e9c50506a0c1 Mon Sep 17 00:00:00 2001
+From: Alan Conway <aconway@apache.org>
+Date: Fri, 22 Jun 2012 18:39:56 +0000
+Subject: [PATCH] QPID-3849: Client connection breaks broker-to-broker cluster
+ SASL authentication
+
+Catch-up shadow connections were not being authenticated which caused two problems:
+- new brokers failed to join the cluster if there was an authenticated session.
+- possible security loophole that would allow an intruder to gain access to a catch-up broker.
+
+All external connections are now fully authenticated, which solves both problems.
+
+git-svn-id: https://svn.apache.org/repos/asf/qpid/trunk@1352992 13f79535-47bb-0310-9956-ffa450edef68
+---
+ qpid/cpp/src/qpid/broker/Connection.cpp        |  9 ++++++---
+ qpid/cpp/src/qpid/broker/Connection.h          |  9 +++++++--
+ qpid/cpp/src/qpid/broker/ConnectionHandler.cpp |  8 ++++----
+ qpid/cpp/src/qpid/broker/ConnectionHandler.h   |  4 ++--
+ qpid/cpp/src/qpid/broker/SaslAuthenticator.cpp | 12 ++++++++----
+ qpid/cpp/src/qpid/broker/SaslAuthenticator.h   |  2 +-
+ qpid/cpp/src/qpid/cluster/Connection.cpp       | 11 +++++++----
+ qpid/cpp/src/qpid/cluster/Connection.h         |  8 +++++---
+ qpid/cpp/src/tests/cluster_tests.py            | 12 ++++++++++++
+ qpid/cpp/src/tests/sasl_test_setup.sh          |  2 +-
+ 10 files changed, 53 insertions(+), 24 deletions(-)
+
+diff --git a/qpid/cpp/src/qpid/broker/Connection.cpp b/qpid/cpp/src/qpid/broker/Connection.cpp
+index 15fffdfcb1..85914b6b3a 100644
+--- a/qpid/cpp/src/qpid/broker/Connection.cpp
++++ b/qpid/cpp/src/qpid/broker/Connection.cpp
+@@ -87,10 +87,14 @@ Connection::Connection(ConnectionOutputHandler* out_,
+                        bool link_,
+                        uint64_t objectId_,
+                        bool shadow_,
+-                       bool delayManagement) :
++                       bool delayManagement,
++                       bool authenticated_
++) :
+     ConnectionState(out_, broker_),
+     securitySettings(external),
+-    adapter(*this, link_, shadow_),
++    shadow(shadow_),
++    authenticated(authenticated_),
++    adapter(*this, link_),
+     link(link_),
+     mgmtClosing(false),
+     mgmtId(mgmtId_),
+@@ -100,7 +104,6 @@ Connection::Connection(ConnectionOutputHandler* out_,
+     timer(broker_.getTimer()),
+     errorListener(0),
+     objectId(objectId_),
+-    shadow(shadow_),
+     outboundTracker(*this)
+ {
+     outboundTracker.wrap(out);
+diff --git a/qpid/cpp/src/qpid/broker/Connection.h b/qpid/cpp/src/qpid/broker/Connection.h
+index d4a04a396c..97de44f94d 100644
+--- a/qpid/cpp/src/qpid/broker/Connection.h
++++ b/qpid/cpp/src/qpid/broker/Connection.h
+@@ -86,7 +86,8 @@ class Connection : public sys::ConnectionInputHandler,
+                bool isLink = false,
+                uint64_t objectId = 0,
+                bool shadow=false,
+-               bool delayManagement = false);
++               bool delayManagement = false,
++               bool authenticated=true);
+ 
+     ~Connection ();
+ 
+@@ -151,6 +152,9 @@ class Connection : public sys::ConnectionInputHandler,
+     /** True if this is a shadow connection in a cluster. */
+     bool isShadow() const { return shadow; }
+ 
++    /** True if this connection is authenticated */
++    bool isAuthenticated() const { return authenticated; }
++
+     // Used by cluster to update connection status
+     sys::AggregateOutput& getOutputTasks() { return outputTasks; }
+ 
+@@ -180,6 +184,8 @@ class Connection : public sys::ConnectionInputHandler,
+ 
+     ChannelMap channels;
+     qpid::sys::SecuritySettings securitySettings;
++    bool shadow;
++    bool authenticated;
+     ConnectionHandler adapter;
+     const bool link;
+     bool mgmtClosing;
+@@ -194,7 +200,6 @@ class Connection : public sys::ConnectionInputHandler,
+     boost::intrusive_ptr<ConnectionTimeoutTask> timeoutTimer;
+     ErrorListener* errorListener;
+     uint64_t objectId;
+-    bool shadow;
+     framing::FieldTable clientProperties;
+ 
+     /**
+diff --git a/qpid/cpp/src/qpid/broker/ConnectionHandler.cpp b/qpid/cpp/src/qpid/broker/ConnectionHandler.cpp
+index 8db136a448..a22972ddd2 100644
+--- a/qpid/cpp/src/qpid/broker/ConnectionHandler.cpp
++++ b/qpid/cpp/src/qpid/broker/ConnectionHandler.cpp
+@@ -106,9 +106,10 @@ void ConnectionHandler::setSecureConnection(SecureConnection* secured)
+     handler->secured = secured;
+ }
+ 
+-ConnectionHandler::ConnectionHandler(Connection& connection, bool isClient, bool isShadow)  : handler(new Handler(connection, isClient, isShadow)) {}
++ConnectionHandler::ConnectionHandler(Connection& connection, bool isClient)  :
++    handler(new Handler(connection, isClient)) {}
+ 
+-ConnectionHandler::Handler::Handler(Connection& c, bool isClient, bool isShadow) :
++ConnectionHandler::Handler::Handler(Connection& c, bool isClient) :
+     proxy(c.getOutput()),
+     connection(c), serverMode(!isClient), secured(0),
+     isOpen(false)
+@@ -119,14 +120,13 @@ ConnectionHandler::Handler::Handler(Connection& c, bool isClient, bool isShadow)
+ 
+         properties.setString(QPID_FED_TAG, connection.getBroker().getFederationTag());
+ 
+-        authenticator = SaslAuthenticator::createAuthenticator(c, isShadow);
++        authenticator = SaslAuthenticator::createAuthenticator(c);
+         authenticator->getMechanisms(mechanisms);
+ 
+         Array locales(0x95);
+         boost::shared_ptr<FieldValue> l(new Str16Value(en_US));
+         locales.add(l);
+         proxy.start(properties, mechanisms, locales);
+-        
+     }
+ 
+     maxFrameSize = (64 * 1024) - 1;
+diff --git a/qpid/cpp/src/qpid/broker/ConnectionHandler.h b/qpid/cpp/src/qpid/broker/ConnectionHandler.h
+index 2e25543308..9346e7b1ac 100644
+--- a/qpid/cpp/src/qpid/broker/ConnectionHandler.h
++++ b/qpid/cpp/src/qpid/broker/ConnectionHandler.h
+@@ -61,7 +61,7 @@ class ConnectionHandler : public framing::FrameHandler
+         SecureConnection* secured;
+         bool isOpen;
+ 
+-        Handler(Connection& connection, bool isClient, bool isShadow=false);
++        Handler(Connection& connection, bool isClient);
+         ~Handler();
+         void startOk(const qpid::framing::ConnectionStartOkBody& body);
+         void startOk(const qpid::framing::FieldTable& clientProperties,
+@@ -99,7 +99,7 @@ class ConnectionHandler : public framing::FrameHandler
+ 
+     bool handle(const qpid::framing::AMQMethodBody& method);
+   public:
+-    ConnectionHandler(Connection& connection, bool isClient, bool isShadow=false );
++    ConnectionHandler(Connection& connection, bool isClient );
+     void close(framing::connection::CloseCode code, const std::string& text);
+     void heartbeat();
+     void handle(framing::AMQFrame& frame);
+diff --git a/qpid/cpp/src/qpid/broker/SaslAuthenticator.cpp b/qpid/cpp/src/qpid/broker/SaslAuthenticator.cpp
+index 09df180fcc..2d7c820b63 100644
+--- a/qpid/cpp/src/qpid/broker/SaslAuthenticator.cpp
++++ b/qpid/cpp/src/qpid/broker/SaslAuthenticator.cpp
+@@ -166,13 +166,17 @@ void SaslAuthenticator::fini(void)
+ 
+ #endif
+ 
+-std::auto_ptr<SaslAuthenticator> SaslAuthenticator::createAuthenticator(Connection& c, bool isShadow )
++std::auto_ptr<SaslAuthenticator> SaslAuthenticator::createAuthenticator(Connection& c )
+ {
+     if (c.getBroker().getOptions().auth) {
+-        if ( isShadow )
+-            return std::auto_ptr<SaslAuthenticator>(new NullAuthenticator(c, c.getBroker().getOptions().requireEncrypted));
++        // The cluster creates non-authenticated connections for internal shadow connections
++        // that are never connected to an external client.
++        if ( !c.isAuthenticated() )
++            return std::auto_ptr<SaslAuthenticator>(
++                new NullAuthenticator(c, c.getBroker().getOptions().requireEncrypted));
+         else
+-            return std::auto_ptr<SaslAuthenticator>(new CyrusAuthenticator(c, c.getBroker().getOptions().requireEncrypted));
++            return std::auto_ptr<SaslAuthenticator>(
++                new CyrusAuthenticator(c, c.getBroker().getOptions().requireEncrypted));
+     } else {
+         QPID_LOG(debug, "SASL: No Authentication Performed");
+         return std::auto_ptr<SaslAuthenticator>(new NullAuthenticator(c, c.getBroker().getOptions().requireEncrypted));
+diff --git a/qpid/cpp/src/qpid/broker/SaslAuthenticator.h b/qpid/cpp/src/qpid/broker/SaslAuthenticator.h
+index 4e5d43214c..e5ecc9f6ec 100644
+--- a/qpid/cpp/src/qpid/broker/SaslAuthenticator.h
++++ b/qpid/cpp/src/qpid/broker/SaslAuthenticator.h
+@@ -54,7 +54,7 @@ public:
+     static void init(const std::string& saslName, std::string const & saslConfigPath );
+     static void fini(void);
+ 
+-    static std::auto_ptr<SaslAuthenticator> createAuthenticator(Connection& connection, bool isShadow);
++    static std::auto_ptr<SaslAuthenticator> createAuthenticator(Connection& connection);
+ 
+     virtual void callUserIdCallbacks() { }
+ };
+diff --git a/qpid/cpp/src/qpid/cluster/Connection.cpp b/qpid/cpp/src/qpid/cluster/Connection.cpp
+index ee1bc1feb0..de9e5b3ba0 100644
+--- a/qpid/cpp/src/qpid/cluster/Connection.cpp
++++ b/qpid/cpp/src/qpid/cluster/Connection.cpp
+@@ -85,7 +85,9 @@ Connection::Connection(Cluster& c, sys::ConnectionOutputHandler& out,
+                        const std::string& mgmtId,
+                        const ConnectionId& id, const qpid::sys::SecuritySettings& external)
+     : cluster(c), self(id), catchUp(false), announced(false), output(*this, out),
+-      connectionCtor(&output, cluster.getBroker(), mgmtId, external, false, 0, true),
++      connectionCtor(&output, cluster.getBroker(), mgmtId, external,
++                     false/*isLink*/, 0/*objectId*/, true/*shadow*/, false/*delayManagement*/,
++                     false/*authenticated*/),
+       expectProtocolHeader(false),
+       mcastFrameHandler(cluster.getMulticast(), self),
+       updateIn(c.getUpdateReceiver()),
+@@ -102,9 +104,10 @@ Connection::Connection(Cluster& c, sys::ConnectionOutputHandler& out,
+                    external,
+                    isLink,
+                    isCatchUp ? ++catchUpId : 0,
+-                   // The first catch-up connection is not considered a shadow
+-                   // as it needs to be authenticated.
+-                   isCatchUp && self.second > 1),
++                   // The first catch-up connection is not a shadow
++                   isCatchUp && self.second > 1,
++                   false,       // delayManagement
++                   true),       // catch up connecytions are authenticated
+     expectProtocolHeader(isLink),
+     mcastFrameHandler(cluster.getMulticast(), self),
+     updateIn(c.getUpdateReceiver()),
+diff --git a/qpid/cpp/src/qpid/cluster/Connection.h b/qpid/cpp/src/qpid/cluster/Connection.h
+index d03d6f610a..b0e7b3bd9e 100644
+--- a/qpid/cpp/src/qpid/cluster/Connection.h
++++ b/qpid/cpp/src/qpid/cluster/Connection.h
+@@ -228,6 +228,7 @@ class Connection :
+         uint64_t objectId;
+         bool shadow;
+         bool delayManagement;
++        bool authenticated;
+ 
+         ConnectionCtor(
+             sys::ConnectionOutputHandler* out_,
+@@ -237,17 +238,18 @@ class Connection :
+             bool isLink_=false,
+             uint64_t objectId_=0,
+             bool shadow_=false,
+-            bool delayManagement_=false
++            bool delayManagement_=false,
++            bool authenticated_=true
+         ) : out(out_), broker(broker_), mgmtId(mgmtId_), external(external_),
+             isLink(isLink_), objectId(objectId_), shadow(shadow_),
+-            delayManagement(delayManagement_)
++            delayManagement(delayManagement_), authenticated(authenticated_)
+         {}
+ 
+         std::auto_ptr<broker::Connection> construct() {
+             return std::auto_ptr<broker::Connection>(
+                 new broker::Connection(
+                     out, broker, mgmtId, external, isLink, objectId,
+-                    shadow, delayManagement)
++                    shadow, delayManagement, authenticated)
+             );
+         }
+     };
+diff --git a/qpid/cpp/src/tests/cluster_tests.py b/qpid/cpp/src/tests/cluster_tests.py
+index 09eebc5ec9..3c96b252df 100755
+--- a/qpid/cpp/src/tests/cluster_tests.py
++++ b/qpid/cpp/src/tests/cluster_tests.py
+@@ -227,6 +227,18 @@ acl deny all all
+         self.assertEqual("x", cluster[0].get_message("q").content)
+         self.assertEqual("y", cluster[1].get_message("q").content)
+ 
++    def test_other_mech(self):
++        """Test using a mechanism other than PLAIN/ANONYMOUS for cluster update  authentication.
++        Regression test for https://issues.apache.org/jira/browse/QPID-3849"""
++        sasl_config=os.path.join(self.rootdir, "sasl_config")
++        cluster = self.cluster(2, args=["--auth", "yes", "--sasl-config", sasl_config,
++                                        "--cluster-username=zig",
++                                        "--cluster-password=zig",
++                                        "--cluster-mechanism=DIGEST-MD5"])
++        cluster[0].connect()
++        cluster.start()         # Before the fix this broker falied to join the cluster.
++        cluster[2].connect()
++
+     def test_link_events(self):
+         """Regression test for https://bugzilla.redhat.com/show_bug.cgi?id=611543"""
+         args = ["--mgmt-pub-interval", 1] # Publish management information every second.
+diff --git a/qpid/cpp/src/tests/sasl_test_setup.sh b/qpid/cpp/src/tests/sasl_test_setup.sh
+index 3e69c0f02b..3947986517 100755
+--- a/qpid/cpp/src/tests/sasl_test_setup.sh
++++ b/qpid/cpp/src/tests/sasl_test_setup.sh
+@@ -30,7 +30,7 @@ pwcheck_method: auxprop
+ auxprop_plugin: sasldb
+ sasldb_path: $PWD/sasl_config/qpidd.sasldb
+ sql_select: dummy select
+-mech_list: ANONYMOUS PLAIN DIGEST-MD5 EXTERNAL
++mech_list: ANONYMOUS PLAIN DIGEST-MD5 EXTERNAL CRAM-MD5
+ EOF
+ 
+ # Populate temporary sasl db.
+-- 
+2.34.1
+

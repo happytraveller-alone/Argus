@@ -1,0 +1,22 @@
+From 97b0f64923bc5382531b931625267a3c30d2f17e Mon Sep 17 00:00:00 2001
+From: Bo Maryniuk <bo@suse.de>
+Date: Thu, 5 Jan 2017 22:41:53 +0100
+Subject: [PATCH] Lintfix
+
+---
+ salt/roster/__init__.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/salt/roster/__init__.py b/salt/roster/__init__.py
+index aa4dd335c83b..9ec700b947fb 100644
+--- a/salt/roster/__init__.py
++++ b/salt/roster/__init__.py
+@@ -54,7 +54,7 @@ def get_roster_file(options):
+         raise IOError('No roster file found')
+ 
+     if not os.access(template, os.R_OK):
+-        raise IOError('Access denied to roster "{}"'.format(template))
++        raise IOError('Access denied to roster "{0}"'.format(template))
+ 
+     return template
+ 

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="CollectionTypeMismatch Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for CollectionTypeMismatch</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="CollectionTypeMismatch" language="java" since="7.17.0" message="Object of type ''{0}'' cannot be in collection expecting ''{1}''" class="net.sourceforge.pmd.lang.java.rule.errorprone.CollectionTypeMismatchRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#collectiontypemismatch">
+            <description>
+    Detects method calls on collections where the passed object cannot possibly be in the collection
+    due to type mismatch. This helps catch potential programming errors where incompatible types
+    are used with collection methods like contains(), remove(), indexOf(), etc.
+
+    Methods checked include:
+    - Collection: contains(), remove(), removeAll(), retainAll(), containsAll()
+    - List: indexOf(), lastIndexOf()
+    - Map: containsKey(), containsValue(), get(), getOrDefault(), remove()
+    - Deque: removeFirstOccurrence(), removeLastOccurrence()
+    - Hashtable: contains() (legacy method that checks values)
+    - ConcurrentHashMap: contains() (legacy method that checks values)
+            </description>
+            <priority>3</priority>
+            <example>
+
+    List&lt;Integer&gt; numbers = Arrays.asList(1, 2, 3);
+    numbers.remove("string"); // violation: String cannot be in Integer list
+
+    Map&lt;String, Integer&gt; map = new HashMap&lt;&gt;();
+    map.get(42); // violation: Integer key cannot be in String-keyed map
+
+    Set&lt;String&gt; names = new HashSet&lt;&gt;(); 
+    names.contains(123); // violation: Integer cannot be in String set
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,150 @@
+From c7a62a8c82219b50589257f79021da1df1a76808 Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Tue, 14 Sep 2021 23:26:27 +0100
+Subject: [PATCH] MDL-72573 mod_h5pactivity: tighter validation of external
+ sort param.
+
+Restrict external method $sortorder parameter to limited subset of
+values.
+---
+ .../classes/external/get_user_attempts.php    | 22 ++++---
+ .../tests/external/get_user_attempts_test.php | 64 +++++++++++++++++++
+ 2 files changed, 77 insertions(+), 9 deletions(-)
+
+diff --git a/mod/h5pactivity/classes/external/get_user_attempts.php b/mod/h5pactivity/classes/external/get_user_attempts.php
+index 216653e9331..8a27f821bc3 100644
+--- a/mod/h5pactivity/classes/external/get_user_attempts.php
++++ b/mod/h5pactivity/classes/external/get_user_attempts.php
+@@ -62,7 +62,7 @@ class get_user_attempts extends external_api {
+             [
+                 'h5pactivityid' => new external_value(PARAM_INT, 'h5p activity instance id'),
+                 'sortorder' => new external_value(PARAM_TEXT,
+-                    'sort by this element: id, firstname', VALUE_DEFAULT, 'id ASC'),
++                    'sort by either user id, firstname or lastname (with optional asc/desc)', VALUE_DEFAULT, 'id ASC'),
+                 'page' => new external_value(PARAM_INT, 'current page', VALUE_DEFAULT, -1),
+                 'perpage' => new external_value(PARAM_INT, 'items per page', VALUE_DEFAULT, 0),
+                 'firstinitial' => new external_value(PARAM_TEXT, 'Users whose first name ' .
+@@ -85,7 +85,7 @@ class get_user_attempts extends external_api {
+      * @param int $lastinitial Users whose last name starts with $lastinitial
+      * @return stdClass report data
+      */
+-    public static function execute(int $h5pactivityid, $sortorder = '', ?int $page = 0,
++    public static function execute(int $h5pactivityid, $sortorder = 'id ASC', ?int $page = 0,
+             ?int $perpage = 0, $firstinitial = '', $lastinitial = ''): stdClass {
+         [
+             'h5pactivityid' => $h5pactivityid,
+@@ -117,7 +117,14 @@ class get_user_attempts extends external_api {
+                 'h5pactivity:reviewattempts required view attempts of all enrolled users.');
+         }
+ 
+-        $coursecontext = \context_course::instance($course->id);
++        // Ensure sortorder parameter is safe to use. Fallback to default value of the parameter itself.
++        $sortorderparts = explode(' ', $sortorder, 2);
++        $sortorder = get_safe_orderby([
++            'id' => 'u.id',
++            'firstname' => 'u.firstname',
++            'lastname' => 'u.lastname',
++            'default' => 'u.id',
++        ], $sortorderparts[0], $sortorderparts[1] ?? '');
+ 
+         $users = self::get_active_users($manager, 'u.id, u.firstname, u.lastname',
+             $sortorder, $page * $perpage, $perpage);
+@@ -172,7 +179,7 @@ class get_user_attempts extends external_api {
+     private static function get_active_users(
+         manager $manager,
+         string $userfields = 'u.*',
+-        string $sortorder = null,
++        string $sortorder = '',
+         int $limitfrom = 0,
+         int $limitnum = 0
+     ): array {
+@@ -184,11 +191,8 @@ class get_user_attempts extends external_api {
+         // Final SQL.
+         $sql = "SELECT DISTINCT {$userfields}
+                   FROM {user} u {$capjoin->joins}
+-                WHERE {$capjoin->wheres}";
+-
+-        if (!empty($sortorder)) {
+-            $sql .= " ORDER BY {$sortorder}";
+-        }
++                 WHERE {$capjoin->wheres}
++                       {$sortorder}";
+ 
+         return $DB->get_records_sql($sql, $capjoin->params, $limitfrom, $limitnum);
+     }
+diff --git a/mod/h5pactivity/tests/external/get_user_attempts_test.php b/mod/h5pactivity/tests/external/get_user_attempts_test.php
+index 556080035a8..faff92273f4 100644
+--- a/mod/h5pactivity/tests/external/get_user_attempts_test.php
++++ b/mod/h5pactivity/tests/external/get_user_attempts_test.php
+@@ -182,4 +182,68 @@ class get_user_attempts_test extends externallib_advanced_testcase {
+             ],
+         ];
+     }
++
++    /**
++     * Data provider for {@see test_execute_with_sortorder}
++     *
++     * @return array[]
++     */
++    public function execute_with_sortorder(): array {
++        return [
++            'Sort by id' => ['id', ['user01', 'user02']],
++            'Sort by id desc' => ['id desc', ['user02', 'user01']],
++            'Sort by id asc' => ['id asc', ['user01', 'user02']],
++            'Sort by firstname' => ['firstname', ['user01', 'user02']],
++            'Sort by firstname desc' => ['firstname desc', ['user02', 'user01']],
++            'Sort by firstname asc' => ['firstname asc', ['user01', 'user02']],
++            'Sort by lastname' => ['lastname', ['user02', 'user01']],
++            'Sort by lastname desc' => ['lastname desc', ['user01', 'user02']],
++            'Sort by lastname asc' => ['lastname asc', ['user02', 'user01']],
++            // Edge cases (should fall back to default).
++            'Sort by empty string' => ['', ['user01', 'user02']],
++            'Sort by invalid field' => ['invalid', ['user01', 'user02']],
++        ];
++    }
++
++    /**
++     * Test external execute method with sortorder
++     *
++     * @param string $sortorder
++     * @param string[] $expectedorder
++     *
++     * @dataProvider execute_with_sortorder
++     */
++    public function test_execute_with_sortorder(string $sortorder, array $expectedorder): void {
++        $this->resetAfterTest();
++        $this->setAdminUser();
++
++        // Create course, module.
++        $course = $this->getDataGenerator()->create_course();
++        $module = $this->getDataGenerator()->create_module('h5pactivity', ['course' => $course]);
++
++        // Couple of enrolled users in the course.
++        $users['user01'] = $this->getDataGenerator()->create_and_enrol($course, 'student', [
++            'username' => 'user01',
++            'firstname' => 'Adam',
++            'lastname' => 'Zebra',
++        ]);
++        $users['user02'] = $this->getDataGenerator()->create_and_enrol($course, 'student', [
++            'username' => 'user02',
++            'firstname' => 'Zoe',
++            'lastname' => 'Apples',
++        ]);
++
++        $result = external_api::clean_returnvalue(
++            get_user_attempts::execute_returns(),
++            get_user_attempts::execute($module->id, $sortorder)
++        );
++
++        // Map expected order of usernames to user IDs.
++        $expectedorderbyuserid = array_map(static function(string $username) use ($users): int {
++            return $users[$username]->id;
++        }, $expectedorder);
++
++        // The order should match the ordering of user attempt user IDs.
++        $this->assertEquals($expectedorderbyuserid, array_column($result['usersattempts'], 'userid'));
++    }
+ }
+-- 
+2.34.1
+

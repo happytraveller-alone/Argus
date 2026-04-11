@@ -14,7 +14,6 @@ pub struct AppConfig {
     pub runner_preflight_strict: bool,
     pub runner_preflight_timeout_seconds: u64,
     pub runner_preflight_max_concurrency: usize,
-    pub scanner_yasa_image: String,
     pub scanner_opengrep_image: String,
     pub scanner_bandit_image: String,
     pub scanner_gitleaks_image: String,
@@ -47,8 +46,6 @@ impl AppConfig {
             runner_preflight_strict: parse_bool_env("RUNNER_PREFLIGHT_STRICT", false),
             runner_preflight_timeout_seconds: parse_u64_env("RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30),
             runner_preflight_max_concurrency: parse_usize_env("RUNNER_PREFLIGHT_MAX_CONCURRENCY", 2),
-            scanner_yasa_image: env::var("SCANNER_YASA_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/yasa-runner:latest".to_string()),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
                 .unwrap_or_else(|_| "vulhunter/opengrep-runner:latest".to_string()),
             scanner_bandit_image: env::var("SCANNER_BANDIT_IMAGE")
@@ -78,7 +75,6 @@ impl AppConfig {
             runner_preflight_strict: false,
             runner_preflight_timeout_seconds: 1,
             runner_preflight_max_concurrency: 1,
-            scanner_yasa_image: "vulhunter/yasa-runner:test".to_string(),
             scanner_opengrep_image: "vulhunter/opengrep-runner:test".to_string(),
             scanner_bandit_image: "vulhunter/bandit-runner:test".to_string(),
             scanner_gitleaks_image: "vulhunter/gitleaks-runner:test".to_string(),

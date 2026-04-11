@@ -1,0 +1,25 @@
+From d40f5409ac36c1eab7b8a5ccf3d91cc6db90ce70 Mon Sep 17 00:00:00 2001
+From: Lukas Zapletal <lzap+git@redhat.com>
+Date: Wed, 11 Jun 2014 16:15:05 +0200
+Subject: [PATCH] fixes #6149 - fixed XSS in host YAML view (CVE-2014-3492)
+
+---
+ app/controllers/hosts_controller.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/app/controllers/hosts_controller.rb b/app/controllers/hosts_controller.rb
+index 0a091c98c..279c7818d 100644
+--- a/app/controllers/hosts_controller.rb
++++ b/app/controllers/hosts_controller.rb
+@@ -175,7 +175,7 @@ class HostsController < ApplicationController
+ 
+     begin
+       respond_to do |format|
+-        format.html { render :text => "<pre>#{@host.info.to_yaml}</pre>" }
++        format.html { render :text => "<pre>#{ERB::Util.html_escape(@host.info.to_yaml)}</pre>" }
+         format.yml { render :text => @host.info.to_yaml }
+       end
+     rescue
+-- 
+2.34.1
+

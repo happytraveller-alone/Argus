@@ -1,0 +1,184 @@
+From 8deeca7cad3df1143ad9c351d107b5c0a6c61213 Mon Sep 17 00:00:00 2001
+From: Sebastian Wolf <swolf@nagios.com>
+Date: Thu, 23 Apr 2020 13:13:48 -0500
+Subject: [PATCH] Fix vulnerability in trends/histogram/maps pages (#756)
+
+---
+ .gitignore                                | 3 +++
+ Changelog                                 | 5 +++++
+ configure                                 | 3 +++
+ configure.ac                              | 3 +++
+ html/histogram-form.html                  | 7 -------
+ html/js/{histogram.js => histogram.js.in} | 4 ++--
+ html/js/{map.js => map.js.in}             | 3 +--
+ html/js/{trends.js => trends.js.in}       | 3 +--
+ html/map-form.html                        | 6 ------
+ html/trends-form.html                     | 7 -------
+ 10 files changed, 18 insertions(+), 26 deletions(-)
+ rename html/js/{histogram.js => histogram.js.in} (96%)
+ rename html/js/{map.js => map.js.in} (97%)
+ rename html/js/{trends.js => trends.js.in} (98%)
+
+diff --git a/.gitignore b/.gitignore
+index 154f66e1..e55cc8b2 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -44,3 +44,6 @@ html/angularjs/ui-utils-0.2.3
+ html/bootstrap-3.3.7
+ html/d3
+ html/index.php
++html/js/histogram.js
++html/js/map.js
++html/js/trends.js
+diff --git a/Changelog b/Changelog
+index 0a7abcdb..15468d9d 100644
+--- a/Changelog
++++ b/Changelog
+@@ -2,6 +2,11 @@
+ Nagios Core 4 Change Log
+ ########################
+ 
++4.4.6 - 2020-??-??
++------------------
++FIXES
++* Fixed postauth vulnerabilities in histogram.js, map.js, trends.js (CVE-2020-1408) (Thanks UraSec Team) (Sebastian Wolf)
++
+ 4.4.5 - 2019-08-20
+ ------------------
+ FIXES
+diff --git a/configure b/configure
+index 56d14a31..6407a086 100755
+--- a/configure
++++ b/configure
+@@ -8866,6 +8866,9 @@ fi
+ 
+ perl subst include/locations.h
+ perl subst html/config.inc.php
++perl subst html/js/histogram.js
++perl subst html/js/map.js
++perl subst html/js/trends.js
+ 
+ 
+ echo ""
+diff --git a/configure.ac b/configure.ac
+index 0bfab673..70de5e7a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -923,6 +923,9 @@ AC_OUTPUT([
+ 
+ perl subst include/locations.h
+ perl subst html/config.inc.php
++perl subst html/js/histogram.js
++perl subst html/js/map.js
++perl subst html/js/trends.js
+ dnl perl subst daemon-service
+ 
+ 
+diff --git a/html/histogram-form.html b/html/histogram-form.html
+index 2261d1eb..86d50c5e 100644
+--- a/html/histogram-form.html
++++ b/html/histogram-form.html
+@@ -12,13 +12,6 @@
+ 	<div class="modal-body">
+ 		<tabset>
+ 			<tab heading="Standard">
+-				<div class="form-group" id="cgiurlDiv">
+-					<label>URL for JSON CGIs</label>
+-					<input type="text" class="form-control"
+-							ng-model="params.cgiurl"
+-							placeholder="URL for JSON CGIs"
+-							ui-event="{ blur : 'onBlurCgiurl($event)' }">
+-				</div>
+ 				<div class="form-group">
+ 					<label>Report Type</label>
+ 					<select class="form-control"
+diff --git a/html/js/histogram.js b/html/js/histogram.js.in
+similarity index 96%
+rename from html/js/histogram.js
+rename to html/js/histogram.js.in
+index e110f2d9..456da706 100644
+--- a/html/js/histogram.js
++++ b/html/js/histogram.js.in
+@@ -23,8 +23,8 @@ angular.module("histogramApp", ["ui.bootstrap", "ui.utils",
+ 
+ 		// URL parameters
+ 		$scope.params = {
+-			cgiurl: $scope.search.cgiurl ? $scope.search.cgiurl : 
+-					$location.absUrl().replace(/histogram\.html.*$/, "cgi-bin/"),
++
++			cgiurl: '@cgiurl@',
+ 			reporttype: $scope.search.reporttype ?
+ 					$scope.search.reporttype : "",
+ 			host: $scope.search.host ? $scope.search.host : "",
+diff --git a/html/js/map.js b/html/js/map.js.in
+similarity index 97%
+rename from html/js/map.js
+rename to html/js/map.js.in
+index 00cfea39..1725fbe6 100644
+--- a/html/js/map.js
++++ b/html/js/map.js.in
+@@ -97,8 +97,7 @@ angular.module("mapApp", ["ui.bootstrap", "ui.utils", "nagiosDecorations",
+ 
+ 		// URL parameters
+ 		$scope.params = {
+-			cgiurl: $scope.search.cgiurl ? $scope.search.cgiurl :
+-					$location.absUrl().replace(/map\.php.*$/, "cgi-bin/"),
++			cgiurl: '@cgiurl@',
+ 			layout: map_layout,
+ 			dimensions: $scope.search.dimensions ?
+ 					$scope.search.dimensions : "",
+diff --git a/html/js/trends.js b/html/js/trends.js.in
+similarity index 98%
+rename from html/js/trends.js
+rename to html/js/trends.js.in
+index eca76491..fb7aad3b 100644
+--- a/html/js/trends.js
++++ b/html/js/trends.js.in
+@@ -34,8 +34,7 @@ angular.module("trendsApp", ["ui.bootstrap", "ui.utils",
+ 
+ 		// URL parameters
+ 		$scope.params = {
+-			cgiurl: $scope.search.cgiurl ? $scope.search.cgiurl : 
+-					$location.absUrl().replace(/trends\.html.*$/, "cgi-bin/"),
++			cgiurl: '@cgiurl@',
+ 			reporttype: $scope.search.reporttype ?
+ 					$scope.search.reporttype : "",
+ 			host: $scope.search.host ? $scope.search.host : "",
+diff --git a/html/map-form.html b/html/map-form.html
+index e6b5281b..0419f42a 100644
+--- a/html/map-form.html
++++ b/html/map-form.html
+@@ -10,12 +10,6 @@
+ 		</h4>
+ 	</div>
+ 	<div class="modal-body">
+-		<div class="form-group">
+-			<label>URL for JSON CGIs</label>
+-			<input type="text" class="form-control" ng-model="params.cgiurl"
+-					placeholder="http://localhost/nagios/cgi-bin/"
+-					ui-event="{ blur : 'onBlurCgiurl($event)' }">
+-		</div>
+ 		<div class="form-group">
+ 			<label>URL for Icons</label>
+ 			<input type="text" class="form-control" ng-model="params.iconurl"
+diff --git a/html/trends-form.html b/html/trends-form.html
+index f1722a7e..e32dc023 100644
+--- a/html/trends-form.html
++++ b/html/trends-form.html
+@@ -12,13 +12,6 @@
+ 	<div class="modal-body">
+ 		<tabset>
+ 			<tab heading="Standard">
+-				<div class="form-group">
+-					<label>URL for JSON CGIs</label>
+-					<input type="text" class="form-control"
+-							ng-model="params.cgiurl"
+-							placeholder="URL for JSON CGIs"
+-							ui-event="{ blur : 'onBlurCgiurl($event)' }">
+-				</div>
+ 				<div class="form-group">
+ 					<label>Report Type</label>
+ 					<select class="form-control"
+-- 
+2.34.1
+

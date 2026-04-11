@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ProjectVersionAsDependencyVersion Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ProjectVersionAsDependencyVersion</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ProjectVersionAsDependencyVersion" language="pom" since="5.4" message="Do not use project.version to express a dependency version." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_pom_errorprone.html#projectversionasdependencyversion">
+            <description>
+    Using that expression in dependency declarations seems like a shortcut, but it can go wrong.
+    By far the most common problem is the use of \${project.version} in a BOM or parent POM.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //dependencies/dependency
+        [contains(version/text/@Text,'{project.version}')]
+        [
+            (/document/project/parent/groupId and groupId/text/@Text != /document/project/parent/groupId/text/@Text)
+            or
+            (/document/project/groupId and groupId/text/@Text != /document/project/groupId/text/@Text)
+        ]/version
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    &lt;project...&gt;
+      ...
+      &lt;dependency&gt;
+        ...
+        &lt;version&gt;\${project.version}&lt;/version&gt;
+      &lt;/dependency&gt;
+    &lt;/project&gt;
+
+            </example>
+        </rule>
+
+</ruleset>

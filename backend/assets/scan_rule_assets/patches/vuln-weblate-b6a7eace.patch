@@ -1,0 +1,31 @@
+From b6a7eace155fa0feaf01b4ac36165a9c5e63bfdd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <michal@cihar.com>
+Date: Thu, 27 Jun 2024 14:05:53 +0200
+Subject: [PATCH] fix(backups): skip pontentially bogus files in backups
+
+---
+ weblate/trans/backups.py | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/weblate/trans/backups.py b/weblate/trans/backups.py
+index d1a8a2b8ab..7b7d91ceb7 100644
+--- a/weblate/trans/backups.py
++++ b/weblate/trans/backups.py
+@@ -601,9 +601,11 @@ class ProjectBackup:
+             # Extract VCS
+             for name in zipfile.namelist():
+                 if name.startswith(self.VCS_PREFIX):
+-                    targetpath = os.path.join(
+-                        project.full_path, name[self.VCS_PREFIX_LEN :]
+-                    )
++                    path = name[self.VCS_PREFIX_LEN :]
++                    # Skip potentially dangerous paths
++                    if path != os.path.normpath(path):
++                        continue
++                    targetpath = os.path.join(project.full_path, path)
+                     upperdirs = os.path.dirname(targetpath)
+                     if upperdirs and not os.path.exists(upperdirs):
+                         os.makedirs(upperdirs)
+-- 
+2.34.1
+

@@ -1,0 +1,30 @@
+From 9ddcb02edb9c13d2713460e347f8b343c84aa2f4 Mon Sep 17 00:00:00 2001
+From: Siham Hussein <seehamrun@users.noreply.github.com>
+Date: Tue, 30 Mar 2021 10:15:49 -0500
+Subject: [PATCH] Switch to using Files.createTempFile (#969)
+
+* Switch to using Files.createTempFile
+
+* Actually return a file
+
+* fix import order
+---
+ .../spi/cloud/storage/TemporaryPerJobDataStore.java             | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/portability-spi-cloud/src/main/java/org/datatransferproject/spi/cloud/storage/TemporaryPerJobDataStore.java b/portability-spi-cloud/src/main/java/org/datatransferproject/spi/cloud/storage/TemporaryPerJobDataStore.java
+index 586fc8cb..c78a8323 100644
+--- a/portability-spi-cloud/src/main/java/org/datatransferproject/spi/cloud/storage/TemporaryPerJobDataStore.java
++++ b/portability-spi-cloud/src/main/java/org/datatransferproject/spi/cloud/storage/TemporaryPerJobDataStore.java
+@@ -45,7 +45,7 @@ public interface TemporaryPerJobDataStore {
+ 
+   default File getTempFileFromInputStream(InputStream inputStream, String prefix, String suffix)
+       throws IOException {
+-    File tmp = File.createTempFile(prefix, suffix);
++    File tmp = Files.createTempFile(prefix, suffix).toFile();
+     tmp.deleteOnExit();
+     Files.copy(inputStream, tmp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+     return tmp;
+-- 
+2.34.1
+

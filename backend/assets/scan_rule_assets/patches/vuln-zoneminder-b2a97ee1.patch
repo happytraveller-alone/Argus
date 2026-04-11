@@ -1,0 +1,162 @@
+From b2a97ee190c6dc3e30b9c36b9c33c33348dde4d6 Mon Sep 17 00:00:00 2001
+From: Matthew Noorenberghe <github@matthew.noorenberghe.com>
+Date: Sat, 9 Feb 2019 15:10:42 -0800
+Subject: [PATCH] frame.php: Fix multiple XSS from 'show' and 'scale'
+ parameters and enforce CSP.
+
+Fixes #2448, fixes #2449, and fixes #2447.
+---
+ web/includes/functions.php                    |  1 +
+ web/skins/classic/css/base/views/frame.css    |  5 ----
+ web/skins/classic/css/classic/views/frame.css |  5 ----
+ web/skins/classic/css/dark/views/frame.css    |  5 ----
+ web/skins/classic/views/frame.php             | 23 ++++++++++---------
+ web/skins/classic/views/js/frame.js           |  8 ++++++-
+ web/skins/classic/views/js/frame.js.php       |  2 +-
+ 7 files changed, 21 insertions(+), 28 deletions(-)
+
+diff --git a/web/includes/functions.php b/web/includes/functions.php
+index a3723c6352..85e3b022c5 100644
+--- a/web/includes/functions.php
++++ b/web/includes/functions.php
+@@ -56,6 +56,7 @@ function CSPHeaders($view, $nonce) {
+     case 'download':
+     case 'error':
+     case 'export':
++    case 'frame':
+     case 'function':
+     case 'log':
+     case 'logout':
+diff --git a/web/skins/classic/css/base/views/frame.css b/web/skins/classic/css/base/views/frame.css
+index c9cb1846ca..947fee1bc4 100644
+--- a/web/skins/classic/css/base/views/frame.css
++++ b/web/skins/classic/css/base/views/frame.css
+@@ -9,8 +9,3 @@
+     display: flex;
+     justify-content: space-between;
+ }
+-
+-#controls a {
+-    width: 40px;
+-    margin-left: -20px;
+-}
+diff --git a/web/skins/classic/css/classic/views/frame.css b/web/skins/classic/css/classic/views/frame.css
+index c9cb1846ca..947fee1bc4 100644
+--- a/web/skins/classic/css/classic/views/frame.css
++++ b/web/skins/classic/css/classic/views/frame.css
+@@ -9,8 +9,3 @@
+     display: flex;
+     justify-content: space-between;
+ }
+-
+-#controls a {
+-    width: 40px;
+-    margin-left: -20px;
+-}
+diff --git a/web/skins/classic/css/dark/views/frame.css b/web/skins/classic/css/dark/views/frame.css
+index c9cb1846ca..947fee1bc4 100644
+--- a/web/skins/classic/css/dark/views/frame.css
++++ b/web/skins/classic/css/dark/views/frame.css
+@@ -9,8 +9,3 @@
+     display: flex;
+     justify-content: space-between;
+ }
+-
+-#controls a {
+-    width: 40px;
+-    margin-left: -20px;
+-}
+diff --git a/web/skins/classic/views/frame.php b/web/skins/classic/views/frame.php
+index 9319510567..ae69fecba0 100644
+--- a/web/skins/classic/views/frame.php
++++ b/web/skins/classic/views/frame.php
+@@ -51,14 +51,15 @@
+ $alarmFrame = $Frame->Type()=='Alarm';
+ 
+ if ( isset( $_REQUEST['scale'] ) ) {
+-  $scale = $_REQUEST['scale'];
++  $scale = validNum($_REQUEST['scale']);
+ } else if ( isset( $_COOKIE['zmWatchScale'.$Monitor->Id()] ) ) {
+-  $scale = $_COOKIE['zmWatchScale'.$Monitor->Id()];
++  $scale = validNum($_COOKIE['zmWatchScale'.$Monitor->Id()]);
+ } else if ( isset( $_COOKIE['zmWatchScale'] ) ) {
+-  $scale = $_COOKIE['zmWatchScale'];
++  $scale = validNum($_COOKIE['zmWatchScale']);
+ } else {
+   $scale = max( reScale( SCALE_BASE, $Monitor->DefaultScale(), ZM_WEB_DEFAULT_SCALE ), SCALE_BASE );
+ }
++$scale = $scale ?: "auto";
+ 
+ $imageData = $Event->getImageSrc( $frame, $scale, 0 );
+ if ( ! $imageData ) {
+@@ -67,7 +68,7 @@
+ }
+ 
+ $show = 'capt';
+-if ( isset($_REQUEST['show']) ) {
++if (isset($_REQUEST['show']) && in_array($_REQUEST['show'], array('capt', 'anal'))) {
+   $show = $_REQUEST['show'];
+ } else if ( $imageData['hasAnalImage'] ) {
+   $show = 'anal';
+@@ -89,9 +90,9 @@
+       <div id="headerButtons">
+         <?php if ( ZM_RECORD_EVENT_STATS && $alarmFrame ) { echo makePopupLink( '?view=stats&amp;eid='.$Event->Id().'&amp;fid='.$Frame->FrameId(), 'zmStats', 'stats', translate('Stats') ); } ?>
+         <?php if ( canEdit( 'Events' ) ) { ?><a href="?view=none&amp;action=delete&amp;markEid=<?php echo $Event->Id() ?>"><?php echo translate('Delete') ?></a><?php } ?>
+-        <a href="#" onclick="closeWindow(); return( false );"><?php echo translate('Close') ?></a>
++        <a href="#" data-on-click="closeWindow"><?php echo translate('Close') ?></a>
+       </div>
+-      <div id="scaleControl"><label for="scale"><?php echo translate('Scale') ?></label><?php echo buildSelect('scale', $scales, 'changeScale();'); ?></div>
++      <div id="scaleControl"><label for="scale"><?php echo translate('Scale') ?></label><?php echo buildSelect('scale', $scales); ?></div>
+       <h2><?php echo translate('Frame') ?> <?php echo $Event->Id().'-'.$Frame->FrameId().' ('.$Frame->Score().')' ?></h2>
+       <input type="hidden" name="base_width" id="base_width" value="<?php echo $Event->Width(); ?>"/>
+       <input type="hidden" name="base_height" id="base_height" value="<?php echo $Event->Height(); ?>"/>
+@@ -103,19 +104,19 @@
+ <?php if ( $imageData['hasAnalImage'] ) {
+  echo sprintf('<a href="?view=frame&amp;eid=%d&amp;fid=%d&scale=%d&amp;show=%s">', $Event->Id(), $Frame->FrameId(), $scale, ( $show=='anal'?'capt':'anal' ) );
+ } ?>
+-<img id="frameImg" src="<?php echo $Frame->getImageSrc($show=='anal'?'analyse':'capture') ?>" width="<?php echo reScale( $Event->Width(), $Event->DefaultScale(), $scale ) ?>" height="<?php echo reScale( $Event->Height(), $Event->DefaultScale(), $scale ) ?>" alt="<?php echo $Frame->EventId()."-".$Frame->FrameId() ?>" class="<?php echo $imageData['imageClass'] ?>"/>
++<img id="frameImg" src="<?php echo validHtmlStr($Frame->getImageSrc($show=='anal'?'analyse':'capture')) ?>" width="<?php echo reScale( $Event->Width(), $Event->DefaultScale(), $scale ) ?>" height="<?php echo reScale( $Event->Height(), $Event->DefaultScale(), $scale ) ?>" alt="<?php echo $Frame->EventId()."-".$Frame->FrameId() ?>" class="<?php echo $imageData['imageClass'] ?>"/>
+ <?php if ( $imageData['hasAnalImage'] ) { ?></a><?php } ?>
+ 
+       </p>
+       <p id="controls">
+ <?php if ( $Frame->FrameId() > 1 ) { ?>
+-        <button type="button" id="firstLink" onclick="window.location='?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $firstFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>';"><?php echo translate('First') ?></button>
+-        <button type="button" id="prevLink" onclick="window.location='?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $prevFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>';"><?php echo translate('Prev') ?></button>
++        <a class="btn-primary" id="firstLink" href="?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $firstFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>"><?php echo translate('First') ?></a>
++        <a class="btn-primary" id="prevLink" href="?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $prevFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>"><?php echo translate('Prev') ?></a>
+ <?php
+       }
+       if ( $Frame->FrameId() < $maxFid ) { ?>
+-        <button type="button" id="nextLink" onclick="window.location='?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $nextFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>';"><?php echo translate('Next') ?></button>
+-        <button type="button" id="lastLink" onclick="window.location='?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $lastFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>';"><?php echo translate('Last') ?></button>
++        <a class="btn-primary" id="nextLink" href="?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $nextFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>"><?php echo translate('Next') ?></a>
++        <a class="btn-primary" id="lastLink" href="?view=frame&amp;eid=<?php echo $Event->Id() ?>&amp;fid=<?php echo $lastFid ?>&amp;scale=<?php echo $scale ?>&amp;show=<?php echo $show ?>"><?php echo translate('Last') ?></a>
+ <?php } ?>
+       </p>
+ <?php if (file_exists ($dImagePath)) { ?>
+diff --git a/web/skins/classic/views/js/frame.js b/web/skins/classic/views/js/frame.js
+index e0401c7c75..03058ff8ad 100644
+--- a/web/skins/classic/views/js/frame.js
++++ b/web/skins/classic/views/js/frame.js
+@@ -30,4 +30,10 @@ function changeScale() {
+   });
+ }
+ 
+-if (scale == 'auto') $j(document).ready(changeScale);
++if (scale == 'auto') {
++  $j(document).ready(changeScale);
++}
++
++document.addEventListener('DOMContentLoaded', function onDCL() {
++  document.getElementById('scale').addEventListener('change', changeScale);
++});
+diff --git a/web/skins/classic/views/js/frame.js.php b/web/skins/classic/views/js/frame.js.php
+index c9b3f2eea6..572587f828 100644
+--- a/web/skins/classic/views/js/frame.js.php
++++ b/web/skins/classic/views/js/frame.js.php
+@@ -1,3 +1,3 @@
+-var scale = '<?php echo $scale ?>';
++var scale = '<?php echo validJsStr($scale); ?>';
+ 
+ var SCALE_BASE = <?php echo SCALE_BASE ?>;

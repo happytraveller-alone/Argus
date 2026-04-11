@@ -1,0 +1,478 @@
+From 010e0614f2effe058855aacfc3e61c71e1cb5739 Mon Sep 17 00:00:00 2001
+From: Dave Arnold <darnold@adobe.com>
+Date: Thu, 15 Dec 2016 11:22:15 +0100
+Subject: [PATCH] [cff] Implement dynamic stack size for Adobe engine.
+
+This also adds `cf2_stack_setReal' and `cf2_stack_pop', needed for
+the forthcoming CFF2 support.
+
+* src/cff/cf2stack.c (cf2_stack_init): Add argument for stack size.
+(cf2_stack_free): Deallocate stack.
+(cf2_stack_count, cf2_stack_pushInt, cf2_stack_pushFixed,
+cf2_stack_popInt, cf2_stack_popFixed, cf2_stack_getReal,
+cf2_stack_clear): Updated.
+(cf2_stack_setReal, cf2_stack_pop): New functions.
+
+* src/cff/cf2stack.h (CF2_Stack): Add `stackSize' member.
+Update function declarations.
+
+* src/cff/cf2intrp.c (cf2_interpT2CharString): Updated.
+
+* src/cff/cffparse.c (cff_parser_init): Add parameter for stack
+size; return error code.
+(cff_parser_done): New function.
+(cff_parser_run): Updated.
+
+* src/cff/cffparse.h (CFF_Parser): Add `stackSize' member and make
+`stack' a pointer.
+Update function declarations.
+
+* src/cff/cffload.c (cff_load_private_dict, cff_subfont_load):
+Updated.
+---
+ ChangeLog          | 31 +++++++++++++++++++++++
+ src/cff/cf2intrp.c |  2 +-
+ src/cff/cf2stack.c | 63 ++++++++++++++++++++++++++++++++++++++--------
+ src/cff/cf2stack.h | 14 +++++++++--
+ src/cff/cffload.c  | 43 ++++++++++++++++++++-----------
+ src/cff/cffparse.c | 36 +++++++++++++++++++++++---
+ src/cff/cffparse.h |  9 +++++--
+ 7 files changed, 166 insertions(+), 32 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index dd862dd53..92ef7ecf0 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,34 @@
++2016-12-15  Dave Arnold  <darnold@adobe.com>
++
++	[cff] Implement dynamic stack size for Adobe engine.
++
++	This also adds `cf2_stack_setReal' and `cf2_stack_pop', needed for
++	the forthcoming CFF2 support.
++
++	* src/cff/cf2stack.c (cf2_stack_init): Add argument for stack size.
++	(cf2_stack_free): Deallocate stack.
++	(cf2_stack_count, cf2_stack_pushInt, cf2_stack_pushFixed,
++	cf2_stack_popInt, cf2_stack_popFixed, cf2_stack_getReal,
++	cf2_stack_clear): Updated.
++	(cf2_stack_setReal, cf2_stack_pop): New functions.
++
++	* src/cff/cf2stack.h (CF2_Stack): Add `stackSize' member.
++	Update function declarations.
++
++	* src/cff/cf2intrp.c (cf2_interpT2CharString): Updated.
++
++	* src/cff/cffparse.c (cff_parser_init): Add parameter for stack
++	size; return error code.
++	(cff_parser_done): New function.
++	(cff_parser_run): Updated.
++
++	* src/cff/cffparse.h (CFF_Parser): Add `stackSize' member and make
++	`stack' a pointer.
++	Update function declarations.
++
++	* src/cff/cffload.c (cff_load_private_dict, cff_subfont_load):
++	Updated.
++
+ 2016-12-15  Dave Arnold  <darnold@adobe.com>
+ 	    Werner Lemberg  <wl@gnu.org>
+ 
+diff --git a/src/cff/cf2intrp.c b/src/cff/cf2intrp.c
+index d002e540a..98e73eae5 100644
+--- a/src/cff/cf2intrp.c
++++ b/src/cff/cf2intrp.c
+@@ -532,7 +532,7 @@
+      */
+ 
+     /* allocate an operand stack */
+-    opStack = cf2_stack_init( memory, error );
++    opStack = cf2_stack_init( memory, error, CF2_OPERAND_STACK_SIZE );
+     if ( !opStack )
+     {
+       lastError = FT_THROW( Out_Of_Memory );
+diff --git a/src/cff/cf2stack.c b/src/cff/cf2stack.c
+index 8f3adb6d6..a2e5b1868 100644
+--- a/src/cff/cf2stack.c
++++ b/src/cff/cf2stack.c
+@@ -51,7 +51,8 @@
+   /* `error').                                               */
+   FT_LOCAL_DEF( CF2_Stack )
+   cf2_stack_init( FT_Memory  memory,
+-                  FT_Error*  e )
++                  FT_Error*  e,
++                  FT_UInt    stackSize )
+   {
+     FT_Error  error = FT_Err_Ok;     /* for FT_NEW */
+ 
+@@ -63,9 +64,18 @@
+       /* initialize the structure; FT_NEW zeroes it */
+       stack->memory = memory;
+       stack->error  = e;
+-      stack->top    = &stack->buffer[0]; /* empty stack */
+     }
+ 
++    /* allocate the stack buffer */
++    if ( FT_NEW_ARRAY( stack->buffer, stackSize ) )
++    {
++      FT_FREE( stack );
++      return NULL;
++    }
++
++    stack->stackSize = stackSize;
++    stack->top       = stack->buffer;     /* empty stack */
++
+     return stack;
+   }
+ 
+@@ -77,6 +87,8 @@
+     {
+       FT_Memory  memory = stack->memory;
+ 
++      /* free the buffer */
++      FT_FREE( stack->buffer );
+ 
+       /* free the main structure */
+       FT_FREE( stack );
+@@ -87,7 +99,7 @@
+   FT_LOCAL_DEF( CF2_UInt )
+   cf2_stack_count( CF2_Stack  stack )
+   {
+-    return (CF2_UInt)( stack->top - &stack->buffer[0] );
++    return (CF2_UInt)( stack->top - stack->buffer );
+   }
+ 
+ 
+@@ -95,7 +107,7 @@
+   cf2_stack_pushInt( CF2_Stack  stack,
+                      CF2_Int    val )
+   {
+-    if ( stack->top == &stack->buffer[CF2_OPERAND_STACK_SIZE] )
++    if ( stack->top == stack->buffer + stack->stackSize )
+     {
+       CF2_SET_ERROR( stack->error, Stack_Overflow );
+       return;     /* stack overflow */
+@@ -111,7 +123,7 @@
+   cf2_stack_pushFixed( CF2_Stack  stack,
+                        CF2_Fixed  val )
+   {
+-    if ( stack->top == &stack->buffer[CF2_OPERAND_STACK_SIZE] )
++    if ( stack->top == stack->buffer + stack->stackSize )
+     {
+       CF2_SET_ERROR( stack->error, Stack_Overflow );
+       return;     /* stack overflow */
+@@ -127,7 +139,7 @@
+   FT_LOCAL_DEF( CF2_Int )
+   cf2_stack_popInt( CF2_Stack  stack )
+   {
+-    if ( stack->top == &stack->buffer[0] )
++    if ( stack->top == stack->buffer )
+     {
+       CF2_SET_ERROR( stack->error, Stack_Underflow );
+       return 0;   /* underflow */
+@@ -149,7 +161,7 @@
+   FT_LOCAL_DEF( CF2_Fixed )
+   cf2_stack_popFixed( CF2_Stack  stack )
+   {
+-    if ( stack->top == &stack->buffer[0] )
++    if ( stack->top == stack->buffer )
+     {
+       CF2_SET_ERROR( stack->error, Stack_Underflow );
+       return cf2_intToFixed( 0 );    /* underflow */
+@@ -175,7 +187,7 @@
+   cf2_stack_getReal( CF2_Stack  stack,
+                      CF2_UInt   idx )
+   {
+-    FT_ASSERT( cf2_stack_count( stack ) <= CF2_OPERAND_STACK_SIZE );
++    FT_ASSERT( cf2_stack_count( stack ) <= stack->stackSize );
+ 
+     if ( idx >= cf2_stack_count( stack ) )
+     {
+@@ -195,7 +207,38 @@
+   }
+ 
+ 
+-  FT_LOCAL( void )
++  /* provide random access to stack */
++  FT_LOCAL_DEF( void )
++  cf2_stack_setReal( CF2_Stack  stack,
++                     CF2_UInt   idx,
++                     CF2_Fixed  val )
++  {
++    if ( idx > cf2_stack_count( stack ) )
++    {
++      CF2_SET_ERROR( stack->error, Stack_Overflow );
++      return;
++    }
++
++    stack->buffer[idx].u.r  = val;
++    stack->buffer[idx].type = CF2_NumberFixed;
++  }
++
++
++  /* discard (pop) num values from stack */
++  FT_LOCAL_DEF( void )
++  cf2_stack_pop( CF2_Stack  stack,
++                 CF2_UInt   num )
++  {
++    if ( num > cf2_stack_count( stack ) )
++    {
++      CF2_SET_ERROR( stack->error, Stack_Underflow );
++      return;
++    }
++    stack->top -= num;
++  }
++
++
++  FT_LOCAL_DEF( void )
+   cf2_stack_roll( CF2_Stack  stack,
+                   CF2_Int    count,
+                   CF2_Int    shift )
+@@ -278,7 +321,7 @@
+   FT_LOCAL_DEF( void )
+   cf2_stack_clear( CF2_Stack  stack )
+   {
+-    stack->top = &stack->buffer[0];
++    stack->top = stack->buffer;
+   }
+ 
+ 
+diff --git a/src/cff/cf2stack.h b/src/cff/cf2stack.h
+index e740a7ac4..ef08eefe4 100644
+--- a/src/cff/cf2stack.h
++++ b/src/cff/cf2stack.h
+@@ -62,15 +62,17 @@ FT_BEGIN_HEADER
+   {
+     FT_Memory         memory;
+     FT_Error*         error;
+-    CF2_StackNumber   buffer[CF2_OPERAND_STACK_SIZE];
++    CF2_StackNumber*  buffer;
+     CF2_StackNumber*  top;
++    FT_UInt           stackSize;
+ 
+   } CF2_StackRec, *CF2_Stack;
+ 
+ 
+   FT_LOCAL( CF2_Stack )
+   cf2_stack_init( FT_Memory  memory,
+-                  FT_Error*  error );
++                  FT_Error*  error,
++                  FT_UInt    stackSize );
+   FT_LOCAL( void )
+   cf2_stack_free( CF2_Stack  stack );
+ 
+@@ -92,6 +94,14 @@ FT_BEGIN_HEADER
+   FT_LOCAL( CF2_Fixed )
+   cf2_stack_getReal( CF2_Stack  stack,
+                      CF2_UInt   idx );
++  FT_LOCAL( void )
++  cf2_stack_setReal( CF2_Stack  stack,
++                     CF2_UInt   idx,
++                     CF2_Fixed  val );
++
++  FT_LOCAL( void )
++  cf2_stack_pop( CF2_Stack  stack,
++                 CF2_UInt   num );
+ 
+   FT_LOCAL( void )
+   cf2_stack_roll( CF2_Stack  stack,
+diff --git a/src/cff/cffload.c b/src/cff/cffload.c
+index 072474f3f..968a6f8b6 100644
+--- a/src/cff/cffload.c
++++ b/src/cff/cffload.c
+@@ -1341,11 +1341,11 @@
+     CFF_FontRecDict  top    = &subfont->font_dict;
+     CFF_Private      priv   = &subfont->private_dict;
+     FT_Stream        stream = font->stream;
++    FT_UInt          stackSize;
+ 
+ 
+-    /* parse the private dictionary, if any */
+     if ( !top->private_offset || !top->private_size )
+-      goto Exit;
++      goto Exit2;       /* no private DICT, do nothing */
+ 
+     /* set defaults */
+     FT_ZERO( priv );
+@@ -1356,12 +1356,16 @@
+     priv->expansion_factor = (FT_Fixed)( 0.06 * 0x10000L );
+     priv->blue_scale       = (FT_Fixed)( 0.039625 * 0x10000L * 1000 );
+ 
+-    cff_parser_init( &parser,
+-                     CFF_CODE_PRIVATE,
+-                     priv,
+-                     font->library,
+-                     top->num_designs,
+-                     top->num_axes );
++    stackSize = CFF_MAX_STACK_DEPTH + 1;
++
++    if ( cff_parser_init( &parser,
++                          CFF_CODE_PRIVATE,
++                          priv,
++                          font->library,
++                          stackSize,
++                          top->num_designs,
++                          top->num_axes ) )
++      goto Exit;
+ 
+     if ( FT_STREAM_SEEK( font->base_offset + top->private_offset ) ||
+          FT_FRAME_ENTER( top->private_size )                       )
+@@ -1380,6 +1384,11 @@
+     priv->num_blue_values &= ~1;
+ 
+   Exit:
++    /* clean up */
++    cff_parser_done( &parser ); /* free parser stack */
++
++  Exit2:
++    /* no clean up (parser not initialized) */
+     return error;
+   }
+ 
+@@ -1399,13 +1408,17 @@
+     CFF_FontRecDict  top  = &subfont->font_dict;
+     CFF_Private      priv = &subfont->private_dict;
+ 
++    FT_UInt  stackSize = CFF_MAX_STACK_DEPTH;
++
+ 
+-    cff_parser_init( &parser,
+-                     CFF_CODE_TOPDICT,
+-                     &subfont->font_dict,
+-                     font->library,
+-                     0,
+-                     0 );
++    if ( cff_parser_init( &parser,
++                          CFF_CODE_TOPDICT,
++                          &subfont->font_dict,
++                          font->library,
++                          stackSize,
++                          0,
++                          0 ) )
++      goto Exit;
+ 
+     /* set defaults */
+     FT_ZERO( top );
+@@ -1470,6 +1483,8 @@
+     }
+ 
+   Exit:
++    cff_parser_done( &parser ); /* free parser stack */
++
+     return error;
+   }
+ 
+diff --git a/src/cff/cffparse.c b/src/cff/cffparse.c
+index 95638b89e..8d774fabc 100644
+--- a/src/cff/cffparse.c
++++ b/src/cff/cffparse.c
+@@ -36,22 +36,52 @@
+ #define FT_COMPONENT  trace_cffparse
+ 
+ 
+-  FT_LOCAL_DEF( void )
++  FT_LOCAL_DEF( FT_Error )
+   cff_parser_init( CFF_Parser  parser,
+                    FT_UInt     code,
+                    void*       object,
+                    FT_Library  library,
++                   FT_UInt     stackSize,
+                    FT_UShort   num_designs,
+                    FT_UShort   num_axes )
+   {
++    FT_Memory  memory = library->memory;    /* for FT_NEW_ARRAY */
++    FT_Error   error;                       /* for FT_NEW_ARRAY */
++
++
+     FT_ZERO( parser );
+ 
++#if 0
+     parser->top         = parser->stack;
++#endif
+     parser->object_code = code;
+     parser->object      = object;
+     parser->library     = library;
+     parser->num_designs = num_designs;
+     parser->num_axes    = num_axes;
++
++    /* allocate the stack buffer */
++    if ( FT_NEW_ARRAY( parser->stack, stackSize ) )
++    {
++      FT_FREE( parser->stack );
++      goto Exit;
++    }
++
++    parser->stackSize = stackSize;
++    parser->top       = parser->stack;    /* empty stack */
++
++  Exit:
++    return error;
++  }
++
++
++  FT_LOCAL_DEF( void )
++  cff_parser_done( CFF_Parser  parser )
++  {
++    FT_Memory  memory = parser->library->memory;    /* for FT_FREE */
++
++
++    FT_FREE( parser->stack );
+   }
+ 
+ 
+@@ -1071,7 +1101,7 @@
+       if ( v >= 27 && v != 31 )
+       {
+         /* it's a number; we will push its position on the stack */
+-        if ( parser->top - parser->stack >= CFF_MAX_STACK_DEPTH )
++        if ( (FT_UInt)( parser->top - parser->stack ) >= parser->stackSize )
+           goto Stack_Overflow;
+ 
+         *parser->top++ = p;
+@@ -1162,7 +1192,7 @@
+           FT_Bool   neg;
+ 
+ 
+-          if ( parser->top - parser->stack >= CFF_MAX_STACK_DEPTH )
++          if ( (FT_UInt)( parser->top - parser->stack ) >= parser->stackSize )
+             goto Stack_Overflow;
+ 
+           *parser->top++ = q;
+diff --git a/src/cff/cffparse.h b/src/cff/cffparse.h
+index a95970edc..0d450a24f 100644
+--- a/src/cff/cffparse.h
++++ b/src/cff/cffparse.h
+@@ -41,8 +41,9 @@ FT_BEGIN_HEADER
+     FT_Byte*    limit;
+     FT_Byte*    cursor;
+ 
+-    FT_Byte*    stack[CFF_MAX_STACK_DEPTH + 1];
++    FT_Byte**   stack;
+     FT_Byte**   top;
++    FT_UInt     stackSize;  /* allocated size */
+ 
+     FT_UInt     object_code;
+     void*       object;
+@@ -53,14 +54,18 @@ FT_BEGIN_HEADER
+   } CFF_ParserRec, *CFF_Parser;
+ 
+ 
+-  FT_LOCAL( void )
++  FT_LOCAL( FT_Error )
+   cff_parser_init( CFF_Parser  parser,
+                    FT_UInt     code,
+                    void*       object,
+                    FT_Library  library,
++                   FT_UInt     stackSize,
+                    FT_UShort   num_designs,
+                    FT_UShort   num_axes );
+ 
++  FT_LOCAL( void )
++  cff_parser_done( CFF_Parser  parser );
++
+   FT_LOCAL( FT_Error )
+   cff_parser_run( CFF_Parser  parser,
+                   FT_Byte*    start,
+-- 
+2.34.1
+

@@ -1,0 +1,236 @@
+From 5b09fcaff11d33010469e695ef365a91c91674b5 Mon Sep 17 00:00:00 2001
+From: "Endi S. Dewata" <edewata@redhat.com>
+Date: Mon, 17 May 2021 18:17:26 -0500
+Subject: [PATCH] Use password file when creating admin user
+
+The pki-server <subsystem>-user-add has been updated to
+provide a --password-file option. The deployment tool
+has been modified to use this option when creating the
+admin user to avoid the password from getting logged in
+the debug mode.
+
+Resolves: CVE-2021-3551
+---
+ base/server/python/pki/server/cli/user.py     |  9 ++-
+ .../python/pki/server/deployment/__init__.py  |  5 +-
+ base/server/python/pki/server/subsystem.py    | 74 +++++++++++--------
+ .../server/cli/SubsystemUserAddCLI.java       | 11 +++
+ 4 files changed, 66 insertions(+), 33 deletions(-)
+
+diff --git a/base/server/python/pki/server/cli/user.py b/base/server/python/pki/server/cli/user.py
+index 3aa6e41a6..4a7681f11 100644
+--- a/base/server/python/pki/server/cli/user.py
++++ b/base/server/python/pki/server/cli/user.py
+@@ -47,6 +47,7 @@ class UserAddCLI(pki.cli.CLI):
+         print('      --full-name <full name>        Full name')
+         print('      --email <email>                Email')
+         print('      --password <password>          Password')
++        print('      --password-file <path>         Password file')
+         print('      --phone <phone>                Phone')
+         print('      --type <type>                  Type')
+         print('      --state <state>                State')
+@@ -59,7 +60,8 @@ class UserAddCLI(pki.cli.CLI):
+     def execute(self, argv):
+         try:
+             opts, args = getopt.gnu_getopt(argv, 'i:v', [
+-                'instance=', 'full-name=', 'email=', 'password=',
++                'instance=', 'full-name=', 'email=',
++                'password=', 'password-file=',
+                 'phone=', 'type=', 'state=', 'tps-profiles=',
+                 'verbose', 'debug', 'help'])
+ 
+@@ -73,6 +75,7 @@ class UserAddCLI(pki.cli.CLI):
+         full_name = None
+         email = None
+         password = None
++        password_file = None
+         phone = None
+         user_type = None
+         state = None
+@@ -91,6 +94,9 @@ class UserAddCLI(pki.cli.CLI):
+             elif o == '--password':
+                 password = a
+ 
++            elif o == '--password-file':
++                password_file = a
++
+             elif o == '--phone':
+                 phone = a
+ 
+@@ -149,6 +155,7 @@ class UserAddCLI(pki.cli.CLI):
+             full_name=full_name,
+             email=email,
+             password=password,
++            password_file=password_file,
+             phone=phone,
+             user_type=user_type,
+             tps_profiles=tps_profiles,
+diff --git a/base/server/python/pki/server/deployment/__init__.py b/base/server/python/pki/server/deployment/__init__.py
+index daf00f7a4..d75999291 100644
+--- a/base/server/python/pki/server/deployment/__init__.py
++++ b/base/server/python/pki/server/deployment/__init__.py
+@@ -978,6 +978,8 @@ class PKIDeployer:
+         if subsystem.type == 'TPS':
+             tps_profiles = ['All Profiles']
+ 
++        # Run the command as current user such that
++        # it can read the temporary password file.
+         subsystem.add_user(
+             uid,
+             full_name=full_name,
+@@ -985,7 +987,8 @@ class PKIDeployer:
+             password=password,
+             user_type='adminType',
+             state='1',
+-            tps_profiles=tps_profiles)
++            tps_profiles=tps_profiles,
++            as_current_user=True)
+ 
+         admin_groups = subsystem.config['preop.admin.group']
+         groups = [x.strip() for x in admin_groups.split(',')]
+diff --git a/base/server/python/pki/server/subsystem.py b/base/server/python/pki/server/subsystem.py
+index 6c72e15ae..0a686e061 100644
+--- a/base/server/python/pki/server/subsystem.py
++++ b/base/server/python/pki/server/subsystem.py
+@@ -1459,54 +1459,66 @@ class PKISubsystem(object):
+                  full_name=None,
+                  email=None,
+                  password=None,
++                 password_file=None,
+                  phone=None,
+                  user_type=None,
+                  state=None,
+                  tps_profiles=None,
+                  as_current_user=False):
+ 
+-        cmd = [self.name + '-user-add']
++        tmpdir = tempfile.mkdtemp()
+ 
+-        if full_name:
+-            cmd.append('--full-name')
+-            cmd.append(full_name)
++        try:
++            if password and not password_file:
++                password_file = os.path.join(tmpdir, 'password.txt')
++                with open(password_file, 'w') as f:
++                    f.write(password)
+ 
+-        if email:
+-            cmd.append('--email')
+-            cmd.append(email)
++            cmd = [self.name + '-user-add']
+ 
+-        if password:
+-            cmd.append('--password')
+-            cmd.append(password)
++            if full_name:
++                cmd.append('--full-name')
++                cmd.append(full_name)
+ 
+-        if phone:
+-            cmd.append('--phone')
+-            cmd.append(phone)
++            if email:
++                cmd.append('--email')
++                cmd.append(email)
+ 
+-        if user_type:
+-            cmd.append('--type')
+-            cmd.append(user_type)
++            if password_file:
++                cmd.append('--password-file')
++                cmd.append(password_file)
+ 
+-        if state:
+-            cmd.append('--state')
+-            cmd.append(state)
++            if phone:
++                cmd.append('--phone')
++                cmd.append(phone)
+ 
+-        if tps_profiles:
+-            cmd.append('--tps-profiles')
+-            cmd.append(','.join(tps_profiles))
++            if user_type:
++                cmd.append('--type')
++                cmd.append(user_type)
+ 
+-        if logger.isEnabledFor(logging.DEBUG):
+-            cmd.append('--debug')
++            if state:
++                cmd.append('--state')
++                cmd.append(state)
+ 
+-        elif logger.isEnabledFor(logging.INFO):
+-            cmd.append('--verbose')
++            if tps_profiles:
++                cmd.append('--tps-profiles')
++                cmd.append(','.join(tps_profiles))
+ 
+-        cmd.append(user_id)
++            if logger.isEnabledFor(logging.DEBUG):
++                cmd.append('--debug')
+ 
+-        self.run(
+-            cmd,
+-            as_current_user=as_current_user,
+-            capture_output=True)
++            elif logger.isEnabledFor(logging.INFO):
++                cmd.append('--verbose')
++
++            cmd.append(user_id)
++
++            self.run(
++                cmd,
++                as_current_user=as_current_user,
++                capture_output=True)
++
++        finally:
++            shutil.rmtree(tmpdir)
+ 
+     def modify_user(self, user_id, add_see_also=None, del_see_also=None,
+                     as_current_user=False):
+diff --git a/base/server/src/main/java/org/dogtagpki/server/cli/SubsystemUserAddCLI.java b/base/server/src/main/java/org/dogtagpki/server/cli/SubsystemUserAddCLI.java
+index fb43d4237..5c231edd3 100644
+--- a/base/server/src/main/java/org/dogtagpki/server/cli/SubsystemUserAddCLI.java
++++ b/base/server/src/main/java/org/dogtagpki/server/cli/SubsystemUserAddCLI.java
+@@ -6,6 +6,8 @@
+ package org.dogtagpki.server.cli;
+ 
+ import java.io.File;
++import java.nio.file.Files;
++import java.nio.file.Paths;
+ import java.util.Arrays;
+ import java.util.List;
+ 
+@@ -61,6 +63,10 @@ public class SubsystemUserAddCLI extends CommandCLI {
+         option.setArgName("password");
+         options.addOption(option);
+ 
++        option = new Option(null, "password-file", true, "Password file");
++        option.setArgName("path");
++        options.addOption(option);
++
+         option = new Option(null, "phone", true, "Phone");
+         option.setArgName("phone");
+         options.addOption(option);
+@@ -97,11 +103,16 @@ public class SubsystemUserAddCLI extends CommandCLI {
+ 
+         String email = cmd.getOptionValue("email");
+         String password = cmd.getOptionValue("password");
++        String passwordFile = cmd.getOptionValue("password-file");
+         String phone = cmd.getOptionValue("phone");
+         String type = cmd.getOptionValue("type");
+         String state = cmd.getOptionValue("state");
+         String tpsProfiles = cmd.getOptionValue("tps-profiles");
+ 
++        if (passwordFile != null) {
++            password = new String(Files.readAllBytes(Paths.get(passwordFile)), "UTF-8").trim();
++        }
++
+         String catalinaBase = System.getProperty("catalina.base");
+ 
+         TomcatJSS tomcatjss = TomcatJSS.getInstance();
+-- 
+2.34.1
+

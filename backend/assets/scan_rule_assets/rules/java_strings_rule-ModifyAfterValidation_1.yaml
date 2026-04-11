@@ -1,0 +1,50 @@
+rules:
+- id: java_strings_rule-ModifyAfterValidation_1
+  languages:
+  - java
+  patterns:
+  - pattern: '(java.util.regex.Pattern $Y).matcher($VAR);
+
+      ...
+
+      $VAR.$METHOD(...);
+
+      '
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (replace|replaceAll|replaceFirst|concat)
+  message: "The application was found matching a variable during a regular expression\n\
+    pattern match, and then calling string modification functions after validation\
+    \ has occurred.\nThis is usually indicative of a poor input validation strategy\
+    \ as an adversary may attempt to\nexploit the removal of characters.\n\nFor example\
+    \ a common mistake in attempting to remove path characters to protect against\
+    \ path\ntraversal is to match '../' and then remove any matches. However, if an\
+    \ adversary were to\ninclude in their input: '....//' then the `replace`  method\
+    \ would replace the first `../` but\ncause the leading `..` and trailing `/` to\
+    \ join into the final string of `../`, effectively\nbypassing the check.\n\nTo\
+    \ remediate this issue always perform string modifications before any validation\
+    \ of a string.\nIt is strongly recommended that strings be encoded instead of\
+    \ replaced or removed prior to\nvalidation.\n\n\nExample replaces `..` before\
+    \ validation. Do note this is still not a recommended method for\nprotecting against\
+    \ directory traversal, always use randomly generated IDs or filenames instead:\n\
+    ```\n// This is ONLY for demonstration purpose, never use untrusted input\n//\
+    \ in paths, always use randomly generated filenames or IDs.\nString input = \"\
+    test../....//dir\";\n// Use replaceAll _not_ replace\ninput = input.replaceAll(\"\
+    \\\\.\\\\.\", \"\");\n// Input would be test///dir at this point\n// Create a\
+    \ pattern to match on\nPattern pattern = Pattern.compile(\"\\\\.\\\\.\");\n//\
+    \ Create a matcher\nMatcher match = pattern.matcher(input);\n// Call find to see\
+    \ if .. is still in our string\nif (match.find()) {\n    throw new Exception(\"\
+    .. detected\");\n}\n// Use the input (but do not modify the string)\nSystem.out.println(input\
+    \ + \" safe\");\n```\n\nFor more information see Carnegie Mellon University's\
+    \ Secure Coding Guide:\nhttps://wiki.sei.cmu.edu/confluence/display/java/IDS11-J.+Perform+any+string+modifications+before+validation\n\
+    \n"
+  metadata:
+    shortDescription: Collapse of data into unsafe value
+    category: security
+    cwe: CWE-182
+    confidence: HIGH
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Info
+  severity: WARNING

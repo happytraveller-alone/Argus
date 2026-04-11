@@ -1,0 +1,63 @@
+rules:
+- id: unvalidated-redirect_1
+  languages:
+  - java
+  message: Application redirects to a destination URL specified by a user-supplied
+    parameter that is not validated. This could direct users to malicious locations.
+    Consider using an allowlist to validate URLs.
+  metadata:
+    asvs:
+      control_id: 5.1.5 Open Redirect
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v51-input-validation-requirements
+      section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-601: URL Redirection to Untrusted Site (''Open Redirect'')'
+    impact: LOW
+    likelihood: MEDIUM
+    owasp:
+    - A01:2021 - Broken Access Control
+    references:
+    - https://owasp.org/Top10/A01_2021-Broken_Access_Control
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#UNVALIDATED_REDIRECT
+    subcategory:
+    - vuln
+    technology:
+    - java
+  pattern-either:
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,String $URL,...) {\n  ...\n\
+      \  $RES.sendRedirect($URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,String $URL,...,HttpServletResponse $RES,...) {\n  ...\n\
+      \  $RES.sendRedirect($URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletRequest $REQ,...,HttpServletResponse $RES,...)\
+      \ {\n  ...\n  String $URL = $REQ.getParameter(...);\n  ...\n  $RES.sendRedirect($URL);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,HttpServletRequest $REQ,...)\
+      \ {\n  ...\n  String $URL = $REQ.getParameter(...);\n  ...\n  $RES.sendRedirect($URL);\n\
+      \  ...\n}\n"
+  - pattern: "$X $METHOD(...,String $URL,...) {\n  ...\n  HttpServletResponse $RES\
+      \ = ...;\n  ...\n  $RES.sendRedirect($URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletRequest $REQ,...,HttpServletResponse $RES,...)\
+      \ {\n  ...\n  $RES.sendRedirect($REQ.getParameter(...));\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,HttpServletRequest $REQ,...)\
+      \ {\n  ...\n  $RES.sendRedirect($REQ.getParameter(...));\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,String $URL,...) {\n  ...\n\
+      \  $RES.addHeader(\"Location\",$URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,String $URL,...,HttpServletResponse $RES,...) {\n  ...\n\
+      \  $RES.addHeader(\"Location\",$URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletRequest $REQ,...,HttpServletResponse $RES,...)\
+      \ {\n  ...\n  String $URL = $REQ.getParameter(...);\n  ...\n  $RES.addHeader(\"\
+      Location\",$URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,HttpServletRequest $REQ,...)\
+      \ {\n  ...\n  String $URL = $REQ.getParameter(...);\n  ...\n  $RES.addHeader(\"\
+      Location\",$URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,String $URL,...) {\n  ...\n  HttpServletResponse $RES\
+      \ = ...;\n  ...\n  $RES.addHeader(\"Location\",$URL);\n  ...\n}\n"
+  - pattern: "$X $METHOD(...,HttpServletRequest $REQ,...,HttpServletResponse $RES,...)\
+      \ {\n  ...\n  $RES.addHeader(\"Location\",$REQ.getParameter(...));\n  ...\n\
+      }\n"
+  - pattern: "$X $METHOD(...,HttpServletResponse $RES,...,HttpServletRequest $REQ,...)\
+      \ {\n  ...\n  $RES.addHeader(\"Location\",$REQ.getParameter(...));\n  ...\n}"
+  severity: WARNING

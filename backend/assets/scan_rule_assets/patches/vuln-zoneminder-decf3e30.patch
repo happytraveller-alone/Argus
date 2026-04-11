@@ -1,0 +1,23 @@
+From decf3e307bdadc0a96ffb151d19f4a4605a7cc71 Mon Sep 17 00:00:00 2001
+From: Isaac Connor <isaac@zoneminder.com>
+Date: Mon, 20 Feb 2023 12:10:49 -0500
+Subject: [PATCH] Use dbEscapeString on username retrieved from jwt to prevent
+ SQL injection
+
+---
+ src/zm_user.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/zm_user.cpp b/src/zm_user.cpp
+index 25ee5fa977..e584d1dd4a 100644
+--- a/src/zm_user.cpp
++++ b/src/zm_user.cpp
+@@ -176,7 +176,7 @@ User *zmLoadTokenUser(const std::string &jwt_token_str, bool use_remote_addr) {
+   Debug(1, "Inside zmLoadTokenUser, formed key=%s", key.c_str());
+ 
+   std::pair<std::string, unsigned int> ans = verifyToken(jwt_token_str, key);
+-  std::string username = ans.first;
++  std::string username = zmDbEscapeString(ans.first);
+   unsigned int iat = ans.second;
+   Debug(1, "retrieved user '%s' from token", username.c_str());
+ 

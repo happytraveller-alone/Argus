@@ -1,0 +1,27 @@
+From 46a8c1ad6a0797ede9ddca1ebe0fc4e2aeba9073 Mon Sep 17 00:00:00 2001
+From: Akshay Joshi <akshay.joshi@enterprisedb.com>
+Date: Fri, 27 Oct 2023 17:23:33 +0530
+Subject: [PATCH] Use Python's subprocess module instead of the eventlet's
+ subprocess as it is not working with Python v3.12
+
+---
+ web/pgadmin/tools/psql/__init__.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/web/pgadmin/tools/psql/__init__.py b/web/pgadmin/tools/psql/__init__.py
+index 0da22e24f..4134b1c5a 100644
+--- a/web/pgadmin/tools/psql/__init__.py
++++ b/web/pgadmin/tools/psql/__init__.py
+@@ -11,8 +11,8 @@ import os
+ import select
+ import struct
+ import config
++import subprocess
+ from sys import platform as _platform
+-from eventlet.green import subprocess
+ from config import PG_DEFAULT_DRIVER
+ from flask import Response, request
+ from flask import render_template, copy_current_request_context, \
+-- 
+2.34.1
+

@@ -1,0 +1,43 @@
+From 8e1a572b0f76c2649ad75362a662b5883f6fb215 Mon Sep 17 00:00:00 2001
+From: bellenuit <matti@belle-nuit.com>
+Date: Wed, 15 Mar 2023 21:08:19 +0100
+Subject: [PATCH] hotfix
+
+XSS vulnerabilty on input validation
+---
+ api.php           | 2 +-
+ inc/utilities.php | 5 +----
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/api.php b/api.php
+index 97a1ec9..2d94c5c 100644
+--- a/api.php
++++ b/api.php
+@@ -26,7 +26,7 @@
+ define('SOFAWIKI',true);  // all included files will check for this variable
+ $swError = "";
+ $swDebug = "";
+-$swVersion = '3.8.8';   
++$swVersion = '3.8.9';   
+ $swMainName = 'Main';
+ $swStartTime = microtime(true);
+ $swSimpleURL = false;
+diff --git a/inc/utilities.php b/inc/utilities.php
+index aba482f..598f19e 100644
+--- a/inc/utilities.php
++++ b/inc/utilities.php
+@@ -7,10 +7,7 @@ if (!defined('SOFAWIKI')) die('invalid acces');
+ 
+ function swSimpleSanitize($s)
+ {
+-	// filters out XSS input to be used on variables that should not habe html code or exec code
+-	$s = str_replace("<","",$s);
+-	$s = str_replace(">","",$s);
+-	return $s;
++	return filter_var($s, FILTER_SANITIZE_STRING);
+ }
+ 
+ 
+-- 
+2.34.1
+

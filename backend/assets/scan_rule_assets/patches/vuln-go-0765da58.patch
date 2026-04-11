@@ -1,0 +1,161 @@
+From 0765da5884adcc8b744979303a36a27092d8fc51 Mon Sep 17 00:00:00 2001
+From: Damien Neil <dneil@google.com>
+Date: Fri, 12 Aug 2022 16:21:09 -0700
+Subject: [PATCH] net/url: consistently remove ../ elements in JoinPath
+
+JoinPath would fail to remove relative elements from the start of
+the path when the first path element is "".
+
+In addition, JoinPath would return the original path unmodified
+when provided with no elements to join, violating the documented
+behavior of always cleaning the resulting path.
+
+Correct both these cases.
+
+    JoinPath("http://go.dev", "../go")
+    // before: http://go.dev/../go
+    // after:  http://go.dev/go
+
+    JoinPath("http://go.dev/../go")
+    // before: http://go.dev/../go
+    // after:  http://go.dev/go
+
+Fixes #54385.
+
+Change-Id: I6d22cd160d097c50703dd96e4f453c6c118fd5d9
+Reviewed-on: https://go-review.googlesource.com/c/go/+/423514
+Reviewed-by: David Chase <drchase@google.com>
+Reviewed-by: Alan Donovan <adonovan@google.com>
+---
+ src/net/url/url.go      | 26 +++++++++++--------
+ src/net/url/url_test.go | 57 ++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 72 insertions(+), 11 deletions(-)
+
+diff --git a/src/net/url/url.go b/src/net/url/url.go
+index a21af7e479..d530a50d40 100644
+--- a/src/net/url/url.go
++++ b/src/net/url/url.go
+@@ -1194,17 +1194,23 @@ func (u *URL) UnmarshalBinary(text []byte) error {
+ // any existing path and the resulting path cleaned of any ./ or ../ elements.
+ // Any sequences of multiple / characters will be reduced to a single /.
+ func (u *URL) JoinPath(elem ...string) *URL {
+-	url := *u
+-	if len(elem) > 0 {
+-		elem = append([]string{u.EscapedPath()}, elem...)
+-		p := path.Join(elem...)
+-		// path.Join will remove any trailing slashes.
+-		// Preserve at least one.
+-		if strings.HasSuffix(elem[len(elem)-1], "/") && !strings.HasSuffix(p, "/") {
+-			p += "/"
+-		}
+-		url.setPath(p)
++	elem = append([]string{u.EscapedPath()}, elem...)
++	var p string
++	if !strings.HasPrefix(elem[0], "/") {
++		// Return a relative path if u is relative,
++		// but ensure that it contains no ../ elements.
++		elem[0] = "/" + elem[0]
++		p = path.Join(elem...)[1:]
++	} else {
++		p = path.Join(elem...)
+ 	}
++	// path.Join will remove any trailing slashes.
++	// Preserve at least one.
++	if strings.HasSuffix(elem[len(elem)-1], "/") && !strings.HasSuffix(p, "/") {
++		p += "/"
++	}
++	url := *u
++	url.setPath(p)
+ 	return &url
+ }
+ 
+diff --git a/src/net/url/url_test.go b/src/net/url/url_test.go
+index 263eddffcf..577cf631c8 100644
+--- a/src/net/url/url_test.go
++++ b/src/net/url/url_test.go
+@@ -2080,6 +2080,26 @@ func TestJoinPath(t *testing.T) {
+ 			elem: []string{"../../../go"},
+ 			out:  "https://go.googlesource.com/go",
+ 		},
++		{
++			base: "https://go.googlesource.com/",
++			elem: []string{"../go"},
++			out:  "https://go.googlesource.com/go",
++		},
++		{
++			base: "https://go.googlesource.com",
++			elem: []string{"../go"},
++			out:  "https://go.googlesource.com/go",
++		},
++		{
++			base: "https://go.googlesource.com",
++			elem: []string{"../go", "../../go", "../../../go"},
++			out:  "https://go.googlesource.com/go",
++		},
++		{
++			base: "https://go.googlesource.com/../go",
++			elem: nil,
++			out:  "https://go.googlesource.com/go",
++		},
+ 		{
+ 			base: "https://go.googlesource.com/",
+ 			elem: []string{"./go"},
+@@ -2112,7 +2132,7 @@ func TestJoinPath(t *testing.T) {
+ 		{
+ 			base: "https://go.googlesource.com",
+ 			elem: nil,
+-			out:  "https://go.googlesource.com",
++			out:  "https://go.googlesource.com/",
+ 		},
+ 		{
+ 			base: "https://go.googlesource.com/",
+@@ -2129,11 +2149,46 @@ func TestJoinPath(t *testing.T) {
+ 			elem: []string{"c%2fd"},
+ 			out:  "https://go.googlesource.com/a%2fb/c%2fd",
+ 		},
++		{
++			base: "https://go.googlesource.com/a/b",
++			elem: []string{"/go"},
++			out:  "https://go.googlesource.com/a/b/go",
++		},
+ 		{
+ 			base: "/",
+ 			elem: nil,
+ 			out:  "/",
+ 		},
++		{
++			base: "a",
++			elem: nil,
++			out:  "a",
++		},
++		{
++			base: "a",
++			elem: []string{"b"},
++			out:  "a/b",
++		},
++		{
++			base: "a",
++			elem: []string{"../b"},
++			out:  "b",
++		},
++		{
++			base: "a",
++			elem: []string{"../../b"},
++			out:  "b",
++		},
++		{
++			base: "",
++			elem: []string{"a"},
++			out:  "a",
++		},
++		{
++			base: "",
++			elem: []string{"../a"},
++			out:  "a",
++		},
+ 	}
+ 	for _, tt := range tests {
+ 		wantErr := "nil"
+-- 
+2.34.1
+

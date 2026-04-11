@@ -1,0 +1,27 @@
+From 70e574689664c10ed2c47581999cc2ce3e3c5afb Mon Sep 17 00:00:00 2001
+From: "Yukihiro \"Matz\" Matsumoto" <matz@ruby.or.jp>
+Date: Fri, 10 Jan 2020 17:58:15 +0900
+Subject: [PATCH] Fixed wrong condition for copying arguments on stack; fix
+ #4926
+
+This bug was introduced in 694089f to address #4832
+---
+ src/class.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/class.c b/src/class.c
+index a7d9ebf37..f5316e272 100644
+--- a/src/class.c
++++ b/src/class.c
+@@ -913,7 +913,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
+       {
+         mrb_value **var;
+         mrb_int *pl;
+-        mrb_bool nocopy = altmode || argv_on_stack ? TRUE : FALSE;
++        mrb_bool nocopy = altmode || argv_on_stack ? FALSE : TRUE;
+ 
+         var = va_arg(ap, mrb_value**);
+         pl = va_arg(ap, mrb_int*);
+-- 
+2.34.1
+

@@ -1,0 +1,30 @@
+rules:
+- id: c_integer_rule-atoi-atol
+  languages:
+  - c
+  - cpp
+  message: 'The `atoi` family of functions can potentially overflow or underflow integer
+    values. Consider
+
+    using `stroul` instead.
+
+
+    For more information please see:
+
+    https://wiki.sei.cmu.edu/confluence/display/c/ERR34-C.+Detect+errors+when+converting+a+string+to+a+number
+
+    '
+  metadata:
+    shortDescription: Possible integer overflow or underflow
+    cwe: CWE-190
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+    category: security
+  pattern-either:
+  - pattern: atoi(...)
+  - pattern: atol(...)
+  - pattern: _wtoi(...)
+  - pattern: _wtoi64(...)
+  severity: INFO

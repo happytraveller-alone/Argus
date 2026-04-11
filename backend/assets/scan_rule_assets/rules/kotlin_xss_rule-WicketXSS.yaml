@@ -1,0 +1,27 @@
+rules:
+- id: kotlin_xss_rule-WicketXSS
+  languages:
+  - kotlin
+  message: 'Disabling HTML escaping put the application at risk for Cross-Site Scripting
+    (XSS).
+
+    '
+  metadata:
+    shortDescription: Improper neutralization of input during web page generation
+      ('Cross-site Scripting')
+    category: security
+    cwe: CWE-79
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: MEDIUM
+  severity: WARNING
+  patterns:
+  - pattern-inside: 'import org.apache.wicket.$A
+
+      ...
+
+      '
+  - pattern: '$OBJ.setEscapeModelStrings(false);
+
+      '

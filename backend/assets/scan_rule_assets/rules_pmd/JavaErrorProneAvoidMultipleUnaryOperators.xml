@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidMultipleUnaryOperators Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidMultipleUnaryOperators</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidMultipleUnaryOperators" language="java" since="4.2" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" message="Using multiple unary operators may be a bug, and/or is confusing." externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidmultipleunaryoperators">
+            <description>
+    The use of multiple unary operators may be problematic, and/or confusing.
+    Ensure that the intended usage is not a bug, or consider simplifying the expression.
+            </description>
+            <priority>2</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+                        (: Only report on the toplevel one :)
+                        //UnaryExpression[UnaryExpression and not(parent::UnaryExpression)]
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    // These are typo bugs, or at best needlessly complex and confusing:
+    int i = - -1;
+    int j = + - +1;
+    int z = ~~2;
+    boolean b = !!true;
+    boolean c = !!!true;
+
+    // These are better:
+    int i = 1;
+    int j = -1;
+    int z = 2;
+    boolean b = true;
+    boolean c = false;
+
+    // And these just make your brain hurt:
+    int i = ~-2;
+    int j = -~7;
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

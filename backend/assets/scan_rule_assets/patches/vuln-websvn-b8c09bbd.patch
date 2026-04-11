@@ -1,0 +1,56 @@
+From b8c09bbd688fe838f9f14fbbb2cf897f3480c9b4 Mon Sep 17 00:00:00 2001
+From: AM-SoFT Support <support@am-soft.de>
+Date: Tue, 11 May 2021 09:33:28 +0200
+Subject: [PATCH] Code style.
+
+---
+ include/svnlook.php | 21 ++++++++++-----------
+ 1 file changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/include/svnlook.php b/include/svnlook.php
+index bac9622..7b2c2ae 100644
+--- a/include/svnlook.php
++++ b/include/svnlook.php
+@@ -1112,19 +1112,18 @@ class SVNRepository {
+ 
+ 	// {{{ getListSearch
+ 
+-	function getListSearch($path,$searchstring='', $rev = 0, $peg = '') {
++	function getListSearch($path, $term = '', $rev = 0, $peg = '') {
+ 		global $config, $curList;
+ 
+-		// Since directories returned by svn log don't have trailing slashes (:-(), we need to remove
+-		// the trailing slash from the path for comparison purposes
+-
+-		if ($path[strlen($path) - 1] == '/' && $path != '/') {
++		// Since directories returned by "svn log" don't have trailing slashes (:-(), we need to
++		// remove the trailing slash from the path for comparison purposes.
++		if (($path[strlen($path) - 1] == '/') && ($path != '/')) {
+ 			$path = substr($path, 0, -1);
+ 		}
+ 
+-		$curList = new SVNList;
+-		$curList->entries = array();
+-		$curList->path = $path;
++		$curList			= new SVNList;
++		$curList->entries	= array();
++		$curList->path		= $path;
+ 
+ 		// Get the list info
+ 
+@@ -1134,9 +1133,9 @@ class SVNRepository {
+ 				$rev = $headlog->entries[0]->rev;
+ 		}
+ 
+-		$searchstring = escapeshellarg($searchstring);
+-		$cmd = 'list -R --search ' . $searchstring . ' --xml';
+-		$cmd = $this->svnCommandString($cmd, $path, $rev, $peg);
++		$term	= escapeshellarg($term);
++		$cmd	= 'list -R --search ' . $term . ' --xml';
++		$cmd	= $this->svnCommandString($cmd, $path, $rev, $peg);
+ 		$this->_xmlParseCmdOutput($cmd, 'listStartElement', 'listEndElement', 'listCharacterData');
+ 
+ 		return $curList;
+-- 
+2.34.1
+

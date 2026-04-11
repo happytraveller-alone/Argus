@@ -1,0 +1,99 @@
+From 270e9a768b2fbb84ab832869d2de606c865f0e85 Mon Sep 17 00:00:00 2001
+From: Eran Hammer <eran@hammer.io>
+Date: Sun, 27 Dec 2015 08:12:18 -0800
+Subject: [PATCH] Fix cors config cascade. Closes #2980
+
+---
+ lib/route.js  |  6 +++---
+ lib/schema.js |  8 ++++----
+ test/cors.js  | 38 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 45 insertions(+), 7 deletions(-)
+
+diff --git a/lib/route.js b/lib/route.js
+index 85b7f103..bae4ae1b 100755
+--- a/lib/route.js
++++ b/lib/route.js
+@@ -53,9 +53,9 @@ exports = module.exports = internals.Route = function (route, connection, plugin
+     // Apply settings in order: {connection} <- {handler} <- {realm} <- {route}
+ 
+     const handlerDefaults = Handler.defaults(method, handler, connection.server);
+-    let base = Hoek.applyToDefaultsWithShallow(connection.settings.routes, handlerDefaults, ['bind', 'cors']);
+-    base = Hoek.applyToDefaultsWithShallow(base, realm.settings, ['bind', 'cors']);
+-    this.settings = Hoek.applyToDefaultsWithShallow(base, route.config || {}, ['bind', 'cors']);
++    let base = Hoek.applyToDefaultsWithShallow(connection.settings.routes, handlerDefaults, ['bind']);
++    base = Hoek.applyToDefaultsWithShallow(base, realm.settings, ['bind']);
++    this.settings = Hoek.applyToDefaultsWithShallow(base, route.config || {}, ['bind']);
+     this.settings.handler = handler;
+     this.settings = Schema.apply('routeConfig', this.settings, routeDisplay);
+ 
+diff --git a/lib/schema.js b/lib/schema.js
+index 376de495..be42ce95 100755
+--- a/lib/schema.js
++++ b/lib/schema.js
+@@ -80,10 +80,10 @@ internals.routeBase = Joi.object({
+     cors: Joi.object({
+         origin: Joi.array().min(1),
+         maxAge: Joi.number(),
+-        headers: Joi.array(),
+-        additionalHeaders: Joi.array(),
+-        exposedHeaders: Joi.array(),
+-        additionalExposedHeaders: Joi.array(),
++        headers: Joi.array().items(Joi.string()),
++        additionalHeaders: Joi.array().items(Joi.string()),
++        exposedHeaders: Joi.array().items(Joi.string()),
++        additionalExposedHeaders: Joi.array().items(Joi.string()),
+         credentials: Joi.boolean()
+     })
+         .allow(false, true),
+diff --git a/test/cors.js b/test/cors.js
+index 454844a0..66e449ae 100755
+--- a/test/cors.js
++++ b/test/cors.js
+@@ -209,6 +209,44 @@ describe('CORS', () => {
+         });
+     });
+ 
++    it('combines connection defaults with route config', (done) => {
++
++        const handler = function (request, reply) {
++
++            return reply();
++        };
++
++        const server = new Hapi.Server();
++        server.connection({ routes: { cors: { origin: ['http://example.com/'] } } });
++        server.route({ method: 'GET', path: '/', handler: handler, config: { cors: { credentials: true } } });
++
++        server.inject({ url: '/', headers: { origin: 'http://example.com/' } }, (res1) => {
++
++            expect(res1.result).to.equal(null);
++            expect(res1.headers['access-control-allow-credentials']).to.equal('true');
++
++            server.inject({ methof: 'OPTIONS', url: '/', headers: { origin: 'http://example.com/' } }, (res2) => {
++
++                expect(res2.result).to.equal(null);
++                expect(res2.headers['access-control-allow-credentials']).to.equal('true');
++
++                server.inject({ url: '/', headers: { origin: 'http://example.org/' } }, (res3) => {
++
++                    expect(res3.result).to.equal(null);
++                    expect(res3.headers['access-control-allow-credentials']).to.not.exist();
++
++                    server.inject({ methof: 'OPTIONS', url: '/', headers: { origin: 'http://example.org/' } }, (res4) => {
++
++                        expect(res4.result).to.equal(null);
++                        expect(res4.headers['access-control-allow-credentials']).to.not.exist();
++                        expect(res4.headers['access-control-allow-origin']).to.not.exist();
++                        done();
++                    });
++                });
++            });
++        });
++    });
++
+     describe('headers()', () => {
+ 
+         it('returns CORS origin (route level)', (done) => {
+-- 
+2.34.1
+

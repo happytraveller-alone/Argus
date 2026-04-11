@@ -1,0 +1,69 @@
+From 2681d581075c69544b67cb1bd491b848896f46ea Mon Sep 17 00:00:00 2001
+From: Laurent Destailleur <eldy@destailleur.fr>
+Date: Wed, 9 Jun 2021 16:37:15 +0200
+Subject: [PATCH] FIx CVE ID: CVE-2021-33816
+
+---
+ htdocs/core/class/utils.class.php |  2 +-
+ htdocs/website/index.php          | 25 +++++++++++++++++++++++--
+ 2 files changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/htdocs/core/class/utils.class.php b/htdocs/core/class/utils.class.php
+index a4f6bb11706..bdd6cc2b83a 100644
+--- a/htdocs/core/class/utils.class.php
++++ b/htdocs/core/class/utils.class.php
+@@ -594,7 +594,7 @@ class Utils
+ 	 * Execute a CLI command.
+ 	 *
+ 	 * @param 	string	$command		Command line to execute.
+-	 * @param 	string	$outputfile		Output file (used only when method is 2). For exemple $conf->admin->dir_temp.'/out.tmp';
++	 * @param 	string	$outputfile		A path for an output file (used only when method is 2). For example: $conf->admin->dir_temp.'/out.tmp';
+ 	 * @param	int		$execmethod		0=Use default method (that is 1 by default), 1=Use the PHP 'exec', 2=Use the 'popen' method
+ 	 * @return	array					array('result'=>...,'output'=>...,'error'=>...). result = 0 means OK.
+ 	 */
+diff --git a/htdocs/website/index.php b/htdocs/website/index.php
+index fe1bdce10d4..9361aae865f 100644
+--- a/htdocs/website/index.php
++++ b/htdocs/website/index.php
+@@ -1998,8 +1998,12 @@ if ($usercanedit && (($action == 'updatesource' || $action == 'updatecontent' ||
+ 
+ 			// Security analysis
+ 			$phpfullcodestring = dolKeepOnlyPhpCode($objectpage->content);
+-			//print dol_escape_htmltag($phpfullcodestring);exit;
+-			$forbiddenphpcommands = array("exec", "passthru", "system", "shell_exec", "proc_open", "eval", "dol_eval");
++
++			// First check forbidden commands
++			$forbiddenphpcommands = array();
++			if (empty($conf->global->WEBSITE_PHP_ALLOW_EXEC)) {    // If option is not on, we disallow functions to execute commands
++				$forbiddenphpcommands = array("exec", "passthru", "shell_exec", "system", "proc_open", "popen", "eval", "dol_eval", "executeCLI");
++			}
+ 			if (empty($conf->global->WEBSITE_PHP_ALLOW_WRITE)) {    // If option is not on, we disallow functions to write files
+ 				$forbiddenphpcommands = array_merge($forbiddenphpcommands, array("fopen", "file_put_contents", "fputs", "fputscsv", "fwrite", "fpassthru", "unlink", "mkdir", "rmdir", "symlink", "touch", "umask"));
+ 			}
+@@ -2015,6 +2019,23 @@ if ($usercanedit && (($action == 'updatesource' || $action == 'updatecontent' ||
+ 					}
+ 				}
+ 			}
++			// This char can be used to execute RCE for example using with echo `ls`
++			$forbiddenphpchars = array();
++			if (empty($conf->global->WEBSITE_PHP_ALLOW_DANGEROUS_CHARS)) {    // If option is not on, we disallow functions to execute commands
++				$forbiddenphpchars = array("`");
++			}
++			foreach ($forbiddenphpchars as $forbiddenphpchar) {
++				if (preg_match('/'.$forbiddenphpchar.'/ms', $phpfullcodestring)) {
++					$error++;
++					setEventMessages($langs->trans("DynamicPHPCodeContainsAForbiddenInstruction", $forbiddenphpchar), null, 'errors');
++					if ($action == 'updatesource') {
++						$action = 'editsource';
++					}
++					if ($action == 'updatecontent') {
++						$action = 'editcontent';
++					}
++				}
++			}
+ 
+ 			if (empty($user->rights->website->writephp)) {
+ 				if ($phpfullcodestringold != $phpfullcodestring) {
+-- 
+2.34.1
+

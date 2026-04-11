@@ -1,0 +1,33 @@
+rules:
+- id: bypass-tls-verification_1
+  languages:
+  - javascript
+  - typescript
+  message: Checks for setting the environment variable NODE_TLS_REJECT_UNAUTHORIZED
+    to 0, which disables TLS verification. This should only be used for debugging
+    purposes. Setting the option rejectUnauthorized to false bypasses verification
+    against the list of trusted CAs, which also leads to insecure transport. These
+    options lead to vulnerability to MTM attacks, and should not be used.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe: 'CWE-319: Cleartext Transmission of Sensitive Information'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp: A03:2017 - Sensitive Data Exposure
+    references:
+    - https://nodejs.org/api/https.html#https_https_request_options_callback
+    - https://stackoverflow.com/questions/20433287/node-js-request-cert-has-expired#answer-29397100
+    subcategory:
+    - vuln
+    technology:
+    - node.js
+    vulnerability: Insecure Transport
+  pattern-either:
+  - pattern: 'process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+
+      '
+  - pattern: '{rejectUnauthorized:false}
+
+      '
+  severity: WARNING

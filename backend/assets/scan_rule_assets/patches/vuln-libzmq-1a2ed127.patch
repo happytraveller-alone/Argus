@@ -1,0 +1,30 @@
+From 1a2ed12716693073032d57dac4e269df3d373751 Mon Sep 17 00:00:00 2001
+From: Guido Vranken <guidovranken@gmail.com>
+Date: Tue, 8 Jan 2019 23:39:41 +0100
+Subject: [PATCH] Problem: pointer overflow in zmq::v2_decoder_t::size_ready
+ leading to remote code execution (issue #3351)
+
+Solution: refactor bounds check arithmetic such that no overflow shall occur
+
+Signed-off-by: Guido Vranken <guidovranken@gmail.com>
+---
+ src/v2_decoder.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/v2_decoder.cpp b/src/v2_decoder.cpp
+index 3c29da2d..4523d6b0 100644
+--- a/src/v2_decoder.cpp
++++ b/src/v2_decoder.cpp
+@@ -115,8 +115,7 @@ int zmq::v2_decoder_t::size_ready (uint64_t msg_size_,
+ 
+     shared_message_memory_allocator &allocator = get_allocator ();
+     if (unlikely (!_zero_copy
+-                  || ((unsigned char *) read_pos_ + msg_size_
+-                      > (allocator.data () + allocator.size ())))) {
++                  || msg_size_ > allocator.data () + allocator.size () - read_pos_ )) {
+         // a new message has started, but the size would exceed the pre-allocated arena
+         // this happens every time when a message does not fit completely into the buffer
+         rc = _in_progress.init_size (static_cast<size_t> (msg_size_));
+-- 
+2.34.1
+

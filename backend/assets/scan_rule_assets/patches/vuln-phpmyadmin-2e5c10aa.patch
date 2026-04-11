@@ -1,0 +1,54 @@
+From 2e5c10aa2fc10fb1004aac7db78ebdaac21b9220 Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Mon, 1 Aug 2005 12:38:56 +0000
+Subject: [PATCH] bug #1249239, XSS vulnerability on Create page
+
+---
+ ChangeLog                | 3 +++
+ libraries/common.lib.php | 6 +++---
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index c8ff6b8666..9b4b0874db 100755
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -5,6 +5,9 @@ phpMyAdmin - Changelog
+ $Id$
+ $Source$
+ 
++2005-08-01 Marc Delisle  <lem9@users.sourceforge.net>
++    * libraries/common.lib.php: bug #1249239, XSS vulnerability on Create page
++
+ 2005-07-29 Marc Delisle  <lem9@users.sourceforge.net>
+     * tbl_change.php, lang/*: new message $strAndThen
+ 	* libraries/dbg/profiling.php: patch #1160439, improvements,
+diff --git a/libraries/common.lib.php b/libraries/common.lib.php
+index 6b59305a52..8086305b2f 100644
+--- a/libraries/common.lib.php
++++ b/libraries/common.lib.php
+@@ -635,11 +635,11 @@ if ($is_minimum_common == FALSE) {
+ 
+         // --- Added to solve bug #641765
+         // Robbat2 - 12 January 2003, 9:46PM
+-        // Revised, Robbat2 - 13 Janurary 2003, 2:59PM
++        // Revised, Robbat2 - 13 January 2003, 2:59PM
+         if (!function_exists('PMA_SQP_isError') || PMA_SQP_isError()) {
+             $formatted_sql = htmlspecialchars($the_query);
+         } else {
+-            $formatted_sql = PMA_formatSql(PMA_SQP_parse($the_query), $the_query);
++            $formatted_sql = PMA_formatSql(PMA_SQP_parse(PMA_sanitize($the_query)), $the_query);
+         }
+         // ---
+         echo "\n" . '<!-- PMA-SQL-ERROR -->' . "\n";
+@@ -655,7 +655,7 @@ if ($is_minimum_common == FALSE) {
+         if (!empty($the_query) && !strstr($the_query, 'connect')) {
+             // --- Added to solve bug #641765
+             // Robbat2 - 12 January 2003, 9:46PM
+-            // Revised, Robbat2 - 13 Janurary 2003, 2:59PM
++            // Revised, Robbat2 - 13 January 2003, 2:59PM
+             if (function_exists('PMA_SQP_isError') && PMA_SQP_isError()) {
+                 echo PMA_SQP_getErrorString();
+             }
+-- 
+2.34.1
+

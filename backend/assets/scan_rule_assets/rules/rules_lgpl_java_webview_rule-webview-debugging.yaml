@@ -1,0 +1,33 @@
+rules:
+- id: rules_lgpl_java_webview_rule-webview-debugging
+  patterns:
+  - pattern-either:
+    - pattern: '$WB.setWebContentsDebuggingEnabled(true);
+
+        '
+    - pattern: '$X = true;
+
+        ...
+
+        $WB.setWebContentsDebuggingEnabled($X);
+
+        '
+  message: "Remote WebView debugging is enabled. This allows an attacker with\ndebugging\
+    \ access to interact with the webview and steal or corrupt data.\nTo fix these\
+    \ security issues, it is recommended to disable remote \ndebugging and restrict\
+    \ file access in the WebView. \nHere's how you can do it:\n```\nWebView webView\
+    \ = new WebView(context);\n\n// Disable remote debugging\nif (Build.VERSION.SDK_INT\
+    \ >= Build.VERSION_CODES.KITKAT) {\n    WebView.setWebContentsDebuggingEnabled(false);\n\
+    }\n\n// Restrict file access from file URLs\nwebView.getSettings().setAllowFileAccessFromFileURLs(false);\n\
+    \n// Load a web page\nwebView.loadUrl(\"https://example.com\");\n```\n"
+  languages:
+  - java
+  severity: WARNING
+  metadata:
+    category: security
+    cwe: CWE-489
+    shortDescription: Active debug code
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: MEDIUM

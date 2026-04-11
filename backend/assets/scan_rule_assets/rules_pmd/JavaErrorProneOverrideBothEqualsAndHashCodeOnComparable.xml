@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="OverrideBothEqualsAndHashCodeOnComparable Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for OverrideBothEqualsAndHashCodeOnComparable</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="OverrideBothEqualsAndHashCodeOnComparable" language="java" since="7.17.0" message="When implementing Comparable both equals() and hashCode() should be overridden" class="net.sourceforge.pmd.lang.java.rule.errorprone.OverrideBothEqualsAndHashCodeOnComparableRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#overridebothequalsandhashcodeoncomparable">
+            <description>
+                Classes that implement `Comparable` should override both `equals()` and
+                `hashCode()` if instances of these classes are used in collections. This is
+                to ensure that the class's natural ordering is consistent with `equals()`.
+                Failing to do so can lead to unexpected behavior in sets which then do not
+                conform to the `Set` interface. While the `Set` interface relies on
+                `equals()` to determine object equality, sorted sets like `TreeSet` use
+                `compareTo()` instead. The same issue can arise when such objects are used
+                as keys in sorted maps.
+
+                Note 1: This rule is related to {% rule OverrideBothEqualsAndHashcode %}. It
+                will report missing `equals()` and/or `hashCode()` methods for classes only
+                that implement `Comparable`.
+
+                Note 2: This rule reports records only, if either `equals()` or `hashCode()`
+                have been overridden, but not both. If a record uses the generated
+                equals/hashCode methods, then the `compareTo()` implementation is only
+                consistent with `equals()` if all record components are considered.
+            </description>
+            <priority>3</priority>
+            <example>
+                
+    public class Bar implements Comparable&lt;Bar&gt; {  // poor - missing equals() and hashCode()
+        public int compareTo(Bar other) {
+            // some comparison
+        }
+    }
+
+    public class Baz implements Comparable&lt;Baz&gt; {  // poor - missing hashCode()
+        public int compareTo(Baz other) {
+            // some comparison
+        }
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            return compareTo((Baz) o) == 0;
+        }
+    }
+
+    public class Foo implements Comparable&lt;Foo&gt; {  // correct
+        public int compareTo(Foo other) {
+            // some comparison
+        }
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            return compareTo((Foo) o) == 0;
+        }
+        public int hashCode() {
+            // return hash code
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

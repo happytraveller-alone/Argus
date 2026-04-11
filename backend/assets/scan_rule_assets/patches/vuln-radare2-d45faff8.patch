@@ -1,0 +1,71 @@
+From d45faff871c285a1daed7d051af0bc73f017fa69 Mon Sep 17 00:00:00 2001
+From: Dirk Eibach <eibach@gdsys.de>
+Date: Mon, 19 Mar 2018 16:42:07 +0100
+Subject: [PATCH] util: Fix harcoded segment granularity in r_print (#9723)
+
+Fix the hardcoded assumptions on segment granularity in r_print.
+
+Signed-off-by: Dirk Eibach <dirk.eibach@gdsys.cc>
+---
+ libr/core/cconfig.c    | 1 +
+ libr/include/r_print.h | 1 +
+ libr/util/print.c      | 5 +++--
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/libr/core/cconfig.c b/libr/core/cconfig.c
+index 0bad250550..00187eda9a 100644
+--- a/libr/core/cconfig.c
++++ b/libr/core/cconfig.c
+@@ -1807,6 +1807,7 @@ static int cb_seggrn(void *user, void *data) {
+ 	RConfigNode *node = (RConfigNode *) data;
+ 	core->assembler->seggrn = node->i_value;
+ 	core->anal->seggrn = node->i_value;
++	core->print->seggrn = node->i_value;
+ 	return true;
+ }
+ 
+diff --git a/libr/include/r_print.h b/libr/include/r_print.h
+index a1407a0ded..df76ae3a0e 100644
+--- a/libr/include/r_print.h
++++ b/libr/include/r_print.h
+@@ -66,6 +66,7 @@ typedef struct r_print_t {
+ 	int ocur;
+ 	int cols;
+ 	int flags;
++	int seggrn;
+ 	bool use_comments;
+ 	int addrmod;
+ 	int col;
+diff --git a/libr/util/print.c b/libr/util/print.c
+index b5369459b5..83337481dd 100644
+--- a/libr/util/print.c
++++ b/libr/util/print.c
+@@ -292,6 +292,7 @@ R_API RPrint* r_print_new() {
+ 		R_PRINT_FLAGS_OFFSET |
+ 		R_PRINT_FLAGS_HEADER |
+ 		R_PRINT_FLAGS_ADDRMOD;
++	p->seggrn = 4;
+ 	p->zoom = R_NEW0 (RPrintZoom);
+ 	p->reg = NULL;
+ 	p->get_register = NULL;
+@@ -381,7 +382,7 @@ R_API void r_print_addr(RPrint *p, ut64 addr) {
+ 	if (use_segoff) {
+ 		ut32 s, a;
+ 		a = addr & 0xffff;
+-		s = (addr - a) >> 4;
++		s = (addr - a) >> p->seggrn;
+ 		if (dec) {
+ 			snprintf (space, sizeof (space), "%d:%d", s & 0xffff, a & 0xffff);
+ 			white = r_str_pad (' ', 9 - strlen (space));
+@@ -808,7 +809,7 @@ R_API void r_print_hexdump(RPrint *p, ut64 addr, const ut8 *buf, int len, int ba
+ 				if (use_segoff) {
+ 					ut32 s, a;
+ 					a = addr & 0xffff;
+-					s = ((addr - a) >> 4) & 0xffff;
++					s = ((addr - a) >> p->seggrn) & 0xffff;
+ 					snprintf (soff, sizeof (soff), "%04x:%04x ", s, a);
+ 					printfmt ("- offset -");
+ 				} else {
+-- 
+2.34.1
+

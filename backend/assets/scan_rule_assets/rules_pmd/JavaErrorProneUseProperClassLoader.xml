@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="UseProperClassLoader Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for UseProperClassLoader</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="UseProperClassLoader" language="java" since="3.7" message="In J2EE, getClassLoader() might not work as expected.  Use Thread.currentThread().getContextClassLoader() instead." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#useproperclassloader">
+            <description>
+    In J2EE, the getClassLoader() method might not work as expected. Use
+    Thread.currentThread().getContextClassLoader() instead.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>//MethodCall[pmd-java:matchesSig("java.lang.Class#getClassLoader()")]</value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        ClassLoader cl = Bar.class.getClassLoader();
+    }
+
+            </example>
+        </rule>
+
+</ruleset>

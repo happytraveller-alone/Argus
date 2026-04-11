@@ -1,0 +1,28 @@
+From 5fcd19bdc89a3fe4cb8ad8c356590e1e4740c743 Mon Sep 17 00:00:00 2001
+From: aryaantony92 <97134765+aryaantony92@users.noreply.github.com>
+Date: Thu, 6 Jul 2023 16:46:13 +0200
+Subject: [PATCH] Fix xss in admin login 2fa setup page (#147)
+
+* Fix xss in admin login 2fa setup page
+
+* Remove raw from the twig as the error message shouldn't have html
+---
+ templates/admin/login/two_factor_setup.html.twig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/templates/admin/login/two_factor_setup.html.twig b/templates/admin/login/two_factor_setup.html.twig
+index c3c92ccbe..bf2b87280 100644
+--- a/templates/admin/login/two_factor_setup.html.twig
++++ b/templates/admin/login/two_factor_setup.html.twig
+@@ -3,7 +3,7 @@
+ {% block content %}
+     {% if error is defined %}
+         <div class="text error">
+-            {{ error|trans([],'admin')|raw }}
++            {{ error|trans([],'admin') }}
+         </div>
+     {% else %}
+         <div class="text info">
+-- 
+2.34.1
+

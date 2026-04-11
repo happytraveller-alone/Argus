@@ -1,0 +1,37 @@
+rules:
+- id: python_assert_rule-assert-used_1
+  languages:
+  - python
+  message: "The application was found using `assert` in non-test code. Usually reserved\
+    \ for debug and test\ncode, the `assert`\nfunction is commonly used to test conditions\
+    \ before continuing execution. However, enclosed\ncode will be removed\nwhen compiling\
+    \ Python code to optimized byte code. Depending on the assertion and subsequent\n\
+    logic, this could\nlead to undefined behavior of the application or application\
+    \ crashes.\n\nTo remediate this issue, remove the `assert` calls. If necessary,\
+    \ replace them with either `if`\nconditions or\n`try/except` blocks.\n\nExample\
+    \ using `try/except` instead of `assert`:\n```\n# Below try/except is equal to\
+    \ the assert statement of:\n# assert user.is_authenticated(), \"user must be authenticated\"\
+    \ntry:\n    if not user.is_authenticated():\n        raise AuthError(\"user must\
+    \ be authenticated\")\nexcept AuthError as e:\n    # Handle error\n    # ...\n\
+    \    # Return, do not continue processing\n    return\n```\n"
+  metadata:
+    cwe: CWE-754
+    category: security
+    shortDescription: Improper check for unusual or exceptional conditions
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: Info
+  patterns:
+  - pattern: assert(...)
+  - pattern-not-inside: 'import pytest
+
+      ...
+
+      '
+  - pattern-not-inside: 'import unittest
+
+      ...
+
+      '
+  severity: INFO

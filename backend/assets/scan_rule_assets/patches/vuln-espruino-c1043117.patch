@@ -1,0 +1,154 @@
+From c1043117262abef28903adbb944c0861da8dd8ec Mon Sep 17 00:00:00 2001
+From: Gordon Williams <gw@pur3.co.uk>
+Date: Mon, 27 Apr 2020 13:44:05 +0100
+Subject: [PATCH] Fix 1-byte overflow when using UDP (#1799)             Remove
+ 1-byte padding in Graphics lib
+
+---
+ ChangeLog                         | 2 ++
+ libs/bluetooth/jswrap_bluetooth.c | 2 +-
+ libs/graphics/graphics.c          | 2 +-
+ libs/graphics/graphics.h          | 1 -
+ libs/network/js/network_js.c      | 1 -
+ libs/network/network.c            | 2 +-
+ libs/network/socketserver.c       | 4 ++--
+ src/jsvar.c                       | 5 ++---
+ src/jsvar.h                       | 2 +-
+ 9 files changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index eef341a04..b179b5be6 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,5 +1,7 @@
+      2v06 : Allow `"ram"` keyword at the top of a function to allow it to be pretokenised and loaded to RAM
+             Don't store line numbers for pretokenised functions
++            Fix 1-byte overflow when using UDP (#1799)
++            Remove 1-byte padding in Graphics lib
+ 
+      2v05 : Add Array.includes
+             Fix (Number.toFixed) rounding, eg (1234.505).toFixed(2)
+diff --git a/libs/bluetooth/jswrap_bluetooth.c b/libs/bluetooth/jswrap_bluetooth.c
+index 0e3fa915b..9bbbf92d0 100644
+--- a/libs/bluetooth/jswrap_bluetooth.c
++++ b/libs/bluetooth/jswrap_bluetooth.c
+@@ -2946,7 +2946,7 @@ specifically for Espruino.
+ void jswrap_ble_BluetoothDevice_sendPasskey(JsVar *parent, JsVar *passkeyVar) {
+   char passkey[BLE_GAP_PASSKEY_LEN+1];
+   memset(passkey, 0, sizeof(passkey));
+-  jsvGetString(passkeyVar, passkey, sizeof(passkey));
++  jsvGetStringChars(passkeyVar,0,passkey, sizeof(passkey));
+   uint32_t err_code = jsble_central_send_passkey(passkey);
+   jsble_check_error(err_code);
+ }
+diff --git a/libs/graphics/graphics.c b/libs/graphics/graphics.c
+index 5a5fc635a..40b05377f 100644
+--- a/libs/graphics/graphics.c
++++ b/libs/graphics/graphics.c
+@@ -136,7 +136,7 @@ bool graphicsGetFromVar(JsGraphics *gfx, JsVar *parent) {
+   JsVar *data = jsvObjectGetChild(parent, JS_HIDDEN_CHAR_STR"gfx", 0);
+   assert(data);
+   if (data) {
+-    jsvGetString(data, (char*)&gfx->data, sizeof(JsGraphicsData)+1/*trailing zero*/);
++    jsvGetStringChars(data,0,(char*)&gfx->data, sizeof(JsGraphicsData));
+     jsvUnLock(data);
+     gfx->setPixel = graphicsFallbackSetPixel;
+     gfx->getPixel = graphicsFallbackGetPixel;
+diff --git a/libs/graphics/graphics.h b/libs/graphics/graphics.h
+index aec1cd10c..1f0ec7559 100644
+--- a/libs/graphics/graphics.h
++++ b/libs/graphics/graphics.h
+@@ -95,7 +95,6 @@ typedef struct {
+ typedef struct JsGraphics {
+   JsVar *graphicsVar; // this won't be locked again - we just know that it is already locked by something else
+   JsGraphicsData data;
+-  unsigned char _blank; ///< this is needed as jsvGetString for 'data' wants to add a trailing zero
+   void *backendData; ///< Data used by the graphics backend
+ 
+   void (*setPixel)(struct JsGraphics *gfx, int x, int y, unsigned int col);
+diff --git a/libs/network/js/network_js.c b/libs/network/js/network_js.c
+index 994d9ca70..330847ac5 100644
+--- a/libs/network/js/network_js.c
++++ b/libs/network/js/network_js.c
+@@ -122,7 +122,6 @@ int net_js_recv(JsNetwork *net, SocketType socketType, int sckt, void *buf, size
+     r = (int)jsvGetStringLength(res);
+     if (r>(int)len) { r=(int)len; assert(0); }
+     jsvGetStringChars(res, 0, (char*)buf, (size_t)r);
+-    // FIXME: jsvGetStringChars adds a 0 - does that actually write past the end of the array, or clip the data we get?
+   } else if (jsvIsInt(res)) {
+     r = jsvGetInteger(res);
+     if (r>=0) {
+diff --git a/libs/network/network.c b/libs/network/network.c
+index bc0971272..b5f4059d2 100644
+--- a/libs/network/network.c
++++ b/libs/network/network.c
+@@ -230,7 +230,7 @@ bool networkGetFromVar(JsNetwork *net) {
+ 
+   // Retrieve the data for the network var and save in the data property of the JsNetwork
+   // structure.
+-  jsvGetString(net->networkVar, (char *)&net->data, sizeof(JsNetworkData)+1/*trailing zero*/);
++  jsvGetStringChars(net->networkVar,0,(char *)&net->data, sizeof(JsNetworkData));
+ 
+   // Now we know which kind of network we are working with, invoke the corresponding initialization
+   // function to set the callbacks for this network tyoe.
+diff --git a/libs/network/socketserver.c b/libs/network/socketserver.c
+index ef62378bf..666272110 100644
+--- a/libs/network/socketserver.c
++++ b/libs/network/socketserver.c
+@@ -388,8 +388,8 @@ void socketReceivedUDP(JsVar *connection, JsVar **receiveData) {
+   // Get the header
+   size_t len = jsvGetStringLength(*receiveData);
+   if (len < sizeof(JsNetUDPPacketHeader)) return; // not enough data for header!
+-  char buf[sizeof(JsNetUDPPacketHeader)+1]; // trailing 0 from jsvGetStringChars
+-  jsvGetStringChars(*receiveData, 0, buf, sizeof(JsNetUDPPacketHeader)+1);
++  char buf[sizeof(JsNetUDPPacketHeader)];
++  jsvGetStringChars(*receiveData, 0, buf, sizeof(JsNetUDPPacketHeader));
+   JsNetUDPPacketHeader *header = (JsNetUDPPacketHeader*)buf;
+   if (sizeof(JsNetUDPPacketHeader)+header->length < len) return; // not enough data yet
+ 
+diff --git a/src/jsvar.c b/src/jsvar.c
+index accb1048f..651972bbc 100644
+--- a/src/jsvar.c
++++ b/src/jsvar.c
+@@ -1309,7 +1309,7 @@ size_t jsvGetString(const JsVar *v, char *str, size_t len) {
+     // Try and get as a JsVar string, and try again
+     JsVar *stringVar = jsvAsString((JsVar*)v); // we know we're casting to non-const here
+     if (stringVar) {
+-      size_t l = jsvGetString(stringVar, str, len); // call again - but this time with converted var
++      size_t l = jsvGetStringChars(stringVar, 0, str, len); // call again - but this time with converted var
+       jsvUnLock(stringVar);
+       return l;
+     } else {
+@@ -1320,7 +1320,7 @@ size_t jsvGetString(const JsVar *v, char *str, size_t len) {
+   }
+ }
+ 
+-/// Get len bytes of string data from this string. Does not error if string len is not equal to len
++/// Get len bytes of string data from this string. Does not error if string len is not equal to len, no terminating 0
+ size_t jsvGetStringChars(const JsVar *v, size_t startChar, char *str, size_t len) {
+   assert(jsvHasCharacterData(v));
+   size_t l = len;
+@@ -1335,7 +1335,6 @@ size_t jsvGetStringChars(const JsVar *v, size_t startChar, char *str, size_t len
+     jsvStringIteratorNext(&it);
+   }
+   jsvStringIteratorFree(&it);
+-  *str = 0;
+   return len-l;
+ }
+ 
+diff --git a/src/jsvar.h b/src/jsvar.h
+index 31d39867e..b9fddd960 100644
+--- a/src/jsvar.h
++++ b/src/jsvar.h
+@@ -486,7 +486,7 @@ JsVar *jsvGetValueOf(JsVar *v); ///< Return the JsVar, or if it's an object and
+ /** Save this var as a string to the given buffer, and return how long it was (return val doesn't include terminating 0)
+ If the buffer length is exceeded, the returned value will == len */
+ size_t jsvGetString(const JsVar *v, char *str, size_t len);
+-size_t jsvGetStringChars(const JsVar *v, size_t startChar, char *str, size_t len); ///< Get len bytes of string data from this string. Does not error if string len is not equal to len
++size_t jsvGetStringChars(const JsVar *v, size_t startChar, char *str, size_t len); ///< Get len bytes of string data from this string. Does not error if string len is not equal to len, no terminating 0
+ void jsvSetString(JsVar *v, const char *str, size_t len); ///< Set the Data in this string. This must JUST overwrite - not extend or shrink
+ JsVar *jsvAsString(JsVar *var); ///< If var is a string, lock and return it, else create a new string
+ JsVar *jsvAsStringAndUnLock(JsVar *var); ///< Same as jsvAsString, but unlocks 'var'
+-- 
+2.34.1
+

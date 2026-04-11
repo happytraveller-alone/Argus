@@ -1,0 +1,19 @@
+rules:
+- id: arbitrary-sleep
+  patterns:
+  - pattern-not: time.sleep($F(...))
+  - pattern-either:
+    - pattern: 'time.sleep($X: int)
+
+        '
+    - pattern: 'time.sleep($X: float)
+
+        '
+  message: time.sleep() call; did you mean to leave this in?
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'

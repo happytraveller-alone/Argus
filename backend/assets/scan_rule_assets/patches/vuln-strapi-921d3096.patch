@@ -1,0 +1,33 @@
+From 56aa69f472afafff790193a9c2b28d3f75ce4dd3 Mon Sep 17 00:00:00 2001
+From: Convly <jean-sebastien.herbaux@epitech.eu>
+Date: Tue, 10 Jan 2023 10:34:49 +0100
+Subject: [PATCH] Use lodash fp instead of lodash
+
+---
+ .../server/controllers/validation/email-template.js           | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/packages/plugins/users-permissions/server/controllers/validation/email-template.js b/packages/plugins/users-permissions/server/controllers/validation/email-template.js
+index e2f0d4a2f8..49b3f765f7 100644
+--- a/packages/plugins/users-permissions/server/controllers/validation/email-template.js
++++ b/packages/plugins/users-permissions/server/controllers/validation/email-template.js
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const _ = require('lodash');
++const { trim } = require('lodash/fp');
+ const {
+   template: { createLooseInterpolationRegExp, createStrictInterpolationRegExp },
+ } = require('@strapi/utils');
+@@ -33,7 +33,7 @@ const matchAll = (pattern, src) => {
+   while ((match = regexPatternWithGlobal.exec(src))) {
+     const [, group] = match;
+ 
+-    matches.push(_.trim(group));
++    matches.push(trim(group));
+   }
+ 
+   return matches;
+-- 
+2.34.1
+

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="UseCorrectExceptionLogging Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for UseCorrectExceptionLogging</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="UseCorrectExceptionLogging" language="java" since="3.2" message="Use the correct logging statement for logging exceptions" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#usecorrectexceptionlogging">
+            <description>
+    To make sure the full stacktrace is printed out, use the logging statement with two arguments: a String and a Throwable.
+
+    This rule only applies to [Apache Commons Logging](https://commons.apache.org/proper/commons-logging/).
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //CatchClause/Block//MethodCall
+        [pmd-java:matchesSig('org.apache.commons.logging.Log#_(java.lang.Object)')]
+        [ArgumentList[not(MethodCall)]//VariableAccess/@Name = ancestor::CatchClause/CatchParameter/@Name]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Main {
+        private static final Log _LOG = LogFactory.getLog( Main.class );
+        void bar() {
+            try {
+            } catch( Exception e ) {
+                _LOG.error( e ); //Wrong!
+            } catch( OtherException oe ) {
+                _LOG.error( oe.getMessage(), oe ); //Correct
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

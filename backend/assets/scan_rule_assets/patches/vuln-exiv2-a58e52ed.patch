@@ -1,0 +1,33 @@
+From a58e52ed702d3bc7b8bab7ec1d70a4849eebece3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Milo=C5=A1=20Komar=C4=8Devi=C4=87?=
+ <4973094+kmilos@users.noreply.github.com>
+Date: Mon, 24 Oct 2022 12:23:28 +0200
+Subject: [PATCH] Use safe add to prevent overflow
+
+Co-authored-by: Kevin Backhouse <kevinbackhouse@github.com>
+
+Use safe add to prevent overflow
+
+Co-authored-by: Kevin Backhouse <kevinbackhouse@github.com>
+---
+ src/bmffimage.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/bmffimage.cpp b/src/bmffimage.cpp
+index 837bcf0f9..9ff9dc1f9 100644
+--- a/src/bmffimage.cpp
++++ b/src/bmffimage.cpp
+@@ -516,8 +516,8 @@ uint64_t BmffImage::boxHandler(std::ostream& out /* = std::cout*/, Exiv2::PrintS
+       DataBuf arr;
+       brotliUncompress(data.c_data(4), data.size() - 4, arr);
+       if (realType == TAG_exif) {
+-        uint32_t offset = arr.read_uint32(0, endian_) + 4;
+-        enforce(offset + 4 < arr.size(), Exiv2::ErrorCode::kerCorruptedMetadata);
++        uint32_t offset = Safe::add(arr.read_uint32(0, endian_), 4u);
++        enforce(Safe::add(offset, 4u) < arr.size(), Exiv2::ErrorCode::kerCorruptedMetadata);
+         Internal::TiffParserWorker::decode(exifData(), iptcData(), xmpData(), arr.c_data(offset), arr.size() - offset,
+                                            Internal::Tag::root, Internal::TiffMapping::findDecoder);
+       } else if (realType == TAG_xml) {
+-- 
+2.34.1
+

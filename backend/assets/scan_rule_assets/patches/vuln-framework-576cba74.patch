@@ -1,0 +1,29 @@
+From 576cba749f9cfa150e9ba3eb23c06c70b75f64a8 Mon Sep 17 00:00:00 2001
+From: Michael Cordingley <Michael.Cordingley@gmail.com>
+Date: Wed, 20 Sep 2017 21:35:31 -0400
+Subject: [PATCH] Perform constant-time token comparison in
+ DatabaseUserProvider
+
+---
+ src/Illuminate/Auth/DatabaseUserProvider.php | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/Illuminate/Auth/DatabaseUserProvider.php b/src/Illuminate/Auth/DatabaseUserProvider.php
+index a94b74b8b4..e131e4223d 100755
+--- a/src/Illuminate/Auth/DatabaseUserProvider.php
++++ b/src/Illuminate/Auth/DatabaseUserProvider.php
+@@ -70,10 +70,9 @@ class DatabaseUserProvider implements UserProvider
+     {
+         $user = $this->conn->table($this->table)
+                         ->where('id', $identifier)
+-                        ->where('remember_token', $token)
+                         ->first();
+ 
+-        return $this->getGenericUser($user);
++        return hash_equals($user->remember_token, $token) ? $this->getGenericUser($user) : null;
+     }
+ 
+     /**
+-- 
+2.34.1
+

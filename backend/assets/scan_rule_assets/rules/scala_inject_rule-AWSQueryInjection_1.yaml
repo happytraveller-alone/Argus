@@ -1,0 +1,40 @@
+rules:
+- id: scala_inject_rule-AWSQueryInjection_1
+  languages:
+  - scala
+  message: 'Constructing SimpleDB queries containing user input can allow an attacker
+    to view unauthorized
+
+    records.
+
+    '
+  metadata:
+    category: security
+    cwe: CWE-943
+    shortDescription: Improper Neutralization of Special Elements in Data Query Logic
+    technology:
+    - scala
+    security-severity: Info
+  mode: taint
+  pattern-sinks:
+  - pattern: new com.amazonaws.services.simpledb.model.SelectRequest($QUERY, ...);
+  - patterns:
+    - pattern-inside: '$DB.select(($SR: com.amazonaws.services.simpledb.model.SelectRequest).withSelectExpression($QUERY,...));
+
+        '
+    - pattern: $QUERY
+    - metavariable-pattern:
+        metavariable: $DB
+        pattern-either:
+        - pattern: '($DB: com.amazonaws.services.simpledb.AmazonSimpleDB)'
+        - pattern: '($DB: com.amazonaws.services.simpledb.AmazonSimpleDBClient)'
+  pattern-sources:
+  - patterns:
+    - pattern-inside: "def $FUNC(..., $REQ: HttpServletRequest, ...): $TYPE = {\n\
+        \  ...\n}\n"
+    - pattern: $REQ
+  - patterns:
+    - pattern-inside: "def $FUNC(..., $X: $TYPE, ...): $RET_TYPE = {\n  ...\n  $QUERY\
+        \ = <...$X...>\n  ...\n}\n"
+    - pattern: $QUERY
+  severity: ERROR

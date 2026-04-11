@@ -1,0 +1,25 @@
+From ac257737290926c32980d074aad22ed80802b231 Mon Sep 17 00:00:00 2001
+From: Johan Cwiklinski <jcwiklinski@teclib.com>
+Date: Fri, 16 Sep 2016 09:37:20 +0200
+Subject: [PATCH] Fix mysqli_set_charset call
+
+---
+ inc/dbmysql.class.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/inc/dbmysql.class.php b/inc/dbmysql.class.php
+index 32b0598df2..e76875f08b 100644
+--- a/inc/dbmysql.class.php
++++ b/inc/dbmysql.class.php
+@@ -125,7 +125,7 @@ class DBmysql {
+          $this->connected = false;
+          $this->error     = 1;
+       } else {
+-         $this->dbh->query("SET NAMES '" . (isset($this->dbenc) ? $this->dbenc : "utf8") . "'");
++         mysqli_set_charset($this->dbh, isset($this->dbenc) ? $this->dbenc : "utf8");
+ 
+          if (GLPI_FORCE_EMPTY_SQL_MODE) {
+             $this->dbh->query("SET SESSION sql_mode = ''");
+-- 
+2.34.1
+

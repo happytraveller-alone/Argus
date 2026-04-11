@@ -1,0 +1,29 @@
+From 2c639e85a32aaef4a9978e5ca139fb74ca5d6ae4 Mon Sep 17 00:00:00 2001
+From: Adrian Greeve <adrian@moodle.com>
+Date: Tue, 28 Oct 2014 10:20:37 +0800
+Subject: [PATCH] MDL-47697 mod_data: Fix group id change when editing.
+
+When a teacher edits an entry in the database module
+it would change the group ID to the one that the teacher
+currently had selected.
+
+Thanks to Steve Bond for providing a patch.
+---
+ mod/data/edit.php | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/mod/data/edit.php b/mod/data/edit.php
+index 13727aed5a6..f33286f6eb7 100644
+--- a/mod/data/edit.php
++++ b/mod/data/edit.php
+@@ -168,7 +168,6 @@ if ($datarecord = data_submitted() and confirm_sesskey()) {
+             $record->approved = 0;
+         }
+ 
+-        $record->groupid = $currentgroup;
+         $record->timemodified = time();
+         $DB->update_record('data_records', $record);
+ 
+-- 
+2.34.1
+

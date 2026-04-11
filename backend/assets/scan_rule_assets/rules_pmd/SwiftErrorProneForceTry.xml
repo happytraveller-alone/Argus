@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ForceTry Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ForceTry</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ForceTry" language="swift" since="7.0.0" message="Force tries should be avoided." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_swift_errorprone.html#forcetry">
+            <description>
+                Force tries should be avoided. If the code being wrapped happens to raise and exception, our application will crash.
+                Consider using a conditional try and handling the resulting optional, or wrapping the try statement in a do-catch block.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //TryOperator[T-bang]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+                
+    let x = try! someThrowingFunction() // violation, force trying
+
+    let x = try? someThrowingFunction() // no violation
+
+            </example>
+        </rule>
+
+</ruleset>

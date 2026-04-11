@@ -1,0 +1,26 @@
+From e6dfda305acf85250861ecfa14a7bd6bb2fad5c3 Mon Sep 17 00:00:00 2001
+From: Leif Hedstrom <zwoop@apache.org>
+Date: Tue, 27 Feb 2018 19:34:10 -0700
+Subject: [PATCH] Adds better sanity checks around the method IX
+
+(cherry picked from commit e7517f393e97f405ce655736ff3f2b2ea6910717)
+---
+ proxy/http/remap/UrlRewrite.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/proxy/http/remap/UrlRewrite.cc b/proxy/http/remap/UrlRewrite.cc
+index 40d78acf2..fe3da9e25 100644
+--- a/proxy/http/remap/UrlRewrite.cc
++++ b/proxy/http/remap/UrlRewrite.cc
+@@ -404,7 +404,7 @@ UrlRewrite::PerformACLFiltering(HttpTransact::State *s, url_mapping *map)
+       bool match = true;
+ 
+       if (rp->method_restriction_enabled) {
+-        if (method_wksidx != -1) {
++        if (method_wksidx >= 0 && method_wksidx < HTTP_WKSIDX_METHODS_CNT) {
+           match = rp->standard_method_lookup[method_wksidx];
+         } else if (!rp->nonstandard_methods.empty()) {
+           match = false;
+-- 
+2.34.1
+

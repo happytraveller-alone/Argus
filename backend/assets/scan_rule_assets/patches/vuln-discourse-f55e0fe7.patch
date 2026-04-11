@@ -1,0 +1,73 @@
+From f55e0fe7910149c431861c18ce407d1be0d6091a Mon Sep 17 00:00:00 2001
+From: Bianca Nenciu <nbianca@users.noreply.github.com>
+Date: Wed, 25 Jan 2023 18:56:22 +0200
+Subject: [PATCH] SECURITY: Update to exclude tag topic filter (#20006)
+
+Ignores tags specified in exclude_tag topics param that a user does not
+have access to.
+
+Co-authored-by: Blake Erickson <o.blakeerickson@gmail.com>
+---
+ lib/topic_query.rb           | 19 +++++++++++--------
+ spec/lib/topic_query_spec.rb |  8 ++++++++
+ 2 files changed, 19 insertions(+), 8 deletions(-)
+
+diff --git a/lib/topic_query.rb b/lib/topic_query.rb
+index 4d3ea15bbd..a7049b008e 100644
+--- a/lib/topic_query.rb
++++ b/lib/topic_query.rb
+@@ -735,14 +735,17 @@ class TopicQuery
+         result = result.where.not(id: TopicTag.distinct.pluck(:topic_id))
+       end
+ 
+-      result = result.where(<<~SQL, name: @options[:exclude_tag]) if @options[:exclude_tag].present?
+-        topics.id NOT IN (
+-          SELECT topic_tags.topic_id
+-          FROM topic_tags
+-          INNER JOIN tags ON tags.id = topic_tags.tag_id
+-          WHERE tags.name = :name
+-        )
+-        SQL
++      if @options[:exclude_tag].present? &&
++           !DiscourseTagging.hidden_tag_names(@guardian).include?(@options[:exclude_tag])
++        result = result.where(<<~SQL, name: @options[:exclude_tag])
++          topics.id NOT IN (
++            SELECT topic_tags.topic_id
++            FROM topic_tags
++            INNER JOIN tags ON tags.id = topic_tags.tag_id
++            WHERE tags.name = :name
++          )
++          SQL
++      end
+     end
+ 
+     result = apply_ordering(result, options)
+diff --git a/spec/lib/topic_query_spec.rb b/spec/lib/topic_query_spec.rb
+index 8ba558a353..261a4cbb7c 100644
+--- a/spec/lib/topic_query_spec.rb
++++ b/spec/lib/topic_query_spec.rb
+@@ -409,6 +409,9 @@ RSpec.describe TopicQuery do
+       fab!(:tagged_topic3) { Fabricate(:topic, tags: [tag, other_tag]) }
+       fab!(:tagged_topic4) { Fabricate(:topic, tags: [uppercase_tag]) }
+       fab!(:no_tags_topic) { Fabricate(:topic) }
++      fab!(:tag_group) do
++        Fabricate(:tag_group, permissions: { "staff" => 1 }, tag_names: [other_tag.name])
++      end
+       let(:synonym) { Fabricate(:tag, target_tag: tag, name: "synonym") }
+ 
+       it "excludes a tag if desired" do
+@@ -416,6 +419,11 @@ RSpec.describe TopicQuery do
+         expect(topics.any? { |t| t.tags.include?(tag) }).to eq(false)
+       end
+ 
++      it "does not exclude a tagged topic without permission" do
++        topics = TopicQuery.new(user, exclude_tag: other_tag.name).list_latest.topics
++        expect(topics.map(&:id)).to include(tagged_topic2.id)
++      end
++
+       it "returns topics with the tag when filtered to it" do
+         expect(TopicQuery.new(moderator, tags: tag.name).list_latest.topics).to contain_exactly(
+           tagged_topic1,
+-- 
+2.34.1
+

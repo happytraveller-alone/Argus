@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="MethodWithSameNameAsEnclosingClass Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for MethodWithSameNameAsEnclosingClass</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="MethodWithSameNameAsEnclosingClass" language="apex" since="5.5.0" message="Classes should not have non-constructor methods with the same name as the class" class="net.sourceforge.pmd.lang.apex.rule.errorprone.MethodWithSameNameAsEnclosingClassRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#methodwithsamenameasenclosingclass">
+        <description>
+          Non-constructor methods should not have the same name as the enclosing class.
+        </description>
+        <priority>3</priority>
+        <example>
+          
+    public class MyClass {
+        // this is OK because it is a constructor
+        public MyClass() {}
+        // this is bad because it is a method
+        public void MyClass() {}
+    }
+
+        </example>
+      </rule>
+      
+      
+
+</ruleset>

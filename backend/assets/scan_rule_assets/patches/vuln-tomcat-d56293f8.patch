@@ -1,0 +1,65 @@
+From d56293f816d6dc9e2b47107f208fa9e95db58c65 Mon Sep 17 00:00:00 2001
+From: Mark Thomas <markt@apache.org>
+Date: Mon, 9 Nov 2020 19:23:12 +0000
+Subject: [PATCH] Fix BZ 64830 - concurrency issue in HPACK decoder
+
+https://bz.apache.org/bugzilla/show_bug.cgi?id=64830
+---
+ java/org/apache/coyote/http2/HpackDecoder.java | 12 ++++--------
+ webapps/docs/changelog.xml                     |  3 +++
+ 2 files changed, 7 insertions(+), 8 deletions(-)
+
+diff --git a/java/org/apache/coyote/http2/HpackDecoder.java b/java/org/apache/coyote/http2/HpackDecoder.java
+index 551101b33a..517dc0b4ae 100644
+--- a/java/org/apache/coyote/http2/HpackDecoder.java
++++ b/java/org/apache/coyote/http2/HpackDecoder.java
+@@ -72,8 +72,6 @@ public class HpackDecoder {
+     private volatile boolean countedCookie;
+     private volatile int headerSize = 0;
+ 
+-    private final StringBuilder stringBuilder = new StringBuilder();
+-
+     HpackDecoder(int maxMemorySize) {
+         this.maxMemorySizeHard = maxMemorySize;
+         this.maxMemorySizeSoft = maxMemorySize;
+@@ -222,19 +220,17 @@ public class HpackDecoder {
+         if (huffman) {
+             return readHuffmanString(length, buffer);
+         }
++        StringBuilder stringBuilder = new StringBuilder(length);
+         for (int i = 0; i < length; ++i) {
+             stringBuilder.append((char) buffer.get());
+         }
+-        String ret = stringBuilder.toString();
+-        stringBuilder.setLength(0);
+-        return ret;
++        return stringBuilder.toString();
+     }
+ 
+     private String readHuffmanString(int length, ByteBuffer buffer) throws HpackException {
++        StringBuilder stringBuilder = new StringBuilder(length);
+         HPackHuffman.decode(buffer, length, stringBuilder);
+-        String ret = stringBuilder.toString();
+-        stringBuilder.setLength(0);
+-        return ret;
++        return stringBuilder.toString();
+     }
+ 
+     private String handleIndexedHeaderName(int index) throws HpackException {
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index 8dedaa2d92..6018dfb62e 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -128,6 +128,9 @@
+         Add additional debug logging for I/O issues when communicating with the
+         user agent. (markt)
+       </add>
++      <fix>
++        <bug>64830</bug>: Fix concurrency issue in HPACK decoder. (markt)
++      </fix>
+     </changelog>
+   </subsection>
+   <subsection name="Jasper">
+-- 
+2.34.1
+

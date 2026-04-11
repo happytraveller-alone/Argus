@@ -1,0 +1,45 @@
+From 427463a52574e4b3bcbe1c65c49066438770641e Mon Sep 17 00:00:00 2001
+From: Viktor <viktor.khokhryakov@gmail.com>
+Date: Mon, 4 Feb 2019 16:10:25 +0800
+Subject: [PATCH] MDL-62702 core_lib: fix broken verification signature
+
+---
+ lib/ltiprovider/src/OAuth/OAuthRequest.php | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/lib/ltiprovider/src/OAuth/OAuthRequest.php b/lib/ltiprovider/src/OAuth/OAuthRequest.php
+index 0f9bbe07d85..4948b3d1153 100644
+--- a/lib/ltiprovider/src/OAuth/OAuthRequest.php
++++ b/lib/ltiprovider/src/OAuth/OAuthRequest.php
+@@ -17,7 +17,6 @@ class OAuthRequest {
+     // for debug purposes
+     public $base_string;
+     public static $version = '1.0';
+-    public static $POST_INPUT = 'php://input';
+ 
+     function __construct($http_method, $http_url, $parameters = null) {
+ 
+@@ -60,8 +59,7 @@ class OAuthRequest {
+               $parameters = array();
+           }
+ 
+-          // We have a Authorization-header with OAuth data. Parse the header
+-          // and add those overriding any duplicates from GET or POST
++          // We have a Authorization-header with OAuth data. Parse the header and add those.
+           if (isset($request_headers['Authorization']) && substr($request_headers['Authorization'], 0, 6) == 'OAuth ') {
+               $header_parameters = OAuthUtil::split_header($request_headers['Authorization']);
+               $parameters = array_merge($parameters, $header_parameters);
+@@ -69,9 +67,7 @@ class OAuthRequest {
+ 
+           // If there are parameters in $_POST, these are likely what will be used. Therefore, they should be considered
+           // the final value in the case of any duplicates from sources parsed above.
+-          foreach ($_POST as $key => $value) {
+-              $parameters[$key] = OAuthUtil::urldecode_rfc3986($value);
+-          }
++          $parameters = array_merge($parameters, $_POST);
+       }
+ 
+       return new OAuthRequest($http_method, $http_url, $parameters);
+-- 
+2.34.1
+

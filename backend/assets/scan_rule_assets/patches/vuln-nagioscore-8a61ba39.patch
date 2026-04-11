@@ -1,0 +1,58 @@
+From 8a61ba397a15fef42489b53e533d2329c8b7bd49 Mon Sep 17 00:00:00 2001
+From: Bryan Heden <bheden@nagios.com>
+Date: Thu, 19 Jul 2018 14:21:55 -0500
+Subject: [PATCH] Revert "Fix for CVE-2018-13441 null pointer dereference
+ (#553)"
+
+This reverts commit c399086da9ec73daf9f0961b5d2cf20f04466c2e.
+---
+ Changelog            | 1 -
+ base/query-handler.c | 6 +++---
+ 2 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/Changelog b/Changelog
+index 3d5b5c7a..78370398 100644
+--- a/Changelog
++++ b/Changelog
+@@ -7,7 +7,6 @@ Nagios Core 4 Change Log
+ * Fix for duplicate comments on reload (#549) (Bryan Heden)
+ * Fix for check_interval/retry_interval bug (Scott Wilkerson)
+ * Fix passive checks sending recovery email when host was previously up (Scott Wilkerson)
+-* Fix for CVE-2018-13441 null pointer dereference (Trevor McDonald)
+ 
+ 4.4.1 - 2018-06-25
+ ------------------
+diff --git a/base/query-handler.c b/base/query-handler.c
+index 9e67a3cc..51069ec6 100644
+--- a/base/query-handler.c
++++ b/base/query-handler.c
+@@ -26,7 +26,7 @@ static int qh_echo(int sd, char *buf, unsigned int len)
+ {
+ 	int result = 0;
+ 
+-	if (buf == NULL || !strcmp(buf, "help")) {
++	if (!strcmp(buf, "help")) {
+ 
+ 		nsock_printf_nul(sd,
+ 			"Query handler that simply echoes back what you send it.");
+@@ -371,7 +371,7 @@ static int qh_help(int sd, char *buf, unsigned int len)
+ {
+ 	struct query_handler *qh = NULL;
+ 
+-	if (buf == NULL || !strcmp(buf, "help")) {
++	if (!*buf || !strcmp(buf, "help")) {
+ 		nsock_printf_nul(sd,
+ 			"  help <name>   show help for handler <name>\n"
+ 			"  help list     list registered handlers\n");
+@@ -405,7 +405,7 @@ static int qh_core(int sd, char *buf, unsigned int len)
+ {
+ 	char *space;
+ 
+-	if (buf == NULL || !strcmp(buf, "help")) {
++	if (*buf == 0 || !strcmp(buf, "help")) {
+ 
+ 		nsock_printf_nul(sd, 
+ 			"Query handler for manipulating nagios core.\n"
+-- 
+2.34.1
+

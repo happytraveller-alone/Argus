@@ -1,0 +1,47 @@
+From b30e9e9ee2ade6951bfaf28e15ef77325a206971 Mon Sep 17 00:00:00 2001
+From: Ryan Day <day36@llnl.gov>
+Date: Tue, 31 Oct 2017 18:28:16 -0600
+Subject: [PATCH] Fix security issue in Prolog and Epilog by always prepending
+ SPANK_ to env vars.
+
+CVE-2017-15566.
+
+Bug 4228.
+---
+ NEWS                    | 2 ++
+ src/slurmd/slurmd/req.c | 6 ++----
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/NEWS b/NEWS
+index 1dd422b3a5..f4f9d61845 100644
+--- a/NEWS
++++ b/NEWS
+@@ -20,6 +20,8 @@ documents those changes that are of interest to users and administrators.
+  -- Fix to backfill scheduling with respect to QOS and association limits. Jobs
+     submitted to multiple partitions are most likley to be effected.
+  -- Avoid erroneous errno set by the mariadb 10.2 api.
++ -- Fix security issue in Prolog and Epilog by always prepending SPANK_ to
++    all user-set environment variables. CVE-2017-15566.
+ 
+ * Changes in Slurm 16.05.10-2
+ =============================
+diff --git a/src/slurmd/slurmd/req.c b/src/slurmd/slurmd/req.c
+index d86e3f0d7c..440a853541 100644
+--- a/src/slurmd/slurmd/req.c
++++ b/src/slurmd/slurmd/req.c
+@@ -5580,10 +5580,8 @@ _build_env(job_env_t *job_env)
+ 		job_env->spank_job_env_size = 0;
+ 		job_env->spank_job_env = (char **) NULL;
+ 	}
+-	if (job_env->spank_job_env_size) {
+-		env_array_merge_spank(&env,
+-				      (const char **) job_env->spank_job_env);
+-	}
++	if (job_env->spank_job_env_size)
++		env_array_merge(&env, (const char **) job_env->spank_job_env);
+ 
+ 	slurm_mutex_lock(&conf->config_mutex);
+ 	setenvf(&env, "SLURMD_NODENAME", "%s", conf->node_name);
+-- 
+2.34.1
+

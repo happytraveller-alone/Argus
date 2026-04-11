@@ -1,0 +1,28 @@
+From e3edf64c14a4afa9845541b225cec91b4d9830d7 Mon Sep 17 00:00:00 2001
+From: Ivan Klimchuk <ivan.klimchuk@1pt.com>
+Date: Mon, 9 Jul 2018 12:19:06 +0300
+Subject: [PATCH] Use built in sanitization function
+
+---
+ core/model/modx/registry/modfileregister.class.php | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/core/model/modx/registry/modfileregister.class.php b/core/model/modx/registry/modfileregister.class.php
+index 6972e2a97..183ce392a 100644
+--- a/core/model/modx/registry/modfileregister.class.php
++++ b/core/model/modx/registry/modfileregister.class.php
+@@ -64,7 +64,10 @@ class modFileRegister extends modRegister {
+      */
+     public function clear($topic)
+     {
+-        $topicDirectory = $this->directory . ltrim(basename($topic), '/');
++        /** @var modFileHandler $fileHandler */
++        $fileHandler = $this->modx->getService('fileHandler', 'modFileHandler');
++
++        $topicDirectory = $this->directory . ltrim($fileHandler->sanitizePath($topic), '/');
+ 
+         return $this->modx->cacheManager->deleteTree(
+             realpath($topicDirectory),
+-- 
+2.34.1
+

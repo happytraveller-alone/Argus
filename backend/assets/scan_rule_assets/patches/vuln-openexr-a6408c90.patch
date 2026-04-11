@@ -1,0 +1,82 @@
+From a6408c90339bdf19f89476578d7f936b741be9b2 Mon Sep 17 00:00:00 2001
+From: Peter Hillman <peterh@wetafx.co.nz>
+Date: Thu, 23 Jan 2020 09:40:44 +1300
+Subject: [PATCH] avoid creating compression object just to compute
+ numLinesInBuffer
+
+Signed-off-by: Peter Hillman <peterh@wetafx.co.nz>
+---
+ OpenEXR/IlmImf/ImfMisc.cpp | 42 +++++++++++++++++++++++++++++++-------
+ 1 file changed, 35 insertions(+), 7 deletions(-)
+
+diff --git a/OpenEXR/IlmImf/ImfMisc.cpp b/OpenEXR/IlmImf/ImfMisc.cpp
+index 6e70c5d49..d0b6fb26f 100644
+--- a/OpenEXR/IlmImf/ImfMisc.cpp
++++ b/OpenEXR/IlmImf/ImfMisc.cpp
+@@ -269,6 +269,7 @@ defaultFormat (Compressor * compressor)
+ }
+ 
+ 
++//obsolete
+ int
+ numLinesInBuffer (Compressor * compressor)
+ {
+@@ -1842,6 +1843,39 @@ usesLongNames (const Header &header)
+     return false;
+ }
+ 
++namespace
++{
++// for a given compression type, return the number of scanlines
++// compressed into a single chunk
++// TODO add to API and move to ImfCompressor.cpp
++int
++numLinesInBuffer(Compression comp)
++{
++    switch(comp)
++    {
++        case NO_COMPRESSION :
++        case RLE_COMPRESSION:
++        case ZIPS_COMPRESSION:
++            return 1;
++        case ZIP_COMPRESSION:
++            return 16;
++        case PIZ_COMPRESSION:
++            return 32;
++        case PXR24_COMPRESSION:
++            return 16;
++        case B44_COMPRESSION:
++        case B44A_COMPRESSION:
++        case DWAA_COMPRESSION:
++            return 32;
++        case DWAB_COMPRESSION:
++            return 256;
++
++        default:
++	        throw IEX_NAMESPACE::ArgExc ("Unknown compression type");
++    }
++}
++}
++
+ int
+ getScanlineChunkOffsetTableSize(const Header& header)
+ {
+@@ -1851,17 +1885,11 @@ getScanlineChunkOffsetTableSize(const Header& header)
+     size_t maxBytesPerLine = bytesPerLineTable (header,
+                                                 bytesPerLine);
+ 
+-    Compressor* compressor = newCompressor(header.compression(),
+-                                           maxBytesPerLine,
+-                                           header);
+-
+-    int linesInBuffer = numLinesInBuffer (compressor);
++    int linesInBuffer = numLinesInBuffer ( header.compression() );
+ 
+     int lineOffsetSize = (dataWindow.max.y - dataWindow.min.y +
+                           linesInBuffer) / linesInBuffer;
+ 
+-    delete compressor;
+-
+     return lineOffsetSize;
+ }
+ 

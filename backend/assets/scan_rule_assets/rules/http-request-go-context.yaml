@@ -1,0 +1,23 @@
+rules:
+- id: http-request-go-context
+  patterns:
+  - pattern-either:
+    - pattern: '$CTX := ($R : *http.Request).Context()
+
+        ...
+
+        go $F($CTX, ...)
+
+        '
+    - pattern: 'go $F(($R : *http.Request).Context(), ...)
+
+        '
+  message: passing an http-request scoped Context to a goroutine
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-401: Memory Leak'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'

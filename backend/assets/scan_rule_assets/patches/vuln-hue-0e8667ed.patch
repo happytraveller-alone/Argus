@@ -1,0 +1,82 @@
+From 0e8667ed22f76d4cce8211ffc6c04b849479b2eb Mon Sep 17 00:00:00 2001
+From: Amit S <asrivastava@cloudera.com>
+Date: Tue, 24 Oct 2023 10:35:14 -0700
+Subject: [PATCH] [compute] check correctly for is_compute for session_type
+ (#3510)
+
+the problem is that when multiple queries are executed, we are not able
+to reuse the existing sessions as the session reuse is broken.
+
+if computes are in use then use compute[name] as the type otherwise
+fallback to old snippet[type] and use it everywhere.
+
+frontend update to send the session_type from the session returned
+by previous call.
+
+Change-Id: I0e6cb1149ca7961fc799ccce69fe70343d241bb5
+---
+ desktop/core/src/desktop/js/apps/notebook/snippet.js     | 4 ++--
+ .../libs/notebook/src/notebook/connectors/hiveserver2.py | 9 +++++----
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/desktop/core/src/desktop/js/apps/notebook/snippet.js b/desktop/core/src/desktop/js/apps/notebook/snippet.js
+index d5fe107770..cb5701ccae 100644
+--- a/desktop/core/src/desktop/js/apps/notebook/snippet.js
++++ b/desktop/core/src/desktop/js/apps/notebook/snippet.js
+@@ -1878,7 +1878,7 @@ class Snippet {
+               if (!notebook.sessions().length) {
+                 notebook.addSession(
+                   new Session(vm, {
+-                    type: self.type(),
++                    type: data.handle.session_type || self.type(),
+                     session_id: data.handle.session_guid,
+                     id: data.handle.session_id,
+                     properties: {}
+@@ -1887,7 +1887,7 @@ class Snippet {
+               } else {
+                 notebook.sessions()[0].session_id(data.handle.session_guid);
+                 notebook.sessions()[0].id(data.handle.session_id);
+-                notebook.sessions()[0].type(self.type());
++                notebook.sessions()[0].type(data.handle.session_type || self.type());
+               }
+             }
+             if (vm.editorMode()) {
+diff --git a/desktop/libs/notebook/src/notebook/connectors/hiveserver2.py b/desktop/libs/notebook/src/notebook/connectors/hiveserver2.py
+index 0df13556ab..879402f256 100644
+--- a/desktop/libs/notebook/src/notebook/connectors/hiveserver2.py
++++ b/desktop/libs/notebook/src/notebook/connectors/hiveserver2.py
+@@ -29,6 +29,7 @@ import sys
+ 
+ from django.urls import reverse
+ 
++from beeswax.common import is_compute
+ from desktop.auth.backend import is_admin
+ from desktop.conf import USE_DEFAULT_CONFIGURATION, has_connectors
+ from desktop.lib.conf import BoundConfig
+@@ -316,11 +317,11 @@ class HS2Api(Api):
+     db = self._get_db(snippet, interpreter=self.interpreter)
+ 
+     statement = self._get_current_statement(notebook, snippet)
+-    session = self._get_session(notebook, snippet['type'])
++    compute = snippet.get('compute', {})
++    session_type = compute['name'] if is_compute(snippet) and compute.get('name') else snippet['type']
++    session = self._get_session(notebook, session_type)
+ 
+     query = self._prepare_hql_query(snippet, statement['statement'], session)
+-    compute = snippet.get('compute')
+-    session_type = compute['name'] if compute else snippet['type']
+     _session = self._get_session_by_id(notebook, session_type)
+ 
+ 
+@@ -349,7 +350,7 @@ class HS2Api(Api):
+       'log_context': handle.log_context,
+       'session_guid': handle.session_guid,
+       'session_id': handle.session_id,
+-      'session_type': snippet['type']
++      'session_type': session_type
+     }
+     response.update(statement)
+ 
+-- 
+2.34.1
+

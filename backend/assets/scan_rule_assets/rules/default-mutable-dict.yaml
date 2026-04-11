@@ -1,0 +1,72 @@
+rules:
+- id: default-mutable-dict
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: "def $F(..., $D={}, ...):\n  ...\n  $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {}\n  ...\n  $D[...]\
+          \ = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict(...)\n  ...\n \
+          \ $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D.copy()\n  ...\n \
+          \ $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict.copy($D)\n  ...\n\
+          \  $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {... for ... in ...}\n\
+          \  ...\n  $D[...] = ...\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D or {}\n  ...\n  $D[...]\
+          \ = ...\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D={}, ...):\n   \
+          \ ...\n    $D[...] = ...\n"
+    - patterns:
+      - pattern: "def $F(..., $D={}, ...):\n  ...\n  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {}\n  ...\n  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict(...)\n  ...\n \
+          \ $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D.copy()\n  ...\n \
+          \ $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict.copy($D)\n  ...\n\
+          \  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {... for ... in ...}\n\
+          \  ...\n  $D.update(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D or {}\n  ...\n  $D.update(...)\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D={}, ...):\n   \
+          \ ...\n    $D.update(...)\n"
+    - patterns:
+      - pattern: "def $F(..., $D={}, ...):\n  ...\n  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {}\n  ...\n  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict(...)\n  ...\n \
+          \ $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D.copy()\n  ...\n \
+          \ $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.deepcopy($D)\n\
+          \  ...\n  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = copy.copy($D)\n  ...\n\
+          \  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = dict.copy($D)\n  ...\n\
+          \  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = {... for ... in ...}\n\
+          \  ...\n  $D.setdefault(...)\n"
+      - pattern-not: "def $F(..., $D={}, ...):\n  ...\n  $D = $D or {}\n  ...\n  $D.setdefault(...)\n"
+      - pattern-not-inside: "def $A(...):\n  ...\n  def $F(..., $D={}, ...):\n   \
+          \ ...\n    $D.setdefault(...)\n"
+  message: Function $F mutates default dict $D. Instances of default function arguments
+    in Python are shared between function calls.  Mutating a default function argument
+    changes the result for all function consumers. This will most likely cause unexpected
+    results, or lead to security vulnerabilities whereby one function consumer can
+    either view or modify the data of another function consumer.
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-200: Information Exposure'

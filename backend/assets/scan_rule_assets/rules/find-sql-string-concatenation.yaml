@@ -1,0 +1,34 @@
+rules:
+- id: find-sql-string-concatenation
+  message: In $METHOD, $X is used to construct a SQL query via string concatenation.
+  languages:
+  - java
+  severity: ERROR
+  pattern-either:
+  - pattern: "$RETURN $METHOD(...,String $X,...){\n  ...\n  Session $SESSION = ...;\n\
+      \  ...\n  String $QUERY = ... + $X + ...;\n  ...\n  PreparedStatement $PS =\
+      \ $SESSION.connection().prepareStatement($QUERY);\n  ...\n  ResultSet $RESULT\
+      \ = $PS.executeQuery();\n  ...\n}\n"
+  - pattern: "$RETURN $METHOD(...,String $X,...){\n  ...\n  String $QUERY = ... +\
+      \ $X + ...;\n  ...\n  Session $SESSION = ...;\n  ...\n  PreparedStatement $PS\
+      \ = $SESSION.connection().prepareStatement($QUERY);\n  ...\n  ResultSet $RESULT\
+      \ = $PS.executeQuery();\n  ...\n}\n"
+  metadata:
+    category: security
+    technology:
+    - jboss
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
+      (''SQL Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: HIGH

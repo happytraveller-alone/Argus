@@ -1,0 +1,31 @@
+From 292af5adc6e508806a627a23cc1eae83702267d6 Mon Sep 17 00:00:00 2001
+From: kelson <kelson@shysecurity.com>
+Date: Fri, 6 May 2016 13:54:10 -0400
+Subject: [PATCH] fixed timing attack in gluon.utils.compare
+
+---
+ gluon/utils.py | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/gluon/utils.py b/gluon/utils.py
+index 472bf31a..8b4bb4c9 100644
+--- a/gluon/utils.py
++++ b/gluon/utils.py
+@@ -83,11 +83,9 @@ def compare(a, b):
+     """ Compares two strings and not vulnerable to timing attacks """
+     if HAVE_COMPARE_DIGEST:
+         return hmac.compare_digest(a, b)
+-    if len(a) != len(b):
+-        return False
+-    result = 0
+-    for x, y in zip(a, b):
+-        result |= ord(x) ^ ord(y)
++    result = len(a) ^ len(b)
++    for i in xrange(len(b)):
++		result |= ord(a[i%len(a)]) ^ ord(b[i])
+     return result == 0
+ 
+ 
+-- 
+2.34.1
+

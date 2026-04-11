@@ -1,0 +1,43 @@
+rules:
+- id: use-django-environ
+  patterns:
+  - pattern-not: '...
+
+      import environ
+
+      ...
+
+      '
+  - pattern-either:
+    - pattern: 'import django
+
+        ...
+
+        import os
+
+        ...
+
+        $FOO = $M.environ[...]
+
+        '
+    - pattern: 'import os
+
+        ...
+
+        import django
+
+        ...
+
+        $FOO = $M.environ[...]
+
+        '
+  message: You are using environment variables inside django app. Use `django-environ`
+    as it a better alternative for deployment.
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information'
+    - 'CWE-522: Insufficiently Protected Credentials'
+    - 'CWE-532: Inclusion of Sensitive Information in Log Files'

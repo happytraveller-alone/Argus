@@ -1,0 +1,71 @@
+From 9d8d2ee6192e8b7ebb6713bd6215e06f94e2a9f7 Mon Sep 17 00:00:00 2001
+From: Aparup Banerjee <aparup@moodle.com>
+Date: Thu, 28 Jun 2012 15:32:33 +0800
+Subject: [PATCH] MDL-23254 Authentication : used httpswwwroot as root url
+ during authentication procedure where $PAGE->https_required() is specified.
+
+---
+ auth/ldap/ntlmsso_attempt.php | 5 +++--
+ auth/ldap/ntlmsso_magic.php   | 3 ++-
+ auth/shibboleth/login.php     | 8 ++++----
+ 3 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/auth/ldap/ntlmsso_attempt.php b/auth/ldap/ntlmsso_attempt.php
+index 8624b38b57d..69bbd42624b 100644
+--- a/auth/ldap/ntlmsso_attempt.php
++++ b/auth/ldap/ntlmsso_attempt.php
+@@ -33,8 +33,9 @@ $PAGE->set_title("$site->fullname: $loginsite");
+ $PAGE->set_heading($site->fullname);
+ echo $OUTPUT->header();
+ 
++// $PAGE->https_required() up above takes care of what $CFG->httpswwwroot should be.
+ $msg = '<p>'.get_string('ntlmsso_attempting', 'auth_ldap').'</p>'
+     . '<img width="1", height="1" '
+-    . ' src="' . $CFG->wwwroot . '/auth/ldap/ntlmsso_magic.php?sesskey='
++    . ' src="' . $CFG->httpswwwroot . '/auth/ldap/ntlmsso_magic.php?sesskey='
+     . $sesskey . '" />';
+-redirect($CFG->wwwroot . '/auth/ldap/ntlmsso_finish.php', $msg, 3);
++redirect($CFG->httpswwwroot . '/auth/ldap/ntlmsso_finish.php', $msg, 3);
+diff --git a/auth/ldap/ntlmsso_magic.php b/auth/ldap/ntlmsso_magic.php
+index 9c74f87c93a..f7cd208cce2 100644
+--- a/auth/ldap/ntlmsso_magic.php
++++ b/auth/ldap/ntlmsso_magic.php
+@@ -29,7 +29,8 @@ $file = $CFG->dirroot.'/pix/spacer.gif';
+ if ($authplugin->ntlmsso_magic($sesskey) && file_exists($file)) {
+     if (!empty($authplugin->config->ntlmsso_ie_fastpath)) {
+         if (check_browser_version('MSIE')) {
+-            redirect($CFG->wwwroot.'/auth/ldap/ntlmsso_finish.php');
++            // $PAGE->https_required() up above takes care of what $CFG->httpswwwroot should be.
++            redirect($CFG->httpswwwroot.'/auth/ldap/ntlmsso_finish.php');
+         }
+     }
+ 
+diff --git a/auth/shibboleth/login.php b/auth/shibboleth/login.php
+index 0b635acbc9d..ee3372f03fe 100644
+--- a/auth/shibboleth/login.php
++++ b/auth/shibboleth/login.php
+@@ -44,17 +44,17 @@ $PAGE->https_required();
+         // Redirect to SessionInitiator with entityID as argument
+         if (isset($IdPs[$selectedIdP][1]) && !empty($IdPs[$selectedIdP][1])) {
+             // For Shibbolet 1.x Service Providers
+-            header('Location: '.$IdPs[$selectedIdP][1].'?providerId='. urlencode($selectedIdP) .'&target='. urlencode($CFG->wwwroot.'/auth/shibboleth/index.php'));
++            header('Location: '.$IdPs[$selectedIdP][1].'?providerId='. urlencode($selectedIdP) .'&target='. urlencode($CFG->httpswwwroot.'/auth/shibboleth/index.php'));
+ 
+             // For Shibbolet 2.x Service Providers
+-            // header('Location: '.$IdPs[$selectedIdP][1].'?entityID='. urlencode($selectedIdP) .'&target='. urlencode($CFG->wwwroot.'/auth/shibboleth/index.php'));
++            // header('Location: '.$IdPs[$selectedIdP][1].'?entityID='. urlencode($selectedIdP) .'&target='. urlencode($CFG->httpswwwroot.'/auth/shibboleth/index.php'));
+ 
+         } else {
+             // For Shibbolet 1.x Service Providers
+-            header('Location: /Shibboleth.sso?providerId='. urlencode($selectedIdP) .'&target='. urlencode($CFG->wwwroot.'/auth/shibboleth/index.php'));
++            header('Location: /Shibboleth.sso?providerId='. urlencode($selectedIdP) .'&target='. urlencode($CFG->httpswwwroot.'/auth/shibboleth/index.php'));
+ 
+             // For Shibboleth 2.x Service Providers
+-            // header('Location: /Shibboleth.sso/DS?entityID='. urlencode($selectedIdP) .'&target='. urlencode($CFG->wwwroot.'/auth/shibboleth/index.php'));
++            // header('Location: /Shibboleth.sso/DS?entityID='. urlencode($selectedIdP) .'&target='. urlencode($CFG->httpswwwroot.'/auth/shibboleth/index.php'));
+         }
+     } elseif (isset($_POST['idp']) && !isset($IdPs[$_POST['idp']]))  {
+         $errormsg = get_string('auth_shibboleth_errormsg', 'auth_shibboleth');
+-- 
+2.34.1
+

@@ -1,0 +1,24 @@
+From dbf369399e7e3519d7996a2818cbeed89ec2f3f8 Mon Sep 17 00:00:00 2001
+From: Jan Muehlemann <jan.muehlemann@gmail.com>
+Date: Tue, 20 Sep 2016 15:51:50 +0200
+Subject: [PATCH] 3.4.3
+
+---
+ package.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.json b/package.json
+index 1a20480..63f78ba 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "i18next",
+-  "version": "3.4.2",
++  "version": "3.4.3",
+   "description": "i18next internationalization framework",
+   "main": "./index.js",
+   "jsnext:main": "dist/es/index.js",
+-- 
+2.34.1
+

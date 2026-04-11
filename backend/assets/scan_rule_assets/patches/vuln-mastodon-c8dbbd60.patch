@@ -1,0 +1,431 @@
+From c8dbbd60eb072a5f433b1a6aefd0be5ca2bfdb80 Mon Sep 17 00:00:00 2001
+From: Claire <claire.github-309c@sitedethib.com>
+Date: Sun, 23 Jan 2022 18:10:10 +0100
+Subject: [PATCH] Fix error-prone SQL queries (#15828)
+
+* Fix error-prone SQL queries in Account search
+
+While this code seems to not present an actual vulnerability, one could
+easily be introduced by mistake due to how the query is built.
+
+This PR parameterises the `to_tsquery` input to make the query more robust.
+
+* Harden code for Status#tagged_with_all and Status#tagged_with_none
+
+Those two scopes aren't used in a way that could be vulnerable to an SQL
+injection, but keeping them unchanged might be a hazard.
+
+* Remove unneeded spaces surrounding tsquery term
+
+* Please CodeClimate
+
+* Move advanced_search_for SQL template to its own function
+
+This avoids one level of indentation while making clearer that the SQL template
+isn't build from all the dynamic parameters of advanced_search_for.
+
+* Add tests covering tagged_with, tagged_with_all and tagged_with_none
+
+* Rewrite tagged_with_none to avoid multiple joins and make it more robust
+
+* Remove obsolete brakeman warnings
+
+* Revert "Remove unneeded spaces surrounding tsquery term"
+
+The two queries are not strictly equivalent.
+
+This reverts commit 86f16c537e06c6ba4a8b250f25dcce9f049023ff.
+---
+ app/models/account.rb      | 105 +++++++++++++++++++------------------
+ app/models/status.rb       |   7 +--
+ config/brakeman.ignore     |  80 ----------------------------
+ spec/models/status_spec.rb |  81 ++++++++++++++++++++++++++++
+ 4 files changed, 138 insertions(+), 135 deletions(-)
+
+diff --git a/app/models/account.rb b/app/models/account.rb
+index 2f2a55b55..11345a15c 100644
+--- a/app/models/account.rb
++++ b/app/models/account.rb
+@@ -426,6 +426,9 @@ class Account < ApplicationRecord
+   end
+ 
+   class << self
++    DISALLOWED_TSQUERY_CHARACTERS = /['?\\:‘’]/.freeze
++    TEXTSEARCH = "(setweight(to_tsvector('simple', accounts.display_name), 'A') || setweight(to_tsvector('simple', accounts.username), 'B') || setweight(to_tsvector('simple', coalesce(accounts.domain, '')), 'C'))"
++
+     def readonly_attributes
+       super - %w(statuses_count following_count followers_count)
+     end
+@@ -436,98 +439,100 @@ class Account < ApplicationRecord
+     end
+ 
+     def search_for(terms, limit = 10, offset = 0)
+-      textsearch, query = generate_query_for_search(terms)
++      tsquery = generate_query_for_search(terms)
+ 
+       sql = <<-SQL.squish
+         SELECT
+           accounts.*,
+-          ts_rank_cd(#{textsearch}, #{query}, 32) AS rank
++          ts_rank_cd(#{TEXTSEARCH}, to_tsquery('simple', :tsquery), 32) AS rank
+         FROM accounts
+-        WHERE #{query} @@ #{textsearch}
++        WHERE to_tsquery('simple', :tsquery) @@ #{TEXTSEARCH}
+           AND accounts.suspended_at IS NULL
+           AND accounts.moved_to_account_id IS NULL
+         ORDER BY rank DESC
+-        LIMIT ? OFFSET ?
++        LIMIT :limit OFFSET :offset
+       SQL
+ 
+-      records = find_by_sql([sql, limit, offset])
++      records = find_by_sql([sql, limit: limit, offset: offset, tsquery: tsquery])
+       ActiveRecord::Associations::Preloader.new.preload(records, :account_stat)
+       records
+     end
+ 
+     def advanced_search_for(terms, account, limit = 10, following = false, offset = 0)
+-      textsearch, query = generate_query_for_search(terms)
++      tsquery = generate_query_for_search(terms)
++      sql = advanced_search_for_sql_template(following)
++      records = find_by_sql([sql, id: account.id, limit: limit, offset: offset, tsquery: tsquery])
++      ActiveRecord::Associations::Preloader.new.preload(records, :account_stat)
++      records
++    end
++
++    def from_text(text)
++      return [] if text.blank?
+ 
++      text.scan(MENTION_RE).map { |match| match.first.split('@', 2) }.uniq.filter_map do |(username, domain)|
++        domain = begin
++          if TagManager.instance.local_domain?(domain)
++            nil
++          else
++            TagManager.instance.normalize_domain(domain)
++          end
++        end
++        EntityCache.instance.mention(username, domain)
++      end
++    end
++
++    private
++
++    def generate_query_for_search(unsanitized_terms)
++      terms = unsanitized_terms.gsub(DISALLOWED_TSQUERY_CHARACTERS, ' ')
++
++      # The final ":*" is for prefix search.
++      # The trailing space does not seem to fit any purpose, but `to_tsquery`
++      # behaves differently with and without a leading space if the terms start
++      # with `./`, `../`, or `.. `. I don't understand why, so, in doubt, keep
++      # the same query.
++      "' #{terms} ':*"
++    end
++
++    def advanced_search_for_sql_template(following)
+       if following
+-        sql = <<-SQL.squish
++        <<-SQL.squish
+           WITH first_degree AS (
+             SELECT target_account_id
+             FROM follows
+-            WHERE account_id = ?
++            WHERE account_id = :id
+             UNION ALL
+-            SELECT ?
++            SELECT :id
+           )
+           SELECT
+             accounts.*,
+-            (count(f.id) + 1) * ts_rank_cd(#{textsearch}, #{query}, 32) AS rank
++            (count(f.id) + 1) * ts_rank_cd(#{TEXTSEARCH}, to_tsquery('simple', :tsquery), 32) AS rank
+           FROM accounts
+-          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = ?)
++          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = :id)
+           WHERE accounts.id IN (SELECT * FROM first_degree)
+-            AND #{query} @@ #{textsearch}
++            AND to_tsquery('simple', :tsquery) @@ #{TEXTSEARCH}
+             AND accounts.suspended_at IS NULL
+             AND accounts.moved_to_account_id IS NULL
+           GROUP BY accounts.id
+           ORDER BY rank DESC
+-          LIMIT ? OFFSET ?
++          LIMIT :limit OFFSET :offset
+         SQL
+-
+-        records = find_by_sql([sql, account.id, account.id, account.id, limit, offset])
+       else
+-        sql = <<-SQL.squish
++        <<-SQL.squish
+           SELECT
+             accounts.*,
+-            (count(f.id) + 1) * ts_rank_cd(#{textsearch}, #{query}, 32) AS rank
++            (count(f.id) + 1) * ts_rank_cd(#{TEXTSEARCH}, to_tsquery('simple', :tsquery), 32) AS rank
+           FROM accounts
+-          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = ?) OR (accounts.id = f.target_account_id AND f.account_id = ?)
+-          WHERE #{query} @@ #{textsearch}
++          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = :id) OR (accounts.id = f.target_account_id AND f.account_id = :id)
++          WHERE to_tsquery('simple', :tsquery) @@ #{TEXTSEARCH}
+             AND accounts.suspended_at IS NULL
+             AND accounts.moved_to_account_id IS NULL
+           GROUP BY accounts.id
+           ORDER BY rank DESC
+-          LIMIT ? OFFSET ?
++          LIMIT :limit OFFSET :offset
+         SQL
+-
+-        records = find_by_sql([sql, account.id, account.id, limit, offset])
+-      end
+-
+-      ActiveRecord::Associations::Preloader.new.preload(records, :account_stat)
+-      records
+-    end
+-
+-    def from_text(text)
+-      return [] if text.blank?
+-
+-      text.scan(MENTION_RE).map { |match| match.first.split('@', 2) }.uniq.filter_map do |(username, domain)|
+-        domain = begin
+-          if TagManager.instance.local_domain?(domain)
+-            nil
+-          else
+-            TagManager.instance.normalize_domain(domain)
+-          end
+-        end
+-        EntityCache.instance.mention(username, domain)
+       end
+     end
+-
+-    private
+-
+-    def generate_query_for_search(terms)
+-      terms      = Arel.sql(connection.quote(terms.gsub(/['?\\:]/, ' ')))
+-      textsearch = "(setweight(to_tsvector('simple', accounts.display_name), 'A') || setweight(to_tsvector('simple', accounts.username), 'B') || setweight(to_tsvector('simple', coalesce(accounts.domain, '')), 'C'))"
+-      query      = "to_tsquery('simple', ''' ' || #{terms} || ' ''' || ':*')"
+-
+-      [textsearch, query]
+-    end
+   end
+ 
+   def emojis
+diff --git a/app/models/status.rb b/app/models/status.rb
+index c7f761bc6..fc8835b54 100644
+--- a/app/models/status.rb
++++ b/app/models/status.rb
+@@ -96,15 +96,12 @@ class Status < ApplicationRecord
+   scope :not_excluded_by_account, ->(account) { where.not(account_id: account.excluded_from_timeline_account_ids) }
+   scope :not_domain_blocked_by_account, ->(account) { account.excluded_from_timeline_domains.blank? ? left_outer_joins(:account) : left_outer_joins(:account).where('accounts.domain IS NULL OR accounts.domain NOT IN (?)', account.excluded_from_timeline_domains) }
+   scope :tagged_with_all, ->(tag_ids) {
+-    Array(tag_ids).reduce(self) do |result, id|
++    Array(tag_ids).map(&:to_i).reduce(self) do |result, id|
+       result.joins("INNER JOIN statuses_tags t#{id} ON t#{id}.status_id = statuses.id AND t#{id}.tag_id = #{id}")
+     end
+   }
+   scope :tagged_with_none, ->(tag_ids) {
+-    Array(tag_ids).reduce(self) do |result, id|
+-      result.joins("LEFT OUTER JOIN statuses_tags t#{id} ON t#{id}.status_id = statuses.id AND t#{id}.tag_id = #{id}")
+-            .where("t#{id}.tag_id IS NULL")
+-    end
++    where('NOT EXISTS (SELECT * FROM statuses_tags forbidden WHERE forbidden.status_id = statuses.id AND forbidden.tag_id IN (?))', tag_ids)
+   }
+ 
+   cache_associated :application,
+diff --git a/config/brakeman.ignore b/config/brakeman.ignore
+index 35f2c3178..07a2c377f 100644
+--- a/config/brakeman.ignore
++++ b/config/brakeman.ignore
+@@ -60,46 +60,6 @@
+       "confidence": "High",
+       "note": ""
+     },
+-    {
+-      "warning_type": "SQL Injection",
+-      "warning_code": 0,
+-      "fingerprint": "6e4051854bb62e2ddbc671f82d6c2328892e1134b8b28105ecba9b0122540714",
+-      "check_name": "SQL",
+-      "message": "Possible SQL injection",
+-      "file": "app/models/account.rb",
+-      "line": 479,
+-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+-      "code": "find_by_sql([\"          WITH first_degree AS (\\n            SELECT target_account_id\\n            FROM follows\\n            WHERE account_id = ?\\n            UNION ALL\\n            SELECT ?\\n          )\\n          SELECT\\n            accounts.*,\\n            (count(f.id) + 1) * ts_rank_cd(#{textsearch}, #{query}, 32) AS rank\\n          FROM accounts\\n          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = ?)\\n          WHERE accounts.id IN (SELECT * FROM first_degree)\\n            AND #{query} @@ #{textsearch}\\n            AND accounts.suspended_at IS NULL\\n            AND accounts.moved_to_account_id IS NULL\\n          GROUP BY accounts.id\\n          ORDER BY rank DESC\\n          LIMIT ? OFFSET ?\\n\".squish, account.id, account.id, account.id, limit, offset])",
+-      "render_path": null,
+-      "location": {
+-        "type": "method",
+-        "class": "Account",
+-        "method": "advanced_search_for"
+-      },
+-      "user_input": "textsearch",
+-      "confidence": "Medium",
+-      "note": ""
+-    },
+-    {
+-      "warning_type": "SQL Injection",
+-      "warning_code": 0,
+-      "fingerprint": "6f075c1484908e3ec9bed21ab7cf3c7866be8da3881485d1c82e13093aefcbd7",
+-      "check_name": "SQL",
+-      "message": "Possible SQL injection",
+-      "file": "app/models/status.rb",
+-      "line": 105,
+-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+-      "code": "result.joins(\"LEFT OUTER JOIN statuses_tags t#{id} ON t#{id}.status_id = statuses.id AND t#{id}.tag_id = #{id}\")",
+-      "render_path": null,
+-      "location": {
+-        "type": "method",
+-        "class": "Status",
+-        "method": null
+-      },
+-      "user_input": "id",
+-      "confidence": "Weak",
+-      "note": ""
+-    },
+     {
+       "warning_type": "Mass Assignment",
+       "warning_code": 105,
+@@ -140,26 +100,6 @@
+       "confidence": "High",
+       "note": ""
+     },
+-    {
+-      "warning_type": "SQL Injection",
+-      "warning_code": 0,
+-      "fingerprint": "9251d682c4e2840e1b2fea91e7d758efe2097ecb7f6255c065e3750d25eb178c",
+-      "check_name": "SQL",
+-      "message": "Possible SQL injection",
+-      "file": "app/models/account.rb",
+-      "line": 448,
+-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+-      "code": "find_by_sql([\"        SELECT\\n          accounts.*,\\n          ts_rank_cd(#{textsearch}, #{query}, 32) AS rank\\n        FROM accounts\\n        WHERE #{query} @@ #{textsearch}\\n          AND accounts.suspended_at IS NULL\\n          AND accounts.moved_to_account_id IS NULL\\n        ORDER BY rank DESC\\n        LIMIT ? OFFSET ?\\n\".squish, limit, offset])",
+-      "render_path": null,
+-      "location": {
+-        "type": "method",
+-        "class": "Account",
+-        "method": "search_for"
+-      },
+-      "user_input": "textsearch",
+-      "confidence": "Medium",
+-      "note": ""
+-    },
+     {
+       "warning_type": "SQL Injection",
+       "warning_code": 0,
+@@ -220,26 +160,6 @@
+       "confidence": "High",
+       "note": ""
+     },
+-    {
+-      "warning_type": "SQL Injection",
+-      "warning_code": 0,
+-      "fingerprint": "e21d8fee7a5805761679877ca35ed1029c64c45ef3b4012a30262623e1ba8bb9",
+-      "check_name": "SQL",
+-      "message": "Possible SQL injection",
+-      "file": "app/models/account.rb",
+-      "line": 495,
+-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+-      "code": "find_by_sql([\"          SELECT\\n            accounts.*,\\n            (count(f.id) + 1) * ts_rank_cd(#{textsearch}, #{query}, 32) AS rank\\n          FROM accounts\\n          LEFT OUTER JOIN follows AS f ON (accounts.id = f.account_id AND f.target_account_id = ?) OR (accounts.id = f.target_account_id AND f.account_id = ?)\\n          WHERE #{query} @@ #{textsearch}\\n            AND accounts.suspended_at IS NULL\\n            AND accounts.moved_to_account_id IS NULL\\n          GROUP BY accounts.id\\n          ORDER BY rank DESC\\n          LIMIT ? OFFSET ?\\n\".squish, account.id, account.id, limit, offset])",
+-      "render_path": null,
+-      "location": {
+-        "type": "method",
+-        "class": "Account",
+-        "method": "advanced_search_for"
+-      },
+-      "user_input": "textsearch",
+-      "confidence": "Medium",
+-      "note": ""
+-    },
+     {
+       "warning_type": "Mass Assignment",
+       "warning_code": 105,
+diff --git a/spec/models/status_spec.rb b/spec/models/status_spec.rb
+index 20fb894e7..653575778 100644
+--- a/spec/models/status_spec.rb
++++ b/spec/models/status_spec.rb
+@@ -267,6 +267,87 @@ RSpec.describe Status, type: :model do
+     end
+   end
+ 
++  describe '.tagged_with' do
++    let(:tag1)     { Fabricate(:tag) }
++    let(:tag2)     { Fabricate(:tag) }
++    let(:tag3)     { Fabricate(:tag) }
++    let!(:status1) { Fabricate(:status, tags: [tag1]) }
++    let!(:status2) { Fabricate(:status, tags: [tag2]) }
++    let!(:status3) { Fabricate(:status, tags: [tag3]) }
++    let!(:status4) { Fabricate(:status, tags: []) }
++    let!(:status5) { Fabricate(:status, tags: [tag1, tag2, tag3]) }
++
++    context 'when given one tag' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with([tag1.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status5.id]
++        expect(Status.tagged_with([tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status2.id, status5.id]
++        expect(Status.tagged_with([tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status3.id, status5.id]
++      end
++    end
++
++    context 'when given multiple tags' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with([tag1.id, tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status2.id, status5.id]
++        expect(Status.tagged_with([tag1.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status3.id, status5.id]
++        expect(Status.tagged_with([tag2.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status2.id, status3.id, status5.id]
++      end
++    end
++  end
++
++  describe '.tagged_with_all' do
++    let(:tag1)     { Fabricate(:tag) }
++    let(:tag2)     { Fabricate(:tag) }
++    let(:tag3)     { Fabricate(:tag) }
++    let!(:status1) { Fabricate(:status, tags: [tag1]) }
++    let!(:status2) { Fabricate(:status, tags: [tag2]) }
++    let!(:status3) { Fabricate(:status, tags: [tag3]) }
++    let!(:status4) { Fabricate(:status, tags: []) }
++    let!(:status5) { Fabricate(:status, tags: [tag1, tag2]) }
++
++    context 'when given one tag' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with_all([tag1.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status5.id]
++        expect(Status.tagged_with_all([tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status2.id, status5.id]
++        expect(Status.tagged_with_all([tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status3.id]
++      end
++    end
++
++    context 'when given multiple tags' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with_all([tag1.id, tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status5.id]
++        expect(Status.tagged_with_all([tag1.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq []
++        expect(Status.tagged_with_all([tag2.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq []
++      end
++    end
++  end
++
++  describe '.tagged_with_none' do
++    let(:tag1)     { Fabricate(:tag) }
++    let(:tag2)     { Fabricate(:tag) }
++    let(:tag3)     { Fabricate(:tag) }
++    let!(:status1) { Fabricate(:status, tags: [tag1]) }
++    let!(:status2) { Fabricate(:status, tags: [tag2]) }
++    let!(:status3) { Fabricate(:status, tags: [tag3]) }
++    let!(:status4) { Fabricate(:status, tags: []) }
++    let!(:status5) { Fabricate(:status, tags: [tag1, tag2, tag3]) }
++
++    context 'when given one tag' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with_none([tag1.id]).reorder(:id).pluck(:id).uniq).to eq [status2.id, status3.id, status4.id]
++        expect(Status.tagged_with_none([tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status3.id, status4.id]
++        expect(Status.tagged_with_none([tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status2.id, status4.id]
++      end
++    end
++
++    context 'when given multiple tags' do
++      it 'returns the expected statuses' do
++        expect(Status.tagged_with_none([tag1.id, tag2.id]).reorder(:id).pluck(:id).uniq).to eq [status3.id, status4.id]
++        expect(Status.tagged_with_none([tag1.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status2.id, status4.id]
++        expect(Status.tagged_with_none([tag2.id, tag3.id]).reorder(:id).pluck(:id).uniq).to eq [status1.id, status4.id]
++      end
++    end
++  end
++
+   describe '.permitted_for' do
+     subject { described_class.permitted_for(target_account, account).pluck(:visibility) }
+ 
+-- 
+2.34.1
+

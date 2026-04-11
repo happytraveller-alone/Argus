@@ -1,0 +1,98 @@
+From 282c38a4f901afa1d91a9dc72709ba0ddfee5576 Mon Sep 17 00:00:00 2001
+From: Will Ezell <will@dotcms.com>
+Date: Fri, 31 May 2019 13:55:03 -0600
+Subject: [PATCH] Issue 16650 redirect (#16654)
+
+* #16650 redirect to login correctly
+
+* #16650 allow /c to work
+
+* #16650 allow /c to work even when logged in
+
+* #16650 allow /c to work even when logged in
+
+(cherry picked from commit 17511c56fdb8b4d4be05ca9139ebb39d293baddf)
+---
+ .../dotcms/XSSPreventionWebInterceptor.java   | 24 +++++++++++++++----
+ .../servlets/LoginEditModeServlet.java        |  2 +-
+ .../portal/struts/PortalRequestProcessor.java |  2 +-
+ 3 files changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/dotCMS/src/main/java/com/dotcms/filters/interceptor/dotcms/XSSPreventionWebInterceptor.java b/dotCMS/src/main/java/com/dotcms/filters/interceptor/dotcms/XSSPreventionWebInterceptor.java
+index b570ab41ca..1f78be9865 100644
+--- a/dotCMS/src/main/java/com/dotcms/filters/interceptor/dotcms/XSSPreventionWebInterceptor.java
++++ b/dotCMS/src/main/java/com/dotcms/filters/interceptor/dotcms/XSSPreventionWebInterceptor.java
+@@ -1,6 +1,7 @@
+ package com.dotcms.filters.interceptor.dotcms;
+ 
+ import java.io.IOException;
++import java.io.PrintWriter;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+@@ -9,6 +10,7 @@ import com.dotcms.filters.interceptor.Result;
+ import com.dotcms.filters.interceptor.WebInterceptor;
+ import com.dotcms.util.SecurityUtils;
+ import com.dotmarketing.util.Config;
++import com.liferay.portal.util.PortalUtil;
+ 
+ /**
+  * Interceptor created to validate referers for incoming requests. This will reject any calls to
+@@ -62,10 +64,24 @@ public class XSSPreventionWebInterceptor implements WebInterceptor {
+ 
+     Result result = Result.NEXT;
+     if(!securityUtils.validateReferer(request)) {
+-      response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+-      response.setContentType("text/html");
+-      response.getWriter().print(unauthorizedHtmlResponse());
+-      response.getWriter().close();
++      
++      if(PortalUtil.getUser(request)!=null && request.getRequestURI().startsWith("/c/")) {
++        try(PrintWriter writer = response.getWriter()){
++          response.setContentType("text/html");
++          writer.append("<html><head>");
++          writer.append("<script>");
++          writer.append("top.location.href='/dotAdmin/';");
++          writer.append("</script>");
++          writer.append("</head></html>");
++        }
++      }else {
++
++        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
++        response.setContentType("text/html");
++        try(PrintWriter writer = response.getWriter()){
++          writer.print(unauthorizedHtmlResponse());
++        }
++      }
+       result = Result.SKIP_NO_CHAIN;
+     }
+    
+diff --git a/dotCMS/src/main/java/com/dotmarketing/servlets/LoginEditModeServlet.java b/dotCMS/src/main/java/com/dotmarketing/servlets/LoginEditModeServlet.java
+index c69c33db6f..de76048137 100644
+--- a/dotCMS/src/main/java/com/dotmarketing/servlets/LoginEditModeServlet.java
++++ b/dotCMS/src/main/java/com/dotmarketing/servlets/LoginEditModeServlet.java
+@@ -96,7 +96,7 @@ public class LoginEditModeServlet extends HttpServlet {
+ 		} catch (DotSecurityException e) {
+ 			Logger.error(LoginEditModeServlet.class,e.getMessage(),e);
+ 		}
+-		request.getRequestDispatcher("/c").forward(request,response);
++		response.sendRedirect("/dotAdmin/?r=" + System.currentTimeMillis());
+ 	}
+ 
+     private String findAssetURI(Contentlet cont) throws DotDataException {
+diff --git a/dotCMS/src/main/java/com/liferay/portal/struts/PortalRequestProcessor.java b/dotCMS/src/main/java/com/liferay/portal/struts/PortalRequestProcessor.java
+index 8e058010b4..948a41e3e3 100644
+--- a/dotCMS/src/main/java/com/liferay/portal/struts/PortalRequestProcessor.java
++++ b/dotCMS/src/main/java/com/liferay/portal/struts/PortalRequestProcessor.java
+@@ -132,7 +132,7 @@ public class PortalRequestProcessor extends StxxTilesRequestProcessor {
+ 
+ 
+ 			if(PortalUtil.getUserId(req) == null){
+-				res.sendRedirect("/html/portal/login.jsp?r=" + System.currentTimeMillis());
++				res.sendRedirect("/dotAdmin/?r=" + System.currentTimeMillis());
+ 			}else{
+ 
+ 				if(lastPath != null){
+-- 
+2.34.1
+

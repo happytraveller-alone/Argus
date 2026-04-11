@@ -1,0 +1,53 @@
+From c0c191c08f05fe10d7a6b1bf9475c1a651a89362 Mon Sep 17 00:00:00 2001
+From: Alexandre Bodin <bodin.alex@gmail.com>
+Date: Tue, 7 Jan 2020 14:15:16 +0100
+Subject: [PATCH] chore(admin): Improve plugin name validator in
+ install/uninstall plugin
+
+---
+ packages/strapi-admin/controllers/Admin.js | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/packages/strapi-admin/controllers/Admin.js b/packages/strapi-admin/controllers/Admin.js
+index d888e95d7a..ea5ed8ae12 100644
+--- a/packages/strapi-admin/controllers/Admin.js
++++ b/packages/strapi-admin/controllers/Admin.js
+@@ -7,6 +7,17 @@ const formatError = error => [
+   { messages: [{ id: error.id, message: error.message, field: error.field }] },
+ ];
+ 
++const PLUGIN_NAME_REGEX = /^[A-Za-z][A-Za-z0-9-_]+$/;
++
++/**
++ * Validates a plugin name format
++ */
++const isValidPluginName = plugin => {
++  return (
++    _.isString(plugin) && !_.isEmpty(plugin) && PLUGIN_NAME_REGEX.test(plugin)
++  );
++};
++
+ /**
+  * A set of functions called "actions" for `Admin`
+  */
+@@ -67,7 +78,7 @@ module.exports = {
+     try {
+       const { plugin } = ctx.request.body;
+ 
+-      if (!/^[A-Za-z0-9_-]+$/.test(plugin)) {
++      if (!isValidPluginName(plugin)) {
+         return ctx.badRequest('Invalid plugin name');
+       }
+ 
+@@ -107,7 +118,7 @@ module.exports = {
+     try {
+       const { plugin } = ctx.params;
+ 
+-      if (!/^[A-Za-z0-9_-]+$/.test(plugin)) {
++      if (!isValidPluginName(plugin)) {
+         return ctx.badRequest('Invalid plugin name');
+       }
+ 
+-- 
+2.34.1
+

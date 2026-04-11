@@ -1,0 +1,32 @@
+From 018d2c5061200d69f7f5a9154dd8590b79d87a45 Mon Sep 17 00:00:00 2001
+From: Johan Cwiklinski <jcwiklinski@teclib.com>
+Date: Thu, 13 Jul 2017 08:35:54 +0200
+Subject: [PATCH] Ensure entity_restrict is a list of integers; fixes #2456
+
+---
+ ajax/getDropdownValue.php | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/ajax/getDropdownValue.php b/ajax/getDropdownValue.php
+index b240c20228..5bcffe2975 100644
+--- a/ajax/getDropdownValue.php
++++ b/ajax/getDropdownValue.php
+@@ -50,7 +50,14 @@ if (isset($_POST["entity_restrict"])
+     && !is_array($_POST["entity_restrict"])
+     && (substr($_POST["entity_restrict"], 0, 1) === '[')
+     && (substr($_POST["entity_restrict"], -1) === ']')) {
+-    $_POST["entity_restrict"] = Toolbox::jsonDecode($_POST["entity_restrict"]);
++   $decoded = Toolbox::jsonDecode($_POST['entity_restrict']);
++   $entities = [];
++   if (is_array($decoded)) {
++      foreach ($decoded as $value) {
++         $entities[] = (int)$value;
++      }
++   }
++   $_POST["entity_restrict"] = $entities;
+ }
+ 
+ // Security
+-- 
+2.34.1
+

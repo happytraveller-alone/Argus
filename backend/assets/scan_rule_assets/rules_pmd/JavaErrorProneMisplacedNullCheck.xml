@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="MisplacedNullCheck Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for MisplacedNullCheck</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="MisplacedNullCheck" language="java" since="3.5" message="The null check here is misplaced; if the variable ''{0}'' is null there will be a NullPointerException" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#misplacednullcheck">
+            <description>
+    The null check here is misplaced. If the variable is null a `NullPointerException` will be thrown.
+    Either the check is useless (the variable will never be `null`) or it is incorrect.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //InfixExpression[@Operator = '&amp;&amp;']
+        /InfixExpression[@Operator = '!=']
+            (: one side is null :)
+            [NullLiteral]
+            (: other side checks for the variable used somewhere in the first child of conditional and expression :)
+            [VariableAccess]
+            [some $var in preceding-sibling::*//VariableAccess
+                [parent::MethodCall or parent::FieldAccess]
+                [not(ancestor::InfixExpression[@Operator = '||'])]
+                /@Name
+                satisfies $var = VariableAccess/@Name
+            ]
+        /VariableAccess
+    |
+    //InfixExpression[@Operator = '||']
+        /InfixExpression[@Operator = '==']
+            (: one side is null :)
+            [NullLiteral]
+            (: other side checks for the variable used somewhere in the first child of conditional or expression :)
+            [VariableAccess]
+            [some $var in preceding-sibling::*//VariableAccess
+                [parent::MethodCall or parent::FieldAccess]
+                [not(ancestor::InfixExpression[@Operator = '&amp;&amp;'])]
+                /@Name
+                satisfies $var = VariableAccess/@Name
+            ]
+        /VariableAccess
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        void bar() {
+            if (a.equals(baz) &amp;&amp; a != null) {} // a could be null, misplaced null check
+
+            if (a != null &amp;&amp; a.equals(baz)) {} // correct null check
+        }
+    }
+
+            </example>
+            <example>
+
+    public class Foo {
+        void bar() {
+            if (a.equals(baz) || a == null) {} // a could be null, misplaced null check
+
+            if (a == null || a.equals(baz)) {} // correct null check
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,333 @@
+From 5ab77f9347f55140c526097d618cdaff81a160b0 Mon Sep 17 00:00:00 2001
+From: Steve Lhomme <robux4@ycbcr.xyz>
+Date: Mon, 15 Feb 2021 08:18:37 +0100
+Subject: [PATCH] return early when reading an invalid size or with
+ SCOPE_NO_DATA
+
+---
+ src/EbmlCrc32.cpp         | 18 +++++++------
+ src/EbmlDate.cpp          | 16 +++++------
+ src/EbmlFloat.cpp         | 56 ++++++++++++++++++++-------------------
+ src/EbmlSInteger.cpp      | 31 +++++++++++-----------
+ src/EbmlString.cpp        | 33 ++++++++++++-----------
+ src/EbmlUInteger.cpp      | 32 +++++++++++-----------
+ src/EbmlUnicodeString.cpp | 35 ++++++++++++------------
+ 7 files changed, 115 insertions(+), 106 deletions(-)
+
+diff --git a/src/EbmlCrc32.cpp b/src/EbmlCrc32.cpp
+index 498cb46..6246553 100644
+--- a/src/EbmlCrc32.cpp
++++ b/src/EbmlCrc32.cpp
+@@ -232,16 +232,18 @@ filepos_t EbmlCrc32::RenderData(IOCallback & output, bool /* bForceRender */, bo
+ 
+ filepos_t EbmlCrc32::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    if (GetSize() != 4) {
+-      // impossible to read, skip it
+-      input.setFilePointer(GetSize(), seek_current);
+-    } else {
+-      input.readFully(&m_crc_final, GetSize());
+-      SetValueIsSet();
+-    }
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
++
++  if (GetSize() != 4) {
++    // impossible to read, skip it
++    input.setFilePointer(GetSize(), seek_current);
++    return GetSize();
+   }
+ 
++  input.readFully(&m_crc_final, GetSize());
++  SetValueIsSet();
++
+   return GetSize();
+ }
+ 
+diff --git a/src/EbmlDate.cpp b/src/EbmlDate.cpp
+index c0e6e7a..f398d30 100644
+--- a/src/EbmlDate.cpp
++++ b/src/EbmlDate.cpp
+@@ -54,17 +54,17 @@ filepos_t EbmlDate::ReadData(IOCallback & input, ScopeMode ReadFully)
+   if (GetSize() != 8) {
+     // impossible to read, skip it
+     input.setFilePointer(GetSize(), seek_current);
+-  } else {
+-    binary Buffer[8];
+-    input.readFully(Buffer, GetSize());
++    return GetSize();
++  }
+ 
+-    big_int64 b64;
+-    b64.Eval(Buffer);
++  binary Buffer[8];
++  input.readFully(Buffer, GetSize());
+ 
+-    myDate = b64;
+-    SetValueIsSet();
+-  }
++  big_int64 b64;
++  b64.Eval(Buffer);
+ 
++  myDate = b64;
++  SetValueIsSet();
+   return GetSize();
+ }
+ 
+diff --git a/src/EbmlFloat.cpp b/src/EbmlFloat.cpp
+index 69abce1..37fe3e6 100644
+--- a/src/EbmlFloat.cpp
++++ b/src/EbmlFloat.cpp
+@@ -112,33 +112,35 @@ uint64 EbmlFloat::UpdateSize(bool bWithDefault, bool  /* bForceRender */)
+ */
+ filepos_t EbmlFloat::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    assert(GetSize() == 4 || GetSize() == 8);
+-    if (GetSize() == 4 || GetSize() == 8) {
+-      binary Buffer[8];
+-      input.readFully(Buffer, GetSize());
+-
+-      if (GetSize() == 4) {
+-        big_int32 TmpRead;
+-        TmpRead.Eval(Buffer);
+-        auto tmpp = int32(TmpRead);
+-        float val;
+-        memcpy(&val, &tmpp, 4);
+-        Value = static_cast<double>(val);
+-        SetValueIsSet();
+-      } else if (GetSize() == 8) {
+-        big_int64 TmpRead;
+-        TmpRead.Eval(Buffer);
+-        auto tmpp = int64(TmpRead);
+-        double val;
+-        memcpy(&val, &tmpp, 8);
+-        Value = val;
+-        SetValueIsSet();
+-      } else {
+-        // impossible to read, skip it
+-        input.setFilePointer(GetSize(), seek_current);
+-      }
+-    }
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
++
++  assert(GetSize() == 4 || GetSize() == 8);
++  if (GetSize() != 4 && GetSize() != 8) {
++    // impossible to read, skip it
++    input.setFilePointer(GetSize(), seek_current);
++    return GetSize();
++  }
++
++  binary Buffer[8];
++  input.readFully(Buffer, GetSize());
++
++  if (GetSize() == 4) {
++    big_int32 TmpRead;
++    TmpRead.Eval(Buffer);
++    auto tmpp = int32(TmpRead);
++    float val;
++    memcpy(&val, &tmpp, 4);
++    Value = static_cast<double>(val);
++    SetValueIsSet();
++  } else {
++    big_int64 TmpRead;
++    TmpRead.Eval(Buffer);
++    auto tmpp = int64(TmpRead);
++    double val;
++    memcpy(&val, &tmpp, 8);
++    Value = val;
++    SetValueIsSet();
+   }
+ 
+   return GetSize();
+diff --git a/src/EbmlSInteger.cpp b/src/EbmlSInteger.cpp
+index c0cc055..c0a93e9 100644
+--- a/src/EbmlSInteger.cpp
++++ b/src/EbmlSInteger.cpp
+@@ -133,27 +133,28 @@ uint64 EbmlSInteger::UpdateSize(bool bWithDefault, bool /* bForceRender */)
+ 
+ filepos_t EbmlSInteger::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    if (GetSize() > 8) {
+-      // impossible to read, skip it
+-      input.setFilePointer(GetSize(), seek_current);
+-    } else {
+-      binary Buffer[8];
+-      input.readFully(Buffer, GetSize());
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
+ 
+-      uint64 TempValue = Buffer[0] & 0x80 ? std::numeric_limits<uint64>::max() : 0;
++  if (GetSize() > 8) {
++    // impossible to read, skip it
++    input.setFilePointer(GetSize(), seek_current);
++    return GetSize();
++  }
+ 
+-      for (unsigned int i=0; i<GetSize(); i++) {
+-        TempValue <<= 8;
+-        TempValue |= Buffer[i];
+-      }
++  binary Buffer[8];
++  input.readFully(Buffer, GetSize());
+ 
+-      Value = ToSigned(TempValue);
++  uint64 TempValue = Buffer[0] & 0x80 ? std::numeric_limits<uint64>::max() : 0;
+ 
+-      SetValueIsSet();
+-    }
++  for (unsigned int i=0; i<GetSize(); i++) {
++    TempValue <<= 8;
++    TempValue |= Buffer[i];
+   }
+ 
++  Value = ToSigned(TempValue);
++
++  SetValueIsSet();
+   return GetSize();
+ }
+ 
+diff --git a/src/EbmlString.cpp b/src/EbmlString.cpp
+index c34036f..27e55fd 100644
+--- a/src/EbmlString.cpp
++++ b/src/EbmlString.cpp
+@@ -137,24 +137,25 @@ uint64 EbmlString::UpdateSize(bool bWithDefault, bool /* bForceRender */)
+ 
+ filepos_t EbmlString::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    if (GetSize() == 0) {
+-      Value = "";
+-      SetValueIsSet();
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
++
++  if (GetSize() == 0) {
++    Value = "";
++    SetValueIsSet();
++  } else {
++    auto Buffer = (GetSize() + 1 < std::numeric_limits<std::size_t>::max()) ? new (std::nothrow) char[GetSize() + 1] : nullptr;
++    if (Buffer == nullptr) {
++      // unable to store the data, skip it
++      input.setFilePointer(GetSize(), seek_current);
+     } else {
+-      auto Buffer = (GetSize() + 1 < std::numeric_limits<std::size_t>::max()) ? new (std::nothrow) char[GetSize() + 1] : nullptr;
+-      if (Buffer == nullptr) {
+-        // unable to store the data, skip it
+-        input.setFilePointer(GetSize(), seek_current);
+-      } else {
+-        input.readFully(Buffer, GetSize());
+-        if (Buffer[GetSize()-1] != '\0') {
+-          Buffer[GetSize()] = '\0';
+-        }
+-        Value = Buffer;
+-        delete [] Buffer;
+-        SetValueIsSet();
++      input.readFully(Buffer, GetSize());
++      if (Buffer[GetSize()-1] != '\0') {
++        Buffer[GetSize()] = '\0';
+       }
++      Value = Buffer;
++      delete [] Buffer;
++      SetValueIsSet();
+     }
+   }
+ 
+diff --git a/src/EbmlUInteger.cpp b/src/EbmlUInteger.cpp
+index 73b90e9..81cd214 100644
+--- a/src/EbmlUInteger.cpp
++++ b/src/EbmlUInteger.cpp
+@@ -127,22 +127,24 @@ uint64 EbmlUInteger::UpdateSize(bool bWithDefault, bool /* bForceRender */)
+ 
+ filepos_t EbmlUInteger::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    if (GetSize() > 8) {
+-      // impossible to read, skip it
+-      input.setFilePointer(GetSize(), seek_current);
+-    } else {
+-      binary Buffer[8];
+-      input.readFully(Buffer, GetSize());
+-      Value = 0;
+-
+-      for (unsigned int i=0; i<GetSize(); i++) {
+-        Value <<= 8;
+-        Value |= Buffer[i];
+-      }
+-      SetValueIsSet();
+-    }
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
++
++  if (GetSize() > 8) {
++    // impossible to read, skip it
++    input.setFilePointer(GetSize(), seek_current);
++    return GetSize();
++  }
++
++  binary Buffer[8];
++  input.readFully(Buffer, GetSize());
++  Value = 0;
++
++  for (unsigned int i=0; i<GetSize(); i++) {
++    Value <<= 8;
++    Value |= Buffer[i];
+   }
++  SetValueIsSet();
+ 
+   return GetSize();
+ }
+diff --git a/src/EbmlUnicodeString.cpp b/src/EbmlUnicodeString.cpp
+index ce70600..496a16a 100644
+--- a/src/EbmlUnicodeString.cpp
++++ b/src/EbmlUnicodeString.cpp
+@@ -302,25 +302,26 @@ uint64 EbmlUnicodeString::UpdateSize(bool bWithDefault, bool /* bForceRender */)
+ */
+ filepos_t EbmlUnicodeString::ReadData(IOCallback & input, ScopeMode ReadFully)
+ {
+-  if (ReadFully != SCOPE_NO_DATA) {
+-    if (GetSize() == 0) {
+-      Value = UTFstring::value_type(0);
+-      SetValueIsSet();
++  if (ReadFully == SCOPE_NO_DATA)
++    return GetSize();
++
++  if (GetSize() == 0) {
++    Value = UTFstring::value_type(0);
++    SetValueIsSet();
++  } else {
++    auto Buffer = (GetSize() + 1 < std::numeric_limits<std::size_t>::max()) ? new (std::nothrow) char[GetSize()+1] : nullptr;
++    if (Buffer == nullptr) {
++      // impossible to read, skip it
++      input.setFilePointer(GetSize(), seek_current);
+     } else {
+-      auto Buffer = (GetSize() + 1 < std::numeric_limits<std::size_t>::max()) ? new (std::nothrow) char[GetSize()+1] : nullptr;
+-      if (Buffer == nullptr) {
+-        // impossible to read, skip it
+-        input.setFilePointer(GetSize(), seek_current);
+-      } else {
+-        input.readFully(Buffer, GetSize());
+-        if (Buffer[GetSize()-1] != 0) {
+-          Buffer[GetSize()] = 0;
+-        }
+-
+-        Value.SetUTF8(Buffer); // implicit conversion to std::string
+-        delete [] Buffer;
+-        SetValueIsSet();
++      input.readFully(Buffer, GetSize());
++      if (Buffer[GetSize()-1] != 0) {
++        Buffer[GetSize()] = 0;
+       }
++
++      Value.SetUTF8(Buffer); // implicit conversion to std::string
++      delete [] Buffer;
++      SetValueIsSet();
+     }
+   }
+ 
+-- 
+2.34.1
+

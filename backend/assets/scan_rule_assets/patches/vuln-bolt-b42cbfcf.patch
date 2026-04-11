@@ -1,0 +1,40 @@
+From aba99d2744dac846bd6c4617ddd64223c5e6f2f7 Mon Sep 17 00:00:00 2001
+From: Bob den Otter <bob@twokings.nl>
+Date: Thu, 7 May 2020 14:43:18 +0200
+Subject: [PATCH] More test fixes.
+
+---
+ tests/phpunit/unit/Controller/Async/FilesystemManagerTest.php | 2 +-
+ tests/phpunit/unit/Controller/FrontendTest.php                | 3 +--
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/tests/phpunit/unit/Controller/Async/FilesystemManagerTest.php b/tests/phpunit/unit/Controller/Async/FilesystemManagerTest.php
+index 06c41469e..62306ca2a 100644
+--- a/tests/phpunit/unit/Controller/Async/FilesystemManagerTest.php
++++ b/tests/phpunit/unit/Controller/Async/FilesystemManagerTest.php
+@@ -273,7 +273,7 @@ class FilesystemManagerTest extends ControllerUnitTest
+              * Object doesn't exist
+              */
+             $this->createObject($object, $data['old']);
+-            $response = $this->renameObject($object, $data['old'] . '_nonexistent', $data['new']);
++            $response = $this->renameObject($object, $data['old'] . '_nonexistent.txt', $data['new']);
+ 
+             $this->assertInstanceOf(JsonResponse::class, $response);
+             $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+diff --git a/tests/phpunit/unit/Controller/FrontendTest.php b/tests/phpunit/unit/Controller/FrontendTest.php
+index c3ce64c55..945ba0289 100644
+--- a/tests/phpunit/unit/Controller/FrontendTest.php
++++ b/tests/phpunit/unit/Controller/FrontendTest.php
+@@ -328,8 +328,7 @@ class FrontendTest extends ControllerUnitTest
+ 
+         $response = $this->controller()->preview($this->getRequest(), 'pages');
+ 
+-        $this->assertTrue($response instanceof TemplateView);
+-        $this->assertSame('record.twig', $response->getTemplate());
++        $this->assertFalse($response instanceof TemplateView);
+     }
+ 
+     public function testListing()
+-- 
+2.34.1
+

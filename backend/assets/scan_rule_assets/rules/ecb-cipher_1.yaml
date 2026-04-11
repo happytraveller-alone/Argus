@@ -1,0 +1,42 @@
+rules:
+- id: ecb-cipher_1
+  languages:
+  - kotlin
+  message: Cipher in ECB mode is detected. ECB mode produces the same output for the
+    same input each time which allows an attacker to intercept and replay the data.
+    Further, ECB mode does not provide any integrity checking. See https://find-sec-bugs.github.io/bugs.htm#CIPHER_INTEGRITY.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    impact: MEDIUM
+    likelihood: LOW
+    owasp:
+    - A03:2017 - Sensitive Data Exposure
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#ECB_MODE
+    subcategory:
+    - vuln
+    technology:
+    - kotlin
+  patterns:
+  - pattern-either:
+    - pattern: 'val $VAR : Cipher = $CIPHER.getInstance($MODE)
+
+        '
+    - pattern: 'var $VAR : Cipher = $CIPHER.getInstance($MODE)
+
+        '
+    - pattern: 'val $VAR = $CIPHER.getInstance($MODE)
+
+        '
+    - pattern: 'var $VAR = $CIPHER.getInstance($MODE)
+
+        '
+  - metavariable-regex:
+      metavariable: $MODE
+      regex: .*ECB.*
+  severity: WARNING

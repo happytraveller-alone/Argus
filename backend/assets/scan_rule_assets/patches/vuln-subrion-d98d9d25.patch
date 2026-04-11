@@ -1,0 +1,31 @@
+From d98d9d2531ebfe4429743e08ac4ba440c5f60cf8 Mon Sep 17 00:00:00 2001
+From: Daiyrbek Artelov <4unkur@gmail.com>
+Date: Thu, 27 Feb 2020 16:43:02 +0200
+Subject: [PATCH] Resolves #762
+
+---
+ admin/permissions.php | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/admin/permissions.php b/admin/permissions.php
+index 9f102e96..490612ce 100644
+--- a/admin/permissions.php
++++ b/admin/permissions.php
+@@ -163,7 +163,13 @@ class iaBackendController extends iaAbstractControllerBackend
+         $actions = $iaAcl->getActions();
+         $groups = [];
+ 
+-        foreach ([iaAcl::OBJECT_PAGE, iaAcl::OBJECT_ADMIN_PAGE] as $i => $pageType) {
++        $pageTypes = [iaAcl::OBJECT_PAGE];
++
++        if (iaUsers::MEMBERSHIP_GUEST != $settings['group']) {
++            $pageTypes[] = iaAcl::OBJECT_ADMIN_PAGE;
++        }
++
++        foreach ($pageTypes as $i => $pageType) {
+             $fieldsList = ['name', 'action', 'group', 'parent'];
+             $titles = $iaPage->getTitles(iaAcl::OBJECT_PAGE == $pageType ? iaCore::FRONT : iaCore::ADMIN);
+             $pages = $this->_iaDb->all($fieldsList,
+-- 
+2.34.1
+

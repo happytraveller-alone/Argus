@@ -1,0 +1,39 @@
+rules:
+- id: vuln-redis-71536684
+  pattern: 'FILE *$FP = fopen($FILENAME, "w");
+
+    '
+  pattern-not: 'mode_t $OLD_UMASK = umask($MODE);
+
+    FILE *$FP;
+
+    $FP = fopen($FILENAME, "w");
+
+    umask($OLD_UMASK);
+
+    chmod($FILENAME, $PERMISSIONS);
+
+    '
+  languages:
+  - c
+  message: 'Detected insecure file creation without proper permissions. This can lead
+    to
+
+    security vulnerabilities where sensitive files are created with overly permissive
+
+    access rights, allowing unauthorized users to read or modify them. To fix this,
+
+    use umask to restrict permissions during file creation and explicitly set
+
+    appropriate permissions with chmod.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/antirez/redis/commit/71536684a788dc859e42132a2c5a2b7373414375
+    category: security
+    cwe:
+    - 'CWE-276: Incorrect Default Permissions'
+    owasp: A05:2021 - Security Misconfiguration
+    technology:
+    - c

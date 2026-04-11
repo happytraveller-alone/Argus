@@ -1,0 +1,88 @@
+rules:
+- id: ruby_http_rule-AvoidTaintedHTTPRequest
+  mode: taint
+  pattern-sources:
+  - pattern: params
+  - pattern: cookies
+  - pattern: request.env
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern: Net::HTTP::$METHOD.new(...)
+      - metavariable-pattern:
+          metavariable: $METHOD
+          patterns:
+          - pattern-either:
+            - pattern: Copy
+            - pattern: Delete
+            - pattern: Get
+            - pattern: Head
+            - pattern: Lock
+            - pattern: Mkcol
+            - pattern: Move
+            - pattern: Options
+            - pattern: Patch
+            - pattern: Post
+            - pattern: Propfind
+            - pattern: Proppatch
+            - pattern: Put
+            - pattern: Trace
+            - pattern: Unlock
+    - patterns:
+      - pattern: Net::HTTP.$X(...)
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+          - pattern-either:
+            - pattern: get
+            - pattern: get2
+            - pattern: head
+            - pattern: head2
+            - pattern: options
+            - pattern: patch
+            - pattern: post
+            - pattern: post2
+            - pattern: post_form
+            - pattern: put
+            - pattern: request
+            - pattern: request_get
+            - pattern: request_head
+            - pattern: request_post
+            - pattern: send_request
+            - pattern: trace
+            - pattern: get_print
+            - pattern: get_response
+            - pattern: start
+  message: "The application was found including unvalidated user input into `Net::HTTP`\
+    \ methods, \nwhich could lead to HTTP Parameter Pollution (HPP) or worse, Server\
+    \ Side Request Forgery (SSRF).\nSpecifically, it looks for methods like GET, POST,\
+    \ DELETE, etc., \nbeing called with parameters that could be controlled by an\
+    \ end-user. \nUsing untrusted input in such a manner without proper validation\
+    \ and \nsanitization can lead to a variety of security vulnerabilities, including\
+    \ \nSSRF, injection attacks, unintended data leaks, and unauthorized actions \n\
+    being performed on behalf of the attacker.\n\nEnsure all user-controlled input\
+    \ is validated against a strict set of rules \n(e.g., expected data types, patterns,\
+    \ and lengths) and sanitized to remove \nor encode potentially harmful characters\
+    \ before being used in HTTP requests. \nAdditionally, consider using higher-level\
+    \ abstractions or frameworks that \nautomatically handle some of these concerns.\n\
+    \nSecure Code Example:\n```\nrequire 'uri'\n\n# Validate and sanitize the user\
+    \ input before using it in the HTTP request\nbegin\n  user_input = params[:url]\n\
+    \  uri = URI.parse(user_input)\n\n  # Ensure the URI is HTTP/HTTPS and refers\
+    \ to a trusted domain\n  if uri.scheme.match?(/\\Ahttps?\\z/) && uri.host == 'www.abc.com'\n\
+    \    response = Net::HTTP.get(uri)\n  else\n    raise \"Invalid URL\"\n  end\n\
+    rescue URI::InvalidURIError\n  puts \"Provided URL is not valid\"\nend\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    category: security
+    shortDescription: Server side request forgery (SSRF)
+    cwe: CWE-918
+    owasp:
+    - A1:2017-Injection
+    - A10:2021-Server-Side Request Forgery
+    security-severity: MEDIUM
+    technology:
+    - rails
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/audit/avoid-tainted-http-request.yaml

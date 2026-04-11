@@ -1,0 +1,33 @@
+From 565b42660e80e928a4f92491ba41d73f3ade4cfa Mon Sep 17 00:00:00 2001
+From: Pascal Quantin <pascal.quantin@gmail.com>
+Date: Fri, 28 Oct 2016 14:41:40 +0200
+Subject: [PATCH] ANSI IS-637 A: fix decoding of IA5 SMS
+
+Give the right buffer to the decoding function
+
+Bug: 13065
+Change-Id: I0e41e04fb68602d95ea6f060c1a37c8b8596134d
+Reviewed-on: https://code.wireshark.org/review/18548
+Reviewed-by: Pascal Quantin <pascal.quantin@gmail.com>
+(cherry picked from commit 3b1d9913711d4818388e350684cadb94255a98eb)
+Reviewed-on: https://code.wireshark.org/review/18550
+---
+ epan/dissectors/packet-ansi_637.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/epan/dissectors/packet-ansi_637.c b/epan/dissectors/packet-ansi_637.c
+index c40b4de6a1..c8f6f4b02a 100644
+--- a/epan/dissectors/packet-ansi_637.c
++++ b/epan/dissectors/packet-ansi_637.c
+@@ -430,7 +430,7 @@ text_decoder(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset
+         offset = 0;
+         bit = 0;
+ 
+-        ustr = tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb, (offset << 3) + bit, num_fields);
++        ustr = tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb_out, (offset << 3) + bit, num_fields);
+         IA5_7BIT_decode(ansi_637_bigbuf, ustr, num_fields);
+ 
+         proto_tree_add_string(tree, hf_index, tvb_out, 0,
+-- 
+2.34.1
+

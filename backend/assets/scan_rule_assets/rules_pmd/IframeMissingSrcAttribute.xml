@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="IframeMissingSrcAttribute Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for IframeMissingSrcAttribute</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="IframeMissingSrcAttribute" language="jsp" since="3.6" message="IFrames must have a src attribute." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_jsp_security.html#iframemissingsrcattribute">
+            <description>
+    IFrames which are missing a src element can cause security information popups in IE if you are accessing the page
+    through SSL. See http://support.microsoft.com/default.aspx?scid=kb;EN-US;Q261188
+            </description>
+            <priority>2</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //Element[upper-case(@Name)="IFRAME"][count(Attribute[upper-case(@Name)="SRC" ]) = 0]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    &lt;HTML&gt;&lt;title&gt;bad example&gt;&lt;BODY&gt;
+    &lt;iframe&gt;&lt;/iframe&gt;
+    &lt;/BODY&gt; &lt;/HTML&gt;
+
+    &lt;HTML&gt;&lt;title&gt;good example&gt;&lt;BODY&gt;
+    &lt;iframe src="foo"&gt;&lt;/iframe&gt;
+    &lt;/BODY&gt; &lt;/HTML&gt;
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,42 @@
+rules:
+- id: ruby_escaping_rule-JSONEntityEscape
+  pattern-either:
+  - pattern: 'ActiveSupport.escape_html_entities_in_json = false
+
+      '
+  - pattern: 'config.active_support.escape_html_entities_in_json = false
+
+      '
+  message: "This rule checks if HTML escaping is globally disabled for JSON output,\
+    \ \nwhich can lead to Cross-Site Scripting (XSS) vulnerabilities. \nXSS attacks\
+    \ allow attackers to inject malicious scripts into web pages \nviewed by other\
+    \ users, compromising the integrity and confidentiality \nof user data. When HTML\
+    \ escaping is disabled, special HTML characters \nin JSON output are not converted\
+    \ to their entity equivalents, making \nit possible for an attacker to inject\
+    \ executable scripts into the web \napplication's output. \n\nTo mitigate this\
+    \ risk, ensure that HTML escaping is enabled when \ngenerating JSON output, particularly\
+    \ in web applications \nthat dynamically insert user-generated content into the\
+    \ DOM.\n\nSecure Code Example:\n```\n# For an initializer configuration (e.g.,\
+    \ in config/initializers/active_support.rb)\n# Enable HTML entity escaping in\
+    \ JSON to prevent XSS\nActiveSupport.escape_html_entities_in_json = true\n\n#\
+    \ For application-wide configuration (e.g., in config/application.rb)\nmodule\
+    \ YourApplication\n  class Application < Rails::Application\n    # Enable HTML\
+    \ entity escaping in JSON to prevent XSS\n    config.active_support.escape_html_entities_in_json\
+    \ = true\n  end\nend\n```\n"
+  languages:
+  - ruby
+  metadata:
+    shortDescription: Improper neutralization of input during web page generation
+      ('Cross-site Scripting')
+    category: security
+    cwe: CWE-79
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    security-severity: MEDIUM
+    technology:
+    - rails
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/json-entity-escape.yaml
+  severity: WARNING

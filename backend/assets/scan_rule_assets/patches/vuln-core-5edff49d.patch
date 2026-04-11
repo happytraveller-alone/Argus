@@ -1,0 +1,26 @@
+From 5edff49db1cd8b5078611e2f542d91c02af2b25c Mon Sep 17 00:00:00 2001
+From: Ad Schellevis <ad@opnsense.org>
+Date: Thu, 29 Jun 2023 21:29:32 +0200
+Subject: [PATCH] System:Settings:Cron - cleanse user input in
+ /ui/cron/item/open/...
+
+---
+ .../mvc/app/controllers/OPNsense/Cron/ItemController.php        | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/opnsense/mvc/app/controllers/OPNsense/Cron/ItemController.php b/src/opnsense/mvc/app/controllers/OPNsense/Cron/ItemController.php
+index a94d63382..8c8b74251 100644
+--- a/src/opnsense/mvc/app/controllers/OPNsense/Cron/ItemController.php
++++ b/src/opnsense/mvc/app/controllers/OPNsense/Cron/ItemController.php
+@@ -43,7 +43,7 @@ class ItemController extends \OPNsense\Base\IndexController
+      */
+     public function openAction($uuid = null)
+     {
+-        $this->view->selected_uuid = $uuid;
++        $this->view->selected_uuid = htmlspecialchars($uuid, ENT_QUOTES | ENT_HTML401);
+         // include dialog form definitions
+         $this->view->formDialogEdit = $this->getForm("dialogEdit");
+         $this->view->pick('OPNsense/Cron/index');
+-- 
+2.34.1
+

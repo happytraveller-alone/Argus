@@ -1,0 +1,34 @@
+rules:
+- id: rules_lgpl_java_webview_rule-ignore-ssl-certificate-errors
+  pattern: "$RET onReceivedSslError(WebView $W, SslErrorHandler $H, SslError $E) {\n\
+    \  ...\n  $H.proceed();\n}\n"
+  message: "Insecure WebView Implementation. leading to a security problem known as\
+    \ SSL certificate \nvalidation bypass. This occurs when the app fails to properly\
+    \ validate SSL certificates, \nallowing potentially malicious or spoofed certificates\
+    \ to be accepted, leading to a \nMan-in-the-Middle (MitM) attack where an attacker\
+    \ intercepts and manipulates communication \nbetween the app and the server. \n\
+    \nTo fix this security issue, you should properly handle SSL errors and only proceed\
+    \ with \nthe connection if the SSL certificate is valid and trusted. Here's an\
+    \ example code in Java:\n```      \npublic class MyWebViewClient extends WebViewClient\
+    \ {      \n  @Override\n  public void onReceivedSslError(WebView view, SslErrorHandler\
+    \ handler, SslError error) {\n    // Check the SSL error type\n    switch (error.getPrimaryError())\
+    \ {\n      case SslError.SSL_UNTRUSTED:\n        // Certificate is untrusted\n\
+    \        // Handle the error appropriately, such as showing an error message\n\
+    \        break;\n      case SslError.SSL_EXPIRED:\n        // Certificate has\
+    \ expired\n        // Handle the error appropriately\n        break;\n      case\
+    \ SslError.SSL_IDMISMATCH:\n        // Certificate hostname mismatch\n       \
+    \ // Handle the error appropriately\n        break;\n      case SslError.SSL_NOTYETVALID:\n\
+    \        // Certificate is not yet valid\n        // Handle the error appropriately\n\
+    \        break;\n    }\n    // Cancel the connection\n    // This prevents the\
+    \ WebView from loading the content\n    handler.cancel();\n  }\n}\n```\n"
+  languages:
+  - java
+  severity: WARNING
+  metadata:
+    category: security
+    cwe: CWE-295
+    shortDescription: Improper certificate validation"
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: MEDIUM

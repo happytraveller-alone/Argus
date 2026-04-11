@@ -1,0 +1,118 @@
+From 47b51f5582763a2b7958fa9853ba851d9f33229f Mon Sep 17 00:00:00 2001
+From: Alexandru Emil Lupu <contact@alecslupu.ro>
+Date: Thu, 11 May 2023 15:52:43 +0300
+Subject: [PATCH] Change the participant initiatives editor toolbars type
+ (#10844)
+
+* Change the participant initiatives editor toolbars type
+
+* Fix the expectation in the initiative editor spec
+
+* Add specs to ensure correct editor in complete and edit views
+
+Co-authored-by: Antti Hukkanen <antti.hukkanen@mainiotech.fi>
+---
+ .../create_initiative/fill_data.html.erb          |  2 +-
+ .../create_initiative/previous_form.html.erb      |  2 +-
+ .../initiatives/initiatives/_form.html.erb        |  2 +-
+ .../spec/system/create_initiative_spec.rb         | 13 ++++++++++++-
+ .../spec/system/edit_initiative_spec.rb           | 15 +++++++++++++++
+ 5 files changed, 30 insertions(+), 4 deletions(-)
+
+diff --git a/decidim-initiatives/app/views/decidim/initiatives/create_initiative/fill_data.html.erb b/decidim-initiatives/app/views/decidim/initiatives/create_initiative/fill_data.html.erb
+index f0bb10112a..c228420d78 100644
+--- a/decidim-initiatives/app/views/decidim/initiatives/create_initiative/fill_data.html.erb
++++ b/decidim-initiatives/app/views/decidim/initiatives/create_initiative/fill_data.html.erb
+@@ -45,7 +45,7 @@
+             </div>
+ 
+             <div class="field">
+-              <%= text_editor_for(f, :description, lines: 8, toolbar: :full) %>
++              <%= text_editor_for(f, :description, lines: 8, toolbar: :content) %>
+             </div>
+ 
+             <div class="field">
+diff --git a/decidim-initiatives/app/views/decidim/initiatives/create_initiative/previous_form.html.erb b/decidim-initiatives/app/views/decidim/initiatives/create_initiative/previous_form.html.erb
+index c2685f2470..daf3ff9ecb 100644
+--- a/decidim-initiatives/app/views/decidim/initiatives/create_initiative/previous_form.html.erb
++++ b/decidim-initiatives/app/views/decidim/initiatives/create_initiative/previous_form.html.erb
+@@ -27,7 +27,7 @@
+           </div>
+ 
+           <div class="field">
+-            <%= text_editor_for(f, :description, lines: 8, toolbar: :full) %>
++            <%= text_editor_for(f, :description, lines: 8, toolbar: :content) %>
+           </div>
+ 
+           <div class="actions">
+diff --git a/decidim-initiatives/app/views/decidim/initiatives/initiatives/_form.html.erb b/decidim-initiatives/app/views/decidim/initiatives/initiatives/_form.html.erb
+index 0118f5d1c9..2c361d1353 100644
+--- a/decidim-initiatives/app/views/decidim/initiatives/initiatives/_form.html.erb
++++ b/decidim-initiatives/app/views/decidim/initiatives/initiatives/_form.html.erb
+@@ -22,7 +22,7 @@
+ </div>
+ 
+ <div class="field">
+-  <%= text_editor_for(form, :description, toolbar: :full, lines: 8, disabled: !allowed_to?(:update, :initiative, initiative: current_initiative), value: translated_attribute(@form.description)) %>
++  <%= text_editor_for(form, :description, toolbar: :content, lines: 8, disabled: !allowed_to?(:update, :initiative, initiative: current_initiative), value: translated_attribute(@form.description)) %>
+ </div>
+ 
+ <div class="field">
+diff --git a/decidim-initiatives/spec/system/create_initiative_spec.rb b/decidim-initiatives/spec/system/create_initiative_spec.rb
+index be5c0137d2..6eb517932d 100644
+--- a/decidim-initiatives/spec/system/create_initiative_spec.rb
++++ b/decidim-initiatives/spec/system/create_initiative_spec.rb
+@@ -209,7 +209,7 @@ describe "Initiative", type: :system do
+       find_button("I want to promote this initiative").click
+     end
+ 
+-    it_behaves_like "having a rich text editor", "new_initiative_previous_form", "full"
++    it_behaves_like "having a rich text editor", "new_initiative_previous_form", "content"
+   end
+ 
+   describe "creating an initiative" do
+@@ -445,6 +445,17 @@ describe "Initiative", type: :system do
+               expect(page).to have_content("Area")
+             end
+           end
++
++          context "when rich text editor is enabled for participants" do
++            before do
++              expect(page).to have_content("Create")
++              organization.update(rich_text_editor_in_public_views: true)
++
++              visit current_path
++            end
++
++            it_behaves_like "having a rich text editor", "new_initiative_form", "content"
++          end
+         end
+       end
+ 
+diff --git a/decidim-initiatives/spec/system/edit_initiative_spec.rb b/decidim-initiatives/spec/system/edit_initiative_spec.rb
+index fc9bc49ae2..28f9e9fc0b 100644
+--- a/decidim-initiatives/spec/system/edit_initiative_spec.rb
++++ b/decidim-initiatives/spec/system/edit_initiative_spec.rb
+@@ -97,4 +97,19 @@ describe "Edit initiative", type: :system do
+       expect(page).to have_content("not authorized")
+     end
+   end
++
++  context "when rich text editor is enabled for participants" do
++    let(:initiative) { create(:initiative, :created, author: user, scoped_type: scoped_type, organization: organization) }
++    let(:organization) { create(:organization, rich_text_editor_in_public_views: true) }
++
++    before do
++      visit initiative_path
++
++      click_link("Edit", href: edit_initiative_path)
++
++      expect(page).to have_content "EDIT INITIATIVE"
++    end
++
++    it_behaves_like "having a rich text editor", "edit_initiative", "content"
++  end
+ end
+-- 
+2.34.1
+

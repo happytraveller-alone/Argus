@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="VfHtmlStyleTagXss Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for VfHtmlStyleTagXss</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="VfHtmlStyleTagXss" language="visualforce" since="6.31.0" message="Use correct encoding for expressions within Style tag" class="net.sourceforge.pmd.lang.visualforce.rule.security.VfHtmlStyleTagXssRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_visualforce_security.html#vfhtmlstyletagxss">
+            <description>
+    Checks for the correct encoding in `&lt;style/&gt;` tags in Visualforce pages.
+
+    The rule is based on Salesforce Security's recommendation to prevent XSS in Visualforce as mentioned
+    on [Secure Coding Cross Site Scripting](https://developer.salesforce.com/docs/atlas.en-us.secure_coding_guide.meta/secure_coding_guide/secure_coding_cross_site_scripting.htm).
+
+    In order to avoid cross site scripting, the relevant encoding must be used in HTML tags. The rule expects
+    `URLENCODING` or `JSINHTMLENCODING` for URL-based style values and any kind of encoding
+    (e.g. `HTMLENCODING`) for non-url style values.
+
+    See also {% rule "VfUnescapeEl" %} to check escaping in other places on Visualforce pages.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    &lt;apex:page&gt;
+        &lt;style&gt;
+            div {
+                background: url('{!XSSHere}'); // Potential XSS
+            }
+            div {
+                background: url('{!URLENCODE(XSSHere)}'); // correct encoding
+            }
+        &lt;/style&gt;
+    &lt;/apex:page&gt;
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

@@ -1,0 +1,25 @@
+From 06a1bceddbd0b635e7c35c87406b529be1f38a46 Mon Sep 17 00:00:00 2001
+From: Johan Cwiklinski <jcwiklinski@teclib.com>
+Date: Fri, 23 Sep 2016 15:40:48 +0200
+Subject: [PATCH] use object notation for setting charset
+
+---
+ inc/dbmysql.class.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/inc/dbmysql.class.php b/inc/dbmysql.class.php
+index e76875f08b..f06f792ef6 100644
+--- a/inc/dbmysql.class.php
++++ b/inc/dbmysql.class.php
+@@ -125,7 +125,7 @@ class DBmysql {
+          $this->connected = false;
+          $this->error     = 1;
+       } else {
+-         mysqli_set_charset($this->dbh, isset($this->dbenc) ? $this->dbenc : "utf8");
++         $this->dbh->set_charset(isset($this->dbenc) ? $this->dbenc : "utf8");
+ 
+          if (GLPI_FORCE_EMPTY_SQL_MODE) {
+             $this->dbh->query("SET SESSION sql_mode = ''");
+-- 
+2.34.1
+

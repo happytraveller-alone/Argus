@@ -1,0 +1,40 @@
+rules:
+- id: python_ssh_rule-ssh-nohost-key-verification_1
+  languages:
+  - python
+  message: "The application was found to ignore host keys. Host keys are important\
+    \ as\nthey provide assurance that the client can prove that the host is trusted.\n\
+    By ignoring these host keys, it is impossible for the client to validate the\n\
+    connection is to a trusted host.\n\nTo remediate this issue, remove the call to\
+    \ `set_missing_host_key_policy(...)` which\nsets the host key policy. Instead,\
+    \ load key files using either `load_system_host_keys`\nor `load_host_keys` to\
+    \ only allow known good hosts. By not setting a host key policy\nfor unknown hosts,\
+    \ `paramiko`'s default policy is to use `RejectPolicy`.\n\nExample configuration\
+    \ connecting to a known, trusted host, and not allowing connections\nto unknown\
+    \ hosts:\n```\nimport paramiko\n\n# Create an SSH client\nwith paramiko.SSHClient()\
+    \ as ssh:\n    # Load the system host keys so we can confirm the\n    # host we\
+    \ are connecting to is legitimate\n    ssh.load_system_host_keys('/home/appuser/.ssh/known_hosts')\n\
+    \n    # Connect to the remote host using our SSH private key\n    ssh.connect(hostname='example.org',\n\
+    \                port=22,\n                username='appuser',\n             \
+    \   key_filename='/home/appuser/.ssh/private_key')\n```\n\nFor more information\
+    \ on `set_missing_host_key_policy` see:\n- https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy\n"
+  metadata:
+    cwe: CWE-322
+    category: security
+    owasp:
+    - A5:2017-Broken Access Control
+    - A07:2021-Identification and Authentication Failures
+    shortDescription: Key exchange without entity authentication
+    security-severity: Medium
+  patterns:
+  - pattern-inside: '$CLIENT = paramiko.client.SSHClient(...)
+
+      ...
+
+      $CLIENT.set_missing_host_key_policy(...)
+
+      '
+  - pattern-either:
+    - pattern: paramiko.client.AutoAddPolicy
+    - pattern: paramiko.client.WarningPolicy
+  severity: ERROR
