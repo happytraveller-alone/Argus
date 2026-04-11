@@ -4,7 +4,6 @@ pub mod config;
 pub mod core;
 pub mod db;
 pub mod error;
-pub mod proxy;
 pub mod routes;
 pub mod runtime;
 pub mod scan;

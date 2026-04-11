@@ -3,15 +3,20 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `255` 个文件：
+- 当前纳入本计划的 Python 存量一共 `230` 个文件：
   - `backend_old` 根目录 `4` 个
-  - `backend_old/app` 下除 `api` 外 `251` 个
-- Rust backend 目前只明确接管了控制面的一小块：
-  - `projects`
-  - `system-config`
-  - `search`
-  - `skills`
-  - `/api/v1/*` fallback proxy
+  - `backend_old/app` 下除 `api` 外 `226` 个
+- Rust backend 当前已直接挂载并承接以下路由组：
+  - `/api/v1/agent-tasks/*`
+  - `/api/v1/agent-test/*`
+  - `/api/v1/static-tasks/*`
+  - `projects / system-config / search / skills`
+- Rust `/api/v1/*` fallback proxy 已不在 live 代码路径：
+  - `backend/src/proxy.rs` 不存在
+  - `backend/src/app.rs` 为 `fallback 404`，不是转发到 Python backend
+- Docker 三链路 (`default/hybrid/full`) 的 Python backend bridge 已从 compose 变量层清零：
+  - `backend-py` 无命中
+  - `PYTHON_UPSTREAM_BASE_URL` 无命中
 - 真正决定“Python 是否被吃掉”的非 API 内核还主要在 Python：
   - bootstrap / config / db
   - domain models / schemas
@@ -19,6 +24,27 @@
   - upload / report / project shared services
   - LLM / llm_rule
   - agent / tool runtime / workflow / streaming / knowledge
+
+## 2026-04-11 仓库事实刷新（二次核对）
+
+- read-only evidence:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `226`
+  - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
+    `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
+  - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
+    命中 `backend/src/routes/mod.rs`
+  - `rg -n 'backend-py|PYTHON_UPSTREAM_BASE_URL' docker-compose*.yml -S`
+    无命中（exit code 1）
+  - `rg -n 'PYTHON_UPSTREAM_BASE_URL|backend-py|/api/v1/\\{\\*path\\}|proxy\\.rs' backend/src -S`
+    无 gateway/proxy 命中（仅 `opengrep_launcher` 的 `http_proxy` 环境变量命中）
+
+## 新 Gate（Rust 全接管硬门槛）
+
+- Gate R1: `backend/src/proxy.rs` 必须保持不存在，`backend/src/app.rs` 不允许重新引入 `/api/v1/{*path}` proxy fallback。
+- Gate R2: `docker-compose.yml` 必须删除 `backend-py` service。
+- Gate R3: `docker-compose.yml`、`docker-compose.hybrid.yml`、`docker-compose.full.yml` 必须清零 `PYTHON_UPSTREAM_BASE_URL`。
+- Gate R4: `rg -n "backend-py|PYTHON_UPSTREAM_BASE_URL" docker-compose*.yml backend/src -S` 结果只允许出现非后端迁移语义的 `http_proxy/https_proxy` 文本，不允许出现 Python backend bridge 命中。
 
 ## 核心判断
 

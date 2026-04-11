@@ -1,11 +1,15 @@
 use axum::{routing::any, Router};
 
-use crate::{proxy, routes, state::AppState};
+use crate::{routes, state::AppState};
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .merge(routes::owned_routes())
-        .route("/api/v1/{*path}", any(proxy::proxy_unmigrated_api))
-        .fallback(any(|| async { proxy::not_owned_response() }))
+        .fallback(any(|| async {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                "route not owned by rust gateway",
+            )
+        }))
         .with_state(state)
 }

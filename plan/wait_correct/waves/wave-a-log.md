@@ -390,6 +390,30 @@
 - 后续修复波次: Wave D / runtime orchestration cleanup
 - owner: Rust migration
 
+### 14. Ledger refresh: Rust task routes are mounted, compose bridge vars are cleared
+
+- endpoint / feature:
+  - Rust: `/api/v1/agent-tasks/*`, `/api/v1/agent-test/*`, `/api/v1/static-tasks/*`
+  - Deploy chain gate set: `backend-py`, `PYTHON_UPSTREAM_BASE_URL`
+- 仓库事实:
+  - `backend/src/routes/mod.rs` 已 `nest` 三个 task 路由组
+  - `backend/src/proxy.rs` 不存在，Rust gateway 未保留 Python catch-all proxy 文件入口
+  - `backend/src/app.rs` fallback 是 `404 route not owned by rust gateway`，不是转发 upstream
+  - `rg -n "backend-py|PYTHON_UPSTREAM_BASE_URL" docker-compose*.yml -S` 无命中（exit code 1）
+- inventory 刷新:
+  - `python-endpoints-inventory.csv` 当前总量 `179`
+  - 分类：`proxy=114`、`migrate=38`、`retire=20`、`defer=7`
+  - `backend_old` 根目录 Python: `4`
+  - `backend_old/app` 非 API Python: `226`
+- 是否影响前端:
+  - 当前不阻断主路径，compose 变量层已满足 Rust backend bridge 清零；后续关键风险在 Python runtime live surface
+- 新 gate:
+  - default/hybrid/full compose 渲染结果中必须不存在 `backend-py`
+  - default/hybrid/full compose 渲染结果中必须不存在 `PYTHON_UPSTREAM_BASE_URL`
+  - `rg -n "backend-py|PYTHON_UPSTREAM_BASE_URL|proxy\\.rs" docker-compose*.yml backend/src -S` 不得出现 Python backend bridge 命中
+- 后续修复波次: Wave B+（deploy chain cleanup）
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

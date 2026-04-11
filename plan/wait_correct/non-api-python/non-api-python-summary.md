@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `255`
+- Total inventory: `230`
 - `backend_old` root Python: `4`
-- `backend_old/app` non-API Python: `251`
+- `backend_old/app` non-API Python: `226`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -13,10 +13,33 @@
 
 ## Active Ledger
 
+## 2026-04-11 Snapshot Refresh (Repo Facts)
+
+- Route inventory (from `python-endpoints-inventory.csv`):
+  - total: `179`
+  - proxy: `114`
+  - migrate: `38`
+  - retire: `20`
+  - defer: `7`
+- Rust route ownership 已在 gateway 显式挂载：
+  - `/api/v1/agent-tasks/*`
+  - `/api/v1/agent-test/*`
+  - `/api/v1/static-tasks/*`
+- Rust proxy bridge 现状：
+  - `backend/src/proxy.rs` 不存在
+  - `backend/src/app.rs` 使用 `fallback 404`，不是 Python upstream proxy
+- Compose 收口现状（Rust backend bridge 变量层）：
+  - `docker-compose.yml` / `docker-compose.hybrid.yml` / `docker-compose.full.yml` 对 `backend-py` 无命中
+  - `docker-compose.yml` / `docker-compose.hybrid.yml` / `docker-compose.full.yml` 对 `PYTHON_UPSTREAM_BASE_URL` 无命中
+- 新 gate:
+  - 三条 compose 链路清零 `backend-py` 与 `PYTHON_UPSTREAM_BASE_URL`
+  - `rg -n "backend-py|PYTHON_UPSTREAM_BASE_URL" docker-compose*.yml backend/src -S` 不得出现 Python backend bridge 命中
+
+
 ### 1. non-api python inventory is not yet migrated
 
 - current state:
-  - Rust 已 owned `projects / system-config / search / skills`、gateway/proxy，以及新的 startup bootstrap shell
+  - Rust 已 owned `projects / system-config / search / skills`、`agent-tasks / agent-test / static-tasks` 路由组，以及新的 startup bootstrap shell
   - Python 仍拥有 schema/init_db/recovery/preflight、db/model/schema、runtime、upload、scan orchestration、llm、agent 主链路
 - scope:
   - `backend_old/*.py`
@@ -33,7 +56,7 @@
   - Rust 成为 source of truth
   - 运行主链路不再调用对应 Python 文件
   - `projects/system-config/skills` 的 Python mirror 已删除
-  - `/api/v1/*` fallback 不再承接相关能力
+  - `backend-py` service 与 `PYTHON_UPSTREAM_BASE_URL` 从 default/hybrid/full compose 全部删除
 
 ### 1a. Rust startup bootstrap is now partially owned
 

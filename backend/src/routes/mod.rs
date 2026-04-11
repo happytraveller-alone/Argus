@@ -1,6 +1,9 @@
+pub mod agent_tasks;
+pub mod agent_test;
 pub mod projects;
 pub mod search;
 pub mod skills;
+pub mod static_tasks;
 pub mod system_config;
 
 use axum::extract::State;
@@ -12,10 +15,17 @@ use crate::state::AppState;
 pub fn owned_routes() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .route(
+            "/api/v1/agent-tasks/",
+            axum::routing::post(agent_tasks::create_agent_task).get(agent_tasks::list_agent_tasks),
+        )
+        .nest("/api/v1/agent-tasks", agent_tasks::router())
+        .nest("/api/v1/agent-test", agent_test::router())
         .nest("/api/v1/system-config", system_config::router())
         .nest("/api/v1/projects", projects::router())
         .nest("/api/v1/search", search::router())
         .nest("/api/v1/skills", skills::router())
+        .nest("/api/v1/static-tasks", static_tasks::router())
 }
 
 async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {

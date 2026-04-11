@@ -15,6 +15,8 @@ docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
+The release compose path is now unified as `Rust backend + TypeScript frontend`, and no longer includes the legacy Python backend service.
+
 ## Before You Start
 
 Bootstrap the backend Docker env file before the first run:

@@ -12,6 +12,8 @@ docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
+当前 compose 链路已统一为 `Rust backend + TypeScript frontend`，不再包含旧的 Python backend 双后端链路。
+
 ## 启动前准备
 
 1. 复制后端环境文件：

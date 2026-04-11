@@ -1,3 +1,6 @@
+# DEPRECATED: legacy Python backend image.
+# This Dockerfile is retired from active compose/release paths and kept only
+# for historical compatibility during migration. Do not wire new flows to it.
 # ============================================
 # 多阶段构建 - 构建阶段
 # ============================================

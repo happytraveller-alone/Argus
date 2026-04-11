@@ -8,7 +8,6 @@ pub struct AppConfig {
     pub database_url: Option<String>,
     pub rust_database_url: Option<String>,
     pub python_database_url: Option<String>,
-    pub python_upstream_base_url: Option<String>,
     pub python_alembic_enabled: bool,
     pub zip_storage_path: PathBuf,
     pub startup_init_enabled: bool,
@@ -71,7 +70,6 @@ impl AppConfig {
             database_url: database_env.clone(),
             rust_database_url: rust_database_url.clone(),
             python_database_url,
-            python_upstream_base_url: optional_env("PYTHON_UPSTREAM_BASE_URL"),
             python_alembic_enabled: parse_bool_env("PYTHON_ALEMBIC_ENABLED", true),
             zip_storage_path: env_path("ZIP_STORAGE_PATH", "./uploads/zip_files"),
             startup_init_enabled: parse_bool_env("STARTUP_INIT_ENABLED", true),
@@ -144,7 +142,6 @@ impl AppConfig {
             database_url: None,
             rust_database_url: None,
             python_database_url: None,
-            python_upstream_base_url: None,
             python_alembic_enabled: true,
             zip_storage_path: PathBuf::from("./tmp/test-zips"),
             startup_init_enabled: true,
@@ -190,11 +187,6 @@ impl AppConfig {
             flow_parser_runner_image: "vulhunter/flow-parser-runner:test".to_string(),
             sandbox_runner_image: "vulhunter/sandbox-runner:test".to_string(),
         }
-    }
-
-    pub fn with_python_upstream(mut self, python_upstream_base_url: impl Into<String>) -> Self {
-        self.python_upstream_base_url = Some(python_upstream_base_url.into());
-        self
     }
 }
 

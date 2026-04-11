@@ -14,6 +14,8 @@ docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
+当前 release compose 已统一为 `Rust backend + TypeScript frontend`，不再包含旧的 Python backend 服务。
+
 ## 启动前准备
 
 首次启动前先准备 backend Docker 环境文件：
