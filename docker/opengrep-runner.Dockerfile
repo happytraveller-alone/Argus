@@ -5,6 +5,12 @@ ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG OPENGREP_VERSION=v1.15.1
 
+FROM rust:1.90-slim AS opengrep-launcher
+WORKDIR /code
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo build --release --bin backend-opengrep-launcher
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie AS opengrep-runner
 
 ARG BACKEND_APT_MIRROR_PRIMARY
@@ -22,7 +28,7 @@ ENV XDG_CONFIG_HOME=/opt/opengrep/xdg-config
 ENV XDG_DATA_HOME=/opt/opengrep/xdg-data
 ENV XDG_CACHE_HOME=/opt/opengrep/xdg-cache
 
-COPY --chmod=755 backend_old/app/runtime/launchers/opengrep_launcher.py ${OPENGREP_WRAPPER_BIN}
+COPY --from=opengrep-launcher --chmod=755 /code/target/release/backend-opengrep-launcher ${OPENGREP_WRAPPER_BIN}
 
 RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \

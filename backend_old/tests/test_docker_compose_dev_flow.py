@@ -254,7 +254,7 @@ def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
         encoding="utf-8"
     )
 
-    assert 'CMD ["python3", "-m", "app.runtime.container_startup", "prod"]' in backend_text
+    assert 'CMD ["/usr/local/bin/backend-runtime-startup", "prod"]' in backend_text
 
 
 def test_nexus_web_dockerfile_is_removed() -> None:

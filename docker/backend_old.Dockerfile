@@ -145,6 +145,15 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
 # ============================================
 # 多阶段构建 - 运行时基础阶段
 # ============================================
+FROM rust:1.90-slim AS runtime-entrypoints
+WORKDIR /code
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo build --release \
+  --bin backend-runtime-startup \
+  --bin backend-opengrep-launcher \
+  --bin backend-phpstan-launcher
+
 FROM python-base AS runtime-base
 
 WORKDIR /app
@@ -251,6 +260,7 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
 FROM runtime-base AS dev-runtime
 
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
   for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
@@ -267,7 +277,7 @@ RUN mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/
 
 EXPOSE 8000
 
-CMD ["python3", "-m", "app.runtime.container_startup", "dev"]
+CMD ["/usr/local/bin/backend-runtime-startup", "dev"]
 
 # ============================================================
 # Cython 编译阶段：将 Python 源码编译为 .so 扩展（代码混淆）
@@ -324,10 +334,6 @@ RUN set -eux; \
   done; \
   # 3. 复制入口文件（CMD 直接引用，必须保留 .py）
   cp /build/app/main.py /final/app/main.py; \
-  mkdir -p /final/app/runtime; \
-  cp /build/app/runtime/container_startup.py /final/app/runtime/container_startup.py; \
-  # 4. 复制 launchers 目录（COPY --chmod=755 可执行脚本）
-  cp -r /build/app/runtime/launchers /final/app/runtime/launchers; \
   # 5. 复制 schema_snapshots 目录（Alembic baseline）
   mkdir -p /final/app/db; \
   cp -r /build/app/db/schema_snapshots /final/app/db/schema_snapshots; \
@@ -373,9 +379,6 @@ RUN set -eux; \
 RUN set -eux; \
   BYTECODE_TARGETS="\
   /final/app/main.py \
-  /final/app/runtime/container_startup.py \
-  /final/app/runtime/launchers/opengrep_launcher.py \
-  /final/app/runtime/launchers/phpstan_launcher.py \
   /final/app/api/v1/endpoints/agent_tasks_reporting.py"; \
   TARGET_COUNT=0; \
   for src in ${BYTECODE_TARGETS}; do \
@@ -391,8 +394,6 @@ RUN set -eux; \
   echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
   test -f /final/app/main.pyc || \
   { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
-  test -f /final/app/runtime/container_startup.pyc || \
-  { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
   echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
 # ============================================================
@@ -403,6 +404,7 @@ FROM runtime-base AS runtime-cython
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
   for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
@@ -462,7 +464,6 @@ for mod_name in cython_mods:
     print('[Cython] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
 pyc_mods = [
     'app.main',
-    'app.runtime.container_startup',
     'app.api.v1.endpoints.agent_tasks_reporting',
 ]
 for mod_name in pyc_mods:
@@ -473,7 +474,7 @@ for mod_name in pyc_mods:
 print('[Cython] All core module verifications PASSED')
 PYEOF
 
-CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
+CMD ["/usr/local/bin/backend-runtime-startup", "prod"]
 
 # ============================================================
 # runtime: 平衡型生产 target
@@ -483,6 +484,7 @@ CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
 FROM runtime-base AS runtime
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
   for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
@@ -515,9 +517,6 @@ RUN mkdir -p \
 RUN set -eux; \
   BYTECODE_TARGETS="\
   /app/app/main.py \
-  /app/app/runtime/container_startup.py \
-  /app/app/runtime/launchers/opengrep_launcher.py \
-  /app/app/runtime/launchers/phpstan_launcher.py \
   /app/app/api/v1/endpoints/agent_tasks_reporting.py"; \
   TARGET_COUNT=0; \
   for src in ${BYTECODE_TARGETS}; do \
@@ -533,8 +532,6 @@ RUN set -eux; \
   echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
   test -f /app/app/main.pyc || \
   { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
-  test -f /app/app/runtime/container_startup.pyc || \
-  { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
   echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
 RUN groupadd --gid 1001 appgroup && \
@@ -552,7 +549,6 @@ RUN /opt/backend-venv/bin/python - <<'PYEOF'
 import importlib.util
 pyc_mods = [
     'app.main',
-    'app.runtime.container_startup',
     'app.api.v1.endpoints.agent_tasks_reporting',
 ]
 for mod_name in pyc_mods:
@@ -569,7 +565,7 @@ for mod_name in source_mods:
 print('[Runtime] Balanced obfuscation verifications PASSED')
 PYEOF
 
-CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
+CMD ["/usr/local/bin/backend-runtime-startup", "prod"]
 
 # ============================================================
 # runtime-plain: 跳过 Cython 编译，直接使用 Python 源码
@@ -578,6 +574,7 @@ CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
 FROM runtime-base AS runtime-plain
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
   for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
@@ -609,4 +606,4 @@ RUN mkdir -p \
 
 EXPOSE 8000
 
-CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
+CMD ["/usr/local/bin/backend-runtime-startup", "prod"]

@@ -62,6 +62,15 @@ RUN set -eux; \
   PIP_INDEX_URL="${BACKEND_PYPI_INDEX_FALLBACK}" \
   uv sync --active --frozen --no-dev
 
+FROM rust:1.90-slim AS runtime-entrypoints
+WORKDIR /code
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo build --release \
+  --bin backend-runtime-startup \
+  --bin backend-opengrep-launcher \
+  --bin backend-phpstan-launcher
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim AS runtime-release
 
 WORKDIR /app
@@ -108,6 +117,7 @@ COPY backend_old/app /app/app
 COPY backend_old/alembic /app/alembic
 COPY backend_old/alembic.ini /app/alembic.ini
 COPY backend_old/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
+COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN groupadd --gid 1001 appgroup && \
   useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser && \
@@ -117,4 +127,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
+CMD ["/usr/local/bin/backend-runtime-startup", "prod"]

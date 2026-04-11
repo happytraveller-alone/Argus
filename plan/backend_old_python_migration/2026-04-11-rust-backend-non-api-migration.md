@@ -185,6 +185,50 @@
 - Rust 直接调度 launcher / runner / scanner，不再经 Python runtime 中转。
 - 启动恢复、preflight、外部工具探测统一收到 Rust runtime 抽象。
 - 只有当 Rust 主链路不再调用 Python runtime 和 launcher，才算完成。
+- 当前进展：
+  - `backend_old/app/runtime` 已从 live tree 删除。
+  - Rust 已新增 runtime 接管入口：
+    - `backend/src/runtime/bootstrap.rs`
+    - `backend/src/bin/backend_runtime_startup.rs`
+    - `backend/src/bin/opengrep_launcher.rs`
+    - `backend/src/bin/phpstan_launcher.rs`
+  - `docker/backend_old.Dockerfile`、`scripts/release-templates/backend.Dockerfile`
+    已切到 `/usr/local/bin/backend-runtime-startup`
+  - `docker/opengrep-runner.Dockerfile`、`docker/phpstan-runner.Dockerfile`
+    已切到 Rust launcher binaries
+  - `backend/tests/runtime_env_bootstrap.rs` 已取代旧的
+    `backend_old/tests/test_backend_container_startup_env_bootstrap.py`
+  - operational verification:
+    - `find backend_old/app -type d -name runtime -print`
+    - `rg -n "app\\.runtime\\.|from app\\.runtime|import app\\.runtime|container_startup\\.py|opengrep_launcher\\.py|phpstan_launcher\\.py" backend_old backend docker scripts .github`
+    - 预期结果：
+      - `backend_old/app/runtime` 不再存在
+      - live runtime / Dockerfile / tests 不再引用旧 Python runtime 路径
+  - 边界说明：
+    - 这表示 `app/runtime` 目录已被 Rust runtime entrypoints 接管并可删除
+    - 这不等于 `backend-py` 兼容服务整体退休，也不等于 `scanner*` / `flow_parser*` / 其它 runtime orchestration 已全部 Rust-owned
+- 当前进展：
+  - `backend_old/app/runtime` 已从 live tree 删除。
+  - Rust 已新增 runtime 接管入口：
+    - `backend/src/runtime/bootstrap.rs`
+    - `backend/src/bin/backend_runtime_startup.rs`
+    - `backend/src/bin/opengrep_launcher.rs`
+    - `backend/src/bin/phpstan_launcher.rs`
+  - `docker/backend_old.Dockerfile`、`scripts/release-templates/backend.Dockerfile`
+    已切到 `/usr/local/bin/backend-runtime-startup`
+  - `docker/opengrep-runner.Dockerfile`、`docker/phpstan-runner.Dockerfile`
+    已切到 Rust launcher binaries
+  - `backend/tests/runtime_env_bootstrap.rs` 已取代旧的
+    `backend_old/tests/test_backend_container_startup_env_bootstrap.py`
+  - operational verification:
+    - `find backend_old/app -type d -name runtime -print`
+    - `rg -n "app\\.runtime\\.|from app\\.runtime|import app\\.runtime|container_startup\\.py|opengrep_launcher\\.py|phpstan_launcher\\.py" backend_old backend docker scripts .github`
+    - 预期结果：
+      - `backend_old/app/runtime` 不再存在
+      - live runtime / Dockerfile / tests 不再引用旧 Python runtime 路径
+  - 边界说明：
+    - 这表示 `app/runtime` 目录已被 Rust runtime entrypoints 接管并可删除
+    - 这不等于 `backend-py` 兼容服务整体退休，也不等于 `scanner*` / `flow_parser*` / 其它 runtime orchestration 已全部 Rust-owned
 
 ### 4. `services/upload` (`6`)
 

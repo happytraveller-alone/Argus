@@ -4,6 +4,12 @@ ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 
+FROM rust:1.90-slim AS phpstan-launcher
+WORKDIR /code
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/src ./src
+RUN cargo build --release --bin backend-phpstan-launcher
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie AS phpstan-runner
 
 ARG BACKEND_APT_MIRROR_PRIMARY
@@ -15,7 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PHPSTAN_HOME=/opt/phpstan
 
-COPY --chmod=755 backend_old/app/runtime/launchers/phpstan_launcher.py /usr/local/bin/phpstan
+COPY --from=phpstan-launcher --chmod=755 /code/target/release/backend-phpstan-launcher /usr/local/bin/phpstan
 
 RUN --mount=type=cache,id=vulhunter-phpstan-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-phpstan-runner-apt-cache,target=/var/cache/apt,sharing=locked \

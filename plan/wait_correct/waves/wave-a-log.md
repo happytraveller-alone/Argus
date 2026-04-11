@@ -359,3 +359,63 @@
 - owner: Rust migration
 - offline residue cleanup owner:
   - 如果未来要清掉这条 patch 文本残留，由 Rust migration owner 在 Wave F / retire cleanup 处理
+
+### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
+
+- endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
+- Python 旧行为:
+  - `app.runtime.container_startup` 负责 backend-py 容器启动前的 env/bootstrap、uv sync、DB wait、migration、reset、uvicorn exec
+  - `app.runtime.launchers.opengrep_launcher` / `phpstan_launcher` 负责 runner wrapper
+- Rust 当前行为:
+  - Rust 已新增：
+    - `backend/src/runtime/bootstrap.rs`
+    - `backend/src/bin/backend_runtime_startup.rs`
+    - `backend/src/bin/opengrep_launcher.rs`
+    - `backend/src/bin/phpstan_launcher.rs`
+  - `docker/backend_old.Dockerfile` 与 `scripts/release-templates/backend.Dockerfile`
+    已改用 `/usr/local/bin/backend-runtime-startup`
+  - `docker/opengrep-runner.Dockerfile` 与 `docker/phpstan-runner.Dockerfile`
+    已改用 Rust launcher binaries
+  - `backend_old/tests/test_backend_container_startup_env_bootstrap.py` 已删除，Rust 测试 `backend/tests/runtime_env_bootstrap.rs` 接管
+  - `backend_old/app/runtime` 目录已物理删除
+- operational verification:
+  - `find backend_old/app -type d -name runtime -print`
+  - `rg -n "app\\.runtime\\.|from app\\.runtime|import app\\.runtime|container_startup\\.py|opengrep_launcher\\.py|phpstan_launcher\\.py" backend_old backend docker scripts .github`
+  - expected state:
+    - `backend_old/app/runtime` 不再存在
+    - live runtime / Dockerfile / tests 不再引用旧 Python runtime 路径
+- 边界说明:
+  - 这是 `app/runtime` 目录退役，不是 Phase D 全量完成
+  - `scanner*`、`flow_parser*` 和其它 runtime/service 链路仍在 Python 侧
+- 后续修复波次: Wave D / runtime orchestration cleanup
+- owner: Rust migration
+
+### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
+
+- endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
+- Python 旧行为:
+  - `app.runtime.container_startup` 负责 backend-py 容器启动前的 env/bootstrap、uv sync、DB wait、migration、reset、uvicorn exec
+  - `app.runtime.launchers.opengrep_launcher` / `phpstan_launcher` 负责 runner wrapper
+- Rust 当前行为:
+  - Rust 已新增：
+    - `backend/src/runtime/bootstrap.rs`
+    - `backend/src/bin/backend_runtime_startup.rs`
+    - `backend/src/bin/opengrep_launcher.rs`
+    - `backend/src/bin/phpstan_launcher.rs`
+  - `docker/backend_old.Dockerfile` 与 `scripts/release-templates/backend.Dockerfile`
+    已改用 `/usr/local/bin/backend-runtime-startup`
+  - `docker/opengrep-runner.Dockerfile` 与 `docker/phpstan-runner.Dockerfile`
+    已改用 Rust launcher binaries
+  - `backend_old/tests/test_backend_container_startup_env_bootstrap.py` 已删除，Rust 测试 `backend/tests/runtime_env_bootstrap.rs` 接管
+  - `backend_old/app/runtime` 目录已物理删除
+- operational verification:
+  - `find backend_old/app -type d -name runtime -print`
+  - `rg -n "app\\.runtime\\.|from app\\.runtime|import app\\.runtime|container_startup\\.py|opengrep_launcher\\.py|phpstan_launcher\\.py" backend_old backend docker scripts .github`
+  - expected state:
+    - `backend_old/app/runtime` 不再存在
+    - live runtime / Dockerfile / tests 不再引用旧 Python runtime 路径
+- 边界说明:
+  - 这是 `app/runtime` 目录退役，不是 Phase D 全量完成
+  - `scanner*`、`flow_parser*` 和其它 runtime/service 链路仍在 Python 侧
+- 后续修复波次: Wave D / runtime orchestration cleanup
+- owner: Rust migration

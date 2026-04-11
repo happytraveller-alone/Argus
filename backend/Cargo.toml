@@ -30,4 +30,19 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1.16", features = ["serde", "v4"] }
-zip = { version = "2.4", default-features = false, features = ["deflate"] }
+zip = { version = "8.5.1", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[[bin]]
+name = "backend-runtime-startup"
+path = "src/bin/backend_runtime_startup.rs"
+
+[[bin]]
+name = "backend-opengrep-launcher"
+path = "src/bin/opengrep_launcher.rs"
+
+[[bin]]
+name = "backend-phpstan-launcher"
+path = "src/bin/phpstan_launcher.rs"
