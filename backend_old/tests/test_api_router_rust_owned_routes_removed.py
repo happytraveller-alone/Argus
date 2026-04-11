@@ -19,6 +19,8 @@ def test_api_router_excludes_rust_owned_route_modules():
         "app.api.v1.endpoints.projects",
         "app.api.v1.endpoints.search",
         "app.api.v1.endpoints.skills",
+        "app.api.v1.endpoints.prompts",
+        "app.api.v1.endpoints.rules",
         "app.api.v1.endpoints.projects_crud",
         "app.api.v1.endpoints.projects_files",
         "app.api.v1.endpoints.projects_insights",
@@ -30,8 +32,6 @@ def test_api_router_excludes_rust_owned_route_modules():
     assert endpoint_modules.isdisjoint(rust_owned_modules)
 
     remaining_python_modules = {
-        "app.api.v1.endpoints.prompts",
-        "app.api.v1.endpoints.rules",
         "app.api.v1.endpoints.agent_tasks_access",
         "app.api.v1.endpoints.static_tasks_cache",
     }

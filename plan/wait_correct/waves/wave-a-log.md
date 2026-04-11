@@ -167,6 +167,8 @@
 - Rust 当前行为补充: 新增/保留回归测试：
   - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
   - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- Rust 当前行为补充: Python live router 已不再挂载 `/prompts` 与 `/rules`
+- Rust 当前行为补充: `prompts.py` 与 `rules.py` 已物理删除，旧模板/审计规则 live endpoint 完整退场
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration
