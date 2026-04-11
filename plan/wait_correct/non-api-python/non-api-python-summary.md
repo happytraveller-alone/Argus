@@ -48,13 +48,16 @@
   - startup init allowlist / denylist / defer-list 已显式写入 Rust policy
   - Gitleaks 已开始实际消费 Rust 规则资产库中的 builtin config
   - Opengrep 已开始实际消费 Rust 规则资产库中的 internal / patch 规则目录
+  - Bandit 已开始实际消费 Rust 规则资产库中的 builtin snapshot
+  - PMD 已开始实际消费 Rust 规则资产库中的 builtin XML rulesets
 - still missing:
   - Python `app.main` 内的 schema version orchestration
   - `init_db()` 的完整 Rust 版本
   - recovery 对 legacy task tables 的依赖删除
   - runner preflight 后续与 Rust runtime 的进一步打通
   - 扫描引擎对 Rust 规则资产库的完整消费链路
-  - `bandit / phpstan / pmd / yasa` 的规则消费接入
+  - `phpstan` 的规则消费接入
+  - `yasa` 已从后续 Rust 迁移目标中移除
 - owner: Rust migration
 - target phase:
   - A now in progress

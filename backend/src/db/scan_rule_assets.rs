@@ -7,18 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::state::AppState;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScanRuleAsset {
-    pub engine: String,
-    pub source_kind: String,
-    pub asset_path: String,
-    pub file_format: String,
-    pub sha256: String,
-    pub content: String,
-    pub metadata_json: Value,
-}
+use crate::state::{AppState, ScanRuleAsset};
 
 #[derive(Clone, Debug, Default)]
 pub struct ScanRuleAssetImportSummary {

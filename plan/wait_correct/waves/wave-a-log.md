@@ -87,6 +87,8 @@
 - Rust 当前行为补充: `backend_old/app/db` 下扫描引擎规则资产已开始导入 Rust 自己维护的 `rust_scan_rule_assets`
 - Rust 当前行为补充: Gitleaks preflight 已经开始消费 Rust materialize 出来的 builtin config
 - Rust 当前行为补充: Opengrep preflight 已经开始消费 Rust materialize 出来的 internal / patch 规则目录
+- Rust 当前行为补充: Bandit preflight 已经开始消费 Rust snapshot 选出的 test ids
+- Rust 当前行为补充: PMD preflight 已经开始消费 Rust materialize 出来的 builtin rulesets
 - 是否影响前端: 否，HTTP 主路径保持可用；健康态变得更诚实
 - 后续修复波次: Wave A 后续 / Batch 1 Slice 2
 - owner: Rust migration

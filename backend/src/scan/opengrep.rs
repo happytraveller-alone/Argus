@@ -4,8 +4,8 @@ use anyhow::Result;
 use tokio::fs;
 
 use crate::{
-    db::scan_rule_assets::{self, ScanRuleAsset},
-    state::AppState,
+    db::scan_rule_assets,
+    state::{AppState, ScanRuleAsset},
 };
 
 const OPENGREP_ENGINE: &str = "opengrep";

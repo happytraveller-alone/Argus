@@ -219,6 +219,17 @@ pub struct StoredProjectArchive {
     pub uploaded_at: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScanRuleAsset {
+    pub engine: String,
+    pub source_kind: String,
+    pub asset_path: String,
+    pub file_format: String,
+    pub sha256: String,
+    pub content: String,
+    pub metadata_json: serde_json::Value,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
