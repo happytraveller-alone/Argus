@@ -7,7 +7,6 @@ def test_agent_tasks_split_modules_exist():
         "app.api.v1.endpoints.agent_tasks_runtime",
         "app.api.v1.endpoints.agent_tasks_tool_runtime",
         "app.api.v1.endpoints.agent_tasks_bootstrap",
-        "app.api.v1.endpoints.agent_tasks_execution",
         "app.api.v1.endpoints.agent_tasks_findings",
         "app.api.v1.endpoints.agent_tasks_access",
     ]
@@ -20,7 +19,6 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.api.v1.endpoints import agent_tasks
     from app.api.v1.endpoints import agent_tasks_bootstrap
     from app.api.v1.endpoints import agent_tasks_contracts
-    from app.api.v1.endpoints import agent_tasks_execution
     from app.api.v1.endpoints import agent_tasks_findings
     from app.api.v1.endpoints import agent_tasks_tool_runtime
     from app.api.v1.endpoints import agent_tasks_runtime
@@ -36,7 +34,6 @@ def test_agent_tasks_facade_re_exports_key_symbols():
         is agent_tasks_tool_runtime._sync_tool_playbook_to_memory
     )
     assert agent_tasks._resolve_static_bootstrap_config is agent_tasks_bootstrap._resolve_static_bootstrap_config
-    assert agent_tasks._execute_agent_task is agent_tasks_execution._execute_agent_task
     assert agent_tasks._save_findings is agent_tasks_findings._save_findings
 
 
