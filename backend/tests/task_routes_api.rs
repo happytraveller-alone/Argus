@@ -121,6 +121,226 @@ async fn seed_agent_report_findings(
     (first_id, second_id)
 }
 
+async fn seed_agent_result_state(
+    state: &AppState,
+    task_id: &str,
+) -> (String, String, String) {
+    let mut snapshot = task_state::load_snapshot(state).await.unwrap();
+    let record = snapshot.agent_tasks.get_mut(task_id).unwrap();
+    record.status = "completed".to_string();
+    record.current_phase = Some("reporting".to_string());
+    record.current_step = Some("agent findings ready".to_string());
+    record.progress_percentage = 100.0;
+    record.started_at = Some("2026-04-12T10:00:00Z".to_string());
+    record.completed_at = Some("2026-04-12T10:30:00Z".to_string());
+    record.total_files = 12;
+    record.indexed_files = 12;
+    record.analyzed_files = 10;
+    record.total_chunks = 22;
+    record.files_with_findings = 2;
+    record.findings.clear();
+    record.checkpoints.clear();
+    let verified_id = Uuid::new_v4().to_string();
+    let pending_id = Uuid::new_v4().to_string();
+    let false_positive_id = Uuid::new_v4().to_string();
+    record.findings.push(task_state::AgentFindingRecord {
+        id: verified_id.clone(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "sql_injection".to_string(),
+        severity: "high".to_string(),
+        title: "SQL injection in login".to_string(),
+        display_title: Some("登录 SQL 注入".to_string()),
+        description: Some("raw SQL string interpolation".to_string()),
+        description_markdown: Some("登录查询拼接了用户输入。".to_string()),
+        file_path: Some("src/auth/login.ts".to_string()),
+        line_start: Some(42),
+        line_end: Some(48),
+        resolved_file_path: Some("src/auth/login.ts".to_string()),
+        resolved_line_start: Some(42),
+        code_snippet: Some("SELECT * FROM users WHERE email = '${email}'".to_string()),
+        status: "verified".to_string(),
+        is_verified: true,
+        verdict: Some("confirmed".to_string()),
+        authenticity: Some("confirmed".to_string()),
+        verification_evidence: Some("verified by rust integration test".to_string()),
+        suggestion: Some("use parameterized query".to_string()),
+        confidence: Some(0.95),
+        created_at: "2026-04-12T10:00:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings.push(task_state::AgentFindingRecord {
+        id: pending_id.clone(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "xss".to_string(),
+        severity: "medium".to_string(),
+        title: "Reflected XSS in search".to_string(),
+        display_title: Some("搜索页反射型 XSS".to_string()),
+        description: Some("unsafe HTML render".to_string()),
+        description_markdown: Some("搜索词进入了危险 HTML 渲染链路。".to_string()),
+        file_path: Some("src/web/search.tsx".to_string()),
+        line_start: Some(77),
+        line_end: Some(82),
+        resolved_file_path: Some("src/web/search.tsx".to_string()),
+        resolved_line_start: Some(77),
+        code_snippet: Some("<div dangerouslySetInnerHTML={...} />".to_string()),
+        status: "pending".to_string(),
+        is_verified: false,
+        verdict: Some("likely".to_string()),
+        authenticity: Some("likely".to_string()),
+        suggestion: Some("escape output".to_string()),
+        confidence: Some(0.71),
+        created_at: "2026-04-12T10:05:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings.push(task_state::AgentFindingRecord {
+        id: false_positive_id.clone(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "xss".to_string(),
+        severity: "low".to_string(),
+        title: "Dismissed XSS alert".to_string(),
+        display_title: Some("已驳回的 XSS 误报".to_string()),
+        description: Some("template escapes output".to_string()),
+        description_markdown: Some("模板层已统一编码，这条告警判定为误报。".to_string()),
+        file_path: Some("src/web/search.tsx".to_string()),
+        line_start: Some(84),
+        line_end: Some(84),
+        resolved_file_path: Some("src/web/search.tsx".to_string()),
+        resolved_line_start: Some(84),
+        status: "false_positive".to_string(),
+        is_verified: false,
+        verdict: Some("false_positive".to_string()),
+        authenticity: Some("false_positive".to_string()),
+        verification_evidence: Some("renderer already escapes user input".to_string()),
+        confidence: Some(0.12),
+        created_at: "2026-04-12T10:08:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings_count = 2;
+    record.verified_count = 1;
+    record.false_positive_count = 1;
+    record.critical_count = 0;
+    record.high_count = 1;
+    record.medium_count = 1;
+    record.low_count = 0;
+    record.verified_high_count = 1;
+    record.verified_medium_count = 0;
+    record.verified_low_count = 0;
+    record.security_score = Some(85.0);
+    record.quality_score = 92.0;
+    record.agent_tree = vec![
+        json!({
+            "id": format!("root-{task_id}"),
+            "agent_id": format!("root-{task_id}"),
+            "agent_name": "RustAgentRoot",
+            "agent_type": "root",
+            "parent_agent_id": Value::Null,
+            "depth": 0,
+            "task_description": "orchestrate agent audit",
+            "status": "completed",
+            "result_summary": "aggregated agent results",
+            "findings_count": 2,
+            "verified_findings_count": 1,
+            "iterations": 4,
+            "tokens_used": 320,
+            "tool_calls": 6,
+            "duration_ms": 120000,
+            "children": Vec::<Value>::new(),
+        }),
+        json!({
+            "id": format!("analysis-{task_id}"),
+            "agent_id": format!("analysis-{task_id}"),
+            "agent_name": "RustAnalysisAgent",
+            "agent_type": "analysis",
+            "parent_agent_id": format!("root-{task_id}"),
+            "depth": 1,
+            "task_description": "trace suspicious sinks",
+            "status": "completed",
+            "result_summary": "found 2 candidate issues",
+            "findings_count": 2,
+            "verified_findings_count": 0,
+            "iterations": 3,
+            "tokens_used": 180,
+            "tool_calls": 4,
+            "duration_ms": 80000,
+            "children": Vec::<Value>::new(),
+        }),
+        json!({
+            "id": format!("verify-{task_id}"),
+            "agent_id": format!("verify-{task_id}"),
+            "agent_name": "RustVerificationAgent",
+            "agent_type": "verification",
+            "parent_agent_id": format!("root-{task_id}"),
+            "depth": 1,
+            "task_description": "confirm exploitability",
+            "status": "completed",
+            "result_summary": "verified 1 finding and rejected 1 alert",
+            "findings_count": 2,
+            "verified_findings_count": 1,
+            "iterations": 1,
+            "tokens_used": 96,
+            "tool_calls": 2,
+            "duration_ms": 24000,
+            "children": Vec::<Value>::new(),
+        }),
+    ];
+    record.checkpoints.push(task_state::AgentCheckpointRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        agent_id: format!("root-{task_id}"),
+        agent_name: "RustAgentRoot".to_string(),
+        agent_type: "root".to_string(),
+        parent_agent_id: None,
+        iteration: 0,
+        status: "created".to_string(),
+        total_tokens: 0,
+        tool_calls: 0,
+        findings_count: 0,
+        checkpoint_type: "auto".to_string(),
+        checkpoint_name: Some("created".to_string()),
+        created_at: Some("2026-04-12T10:00:00Z".to_string()),
+        state_data: json!({"phase": "created"}),
+        metadata: Some(json!({"source": "seed"})),
+    });
+    record.checkpoints.push(task_state::AgentCheckpointRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        agent_id: format!("analysis-{task_id}"),
+        agent_name: "RustAnalysisAgent".to_string(),
+        agent_type: "analysis".to_string(),
+        parent_agent_id: Some(format!("root-{task_id}")),
+        iteration: 3,
+        status: "completed".to_string(),
+        total_tokens: 180,
+        tool_calls: 4,
+        findings_count: 2,
+        checkpoint_type: "auto".to_string(),
+        checkpoint_name: Some("analysis-complete".to_string()),
+        created_at: Some("2026-04-12T10:20:00Z".to_string()),
+        state_data: json!({"phase": "analysis"}),
+        metadata: Some(json!({"source": "seed"})),
+    });
+    record.checkpoints.push(task_state::AgentCheckpointRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        agent_id: format!("verify-{task_id}"),
+        agent_name: "RustVerificationAgent".to_string(),
+        agent_type: "verification".to_string(),
+        parent_agent_id: Some(format!("root-{task_id}")),
+        iteration: 1,
+        status: "completed".to_string(),
+        total_tokens: 96,
+        tool_calls: 2,
+        findings_count: 2,
+        checkpoint_type: "final".to_string(),
+        checkpoint_name: Some("verification-complete".to_string()),
+        created_at: Some("2026-04-12T10:29:00Z".to_string()),
+        state_data: json!({"phase": "verification"}),
+        metadata: Some(json!({"source": "seed"})),
+    });
+    task_state::save_snapshot(state, &snapshot).await.unwrap();
+    (verified_id, pending_id, false_positive_id)
+}
+
 #[tokio::test]
 async fn agent_task_routes_are_rust_owned_without_python_upstream() {
     let state = AppState::from_config(isolated_test_config("agent-task-routes"))
@@ -219,6 +439,13 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(findings_response.status(), StatusCode::OK);
+    let findings_json: Value = serde_json::from_slice(
+        &to_bytes(findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(findings_json.as_array().unwrap().len(), 2);
 
     let summary_response = app
         .clone()
@@ -230,6 +457,15 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(summary_response.status(), StatusCode::OK);
+    let summary_json: Value = serde_json::from_slice(
+        &to_bytes(summary_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(summary_json["statistics"]["findings_count"], 2);
+    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["total"], 1);
+    assert_eq!(summary_json["vulnerability_types"]["xss"]["total"], 1);
 
     let agent_tree_response = app
         .clone()
@@ -241,6 +477,14 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(agent_tree_response.status(), StatusCode::OK);
+    let agent_tree_json: Value = serde_json::from_slice(
+        &to_bytes(agent_tree_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(agent_tree_json["total_agents"], 3);
+    assert_eq!(agent_tree_json["nodes"].as_array().unwrap().len(), 3);
 
     let checkpoints_response = app
         .clone()
@@ -252,6 +496,13 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(checkpoints_response.status(), StatusCode::OK);
+    let checkpoints_json: Value = serde_json::from_slice(
+        &to_bytes(checkpoints_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(checkpoints_json.as_array().unwrap().len() >= 4);
 
     let report_response = app
         .clone()
@@ -474,6 +725,201 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
         .await
         .unwrap();
     assert!(finding_pdf_body.starts_with(b"%PDF-1.4"));
+}
+
+#[tokio::test]
+async fn agent_task_result_routes_support_filters_summary_and_checkpoint_queries() {
+    let state = AppState::from_config(isolated_test_config("agent-task-results"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "结果面项目").await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "results-task",
+                        "description": "result routes contract test",
+                        "max_iterations": 2
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value =
+        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let task_id = create_json["id"].as_str().unwrap().to_string();
+    let (verified_id, pending_id, false_positive_id) =
+        seed_agent_result_state(&state, &task_id).await;
+
+    let visible_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings?include_false_positive=false&limit=10"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(visible_findings_response.status(), StatusCode::OK);
+    let visible_findings: Value = serde_json::from_slice(
+        &to_bytes(visible_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(visible_findings.as_array().unwrap().len(), 2);
+    assert_eq!(visible_findings[0]["id"], verified_id);
+    assert_eq!(visible_findings[1]["id"], pending_id);
+
+    let verified_only_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings?verified_only=true&include_false_positive=false"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(verified_only_response.status(), StatusCode::OK);
+    let verified_only_json: Value = serde_json::from_slice(
+        &to_bytes(verified_only_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(verified_only_json.as_array().unwrap().len(), 1);
+    assert_eq!(verified_only_json[0]["id"], verified_id);
+
+    let severity_filtered_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings?severity=medium&vulnerability_type=xss&include_false_positive=false"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(severity_filtered_response.status(), StatusCode::OK);
+    let severity_filtered_json: Value = serde_json::from_slice(
+        &to_bytes(severity_filtered_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(severity_filtered_json.as_array().unwrap().len(), 1);
+    assert_eq!(severity_filtered_json[0]["id"], pending_id);
+
+    let hidden_false_positive_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings/{false_positive_id}?include_false_positive=false"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hidden_false_positive_response.status(), StatusCode::NOT_FOUND);
+
+    let visible_false_positive_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings/{false_positive_id}?include_false_positive=true"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(visible_false_positive_response.status(), StatusCode::OK);
+
+    let summary_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}/summary"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(summary_response.status(), StatusCode::OK);
+    let summary_json: Value = serde_json::from_slice(
+        &to_bytes(summary_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(summary_json["statistics"]["findings_count"], 2);
+    assert_eq!(summary_json["statistics"]["verified_count"], 1);
+    assert_eq!(summary_json["statistics"]["false_positive_count"], 1);
+    assert_eq!(summary_json["severity_distribution"]["high"], 1);
+    assert_eq!(summary_json["severity_distribution"]["medium"], 1);
+    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["total"], 1);
+    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["verified"], 1);
+    assert_eq!(summary_json["vulnerability_types"]["xss"]["total"], 1);
+    assert_eq!(summary_json["vulnerability_types"]["xss"]["verified"], 0);
+
+    let agent_tree_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}/agent-tree"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(agent_tree_response.status(), StatusCode::OK);
+    let agent_tree_json: Value = serde_json::from_slice(
+        &to_bytes(agent_tree_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(agent_tree_json["total_agents"], 3);
+    assert_eq!(agent_tree_json["verified_total_findings"], 1);
+    assert_eq!(agent_tree_json["nodes"][0]["findings_count"], 2);
+    assert_eq!(agent_tree_json["nodes"][0]["verified_findings_count"], 1);
+
+    let checkpoints_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/checkpoints?agent_id=verify-{task_id}&limit=1"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(checkpoints_response.status(), StatusCode::OK);
+    let checkpoints_json: Value = serde_json::from_slice(
+        &to_bytes(checkpoints_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(checkpoints_json.as_array().unwrap().len(), 1);
+    assert_eq!(checkpoints_json[0]["agent_id"], format!("verify-{task_id}"));
 }
 
 #[tokio::test]

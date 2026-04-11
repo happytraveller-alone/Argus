@@ -69,6 +69,27 @@ struct FindingStatusQuery {
 }
 
 #[derive(Debug, Deserialize)]
+struct AgentFindingsQuery {
+    severity: Option<String>,
+    vulnerability_type: Option<String>,
+    verified_only: Option<bool>,
+    include_false_positive: Option<bool>,
+    skip: Option<usize>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentFindingDetailQuery {
+    include_false_positive: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CheckpointListQuery {
+    agent_id: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
 struct ReportQuery {
     format: Option<String>,
     include_code_snippets: Option<bool>,
@@ -274,23 +295,7 @@ async fn start_agent_task(
     record.total_iterations = record.total_iterations.max(1);
     seed_agent_task_findings(record);
     refresh_agent_task_aggregates(record);
-    if let Some(node) = record.agent_tree.first_mut() {
-        if let Some(object) = node.as_object_mut() {
-            object.insert("status".to_string(), json!("completed"));
-            object.insert(
-                "result_summary".to_string(),
-                json!("task executed in rust backend"),
-            );
-            object.insert("iterations".to_string(), json!(record.total_iterations));
-            object.insert("tool_calls".to_string(), json!(record.tool_calls_count));
-            object.insert("tokens_used".to_string(), json!(record.tokens_used));
-            object.insert("findings_count".to_string(), json!(record.findings_count));
-            object.insert(
-                "verified_findings_count".to_string(),
-                json!(record.verified_count),
-            );
-        }
-    }
+    seed_agent_task_tree(record);
     push_agent_event(
         record,
         "phase_start",
@@ -333,6 +338,36 @@ async fn start_agent_task(
             })),
         );
     }
+    append_agent_checkpoint(
+        record,
+        &format!("analysis-{}", record.id),
+        "RustAnalysisAgent",
+        "analysis",
+        Some(&format!("root-{}", record.id)),
+        "auto",
+        Some("analysis-complete"),
+        "completed",
+        record.total_iterations.max(1).saturating_sub(1),
+        record.findings_count,
+        record.tokens_used.saturating_sub(96),
+        record.tool_calls_count.saturating_sub(2),
+        json!({"phase": "analysis", "status": "completed"}),
+    );
+    append_agent_checkpoint(
+        record,
+        &format!("verification-{}", record.id),
+        "RustVerificationAgent",
+        "verification",
+        Some(&format!("root-{}", record.id)),
+        "auto",
+        Some("verification-complete"),
+        "completed",
+        record.total_iterations.max(1),
+        record.findings_count,
+        96,
+        2,
+        json!({"phase": "verification", "status": "completed"}),
+    );
     push_checkpoint(record, "final", Some("completed"));
 
     task_state::save_snapshot(&state, &snapshot)
@@ -425,6 +460,7 @@ async fn stream_agent_events(
 async fn list_agent_findings(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<AgentFindingsQuery>,
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let snapshot = task_state::load_snapshot(&state)
         .await
@@ -433,10 +469,41 @@ async fn list_agent_findings(
         .agent_tasks
         .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+    let include_false_positive = query.include_false_positive.unwrap_or(false);
+    let verified_only = query.verified_only.unwrap_or(false);
+    let severity_filter = query.severity.as_deref().map(normalized_token);
+    let vulnerability_filter = query
+        .vulnerability_type
+        .as_deref()
+        .map(normalized_token);
+    let skip = query.skip.unwrap_or(0);
+    let limit = query.limit.unwrap_or(record.findings.len());
+    let mut findings = record
+        .findings
+        .iter()
+        .filter(|finding| include_false_positive || finding_export_status(finding) != "false_positive")
+        .filter(|finding| {
+            severity_filter
+                .as_deref()
+                .is_none_or(|severity| normalized_token(&finding.severity) == severity)
+        })
+        .filter(|finding| {
+            vulnerability_filter.as_deref().is_none_or(|vulnerability_type| {
+                normalized_token(&finding.vulnerability_type) == vulnerability_type
+            })
+        })
+        .filter(|finding| !verified_only || finding_export_status(finding) == "verified")
+        .collect::<Vec<_>>();
+    findings.sort_by(|left, right| {
+        severity_rank(&left.severity)
+            .cmp(&severity_rank(&right.severity))
+            .then_with(|| right.created_at.cmp(&left.created_at))
+    });
     Ok(Json(
-        record
-            .findings
-            .iter()
+        findings
+            .into_iter()
+            .skip(skip)
+            .take(limit)
             .map(agent_finding_value)
             .collect::<Vec<_>>(),
     ))
@@ -445,6 +512,7 @@ async fn list_agent_findings(
 async fn get_agent_finding(
     State(state): State<AppState>,
     AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
+    Query(query): Query<AgentFindingDetailQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = task_state::load_snapshot(&state)
         .await
@@ -458,6 +526,9 @@ async fn get_agent_finding(
         .iter()
         .find(|finding| finding.id == finding_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent finding not found: {finding_id}")))?;
+    if !query.include_false_positive.unwrap_or(true) && finding_export_status(finding) == "false_positive" {
+        return Err(ApiError::NotFound(format!("agent finding not found: {finding_id}")));
+    }
     Ok(Json(agent_finding_value(finding)))
 }
 
@@ -545,6 +616,28 @@ async fn get_agent_task_summary(
         .agent_tasks
         .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+    let mut vulnerability_types = BTreeMap::<String, Value>::new();
+    for finding in &record.findings {
+        if finding_export_status(finding) == "false_positive" {
+            continue;
+        }
+        let key = normalized_token(&finding.vulnerability_type);
+        let entry = vulnerability_types
+            .entry(key)
+            .or_insert_with(|| json!({"total": 0, "verified": 0}));
+        if let Some(object) = entry.as_object_mut() {
+            object.insert(
+                "total".to_string(),
+                json!(object.get("total").and_then(Value::as_i64).unwrap_or(0) + 1),
+            );
+            if finding_export_status(finding) == "verified" {
+                object.insert(
+                    "verified".to_string(),
+                    json!(object.get("verified").and_then(Value::as_i64).unwrap_or(0) + 1),
+                );
+            }
+        }
+    }
     Ok(Json(json!({
         "task_id": record.id,
         "status": record.status,
@@ -567,7 +660,7 @@ async fn get_agent_task_summary(
             "medium": record.medium_count,
             "low": record.low_count,
         },
-        "vulnerability_types": {},
+        "vulnerability_types": vulnerability_types,
         "duration_seconds": duration_seconds(record.started_at.as_deref(), record.completed_at.as_deref()),
     })))
 }
@@ -599,6 +692,7 @@ async fn get_agent_tree(
 async fn list_checkpoints(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<CheckpointListQuery>,
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let snapshot = task_state::load_snapshot(&state)
         .await
@@ -607,10 +701,19 @@ async fn list_checkpoints(
         .agent_tasks
         .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+    let limit = query.limit.unwrap_or(record.checkpoints.len());
+    let mut checkpoints = record
+        .checkpoints
+        .iter()
+        .filter(|checkpoint| {
+            query.agent_id.as_deref().is_none_or(|agent_id| checkpoint.agent_id == agent_id)
+        })
+        .collect::<Vec<_>>();
+    checkpoints.sort_by(|left, right| right.created_at.cmp(&left.created_at));
     Ok(Json(
-        record
-            .checkpoints
-            .iter()
+        checkpoints
+            .into_iter()
+            .take(limit)
             .map(checkpoint_summary_value)
             .collect::<Vec<_>>(),
     ))
@@ -934,6 +1037,108 @@ fn refresh_agent_task_aggregates(record: &mut task_state::AgentTaskRecord) {
     record.verified_high_count = verified_high;
     record.verified_medium_count = verified_medium;
     record.verified_low_count = verified_low;
+}
+
+fn seed_agent_task_tree(record: &mut task_state::AgentTaskRecord) {
+    record.agent_tree = vec![
+        json!({
+            "id": format!("root-{}", record.id),
+            "agent_id": format!("root-{}", record.id),
+            "agent_name": "RustAgentRoot",
+            "agent_type": "root",
+            "parent_agent_id": Value::Null,
+            "depth": 0,
+            "task_description": record.description,
+            "status": "completed",
+            "result_summary": "task executed in rust backend",
+            "findings_count": record.findings_count,
+            "verified_findings_count": record.verified_count,
+            "iterations": record.total_iterations,
+            "tokens_used": record.tokens_used,
+            "tool_calls": record.tool_calls_count,
+            "duration_ms": 120000,
+            "children": Vec::<Value>::new(),
+        }),
+        json!({
+            "id": format!("analysis-{}", record.id),
+            "agent_id": format!("analysis-{}", record.id),
+            "agent_name": "RustAnalysisAgent",
+            "agent_type": "analysis",
+            "parent_agent_id": format!("root-{}", record.id),
+            "depth": 1,
+            "task_description": "trace suspicious sinks",
+            "status": "completed",
+            "result_summary": "identified candidate sinks and dataflow paths",
+            "findings_count": record.findings_count,
+            "verified_findings_count": 0,
+            "iterations": record.total_iterations.max(1).saturating_sub(1),
+            "tokens_used": record.tokens_used.saturating_sub(96),
+            "tool_calls": record.tool_calls_count.saturating_sub(2),
+            "duration_ms": 82000,
+            "children": Vec::<Value>::new(),
+        }),
+        json!({
+            "id": format!("verification-{}", record.id),
+            "agent_id": format!("verification-{}", record.id),
+            "agent_name": "RustVerificationAgent",
+            "agent_type": "verification",
+            "parent_agent_id": format!("root-{}", record.id),
+            "depth": 1,
+            "task_description": "confirm exploitability and triage false positives",
+            "status": "completed",
+            "result_summary": "verified actionable findings and closed noisy alerts",
+            "findings_count": record.findings_count,
+            "verified_findings_count": record.verified_count,
+            "iterations": 1,
+            "tokens_used": 96,
+            "tool_calls": 2,
+            "duration_ms": 28000,
+            "children": Vec::<Value>::new(),
+        }),
+    ];
+}
+
+fn finding_export_status(finding: &task_state::AgentFindingRecord) -> &'static str {
+    let status = finding.status.trim().to_ascii_lowercase();
+    let verdict = finding
+        .verdict
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let authenticity = finding
+        .authenticity
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    if status == "false_positive" || verdict == "false_positive" || authenticity == "false_positive"
+    {
+        "false_positive"
+    } else if finding.is_verified
+        || status == "verified"
+        || verdict == "confirmed"
+        || authenticity == "confirmed"
+    {
+        "verified"
+    } else {
+        "pending"
+    }
+}
+
+fn normalized_token(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn severity_rank(severity: &str) -> i32 {
+    match normalized_token(severity).as_str() {
+        "critical" => 0,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        _ => 4,
+    }
 }
 
 fn build_agent_report_json(
@@ -1457,6 +1662,41 @@ fn checkpoint_summary_value(record: &task_state::AgentCheckpointRecord) -> Value
 
 fn checkpoint_detail_value(record: &task_state::AgentCheckpointRecord) -> Value {
     serde_json::to_value(record).unwrap_or_else(|_| json!({}))
+}
+
+fn append_agent_checkpoint(
+    record: &mut task_state::AgentTaskRecord,
+    agent_id: &str,
+    agent_name: &str,
+    agent_type: &str,
+    parent_agent_id: Option<&str>,
+    checkpoint_type: &str,
+    checkpoint_name: Option<&str>,
+    status: &str,
+    iteration: i64,
+    findings_count: i64,
+    total_tokens: i64,
+    tool_calls: i64,
+    state_data: Value,
+) {
+    record.checkpoints.push(task_state::AgentCheckpointRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: record.id.clone(),
+        agent_id: agent_id.to_string(),
+        agent_name: agent_name.to_string(),
+        agent_type: agent_type.to_string(),
+        parent_agent_id: parent_agent_id.map(ToString::to_string),
+        iteration,
+        status: status.to_string(),
+        total_tokens,
+        tool_calls,
+        findings_count,
+        checkpoint_type: checkpoint_type.to_string(),
+        checkpoint_name: checkpoint_name.map(ToString::to_string),
+        created_at: Some(now_rfc3339()),
+        state_data,
+        metadata: Some(json!({"source": "rust-backend"})),
+    });
 }
 
 fn push_agent_event(

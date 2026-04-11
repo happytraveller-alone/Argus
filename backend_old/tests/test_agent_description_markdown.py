@@ -1,12 +1,5 @@
-from datetime import datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
-
 import pytest
 
-from app.api.v1.endpoints.agent_tasks import list_agent_findings
-from app.models.agent_task import AgentTask
-from app.models.project import Project
 from app.services.agent.event_manager import AgentEventEmitter
 from app.services.agent.utils.vulnerability_naming import (
     build_cn_structured_description,
@@ -14,17 +7,6 @@ from app.services.agent.utils.vulnerability_naming import (
 )
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
-
-
-class _ScalarListResult:
-    def __init__(self, rows):
-        self._rows = rows
-
-    def scalars(self):
-        return self
-
-    def all(self):
-        return self._rows
 
 
 @pytest.mark.asyncio
@@ -96,73 +78,6 @@ async def test_structured_description_markdown_filters_verifier_prefix_from_root
 
     assert "verifier=" not in markdown
     assert "用户可控参数在缺少白名单校验时进入 system 调用。" in markdown
-
-
-@pytest.mark.asyncio
-async def test_list_agent_findings_includes_description_markdown():
-    task_id = "task-description-markdown"
-    now = datetime(2026, 2, 25, 9, 0, 0, tzinfo=timezone.utc)
-
-    finding = SimpleNamespace(
-        id="finding-1",
-        task_id=task_id,
-        vulnerability_type="xss",
-        severity="high",
-        title="xss finding",
-        description="参数未经编码直接输出到模板上下文。",
-        file_path="/tmp/workspace/src/app.py",
-        line_start=10,
-        line_end=12,
-        code_snippet="return render(user_input)",
-        code_context="def show(user_input):\n    return render(user_input)",
-        function_name="show",
-        is_verified=True,
-        ai_confidence=0.91,
-        status="verified",
-        suggestion="对输出进行严格编码",
-        has_poc=False,
-        poc_code=None,
-        poc_description=None,
-        poc_steps=None,
-        verification_result={
-            "authenticity": "confirmed",
-            "reachability": "reachable",
-            "evidence": "TextContent(type='text', text='用户输入进入模板渲染')",
-            "reachability_target": {
-                "file_path": "/tmp/workspace/src/app.py",
-                "function": "show",
-                "start_line": 8,
-                "end_line": 18,
-            },
-            "function_trigger_flow": ["router -> show", "show -> render"],
-        },
-        created_at=now,
-    )
-
-    db = AsyncMock()
-
-    async def get_side_effect(model, _id):
-        if model is AgentTask:
-            return SimpleNamespace(id=task_id, project_id="project-1")
-        if model is Project:
-            return SimpleNamespace(id="project-1")
-        return None
-
-    db.get = AsyncMock(side_effect=get_side_effect)
-    db.execute = AsyncMock(return_value=_ScalarListResult([finding]))
-
-    result = await list_agent_findings(
-        task_id=task_id,
-        include_false_positive=False,
-        skip=0,
-        limit=50,
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    assert len(result) == 1
-    assert result[0].description_markdown
-    assert "### 定位与结论" in (result[0].description_markdown or "")
 
 
 @pytest.mark.asyncio

@@ -60,6 +60,11 @@
   - `backend_old/app/api/v1/endpoints/agent_tasks.py` 已移除 reporting import/re-export 与 reporting router 挂载
   - Rust `backend/src/routes/agent_tasks.rs` 已覆盖 `/api/v1/agent-tasks/{task_id}/report` 与 `/api/v1/agent-tasks/{task_id}/findings/{finding_id}/report`
   - inventory 中两条 agent-task report export route 已登记为 Rust-owned (`migrate`)
+- Agent-task results Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/agent_tasks_routes_results.py`
+  - `backend_old/app/api/v1/endpoints/agent_tasks.py` 已移除 results import/re-export 与 results router 挂载
+  - Rust `backend/src/routes/agent_tasks.rs` 已覆盖 `/api/v1/agent-tasks/{task_id}/findings*`、`/summary`、`/agent-tree`、`/checkpoints*`
+  - inventory 中七条 agent-task result route 已登记为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 
