@@ -35,6 +35,10 @@
   - 删除 `backend_old/app/api/v1/endpoints/static_tasks_gitleaks.py`
   - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_gitleaks` import、router include、runtime bind、schema alias 与 re-export
   - inventory 中 `/api/v1/static-tasks/gitleaks/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
+- Bandit Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/static_tasks_bandit.py`
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_bandit` import、router include、runtime bind、schema alias、helper alias 与 re-export
+  - inventory 中 `/api/v1/static-tasks/bandit/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 

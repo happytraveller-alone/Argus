@@ -2,7 +2,6 @@ import asyncio
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import static_tasks_bandit as _bandit
 from app.api.v1.endpoints import static_tasks_cache as _cache
 from app.api.v1.endpoints import static_tasks_opengrep as _opengrep
 from app.api.v1.endpoints import static_tasks_opengrep_rules as _opengrep_rules
@@ -27,22 +26,9 @@ from app.api.v1.endpoints.static_tasks_shared import (
 router = APIRouter()
 router.include_router(_opengrep.router)
 router.include_router(_opengrep_rules.router)
-router.include_router(_bandit.router)
 router.include_router(_pmd.router)
 router.include_router(_phpstan.router)
 router.include_router(_cache.router)
-
-
-def _bind_bandit_runtime() -> None:
-    _bandit.asyncio = asyncio
-    _bandit.async_session_factory = async_session_factory
-    _bandit._clear_scan_task_cancel = _clear_scan_task_cancel
-    _bandit._get_project_root = _get_project_root
-    _bandit._is_scan_task_cancelled = _is_scan_task_cancelled
-    _bandit._resolve_backend_venv_executable = _resolve_backend_venv_executable
-    _bandit._request_scan_task_cancel = _request_scan_task_cancel
-    _bandit._run_subprocess_with_tracking = _run_subprocess_with_tracking
-    _bandit._sync_task_scan_duration = _sync_task_scan_duration
 
 
 def _bind_phpstan_runtime() -> None:
@@ -64,11 +50,6 @@ def _bind_pmd_runtime() -> None:
     _pmd._is_scan_task_cancelled = _is_scan_task_cancelled
     _pmd._request_scan_task_cancel = _request_scan_task_cancel
     _pmd._sync_task_scan_duration = _sync_task_scan_duration
-
-
-async def _execute_bandit_scan(*args, **kwargs):
-    _bind_bandit_runtime()
-    return await _bandit._execute_bandit_scan(*args, **kwargs)
 
 
 async def _execute_phpstan_scan(*args, **kwargs):
@@ -95,10 +76,6 @@ OpengrepFindingContextResponse = _opengrep.OpengrepFindingContextResponse
 OpengrepScanProgressLogEntry = _opengrep.OpengrepScanProgressLogEntry
 OpengrepScanProgressResponse = _opengrep.OpengrepScanProgressResponse
 
-BanditScanTaskCreate = _bandit.BanditScanTaskCreate
-BanditScanTaskResponse = _bandit.BanditScanTaskResponse
-BanditFindingResponse = _bandit.BanditFindingResponse
-
 PhpstanScanTaskCreate = _phpstan.PhpstanScanTaskCreate
 PhpstanScanTaskResponse = _phpstan.PhpstanScanTaskResponse
 PhpstanFindingResponse = _phpstan.PhpstanFindingResponse
@@ -108,7 +85,6 @@ PmdScanTaskResponse = _pmd.PmdScanTaskResponse
 PmdFindingResponse = _pmd.PmdFindingResponse
 
 _parse_opengrep_output = _opengrep._parse_opengrep_output
-_parse_bandit_output_payload = _bandit._parse_bandit_output_payload
 _parse_phpstan_output_payload = _phpstan._parse_phpstan_output_payload
 _filter_phpstan_security_messages = _phpstan._filter_phpstan_security_messages
 
@@ -137,23 +113,6 @@ upload_patch_archive = _opengrep_rules.upload_patch_archive
 upload_patch_directory = _opengrep_rules.upload_patch_directory
 upload_opengrep_rules = _opengrep_rules.upload_opengrep_rules
 upload_opengrep_rules_directory = _opengrep_rules.upload_opengrep_rules_directory
-
-create_bandit_scan = _bandit.create_bandit_scan
-list_bandit_tasks = _bandit.list_bandit_tasks
-get_bandit_task = _bandit.get_bandit_task
-interrupt_bandit_task = _bandit.interrupt_bandit_task
-delete_bandit_task = _bandit.delete_bandit_task
-get_bandit_findings = _bandit.get_bandit_findings
-get_bandit_finding = _bandit.get_bandit_finding
-update_bandit_finding_status = _bandit.update_bandit_finding_status
-list_bandit_rules = _bandit.list_bandit_rules
-get_bandit_rule = _bandit.get_bandit_rule
-update_bandit_rule_enabled = _bandit.update_bandit_rule_enabled
-batch_update_bandit_rules_enabled = _bandit.batch_update_bandit_rules_enabled
-delete_bandit_rule = _bandit.delete_bandit_rule
-restore_bandit_rule = _bandit.restore_bandit_rule
-batch_delete_bandit_rules = _bandit.batch_delete_bandit_rules
-batch_restore_bandit_rules = _bandit.batch_restore_bandit_rules
 
 create_phpstan_scan = _phpstan.create_phpstan_scan
 list_phpstan_tasks = _phpstan.list_phpstan_tasks

@@ -1,14 +1,14 @@
 # Python Endpoint Inventory Summary
 
 - Total routes: `179`
-- Migrate: `53`
+- Migrate: `73`
 - Retire: `20`
 - Defer: `7`
-- Proxy: `99`
+- Proxy: `79`
 
 - Task route groups (`/api/v1/agent-tasks/*` + `/api/v1/agent-test/*` + `/api/v1/static-tasks/*`) in Python inventory:
   - Total: `101`
-  - Proxy: `86`
+  - Proxy: `66`
 
 - Rust gateway status snapshot:
   - `backend/src/routes/mod.rs` 已显式 `nest` 三个路由组：
@@ -16,6 +16,7 @@
     - `/api/v1/agent-test`
     - `/api/v1/static-tasks`
   - `/api/v1/static-tasks/gitleaks/*` 已标记为 Rust-owned（Python endpoint surface retired）
+  - `/api/v1/static-tasks/bandit/*` 已标记为 Rust-owned（Python endpoint surface retired）
   - `backend/src/proxy.rs` 不存在，gateway 不再提供 Python catch-all proxy 文件入口
 
 - Deployment gate snapshot:
