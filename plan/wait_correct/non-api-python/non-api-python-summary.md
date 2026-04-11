@@ -44,11 +44,13 @@
   - Rust DB bootstrap 只检查 Rust 自己依赖的表，不再盯 Python `alembic_version`
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
   - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
+  - `backend_old/app/db` 下的扫描引擎规则资产已开始导入 `rust_scan_rule_assets`
 - still missing:
   - Python `app.main` 内的 schema version orchestration
   - `init_db()` 的完整 Rust 版本
   - recovery 对 legacy task tables 的依赖删除
   - runner preflight 后续与 Rust runtime 的进一步打通
+  - 扫描引擎对 Rust 规则资产库的完整消费链路
 - owner: Rust migration
 - target phase:
   - A now in progress

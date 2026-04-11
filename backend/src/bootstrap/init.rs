@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::json;
 
 use crate::{
-    db::{projects, system_config},
+    db::{projects, scan_rule_assets, system_config},
     state::{AppState, BootstrapStatus, StartupInitStatus},
 };
 
@@ -35,6 +35,16 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
         actions.push("created empty rust project store".to_string());
     } else {
         actions.push("rust project store already present".to_string());
+    }
+
+    if state.db_pool.is_some() {
+        let summary = scan_rule_assets::ensure_initialized(state).await?;
+        actions.push(format!(
+            "scan rule assets synced: discovered={} inserted={} updated={} skipped={}",
+            summary.discovered, summary.inserted, summary.updated, summary.skipped
+        ));
+    } else {
+        actions.push("scan rule asset import skipped without rust db".to_string());
     }
 
     Ok(StartupInitStatus {

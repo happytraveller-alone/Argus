@@ -10,7 +10,12 @@ use tokio::time::timeout;
 
 use crate::state::{AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus};
 
-const REQUIRED_RUST_TABLES: &[&str] = &["system_configs", "rust_projects", "rust_project_archives"];
+const REQUIRED_RUST_TABLES: &[&str] = &[
+    "system_configs",
+    "rust_projects",
+    "rust_project_archives",
+    "rust_scan_rule_assets",
+];
 
 pub async fn run(state: &AppState) -> Result<BootstrapReport> {
     let report = build_report(state).await;
@@ -203,7 +208,10 @@ mod tests {
     fn missing_required_tables_reports_exact_rust_dependencies() {
         let present = vec!["system_configs".to_string()];
         let missing = missing_required_tables(&present);
-        assert_eq!(missing, vec!["rust_projects", "rust_project_archives"]);
+        assert_eq!(
+            missing,
+            vec!["rust_projects", "rust_project_archives", "rust_scan_rule_assets"]
+        );
     }
 
     #[test]
@@ -212,6 +220,7 @@ mod tests {
             "system_configs".to_string(),
             "rust_projects".to_string(),
             "rust_project_archives".to_string(),
+            "rust_scan_rule_assets".to_string(),
         ];
         assert!(missing_required_tables(&present).is_empty());
     }

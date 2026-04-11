@@ -63,6 +63,13 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
     assert!(
         report.init.actions.iter().any(|action| action == "created empty rust project store")
     );
+    assert!(
+        report
+            .init
+            .actions
+            .iter()
+            .any(|action| action == "scan rule asset import skipped without rust db")
+    );
     assert_eq!(report.recovery.status, "skipped");
     assert_eq!(report.preflight.status, "skipped");
     assert!(config.zip_storage_path.join("rust-system-config.json").exists());
@@ -94,7 +101,12 @@ async fn bootstrap_db_check_does_not_hard_fail_when_database_is_unreachable() {
     );
     assert_eq!(
         report.database.checked_tables,
-        vec!["system_configs", "rust_projects", "rust_project_archives"]
+        vec![
+            "system_configs",
+            "rust_projects",
+            "rust_project_archives",
+            "rust_scan_rule_assets"
+        ]
     );
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
@@ -167,7 +179,12 @@ async fn health_reports_degraded_when_bootstrap_is_degraded() {
     assert_eq!(payload["bootstrap"]["database"]["mode"], "db");
     assert_eq!(
         payload["bootstrap"]["database"]["checked_tables"],
-        serde_json::json!(["system_configs", "rust_projects", "rust_project_archives"])
+        serde_json::json!([
+            "system_configs",
+            "rust_projects",
+            "rust_project_archives",
+            "rust_scan_rule_assets"
+        ])
     );
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;

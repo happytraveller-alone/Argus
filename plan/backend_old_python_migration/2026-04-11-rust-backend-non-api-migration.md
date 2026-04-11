@@ -442,6 +442,17 @@
     - 会初始化默认 `system_config`
     - 会初始化空的 `rust-projects.json`
     - 不会导入 demo 用户、旧规则、旧用户态数据
+  - Rust 新增 `rust_scan_rule_assets` 规则资产库：
+    - 会把 `backend_old/app/db` 下扫描引擎规则资产导入 Rust 自己维护的数据库
+    - 当前覆盖：
+      - `rules/`
+      - `rules_from_patches/`
+      - `patches/`
+      - `gitleaks_builtin/`
+      - `bandit_builtin/`
+      - `rules_phpstan/`
+      - `rules_pmd/`
+      - `yasa_builtin/`
   - `backend/tests/bootstrap_startup.rs` 覆盖：
     - 文件存储根创建
     - 无 DB 时 file-mode control-plane init
@@ -452,11 +463,13 @@
   - Rust DB 启动检查已经和 Python 旧 DB 语义解耦，Python 只保留参考价值
   - Rust 已开始 owner startup init / recovery / preflight 的 orchestration 外壳
   - Rust 在 file-mode 下已经能独立自举最小 control-plane 状态
+  - `backend_old/app/db` 中仍有价值的扫描引擎规则资产，已经开始迁入 Rust 自有库，不再依赖 Python 侧灌库
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
   - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走
   - startup recovery 虽已由 Rust 编排接手，但恢复目标仍是 legacy task tables，属于迁移期桥
   - runner preflight 虽已迁到 Rust，但仍是启动前 runner 可用性检查，不是 runtime 迁移完成
+  - 扫描规则资产虽然已进 Rust DB，但后续各引擎的 Rust-native 读取与使用链路还没全部接上
   - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
 - 下一刀：
   - 继续迁 Phase A 剩余底座，把 DB/schema/init 流程的 source of truth 从 Python 挪到 Rust
