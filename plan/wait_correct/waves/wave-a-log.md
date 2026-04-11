@@ -92,3 +92,14 @@
 - 是否影响前端: 否，HTTP 主路径保持可用；健康态变得更诚实
 - 后续修复波次: Wave A 后续 / Batch 1 Slice 2
 - owner: Rust migration
+
+### 7. Rust now reports legacy schema version status itself
+
+- endpoint / feature: `backend/src/bootstrap/legacy_schema.rs`, `bootstrap.database.legacy_schema`, `/health`
+- Python 旧行为: 只有 Python `app.main` 知道 `alembic_version` 是否落后，并决定是否自动跑 `alembic upgrade head`
+- Rust 当前行为: Rust 会直接解析 `backend_old/alembic/versions/*.py` 推导 expected heads，并在 DB 可达时读取 `alembic_version.version_num`；缺失或不匹配时对 bootstrap 报 `degraded`
+- Rust 当前行为补充: parser 已兼容 typed/plain assignment 和多行 `down_revision`
+- Rust 当前行为补充: Rust 只接管可观测性与判定，不在启动期执行重型 migration
+- 是否影响前端: 否，新增的是健康态细节，不破坏旧字段
+- 后续修复波次: Wave A 后续 / Batch 1 Slice 3
+- owner: Rust migration

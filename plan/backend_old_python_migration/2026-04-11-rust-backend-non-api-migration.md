@@ -513,3 +513,44 @@
   - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
 - 下一刀：
   - 继续迁 Phase A 剩余底座，把 DB/schema/init 流程的 source of truth 从 Python 挪到 Rust
+
+### 2026-04-11 Batch 1 / Slice 2
+
+- 已完成：
+  - Rust 新增 `backend/src/bootstrap/legacy_schema.rs`
+  - Rust bootstrap 会直接解析 `backend_old/alembic/versions/*.py`，识别 legacy Alembic migration graph 的 expected heads
+  - parser 已兼容：
+    - `revision = "..."`
+    - `revision: Union[...] = "..."`
+    - `down_revision` 的单行与多行表达式
+  - Rust database bootstrap report 新增 `legacy_schema` 结构化状态：
+    - `status`
+    - `versions_dir`
+    - `expected_heads`
+    - `current_versions`
+    - `matches_expected_heads`
+    - `error`
+  - `/health` 已暴露 `bootstrap.database.legacy_schema`
+  - DB 可达时，Rust 会直接读取 `alembic_version.version_num`
+  - 若 `alembic_version` 缺失或当前版本与 expected heads 不一致，Rust 会把 bootstrap 标成 `degraded`
+  - DB 不可达或超时时，服务仍可启动，但 `legacy_schema` 会和整体 DB 状态一起诚实暴露降级/超时
+  - file-mode 下 `legacy_schema` 明确为 `skipped`
+  - `backend/tests/bootstrap_startup.rs` 与 `backend/src/bootstrap/mod.rs` 单测已补齐：
+    - typed/plain assignment 解析
+    - 多行 `down_revision` merge 解析
+    - 非法 `down_revision` 显式报错，不再静默当 root
+    - current versions 与 expected heads 的 match / missing / mismatch 降级语义
+- 当前意义：
+  - Rust 已开始接管 legacy schema version 的认知权，不再完全依赖 Python `app.main` 才知道数据库迁移是否落后
+  - `/health` 对“Rust 自身表是否齐全”和“Python legacy schema 是否对齐”都能给出结构化状态
+  - 这一步没有引入重型 migration 执行，符合“启动只做检查与诚实报告，不在 Rust 启动里跑 alembic”的边界
+  - Phase A 里 “schema version orchestration” 已从 Python-only 变成 Rust 具备检查与判定能力，但还没完全替掉 Python 的启动策略
+- 仍未完成：
+  - Rust 还不会执行或接管 legacy schema migration，只负责识别与报告
+  - Python `init_db()` 的完整语义仍未迁走
+  - startup recovery 仍指向 legacy task tables，属于迁移期桥
+  - runner preflight 仍是启动期 runner 可用性检查，不是 runtime ownership 完成
+  - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
+  - `phpstan` 的 Rust 规则消费链路仍未接入
+- 下一刀：
+  - 继续迁 Phase A / Phase C 交界处，把 Rust 对 schema/init 的“认知权”推进到“初始化与持久化语义 ownership”，优先收口 `init_db()` 仍然承载的 legacy 启动职责

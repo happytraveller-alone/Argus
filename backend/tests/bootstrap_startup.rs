@@ -56,6 +56,10 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
     assert_eq!(report.database.mode, "file");
     assert_eq!(report.database.status, "skipped");
     assert!(report.database.checked_tables.is_empty());
+    assert_eq!(report.database.legacy_schema.status, "skipped");
+    assert!(!report.database.legacy_schema.expected_heads.is_empty());
+    assert!(report.database.legacy_schema.current_versions.is_empty());
+    assert_eq!(report.database.legacy_schema.matches_expected_heads, None);
     assert_eq!(report.init.status, "ok");
     assert_eq!(
         report.init.policy.allowed_at_startup,
@@ -65,36 +69,37 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
             "rust_scan_rule_asset_sync"
         ]
     );
-    assert!(
-        report
-            .init
-            .policy
-            .forbidden_at_startup
-            .contains(&"demo_user_bootstrap".to_string())
-    );
-    assert!(
-        report
-            .init
-            .policy
-            .deferred_until_rust_owned
-            .contains(&"agent_task_seed_data".to_string())
-    );
-    assert!(
-        report.init.actions.iter().any(|action| action == "created default rust system config")
-    );
-    assert!(
-        report.init.actions.iter().any(|action| action == "created empty rust project store")
-    );
-    assert!(
-        report
-            .init
-            .actions
-            .iter()
-            .any(|action| action == "scan rule asset import skipped without rust db")
-    );
+    assert!(report
+        .init
+        .policy
+        .forbidden_at_startup
+        .contains(&"demo_user_bootstrap".to_string()));
+    assert!(report
+        .init
+        .policy
+        .deferred_until_rust_owned
+        .contains(&"agent_task_seed_data".to_string()));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "created default rust system config"));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "created empty rust project store"));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "scan rule asset import skipped without rust db"));
     assert_eq!(report.recovery.status, "skipped");
     assert_eq!(report.preflight.status, "skipped");
-    assert!(config.zip_storage_path.join("rust-system-config.json").exists());
+    assert!(config
+        .zip_storage_path
+        .join("rust-system-config.json")
+        .exists());
     assert!(config.zip_storage_path.join("rust-projects.json").exists());
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
@@ -130,6 +135,9 @@ async fn bootstrap_db_check_does_not_hard_fail_when_database_is_unreachable() {
             "rust_scan_rule_assets"
         ]
     );
+    assert_eq!(report.database.legacy_schema.status, report.database.status);
+    assert!(report.database.legacy_schema.current_versions.is_empty());
+    assert_eq!(report.database.legacy_schema.matches_expected_heads, None);
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }
@@ -159,12 +167,32 @@ async fn health_includes_bootstrap_status() {
     let payload: Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(payload["service"], "backend-rust");
-    assert!(payload.get("bootstrap").is_some(), "health must include bootstrap");
+    assert!(
+        payload.get("bootstrap").is_some(),
+        "health must include bootstrap"
+    );
     assert_eq!(payload["status"], "ok");
     assert_eq!(payload["bootstrap"]["file_store"]["status"], "ok");
     assert_eq!(
         payload["bootstrap"]["database"]["checked_tables"],
         serde_json::json!([])
+    );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["status"],
+        "skipped"
+    );
+    assert!(
+        payload["bootstrap"]["database"]["legacy_schema"]["expected_heads"]
+            .as_array()
+            .is_some_and(|heads| !heads.is_empty())
+    );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["current_versions"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["matches_expected_heads"],
+        serde_json::Value::Null
     );
     assert_eq!(payload["bootstrap"]["init"]["status"], "ok");
     assert_eq!(
@@ -178,9 +206,7 @@ async fn health_includes_bootstrap_status() {
     let denied = payload["bootstrap"]["init"]["policy"]["forbidden_at_startup"]
         .as_array()
         .expect("forbidden_at_startup should be an array");
-    assert!(
-        denied.iter().any(|item| item == "demo_user_bootstrap")
-    );
+    assert!(denied.iter().any(|item| item == "demo_user_bootstrap"));
     let deferred = payload["bootstrap"]["init"]["policy"]["deferred_until_rust_owned"]
         .as_array()
         .expect("deferred_until_rust_owned should be an array");
@@ -226,6 +252,18 @@ async fn health_reports_degraded_when_bootstrap_is_degraded() {
             "rust_scan_rule_assets"
         ])
     );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["status"],
+        payload["bootstrap"]["database"]["status"]
+    );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["current_versions"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        payload["bootstrap"]["database"]["legacy_schema"]["matches_expected_heads"],
+        serde_json::Value::Null
+    );
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }
@@ -249,7 +287,9 @@ async fn bootstrap_fails_when_zip_storage_root_cannot_be_created() {
 
     let report = state.bootstrap.read().await.clone();
     assert_eq!(report.file_store.status, "error");
-    assert!(error.to_string().contains("bootstrap failed to initialize file storage root"));
+    assert!(error
+        .to_string()
+        .contains("bootstrap failed to initialize file storage root"));
 
     let _ = tokio::fs::remove_file(&blocked_parent).await;
 }

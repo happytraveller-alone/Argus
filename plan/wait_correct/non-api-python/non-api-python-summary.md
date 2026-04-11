@@ -41,7 +41,9 @@
   - `backend/src/bootstrap/mod.rs` 已负责最小启动检查
   - `backend/src/main.rs` 已在 `serve` 前执行 bootstrap
   - `/health` 已暴露 bootstrap 状态
-  - Rust DB bootstrap 只检查 Rust 自己依赖的表，不再盯 Python `alembic_version`
+  - Rust DB bootstrap 已同时具备两层状态判断：
+    - Rust 自己依赖表是否齐全
+    - legacy Python schema version 是否与 `backend_old/alembic/versions/*.py` 推导出的 expected heads 对齐
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
   - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
   - `backend/assets/scan_rule_assets/` 已成为 Rust 规则资产 root，并导入 `rust_scan_rule_assets`
@@ -50,8 +52,13 @@
   - Opengrep 已开始实际消费 Rust 规则资产库中的 internal / patch 规则目录
   - Bandit 已开始实际消费 Rust 规则资产库中的 builtin snapshot
   - PMD 已开始实际消费 Rust 规则资产库中的 builtin XML rulesets
+  - `/health` 中 `bootstrap.database.legacy_schema` 已会报告：
+    - `expected_heads`
+    - `current_versions`
+    - `matches_expected_heads`
+    - `error`
 - still missing:
-  - Python `app.main` 内的 schema version orchestration
+  - Rust 只接管了 legacy schema version 的检查与报告，还没有接管 migration 执行策略
   - `init_db()` 的完整 Rust 版本
   - recovery 对 legacy task tables 的依赖删除
   - runner preflight 后续与 Rust runtime 的进一步打通

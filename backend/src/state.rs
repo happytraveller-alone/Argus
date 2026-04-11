@@ -45,31 +45,87 @@ impl Default for FileStoreBootstrapStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LegacySchemaBootstrapStatus {
+    pub status: String,
+    pub versions_dir: String,
+    pub expected_heads: Vec<String>,
+    pub current_versions: Vec<String>,
+    pub matches_expected_heads: Option<bool>,
+    pub error: Option<String>,
+}
+
+impl LegacySchemaBootstrapStatus {
+    pub fn skipped(versions_dir: String, expected_heads: Vec<String>) -> Self {
+        Self {
+            status: "skipped".to_string(),
+            versions_dir,
+            expected_heads,
+            current_versions: Vec::new(),
+            matches_expected_heads: None,
+            error: None,
+        }
+    }
+
+    pub fn db_not_run(versions_dir: String, expected_heads: Vec<String>) -> Self {
+        Self {
+            status: BootstrapStatus::NotRun.as_str().to_string(),
+            versions_dir,
+            expected_heads,
+            current_versions: Vec::new(),
+            matches_expected_heads: None,
+            error: None,
+        }
+    }
+
+    pub fn with_error(mut self, status: &str, error: String) -> Self {
+        self.status = status.to_string();
+        self.error = Some(error);
+        self
+    }
+}
+
+impl Default for LegacySchemaBootstrapStatus {
+    fn default() -> Self {
+        Self {
+            status: BootstrapStatus::NotRun.as_str().to_string(),
+            versions_dir: String::new(),
+            expected_heads: Vec::new(),
+            current_versions: Vec::new(),
+            matches_expected_heads: None,
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatabaseBootstrapStatus {
     pub mode: String,
     pub status: String,
     pub checked_tables: Vec<String>,
     pub missing_tables: Vec<String>,
+    pub legacy_schema: LegacySchemaBootstrapStatus,
     pub error: Option<String>,
 }
 
 impl DatabaseBootstrapStatus {
-    pub fn file_mode() -> Self {
+    pub fn file_mode(legacy_schema: LegacySchemaBootstrapStatus) -> Self {
         Self {
             mode: "file".to_string(),
             status: "skipped".to_string(),
             checked_tables: Vec::new(),
             missing_tables: Vec::new(),
+            legacy_schema,
             error: None,
         }
     }
 
-    pub fn db_mode() -> Self {
+    pub fn db_mode(legacy_schema: LegacySchemaBootstrapStatus) -> Self {
         Self {
             mode: "db".to_string(),
             status: BootstrapStatus::NotRun.as_str().to_string(),
             checked_tables: Vec::new(),
             missing_tables: Vec::new(),
+            legacy_schema,
             error: None,
         }
     }
@@ -179,7 +235,7 @@ impl BootstrapReport {
         Self {
             overall: BootstrapStatus::Ok.as_str().to_string(),
             file_store: FileStoreBootstrapStatus::default(),
-            database: DatabaseBootstrapStatus::file_mode(),
+            database: DatabaseBootstrapStatus::file_mode(LegacySchemaBootstrapStatus::default()),
             init: StartupInitStatus::default(),
             recovery: StartupRecoveryStatus::default(),
             preflight: RunnerPreflightStatus::default(),
@@ -265,6 +321,7 @@ impl AppState {
                     status: BootstrapStatus::NotRun.as_str().to_string(),
                     checked_tables: Vec::new(),
                     missing_tables: Vec::new(),
+                    legacy_schema: LegacySchemaBootstrapStatus::default(),
                     error: None,
                 },
                 init: StartupInitStatus::default(),
