@@ -64,8 +64,8 @@
 ### 4. Search 和 skills 当前是最小可用契约，不是 Python 旧行为的逐字段复刻
 
 - endpoint / feature: `/api/v1/search/*`, `/api/v1/skills/*`
-- Python 旧行为: 依赖旧搜索服务、scan-core 元数据和复杂 DB 关联
-- Rust 当前行为: 先提供前端主路径所需最小契约，部分统计和 skill test 结果为迁移期占位输出
+- Python 旧行为: 依赖旧搜索服务、scan-core 元数据和复杂 DB 关联，以及 legacy `prompt_skills` / `user_configs`
+- Rust 当前行为: project search 已 Rust-owned，但 tasks/findings 仍是空壳；skills 先提供前端主路径所需最小契约，但 custom prompt skills 和 builtin prompt state 仍绑在 Python 旧存储
 - 是否影响前端: 当前主路径不受影响
 - 后续修复波次: Wave A 后续 / Wave B
 - owner: Rust migration

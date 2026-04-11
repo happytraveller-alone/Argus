@@ -55,6 +55,23 @@
 - `backend/src/routes/skills.rs`
 - `backend/src/proxy.rs`
 
+### 需要明确写死的现状修正
+
+- `projects`
+  - Rust 已经是项目主数据面的 source of truth
+  - 但写路径仍会同步 legacy `projects / project_info / project_management_metrics`
+- `system-config`
+  - Rust 已经是系统配置主存储
+  - 但保存/删除仍会同步 legacy `user_configs`
+- `skills`
+  - 不能算“已吃掉”
+  - custom prompt skills 在 DB 模式下仍直接读写 legacy `prompt_skills`
+  - builtin prompt state 仍直接绑在 `user_configs.other_config`
+- `search`
+  - 不能算整体完成
+  - 当前只有 project search 真正 Rust-owned
+  - `tasks / findings` 仍只是 Rust 空壳，不是完整迁移
+
 ### 当前仍存在的迁移期桥
 
 - `projects` Python mirror
@@ -65,9 +82,15 @@
   - 删除前置条件：LLM / agent preflight / task runtime 全部改为只读 Rust config
 - `skills` mirror
   - Rust 文件：`backend/src/routes/skills.rs`
-  - 删除前置条件：agent workflow / prompt skill merge / skill test runner 改为 Rust-owned
+  - 更准确地说：legacy `prompt_skills` / `user_configs.other_config` 仍是主存储
+  - 删除前置条件：prompt skill storage、builtin prompt state、agent workflow / skill test runner 全部改为 Rust-owned
 - `/api/v1/*` proxy fallback
   - Rust 文件：`backend/src/proxy.rs`
+  - 当前仍在 proxy 后的主战场：
+    - Phase A: `config` old path compat
+    - Phase B: `users` / `projects members`
+    - Phase D: `static-tasks`
+    - Phase E: `prompts` / `rules` / `agent-tasks` / `agent-test`
   - 删除前置条件：`static-tasks`、`agent-tasks` 以及剩余 Python API 路由都完成 Rust 接管
 
 ## Inventory Summary

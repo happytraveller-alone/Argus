@@ -40,8 +40,17 @@
 - current state:
   - `backend/src/routes/projects.rs` 仍有 Python project mirror
   - `backend/src/routes/system_config.rs` 仍有 Python user-config mirror
-  - `backend/src/routes/skills.rs` 仍有 skills mirror
+  - `backend/src/routes/skills.rs` 不是简单 mirror，legacy `prompt_skills` 和 `user_configs.other_config` 仍是主存储
   - `backend/src/proxy.rs` 仍承接未迁移 `/api/v1/*`
 - owner: Rust migration
 - delete gate:
   - `static-tasks` / `agent-tasks` 以及对应 runtime、llm、agent 内核全部 Rust-owned
+
+### 3. search is only partially migrated
+
+- current state:
+  - project search 已 Rust-owned
+  - tasks / findings search 仍只是 Rust 空壳，不应记为“搜索已完成迁移”
+- owner: Rust migration
+- delete gate:
+  - 任务、finding、规则等搜索索引和查询模型迁到 Rust domain / db 层
