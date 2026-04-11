@@ -70,6 +70,13 @@
   - `backend_old/app/api/v1/endpoints/agent_tasks.py` 已移除 tasks import/re-export 与 tasks router 挂载
   - Rust `backend/src/routes/agent_tasks.rs` 已覆盖 `/api/v1/agent-tasks`、`/{task_id}`、`/{task_id}/cancel`、`/{task_id}/events*`
   - inventory 中七条 agent-task lifecycle route 已登记为 Rust-owned (`migrate`)
+- Python v1 API router mounts retired:
+  - `backend_old/app/api/v1/api.py` 已移除 `agent_tasks` / `static_tasks` include_router，`api_router` 仅保留空 APIRouter 壳
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py` 与 `backend_old/tests/test_agent_tasks_module_layout.py` 已改为断言 router 无 mounted paths
+- Stale top-level search/rules proxy inventory retired:
+  - `backend_old/app/api/v1/endpoints/search.py` 与 `backend_old/app/api/v1/endpoints/rules.py` 当前仓库不存在
+  - inventory 中 legacy `/api/v1/findings/search`、`/api/v1/tasks/search`、`/api/v1/rules*` 已由 `proxy` 切换为 `retire`
+  - Python inventory 现已满足 `proxy = 0`
 
 ## Wait Correct Entries
 

@@ -44,4 +44,4 @@ def test_agent_tasks_api_router_import_remains_healthy():
     from app.api.v1.api import api_router
 
     paths = {route.path for route in api_router.routes}
-    assert "/agent-tasks/" in paths
+    assert paths == set()

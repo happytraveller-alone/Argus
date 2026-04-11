@@ -29,7 +29,7 @@ DELETE,/api/v1/config/me,retire,old /config contract retired (replaced by /syste
 GET,/api/v1/config/me,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py
 PUT,/api/v1/config/me,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py
 POST,/api/v1/config/test-llm,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py
-GET,/api/v1/findings/search,proxy,not yet migrated in this wave but still required,search,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/search.py
+GET,/api/v1/findings/search,retire,legacy top-level findings search contract retired; Python search endpoint file absent and Rust search lives under /api/v1/search/*,search,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/search.py
 GET,/api/v1/projects,migrate,owned in current wave (/api/v1/projects),projects_crud,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/projects_crud.py
 POST,/api/v1/projects,migrate,owned in current wave (/api/v1/projects),projects_crud,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/projects_crud.py
 POST,/api/v1/projects/cache/clear,migrate,owned in current wave (/api/v1/projects),projects_files,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/projects_files.py
@@ -68,17 +68,17 @@ DELETE,/api/v1/prompts/{template_id},defer,prompts deferred in current waves,pro
 GET,/api/v1/prompts/{template_id},defer,prompts deferred in current waves,prompts,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/prompts.py
 PUT,/api/v1/prompts/{template_id},defer,prompts deferred in current waves,prompts,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/prompts.py
 POST,/api/v1/prompts/{template_id}/set-default,defer,prompts deferred in current waves,prompts,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/prompts.py
-GET,/api/v1/rules,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-POST,/api/v1/rules,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-POST,/api/v1/rules/import,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-DELETE,/api/v1/rules/{rule_set_id},proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-GET,/api/v1/rules/{rule_set_id},proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-PUT,/api/v1/rules/{rule_set_id},proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-GET,/api/v1/rules/{rule_set_id}/export,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-POST,/api/v1/rules/{rule_set_id}/rules,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-DELETE,/api/v1/rules/{rule_set_id}/rules/{rule_id},proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-PUT,/api/v1/rules/{rule_set_id}/rules/{rule_id},proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
-PUT,/api/v1/rules/{rule_set_id}/rules/{rule_id}/toggle,proxy,not yet migrated in this wave but still required,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+GET,/api/v1/rules,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+POST,/api/v1/rules,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+POST,/api/v1/rules/import,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+DELETE,/api/v1/rules/{rule_set_id},retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+GET,/api/v1/rules/{rule_set_id},retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+PUT,/api/v1/rules/{rule_set_id},retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+GET,/api/v1/rules/{rule_set_id}/export,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+POST,/api/v1/rules/{rule_set_id}/rules,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+DELETE,/api/v1/rules/{rule_set_id}/rules/{rule_id},retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+PUT,/api/v1/rules/{rule_set_id}/rules/{rule_id},retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
+PUT,/api/v1/rules/{rule_set_id}/rules/{rule_id}/toggle,retire,legacy top-level rules contract retired; Python rules endpoint file absent and rule management moved to /api/v1/static-tasks/rules*,rules,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/rules.py
 GET,/api/v1/search,migrate,owned in current wave (/api/v1/search),search,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/search.py
 GET,/api/v1/skills/catalog,migrate,owned in current wave (/api/v1/skills),skills,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/skills.py
 GET,/api/v1/skills/prompt-skills,migrate,owned in current wave (/api/v1/skills),skills,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/skills.py
@@ -185,7 +185,7 @@ GET,/api/v1/static-tasks/tasks/{task_id}/findings/{finding_id},migrate,rust-owne
 GET,/api/v1/static-tasks/tasks/{task_id}/findings/{finding_id}/context,migrate,rust-owned static-tasks route group; python opengrep-tasks endpoint retired,static_tasks_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/static_tasks.rs
 POST,/api/v1/static-tasks/tasks/{task_id}/interrupt,migrate,rust-owned static-tasks route group; python opengrep-tasks endpoint retired,static_tasks_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/static_tasks.rs
 GET,/api/v1/static-tasks/tasks/{task_id}/progress,migrate,rust-owned static-tasks route group; python opengrep-tasks endpoint retired,static_tasks_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/static_tasks.rs
-GET,/api/v1/tasks/search,proxy,not yet migrated in this wave but still required,search,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/search.py
+GET,/api/v1/tasks/search,retire,legacy top-level task search contract retired; Python search endpoint file absent and Rust search lives under /api/v1/search/*,search,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/search.py
 GET,/api/v1/users,retire,users scope removed in Rust plan,users,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/users.py
 POST,/api/v1/users,retire,users scope removed in Rust plan,users,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/users.py
 GET,/api/v1/users/me,retire,users scope removed in Rust plan,users,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/users.py
