@@ -27,7 +27,7 @@ from app.api.v1.endpoints.static_tasks_shared import (
     ensure_scan_workspace,
 )
 from app.core.config import settings
-from app.db.static_finding_paths import normalize_static_scan_file_path
+from app.services.scan_path_utils import normalize_scan_file_path
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 
 from .base import (
@@ -263,7 +263,7 @@ class PhpstanBootstrapScanner(StaticBootstrapScanner):
                         id=f"phpstan-{index}",
                         title=title,
                         description=description,
-                        file_path=normalize_static_scan_file_path(
+                        file_path=normalize_scan_file_path(
                             str(file_path or "").strip(),
                             "/scan/project",
                         ),

@@ -29,7 +29,6 @@ from app.api.v1.endpoints.static_tasks_shared import (
     ensure_scan_workspace,
 )
 from app.core.config import settings
-from app.db.static_finding_paths import normalize_static_scan_file_path
 from app.models.agent_task import AgentTask
 from app.models.bandit import BanditRuleState
 from app.models.opengrep import OpengrepRule
@@ -39,6 +38,7 @@ from app.services.agent.bootstrap import (
     OpenGrepBootstrapScanner,
     PhpstanBootstrapScanner,
 )
+from app.services.scan_path_utils import normalize_scan_file_path
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from app.services.agent.utils.vulnerability_naming import (
     normalize_cwe_id as normalize_cwe_id_util,
@@ -381,7 +381,7 @@ def _normalize_bootstrap_finding_from_gitleaks_payload(
 ) -> Dict[str, Any]:
     rule_id = str(finding.get("RuleID") or "gitleaks_secret").strip()
     description = str(finding.get("Description") or "Gitleaks 密钥泄露候选").strip()
-    file_path = normalize_static_scan_file_path(
+    file_path = normalize_scan_file_path(
         str(finding.get("File") or "").strip(),
         "/scan/project",
     )

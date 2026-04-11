@@ -19,7 +19,7 @@ from app.api.v1.endpoints.static_tasks_shared import (
     ensure_scan_workspace,
 )
 from app.core.config import settings
-from app.db.static_finding_paths import normalize_static_scan_file_path
+from app.services.scan_path_utils import normalize_scan_file_path
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 
 from .base import (
@@ -121,7 +121,7 @@ class BanditBootstrapScanner(StaticBootstrapScanner):
             test_id = str(payload.get("test_id") or "").strip()
             test_name = str(payload.get("test_name") or "").strip()
             issue_text = str(payload.get("issue_text") or "").strip()
-            file_path = normalize_static_scan_file_path(
+            file_path = normalize_scan_file_path(
                 str(payload.get("filename") or "").strip(),
                 "/scan/project",
             )

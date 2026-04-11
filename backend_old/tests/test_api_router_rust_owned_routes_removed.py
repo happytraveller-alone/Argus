@@ -54,6 +54,11 @@ def test_legacy_init_db_module_has_been_retired():
     assert not init_db_path.exists()
 
 
+def test_legacy_scan_path_db_helper_module_has_been_retired():
+    retired_helper_path = PROJECT_ROOT / "app/db" / "_".join(["static", "finding_paths.py"])
+    assert not retired_helper_path.exists()
+
+
 def test_legacy_agent_tasks_execution_module_has_been_retired():
     execution_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_execution.py"
     assert not execution_path.exists()

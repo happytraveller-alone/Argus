@@ -22,8 +22,8 @@ from app.api.v1.endpoints.static_tasks_shared import (
     ensure_scan_workspace,
 )
 from app.core.config import settings
-from app.db.static_finding_paths import normalize_static_scan_file_path
 from app.models.opengrep import OpengrepRule
+from app.services.scan_path_utils import normalize_scan_file_path
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 
 from .base import (
@@ -174,7 +174,7 @@ class OpenGrepBootstrapScanner(StaticBootstrapScanner):
             extra = payload.get("extra") if isinstance(payload.get("extra"), dict) else {}
             title = extra.get("message") or str(check_id or "OpenGrep 发现")
             description = extra.get("message") or ""
-            file_path = normalize_static_scan_file_path(
+            file_path = normalize_scan_file_path(
                 str(payload.get("path") or "").strip(),
                 "/scan/project",
             )
