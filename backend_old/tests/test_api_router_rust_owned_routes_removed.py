@@ -47,3 +47,8 @@ def test_legacy_api_deps_module_has_been_retired():
 def test_legacy_static_tasks_facade_module_has_been_retired():
     static_tasks_path = PROJECT_ROOT / "app/api/v1/endpoints/static_tasks.py"
     assert not static_tasks_path.exists()
+
+
+def test_legacy_init_db_module_has_been_retired():
+    init_db_path = PROJECT_ROOT / "app/db/init_db.py"
+    assert not init_db_path.exists()

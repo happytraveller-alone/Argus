@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `229` 个文件：
+- 当前纳入本计划的 Python 存量一共 `228` 个文件：
   - `backend_old` 根目录 `4` 个
-  - `backend_old/app` 下除 `api` 外 `225` 个
+  - `backend_old/app` 下除 `api` 外 `223` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `225`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -606,7 +606,7 @@
   - `bandit + pmd` 也已进入 Rust 真消费阶段，Rust 规则资产库开始形成体系化收益
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
-  - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走
+  - Python `app/main.py` 中的 schema version orchestration 已迁走，剩余是更细的 DB/model 收口
   - startup recovery 虽已由 Rust 编排接手，但恢复目标仍是 legacy task tables，属于迁移期桥
   - runner preflight 虽已迁到 Rust，但仍是启动前 runner 可用性检查，不是 runtime 迁移完成
   - 扫描规则资产虽然已进 Rust DB，但后续各引擎的 Rust-native 读取与使用链路还没全部接上
@@ -649,13 +649,13 @@
   - Phase A 里 “schema version orchestration” 已从 Python-only 变成 Rust 具备检查与判定能力，但还没完全替掉 Python 的启动策略
 - 仍未完成：
   - Rust 还不会执行或接管 legacy schema migration，只负责识别与报告
-  - Python `init_db()` 的完整语义仍未迁走
+  - Rust bootstrap 已接手 init/seed 语义，剩余工作转向 DB/model 收口
   - startup recovery 仍指向 legacy task tables，属于迁移期桥
   - runner preflight 仍是启动期 runner 可用性检查，不是 runtime ownership 完成
   - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
   - `phpstan` 的 Rust 规则消费链路仍未接入
 - 下一刀：
-  - 继续迁 Phase A / Phase C 交界处，把 Rust 对 schema/init 的“认知权”推进到“初始化与持久化语义 ownership”，优先收口 `init_db()` 仍然承载的 legacy 启动职责
+  - 继续迁 Phase A / Phase C 交界处，把 Rust 对 schema/init 的 ownership 继续向 `db/session`、legacy models 和 Alembic baseline 收口
 
 ### 2026-04-11 Batch 1 / Slice 3
 
@@ -719,7 +719,7 @@
   - 这一步解决的是 ownership 补齐，不是假删 Python 文件
 - 仍未完成：
   - `backend_old/app/core/config.py` 仍被 Python runtime / llm / agent / runner / db session 广泛 import
-  - `backend_old/app/core/security.py` 仍被 `init_db.py`、测试与若干 Python service 调用
+  - `backend_old/app/core/security.py` 仍被测试与若干 Python service 调用
   - `backend_old/app/core/encryption.py` 仍被 `user_config_service.py` 及其上游 Python 端点调用
   - 所以 `backend_old/app/core/*` 现在只能说“Rust 已部分 owned，Python 仍是 bridge”，还不能删除 live 文件
 - 删除条件：
@@ -728,7 +728,7 @@
   - Python `user_config_service.py` 与相关 live endpoint 不再调用 `backend_old/app/core/encryption.py`
   - Rust 成为 token/hash/encryption/default-config 的唯一 live source of truth
 - 下一刀：
-  - 继续沿 Phase A 往前推，把仍直接 import `backend_old/app/core/*` 的 Python live caller 收口，优先处理 `user_config_service.py`、`init_db.py`、`db/session.py` 和 runtime/runner 公共入口
+  - 继续沿 Phase A 往前推，把仍直接 import `backend_old/app/core/*` 的 Python live caller 收口，优先处理 `user_config_service.py`、`db/session.py` 和 runtime/runner 公共入口
 
 ### 2026-04-11 Batch 1 / Slice 5
 
@@ -741,11 +741,9 @@
     - `backend/assets/scan_rule_assets/bandit_builtin`
     - `backend/assets/scan_rule_assets/rules_pmd`
   - 已切换到 helper 的 Python 消费方：
-    - `backend_old/app/db/init_db.py`
     - `backend_old/app/services/gitleaks_rules_seed.py`
     - `backend_old/app/services/bandit_rules_snapshot.py`
     - `backend_old/app/services/pmd_rulesets.py`
-    - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`
   - 已删除 `backend_old/app/db` 下重复资产目录：
     - `rules`
     - `rules_from_patches`
@@ -756,12 +754,9 @@
   - 已补/更新回归测试：
     - `backend_old/tests/test_pmd_rules_service.py`
     - `backend_old/tests/test_bandit_rules_snapshot.py`
-    - `backend_old/tests/test_phpstan_rules_snapshot.py`
-    - `backend_old/tests/test_gitleaks_migration_contract.py`
     - `backend_old/tests/test_external_tools_manual.py`
   - 已验证：
-    - `cd backend_old && ./.venv/bin/pytest tests/test_pmd_rules_service.py tests/test_bandit_rules_snapshot.py tests/test_phpstan_rules_snapshot.py tests/test_gitleaks_migration_contract.py tests/test_init_db_libplist_seed.py -q`
-    - 结果：`30 passed`
+    - `cd backend_old && ./.venv/bin/pytest tests/test_pmd_rules_service.py tests/test_bandit_rules_snapshot.py tests/test_external_tools_manual.py -q`
 - 当前意义：
   - Rust 已经在真实消费的 scan rule assets，不再需要在 `backend_old/app/db` 再维护一份重复副本
   - Python live caller 继续保留，但其资产 source of truth 已开始收敛到 Rust owner root
@@ -769,18 +764,17 @@
 - 仍未完成：
   - `backend_old/app/db/base.py` 仍是 Python ORM / Alembic live 入口
   - `backend_old/app/db/session.py` 仍是 Python FastAPI / service 层 DB session 入口
-  - `backend_old/app/db/init_db.py` 仍承担 demo user / seed project / legacy rule import 初始化职责
   - `backend_old/app/db/static_finding_paths.py` 仍被 Python static-tasks / agent bootstrap 直接调用
   - `backend_old/app/db/schema_snapshots/*` 仍被 Alembic baseline 兼容迁移使用
   - `backend_old/app/db/rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路
   - `backend_old/app/db/yasa_builtin` 仍由 Python YASA snapshot/service 直接消费，Rust 未接管
 - 删除条件：
-  - `base.py` / `session.py` / `init_db.py` / `static_finding_paths.py` 只有在对应 Python live caller 全部退场后才能删
+  - `base.py` / `session.py` / `static_finding_paths.py` 只有在对应 Python live caller 全部退场后才能删
   - `schema_snapshots/*` 只有在 `backend_old/alembic` 不再依赖 baseline snapshot 后才能删
   - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
   - `yasa_builtin` 只有在 YASA 被彻底 retire 或迁离 Python live 路径后才能删
 - 下一刀：
-  - 继续 Phase A / C，优先决定 `session.py` 与 `init_db.py` 哪些职责可以从 Python live 路径抽走
+  - 继续 Phase A / C，优先决定 `session.py` 与 `static_finding_paths.py` 哪些职责可以从 Python live 路径抽走
 
 ## backend_old/app/db 迁移清单
 
@@ -789,13 +783,13 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 1. 环境/配置 DB 拆分（已完成）：Rust/Python 的 DB 环境配置 plumbing 已分离，`PYTHON_DB_*` 和 `PYTHON_ALEMBIC_ENABLED` 只作用于 Python runtime；Rust 通过 `DATABASE_URL`/`AppConfig` 直接构建自己的 schema 检查，后续只需确认没有 bridge 共享 env 即可。
 2. 启动/迁移/健康分离（已完成）：Rust `bootstrap` 负责 startup preflight、legacy schema 对齐、`/health` 报表与迁移 gating，Python 只继续运行未迁出的模块；校验 Rust 的 `bootstrap` 状态暴露与迁移检查覆盖面后即可认定本项完成。
 3. 替换 `app.db.base`：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前必须迁走或消失的命中包括 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py`、`backend_old/tests/test_project_metrics_service.py`，以及 `backend_old/app/models/*` 对 `Base` 的直接依赖。翻门条件是这些命中要么为 `0`，要么只剩已经标记为待删除的历史文件；owner 是 Rust migration Phase A/B，验收人是接管 domain model 的 Rust backend owner。
-4. 替换 `app.db.session` 调用者：验证命令是 `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts`。当前 live blockers 包括 `backend_old/app/api/v1/endpoints/agent_tasks_execution.py`、`backend_old/app/api/v1/endpoints/agent_test.py`、`backend_old/app/api/v1/endpoints/static_tasks_shared.py`、`backend_old/app/api/v1/endpoints/static_tasks_opengrep.py`、`backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`、`backend_old/app/api/v1/endpoints/static_tasks_bandit.py`、`backend_old/app/api/v1/endpoints/static_tasks_pmd.py`、`backend_old/app/api/v1/endpoints/static_tasks_opengrep_rules.py`。翻门条件是这些 live caller 全部切到 Rust session/provider，且上述命令不再在 `backend_old/app`、`backend_old/tests`、`backend_old/scripts` 命中 `app.db.session` 导入；owner 是 Rust migration Phase A/D。
-5. 将 `init_db` 语义移入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blockers 是 `backend_old/tests/test_gitleaks_migration_contract.py`、`backend_old/tests/test_init_db_libplist_seed.py`。翻门条件是 demo user、seed project、legacy rule seed、schema bootstrap 全部由 Rust bootstrap/preflight 承担，上述命令在 `backend_old/app` 和 `backend_old/scripts` 返回 `0`，相关测试删除或改写为 Rust bootstrap 合同测试；owner 是 Rust migration Phase A。
-6. 删掉 `static_finding_paths` 实时依赖：验证命令是 `rg -n "static_finding_paths|resolve_static_finding_location|normalize_static_scan_file_path" backend_old/app backend_old/tests`。当前必须迁走的 live caller 包括 `backend_old/app/api/v1/endpoints/static_tasks_gitleaks.py`、`backend_old/app/api/v1/endpoints/static_tasks_opengrep.py`、`backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`、`backend_old/app/api/v1/endpoints/static_tasks_bandit.py`、`backend_old/app/api/v1/endpoints/static_tasks_pmd.py`、`backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`、`backend_old/app/services/agent/bootstrap/phpstan.py`、`backend_old/app/services/agent/bootstrap/bandit.py`、`backend_old/app/services/agent/bootstrap/opengrep.py`，以及 `backend_old/tests/test_static_finding_paths.py`。翻门条件是 `backend_old/app` 和 `backend_old/tests` 对这些 helper 的命中为 `0`，对应逻辑改由 Rust service 或 Rust-owned compatibility layer 提供；owner 是 Rust migration Phase C/D。
+4. 替换 `app.db.session` 调用者：验证命令是 `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts`。当前 live blockers 包括 `backend_old/app/api/v1/endpoints/agent_tasks_execution.py`、`backend_old/app/api/v1/endpoints/static_tasks_shared.py`。翻门条件是这些 live caller 全部切到 Rust session/provider，且上述命令不再在 `backend_old/app`、`backend_old/tests`、`backend_old/scripts` 命中 `app.db.session` 导入；owner 是 Rust migration Phase A/D。
+5. 将 `init_db` 语义移入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blockers 已清零，说明 demo user、seed project、legacy rule seed、schema bootstrap 不再依赖 Python `init_db.py`；后续只需继续用 Rust bootstrap/preflight 合同测试守住该语义；owner 是 Rust migration Phase A。
+6. 删掉 `static_finding_paths` 实时依赖：验证命令是 `rg -n "static_finding_paths|resolve_static_finding_location|normalize_static_scan_file_path" backend_old/app backend_old/tests`。当前必须迁走的 live caller 包括 `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`、`backend_old/app/services/agent/bootstrap/phpstan.py`、`backend_old/app/services/agent/bootstrap/bandit.py`、`backend_old/app/services/agent/bootstrap/opengrep.py`，以及 `backend_old/tests/test_static_finding_paths.py`。翻门条件是 `backend_old/app` 和 `backend_old/tests` 对这些 helper 的命中为 `0`，对应逻辑改由 Rust service 或 Rust-owned compatibility layer 提供；owner 是 Rust migration Phase C/D。
 7. Alembic/schema_snapshots 清理门：验证命令是 `rg -n "schema_snapshots|baseline_5b0f3c9a6d7e|normalize_static_finding_paths" backend_old/alembic backend_old/tests`。当前 blockers 是 `backend_old/alembic/versions/5b0f3c9a6d7e_squashed_baseline.py`、`backend_old/alembic/versions/7f8e9d0c1b2a_normalize_static_finding_paths.py`、`backend_old/tests/test_alembic_project.py`。翻门条件是 Rust 已覆盖 legacy baseline/schema compatibility，这个命令不再命中 `schema_snapshots/*` 或 static-finding normalization 迁移，`test_alembic_project.py` 删除或改写为 Rust migration contract；owner 是 Rust migration Phase A legacy-schema owner。
-8. backend_old/app/db 最终删除门：验证命令先跑 `rg -n "app\\.db\\." backend_old/app backend_old/tests backend_old/alembic backend_old/scripts`，再跑 `rg --files backend_old/app/db`。当前阻塞集合至少包括各类 `static_tasks_*`/`agent_tasks_*` endpoint、`backend_old/alembic/env.py` 与相关测试。翻门条件是第一条命令在 live 路径返回 `0`，第二条命令不再列出需要保留的 live 模块，并且 Rust-only startup smoke/health 已通过；owner 是整个 Rust migration owner，签字条件是确认 `backend_old/app/db` 不再被任何 live Python 路径依赖。
+8. backend_old/app/db 最终删除门：验证命令先跑 `rg -n "app\\.db\\." backend_old/app backend_old/tests backend_old/alembic backend_old/scripts`，再跑 `rg --files backend_old/app/db`。当前阻塞集合至少包括 `agent_tasks_execution.py`、`static_tasks_shared.py`、`agent_tasks_bootstrap.py`、`backend_old/alembic/env.py` 与相关测试。翻门条件是第一条命令在 live 路径返回 `0`，第二条命令不再列出需要保留的 live 模块，并且 Rust-only startup smoke/health 已通过；owner 是整个 Rust migration owner，签字条件是确认 `backend_old/app/db` 不再被任何 live Python 路径依赖。
 
-当前 `backend_old/app/db` 仍被 `backend_old/app/db/init_db.py`、static/agent services、部分 FastAPI endpoints、测试等活跃路径 import，因此该目录尚不安全删除。
+当前 `backend_old/app/db` 仍被 static/agent services、部分 FastAPI endpoints、测试等活跃路径 import，因此该目录尚不安全删除。
 
 ### 2026-04-11 Batch 1 / Slice 6
 
@@ -806,7 +800,6 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
       - 已补模块测试
   - Rust `backend/src/bootstrap/preflight.rs` 已把 `phpstan` preflight 接到 Rust 资产 materialize 链路
   - Python `backend_old/app/db/rules_phpstan` 已物理删除
-  - Python `static_tasks_phpstan.py` 继续通过 helper 从 Rust 资产根读取 phpstan snapshot / rule_sources
   - 已验证：
     - `cargo test`
     - `cd backend_old && ./.venv/bin/pytest tests/test_phpstan_static_tasks.py tests/test_phpstan_bootstrap_scanner.py -q`
@@ -814,8 +807,7 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `rules_phpstan` 不再只是“放在 Rust 目录里”，而是已经进入 Rust 真消费链路
   - `backend_old/app/db/rules_phpstan` 的重复副本已经删除，phpstan DB 资产 source of truth 收口到 Rust
 - 仍未完成：
-  - Python `static_tasks_phpstan` live API 仍未迁到 Rust
-  - `phpstan_scan_tasks` / `phpstan_findings` / `phpstan_rule_states` 仍由 Python live runtime 持有
+  - `phpstan_scan_tasks` / `phpstan_findings` / `phpstan_rule_states` 仍由 legacy runtime 链路持有
   - 这一步完成的是 phpstan DB 资产接管，不是 phpstan 整条运行时接管
 - 已开始但未完成：
   - YASA 退役已进入执行态，后端已移除大部分模型/服务/launcher/route 主体
