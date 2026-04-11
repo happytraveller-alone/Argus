@@ -93,6 +93,13 @@
   - 删除 `backend_old/app/api/deps.py`
   - `backend_old/app/api/v1/endpoints/static_tasks_shared.py` 已移除无用的 `deps` import
   - `app.db.session` / `core.security` blocker 列表已同步去掉 `api/deps.py`
+- Legacy static-tasks facade retired:
+  - 删除 `backend_old/app/api/v1/endpoints/static_tasks.py`
+  - 删除只服务该 facade 的旧 Python 测试：
+    - `backend_old/tests/test_static_tasks_split_contract.py`
+    - `backend_old/tests/test_phpstan_rules_snapshot.py`
+    - `backend_old/tests/test_phpstan_rules_api.py`
+    - `backend_old/tests/test_static_tri_state_statuses.py`
 - Legacy static reset helper retired:
   - 删除 `backend_old/scripts/reset_static_scan_tables.py`
   - `backend_old/scripts/dev-entrypoint.sh` 已改为跳过 Python reset 脚本，声明 Rust 规则 bootstrap 为 authoritative
@@ -495,7 +502,6 @@
 - 对应 Python 哪些执行入口已删除:
   - `backend_old/app/db/rules_phpstan/*`
   - 已从聚合入口移除 YASA 的导出/聚合依赖：
-    - `backend_old/app/api/v1/endpoints/static_tasks.py`
     - `backend_old/app/services/agent/bootstrap/__init__.py`
   - 已从模型聚合导出与项目关系中移除 YASA 依赖：
     - `backend_old/app/models/__init__.py`

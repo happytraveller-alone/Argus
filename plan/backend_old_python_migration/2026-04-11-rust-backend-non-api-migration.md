@@ -801,18 +801,17 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 
 ### 2026-04-11 Batch 1 / Slice 6
 
-- 已完成：
-  - Rust 新增 `backend/src/scan/phpstan.rs`
-    - 已能从 Rust 资产库读取 `rules_phpstan/*`
-    - 已能 materialize `phpstan_rules_combined.json` 与 `rule_sources/`
-    - 已补模块测试
+  - 已完成：
+    - Rust 新增 `backend/src/scan/phpstan.rs`
+      - 已能从 Rust 资产库读取 `rules_phpstan/*`
+      - 已能 materialize `phpstan_rules_combined.json` 与 `rule_sources/`
+      - 已补模块测试
   - Rust `backend/src/bootstrap/preflight.rs` 已把 `phpstan` preflight 接到 Rust 资产 materialize 链路
   - Python `backend_old/app/db/rules_phpstan` 已物理删除
   - Python `static_tasks_phpstan.py` 继续通过 helper 从 Rust 资产根读取 phpstan snapshot / rule_sources
   - 已验证：
     - `cargo test`
-    - `cd backend_old && ./.venv/bin/pytest tests/test_phpstan_rules_snapshot.py tests/test_phpstan_rules_api.py tests/test_phpstan_static_tasks.py tests/test_phpstan_bootstrap_scanner.py -q`
-    - 结果：`27 passed`
+    - `cd backend_old && ./.venv/bin/pytest tests/test_phpstan_static_tasks.py tests/test_phpstan_bootstrap_scanner.py -q`
 - 当前意义：
   - `rules_phpstan` 不再只是“放在 Rust 目录里”，而是已经进入 Rust 真消费链路
   - `backend_old/app/db/rules_phpstan` 的重复副本已经删除，phpstan DB 资产 source of truth 收口到 Rust
