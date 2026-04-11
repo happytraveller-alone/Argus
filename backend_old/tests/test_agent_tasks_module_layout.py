@@ -22,6 +22,7 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.services.agent import bandit_bootstrap_rules
     from app.services.agent import bootstrap_findings
     from app.services.agent import bootstrap_policy
+    from app.services.agent import bootstrap_seeds
     from app.services.agent import scope_filters
 
     assert agent_tasks.AgentTaskCreate is agent_tasks_contracts.AgentTaskCreate
@@ -53,6 +54,11 @@ def test_agent_tasks_facade_re_exports_key_symbols():
         agent_tasks_bootstrap._dedupe_bootstrap_findings
         is bootstrap_findings._dedupe_bootstrap_findings
     )
+    assert (
+        agent_tasks._merge_seed_and_agent_findings
+        is bootstrap_seeds._merge_seed_and_agent_findings
+    )
+    assert agent_tasks_bootstrap.MAX_SEED_FINDINGS == bootstrap_seeds.MAX_SEED_FINDINGS
     assert agent_tasks._filter_bootstrap_findings is scope_filters._filter_bootstrap_findings
     assert agent_tasks_findings._is_core_ignored_path is scope_filters._is_core_ignored_path
     assert agent_tasks._save_findings is agent_tasks_findings._save_findings
