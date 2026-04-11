@@ -1053,3 +1053,88 @@ async fn agent_test_routes_are_rust_owned_without_python_upstream() {
         assert_eq!(response.headers()["content-type"], "text/event-stream");
     }
 }
+
+#[tokio::test]
+async fn agent_test_streams_emit_structured_tool_and_result_events() {
+    let state = AppState::from_config(isolated_test_config("agent-test-events"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-test/recon/run")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_path": "/tmp/demo-project",
+                        "project_name": "demo-project",
+                        "framework_hint": "fastapi",
+                        "max_iterations": 3
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for chunk in body.split("\n\n") {
+        if let Some(line) = chunk.lines().find(|line| line.starts_with("data: ")) {
+            let payload = serde_json::from_str::<Value>(&line[6..]).unwrap();
+            events.push(payload);
+        }
+    }
+
+    let event_types = events
+        .iter()
+        .filter_map(|event| event.get("type").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"phase_start"));
+    assert!(event_types.contains(&"tool_call"));
+    assert!(event_types.contains(&"tool_result"));
+    assert!(event_types.contains(&"queue_snapshot"));
+    assert!(event_types.contains(&"result"));
+    assert!(event_types.contains(&"done"));
+
+    let tool_call = events
+        .iter()
+        .find(|event| event["type"] == "tool_call")
+        .expect("tool_call event missing");
+    assert_eq!(tool_call["tool_name"], "prepare_project");
+    assert_eq!(tool_call["tool_input"]["project_name"], "demo-project");
+
+    let tool_result = events
+        .iter()
+        .find(|event| event["type"] == "tool_result")
+        .expect("tool_result event missing");
+    assert_eq!(tool_result["tool_name"], "prepare_project");
+    assert!(tool_result["tool_output"]
+        .as_str()
+        .is_some_and(|value| value.contains("prepared")));
+
+    let queue_snapshot = events
+        .iter()
+        .find(|event| event["type"] == "queue_snapshot")
+        .expect("queue_snapshot event missing");
+    assert_eq!(queue_snapshot["data"]["recon"]["label"], "风险点队列");
+
+    let result = events
+        .iter()
+        .find(|event| event["type"] == "result")
+        .expect("result event missing");
+    assert_eq!(result["data"]["project_name"], "demo-project");
+    assert_eq!(result["data"]["test_mode"], "recon");
+}

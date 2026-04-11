@@ -8,7 +8,6 @@ def test_internal_callers_no_longer_import_config_endpoint():
     caller_paths = [
         PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_execution.py",
         PROJECT_ROOT / "app/api/v1/endpoints/static_tasks_shared.py",
-        PROJECT_ROOT / "app/api/v1/endpoints/agent_test.py",
         PROJECT_ROOT / "app/services/agent/skill_test_runner.py",
     ]
 
