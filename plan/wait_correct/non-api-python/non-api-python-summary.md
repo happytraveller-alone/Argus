@@ -45,7 +45,7 @@
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
   - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
   - `backend_old/app/db` 下的扫描引擎规则资产已开始导入 `rust_scan_rule_assets`
-  - startup init allowlist / denylist 已显式写入 Rust policy
+  - startup init allowlist / denylist / defer-list 已显式写入 Rust policy
   - Gitleaks 已开始实际消费 Rust 规则资产库中的 builtin config
 - still missing:
   - Python `app.main` 内的 schema version orchestration

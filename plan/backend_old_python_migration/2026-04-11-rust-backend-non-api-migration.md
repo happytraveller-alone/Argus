@@ -454,6 +454,13 @@
       - `legacy_project_seed_download`
       - `legacy_rule_table_import`
       - `legacy_prompt_template_seed`
+    - defer until rust-owned:
+      - `agent_task_seed_data`
+      - `static_scan_task_seed_data`
+      - `legacy_rule_projection_tables`
+      - `legacy_prompt_template_projection`
+      - `seed_project_archive_download`
+      - `legacy_user_config_backfill`
   - Rust 新增 `rust_scan_rule_assets` 规则资产库：
     - 会把 `backend_old/app/db` 下扫描引擎规则资产导入 Rust 自己维护的数据库
     - 当前覆盖：

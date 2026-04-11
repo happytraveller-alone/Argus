@@ -73,6 +73,13 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
             .contains(&"demo_user_bootstrap".to_string())
     );
     assert!(
+        report
+            .init
+            .policy
+            .deferred_until_rust_owned
+            .contains(&"agent_task_seed_data".to_string())
+    );
+    assert!(
         report.init.actions.iter().any(|action| action == "created default rust system config")
     );
     assert!(
@@ -174,6 +181,10 @@ async fn health_includes_bootstrap_status() {
     assert!(
         denied.iter().any(|item| item == "demo_user_bootstrap")
     );
+    let deferred = payload["bootstrap"]["init"]["policy"]["deferred_until_rust_owned"]
+        .as_array()
+        .expect("deferred_until_rust_owned should be an array");
+    assert!(deferred.iter().any(|item| item == "agent_task_seed_data"));
     assert_eq!(payload["bootstrap"]["recovery"]["status"], "skipped");
     assert_eq!(payload["bootstrap"]["preflight"]["status"], "skipped");
 

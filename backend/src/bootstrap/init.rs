@@ -21,6 +21,14 @@ fn startup_init_policy() -> StartupInitPolicy {
             "legacy_rule_table_import".to_string(),
             "legacy_prompt_template_seed".to_string(),
         ],
+        deferred_until_rust_owned: vec![
+            "agent_task_seed_data".to_string(),
+            "static_scan_task_seed_data".to_string(),
+            "legacy_rule_projection_tables".to_string(),
+            "legacy_prompt_template_projection".to_string(),
+            "seed_project_archive_download".to_string(),
+            "legacy_user_config_backfill".to_string(),
+        ],
     }
 }
 
@@ -96,5 +104,11 @@ mod tests {
         assert!(policy
             .forbidden_at_startup
             .contains(&"legacy_prompt_template_seed".to_string()));
+        assert!(policy
+            .deferred_until_rust_owned
+            .contains(&"agent_task_seed_data".to_string()));
+        assert!(policy
+            .deferred_until_rust_owned
+            .contains(&"legacy_rule_projection_tables".to_string()));
     }
 }
