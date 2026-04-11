@@ -12,3 +12,10 @@
 1. 先运行 `scripts/migration/generate_python_route_inventory.py`
 2. 再运行 `scripts/migration/api_contract_diff.py`
 3. 把结果和结论落到当前 wave 文件中
+
+执行纪律补充：
+
+1. 每次只推进一个可验证的小迁移任务
+2. 每个小任务完成后立刻单独提交
+3. Rust 已接管的能力，要同步删除 Python live entry、失效 endpoint 或专属旧测试
+4. 不能删除的 Python 代码，必须在对应 wave 中登记为 bridge，而不是默认保留

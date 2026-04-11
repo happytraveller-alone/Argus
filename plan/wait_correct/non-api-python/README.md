@@ -13,3 +13,11 @@
    - `plan/backend_old_python_migration/2026-04-11-rust-backend-non-api-migration.md`
 2. 再更新这里的 summary
 3. 最后把该次迁移留下的 bridge / 未删项补进对应 `waves/*.md`
+
+额外硬规则：
+
+- 每个迁移小任务结束时，必须同步回答三个问题：
+  - Rust 现在具体接管了什么
+  - 对应 Python 哪些执行入口已经删除
+  - 还有哪些 Python 代码仍然只是 bridge
+- 如果回答不出第二条，就不算完成迁移，只算“增加了一份 Rust 实现”

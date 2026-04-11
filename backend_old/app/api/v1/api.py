@@ -4,24 +4,18 @@ from app.api.v1.endpoints import (
     agent_test,
     config,
     members,
-    projects,
     prompts,
     rules,
-    search,
-    skills,
     static_tasks,
     users,
 )
 
 api_router = APIRouter()
-api_router.include_router(search.router, tags=["search"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
-api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(members.router, prefix="/projects", tags=["members"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
 api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agent-tasks"])
 api_router.include_router(agent_test.router, prefix="/agent-test", tags=["agent-test"])
-api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(static_tasks.router, prefix="/static-tasks", tags=["static-tasks"])

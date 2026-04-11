@@ -381,6 +381,20 @@
 
 ## 固定执行标准
 
+### 原子迁移纪律
+
+- 后续迁移按“小任务”推进，每个小任务必须满足：
+  - 只收敛一个明确能力边界
+  - Rust 接管后，立刻删除对应 Python 执行入口、live router 挂载或已失效测试
+  - 同一能力在同一时刻只能保留一处实际执行代码
+- 每完成一个小任务必须立刻单独提交：
+  - 禁止把多个迁移切片混在同一个 commit
+  - commit 必须能对应到 `plan/wait_correct/waves/*.md` 中的一条明确记录
+- 如果某段 Python 代码暂时不能删，必须明确说明它还是 bridge：
+  - 谁在读
+  - 删除前置条件
+  - 预计在哪个 slice 删除
+
 ### 每一阶段都必须做的三件事
 
 1. 先把对应 Python 文件在 inventory 标成当前阶段 owner。
@@ -400,6 +414,7 @@
 
 - 只有当 Rust 已接管该能力的 source of truth，
 - 并且运行主链路不再调用对应 Python 文件，
+- 并且对应 Python live entry / adapter / dead test 已删除或降为明确 bridge，
 - 才算完成。
 
 仅仅是路由不再直连，不算完成。
