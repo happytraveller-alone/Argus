@@ -6,7 +6,6 @@ from app.api.v1.endpoints import static_tasks_cache as _cache
 from app.api.v1.endpoints import static_tasks_opengrep as _opengrep
 from app.api.v1.endpoints import static_tasks_opengrep_rules as _opengrep_rules
 from app.api.v1.endpoints import static_tasks_pmd as _pmd
-from app.api.v1.endpoints import static_tasks_phpstan as _phpstan
 from app.api.v1.endpoints.static_tasks_shared import (
     _clear_scan_task_cancel,
     _resolve_backend_venv_executable,
@@ -27,20 +26,7 @@ router = APIRouter()
 router.include_router(_opengrep.router)
 router.include_router(_opengrep_rules.router)
 router.include_router(_pmd.router)
-router.include_router(_phpstan.router)
 router.include_router(_cache.router)
-
-
-def _bind_phpstan_runtime() -> None:
-    _phpstan.asyncio = asyncio
-    _phpstan.async_session_factory = async_session_factory
-    _phpstan._clear_scan_task_cancel = _clear_scan_task_cancel
-    _phpstan._get_project_root = _get_project_root
-    _phpstan._is_scan_task_cancelled = _is_scan_task_cancelled
-    _phpstan._request_scan_task_cancel = _request_scan_task_cancel
-    _phpstan._run_subprocess_with_tracking = _run_subprocess_with_tracking
-    _phpstan._sync_task_scan_duration = _sync_task_scan_duration
-
 
 def _bind_pmd_runtime() -> None:
     _pmd.asyncio = asyncio
@@ -50,11 +36,6 @@ def _bind_pmd_runtime() -> None:
     _pmd._is_scan_task_cancelled = _is_scan_task_cancelled
     _pmd._request_scan_task_cancel = _request_scan_task_cancel
     _pmd._sync_task_scan_duration = _sync_task_scan_duration
-
-
-async def _execute_phpstan_scan(*args, **kwargs):
-    _bind_phpstan_runtime()
-    return await _phpstan._execute_phpstan_scan(*args, **kwargs)
 
 
 async def _execute_pmd_scan(*args, **kwargs):
@@ -76,17 +57,11 @@ OpengrepFindingContextResponse = _opengrep.OpengrepFindingContextResponse
 OpengrepScanProgressLogEntry = _opengrep.OpengrepScanProgressLogEntry
 OpengrepScanProgressResponse = _opengrep.OpengrepScanProgressResponse
 
-PhpstanScanTaskCreate = _phpstan.PhpstanScanTaskCreate
-PhpstanScanTaskResponse = _phpstan.PhpstanScanTaskResponse
-PhpstanFindingResponse = _phpstan.PhpstanFindingResponse
-
 PmdScanTaskCreate = _pmd.PmdScanTaskCreate
 PmdScanTaskResponse = _pmd.PmdScanTaskResponse
 PmdFindingResponse = _pmd.PmdFindingResponse
 
 _parse_opengrep_output = _opengrep._parse_opengrep_output
-_parse_phpstan_output_payload = _phpstan._parse_phpstan_output_payload
-_filter_phpstan_security_messages = _phpstan._filter_phpstan_security_messages
 
 list_static_tasks = _opengrep.list_static_tasks
 create_static_task = _opengrep.create_static_task
@@ -113,24 +88,6 @@ upload_patch_archive = _opengrep_rules.upload_patch_archive
 upload_patch_directory = _opengrep_rules.upload_patch_directory
 upload_opengrep_rules = _opengrep_rules.upload_opengrep_rules
 upload_opengrep_rules_directory = _opengrep_rules.upload_opengrep_rules_directory
-
-create_phpstan_scan = _phpstan.create_phpstan_scan
-list_phpstan_tasks = _phpstan.list_phpstan_tasks
-get_phpstan_task = _phpstan.get_phpstan_task
-interrupt_phpstan_task = _phpstan.interrupt_phpstan_task
-delete_phpstan_task = _phpstan.delete_phpstan_task
-get_phpstan_findings = _phpstan.get_phpstan_findings
-get_phpstan_finding = _phpstan.get_phpstan_finding
-update_phpstan_finding_status = _phpstan.update_phpstan_finding_status
-list_phpstan_rules = _phpstan.list_phpstan_rules
-get_phpstan_rule = _phpstan.get_phpstan_rule
-update_phpstan_rule = _phpstan.update_phpstan_rule
-update_phpstan_rule_enabled = _phpstan.update_phpstan_rule_enabled
-batch_update_phpstan_rules_enabled = _phpstan.batch_update_phpstan_rules_enabled
-delete_phpstan_rule = _phpstan.delete_phpstan_rule
-restore_phpstan_rule = _phpstan.restore_phpstan_rule
-batch_delete_phpstan_rules = _phpstan.batch_delete_phpstan_rules
-batch_restore_phpstan_rules = _phpstan.batch_restore_phpstan_rules
 
 create_pmd_scan = _pmd.create_pmd_scan
 list_pmd_tasks = _pmd.list_pmd_tasks

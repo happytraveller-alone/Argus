@@ -60,6 +60,23 @@
 - 后续修复波次: Wave B / C
 - owner: Rust migration
 
+### 15. phpstan endpoint surface retired from Python static tasks router
+
+- endpoint / feature: `/api/v1/static-tasks/phpstan/*`
+- Python 旧行为:
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 通过 `_phpstan` include/runtime bind/schema alias/helper alias/re-export 暴露 phpstan endpoint
+  - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py` 承载完整 phpstan route surface
+- Rust 当前行为:
+  - `backend/src/routes/static_tasks.rs` 已提供 Rust-owned `/api/v1/static-tasks/phpstan/*`
+  - Python `static_tasks.py` 已移除 `_phpstan` import、`router.include_router(_phpstan.router)`、runtime bind、schema alias、helper alias、re-export
+  - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py` 已删除
+- inventory 更新:
+  - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/phpstan/*` 全部由 `proxy` 切换为 `migrate`
+  - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
+  - 汇总计数更新为 `migrate=90`、`proxy=62`，task-group `proxy=49`
+- 后续修复波次: Wave A static engine endpoint retirement
+- owner: Rust migration
+
 ### 12. `backend_old/app/utils` runtime artifacts retired; only offline patch text remains
 
 - endpoint / feature: `backend_old/app/utils/*`, `backend_old/tests/test_date_utils.py`
