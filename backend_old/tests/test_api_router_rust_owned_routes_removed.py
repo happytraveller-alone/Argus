@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from app.api.v1.api import api_router
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_api_router_excludes_rust_owned_route_modules():
@@ -32,3 +37,8 @@ def test_api_router_excludes_rust_owned_route_modules():
     }
 
     assert remaining_python_modules.intersection(endpoint_modules)
+
+
+def test_legacy_config_endpoint_module_has_been_retired():
+    config_path = PROJECT_ROOT / "app/api/v1/endpoints/config.py"
+    assert not config_path.exists()

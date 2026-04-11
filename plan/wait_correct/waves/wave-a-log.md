@@ -153,10 +153,20 @@
   - `agent_test.py`
   - `static_tasks_opengrep_rules.py`
     已改为从 service 层读取 effective user config，不再反向 import `app.api.v1.endpoints.config`
-- Rust 当前行为补充: `config.py` 当前保留 HTTP 契约，但核心默认配置/用户配置载入逻辑已通过 service 封装复用
-- Rust 当前行为补充: 新增回归测试 `backend_old/tests/test_config_internal_callers_use_service_layer.py`
 - Rust 当前行为补充: Python live router 已不再挂载 `/config`，live 配置入口默认收敛到 Rust `/system-config`
-- Rust 当前行为补充: `config.py` 当前只保留过渡 helper / 测试承载，不再承担 Python live API surface
+- Rust 当前行为补充: `config.py` 已物理删除，`/config` 旧 Python endpoint 完整退场
+- Rust 当前行为补充: 与 `config.py` 强绑定、且不再承担 bridge 职责的旧 service / 测试也已删除：
+  - `backend_old/app/services/llm_provider_service.py`
+  - `backend_old/app/services/llm_config_runtime_service.py`
+  - `backend_old/tests/test_llm_provider_catalog_and_aliases.py`
+  - `backend_old/tests/test_llm_strict_config.py`
+  - `backend_old/tests/test_config_mcp_backend_owned.py`
+  - `backend_old/tests/test_chinese_only_config.py`
+  - `backend_old/tests/test_legacy_cleanup.py`
+- Rust 当前行为补充: 保留的 `backend_old/app/services/user_config_service.py` 与 `backend_old/app/services/project_test_service.py` 仍有 Python 运行时调用，属于过渡期 service，不属于 dead code
+- Rust 当前行为补充: 新增/保留回归测试：
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration
