@@ -52,6 +52,24 @@
 - 后续修复波次: Wave B / C
 - owner: Rust migration
 
+### 12. `backend_old/app/utils` runtime artifacts retired; only offline patch text remains
+
+- endpoint / feature: `backend_old/app/utils/*`, `backend_old/tests/test_date_utils.py`
+- Python 旧行为:
+  - `backend_old/app/utils/date_utils.py` 提供 date formatting/relative helpers used across Python runtime tests.
+  - `backend_old/app/utils/repo_utils.py` 支持 remote repository handling paths。
+  - `backend_old/app/utils/security.py` 只是 forwarding wrapper，把 runtime JWT/bcrypt/encryption 责任再转给 core。
+- Rust 当前行为:
+  - Rust `backend/src/core/date_utils` 直接替代了 Python date helper，`backend_old/tests/test_date_utils.py` 已从 repo 中删除。
+  - `repo_utils` 被 retiroed，因为当前架构没有 live remote repository handling entry point。
+  - `utils/security` forwarding wrapper 已 retire，核心安全逻辑完全由 Rust `backend/src/core/security.rs` / `backend/src/core/encryption.rs` 担当。
+  - `backend_old/app/utils` 目录已从 live runtime 中删掉；唯一包含 `app.utils` 字符的产物是离线扫描规则补丁资产 `backend/assets/scan_rule_assets/patches/vuln-halo-d59877a9.patch`，那只是静态文本替换，不是 runtime 依赖。
+- 是否影响前端: 否；Rust backend 已接管相关 helper，Python runtime 不再运行这些代码。
+- 后续修复波次: Wave A 后续 / Wave F retire cleanup
+- owner: Rust migration
+- delete gate:
+  - 运行时已确认无 `backend_old/app/utils` 依赖，剩余的 `app.utils` 文本只是 offline patch asset，不构成 run-time breakage。
+
 ### 3. Static tasks and agent tasks are still not Rust-owned
 
 - endpoint / feature: `/api/v1/static-tasks/*`, `/api/v1/agent-tasks/*`
@@ -301,3 +319,27 @@
 - 是否影响前端: phpstan 不受影响；YASA 前端 live path 已退净，剩余是 mixed tests / inventory / 文本文档收尾
 - 后续修复波次: Wave A 后续 / YASA residual cleanup
 - owner: Rust migration
+
+### 12. `backend_old/app/utils` retirement must be verified as runtime-clean, not text-clean
+
+- endpoint / feature: `backend_old/app/utils/*`, `backend_old/tests/test_date_utils.py`, offline patch residue under `backend/assets/scan_rule_assets/patches`
+- Python 旧行为:
+  - `backend_old/app/utils/date_utils.py` 提供 date helper
+  - `repo_utils.py` 承接 remote repository handling
+  - `utils/security.py` 只是 security forwarding wrapper
+- Rust 当前行为:
+  - Rust `backend/src/core/date_utils` 已替代 date helper 行为，`backend_old/tests/test_date_utils.py` 已删除
+  - `repo_utils` 已 retire，因为 remote repository handling 不再有 live runtime 入口
+  - `utils/security` forwarding wrapper 已 retire，核心安全逻辑由 Rust `backend/src/core/security.rs` / `backend/src/core/encryption.rs` 承接
+  - `backend_old/app/utils` 整个目录已不在 live Python runtime 中
+- operational verification:
+  - `rg -n "app\\.utils|repo_utils|app\\.utils\\.security" backend_old/app backend_old/tests backend/src backend/assets/scan_rule_assets/patches`
+  - 预期结果是 `backend_old/app`、`backend_old/tests`、`backend/src` 三类 live runtime/test 路径没有任何命中
+  - 唯一允许剩下的命中是离线 patch 资产 `backend/assets/scan_rule_assets/patches/vuln-halo-d59877a9.patch`
+- runtime vs offline distinction:
+  - 上述 patch 文件只是离线扫描规则文本，不是运行时 import、module 依赖或测试依赖
+  - 所以它属于文本文档/资产残留，不属于 runtime blocker
+- 后续修复波次: Wave F / retire cleanup
+- owner: Rust migration
+- offline residue cleanup owner:
+  - 如果未来要清掉这条 patch 文本残留，由 Rust migration owner 在 Wave F / retire cleanup 处理

@@ -279,9 +279,22 @@
 
 ### 8. `utils` (`4`)
 
+#### `retire`
+
+- Rust `backend/src/core/date_utils` 现在直接替代原 Python `backend_old/app/utils/date_utils.py` 的行为，配套 `backend_old/tests/test_date_utils.py` 已删除。
+- `repo_utils` 被淘汰，因为远程仓库 handling 逻辑在当前架构中已无可支持的 runtime 入口。
+- `utils/security` 的 forwarding wrapper 退役，核心安全责任完全落到 Rust `backend/src/core/security.rs` / `backend/src/core/encryption.rs`。
+- `backend_old/app/utils` 目录已从 live Python runtime 中删除，唯一残留的 `app.utils` 字串出现在离线扫描规则补丁资产 `backend/assets/scan_rule_assets/patches/vuln-halo-d59877a9.patch`，那只是文本替换，不属于运行时依赖。
+- 运行态核查命令固定为：
+  - `rg -n "app\\.utils|repo_utils|app\\.utils\\.security" backend_old/app backend_old/tests backend/src backend/assets/scan_rule_assets/patches`
+  - 预期结果：
+    - `backend_old/app`、`backend_old/tests`、`backend/src` 这三类 live runtime/test 路径命中数必须为 `0`
+    - 唯一允许剩下的命中是 `backend/assets/scan_rule_assets/patches/vuln-halo-d59877a9.patch`
+  - 如果将来要清掉这条离线 patch 文本残留，owner 仍是 Rust migration，目标阶段记到 Phase F / Batch 5 retire cleanup，不应回流成 runtime 清理任务。
+
 #### `compat_only`
 
-- `backend_old/app/utils/*`
+- 暂无 live compat-only 依赖（目录已从 runtime 中剥离，后续仅留离线 patch 文本）。
 
 #### 迁移要求
 
