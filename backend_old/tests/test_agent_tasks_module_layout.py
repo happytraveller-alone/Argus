@@ -19,6 +19,7 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_findings
     from app.api.v1.endpoints import agent_tasks_tool_runtime
+    from app.services.agent import bandit_bootstrap_rules
     from app.services.agent import bootstrap_findings
     from app.services.agent import bootstrap_policy
     from app.services.agent import scope_filters
@@ -39,6 +40,10 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     assert (
         agent_tasks_bootstrap._resolve_static_bootstrap_config
         is bootstrap_policy._resolve_static_bootstrap_config
+    )
+    assert (
+        agent_tasks_bootstrap._resolve_bandit_bootstrap_rule_ids
+        is bandit_bootstrap_rules._resolve_bandit_bootstrap_rule_ids
     )
     assert (
         agent_tasks._normalize_bootstrap_finding_from_gitleaks_payload
