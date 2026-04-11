@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.config import settings
-from app.models.agent_task import AgentTask
 from app.models.bandit import BanditRuleState
 from app.models.opengrep import OpengrepRule
 from app.services.bandit_rules_snapshot import load_bandit_builtin_snapshot
@@ -28,6 +27,11 @@ from app.services.agent.bootstrap import (
     BanditBootstrapScanner,
     OpenGrepBootstrapScanner,
     PhpstanBootstrapScanner,
+)
+from app.services.agent.bootstrap_policy import (
+    _normalize_verification_level,
+    _resolve_agent_task_source_mode,
+    _resolve_static_bootstrap_config,
 )
 from app.services.agent.scope_filters import (
     _build_core_audit_exclude_patterns,
@@ -60,18 +64,6 @@ async def _prepare_scan_project_dir_async(
 ) -> None:
     await asyncio.to_thread(shutil.rmtree, project_dir, True)
     await asyncio.to_thread(copy_project_tree_to_scan_dir, project_root, project_dir)
-
-
-_VERIFICATION_LEVEL_ALIASES = {
-    "analysis_with_poc_plan": "analysis_with_poc_plan",
-    "analysis_only": "analysis_with_poc_plan",
-    "sandbox": "analysis_with_poc_plan",
-    "generate_poc": "analysis_with_poc_plan",
-    "poc_plan": "analysis_with_poc_plan",
-}
-
-HYBRID_TASK_NAME_MARKER = "[HYBRID]"
-INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]"
 
 
 def _normalize_bandit_rule_id(raw_rule_id: Any) -> str:
@@ -156,90 +148,6 @@ def _to_int(value: Any) -> Optional[int]:
             return int(stripped)
     return None
 
-
-def _normalize_verification_level(value: Optional[str]) -> str:
-    raw_value = str(value or "").strip().lower()
-    if not raw_value:
-        return "analysis_with_poc_plan"
-    return _VERIFICATION_LEVEL_ALIASES.get(raw_value, "analysis_with_poc_plan")
-
-
-def _resolve_agent_task_source_mode(
-    name: Optional[str],
-    description: Optional[str],
-) -> str:
-    normalized_name = str(name or "").strip().lower()
-    normalized_description = str(description or "").strip().lower()
-    normalized_combined = f"{normalized_name} {normalized_description}"
-    if (
-        HYBRID_TASK_NAME_MARKER.lower() in normalized_combined
-        or "混合扫描" in normalized_combined
-    ):
-        return "hybrid"
-    if INTELLIGENT_TASK_NAME_MARKER.lower() in normalized_combined:
-        return "intelligent"
-    # 历史无 marker 任务，默认迁移为 hybrid。
-    return "hybrid"
-
-
-def _resolve_static_bootstrap_config(
-    task: AgentTask,
-    source_mode: str,
-) -> Dict[str, Any]:
-    defaults: Dict[str, Any] = {
-        "mode": "disabled",
-        "opengrep_enabled": False,
-        "bandit_enabled": False,
-        "gitleaks_enabled": False,
-        "phpstan_enabled": False,
-    }
-    if source_mode == "hybrid":
-        defaults = {
-            "mode": "embedded",
-            "opengrep_enabled": True,
-            "bandit_enabled": False,
-            "gitleaks_enabled": False,
-            "phpstan_enabled": False,
-        }
-
-    audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
-    static_bootstrap = (
-        audit_scope.get("static_bootstrap")
-        if isinstance(audit_scope.get("static_bootstrap"), dict)
-        else {}
-    )
-
-    raw_mode = str(static_bootstrap.get("mode") or defaults["mode"]).strip().lower()
-    mode = "embedded" if raw_mode == "embedded" else "disabled"
-    if source_mode != "hybrid":
-        mode = "disabled"
-
-    opengrep_enabled = bool(
-        static_bootstrap.get("opengrep_enabled", defaults["opengrep_enabled"])
-    )
-    bandit_enabled = bool(
-        static_bootstrap.get("bandit_enabled", defaults["bandit_enabled"])
-    )
-    gitleaks_enabled = bool(
-        static_bootstrap.get("gitleaks_enabled", defaults["gitleaks_enabled"])
-    )
-    phpstan_enabled = bool(
-        static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
-    )
-
-    if mode == "disabled":
-        opengrep_enabled = False
-        bandit_enabled = False
-        gitleaks_enabled = False
-        phpstan_enabled = False
-
-    return {
-        "mode": mode,
-        "opengrep_enabled": opengrep_enabled,
-        "bandit_enabled": bandit_enabled,
-        "gitleaks_enabled": gitleaks_enabled,
-        "phpstan_enabled": phpstan_enabled,
-    }
 
 def _extract_bootstrap_rule_lookup_keys(check_id: Any) -> List[str]:
     raw_check_id = str(check_id or "").strip()
