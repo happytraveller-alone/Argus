@@ -1,0 +1,2 @@
+method,path,status,reason,source_module,source_file
+GET,/api/v1/example,migrate,owned-by-rust-wave-x,example,endpoints/example.py

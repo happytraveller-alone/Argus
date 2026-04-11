@@ -5,10 +5,12 @@ use axum::{
 use backend_rust::{app::build_router, config::AppConfig, state::AppState};
 use serde_json::{json, Value};
 use tower::util::ServiceExt;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn system_config_crud_roundtrip_stays_deuserized() {
-    let state = AppState::from_config(AppConfig::for_tests())
+    let config = isolated_test_config("system-config-crud");
+    let state = AppState::from_config(config.clone())
         .await
         .expect("state should build");
     let app = build_router(state);
@@ -62,7 +64,12 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
         .unwrap();
     assert_eq!(save_response.status(), StatusCode::OK);
 
-    let current_response = app
+    let reloaded_state = AppState::from_config(config)
+        .await
+        .expect("reloaded state should build");
+    let reloaded_app = build_router(reloaded_state);
+
+    let current_response = reloaded_app
         .clone()
         .oneshot(
             Request::get("/api/v1/system-config")
@@ -83,7 +90,7 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     assert!(current_json.get("id").is_none());
     assert!(current_json.get("user_id").is_none());
 
-    let delete_response = app
+    let delete_response = reloaded_app
         .clone()
         .oneshot(
             Request::builder()
@@ -106,7 +113,7 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
 
 #[tokio::test]
 async fn system_config_helper_endpoints_are_available() {
-    let state = AppState::from_config(AppConfig::for_tests())
+    let state = AppState::from_config(isolated_test_config("system-config-helper"))
         .await
         .expect("state should build");
     let app = build_router(state);
@@ -148,4 +155,11 @@ async fn system_config_helper_endpoints_are_available() {
     .unwrap();
     assert_eq!(preflight_json["ok"], false);
     assert_eq!(preflight_json["reasonCode"], "default_config");
+}
+
+fn isolated_test_config(scope: &str) -> AppConfig {
+    let mut config = AppConfig::for_tests();
+    config.zip_storage_path =
+        std::env::temp_dir().join(format!("audittool-rust-{scope}-{}", Uuid::new_v4()));
+    config
 }

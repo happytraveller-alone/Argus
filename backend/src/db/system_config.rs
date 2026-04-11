@@ -1,10 +1,14 @@
-use anyhow::Result;
+use std::{io::ErrorKind, path::PathBuf};
+
+use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use sqlx::Row;
+use tokio::fs;
 
 use crate::state::{AppState, StoredSystemConfig};
 
 const SYSTEM_CONFIG_SINGLETON_ID: &str = "default";
+const SYSTEM_CONFIG_FILE_NAME: &str = "rust-system-config.json";
 
 pub async fn load_current(state: &AppState) -> Result<Option<StoredSystemConfig>> {
     if let Some(pool) = &state.db_pool {
@@ -27,7 +31,7 @@ pub async fn load_current(state: &AppState) -> Result<Option<StoredSystemConfig>
         }));
     }
 
-    Ok(state.memory_store.system_config.read().await.clone())
+    load_current_from_file(state).await
 }
 
 pub async fn save_current(
@@ -57,7 +61,7 @@ pub async fn save_current(
         .execute(pool)
         .await?;
     } else {
-        *state.memory_store.system_config.write().await = Some(stored.clone());
+        save_current_to_file(state, &stored).await?;
     }
 
     Ok(stored)
@@ -70,7 +74,54 @@ pub async fn clear_current(state: &AppState) -> Result<()> {
             .execute(pool)
             .await?;
     } else {
-        *state.memory_store.system_config.write().await = None;
+        clear_current_file(state).await?;
     }
+    Ok(())
+}
+
+async fn load_current_from_file(state: &AppState) -> Result<Option<StoredSystemConfig>> {
+    let _guard = state.file_store_lock.lock().await;
+    let path = system_config_file_path(state);
+    let raw = match fs::read_to_string(&path).await {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let parsed = serde_json::from_str::<StoredSystemConfig>(&raw).with_context(|| {
+        format!(
+            "failed to parse file-backed system config: {}",
+            path.display()
+        )
+    })?;
+    Ok(Some(parsed))
+}
+
+async fn save_current_to_file(state: &AppState, stored: &StoredSystemConfig) -> Result<()> {
+    let _guard = state.file_store_lock.lock().await;
+    ensure_file_storage_root(state).await?;
+    let path = system_config_file_path(state);
+    let tmp_path = path.with_extension("tmp");
+    let bytes = serde_json::to_vec(stored)?;
+    fs::write(&tmp_path, bytes).await?;
+    fs::rename(tmp_path, path).await?;
+    Ok(())
+}
+
+async fn clear_current_file(state: &AppState) -> Result<()> {
+    let _guard = state.file_store_lock.lock().await;
+    let path = system_config_file_path(state);
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn system_config_file_path(state: &AppState) -> PathBuf {
+    state.config.zip_storage_path.join(SYSTEM_CONFIG_FILE_NAME)
+}
+
+async fn ensure_file_storage_root(state: &AppState) -> Result<()> {
+    fs::create_dir_all(&state.config.zip_storage_path).await?;
     Ok(())
 }

@@ -2,24 +2,19 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 use crate::config::AppConfig;
 
-#[derive(Clone, Debug, Default)]
-pub struct MemoryStore {
-    pub system_config: Arc<RwLock<Option<StoredSystemConfig>>>,
-    pub projects: Arc<RwLock<std::collections::BTreeMap<String, StoredProject>>>,
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredSystemConfig {
     pub llm_config_json: serde_json::Value,
     pub other_config_json: serde_json::Value,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredProject {
     pub id: String,
     pub name: String,
@@ -36,7 +31,7 @@ pub struct StoredProject {
     pub archive: Option<StoredProjectArchive>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredProjectArchive {
     pub original_filename: String,
     pub storage_path: String,
@@ -50,7 +45,7 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub http_client: Client,
     pub db_pool: Option<PgPool>,
-    pub memory_store: MemoryStore,
+    pub file_store_lock: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -70,7 +65,7 @@ impl AppState {
             config: Arc::new(config),
             http_client,
             db_pool,
-            memory_store: MemoryStore::default(),
+            file_store_lock: Arc::new(Mutex::new(())),
         })
     }
 }

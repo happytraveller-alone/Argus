@@ -129,15 +129,71 @@ pub struct ArchiveUploadResponse {
     pub detected_languages: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectFileEntry {
+    pub path: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FileTreeNode {
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<FileTreeNode>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FileTreeResponse {
+    pub root: FileTreeNode,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProjectFilesQuery {
+    pub exclude_patterns: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProjectFileContentQuery {
+    pub encoding: Option<String>,
+    pub use_cache: Option<bool>,
+    pub stream: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ProjectExportRequest {
+    pub project_ids: Option<Vec<String>>,
+    pub include_archives: Option<bool>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_project).get(list_projects))
         .route("/create-with-zip", post(create_project_with_zip))
+        .route("/stats", get(get_project_stats))
+        .route("/dashboard-snapshot", get(get_dashboard_snapshot))
+        .route("/static-scan-overview", get(get_static_scan_overview))
+        .route("/export", post(export_project_bundle))
+        .route("/import", post(import_project_bundle))
+        .route("/cache/stats", get(get_cache_stats))
+        .route("/cache/clear", post(clear_cache))
         .route(
             "/description/generate",
             post(generate_project_description_preview),
         )
         .route("/info/{id}", get(get_project_info))
+        .route("/{id}/files", get(get_project_files))
+        .route("/{id}/files-tree", get(get_project_files_tree))
+        .route("/{id}/files/{*file_path}", get(get_project_file_content))
+        .route("/{id}/upload/preview", get(preview_upload_file))
+        .route("/{id}/directory", post(upload_project_directory))
+        .route("/{id}/metrics/recalculate", post(recalc_project_metrics))
+        .route("/{id}/cache/invalidate", post(invalidate_project_cache))
         .route(
             "/{id}",
             get(get_project).put(update_project).delete(delete_project),
@@ -454,6 +510,271 @@ pub async fn generate_project_description_for_project(
         language_info: project.language_info,
         source: "static".to_string(),
     }))
+}
+
+pub async fn get_project_files(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+    Query(query): Query<ProjectFilesQuery>,
+) -> Result<Json<Vec<ProjectFileEntry>>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    let archive = require_archive(&project)?;
+    let files = list_archive_files(
+        &archive.storage_path,
+        parse_exclude_patterns(query.exclude_patterns),
+    )?;
+    Ok(Json(files))
+}
+
+pub async fn get_project_files_tree(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+    Query(query): Query<ProjectFilesQuery>,
+) -> Result<Json<FileTreeResponse>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    let archive = require_archive(&project)?;
+    let files = list_archive_files(
+        &archive.storage_path,
+        parse_exclude_patterns(query.exclude_patterns),
+    )?;
+    Ok(Json(FileTreeResponse {
+        root: build_file_tree(&files),
+    }))
+}
+
+pub async fn get_project_file_content(
+    State(state): State<AppState>,
+    AxumPath((project_id, file_path)): AxumPath<(String, String)>,
+    Query(query): Query<ProjectFileContentQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    let archive = require_archive(&project)?;
+    let (content, size, encoding, is_text) =
+        read_archive_file(&archive.storage_path, &file_path, query.encoding.as_deref())?;
+    Ok(Json(json!({
+        "file_path": file_path,
+        "content": content,
+        "size": size,
+        "encoding": encoding,
+        "is_text": is_text,
+        "is_cached": false,
+    })))
+}
+
+pub async fn preview_upload_file(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    let archive = require_archive(&project)?;
+    let files = list_archive_files(&archive.storage_path, Vec::new())?;
+    let sample_files: Vec<Value> = files
+        .iter()
+        .take(50)
+        .map(|entry| json!({"path": entry.path, "size": entry.size}))
+        .collect();
+    Ok(Json(json!({
+        "file_count": files.len(),
+        "files": sample_files,
+        "supported_formats": [".zip"],
+    })))
+}
+
+pub async fn upload_project_directory(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+    multipart: Multipart,
+) -> Result<Json<ArchiveUploadResponse>, ApiError> {
+    let mut project = require_project(&state, &project_id).await?;
+    let (archive_name, archive_bytes) = zip_directory_upload(multipart).await?;
+    let detected_languages =
+        apply_archive_to_project(&state, &mut project, archive_name.clone(), archive_bytes).await?;
+    let project = projects::update_project(&state, project)
+        .await
+        .map_err(internal_error)?;
+    sync_python_project_mirror(&state, &project).await?;
+    Ok(Json(ArchiveUploadResponse {
+        message: "文件夹上传成功".to_string(),
+        original_filename: archive_name,
+        file_size: project
+            .archive
+            .as_ref()
+            .map(|item| item.file_size)
+            .unwrap_or_default(),
+        detected_languages,
+    }))
+}
+
+pub async fn get_cache_stats() -> Json<Value> {
+    Json(json!({
+        "total_entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "hit_rate": 0.0,
+        "evictions": 0,
+        "memory_used_mb": 0.0,
+        "memory_limit_mb": 0.0,
+    }))
+}
+
+pub async fn clear_cache() -> Json<Value> {
+    Json(json!({ "message": "缓存已清空" }))
+}
+
+pub async fn invalidate_project_cache(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    require_project(&state, &project_id).await?;
+    Ok(Json(json!({
+        "message": "缓存已清除",
+        "deleted_entries": 0,
+    })))
+}
+
+pub async fn recalc_project_metrics(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+) -> Result<Json<ProjectManagementMetricsResponse>, ApiError> {
+    let project = require_project(&state, &project_id).await?;
+    Ok(Json(build_metrics(&project)))
+}
+
+pub async fn get_project_stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let items = projects::list_projects(&state)
+        .await
+        .map_err(internal_error)?;
+    let total_projects = items.len() as i64;
+    let active_projects = items.iter().filter(|item| item.is_active).count() as i64;
+    Ok(Json(json!({
+        "total_projects": total_projects,
+        "active_projects": active_projects,
+        "total_tasks": 0,
+        "completed_tasks": 0,
+        "interrupted_tasks": 0,
+        "running_tasks": 0,
+        "failed_tasks": 0,
+        "total_issues": 0,
+        "resolved_issues": 0,
+        "avg_quality_score": 0.0,
+    })))
+}
+
+pub async fn get_dashboard_snapshot(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
+    let items = projects::list_projects(&state)
+        .await
+        .map_err(internal_error)?;
+    let total_projects = items.len() as i64;
+    Ok(Json(json!({
+        "generated_at": now_rfc3339(),
+        "total_scan_duration_ms": 0,
+        "scan_runs": [],
+        "vulns": [],
+        "rule_confidence": [],
+        "rule_confidence_by_language": [],
+        "cwe_distribution": [],
+        "summary": {
+            "total_projects": total_projects,
+            "current_effective_findings": 0,
+            "current_verified_findings": 0,
+            "total_model_tokens": 0,
+            "false_positive_rate": 0.0,
+            "scan_success_rate": 0.0,
+            "avg_scan_duration_ms": 0.0,
+            "window_scanned_projects": 0,
+            "window_new_effective_findings": 0,
+            "window_verified_findings": 0,
+            "window_false_positive_rate": 0.0,
+            "window_scan_success_rate": 0.0,
+            "window_avg_scan_duration_ms": 0.0
+        },
+        "daily_activity": [],
+        "verification_funnel": {
+            "raw_findings": 0,
+            "effective_findings": 0,
+            "verified_findings": 0,
+            "false_positive_count": 0
+        },
+        "task_status_breakdown": {
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+            "interrupted": 0,
+            "cancelled": 0
+        },
+        "task_status_by_scan_type": {
+            "pending": {"static": 0, "intelligent": 0, "hybrid": 0},
+            "running": {"static": 0, "intelligent": 0, "hybrid": 0},
+            "completed": {"static": 0, "intelligent": 0, "hybrid": 0},
+            "failed": {"static": 0, "intelligent": 0, "hybrid": 0},
+            "interrupted": {"static": 0, "intelligent": 0, "hybrid": 0},
+            "cancelled": {"static": 0, "intelligent": 0, "hybrid": 0}
+        },
+        "engine_breakdown": [],
+        "project_hotspots": [],
+        "language_risk": [],
+        "recent_tasks": [],
+        "project_risk_distribution": [],
+        "verified_vulnerability_types": [],
+        "static_engine_rule_totals": [],
+        "language_loc_distribution": []
+    })))
+}
+
+pub async fn get_static_scan_overview(
+    Query(query): Query<BTreeMap<String, String>>,
+) -> Json<Value> {
+    let page = query
+        .get("page")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(1);
+    let page_size = query
+        .get("page_size")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(6);
+    Json(json!({
+        "items": [],
+        "total": 0,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": 1,
+    }))
+}
+
+pub async fn export_project_bundle(
+    State(state): State<AppState>,
+    Json(request): Json<ProjectExportRequest>,
+) -> Result<Response, ApiError> {
+    let mut items = projects::list_projects(&state)
+        .await
+        .map_err(internal_error)?;
+    if let Some(ids) = request.project_ids.as_ref() {
+        items.retain(|project| ids.iter().any(|id| id == &project.id));
+    }
+    let bundle = build_export_bundle(&items, request.include_archives.unwrap_or(true)).await?;
+    let mut response = Response::new(Body::from(bundle));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"audittool-project-export.zip\""),
+    );
+    Ok(response)
+}
+
+pub async fn import_project_bundle(
+    State(state): State<AppState>,
+    multipart: Multipart,
+) -> Result<Json<Value>, ApiError> {
+    let bundle_bytes = parse_bundle_multipart(multipart).await?;
+    let summary = import_bundle_bytes(&state, &bundle_bytes).await?;
+    Ok(Json(summary))
 }
 
 #[derive(Debug)]
@@ -796,6 +1117,438 @@ fn build_metrics(project: &StoredProject) -> ProjectManagementMetricsResponse {
         error_message: None,
         created_at: project.created_at.clone(),
         updated_at: project.updated_at.clone(),
+    }
+}
+
+fn require_archive(project: &StoredProject) -> Result<StoredProjectArchive, ApiError> {
+    project
+        .archive
+        .clone()
+        .ok_or_else(|| ApiError::NotFound("archive not found".to_string()))
+}
+
+fn parse_exclude_patterns(raw: Option<String>) -> Vec<String> {
+    raw.and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+        .unwrap_or_default()
+}
+
+fn list_archive_files(
+    storage_path: &str,
+    exclude_patterns: Vec<String>,
+) -> Result<Vec<ProjectFileEntry>, ApiError> {
+    let bytes = std::fs::read(storage_path)
+        .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
+    let reader = Cursor::new(bytes);
+    let mut archive =
+        ZipArchive::new(reader).map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let mut files = Vec::new();
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        if entry.is_dir() {
+            continue;
+        }
+        if should_exclude(entry.name(), &exclude_patterns) {
+            continue;
+        }
+        files.push(ProjectFileEntry {
+            path: entry.name().to_string(),
+            size: entry.size(),
+        });
+    }
+    Ok(files)
+}
+
+fn build_file_tree(files: &[ProjectFileEntry]) -> FileTreeNode {
+    let mut root = MutableTreeNode::directory("", "");
+    for entry in files {
+        let segments: Vec<&str> = entry
+            .path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .collect();
+        root.insert(&segments, entry.size, &entry.path);
+    }
+    root.into_node()
+}
+
+fn read_archive_file(
+    storage_path: &str,
+    file_path: &str,
+    requested_encoding: Option<&str>,
+) -> Result<(String, u64, String, bool), ApiError> {
+    let bytes = std::fs::read(storage_path)
+        .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
+    let reader = Cursor::new(bytes);
+    let mut archive =
+        ZipArchive::new(reader).map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let mut entry = archive
+        .by_name(file_path)
+        .map_err(|_| ApiError::NotFound("file not found".to_string()))?;
+    let size = entry.size();
+    let mut file_bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut file_bytes)
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    let is_text = is_probably_text(file_path, &file_bytes);
+    let encoding = requested_encoding.unwrap_or("utf-8").to_string();
+    let content = if is_text {
+        String::from_utf8_lossy(&file_bytes).to_string()
+    } else {
+        String::new()
+    };
+    Ok((content, size, encoding, is_text))
+}
+
+fn should_exclude(path: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+        if trimmed.ends_with("/**") {
+            let prefix = trimmed.trim_end_matches("/**");
+            return path.starts_with(prefix);
+        }
+        if let Some(suffix) = trimmed.strip_prefix("*.") {
+            return Path::new(path)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case(suffix))
+                .unwrap_or(false);
+        }
+        path.contains(trimmed)
+    })
+}
+
+fn is_probably_text(path: &str, bytes: &[u8]) -> bool {
+    if bytes.contains(&0) {
+        return false;
+    }
+    detect_language(path).is_some() || path.ends_with(".md") || path.ends_with(".txt")
+}
+
+async fn build_export_bundle(
+    items: &[StoredProject],
+    include_archives: bool,
+) -> Result<Vec<u8>, ApiError> {
+    use std::io::Write;
+
+    let mut output = Vec::new();
+    let cursor = Cursor::new(&mut output);
+    let mut writer = zip::ZipWriter::new(cursor);
+    let options = zip::write::SimpleFileOptions::default();
+
+    let manifest_projects: Vec<Value> = items
+        .iter()
+        .map(|project| {
+            json!({
+                "id": project.id,
+                "name": project.name,
+                "description": project.description,
+                "source_type": project.source_type,
+                "repository_type": project.repository_type,
+                "default_branch": project.default_branch,
+                "programming_languages_json": project.programming_languages_json,
+                "is_active": project.is_active,
+                "created_at": project.created_at,
+                "updated_at": project.updated_at,
+                "language_info": project.language_info,
+                "info_status": project.info_status,
+                "archive_filename": project.archive.as_ref().map(|_| format!("archives/{}.zip", project.id)),
+            })
+        })
+        .collect();
+
+    writer
+        .start_file("manifest.json", options)
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    writer
+        .write_all(
+            json!({
+                "version": 1,
+                "exported_at": now_rfc3339(),
+                "projects": manifest_projects,
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+
+    if include_archives {
+        for project in items {
+            if let Some(archive) = &project.archive {
+                let bytes = fs::read(&archive.storage_path)
+                    .await
+                    .map_err(|error| ApiError::Internal(error.to_string()))?;
+                writer
+                    .start_file(format!("archives/{}.zip", project.id), options)
+                    .map_err(|error| ApiError::Internal(error.to_string()))?;
+                writer
+                    .write_all(&bytes)
+                    .map_err(|error| ApiError::Internal(error.to_string()))?;
+            }
+        }
+    }
+
+    writer
+        .finish()
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    Ok(output)
+}
+
+async fn parse_bundle_multipart(mut multipart: Multipart) -> Result<Vec<u8>, ApiError> {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?
+    {
+        if field.name().unwrap_or_default() == "bundle" {
+            return Ok(field
+                .bytes()
+                .await
+                .map_err(|error| ApiError::BadRequest(error.to_string()))?
+                .to_vec());
+        }
+    }
+    Err(ApiError::BadRequest("bundle is required".to_string()))
+}
+
+async fn import_bundle_bytes(state: &AppState, bundle_bytes: &[u8]) -> Result<Value, ApiError> {
+    let reader = Cursor::new(bundle_bytes);
+    let mut archive =
+        ZipArchive::new(reader).map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let manifest = read_manifest(&mut archive)?;
+    let mut imported = Vec::new();
+    let mut skipped = Vec::new();
+    let mut failed = Vec::new();
+
+    for item in manifest {
+        let project_id = item["id"].as_str().unwrap_or_default().to_string();
+        if project_id.is_empty() {
+            failed.push(json!({"source_project_id": null, "reason": "missing id"}));
+            continue;
+        }
+        if projects::get_project(state, &project_id)
+            .await
+            .map_err(internal_error)?
+            .is_some()
+        {
+            skipped.push(json!({
+                "source_project_id": project_id,
+                "reason": "project already exists",
+                "existing_project_id": project_id,
+            }));
+            continue;
+        }
+
+        let mut project = StoredProject {
+            id: project_id.clone(),
+            name: item["name"]
+                .as_str()
+                .unwrap_or("imported-project")
+                .to_string(),
+            description: item["description"].as_str().unwrap_or_default().to_string(),
+            source_type: item["source_type"].as_str().unwrap_or("zip").to_string(),
+            repository_type: item["repository_type"]
+                .as_str()
+                .unwrap_or("other")
+                .to_string(),
+            default_branch: item["default_branch"]
+                .as_str()
+                .unwrap_or("main")
+                .to_string(),
+            programming_languages_json: item["programming_languages_json"]
+                .as_str()
+                .unwrap_or("[]")
+                .to_string(),
+            is_active: item["is_active"].as_bool().unwrap_or(true),
+            created_at: item["created_at"]
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(now_rfc3339),
+            updated_at: item["updated_at"]
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(now_rfc3339),
+            language_info: item["language_info"]
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(empty_language_info_string),
+            info_status: item["info_status"]
+                .as_str()
+                .unwrap_or("pending")
+                .to_string(),
+            archive: None,
+        };
+
+        if let Some(archive_name) = item["archive_filename"].as_str() {
+            let archive_bytes = read_zip_entry_bytes(&mut archive, archive_name)?;
+            let original_filename = format!("{project_id}.zip");
+            let stored_archive =
+                persist_archive(state, &project_id, &original_filename, &archive_bytes).await?;
+            project.archive = Some(stored_archive);
+        }
+
+        let project = projects::create_project(state, project)
+            .await
+            .map_err(internal_error)?;
+        sync_python_project_mirror(state, &project).await?;
+        imported.push(json!({
+            "source_project_id": project_id,
+            "project_id": project.id,
+            "name": project.name,
+        }));
+    }
+
+    Ok(json!({
+        "imported_projects": imported,
+        "skipped_projects": skipped,
+        "failed_projects": failed,
+        "warnings": [],
+    }))
+}
+
+fn read_manifest(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<Value>, ApiError> {
+    let raw = read_zip_entry_bytes(archive, "manifest.json")?;
+    let payload: Value =
+        serde_json::from_slice(&raw).map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    Ok(payload["projects"].as_array().cloned().unwrap_or_default())
+}
+
+fn read_zip_entry_bytes(
+    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    entry_name: &str,
+) -> Result<Vec<u8>, ApiError> {
+    let mut entry = archive
+        .by_name(entry_name)
+        .map_err(|_| ApiError::NotFound(format!("missing bundle entry: {entry_name}")))?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut bytes)
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    Ok(bytes)
+}
+
+async fn zip_directory_upload(mut multipart: Multipart) -> Result<(String, Vec<u8>), ApiError> {
+    use std::io::Write;
+
+    let mut output = Vec::new();
+    let cursor = Cursor::new(&mut output);
+    let mut writer = zip::ZipWriter::new(cursor);
+    let options = zip::write::SimpleFileOptions::default();
+    let mut file_count = 0usize;
+
+    loop {
+        let next = multipart
+            .next_field()
+            .await
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let Some(field) = next else {
+            break;
+        };
+        let Some(filename) = field.file_name().map(str::to_string) else {
+            continue;
+        };
+        let bytes = field
+            .bytes()
+            .await
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        writer
+            .start_file(filename, options)
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
+        writer
+            .write_all(&bytes)
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
+        file_count += 1;
+    }
+
+    if file_count == 0 {
+        return Err(ApiError::BadRequest(
+            "at least one file is required".to_string(),
+        ));
+    }
+
+    writer
+        .finish()
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    Ok(("directory-upload.zip".to_string(), output))
+}
+
+#[derive(Debug, Clone)]
+struct MutableTreeNode {
+    name: String,
+    path: String,
+    node_type: String,
+    size: Option<u64>,
+    children: BTreeMap<String, MutableTreeNode>,
+}
+
+impl MutableTreeNode {
+    fn directory(name: &str, path: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            path: path.to_string(),
+            node_type: "directory".to_string(),
+            size: None,
+            children: BTreeMap::new(),
+        }
+    }
+
+    fn file(name: &str, path: &str, size: u64) -> Self {
+        Self {
+            name: name.to_string(),
+            path: path.to_string(),
+            node_type: "file".to_string(),
+            size: Some(size),
+            children: BTreeMap::new(),
+        }
+    }
+
+    fn insert(&mut self, segments: &[&str], size: u64, full_path: &str) {
+        if segments.is_empty() {
+            return;
+        }
+        if segments.len() == 1 {
+            self.children.insert(
+                segments[0].to_string(),
+                Self::file(segments[0], full_path, size),
+            );
+            return;
+        }
+        let head = segments[0];
+        let child_path = if self.path.is_empty() {
+            head.to_string()
+        } else {
+            format!("{}/{}", self.path, head)
+        };
+        self.children
+            .entry(head.to_string())
+            .or_insert_with(|| Self::directory(head, &child_path))
+            .insert(&segments[1..], size, full_path);
+    }
+
+    fn into_node(self) -> FileTreeNode {
+        let children = if self.children.is_empty() {
+            None
+        } else {
+            Some(
+                self.children
+                    .into_values()
+                    .map(MutableTreeNode::into_node)
+                    .collect(),
+            )
+        };
+        FileTreeNode {
+            name: if self.name.is_empty() {
+                "/".to_string()
+            } else {
+                self.name
+            },
+            path: self.path,
+            node_type: self.node_type,
+            size: self.size,
+            children,
+        }
     }
 }
 

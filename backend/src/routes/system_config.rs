@@ -620,12 +620,11 @@ async fn sync_python_user_config_mirror(
         return Ok(());
     };
 
-    let bootstrap_user_id: Option<String> = sqlx::query_scalar(
-        "select id from users order by created_at asc limit 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(|error| ApiError::Internal(error.to_string()))?;
+    let bootstrap_user_id: Option<String> =
+        sqlx::query_scalar("select id from users order by created_at asc limit 1")
+            .fetch_optional(pool)
+            .await
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
 
     let Some(bootstrap_user_id) = bootstrap_user_id else {
         return Ok(());
