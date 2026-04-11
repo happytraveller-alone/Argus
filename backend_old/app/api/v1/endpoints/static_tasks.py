@@ -4,7 +4,6 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import static_tasks_bandit as _bandit
 from app.api.v1.endpoints import static_tasks_cache as _cache
-from app.api.v1.endpoints import static_tasks_gitleaks as _gitleaks
 from app.api.v1.endpoints import static_tasks_opengrep as _opengrep
 from app.api.v1.endpoints import static_tasks_opengrep_rules as _opengrep_rules
 from app.api.v1.endpoints import static_tasks_pmd as _pmd
@@ -31,7 +30,6 @@ router.include_router(_opengrep_rules.router)
 router.include_router(_bandit.router)
 router.include_router(_pmd.router)
 router.include_router(_phpstan.router)
-router.include_router(_gitleaks.router)
 router.include_router(_cache.router)
 
 
@@ -68,17 +66,6 @@ def _bind_pmd_runtime() -> None:
     _pmd._sync_task_scan_duration = _sync_task_scan_duration
 
 
-def _bind_gitleaks_runtime() -> None:
-    _gitleaks.asyncio = asyncio
-    _gitleaks.async_session_factory = async_session_factory
-    _gitleaks._clear_scan_task_cancel = _clear_scan_task_cancel
-    _gitleaks._get_project_root = _get_project_root
-    _gitleaks._is_scan_task_cancelled = _is_scan_task_cancelled
-    _gitleaks._request_scan_task_cancel = _request_scan_task_cancel
-    _gitleaks._run_subprocess_with_tracking = _run_subprocess_with_tracking
-    _gitleaks._sync_task_scan_duration = _sync_task_scan_duration
-
-
 async def _execute_bandit_scan(*args, **kwargs):
     _bind_bandit_runtime()
     return await _bandit._execute_bandit_scan(*args, **kwargs)
@@ -92,11 +79,6 @@ async def _execute_phpstan_scan(*args, **kwargs):
 async def _execute_pmd_scan(*args, **kwargs):
     _bind_pmd_runtime()
     return await _pmd._execute_pmd_scan(*args, **kwargs)
-
-
-async def _execute_gitleaks_scan(*args, **kwargs):
-    _bind_gitleaks_runtime()
-    return await _gitleaks._execute_gitleaks_scan(*args, **kwargs)
 
 
 OpengrepRuleSingleUploadRequest = _opengrep_rules.OpengrepRuleSingleUploadRequest
@@ -125,15 +107,10 @@ PmdScanTaskCreate = _pmd.PmdScanTaskCreate
 PmdScanTaskResponse = _pmd.PmdScanTaskResponse
 PmdFindingResponse = _pmd.PmdFindingResponse
 
-GitleaksScanTaskCreate = _gitleaks.GitleaksScanTaskCreate
-GitleaksScanTaskResponse = _gitleaks.GitleaksScanTaskResponse
-GitleaksFindingResponse = _gitleaks.GitleaksFindingResponse
-
 _parse_opengrep_output = _opengrep._parse_opengrep_output
 _parse_bandit_output_payload = _bandit._parse_bandit_output_payload
 _parse_phpstan_output_payload = _phpstan._parse_phpstan_output_payload
 _filter_phpstan_security_messages = _phpstan._filter_phpstan_security_messages
-_build_effective_gitleaks_config_toml = _gitleaks._build_effective_gitleaks_config_toml
 
 list_static_tasks = _opengrep.list_static_tasks
 create_static_task = _opengrep.create_static_task
@@ -204,22 +181,6 @@ delete_pmd_task = _pmd.delete_pmd_task
 get_pmd_findings = _pmd.get_pmd_findings
 get_pmd_finding = _pmd.get_pmd_finding
 update_pmd_finding_status = _pmd.update_pmd_finding_status
-
-list_gitleaks_rules = _gitleaks.list_gitleaks_rules
-get_gitleaks_rule = _gitleaks.get_gitleaks_rule
-create_gitleaks_rule = _gitleaks.create_gitleaks_rule
-update_gitleaks_rule = _gitleaks.update_gitleaks_rule
-delete_gitleaks_rule = _gitleaks.delete_gitleaks_rule
-batch_update_gitleaks_rules = _gitleaks.batch_update_gitleaks_rules
-import_builtin_gitleaks_rules = _gitleaks.import_builtin_gitleaks_rules
-create_gitleaks_scan = _gitleaks.create_gitleaks_scan
-list_gitleaks_tasks = _gitleaks.list_gitleaks_tasks
-get_gitleaks_task = _gitleaks.get_gitleaks_task
-interrupt_gitleaks_task = _gitleaks.interrupt_gitleaks_task
-delete_gitleaks_task = _gitleaks.delete_gitleaks_task
-get_gitleaks_findings = _gitleaks.get_gitleaks_findings
-get_gitleaks_finding = _gitleaks.get_gitleaks_finding
-update_gitleaks_finding_status = _gitleaks.update_gitleaks_finding_status
 
 list_pmd_presets = _pmd.list_pmd_presets
 list_builtin_pmd_rulesets = _pmd.list_builtin_pmd_rulesets
