@@ -18,12 +18,8 @@ interface DefaultConfigPayload {
 }
 
 interface UserConfigPayload {
-  id: string;
-  user_id: string;
   llmConfig: ConfigObject;
   otherConfig: ConfigObject;
-  created_at: string;
-  updated_at?: string;
 }
 
 interface LlmQuickConfigSnapshotPayload {
@@ -499,7 +495,7 @@ export const api = {
     return res.data;
   },
 
-  async createProject(project: CreateProjectForm & { owner_id?: string }): Promise<Project> {
+  async createProject(project: CreateProjectForm): Promise<Project> {
     const res = await apiClient.post('/projects/', {
       name: project.name,
       description: project.description,
@@ -513,7 +509,7 @@ export const api = {
   },
 
   async createProjectWithZip(
-    project: CreateProjectForm & { owner_id?: string },
+    project: CreateProjectForm,
     file: File,
   ): Promise<Project> {
     const formData = new FormData();
@@ -696,7 +692,7 @@ export const api = {
 
   async getDefaultConfig(): Promise<DefaultConfigPayload | null> {
     try {
-      const res = await apiClient.get('/config/defaults');
+      const res = await apiClient.get('/system-config/defaults');
       return res.data;
     } catch (error) {
       console.error('Failed to get default config:', error);
@@ -706,7 +702,7 @@ export const api = {
 
   async getUserConfig(): Promise<UserConfigPayload | null> {
     try {
-      const res = await apiClient.get('/config/me');
+      const res = await apiClient.get('/system-config');
       console.log('[API] getUserConfig 成功:', {
         hasLlmConfig: !!res.data?.llmConfig,
         hasApiKey: !!res.data?.llmConfig?.llmApiKey,
@@ -841,12 +837,12 @@ export const api = {
     llmConfig?: ConfigObject;
     otherConfig?: ConfigObject;
   }): Promise<UserConfigPayload> {
-    const res = await apiClient.put('/config/me', config);
+    const res = await apiClient.put('/system-config', config);
     return res.data;
   },
 
   async deleteUserConfig(): Promise<void> {
-    await apiClient.delete('/config/me');
+    await apiClient.delete('/system-config');
   },
 
   async testLLMConnection(params: {
@@ -861,12 +857,12 @@ export const api = {
     model?: string;
     response?: string;
   }> {
-    const res = await apiClient.post('/config/test-llm', params);
+    const res = await apiClient.post('/system-config/test-llm', params);
     return res.data;
   },
 
   async runAgentTaskPreflight(): Promise<AgentTaskPreflightPayload> {
-    const res = await apiClient.post('/config/agent-task-preflight');
+    const res = await apiClient.post('/system-config/agent-preflight');
     return res.data;
   },
 
@@ -885,7 +881,7 @@ export const api = {
       supportsCustomHeaders?: boolean;
     }>;
   }> {
-    const res = await apiClient.get('/config/llm-providers');
+    const res = await apiClient.get('/system-config/llm-providers');
     return res.data;
   },
 
@@ -914,7 +910,7 @@ export const api = {
     >;
     tokenRecommendationSource?: string;
   }> {
-    const res = await apiClient.post('/config/fetch-llm-models', params);
+    const res = await apiClient.post('/system-config/fetch-llm-models', params);
     return res.data;
   }
 };

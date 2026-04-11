@@ -4,7 +4,7 @@ import { getApiBaseUrl } from "../api/apiBase";
  * 前端环境变量配置
  * 
  * 注意：在 refactor/backend 分支中，所有 LLM 分析都在后端进行。
- * LLM 配置保存在后端数据库（通过 /api/v1/config/me API），
+ * LLM 配置保存在后端数据库（通过 /api/v1/system-config API），
  * 这里只保留前端应用本身需要的配置。
  */
 

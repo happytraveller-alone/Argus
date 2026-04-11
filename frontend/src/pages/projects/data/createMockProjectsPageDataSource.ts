@@ -61,13 +61,11 @@ function createMockProject(overrides: Partial<Project> = {}): Project {
 			typeof overrides.programming_languages === "string"
 				? overrides.programming_languages
 				: "TypeScript,Python",
-		owner_id: overrides.owner_id || "mock-user",
 		is_active: overrides.is_active ?? true,
 		created_at: timestamp,
 		updated_at: overrides.updated_at || timestamp,
 		management_metrics:
 			overrides.management_metrics || createMockMetrics(overrides.management_metrics ?? {}),
-		owner: overrides.owner,
 	};
 }
 

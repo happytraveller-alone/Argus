@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前后端是 `backend/app/main.py` 驱动的 FastAPI 单体服务，对外暴露 `/api/v1/*`。项目规模已经大到不适合继续在 Python 单体里硬补，所以本次迁移不再追求“原地翻修”，而是新增一套 Rust 后端逐步夺回接口控制权。
+当前后端是 `backend_old/app/main.py` 驱动的 FastAPI 单体服务，对外暴露 `/api/v1/*`。项目规模已经大到不适合继续在 Python 单体里硬补，所以本次迁移不再追求“原地翻修”，而是新增一套 Rust 后端逐步夺回接口控制权。
 
 这次设计已经锁定以下前提：
 
@@ -26,7 +26,7 @@ Rust 服务接管当前对外后端端口，统一接受前端请求。
 
 这能保证前端永远只连一个后端，不把“双栈状态机”塞进浏览器。
 
-同时，前端不再依赖 `nexus-web` 这类第三页面服务；首页和本地部署拓扑统一收敛为 `frontend + backend/backend-py`。
+同时，前端不再依赖 `nexus-web` 这类第三页面服务；首页和本地部署拓扑统一收敛为 `frontend + backend/backend_old`。
 
 ### 2. 去用户化不是补丁，而是重新定义边界
 
@@ -182,17 +182,17 @@ Rust 服务按“网关壳 + 领域模块”组织，不做第二个单体泥球
 
 建议目录：
 
-- `backend-rust/src/main.rs`
-- `backend-rust/src/app.rs`
-- `backend-rust/src/config.rs`
-- `backend-rust/src/state.rs`
-- `backend-rust/src/error.rs`
-- `backend-rust/src/proxy.rs`
-- `backend-rust/src/routes/health.rs`
-- `backend-rust/src/routes/system_config.rs`
-- `backend-rust/src/routes/projects.rs`
-- `backend-rust/src/db/system_config.rs`
-- `backend-rust/src/db/projects.rs`
+- `backend/src/main.rs`
+- `backend/src/app.rs`
+- `backend/src/config.rs`
+- `backend/src/state.rs`
+- `backend/src/error.rs`
+- `backend/src/proxy.rs`
+- `backend/src/routes/health.rs`
+- `backend/src/routes/system_config.rs`
+- `backend/src/routes/projects.rs`
+- `backend/src/db/system_config.rs`
+- `backend/src/db/projects.rs`
 
 职责边界：
 

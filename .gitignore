@@ -127,12 +127,12 @@ docker/env/backend/.env
 docker/env/frontend/.env
 
 # Backend specific
-backend/.venv/
-backend/venv/
-backend/__pycache__/
-backend/*.pyc
-backend/.pytest_cache/
-backend/.coverage
+backend_old/.venv/
+backend_old/venv/
+backend_old/__pycache__/
+backend_old/*.pyc
+backend_old/.pytest_cache/
+backend_old/.coverage
 backend/alembic.ini.bak
 
 # Frontend specific
@@ -200,15 +200,15 @@ examples/
 # ChromaDB data
 chroma/
 
-backend/data/vector_db/
+backend_old/data/vector_db/
 
 # custom
 commit_message.txt
 .worktrees/
 
 skills/
-!backend/app/services/agent/skills/
-!backend/app/services/agent/skills/**
+!backend_old/app/services/agent/skills/
+!backend_old/app/services/agent/skills/**
 
 # Codex integration - session logs and generated docs
 .codex/
@@ -237,7 +237,7 @@ backend/data/
 
 ./dist/
 
-backend/pytest*
+backend_old/pytest*
 
 
 /data/
@@ -245,3 +245,6 @@ backend/pytest*
 .claude
 claude/
 codex/
+
+# rust
+/backend/target/

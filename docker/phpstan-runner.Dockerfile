@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PHPSTAN_HOME=/opt/phpstan
 
-COPY --chmod=755 backend/app/runtime/launchers/phpstan_launcher.py /usr/local/bin/phpstan
+COPY --chmod=755 backend_old/app/runtime/launchers/phpstan_launcher.py /usr/local/bin/phpstan
 
 RUN --mount=type=cache,id=vulhunter-phpstan-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-phpstan-runner-apt-cache,target=/var/cache/apt,sharing=locked \

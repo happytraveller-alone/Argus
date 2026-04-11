@@ -32,7 +32,7 @@ services:
     ports:
       - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
     env_file:
-      - path: ./docker/env/backend/.env
+      - path: ./docker/env/backend_old/.env
         required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}

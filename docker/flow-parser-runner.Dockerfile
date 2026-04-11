@@ -23,7 +23,7 @@ ENV PYTHONNOUSERSITE=1
 ENV PYTHONPATH=/opt/flow-parser
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
-COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
+COPY backend_old/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 
 RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-flow-parser-runner-apt-cache,target=/var/cache/apt,sharing=locked \
@@ -85,8 +85,8 @@ RUN --mount=type=cache,id=vulhunter-flow-parser-runner-pip,target=/root/.cache/p
 
 WORKDIR /opt/flow-parser
 
-COPY backend/app /opt/flow-parser/app
-COPY backend/scripts/flow_parser_runner.py /opt/flow-parser/flow_parser_runner.py
+COPY backend_old/app /opt/flow-parser/app
+COPY backend_old/scripts/flow_parser_runner.py /opt/flow-parser/flow_parser_runner.py
 
 RUN set -eux; \
     mkdir -p /scan; \

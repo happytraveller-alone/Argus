@@ -37,7 +37,7 @@ ENV YASA_REAL_BIN=/opt/yasa/bin/yasa-engine.real
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
 # 注意：launcher 文件不在此处 COPY，移至 yasa-builder 阶段
-COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
+COPY backend_old/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 COPY frontend/yasa-engine-overrides /tmp/yasa-engine-overrides
 
 RUN --mount=type=cache,id=vulhunter-yasa-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
@@ -296,9 +296,9 @@ RUN --mount=type=cache,id=vulhunter-yasa-runner-apt-lists,target=/var/lib/apt/li
 # 当仅 launcher 变动时，fetcher 层命中 GHA 缓存，本阶段仅执行文件复制操作（极快）。
 FROM yasa-fetcher AS yasa-builder
 
-COPY --chmod=755 backend/app/runtime/launchers/yasa_engine_launcher.py /tmp/yasa-launchers/yasa-engine
-COPY --chmod=755 backend/app/runtime/launchers/yasa_launcher.py /tmp/yasa-launchers/yasa
-COPY --chmod=755 backend/app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py
+COPY --chmod=755 backend_old/app/runtime/launchers/yasa_engine_launcher.py /tmp/yasa-launchers/yasa-engine
+COPY --chmod=755 backend_old/app/runtime/launchers/yasa_launcher.py /tmp/yasa-launchers/yasa
+COPY --chmod=755 backend_old/app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py
 
 RUN set -eux; \
     cp /tmp/yasa-launchers/yasa-engine /opt/yasa-runtime/bin/yasa-engine; \

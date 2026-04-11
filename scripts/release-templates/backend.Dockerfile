@@ -45,7 +45,7 @@ RUN set -eux; \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=uvbin /uv /usr/local/bin/uv
-COPY backend/pyproject.toml backend/uv.lock ./
+COPY backend_old/pyproject.toml backend_old/uv.lock ./
 
 RUN set -eux; \
   uv venv "${BACKEND_VENV_PATH}"; \
@@ -104,10 +104,10 @@ RUN set -eux; \
   mkdir -p /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
-COPY backend/app /app/app
-COPY backend/alembic /app/alembic
-COPY backend/alembic.ini /app/alembic.ini
-COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
+COPY backend_old/app /app/app
+COPY backend_old/alembic /app/alembic
+COPY backend_old/alembic.ini /app/alembic.ini
+COPY backend_old/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 
 RUN groupadd --gid 1001 appgroup && \
   useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser && \

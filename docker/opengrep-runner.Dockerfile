@@ -22,7 +22,7 @@ ENV XDG_CONFIG_HOME=/opt/opengrep/xdg-config
 ENV XDG_DATA_HOME=/opt/opengrep/xdg-data
 ENV XDG_CACHE_HOME=/opt/opengrep/xdg-cache
 
-COPY --chmod=755 backend/app/runtime/launchers/opengrep_launcher.py ${OPENGREP_WRAPPER_BIN}
+COPY --chmod=755 backend_old/app/runtime/launchers/opengrep_launcher.py ${OPENGREP_WRAPPER_BIN}
 
 RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \

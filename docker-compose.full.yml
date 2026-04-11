@@ -88,6 +88,7 @@ services:
       SANDBOX_RUNNER_PYPI_INDEX_PRIMARY: ${SANDBOX_RUNNER_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
       SANDBOX_RUNNER_NPM_REGISTRY: ${SANDBOX_RUNNER_NPM_REGISTRY:-https://registry.npmmirror.com}
       YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}
+      PYTHON_UPSTREAM_BASE_URL: http://backend-py:8000
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
       GIT_MIRROR_PREFIXES: ${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}

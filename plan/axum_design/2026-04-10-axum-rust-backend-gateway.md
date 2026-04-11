@@ -13,17 +13,17 @@
 ### Task 1: Scaffold The Rust Gateway Workspace
 
 **Files:**
-- Create: `backend-rust/Cargo.toml`
-- Create: `backend-rust/src/main.rs`
-- Create: `backend-rust/src/app.rs`
-- Create: `backend-rust/src/config.rs`
-- Create: `backend-rust/src/state.rs`
-- Create: `backend-rust/src/error.rs`
-- Create: `backend-rust/src/routes/mod.rs`
+- Create: `backend/Cargo.toml`
+- Create: `backend/src/main.rs`
+- Create: `backend/src/app.rs`
+- Create: `backend/src/config.rs`
+- Create: `backend/src/state.rs`
+- Create: `backend/src/error.rs`
+- Create: `backend/src/routes/mod.rs`
 
 - [ ] **Step 1: Write the failing smoke test**
 
-Create `backend-rust/tests/http_smoke.rs` with a minimal startup test that boots the Axum app and asserts:
+Create `backend/tests/http_smoke.rs` with a minimal startup test that boots the Axum app and asserts:
 
 - `GET /health` returns `200`
 - `GET /api/v1/unknown-route` is not handled locally yet
@@ -36,7 +36,7 @@ Expected: FAIL because the Rust service and route tree do not exist yet.
 
 - [ ] **Step 3: Create the Cargo workspace and runtime shell**
 
-Add dependencies in `backend-rust/Cargo.toml` for:
+Add dependencies in `backend/Cargo.toml` for:
 
 - `axum`
 - `tokio`
@@ -74,13 +74,13 @@ If `.git` metadata is unavailable in the current workspace, skip the commit and 
 ### Task 2: Add Reverse Proxy Fallback To Python
 
 **Files:**
-- Create: `backend-rust/src/proxy.rs`
-- Modify: `backend-rust/src/app.rs`
-- Create: `backend-rust/tests/proxy_fallback.rs`
+- Create: `backend/src/proxy.rs`
+- Modify: `backend/src/app.rs`
+- Create: `backend/tests/proxy_fallback.rs`
 
 - [ ] **Step 1: Write the failing proxy contract test**
 
-Create `backend-rust/tests/proxy_fallback.rs` that spins up:
+Create `backend/tests/proxy_fallback.rs` that spins up:
 
 - a fake Python upstream server
 - the Axum gateway
@@ -117,22 +117,22 @@ Expected: PASS, proving the gateway is safe before it owns business logic.
 
 - [ ] **Step 5: Commit**
 
-Run: `git add backend-rust/src/proxy.rs backend-rust/src/app.rs backend-rust/tests/proxy_fallback.rs && git commit -m "feat: add python fallback proxy for unmigrated routes"`
+Run: `git add backend/src/proxy.rs backend/src/app.rs backend/tests/proxy_fallback.rs && git commit -m "feat: add python fallback proxy for unmigrated routes"`
 
 ### Task 3: Add Rust-Owned System Config Storage And Endpoints
 
 **Files:**
-- Create: `backend-rust/migrations/0001_system_configs.sql`
-- Create: `backend-rust/src/db/mod.rs`
-- Create: `backend-rust/src/db/system_config.rs`
-- Create: `backend-rust/src/routes/system_config.rs`
-- Create: `backend-rust/tests/system_config_api.rs`
-- Modify: `backend-rust/src/routes/mod.rs`
-- Modify: `backend-rust/src/app.rs`
+- Create: `backend/migrations/0001_system_configs.sql`
+- Create: `backend/src/db/mod.rs`
+- Create: `backend/src/db/system_config.rs`
+- Create: `backend/src/routes/system_config.rs`
+- Create: `backend/tests/system_config_api.rs`
+- Modify: `backend/src/routes/mod.rs`
+- Modify: `backend/src/app.rs`
 
 - [ ] **Step 1: Write the failing system-config API tests**
 
-Create `backend-rust/tests/system_config_api.rs` covering:
+Create `backend/tests/system_config_api.rs` covering:
 
 - `GET /api/v1/system-config/defaults`
 - `GET /api/v1/system-config`
@@ -154,7 +154,7 @@ Expected: FAIL because neither schema nor handlers exist.
 
 - [ ] **Step 3: Create the new schema**
 
-Add `backend-rust/migrations/0001_system_configs.sql` with a table shaped like:
+Add `backend/migrations/0001_system_configs.sql` with a table shaped like:
 
 ```sql
 create table if not exists system_configs (
@@ -211,21 +211,21 @@ Expected: PASS for CRUD plus the public config helpers.
 
 - [ ] **Step 7: Commit**
 
-Run: `git add backend-rust/migrations/0001_system_configs.sql backend-rust/src/db backend-rust/src/routes/system_config.rs backend-rust/tests/system_config_api.rs backend-rust/src/app.rs backend-rust/src/routes/mod.rs && git commit -m "feat: add rust system-config api"`
+Run: `git add backend/migrations/0001_system_configs.sql backend/src/db backend/src/routes/system_config.rs backend/tests/system_config_api.rs backend/src/app.rs backend/src/routes/mod.rs && git commit -m "feat: add rust system-config api"`
 
 ### Task 4: Add Rust-Owned Project Schema And ZIP CRUD
 
 **Files:**
-- Create: `backend-rust/migrations/0002_rust_projects.sql`
-- Create: `backend-rust/src/db/projects.rs`
-- Create: `backend-rust/src/routes/projects.rs`
-- Create: `backend-rust/tests/projects_api.rs`
-- Modify: `backend-rust/src/routes/mod.rs`
-- Modify: `backend-rust/src/app.rs`
+- Create: `backend/migrations/0002_rust_projects.sql`
+- Create: `backend/src/db/projects.rs`
+- Create: `backend/src/routes/projects.rs`
+- Create: `backend/tests/projects_api.rs`
+- Modify: `backend/src/routes/mod.rs`
+- Modify: `backend/src/app.rs`
 
 - [ ] **Step 1: Write the failing project API tests**
 
-Create `backend-rust/tests/projects_api.rs` covering:
+Create `backend/tests/projects_api.rs` covering:
 
 - `POST /api/v1/projects`
 - `GET /api/v1/projects`
@@ -251,7 +251,7 @@ Expected: FAIL because project schema and routes do not exist.
 
 - [ ] **Step 3: Create the new project tables**
 
-Add `backend-rust/migrations/0002_rust_projects.sql` with:
+Add `backend/migrations/0002_rust_projects.sql` with:
 
 - `rust_projects`
 - `rust_project_archives`
@@ -313,7 +313,7 @@ Expected: PASS for the Rust-owned project subset.
 
 - [ ] **Step 7: Commit**
 
-Run: `git add backend-rust/migrations/0002_rust_projects.sql backend-rust/src/db/projects.rs backend-rust/src/routes/projects.rs backend-rust/tests/projects_api.rs backend-rust/src/app.rs backend-rust/src/routes/mod.rs && git commit -m "feat: add rust project zip crud api"`
+Run: `git add backend/migrations/0002_rust_projects.sql backend/src/db/projects.rs backend/src/routes/projects.rs backend/tests/projects_api.rs backend/src/app.rs backend/src/routes/mod.rs && git commit -m "feat: add rust project zip crud api"`
 
 ### Task 5: Switch Frontend To The New De-Userized Contract
 
@@ -381,7 +381,7 @@ Run: `git add frontend/src/shared/api/database.ts frontend/src/shared/types/inde
 - Modify: `docker-compose.yml`
 - Modify: `frontend/scripts/dev-entrypoint.sh`
 - Modify: `frontend/src/shared/api/serverClient.ts`
-- Create: `backend-rust/.sqlx/` metadata only if the implementation uses offline SQLx checks
+- Create: `backend/.sqlx/` metadata only if the implementation uses offline SQLx checks
 
 - [ ] **Step 1: Write a failing compose contract test or checklist**
 
