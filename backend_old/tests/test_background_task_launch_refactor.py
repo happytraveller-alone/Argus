@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy.orm.attributes import instance_state
 
 from app.api.v1.endpoints import agent_tasks_routes_tasks
-from app.api.v1.endpoints import static_tasks_bandit
 from app.api.v1.endpoints import static_tasks_opengrep
 from app.api.v1.endpoints import static_tasks_phpstan
 from app.api.v1.endpoints import static_tasks_shared
@@ -121,11 +120,6 @@ async def test_launch_static_background_job_registers_and_cleans_up():
     ("module", "factory_name", "request_payload"),
     [
         (
-            static_tasks_bandit,
-            "create_bandit_scan",
-            static_tasks_bandit.BanditScanTaskCreate(project_id="project-1", target_path="."),
-        ),
-        (
             static_tasks_phpstan,
             "create_phpstan_scan",
             static_tasks_phpstan.PhpstanScanTaskCreate(project_id="project-1", target_path=".", level=6),
@@ -226,11 +220,6 @@ async def test_create_agent_task_launches_async_job_and_releases_request_session
 @pytest.mark.parametrize(
     ("module", "factory_name", "request_payload"),
     [
-        (
-            static_tasks_bandit,
-            "create_bandit_scan",
-            static_tasks_bandit.BanditScanTaskCreate(project_id="project-1", target_path="."),
-        ),
         (
             static_tasks_phpstan,
             "create_phpstan_scan",

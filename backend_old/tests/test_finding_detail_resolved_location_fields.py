@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.v1.endpoints.static_tasks_bandit import get_bandit_finding
 from app.api.v1.endpoints.static_tasks_phpstan import get_phpstan_finding
 from app.api.v1.endpoints.static_tasks_pmd import get_pmd_finding
 
@@ -14,47 +13,6 @@ class _ScalarOneOrNoneResult:
 
     def scalar_one_or_none(self):
         return self._value
-
-
-@pytest.mark.asyncio
-async def test_get_bandit_finding_returns_resolved_location_fields(monkeypatch, tmp_path):
-    db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _ScalarOneOrNoneResult(SimpleNamespace(id="task-1", project_id="project-1")),
-            _ScalarOneOrNoneResult(
-                SimpleNamespace(
-                    id="finding-1",
-                    scan_task_id="task-1",
-                    test_id="B602",
-                    test_name="subprocess_popen_with_shell_equals_true",
-                    issue_severity="HIGH",
-                    issue_confidence="HIGH",
-                    file_path=str(tmp_path / "app" / "tasks" / "run_cmd.py"),
-                    line_number=41,
-                    code_snippet="subprocess.Popen(command, shell=True)",
-                    issue_text="shell=True may trigger command injection",
-                    more_info="https://bandit.readthedocs.io/",
-                    status="open",
-                )
-            ),
-        ]
-    )
-
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.static_tasks_bandit._get_project_root",
-        AsyncMock(return_value=str(tmp_path)),
-    )
-
-    result = await get_bandit_finding(
-        task_id="task-1",
-        finding_id="finding-1",
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    assert result.resolved_file_path == "app/tasks/run_cmd.py"
-    assert result.resolved_line_start == 41
 
 
 @pytest.mark.asyncio
