@@ -52,3 +52,22 @@ def test_config_endpoint_no_longer_owns_llm_provider_helper_impl():
     assert (
         "from app.services import llm_provider_service" in content
     ), "config.py should depend on llm_provider_service"
+
+
+def test_config_endpoint_no_longer_owns_llm_snapshot_helper_impl():
+    config_path = PROJECT_ROOT / "app/api/v1/endpoints/config.py"
+    content = config_path.read_text(encoding="utf-8")
+
+    forbidden_defs = [
+        "def _resolve_effective_llm_api_key(",
+        "def _has_saved_llm_connection_config(",
+        "def _build_llm_quick_config_snapshot(",
+        "def _collect_preflight_missing_fields(",
+        "def _format_missing_fields_message(",
+    ]
+    for snippet in forbidden_defs:
+        assert snippet not in content, f"config.py still owns helper: {snippet}"
+
+    assert (
+        "from app.services import llm_config_runtime_service" in content
+    ), "config.py should depend on llm_config_runtime_service"

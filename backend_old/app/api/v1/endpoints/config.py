@@ -34,6 +34,7 @@ from app.services.llm.config_utils import (
 )
 from app.services.llm.types import LLMProvider
 from app.services.project_test_service import normalize_extracted_project_root
+from app.services import llm_config_runtime_service
 from app.services import llm_provider_service
 from app.services import user_config_service
 from app.services.zip_storage import load_project_zip
@@ -76,66 +77,6 @@ AGENT_TASK_PREFLIGHT_TIMEOUT_SECONDS = 10
 
 def _normalize_llm_provider_id(provider: Any) -> str:
     return llm_provider_service.normalize_llm_provider_id(provider)
-
-
-def _resolve_effective_llm_api_key(provider_id: str, llm_config: dict[str, Any]) -> str:
-    direct_key = str(llm_config.get("llmApiKey") or "").strip()
-    if direct_key:
-        return direct_key
-    provider_key_field = llm_provider_service.provider_api_key_field(
-        _normalize_llm_provider_id(provider_id)
-    )
-    if not provider_key_field:
-        return ""
-    return str(llm_config.get(provider_key_field) or "").strip()
-
-
-def _has_saved_llm_connection_config(llm_config: dict[str, Any]) -> bool:
-    for key in LLM_CONNECTION_CONFIG_KEYS:
-        if str(llm_config.get(key) or "").strip():
-            return True
-    return False
-
-
-def _build_llm_quick_config_snapshot(
-    llm_config: dict[str, Any],
-) -> "LLMQuickConfigSnapshot":
-    provider = _normalize_llm_provider_id(llm_config.get("llmProvider"))
-    base_url = normalize_llm_base_url(
-        llm_config.get("llmBaseUrl") or llm_config.get("ollamaBaseUrl")
-    )
-    return LLMQuickConfigSnapshot(
-        provider=provider,
-        model=str(llm_config.get("llmModel") or "").strip(),
-        baseUrl=base_url,
-        apiKey=_resolve_effective_llm_api_key(provider, llm_config),
-    )
-
-
-def _collect_preflight_missing_fields(
-    snapshot: "LLMQuickConfigSnapshot",
-) -> list[str]:
-    missing_fields: list[str] = []
-    if not snapshot.model:
-        missing_fields.append("llmModel")
-    if not snapshot.baseUrl:
-        missing_fields.append("llmBaseUrl")
-    if snapshot.provider != "ollama" and not snapshot.apiKey:
-        missing_fields.append("llmApiKey")
-    return missing_fields
-
-
-def _format_missing_fields_message(missing_fields: list[str]) -> str:
-    field_label_map = {
-        "llmModel": "模型（llmModel）",
-        "llmBaseUrl": "Base URL（llmBaseUrl）",
-        "llmApiKey": "API Key（llmApiKey）",
-    }
-    return "、".join(
-        field_label_map[field]
-        for field in missing_fields
-        if field in field_label_map
-    )
 
 
 async def _load_user_config_payload(
@@ -805,9 +746,14 @@ async def agent_task_llm_preflight(
         db=db,
         user_id=current_user.id,
     )
-    effective_snapshot = _build_llm_quick_config_snapshot(effective_llm_config)
+    effective_snapshot = LLMQuickConfigSnapshot(
+        **llm_config_runtime_service.build_llm_quick_config_snapshot(effective_llm_config)
+    )
 
-    if not _has_saved_llm_connection_config(saved_llm_config):
+    if not llm_config_runtime_service.has_saved_llm_connection_config(
+        saved_llm_config,
+        LLM_CONNECTION_CONFIG_KEYS,
+    ):
         return AgentTaskLLMPreflightResponse(
             ok=False,
             stage="llm_config",
@@ -817,8 +763,10 @@ async def agent_task_llm_preflight(
             savedConfig=None,
         )
 
-    saved_snapshot = _build_llm_quick_config_snapshot(saved_llm_config)
-    missing_fields = _collect_preflight_missing_fields(saved_snapshot)
+    saved_snapshot = LLMQuickConfigSnapshot(
+        **llm_config_runtime_service.build_llm_quick_config_snapshot(saved_llm_config)
+    )
+    missing_fields = llm_config_runtime_service.collect_preflight_missing_fields(saved_snapshot)
     if missing_fields:
         return AgentTaskLLMPreflightResponse(
             ok=False,
@@ -827,7 +775,7 @@ async def agent_task_llm_preflight(
             missingFields=missing_fields,
             message=(
                 "智能扫描初始化失败：LLM 缺少必填配置 "
-                f"{_format_missing_fields_message(missing_fields)}，请先补全并保存。"
+                f"{llm_config_runtime_service.format_missing_fields_message(missing_fields)}，请先补全并保存。"
             ),
             effectiveConfig=effective_snapshot,
             savedConfig=saved_snapshot,
