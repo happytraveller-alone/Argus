@@ -28,11 +28,6 @@ on:
         required: false
         type: boolean
         default: true
-      build_yasa_runner:
-        description: '构建 YASA runner 镜像'
-        required: false
-        type: boolean
-        default: false
       build_opengrep_runner:
         description: '构建 OpenGrep runner 镜像'
         required: false
@@ -109,7 +104,6 @@ jobs:
               - '.dockerignore'
               - 'docker/backend.Dockerfile'
               - 'backend/**'
-              - 'frontend/yasa-engine-overrides/**'
 
   build-frontend-latest:
     if: github.event_name == 'push' && needs.detect-changes.outputs.frontend == 'true'
@@ -417,35 +411,6 @@ jobs:
             --type spdx \
             "${IMAGE}:${TAG}@${DIGEST}"
 
-      - name: 构建并推送 YASA runner Docker 镜像
-        id: build-yasa
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_yasa_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/yasa-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-yasa-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=yasa-runner
-          cache-to: type=gha,mode=max,scope=yasa-runner
-
-      - name: 签名 YASA runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_yasa_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-yasa.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-yasa-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-yasa-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
       - name: 构建并推送 OpenGrep runner Docker 镜像
         id: build-opengrep
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
@@ -686,9 +651,6 @@ jobs:
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
             set_public "vulhunter-backend"
           fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
-            set_public "vulhunter-yasa-runner"
-          fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
             set_public "vulhunter-opengrep-runner"
           fi
@@ -729,9 +691,6 @@ jobs:
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
             add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}"
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
             add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}"
@@ -786,9 +745,6 @@ jobs:
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
             echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
             echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY

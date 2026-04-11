@@ -115,7 +115,6 @@ validate_release_tree() {
     "frontend/scripts/obfuscatorOptions.ts"
     "frontend/scripts/dev-launcher.mjs"
     "frontend/src/app/main.tsx"
-    "frontend/yasa-engine-overrides/src/config.ts"
   )
   forbidden_paths=(
     "NOTICE"

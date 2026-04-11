@@ -1,5 +1,0 @@
-services:
-  backend:
-    volumes:
-      - ${YASA_HOST_BIN_PATH:-/home/jy/.local/bin/yasa}:/opt/yasa/bin/yasa:ro
-      - ${YASA_HOST_RESOURCE_DIR:-/home/jy/.local/share/yasa-engine/resource}:/opt/yasa/resource:ro

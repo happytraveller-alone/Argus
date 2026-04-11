@@ -3,7 +3,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER_SERVICE_NAMES = (
-    "yasa-runner",
     "opengrep-runner",
     "bandit-runner",
     "gitleaks-runner",
@@ -79,16 +78,13 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "BACKEND_INSTALL_YASA" not in compose_text
     assert "YASA_VERSION:" not in compose_text
     assert "BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/" in compose_text
-    assert "YASA_ENABLED: ${YASA_ENABLED:-true}" in compose_text
+    assert "YASA_ENABLED" not in compose_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
     assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text
     assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}" in compose_text
     assert "VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}" in compose_text
-    assert (
-        "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
-        "vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
+    assert "SCANNER_YASA_IMAGE" not in compose_text
     assert (
         "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
         "vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
@@ -112,7 +108,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     ) in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
-    assert "YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}" in compose_text
+    assert "YASA_TIMEOUT_SECONDS" not in compose_text
     assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" not in compose_text
     assert "scan_workspace:/tmp/vulhunter/scans" in compose_text
     assert "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock" in compose_text
@@ -215,7 +211,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "CODEX_SKILLS_AUTO_INSTALL" not in full_overlay_text
     assert "BACKEND_INSTALL_YASA" not in full_overlay_text
     assert "YASA_VERSION=" not in full_overlay_text
-    assert "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}" in full_overlay_text
+    assert "SCANNER_YASA_IMAGE" not in full_overlay_text
     assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in full_overlay_text
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in full_overlay_text
     assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in full_overlay_text
@@ -225,6 +221,8 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/" in full_overlay_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in full_overlay_text
+    assert "YASA_ENABLED" not in full_overlay_text
+    assert "YASA_TIMEOUT_SECONDS" not in full_overlay_text
     assert "mem_limit: 1536m" in full_overlay_text
     assert "pids_limit: 512" in full_overlay_text
     assert "CHOKIDAR_USEPOLLING: ${FRONTEND_CHOKIDAR_USEPOLLING:-false}" in full_overlay_text
@@ -305,9 +303,6 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     backend_readme_text = (REPO_ROOT / "backend" / "README.md").read_text(encoding="utf-8")
     backend_start_text = (REPO_ROOT / "backend" / "start.sh").read_text(encoding="utf-8")
     pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
-    yasa_runner_text = (REPO_ROOT / "docker" / "yasa-runner.Dockerfile").read_text(
-        encoding="utf-8"
-    )
     flow_parser_runner_text = (
         REPO_ROOT / "docker" / "flow-parser-runner.Dockerfile"
     ).read_text(encoding="utf-8")
@@ -348,16 +343,7 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'ln -sfn /opt/backend-venv /app/.venv' not in backend_text
     assert 'rm -rf /root/.cache/pip' in backend_text
     assert 'rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11' in backend_text
-    assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim" in yasa_runner_text
-    assert "AS yasa-builder" in yasa_runner_text
-    assert "AS yasa-runner" in yasa_runner_text
-    assert "/opt/yasa/bin/yasa" in yasa_runner_text
-    assert "/opt/yasa-runtime" in yasa_runner_text
-    assert "COPY frontend/yasa-engine-overrides /tmp/yasa-engine-overrides" in yasa_runner_text
-    assert "COPY --from=yasa-builder /opt/yasa-runtime /opt/yasa" in yasa_runner_text
-    assert "YASA runner placeholder" not in yasa_runner_text
-    assert "node_modules" not in yasa_runner_text
-    assert "WORKDIR /scan" in yasa_runner_text
+    assert not (REPO_ROOT / "docker" / "yasa-runner.Dockerfile").exists()
     assert "tree-sitter-language-pack" in flow_parser_runner_text
     assert "code2flow" in flow_parser_runner_text
     assert "ARG BACKEND_PYPI_INDEX_CANDIDATES=" in flow_parser_runner_text
@@ -483,7 +469,6 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "if: github.event_name == 'push'" in workflow_text
     assert "if: github.event_name == 'workflow_dispatch'" in workflow_text
     assert "platforms: linux/amd64" in workflow_text
-    assert "build_yasa_runner" in workflow_text
     assert "build_opengrep_runner" in workflow_text
     assert "build_bandit_runner" in workflow_text
     assert "build_gitleaks_runner" in workflow_text
@@ -493,7 +478,7 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "./docker/backend.Dockerfile" in workflow_text
     assert "./docker/frontend.Dockerfile" in workflow_text
     assert "context: ." in workflow_text
-    assert "./docker/yasa-runner.Dockerfile" in workflow_text
+    assert "./docker/yasa-runner.Dockerfile" not in workflow_text
     assert "./docker/opengrep-runner.Dockerfile" in workflow_text
     assert "./docker/bandit-runner.Dockerfile" in workflow_text
     assert "./docker/gitleaks-runner.Dockerfile" in workflow_text
@@ -504,7 +489,7 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "GHCR_REGISTRY: ghcr.io" in workflow_text
     assert "build_nexus_web" not in workflow_text
     assert "./nexus-web/src" not in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "vulhunter-yasa-runner" not in workflow_text
     assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
     assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
     assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
@@ -531,7 +516,7 @@ def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
     assert "- 'docker/frontend.Dockerfile'" in workflow_text
     assert "- 'docker/backend.Dockerfile'" in workflow_text
     assert "- '.github/workflows/docker-publish.yml'" in workflow_text
-    assert "- 'frontend/yasa-engine-overrides/**'" in workflow_text
+    assert "frontend/yasa-engine-overrides" not in workflow_text
 
 
 def test_release_workflow_builds_slim_release_tree() -> None:

@@ -22,10 +22,7 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
         "image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
         "vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
-    assert (
-        "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
-        "vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
+    assert "SCANNER_YASA_IMAGE" not in compose_text
     assert "nexus-web:" not in compose_text
     assert "nexus-itemDetail:" not in compose_text
     assert "context: ./nexus-web" not in compose_text
@@ -45,10 +42,7 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
     assert "target: runtime-plain" in hybrid_text
     assert "context: ./frontend" in hybrid_text
     assert "context: ." in hybrid_text
-    assert (
-        "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
-        "vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in hybrid_text
+    assert "SCANNER_YASA_IMAGE" not in hybrid_text
     assert "nexus-web" not in hybrid_text
     assert "nexus-itemDetail" not in hybrid_text
     assert "-runner-local:latest" not in hybrid_text

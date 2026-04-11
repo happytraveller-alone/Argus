@@ -42,7 +42,6 @@ class RunnerPreflightResult:
 def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
     timeout_seconds = int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30))
     return [
-        RunnerPreflightSpec("yasa", str(getattr(settings, "SCANNER_YASA_IMAGE", "")), ["/opt/yasa/bin/yasa", "--version"], timeout_seconds),
         RunnerPreflightSpec("opengrep", str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "")), ["opengrep", "--version"], timeout_seconds),
         RunnerPreflightSpec("bandit", str(getattr(settings, "SCANNER_BANDIT_IMAGE", "")), ["bandit", "--version"], timeout_seconds),
         RunnerPreflightSpec("gitleaks", str(getattr(settings, "SCANNER_GITLEAKS_IMAGE", "")), ["gitleaks", "version"], timeout_seconds),

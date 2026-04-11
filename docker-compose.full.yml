@@ -51,7 +51,6 @@ services:
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-local:latest}
-      YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
@@ -68,7 +67,6 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
       SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}
@@ -87,7 +85,6 @@ services:
       SANDBOX_RUNNER_APT_SECURITY_FALLBACK: ${SANDBOX_RUNNER_APT_SECURITY_FALLBACK:-security.debian.org}
       SANDBOX_RUNNER_PYPI_INDEX_PRIMARY: ${SANDBOX_RUNNER_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
       SANDBOX_RUNNER_NPM_REGISTRY: ${SANDBOX_RUNNER_NPM_REGISTRY:-https://registry.npmmirror.com}
-      YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}
       PYTHON_UPSTREAM_BASE_URL: http://backend-py:8000
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}

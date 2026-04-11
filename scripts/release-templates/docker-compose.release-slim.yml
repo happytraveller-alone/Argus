@@ -45,7 +45,6 @@ services:
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
-      YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
@@ -60,7 +59,6 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}
@@ -73,7 +71,6 @@ services:
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
       FLOW_PARSER_RUNNER_BATCH_MAX_FILES: "${FLOW_PARSER_RUNNER_BATCH_MAX_FILES:-100}"
       FLOW_PARSER_RUNNER_BATCH_MAX_BYTES: "${FLOW_PARSER_RUNNER_BATCH_MAX_BYTES:-8388608}"
-      YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
       GIT_MIRROR_PREFIXES: ${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}

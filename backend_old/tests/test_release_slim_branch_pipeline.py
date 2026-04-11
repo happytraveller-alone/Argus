@@ -61,6 +61,7 @@ def test_scheduled_release_workflow_no_longer_uses_git_tags_as_release_state() -
     assert "git push origin ${{ steps.check.outputs.version }}" not in workflow_text
     assert "-f build_frontend=true" not in workflow_text
     assert "-f build_backend=true" not in workflow_text
+    assert "-f build_yasa_runner=true" not in workflow_text
 
 
 def test_legacy_release_helper_script_is_removed() -> None:
@@ -95,7 +96,6 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "frontend/scripts/obfuscatorOptions.ts",
         "frontend/scripts/dev-launcher.mjs",
         "frontend/src/app/main.tsx",
-        "frontend/yasa-engine-overrides/src/config.ts",
     ]
     for rel_path in required_paths:
         assert (output_dir / rel_path).exists(), rel_path
