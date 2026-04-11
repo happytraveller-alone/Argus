@@ -3,9 +3,11 @@ from pathlib import Path
 import pytest
 
 from app.api.v1.endpoints.agent_tasks import (
-    _build_core_audit_exclude_patterns,
     _collect_project_info,
     _discover_entry_points_deterministic,
+)
+from app.services.agent.scope_filters import (
+    _build_core_audit_exclude_patterns,
     _filter_bootstrap_findings,
 )
 from app.services.agent.tools.smart_scan_tool import SmartScanTool

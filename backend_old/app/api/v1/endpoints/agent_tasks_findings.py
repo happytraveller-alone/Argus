@@ -25,8 +25,8 @@ from app.services.agent.utils.vulnerability_naming import (
     resolve_cwe_id as resolve_cwe_id_util,
     resolve_vulnerability_profile as resolve_vulnerability_profile_util,
 )
+from app.services.agent.scope_filters import _is_core_ignored_path
 
-from .agent_tasks_bootstrap import _is_core_ignored_path
 from .agent_tasks_contracts import AgentFindingResponse
 
 logger = logging.getLogger(__name__)

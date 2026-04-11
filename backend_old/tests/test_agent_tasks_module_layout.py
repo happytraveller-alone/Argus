@@ -19,6 +19,7 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_findings
     from app.api.v1.endpoints import agent_tasks_tool_runtime
+    from app.services.agent import scope_filters
 
     assert agent_tasks.AgentTaskCreate is agent_tasks_contracts.AgentTaskCreate
     assert (
@@ -30,6 +31,8 @@ def test_agent_tasks_facade_re_exports_key_symbols():
         is agent_tasks_tool_runtime._sync_tool_playbook_to_memory
     )
     assert agent_tasks._resolve_static_bootstrap_config is agent_tasks_bootstrap._resolve_static_bootstrap_config
+    assert agent_tasks._filter_bootstrap_findings is scope_filters._filter_bootstrap_findings
+    assert agent_tasks_findings._is_core_ignored_path is scope_filters._is_core_ignored_path
     assert agent_tasks._save_findings is agent_tasks_findings._save_findings
 
 
