@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.api.v1.endpoints.agent_tasks import _build_seed_from_entrypoints
+from app.services.agent.bootstrap_entrypoints import _build_seed_from_entrypoints
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
@@ -39,4 +39,3 @@ async def test_build_seed_from_entrypoints_returns_seeds_with_entry_points(tmp_p
     assert first.get("file_path") == "src/api.py"
     assert isinstance(first.get("entry_points"), list)
     assert first.get("entry_points")[:2] == entry_funcs
-

@@ -20,6 +20,7 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.api.v1.endpoints import agent_tasks_findings
     from app.api.v1.endpoints import agent_tasks_tool_runtime
     from app.services.agent import bandit_bootstrap_rules
+    from app.services.agent import bootstrap_entrypoints
     from app.services.agent import bootstrap_findings
     from app.services.agent import bootstrap_policy
     from app.services.agent import bootstrap_seeds
@@ -49,6 +50,14 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     assert (
         agent_tasks._normalize_bootstrap_finding_from_gitleaks_payload
         is bootstrap_findings._normalize_bootstrap_finding_from_gitleaks_payload
+    )
+    assert (
+        agent_tasks._build_seed_from_entrypoints
+        is bootstrap_entrypoints._build_seed_from_entrypoints
+    )
+    assert (
+        agent_tasks._discover_entry_points_deterministic
+        is bootstrap_entrypoints._discover_entry_points_deterministic
     )
     assert (
         agent_tasks_bootstrap._dedupe_bootstrap_findings
