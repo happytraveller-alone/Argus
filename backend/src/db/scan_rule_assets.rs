@@ -139,6 +139,55 @@ pub async fn load_asset_content(
         .map(|asset| asset.content))
 }
 
+pub async fn load_assets_by_engine(
+    state: &AppState,
+    engine: &str,
+    source_kinds: &[&str],
+) -> Result<Vec<ScanRuleAsset>> {
+    if let Some(pool) = &state.db_pool {
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, String, Value)>(
+            r#"
+            select engine, source_kind, asset_path, file_format, sha256, content, metadata_json
+            from rust_scan_rule_assets
+            where engine = $1
+              and source_kind = any($2)
+              and is_active = true
+            order by asset_path asc
+            "#,
+        )
+        .bind(engine)
+        .bind(source_kinds)
+        .fetch_all(pool)
+        .await?;
+
+        return Ok(rows
+            .into_iter()
+            .map(
+                |(engine, source_kind, asset_path, file_format, sha256, content, metadata_json)| {
+                    ScanRuleAsset {
+                        engine,
+                        source_kind,
+                        asset_path,
+                        file_format,
+                        sha256,
+                        content,
+                        metadata_json,
+                    }
+                },
+            )
+            .collect());
+    }
+
+    let source_kinds = source_kinds
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    Ok(discover_rule_assets()?
+        .into_iter()
+        .filter(|asset| asset.engine == engine && source_kinds.contains(asset.source_kind.as_str()))
+        .collect())
+}
+
 pub fn discover_rule_assets() -> Result<Vec<ScanRuleAsset>> {
     let root = rule_asset_root();
     let mut assets = Vec::new();

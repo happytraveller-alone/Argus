@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use tokio::{sync::Semaphore, task::JoinSet, time::{timeout, Duration}};
 
 use crate::{
-    scan::gitleaks,
+    scan::{gitleaks, opengrep},
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -243,6 +243,14 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         }
     }
 
+    if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
+        if let Some((workspace_dir, command, mounts)) = build_opengrep_preflight_inputs(state).await? {
+            opengrep_spec.command = command;
+            opengrep_spec.mounts = mounts;
+            cleanup_dirs.push(workspace_dir);
+        }
+    }
+
     Ok((specs, cleanup_dirs))
 }
 
@@ -263,6 +271,24 @@ async fn build_gitleaks_preflight_inputs(
         "/work/report.json",
         Some("/work/gitleaks.toml"),
     );
+    Ok(Some((
+        workspace_dir.clone(),
+        command,
+        vec![(workspace_dir, "/work".to_string())],
+    )))
+}
+
+async fn build_opengrep_preflight_inputs(
+    state: &AppState,
+) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
+    let workspace_dir = std::env::temp_dir().join(format!("opengrep-preflight-{}", uuid::Uuid::new_v4()));
+    let rules_dir = opengrep::materialize_rule_directory(state, &workspace_dir).await?;
+    let Some(_rules_dir) = rules_dir else {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Ok(None);
+    };
+
+    let command = opengrep::build_validate_command("/work/opengrep-rules");
     Ok(Some((
         workspace_dir.clone(),
         command,
@@ -310,6 +336,16 @@ mod tests {
         assert!(gitleaks.command.iter().any(|part| part == "detect"));
         assert!(gitleaks.command.iter().any(|part| part == "--config"));
         assert_eq!(gitleaks.mounts.len(), 1);
+
+        let opengrep = specs
+            .iter()
+            .find(|spec| spec.name == "opengrep")
+            .expect("opengrep spec should exist");
+        assert_eq!(
+            opengrep.command,
+            vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
+        );
+        assert_eq!(opengrep.mounts.len(), 1);
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;

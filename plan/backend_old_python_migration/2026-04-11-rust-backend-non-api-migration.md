@@ -476,6 +476,10 @@
     - Gitleaks 会从 Rust 规则资产库读取 builtin TOML
     - Rust 会 materialize 成 `gitleaks.toml`
     - Rust preflight 会把该 config 挂载进容器并传给 `gitleaks detect --config`
+  - 已打通第二条规则消费链路：
+    - Opengrep 会从 Rust 规则资产库读取 `internal_rule + patch_rule`
+    - Rust 会 materialize 成 `opengrep-rules/`
+    - Rust preflight 会把该规则目录挂载进容器并执行 `opengrep --config /work/opengrep-rules --validate`
   - `backend/tests/bootstrap_startup.rs` 覆盖：
     - 文件存储根创建
     - 无 DB 时 file-mode control-plane init
@@ -489,13 +493,14 @@
   - `backend_old/app/db` 中仍有价值的扫描引擎规则资产，已经开始迁入 Rust 自有库，不再依赖 Python 侧灌库
   - Rust startup init 的“该做/不该做”已经是自己的 policy，不再让 Python demo/user 初始化影子带偏设计
   - 至少已有一个扫描引擎开始真正消费 Rust 自己维护的规则资产
+  - `opengrep` 已进入 Rust 真消费阶段，最大的规则资产源开始脱离 Python 旧链路
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
   - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走
   - startup recovery 虽已由 Rust 编排接手，但恢复目标仍是 legacy task tables，属于迁移期桥
   - runner preflight 虽已迁到 Rust，但仍是启动前 runner 可用性检查，不是 runtime 迁移完成
   - 扫描规则资产虽然已进 Rust DB，但后续各引擎的 Rust-native 读取与使用链路还没全部接上
-  - 当前只打通了 Gitleaks 样板链路，`opengrep / bandit / phpstan / pmd / yasa` 仍待接入
+  - 当前已打通 `gitleaks + opengrep`，`bandit / phpstan / pmd / yasa` 仍待接入
   - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
 - 下一刀：
   - 继续迁 Phase A 剩余底座，把 DB/schema/init 流程的 source of truth 从 Python 挪到 Rust
