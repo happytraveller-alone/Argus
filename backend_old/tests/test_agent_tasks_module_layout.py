@@ -10,7 +10,6 @@ def test_agent_tasks_split_modules_exist():
         "app.api.v1.endpoints.agent_tasks_execution",
         "app.api.v1.endpoints.agent_tasks_findings",
         "app.api.v1.endpoints.agent_tasks_access",
-        "app.api.v1.endpoints.agent_tasks_routes_tasks",
     ]
 
     for module_name in module_names:
@@ -23,7 +22,6 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_execution
     from app.api.v1.endpoints import agent_tasks_findings
-    from app.api.v1.endpoints import agent_tasks_routes_tasks
     from app.api.v1.endpoints import agent_tasks_tool_runtime
     from app.api.v1.endpoints import agent_tasks_runtime
 
@@ -40,7 +38,6 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     assert agent_tasks._resolve_static_bootstrap_config is agent_tasks_bootstrap._resolve_static_bootstrap_config
     assert agent_tasks._execute_agent_task is agent_tasks_execution._execute_agent_task
     assert agent_tasks._save_findings is agent_tasks_findings._save_findings
-    assert agent_tasks.create_agent_task is agent_tasks_routes_tasks.create_agent_task
 
 
 def test_agent_tasks_api_router_import_remains_healthy():

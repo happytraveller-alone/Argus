@@ -341,6 +341,134 @@ async fn seed_agent_result_state(
     (verified_id, pending_id, false_positive_id)
 }
 
+async fn seed_agent_lifecycle_state(state: &AppState, task_id: &str) {
+    let mut snapshot = task_state::load_snapshot(state).await.unwrap();
+    let record = snapshot.agent_tasks.get_mut(task_id).unwrap();
+    record.status = "running".to_string();
+    record.current_phase = Some("analysis".to_string());
+    record.current_step = Some("streaming events".to_string());
+    record.progress_percentage = 64.0;
+    record.started_at = Some("2026-04-12T11:00:00Z".to_string());
+    record.total_files = 9;
+    record.indexed_files = 9;
+    record.analyzed_files = 6;
+    record.total_chunks = 18;
+    record.files_with_findings = 2;
+    record.findings.clear();
+    record.events.clear();
+    record.checkpoints.clear();
+    record.findings.push(task_state::AgentFindingRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "sql_injection".to_string(),
+        severity: "critical".to_string(),
+        title: "Critical SQL injection".to_string(),
+        status: "verified".to_string(),
+        is_verified: true,
+        verdict: Some("confirmed".to_string()),
+        authenticity: Some("confirmed".to_string()),
+        created_at: "2026-04-12T11:05:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings.push(task_state::AgentFindingRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "xss".to_string(),
+        severity: "high".to_string(),
+        title: "Pending reflected xss".to_string(),
+        status: "pending".to_string(),
+        is_verified: false,
+        verdict: Some("likely".to_string()),
+        authenticity: Some("likely".to_string()),
+        created_at: "2026-04-12T11:06:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings.push(task_state::AgentFindingRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "xss".to_string(),
+        severity: "medium".to_string(),
+        title: "Dismissed duplicate xss".to_string(),
+        status: "false_positive".to_string(),
+        is_verified: false,
+        verdict: Some("false_positive".to_string()),
+        authenticity: Some("false_positive".to_string()),
+        created_at: "2026-04-12T11:07:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings_count = 2;
+    record.verified_count = 1;
+    record.false_positive_count = 1;
+    record.critical_count = 1;
+    record.high_count = 1;
+    record.medium_count = 0;
+    record.low_count = 0;
+    record.verified_critical_count = 1;
+    record.verified_high_count = 0;
+    record.verified_medium_count = 0;
+    record.verified_low_count = 0;
+    record.tool_calls_count = 5;
+    record.tokens_used = 210;
+    record.tool_evidence_protocol = Some("native_v1".to_string());
+    record.events.push(task_state::AgentEventRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        event_type: "phase_start".to_string(),
+        phase: Some("analysis".to_string()),
+        message: Some("analysis started".to_string()),
+        tool_name: None,
+        tool_input: None,
+        tool_output: None,
+        tool_duration_ms: None,
+        finding_id: None,
+        tokens_used: None,
+        metadata: None,
+        sequence: 1,
+        timestamp: "2026-04-12T11:00:01Z".to_string(),
+    });
+    record.events.push(task_state::AgentEventRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        event_type: "tool_call".to_string(),
+        phase: Some("analysis".to_string()),
+        message: Some("search codebase".to_string()),
+        tool_name: Some("search_code".to_string()),
+        tool_input: Some(json!({"pattern": "SELECT"})),
+        tool_output: Some(json!({
+            "result": "matched login.ts",
+            "metadata": {
+                "render_type": "analysis_summary",
+                "display_command": "search_code",
+                "command_chain": ["search_code"],
+                "entries": [],
+            }
+        })),
+        tool_duration_ms: Some(320),
+        finding_id: None,
+        tokens_used: Some(24),
+        metadata: Some(json!({"agent": "analysis"})),
+        sequence: 2,
+        timestamp: "2026-04-12T11:00:05Z".to_string(),
+    });
+    record.events.push(task_state::AgentEventRecord {
+        id: Uuid::new_v4().to_string(),
+        task_id: task_id.to_string(),
+        event_type: "finding".to_string(),
+        phase: Some("analysis".to_string()),
+        message: Some("captured critical sql injection".to_string()),
+        tool_name: None,
+        tool_input: None,
+        tool_output: None,
+        tool_duration_ms: None,
+        finding_id: record.findings.first().map(|finding| finding.id.clone()),
+        tokens_used: None,
+        metadata: Some(json!({"severity": "critical"})),
+        sequence: 3,
+        timestamp: "2026-04-12T11:00:09Z".to_string(),
+    });
+    task_state::save_snapshot(state, &snapshot).await.unwrap();
+}
+
 #[tokio::test]
 async fn agent_task_routes_are_rust_owned_without_python_upstream() {
     let state = AppState::from_config(isolated_test_config("agent-task-routes"))
@@ -920,6 +1048,118 @@ async fn agent_task_result_routes_support_filters_summary_and_checkpoint_queries
     .unwrap();
     assert_eq!(checkpoints_json.as_array().unwrap().len(), 1);
     assert_eq!(checkpoints_json[0]["agent_id"], format!("verify-{task_id}"));
+}
+
+#[tokio::test]
+async fn agent_task_lifecycle_routes_expose_defect_summary_and_paginated_events() {
+    let state = AppState::from_config(isolated_test_config("agent-task-lifecycle"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "生命周期项目").await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "lifecycle-task",
+                        "description": "lifecycle contract test",
+                        "max_iterations": 3,
+                        "verification_level": "analysis_with_poc_plan",
+                        "target_files": ["src/auth/login.ts"],
+                        "exclude_patterns": ["dist/**"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value =
+        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let task_id = create_json["id"].as_str().unwrap().to_string();
+    seed_agent_lifecycle_state(&state, &task_id).await;
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/agent-tasks/?limit=20")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json: Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let item = &list_json.as_array().unwrap()[0];
+    assert_eq!(item["tool_evidence_protocol"], "native_v1");
+    assert_eq!(item["verified_critical_count"], 1);
+    assert_eq!(item["verified_high_count"], 0);
+    assert_eq!(item["defect_summary"]["total_count"], 3);
+    assert_eq!(item["defect_summary"]["status_counts"]["pending"], 1);
+    assert_eq!(item["defect_summary"]["status_counts"]["verified"], 1);
+    assert_eq!(item["defect_summary"]["status_counts"]["false_positive"], 1);
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_json: Value = serde_json::from_slice(
+        &to_bytes(detail_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(detail_json["target_files"][0], "src/auth/login.ts");
+    assert_eq!(detail_json["exclude_patterns"][0], "dist/**");
+    assert_eq!(detail_json["verification_level"], "analysis_with_poc_plan");
+    assert_eq!(detail_json["defect_summary"]["severity_counts"]["critical"], 1);
+    assert_eq!(detail_json["defect_summary"]["severity_counts"]["high"], 1);
+
+    let paged_events_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/events/list?after_sequence=1&limit=1"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(paged_events_response.status(), StatusCode::OK);
+    let paged_events_json: Value = serde_json::from_slice(
+        &to_bytes(paged_events_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(paged_events_json.as_array().unwrap().len(), 1);
+    assert_eq!(paged_events_json[0]["sequence"], 2);
+    assert_eq!(paged_events_json[0]["tool_name"], "search_code");
+    assert_eq!(
+        paged_events_json[0]["tool_output"]["metadata"]["display_command"],
+        "search_code"
+    );
 }
 
 #[tokio::test]

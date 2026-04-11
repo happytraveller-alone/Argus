@@ -1645,7 +1645,53 @@ fn percent_encode_utf8(text: &str) -> String {
 }
 
 fn agent_task_value(record: &task_state::AgentTaskRecord) -> Value {
-    serde_json::to_value(record).unwrap_or_else(|_| json!({}))
+    let mut value = serde_json::to_value(record).unwrap_or_else(|_| json!({}));
+    if let Some(object) = value.as_object_mut() {
+        let mut critical = 0i64;
+        let mut high = 0i64;
+        let mut medium = 0i64;
+        let mut low = 0i64;
+        let mut info = 0i64;
+        let mut pending = 0i64;
+        let mut verified = 0i64;
+        let mut false_positive = 0i64;
+
+        for finding in &record.findings {
+            match normalized_token(&finding.severity).as_str() {
+                "critical" => critical += 1,
+                "high" => high += 1,
+                "medium" => medium += 1,
+                "low" => low += 1,
+                _ => info += 1,
+            }
+            match finding_export_status(finding) {
+                "verified" => verified += 1,
+                "false_positive" => false_positive += 1,
+                _ => pending += 1,
+            }
+        }
+        let total_count = record.findings.len() as i64;
+        object.insert(
+            "defect_summary".to_string(),
+            json!({
+                "scope": "all_findings",
+                "total_count": total_count,
+                "severity_counts": {
+                    "critical": critical,
+                    "high": high,
+                    "medium": medium,
+                    "low": low,
+                    "info": info,
+                },
+                "status_counts": {
+                    "pending": pending,
+                    "verified": verified,
+                    "false_positive": false_positive,
+                },
+            }),
+        );
+    }
+    value
 }
 
 fn agent_event_value(record: &task_state::AgentEventRecord) -> Value {
