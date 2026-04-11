@@ -37,3 +37,8 @@ def test_api_router_excludes_rust_owned_route_modules():
 def test_legacy_config_endpoint_module_has_been_retired():
     config_path = PROJECT_ROOT / "app/api/v1/endpoints/config.py"
     assert not config_path.exists()
+
+
+def test_legacy_api_deps_module_has_been_retired():
+    deps_path = PROJECT_ROOT / "app/api/deps.py"
+    assert not deps_path.exists()

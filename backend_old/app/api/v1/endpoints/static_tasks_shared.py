@@ -17,7 +17,6 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.api import deps
 from app.core.config import settings
 from app.db.session import async_session_factory, get_db
 from app.models.opengrep import OpengrepRule
