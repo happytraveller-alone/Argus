@@ -76,8 +76,24 @@ impl DatabaseBootstrapStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartupInitPolicy {
+    pub allowed_at_startup: Vec<String>,
+    pub forbidden_at_startup: Vec<String>,
+}
+
+impl Default for StartupInitPolicy {
+    fn default() -> Self {
+        Self {
+            allowed_at_startup: Vec::new(),
+            forbidden_at_startup: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StartupInitStatus {
     pub status: String,
+    pub policy: StartupInitPolicy,
     pub actions: Vec<String>,
     pub error: Option<String>,
 }
@@ -86,6 +102,7 @@ impl Default for StartupInitStatus {
     fn default() -> Self {
         Self {
             status: BootstrapStatus::NotRun.as_str().to_string(),
+            policy: StartupInitPolicy::default(),
             actions: Vec::new(),
             error: None,
         }

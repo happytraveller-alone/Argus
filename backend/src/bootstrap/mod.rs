@@ -79,6 +79,7 @@ async fn build_report(state: &AppState) -> BootstrapReport {
             report.overall = BootstrapStatus::Degraded.as_str().to_string();
             crate::state::StartupInitStatus {
                 status: BootstrapStatus::Error.as_str().to_string(),
+                policy: crate::state::StartupInitPolicy::default(),
                 actions: Vec::new(),
                 error: Some(error.to_string()),
             }

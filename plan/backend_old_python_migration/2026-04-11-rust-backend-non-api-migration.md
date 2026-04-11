@@ -442,6 +442,18 @@
     - 会初始化默认 `system_config`
     - 会初始化空的 `rust-projects.json`
     - 不会导入 demo 用户、旧规则、旧用户态数据
+  - Rust 已显式定义 startup init policy：
+    - allowlist:
+      - `default_rust_system_config`
+      - `empty_rust_project_store`
+      - `rust_scan_rule_asset_sync`
+    - denylist:
+      - `demo_user_bootstrap`
+      - `demo_project_seed`
+      - `legacy_user_table_mutation`
+      - `legacy_project_seed_download`
+      - `legacy_rule_table_import`
+      - `legacy_prompt_template_seed`
   - Rust 新增 `rust_scan_rule_assets` 规则资产库：
     - 会把 `backend_old/app/db` 下扫描引擎规则资产导入 Rust 自己维护的数据库
     - 当前覆盖：
@@ -464,6 +476,7 @@
   - Rust 已开始 owner startup init / recovery / preflight 的 orchestration 外壳
   - Rust 在 file-mode 下已经能独立自举最小 control-plane 状态
   - `backend_old/app/db` 中仍有价值的扫描引擎规则资产，已经开始迁入 Rust 自有库，不再依赖 Python 侧灌库
+  - Rust startup init 的“该做/不该做”已经是自己的 policy，不再让 Python demo/user 初始化影子带偏设计
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
   - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走

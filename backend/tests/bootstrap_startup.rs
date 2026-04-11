@@ -57,6 +57,21 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
     assert_eq!(report.database.status, "skipped");
     assert!(report.database.checked_tables.is_empty());
     assert_eq!(report.init.status, "ok");
+    assert_eq!(
+        report.init.policy.allowed_at_startup,
+        vec![
+            "default_rust_system_config",
+            "empty_rust_project_store",
+            "rust_scan_rule_asset_sync"
+        ]
+    );
+    assert!(
+        report
+            .init
+            .policy
+            .forbidden_at_startup
+            .contains(&"demo_user_bootstrap".to_string())
+    );
     assert!(
         report.init.actions.iter().any(|action| action == "created default rust system config")
     );
@@ -145,6 +160,20 @@ async fn health_includes_bootstrap_status() {
         serde_json::json!([])
     );
     assert_eq!(payload["bootstrap"]["init"]["status"], "ok");
+    assert_eq!(
+        payload["bootstrap"]["init"]["policy"]["allowed_at_startup"],
+        serde_json::json!([
+            "default_rust_system_config",
+            "empty_rust_project_store",
+            "rust_scan_rule_asset_sync"
+        ])
+    );
+    let denied = payload["bootstrap"]["init"]["policy"]["forbidden_at_startup"]
+        .as_array()
+        .expect("forbidden_at_startup should be an array");
+    assert!(
+        denied.iter().any(|item| item == "demo_user_bootstrap")
+    );
     assert_eq!(payload["bootstrap"]["recovery"]["status"], "skipped");
     assert_eq!(payload["bootstrap"]["preflight"]["status"], "skipped");
 
