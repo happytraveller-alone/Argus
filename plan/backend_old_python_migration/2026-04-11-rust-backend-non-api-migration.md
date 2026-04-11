@@ -432,6 +432,12 @@
   - Rust 新增 `backend/src/bootstrap/mod.rs`
   - `backend/src/main.rs` 在 `serve` 前执行 bootstrap
   - `/health` 新增 bootstrap 状态回报
+  - Rust bootstrap 的 DB 检查只盯 Rust 自己依赖的表，不再盯 Python `alembic_version`
+  - Rust 新增 startup orchestration 子模块：
+    - `backend/src/bootstrap/init.rs`
+    - `backend/src/bootstrap/recovery.rs`
+    - `backend/src/bootstrap/preflight.rs`
+  - startup recovery 和 runner preflight 的编排位置已从 Python `app.main` 迁到 Rust bootstrap
   - `backend/tests/bootstrap_startup.rs` 覆盖：
     - 文件存储根创建
     - 无 DB 时 file-mode / skipped
@@ -439,9 +445,13 @@
     - 文件存储根不可创建时启动失败
 - 当前意义：
   - Rust public backend 不再只是 router 壳，已经开始拥有自己的启动前检查与状态报告
+  - Rust DB 启动检查已经和 Python 旧 DB 语义解耦，Python 只保留参考价值
+  - Rust 已开始 owner startup init / recovery / preflight 的 orchestration 外壳
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
-  - Python `app/main.py` 中的 schema version orchestration、`init_db()`、中断任务恢复、runner preflight 仍未迁走
+  - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走
+  - startup recovery 虽已由 Rust 编排接手，但恢复目标仍是 legacy task tables，属于迁移期桥
+  - runner preflight 虽已迁到 Rust，但仍是启动前 runner 可用性检查，不是 runtime 迁移完成
   - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
 - 下一刀：
-  - 继续迁 Phase A 剩余底座，把 DB/schema/startup recovery 的 source of truth 从 Python 挪到 Rust
+  - 继续迁 Phase A 剩余底座，把 DB/schema/init 流程的 source of truth 从 Python 挪到 Rust

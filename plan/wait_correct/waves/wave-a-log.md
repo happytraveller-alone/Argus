@@ -83,7 +83,7 @@
 
 - endpoint / feature: `backend/src/bootstrap/mod.rs`, `/health`, Rust server startup path
 - Python 旧行为: Python `app.main` 在 lifespan 内负责 schema version check、`init_db()`、中断任务恢复、runner preflight
-- Rust 当前行为: Rust 启动前已经执行最小 bootstrap，负责文件存储根检查、DB 可用性检查、`alembic_version` 元数据最小检查，并把状态暴露到 `/health`
+- Rust 当前行为: Rust 启动前已经执行 bootstrap，负责文件存储根检查、DB 可用性检查、Rust 自身依赖表检查，并开始接管 startup init / recovery / runner preflight 的 orchestration，同时把状态暴露到 `/health`
 - 是否影响前端: 否，HTTP 主路径保持可用；健康态变得更诚实
 - 后续修复波次: Wave A 后续 / Batch 1 Slice 2
 - owner: Rust migration

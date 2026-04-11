@@ -48,8 +48,8 @@ impl Default for FileStoreBootstrapStatus {
 pub struct DatabaseBootstrapStatus {
     pub mode: String,
     pub status: String,
-    pub alembic_version_table: Option<bool>,
-    pub alembic_version: Option<String>,
+    pub checked_tables: Vec<String>,
+    pub missing_tables: Vec<String>,
     pub error: Option<String>,
 }
 
@@ -58,8 +58,8 @@ impl DatabaseBootstrapStatus {
         Self {
             mode: "file".to_string(),
             status: "skipped".to_string(),
-            alembic_version_table: None,
-            alembic_version: None,
+            checked_tables: Vec::new(),
+            missing_tables: Vec::new(),
             error: None,
         }
     }
@@ -68,8 +68,78 @@ impl DatabaseBootstrapStatus {
         Self {
             mode: "db".to_string(),
             status: BootstrapStatus::NotRun.as_str().to_string(),
-            alembic_version_table: None,
-            alembic_version: None,
+            checked_tables: Vec::new(),
+            missing_tables: Vec::new(),
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartupInitStatus {
+    pub status: String,
+    pub actions: Vec<String>,
+    pub error: Option<String>,
+}
+
+impl Default for StartupInitStatus {
+    fn default() -> Self {
+        Self {
+            status: BootstrapStatus::NotRun.as_str().to_string(),
+            actions: Vec::new(),
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecoveryTaskStatus {
+    pub name: String,
+    pub table_present: bool,
+    pub recovered: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartupRecoveryStatus {
+    pub status: String,
+    pub tasks: Vec<RecoveryTaskStatus>,
+    pub error: Option<String>,
+}
+
+impl Default for StartupRecoveryStatus {
+    fn default() -> Self {
+        Self {
+            status: BootstrapStatus::NotRun.as_str().to_string(),
+            tasks: Vec::new(),
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunnerPreflightCheckStatus {
+    pub name: String,
+    pub success: bool,
+    pub exit_code: Option<i32>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunnerPreflightStatus {
+    pub status: String,
+    pub enabled: bool,
+    pub strict: bool,
+    pub checks: Vec<RunnerPreflightCheckStatus>,
+    pub error: Option<String>,
+}
+
+impl Default for RunnerPreflightStatus {
+    fn default() -> Self {
+        Self {
+            status: BootstrapStatus::NotRun.as_str().to_string(),
+            enabled: false,
+            strict: false,
+            checks: Vec::new(),
             error: None,
         }
     }
@@ -80,6 +150,9 @@ pub struct BootstrapReport {
     pub overall: String,
     pub file_store: FileStoreBootstrapStatus,
     pub database: DatabaseBootstrapStatus,
+    pub init: StartupInitStatus,
+    pub recovery: StartupRecoveryStatus,
+    pub preflight: RunnerPreflightStatus,
 }
 
 impl BootstrapReport {
@@ -88,6 +161,9 @@ impl BootstrapReport {
             overall: BootstrapStatus::Ok.as_str().to_string(),
             file_store: FileStoreBootstrapStatus::default(),
             database: DatabaseBootstrapStatus::file_mode(),
+            init: StartupInitStatus::default(),
+            recovery: StartupRecoveryStatus::default(),
+            preflight: RunnerPreflightStatus::default(),
         }
     }
 }
@@ -157,10 +233,13 @@ impl AppState {
                 database: DatabaseBootstrapStatus {
                     mode: "unknown".to_string(),
                     status: BootstrapStatus::NotRun.as_str().to_string(),
-                    alembic_version_table: None,
-                    alembic_version: None,
+                    checked_tables: Vec::new(),
+                    missing_tables: Vec::new(),
                     error: None,
                 },
+                init: StartupInitStatus::default(),
+                recovery: StartupRecoveryStatus::default(),
+                preflight: RunnerPreflightStatus::default(),
             })),
         })
     }

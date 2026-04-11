@@ -55,6 +55,10 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
 
     assert_eq!(report.database.mode, "file");
     assert_eq!(report.database.status, "skipped");
+    assert!(report.database.checked_tables.is_empty());
+    assert_eq!(report.init.status, "skipped");
+    assert_eq!(report.recovery.status, "skipped");
+    assert_eq!(report.preflight.status, "skipped");
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }
@@ -79,6 +83,10 @@ async fn bootstrap_db_check_does_not_hard_fail_when_database_is_unreachable() {
         report.database.status == "error" || report.database.status == "timeout",
         "expected db status to be error/timeout, got {}",
         report.database.status
+    );
+    assert_eq!(
+        report.database.checked_tables,
+        vec!["system_configs", "rust_projects", "rust_project_archives"]
     );
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
@@ -112,6 +120,13 @@ async fn health_includes_bootstrap_status() {
     assert!(payload.get("bootstrap").is_some(), "health must include bootstrap");
     assert_eq!(payload["status"], "ok");
     assert_eq!(payload["bootstrap"]["file_store"]["status"], "ok");
+    assert_eq!(
+        payload["bootstrap"]["database"]["checked_tables"],
+        serde_json::json!([])
+    );
+    assert_eq!(payload["bootstrap"]["init"]["status"], "skipped");
+    assert_eq!(payload["bootstrap"]["recovery"]["status"], "skipped");
+    assert_eq!(payload["bootstrap"]["preflight"]["status"], "skipped");
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }
@@ -142,6 +157,10 @@ async fn health_reports_degraded_when_bootstrap_is_degraded() {
     let payload: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(payload["status"], "degraded");
     assert_eq!(payload["bootstrap"]["database"]["mode"], "db");
+    assert_eq!(
+        payload["bootstrap"]["database"]["checked_tables"],
+        serde_json::json!(["system_configs", "rust_projects", "rust_project_archives"])
+    );
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }

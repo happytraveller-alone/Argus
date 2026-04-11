@@ -41,11 +41,13 @@
   - `backend/src/bootstrap/mod.rs` 已负责最小启动检查
   - `backend/src/main.rs` 已在 `serve` 前执行 bootstrap
   - `/health` 已暴露 bootstrap 状态
+  - Rust DB bootstrap 只检查 Rust 自己依赖的表，不再盯 Python `alembic_version`
+  - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
 - still missing:
   - Python `app.main` 内的 schema version orchestration
-  - `init_db()`
-  - interrupted task recovery
-  - runner preflight
+  - `init_db()` 的完整 Rust 版本
+  - recovery 对 legacy task tables 的依赖删除
+  - runner preflight 后续与 Rust runtime 的进一步打通
 - owner: Rust migration
 - target phase:
   - A now in progress
