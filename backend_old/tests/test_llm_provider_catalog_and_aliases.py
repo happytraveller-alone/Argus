@@ -2,18 +2,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1.endpoints.config import (
-    LLMFetchModelsRequest,
-    _build_llm_provider_catalog,
-    _extract_model_names_from_payload,
-    _resolve_llm_runtime_provider,
-    fetch_llm_models,
-)
+from app.api.v1.endpoints.config import LLMFetchModelsRequest, fetch_llm_models
+from app.services import llm_provider_service
 from app.services.llm.types import LLMProvider
 
 
 def test_llm_provider_catalog_contains_new_and_legacy_providers():
-    providers = _build_llm_provider_catalog()
+    providers = llm_provider_service.build_llm_provider_catalog()
     provider_ids = {item["id"] for item in providers}
 
     assert "openai" in provider_ids
@@ -33,15 +28,15 @@ def test_llm_provider_catalog_contains_new_and_legacy_providers():
 
 
 def test_provider_alias_resolution_for_runtime():
-    provider_id, runtime_provider = _resolve_llm_runtime_provider("claude")
+    provider_id, runtime_provider = llm_provider_service.resolve_llm_runtime_provider_alias("claude")
     assert provider_id == "anthropic"
     assert runtime_provider == LLMProvider.CLAUDE
 
-    provider_id, runtime_provider = _resolve_llm_runtime_provider("anthropic")
+    provider_id, runtime_provider = llm_provider_service.resolve_llm_runtime_provider_alias("anthropic")
     assert provider_id == "anthropic"
     assert runtime_provider == LLMProvider.CLAUDE
 
-    provider_id, runtime_provider = _resolve_llm_runtime_provider("custom")
+    provider_id, runtime_provider = llm_provider_service.resolve_llm_runtime_provider_alias("custom")
     assert provider_id == "custom"
     assert runtime_provider == LLMProvider.OPENAI
 
@@ -56,7 +51,7 @@ def test_extract_model_names_supports_openai_and_name_fields():
         ]
     }
 
-    models = _extract_model_names_from_payload(payload)
+    models = llm_provider_service.extract_model_names_from_payload(payload)
     assert models == ["gpt-4o", "gpt-4o-mini", "gpt-5"]
 
 
@@ -66,7 +61,7 @@ async def test_fetch_models_falls_back_to_static_when_online_fetch_fails(monkeyp
         raise RuntimeError("network error")
 
     monkeypatch.setattr(
-        "app.api.v1.endpoints.config._fetch_models_openai_compatible",
+        "app.services.llm_provider_service.fetch_models_openai_compatible",
         _raise_fetch_error,
     )
 

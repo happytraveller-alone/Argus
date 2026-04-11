@@ -31,3 +31,24 @@ def test_internal_callers_no_longer_import_config_endpoint():
 
         assert forbidden not in content, f"{path.name} still depends on config endpoint"
         assert required in content, f"{path.name} should depend on user_config_service"
+
+
+def test_config_endpoint_no_longer_owns_llm_provider_helper_impl():
+    config_path = PROJECT_ROOT / "app/api/v1/endpoints/config.py"
+    content = config_path.read_text(encoding="utf-8")
+
+    forbidden_defs = [
+        "def _build_llm_provider_catalog(",
+        "def _resolve_llm_runtime_provider(",
+        "def _extract_model_names_from_payload(",
+        "def _extract_model_metadata_from_payload(",
+        "async def _fetch_models_openai_compatible(",
+        "async def _fetch_models_anthropic(",
+        "async def _fetch_models_azure_openai(",
+    ]
+    for snippet in forbidden_defs:
+        assert snippet not in content, f"config.py still owns helper: {snippet}"
+
+    assert (
+        "from app.services import llm_provider_service" in content
+    ), "config.py should depend on llm_provider_service"
