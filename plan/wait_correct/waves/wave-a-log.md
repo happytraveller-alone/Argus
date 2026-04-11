@@ -155,6 +155,8 @@
     已改为从 service 层读取 effective user config，不再反向 import `app.api.v1.endpoints.config`
 - Rust 当前行为补充: `config.py` 当前保留 HTTP 契约，但核心默认配置/用户配置载入逻辑已通过 service 封装复用
 - Rust 当前行为补充: 新增回归测试 `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- Rust 当前行为补充: Python live router 已不再挂载 `/config`，live 配置入口默认收敛到 Rust `/system-config`
+- Rust 当前行为补充: `config.py` 当前只保留过渡 helper / 测试承载，不再承担 Python live API surface
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration
