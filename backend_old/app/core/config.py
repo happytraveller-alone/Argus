@@ -30,6 +30,14 @@ def _default_image(name: str) -> str:
     )
 
 
+def _normalize_database_url(value: Optional[str]) -> Optional[str]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "VulHunter"
     API_V1_STR: str = "/api/v1"
@@ -76,11 +84,21 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_DB: str = "vulhunter"
     DATABASE_URL: str | None = None
+    PYTHON_DATABASE_URL: str | None = None
+    PYTHON_ALEMBIC_ENABLED: bool = True
 
     @model_validator(mode="after")
     def assemble_db_connection(self) -> Self:
-        if isinstance(self.DATABASE_URL, str) and self.DATABASE_URL:
+        python_url = _normalize_database_url(self.PYTHON_DATABASE_URL)
+        if python_url:
+            self.DATABASE_URL = python_url
             return self
+
+        database_url = _normalize_database_url(self.DATABASE_URL)
+        if database_url:
+            self.DATABASE_URL = database_url
+            return self
+
         self.DATABASE_URL = (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"

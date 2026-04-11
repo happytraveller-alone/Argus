@@ -298,8 +298,8 @@ pub struct AppState {
 impl AppState {
     pub async fn from_config(config: AppConfig) -> Result<Self> {
         let http_client = Client::builder().build()?;
-        let db_pool = config
-            .database_url
+        let rust_database_url = config.resolved_rust_database_url();
+        let db_pool = rust_database_url
             .as_ref()
             .map(|database_url| {
                 PgPoolOptions::new()

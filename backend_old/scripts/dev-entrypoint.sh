@@ -133,7 +133,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 async def check_db():
-    engine = create_async_engine(os.environ.get('DATABASE_URL', ''))
+    database_url = (
+        os.environ.get('PYTHON_DATABASE_URL')
+        or os.environ.get('DATABASE_URL')
+        or ''
+    )
+    engine = create_async_engine(database_url)
     try:
         async with engine.connect() as conn:
             await conn.execute(text('SELECT 1'))
@@ -168,8 +173,25 @@ run_optional_resets() {
 sync_python_env_if_needed
 wait_for_db
 
-echo "Running database migrations..."
-"${VENV_DIR}/bin/alembic" upgrade head
+python_alembic_enabled() {
+    value="${PYTHON_ALEMBIC_ENABLED:-true}"
+    value="$(printf "%s" "$value" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$value" in
+        0|false|off|no)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+echo "Running database migrations ..."
+if python_alembic_enabled; then
+    "${VENV_DIR}/bin/alembic" upgrade head
+else
+    echo "Skipping alembic upgrade (PYTHON_ALEMBIC_ENABLED=${PYTHON_ALEMBIC_ENABLED:-false})"
+fi
 
 run_optional_resets
 

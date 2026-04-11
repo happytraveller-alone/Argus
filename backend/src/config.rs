@@ -6,7 +6,10 @@ use anyhow::{Context, Result};
 pub struct AppConfig {
     pub bind_addr: SocketAddr,
     pub database_url: Option<String>,
+    pub rust_database_url: Option<String>,
+    pub python_database_url: Option<String>,
     pub python_upstream_base_url: Option<String>,
+    pub python_alembic_enabled: bool,
     pub zip_storage_path: PathBuf,
     pub startup_init_enabled: bool,
     pub startup_recovery_enabled: bool,
@@ -58,10 +61,18 @@ impl AppConfig {
         let bind_addr = SocketAddr::from_str(&bind_addr)
             .with_context(|| format!("invalid BIND_ADDR: {bind_addr}"))?;
 
+        let database_env = optional_env("DATABASE_URL");
+        let rust_database_url = optional_env("RUST_DATABASE_URL").or_else(|| database_env.clone());
+        let python_database_url =
+            optional_env("PYTHON_DATABASE_URL").or_else(|| database_env.clone());
+
         Ok(Self {
             bind_addr,
-            database_url: optional_env("DATABASE_URL"),
+            database_url: database_env.clone(),
+            rust_database_url: rust_database_url.clone(),
+            python_database_url,
             python_upstream_base_url: optional_env("PYTHON_UPSTREAM_BASE_URL"),
+            python_alembic_enabled: parse_bool_env("PYTHON_ALEMBIC_ENABLED", true),
             zip_storage_path: env_path("ZIP_STORAGE_PATH", "./uploads/zip_files"),
             startup_init_enabled: parse_bool_env("STARTUP_INIT_ENABLED", true),
             startup_recovery_enabled: parse_bool_env("STARTUP_RECOVERY_ENABLED", true),
@@ -121,11 +132,20 @@ impl AppConfig {
         })
     }
 
+    pub fn resolved_rust_database_url(&self) -> Option<String> {
+        self.rust_database_url
+            .clone()
+            .or_else(|| self.database_url.clone())
+    }
+
     pub fn for_tests() -> Self {
         Self {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
             database_url: None,
+            rust_database_url: None,
+            python_database_url: None,
             python_upstream_base_url: None,
+            python_alembic_enabled: true,
             zip_storage_path: PathBuf::from("./tmp/test-zips"),
             startup_init_enabled: true,
             startup_recovery_enabled: true,
@@ -179,7 +199,14 @@ impl AppConfig {
 }
 
 fn optional_env(key: &str) -> Option<String> {
-    env::var(key).ok().filter(|value| !value.trim().is_empty())
+    env::var(key).ok().and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 fn env_path(key: &str, default: &str) -> PathBuf {

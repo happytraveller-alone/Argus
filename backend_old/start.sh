@@ -3,6 +3,20 @@
 
 set -e
 
+python_alembic_enabled() {
+    local value
+    value="${PYTHON_ALEMBIC_ENABLED:-true}"
+    value="$(printf "%s" "$value" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$value" in
+        0|false|off|no)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 echo "启动 VulHunter 后端服务..."
 
 # 检查 uv 是否安装
@@ -16,9 +30,13 @@ fi
 echo "同步后端依赖..."
 uv sync --frozen
 
-# 运行数据库迁移
-echo "🔄 运行数据库迁移..."
-uv run alembic upgrade head
+# 运行数据库迁移（可选）
+if python_alembic_enabled; then
+    echo "🔄 运行数据库迁移..."
+    uv run alembic upgrade head
+else
+    echo "跳过数据库迁移（PYTHON_ALEMBIC_ENABLED=${PYTHON_ALEMBIC_ENABLED:-false}）"
+fi
 
 # 启动服务
 echo "启动后端服务..."

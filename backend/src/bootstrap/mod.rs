@@ -7,9 +7,11 @@ mod recovery;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::time::timeout;
 
+use crate::config::AppConfig;
 use crate::state::{
     AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus,
     LegacySchemaBootstrapStatus,
@@ -65,7 +67,7 @@ async fn build_report(state: &AppState) -> BootstrapReport {
             ));
         }
         Some(pool) => {
-            report.database = check_database(pool, &legacy_expectation).await;
+            report.database = check_database(state, pool, &legacy_expectation).await;
             if report.database.status != BootstrapStatus::Ok.as_str() {
                 // Non-fatal for now: we still want the server to start so /health can report.
                 report.overall = BootstrapStatus::Degraded.as_str().to_string();
@@ -141,11 +143,13 @@ async fn build_report(state: &AppState) -> BootstrapReport {
 }
 
 async fn check_database(
+    state: &AppState,
     pool: &PgPool,
     legacy_expectation: &legacy_schema::LegacySchemaExpectation,
 ) -> DatabaseBootstrapStatus {
     let mut status =
         DatabaseBootstrapStatus::db_mode(legacy_status_for_db_mode(legacy_expectation));
+    let config = state.config.as_ref();
     status.checked_tables = REQUIRED_RUST_TABLES
         .iter()
         .map(|name| (*name).to_string())
@@ -238,7 +242,18 @@ async fn check_database(
         );
     }
 
-    inspect_legacy_schema_versions(pool, &mut status).await;
+    if config.python_alembic_enabled {
+        inspect_legacy_schema_versions(config, pool, &mut status).await;
+    } else {
+        let mut skipped = LegacySchemaBootstrapStatus::skipped(
+            legacy_expectation.versions_dir.clone(),
+            legacy_expectation.expected_heads.clone(),
+        );
+        if let Some(error) = &legacy_expectation.error {
+            skipped = skipped.with_error(BootstrapStatus::Error.as_str(), error.clone());
+        }
+        status.legacy_schema = skipped;
+    }
     if status.status == BootstrapStatus::NotRun.as_str() {
         status.status = BootstrapStatus::Ok.as_str().to_string();
     }
@@ -272,10 +287,46 @@ fn legacy_status_for_db_mode(
     status
 }
 
-async fn inspect_legacy_schema_versions(pool: &PgPool, status: &mut DatabaseBootstrapStatus) {
+async fn inspect_legacy_schema_versions(
+    config: &AppConfig,
+    rust_pool: &PgPool,
+    status: &mut DatabaseBootstrapStatus,
+) {
     if status.legacy_schema.status == BootstrapStatus::Error.as_str() {
         return;
     }
+
+    let rust_db_url = config.resolved_rust_database_url();
+    let mut python_pool: Option<PgPool> = None;
+
+    if let Some(python_url) = config.python_database_url.as_ref() {
+        if rust_db_url
+            .as_ref()
+            .map_or(true, |rust_url| python_url != rust_url)
+        {
+            match PgPoolOptions::new()
+                .max_connections(1)
+                .connect_lazy(python_url)
+            {
+                Ok(pool) => {
+                    python_pool = Some(pool);
+                }
+                Err(err) => {
+                    status.legacy_schema.status = BootstrapStatus::Error.as_str().to_string();
+                    status.legacy_schema.matches_expected_heads = None;
+                    status.legacy_schema.current_versions.clear();
+                    let detail = format!(
+                        "failed to open python database for legacy schema inspection: {err}"
+                    );
+                    status.legacy_schema.error = Some(detail.clone());
+                    mark_database_degraded(status, detail);
+                    return;
+                }
+            }
+        }
+    }
+
+    let query_pool: &PgPool = python_pool.as_ref().unwrap_or(rust_pool);
 
     let versions_result = timeout(
         Duration::from_secs(2),
@@ -284,7 +335,7 @@ async fn inspect_legacy_schema_versions(pool: &PgPool, status: &mut DatabaseBoot
              FROM alembic_version
              ORDER BY version_num",
         )
-        .fetch_all(pool),
+        .fetch_all(query_pool),
     )
     .await;
 
