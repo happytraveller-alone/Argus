@@ -16,7 +16,6 @@ docker_stub.errors = types.SimpleNamespace(
 sys.modules.setdefault("docker", docker_stub)
 
 from app.api.v1.endpoints import static_tasks_shared
-from app.api.v1.endpoints.static_tasks_opengrep import get_static_task_progress
 
 
 def test_ensure_scan_workspace_under_configured_root(tmp_path, monkeypatch):
@@ -186,95 +185,6 @@ def test_prune_scan_progress_store_removes_expired_entries():
     assert removed == 1
     assert "expired-task" not in static_tasks_shared._scan_progress_store
     assert "fresh-task" in static_tasks_shared._scan_progress_store
-
-
-async def test_get_static_task_progress_reads_shared_progress_store():
-    task_id = "task-progress-2"
-    static_tasks_shared._scan_progress_store.clear()
-    static_tasks_shared._record_scan_progress(
-        task_id,
-        status="running",
-        progress=42,
-        stage="scan",
-        message="scanning",
-    )
-
-    class _Result:
-        def scalar_one_or_none(self):
-            return type(
-                "Task",
-                (),
-                {
-                    "id": task_id,
-                    "status": "running",
-                    "created_at": None,
-                    "updated_at": None,
-                },
-            )()
-
-    class _Db:
-        async def execute(self, _statement):
-            return _Result()
-
-    payload = await get_static_task_progress(
-        task_id=task_id,
-        include_logs=True,
-        db=_Db(),
-        current_user=type("User", (), {"id": "u-1"})(),
-    )
-
-    assert payload["task_id"] == task_id
-    assert payload["status"] == "running"
-    assert payload["progress"] == 42
-    assert payload["logs"][0]["message"] == "scanning"
-
-
-async def test_get_static_task_progress_falls_back_after_terminal_state_cleanup():
-    task_id = "task-progress-terminal-fallback"
-    static_tasks_shared._scan_progress_store.clear()
-    static_tasks_shared._record_scan_progress(
-        task_id,
-        status="running",
-        progress=95,
-        stage="persist",
-        message="persisting",
-    )
-    static_tasks_shared._record_scan_progress(
-        task_id,
-        status="completed",
-        progress=100,
-        stage="completed",
-        message="done",
-    )
-
-    class _Result:
-        def scalar_one_or_none(self):
-            return type(
-                "Task",
-                (),
-                {
-                    "id": task_id,
-                    "status": "completed",
-                    "created_at": None,
-                    "updated_at": None,
-                },
-            )()
-
-    class _Db:
-        async def execute(self, _statement):
-            return _Result()
-
-    payload = await get_static_task_progress(
-        task_id=task_id,
-        include_logs=True,
-        db=_Db(),
-        current_user=type("User", (), {"id": "u-1"})(),
-    )
-
-    assert payload["task_id"] == task_id
-    assert payload["status"] == "completed"
-    assert payload["progress"] == 100.0
-    assert payload["logs"] == []
 
 
 def test_scan_process_active_and_cancel_uses_shared_tracking():

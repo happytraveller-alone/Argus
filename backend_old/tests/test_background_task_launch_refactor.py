@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy.orm.attributes import instance_state
 
 from app.api.v1.endpoints import agent_tasks_routes_tasks
-from app.api.v1.endpoints import static_tasks_opengrep
 from app.api.v1.endpoints import static_tasks_shared
 from app.api.v1.endpoints.agent_tasks_contracts import AgentTaskCreate
 from app.models.project import Project
@@ -115,58 +114,6 @@ async def test_launch_static_background_job_registers_and_cleans_up():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("module", "factory_name", "request_payload"),
-    [
-        (
-            static_tasks_opengrep,
-            "create_static_task",
-            static_tasks_opengrep.OpengrepScanTaskCreate(
-                project_id="project-1",
-                target_path=".",
-                rule_ids=["rule-1"],
-            ),
-        ),
-    ],
-)
-async def test_static_scan_create_routes_launch_async_job_and_release_request_session(
-    monkeypatch,
-    module,
-    factory_name,
-    request_payload,
-):
-    project = SimpleNamespace(
-        id="project-1",
-        name="demo-project",
-        source_type="zip",
-        programming_languages="typescript",
-    )
-    rules = [SimpleNamespace(id="rule-1")]
-    db = _CreateSession(project=project, rules=rules)
-    launched = []
-
-    monkeypatch.setattr(module, "_get_project_root", AsyncMock(return_value="/tmp/project"))
-    monkeypatch.setattr(module, "_launch_static_background_job", lambda scan_type, task_id, coro: launched.append((scan_type, task_id, coro)), raising=False)
-    monkeypatch.setattr(module, "_record_scan_progress", lambda *_args, **_kwargs: None, raising=False)
-    monkeypatch.setattr(module, "_get_user_config", AsyncMock(return_value={}), raising=False)
-
-    create_fn = getattr(module, factory_name)
-    response = await create_fn(
-        request=request_payload,
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    assert response.id.startswith("generated-")
-    assert launched, f"{module.__name__} did not launch an asyncio task"
-    assert db.rollback_calls == 1
-    assert db.close_calls == 1
-
-    for _scan_type, _task_id, coro in launched:
-        coro.close()
-
-
-@pytest.mark.asyncio
 async def test_create_agent_task_launches_async_job_and_releases_request_session(monkeypatch):
     project = SimpleNamespace(
         id="project-1",
@@ -207,61 +154,6 @@ async def test_create_agent_task_launches_async_job_and_releases_request_session
     assert db.close_calls == 1
 
     for _name, coro in created_tasks:
-        coro.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("module", "factory_name", "request_payload"),
-    [
-        (
-            static_tasks_opengrep,
-            "create_static_task",
-            static_tasks_opengrep.OpengrepScanTaskCreate(
-                project_id="project-1",
-                target_path=".",
-                rule_ids=["rule-1"],
-            ),
-        ),
-    ],
-)
-async def test_static_scan_create_routes_do_not_touch_detached_orm_after_releasing_session(
-    monkeypatch,
-    module,
-    factory_name,
-    request_payload,
-):
-    project = SimpleNamespace(
-        id="project-1",
-        name="demo-project",
-        source_type="zip",
-        programming_languages="typescript",
-    )
-    rules = [SimpleNamespace(id="rule-1")]
-    db = _DetachedOnCloseSession(project=project, rules=rules)
-    launched = []
-
-    monkeypatch.setattr(module, "_get_project_root", AsyncMock(return_value="/tmp/project"))
-    monkeypatch.setattr(
-        module,
-        "_launch_static_background_job",
-        lambda scan_type, task_id, coro: launched.append((scan_type, task_id, coro)),
-        raising=False,
-    )
-    monkeypatch.setattr(module, "_record_scan_progress", lambda *_args, **_kwargs: None, raising=False)
-    monkeypatch.setattr(module, "_get_user_config", AsyncMock(return_value={}), raising=False)
-
-    create_fn = getattr(module, factory_name)
-    response = await create_fn(
-        request=request_payload,
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    assert response.id.startswith("generated-")
-    assert launched
-
-    for _scan_type, _task_id, coro in launched:
         coro.close()
 
 
