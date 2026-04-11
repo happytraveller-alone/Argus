@@ -37,6 +37,7 @@ from app.services.llm.provider_registry import (
     resolve_llm_runtime_provider as resolve_provider_runtime,
 )
 from app.services.llm.types import LLMProvider
+from app.services.project_test_service import normalize_extracted_project_root
 from app.services import user_config_service
 from app.services.zip_storage import load_project_zip
 
@@ -459,17 +460,7 @@ def _strip_runtime_config(raw_other_config: Any) -> dict:
     return user_config_service.strip_runtime_config(raw_other_config)
 
 def _normalize_extracted_project_root(base_path: str) -> str:
-    candidates = [
-        item
-        for item in os.listdir(base_path)
-        if not str(item).startswith("__") and not str(item).startswith(".")
-    ]
-    if len(candidates) != 1:
-        return base_path
-    nested = os.path.join(base_path, candidates[0])
-    if os.path.isdir(nested):
-        return nested
-    return base_path
+    return normalize_extracted_project_root(base_path)
 
 
 _VERIFY_DEFAULT_PROJECT_NAME = "libplist"

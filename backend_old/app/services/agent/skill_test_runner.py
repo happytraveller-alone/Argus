@@ -10,15 +10,13 @@ from typing import Any, Dict, Tuple
 
 from fastapi import HTTPException
 
-from app.api.v1.endpoints.config import (
-    _normalize_extracted_project_root,
-)
 from app.services.agent.agents.skill_test import SkillTestAgent
 from app.services.agent.event_manager import normalize_tool_output_envelope
 from app.services.agent.skills.scan_core import (
     SCAN_CORE_DEFAULT_TEST_PROJECT_NAME,
     get_scan_core_skill_test_policy,
 )
+from app.services.project_test_service import normalize_extracted_project_root
 from app.services.agent.tools import (
     CodeWindowTool,
     ControlFlowAnalysisLightTool,
@@ -263,7 +261,7 @@ class StructuredToolTestRunner:
             )
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(temp_dir)
-            project_root = _normalize_extracted_project_root(temp_dir)
+            project_root = normalize_extracted_project_root(temp_dir)
             await self.event_emitter.emit_event(
                 "project_prepare",
                 "测试项目准备完成",
@@ -472,7 +470,7 @@ class SkillTestRunner:
             )
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(temp_dir)
-            project_root = _normalize_extracted_project_root(temp_dir)
+            project_root = normalize_extracted_project_root(temp_dir)
             await self.event_emitter.emit_event(
                 "project_prepare",
                 "测试项目准备完成",
