@@ -14,6 +14,7 @@ use std::{
 
 const DEFAULT_VENV_PATH: &str = "/opt/backend-venv";
 const DEFAULT_APP_ROOT: &str = "/app";
+const DEFAULT_BACKEND_SERVER_BIN: &str = "/usr/local/bin/backend";
 const DEFAULT_BACKEND_DOCKER_ENV_DIR: &str = "/docker/env/backend";
 const LOCK_STAMP_FILENAME: &str = ".vulhunter-dev-lock.sha256";
 const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
@@ -387,21 +388,16 @@ pub fn run_optional_resets(app_root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn exec_uvicorn(reload_enabled: bool) -> Result<()> {
-    let uvicorn_bin = venv_bin("uvicorn");
-    let mut args = vec![
-        "app.main:app".to_string(),
-        "--host".to_string(),
-        "0.0.0.0".to_string(),
-        "--port".to_string(),
-        "8000".to_string(),
-    ];
-    if reload_enabled {
-        args.insert(1, "--reload".to_string());
-    }
+fn backend_server_bin() -> PathBuf {
+    env::var("BACKEND_SERVER_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_BACKEND_SERVER_BIN))
+}
 
-    let err = Command::new(&uvicorn_bin).args(&args).exec();
-    bail!("starting uvicorn failed: {err}")
+pub fn exec_backend_server() -> Result<()> {
+    let backend_bin = backend_server_bin();
+    let err = Command::new(&backend_bin).exec();
+    bail!("starting rust backend server failed: {err}")
 }
 
 pub fn run(mode: &str) -> Result<()> {
@@ -427,6 +423,34 @@ pub fn run(mode: &str) -> Result<()> {
     run_database_migrations(&app_root)?;
     run_optional_resets(&app_root)?;
 
-    println!("Starting uvicorn...");
-    exec_uvicorn(mode == "dev")
+    if mode == "dev" {
+        println!("Starting Rust backend server (reload delegated to cargo/local scripts)...");
+    } else {
+        println!("Starting Rust backend server...");
+    }
+    exec_backend_server()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{backend_server_bin, DEFAULT_BACKEND_SERVER_BIN};
+
+    #[test]
+    fn backend_server_bin_defaults_to_rust_backend_binary() {
+        let _guard = std::env::remove_var("BACKEND_SERVER_BIN");
+        assert_eq!(
+            backend_server_bin(),
+            std::path::PathBuf::from(DEFAULT_BACKEND_SERVER_BIN)
+        );
+    }
+
+    #[test]
+    fn backend_server_bin_honors_override() {
+        std::env::set_var("BACKEND_SERVER_BIN", "/tmp/custom-backend");
+        assert_eq!(
+            backend_server_bin(),
+            std::path::PathBuf::from("/tmp/custom-backend")
+        );
+        std::env::remove_var("BACKEND_SERVER_BIN");
+    }
 }

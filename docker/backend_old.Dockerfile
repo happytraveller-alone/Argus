@@ -153,6 +153,7 @@ WORKDIR /code
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 RUN cargo build --release \
+  --bin backend-rust \
   --bin backend-runtime-startup \
   --bin backend-opengrep-launcher \
   --bin backend-phpstan-launcher
@@ -263,6 +264,7 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
 FROM runtime-base AS dev-runtime
 
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=runtime-entrypoints /code/target/release/backend-rust /usr/local/bin/backend
 COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
@@ -407,6 +409,7 @@ FROM runtime-base AS runtime-cython
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-rust /usr/local/bin/backend
 COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
@@ -487,6 +490,7 @@ CMD ["/usr/local/bin/backend-runtime-startup", "prod"]
 FROM runtime-base AS runtime
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-rust /usr/local/bin/backend
 COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \
@@ -577,6 +581,7 @@ CMD ["/usr/local/bin/backend-runtime-startup", "prod"]
 FROM runtime-base AS runtime-plain
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
+COPY --from=runtime-entrypoints /code/target/release/backend-rust /usr/local/bin/backend
 COPY --from=runtime-entrypoints /code/target/release/backend-runtime-startup /usr/local/bin/backend-runtime-startup
 
 RUN set -eux; \

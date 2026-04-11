@@ -77,6 +77,10 @@
   - `backend_old/app/api/v1/endpoints/search.py` 与 `backend_old/app/api/v1/endpoints/rules.py` 当前仓库不存在
   - inventory 中 legacy `/api/v1/findings/search`、`/api/v1/tasks/search`、`/api/v1/rules*` 已由 `proxy` 切换为 `retire`
   - Python inventory 现已满足 `proxy = 0`
+- Legacy runtime startup wrapper no longer jumps back to Python app entry:
+  - `backend/src/runtime/bootstrap.rs` 已移除 `app.main:app` / uvicorn exec，改为直接 exec Rust backend binary
+  - `docker/backend_old.Dockerfile` 的 runtime-entrypoints 现会同时构建并复制 `backend-rust`
+  - legacy `backend-runtime-startup` 保留为兼容 wrapper，但最终 server process 已切到 Rust backend
 
 ## Wait Correct Entries
 
