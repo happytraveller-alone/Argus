@@ -51,6 +51,10 @@
   - 删除 `backend_old/app/api/v1/endpoints/static_tasks_opengrep.py`
   - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_opengrep` import、router include、schema alias、helper alias 与 re-export
   - inventory 中 `/api/v1/static-tasks/tasks*` 与 `/api/v1/static-tasks/findings/{finding_id}/status` 已从 Python proxy 改为 Rust-owned (`migrate`)
+- Agent-test Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/agent_test.py`
+  - `backend_old/app/api/v1/api.py` 已移除 `agent_test` import 与 `api_router.include_router(..., prefix="/agent-test")` 挂载
+  - inventory 中 `/api/v1/agent-test/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 
@@ -138,6 +142,23 @@
   - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
   - 汇总计数更新为 `migrate=130`、`proxy=22`，task-group `proxy=9`
 - 后续修复波次: Wave A static engine endpoint retirement
+- owner: Rust migration
+
+### 19. agent-test endpoint surface retired from Python API router
+
+- endpoint / feature: `/api/v1/agent-test/*`
+- Python 旧行为:
+  - `backend_old/app/api/v1/api.py` 通过 `api_router.include_router(agent_test.router, prefix="/agent-test")` 挂载 agent-test route group
+  - `backend_old/app/api/v1/endpoints/agent_test.py` 承载完整 agent-test SSE/streaming route surface
+- Rust 当前行为:
+  - `backend/src/routes/mod.rs` 已显式挂载 Rust-owned `/api/v1/agent-test`
+  - Python `backend_old/app/api/v1/api.py` 已移除 `agent_test` import 和 router 挂载
+  - `backend_old/app/api/v1/endpoints/agent_test.py` 已删除
+- inventory 更新:
+  - `python-endpoints-inventory.csv` 中 `/api/v1/agent-test/*` 全部由 `proxy` 切换为 `migrate`
+  - source/owner 切换为 `agent_test_rust` + `backend/src/routes/agent_test.rs`
+  - 汇总计数更新为 `migrate=136`、`proxy=16`，task-group `proxy=3`
+- 后续修复波次: Wave A task route retirement
 - owner: Rust migration
 
 ### 12. `backend_old/app/utils` runtime artifacts retired; only offline patch text remains
