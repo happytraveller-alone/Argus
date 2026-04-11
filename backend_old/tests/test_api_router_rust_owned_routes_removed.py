@@ -32,11 +32,12 @@ def test_api_router_excludes_rust_owned_route_modules():
     assert endpoint_modules.isdisjoint(rust_owned_modules)
 
     remaining_python_modules = {
-        "app.api.v1.endpoints.agent_tasks_access",
-        "app.api.v1.endpoints.static_tasks_cache",
+        "app.api.v1.endpoints.agent_tasks_routes_tasks",
+        "app.api.v1.endpoints.agent_tasks_routes_results",
+        "app.api.v1.endpoints.agent_tasks_reporting",
     }
 
-    assert remaining_python_modules.intersection(endpoint_modules)
+    assert remaining_python_modules.issubset(endpoint_modules)
 
 
 def test_legacy_config_endpoint_module_has_been_retired():
