@@ -69,3 +69,12 @@
 - 是否影响前端: 当前主路径不受影响
 - 后续修复波次: Wave A 后续 / Wave B
 - owner: Rust migration
+
+### 5. non-api python inventory is not yet migrated
+
+- endpoint / feature: `backend_old/*.py`, `backend_old/app/**` except `backend_old/app/api/**`
+- Python 旧行为: Python 直接承载 bootstrap、db/model/schema、runtime、upload、scan orchestration、llm、agent 主链路
+- Rust 当前行为: Rust 只接管了控制面的一部分，核心 non-API runtime 仍主要由 Python 承担
+- 是否影响前端: 当前主路径可用，但迁移目标未完成，mirror 和 proxy 仍必须保留
+- 后续修复波次: Wave B / C / D / E / F
+- owner: Rust migration

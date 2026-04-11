@@ -4,6 +4,7 @@
 
 - `route-inventory/`：Python 端点盘点与迁移桶归类（`migrate/retire/defer/proxy`）
 - `api-contract/`：Python vs Rust 合同对比结果与差异记录
+- `non-api-python/`：`backend_old` 非 API Python 内核迁移总账
 - `waves/`：每一波迁移的范围、门禁、完成状态
 
 执行顺序建议：
