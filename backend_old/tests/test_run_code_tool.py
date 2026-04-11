@@ -105,14 +105,14 @@ class TestSandboxManagerImageResolution:
 
         assert candidates == [
             "custom/sandbox:latest",
-            "vulhunter/sandbox:latest",
+            "vulhunter/sandbox-runner:latest",
             "VulHunter/sandbox:latest",
             "VulHunter-sandbox:latest",
-            "docker.m.daocloud.io/lintsinghua/vulhunter-sandbox:latest",
+            "ghcr.io/audittool/vulhunter-sandbox-runner:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
-        manager = SandboxManager(SandboxConfig(image="docker.m.daocloud.io/lintsinghua/vulhunter-sandbox:latest"))
+        manager = SandboxManager(SandboxConfig(image="ghcr.io/audittool/vulhunter-sandbox-runner:latest"))
         manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())
@@ -127,7 +127,7 @@ class TestSandboxManagerImageResolution:
             ["custom/sandbox:latest: not found"],
         )
 
-        assert "docker build -f docker/sandbox.Dockerfile -t vulhunter/sandbox:latest ." in message
+        assert "docker build -f docker/sandbox-runner.Dockerfile -t vulhunter/sandbox-runner:latest ." in message
         assert "cd docker/sandbox" not in message
 
 
@@ -364,8 +364,8 @@ class TestRunCodeToolExecution:
                 "exit_code": 0,
                 "stdout": "payload detected\\nproof line",
                 "stderr": "",
-                "image": "vulhunter/sandbox:latest",
-                "image_candidates": ["vulhunter/sandbox:latest"],
+                "image": "vulhunter/sandbox-runner:latest",
+                "image_candidates": ["vulhunter/sandbox-runner:latest"],
             }
         )
         tool = RunCodeTool(sandbox_manager=sandbox_manager, project_root="/test")
@@ -388,7 +388,7 @@ class TestRunCodeToolExecution:
         assert entry["description"] == "验证命令注入 harness"
         assert "python3 -c" in entry["execution_command"]
         assert entry["stdout_preview"].startswith("payload detected")
-        assert entry["runtime_image"] == "vulhunter/sandbox:latest"
+        assert entry["runtime_image"] == "vulhunter/sandbox-runner:latest"
         assert entry["code"]["language"] == "python"
         assert entry["code"]["lines"][0]["line_number"] == 1
 
@@ -739,8 +739,8 @@ async def test_sandbox_exec_returns_execution_result_metadata():
             "exit_code": 7,
             "stdout": "partial output",
             "stderr": "permission denied",
-            "image": "vulhunter/sandbox:latest",
-            "image_candidates": ["vulhunter/sandbox:latest", "VulHunter/sandbox:latest"],
+            "image": "vulhunter/sandbox-runner:latest",
+            "image_candidates": ["vulhunter/sandbox-runner:latest", "VulHunter/sandbox-runner:latest"],
         }
     )
     tool = SandboxTool(sandbox_manager=sandbox_manager)

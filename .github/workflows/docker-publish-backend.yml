@@ -1,0 +1,31 @@
+name: Docker Publish Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/docker-publish-backend.yml"
+      - ".dockerignore"
+      - "docker/backend.Dockerfile"
+      - "backend/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish-backend:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      image_name: vulhunter-backend
+      context: .
+      file: ./docker/backend.Dockerfile
+      build_args: |
+        DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+      platforms: linux/amd64,linux/arm64
+    secrets: inherit

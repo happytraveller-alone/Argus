@@ -15,11 +15,11 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
     assert "docker-compose.release-cython.yml" not in compose_text
     assert "docker-compose.self-contained.yml" not in compose_text
     assert (
-        "image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text
@@ -32,6 +32,7 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
     assert "NEXUS_ITEM_DETAIL_PULL_POLICY" not in compose_text
     assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in compose_text
     assert "RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS" not in compose_text
+    assert "vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}" in compose_text
 
     assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in hybrid_text
     assert "docker-compose.full.yml" not in hybrid_text

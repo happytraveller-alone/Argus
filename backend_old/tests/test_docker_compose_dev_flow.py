@@ -11,19 +11,19 @@ RUNNER_SERVICE_NAMES = (
     "flow-parser-runner",
 )
 DEFAULT_BACKEND_IMAGE = (
-    "${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
+    "${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
     "/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_FRONTEND_IMAGE = (
-    "${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
+    "${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
     "/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_SANDBOX_IMAGE = (
-    "${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
-    "/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}"
+    "${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
+    "/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_SCANNER_PMD_IMAGE = (
-    "${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
+    "${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
     "/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 
@@ -82,28 +82,28 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
     assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text
-    assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}" in compose_text
+    assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-audittool}" in compose_text
     assert "VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}" in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text
     assert (
-        "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert f"SCANNER_PMD_IMAGE: {DEFAULT_SCANNER_PMD_IMAGE}" in compose_text
     assert (
-        "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
@@ -122,7 +122,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "MCP_REQUIRE_ALL_READY_ON_STARTUP" not in compose_text
     assert '/bin/sh", "-lc"' not in compose_text
     assert (
-        "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in compose_text
@@ -232,7 +232,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "BACKEND_PNPM_CMD_TIMEOUT_SECONDS" not in full_overlay_text
     assert "BACKEND_PNPM_INSTALL_OPTIONAL" not in full_overlay_text
     assert "MCP_REQUIRED_RUNTIME_DOMAIN" not in full_overlay_text
-    assert "SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-local:latest}" in full_overlay_text
+    assert "SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-runner-local:latest}" in full_overlay_text
     assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}" in full_overlay_text
     assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in full_overlay_text
     assert "\n  frontend-dev:" not in full_overlay_text
@@ -447,74 +447,93 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
 
 
 def test_docker_publish_pushes_all_runner_images() -> None:
-    workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
+    reusable_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
+        encoding="utf-8"
+    )
+    runners_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish-runners.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "\n  push:\n" in workflow_text
-    assert "\n    branches:\n      - main\n" in workflow_text
-    assert "\n    paths:\n" in workflow_text
-    assert "\non:\n  push:\n" in workflow_text
-    assert "workflow_dispatch:" in workflow_text
-    assert "'v*.*.*'" not in workflow_text
-    assert "detect-changes:" in workflow_text
-    assert "dorny/paths-filter@v3" in workflow_text
-    assert "needs.detect-changes.outputs.frontend == 'true'" in workflow_text
-    assert "needs.detect-changes.outputs.backend == 'true'" in workflow_text
-    assert "tag:" in workflow_text
-    assert "build-frontend-latest:" in workflow_text
-    assert "build-backend-latest:" in workflow_text
-    assert "build-manual:" in workflow_text
-    assert "if: github.event_name == 'push'" in workflow_text
-    assert "if: github.event_name == 'workflow_dispatch'" in workflow_text
-    assert "platforms: linux/amd64" in workflow_text
-    assert "build_opengrep_runner" in workflow_text
-    assert "build_bandit_runner" in workflow_text
-    assert "build_gitleaks_runner" in workflow_text
-    assert "build_phpstan_runner" in workflow_text
-    assert "build_flow_parser_runner" in workflow_text
-    assert "build_sandbox_runner" in workflow_text
-    assert "./docker/backend.Dockerfile" in workflow_text
-    assert "./docker/frontend.Dockerfile" in workflow_text
-    assert "context: ." in workflow_text
-    assert "./docker/yasa-runner.Dockerfile" not in workflow_text
-    assert "./docker/opengrep-runner.Dockerfile" in workflow_text
-    assert "./docker/bandit-runner.Dockerfile" in workflow_text
-    assert "./docker/gitleaks-runner.Dockerfile" in workflow_text
-    assert "./docker/phpstan-runner.Dockerfile" in workflow_text
-    assert "./docker/flow-parser-runner.Dockerfile" in workflow_text
-    assert "./docker/sandbox-runner.Dockerfile" in workflow_text
-    assert "VULHUNTER_IMAGE_NAMESPACE" in workflow_text
-    assert "GHCR_REGISTRY: ghcr.io" in workflow_text
-    assert "build_nexus_web" not in workflow_text
-    assert "./nexus-web/src" not in workflow_text
-    assert "vulhunter-yasa-runner" not in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "docker logout ghcr.io || true" in workflow_text
-    assert "docker manifest inspect" in workflow_text
+    assert "workflow_call:" in reusable_workflow_text
+    assert "build-and-publish:" in reusable_workflow_text
+    assert 'default: "linux/amd64,linux/arm64"' in reusable_workflow_text
+    assert "docker/setup-qemu-action@v4" in reusable_workflow_text
+    assert "docker/setup-buildx-action@v4" in reusable_workflow_text
+    assert "docker/build-push-action@v7" in reusable_workflow_text
+    assert "GHCR_USERNAME" in reusable_workflow_text
+    assert "GHCR_TOKEN" in reusable_workflow_text
+    assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
+    assert "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
+    assert "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
+    assert "docker logout ghcr.io || true" in reusable_workflow_text
+    assert "docker manifest inspect" in reusable_workflow_text
+
+    assert "\n  push:\n" in runners_workflow_text
+    assert "\n    branches:\n      - main\n" in runners_workflow_text
+    assert "\n    paths:\n" in runners_workflow_text
+    assert "workflow_dispatch:" in runners_workflow_text
+    assert "prepare-matrix:" in runners_workflow_text
+    assert "dorny/paths-filter@v3" in runners_workflow_text
+    assert "publish-runners:" in runners_workflow_text
+    assert "nothing-to-publish:" in runners_workflow_text
+    assert "build_opengrep_runner" in runners_workflow_text
+    assert "build_bandit_runner" in runners_workflow_text
+    assert "build_gitleaks_runner" in runners_workflow_text
+    assert "build_phpstan_runner" in runners_workflow_text
+    assert "build_flow_parser_runner" in runners_workflow_text
+    assert "build_pmd_runner" in runners_workflow_text
+    assert "build_sandbox_runner" in runners_workflow_text
+    assert "build_sandbox:" not in runners_workflow_text
+    assert "./docker/opengrep-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/bandit-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/gitleaks-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/phpstan-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/flow-parser-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/pmd-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/sandbox-runner.Dockerfile" in runners_workflow_text
+    assert "vulhunter-opengrep-runner" in runners_workflow_text
+    assert "vulhunter-bandit-runner" in runners_workflow_text
+    assert "vulhunter-gitleaks-runner" in runners_workflow_text
+    assert "vulhunter-phpstan-runner" in runners_workflow_text
+    assert "vulhunter-flow-parser-runner" in runners_workflow_text
+    assert "vulhunter-pmd-runner" in runners_workflow_text
+    assert "vulhunter-sandbox-runner" in runners_workflow_text
+    assert '"name": "vulhunter-sandbox"' not in runners_workflow_text
+    assert "uses: ./.github/workflows/docker-publish.yml" in runners_workflow_text
 
 
 def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
-    workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
+    frontend_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish-frontend.yml").read_text(
+        encoding="utf-8"
+    )
+    backend_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish-backend.yml").read_text(
+        encoding="utf-8"
+    )
+    reusable_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "build-frontend-latest:" in workflow_text
-    assert "build-backend-latest:" in workflow_text
-    assert "vulhunter-frontend:latest" in workflow_text
-    assert "vulhunter-backend:latest" in workflow_text
-    assert "platforms: linux/amd64" in workflow_text
-    assert "platforms: linux/amd64,linux/arm64" in workflow_text
-    assert "- 'frontend/**'" in workflow_text
-    assert "- 'backend/**'" in workflow_text
-    assert "- 'docker/frontend.Dockerfile'" in workflow_text
-    assert "- 'docker/backend.Dockerfile'" in workflow_text
-    assert "- '.github/workflows/docker-publish.yml'" in workflow_text
+    assert "\n  push:\n" in frontend_workflow_text
+    assert "workflow_dispatch:" in frontend_workflow_text
+    assert "- \"frontend/**\"" in frontend_workflow_text
+    assert "- \"docker/frontend.Dockerfile\"" in frontend_workflow_text
+    assert "uses: ./.github/workflows/docker-publish.yml" in frontend_workflow_text
+    assert "image_name: vulhunter-frontend" in frontend_workflow_text
+    assert "context: ./frontend" in frontend_workflow_text
+    assert "platforms: linux/amd64,linux/arm64" in frontend_workflow_text
+
+    assert "\n  push:\n" in backend_workflow_text
+    assert "workflow_dispatch:" in backend_workflow_text
+    assert "- \"backend/**\"" in backend_workflow_text
+    assert "- \"docker/backend.Dockerfile\"" in backend_workflow_text
+    assert "uses: ./.github/workflows/docker-publish.yml" in backend_workflow_text
+    assert "image_name: vulhunter-backend" in backend_workflow_text
+    assert "context: ." in backend_workflow_text
+    assert "platforms: linux/amd64,linux/arm64" in backend_workflow_text
+    assert "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library" in backend_workflow_text
+
+    assert "VULHUNTER_IMAGE_TAG: latest" in reusable_workflow_text
+    assert 'default: "linux/amd64,linux/arm64"' in reusable_workflow_text
 
 
 def test_release_workflow_builds_slim_release_tree() -> None:

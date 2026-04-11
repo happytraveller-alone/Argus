@@ -1,0 +1,30 @@
+name: Docker Publish Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/docker-publish-frontend.yml"
+      - ".dockerignore"
+      - "docker/frontend.Dockerfile"
+      - "frontend/**"
+      - "frontend/.dockerignore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish-frontend:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      image_name: vulhunter-frontend
+      context: ./frontend
+      file: ./docker/frontend.Dockerfile
+      platforms: linux/amd64,linux/arm64
+    secrets: inherit

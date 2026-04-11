@@ -114,12 +114,12 @@ class SandboxManager:
         explicit_image = str(self.config.image or settings.SANDBOX_IMAGE or "").strip()
         ghcr_registry = str(os.environ.get("GHCR_REGISTRY") or "docker.m.daocloud.io").strip() or "docker.m.daocloud.io"
         image_tag = str(os.environ.get("VULHUNTER_IMAGE_TAG") or "latest").strip() or "latest"
-        remote_image = f"{ghcr_registry}/lintsinghua/vulhunter-sandbox:{image_tag}"
+        remote_image = f"{ghcr_registry}/audittool/vulhunter-sandbox-runner:{image_tag}"
         ordered_candidates = [
             explicit_image,
-            "vulhunter/sandbox:latest",
-            "VulHunter/sandbox:latest",
-            "VulHunter-sandbox:latest",
+            "vulhunter/sandbox-runner:latest",
+            "VulHunter/sandbox-runner:latest",
+            "VulHunter-sandbox-runner:latest",
             remote_image,
         ]
         deduped: List[str] = []
@@ -165,7 +165,7 @@ class SandboxManager:
     def _format_image_resolution_error(self, candidates: List[str], attempt_errors: List[str]) -> str:
         attempted = ", ".join(candidates) or str(self.config.image or "<unset>")
         detail_text = " | ".join(attempt_errors[-3:]) if attempt_errors else "镜像不存在或拉取失败"
-        build_hint = "docker build -f docker/sandbox.Dockerfile -t vulhunter/sandbox:latest ."
+        build_hint = "docker build -f docker/sandbox-runner.Dockerfile -t vulhunter/sandbox-runner:latest ."
         return (
             f"未找到可用沙箱镜像。已尝试: {attempted}。"
             f"详情: {detail_text}。"

@@ -206,7 +206,7 @@ class Settings(BaseSettings):
     SANDBOX_RUNNER_ENABLED: bool = True  # 启用新 runner 抽象
 
     # Sandbox 配置 (保持兼容,作为 fallback)
-    SANDBOX_IMAGE: str = _default_image("vulhunter-sandbox")  # 沙箱 Docker 镜像
+    SANDBOX_IMAGE: str = _default_image("vulhunter-sandbox-runner")  # 兼容旧配置，默认复用 sandbox-runner 镜像
     SANDBOX_MEMORY_LIMIT: str = "512m"  # 沙箱内存限制
     SANDBOX_CPU_LIMIT: float = 1.0  # 沙箱 CPU 限制
     SANDBOX_TIMEOUT: int = 60  # 沙箱命令超时（秒）

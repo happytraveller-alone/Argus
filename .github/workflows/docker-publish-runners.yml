@@ -1,0 +1,256 @@
+name: Docker Publish Runners
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/docker-publish-runners.yml"
+      - ".dockerignore"
+      - "docker/opengrep-runner.Dockerfile"
+      - "docker/bandit-runner.Dockerfile"
+      - "docker/gitleaks-runner.Dockerfile"
+      - "docker/phpstan-runner.Dockerfile"
+      - "docker/flow-parser-runner.Dockerfile"
+      - "docker/flow-parser-runner.requirements.txt"
+      - "docker/pmd-runner.Dockerfile"
+      - "docker/sandbox-runner.Dockerfile"
+      - "backend/Cargo.toml"
+      - "backend/Cargo.lock"
+      - "backend/src/**"
+      - "backend_old/app/**"
+      - "backend_old/scripts/**"
+  workflow_dispatch:
+    inputs:
+      build_opengrep_runner:
+        description: "构建 OpenGrep runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_bandit_runner:
+        description: "构建 Bandit runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_gitleaks_runner:
+        description: "构建 Gitleaks runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_phpstan_runner:
+        description: "构建 PHPStan runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_flow_parser_runner:
+        description: "构建 flow/parser runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_pmd_runner:
+        description: "构建 PMD runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_sandbox_runner:
+        description: "构建 sandbox-runner 镜像"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  prepare-matrix:
+    name: 计算需要发布的 runner 镜像
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      count: ${{ steps.matrix.outputs.count }}
+
+    steps:
+      - name: 检出代码
+        if: github.event_name == 'push'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: 检测 runner 相关变更
+        if: github.event_name == 'push'
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            opengrep_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'backend/Cargo.toml'
+              - 'backend/Cargo.lock'
+              - 'backend/src/**'
+              - 'docker/opengrep-runner.Dockerfile'
+            bandit_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'docker/bandit-runner.Dockerfile'
+            gitleaks_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'docker/gitleaks-runner.Dockerfile'
+            phpstan_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'backend/Cargo.toml'
+              - 'backend/Cargo.lock'
+              - 'backend/src/**'
+              - 'docker/phpstan-runner.Dockerfile'
+            flow_parser_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'docker/flow-parser-runner.Dockerfile'
+              - 'docker/flow-parser-runner.requirements.txt'
+              - 'backend_old/app/**'
+              - 'backend_old/scripts/**'
+            pmd_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'docker/pmd-runner.Dockerfile'
+            sandbox_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/docker-publish-runners.yml'
+              - '.dockerignore'
+              - 'docker/sandbox-runner.Dockerfile'
+
+      - name: 生成构建矩阵
+        id: matrix
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          OPENGREP_RUNNER_CHANGED: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
+          BANDIT_RUNNER_CHANGED: ${{ steps.filter.outputs.bandit_runner || 'false' }}
+          GITLEAKS_RUNNER_CHANGED: ${{ steps.filter.outputs.gitleaks_runner || 'false' }}
+          PHPSTAN_RUNNER_CHANGED: ${{ steps.filter.outputs.phpstan_runner || 'false' }}
+          FLOW_PARSER_RUNNER_CHANGED: ${{ steps.filter.outputs.flow_parser_runner || 'false' }}
+          PMD_RUNNER_CHANGED: ${{ steps.filter.outputs.pmd_runner || 'false' }}
+          SANDBOX_RUNNER_CHANGED: ${{ steps.filter.outputs.sandbox_runner || 'false' }}
+          BUILD_OPENGREP_RUNNER: ${{ github.event.inputs.build_opengrep_runner || 'false' }}
+          BUILD_BANDIT_RUNNER: ${{ github.event.inputs.build_bandit_runner || 'false' }}
+          BUILD_GITLEAKS_RUNNER: ${{ github.event.inputs.build_gitleaks_runner || 'false' }}
+          BUILD_PHPSTAN_RUNNER: ${{ github.event.inputs.build_phpstan_runner || 'false' }}
+          BUILD_FLOW_PARSER_RUNNER: ${{ github.event.inputs.build_flow_parser_runner || 'false' }}
+          BUILD_PMD_RUNNER: ${{ github.event.inputs.build_pmd_runner || 'false' }}
+          BUILD_SANDBOX_RUNNER: ${{ github.event.inputs.build_sandbox_runner || 'false' }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          def is_true(value: str) -> bool:
+              return str(value).strip().lower() == "true"
+
+          event_name = os.environ["EVENT_NAME"]
+          images = [
+              {
+                  "name": "vulhunter-opengrep-runner",
+                  "context": ".",
+                  "file": "./docker/opengrep-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "OPENGREP_RUNNER_CHANGED",
+                  "manual_env": "BUILD_OPENGREP_RUNNER",
+              },
+              {
+                  "name": "vulhunter-bandit-runner",
+                  "context": ".",
+                  "file": "./docker/bandit-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "BANDIT_RUNNER_CHANGED",
+                  "manual_env": "BUILD_BANDIT_RUNNER",
+              },
+              {
+                  "name": "vulhunter-gitleaks-runner",
+                  "context": ".",
+                  "file": "./docker/gitleaks-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "GITLEAKS_RUNNER_CHANGED",
+                  "manual_env": "BUILD_GITLEAKS_RUNNER",
+              },
+              {
+                  "name": "vulhunter-phpstan-runner",
+                  "context": ".",
+                  "file": "./docker/phpstan-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "PHPSTAN_RUNNER_CHANGED",
+                  "manual_env": "BUILD_PHPSTAN_RUNNER",
+              },
+              {
+                  "name": "vulhunter-flow-parser-runner",
+                  "context": ".",
+                  "file": "./docker/flow-parser-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "FLOW_PARSER_RUNNER_CHANGED",
+                  "manual_env": "BUILD_FLOW_PARSER_RUNNER",
+              },
+              {
+                  "name": "vulhunter-pmd-runner",
+                  "context": ".",
+                  "file": "./docker/pmd-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "PMD_RUNNER_CHANGED",
+                  "manual_env": "BUILD_PMD_RUNNER",
+              },
+              {
+                  "name": "vulhunter-sandbox-runner",
+                  "context": ".",
+                  "file": "./docker/sandbox-runner.Dockerfile",
+                  "build_args": "",
+                  "changed_env": "SANDBOX_RUNNER_CHANGED",
+                  "manual_env": "BUILD_SANDBOX_RUNNER",
+              },
+          ]
+
+          selected = []
+          for image in images:
+              env_name = image["changed_env"] if event_name == "push" else image["manual_env"]
+              if is_true(os.environ.get(env_name, "false")):
+                  selected.append(image)
+
+          matrix = {"include": selected}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
+              output.write(f"count={len(selected)}\n")
+          PY
+
+  publish-runners:
+    name: 发布 ${{ matrix.name }}
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.count != '0'
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      image_name: ${{ matrix.name }}
+      context: ${{ matrix.context }}
+      file: ${{ matrix.file }}
+      build_args: ${{ matrix.build_args }}
+      platforms: linux/amd64,linux/arm64
+    secrets: inherit
+
+  nothing-to-publish:
+    name: 无需发布
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.count == '0'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 输出跳过说明
+        run: |
+          echo "## 无需发布" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 本次触发没有命中任何需要构建的 runner 镜像。" >> "$GITHUB_STEP_SUMMARY"

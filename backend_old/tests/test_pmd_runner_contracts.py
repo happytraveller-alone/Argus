@@ -37,7 +37,7 @@ def test_compose_exposes_scanner_pmd_image_without_compose_runner_service() -> N
     compose_text = compose_path.read_text(encoding="utf-8")
 
     assert (
-        "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
         "vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text
@@ -92,10 +92,17 @@ def test_external_tools_manual_pmd_section_documents_runner_requirements() -> No
 
 
 def test_docker_publish_workflow_builds_pmd_runner() -> None:
-    workflow_path = _repo_root() / ".github" / "workflows" / "docker-publish.yml"
-    workflow_text = workflow_path.read_text(encoding="utf-8")
+    reusable_workflow_text = (_repo_root() / ".github" / "workflows" / "docker-publish.yml").read_text(
+        encoding="utf-8"
+    )
+    runners_workflow_text = (
+        _repo_root() / ".github" / "workflows" / "docker-publish-runners.yml"
+    ).read_text(encoding="utf-8")
 
-    assert "build_pmd_runner" in workflow_text
-    assert "./docker/pmd-runner.Dockerfile" in workflow_text
-    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
-    assert "build_nexus_web" not in workflow_text
+    assert "build_pmd_runner" in runners_workflow_text
+    assert "./docker/pmd-runner.Dockerfile" in runners_workflow_text
+    assert "vulhunter-pmd-runner" in runners_workflow_text
+    assert "uses: ./.github/workflows/docker-publish.yml" in runners_workflow_text
+    assert "VULHUNTER_IMAGE_TAG: latest" in reusable_workflow_text
+    assert 'default: "linux/amd64,linux/arm64"' in reusable_workflow_text
+    assert "build_nexus_web" not in runners_workflow_text

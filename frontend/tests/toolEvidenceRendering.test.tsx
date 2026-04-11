@@ -61,12 +61,12 @@ const executionEvidence: ToolEvidencePayload = {
       status: "passed",
       title: "Harness 执行结果",
       description: "验证命令注入 harness",
-      runtimeImage: "vulhunter/sandbox:latest",
+      runtimeImage: "vulhunter/sandbox-runner:latest",
       executionCommand: "cd /tmp && python3 -c 'print(1)'",
       stdoutPreview: "payload detected",
       stderrPreview: "",
       artifacts: [
-        { label: "镜像", value: "vulhunter/sandbox:latest" },
+        { label: "镜像", value: "vulhunter/sandbox-runner:latest" },
         { label: "退出码", value: "0" },
       ],
       code: {

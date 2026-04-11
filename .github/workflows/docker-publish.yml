@@ -1,118 +1,44 @@
-name: Docker Publish
+name: Docker Publish Reusable
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/docker-publish.yml'
-      - '.dockerignore'
-      - 'docker/frontend.Dockerfile'
-      - 'docker/backend.Dockerfile'
-      - 'frontend/**'
-      - 'backend/**'
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      tag:
-        description: '镜像标签 (例如: latest, dev, v3.0.0)'
+      image_name:
+        description: "镜像名，不含 registry/namespace/tag"
         required: true
-        default: 'latest'
         type: string
-      build_frontend:
-        description: '构建前端镜像'
+      context:
+        description: "docker build context"
+        required: true
+        type: string
+      file:
+        description: "Dockerfile 路径"
+        required: true
+        type: string
+      build_args:
+        description: "多行 build args"
         required: false
-        type: boolean
-        default: true
-      build_backend:
-        description: '构建后端镜像'
+        type: string
+        default: ""
+      platforms:
+        description: "发布架构列表"
         required: false
-        type: boolean
-        default: true
-      build_opengrep_runner:
-        description: '构建 OpenGrep runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_bandit_runner:
-        description: '构建 Bandit runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_gitleaks_runner:
-        description: '构建 Gitleaks runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_phpstan_runner:
-        description: '构建 PHPStan runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_flow_parser_runner:
-        description: '构建 flow/parser runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_pmd_runner:
-        description: '构建 PMD runner 镜像'
-        required: false
-        type: boolean
-        default: false
-      build_sandbox:
-        description: '构建沙箱镜像'
-        required: false
-        type: boolean
-        default: false
-      build_sandbox_runner:
-        description: '构建 sandbox-runner 镜像'
-        required: false
-        type: boolean
-        default: false
+        type: string
+        default: "linux/amd64,linux/arm64"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
-  VULHUNTER_IMAGE_NAMESPACE: unbengable12
+  VULHUNTER_IMAGE_NAMESPACE: audittool
+  VULHUNTER_IMAGE_TAG: latest
 
 jobs:
-  detect-changes:
-    if: github.event_name == 'push'
-    name: 检测镜像相关变更
+  build-and-publish:
+    name: 发布 ${{ inputs.image_name }}
     runs-on: ubuntu-latest
-
-    outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: 识别前后端相关变更
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            frontend:
-              - '.github/workflows/docker-publish.yml'
-              - 'docker/frontend.Dockerfile'
-              - 'frontend/**'
-            backend:
-              - '.github/workflows/docker-publish.yml'
-              - '.dockerignore'
-              - 'docker/backend.Dockerfile'
-              - 'backend/**'
-
-  build-frontend-latest:
-    if: github.event_name == 'push' && needs.detect-changes.outputs.frontend == 'true'
-    name: 自动构建前端 latest
-    runs-on: ubuntu-latest
-    needs: detect-changes
 
     concurrency:
-      group: docker-publish-frontend-latest-main
+      group: docker-publish-${{ inputs.image_name }}-${{ github.ref_name }}
       cancel-in-progress: true
 
     permissions:
@@ -125,648 +51,104 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v6
 
-      - name: 登录到 GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 安装 Cosign
-        uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.3'
-
-      - name: 安装 Syft (SBOM 生成)
-        uses: anchore/sbom-action/download-syft@v0
-        with:
-          syft-version: 'v1.18.0'
-
-      - name: 设置 Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: 构建并推送前端 Docker 镜像
-        id: build-frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          file: ./docker/frontend.Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:latest
-          cache-from: type=gha,scope=frontend-latest
-          cache-to: type=gha,mode=max,scope=frontend-latest
-
-      - name: 签名前端镜像
+      - name: 校验 GHCR 发布凭据
         env:
-          DIGEST: ${{ steps.build-frontend.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend
-        run: |
-          cosign sign --yes "${IMAGE}:latest@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-frontend.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-frontend.spdx.json \
-            --type spdx \
-            "${IMAGE}:latest@${DIGEST}"
-
-      - name: 设置前端 GHCR 包为公开可见性
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh api --method PATCH "/user/packages/container/vulhunter-frontend" \
-            -f visibility=public --silent 2>/dev/null; then
-            echo "vulhunter-frontend set to public successfully"
-          else
-            echo "::warning::Could not set vulhunter-frontend to public via API (may already be public or require manual action)."
-          fi
-
-      - name: 验证前端 GHCR 匿名拉取
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
-          image="${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:latest"
-          docker logout ghcr.io || true
-          for attempt in 1 2 3; do
-            if docker manifest inspect "${image}" >/dev/null 2>&1; then
-              exit 0
-            fi
-            echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
-            sleep 20
-          done
-          echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
-          exit 1
-
-      - name: 输出前端镜像信息
-        run: |
-          echo "## 自动刷新前端 latest 镜像" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
-
-  build-backend-latest:
-    if: github.event_name == 'push' && needs.detect-changes.outputs.backend == 'true'
-    name: 自动构建后端 latest
-    runs-on: ubuntu-latest
-    needs: detect-changes
-
-    concurrency:
-      group: docker-publish-backend-latest-main
-      cancel-in-progress: true
-
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v6
-
-      - name: 登录到 GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 安装 Cosign
-        uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.3'
-
-      - name: 安装 Syft (SBOM 生成)
-        uses: anchore/sbom-action/download-syft@v0
-        with:
-          syft-version: 'v1.18.0'
-
-      - name: 设置 Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: 构建并推送后端 Docker 镜像
-        id: build-backend
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/backend.Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:latest
-          build-args: |
-            DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-          cache-from: |
-            type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache-amd64-latest
-            type=gha,scope=backend-latest
-          cache-to: |
-            type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache-amd64-latest,mode=max
-            type=gha,mode=max,scope=backend-latest
-
-      - name: 签名后端镜像
-        env:
-          DIGEST: ${{ steps.build-backend.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend
-        run: |
-          cosign sign --yes "${IMAGE}:latest@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-backend.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-backend.spdx.json \
-            --type spdx \
-            "${IMAGE}:latest@${DIGEST}"
-
-      - name: 设置后端 GHCR 包为公开可见性
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh api --method PATCH "/user/packages/container/vulhunter-backend" \
-            -f visibility=public --silent 2>/dev/null; then
-            echo "vulhunter-backend set to public successfully"
-          else
-            echo "::warning::Could not set vulhunter-backend to public via API (may already be public or require manual action)."
+          if [ "${VULHUNTER_IMAGE_NAMESPACE}" != "${GITHUB_REPOSITORY_OWNER}" ] && { [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; }; then
+            echo "::error::Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets."
+            exit 1
           fi
 
-      - name: 验证后端 GHCR 匿名拉取
-        run: |
-          set -euo pipefail
-          image="${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:latest"
-          docker logout ghcr.io || true
-          for attempt in 1 2 3; do
-            if docker manifest inspect "${image}" >/dev/null 2>&1; then
-              exit 0
-            fi
-            echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
-            sleep 20
-          done
-          echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
-          exit 1
-
-      - name: 输出后端镜像信息
-        run: |
-          echo "## 自动刷新后端 latest 镜像" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:latest\`" >> $GITHUB_STEP_SUMMARY
-
-  build-manual:
-    if: github.event_name == 'workflow_dispatch'
-    name: 构建并推送镜像
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-      id-token: write      # Cosign keyless signing 所需
-      attestations: write  # SBOM attestation 所需
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v6
-
-      - name: 确定镜像标签
-        id: image-tag
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          echo "tag=${INPUT_TAG:-latest}" >> $GITHUB_OUTPUT
-          echo "build_all=false" >> $GITHUB_OUTPUT
-
       - name: 登录到 GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ${{ env.GHCR_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME != '' && secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: 安装 Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.3'
+          cosign-release: "v2.4.3"
 
       - name: 安装 Syft (SBOM 生成)
         uses: anchore/sbom-action/download-syft@v0
         with:
-          syft-version: 'v1.18.0'
+          syft-version: "v1.18.0"
 
       - name: 设置 QEMU
+        if: contains(inputs.platforms, 'arm64')
         uses: docker/setup-qemu-action@v4
 
       - name: 设置 Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: 构建并推送前端 Docker 镜像
-        id: build-frontend
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
+      - name: 构建并推送 Docker 镜像
+        id: build-image
         uses: docker/build-push-action@v7
         with:
-          context: ./frontend
-          file: ./docker/frontend.Dockerfile
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
           push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-frontend:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          platforms: ${{ inputs.platforms }}
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
+          cache-from: type=gha,scope=${{ inputs.image_name }}-latest
+          cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-latest
+          build-args: ${{ inputs.build_args }}
 
-      - name: 签名前端镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
+      - name: 签名并附加 SBOM
         env:
-          DIGEST: ${{ steps.build-frontend.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend
-          TAG: ${{ steps.image-tag.outputs.tag }}
+          DIGEST: ${{ steps.build-image.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}
+          TAG: ${{ env.VULHUNTER_IMAGE_TAG }}
+          SBOM_PATH: /tmp/${{ inputs.image_name }}.spdx.json
         run: |
           cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-frontend.spdx.json
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file "${SBOM_PATH}"
           cosign attest --yes \
-            --predicate /tmp/sbom-frontend.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送后端 Docker 镜像
-        id: build-backend
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_backend == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/backend.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-backend:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          build-args: |
-            DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-          cache-from: |
-            type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache
-            type=gha,scope=backend
-          cache-to: type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache,mode=max
-
-      - name: 签名后端镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_backend == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-backend.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-backend.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-backend.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 OpenGrep runner Docker 镜像
-        id: build-opengrep
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/opengrep-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-opengrep-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=opengrep-runner
-          cache-to: type=gha,mode=max,scope=opengrep-runner
-
-      - name: 签名 OpenGrep runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-opengrep.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-opengrep-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-opengrep-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 Bandit runner Docker 镜像
-        id: build-bandit
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_bandit_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/bandit-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-bandit-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=bandit-runner
-          cache-to: type=gha,mode=max,scope=bandit-runner
-
-      - name: 签名 Bandit runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_bandit_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-bandit.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-bandit-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-bandit-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 Gitleaks runner Docker 镜像
-        id: build-gitleaks
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_gitleaks_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/gitleaks-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-gitleaks-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=gitleaks-runner
-          cache-to: type=gha,mode=max,scope=gitleaks-runner
-
-      - name: 签名 Gitleaks runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_gitleaks_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-gitleaks.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-gitleaks-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-gitleaks-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 PHPStan runner Docker 镜像
-        id: build-phpstan
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_phpstan_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/phpstan-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-phpstan-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=phpstan-runner
-          cache-to: type=gha,mode=max,scope=phpstan-runner
-
-      - name: 签名 PHPStan runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_phpstan_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-phpstan.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-phpstan-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-phpstan-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 flow/parser runner Docker 镜像
-        id: build-flow-parser
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_flow_parser_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/flow-parser-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-flow-parser-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=flow-parser-runner
-          cache-to: type=gha,mode=max,scope=flow-parser-runner
-
-      - name: 签名 flow-parser runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_flow_parser_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-flow-parser.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-flow-parser-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-flow-parser-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送 PMD runner Docker 镜像
-        id: build-pmd
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_pmd_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/pmd-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-pmd-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=pmd-runner
-          cache-to: type=gha,mode=max,scope=pmd-runner
-
-      - name: 签名 PMD runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_pmd_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-pmd.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-pmd-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-pmd-runner.spdx.json \
-            --type spdx \
-            "${IMAGE}:${TAG}@${DIGEST}"
-
-      - name: 构建并推送沙箱 Docker 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/sandbox.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-sandbox:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=sandbox
-          cache-to: type=gha,mode=max,scope=sandbox
-
-      - name: 构建并推送 sandbox-runner Docker 镜像
-        id: build-sandbox-runner
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox_runner == 'true' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./docker/sandbox-runner.Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-sandbox-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
-          cache-from: type=gha,scope=sandbox-runner
-          cache-to: type=gha,mode=max,scope=sandbox-runner
-
-      - name: 签名 sandbox-runner 镜像
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox_runner == 'true' }}
-        env:
-          DIGEST: ${{ steps.build-sandbox-runner.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner
-          TAG: ${{ steps.image-tag.outputs.tag }}
-        run: |
-          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
-          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-sandbox-runner.spdx.json
-          cosign attest --yes \
-            --predicate /tmp/sbom-sandbox-runner.spdx.json \
+            --predicate "${SBOM_PATH}" \
             --type spdx \
             "${IMAGE}:${TAG}@${DIGEST}"
 
       - name: 设置 GHCR 包为公开可见性
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+          PACKAGE_OWNER: ${{ env.VULHUNTER_IMAGE_NAMESPACE }}
+          PACKAGE_NAME: ${{ inputs.image_name }}
         run: |
           set -euo pipefail
 
-          set_public() {
-            local pkg_name="$1"
-            echo "Setting ${pkg_name} visibility to public..."
-            if gh api --method PATCH "/user/packages/container/${pkg_name}" \
-              -f visibility=public --silent 2>/dev/null; then
-              echo "${pkg_name} set to public successfully"
-            else
-              echo "::warning::Could not set ${pkg_name} to public via API (may already be public or require manual action)."
-            fi
-          }
-
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
-            set_public "vulhunter-frontend"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
-            set_public "vulhunter-backend"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
-            set_public "vulhunter-opengrep-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
-            set_public "vulhunter-bandit-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
-            set_public "vulhunter-gitleaks-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
-            set_public "vulhunter-phpstan-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
-            set_public "vulhunter-flow-parser-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
-            set_public "vulhunter-pmd-runner"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
-            set_public "vulhunter-sandbox"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
-            set_public "vulhunter-sandbox-runner"
+          if gh api --method PATCH "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" \
+            -f visibility=public --silent 2>/dev/null; then
+            echo "${PACKAGE_NAME} set to public successfully via org API"
+          elif gh api --method PATCH "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" \
+            -f visibility=public --silent 2>/dev/null; then
+            echo "${PACKAGE_NAME} set to public successfully via user API"
+          else
+            echo "::warning::Could not set ${PACKAGE_NAME} to public via API (may already be public or require manual action)."
           fi
 
       - name: 验证 GHCR 匿名拉取
-        shell: bash
+        env:
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
         run: |
           set -euo pipefail
-          images=()
-
-          add_image() {
-            images+=("$1")
-          }
-
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}"
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
-            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}"
-          fi
-
           docker logout ghcr.io || true
-
-          for image in "${images[@]}"; do
-            echo "Verifying anonymous pull access for ${image}"
-            success=false
-            for attempt in 1 2 3; do
-              if docker manifest inspect "${image}" >/dev/null 2>&1; then
-                success=true
-                break
-              fi
-              echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
-              sleep 20
-            done
-            if [ "${success}" = "false" ]; then
-              echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
-              exit 1
+          for attempt in 1 2 3; do
+            if docker manifest inspect "${IMAGE}" >/dev/null 2>&1; then
+              exit 0
             fi
+            echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
+            sleep 20
           done
+          echo "::error::Anonymous pull check failed for ${IMAGE}. Ensure the package visibility allows anonymous pulls."
+          exit 1
 
       - name: 输出镜像信息
         run: |
-          echo "## 镜像已推送到 GHCR" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
-            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "## 镜像已推送到 GHCR" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
