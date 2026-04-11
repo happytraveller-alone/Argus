@@ -33,14 +33,6 @@ import {
   type GitleaksScanTask,
 } from "@/shared/api/gitleaks";
 import {
-  getYasaFindings,
-  getYasaScanTask,
-  interruptYasaScanTask,
-  updateYasaFindingStatus,
-  type YasaFinding,
-  type YasaScanTask,
-} from "@/shared/api/yasa";
-import {
   getOpengrepScanFindings,
   getOpengrepScanTask,
   interruptOpengrepScanTask,
@@ -128,26 +120,12 @@ async function fetchAllPmdFindings(taskId: string): Promise<PmdFinding[]> {
 }
 
 
-async function fetchAllYasaFindings(taskId: string): Promise<YasaFinding[]> {
-  const allFindings: YasaFinding[] = [];
-  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getYasaFindings({
-      taskId,
-      skip: page * FINDING_BATCH_SIZE,
-      limit: FINDING_BATCH_SIZE,
-    });
-    allFindings.push(...batch);
-    if (batch.length < FINDING_BATCH_SIZE) break;
-  }
-  return allFindings;
-}
 export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
   gitleaksTaskId,
   banditTaskId,
   phpstanTaskId,
-  yasaTaskId,
   pmdTaskId,
 }: {
   hasEnabledEngine: boolean;
@@ -155,7 +133,6 @@ export function useStaticAnalysisData({
   gitleaksTaskId: string;
   banditTaskId: string;
   phpstanTaskId: string;
-  yasaTaskId: string;
   pmdTaskId: string;
 }) {
   // PHPStan integration: keep task/findings lifecycle aligned with existing engines.
@@ -163,13 +140,11 @@ export function useStaticAnalysisData({
   const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
   const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
   const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
-  const [yasaTask, setYasaTask] = useState<YasaScanTask | null>(null);
   const [pmdTask, setPmdTask] = useState<PmdScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
   const [gitleaksFindings, setGitleaksFindings] = useState<GitleaksFinding[]>([]);
   const [banditFindings, setBanditFindings] = useState<BanditFinding[]>([]);
   const [phpstanFindings, setPhpstanFindings] = useState<PhpstanFinding[]>([]);
-  const [yasaFindings, setYasaFindings] = useState<YasaFinding[]>([]);
   const [pmdFindings, setPmdFindings] = useState<PmdFinding[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
@@ -182,7 +157,6 @@ export function useStaticAnalysisData({
   const gitleaksSilentRefreshRef = useRef(false);
   const banditSilentRefreshRef = useRef(false);
   const phpstanSilentRefreshRef = useRef(false);
-  const yasaSilentRefreshRef = useRef(false);
   const pmdSilentRefreshRef = useRef(false);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
@@ -280,25 +254,6 @@ export function useStaticAnalysisData({
     }
   }, [pmdTaskId]);
 
-  const loadYasaTask = useCallback(async (silent = false) => {
-    if (!yasaTaskId) {
-      setYasaTask(null);
-      return;
-    }
-    try {
-      if (!silent) setLoadingTask(true);
-      const task = await getYasaScanTask(yasaTaskId);
-      setYasaTask(task);
-    } catch {
-      setYasaTask(null);
-      if (!silent) {
-        toast.error("加载 YASA 任务失败");
-      }
-    } finally {
-      if (!silent) setLoadingTask(false);
-    }
-  }, [yasaTaskId]);
-
   const loadOpengrepFindings = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
       setOpengrepFindings([]);
@@ -389,24 +344,6 @@ export function useStaticAnalysisData({
     }
   }, [pmdTaskId]);
 
-  const loadYasaFindings = useCallback(async (silent = false) => {
-    if (!yasaTaskId) {
-      setYasaFindings([]);
-      return;
-    }
-    try {
-      if (!silent) setLoadingFindings(true);
-      setYasaFindings(await fetchAllYasaFindings(yasaTaskId));
-    } catch {
-      setYasaFindings([]);
-      if (!silent) {
-        toast.error("加载 YASA 漏洞失败");
-      }
-    } finally {
-      if (!silent) setLoadingFindings(false);
-    }
-  }, [yasaTaskId]);
-
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -420,13 +357,11 @@ export function useStaticAnalysisData({
         loadBanditTask(silent),
         loadPhpstanTask(silent),
         loadPmdTask(silent),
-        loadYasaTask(silent),
         loadOpengrepFindings(silent),
         loadGitleaksFindings(silent),
         loadBanditFindings(silent),
         loadPhpstanFindings(silent),
         loadPmdFindings(silent),
-        loadYasaFindings(silent),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -440,9 +375,7 @@ export function useStaticAnalysisData({
     loadPmdFindings,
     loadPmdTask,
     loadPhpstanFindings,
-    loadYasaFindings,
     loadPhpstanTask,
-    loadYasaTask,
     loadOpengrepFindings,
     loadOpengrepTask,
   ]);
@@ -497,16 +430,6 @@ export function useStaticAnalysisData({
     }
   }, [loadPmdTask, pmdTaskId]);
 
-  const refreshYasaSilently = useCallback(async () => {
-    if (!yasaTaskId || yasaSilentRefreshRef.current) return;
-    yasaSilentRefreshRef.current = true;
-    try {
-      await loadYasaTask(true);
-    } finally {
-      yasaSilentRefreshRef.current = false;
-    }
-  }, [loadYasaTask, yasaTaskId]);
-
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;
     setInterrupting(true);
@@ -531,10 +454,6 @@ export function useStaticAnalysisData({
         await interruptPmdScanTask(pmdTaskId);
         toast.success("PMD 任务已中止");
       }
-      if (interruptTarget === "yasa" && yasaTaskId) {
-        await interruptYasaScanTask(yasaTaskId);
-        toast.success("YASA 任务已中止");
-      }
       await refreshAll(true);
     } catch {
       toast.error("中止任务失败");
@@ -549,7 +468,6 @@ export function useStaticAnalysisData({
     opengrepTaskId,
     phpstanTaskId,
     pmdTaskId,
-    yasaTaskId,
     refreshAll,
   ]);
 
@@ -605,16 +523,6 @@ export function useStaticAnalysisData({
       } else if (row.engine === "pmd") {
         await updatePmdFindingStatus(row.id, nextStatus);
         setPmdFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
-          ),
-        );
-      } else {
-        await updateYasaFindingStatus({
-          findingId: row.id,
-          status: nextStatus,
-        });
-        setYasaFindings((prev) =>
           prev.map((finding) =>
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
@@ -681,29 +589,17 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [pmdTask?.status, pmdTaskId, refreshPmdSilently]);
 
-  useEffect(() => {
-    if (!yasaTaskId || !isStaticAnalysisPollableStatus(yasaTask?.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void refreshYasaSilently();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [refreshYasaSilently, yasaTask?.status, yasaTaskId]);
-
   return {
     opengrepTask,
     gitleaksTask,
     banditTask,
     phpstanTask,
     pmdTask,
-    yasaTask,
     opengrepFindings,
     gitleaksFindings,
     banditFindings,
     phpstanFindings,
     pmdFindings,
-    yasaFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -728,9 +624,6 @@ export function useStaticAnalysisData({
     ),
     canInterruptPmd: Boolean(
       pmdTaskId && isStaticAnalysisInterruptibleStatus(pmdTask?.status),
-    ),
-    canInterruptYasa: Boolean(
-      yasaTaskId && isStaticAnalysisInterruptibleStatus(yasaTask?.status),
     ),
   };
 }

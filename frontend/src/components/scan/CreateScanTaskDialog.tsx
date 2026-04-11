@@ -17,13 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import {
 	Search,
 	Upload,
 	Package,
@@ -44,11 +37,6 @@ import { createGitleaksScanTask } from "@/shared/api/gitleaks";
 import { createBanditScanTask } from "@/shared/api/bandit";
 import { createPhpstanScanTask } from "@/shared/api/phpstan";
 import { createPmdScanTask } from "@/shared/api/pmd";
-import {
-	createYasaScanTask,
-	getYasaRuleConfigs,
-	type YasaRuleConfig,
-} from "@/shared/api/yasa";
 import {
 	getOpengrepActiveRules,
 	setOpengrepActiveRules,
@@ -71,14 +59,6 @@ import {
 	extractCreateScanTaskApiErrorMessage,
 	stripScanArchiveSuffix,
 } from "./create-scan-task/utils";
-import {
-	getYasaBlockedProjectMessage,
-	getYasaUnsupportedLanguageMessage,
-	isYasaBlockedProjectLanguage,
-	parseYasaLanguageOption,
-	resolveYasaLanguageFromProgrammingLanguages,
-	type YasaLanguageOption,
-} from "@/shared/utils/yasaLanguage";
 import {
 	getPmdBlockedProjectMessage,
 	isPmdBlockedProjectLanguage,
@@ -145,25 +125,14 @@ export default function CreateScanTaskDialog({
 		gitleaks: false,
 		bandit: false,
 		phpstan: false,
-		yasa: false,
 		pmd: false,
 	});
-	const [yasaLanguage, setYasaLanguage] = useState<YasaLanguageOption>("auto");
-	const [yasaRuleConfigs, setYasaRuleConfigs] = useState<YasaRuleConfig[]>([]);
-	const [selectedYasaRuleConfigId, setSelectedYasaRuleConfigId] = useState<string>("default");
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 
 	const { projects, loading, loadProjects } = useProjects();
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
-	const isYasaBlockedProject = useMemo(
-		() =>
-			sourceMode === "existing"
-				? isYasaBlockedProjectLanguage(selectedProject?.programming_languages)
-				: false,
-		[sourceMode, selectedProject?.programming_languages],
-	);
 	const isPmdBlockedProject = useMemo(
 		() =>
 			sourceMode === "existing"
@@ -226,9 +195,7 @@ export default function CreateScanTaskDialog({
 			setShowAdvanced(false);
 			setSelectedRuleIds([]);
 			setScanMode(initialScanMode || "agent");
-			setStaticTools({ opengrep: true, gitleaks: false, bandit: false, phpstan: false, yasa: false, pmd: false });
-			setYasaLanguage("auto");
-			setSelectedYasaRuleConfigId("default");
+			setStaticTools({ opengrep: true, gitleaks: false, bandit: false, phpstan: false, pmd: false });
 			setConfigEngine(null);
 			setSourceMode("existing");
 			setNewProjectName("");
@@ -236,27 +203,6 @@ export default function CreateScanTaskDialog({
 			zipState.reset();
 			}
 		}, [open, preselectedProjectId, initialScanMode, loadProjects]);
-
-	useEffect(() => {
-		if (!open) return;
-		const loadYasaConfigs = async () => {
-			try {
-				const rows = await getYasaRuleConfigs({ isActive: true, limit: 200 });
-				setYasaRuleConfigs(rows);
-			} catch (error) {
-				console.error("加载 YASA 自定义规则配置失败:", error);
-				setYasaRuleConfigs([]);
-			}
-		};
-		void loadYasaConfigs();
-	}, [open]);
-
-	useEffect(() => {
-		if (isYasaBlockedProject && staticTools.yasa) {
-			setStaticTools((prev) => ({ ...prev, yasa: false }));
-			toast.info(getYasaBlockedProjectMessage());
-		}
-	}, [isYasaBlockedProject, staticTools.yasa]);
 
 	useEffect(() => {
 		if (isPmdBlockedProject && staticTools.pmd) {
@@ -332,7 +278,6 @@ export default function CreateScanTaskDialog({
 	const createStaticScanTasksForProject = async (
 		projectId: string,
 		projectName: string,
-		programmingLanguages?: unknown,
 	) => {
 		// PHPStan integration: enforce 4-engine minimum selection check.
 		if (
@@ -340,7 +285,6 @@ export default function CreateScanTaskDialog({
 			!staticTools.gitleaks &&
 			!staticTools.bandit &&
 			!staticTools.phpstan &&
-			!staticTools.yasa &&
 			!staticTools.pmd
 		) {
 			throw new Error("请选择至少一个静态分析工具");
@@ -350,32 +294,15 @@ export default function CreateScanTaskDialog({
 		let gitleaksTask: { id: string } | null = null;
 		let banditTask: { id: string } | null = null;
 		let phpstanTask: { id: string } | null = null;
-		let yasaTask: { id: string } | null = null;
 		let pmdTask: { id: string } | null = null;
-		const selectedRuleConfig = yasaRuleConfigs.find(
-			(item) => item.id === selectedYasaRuleConfigId,
-		);
-		const requestedYasaLanguage =
-			selectedRuleConfig?.language ||
-			(yasaLanguage !== "auto" ? yasaLanguage : undefined);
-		let shouldRunYasa = staticTools.yasa;
-		if (isYasaBlockedProjectLanguage(programmingLanguages)) {
-			shouldRunYasa = false;
-			toast.info(getYasaBlockedProjectMessage());
-		}
 		if (
 			!staticTools.opengrep &&
 			!staticTools.gitleaks &&
 			!staticTools.bandit &&
 			!staticTools.phpstan &&
-			!shouldRunYasa &&
 			!staticTools.pmd
 		) {
-			throw new Error(
-				`${getYasaUnsupportedLanguageMessage(
-					typeof programmingLanguages === "string" ? programmingLanguages : undefined,
-				)}，请至少启用一个其他扫描引擎`,
-			);
+			throw new Error("请选择至少一个静态分析工具");
 		}
 		const staticBatchId = createStaticScanBatchId();
 
@@ -465,18 +392,6 @@ export default function CreateScanTaskDialog({
 				target_path: ".",
 			});
 		}
-		if (shouldRunYasa) {
-			yasaTask = await createYasaScanTask({
-				project_id: projectId,
-				name: appendStaticScanBatchMarker(
-					`静态分析-YASA-${projectName}`,
-					staticBatchId,
-				),
-				target_path: ".",
-				language: selectedRuleConfig ? undefined : requestedYasaLanguage || undefined,
-				rule_config_id: selectedRuleConfig?.id,
-			});
-		}
 		if (staticTools.pmd) {
 			pmdTask = await createPmdScanTask({
 				project_id: projectId,
@@ -494,7 +409,6 @@ export default function CreateScanTaskDialog({
 			gitleaksTask?.id ||
 			banditTask?.id ||
 			phpstanTask?.id ||
-			yasaTask?.id ||
 			pmdTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态分析任务创建失败");
@@ -513,25 +427,19 @@ export default function CreateScanTaskDialog({
 		if (phpstanTask) {
 			params.set("phpstanTaskId", phpstanTask.id);
 		}
-		if (yasaTask) {
-			params.set("yasaTaskId", yasaTask.id);
-		}
 		if (pmdTask) {
 			params.set("pmdTaskId", pmdTask.id);
 		}
-		if (!opengrepTask && !banditTask && !phpstanTask && !yasaTask && !pmdTask && gitleaksTask) {
+		if (!opengrepTask && !banditTask && !phpstanTask && !pmdTask && gitleaksTask) {
 			params.set("tool", "gitleaks");
 		}
-		if (!opengrepTask && !gitleaksTask && !phpstanTask && !yasaTask && !pmdTask && banditTask) {
+		if (!opengrepTask && !gitleaksTask && !phpstanTask && !pmdTask && banditTask) {
 			params.set("tool", "bandit");
 		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !yasaTask && !pmdTask && phpstanTask) {
+		if (!opengrepTask && !gitleaksTask && !banditTask && !pmdTask && phpstanTask) {
 			params.set("tool", "phpstan");
 		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !pmdTask && yasaTask) {
-			params.set("tool", "yasa");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !yasaTask && pmdTask) {
+		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && pmdTask) {
 			params.set("tool", "pmd");
 		}
 
@@ -576,8 +484,7 @@ export default function CreateScanTaskDialog({
 									bandit_enabled: false,
 									gitleaks_enabled: false,
 									phpstan_enabled: false,
-									yasa_enabled: false,
-									yasa_language: "auto",
+									pmd_enabled: false,
 								},
 							},
 							target_files:
@@ -601,7 +508,6 @@ export default function CreateScanTaskDialog({
 					const staticResult = await createStaticScanTasksForProject(
 						createdProject.id,
 						createdProject.name,
-						createdProject.programming_languages,
 					);
 					onOpenChange(false);
 					onTaskCreated();
@@ -639,8 +545,7 @@ export default function CreateScanTaskDialog({
 							bandit_enabled: false,
 							gitleaks_enabled: false,
 							phpstan_enabled: false,
-							yasa_enabled: false,
-							yasa_language: "auto",
+							pmd_enabled: false,
 						},
 					},
 					exclude_patterns: excludePatterns,
@@ -671,7 +576,6 @@ export default function CreateScanTaskDialog({
 			const staticResult = await createStaticScanTasksForProject(
 				selectedProject.id,
 				selectedProject.name,
-				selectedProject.programming_languages,
 			);
 			onOpenChange(false);
 			onTaskCreated();
@@ -704,7 +608,6 @@ export default function CreateScanTaskDialog({
 					staticTools.gitleaks ||
 					staticTools.bandit ||
 					staticTools.phpstan ||
-					staticTools.yasa ||
 					staticTools.pmd
 				);
 			}
@@ -719,7 +622,6 @@ export default function CreateScanTaskDialog({
 					staticTools.gitleaks ||
 					staticTools.bandit ||
 					staticTools.phpstan ||
-					staticTools.yasa ||
 					staticTools.pmd)
 			);
 		}
@@ -741,7 +643,6 @@ export default function CreateScanTaskDialog({
 		staticTools.gitleaks,
 		staticTools.bandit,
 		staticTools.phpstan,
-		staticTools.yasa,
 		staticTools.pmd,
 	]);
 
@@ -920,9 +821,8 @@ export default function CreateScanTaskDialog({
 								disabled={creating}
 								staticTools={staticTools}
 								onStaticToolsChange={setStaticTools}
-								disabledStaticTools={{ yasa: isYasaBlockedProject, pmd: isPmdBlockedProject }}
+								disabledStaticTools={{ pmd: isPmdBlockedProject }}
 								blockedStaticToolMessages={{
-									yasa: isYasaBlockedProject ? getYasaBlockedProjectMessage() : undefined,
 									pmd: isPmdBlockedProject ? getPmdBlockedProjectMessage() : undefined,
 								}}
 								onOpenStaticToolConfig={handleOpenEngineConfig}
@@ -1051,28 +951,7 @@ export default function CreateScanTaskDialog({
 				scanMode="static"
 				enabled={configEngine ? staticTools[configEngine] : false}
 				creating={creating}
-				blockedReason={
-					configEngine === "yasa" && isYasaBlockedProject
-						? getYasaBlockedProjectMessage()
-						: configEngine === "pmd" && isPmdBlockedProject
-							? getPmdBlockedProjectMessage()
-							: null
-				}
-				yasaLanguage={yasaLanguage}
-				onYasaLanguageChange={(value) => setYasaLanguage(parseYasaLanguageOption(value))}
-				yasaRuleConfigs={yasaRuleConfigs}
-				selectedYasaRuleConfigId={selectedYasaRuleConfigId}
-				onSelectedYasaRuleConfigIdChange={setSelectedYasaRuleConfigId}
-				showYasaAutoSkipHint={
-					configEngine === "yasa" &&
-					selectedYasaRuleConfigId === "default" &&
-					yasaLanguage === "auto" &&
-					!resolveYasaLanguageFromProgrammingLanguages(
-						sourceMode === "existing"
-							? selectedProject?.programming_languages
-							: undefined,
-					)
-				}
+				blockedReason={configEngine === "pmd" && isPmdBlockedProject ? getPmdBlockedProjectMessage() : null}
 				onNavigateToEngineConfig={(engine) => handleNavigateToEngineConfig(engine)}
 			/>
 

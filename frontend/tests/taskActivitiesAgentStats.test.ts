@@ -137,8 +137,7 @@ test("fetchTaskActivities maps effective severity stats for intelligent and hybr
       url.startsWith("/static-tasks/gitleaks/tasks") ||
       url.startsWith("/static-tasks/bandit/tasks") ||
       url.startsWith("/static-tasks/phpstan/tasks") ||
-      url.startsWith("/static-tasks/pmd/tasks") ||
-      url.startsWith("/static-tasks/yasa/tasks")
+      url.startsWith("/static-tasks/pmd/tasks")
     ) {
       return { data: [] };
     }
@@ -233,8 +232,7 @@ test("fetchTaskActivities falls back to effective severity stats when defect_sum
       url.startsWith("/static-tasks/gitleaks/tasks") ||
       url.startsWith("/static-tasks/bandit/tasks") ||
       url.startsWith("/static-tasks/phpstan/tasks") ||
-      url.startsWith("/static-tasks/pmd/tasks") ||
-      url.startsWith("/static-tasks/yasa/tasks")
+      url.startsWith("/static-tasks/pmd/tasks")
     ) {
       return { data: [] };
     }

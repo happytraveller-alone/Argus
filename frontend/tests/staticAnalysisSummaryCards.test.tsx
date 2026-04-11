@@ -17,7 +17,6 @@ test("StaticAnalysisSummaryCards keeps the initial zero-progress state pending w
       banditTask: null,
       phpstanTask: null,
       pmdTask: null,
-      yasaTask: null,
       enabledEngines: ["opengrep"],
       loadingInitial: true,
     }),
@@ -25,7 +24,6 @@ test("StaticAnalysisSummaryCards keeps the initial zero-progress state pending w
 
   assert.match(markup, /0%/);
   assert.match(markup, /任务待处理/);
-  assert.match(markup, /扫描排队中，等待引擎启动/);
   assert.doesNotMatch(markup, /任务失败/);
   assert.doesNotMatch(markup, /存在失败引擎/);
 });
@@ -56,7 +54,6 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
       banditTask: null,
       phpstanTask: null,
       pmdTask: null,
-      yasaTask: null,
       enabledEngines: ["opengrep", "gitleaks"],
       loadingInitial: true,
     }),
@@ -64,7 +61,6 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
 
   assert.match(markup, /0%/);
   assert.match(markup, /任务待处理/);
-  assert.match(markup, /扫描排队中，等待引擎启动/);
   assert.match(markup, /Opengrep · 任务待处理/);
   assert.match(markup, /Gitleaks · 任务待处理/);
   assert.doesNotMatch(markup, /Opengrep · 任务完成/);

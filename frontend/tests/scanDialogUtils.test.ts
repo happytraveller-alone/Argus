@@ -86,16 +86,14 @@ test("extractCreateProjectScanApiErrorMessage falls back to error.message", () =
   );
 });
 
-test("buildHybridStaticBootstrapConfig includes yasa_rule_config_id when custom config is selected", () => {
+test("buildHybridStaticBootstrapConfig only preserves supported static engines", () => {
   assert.deepEqual(
     buildHybridStaticBootstrapConfig({
       opengrepEnabled: true,
       banditEnabled: false,
       gitleaksEnabled: false,
       phpstanEnabled: false,
-      yasaEnabled: true,
-      yasaLanguage: "auto",
-      selectedYasaRuleConfigId: "custom-yasa-1",
+      pmdEnabled: true,
     }),
     {
       mode: "embedded",
@@ -103,33 +101,7 @@ test("buildHybridStaticBootstrapConfig includes yasa_rule_config_id when custom 
       bandit_enabled: false,
       gitleaks_enabled: false,
       phpstan_enabled: false,
-      yasa_enabled: true,
-      yasa_language: "auto",
-      yasa_rule_config_id: "custom-yasa-1",
-    },
-  );
-});
-
-test("buildHybridStaticBootstrapConfig omits yasa_rule_config_id for default selection", () => {
-  assert.deepEqual(
-    buildHybridStaticBootstrapConfig({
-      opengrepEnabled: false,
-      banditEnabled: false,
-      gitleaksEnabled: false,
-      phpstanEnabled: true,
-      yasaEnabled: true,
-      yasaLanguage: "typescript",
-      selectedYasaRuleConfigId: "default",
-    }),
-    {
-      mode: "embedded",
-      opengrep_enabled: false,
-      bandit_enabled: false,
-      gitleaks_enabled: false,
-      phpstan_enabled: true,
-      yasa_enabled: true,
-      yasa_language: "typescript",
-      yasa_rule_config_id: null,
+      pmd_enabled: true,
     },
   );
 });

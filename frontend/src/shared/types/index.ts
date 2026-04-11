@@ -170,7 +170,6 @@ export interface DashboardDailyActivityItem {
   bandit_findings: number;
   phpstan_findings: number;
   pmd_findings?: number;
-  yasa_findings: number;
   static_findings: number;
   intelligent_verified_findings: number;
   hybrid_verified_findings: number;
@@ -194,7 +193,7 @@ export interface DashboardTaskStatusBreakdownItem {
 }
 
 export interface DashboardEngineBreakdownItem {
-  engine: "llm" | "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
+  engine: "llm" | "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
   completed_scans: number;
   effective_findings: number;
   verified_findings: number;
@@ -270,7 +269,7 @@ export interface DashboardVerifiedVulnerabilityTypeItem {
 }
 
 export interface DashboardStaticEngineRuleTotalItem {
-  engine: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
+  engine: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
   total_rules: number;
 }
 
@@ -306,7 +305,7 @@ export interface DashboardSnapshotResponse {
 export interface StaticScanOverviewItem {
   project_id: string;
   project_name: string;
-  last_scan_tool: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
+  last_scan_tool: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
   last_scan_task_id: string;
   paired_gitleaks_task_id?: string | null;
   last_scan_at: string;

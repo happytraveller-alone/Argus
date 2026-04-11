@@ -5,7 +5,6 @@ import type { BanditFinding } from "@/shared/api/bandit";
 import type { GitleaksFinding } from "@/shared/api/gitleaks";
 import type { PhpstanFinding } from "@/shared/api/phpstan";
 import type { PmdFinding } from "@/shared/api/pmd";
-import type { YasaFinding } from "@/shared/api/yasa";
 import type {
   OpengrepFinding,
   OpengrepFindingContext,
@@ -735,12 +734,6 @@ export function buildPmdFindingCodeViews(
   return [];
 }
 
-export function buildYasaFindingCodeViews(
-  _finding: YasaFinding,
-): FindingDetailCodeView[] {
-  return [];
-}
-
 export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetailCodeView[] {
   const resolvedFilePath = resolvePreferredFilePath(
     finding.file_path,
@@ -1190,72 +1183,6 @@ export function buildPhpstanFindingDetailModel(params: {
   });
 }
 
-
-export function buildYasaFindingDetailModel(params: {
-  finding: YasaFinding;
-  taskId: string;
-  findingId: string;
-  taskName?: string | null;
-  projectId?: string | null;
-  projectSourceType?: ProjectSourceType | null;
-  projectName?: string | null;
-}): FindingDetailPageModel {
-  const { finding } = params;
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.start_line ?? null, finding.resolved_line_start),
-    lineEnd: finding.end_line ?? finding.start_line ?? null,
-  });
-  const normalizedLevel = String(finding.level || "warning").trim().toLowerCase();
-  const severityLabel = normalizedLevel === "error" ? "中危" : "低危";
-  const severityTone: FindingDetailTone = normalizedLevel === "error" ? "warning" : "success";
-  const headlineValue =
-    String(finding.rule_id || "").trim() ||
-    String(finding.rule_name || "").trim() ||
-    String(finding.message || "").trim() ||
-    "yasa-rule";
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · YASA",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    taskName: params.taskName,
-    location,
-  });
-
-  return buildBaseModel({
-    pageTitle: "统一漏洞详情",
-    codePanelTitle: "关联代码",
-    emptyCodeMessage: "当前来源未提供可展示的命中代码。",
-    narrativeSections: [
-      buildNarrativeSection({
-        id: `yasa:${finding.id}:summary`,
-        title: "扫描说明",
-        content: String(finding.message || "").trim() || MISSING_DESCRIPTION,
-      }),
-    ],
-    trackingItems,
-    overviewItems: buildMergedOverviewItems({
-      name: headlineValue,
-      overviewItems: buildOverviewItems({
-        headlineLabel: "漏洞类型",
-        headlineValue,
-        summaryStats: [
-          { label: "漏洞危害", value: severityLabel, tone: severityTone },
-          { label: "漏洞置信度", value: "中", tone: "warning" },
-        ],
-      }),
-      trackingItems,
-    }),
-    codeSections: buildFindingDetailCodeSections(buildYasaFindingCodeViews(finding)),
-    codeBrowserTarget: buildCodeBrowserTarget({
-      filePath: finding.resolved_file_path ?? finding.file_path,
-      line: finding.resolved_line_start ?? finding.start_line,
-    }),
-    projectId: params.projectId,
-    projectSourceType: params.projectSourceType,
-    projectName: params.projectName,
-  });
-}
 
 export function buildPmdFindingDetailModel(params: {
   finding: PmdFinding;

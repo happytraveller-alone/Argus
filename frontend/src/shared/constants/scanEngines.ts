@@ -3,7 +3,6 @@ export const SCAN_ENGINE_TABS = [
   "gitleaks",
   "bandit",
   "phpstan",
-  "yasa",
   "pmd",
 ] as const;
 
@@ -30,8 +29,6 @@ export function getScanEngineDisplayName(value: ScanEngineTab): string {
       return "Bandit";
     case "phpstan":
       return "PHPStan";
-    case "yasa":
-      return "YASA";
     case "pmd":
       return "PMD";
   }

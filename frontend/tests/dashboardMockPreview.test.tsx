@@ -44,10 +44,7 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /当日累计新增漏洞发现/);
-	assert.match(markup, /当日静态扫描漏洞发现/);
-	assert.match(markup, /当前智能扫描漏洞发现/);
-	assert.match(markup, /混合扫描漏洞发现/);
+	assert.match(markup, /查看近七日当日新增漏洞发现与来源构成的波动/);
 	// assert.match(markup, /最近创建任务/);
 	assert.match(markup, /查看详情/);
 	assert.match(markup, /混合扫描 · Alpha Gateway/);
@@ -107,17 +104,17 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 	assert.equal(engineRows[0].total >= engineRows[1].total, true);
 	assert.match(engineRows[0].meta, /智能扫描/);
 	assert.equal(engineRows.every((row: { segments: unknown[] }) => row.segments.length === 1), true);
-	assert.equal(engineRows.length, 6);
-	assert.equal(engineRows[5].total <= engineRows[4].total, true);
+	assert.equal(engineRows.length, 5);
+	assert.equal(engineRows[4].total <= engineRows[3].total, true);
 
 	const staticRuleRows = module.getPreviewLeaderboardRows("static-engine-rules");
 	assert.equal(staticRuleRows[0].label, "opengrep");
 	assert.equal(staticRuleRows[0].total >= staticRuleRows[1].total, true);
 	assert.match(staticRuleRows[0].meta, /规则/);
 	assert.equal(staticRuleRows.every((row: { segments: unknown[] }) => row.segments.length === 1), true);
-	assert.equal(staticRuleRows.length, 5);
-	assert.equal(staticRuleRows[4].label, "yasa");
-	assert.equal(staticRuleRows[4].total <= staticRuleRows[3].total, true);
+	assert.equal(staticRuleRows.length, 4);
+	assert.equal(staticRuleRows[3].label, "phpstan");
+	assert.equal(staticRuleRows[3].total <= staticRuleRows[2].total, true);
 
 	const languageLineRows = module.getPreviewLeaderboardRows("language-lines");
 	assert.equal(languageLineRows[0].label, "TypeScript");

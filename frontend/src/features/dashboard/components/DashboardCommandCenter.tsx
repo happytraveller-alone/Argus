@@ -504,7 +504,6 @@ function buildEngineRows(
 		gitleaks: "gitleaks",
 		bandit: "bandit",
 		phpstan: "phpstan",
-		yasa: "yasa",
 	};
 	const metaMap: Record<string, string> = {
 		llm: "智能扫描 + 混合扫描",
@@ -512,7 +511,6 @@ function buildEngineRows(
 		gitleaks: "静态扫描",
 		bandit: "静态扫描",
 		phpstan: "静态扫描",
-		yasa: "静态扫描",
 	};
 	return items
 		.slice()

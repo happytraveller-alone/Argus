@@ -82,9 +82,6 @@ test("fetchTaskActivities aggregates grouped static task severities by detail-pa
 		if (url.startsWith("/static-tasks/pmd/tasks")) {
 			return { data: [] };
 		}
-		if (url.startsWith("/static-tasks/yasa/tasks")) {
-			return { data: [] };
-		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -139,8 +136,7 @@ test("fetchTaskActivities clamps opengrep low severity count at zero", async () 
 			url.startsWith("/static-tasks/gitleaks/tasks") ||
 			url.startsWith("/static-tasks/bandit/tasks") ||
 			url.startsWith("/static-tasks/phpstan/tasks") ||
-			url.startsWith("/static-tasks/pmd/tasks") ||
-			url.startsWith("/static-tasks/yasa/tasks")
+			url.startsWith("/static-tasks/pmd/tasks")
 		) {
 			return { data: [] };
 		}

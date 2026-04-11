@@ -3,62 +3,39 @@ import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Dialog } from "../src/components/ui/dialog.tsx";
 import { StaticEngineConfigDialogContent } from "../src/components/scan/StaticEngineConfigDialog.tsx";
 
 globalThis.React = React;
 
-test("StaticEngineConfigDialogContent renders YASA controls and footer actions", () => {
+test("StaticEngineConfigDialogContent renders placeholder text and footer actions for PMD", () => {
   const markup = renderToStaticMarkup(
-    createElement(
-      Dialog,
-      { open: true },
-      createElement(StaticEngineConfigDialogContent, {
-        engine: "yasa",
-        scanMode: "hybrid",
-        enabled: true,
-        creating: false,
-        blockedReason: null,
-        yasaLanguage: "auto",
-        onYasaLanguageChange: () => {},
-        yasaRuleConfigs: [{ id: "cfg-1", name: "custom", language: "typescript" }],
-        selectedYasaRuleConfigId: "default",
-        onSelectedYasaRuleConfigIdChange: () => {},
-        showYasaAutoSkipHint: true,
-        onNavigateToEngineConfig: () => {},
-        onRequestClose: () => {},
-      }),
-    ),
+    createElement(StaticEngineConfigDialogContent, {
+      engine: "pmd",
+      scanMode: "static",
+      enabled: true,
+      creating: false,
+      blockedReason: null,
+      onNavigateToEngineConfig: () => {},
+      onRequestClose: () => {},
+    }),
   );
 
-  assert.match(markup, /YASA 配置/);
-  assert.match(markup, /YASA 规则配置/);
-  assert.match(markup, /YASA 语言/);
+  assert.match(markup, /PMD 配置/);
+  assert.match(markup, /任务级配置即将开放/);
   assert.match(markup, /前往扫描引擎配置页/);
-  assert.match(markup, /YASA 将自动跳过/);
 });
 
 test("StaticEngineConfigDialogContent renders placeholder text for opengrep", () => {
   const markup = renderToStaticMarkup(
-    createElement(
-      Dialog,
-      { open: true },
-      createElement(StaticEngineConfigDialogContent, {
-        engine: "opengrep",
-        scanMode: "static",
-        enabled: false,
-        creating: false,
-        blockedReason: null,
-        yasaLanguage: "auto",
-        onYasaLanguageChange: () => {},
-        yasaRuleConfigs: [],
-        selectedYasaRuleConfigId: "default",
-        onSelectedYasaRuleConfigIdChange: () => {},
-        showYasaAutoSkipHint: false,
-        onNavigateToEngineConfig: () => {},
-        onRequestClose: () => {},
-      }),
-    ),
+    createElement(StaticEngineConfigDialogContent, {
+      engine: "opengrep",
+      scanMode: "static",
+      enabled: false,
+      creating: false,
+      blockedReason: null,
+      onNavigateToEngineConfig: () => {},
+      onRequestClose: () => {},
+    }),
   );
 
   assert.match(markup, /Opengrep 配置/);

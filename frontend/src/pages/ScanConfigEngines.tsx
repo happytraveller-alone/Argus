@@ -5,7 +5,6 @@ import GitleaksRules from "@/pages/GitleaksRules";
 import BanditRules from "@/pages/BanditRules";
 import PhpstanRules from "@/pages/PhpstanRules";
 import PmdRules from "@/pages/PmdRules";
-import YasaRules from "@/pages/YasaRules";
 import {
   DEFAULT_SCAN_ENGINE_TAB,
   isScanEngineTab,
@@ -72,14 +71,8 @@ export default function ScanConfigEngines() {
 							engineValue={currentTab}
 							onEngineChange={handleEngineChange}
 						/>
-					) : currentTab === "pmd" ? (
-						<PmdRules
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
 					) : (
-						<YasaRules
+						<PmdRules
 							showEngineSelector
 							engineValue={currentTab}
 							onEngineChange={handleEngineChange}

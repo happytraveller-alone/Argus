@@ -717,7 +717,12 @@
   - `phpstan_scan_tasks` / `phpstan_findings` / `phpstan_rule_states` 仍由 Python live runtime 持有
   - 这一步完成的是 phpstan DB 资产接管，不是 phpstan 整条运行时接管
 - 已开始但未完成：
-  - YASA 退役已进入执行态，当前已移除部分模型/服务/launcher 与聚合导出
-  - 但仍有 `agent_tasks_bootstrap.py`、`main.py`、`project_transfer_service`、`static_tasks_shared.py` 等 live caller 残留引用，需要单独一刀收完
+  - YASA 退役已进入执行态，后端已移除大部分模型/服务/launcher/route 主体
+  - frontend live path 已完成去 YASA：
+    - 移除 `yasaTaskId` / `tool=yasa` 路由参数拼装
+    - 移除 `Yasa*` 前端类型、详情页分支、任务活动/项目预览聚合
+    - 移除创建扫描对话框与混合扫描 bootstrap 中的 YASA 配置入口
+    - 前端相关回归测试已同步改为无 YASA 口径
+  - 当前主要残留已收缩到少量 mixed tests / inventory / 文本文档残项
 - 下一刀：
-  - 单独做 YASA 全量退役，删除剩余 live caller、route、bootstrap、tests 和迁移残项
+  - 清完剩余 mixed tests / inventory / 文本残项，并确认 Python live bridge 不再被前端间接引用

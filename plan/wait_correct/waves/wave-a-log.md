@@ -263,19 +263,28 @@
   - `backend_old/app/db/rules_phpstan` 已删除，Python 继续读 Rust 资产根
 - 对应 Python 哪些执行入口已删除:
   - `backend_old/app/db/rules_phpstan/*`
-  - 已从聚合入口移除 YASA 的一部分导出/聚合依赖：
+  - 已从聚合入口移除 YASA 的导出/聚合依赖：
     - `backend_old/app/api/v1/endpoints/static_tasks.py`
     - `backend_old/app/services/agent/bootstrap/__init__.py`
-  - 已从模型聚合导出与项目关系中移除一部分 YASA 依赖：
+  - 已从模型聚合导出与项目关系中移除 YASA 依赖：
     - `backend_old/app/models/__init__.py`
     - `backend_old/app/models/project.py`
+  - 已删除 YASA DB / service / launcher / route 主体：
+    - `backend_old/app/api/v1/endpoints/static_tasks_yasa.py`
+    - `backend_old/app/models/yasa.py`
+    - `backend_old/app/services/yasa_runtime.py`
+    - `backend_old/app/services/yasa_runtime_config.py`
+    - `backend_old/app/services/yasa_rules_snapshot.py`
+    - `backend_old/app/services/yasa_language.py`
+    - `backend_old/app/db/yasa_builtin/yasa_rules_snapshot.json`
+    - `backend_old/app/runtime/launchers/yasa_*`
 - 仍然只是 bridge / 未完成清理的 YASA 代码:
-  - `backend_old/app/api/v1/endpoints/static_tasks_yasa.py`
-  - `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`
-  - `backend_old/app/main.py`
+  - `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py` 的 mixed tests 对应残留
   - `backend_old/app/services/project_transfer_service.py`
-  - `backend_old/app/api/v1/endpoints/static_tasks_shared.py`
-  - 若干 YASA 专属测试
-- 是否影响前端: phpstan 不受影响；YASA 已进入退役中间态，尚未完成全链路删除
-- 后续修复波次: Wave A 后续 / YASA full retirement
+- frontend 本轮已完成去 YASA：
+  - `CreateScanTaskDialog` / `CreateProjectScanDialog` / `StaticEngineConfigDialog` 不再暴露 YASA
+  - `FindingDetail`、`taskActivities`、`projectCardPreview`、`static-analysis` 聚合口径已移除 `Yasa*` 与 `tool=yasa`
+  - 相关前端与 mixed-table 测试已改为无 YASA 口径
+- 是否影响前端: phpstan 不受影响；YASA 前端 live path 已退净，剩余是 mixed tests / inventory / 文本文档收尾
+- 后续修复波次: Wave A 后续 / YASA residual cleanup
 - owner: Rust migration

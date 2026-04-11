@@ -6,7 +6,6 @@ import type { BanditScanTask } from "@/shared/api/bandit";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
-import type { YasaScanTask } from "@/shared/api/yasa";
 import type { Project, ProjectManagementMetrics } from "@/shared/types";
 import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
 
@@ -18,7 +17,6 @@ export interface ProjectTaskPool {
 	gitleaksTasks: GitleaksScanTask[];
 	banditTasks: BanditScanTask[];
 	phpstanTasks: PhpstanScanTask[];
-	yasaTasks: YasaScanTask[];
 }
 
 export interface ProjectTaskPoolState extends ProjectTaskPool {

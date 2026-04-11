@@ -11,21 +11,19 @@ test("AgentModeSelector renders config buttons for static tools", () => {
   const markup = renderToStaticMarkup(
     createElement(AgentModeSelector, {
       value: "static",
-      onChange: () => {},
+      onChange: () => { },
       staticTools: {
         opengrep: true,
         gitleaks: false,
         bandit: false,
         phpstan: false,
-        yasa: true,
         pmd: false,
       },
-      onStaticToolsChange: () => {},
-      onOpenStaticToolConfig: () => {},
+      onStaticToolsChange: () => { },
+      onOpenStaticToolConfig: () => { },
     }),
   );
 
   assert.match(markup, /配置 规则扫描/);
-  assert.match(markup, /配置 YASA 扫描/);
   assert.match(markup, /配置 PMD Java 扫描/);
 });

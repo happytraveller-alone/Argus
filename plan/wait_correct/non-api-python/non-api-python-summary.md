@@ -154,13 +154,13 @@
   - Rust 已新增 `backend/src/scan/phpstan.rs` 并实际消费 `rules_phpstan/*`
   - Rust phpstan preflight 已通过 materialized asset 目录校验 snapshot 与 `rule_sources/`
   - `backend_old/app/db/rules_phpstan` 已删除，Python 继续从 Rust 资产根读取 phpstan snapshot / source files
-  - YASA 相关 DB 资产与部分服务/导出已进入退役中间态
+  - YASA 相关 DB 资产、模型、service、launcher、route 已大幅删除
 - still missing:
   - phpstan live API/runtime 仍由 Python 端持有
-  - YASA 仍有多个 live caller 未删完，当前不能宣称“YASA 全量退役完成”
+  - frontend live path 已完成去 YASA，但少量 mixed tests / inventory / 文本文档仍有残留
 - delete gate:
   - phpstan 只有在 live runtime/API 也迁到 Rust 后，才算整条链完成
-  - YASA 只有在剩余 live caller 和测试全部清理后，才算 retire 完成
+  - YASA 只有在 mixed tests、compose/build/inventory 文本残留全部清理后，才算 retire 完成
 - owner: Rust migration
 - target phase:
   - C / D in progress

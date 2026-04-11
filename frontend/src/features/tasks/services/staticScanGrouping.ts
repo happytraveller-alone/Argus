@@ -16,7 +16,6 @@ export interface StaticScanGroup<
 	TBanditTask extends StaticScanTaskLike = StaticScanTaskLike,
 	TPhpstanTask extends StaticScanTaskLike = StaticScanTaskLike,
 	TPmdTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TYasaTask extends StaticScanTaskLike = StaticScanTaskLike,
 > {
 	projectId: string;
 	createdAt: string;
@@ -25,7 +24,6 @@ export interface StaticScanGroup<
 	banditTask?: TBanditTask;
 	phpstanTask?: TPhpstanTask;
 	pmdTask?: TPmdTask;
-	yasaTask?: TYasaTask;
 }
 
 export type StaticScanGroupStatus =
@@ -50,14 +48,12 @@ export function buildStaticScanGroups<
 	TBanditTask extends StaticScanTaskLike,
 	TPhpstanTask extends StaticScanTaskLike,
 	TPmdTask extends StaticScanTaskLike,
-	TYasaTask extends StaticScanTaskLike,
 >(params: {
 	opengrepTasks: TOpengrepTask[];
 	gitleaksTasks: TGitleaksTask[];
 	banditTasks?: TBanditTask[];
 	phpstanTasks?: TPhpstanTask[];
 	pmdTasks?: TPmdTask[];
-	yasaTasks?: TYasaTask[];
 	pairingWindowMs?: number;
 }): Array<
 	StaticScanGroup<
@@ -65,8 +61,7 @@ export function buildStaticScanGroups<
 		TGitleaksTask,
 		TBanditTask,
 		TPhpstanTask,
-		TPmdTask,
-		TYasaTask
+		TPmdTask
 	>
 > {
 	const {
@@ -75,7 +70,6 @@ export function buildStaticScanGroups<
 		banditTasks = [],
 		phpstanTasks = [],
 		pmdTasks = [],
-		yasaTasks = [],
 		pairingWindowMs = STATIC_SCAN_PAIRING_WINDOW_MS,
 	} = params;
 
@@ -83,9 +77,8 @@ export function buildStaticScanGroups<
 		| { engine: "opengrep"; task: TOpengrepTask }
 		| { engine: "gitleaks"; task: TGitleaksTask }
 		| { engine: "bandit"; task: TBanditTask }
-		| { engine: "phpstan"; task: TPhpstanTask }
-		| { engine: "pmd"; task: TPmdTask }
-		| { engine: "yasa"; task: TYasaTask };
+	| { engine: "phpstan"; task: TPhpstanTask }
+	| { engine: "pmd"; task: TPmdTask };
 
 	const tasksByProject = new Map<string, EngineTask[]>();
 	const pushTask = (projectId: string, engineTask: EngineTask) => {
@@ -109,18 +102,13 @@ export function buildStaticScanGroups<
 	for (const task of pmdTasks) {
 		pushTask(task.project_id, { engine: "pmd", task });
 	}
-	for (const task of yasaTasks) {
-		pushTask(task.project_id, { engine: "yasa", task });
-	}
-
 	const groups: Array<
 		StaticScanGroup<
 			TOpengrepTask,
 			TGitleaksTask,
 			TBanditTask,
 			TPhpstanTask,
-			TPmdTask,
-			TYasaTask
+			TPmdTask
 		>
 	> = [];
 
@@ -141,8 +129,7 @@ export function buildStaticScanGroups<
 				TGitleaksTask,
 				TBanditTask,
 				TPhpstanTask,
-				TPmdTask,
-				TYasaTask
+				TPmdTask
 			>
 		> = [];
 
@@ -155,8 +142,7 @@ export function buildStaticScanGroups<
 					TGitleaksTask,
 					TBanditTask,
 					TPhpstanTask,
-					TPmdTask,
-					TYasaTask
+					TPmdTask
 				>
 			>,
 			ignoreWindow = false,
@@ -176,8 +162,7 @@ export function buildStaticScanGroups<
 					(item.engine === "gitleaks" && Boolean(group.gitleaksTask)) ||
 					(item.engine === "bandit" && Boolean(group.banditTask)) ||
 					(item.engine === "phpstan" && Boolean(group.phpstanTask)) ||
-					(item.engine === "pmd" && Boolean(group.pmdTask)) ||
-					(item.engine === "yasa" && Boolean(group.yasaTask));
+					(item.engine === "pmd" && Boolean(group.pmdTask));
 				if (hasSameEngineTask) continue;
 
 				if (diff < bestDiff) {
@@ -192,8 +177,7 @@ export function buildStaticScanGroups<
 					TGitleaksTask,
 					TBanditTask,
 					TPhpstanTask,
-					TPmdTask,
-					TYasaTask
+					TPmdTask
 				> = {
 					projectId,
 					createdAt: item.task.created_at,
@@ -208,8 +192,6 @@ export function buildStaticScanGroups<
 					nextGroup.phpstanTask = item.task;
 				} else if (item.engine === "pmd") {
 					nextGroup.pmdTask = item.task;
-				} else {
-					nextGroup.yasaTask = item.task;
 				}
 				candidateGroups.push(nextGroup);
 				return;
@@ -226,8 +208,6 @@ export function buildStaticScanGroups<
 				targetGroup.phpstanTask = item.task;
 			} else if (item.engine === "pmd") {
 				targetGroup.pmdTask = item.task;
-			} else {
-				targetGroup.yasaTask = item.task;
 			}
 		};
 
@@ -239,8 +219,7 @@ export function buildStaticScanGroups<
 					TGitleaksTask,
 					TBanditTask,
 					TPhpstanTask,
-					TPmdTask,
-					TYasaTask
+					TPmdTask
 				>
 			>
 		>();
@@ -262,8 +241,7 @@ export function buildStaticScanGroups<
 				TGitleaksTask,
 				TBanditTask,
 				TPhpstanTask,
-				TPmdTask,
-				TYasaTask
+				TPmdTask
 			>
 		> = [];
 		for (const item of legacyTasks) {
@@ -280,17 +258,15 @@ export function buildStaticScanGroups<
 export function resolveStaticScanGroupStatus(
 	group: Pick<
 		StaticScanGroup,
-		"opengrepTask" | "gitleaksTask" | "banditTask" | "phpstanTask" | "yasaTask"
-		| "pmdTask"
+		"opengrepTask" | "gitleaksTask" | "banditTask" | "phpstanTask" | "pmdTask"
 	>,
 ): StaticScanGroupStatus {
 	const statuses = [
-		group.opengrepTask?.status,
-		group.gitleaksTask?.status,
-		group.banditTask?.status,
-		group.phpstanTask?.status,
-		group.pmdTask?.status,
-		group.yasaTask?.status,
+			group.opengrepTask?.status,
+			group.gitleaksTask?.status,
+			group.banditTask?.status,
+			group.phpstanTask?.status,
+			group.pmdTask?.status,
 	]
 		.map((status) => normalizeStatus(status))
 		.filter(Boolean);

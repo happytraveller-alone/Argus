@@ -59,7 +59,6 @@ function createSnapshotFixture() {
 				gitleaks_findings: 2,
 				bandit_findings: 1,
 				phpstan_findings: 2,
-				yasa_findings: 1,
 				static_findings: 11,
 				intelligent_verified_findings: 2,
 				hybrid_verified_findings: 3,
@@ -73,7 +72,6 @@ function createSnapshotFixture() {
 				gitleaks_findings: 3,
 				bandit_findings: 2,
 				phpstan_findings: 2,
-				yasa_findings: 1,
 				static_findings: 14,
 				intelligent_verified_findings: 1,
 				hybrid_verified_findings: 4,
@@ -172,15 +170,6 @@ function createSnapshotFixture() {
 				avg_scan_duration_ms: 700,
 				success_rate: 1,
 			},
-			{
-				engine: "yasa",
-				completed_scans: 2,
-				effective_findings: 4,
-				verified_findings: 1,
-				false_positive_count: 0,
-				avg_scan_duration_ms: 680,
-				success_rate: 0.5,
-			},
 		],
 		project_hotspots: [],
 		language_risk: [
@@ -244,15 +233,6 @@ function createSnapshotFixture() {
 				created_at: "2026-03-22T23:30:00.000Z",
 				detail_path: "/tasks/static",
 			},
-			{
-				task_id: "ya-1",
-				task_type: "静态扫描",
-				title: "静态扫描 · Echo Console",
-				engine: "yasa",
-				status: "interrupted",
-				created_at: "2026-03-22T22:30:00.000Z",
-				detail_path: "/tasks/static",
-			},
 		],
 		project_risk_distribution: [
 			{
@@ -283,7 +263,6 @@ function createSnapshotFixture() {
 			{ engine: "gitleaks", total_rules: 214 },
 			{ engine: "bandit", total_rules: 172 },
 			{ engine: "phpstan", total_rules: 129 },
-			{ engine: "yasa", total_rules: 84 },
 		],
 		language_loc_distribution: [
 			{ language: "TypeScript", loc_number: 182400, project_count: 4 },
@@ -321,10 +300,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /当日累计新增漏洞发现/);
-	assert.match(markup, /当日静态扫描漏洞发现/);
-	assert.match(markup, /当前智能扫描漏洞发现/);
-	assert.match(markup, /混合扫描漏洞发现/);
+	assert.match(markup, /查看近一段时间当日新增漏洞发现与来源构成的波动/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /Alpha Gateway/);
@@ -334,8 +310,6 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /查看已完成状态下的扫描类型细分/);
 	assert.doesNotMatch(markup, /静态扫描 · Echo Console/);
 	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
-	assert.match(markup, /上一页/);
-	assert.match(markup, /下一页/);
 	assert.doesNotMatch(markup, /共 \d+ 条/);
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
 	assert.doesNotMatch(markup, /排行榜/);
@@ -747,19 +721,19 @@ test("recent task pagination uses four items per page and clamps invalid pages",
 	assert.deepEqual(
 		module.paginateRecentTasks(tasks.slice(0, 5), 2),
 		{
-			items: tasks.slice(4, 5),
-			currentPage: 2,
-			totalPages: 2,
-			totalCount: 5,
+			items: tasks.slice(0, 4),
+			currentPage: 1,
+			totalPages: 1,
+			totalCount: 4,
 		},
 	);
 	assert.deepEqual(
 		module.paginateRecentTasks(tasks, 999),
 		{
-			items: tasks.slice(4, 5),
-			currentPage: 2,
-			totalPages: 2,
-			totalCount: 5,
+			items: tasks.slice(0, 4),
+			currentPage: 1,
+			totalPages: 1,
+			totalCount: 4,
 		},
 	);
 });

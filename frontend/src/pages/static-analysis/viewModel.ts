@@ -9,7 +9,7 @@ import {
 	type NormalizedSeverity,
 } from "@/shared/utils/staticAnalysisSeverity";
 
-export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
+export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive";
 export type StatusFilter = "all" | FindingStatus;
@@ -122,19 +122,6 @@ type MinimalPhpstanFinding = {
   line?: unknown;
   message?: string | null;
   identifier?: string | null;
-  status?: string | null;
-};
-
-type MinimalYasaFinding = {
-  id: string;
-  scan_task_id?: string | null;
-  file_path?: string | null;
-  start_line?: unknown;
-  end_line?: unknown;
-  message?: string | null;
-  rule_id?: string | null;
-  rule_name?: string | null;
-  level?: string | null;
   status?: string | null;
 };
 
@@ -304,8 +291,7 @@ function getEngineLabel(engine: Engine): string {
   if (engine === "gitleaks") return "Gitleaks";
   if (engine === "bandit") return "Bandit";
   if (engine === "phpstan") return "PHPStan";
-  if (engine === "pmd") return "PMD";
-  return "YASA";
+  return "PMD";
 }
 
 function getStaticAnalysisStatusLabel(status: string): string {
@@ -357,17 +343,11 @@ function normalizeReasonText(value?: string | null): string | null {
   return text || null;
 }
 
-function resolveTaskFailureReason(
-  engine: Engine,
-  task: StaticAnalysisSummaryTaskLike,
-): string {
+function resolveTaskFailureReason(task: StaticAnalysisSummaryTaskLike): string {
   const errorMessage = normalizeReasonText(task.error_message);
   if (errorMessage) return errorMessage;
-
-  if (engine === "yasa") {
-    const diagnosticsSummary = normalizeReasonText(task.diagnostics_summary);
-    if (diagnosticsSummary) return diagnosticsSummary;
-  }
+  const diagnosticsSummary = normalizeReasonText(task.diagnostics_summary);
+  if (diagnosticsSummary) return diagnosticsSummary;
 
   return getStaticAnalysisFailureFallbackMessage(task.status);
 }
@@ -416,18 +396,15 @@ export function getStaticAnalysisTotalDisplayDurationMs(input: {
   gitleaksTask: StaticAnalysisSummaryTaskLike | null;
   banditTask: StaticAnalysisSummaryTaskLike | null;
   phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  yasaTask?: StaticAnalysisSummaryTaskLike | null;
   pmdTask?: StaticAnalysisSummaryTaskLike | null;
   nowMs?: number;
 }): number {
-  const yasaTask = input.yasaTask ?? null;
   const pmdTask = input.pmdTask ?? null;
   return (
     getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.phpstanTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(yasaTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(pmdTask, input.nowMs)
   );
 }
@@ -437,17 +414,14 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
   gitleaksTask: StaticAnalysisSummaryTaskLike | null;
   banditTask: StaticAnalysisSummaryTaskLike | null;
   phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  yasaTask?: StaticAnalysisSummaryTaskLike | null;
   pmdTask?: StaticAnalysisSummaryTaskLike | null;
 }): StaticAnalysisTaskStatusSummary {
-  const yasaTask = input.yasaTask ?? null;
   const pmdTask = input.pmdTask ?? null;
   const engineEntries = [
     { engine: "opengrep" as const, task: input.opengrepTask },
     { engine: "gitleaks" as const, task: input.gitleaksTask },
     { engine: "bandit" as const, task: input.banditTask },
     { engine: "phpstan" as const, task: input.phpstanTask },
-    { engine: "yasa" as const, task: yasaTask },
     { engine: "pmd" as const, task: pmdTask },
   ].filter(
     (entry): entry is { engine: Engine; task: StaticAnalysisSummaryTaskLike } =>
@@ -461,7 +435,6 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
           gitleaksTask: input.gitleaksTask ?? undefined,
           banditTask: input.banditTask ?? undefined,
           phpstanTask: input.phpstanTask ?? undefined,
-          yasaTask: yasaTask ?? undefined,
           pmdTask: pmdTask ?? undefined,
         })
       : "failed";
@@ -477,7 +450,7 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
       );
     })
     .map(({ engine, task }) => {
-      const message = resolveTaskFailureReason(engine, task);
+      const message = resolveTaskFailureReason(task);
       return {
         engine,
         engineLabel: getEngineLabel(engine),
@@ -531,18 +504,15 @@ export function buildStaticAnalysisProgressSummary(input: {
   gitleaksTask: StaticAnalysisProgressTaskLike | null;
   banditTask: StaticAnalysisProgressTaskLike | null;
   phpstanTask: StaticAnalysisProgressTaskLike | null;
-  yasaTask?: StaticAnalysisProgressTaskLike | null;
   pmdTask?: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
-  const yasaTask = input.yasaTask ?? null;
   const pmdTask = input.pmdTask ?? null;
   const tasks = [
     input.opengrepTask,
     input.gitleaksTask,
     input.banditTask,
     input.phpstanTask,
-    yasaTask,
     pmdTask,
   ].filter(Boolean) as StaticAnalysisProgressTaskLike[];
   if (tasks.length === 0) {
@@ -561,7 +531,6 @@ export function buildStaticAnalysisProgressSummary(input: {
     gitleaksTask: input.gitleaksTask,
     banditTask: input.banditTask,
     phpstanTask: input.phpstanTask,
-    yasaTask,
     pmdTask,
   });
 
@@ -593,17 +562,13 @@ export function buildUnifiedFindingRows(input: {
   gitleaksFindings: MinimalGitleaksFinding[];
   banditFindings: MinimalBanditFinding[];
   phpstanFindings: MinimalPhpstanFinding[];
-  yasaFindings?: MinimalYasaFinding[];
   pmdFindings?: MinimalPmdFinding[];
   opengrepTaskId: string;
   gitleaksTaskId: string;
   banditTaskId: string;
   phpstanTaskId: string;
-  yasaTaskId?: string;
   pmdTaskId?: string;
 }): UnifiedFindingRow[] {
-  const yasaFindings = input.yasaFindings || [];
-  const yasaTaskId = input.yasaTaskId || "";
   const pmdFindings = input.pmdFindings || [];
   const pmdTaskId = input.pmdTaskId || "";
   const opengrepRows = input.opengrepFindings.map((finding) => {
@@ -682,28 +647,6 @@ export function buildUnifiedFindingRows(input: {
     };
   });
 
-  const yasaRows = yasaFindings.map((finding) => {
-    const ruleId = String(finding.rule_id || "").trim();
-    const ruleName = String(finding.rule_name || "").trim();
-    const message = String(finding.message || "").trim();
-    const level = String(finding.level || "warning").trim().toLowerCase();
-    const severity = level === "error" ? ("MEDIUM" as const) : ("LOW" as const);
-    return {
-      key: `yasa:${finding.id}`,
-      id: finding.id,
-      taskId: finding.scan_task_id || yasaTaskId,
-      engine: "yasa" as const,
-      rule: ruleId || ruleName || message || "-",
-      filePath: normalizeStaticAnalysisPath(finding.file_path),
-      line: toStaticAnalysisPositiveLine(finding.start_line),
-      severity,
-      severityScore: SEVERITY_SCORE[severity],
-      confidence: "MEDIUM" as const,
-      confidenceScore: CONFIDENCE_SCORE.MEDIUM,
-      status: String(finding.status || "open").trim().toLowerCase(),
-    };
-  });
-
   const pmdRows = pmdFindings.map((finding) => {
     const priority = Number(finding.priority);
     const severity =
@@ -734,7 +677,7 @@ export function buildUnifiedFindingRows(input: {
     };
   });
 
-  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows, ...yasaRows, ...pmdRows];
+  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows, ...pmdRows];
 }
 
 export function buildStaticAnalysisListState(input: {

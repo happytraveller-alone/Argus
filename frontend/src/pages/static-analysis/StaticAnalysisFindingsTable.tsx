@@ -36,8 +36,7 @@ function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
 	if (engine === "gitleaks") return "Gitleaks";
 	if (engine === "bandit") return "Bandit";
 	if (engine === "phpstan") return "PHPStan";
-	if (engine === "pmd") return "PMD";
-	return "YASA";
+	return "PMD";
 }
 
 function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
@@ -102,7 +101,6 @@ export function getColumns(input: {
 					{ label: "Bandit", value: "bandit" },
 					{ label: "PHPStan", value: "phpstan" },
 					{ label: "PMD", value: "pmd" },
-					{ label: "YASA", value: "yasa" },
 				],
 			},
 			cell: ({ row }) => (

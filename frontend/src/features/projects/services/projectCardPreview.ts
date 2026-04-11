@@ -5,7 +5,6 @@ import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { PmdScanTask } from "@/shared/api/pmd";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
-import type { YasaScanTask } from "@/shared/api/yasa";
 import {
   buildBanditSeverityCounts,
   buildGitleaksSeverityCounts,
@@ -273,14 +272,12 @@ export function getProjectCardSummaryStats(params: {
   banditTasks?: BanditScanTask[];
   phpstanTasks?: PhpstanScanTask[];
   pmdTasks?: PmdScanTask[];
-  yasaTasks?: YasaScanTask[];
 }): ProjectCardSummaryStats {
   const { projectId, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const pmdTasks = params.pmdTasks || [];
-  const yasaTasks = params.yasaTasks || [];
 
   const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
   const projectOpengrepTasks = opengrepTasks.filter((task) => task.project_id === projectId);
@@ -288,16 +285,13 @@ export function getProjectCardSummaryStats(params: {
   const projectBanditTasks = banditTasks.filter((task) => task.project_id === projectId);
   const projectPhpstanTasks = phpstanTasks.filter((task) => task.project_id === projectId);
   const projectPmdTasks = pmdTasks.filter((task) => task.project_id === projectId);
-  const projectYasaTasks = yasaTasks.filter((task) => task.project_id === projectId);
-
   const totalTasks =
     projectAgentTasks.length +
     projectOpengrepTasks.length +
     projectGitleaksTasks.length +
     projectBanditTasks.length +
     projectPhpstanTasks.length +
-    projectPmdTasks.length +
-    projectYasaTasks.length;
+    projectPmdTasks.length;
 
   const completedTasks =
     projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
@@ -305,16 +299,14 @@ export function getProjectCardSummaryStats(params: {
     projectGitleaksTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectBanditTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectPhpstanTasks.filter((task) => isCompletedStatus(task.status)).length +
-    projectPmdTasks.filter((task) => isCompletedStatus(task.status)).length +
-    projectYasaTasks.filter((task) => isCompletedStatus(task.status)).length;
+    projectPmdTasks.filter((task) => isCompletedStatus(task.status)).length;
   const runningTasks =
     projectAgentTasks.filter((task) => isRunningStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isRunningStatus(task.status)).length +
     projectGitleaksTasks.filter((task) => isRunningStatus(task.status)).length +
     projectBanditTasks.filter((task) => isRunningStatus(task.status)).length +
     projectPhpstanTasks.filter((task) => isRunningStatus(task.status)).length +
-    projectPmdTasks.filter((task) => isRunningStatus(task.status)).length +
-    projectYasaTasks.filter((task) => isRunningStatus(task.status)).length;
+    projectPmdTasks.filter((task) => isRunningStatus(task.status)).length;
 
   const severityBreakdown = getProjectSeverityBreakdown({
     projectId,
@@ -324,7 +316,6 @@ export function getProjectCardSummaryStats(params: {
     banditTasks,
     phpstanTasks,
     pmdTasks,
-    yasaTasks,
   });
 
   return {
@@ -353,14 +344,12 @@ export function getProjectSeverityBreakdown(params: {
   banditTasks?: BanditScanTask[];
   phpstanTasks?: PhpstanScanTask[];
   pmdTasks?: PmdScanTask[];
-  yasaTasks?: YasaScanTask[];
 }): ProjectSeverityBreakdown {
   const { projectId, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const pmdTasks = params.pmdTasks || [];
-  const yasaTasks = params.yasaTasks || [];
 
   const staticCounts = mergeSeverityCounts(
     ...opengrepTasks
@@ -378,14 +367,6 @@ export function getProjectSeverityBreakdown(params: {
     ...pmdTasks
       .filter((task) => task.project_id === projectId)
       .map((task) => buildPmdSeverityCounts(task)),
-    ...yasaTasks
-      .filter((task) => task.project_id === projectId)
-      .map((task) => ({
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: Math.max(Number(task.total_findings || 0), 0),
-      })),
   );
 
   const agentCounts = mergeSeverityCounts(
@@ -407,14 +388,12 @@ export function getProjectFoundIssuesBreakdown(params: {
   banditTasks?: BanditScanTask[];
   phpstanTasks?: PhpstanScanTask[];
   pmdTasks?: PmdScanTask[];
-  yasaTasks?: YasaScanTask[];
 }): ProjectFoundIssuesBreakdown {
   const { projectId, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const pmdTasks = params.pmdTasks || [];
-  const yasaTasks = params.yasaTasks || [];
 
   const staticIssues = getSeverityCountTotal(
     mergeSeverityCounts(
@@ -433,14 +412,6 @@ export function getProjectFoundIssuesBreakdown(params: {
       ...pmdTasks
         .filter((task) => task.project_id === projectId)
         .map((task) => buildPmdSeverityCounts(task)),
-      ...yasaTasks
-        .filter((task) => task.project_id === projectId)
-        .map((task) => ({
-          critical: 0,
-          high: 0,
-          medium: 0,
-          low: Math.max(Number(task.total_findings || 0), 0),
-        })),
     ),
   );
 
@@ -478,14 +449,12 @@ export function getProjectCardRecentTasks(params: {
   banditTasks?: BanditScanTask[];
   phpstanTasks?: PhpstanScanTask[];
   pmdTasks?: PmdScanTask[];
-  yasaTasks?: YasaScanTask[];
   limit?: number;
 }): ProjectCardRecentTask[] {
   const { projectId, agentTasks, opengrepTasks, gitleaksTasks } = params;
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const pmdTasks = params.pmdTasks || [];
-  const yasaTasks = params.yasaTasks || [];
   const limit = params.limit ?? 3;
   // Multi-engine grouping: a static creation with N engines should render as one recent task item.
   const staticGroups = buildStaticScanGroups({
@@ -494,7 +463,6 @@ export function getProjectCardRecentTasks(params: {
     banditTasks,
     phpstanTasks,
     pmdTasks,
-    yasaTasks,
   }).filter((group) => group.projectId === projectId);
 
   const staticItems: ProjectCardRecentTask[] = staticGroups
@@ -504,9 +472,7 @@ export function getProjectCardRecentTasks(params: {
       const banditTask = group.banditTask;
       const phpstanTask = group.phpstanTask;
       const pmdTask = group.pmdTask;
-      const yasaTask = group.yasaTask;
-      const primaryTask =
-        opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask || yasaTask;
+      const primaryTask = opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask;
       if (!primaryTask) return null;
 
       const params = new URLSearchParams();
@@ -525,23 +491,17 @@ export function getProjectCardRecentTasks(params: {
       if (pmdTask) {
         params.set("pmdTaskId", pmdTask.id);
       }
-      if (yasaTask) {
-        params.set("yasaTaskId", yasaTask.id);
-      }
-      if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask && !pmdTask && !yasaTask) {
+      if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask && !pmdTask) {
         params.set("tool", "gitleaks");
       }
-      if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask && !pmdTask && !yasaTask) {
+      if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask && !pmdTask) {
         params.set("tool", "bandit");
       }
-      if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask && !pmdTask && !yasaTask) {
+      if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask && !pmdTask) {
         params.set("tool", "phpstan");
       }
-      if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !yasaTask && pmdTask) {
+      if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && pmdTask) {
         params.set("tool", "pmd");
-      }
-      if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !pmdTask && yasaTask) {
-        params.set("tool", "yasa");
       }
 
       const filesScanned = [
@@ -550,7 +510,6 @@ export function getProjectCardRecentTasks(params: {
         banditTask?.files_scanned,
         phpstanTask?.files_scanned,
         pmdTask?.files_scanned,
-        yasaTask?.files_scanned,
       ].reduce<number | null>((maxValue, value) => {
         const numeric = toNullableNonNegativeNumber(value);
         if (numeric === null) return maxValue;
@@ -563,7 +522,6 @@ export function getProjectCardRecentTasks(params: {
           Math.max(gitleaksTask?.total_findings ?? 0, 0) +
           Math.max(pmdTask?.total_findings ?? 0, 0) +
           Math.max(phpstanTask?.total_findings ?? 0, 0) +
-          Math.max(yasaTask?.total_findings ?? 0, 0) +
           Math.max(
             banditTask?.total_findings ??
               Math.max(banditTask?.high_count ?? 0, 0) +
@@ -578,7 +536,6 @@ export function getProjectCardRecentTasks(params: {
         banditTask?.scan_duration_ms,
         phpstanTask?.scan_duration_ms,
         pmdTask?.scan_duration_ms,
-        yasaTask?.scan_duration_ms,
       ].reduce<number | null>((sum, value) => {
         const numeric = toNullableNonNegativeNumber(value);
         if (numeric === null || numeric === 0) return sum;
@@ -589,7 +546,7 @@ export function getProjectCardRecentTasks(params: {
         gitleaksTask,
         banditTask,
         phpstanTask,
-        yasaTask,
+        pmdTask,
       ].reduce<string | null>((latest, task) => {
         const current = task?.updated_at || null;
         if (!current) return latest;

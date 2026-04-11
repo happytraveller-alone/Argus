@@ -16,5 +16,4 @@ test("static analysis 运行中轮询只刷新 task/status，不重复拉取 fin
   assert.doesNotMatch(source, /await loadBanditFindings\(true\);/);
   assert.doesNotMatch(source, /await loadPhpstanFindings\(true\);/);
   assert.doesNotMatch(source, /await loadPmdFindings\(true\);/);
-  assert.doesNotMatch(source, /await loadYasaFindings\(true\);/);
 });

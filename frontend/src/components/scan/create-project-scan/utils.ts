@@ -48,9 +48,7 @@ export function buildHybridStaticBootstrapConfig(params: {
 	banditEnabled: boolean;
 	gitleaksEnabled: boolean;
 	phpstanEnabled: boolean;
-	yasaEnabled: boolean;
-	yasaLanguage: string;
-	selectedYasaRuleConfigId: string;
+	pmdEnabled: boolean;
 }) {
 	return {
 		mode: "embedded" as const,
@@ -58,16 +56,6 @@ export function buildHybridStaticBootstrapConfig(params: {
 		bandit_enabled: params.banditEnabled,
 		gitleaks_enabled: params.gitleaksEnabled,
 		phpstan_enabled: params.phpstanEnabled,
-		yasa_enabled: params.yasaEnabled,
-		yasa_language: params.yasaLanguage as
-			| "java"
-			| "golang"
-			| "typescript"
-			| "python"
-			| "auto",
-		yasa_rule_config_id:
-			params.selectedYasaRuleConfigId !== "default"
-				? params.selectedYasaRuleConfigId
-				: null,
+		pmd_enabled: params.pmdEnabled,
 	};
 }

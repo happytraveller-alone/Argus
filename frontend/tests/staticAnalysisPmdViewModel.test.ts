@@ -9,7 +9,6 @@ test("buildUnifiedFindingRows normalizes pmd rows", () => {
     gitleaksFindings: [],
     banditFindings: [],
     phpstanFindings: [],
-    yasaFindings: [],
     pmdFindings: [
       {
         id: "pmd-1",
@@ -28,7 +27,6 @@ test("buildUnifiedFindingRows normalizes pmd rows", () => {
     gitleaksTaskId: "",
     banditTaskId: "",
     phpstanTaskId: "",
-    yasaTaskId: "",
     pmdTaskId: "task-pmd",
   });
 

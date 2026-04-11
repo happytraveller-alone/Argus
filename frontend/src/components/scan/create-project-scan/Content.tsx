@@ -48,12 +48,6 @@ type LlmQuickConfig = {
   apiKey: string;
 };
 
-type YasaRuleConfigItem = {
-  id: string;
-  name: string;
-  language: string;
-};
-
 export default function CreateProjectScanDialogContent({
   open,
   onOpenChange,
@@ -81,8 +75,6 @@ export default function CreateProjectScanDialogContent({
   setNewProjectName,
   newProjectFile,
   handleNewProjectFileSelect,
-  loadingRules,
-  activeRules,
   opengrepEnabled,
   setOpengrepEnabled,
   gitleaksEnabled,
@@ -91,20 +83,10 @@ export default function CreateProjectScanDialogContent({
   setBanditEnabled,
   phpstanEnabled,
   setPhpstanEnabled,
-  yasaEnabled,
-  setYasaEnabled,
   pmdEnabled,
   setPmdEnabled,
-  yasaLanguage,
-  setYasaLanguage,
-  yasaRuleConfigs,
-  selectedYasaRuleConfigId,
-  setSelectedYasaRuleConfigId,
-  isYasaBlockedProject,
-  yasaBlockedMessage,
   isPmdBlockedProject,
   pmdBlockedMessage,
-  showYasaAutoSkipHint,
   showLlmQuickFixPanel,
   openLlmQuickFixPanelManual,
   quickFixSaving,
@@ -158,8 +140,6 @@ export default function CreateProjectScanDialogContent({
   setNewProjectName: (value: string) => void;
   newProjectFile: File | null;
   handleNewProjectFileSelect: (event: ChangeEvent<HTMLInputElement>) => void;
-  loadingRules: boolean;
-  activeRules: unknown[];
   opengrepEnabled: boolean;
   setOpengrepEnabled: (enabled: boolean) => void;
   gitleaksEnabled: boolean;
@@ -168,20 +148,10 @@ export default function CreateProjectScanDialogContent({
   setBanditEnabled: (enabled: boolean) => void;
   phpstanEnabled: boolean;
   setPhpstanEnabled: (enabled: boolean) => void;
-  yasaEnabled: boolean;
-  setYasaEnabled: (enabled: boolean) => void;
   pmdEnabled: boolean;
   setPmdEnabled: (enabled: boolean) => void;
-  yasaLanguage: "auto" | "java" | "golang" | "typescript" | "python";
-  setYasaLanguage: (language: string) => void;
-  yasaRuleConfigs: YasaRuleConfigItem[];
-  selectedYasaRuleConfigId: string;
-  setSelectedYasaRuleConfigId: (id: string) => void;
-  isYasaBlockedProject: boolean;
-  yasaBlockedMessage: string;
   isPmdBlockedProject: boolean;
   pmdBlockedMessage: string;
-  showYasaAutoSkipHint: boolean;
   showLlmQuickFixPanel: boolean;
   openLlmQuickFixPanelManual: () => void | Promise<void>;
   quickFixSaving: boolean;
@@ -246,13 +216,6 @@ export default function CreateProjectScanDialogContent({
       title: "PHPStan",
       checked: phpstanEnabled,
       setChecked: setPhpstanEnabled,
-    },
-    {
-      key: "yasa",
-      title: "YASA",
-      checked: yasaEnabled,
-      setChecked: setYasaEnabled,
-      disabled: isYasaBlockedProject,
     },
     {
       key: "pmd",
@@ -531,9 +494,6 @@ export default function CreateProjectScanDialogContent({
                 <p className="text-sm font-semibold text-foreground">
                   {mode === "hybrid" ? "混合扫描 - 静态引擎" : "静态扫描引擎"}
                 </p>
-                {/* <p className="text-xs text-muted-foreground">
-                  {loadingRules ? "规则加载中..." : `已启用规则 ${activeRules.length}`}
-                </p> */}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {staticEngineItems
@@ -568,9 +528,6 @@ export default function CreateProjectScanDialogContent({
                     </div>
                   ))}
               </div>
-              {isYasaBlockedProject && (
-                <p className="text-xs text-amber-300">{yasaBlockedMessage}</p>
-              )}
               {mode === "static" && isPmdBlockedProject ? (
                 <p className="text-xs text-amber-300">{pmdBlockedMessage}</p>
               ) : null}
@@ -851,18 +808,8 @@ export default function CreateProjectScanDialogContent({
       enabled={configEngine ? staticEngineItems.find((item) => item.key === configEngine)?.checked ?? false : false}
       creating={creating}
       blockedReason={
-        configEngine === "yasa"
-          ? (isYasaBlockedProject ? yasaBlockedMessage : null)
-          : configEngine === "pmd"
-            ? (isPmdBlockedProject ? pmdBlockedMessage : null)
-            : null
+        configEngine === "pmd" ? (isPmdBlockedProject ? pmdBlockedMessage : null) : null
       }
-      yasaLanguage={yasaLanguage}
-      onYasaLanguageChange={setYasaLanguage}
-      yasaRuleConfigs={yasaRuleConfigs}
-      selectedYasaRuleConfigId={selectedYasaRuleConfigId}
-      onSelectedYasaRuleConfigIdChange={setSelectedYasaRuleConfigId}
-      showYasaAutoSkipHint={configEngine === "yasa" && showYasaAutoSkipHint}
       onNavigateToEngineConfig={onNavigateToEngineConfig}
     />
     </>

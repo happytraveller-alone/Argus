@@ -447,13 +447,13 @@ test("buildStaticAnalysisTaskStatusSummary marks mixed completed and failed engi
     },
     banditTask: null,
     phpstanTask: null,
-    yasaTask: {
-      id: "ya-1",
+    pmdTask: {
+      id: "pmd-1",
       project_id: "project-5",
       status: "failed",
       created_at: "2026-03-12T07:00:00.000Z",
       updated_at: "2026-03-12T07:01:00.000Z",
-      error_message: "YASA process failed",
+      error_message: "PMD process failed",
       total_findings: 0,
       scan_duration_ms: 0,
       files_scanned: 0,
@@ -465,22 +465,22 @@ test("buildStaticAnalysisTaskStatusSummary marks mixed completed and failed engi
   assert.equal(summary.progressHint, "扫描已结束，至少一个引擎失败");
   assert.deepEqual(summary.failureReasons, [
     {
-      engine: "yasa",
-      engineLabel: "YASA",
+      engine: "pmd",
+      engineLabel: "PMD",
       isTimeout: false,
-      message: "YASA process failed",
+      message: "PMD process failed",
     },
   ]);
 });
 
-test("buildStaticAnalysisTaskStatusSummary falls back to diagnostics summary for YASA failures", () => {
+test("buildStaticAnalysisTaskStatusSummary falls back to diagnostics summary for PMD failures", () => {
   const summary = buildStaticAnalysisTaskStatusSummary({
     opengrepTask: null,
     gitleaksTask: null,
     banditTask: null,
     phpstanTask: null,
-    yasaTask: {
-      id: "ya-2",
+    pmdTask: {
+      id: "pmd-2",
       project_id: "project-6",
       status: "failed",
       created_at: "2026-03-12T07:00:00.000Z",
@@ -494,8 +494,8 @@ test("buildStaticAnalysisTaskStatusSummary falls back to diagnostics summary for
 
   assert.deepEqual(summary.failureReasons, [
     {
-      engine: "yasa",
-      engineLabel: "YASA",
+      engine: "pmd",
+      engineLabel: "PMD",
       isTimeout: false,
       message: "rule-config parse failed at line 3",
     },
@@ -522,7 +522,7 @@ test("buildStaticAnalysisTaskStatusSummary uses a generic fallback when a failed
     gitleaksTask: null,
     banditTask: null,
     phpstanTask: null,
-    yasaTask: null,
+    pmdTask: null,
   });
 
   assert.deepEqual(summary.failureReasons, [

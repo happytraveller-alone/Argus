@@ -16,10 +16,6 @@ import {
 	getPmdScanTasks,
 } from "@/shared/api/pmd";
 import {
-	type YasaScanTask,
-	getYasaScanTasks,
-} from "@/shared/api/yasa";
-import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
@@ -276,18 +272,6 @@ export function mergeSeverityCounts(...counts: SeverityCounts[]): SeverityCounts
 	);
 }
 
-function buildYasaSeverityCounts(
-	task?: YasaScanTask | null,
-): SeverityCounts {
-	// YASA integration: dashboard/task活动口径将 yasa 发现全部归入 low(hint)。
-	return {
-		critical: 0,
-		high: 0,
-		medium: 0,
-		low: toNonNegativeInt(task?.total_findings),
-	};
-}
-
 export function getSeverityCountTotal(counts: SeverityCounts): number {
 	return counts.critical + counts.high + counts.medium + counts.low;
 }
@@ -298,7 +282,6 @@ function toRuleScanActivities(
 	banditTasks: BanditScanTask[],
 	phpstanTasks: PhpstanScanTask[],
 	pmdTasks: PmdScanTask[],
-	yasaTasks: YasaScanTask[],
 	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem[] {
 	// Multi-engine grouping: one activity item can contain any selected static engines.
@@ -311,7 +294,6 @@ function toRuleScanActivities(
 		banditTasks,
 		phpstanTasks,
 		pmdTasks,
-		yasaTasks,
 	});
 
 	return groups
@@ -321,9 +303,7 @@ function toRuleScanActivities(
 		const banditTask = group.banditTask;
 		const phpstanTask = group.phpstanTask;
 		const pmdTask = group.pmdTask;
-		const yasaTask = group.yasaTask;
-		const primaryTask =
-			opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask || yasaTask;
+		const primaryTask = opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask;
 		if (!primaryTask) {
 			return null;
 		}
@@ -345,23 +325,17 @@ function toRuleScanActivities(
 		if (pmdTask) {
 			params.set("pmdTaskId", pmdTask.id);
 		}
-		if (yasaTask) {
-			params.set("yasaTaskId", yasaTask.id);
-		}
-		if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask && !pmdTask && !yasaTask) {
+		if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask && !pmdTask) {
 			params.set("tool", "gitleaks");
 		}
-		if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask && !pmdTask && !yasaTask) {
+		if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask && !pmdTask) {
 			params.set("tool", "bandit");
 		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask && !pmdTask && !yasaTask) {
+		if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask && !pmdTask) {
 			params.set("tool", "phpstan");
 		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !yasaTask && pmdTask) {
+		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && pmdTask) {
 			params.set("tool", "pmd");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && !pmdTask && yasaTask) {
-			params.set("tool", "yasa");
 		}
 
 		const durationCandidates = [
@@ -370,7 +344,6 @@ function toRuleScanActivities(
 			banditTask?.scan_duration_ms,
 			phpstanTask?.scan_duration_ms,
 			pmdTask?.scan_duration_ms,
-			yasaTask?.scan_duration_ms,
 		];
 		const durationMs = durationCandidates.reduce<number | null>((total, value) => {
 			if (
@@ -389,7 +362,6 @@ function toRuleScanActivities(
 			buildBanditSeverityCounts(banditTask),
 			buildPhpstanSeverityCounts(phpstanTask),
 			buildPmdSeverityCounts(pmdTask),
-			buildYasaSeverityCounts(yasaTask),
 		);
 
 		const candidateStatuses = [
@@ -398,7 +370,6 @@ function toRuleScanActivities(
 			banditTask,
 			phpstanTask,
 			pmdTask,
-			yasaTask,
 		]
 			.map((task) => normalizeStatus(task?.status))
 			.filter(Boolean);
@@ -410,7 +381,7 @@ function toRuleScanActivities(
 			gitleaksTask,
 			banditTask,
 			phpstanTask,
-			yasaTask,
+			pmdTask,
 		].reduce<string | null>((latest, task) => {
 			const current = task?.updated_at || null;
 			if (!current) return latest;
@@ -431,8 +402,7 @@ function toRuleScanActivities(
 					gitleaksTask?.name ||
 					banditTask?.name ||
 					phpstanTask?.name ||
-					pmdTask?.name ||
-					yasaTask?.name,
+					pmdTask?.name,
 			),
 			status: resolveStaticScanGroupStatus(group),
 			gitleaksEnabled: Boolean(gitleaksTask),
@@ -474,7 +444,7 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks, phpstanTasks, pmdTasks, yasaTasks] =
+	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks, phpstanTasks, pmdTasks] =
 		await Promise.all([
 		getAgentTasks({ limit }),
 		getOpengrepScanTasks({ limit }),
@@ -482,7 +452,6 @@ export async function fetchTaskActivities(
 		getBanditScanTasks({ limit }),
 		getPhpstanScanTasks({ limit }),
 		getPmdScanTasks({ limit }),
-		getYasaScanTasks({ limit }),
 	]);
 
 	const projectNameMap = mapProjectNames(projects);
@@ -496,7 +465,6 @@ export async function fetchTaskActivities(
 			banditTasks,
 			phpstanTasks,
 			pmdTasks,
-			yasaTasks,
 			resolveProjectName,
 		),
 		...toAgentActivities(agentTasks, resolveProjectName),

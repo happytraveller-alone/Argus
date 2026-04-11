@@ -426,12 +426,6 @@ const SCAN_ENGINE_ROWS: DashboardPreviewLeaderboardRow[] = [
 		segments: [{ label: "总数", value: 11, tone: "medium" }],
 		total: 11,
 	},
-	{
-		label: "yasa",
-		meta: "静态扫描",
-		segments: [{ label: "总数", value: 9, tone: "low" }],
-		total: 9,
-	},
 ];
 
 const STATIC_ENGINE_RULE_ROWS: DashboardPreviewLeaderboardRow[] = [
@@ -458,12 +452,6 @@ const STATIC_ENGINE_RULE_ROWS: DashboardPreviewLeaderboardRow[] = [
 		meta: "规则总数 129",
 		segments: [{ label: "规则数", value: 129, tone: "low" }],
 		total: 129,
-	},
-	{
-		label: "yasa",
-		meta: "规则总数 84",
-		segments: [{ label: "规则数", value: 84, tone: "medium" }],
-		total: 84,
 	},
 ];
 

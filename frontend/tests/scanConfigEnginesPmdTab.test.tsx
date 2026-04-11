@@ -25,10 +25,10 @@ test("ScanConfigEngines renders pmd rules page when tab=pmd", () => {
     ),
   );
 
-  assert.match(markup, /批量启用/);
-  assert.match(markup, /批量禁用/);
-  assert.match(markup, /取消操作/);
-  assert.match(markup, /导入自定义规则/);
-  assert.match(markup, /内置 ruleset/);
-  assert.doesNotMatch(markup, /导入 XML ruleset/);
+	assert.match(markup, /批量启用/);
+	assert.match(markup, /批量禁用/);
+	assert.match(markup, /取消操作/);
+	assert.match(markup, /导入自定义规则/);
+	assert.match(markup, /规则集/);
+	assert.doesNotMatch(markup, /导入 XML ruleset/);
 });

@@ -10,14 +10,13 @@ import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
 
-export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
+export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
 
 export interface StaticToolSelection {
   opengrep: boolean;
   gitleaks: boolean;
   bandit: boolean;
   phpstan: boolean;
-  yasa: boolean;
   pmd: boolean;
 }
 
@@ -49,7 +48,6 @@ export default function AgentModeSelector({
     gitleaks: false,
     bandit: false,
     phpstan: false,
-    yasa: false,
     pmd: false,
   };
 
@@ -69,7 +67,6 @@ export default function AgentModeSelector({
     { key: "gitleaks", label: "密钥泄露扫描" },
     { key: "bandit", label: "Python 安全扫描" },
     { key: "phpstan", label: "PHPStan 扫描" },
-    { key: "yasa", label: "YASA 扫描" },
     { key: "pmd", label: "PMD Java 扫描" },
   ];
 
@@ -185,11 +182,6 @@ export default function AgentModeSelector({
                   </Button>
                 </div>
               ))}
-              {blockedStaticToolMessages?.yasa ? (
-                <p className="text-[10px] text-amber-300">
-                  {blockedStaticToolMessages.yasa}
-                </p>
-              ) : null}
               {blockedStaticToolMessages?.pmd ? (
                 <p className="text-[10px] text-amber-300">
                   {blockedStaticToolMessages.pmd}

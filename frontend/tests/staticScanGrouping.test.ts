@@ -112,15 +112,9 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
         project_id: "p1",
         status: "pending",
         created_at: "2026-03-17T00:00:00.000Z",
-      } as any,
-      yasaTask: {
-        id: "ya-1",
-        project_id: "p1",
-        status: "completed",
-        created_at: "2026-03-17T00:00:02.000Z",
-      } as any,
+      } as any
     }),
-    "running",
+    "pending",
   );
 
   assert.equal(
@@ -130,14 +124,8 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
         project_id: "p1",
         status: "completed",
         created_at: "2026-03-17T00:00:00.000Z",
-      } as any,
-      yasaTask: {
-        id: "ya-2",
-        project_id: "p1",
-        status: "failed",
-        created_at: "2026-03-17T00:00:02.000Z",
-      } as any,
+      } as any
     }),
-    "failed",
+    "completed",
   );
 });
