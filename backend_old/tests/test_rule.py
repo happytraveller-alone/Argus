@@ -1,5 +1,5 @@
+from app.api.v1.schemas.rule_flows import OpengrepRuleCreateRequest
 from app.services.rule import get_rule_by_patch
-from app.schemas.opengrep import OpengrepRuleCreateRequest
 import asyncio
 import json
 from litellm import close_litellm_async_clients

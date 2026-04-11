@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from app.schemas.opengrep import OpengrepRuleCreateRequest
+from app.api.v1.schemas.rule_flows import OpengrepRuleCreateRequest
 from app.core.config import settings
 
 from .llm_rule.config import Config

@@ -70,6 +70,22 @@
 - delete gate:
   - 运行时已确认无 `backend_old/app/utils` 依赖，剩余的 `app.utils` 文本只是 offline patch asset，不构成 run-time breakage。
 
+### 13. `backend_old/app/schemas` package retired; only API-local DTO pod remains
+
+- endpoint / feature: Python schema definition bundle (`backend_old/app/schemas/*`)
+- Python 旧行为: schema module 集中提供 `search/token/user/audit_rule/prompt_template` 等 DTO definitions 供 Python runtime/endpoint 共享。
+- Rust 当前行为:
+  - `backend_old/app/schemas` package 已从 live tree 中移除；`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema set 都已 retired。
+  - 当前还需要暴露的 rule-flow DTOs 暂存于 `backend_old/app/api/v1/schemas/rule_flows.py`，保持 endpoint-local/API-local 过渡契约。
+  - 这不意味着 `static-tasks` 已经完全 Rust-owned；static-tasks runtime 仍翻到 Python bridge，schema cleanup 只是记录 ownership shrinkage。
+  - operational verification: `find backend_old/app -type d -name schemas -print | sort`
+  - expected output: 仅 `backend_old/app/api/v1/schemas`，证明 `backend_old/app/schemas` 不在 live tree。
+- 是否影响前端: 否；schema cleanup 只影响迁移 ledger，不改变 HTTP contract。
+- 后续修复波次: Wave A 后续 / API surface cleanup
+- owner: Rust migration
+- delete gate:
+  - rule-flow DTOs 完全迁入 Rust 或 transitional package 被删除之后，重新执行 `find backend_old/app -type d -name schemas -print | sort` 可确认是否 safe to drop。
+
 ### 3. Static tasks and agent tasks are still not Rust-owned
 
 - endpoint / feature: `/api/v1/static-tasks/*`, `/api/v1/agent-tasks/*`

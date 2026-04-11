@@ -159,6 +159,9 @@
   - prompt skill
   - user/system config
 - 禁止新增 Python `models` / `schemas` 依赖点。
+- `backend_old/app/schemas` 已退出运行时：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 被 retired，只留下 `backend_old/app/api/v1/schemas`（当前 rule-flow DTO 暂存 `rule_flows.py`，作为 endpoint-local/API-local 过渡宿主）。
+- 这并不意味着 `static-tasks` 已经完全 Rust-owned；静态任务功能链路仍沿用 Python runtime/compat bridge。
+- operational verification：`find backend_old/app -type d -name schemas -print` 应只列出 `backend_old/app/api/v1/schemas`，确认原 `backend_old/app/schemas` 目录不在 live tree 内。
 
 ### 3. `runtime + launchers` (`18`)
 
@@ -319,7 +322,7 @@
 
 - 处理：
   - `backend_old/app/models/*`
-  - `backend_old/app/schemas/*`
+  - `backend_old/app/schemas/*`（dead/retired schemas：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 已被移除；live rule-flow DTOs 暂存于 `backend_old/app/api/v1/schemas/rule_flows.py` 作为 endpoint-local/API-local 过渡宿主）
 - 目标：
   - Rust 自己拥有 typed domain / DTO 层
   - 不再新增 Python model/schema 依赖点

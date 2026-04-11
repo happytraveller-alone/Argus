@@ -26,13 +26,11 @@ from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
 from app.models.phpstan import PhpstanFinding, PhpstanScanTask
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.gitleaks_rules import (
+from app.api.v1.schemas.rule_flows import (
     GitleaksRuleBatchUpdateRequest,
     GitleaksRuleCreateRequest,
     GitleaksRuleResponse,
     GitleaksRuleUpdateRequest,
-)
-from app.schemas.opengrep import (
     OpengrepRuleCreateRequest,
     OpengrepRulePatchResponse,
     OpengrepRuleTextCreateRequest,
@@ -75,7 +73,6 @@ from app.api.v1.endpoints.static_tasks_shared import (
 )
 
 router = APIRouter()
-
 class OpengrepRuleSingleUploadRequest(BaseModel):
     """上传单条规则请求"""
 

@@ -26,19 +26,6 @@ from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
 from app.models.phpstan import PhpstanFinding, PhpstanScanTask
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.gitleaks_rules import (
-    GitleaksRuleBatchUpdateRequest,
-    GitleaksRuleCreateRequest,
-    GitleaksRuleResponse,
-    GitleaksRuleUpdateRequest,
-)
-from app.schemas.opengrep import (
-    OpengrepRuleCreateRequest,
-    OpengrepRulePatchResponse,
-    OpengrepRuleTextCreateRequest,
-    OpengrepRuleTextResponse,
-    OpengrepRuleUpdateRequest,
-)
 from app.services.gitleaks_rules_seed import ensure_builtin_gitleaks_rules
 from app.services.project_metrics import project_metrics_refresher
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
@@ -50,6 +37,12 @@ from app.services.opengrep_confidence import (
 )
 from app.services.rule import get_rule_by_patch, validate_generic_rule
 from app.services.upload.upload_manager import UploadManager
+from app.api.v1.schemas.rule_flows import (
+    GitleaksRuleBatchUpdateRequest,
+    GitleaksRuleCreateRequest,
+    GitleaksRuleResponse,
+    GitleaksRuleUpdateRequest,
+)
 
 from app.api.v1.endpoints.static_tasks_shared import (
     _cleanup_incorrect_rules,
