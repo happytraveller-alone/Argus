@@ -3,10 +3,8 @@
 import asyncio
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import uuid4
@@ -17,7 +15,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.core.config import settings
 from app.models.opengrep import OpengrepRule
 from app.services.agent.bootstrap import (
     BanditBootstrapScanner,
@@ -36,8 +33,10 @@ from app.services.agent.bootstrap_findings import (
     _dedupe_bootstrap_findings,
     _normalize_bootstrap_finding_from_gitleaks_payload,
     _normalize_bootstrap_finding_from_opengrep_payload,
-    _parse_bootstrap_gitleaks_output,
     _parse_bootstrap_opengrep_output,
+)
+from app.services.agent.bootstrap_gitleaks_runner import (
+    _run_bootstrap_gitleaks_scan,
 )
 from app.services.agent.bootstrap_policy import (
     _normalize_verification_level,
@@ -56,29 +55,11 @@ from app.services.agent.scope_filters import (
     _is_core_ignored_path,
     _normalize_scan_path,
 )
-from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from app.services.agent.utils.vulnerability_naming import (
     normalize_cwe_id as normalize_cwe_id_util,
 )
-from app.services.static_scan_runtime import (
-    cleanup_scan_workspace,
-    copy_project_tree_to_scan_dir,
-    ensure_scan_logs_dir,
-    ensure_scan_meta_dir,
-    ensure_scan_output_dir,
-    ensure_scan_project_dir,
-    ensure_scan_workspace,
-)
 
 logger = logging.getLogger(__name__)
-
-
-async def _prepare_scan_project_dir_async(
-    project_root: str,
-    project_dir: str | Path,
-) -> None:
-    await asyncio.to_thread(shutil.rmtree, project_dir, True)
-    await asyncio.to_thread(copy_project_tree_to_scan_dir, project_root, project_dir)
 
 async def _run_bootstrap_opengrep_scan(
     project_root: str,
@@ -125,66 +106,6 @@ async def _run_bootstrap_opengrep_scan(
             os.unlink(merged_rule_path)
         except Exception:
             pass
-
-
-async def _run_bootstrap_gitleaks_scan(
-    project_root: str,
-) -> List[Dict[str, Any]]:
-    task_id = f"bootstrap-{uuid4().hex}"
-    workspace_dir = ensure_scan_workspace("gitleaks-bootstrap", task_id)
-    project_dir = ensure_scan_project_dir("gitleaks-bootstrap", task_id)
-    output_dir = ensure_scan_output_dir("gitleaks-bootstrap", task_id)
-    logs_dir = ensure_scan_logs_dir("gitleaks-bootstrap", task_id)
-    meta_dir = ensure_scan_meta_dir("gitleaks-bootstrap", task_id)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    meta_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / "report.json"
-
-    try:
-        await _prepare_scan_project_dir_async(project_root, project_dir)
-
-        cmd = [
-            "gitleaks",
-            "detect",
-            "--source",
-            "/scan/project",
-            "--report-format",
-            "json",
-            "--report-path",
-            "/scan/output/report.json",
-            "--exit-code",
-            "0",
-            "--no-git",
-        ]
-        result = await run_scanner_container(
-            ScannerRunSpec(
-                scanner_type="gitleaks-bootstrap",
-                image=str(
-                    getattr(settings, "SCANNER_GITLEAKS_IMAGE", "vulhunter/gitleaks-runner:latest")
-                ),
-                workspace_dir=str(workspace_dir),
-                command=cmd,
-                timeout_seconds=900,
-                env={},
-            )
-        )
-        if result.exit_code != 0:
-            stderr_text = ""
-            stdout_text = ""
-            if result.stderr_path and Path(result.stderr_path).exists():
-                stderr_text = Path(result.stderr_path).read_text(encoding="utf-8", errors="ignore")
-            if result.stdout_path and Path(result.stdout_path).exists():
-                stdout_text = Path(result.stdout_path).read_text(encoding="utf-8", errors="ignore")
-            error_text = (stderr_text or stdout_text or result.error or "unknown error").strip()
-            raise RuntimeError(f"gitleaks failed: {error_text[:300]}")
-
-        if not report_path.exists():
-            return []
-        report_content = report_path.read_text(encoding="utf-8", errors="ignore")
-        return _parse_bootstrap_gitleaks_output(report_content)
-    finally:
-        cleanup_scan_workspace("gitleaks-bootstrap", task_id)
 
 
 def _log_embedded_bootstrap_start(tool_name: str, project_root: str) -> None:
