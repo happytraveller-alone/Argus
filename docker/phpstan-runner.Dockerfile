@@ -4,8 +4,13 @@ ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 
-FROM rust:1.90-slim AS phpstan-launcher
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim-bookworm AS phpstan-launcher
 WORKDIR /code
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends pkg-config libssl-dev \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 RUN cargo build --release --bin backend-phpstan-launcher

@@ -402,12 +402,16 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     assert "WORKDIR /scan" in opengrep_runner_text
     assert "opengrep" in opengrep_runner_text
     assert "XDG_CACHE_HOME" in opengrep_runner_text
+    assert "apt-get install -y --no-install-recommends pkg-config libssl-dev" in opengrep_runner_text
+    assert "cargo build --release --bin backend-opengrep-launcher" in opengrep_runner_text
     assert "WORKDIR /scan" in bandit_runner_text
     assert "bandit" in bandit_runner_text
     assert "/opt/bandit-venv" in bandit_runner_text
     assert "WORKDIR /scan" in gitleaks_runner_text
     assert "gitleaks" in gitleaks_runner_text
     assert "download_with_fallback() {" in gitleaks_runner_text
+    assert "apt-get install -y --no-install-recommends pkg-config libssl-dev" in phpstan_runner_text
+    assert "cargo build --release --bin backend-phpstan-launcher" in phpstan_runner_text
     assert (
         "https://gh-proxy.com/https://github.com/gitleaks/gitleaks/releases/download/"
         in gitleaks_runner_text
