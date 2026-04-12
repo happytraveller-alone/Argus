@@ -30,6 +30,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
   VULHUNTER_IMAGE_NAMESPACE: ${{ vars.GHCR_NAMESPACE || github.repository_owner }}
+  GHCR_PACKAGE_VISIBILITY: ${{ vars.GHCR_PACKAGE_VISIBILITY || 'private' }}
   VULHUNTER_IMAGE_TAG: latest
 
 jobs:
@@ -114,6 +115,7 @@ jobs:
             "${IMAGE}:${TAG}@${DIGEST}"
 
       - name: 设置 GHCR 包为公开可见性
+        if: env.GHCR_PACKAGE_VISIBILITY == 'public'
         env:
           GH_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           PACKAGE_OWNER: ${{ env.VULHUNTER_IMAGE_NAMESPACE }}
@@ -132,6 +134,7 @@ jobs:
           fi
 
       - name: 验证 GHCR 匿名拉取
+        if: env.GHCR_PACKAGE_VISIBILITY == 'public'
         env:
           IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
         run: |
@@ -147,8 +150,14 @@ jobs:
           echo "::error::Anonymous pull check failed for ${IMAGE}. Ensure the package visibility allows anonymous pulls."
           exit 1
 
+      - name: 跳过匿名拉取验证
+        if: env.GHCR_PACKAGE_VISIBILITY != 'public'
+        run: |
+          echo "Skipping anonymous pull validation because GHCR package visibility is set to '${GHCR_PACKAGE_VISIBILITY}'." >> "$GITHUB_STEP_SUMMARY"
+
       - name: 输出镜像信息
         run: |
           echo "## 镜像已推送到 GHCR" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- package visibility: \`${{ env.GHCR_PACKAGE_VISIBILITY }}\`" >> "$GITHUB_STEP_SUMMARY"
