@@ -52,6 +52,7 @@ copy_directory_filtered() {
       --exclude '.pytest_cache/' \
       --exclude '.mypy_cache/' \
       --exclude '__pycache__/' \
+      --exclude 'target/' \
       --exclude 'node_modules/' \
       "$src_dir"/ "$dest_dir"/
     return
@@ -59,7 +60,7 @@ copy_directory_filtered() {
 
   cp -R "$src_dir"/. "$dest_dir"
   find "$dest_dir" \
-    \( -name '.venv' -o -name '.venv-*' -o -name '.pytest_cache' -o -name '.mypy_cache' -o -name '__pycache__' -o -name 'node_modules' \) \
+    \( -name '.venv' -o -name '.venv-*' -o -name '.pytest_cache' -o -name '.mypy_cache' -o -name '__pycache__' -o -name 'target' -o -name 'node_modules' \) \
     -exec rm -rf {} +
 }
 
@@ -102,11 +103,12 @@ validate_release_tree() {
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"
     "docker/env/backend/env.example"
-    "backend/alembic.ini"
-    "backend/pyproject.toml"
-    "backend/uv.lock"
-    "backend/app/main.py"
-    "backend/app/services/runner_preflight.py"
+    "backend/Cargo.toml"
+    "backend/Cargo.lock"
+    "backend/src/main.rs"
+    "backend/src/lib.rs"
+    "backend/src/bootstrap/preflight.rs"
+    "backend/migrations/0001_system_configs.sql"
     "frontend/package.json"
     "frontend/pnpm-lock.yaml"
     "frontend/vite.config.ts"
@@ -177,6 +179,7 @@ prune_release_tree() {
     "$OUTPUT_DIR/backend/.venv" \
     "$OUTPUT_DIR/backend/.pytest_cache" \
     "$OUTPUT_DIR/backend/.mypy_cache" \
+    "$OUTPUT_DIR/backend/target" \
     "$OUTPUT_DIR/backend/uploads" \
     "$OUTPUT_DIR/backend/log" \
     "$OUTPUT_DIR/backend/data" \
@@ -202,16 +205,13 @@ prune_release_tree() {
 }
 
 overlay_release_templates() {
-  mkdir -p \
-    "$OUTPUT_DIR/docker" \
-    "$OUTPUT_DIR/backend/app/services"
+  mkdir -p "$OUTPUT_DIR/docker"
 
   cp "$TEMPLATE_DIR/README.md" "$OUTPUT_DIR/README.md"
   cp "$TEMPLATE_DIR/README_EN.md" "$OUTPUT_DIR/README_EN.md"
   cp "$TEMPLATE_DIR/docker-compose.release-slim.yml" "$OUTPUT_DIR/docker-compose.yml"
   cp "$TEMPLATE_DIR/docker-compose.hybrid.release-slim.yml" "$OUTPUT_DIR/docker-compose.hybrid.yml"
   cp "$TEMPLATE_DIR/backend.Dockerfile" "$OUTPUT_DIR/docker/backend.Dockerfile"
-  cp "$TEMPLATE_DIR/runner_preflight.py" "$OUTPUT_DIR/backend/app/services/runner_preflight.py"
 }
 
 sanitize_release_tree() {

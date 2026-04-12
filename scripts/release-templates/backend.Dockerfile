@@ -11,7 +11,6 @@ RUN apt-get update \
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 COPY backend/migrations ./migrations
-COPY backend/tests ./tests
 
 RUN cargo build --release --bin backend-rust
 
