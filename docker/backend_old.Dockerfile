@@ -154,9 +154,7 @@ COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 RUN cargo build --release \
   --bin backend-rust \
-  --bin backend-runtime-startup \
-  --bin backend-opengrep-launcher \
-  --bin backend-phpstan-launcher
+  --bin backend-runtime-startup
 
 FROM python-base AS runtime-base
 

@@ -38,11 +38,3 @@ tempfile = "3.27.0"
 [[bin]]
 name = "backend-runtime-startup"
 path = "src/bin/backend_runtime_startup.rs"
-
-[[bin]]
-name = "backend-opengrep-launcher"
-path = "src/bin/opengrep_launcher.rs"
-
-[[bin]]
-name = "backend-phpstan-launcher"
-path = "src/bin/phpstan_launcher.rs"

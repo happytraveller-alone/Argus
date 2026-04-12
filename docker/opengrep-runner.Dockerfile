@@ -5,17 +5,6 @@ ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG OPENGREP_VERSION=v1.15.1
 
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim-bookworm AS opengrep-launcher
-WORKDIR /code
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends pkg-config libssl-dev \
-  && rm -rf /var/lib/apt/lists/*
-
-COPY backend/Cargo.toml backend/Cargo.lock ./
-COPY backend/src ./src
-RUN cargo build --release --bin backend-opengrep-launcher
-
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie AS opengrep-runner
 
 ARG BACKEND_APT_MIRROR_PRIMARY
@@ -28,12 +17,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV OPENGREP_HOME=/opt/opengrep
 ENV OPENGREP_REAL_BIN=/opt/opengrep/opengrep.real
-ENV OPENGREP_WRAPPER_BIN=/opt/opengrep/opengrep
 ENV XDG_CONFIG_HOME=/opt/opengrep/xdg-config
 ENV XDG_DATA_HOME=/opt/opengrep/xdg-data
 ENV XDG_CACHE_HOME=/opt/opengrep/xdg-cache
-
-COPY --from=opengrep-launcher --chmod=755 /code/target/release/backend-opengrep-launcher ${OPENGREP_WRAPPER_BIN}
 
 RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \
@@ -92,8 +78,13 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
     fi; \
     cp "${OG_CACHE}" "${OPENGREP_REAL_BIN}"; \
     chmod +x "${OPENGREP_REAL_BIN}"; \
-    ln -sf "${OPENGREP_REAL_BIN}" /usr/local/bin/opengrep.real; \
-    ln -sf "${OPENGREP_WRAPPER_BIN}" /usr/local/bin/opengrep; \
+    printf '%s\n' '#!/bin/sh' \
+      'unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy' \
+      'export NO_PROXY=*' \
+      'export no_proxy=*' \
+      'exec /opt/opengrep/opengrep.real "$@"' \
+      > /usr/local/bin/opengrep; \
+    chmod +x /usr/local/bin/opengrep; \
     opengrep --version >/dev/null
 
 WORKDIR /scan
