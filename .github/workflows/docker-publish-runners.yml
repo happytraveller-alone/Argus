@@ -59,6 +59,12 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
 jobs:
   prepare-matrix:
     name: 计算需要发布的 runner 镜像
