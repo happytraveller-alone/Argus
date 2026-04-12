@@ -25,6 +25,12 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 3. Make sure Docker Compose is installed and the Docker daemon is reachable.
 
+## GHCR Image Naming
+
+- GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
+- `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
+- In GitHub Actions you can optionally set the repository variable `GHCR_NAMESPACE` to override the default owner. If it points to a different user or organization, you must also provide `GHCR_USERNAME` and `GHCR_TOKEN`.
+
 ## Supported Commands
 
 ### 1. Default startup

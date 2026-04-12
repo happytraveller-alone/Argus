@@ -15,11 +15,11 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
     assert "docker-compose.release-cython.yml" not in compose_text
     assert "docker-compose.self-contained.yml" not in compose_text
     assert (
-        "image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text

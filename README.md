@@ -27,6 +27,12 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 3. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
 
+## GHCR 镜像命名
+
+- GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
+- `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
+- GitHub Actions 发布时可选设置仓库变量 `GHCR_NAMESPACE` 覆盖默认 owner；如果覆盖到其他组织或账号，需要同时提供 `GHCR_USERNAME` 和 `GHCR_TOKEN`。
+
 ## 三个受支持的命令
 
 ### 1. 默认镜像启动

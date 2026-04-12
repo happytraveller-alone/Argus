@@ -37,7 +37,7 @@ def test_compose_exposes_scanner_pmd_image_without_compose_runner_service() -> N
     compose_text = compose_path.read_text(encoding="utf-8")
 
     assert (
-        "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text

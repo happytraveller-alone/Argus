@@ -11,19 +11,19 @@ RUNNER_SERVICE_NAMES = (
     "flow-parser-runner",
 )
 DEFAULT_BACKEND_IMAGE = (
-    "${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
+    "${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
     "/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_FRONTEND_IMAGE = (
-    "${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
+    "${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
     "/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_SANDBOX_IMAGE = (
-    "${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
+    "${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
     "/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 DEFAULT_SCANNER_PMD_IMAGE = (
-    "${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}"
+    "${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
     "/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 
@@ -82,28 +82,28 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
     assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text
-    assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-audittool}" in compose_text
+    assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}" in compose_text
     assert "VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}" in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text
     assert (
-        "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert (
-        "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert f"SCANNER_PMD_IMAGE: {DEFAULT_SCANNER_PMD_IMAGE}" in compose_text
     assert (
-        "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
@@ -122,7 +122,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "MCP_REQUIRE_ALL_READY_ON_STARTUP" not in compose_text
     assert '/bin/sh", "-lc"' not in compose_text
     assert (
-        "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-audittool}/"
+        "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
         "vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
     assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in compose_text
@@ -460,6 +460,7 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "docker/setup-qemu-action@v4" in reusable_workflow_text
     assert "docker/setup-buildx-action@v4" in reusable_workflow_text
     assert "docker/build-push-action@v7" in reusable_workflow_text
+    assert "vars.GHCR_NAMESPACE || github.repository_owner" in reusable_workflow_text
     assert "GHCR_USERNAME" in reusable_workflow_text
     assert "GHCR_TOKEN" in reusable_workflow_text
     assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
