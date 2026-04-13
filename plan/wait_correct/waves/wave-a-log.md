@@ -655,6 +655,32 @@
 - 后续修复波次: Wave C / project archive shared services
 - owner: Rust migration
 
+### 16. root diagnostics retired; `backend_old` root keeps only `main.py`
+
+- endpoint / feature:
+  - Python root diagnostics:
+    - `backend_old/verify_llm.py`
+    - `backend_old/check_docker_direct.py`
+    - `backend_old/check_sandbox.py`
+- Python 旧行为:
+  - 三者都只是开发/诊断脚本，不承接 HTTP surface、runtime bootstrap 或 compose 主链路
+- Rust 当前行为:
+  - 这些 root diagnostics 已从 repo 物理删除
+  - `backend_old/tests/test_legacy_backend_main_retired.py`
+    已补 root diagnostics 退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `1`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+  - `rg -n "verify_llm.py|check_docker_direct.py|check_sandbox.py" backend_old plan backend docker scripts .github -S`
+    只剩退休守门测试与迁移文档命中
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖这些脚本
+- 边界说明:
+  - 这一步只退休 root diagnostics，不代表 `backend_old/main.py` 已可删除
+  - root Python live surface 现在只剩 `backend_old/main.py`
+- 后续修复波次: Wave F / root bootstrap cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

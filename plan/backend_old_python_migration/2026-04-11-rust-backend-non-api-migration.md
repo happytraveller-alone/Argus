@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `228` 个文件：
-  - `backend_old` 根目录 `4` 个
-  - `backend_old/app` 下除 `api` 外 `223` 个
+- 当前纳入本计划的 Python 存量一共 `230` 个文件：
+  - `backend_old` 根目录 `1` 个
+  - `backend_old/app` 下除 `api` 外 `229` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -28,8 +28,8 @@
 ## 2026-04-11 仓库事实刷新（二次核对）
 
 - read-only evidence:
-  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `1`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -870,3 +870,29 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 - 下一刀：
   - 在 `zip-only` vs `multi-archive` contract 上做决策
   - 再决定是继续迁 `zip_storage` bridge，还是补齐 `upload/project_stats` 语义
+
+### 2026-04-13 Batch 3 / Slice 2
+
+- 已完成：
+  - Python root diagnostics 已物理删除：
+    - `backend_old/verify_llm.py`
+    - `backend_old/check_docker_direct.py`
+    - `backend_old/check_sandbox.py`
+  - 退休守门测试已补到 `backend_old/tests/test_legacy_backend_main_retired.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `1`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "verify_llm.py|check_docker_direct.py|check_sandbox.py" backend_old plan backend docker scripts .github -S`
+      只剩退休守门测试与迁移文档命中
+- 当前意义：
+  - `root bootstrap / diagnostics` 里的三条纯诊断脚本已经从 live tree 清掉
+  - `backend_old` 根目录现在只剩 `main.py` 这一条 Python 文件待后续 migration/retire 判定
+  - 这一步是 Phase F 的 diagnostics retirement，不涉及 runtime/compose 主链路
+- 仍未完成：
+  - `backend_old/main.py` 仍在 root live tree 中，尚未达到删除门
+  - 当前 plan 顶部 inventory 数字已刷新，但整个非 API migration 目标远未完成
+- 删除条件：
+  - `verify_llm.py` / `check_docker_direct.py` / `check_sandbox.py`：已删除，本 slice 完成
+  - `backend_old/main.py`：只有在 root bootstrap / startup responsibility 全部收口到 Rust 后才能删
+- 下一刀：
+  - 继续收口 root `main.py` 与剩余 Phase C shared service / bridge

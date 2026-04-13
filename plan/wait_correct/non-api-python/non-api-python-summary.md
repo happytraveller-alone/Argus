@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
 - Total inventory: `230`
-- `backend_old` root Python: `4`
-- `backend_old/app` non-API Python: `224`
+- `backend_old` root Python: `1`
+- `backend_old/app` non-API Python: `229`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -331,6 +331,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - C in progress
+
+### 1i. root diagnostics retired; `backend_old` root now only keeps `main.py`
+
+- current state:
+  - 已删除：
+    - `backend_old/verify_llm.py`
+    - `backend_old/check_docker_direct.py`
+    - `backend_old/check_sandbox.py`
+  - `backend_old/tests/test_legacy_backend_main_retired.py`
+    已补 root diagnostics 退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `1`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "verify_llm.py|check_docker_direct.py|check_sandbox.py" backend_old plan backend docker scripts .github -S`
+      只剩退休守门测试与迁移文档命中
+- still missing:
+  - `backend_old/main.py` 仍存在，root bootstrap / diagnostics 还没有彻底清零
+- delete gate:
+  - 三条 diagnostics script 已达到删除门并已退休
+  - `backend_old/main.py` 需要等 root bootstrap responsibility 全部收口到 Rust 后才能删
+- owner: Rust migration
+- target phase:
+  - F in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 
