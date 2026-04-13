@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `212` 个文件：
+- 当前纳入本计划的 Python 存量一共 `211` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `212` 个
+  - `backend_old/app` 下除 `api` 外 `211` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -1215,6 +1215,31 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`、`user_config_service.py` 等仍有 live caller
 - 删除条件：
   - `backend_venv.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 runtime helper，或转入真正的 live bridge 迁移
+
+### 2026-04-13 Batch 4 / Slice 6
+
+- 已完成：
+  - `backend_old/app/services/user_config_service.py` 已物理删除
+  - 用户配置默认值/解密/清洗/effective merge 逻辑已内聚回
+    `backend_old/app/services/static_scan_runtime.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 `static_scan_runtime.py` 本地持有 `_load_effective_user_config`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "user_config_service|load_effective_user_config|_load_effective_user_config|sanitize_other_config|strip_runtime_config|_default_user_config" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `static_scan_runtime.py` 与退休守门测试
+- 当前意义：
+  - `user_config_service.py` 不再作为顶层 helper 保留，而是回到唯一实际消费它的 `static_scan_runtime.py`
+  - 这是顶层 config/helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py` 等仍有 live caller
+- 删除条件：
+  - `user_config_service.py`：已删除，本 slice 完成
 - 下一刀：
   - 继续收口顶层 runtime helper，或转入真正的 live bridge 迁移
 

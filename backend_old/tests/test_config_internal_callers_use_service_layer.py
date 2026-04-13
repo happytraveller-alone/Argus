@@ -11,7 +11,7 @@ def test_internal_callers_no_longer_import_config_endpoint():
     ]
 
     forbidden = "from app.api.v1.endpoints.config import _load_effective_user_config"
-    required = "from app.services.user_config_service import load_effective_user_config"
+    required = "async def _load_effective_user_config("
 
     for path in caller_paths:
         content = path.read_text(encoding="utf-8")
@@ -26,7 +26,7 @@ def test_internal_callers_no_longer_import_config_endpoint():
             continue
 
         assert forbidden not in content, f"{path.name} still depends on config endpoint"
-        assert required in content, f"{path.name} should depend on user_config_service"
+        assert required in content, f"{path.name} should host _load_effective_user_config locally"
 
 
 def test_static_scan_runtime_no_longer_imports_db_session_module():

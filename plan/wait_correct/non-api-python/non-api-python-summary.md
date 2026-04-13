@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `212`
+- Total inventory: `211`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `212`
+- `backend_old/app` non-API Python: `211`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -634,6 +634,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - D cleanup in progress
+
+### 1v. `user_config_service.py` retired; helper absorbed into `static_scan_runtime.py`
+
+- current state:
+  - `backend_old/app/services/user_config_service.py` 已删除
+  - 用户配置默认值/解密/清洗/effective merge 逻辑已内聚回
+    `backend_old/app/services/static_scan_runtime.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 `static_scan_runtime.py` 本地持有 `_load_effective_user_config`
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "user_config_service|load_effective_user_config|_load_effective_user_config|sanitize_other_config|strip_runtime_config|_default_user_config" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `static_scan_runtime.py` 与退休守门测试
+- still missing:
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py` 等仍有 live caller
+- delete gate:
+  - `user_config_service.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / config cleanup in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 

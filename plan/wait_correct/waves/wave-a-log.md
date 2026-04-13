@@ -1032,6 +1032,32 @@
 - 后续修复波次: Wave D / runtime helper cleanup
 - owner: Rust migration
 
+### 30. `user_config_service.py` retired; helper absorbed into `static_scan_runtime.py`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/user_config_service.py`
+- Python 旧行为:
+  - 提供用户配置默认值、解密、sanitize 与 effective merge helper
+  - 当前唯一 live caller 是 `static_scan_runtime.py`
+- Rust / current behavior:
+  - `user_config_service.py` 已从 repo 物理删除
+  - 相关 helper 已内聚回 `backend_old/app/services/static_scan_runtime.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 `_load_effective_user_config` 本地存在于 `static_scan_runtime.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+  - `rg -n "user_config_service|load_effective_user_config|_load_effective_user_config|sanitize_other_config|strip_runtime_config|_default_user_config" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已收口到 `static_scan_runtime.py` 与退休守门测试
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 config/helper 内聚退休，不代表 `static_scan_runtime.py` 已完成 Rust 迁移
+- 后续修复波次: Wave D / runtime helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
