@@ -95,6 +95,28 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
         .unwrap();
     assert_eq!(second_task_response.status(), StatusCode::OK);
 
+    let static_task_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/gitleaks/scan")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "gitleaks search scan",
+                        "target_path": ".",
+                        "no_git": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(static_task_response.status(), StatusCode::OK);
+
     let seed_findings_response = app
         .clone()
         .oneshot(
@@ -111,7 +133,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     let global_response = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/search/search?keyword=codex")
+            Request::get("/api/v1/search/search?keyword=search")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -124,7 +146,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(global_json["keyword"], "codex");
+    assert_eq!(global_json["keyword"], "search");
     assert!(global_json["projects"].as_array().unwrap().len() >= 1);
     assert!(global_json["tasks"].as_array().unwrap().len() >= 1);
     assert!(global_json["findings"].as_array().unwrap().len() >= 1);
@@ -190,6 +212,26 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     assert_eq!(paged_task_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(paged_task_json["total"].as_i64().unwrap(), 2);
 
+    let static_task_search_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/search/tasks/search?keyword=gitleaks")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(static_task_search_response.status(), StatusCode::OK);
+    let static_task_search_json: Value = serde_json::from_slice(
+        &to_bytes(static_task_search_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(static_task_search_json["total"].as_i64().unwrap(), 1);
+    assert_eq!(static_task_search_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(static_task_search_json["data"][0]["task_type"], "gitleaks");
+
     let finding_response = app
         .oneshot(
             Request::get("/api/v1/search/findings/search?keyword=Reflected%20XSS")
@@ -208,6 +250,28 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     assert_eq!(finding_json["total"].as_i64().unwrap(), 1);
     assert_eq!(finding_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(finding_json["data"][0]["task_id"], task_id);
+
+    let static_finding_response = app
+        .oneshot(
+            Request::get("/api/v1/search/findings/search?keyword=placeholder%20gitleaks")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(static_finding_response.status(), StatusCode::OK);
+    let static_finding_json: Value = serde_json::from_slice(
+        &to_bytes(static_finding_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(static_finding_json["total"].as_i64().unwrap(), 1);
+    assert_eq!(static_finding_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        static_finding_json["data"][0]["vulnerability_type"],
+        "builtin:placeholder"
+    );
 }
 
 fn isolated_test_config(scope: &str) -> AppConfig {

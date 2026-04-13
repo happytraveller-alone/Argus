@@ -56,6 +56,8 @@ struct SearchFindingItem {
     file_path: String,
     status: String,
     created_at: String,
+    #[serde(skip_serializing)]
+    search_blob: String,
 }
 
 pub fn router() -> Router<AppState> {
@@ -181,31 +183,9 @@ async fn matched_tasks(
     let snapshot = task_state::load_snapshot(state)
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
-    let mut tasks = snapshot.agent_tasks.into_values().collect::<Vec<_>>();
-    tasks.sort_by(|left, right| right.created_at.cmp(&left.created_at));
-    let filtered = tasks
-        .into_iter()
-        .filter(|task| {
-            if keyword.is_empty() {
-                return true;
-            }
-            let haystack = format!(
-                "{} {} {} {} {}",
-                task.name.clone().unwrap_or_default(),
-                task.description.clone().unwrap_or_default(),
-                task.task_type,
-                task.status,
-                task.created_at
-            )
-            .to_lowercase();
-            haystack.contains(&keyword)
-        })
-        .collect::<Vec<_>>();
-    let total = filtered.len();
-    let matched = filtered
-        .into_iter()
-        .skip(offset)
-        .take(limit)
+    let mut tasks = snapshot
+        .agent_tasks
+        .into_values()
         .map(|task| SearchTaskItem {
             id: task.id,
             project_id: task.project_id,
@@ -216,7 +196,39 @@ async fn matched_tasks(
             created_at: task.created_at,
             updated_at: task.completed_at.or(task.started_at),
         })
-        .collect();
+        .chain(
+            snapshot
+                .static_tasks
+                .into_values()
+                .map(|task| SearchTaskItem {
+                    id: task.id,
+                    project_id: task.project_id,
+                    name: task.name,
+                    description: task.target_path.clone(),
+                    task_type: task.engine,
+                    status: task.status,
+                    created_at: task.created_at,
+                    updated_at: task.updated_at,
+                }),
+        )
+        .collect::<Vec<_>>();
+    tasks.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    let filtered = tasks
+        .into_iter()
+        .filter(|task| {
+            if keyword.is_empty() {
+                return true;
+            }
+            let haystack = format!(
+                "{} {} {} {} {}",
+                task.name, task.description, task.task_type, task.status, task.created_at
+            )
+            .to_lowercase();
+            haystack.contains(&keyword)
+        })
+        .collect::<Vec<_>>();
+    let total = filtered.len();
+    let matched = filtered.into_iter().skip(offset).take(limit).collect();
     Ok((matched, total))
 }
 
@@ -234,6 +246,25 @@ async fn matched_findings(
         .agent_tasks
         .into_values()
         .flat_map(|task| task.findings.into_iter())
+        .map(|finding| SearchFindingItem {
+            id: finding.id,
+            task_id: finding.task_id,
+            title: finding.title,
+            description: finding.description.unwrap_or_default(),
+            vulnerability_type: finding.vulnerability_type,
+            severity: finding.severity,
+            file_path: finding.file_path.unwrap_or_default(),
+            status: finding.status,
+            created_at: finding.created_at,
+            search_blob: finding.code_snippet.unwrap_or_default(),
+        })
+        .chain(snapshot.static_tasks.into_values().flat_map(|task| {
+            let task_id = task.id;
+            let task_created_at = task.created_at;
+            task.findings
+                .into_iter()
+                .map(move |finding| static_finding_item(&task_id, &task_created_at, finding))
+        }))
         .collect::<Vec<_>>();
     findings.sort_by(|left, right| right.created_at.cmp(&left.created_at));
     let filtered = findings
@@ -245,31 +276,62 @@ async fn matched_findings(
             let haystack = format!(
                 "{} {} {} {} {}",
                 finding.title,
-                finding.description.clone().unwrap_or_default(),
+                finding.description,
                 finding.vulnerability_type,
-                finding.file_path.clone().unwrap_or_default(),
-                finding.code_snippet.clone().unwrap_or_default()
+                finding.file_path,
+                finding.search_blob
             )
             .to_lowercase();
             haystack.contains(&keyword)
         })
         .collect::<Vec<_>>();
     let total = filtered.len();
-    let matched = filtered
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .map(|finding| SearchFindingItem {
-            id: finding.id,
-            task_id: finding.task_id,
-            title: finding.title,
-            description: finding.description.unwrap_or_default(),
-            vulnerability_type: finding.vulnerability_type,
-            severity: finding.severity,
-            file_path: finding.file_path.unwrap_or_default(),
-            status: finding.status,
-            created_at: finding.created_at,
-        })
-        .collect();
+    let matched = filtered.into_iter().skip(offset).take(limit).collect();
     Ok((matched, total))
+}
+
+fn static_finding_item(
+    task_id: &str,
+    task_created_at: &str,
+    finding: task_state::StaticFindingRecord,
+) -> SearchFindingItem {
+    let payload = finding.payload;
+    let title = optional_payload_string(&payload, &["title", "rule_name", "test_name", "rule_id"])
+        .unwrap_or_else(|| "static finding".to_string());
+    let description =
+        optional_payload_string(&payload, &["description", "issue_text", "message", "match"])
+            .unwrap_or_default();
+    let vulnerability_type = optional_payload_string(
+        &payload,
+        &["vulnerability_type", "rule_id", "test_id", "rule_name"],
+    )
+    .unwrap_or_else(|| "static".to_string());
+    let severity = optional_payload_string(&payload, &["severity"]).unwrap_or_default();
+    let file_path =
+        optional_payload_string(&payload, &["file_path", "resolved_file_path"]).unwrap_or_default();
+    let status = optional_payload_string(&payload, &["status"]).unwrap_or_default();
+    let created_at = optional_payload_string(&payload, &["created_at"])
+        .unwrap_or_else(|| task_created_at.to_string());
+    let search_blob =
+        optional_payload_string(&payload, &["code_snippet", "match", "secret"]).unwrap_or_default();
+
+    SearchFindingItem {
+        id: optional_payload_string(&payload, &["id"]).unwrap_or(finding.id),
+        task_id: optional_payload_string(&payload, &["scan_task_id"])
+            .unwrap_or_else(|| task_id.to_string()),
+        title,
+        description,
+        vulnerability_type,
+        severity,
+        file_path,
+        status,
+        created_at,
+        search_blob,
+    }
+}
+
+fn optional_payload_string(payload: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| payload.get(*key).and_then(|value| value.as_str()))
+        .map(|value| value.to_string())
 }

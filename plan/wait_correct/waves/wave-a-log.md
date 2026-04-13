@@ -874,7 +874,7 @@
 - 后续修复波次: Wave C / shared-service cleanup
 - owner: Rust migration
 
-### 24. Rust search now serves agent task and finding matches
+### 24. Rust search now serves task and finding matches
 
 - endpoint / feature:
   - Rust search routes:
@@ -885,18 +885,18 @@
   - legacy `search_service.py` 已退休；此前 Rust 只真正支持 project search
 - Rust 当前行为:
   - `backend/src/routes/search.rs` 已接入 Rust `task_state` snapshot
-  - agent task 搜索会匹配 `name/description/task_type/status/created_at`
-  - finding 搜索会匹配 `title/description/vulnerability_type/file_path/code_snippet`
+  - agent/static task 搜索会匹配 `name/description|target_path/task_type|engine/status/created_at`
+  - agent/static finding 搜索会匹配 `title/description/vulnerability_type/file_path/code_snippet|match`
   - global search 的 `tasks/findings` 聚合不再固定为空
-  - `backend/tests/search_api.rs` 已改为断言真实 task/finding 命中
+  - `backend/tests/search_api.rs` 已改为断言 agent/static task 与 finding 命中，并覆盖分页 total 语义
 - operational verification:
   - 当前因本机 `rustc 1.85.0` 低于依赖要求，无法执行 `cargo test --test search_api`
   - 但 route/test 合同与实现已经同步更新
 - 是否影响前端:
   - 当前前端没有 active caller 依赖这条搜索路由；这一步主要是 Rust ownership 补全
 - 边界说明:
-  - 目前补的是 agent task / finding search
-  - static task / static finding / rule 搜索仍未完成，因此 `search` 整体仍是 partially migrated
+  - 目前补的是 task/finding search
+  - rule 搜索仍未完成，因此 `search` 整体仍是 partially migrated
 - 后续修复波次: Wave C / search parity cleanup
 - owner: Rust migration
 

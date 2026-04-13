@@ -96,8 +96,8 @@
 - `search`
   - 不能算整体完成
   - 当前 project search 已 Rust-owned
-  - agent task / finding search 已接到 Rust task-state 数据
-  - 但 static task / rule search 仍未完成，不算整体迁移完成
+  - agent/static task 与 finding search 已接到 Rust task-state 数据
+  - 但 rule 维度搜索仍未完成，不算整体迁移完成
 
 ### 当前仍存在的迁移期桥
 
@@ -1098,14 +1098,15 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
     - `GET /api/v1/search/search` 里的 `tasks/findings` 聚合
   - 搜索数据源已接到 Rust `task_state` snapshot：
     - agent task 搜索匹配 `name/description/task_type/status/created_at`
-    - finding 搜索匹配 `title/description/vulnerability_type/file_path/code_snippet`
+    - static task 搜索匹配 `name/engine/status/target_path/created_at`
+    - agent/static finding 搜索匹配 `title/description/vulnerability_type/file_path/code_snippet|match`
   - `backend/tests/search_api.rs` 已从“断言空数组”改为要求真实 task/finding 命中
-  - 当前测试通过公开路由创建 agent task，并先触发 task hydration，再验证 search 命中
+  - 当前测试通过公开路由创建 agent/static task，并验证分页 total 与 task/finding 命中
 - 当前意义：
-  - Rust `search` 不再只有 project search 真正可用；agent task/finding search 已不再是空壳
+  - Rust `search` 不再只有 project search 真正可用；task/finding search 已不再是空壳
   - 这一步补的是 Rust own route 语义，不涉及新的 Python 文件删除
 - 仍未完成：
-  - static task / static finding / rule 维度的搜索仍未进入 Rust search 结果
+  - rule 维度搜索仍未进入 Rust search 结果
   - `search` 整体仍不能算 fully migrated
   - 本机仍无法执行 `cargo test --test search_api`，因为 `rustc 1.85.0` 低于依赖要求
 - 删除条件：
