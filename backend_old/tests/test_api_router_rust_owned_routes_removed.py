@@ -104,3 +104,13 @@ def test_legacy_report_generator_service_has_been_retired():
 def test_legacy_runner_preflight_service_has_been_retired():
     runner_preflight_path = PROJECT_ROOT / "app/services/runner_preflight.py"
     assert not runner_preflight_path.exists()
+
+
+def test_legacy_opengrep_confidence_service_has_been_retired():
+    confidence_path = PROJECT_ROOT / "app/services/opengrep_confidence.py"
+    assert not confidence_path.exists()
+
+
+def test_legacy_init_templates_service_has_been_retired():
+    init_templates_path = PROJECT_ROOT / "app/services/init_templates.py"
+    assert not init_templates_path.exists()

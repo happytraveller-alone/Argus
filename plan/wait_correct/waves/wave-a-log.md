@@ -759,6 +759,35 @@
 - 后续修复波次: Wave C / shared-service cleanup
 - owner: Rust migration
 
+### 20. `opengrep_confidence.py` and `init_templates.py` retired from live tree
+
+- endpoint / feature:
+  - Python dead helper/service:
+    - `backend_old/app/services/opengrep_confidence.py`
+    - `backend_old/app/services/init_templates.py`
+- Python 旧行为:
+  - `opengrep_confidence.py` 提供 Opengrep confidence normalization / aggregation helper
+  - `init_templates.py` 提供 legacy prompt template / audit rule 初始化
+  - 当前仓库里二者都已无 live caller
+- Rust 当前行为:
+  - 两个文件已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - Opengrep confidence 相关逻辑已收口到
+    `backend_old/app/services/agent/bootstrap/opengrep.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `224`
+  - `rg -n "opengrep_confidence.py|init_templates.py|init_templates_and_rules|normalize_confidence|extract_rule_lookup_keys" backend_old backend frontend plan -S`
+    live caller 只剩 `agent/bootstrap/opengrep.py` 内联后的 helper 与迁移文档命中
+- 是否影响前端:
+  - 不影响，前端没有 active caller 直接依赖这两个 Python 文件
+- 边界说明:
+  - `opengrep_confidence.py` 退休不代表 Opengrep finding/report 全语义都已完成 Rust 迁移
+  - `init_templates.py` 退休不代表所有模板/规则初始化语义都已在 Rust 全量等价覆盖
+- 后续修复波次: Wave C / shared-service cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

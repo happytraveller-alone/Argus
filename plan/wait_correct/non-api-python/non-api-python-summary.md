@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `226`
+- Total inventory: `224`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `226`
+- `backend_old/app` non-API Python: `224`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -419,6 +419,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - C in progress
+
+### 1m. `opengrep_confidence.py` and `init_templates.py` retired from live tree
+
+- current state:
+  - 已删除：
+    - `backend_old/app/services/opengrep_confidence.py`
+    - `backend_old/app/services/init_templates.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `224`
+    - `rg -n "opengrep_confidence.py|init_templates.py|init_templates_and_rules|normalize_confidence|extract_rule_lookup_keys" backend_old backend frontend plan -S`
+      live caller 只剩 `agent/bootstrap/opengrep.py` 内联后的 confidence helper 与迁移文档命中
+- still missing:
+  - `zip_storage.py` 与 `json_safe.py` 仍在 `migrate_now`
+  - `seed_archive.py`、`parser.py`、`rule.py`、`gitleaks_rules_seed.py`、`pmd_rulesets.py`、
+    `bandit_rules_snapshot.py` 等仍在 `migrate_with_api`
+- delete gate:
+  - `opengrep_confidence.py` / `init_templates.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - C / D in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 
