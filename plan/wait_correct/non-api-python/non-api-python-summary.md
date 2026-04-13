@@ -537,7 +537,8 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 
 - current state:
   - project search 已 Rust-owned
-  - tasks / findings search 仍只是 Rust 空壳，不应记为“搜索已完成迁移”
+  - agent task / finding search 已接到 Rust task-state 数据，不再是空壳
+  - static task / static finding / rule 维度搜索仍未进入 Rust search 结果
 - owner: Rust migration
 - delete gate:
   - 任务、finding、规则等搜索索引和查询模型迁到 Rust domain / db 层

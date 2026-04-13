@@ -95,8 +95,9 @@
   - builtin prompt state 仍直接绑在 `user_configs.other_config`
 - `search`
   - 不能算整体完成
-  - 当前只有 project search 真正 Rust-owned
-  - `tasks / findings` 仍只是 Rust 空壳，不是完整迁移
+  - 当前 project search 已 Rust-owned
+  - agent task / finding search 已接到 Rust task-state 数据
+  - 但 static task / rule search 仍未完成，不算整体迁移完成
 
 ### 当前仍存在的迁移期桥
 
@@ -1087,3 +1088,27 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `scanner.py` / `gitleaks_rules_seed.py`：已删除，本 slice 完成
 - 下一刀：
   - 转入真正还有 live caller 的桥，优先 `json_safe.py` 或 `parser.py`
+
+### 2026-04-13 Batch 4 / Slice 1
+
+- 已完成：
+  - Rust `backend/src/routes/search.rs` 已把下列 route 从空壳补成真实实现：
+    - `GET /api/v1/search/tasks/search`
+    - `GET /api/v1/search/findings/search`
+    - `GET /api/v1/search/search` 里的 `tasks/findings` 聚合
+  - 搜索数据源已接到 Rust `task_state` snapshot：
+    - agent task 搜索匹配 `name/description/task_type/status/created_at`
+    - finding 搜索匹配 `title/description/vulnerability_type/file_path/code_snippet`
+  - `backend/tests/search_api.rs` 已从“断言空数组”改为要求真实 task/finding 命中
+  - 当前测试通过公开路由创建 agent task，并先触发 task hydration，再验证 search 命中
+- 当前意义：
+  - Rust `search` 不再只有 project search 真正可用；agent task/finding search 已不再是空壳
+  - 这一步补的是 Rust own route 语义，不涉及新的 Python 文件删除
+- 仍未完成：
+  - static task / static finding / rule 维度的搜索仍未进入 Rust search 结果
+  - `search` 整体仍不能算 fully migrated
+  - 本机仍无法执行 `cargo test --test search_api`，因为 `rustc 1.85.0` 低于依赖要求
+- 删除条件：
+  - 本 slice 无直接 Python 文件删除门；这是 Rust route 语义补全
+- 下一刀：
+  - 继续补 static task / finding search，或转入 `json_safe.py` / `parser.py` 这类 live bridge 迁移

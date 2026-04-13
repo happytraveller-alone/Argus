@@ -36,6 +36,77 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
         .await
         .unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let project_id = create_json["id"].as_str().unwrap().to_string();
+
+    let task_create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codex search audit",
+                        "description": "search keyword task body",
+                        "verification_level": "standard"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(task_create_response.status(), StatusCode::OK);
+    let task_create_json: Value = serde_json::from_slice(
+        &to_bytes(task_create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let task_id = task_create_json["id"].as_str().unwrap().to_string();
+
+    let second_task_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codex search audit follow-up",
+                        "description": "search keyword second task body",
+                        "verification_level": "standard"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_task_response.status(), StatusCode::OK);
+
+    let seed_findings_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/agent-tasks/{task_id}/start"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(seed_findings_response.status(), StatusCode::OK);
 
     let global_response = app
         .clone()
@@ -55,7 +126,11 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     .unwrap();
     assert_eq!(global_json["keyword"], "codex");
     assert!(global_json["projects"].as_array().unwrap().len() >= 1);
+    assert!(global_json["tasks"].as_array().unwrap().len() >= 1);
+    assert!(global_json["findings"].as_array().unwrap().len() >= 1);
     assert!(global_json["total"]["projects_total"].as_i64().unwrap() >= 1);
+    assert!(global_json["total"]["tasks_total"].as_i64().unwrap() >= 1);
+    assert!(global_json["total"]["findings_total"].as_i64().unwrap() >= 1);
 
     let project_response = app
         .clone()
@@ -79,7 +154,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     let task_response = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/search/tasks/search?keyword=anything")
+            Request::get("/api/v1/search/tasks/search?keyword=search%20keyword")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -92,11 +167,32 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(task_json["data"].as_array().unwrap().len(), 0);
+    assert_eq!(task_json["total"].as_i64().unwrap(), 1);
+    assert_eq!(task_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(task_json["data"][0]["id"], task_id);
+
+    let paged_task_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/search/tasks/search?keyword=search&limit=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(paged_task_response.status(), StatusCode::OK);
+    let paged_task_json: Value = serde_json::from_slice(
+        &to_bytes(paged_task_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(paged_task_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(paged_task_json["total"].as_i64().unwrap(), 2);
 
     let finding_response = app
         .oneshot(
-            Request::get("/api/v1/search/findings/search?keyword=anything")
+            Request::get("/api/v1/search/findings/search?keyword=Reflected%20XSS")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -109,7 +205,9 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(finding_json["data"].as_array().unwrap().len(), 0);
+    assert_eq!(finding_json["total"].as_i64().unwrap(), 1);
+    assert_eq!(finding_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(finding_json["data"][0]["task_id"], task_id);
 }
 
 fn isolated_test_config(scope: &str) -> AppConfig {
