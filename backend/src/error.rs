@@ -19,8 +19,8 @@ pub enum ApiError {
 }
 
 #[derive(Debug, Serialize)]
-struct ErrorPayload<'a> {
-    error: &'a str,
+struct ErrorPayload {
+    error: String,
 }
 
 impl ApiError {
@@ -37,9 +37,8 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        let body = Json(ErrorPayload {
-            error: &self.to_string(),
-        });
+        let error = self.to_string();
+        let body = Json(ErrorPayload { error });
         (status, body).into_response()
     }
 }

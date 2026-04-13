@@ -54,8 +54,8 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
                 .body(Body::from(
                     json!({
                         "project_id": project_id,
-                        "name": "codex search audit",
-                        "description": "search keyword task body",
+                        "name": "primary codex audit task",
+                        "description": "unique primary task body",
                         "verification_level": "standard"
                     })
                     .to_string(),
@@ -176,7 +176,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     let task_response = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/search/tasks/search?keyword=search%20keyword")
+            Request::get("/api/v1/search/tasks/search?keyword=primary")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -233,6 +233,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     assert_eq!(static_task_search_json["data"][0]["task_type"], "gitleaks");
 
     let finding_response = app
+        .clone()
         .oneshot(
             Request::get("/api/v1/search/findings/search?keyword=Reflected%20XSS")
                 .body(Body::empty())
