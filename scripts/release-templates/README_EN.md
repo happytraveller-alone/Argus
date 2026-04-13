@@ -1,49 +1,92 @@
-# VulHunter Release
+# VulHunter User Guide
 
-This branch is an auto-generated latest slim-source release snapshot from `main`.
-It supports exactly three startup commands:
+This release branch is intended for end users. You only need to configure the app and start the services.
 
-```bash
-docker compose up --build
-```
+## 1. Requirements
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
-```
+- Docker installed
+- Docker Compose installed
+- A working Docker daemon
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
-```
+## 2. First-Time Setup
 
-The release compose path is now unified as `Rust backend + TypeScript frontend`, and no longer includes the legacy Python backend service.
-
-## Before You Start
-
-Bootstrap the backend Docker env file before the first run:
+Copy the backend environment file:
 
 ```bash
 cp docker/env/backend/env.example docker/env/backend/.env
 ```
 
-Set at least:
+Open `docker/env/backend/.env` and set at least:
 
-- `LLM_API_KEY`
 - `LLM_PROVIDER`
+- `LLM_API_KEY`
 - `LLM_MODEL`
+- `SECRET_KEY`
 
-## Supported Modes
+Example:
 
-- `docker compose up --build`: start the default compose stack and build whatever the base definition marks as buildable.
-- `docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build`: on top of the default path, `frontend` and `backend` also switch to local builds.
-- `docker compose -f docker-compose.yml -f docker-compose.full.yml up --build`: enable the full local-build overlay for end-to-end verification.
+```env
+LLM_PROVIDER=openai
+LLM_API_KEY=your-api-key
+LLM_MODEL=gpt-4o-mini
+SECRET_KEY=change-this-to-a-random-string
+```
 
-## Runtime Notes
+What these values mean:
 
-- The slim release flow does not restore the legacy release artifact or deploy script pipeline
-- The release snapshot no longer includes Nexus static runtime assets
+- `LLM_PROVIDER`: the LLM provider you want to use
+- `LLM_API_KEY`: your API key for that provider
+- `LLM_MODEL`: the model name
+- `SECRET_KEY`: replace this with your own random secret
 
-## Endpoints
+## 3. Start the App
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
+For normal use, run:
+
+```bash
+docker compose up --build
+```
+
+The first startup may take some time because images and dependencies need to be prepared.
+
+To run in the background:
+
+```bash
+docker compose up -d --build
+```
+
+## 4. Access the App
+
+After startup, open:
+
+- Web UI: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- OpenAPI docs: `http://localhost:8000/docs`
+
+## 5. Common Commands
+
+View logs:
+
+```bash
+docker compose logs -f
+```
+
+Stop the services:
+
+```bash
+docker compose down
+```
+
+Stop the services and remove volumes:
+
+```bash
+docker compose down -v
+```
+
+## 6. Other Compose Files
+
+The repository also contains other compose override files, but most users do not need them. If your goal is simply to deploy and use the system, this is enough:
+
+```bash
+docker compose up --build
+```

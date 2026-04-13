@@ -27,6 +27,12 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 3. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
 
+## Repo-local Codex
+
+- 本仓库的 repo-local Codex 配置位于 `.codex/config.toml`，按 `codex-cli 0.118.0` 的仓库级配置约定收敛为最小必需字段。
+- 首次在本仓库使用 Codex 时，先执行一次 bootstrap：`CODEX_HOME=$PWD/.codex.local codex login`，或在确认风险后手动把 `~/.codex/auth.json` 复制到 `.codex.local/auth.json`。
+- 完成 bootstrap 后，统一通过 `./scripts/codex-project.sh` 启动 Codex；直接运行裸 `codex` 不保证仓库隔离。
+
 ## GHCR 镜像命名
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。

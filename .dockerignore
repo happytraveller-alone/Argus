@@ -50,3 +50,5 @@ docs
 .history
 .cache
 backend/uploads
+.codex
+.codex.local
