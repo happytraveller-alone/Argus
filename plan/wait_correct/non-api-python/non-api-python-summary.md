@@ -546,6 +546,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - E cleanup in progress
 
+### 1r. `flow_parser_runtime.py` retired; provider absorbed into `agent/flow/lightweight`
+
+- current state:
+  - `backend_old/app/services/flow_parser_runtime.py` 已删除
+  - definition-provider 逻辑已迁入
+    `backend_old/app/services/agent/flow/lightweight/definition_provider.py`
+  - `backend_old/app/services/agent/flow/lightweight/ast_index.py`
+    已改为从 lightweight 域内 import provider
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "flow_parser_runtime|get_default_definition_provider|DefinitionProvider|HybridDefinitionProvider|RunnerDefinitionProvider|LocalDefinitionProvider" backend_old/app backend_old/tests -S`
+      live caller 已收口到 `agent/flow/lightweight` 域内
+- still missing:
+  - `parser.py`、`flow_parser_runner.py`、`scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
+- delete gate:
+  - `flow_parser_runtime.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

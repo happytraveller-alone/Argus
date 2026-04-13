@@ -206,10 +206,11 @@
 - `backend_old/app/services/sandbox_runner_client.py`
 - `backend_old/app/services/backend_venv.py`
 
-#### `retired_after_rust_takeover` (`2`)
+#### `retired_after_rust_takeover` (`3`)
 
 - `backend_old/app/services/opengrep_confidence.py`
 - `backend_old/app/services/scanner.py`
+- `backend_old/app/services/flow_parser_runtime.py`
 
 #### 迁移要求
 
@@ -1138,3 +1139,27 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `project_test_service.py`：已删除，本 slice 完成
 - 下一刀：
   - 继续收口顶层 helper，或转入真正的 live bridge 迁移
+
+### 2026-04-13 Batch 4 / Slice 3
+
+- 已完成：
+  - `backend_old/app/services/flow_parser_runtime.py` 已物理删除
+  - 其 definition-provider 逻辑已迁入
+    `backend_old/app/services/agent/flow/lightweight/definition_provider.py`
+  - `backend_old/app/services/agent/flow/lightweight/ast_index.py`
+    已改为从 lightweight 域内 import provider
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "flow_parser_runtime|get_default_definition_provider|DefinitionProvider|HybridDefinitionProvider|RunnerDefinitionProvider|LocalDefinitionProvider" backend_old/app backend_old/tests -S`
+      live caller 已收口到 `agent/flow/lightweight` 域内
+- 当前意义：
+  - `flow_parser_runtime.py` 不再以顶层 service 形式存在，definition-provider 已内聚到实际消费它的 lightweight flow 域
+  - 这是顶层 runtime helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `parser.py`、`flow_parser_runner.py`、`scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
+- 删除条件：
+  - `flow_parser_runtime.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 flow/runtime helper，或转入 `json_safe.py` 等 live bridge

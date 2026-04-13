@@ -927,6 +927,33 @@
 - 后续修复波次: Wave E / agent surface cleanup
 - owner: Rust migration
 
+### 26. `flow_parser_runtime.py` retired; provider absorbed into `agent/flow/lightweight`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/flow_parser_runtime.py`
+- Python 旧行为:
+  - 提供 DefinitionProvider / HybridDefinitionProvider glue
+  - 当前唯一 live caller 是 `agent/flow/lightweight/ast_index.py`
+- Rust / current behavior:
+  - `flow_parser_runtime.py` 已从 repo 物理删除
+  - definition-provider 逻辑已迁入
+    `backend_old/app/services/agent/flow/lightweight/definition_provider.py`
+  - `backend_old/app/services/agent/flow/lightweight/ast_index.py`
+    已改为域内 import
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+  - `rg -n "flow_parser_runtime|get_default_definition_provider|DefinitionProvider|HybridDefinitionProvider|RunnerDefinitionProvider|LocalDefinitionProvider" backend_old/app backend_old/tests -S`
+    live caller 已收口到 `agent/flow/lightweight` 域内
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 runtime helper 内聚退休，不代表 flow-parser 能力已完成 Rust 迁移
+- 后续修复波次: Wave D / flow helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

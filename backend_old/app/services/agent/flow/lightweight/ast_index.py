@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from app.services.flow_parser_runtime import get_default_definition_provider
 from app.services.parser import TreeSitterParser
+
+from .definition_provider import get_default_definition_provider
 
 
 SUPPORTED_EXTENSIONS = {

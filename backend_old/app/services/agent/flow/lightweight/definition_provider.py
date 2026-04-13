@@ -3,20 +3,23 @@ from __future__ import annotations
 from typing import Any, Dict, List, Protocol
 
 from app.services.flow_parser_runner import get_flow_parser_runner_client
+from app.services.parser import TreeSitterParser
 
 
 class DefinitionProvider(Protocol):
-    def extract_definitions_batch(self, items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def extract_definitions_batch(
+        self, items: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         ...
 
 
 class LocalDefinitionProvider:
     def __init__(self) -> None:
-        from app.services.parser import TreeSitterParser
-
         self.parser = TreeSitterParser()
 
-    def extract_definitions_batch(self, items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def extract_definitions_batch(
+        self, items: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         results: Dict[str, Dict[str, Any]] = {}
         for item in items:
             file_path = str(item.get("file_path") or "").strip()
@@ -48,7 +51,9 @@ class RunnerDefinitionProvider:
     def __init__(self) -> None:
         self.client = get_flow_parser_runner_client()
 
-    def extract_definitions_batch(self, items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def extract_definitions_batch(
+        self, items: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         return self.client.extract_definitions_batch(items)
 
 
@@ -62,7 +67,9 @@ class HybridDefinitionProvider:
         self.runner_provider = runner_provider or RunnerDefinitionProvider()
         self.local_provider = local_provider or LocalDefinitionProvider()
 
-    def extract_definitions_batch(self, items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def extract_definitions_batch(
+        self, items: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         results: Dict[str, Dict[str, Any]] = {}
 
         try:
@@ -82,7 +89,10 @@ class HybridDefinitionProvider:
             for file_path, payload in local_results.items():
                 existing = results.get(file_path)
                 if existing and isinstance(existing.get("diagnostics"), list):
-                    payload["diagnostics"] = [*existing["diagnostics"], *payload.get("diagnostics", [])]
+                    payload["diagnostics"] = [
+                        *existing["diagnostics"],
+                        *payload.get("diagnostics", []),
+                    ]
                 results[file_path] = payload
 
         return results

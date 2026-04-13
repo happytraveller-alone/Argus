@@ -169,3 +169,8 @@ def test_legacy_gitleaks_rules_seed_service_has_been_retired():
 def test_legacy_project_test_service_has_been_retired():
     project_test_service_path = PROJECT_ROOT / "app/services/project_test_service.py"
     assert not project_test_service_path.exists()
+
+
+def test_legacy_flow_parser_runtime_service_has_been_retired():
+    flow_parser_runtime_path = PROJECT_ROOT / "app/services/flow_parser_runtime.py"
+    assert not flow_parser_runtime_path.exists()
