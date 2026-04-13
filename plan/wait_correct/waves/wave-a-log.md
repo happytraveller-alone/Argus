@@ -1008,6 +1008,30 @@
 - 后续修复波次: Wave D / sandbox helper cleanup
 - owner: Rust migration
 
+### 29. `backend_venv.py` retired; helper absorbed into `static_scan_runtime.py`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/backend_venv.py`
+- Python 旧行为:
+  - 提供 backend venv path / env / executable helper
+  - 当前唯一 live caller 是 `static_scan_runtime.py`
+- Rust / current behavior:
+  - `backend_venv.py` 已从 repo 物理删除
+  - helper 已内聚回 `backend_old/app/services/static_scan_runtime.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
+  - `rg -n "backend_venv|build_backend_venv_env|resolve_backend_venv_executable|get_backend_venv_path|get_backend_venv_bin_dir" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已收口到 `static_scan_runtime.py`、退休守门测试与 Rust runtime/bootstrap
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 runtime helper 内聚退休，不代表 `static_scan_runtime.py` 已完成 Rust 迁移
+- 后续修复波次: Wave D / runtime helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

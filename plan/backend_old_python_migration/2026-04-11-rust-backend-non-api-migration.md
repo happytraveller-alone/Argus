@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `213` 个文件：
+- 当前纳入本计划的 Python 存量一共 `212` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `213` 个
+  - `backend_old/app` 下除 `api` 外 `212` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -137,7 +137,7 @@
 | --- | ---: | --- | --- | --- |
 | `root bootstrap / diagnostics` | 4 | `4 retired_after_rust_takeover` | A + F | `backend/src/main.rs`, 后续 `backend/src/bin/*` 或 `scripts/` |
 | `core + db + models + schemas` | 39 | `39 migrate_now` | A + B | `backend/src/core/*`, `backend/src/db/*`, `backend/src/domain/*` |
-| `runtime + launchers` | 18 | `16 migrate_with_api`, `2 retired_after_rust_takeover` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
+| `runtime + launchers` | 18 | `15 migrate_with_api`, `3 retired_after_rust_takeover` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
 | `services/upload` | 5 | `5 retired_after_rust_takeover` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
@@ -206,11 +206,12 @@
 - `backend_old/app/services/sandbox_runner_client.py`
 - `backend_old/app/services/backend_venv.py`
 
-#### `retired_after_rust_takeover` (`3`)
+#### `retired_after_rust_takeover` (`4`)
 
 - `backend_old/app/services/opengrep_confidence.py`
 - `backend_old/app/services/scanner.py`
 - `backend_old/app/services/flow_parser_runtime.py`
+- `backend_old/app/services/backend_venv.py`
 
 #### 迁移要求
 
@@ -1190,6 +1191,32 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 顶层 `sandbox_runner_client.py`：已退休，本 slice 完成
 - 下一刀：
   - 继续收口顶层 runtime/agent helper，或转入真正的 live bridge 迁移
+
+### 2026-04-13 Batch 4 / Slice 5
+
+- 已完成：
+  - `backend_old/app/services/backend_venv.py` 已物理删除
+  - helper 已内聚回 `backend_old/app/services/static_scan_runtime.py`
+    - `_build_backend_venv_env`
+    - `_resolve_backend_venv_executable`
+    - `_get_backend_venv_path`
+    - `_get_backend_venv_bin_dir`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
+    - `rg -n "backend_venv|build_backend_venv_env|resolve_backend_venv_executable|get_backend_venv_path|get_backend_venv_bin_dir" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `static_scan_runtime.py`、退休守门测试与 Rust runtime/bootstrap
+- 当前意义：
+  - `backend_venv.py` 不再作为顶层 runtime helper 保留，而是回到唯一实际消费它的 `static_scan_runtime.py`
+  - 这是顶层 runtime helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`、`user_config_service.py` 等仍有 live caller
+- 删除条件：
+  - `backend_venv.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 runtime helper，或转入真正的 live bridge 迁移
 
 ### 2026-04-13 Batch 4 / Slice 3
 

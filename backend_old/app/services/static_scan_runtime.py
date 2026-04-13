@@ -11,7 +11,7 @@ import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Dict, List, Optional
+from typing import Any, Awaitable, Dict, List, Mapping, Optional
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +20,6 @@ from sqlalchemy.future import select
 from app.core.config import settings
 from app.models.opengrep import OpengrepRule
 from app.models.user_config import UserConfig
-from app.services.backend_venv import (
-    build_backend_venv_env,
-    resolve_backend_venv_executable,
-)
 from app.services.llm.service import LLMConfigError, LLMService
 from app.services.scanner_runner import stop_scanner_container_sync
 
@@ -39,11 +35,41 @@ def _scan_workspace_root() -> Path:
 
 
 def _build_backend_venv_env(base_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    return build_backend_venv_env(base_env)
+    env = dict(os.environ if base_env is None else base_env)
+    venv_path = str(_get_backend_venv_path())
+    bin_path = str(_get_backend_venv_bin_dir())
+    current_path = env.get("PATH", "")
+
+    if current_path:
+        path_parts = [part for part in current_path.split(":") if part]
+        if not path_parts or path_parts[0] != bin_path:
+            env["PATH"] = ":".join([bin_path, *path_parts])
+    else:
+        env["PATH"] = bin_path
+
+    env["VIRTUAL_ENV"] = venv_path
+    env["PYTHONNOUSERSITE"] = "1"
+    return env
 
 
 def _resolve_backend_venv_executable(name: str, *, required: bool = True) -> Optional[str]:
-    return resolve_backend_venv_executable(name, required=required)
+    candidate = _get_backend_venv_bin_dir() / str(name).strip()
+    if candidate.is_file():
+        return str(candidate)
+    if required:
+        raise FileNotFoundError(
+            f"backend venv executable not found: {candidate} (BACKEND_VENV_PATH={_get_backend_venv_path()})"
+        )
+    return None
+
+
+def _get_backend_venv_path() -> Path:
+    configured = str(getattr(settings, "BACKEND_VENV_PATH", "/opt/backend-venv") or "").strip()
+    return Path(configured or "/opt/backend-venv")
+
+
+def _get_backend_venv_bin_dir() -> Path:
+    return _get_backend_venv_path() / "bin"
 
 
 def ensure_scan_workspace(scan_type: str, task_id: str) -> Path:
