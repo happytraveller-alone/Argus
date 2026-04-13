@@ -23,6 +23,7 @@ use zip::ZipArchive;
 use crate::{
     db::projects,
     error::ApiError,
+    project_file_cache::ProjectFileCacheEntry,
     state::{AppState, StoredProject, StoredProjectArchive},
 };
 
@@ -327,6 +328,10 @@ pub async fn delete_project(
     if let Some(archive) = project.archive {
         delete_archive_files(&archive.storage_path).await?;
     }
+    {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.invalidate_project(&project_id);
+    }
     delete_python_project_mirror(&state, &project_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -425,6 +430,10 @@ pub async fn delete_project_zip(
     let project = require_project(&state, &project_id).await?;
     if let Some(archive) = &project.archive {
         delete_archive_files(&archive.storage_path).await?;
+    }
+    {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.invalidate_project(&project_id);
     }
 
     let mut project = project;
@@ -549,8 +558,30 @@ pub async fn get_project_file_content(
 ) -> Result<Json<Value>, ApiError> {
     let project = require_project(&state, &project_id).await?;
     let archive = require_archive(&project)?;
+    let use_cache = query.use_cache.unwrap_or(true);
+    if use_cache {
+        let cached = {
+            let mut cache = state.project_file_cache.lock().await;
+            cache.get(&project_id, &file_path, &archive.sha256)
+        };
+        if let Some(cached) = cached {
+            return Ok(Json(build_file_content_payload(&file_path, &cached, true)));
+        }
+    }
     let (content, size, encoding, is_text) =
         read_archive_file(&archive.storage_path, &file_path, query.encoding.as_deref())?;
+    if use_cache {
+        let mut cache = state.project_file_cache.lock().await;
+        let _ = cache.set(
+            &project_id,
+            &file_path,
+            &archive.sha256,
+            &content,
+            size,
+            &encoding,
+            is_text,
+        );
+    }
     Ok(Json(json!({
         "file_path": file_path,
         "content": content,
@@ -605,20 +636,32 @@ pub async fn upload_project_directory(
     }))
 }
 
-pub async fn get_cache_stats() -> Json<Value> {
+pub async fn get_cache_stats(State(state): State<AppState>) -> Json<Value> {
+    let stats = {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.prune_expired();
+        cache.stats()
+    };
     Json(json!({
-        "total_entries": 0,
-        "hits": 0,
-        "misses": 0,
-        "hit_rate": 0.0,
-        "evictions": 0,
-        "memory_used_mb": 0.0,
-        "memory_limit_mb": 0.0,
+        "total_entries": stats.total_entries,
+        "hits": stats.hits,
+        "misses": stats.misses,
+        "hit_rate": stats.hit_rate,
+        "evictions": stats.evictions,
+        "memory_used_mb": stats.memory_used_mb,
+        "memory_limit_mb": stats.memory_limit_mb,
     }))
 }
 
-pub async fn clear_cache() -> Json<Value> {
-    Json(json!({ "message": "缓存已清空" }))
+pub async fn clear_cache(State(state): State<AppState>) -> Json<Value> {
+    let deleted_entries = {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.clear_all()
+    };
+    Json(json!({
+        "message": "缓存已清空",
+        "deleted_entries": deleted_entries,
+    }))
 }
 
 pub async fn invalidate_project_cache(
@@ -626,9 +669,13 @@ pub async fn invalidate_project_cache(
     AxumPath(project_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     require_project(&state, &project_id).await?;
+    let deleted_entries = {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.invalidate_project(&project_id)
+    };
     Ok(Json(json!({
         "message": "缓存已清除",
-        "deleted_entries": 0,
+        "deleted_entries": deleted_entries,
     })))
 }
 
@@ -945,6 +992,10 @@ async fn apply_archive_to_project(
     file_name: String,
     file_bytes: Vec<u8>,
 ) -> Result<Vec<String>, ApiError> {
+    {
+        let mut cache = state.project_file_cache.lock().await;
+        cache.invalidate_project(&project.id);
+    }
     let analyzed = analyze_archive(&file_name, &file_bytes)?;
     let archive = persist_archive(state, &project.id, &file_name, &file_bytes).await?;
     project.archive = Some(archive);
@@ -1067,6 +1118,22 @@ async fn delete_archive_files(storage_path: &str) -> Result<(), ApiError> {
             .map_err(|error| ApiError::Internal(error.to_string()))?;
     }
     Ok(())
+}
+
+fn build_file_content_payload(
+    file_path: &str,
+    cached: &ProjectFileCacheEntry,
+    is_cached: bool,
+) -> Value {
+    json!({
+        "file_path": file_path,
+        "content": cached.content.clone(),
+        "size": cached.size,
+        "encoding": cached.encoding.clone(),
+        "is_text": cached.is_text,
+        "is_cached": is_cached,
+        "created_at": unix_timestamp_to_rfc3339(cached.created_at_unix()),
+    })
 }
 
 fn to_project_response(project: &StoredProject, include_metrics: bool) -> ProjectResponse {
@@ -1767,6 +1834,13 @@ async fn delete_python_project_mirror(state: &AppState, project_id: &str) -> Res
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     Ok(())
+}
+
+fn unix_timestamp_to_rfc3339(timestamp: i64) -> String {
+    OffsetDateTime::from_unix_timestamp(timestamp)
+        .ok()
+        .and_then(|value| value.format(&Rfc3339).ok())
+        .unwrap_or_else(now_rfc3339)
 }
 
 fn internal_error(error: anyhow::Error) -> ApiError {

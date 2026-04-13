@@ -378,7 +378,9 @@ pub fn run_optional_resets(app_root: &Path) -> Result<()> {
     }
 
     let _ = app_root;
-    println!("Skipping legacy static scan table reset script; Rust rule bootstrap is authoritative.");
+    println!(
+        "Skipping legacy static scan table reset script; Rust rule bootstrap is authoritative."
+    );
     Ok(())
 }
 
@@ -482,6 +484,9 @@ mod tests {
         env::remove_var("BACKEND_VENV_PATH");
         env::remove_var("RESET_STATIC_SCAN_TABLES_ON_DEPLOY");
 
-        assert!(result.is_ok(), "legacy reset script should no longer be required");
+        assert!(
+            result.is_ok(),
+            "legacy reset script should no longer be required"
+        );
     }
 }

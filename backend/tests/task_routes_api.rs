@@ -48,10 +48,7 @@ async fn create_project_with_name(app: &axum::Router, name: &str) -> String {
     payload["id"].as_str().unwrap().to_string()
 }
 
-async fn seed_agent_report_findings(
-    state: &AppState,
-    task_id: &str,
-) -> (String, String) {
+async fn seed_agent_report_findings(state: &AppState, task_id: &str) -> (String, String) {
     let mut snapshot = task_state::load_snapshot(state).await.unwrap();
     let record = snapshot.agent_tasks.get_mut(task_id).unwrap();
     record.findings.clear();
@@ -121,10 +118,7 @@ async fn seed_agent_report_findings(
     (first_id, second_id)
 }
 
-async fn seed_agent_result_state(
-    state: &AppState,
-    task_id: &str,
-) -> (String, String, String) {
+async fn seed_agent_result_state(state: &AppState, task_id: &str) -> (String, String, String) {
     let mut snapshot = task_state::load_snapshot(state).await.unwrap();
     let record = snapshot.agent_tasks.get_mut(task_id).unwrap();
     record.status = "completed".to_string();
@@ -498,9 +492,12 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
-    let create_json: Value =
-        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let task_id = create_json["id"].as_str().unwrap().to_string();
     assert_eq!(create_json["project_id"], project_id);
 
@@ -540,22 +537,32 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(events_response.status(), StatusCode::OK);
-    let events_json: Value =
-        serde_json::from_slice(&to_bytes(events_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
-    assert!(events_json.as_array().is_some_and(|items| !items.is_empty()));
+    let events_json: Value = serde_json::from_slice(
+        &to_bytes(events_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(events_json
+        .as_array()
+        .is_some_and(|items| !items.is_empty()));
 
     let stream_response = app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v1/agent-tasks/{task_id}/events?after_sequence=0"))
-                .body(Body::empty())
-                .unwrap(),
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/events?after_sequence=0"
+            ))
+            .body(Body::empty())
+            .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(stream_response.status(), StatusCode::OK);
-    assert_eq!(stream_response.headers()["content-type"], "text/event-stream");
+    assert_eq!(
+        stream_response.headers()["content-type"],
+        "text/event-stream"
+    );
 
     let findings_response = app
         .clone()
@@ -592,7 +599,10 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
     )
     .unwrap();
     assert_eq!(summary_json["statistics"]["findings_count"], 2);
-    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["total"], 1);
+    assert_eq!(
+        summary_json["vulnerability_types"]["sql_injection"]["total"],
+        1
+    );
     assert_eq!(summary_json["vulnerability_types"]["xss"]["total"], 1);
 
     let agent_tree_response = app
@@ -635,9 +645,11 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
     let report_response = app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v1/agent-tasks/{task_id}/report?format=markdown"))
-                .body(Body::empty())
-                .unwrap(),
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/report?format=markdown"
+            ))
+            .body(Body::empty())
+            .unwrap(),
         )
         .await
         .unwrap();
@@ -685,9 +697,12 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
         .await
         .unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
-    let create_json: Value =
-        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let task_id = create_json["id"].as_str().unwrap().to_string();
 
     let (first_finding_id, second_finding_id) = seed_agent_report_findings(&state, &task_id).await;
@@ -717,9 +732,13 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
     assert!(markdown_disposition.contains("attachment; filename=\""));
     assert!(markdown_disposition.contains("filename*=UTF-8''"));
     assert!(markdown_disposition.contains(".md"));
-    let markdown_body =
-        String::from_utf8(to_bytes(markdown_response.into_body(), usize::MAX).await.unwrap().to_vec())
-            .unwrap();
+    let markdown_body = String::from_utf8(
+        to_bytes(markdown_response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert!(markdown_body.contains("# 漏洞报告：审计项目 Demo"));
     assert!(markdown_body.contains("登录 SQL 注入"));
     assert!(!markdown_body.contains("SELECT * FROM users WHERE email = '${email}'"));
@@ -738,9 +757,12 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
         .unwrap();
     assert_eq!(json_response.status(), StatusCode::OK);
     assert_eq!(json_response.headers()["content-type"], "application/json");
-    let json_payload: Value =
-        serde_json::from_slice(&to_bytes(json_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let json_payload: Value = serde_json::from_slice(
+        &to_bytes(json_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(json_payload["summary"]["total_findings"], 2);
     assert_eq!(json_payload["summary"]["verified_findings"], 1);
     assert_eq!(
@@ -773,7 +795,9 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
         .unwrap();
     assert!(pdf_disposition.contains("filename*=UTF-8''"));
     assert!(pdf_disposition.contains(".pdf"));
-    let pdf_body = to_bytes(pdf_response.into_body(), usize::MAX).await.unwrap();
+    let pdf_body = to_bytes(pdf_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert!(pdf_body.starts_with(b"%PDF-1.4"));
 
     let finding_markdown_response = app
@@ -815,14 +839,20 @@ async fn agent_task_report_exports_cover_task_and_finding_downloads() {
         .await
         .unwrap();
     assert_eq!(finding_json_response.status(), StatusCode::OK);
-    assert_eq!(finding_json_response.headers()["content-type"], "application/json");
+    assert_eq!(
+        finding_json_response.headers()["content-type"],
+        "application/json"
+    );
     let finding_json: Value = serde_json::from_slice(
         &to_bytes(finding_json_response.into_body(), usize::MAX)
             .await
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(finding_json["report_metadata"]["finding_id"], first_finding_id);
+    assert_eq!(
+        finding_json["report_metadata"]["finding_id"],
+        first_finding_id
+    );
     assert!(finding_json["finding"].get("code_snippet").is_none());
     assert!(finding_json["finding"].get("suggestion").is_none());
 
@@ -884,9 +914,12 @@ async fn agent_task_result_routes_support_filters_summary_and_checkpoint_queries
         .await
         .unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
-    let create_json: Value =
-        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let task_id = create_json["id"].as_str().unwrap().to_string();
     let (verified_id, pending_id, false_positive_id) =
         seed_agent_result_state(&state, &task_id).await;
@@ -966,7 +999,10 @@ async fn agent_task_result_routes_support_filters_summary_and_checkpoint_queries
         )
         .await
         .unwrap();
-    assert_eq!(hidden_false_positive_response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        hidden_false_positive_response.status(),
+        StatusCode::NOT_FOUND
+    );
 
     let visible_false_positive_response = app
         .clone()
@@ -1002,8 +1038,14 @@ async fn agent_task_result_routes_support_filters_summary_and_checkpoint_queries
     assert_eq!(summary_json["statistics"]["false_positive_count"], 1);
     assert_eq!(summary_json["severity_distribution"]["high"], 1);
     assert_eq!(summary_json["severity_distribution"]["medium"], 1);
-    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["total"], 1);
-    assert_eq!(summary_json["vulnerability_types"]["sql_injection"]["verified"], 1);
+    assert_eq!(
+        summary_json["vulnerability_types"]["sql_injection"]["total"],
+        1
+    );
+    assert_eq!(
+        summary_json["vulnerability_types"]["sql_injection"]["verified"],
+        1
+    );
     assert_eq!(summary_json["vulnerability_types"]["xss"]["total"], 1);
     assert_eq!(summary_json["vulnerability_types"]["xss"]["verified"], 0);
 
@@ -1082,9 +1124,12 @@ async fn agent_task_lifecycle_routes_expose_defect_summary_and_paginated_events(
         .await
         .unwrap();
     assert_eq!(create_response.status(), StatusCode::OK);
-    let create_json: Value =
-        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let task_id = create_json["id"].as_str().unwrap().to_string();
     seed_agent_lifecycle_state(&state, &task_id).await;
 
@@ -1132,7 +1177,10 @@ async fn agent_task_lifecycle_routes_expose_defect_summary_and_paginated_events(
     assert_eq!(detail_json["target_files"][0], "src/auth/login.ts");
     assert_eq!(detail_json["exclude_patterns"][0], "dist/**");
     assert_eq!(detail_json["verification_level"], "analysis_with_poc_plan");
-    assert_eq!(detail_json["defect_summary"]["severity_counts"]["critical"], 1);
+    assert_eq!(
+        detail_json["defect_summary"]["severity_counts"]["critical"],
+        1
+    );
     assert_eq!(detail_json["defect_summary"]["severity_counts"]["high"], 1);
 
     let paged_events_response = app
@@ -1187,7 +1235,11 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             .oneshot(Request::get(route).body(Body::empty()).unwrap())
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "route should be rust-owned: {route}");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "route should be rust-owned: {route}"
+        );
     }
 
     let create_payloads = [
@@ -1253,7 +1305,11 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "create route should work: {route}");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "create route should work: {route}"
+        );
         let body: Value =
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
@@ -1282,16 +1338,20 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     assert_eq!(opengrep_progress_json["status"], "completed");
     assert_eq!(opengrep_progress_json["progress"], 100.0);
     assert_eq!(opengrep_progress_json["current_stage"], "completed");
-    assert!(
-        opengrep_progress_json["logs"]
-            .as_array()
-            .is_some_and(|logs| !logs.is_empty())
-    );
+    assert!(opengrep_progress_json["logs"]
+        .as_array()
+        .is_some_and(|logs| !logs.is_empty()));
 
     let follow_up_routes = [
         format!("/api/v1/static-tasks/tasks/{}", created_task_ids[0]),
-        format!("/api/v1/static-tasks/tasks/{}/findings?limit=20", created_task_ids[0]),
-        format!("/api/v1/static-tasks/gitleaks/tasks/{}", created_task_ids[1]),
+        format!(
+            "/api/v1/static-tasks/tasks/{}/findings?limit=20",
+            created_task_ids[0]
+        ),
+        format!(
+            "/api/v1/static-tasks/gitleaks/tasks/{}",
+            created_task_ids[1]
+        ),
         format!(
             "/api/v1/static-tasks/gitleaks/tasks/{}/findings?limit=20",
             created_task_ids[1]
@@ -1319,7 +1379,11 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             .oneshot(Request::get(&route).body(Body::empty()).unwrap())
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "follow-up route should work: {route}");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "follow-up route should work: {route}"
+        );
     }
 
     let opengrep_finding_detail = app
@@ -1365,7 +1429,10 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     )
     .unwrap();
     assert_eq!(opengrep_finding_json["status"], "open");
-    assert_eq!(opengrep_finding_json["rule_name"], "rust-placeholder-opengrep-rule");
+    assert_eq!(
+        opengrep_finding_json["rule_name"],
+        "rust-placeholder-opengrep-rule"
+    );
     assert_eq!(opengrep_finding_json["resolved_file_path"], ".");
     assert_eq!(opengrep_finding_json["resolved_line_start"], 1);
 
@@ -1391,11 +1458,9 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     assert_eq!(opengrep_context_json["file_path"], ".");
     assert_eq!(opengrep_context_json["start_line"], 1);
     assert_eq!(opengrep_context_json["end_line"], 1);
-    assert!(
-        opengrep_context_json["lines"]
-            .as_array()
-            .is_some_and(|lines| !lines.is_empty())
-    );
+    assert!(opengrep_context_json["lines"]
+        .as_array()
+        .is_some_and(|lines| !lines.is_empty()));
 
     let gitleaks_rules_response = app
         .clone()
@@ -1418,9 +1483,11 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     let gitleaks_rule_detail = app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v1/static-tasks/gitleaks/rules/{gitleaks_rule_id}"))
-                .body(Body::empty())
-                .unwrap(),
+            Request::get(format!(
+                "/api/v1/static-tasks/gitleaks/rules/{gitleaks_rule_id}"
+            ))
+            .body(Body::empty())
+            .unwrap(),
         )
         .await
         .unwrap();
@@ -1449,7 +1516,9 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri(format!("/api/v1/static-tasks/bandit/rules/{bandit_rule_id}/enabled"))
+                .uri(format!(
+                    "/api/v1/static-tasks/bandit/rules/{bandit_rule_id}/enabled"
+                ))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({ "is_active": false }).to_string()))
                 .unwrap(),
@@ -1486,7 +1555,9 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
                     encode_path_segment(&phpstan_rule_id)
                 ))
                 .header("content-type", "application/json")
-                .body(Body::from(json!({ "name": "patched-rule-name" }).to_string()))
+                .body(Body::from(
+                    json!({ "name": "patched-rule-name" }).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -1558,7 +1629,10 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             .unwrap(),
     )
     .unwrap();
-    let gitleaks_finding_id = gitleaks_findings_json[0]["id"].as_str().unwrap().to_string();
+    let gitleaks_finding_id = gitleaks_findings_json[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let gitleaks_finding_status = app
         .clone()
@@ -1687,7 +1761,12 @@ async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_
         .expect("state should build");
     let app = build_router(state);
 
-    let create_rule = |name: &str, is_active: bool, source: &str, language: &str, severity: &str, confidence: &str| {
+    let create_rule = |name: &str,
+                       is_active: bool,
+                       source: &str,
+                       language: &str,
+                       severity: &str,
+                       confidence: &str| {
         json!({
             "name": name,
             "pattern_yaml": format!("rules:\\n  - id: {}\\n    languages: [python]\\n    severity: WARNING\\n    message: demo\\n    pattern: dangerous_call", name.replace(' ', "-")),
@@ -1707,15 +1786,21 @@ async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_
                 .method(Method::POST)
                 .uri("/api/v1/static-tasks/rules/upload/json")
                 .header("content-type", "application/json")
-                .body(Body::from(create_rule("auth-alpha", false, "json", "python", "WARNING", "MEDIUM").to_string()))
+                .body(Body::from(
+                    create_rule("auth-alpha", false, "json", "python", "WARNING", "MEDIUM")
+                        .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(alpha_response.status(), StatusCode::OK);
-    let alpha_json: Value =
-        serde_json::from_slice(&to_bytes(alpha_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let alpha_json: Value = serde_json::from_slice(
+        &to_bytes(alpha_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let alpha_rule_id = alpha_json["id"].as_str().unwrap().to_string();
 
     let beta_response = app
@@ -1725,15 +1810,21 @@ async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_
                 .method(Method::POST)
                 .uri("/api/v1/static-tasks/rules/upload/json")
                 .header("content-type", "application/json")
-                .body(Body::from(create_rule("auth-beta", true, "upload", "javascript", "ERROR", "HIGH").to_string()))
+                .body(Body::from(
+                    create_rule("auth-beta", true, "upload", "javascript", "ERROR", "HIGH")
+                        .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(beta_response.status(), StatusCode::OK);
-    let beta_json: Value =
-        serde_json::from_slice(&to_bytes(beta_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let beta_json: Value = serde_json::from_slice(
+        &to_bytes(beta_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let beta_rule_id = beta_json["id"].as_str().unwrap().to_string();
 
     let select_by_keyword = app
@@ -1774,9 +1865,12 @@ async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_
         )
         .await
         .unwrap();
-    let alpha_detail_json: Value =
-        serde_json::from_slice(&to_bytes(alpha_detail.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let alpha_detail_json: Value = serde_json::from_slice(
+        &to_bytes(alpha_detail.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(alpha_detail_json["is_active"], true);
 
     let beta_detail = app
@@ -2011,7 +2105,11 @@ async fn agent_test_routes_are_rust_owned_without_python_upstream() {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "agent-test route should work: {route}");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "agent-test route should work: {route}"
+        );
         assert_eq!(response.headers()["content-type"], "text/event-stream");
     }
 }

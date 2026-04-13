@@ -292,6 +292,46 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - D in progress
+
+### 1h. project file-content cache is now Rust-owned; `zip_cache_manager.py` retired
+
+- current state:
+  - Rust 新增 `backend/src/project_file_cache.rs`
+    - 提供 project file-content cache 的 TTL / LRU / memory stats / clear / invalidate
+  - `backend/src/state.rs` 已挂载全局 `project_file_cache`
+  - `backend/src/routes/projects.rs` 现在会对
+    - `GET /projects/{id}/files/{*file_path}`
+    - `GET /projects/cache/stats`
+    - `POST /projects/cache/clear`
+    - `POST /projects/{id}/cache/invalidate`
+    执行真实 cache 行为，而不是返回固定占位值
+  - archive 更新/删除会主动失效项目缓存
+  - `backend_old/app/services/zip_cache_manager.py` 已删除
+  - `backend_old/tests/test_zip_cache_manager.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 `zip_cache_manager.py` 退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "zip_cache_manager|ZipCacheManager" backend/src backend_old/app backend_old/tests -S`
+      只剩退休守门测试命中
+- still missing:
+  - `zip_storage.py` 仍是 bridge：
+    - `backend_old/app/services/upload/project_stats.py`
+    - `backend_old/app/services/static_scan_runtime.py`
+      仍依赖 ZIP 磁盘布局与 `ZIP_STORAGE_PATH`
+  - frontend/upload contract 仍允许 `.tar/.tar.gz/.tar.bz2/.7z/.rar`，
+    Rust `projects` 还只是 zip-only
+  - `project_stats.py` 的 cloc / suffix fallback / LLM description 语义仍未被 Rust 等价接住
+  - Rust 合同测试需要更高 toolchain；当前本机 `rustc 1.85.0` 无法跑通 `cargo test`
+- delete gate:
+  - `zip_cache_manager.py` 已达到删除门并已退休
+  - broader upload/archive shared bridge 尚未达到删除门，不能把 `zip_storage.py`、
+    `upload/*`、`project_stats.py` 误算成同一波退休
+- owner: Rust migration
+- target phase:
+  - C in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

@@ -319,14 +319,17 @@
 
 ### 7. `services/scan/search/report/project` (`18`)
 
-#### `migrate_now` (`7`)
+#### `migrate_now` (`6`)
 
 - `backend_old/app/services/search_service.py`
 - `backend_old/app/services/zip_storage.py`
-- `backend_old/app/services/zip_cache_manager.py`
 - `backend_old/app/services/json_safe.py`
 - `backend_old/app/services/report_generator.py`
 - `backend_old/app/services/runner_preflight.py`
+
+#### `retired_after_rust_takeover` (`1`)
+
+- `backend_old/app/services/zip_cache_manager.py`
 
 #### `migrate_with_api` (`8`)
 
@@ -818,3 +821,52 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 当前主要残留已收缩到少量 mixed tests / inventory / 文本文档残项
 - 下一刀：
   - 清完剩余 mixed tests / inventory / 文本残项，并确认 Python live bridge 不再被前端间接引用
+
+### 2026-04-13 Batch 3 / Slice 1
+
+- 已完成：
+  - Rust 新增 `backend/src/project_file_cache.rs`
+    - 已实现 project file-content cache 的 TTL / LRU / memory stats / clear / invalidate
+    - 已补模块测试，覆盖过期清理与 expired-on-read 行为
+  - `backend/src/state.rs` 已挂载全局 `project_file_cache`
+  - `backend/src/routes/projects.rs` 已把下列 route 从 cache 空壳改为真实行为：
+    - `GET /api/v1/projects/{id}/files/{*file_path}`
+    - `GET /api/v1/projects/cache/stats`
+    - `POST /api/v1/projects/cache/clear`
+    - `POST /api/v1/projects/{id}/cache/invalidate`
+  - archive 更新/删除时会主动失效项目 file-content cache：
+    - `upload_project_zip`
+    - `upload_project_directory`
+    - `delete_project_zip`
+    - `delete_project`
+  - Python `backend_old/app/services/zip_cache_manager.py` 已物理删除
+  - Python 旧专属测试 `backend_old/tests/test_zip_cache_manager.py` 已删除
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "zip_cache_manager|ZipCacheManager" backend/src backend_old/app backend_old/tests -S`
+      只剩退休守门测试命中
+- 当前意义：
+  - Rust `projects` 路由组不再只是暴露 cache endpoint 的空壳，而是已接住 `zip_cache_manager` 对应的真实行为
+  - `backend_old/app/services/zip_cache_manager.py` 这条 Python service 已达到删除门：无 live caller、无主链路依赖、Rust 已接管运行时行为
+  - 这一步是 project file-content cache 接管，不是整个 upload/archive shared service 全量完成
+- 仍未完成：
+  - `backend_old/app/services/zip_storage.py` 仍不能删
+    - `backend_old/app/services/upload/project_stats.py` 与 `backend_old/app/services/static_scan_runtime.py`
+      仍通过 ZIP 磁盘布局 / `ZIP_STORAGE_PATH` 读旧 bridge
+  - `backend_old/app/services/upload/*` 与 `project_stats.py` 仍不能一起宣告退休
+    - frontend 当前仍允许 `.tar/.tar.gz/.tar.bz2/.7z/.rar` 上传后缀
+    - Rust `projects` 目前仍是 zip-only contract
+  - `create-with-zip` / description 相关语言画像仍未等价接住 Python `project_stats.py`
+    的 cloc / suffix fallback / LLM 描述语义
+  - Rust 合同测试当前无法在本机完成：
+    - `cargo test --manifest-path backend/Cargo.toml --test projects_api projects_domain_endpoints_cover_files_stats_and_transfer -- --exact`
+    - 失败原因是本机 `rustc 1.85.0` 低于 lockfile 依赖要求（`time/zip/home/icu_*` 需要 `1.86~1.88`）
+- 删除条件：
+  - `zip_cache_manager.py`：已删除，本 slice 完成
+  - `zip_storage.py`：只有在 Python upload/static-scan bridge 不再通过 ZIP 文件根读取项目归档时才能删
+  - `upload/*`：只有在 frontend upload contract 明确收口到 zip-only，或 Rust 补齐非 zip archive 支持后才能删
+- 下一刀：
+  - 在 `zip-only` vs `multi-archive` contract 上做决策
+  - 再决定是继续迁 `zip_storage` bridge，还是补齐 `upload/project_stats` 语义

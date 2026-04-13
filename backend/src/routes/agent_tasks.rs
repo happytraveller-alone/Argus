@@ -45,7 +45,10 @@ pub fn router() -> Router<AppState> {
         .route("/{task_id}/summary", get(get_agent_task_summary))
         .route("/{task_id}/agent-tree", get(get_agent_tree))
         .route("/{task_id}/checkpoints", get(list_checkpoints))
-        .route("/{task_id}/checkpoints/{checkpoint_id}", get(get_checkpoint_detail))
+        .route(
+            "/{task_id}/checkpoints/{checkpoint_id}",
+            get(get_checkpoint_detail),
+        )
         .route("/{task_id}/report", get(download_report))
 }
 
@@ -109,13 +112,14 @@ pub async fn create_agent_task(
     let task_id = Uuid::new_v4().to_string();
     let name = optional_string(&payload, "name");
     let description = optional_string(&payload, "description");
-    let verification_level =
-        optional_string(&payload, "verification_level").or(Some("analysis_with_poc_plan".to_string()));
+    let verification_level = optional_string(&payload, "verification_level")
+        .or(Some("analysis_with_poc_plan".to_string()));
     let target_vulnerabilities = payload
         .get("target_vulnerabilities")
         .and_then(|value| value.as_array())
         .map(|items| {
-            items.iter()
+            items
+                .iter()
                 .filter_map(|item| item.as_str().map(ToString::to_string))
                 .collect::<Vec<_>>()
         })
@@ -472,25 +476,26 @@ async fn list_agent_findings(
     let include_false_positive = query.include_false_positive.unwrap_or(false);
     let verified_only = query.verified_only.unwrap_or(false);
     let severity_filter = query.severity.as_deref().map(normalized_token);
-    let vulnerability_filter = query
-        .vulnerability_type
-        .as_deref()
-        .map(normalized_token);
+    let vulnerability_filter = query.vulnerability_type.as_deref().map(normalized_token);
     let skip = query.skip.unwrap_or(0);
     let limit = query.limit.unwrap_or(record.findings.len());
     let mut findings = record
         .findings
         .iter()
-        .filter(|finding| include_false_positive || finding_export_status(finding) != "false_positive")
+        .filter(|finding| {
+            include_false_positive || finding_export_status(finding) != "false_positive"
+        })
         .filter(|finding| {
             severity_filter
                 .as_deref()
                 .is_none_or(|severity| normalized_token(&finding.severity) == severity)
         })
         .filter(|finding| {
-            vulnerability_filter.as_deref().is_none_or(|vulnerability_type| {
-                normalized_token(&finding.vulnerability_type) == vulnerability_type
-            })
+            vulnerability_filter
+                .as_deref()
+                .is_none_or(|vulnerability_type| {
+                    normalized_token(&finding.vulnerability_type) == vulnerability_type
+                })
         })
         .filter(|finding| !verified_only || finding_export_status(finding) == "verified")
         .collect::<Vec<_>>();
@@ -526,8 +531,12 @@ async fn get_agent_finding(
         .iter()
         .find(|finding| finding.id == finding_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent finding not found: {finding_id}")))?;
-    if !query.include_false_positive.unwrap_or(true) && finding_export_status(finding) == "false_positive" {
-        return Err(ApiError::NotFound(format!("agent finding not found: {finding_id}")));
+    if !query.include_false_positive.unwrap_or(true)
+        && finding_export_status(finding) == "false_positive"
+    {
+        return Err(ApiError::NotFound(format!(
+            "agent finding not found: {finding_id}"
+        )));
     }
     Ok(Json(agent_finding_value(finding)))
 }
@@ -706,7 +715,10 @@ async fn list_checkpoints(
         .checkpoints
         .iter()
         .filter(|checkpoint| {
-            query.agent_id.as_deref().is_none_or(|agent_id| checkpoint.agent_id == agent_id)
+            query
+                .agent_id
+                .as_deref()
+                .is_none_or(|agent_id| checkpoint.agent_id == agent_id)
         })
         .collect::<Vec<_>>();
     checkpoints.sort_by(|left, right| right.created_at.cmp(&left.created_at));
@@ -839,7 +851,10 @@ struct ReportExportOptions {
     compact_mode: bool,
 }
 
-async fn load_agent_task_project(state: &AppState, project_id: &str) -> Result<AgentReportProject, ApiError> {
+async fn load_agent_task_project(
+    state: &AppState,
+    project_id: &str,
+) -> Result<AgentReportProject, ApiError> {
     let project = projects::get_project(state, project_id)
         .await
         .map_err(internal_error)?;
@@ -875,10 +890,7 @@ fn report_export_options(query: &ReportQuery) -> ReportExportOptions {
 }
 
 fn normalize_report_format(format: Option<&str>, allow_pdf: bool) -> String {
-    let normalized = format
-        .unwrap_or("markdown")
-        .trim()
-        .to_ascii_lowercase();
+    let normalized = format.unwrap_or("markdown").trim().to_ascii_lowercase();
     match normalized.as_str() {
         "json" => "json".to_string(),
         "pdf" if allow_pdf => "pdf".to_string(),
@@ -951,7 +963,9 @@ fn seed_agent_task_findings(record: &mut task_state::AgentTaskRecord) {
         line_end: Some(83),
         resolved_file_path: Some("src/web/search.tsx".to_string()),
         resolved_line_start: Some(77),
-        code_snippet: Some("return <div dangerouslySetInnerHTML={{ __html: keyword }} />".to_string()),
+        code_snippet: Some(
+            "return <div dangerouslySetInnerHTML={{ __html: keyword }} />".to_string(),
+        ),
         status: "pending".to_string(),
         is_verified: false,
         verdict: Some("likely".to_string()),
@@ -1198,7 +1212,10 @@ fn build_agent_report_markdown(
     options: &ReportExportOptions,
 ) -> String {
     let mut lines = vec![
-        format!("# 漏洞报告：{}", render_markdown_heading_text(&project.name)),
+        format!(
+            "# 漏洞报告：{}",
+            render_markdown_heading_text(&project.name)
+        ),
         String::new(),
         "## 执行摘要".to_string(),
         String::new(),
@@ -1207,7 +1224,10 @@ fn build_agent_report_markdown(
         format!("- 漏洞总数：`{}`", record.findings.len()),
         format!("- 已验证漏洞：`{}`", record.verified_count),
         format!("- 误报漏洞：`{}`", record.false_positive_count),
-        format!("- 安全评分：`{:.1}` / 100", record.security_score.unwrap_or(0.0)),
+        format!(
+            "- 安全评分：`{:.1}` / 100",
+            record.security_score.unwrap_or(0.0)
+        ),
         String::new(),
     ];
 
@@ -1255,7 +1275,10 @@ fn build_agent_report_markdown(
             ));
             lines.push(String::new());
             lines.push(format!("- ID：`{}`", finding.id));
-            lines.push(format!("- 严重级别：`{}`", finding.severity.to_ascii_lowercase()));
+            lines.push(format!(
+                "- 严重级别：`{}`",
+                finding.severity.to_ascii_lowercase()
+            ));
             lines.push(format!("- 状态：`{}`", finding.status.to_ascii_lowercase()));
             lines.push(format!(
                 "- 漏洞类型：`{}`",
@@ -1464,27 +1487,29 @@ fn export_finding_json(
     value.insert("id".to_string(), json!(finding.id));
     value.insert(
         "title".to_string(),
-        json!(
-            finding
-                .display_title
-                .clone()
-                .unwrap_or_else(|| finding.title.clone())
-        ),
+        json!(finding
+            .display_title
+            .clone()
+            .unwrap_or_else(|| finding.title.clone())),
     );
-    value.insert("severity".to_string(), json!(finding.severity.to_ascii_lowercase()));
-    value.insert("status".to_string(), json!(finding.status.to_ascii_lowercase()));
+    value.insert(
+        "severity".to_string(),
+        json!(finding.severity.to_ascii_lowercase()),
+    );
+    value.insert(
+        "status".to_string(),
+        json!(finding.status.to_ascii_lowercase()),
+    );
     value.insert(
         "vulnerability_type".to_string(),
         json!(finding.vulnerability_type.to_ascii_lowercase()),
     );
     value.insert(
         "description".to_string(),
-        json!(
-            finding
-                .description_markdown
-                .as_deref()
-                .or(finding.description.as_deref())
-        ),
+        json!(finding
+            .description_markdown
+            .as_deref()
+            .or(finding.description.as_deref())),
     );
     value.insert("verdict".to_string(), json!(finding.verdict));
     value.insert("authenticity".to_string(), json!(finding.authenticity));
@@ -1494,7 +1519,10 @@ fn export_finding_json(
         value.insert("file_path".to_string(), json!(finding.file_path));
         value.insert("line_start".to_string(), json!(finding.line_start));
         value.insert("line_end".to_string(), json!(finding.line_end));
-        value.insert("resolved_file_path".to_string(), json!(finding.resolved_file_path));
+        value.insert(
+            "resolved_file_path".to_string(),
+            json!(finding.resolved_file_path),
+        );
         value.insert(
             "resolved_line_start".to_string(),
             json!(finding.resolved_line_start),
@@ -1521,7 +1549,11 @@ fn compact_markdown(markdown_text: &str) -> String {
     let mut compacted = Vec::new();
     let mut previous_blank = false;
     let mut in_code_fence = false;
-    for raw_line in markdown_text.replace("\r\n", "\n").replace('\r', "\n").lines() {
+    for raw_line in markdown_text
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+    {
         let line = raw_line.trim_end();
         if line.starts_with("```") {
             in_code_fence = !in_code_fence;
@@ -1561,7 +1593,11 @@ fn build_report_download_filename(project_name: &str, extension: &str) -> String
         .format(&format_description!("[year]-[month]-[day]"))
         .unwrap_or_else(|_| "1970-01-01".to_string());
     let extension = extension.trim_start_matches('.').trim();
-    let extension = if extension.is_empty() { "txt" } else { extension };
+    let extension = if extension.is_empty() {
+        "txt"
+    } else {
+        extension
+    };
     format!("漏洞报告-{project_name}-{date_part}.{extension}")
 }
 
@@ -1613,7 +1649,13 @@ fn build_content_disposition(filename: &str) -> String {
     };
     let mut ascii_stem = stem
         .chars()
-        .map(|ch| if ch.is_ascii_graphic() || ch == ' ' { ch } else { '_' })
+        .map(|ch| {
+            if ch.is_ascii_graphic() || ch == ' ' {
+                ch
+            } else {
+                '_'
+            }
+        })
         .collect::<String>();
     while ascii_stem.contains("__") {
         ascii_stem = ascii_stem.replace("__", "_");
@@ -1626,9 +1668,7 @@ fn build_content_disposition(filename: &str) -> String {
     };
     let ascii_filename = format!("{ascii_stem}{extension}");
     let encoded_filename = percent_encode_utf8(filename);
-    format!(
-        "attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}"
-    )
+    format!("attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}")
 }
 
 fn percent_encode_utf8(text: &str) -> String {
@@ -1771,7 +1811,11 @@ fn push_agent_event(
     });
 }
 
-fn push_checkpoint(record: &mut task_state::AgentTaskRecord, checkpoint_type: &str, name: Option<&str>) {
+fn push_checkpoint(
+    record: &mut task_state::AgentTaskRecord,
+    checkpoint_type: &str,
+    name: Option<&str>,
+) {
     record.checkpoints.push(task_state::AgentCheckpointRecord {
         id: Uuid::new_v4().to_string(),
         task_id: record.id.clone(),
@@ -1800,7 +1844,9 @@ async fn ensure_project_exists(state: &AppState, project_id: &str) -> Result<(),
         .await
         .map_err(internal_error)?;
     if project.is_none() {
-        return Err(ApiError::NotFound(format!("project not found: {project_id}")));
+        return Err(ApiError::NotFound(format!(
+            "project not found: {project_id}"
+        )));
     }
     Ok(())
 }
@@ -1826,7 +1872,8 @@ fn optional_string(payload: &Value, key: &str) -> Option<String> {
 
 fn string_array(value: &Value) -> Option<Vec<String>> {
     value.as_array().map(|items| {
-        items.iter()
+        items
+            .iter()
             .filter_map(|item| item.as_str().map(ToString::to_string))
             .collect::<Vec<_>>()
     })

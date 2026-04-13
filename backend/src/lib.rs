@@ -4,6 +4,7 @@ pub mod config;
 pub mod core;
 pub mod db;
 pub mod error;
+pub mod project_file_cache;
 pub mod routes;
 pub mod runtime;
 pub mod scan;

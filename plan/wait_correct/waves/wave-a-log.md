@@ -615,6 +615,46 @@
 - 后续修复波次: Wave B+（deploy chain cleanup）
 - owner: Rust migration
 
+### 15. project file-content cache is Rust-owned; `zip_cache_manager.py` is retired
+
+- endpoint / feature:
+  - Rust: `GET /api/v1/projects/{id}/files/{*file_path}`
+  - Rust: `GET /api/v1/projects/cache/stats`
+  - Rust: `POST /api/v1/projects/cache/clear`
+  - Rust: `POST /api/v1/projects/{id}/cache/invalidate`
+  - Python retired service: `backend_old/app/services/zip_cache_manager.py`
+- Python 旧行为:
+  - `zip_cache_manager.py` 提供 TTL / LRU / memory limit / stats / invalidate / clear
+  - `backend_old/tests/test_zip_cache_manager.py` 覆盖 expired prune 与 expired-on-read
+- Rust 当前行为:
+  - 新增 `backend/src/project_file_cache.rs`
+  - `backend/src/state.rs` 已挂载全局 `project_file_cache`
+  - `backend/src/routes/projects.rs` 不再返回固定 cache 占位值：
+    - file content 第二次读取会命中 cache 并返回 `is_cached=true`
+    - cache stats / clear / invalidate 现在会返回真实条目统计
+    - archive 更新与删除会主动失效项目缓存
+  - `backend/tests/projects_api.rs` 已从“只看 200”提升为断言真实 cache 行为
+  - `backend_old/app/services/zip_cache_manager.py` 已删除
+  - `backend_old/tests/test_zip_cache_manager.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `4`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+  - `rg -n "zip_cache_manager|ZipCacheManager" backend/src backend_old/app backend_old/tests -S`
+    只剩退休守门测试命中
+  - `cargo test --manifest-path backend/Cargo.toml --test projects_api projects_domain_endpoints_cover_files_stats_and_transfer -- --exact`
+    当前因本机 `rustc 1.85.0` 低于 lockfile 依赖要求而失败；这是 toolchain gate，不是本 slice
+- 是否影响前端:
+  - 前端当前没有 active caller 依赖 `projects` cache 管理 endpoint 的旧占位行为
+  - `is_cached` 字段继续保留，代码浏览器 file-content contract 不受破坏
+  - frontend upload contract 仍允许非 zip archive，这一块不在本 slice 内处理
+- 边界说明:
+  - 本次退休的是 `zip_cache_manager.py`，不是整个 upload/archive shared bridge
+  - `zip_storage.py`、`upload/project_stats.py`、`static_scan_runtime.py` 仍依赖 ZIP 文件根 / bridge 语义，不能跟着一起删
+- 后续修复波次: Wave C / project archive shared services
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

@@ -84,3 +84,8 @@ def test_legacy_agent_tasks_access_module_has_been_retired():
 def test_legacy_project_metrics_service_module_has_been_retired():
     metrics_path = PROJECT_ROOT / "app/services/project_metrics.py"
     assert not metrics_path.exists()
+
+
+def test_legacy_zip_cache_manager_has_been_retired():
+    cache_path = PROJECT_ROOT / "app/services/zip_cache_manager.py"
+    assert not cache_path.exists()

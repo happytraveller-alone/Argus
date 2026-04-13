@@ -25,10 +25,16 @@ pub fn router() -> Router<AppState> {
         .route("/rules/create-generic", post(create_opengrep_generic_rule))
         .route("/rules/select", post(batch_update_opengrep_rules))
         .route("/rules/upload", post(upload_opengrep_rules_archive))
-        .route("/rules/upload/directory", post(upload_opengrep_rules_directory))
+        .route(
+            "/rules/upload/directory",
+            post(upload_opengrep_rules_directory),
+        )
         .route("/rules/upload/json", post(upload_opengrep_rule_json))
         .route("/rules/upload/patch-archive", post(upload_patch_archive))
-        .route("/rules/upload/patch-directory", post(upload_patch_directory))
+        .route(
+            "/rules/upload/patch-directory",
+            post(upload_patch_directory),
+        )
         .route(
             "/rules/{rule_id}",
             get(get_opengrep_rule)
@@ -36,7 +42,10 @@ pub fn router() -> Router<AppState> {
                 .patch(update_opengrep_rule)
                 .delete(delete_opengrep_rule),
         )
-        .route("/tasks", get(list_opengrep_tasks).post(create_opengrep_task))
+        .route(
+            "/tasks",
+            get(list_opengrep_tasks).post(create_opengrep_task),
+        )
         .route(
             "/tasks/{task_id}",
             get(get_opengrep_task).delete(delete_opengrep_task),
@@ -56,8 +65,14 @@ pub fn router() -> Router<AppState> {
             "/findings/{finding_id}/status",
             post(update_opengrep_finding_status),
         )
-        .route("/gitleaks/rules", get(list_gitleaks_rules).post(create_gitleaks_rule))
-        .route("/gitleaks/rules/import-builtin", post(import_builtin_gitleaks_rules))
+        .route(
+            "/gitleaks/rules",
+            get(list_gitleaks_rules).post(create_gitleaks_rule),
+        )
+        .route(
+            "/gitleaks/rules/import-builtin",
+            post(import_builtin_gitleaks_rules),
+        )
         .route("/gitleaks/rules/select", post(batch_update_gitleaks_rules))
         .route(
             "/gitleaks/rules/{rule_id}",
@@ -71,7 +86,10 @@ pub fn router() -> Router<AppState> {
             "/gitleaks/tasks/{task_id}",
             get(get_gitleaks_task).delete(delete_gitleaks_task),
         )
-        .route("/gitleaks/tasks/{task_id}/interrupt", post(interrupt_gitleaks_task))
+        .route(
+            "/gitleaks/tasks/{task_id}/interrupt",
+            post(interrupt_gitleaks_task),
+        )
         .route(
             "/gitleaks/tasks/{task_id}/findings",
             get(list_gitleaks_findings),
@@ -85,9 +103,18 @@ pub fn router() -> Router<AppState> {
             post(update_gitleaks_finding_status),
         )
         .route("/bandit/rules", get(list_bandit_rules))
-        .route("/bandit/rules/batch-enabled", post(batch_update_bandit_rules_enabled))
-        .route("/bandit/rules/batch-delete", post(batch_delete_bandit_rules))
-        .route("/bandit/rules/batch-restore", post(batch_restore_bandit_rules))
+        .route(
+            "/bandit/rules/batch-enabled",
+            post(batch_update_bandit_rules_enabled),
+        )
+        .route(
+            "/bandit/rules/batch-delete",
+            post(batch_delete_bandit_rules),
+        )
+        .route(
+            "/bandit/rules/batch-restore",
+            post(batch_restore_bandit_rules),
+        )
         .route(
             "/bandit/rules/{rule_id}",
             get(get_bandit_rule).patch(update_bandit_rule),
@@ -104,8 +131,14 @@ pub fn router() -> Router<AppState> {
             "/bandit/tasks/{task_id}",
             get(get_bandit_task).delete(delete_bandit_task),
         )
-        .route("/bandit/tasks/{task_id}/interrupt", post(interrupt_bandit_task))
-        .route("/bandit/tasks/{task_id}/findings", get(list_bandit_findings))
+        .route(
+            "/bandit/tasks/{task_id}/interrupt",
+            post(interrupt_bandit_task),
+        )
+        .route(
+            "/bandit/tasks/{task_id}/findings",
+            get(list_bandit_findings),
+        )
         .route(
             "/bandit/tasks/{task_id}/findings/{finding_id}",
             get(get_bandit_finding),
@@ -136,15 +169,24 @@ pub fn router() -> Router<AppState> {
             post(update_phpstan_rule_enabled),
         )
         .route("/phpstan/rules/{rule_id}/delete", post(delete_phpstan_rule))
-        .route("/phpstan/rules/{rule_id}/restore", post(restore_phpstan_rule))
+        .route(
+            "/phpstan/rules/{rule_id}/restore",
+            post(restore_phpstan_rule),
+        )
         .route("/phpstan/scan", post(create_phpstan_task))
         .route("/phpstan/tasks", get(list_phpstan_tasks))
         .route(
             "/phpstan/tasks/{task_id}",
             get(get_phpstan_task).delete(delete_phpstan_task),
         )
-        .route("/phpstan/tasks/{task_id}/interrupt", post(interrupt_phpstan_task))
-        .route("/phpstan/tasks/{task_id}/findings", get(list_phpstan_findings))
+        .route(
+            "/phpstan/tasks/{task_id}/interrupt",
+            post(interrupt_phpstan_task),
+        )
+        .route(
+            "/phpstan/tasks/{task_id}/findings",
+            get(list_phpstan_findings),
+        )
         .route(
             "/phpstan/tasks/{task_id}/findings/{finding_id}",
             get(get_phpstan_finding),
@@ -179,7 +221,10 @@ pub fn router() -> Router<AppState> {
             "/pmd/tasks/{task_id}/findings/{finding_id}",
             get(get_pmd_finding),
         )
-        .route("/pmd/findings/{finding_id}/status", post(update_pmd_finding_status))
+        .route(
+            "/pmd/findings/{finding_id}/status",
+            post(update_pmd_finding_status),
+        )
         .route("/cache/repo-stats", get(get_repo_cache_stats))
         .route("/cache/cleanup-unused", post(cleanup_unused_cache))
         .route("/cache/clear-all", post(clear_all_cache))
@@ -217,7 +262,8 @@ async fn list_opengrep_rules(
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let items = merged_opengrep_rules(&state).await?;
     Ok(Json(
-        items.into_iter()
+        items
+            .into_iter()
             .filter(|rule| match query.source.as_deref() {
                 Some(source) => rule.source == source,
                 None => true,
@@ -285,8 +331,10 @@ async fn create_opengrep_rule_from_patch(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let repo_name = optional_string(&payload, "repo_name").unwrap_or_else(|| "generated".to_string());
-    let commit_hash = optional_string(&payload, "commit_hash").unwrap_or_else(|| Uuid::new_v4().to_string());
+    let repo_name =
+        optional_string(&payload, "repo_name").unwrap_or_else(|| "generated".to_string());
+    let commit_hash =
+        optional_string(&payload, "commit_hash").unwrap_or_else(|| Uuid::new_v4().to_string());
     let record = task_state::OpengrepRuleRecord {
         id: format!("generated:{}", Uuid::new_v4()),
         name: format!("{repo_name}-{commit_hash}"),
@@ -299,7 +347,8 @@ async fn create_opengrep_rule_from_patch(
         correct: true,
         is_active: true,
         created_at: now_rfc3339(),
-        pattern_yaml: optional_string(&payload, "commit_content").unwrap_or_else(|| "rules: []".to_string()),
+        pattern_yaml: optional_string(&payload, "commit_content")
+            .unwrap_or_else(|| "rules: []".to_string()),
         patch: optional_string(&payload, "commit_content"),
     };
     upsert_opengrep_rule(&state, record.clone()).await?;
@@ -342,8 +391,14 @@ async fn upload_opengrep_rule_json(
         description: optional_string(&payload, "description"),
         cwe: payload.get("cwe").and_then(string_array),
         source: optional_string(&payload, "source").unwrap_or_else(|| "json".to_string()),
-        correct: payload.get("correct").and_then(Value::as_bool).unwrap_or(true),
-        is_active: payload.get("is_active").and_then(Value::as_bool).unwrap_or(true),
+        correct: payload
+            .get("correct")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        is_active: payload
+            .get("is_active")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
         created_at: now_rfc3339(),
         pattern_yaml: required_string(&payload, "pattern_yaml")?,
         patch: optional_string(&payload, "patch"),
@@ -426,7 +481,9 @@ async fn update_opengrep_rule(
     if let Some(value) = optional_bool(&payload, "is_active") {
         rule.is_active = value;
     }
-    snapshot.opengrep_rules.insert(rule_id.clone(), rule.clone());
+    snapshot
+        .opengrep_rules
+        .insert(rule_id.clone(), rule.clone());
     save_task_snapshot(&state, &snapshot).await?;
     Ok(Json(json!({
         "message": "opengrep rule updated in rust backend",
@@ -451,13 +508,9 @@ async fn batch_update_opengrep_rules(
     let confidence = optional_string(&payload, "confidence");
     let current_is_active = match payload.get("current_is_active") {
         None => None,
-        Some(value) => Some(
-            value
-                .as_bool()
-                .ok_or_else(|| {
-                    ApiError::BadRequest("current_is_active must be a boolean".to_string())
-                })?,
-        ),
+        Some(value) => Some(value.as_bool().ok_or_else(|| {
+            ApiError::BadRequest("current_is_active must be a boolean".to_string())
+        })?),
     };
 
     let mut snapshot = load_task_snapshot(&state).await?;
@@ -517,12 +570,17 @@ async fn create_opengrep_task(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    create_static_task(&state, "opengrep", payload, json!({
-        "error_count": 0,
-        "warning_count": 0,
-        "high_confidence_count": 0,
-        "lines_scanned": 0,
-    }))
+    create_static_task(
+        &state,
+        "opengrep",
+        payload,
+        json!({
+            "error_count": 0,
+            "warning_count": 0,
+            "high_confidence_count": 0,
+            "lines_scanned": 0,
+        }),
+    )
     .await
 }
 
@@ -650,7 +708,8 @@ async fn list_gitleaks_rules(
     let mut items = builtin_gitleaks_rules(&state).await?;
     items.extend(snapshot.gitleaks_rules.into_values());
     Ok(Json(
-        items.into_iter()
+        items
+            .into_iter()
             .filter(|rule| match query.is_active {
                 Some(is_active) => rule.is_active == is_active,
                 None => true,
@@ -682,16 +741,29 @@ async fn create_gitleaks_rule(
 ) -> Result<Json<Value>, ApiError> {
     let record = task_state::GitleaksRuleRecord {
         id: format!("custom:{}", Uuid::new_v4()),
-        name: optional_string(&payload, "name").unwrap_or_else(|| "custom-gitleaks-rule".to_string()),
+        name: optional_string(&payload, "name")
+            .unwrap_or_else(|| "custom-gitleaks-rule".to_string()),
         description: optional_string(&payload, "description"),
         rule_id: required_string(&payload, "rule_id")?,
-        secret_group: payload.get("secret_group").and_then(Value::as_i64).unwrap_or(0),
+        secret_group: payload
+            .get("secret_group")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
         regex: required_string(&payload, "regex")?,
-        keywords: payload.get("keywords").and_then(string_array).unwrap_or_default(),
+        keywords: payload
+            .get("keywords")
+            .and_then(string_array)
+            .unwrap_or_default(),
         path: optional_string(&payload, "path"),
-        tags: payload.get("tags").and_then(string_array).unwrap_or_default(),
+        tags: payload
+            .get("tags")
+            .and_then(string_array)
+            .unwrap_or_default(),
         entropy: payload.get("entropy").and_then(Value::as_f64),
-        is_active: payload.get("is_active").and_then(Value::as_bool).unwrap_or(true),
+        is_active: payload
+            .get("is_active")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
         source: optional_string(&payload, "source").unwrap_or_else(|| "custom".to_string()),
         created_at: now_rfc3339(),
         updated_at: None,
@@ -733,7 +805,9 @@ async fn update_gitleaks_rule(
         rule.is_active = value;
     }
     rule.updated_at = Some(now_rfc3339());
-    snapshot.gitleaks_rules.insert(rule_id.clone(), rule.clone());
+    snapshot
+        .gitleaks_rules
+        .insert(rule_id.clone(), rule.clone());
     save_task_snapshot(&state, &snapshot).await?;
     Ok(Json(gitleaks_rule_value(&rule)))
 }
@@ -782,9 +856,14 @@ async fn create_gitleaks_task(
         .and_then(Value::as_bool)
         .unwrap_or(false)
         .to_string();
-    create_static_task(&state, "gitleaks", payload, json!({
-        "no_git": no_git,
-    }))
+    create_static_task(
+        &state,
+        "gitleaks",
+        payload,
+        json!({
+            "no_git": no_git,
+        }),
+    )
     .await
 }
 
@@ -856,7 +935,9 @@ async fn list_bandit_rules(
                 apply_rule_override_value(bandit_rule_value(&rule), overrides.get(&rule_id))
             })
             .filter(|value| match query.is_active {
-                Some(is_active) => value.get("is_active").and_then(Value::as_bool) == Some(is_active),
+                Some(is_active) => {
+                    value.get("is_active").and_then(Value::as_bool) == Some(is_active)
+                }
                 None => true,
             })
             .filter(|value| match query.deleted.as_deref() {
@@ -864,7 +945,15 @@ async fn list_bandit_rules(
                 Some("false") => value.get("is_deleted").and_then(Value::as_bool) != Some(true),
                 _ => true,
             })
-            .filter(|value| contains_keyword(value.get("name").and_then(Value::as_str).unwrap_or_default(), query.keyword.as_deref()))
+            .filter(|value| {
+                contains_keyword(
+                    value
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                    query.keyword.as_deref(),
+                )
+            })
             .skip(query.skip.unwrap_or(0))
             .take(query.limit.unwrap_or(1_000))
             .collect(),
@@ -917,7 +1006,13 @@ async fn update_bandit_rule_enabled(
         .get("is_active")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    upsert_rule_override(&state, "bandit", &rule_id, json!({ "is_active": is_active })).await?;
+    upsert_rule_override(
+        &state,
+        "bandit",
+        &rule_id,
+        json!({ "is_active": is_active }),
+    )
+    .await?;
     Ok(Json(json!({
         "message": "bandit rule enabled state updated in rust backend",
         "rule_id": rule_id,
@@ -972,7 +1067,9 @@ async fn batch_delete_bandit_rules(State(state): State<AppState>) -> Result<Json
     })))
 }
 
-async fn batch_restore_bandit_rules(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+async fn batch_restore_bandit_rules(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
     Ok(Json(json!({
         "message": "bandit rule batch restore acknowledged in rust backend",
         "updated_count": builtin_bandit_rules(&state).await?.len(),
@@ -988,13 +1085,18 @@ async fn create_bandit_task(
         optional_string(&payload, "severity_level").unwrap_or_else(|| "medium".to_string());
     let confidence_level =
         optional_string(&payload, "confidence_level").unwrap_or_else(|| "medium".to_string());
-    create_static_task(&state, "bandit", payload, json!({
-        "severity_level": severity_level,
-        "confidence_level": confidence_level,
-        "high_count": 0,
-        "medium_count": 0,
-        "low_count": 0,
-    }))
+    create_static_task(
+        &state,
+        "bandit",
+        payload,
+        json!({
+            "severity_level": severity_level,
+            "confidence_level": confidence_level,
+            "high_count": 0,
+            "medium_count": 0,
+            "low_count": 0,
+        }),
+    )
     .await
 }
 
@@ -1066,7 +1168,9 @@ async fn list_phpstan_rules(
                 apply_rule_override_value(phpstan_rule_value(&rule), overrides.get(&rule_id))
             })
             .filter(|value| match query.is_active {
-                Some(is_active) => value.get("is_active").and_then(Value::as_bool) == Some(is_active),
+                Some(is_active) => {
+                    value.get("is_active").and_then(Value::as_bool) == Some(is_active)
+                }
                 None => true,
             })
             .filter(|value| match query.deleted.as_deref() {
@@ -1074,7 +1178,15 @@ async fn list_phpstan_rules(
                 Some("false") => value.get("is_deleted").and_then(Value::as_bool) != Some(true),
                 _ => true,
             })
-            .filter(|value| contains_keyword(value.get("name").and_then(Value::as_str).unwrap_or_default(), query.keyword.as_deref()))
+            .filter(|value| {
+                contains_keyword(
+                    value
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                    query.keyword.as_deref(),
+                )
+            })
             .skip(query.skip.unwrap_or(0))
             .take(query.limit.unwrap_or(1_000))
             .collect(),
@@ -1127,7 +1239,13 @@ async fn update_phpstan_rule_enabled(
         .get("is_active")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    upsert_rule_override(&state, "phpstan", &rule_id, json!({ "is_active": is_active })).await?;
+    upsert_rule_override(
+        &state,
+        "phpstan",
+        &rule_id,
+        json!({ "is_active": is_active }),
+    )
+    .await?;
     Ok(Json(json!({
         "message": "phpstan rule enabled state updated in rust backend",
         "rule_id": rule_id,
@@ -1174,7 +1292,9 @@ async fn restore_phpstan_rule(
     })))
 }
 
-async fn batch_delete_phpstan_rules(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+async fn batch_delete_phpstan_rules(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
     Ok(Json(json!({
         "message": "phpstan rule batch delete acknowledged in rust backend",
         "updated_count": builtin_phpstan_rules(&state).await?.len(),
@@ -1182,7 +1302,9 @@ async fn batch_delete_phpstan_rules(State(state): State<AppState>) -> Result<Jso
     })))
 }
 
-async fn batch_restore_phpstan_rules(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+async fn batch_restore_phpstan_rules(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
     Ok(Json(json!({
         "message": "phpstan rule batch restore acknowledged in rust backend",
         "updated_count": builtin_phpstan_rules(&state).await?.len(),
@@ -1195,9 +1317,14 @@ async fn create_phpstan_task(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let level = payload.get("level").and_then(Value::as_i64).unwrap_or(5);
-    create_static_task(&state, "phpstan", payload, json!({
-        "level": level,
-    }))
+    create_static_task(
+        &state,
+        "phpstan",
+        payload,
+        json!({
+            "level": level,
+        }),
+    )
     .await
 }
 
@@ -1269,7 +1396,10 @@ async fn list_pmd_builtin_rulesets(
             .into_iter()
             .filter(|item| contains_keyword(&item.name, query.keyword.as_deref()))
             .filter(|item| match query.language.as_deref() {
-                Some(language) => item.languages.iter().any(|value| value.eq_ignore_ascii_case(language)),
+                Some(language) => item
+                    .languages
+                    .iter()
+                    .any(|value| value.eq_ignore_ascii_case(language)),
                 None => true,
             })
             .take(query.limit.unwrap_or(1_000))
@@ -1349,7 +1479,9 @@ async fn get_pmd_rule_config(
     let item = snapshot
         .pmd_rule_configs
         .get(&rule_config_id)
-        .ok_or_else(|| ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}")))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}"))
+        })?;
     Ok(Json(pmd_rule_config_value(item)))
 }
 
@@ -1362,7 +1494,9 @@ async fn update_pmd_rule_config(
     let item = snapshot
         .pmd_rule_configs
         .get_mut(&rule_config_id)
-        .ok_or_else(|| ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}")))?;
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}"))
+        })?;
     if let Some(value) = optional_string(&payload, "name") {
         item.name = value;
     }
@@ -1396,12 +1530,17 @@ async fn create_pmd_task(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let ruleset = optional_string(&payload, "ruleset").unwrap_or_else(|| "security".to_string());
-    create_static_task(&state, "pmd", payload, json!({
-        "ruleset": ruleset,
-        "high_count": 0,
-        "medium_count": 0,
-        "low_count": 0,
-    }))
+    create_static_task(
+        &state,
+        "pmd",
+        payload,
+        json!({
+            "ruleset": ruleset,
+            "high_count": 0,
+            "medium_count": 0,
+            "low_count": 0,
+        }),
+    )
     .await
 }
 
@@ -1519,7 +1658,9 @@ async fn create_static_task(
         findings,
     };
     let mut snapshot = load_task_snapshot(state).await?;
-    snapshot.static_tasks.insert(task_id.clone(), record.clone());
+    snapshot
+        .static_tasks
+        .insert(task_id.clone(), record.clone());
     save_task_snapshot(state, &snapshot).await?;
     Ok(Json(static_task_value(&record)))
 }
@@ -1670,7 +1811,9 @@ async fn delete_static_task(
         .get(task_id)
         .ok_or_else(|| ApiError::NotFound(format!("{engine} task not found: {task_id}")))?;
     if existing.engine != engine {
-        return Err(ApiError::NotFound(format!("{engine} task not found: {task_id}")));
+        return Err(ApiError::NotFound(format!(
+            "{engine} task not found: {task_id}"
+        )));
     }
     snapshot.static_tasks.remove(task_id);
     save_task_snapshot(state, &snapshot).await?;
@@ -1691,7 +1834,9 @@ async fn interrupt_static_task(
         .get_mut(task_id)
         .ok_or_else(|| ApiError::NotFound(format!("{engine} task not found: {task_id}")))?;
     if record.engine != engine {
-        return Err(ApiError::NotFound(format!("{engine} task not found: {task_id}")));
+        return Err(ApiError::NotFound(format!(
+            "{engine} task not found: {task_id}"
+        )));
     }
     record.status = "interrupted".to_string();
     record.progress.current_stage = Some("interrupted".to_string());
@@ -1756,7 +1901,11 @@ async fn update_static_finding_status(
         if record.engine != engine {
             continue;
         }
-        if let Some(finding) = record.findings.iter_mut().find(|finding| finding.id == finding_id) {
+        if let Some(finding) = record
+            .findings
+            .iter_mut()
+            .find(|finding| finding.id == finding_id)
+        {
             finding.status = status.to_string();
             if let Some(object) = finding.payload.as_object_mut() {
                 object.insert("status".to_string(), json!(status));
@@ -1769,7 +1918,9 @@ async fn update_static_finding_status(
             })));
         }
     }
-    Err(ApiError::NotFound(format!("{engine} finding not found: {finding_id}")))
+    Err(ApiError::NotFound(format!(
+        "{engine} finding not found: {finding_id}"
+    )))
 }
 
 async fn find_static_task(
@@ -1783,7 +1934,9 @@ async fn find_static_task(
         .get(task_id)
         .ok_or_else(|| ApiError::NotFound(format!("{engine} task not found: {task_id}")))?;
     if record.engine != engine {
-        return Err(ApiError::NotFound(format!("{engine} task not found: {task_id}")));
+        return Err(ApiError::NotFound(format!(
+            "{engine} task not found: {task_id}"
+        )));
     }
     Ok(record.clone())
 }
@@ -1833,14 +1986,21 @@ async fn upsert_rule_override(
     let target = match engine {
         "bandit" => &mut snapshot.bandit_rule_overrides,
         "phpstan" => &mut snapshot.phpstan_rule_overrides,
-        _ => return Err(ApiError::BadRequest(format!("unsupported rule override engine: {engine}"))),
+        _ => {
+            return Err(ApiError::BadRequest(format!(
+                "unsupported rule override engine: {engine}"
+            )))
+        }
     };
-    let entry = target.entry(rule_id.to_string()).or_insert_with(|| task_state::RuleOverrideRecord {
-        id: rule_id.to_string(),
-        is_active: None,
-        is_deleted: None,
-        patch: json!({}),
-    });
+    let entry =
+        target
+            .entry(rule_id.to_string())
+            .or_insert_with(|| task_state::RuleOverrideRecord {
+                id: rule_id.to_string(),
+                is_active: None,
+                is_deleted: None,
+                patch: json!({}),
+            });
     if let Some(is_active) = patch.get("is_active").and_then(Value::as_bool) {
         entry.is_active = Some(is_active);
     }
@@ -1858,9 +2018,13 @@ async fn persist_uploaded_opengrep_rules(
 ) -> Result<usize, ApiError> {
     let mut count = 0usize;
     while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
-        let filename = field.file_name().unwrap_or("uploaded-rule.yaml").to_string();
+        let filename = field
+            .file_name()
+            .unwrap_or("uploaded-rule.yaml")
+            .to_string();
         let bytes = field.bytes().await.map_err(internal_error)?;
-        let pattern_yaml = String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| "rules: []".to_string());
+        let pattern_yaml =
+            String::from_utf8(bytes.to_vec()).unwrap_or_else(|_| "rules: []".to_string());
         let record = task_state::OpengrepRuleRecord {
             id: format!("{source}:{}", Uuid::new_v4()),
             name: filename.clone(),
@@ -1916,7 +2080,9 @@ async fn persist_uploaded_patch_rules(
 async fn builtin_opengrep_rules(
     state: &AppState,
 ) -> Result<Vec<task_state::OpengrepRuleRecord>, ApiError> {
-    let assets = opengrep::load_rule_assets(state).await.map_err(internal_error)?;
+    let assets = opengrep::load_rule_assets(state)
+        .await
+        .map_err(internal_error)?;
     Ok(assets
         .into_iter()
         .filter(|asset| asset.source_kind == "internal_rule" || asset.source_kind == "patch_rule")
@@ -1985,9 +2151,7 @@ async fn builtin_gitleaks_rules(
     Ok(parse_gitleaks_rules(&content))
 }
 
-async fn builtin_bandit_rules(
-    state: &AppState,
-) -> Result<Vec<Value>, ApiError> {
+async fn builtin_bandit_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
     let snapshot = bandit::load_builtin_snapshot(state)
         .await
         .map_err(internal_error)?
@@ -1999,9 +2163,7 @@ async fn builtin_bandit_rules(
         .unwrap_or_default())
 }
 
-async fn builtin_phpstan_rules(
-    state: &AppState,
-) -> Result<Vec<Value>, ApiError> {
+async fn builtin_phpstan_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
     let assets = phpstan::load_builtin_assets(state)
         .await
         .map_err(internal_error)?;
@@ -2031,7 +2193,8 @@ async fn builtin_pmd_rulesets(
                 .strip_prefix("rules_pmd/")
                 .unwrap_or(asset.asset_path.as_str())
                 .to_string();
-            let name = xml_attr(&asset.content, "ruleset", "name").unwrap_or_else(|| file_stem(&filename));
+            let name =
+                xml_attr(&asset.content, "ruleset", "name").unwrap_or_else(|| file_stem(&filename));
             let description = xml_tag(&asset.content, "description");
             let rule_count = asset.content.matches("<rule ").count() as i64;
             let languages = xml_attr_values(&asset.content, "language");
@@ -2182,7 +2345,10 @@ fn pmd_rule_config_value(record: &task_state::PmdRuleConfigRecord) -> Value {
     })
 }
 
-fn apply_rule_override_value(mut value: Value, override_record: Option<&task_state::RuleOverrideRecord>) -> Value {
+fn apply_rule_override_value(
+    mut value: Value,
+    override_record: Option<&task_state::RuleOverrideRecord>,
+) -> Value {
     if let Some(override_record) = override_record {
         if let Some(is_active) = override_record.is_active {
             if let Some(object) = value.as_object_mut() {
@@ -2232,7 +2398,9 @@ fn build_custom_pmd_rule_config(
 }
 
 async fn load_task_snapshot(state: &AppState) -> Result<task_state::TaskStateSnapshot, ApiError> {
-    task_state::load_snapshot(state).await.map_err(internal_error)
+    task_state::load_snapshot(state)
+        .await
+        .map_err(internal_error)
 }
 
 async fn save_task_snapshot(
@@ -2249,7 +2417,9 @@ async fn ensure_project_exists(state: &AppState, project_id: &str) -> Result<(),
         .await
         .map_err(internal_error)?;
     if project.is_none() {
-        return Err(ApiError::NotFound(format!("project not found: {project_id}")));
+        return Err(ApiError::NotFound(format!(
+            "project not found: {project_id}"
+        )));
     }
     Ok(())
 }
@@ -2279,7 +2449,8 @@ fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
 
 fn string_array(value: &Value) -> Option<Vec<String>> {
     value.as_array().map(|items| {
-        items.iter()
+        items
+            .iter()
             .filter_map(|item| item.as_str().map(ToString::to_string))
             .collect::<Vec<_>>()
     })
@@ -2303,7 +2474,9 @@ fn required_bool(payload: &Value, key: &str) -> Result<bool, ApiError> {
 
 fn contains_keyword(text: &str, keyword: Option<&str>) -> bool {
     match keyword.map(str::trim).filter(|value| !value.is_empty()) {
-        Some(keyword) => text.to_ascii_lowercase().contains(&keyword.to_ascii_lowercase()),
+        Some(keyword) => text
+            .to_ascii_lowercase()
+            .contains(&keyword.to_ascii_lowercase()),
         None => true,
     }
 }

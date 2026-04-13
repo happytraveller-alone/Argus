@@ -298,6 +298,26 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
         .as_str()
         .unwrap()
         .contains("fn main()"));
+    assert_eq!(file_content_json["is_cached"], false);
+
+    let cached_file_content_response = source_app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}/files/src/main.rs"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cached_file_content_response.status(), StatusCode::OK);
+    let cached_file_content_json: Value = serde_json::from_slice(
+        &to_bytes(cached_file_content_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cached_file_content_json["is_cached"], true);
+    assert!(cached_file_content_json["created_at"].is_string());
 
     let preview_response = source_app
         .clone()
@@ -320,6 +340,17 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
         .await
         .unwrap();
     assert_eq!(cache_stats_response.status(), StatusCode::OK);
+    let cache_stats_json: Value = serde_json::from_slice(
+        &to_bytes(cache_stats_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cache_stats_json["total_entries"], 1);
+    assert_eq!(cache_stats_json["hits"], 1);
+    assert_eq!(cache_stats_json["misses"], 1);
+    assert_eq!(cache_stats_json["evictions"], 0);
+    assert!(cache_stats_json["memory_used_mb"].as_f64().unwrap() > 0.0);
 
     let cache_invalidate_response = source_app
         .clone()
@@ -333,6 +364,13 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
         .await
         .unwrap();
     assert_eq!(cache_invalidate_response.status(), StatusCode::OK);
+    let cache_invalidate_json: Value = serde_json::from_slice(
+        &to_bytes(cache_invalidate_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cache_invalidate_json["deleted_entries"], 1);
 
     let cache_clear_response = source_app
         .clone()
@@ -346,6 +384,13 @@ async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
         .await
         .unwrap();
     assert_eq!(cache_clear_response.status(), StatusCode::OK);
+    let cache_clear_json: Value = serde_json::from_slice(
+        &to_bytes(cache_clear_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cache_clear_json["deleted_entries"], 0);
 
     let stats_response = source_app
         .clone()

@@ -1,9 +1,4 @@
-use axum::{
-    body::Body,
-    response::Response,
-    routing::post,
-    Json, Router,
-};
+use axum::{body::Body, response::Response, routing::post, Json, Router};
 use http::{header, HeaderValue, StatusCode};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -74,62 +69,80 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn run_recon(Json(payload): Json<ReconTestRequest>) -> Response<Body> {
-    sse_response("recon", json!({
-        "project_path": payload.project_path,
-        "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
-        "framework_hint": payload.framework_hint,
-        "max_iterations": payload.max_iterations.unwrap_or(6),
-    }))
+    sse_response(
+        "recon",
+        json!({
+            "project_path": payload.project_path,
+            "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
+            "framework_hint": payload.framework_hint,
+            "max_iterations": payload.max_iterations.unwrap_or(6),
+        }),
+    )
 }
 
 async fn run_analysis(Json(payload): Json<AnalysisTestRequest>) -> Response<Body> {
-    sse_response("analysis", json!({
-        "project_path": payload.project_path,
-        "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
-        "high_risk_areas": payload.high_risk_areas.unwrap_or_default(),
-        "entry_points": payload.entry_points.unwrap_or_default(),
-        "task_description": payload.task_description.unwrap_or_default(),
-        "max_iterations": payload.max_iterations.unwrap_or(8),
-    }))
+    sse_response(
+        "analysis",
+        json!({
+            "project_path": payload.project_path,
+            "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
+            "high_risk_areas": payload.high_risk_areas.unwrap_or_default(),
+            "entry_points": payload.entry_points.unwrap_or_default(),
+            "task_description": payload.task_description.unwrap_or_default(),
+            "max_iterations": payload.max_iterations.unwrap_or(8),
+        }),
+    )
 }
 
 async fn run_verification(Json(payload): Json<VerificationTestRequest>) -> Response<Body> {
-    sse_response("verification", json!({
-        "project_path": payload.project_path,
-        "findings": payload.findings,
-        "max_iterations": payload.max_iterations.unwrap_or(6),
-    }))
+    sse_response(
+        "verification",
+        json!({
+            "project_path": payload.project_path,
+            "findings": payload.findings,
+            "max_iterations": payload.max_iterations.unwrap_or(6),
+        }),
+    )
 }
 
 async fn run_business_logic(Json(payload): Json<BusinessLogicTestRequest>) -> Response<Body> {
-    sse_response("business_logic", json!({
-        "project_path": payload.project_path,
-        "entry_points_hint": payload.entry_points_hint.unwrap_or_default(),
-        "framework_hint": payload.framework_hint,
-        "max_iterations": payload.max_iterations.unwrap_or(8),
-        "quick_mode": payload.quick_mode.unwrap_or(false),
-    }))
+    sse_response(
+        "business_logic",
+        json!({
+            "project_path": payload.project_path,
+            "entry_points_hint": payload.entry_points_hint.unwrap_or_default(),
+            "framework_hint": payload.framework_hint,
+            "max_iterations": payload.max_iterations.unwrap_or(8),
+            "quick_mode": payload.quick_mode.unwrap_or(false),
+        }),
+    )
 }
 
 async fn run_business_logic_recon(
     Json(payload): Json<BusinessLogicReconTestRequest>,
 ) -> Response<Body> {
-    sse_response("business_logic_recon", json!({
-        "project_path": payload.project_path,
-        "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
-        "framework_hint": payload.framework_hint,
-        "max_iterations": payload.max_iterations.unwrap_or(10),
-    }))
+    sse_response(
+        "business_logic_recon",
+        json!({
+            "project_path": payload.project_path,
+            "project_name": payload.project_name.unwrap_or_else(|| "test-project".to_string()),
+            "framework_hint": payload.framework_hint,
+            "max_iterations": payload.max_iterations.unwrap_or(10),
+        }),
+    )
 }
 
 async fn run_business_logic_analysis(
     Json(payload): Json<BusinessLogicAnalysisTestRequest>,
 ) -> Response<Body> {
-    sse_response("business_logic_analysis", json!({
-        "project_path": payload.project_path,
-        "risk_point": payload.risk_point,
-        "max_iterations": payload.max_iterations.unwrap_or(10),
-    }))
+    sse_response(
+        "business_logic_analysis",
+        json!({
+            "project_path": payload.project_path,
+            "risk_point": payload.risk_point,
+            "max_iterations": payload.max_iterations.unwrap_or(10),
+        }),
+    )
 }
 
 fn sse_response(kind: &str, payload: Value) -> Response<Body> {
