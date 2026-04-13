@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `224` 个文件：
+- 当前纳入本计划的 Python 存量一共 `223` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `224` 个
+  - `backend_old/app` 下除 `api` 外 `223` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `224`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -324,17 +324,17 @@
 - `backend_old/app/services/zip_storage.py`
 - `backend_old/app/services/json_safe.py`
 
-#### `retired_after_rust_takeover` (`5`)
+#### `retired_after_rust_takeover` (`6`)
 
 - `backend_old/app/services/zip_cache_manager.py`
 - `backend_old/app/services/search_service.py`
 - `backend_old/app/services/report_generator.py`
 - `backend_old/app/services/runner_preflight.py`
 - `backend_old/app/services/init_templates.py`
-
-#### `migrate_with_api` (`7`)
-
 - `backend_old/app/services/seed_archive.py`
+
+#### `migrate_with_api` (`6`)
+
 - `backend_old/app/services/gitleaks_rules_seed.py`
 - `backend_old/app/services/pmd_rulesets.py`
 - `backend_old/app/services/parser.py`
@@ -999,3 +999,28 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `opengrep_confidence.py` / `init_templates.py`：已删除，本 slice 完成
 - 下一刀：
   - 回到仍有 live caller 的 `zip_storage.py` / `json_safe.py` / 其余 runtime bridge
+
+### 2026-04-13 Batch 3 / Slice 7
+
+- 已完成：
+  - Python dead helper/service 已物理删除：
+    - `backend_old/app/services/seed_archive.py`
+  - 旧专属测试已删除：
+    - `backend_old/tests/test_seed_archive.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
+    - `rg -n "seed_archive.py|build_seed_archive_candidates|download_seed_archive" backend_old backend frontend plan -S`
+      只剩退休守门测试与迁移文档命中
+- 当前意义：
+  - `seed_archive.py` 已确认没有 live caller，不再作为待迁 helper 保留
+  - `services/scan/search/report/project` 桶中的 `migrate_with_api` 继续收缩
+- 仍未完成：
+  - `zip_storage.py` 与 `json_safe.py` 仍在 `migrate_now`
+  - `gitleaks_rules_seed.py`、`pmd_rulesets.py`、`parser.py`、`rule.py`、
+    `bandit_rules_snapshot.py` 等仍在 `migrate_with_api`
+- 删除条件：
+  - `seed_archive.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续筛剩余 dead service，或回到 `zip_storage.py` / `json_safe.py` 这类活桥

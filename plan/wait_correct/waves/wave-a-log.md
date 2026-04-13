@@ -788,6 +788,30 @@
 - 后续修复波次: Wave C / shared-service cleanup
 - owner: Rust migration
 
+### 21. `seed_archive.py` retired from live tree
+
+- endpoint / feature:
+  - Python dead helper/service: `backend_old/app/services/seed_archive.py`
+- Python 旧行为:
+  - `seed_archive.py` 提供 seed archive URL 组装、探测与下载 helper
+  - 当前仓库里已无 live caller，只剩旧专属测试
+- Rust 当前行为:
+  - `seed_archive.py` 已从 repo 物理删除
+  - `backend_old/tests/test_seed_archive.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
+  - `rg -n "seed_archive.py|build_seed_archive_candidates|download_seed_archive" backend_old backend frontend plan -S`
+    只剩退休守门测试与迁移文档命中
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖 seed archive helper
+- 边界说明:
+  - 退休的是 dead helper，不代表所有 seed/download 语义都已在 Rust 全量等价覆盖
+- 后续修复波次: Wave C / shared-service cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

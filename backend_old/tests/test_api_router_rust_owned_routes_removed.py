@@ -114,3 +114,8 @@ def test_legacy_opengrep_confidence_service_has_been_retired():
 def test_legacy_init_templates_service_has_been_retired():
     init_templates_path = PROJECT_ROOT / "app/services/init_templates.py"
     assert not init_templates_path.exists()
+
+
+def test_legacy_seed_archive_service_has_been_retired():
+    seed_archive_path = PROJECT_ROOT / "app/services/seed_archive.py"
+    assert not seed_archive_path.exists()
