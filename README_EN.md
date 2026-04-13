@@ -29,9 +29,9 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
-- In GitHub Actions you can optionally set the repository variable `GHCR_NAMESPACE` to override the default owner. If it points to a different user or organization, you must also provide `GHCR_USERNAME` and `GHCR_TOKEN`.
+- The reusable GitHub Actions workflow defaults to the current repository owner as the GHCR namespace. To override it, pass `image_namespace` when calling `.github/workflows/docker-publish.yml`. If it points to a different user or organization, you must also provide `GHCR_USERNAME` and `GHCR_TOKEN`.
 - GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls.
-- If you need to override that behavior, set the repository variable `GHCR_PACKAGE_VISIBILITY`; whenever it is not `public`, the workflow skips anonymous pull validation.
+- If you need to override that behavior, pass `package_visibility` when calling the reusable workflow; whenever it is not `public`, the workflow skips anonymous pull validation.
 
 ## Supported Commands
 

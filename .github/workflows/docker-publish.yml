@@ -25,12 +25,22 @@ on:
         required: false
         type: string
         default: "linux/amd64,linux/arm64"
+      image_namespace:
+        description: "GHCR namespace，留空时默认使用当前仓库 owner"
+        required: false
+        type: string
+        default: ""
+      package_visibility:
+        description: "GHCR package visibility"
+        required: false
+        type: string
+        default: "public"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
-  VULHUNTER_IMAGE_NAMESPACE: ${{ vars.GHCR_NAMESPACE || github.repository_owner }}
-  GHCR_PACKAGE_VISIBILITY: ${{ vars.GHCR_PACKAGE_VISIBILITY || 'public' }}
+  VULHUNTER_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}
+  GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}
   VULHUNTER_IMAGE_TAG: latest
 
 jobs:
@@ -114,7 +124,8 @@ jobs:
             --type spdx \
             "${IMAGE}:${TAG}@${DIGEST}"
 
-      - name: 设置 GHCR 包为公开可见性
+      - name: 设置并校验 GHCR 包可见性
+        id: package-visibility
         if: env.GHCR_PACKAGE_VISIBILITY == 'public'
         env:
           GH_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
@@ -123,18 +134,44 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "visibility=unknown" >> "$GITHUB_OUTPUT"
+          package_endpoint=""
+
           if gh api --method PATCH "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" \
             -f visibility=public --silent 2>/dev/null; then
             echo "${PACKAGE_NAME} set to public successfully via org API"
+            package_endpoint="/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}"
           elif gh api --method PATCH "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" \
             -f visibility=public --silent 2>/dev/null; then
             echo "${PACKAGE_NAME} set to public successfully via user API"
+            package_endpoint="/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}"
           else
             echo "::warning::Could not set ${PACKAGE_NAME} to public via API (may already be public or require manual action)."
+            if gh api --method GET "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" --silent >/dev/null 2>&1; then
+              package_endpoint="/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}"
+            elif gh api --method GET "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" --silent >/dev/null 2>&1; then
+              package_endpoint="/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}"
+            fi
+          fi
+
+          if [ -n "${package_endpoint}" ]; then
+            visibility="$(gh api --method GET "${package_endpoint}" --jq '.visibility' 2>/dev/null || true)"
+            if [ "${visibility}" = "public" ]; then
+              echo "visibility=public" >> "$GITHUB_OUTPUT"
+              echo "Verified ${PACKAGE_NAME} is public."
+            elif [ -n "${visibility}" ]; then
+              echo "visibility=${visibility}" >> "$GITHUB_OUTPUT"
+              echo "::error::${PACKAGE_NAME} visibility is '${visibility}', so anonymous pulls will not work."
+              exit 1
+            else
+              echo "::warning::Could not read ${PACKAGE_NAME} visibility via GitHub API. Skipping anonymous pull validation."
+            fi
+          else
+            echo "::warning::Could not resolve GitHub Packages API endpoint for ${PACKAGE_NAME}. Skipping anonymous pull validation."
           fi
 
       - name: 验证 GHCR 匿名拉取
-        if: env.GHCR_PACKAGE_VISIBILITY == 'public'
+        if: env.GHCR_PACKAGE_VISIBILITY == 'public' && steps.package-visibility.outputs.visibility == 'public'
         env:
           IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
         run: |
@@ -149,6 +186,12 @@ jobs:
           done
           echo "::error::Anonymous pull check failed for ${IMAGE}. Ensure the package visibility allows anonymous pulls."
           exit 1
+
+      - name: 跳过无法校验的匿名拉取验证
+        if: env.GHCR_PACKAGE_VISIBILITY == 'public' && steps.package-visibility.outputs.visibility != 'public'
+        run: |
+          echo "Skipping anonymous pull validation because the workflow could not confirm that the package is public with the current GHCR credentials." >> "$GITHUB_STEP_SUMMARY"
+          echo "If anonymous pulls are required, configure GHCR_TOKEN with package admin permissions or set the package visibility manually in GHCR." >> "$GITHUB_STEP_SUMMARY"
 
       - name: 跳过匿名拉取验证
         if: env.GHCR_PACKAGE_VISIBILITY != 'public'

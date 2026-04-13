@@ -31,9 +31,9 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
 - `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
-- GitHub Actions 发布时可选设置仓库变量 `GHCR_NAMESPACE` 覆盖默认 owner；如果覆盖到其他组织或账号，需要同时提供 `GHCR_USERNAME` 和 `GHCR_TOKEN`。
+- GitHub Actions reusable workflow 默认使用当前仓库 owner 作为 namespace；如需覆盖，可在调用 `.github/workflows/docker-publish.yml` 时传入 `image_namespace`，如果覆盖到其他组织或账号，需要同时提供 `GHCR_USERNAME` 和 `GHCR_TOKEN`。
 - GitHub Actions 默认会把 GHCR 包设为 public，并验证匿名拉取。
-- 如需覆盖默认行为，可设置仓库变量 `GHCR_PACKAGE_VISIBILITY`；只要它不是 `public`，workflow 就会跳过匿名拉取校验。
+- 如需覆盖默认行为，可在调用 reusable workflow 时传入 `package_visibility`；只要它不是 `public`，workflow 就会跳过匿名拉取校验。
 
 ## 三个受支持的命令
 

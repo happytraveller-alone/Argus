@@ -468,16 +468,22 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "docker/setup-qemu-action@v4" in reusable_workflow_text
     assert "docker/setup-buildx-action@v4" in reusable_workflow_text
     assert "docker/build-push-action@v7" in reusable_workflow_text
-    assert "vars.GHCR_NAMESPACE || github.repository_owner" in reusable_workflow_text
-    assert "vars.GHCR_PACKAGE_VISIBILITY || 'public'" in reusable_workflow_text
+    assert "image_namespace:" in reusable_workflow_text
+    assert "package_visibility:" in reusable_workflow_text
+    assert "inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner" in reusable_workflow_text
+    assert "GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}" in reusable_workflow_text
     assert "GHCR_USERNAME" in reusable_workflow_text
     assert "GHCR_TOKEN" in reusable_workflow_text
     assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
     assert "if: env.GHCR_PACKAGE_VISIBILITY == 'public'" in reusable_workflow_text
     assert "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
     assert "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
+    assert 'echo "visibility=unknown" >> "$GITHUB_OUTPUT"' in reusable_workflow_text
+    assert "gh api --method GET" in reusable_workflow_text
     assert "docker logout ghcr.io || true" in reusable_workflow_text
     assert "docker manifest inspect" in reusable_workflow_text
+    assert "steps.package-visibility.outputs.visibility == 'public'" in reusable_workflow_text
+    assert "Skipping anonymous pull validation because the workflow could not confirm that the package is public with the current GHCR credentials." in reusable_workflow_text
 
     assert "\n  push:\n" in runners_workflow_text
     assert "\n    branches:\n      - main\n" in runners_workflow_text
