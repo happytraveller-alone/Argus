@@ -1271,6 +1271,35 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 - 下一刀：
   - 继续收口顶层 runtime helper，或进入 `static_scan_runtime.py` / `scanner_runner.py` 这类 live bridge
 
+### 2026-04-13 Batch 4 / Slice 8
+
+- 已完成：
+  - 顶层 `backend_old/app/services/flow_parser_runner.py` 已迁入
+    `backend_old/app/services/agent/flow/flow_parser_runner.py`
+  - 下列 caller 已改为域内 import：
+    - `agent/skill_test_runner.py`
+    - `agent/flow/lightweight/function_locator.py`
+    - `agent/flow/lightweight/callgraph_code2flow.py`
+    - `agent/flow/lightweight/definition_provider.py`
+  - `backend_old/tests/test_flow_parser_runner_client.py`
+    已同步指向新模块路径
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "from app\\.services\\.flow_parser_runner import|import app\\.services\\.flow_parser_runner|get_flow_parser_runner_client|FlowParserRunnerClient" backend_old/app backend_old/tests -S`
+      live caller 已收口到 agent/flow 域内与测试
+- 当前意义：
+  - `flow_parser_runner.py` 不再作为顶层 service 保留，而是下沉到唯一实际消费它的 agent/flow 域
+  - 这是顶层 flow runner helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`（已下沉）、`user_config_service.py`（已内聚）之外，
+    仍有 `scanner_runner.py` / `static_scan_runtime.py` 这类 runtime bridge
+- 删除条件：
+  - 顶层 `flow_parser_runner.py`：已退休，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 runtime helper，优先 `scanner_runner.py`
+
 ### 2026-04-13 Batch 4 / Slice 3
 
 - 已完成：

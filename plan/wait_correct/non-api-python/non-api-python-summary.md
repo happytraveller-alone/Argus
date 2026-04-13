@@ -680,6 +680,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - E cleanup in progress
 
+### 1x. `flow_parser_runner.py` retired from top-level; helper absorbed into `agent/flow`
+
+- current state:
+  - 顶层 `backend_old/app/services/flow_parser_runner.py` 已迁入
+    `backend_old/app/services/agent/flow/flow_parser_runner.py`
+  - agent/flow 与 skill-test caller 已改为域内 import
+  - `backend_old/tests/test_flow_parser_runner_client.py`
+    已同步指向新模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "from app\\.services\\.flow_parser_runner import|import app\\.services\\.flow_parser_runner|get_flow_parser_runner_client|FlowParserRunnerClient" backend_old/app backend_old/tests -S`
+      live caller 已收口到 agent/flow 域内与测试
+- still missing:
+  - `scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
+- delete gate:
+  - 顶层 `flow_parser_runner.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

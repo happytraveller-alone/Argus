@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.core.config import settings
-from app.services.flow_parser_runner import FlowParserRunnerClient
+from app.services.agent.flow.flow_parser_runner import FlowParserRunnerClient
 
 
 def test_flow_parser_runner_client_writes_request_and_reads_response(monkeypatch, tmp_path):

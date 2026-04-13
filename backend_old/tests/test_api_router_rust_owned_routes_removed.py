@@ -199,3 +199,8 @@ def test_legacy_user_config_service_has_been_retired():
 def test_legacy_json_safe_service_has_been_retired():
     json_safe_path = PROJECT_ROOT / "app/services/json_safe.py"
     assert not json_safe_path.exists()
+
+
+def test_legacy_flow_parser_runner_service_has_been_retired():
+    flow_parser_runner_path = PROJECT_ROOT / "app/services/flow_parser_runner.py"
+    assert not flow_parser_runner_path.exists()

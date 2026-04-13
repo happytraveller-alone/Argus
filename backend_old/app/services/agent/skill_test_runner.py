@@ -30,7 +30,7 @@ from app.services.agent.tools import (
     SymbolBodyTool,
 )
 from app.services.agent.tools.base import ToolResult
-from app.services.flow_parser_runner import get_flow_parser_runner_client
+from app.services.agent.flow.flow_parser_runner import get_flow_parser_runner_client
 
 
 def normalize_extracted_project_root(base_path: str) -> str:
