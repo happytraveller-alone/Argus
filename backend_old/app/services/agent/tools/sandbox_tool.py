@@ -78,7 +78,7 @@ class SandboxManager:
             # 初始化 runner client (如果启用)
             if self._use_new_runner:
                 try:
-                    from app.services.sandbox_runner_client import SandboxRunnerClient
+                    from app.services.agent.tools.sandbox_runner_client import SandboxRunnerClient
                     self._runner_client = SandboxRunnerClient()
                     logger.info("✅ SandboxRunnerClient initialized successfully")
                 except Exception as e:

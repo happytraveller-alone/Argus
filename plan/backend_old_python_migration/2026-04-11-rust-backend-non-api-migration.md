@@ -1166,6 +1166,31 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 - 下一刀：
   - 继续收口顶层 flow/runtime helper，或转入真正的 live bridge 迁移
 
+### 2026-04-13 Batch 4 / Slice 4
+
+- 已完成：
+  - `backend_old/app/services/sandbox_runner_client.py` 已迁入
+    `backend_old/app/services/agent/tools/sandbox_runner_client.py`
+  - `backend_old/app/services/agent/tools/sandbox_tool.py`
+    已改为从 agent/tools 域内 import
+  - `backend_old/tests/test_sandbox_runner_client.py`
+    已同步指向新模块路径
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "sandbox_runner_client|SandboxRunnerClient" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `agent/tools` 域内与测试
+- 当前意义：
+  - `sandbox_runner_client.py` 不再作为顶层 service 保留，而是下沉到唯一实际消费它的 agent/tools 域
+  - 这是顶层 sandbox helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`、`user_config_service.py` 等仍有 live caller
+- 删除条件：
+  - 顶层 `sandbox_runner_client.py`：已退休，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 runtime/agent helper，或转入真正的 live bridge 迁移
+
 ### 2026-04-13 Batch 4 / Slice 3
 
 - 已完成：

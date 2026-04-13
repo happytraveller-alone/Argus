@@ -179,3 +179,8 @@ def test_legacy_flow_parser_runtime_service_has_been_retired():
 def test_legacy_tree_sitter_parser_service_has_been_retired():
     parser_path = PROJECT_ROOT / "app/services/parser.py"
     assert not parser_path.exists()
+
+
+def test_legacy_sandbox_runner_client_service_has_been_retired():
+    sandbox_runner_client_path = PROJECT_ROOT / "app/services/sandbox_runner_client.py"
+    assert not sandbox_runner_client_path.exists()

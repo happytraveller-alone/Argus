@@ -981,6 +981,33 @@
 - 后续修复波次: Wave D / flow helper cleanup
 - owner: Rust migration
 
+### 28. `sandbox_runner_client.py` retired from top-level; helper absorbed into `agent/tools`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/sandbox_runner_client.py`
+- Python 旧行为:
+  - 提供 SandboxRunnerClient
+  - 当前 live caller 已收缩到 `agent/tools/sandbox_tool.py`
+- Rust / current behavior:
+  - 顶层 `sandbox_runner_client.py` 已迁入
+    `backend_old/app/services/agent/tools/sandbox_runner_client.py`
+  - `sandbox_tool.py` 已改为域内 import
+  - `backend_old/tests/test_sandbox_runner_client.py`
+    已同步指向新模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+  - `rg -n "sandbox_runner_client|SandboxRunnerClient" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已收口到 `agent/tools` 域内与测试
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 sandbox helper 内聚退休，不代表 sandbox runtime 已完成 Rust 迁移
+- 后续修复波次: Wave D / sandbox helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

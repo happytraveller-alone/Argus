@@ -592,6 +592,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - D / E cleanup in progress
 
+### 1t. `sandbox_runner_client.py` retired from top-level; helper absorbed into `agent/tools`
+
+- current state:
+  - 顶层 `backend_old/app/services/sandbox_runner_client.py` 已迁入
+    `backend_old/app/services/agent/tools/sandbox_runner_client.py`
+  - `sandbox_tool.py` 已改为从 agent/tools 域内 import
+  - `backend_old/tests/test_sandbox_runner_client.py`
+    已同步指向新模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "sandbox_runner_client|SandboxRunnerClient" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `agent/tools` 域内与测试
+- still missing:
+  - `scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`、`user_config_service.py` 等仍有 live caller
+- delete gate:
+  - 顶层 `sandbox_runner_client.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

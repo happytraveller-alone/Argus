@@ -8,7 +8,7 @@ import os
 import pytest
 from pathlib import Path
 
-from app.services.sandbox_runner_client import SandboxRunnerClient
+from app.services.agent.tools.sandbox_runner_client import SandboxRunnerClient
 
 
 def test_client_initialization(tmp_path):
