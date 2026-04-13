@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `223`
+- Total inventory: `216`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `223`
+- `backend_old/app` non-API Python: `216`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -461,6 +461,38 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
     `bandit_rules_snapshot.py` 等仍在 `migrate_with_api`
 - delete gate:
   - `seed_archive.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - C in progress
+
+### 1o. `zip_storage.py` and `upload/*` retired from live tree
+
+- current state:
+  - 已删除：
+    - `backend_old/app/services/zip_storage.py`
+    - `backend_old/app/services/upload/compression_factory.py`
+    - `backend_old/app/services/upload/compression_handlers.py`
+    - `backend_old/app/services/upload/compression_strategy.py`
+    - `backend_old/app/services/upload/language_detection.py`
+    - `backend_old/app/services/upload/project_stats.py`
+    - `backend_old/app/services/upload/upload_manager.py`
+  - 已删除旧专属测试：
+    - `backend_old/tests/test_llm_description.py`
+    - `backend_old/tests/test_cloc_stats.py`
+    - `backend_old/tests/test_project_stats_suffix_fallback.py`
+    - `backend_old/tests/test_file_upload_compress.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `216`
+    - `rg -n "zip_storage.py|get_project_zip_path|project_stats.py|generate_project_description|get_cloc_stats_from_archive|UploadManager|CompressionStrategyFactory|compression_handlers.py|compression_strategy.py|language_detection.py" backend_old backend frontend plan -S`
+      live caller 命中只剩 Rust `projects` 路由、退休守门测试与迁移文档
+- still missing:
+  - frontend 当前仍允许非 zip archive 后缀，但 Rust `projects` 仍是 zip-only contract
+  - `json_safe.py` 仍在 `migrate_now`
+- delete gate:
+  - `zip_storage.py` / `upload/*` / `project_stats.py` 已达到删除门并已退休
 - owner: Rust migration
 - target phase:
   - C in progress

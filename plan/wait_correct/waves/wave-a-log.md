@@ -812,6 +812,41 @@
 - 后续修复波次: Wave C / shared-service cleanup
 - owner: Rust migration
 
+### 22. `zip_storage.py` and `upload/*` retired from live tree
+
+- endpoint / feature:
+  - Python dead implementation:
+    - `backend_old/app/services/zip_storage.py`
+    - `backend_old/app/services/upload/compression_factory.py`
+    - `backend_old/app/services/upload/compression_handlers.py`
+    - `backend_old/app/services/upload/compression_strategy.py`
+    - `backend_old/app/services/upload/language_detection.py`
+    - `backend_old/app/services/upload/project_stats.py`
+    - `backend_old/app/services/upload/upload_manager.py`
+- Python 旧行为:
+  - `zip_storage.py` 提供 ZIP 文件路径/元数据 helper
+  - `upload/*` 提供压缩包策略、cloc/项目描述、语言识别与解压 helper
+  - 当前仓库里已无 live caller，只剩旧专属测试
+- Rust 当前行为:
+  - 上述文件已从 repo 物理删除
+  - `backend_old/tests/test_llm_description.py`、`test_cloc_stats.py`、
+    `test_project_stats_suffix_fallback.py`、`test_file_upload_compress.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - live upload / archive / description HTTP surface 继续由 `backend/src/routes/projects.rs` 承接
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `216`
+  - `rg -n "zip_storage.py|get_project_zip_path|project_stats.py|generate_project_description|get_cloc_stats_from_archive|UploadManager|CompressionStrategyFactory|compression_handlers.py|compression_strategy.py|language_detection.py" backend_old backend frontend plan -S`
+    live caller 命中只剩 Rust `projects` 路由、退休守门测试与迁移文档
+- 是否影响前端:
+  - 当前不影响前端 live path；前端访问的是 Rust `projects` 路由
+  - 但这不代表 Rust 已等价覆盖旧 Python upload 语义；前端仍允许非 zip archive 后缀，Rust 仍是 zip-only contract
+- 边界说明:
+  - 本次退休的是 dead implementation，不是“upload 语义已全部迁完”的宣告
+- 后续修复波次: Wave C / upload-contract cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

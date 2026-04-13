@@ -119,3 +119,38 @@ def test_legacy_init_templates_service_has_been_retired():
 def test_legacy_seed_archive_service_has_been_retired():
     seed_archive_path = PROJECT_ROOT / "app/services/seed_archive.py"
     assert not seed_archive_path.exists()
+
+
+def test_legacy_zip_storage_service_has_been_retired():
+    zip_storage_path = PROJECT_ROOT / "app/services/zip_storage.py"
+    assert not zip_storage_path.exists()
+
+
+def test_legacy_upload_compression_factory_has_been_retired():
+    compression_factory_path = PROJECT_ROOT / "app/services/upload/compression_factory.py"
+    assert not compression_factory_path.exists()
+
+
+def test_legacy_upload_compression_handlers_have_been_retired():
+    compression_handlers_path = PROJECT_ROOT / "app/services/upload/compression_handlers.py"
+    assert not compression_handlers_path.exists()
+
+
+def test_legacy_upload_compression_strategy_has_been_retired():
+    compression_strategy_path = PROJECT_ROOT / "app/services/upload/compression_strategy.py"
+    assert not compression_strategy_path.exists()
+
+
+def test_legacy_upload_language_detection_has_been_retired():
+    language_detection_path = PROJECT_ROOT / "app/services/upload/language_detection.py"
+    assert not language_detection_path.exists()
+
+
+def test_legacy_upload_project_stats_has_been_retired():
+    project_stats_path = PROJECT_ROOT / "app/services/upload/project_stats.py"
+    assert not project_stats_path.exists()
+
+
+def test_legacy_upload_manager_has_been_retired():
+    upload_manager_path = PROJECT_ROOT / "app/services/upload/upload_manager.py"
+    assert not upload_manager_path.exists()

@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `223` 个文件：
+- 当前纳入本计划的 Python 存量一共 `216` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `223` 个
+  - `backend_old/app` 下除 `api` 外 `216` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `223`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `216`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -137,10 +137,10 @@
 | `root bootstrap / diagnostics` | 4 | `4 retired_after_rust_takeover` | A + F | `backend/src/main.rs`, 后续 `backend/src/bin/*` 或 `scripts/` |
 | `core + db + models + schemas` | 39 | `39 migrate_now` | A + B | `backend/src/core/*`, `backend/src/db/*`, `backend/src/domain/*` |
 | `runtime + launchers` | 18 | `17 migrate_with_api`, `1 retired_after_rust_takeover` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
-| `services/upload` | 5 | `5 migrate_now` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
+| `services/upload` | 5 | `5 retired_after_rust_takeover` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
-| `services/scan/search/report/project` | 17 | `2 migrate_now`, `7 migrate_with_api`, `3 compat_only`, `5 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
+| `services/scan/search/report/project` | 17 | `1 migrate_now`, `6 migrate_with_api`, `3 compat_only`, `7 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
 | `utils` | 4 | `4 compat_only` | Batch 5 | 吸收到 `backend/src/core/*` 或具体模块内部 |
 
 ## 分桶明细
@@ -261,14 +261,15 @@
 
 ### 4. `services/upload` (`5`)
 
-#### `migrate_now`
+#### `retired_after_rust_takeover`
 
 - `backend_old/app/services/upload/*`
 
 #### 迁移要求
 
-- 上传、解压、语言识别、压缩策略、项目统计要先收口到 Rust。
-- Rust `projects` / `static-tasks` 后续不能继续回调 Python upload service。
+- Rust `projects` 已承接 live upload / description / archive HTTP surface。
+- Python `upload/*` 当前确认无 live caller，仅剩 legacy tests / 参考语义。
+- 这不等于 Rust 已全量等价旧 Python upload 语义；只表示这组 Python 实现不再 live。
 
 ### 5. `services/llm + llm_rule` (`23`)
 
@@ -319,14 +320,14 @@
 
 ### 7. `services/scan/search/report/project` (`18`)
 
-#### `migrate_now` (`2`)
+#### `migrate_now` (`1`)
 
-- `backend_old/app/services/zip_storage.py`
 - `backend_old/app/services/json_safe.py`
 
-#### `retired_after_rust_takeover` (`6`)
+#### `retired_after_rust_takeover` (`7`)
 
 - `backend_old/app/services/zip_cache_manager.py`
+- `backend_old/app/services/zip_storage.py`
 - `backend_old/app/services/search_service.py`
 - `backend_old/app/services/report_generator.py`
 - `backend_old/app/services/runner_preflight.py`
@@ -1024,3 +1025,38 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `seed_archive.py`：已删除，本 slice 完成
 - 下一刀：
   - 继续筛剩余 dead service，或回到 `zip_storage.py` / `json_safe.py` 这类活桥
+
+### 2026-04-13 Batch 3 / Slice 8
+
+- 已完成：
+  - Python dead implementation 已物理删除：
+    - `backend_old/app/services/zip_storage.py`
+    - `backend_old/app/services/upload/compression_factory.py`
+    - `backend_old/app/services/upload/compression_handlers.py`
+    - `backend_old/app/services/upload/compression_strategy.py`
+    - `backend_old/app/services/upload/language_detection.py`
+    - `backend_old/app/services/upload/project_stats.py`
+    - `backend_old/app/services/upload/upload_manager.py`
+  - 旧专属测试已删除：
+    - `backend_old/tests/test_llm_description.py`
+    - `backend_old/tests/test_cloc_stats.py`
+    - `backend_old/tests/test_project_stats_suffix_fallback.py`
+    - `backend_old/tests/test_file_upload_compress.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `216`
+    - `rg -n "zip_storage.py|get_project_zip_path|project_stats.py|generate_project_description|get_cloc_stats_from_archive|UploadManager|CompressionStrategyFactory|compression_handlers.py|compression_strategy.py|language_detection.py" backend_old backend frontend plan -S`
+      live caller 命中只剩 Rust `projects` 路由、退休守门测试与迁移文档
+- 当前意义：
+  - Rust `projects` 已承接 live upload / archive / description HTTP surface；旧 Python `zip_storage.py` 和 `upload/*` 仅剩参考实现与测试依赖，现已整体退休
+  - 这一步是 dead implementation retirement，不代表 Rust 已全量等价旧 Python upload 语义
+  - `services/upload` 整桶已从 live tree 清空；`services/scan/search/report/project` 里的 `migrate_now` 继续收缩到只剩 `json_safe.py`
+- 仍未完成：
+  - frontend 当前仍允许非 zip archive 后缀，但 Rust `projects` 仍是 zip-only contract
+  - `json_safe.py` 仍被 Python agent/event manager live caller 使用
+  - `gitleaks_rules_seed.py`、`pmd_rulesets.py`、`parser.py`、`rule.py`、`bandit_rules_snapshot.py` 等仍在 `migrate_with_api`
+- 删除条件：
+  - `zip_storage.py` / `upload/*` / `project_stats.py`：已删除，本 slice 完成
+- 下一刀：
+  - 回到真正仍有 live caller 的 `json_safe.py` / `parser.py` / runtime bridge
