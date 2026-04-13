@@ -190,6 +190,171 @@ async fn create_with_zip_and_description_preview_are_available() {
 }
 
 #[tokio::test]
+async fn download_project_archive_supports_utf8_filenames() {
+    let config = isolated_test_config("projects-utf8-archive-name");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let create_payload = json!({
+        "name": "utf8-project",
+        "source_type": "zip",
+        "default_branch": "main",
+        "programming_languages": []
+    });
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects")
+                .header("content-type", "application/json")
+                .body(Body::from(create_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let project_id = create_json["id"].as_str().unwrap().to_string();
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_zip_multipart_bytes(vec![(
+                    "file",
+                    Some("审计项目\"最终版\".zip"),
+                    Some("application/zip"),
+                    test_zip_bytes(),
+                )])))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let archive_response = app
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}/archive"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(archive_response.status(), StatusCode::OK);
+    let disposition = archive_response
+        .headers()
+        .get("content-disposition")
+        .expect("content-disposition should exist")
+        .to_str()
+        .expect("content-disposition should be ASCII-safe");
+    assert!(disposition.contains("filename="));
+    assert!(disposition.contains("filename*=UTF-8''"));
+    assert!(disposition.contains("%E5%AE%A1%E8%AE%A1"));
+}
+
+#[tokio::test]
+async fn project_file_content_reports_actual_encoding_instead_of_requested_encoding() {
+    let config = isolated_test_config("projects-file-content-encoding");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let create_payload = json!({
+        "name": "encoding-project",
+        "source_type": "zip",
+        "default_branch": "main",
+        "programming_languages": []
+    });
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects")
+                .header("content-type", "application/json")
+                .body(Body::from(create_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let project_id = create_json["id"].as_str().unwrap().to_string();
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_zip_multipart_body()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let latin1_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/projects/{project_id}/files/src/main.rs?encoding=latin1"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(latin1_response.status(), StatusCode::OK);
+    let latin1_json: Value = serde_json::from_slice(
+        &to_bytes(latin1_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(latin1_json["encoding"], "utf-8");
+    assert_eq!(latin1_json["is_cached"], false);
+
+    let cached_response = app
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}/files/src/main.rs"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cached_response.status(), StatusCode::OK);
+    let cached_json: Value = serde_json::from_slice(
+        &to_bytes(cached_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cached_json["encoding"], "utf-8");
+    assert_eq!(cached_json["is_cached"], true);
+}
+
+#[tokio::test]
 async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
     let source_config = isolated_test_config("projects-domain-source");
     let source_state = AppState::from_config(source_config.clone())

@@ -468,11 +468,8 @@ pub async fn download_project_archive(
     );
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!(
-            "attachment; filename=\"{}\"",
-            archive.original_filename
-        ))
-        .map_err(|error| ApiError::Internal(error.to_string()))?,
+        HeaderValue::from_str(&build_content_disposition(&archive.original_filename))
+            .map_err(|error| ApiError::Internal(error.to_string()))?,
     );
     Ok(response)
 }
@@ -1136,6 +1133,50 @@ fn build_file_content_payload(
     })
 }
 
+fn build_content_disposition(original_filename: &str) -> String {
+    let fallback = ascii_fallback_filename(original_filename);
+    let encoded = percent_encode_utf8(original_filename);
+    format!(
+        "attachment; filename=\"{}\"; filename*=UTF-8''{}",
+        fallback, encoded
+    )
+}
+
+fn ascii_fallback_filename(original_filename: &str) -> String {
+    let mut sanitized = String::new();
+    for ch in original_filename.chars() {
+        let safe = ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_');
+        if safe {
+            sanitized.push(ch);
+        } else if ch.is_ascii_whitespace() && !sanitized.ends_with('_') {
+            sanitized.push('_');
+        } else if ch.is_ascii() && !sanitized.ends_with('_') {
+            sanitized.push('_');
+        }
+    }
+
+    let sanitized = sanitized.trim_matches('_');
+    if sanitized.is_empty() {
+        "download.zip".to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+fn percent_encode_utf8(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.as_bytes() {
+        let ch = *byte as char;
+        let unreserved = ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~');
+        if unreserved {
+            encoded.push(ch);
+        } else {
+            encoded.push_str(&format!("%{:02X}", byte));
+        }
+    }
+    encoded
+}
+
 fn to_project_response(project: &StoredProject, include_metrics: bool) -> ProjectResponse {
     ProjectResponse {
         id: project.id.clone(),
@@ -1243,7 +1284,7 @@ fn build_file_tree(files: &[ProjectFileEntry]) -> FileTreeNode {
 fn read_archive_file(
     storage_path: &str,
     file_path: &str,
-    requested_encoding: Option<&str>,
+    _requested_encoding: Option<&str>,
 ) -> Result<(String, u64, String, bool), ApiError> {
     let bytes = std::fs::read(storage_path)
         .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
@@ -1258,7 +1299,7 @@ fn read_archive_file(
     std::io::Read::read_to_end(&mut entry, &mut file_bytes)
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     let is_text = is_probably_text(file_path, &file_bytes);
-    let encoding = requested_encoding.unwrap_or("utf-8").to_string();
+    let encoding = "utf-8".to_string();
     let content = if is_text {
         String::from_utf8_lossy(&file_bytes).to_string()
     } else {
