@@ -30,7 +30,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
   VULHUNTER_IMAGE_NAMESPACE: ${{ vars.GHCR_NAMESPACE || github.repository_owner }}
-  GHCR_PACKAGE_VISIBILITY: ${{ vars.GHCR_PACKAGE_VISIBILITY || 'private' }}
+  GHCR_PACKAGE_VISIBILITY: ${{ vars.GHCR_PACKAGE_VISIBILITY || 'public' }}
   VULHUNTER_IMAGE_TAG: latest
 
 jobs:

@@ -469,7 +469,7 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "docker/setup-buildx-action@v4" in reusable_workflow_text
     assert "docker/build-push-action@v7" in reusable_workflow_text
     assert "vars.GHCR_NAMESPACE || github.repository_owner" in reusable_workflow_text
-    assert "vars.GHCR_PACKAGE_VISIBILITY || 'private'" in reusable_workflow_text
+    assert "vars.GHCR_PACKAGE_VISIBILITY || 'public'" in reusable_workflow_text
     assert "GHCR_USERNAME" in reusable_workflow_text
     assert "GHCR_TOKEN" in reusable_workflow_text
     assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
