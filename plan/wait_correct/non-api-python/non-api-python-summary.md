@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `229`
+- Total inventory: `227`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `229`
+- `backend_old/app` non-API Python: `227`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -374,6 +374,31 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - F in progress
+
+### 1k. `search_service.py` and `report_generator.py` retired from live tree
+
+- current state:
+  - 已删除：
+    - `backend_old/app/services/search_service.py`
+    - `backend_old/app/services/report_generator.py`
+  - 已删除旧专属测试：
+    - `backend_old/tests/test_search_service.py`
+    - `backend_old/tests/test_report_generator_contract.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `227`
+    - `rg -n "search_service.py|report_generator.py|SearchService|ReportGenerator" backend_old backend frontend plan -S`
+      只剩退休守门测试、离线规则文本与迁移文档命中
+- still missing:
+  - Rust `search` 仍只有 project search 真正 owned，tasks/findings search 仍是空壳
+  - `zip_storage.py`、`json_safe.py`、`runner_preflight.py` 仍在 `migrate_now` 集合
+- delete gate:
+  - `search_service.py` / `report_generator.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - C in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 

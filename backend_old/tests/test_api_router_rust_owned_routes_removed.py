@@ -89,3 +89,13 @@ def test_legacy_project_metrics_service_module_has_been_retired():
 def test_legacy_zip_cache_manager_has_been_retired():
     cache_path = PROJECT_ROOT / "app/services/zip_cache_manager.py"
     assert not cache_path.exists()
+
+
+def test_legacy_search_service_has_been_retired():
+    search_service_path = PROJECT_ROOT / "app/services/search_service.py"
+    assert not search_service_path.exists()
+
+
+def test_legacy_report_generator_service_has_been_retired():
+    report_generator_path = PROJECT_ROOT / "app/services/report_generator.py"
+    assert not report_generator_path.exists()

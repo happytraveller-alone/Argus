@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `229` 个文件：
+- 当前纳入本计划的 Python 存量一共 `227` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `229` 个
+  - `backend_old/app` 下除 `api` 外 `227` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `227`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -140,7 +140,7 @@
 | `services/upload` | 5 | `5 migrate_now` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
-| `services/scan/search/report/project` | 18 | `6 migrate_now`, `8 migrate_with_api`, `3 compat_only`, `1 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
+| `services/scan/search/report/project` | 17 | `3 migrate_now`, `8 migrate_with_api`, `3 compat_only`, `3 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
 | `utils` | 4 | `4 compat_only` | Batch 5 | 吸收到 `backend/src/core/*` 或具体模块内部 |
 
 ## 分桶明细
@@ -316,17 +316,17 @@
 
 ### 7. `services/scan/search/report/project` (`18`)
 
-#### `migrate_now` (`6`)
+#### `migrate_now` (`3`)
 
-- `backend_old/app/services/search_service.py`
 - `backend_old/app/services/zip_storage.py`
 - `backend_old/app/services/json_safe.py`
-- `backend_old/app/services/report_generator.py`
 - `backend_old/app/services/runner_preflight.py`
 
-#### `retired_after_rust_takeover` (`1`)
+#### `retired_after_rust_takeover` (`3`)
 
 - `backend_old/app/services/zip_cache_manager.py`
+- `backend_old/app/services/search_service.py`
+- `backend_old/app/services/report_generator.py`
 
 #### `migrate_with_api` (`8`)
 
@@ -915,3 +915,33 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `backend_old/main.py`：已删除，本 slice 完成
 - 下一刀：
   - 回到 Phase C / Phase A 主线，继续收口真实 bridge，而不是只清 dead entry
+
+### 2026-04-13 Batch 3 / Slice 4
+
+- 已完成：
+  - Python dead service 已物理删除：
+    - `backend_old/app/services/search_service.py`
+    - `backend_old/app/services/report_generator.py`
+  - Python 旧专属测试已删除：
+    - `backend_old/tests/test_search_service.py`
+    - `backend_old/tests/test_report_generator_contract.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `227`
+    - `rg -n "search_service.py|report_generator.py|SearchService|ReportGenerator" backend_old backend frontend plan -S`
+      只剩退休守门测试、离线规则文本与迁移文档命中
+- 当前意义：
+  - `search_service.py` 与 `report_generator.py` 已确认不在 live caller 链路里，只剩 legacy tests 依赖
+  - 这两条 shared service 已从 `migrate_now` 资产表移出，转为已退休 dead service
+  - 当前 `services/scan/search/report/project` 桶中的真实 `migrate_now` 剩余项进一步收缩到：
+    - `zip_storage.py`
+    - `json_safe.py`
+    - `runner_preflight.py`
+- 仍未完成：
+  - Rust `search` 仍只有 project search 真正 owned，tasks/findings search 仍是空壳
+  - `zip_storage.py`、`runner_preflight.py` 以及 upload/project bridge 仍是活跃收口对象
+- 删除条件：
+  - `search_service.py` / `report_generator.py`：已删除，本 slice 完成
+- 下一刀：
+  - 回到仍有 live bridge 的 `zip_storage.py` / `runner_preflight.py` / upload contract

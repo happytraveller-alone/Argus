@@ -705,6 +705,35 @@
 - 后续修复波次: Wave F / phase-mainline cleanup
 - owner: Rust migration
 
+### 18. `search_service.py` and `report_generator.py` retired from live tree
+
+- endpoint / feature:
+  - Python dead services:
+    - `backend_old/app/services/search_service.py`
+    - `backend_old/app/services/report_generator.py`
+- Python 旧行为:
+  - `search_service.py` 提供 legacy project/task/finding search 组合查询
+  - `report_generator.py` 提供 WeasyPrint PDF 报告生成
+  - 当前仓库里二者已无 live caller，只剩 legacy tests
+- Rust 当前行为:
+  - 两个 service 文件已从 repo 物理删除
+  - `backend_old/tests/test_search_service.py` 与 `backend_old/tests/test_report_generator_contract.py`
+    已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `227`
+  - `rg -n "search_service.py|report_generator.py|SearchService|ReportGenerator" backend_old backend frontend plan -S`
+    只剩退休守门测试、离线规则文本与迁移文档命中
+- 是否影响前端:
+  - 当前不影响前端 live path；前端没有 active caller 直接依赖这两个 Python service
+- 边界说明:
+  - `search_service.py` 退休不代表 Rust `tasks/findings` search 已完成，只表示 Python service 本身不再 live
+  - `report_generator.py` 退休不代表所有导出/report 语义已完全收口到 Rust，只表示这个 Python 实现不再 live
+- 后续修复波次: Wave C / shared-service cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
