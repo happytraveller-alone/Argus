@@ -9,6 +9,11 @@ def test_legacy_backend_main_module_has_been_retired():
     assert not main_path.exists()
 
 
+def test_legacy_root_main_script_has_been_retired():
+    root_main_path = PROJECT_ROOT / "main.py"
+    assert not root_main_path.exists()
+
+
 def test_legacy_root_verify_llm_script_has_been_retired():
     verify_path = PROJECT_ROOT / "verify_llm.py"
     assert not verify_path.exists()

@@ -681,6 +681,30 @@
 - 后续修复波次: Wave F / root bootstrap cleanup
 - owner: Rust migration
 
+### 17. `backend_old/main.py` retired; root Python live surface is zero
+
+- endpoint / feature:
+  - Python root entry: `backend_old/main.py`
+- Python 旧行为:
+  - root stub 只输出 `Hello from VulHunter-backend!`
+  - 不承接 HTTP surface、runtime bootstrap、compose 启动或 Docker entrypoint
+- Rust 当前行为:
+  - `backend_old/main.py` 已从 repo 物理删除
+  - `backend_old/tests/test_legacy_backend_main_retired.py`
+    已补 root `main.py` 退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+  - `rg -n "backend_old/main.py|Hello from VulHunter-backend" backend_old backend docker scripts .github frontend plan -S`
+    只剩迁移文档命中
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖 root `main.py`
+- 边界说明:
+  - 这一步清空了 `backend_old` 根目录 Python live surface
+  - 但不意味着 non-API migration 主战场已经完成
+- 后续修复波次: Wave F / phase-mainline cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

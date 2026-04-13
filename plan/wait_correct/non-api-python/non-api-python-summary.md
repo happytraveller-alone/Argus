@@ -1,7 +1,7 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `230`
-- `backend_old` root Python: `1`
+- Total inventory: `229`
+- `backend_old` root Python: `0`
 - `backend_old/app` non-API Python: `229`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
@@ -351,6 +351,26 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - delete gate:
   - 三条 diagnostics script 已达到删除门并已退休
   - `backend_old/main.py` 需要等 root bootstrap responsibility 全部收口到 Rust 后才能删
+- owner: Rust migration
+- target phase:
+  - F in progress
+
+### 1j. `backend_old/main.py` retired; root Python live surface is now zero
+
+- current state:
+  - `backend_old/main.py` 已删除
+  - `backend_old/tests/test_legacy_backend_main_retired.py`
+    已补 root `main.py` 退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "backend_old/main.py|Hello from VulHunter-backend" backend_old backend docker scripts .github frontend plan -S`
+      只剩迁移文档命中
+- still missing:
+  - non-API migration 主战场仍在 `app/core`、`app/db`、`upload`、`llm`、`agent`
+- delete gate:
+  - `backend_old/main.py` 已达到删除门并已退休
+  - `backend_old` 根目录 Python live surface 已归零
 - owner: Rust migration
 - target phase:
   - F in progress

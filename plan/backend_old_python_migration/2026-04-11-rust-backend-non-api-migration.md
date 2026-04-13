@@ -3,8 +3,8 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `230` 个文件：
-  - `backend_old` 根目录 `1` 个
+- 当前纳入本计划的 Python 存量一共 `229` 个文件：
+  - `backend_old` 根目录 `0` 个
   - `backend_old/app` 下除 `api` 外 `229` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
@@ -28,7 +28,7 @@
 ## 2026-04-11 仓库事实刷新（二次核对）
 
 - read-only evidence:
-  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `1`
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
   - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
@@ -134,25 +134,22 @@
 
 | 大类 | 文件数 | 默认归类 | 目标 phase | Rust 落点 |
 | --- | ---: | --- | --- | --- |
-| `root bootstrap / diagnostics` | 4 | `1 migrate_now`, `3 retire` | A + F | `backend/src/main.rs`, 后续 `backend/src/bin/*` 或 `scripts/` |
+| `root bootstrap / diagnostics` | 4 | `4 retired_after_rust_takeover` | A + F | `backend/src/main.rs`, 后续 `backend/src/bin/*` 或 `scripts/` |
 | `core + db + models + schemas` | 39 | `39 migrate_now` | A + B | `backend/src/core/*`, `backend/src/db/*`, `backend/src/domain/*` |
 | `runtime + launchers` | 18 | `18 migrate_with_api` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
 | `services/upload` | 5 | `5 migrate_now` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
-| `services/scan/search/report/project` | 18 | `7 migrate_now`, `8 migrate_with_api`, `3 compat_only` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
+| `services/scan/search/report/project` | 18 | `6 migrate_now`, `8 migrate_with_api`, `3 compat_only`, `1 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
 | `utils` | 4 | `4 compat_only` | Batch 5 | 吸收到 `backend/src/core/*` 或具体模块内部 |
 
 ## 分桶明细
 
 ### 1. `root bootstrap / diagnostics` (`4`)
 
-#### `migrate_now`
+#### `retired_after_rust_takeover`
 
 - `backend_old/main.py`
-
-#### `retire`
-
 - `backend_old/verify_llm.py`
 - `backend_old/check_docker_direct.py`
 - `backend_old/check_sandbox.py`
@@ -896,3 +893,25 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `backend_old/main.py`：只有在 root bootstrap / startup responsibility 全部收口到 Rust 后才能删
 - 下一刀：
   - 继续收口 root `main.py` 与剩余 Phase C shared service / bridge
+
+### 2026-04-13 Batch 3 / Slice 3
+
+- 已完成：
+  - Python root entry `backend_old/main.py` 已物理删除
+  - `backend_old/tests/test_legacy_backend_main_retired.py`
+    已补 root `main.py` 退休守门测试
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `229`
+    - `rg -n "backend_old/main.py|Hello from VulHunter-backend" backend_old backend docker scripts .github frontend plan -S`
+      只剩迁移文档命中
+- 当前意义：
+  - `backend_old` 根目录 Python live surface 已清零
+  - `root bootstrap / diagnostics` 这一桶现在全部从 live tree 中退出
+  - root Python 入口责任已经完全收口到 Rust / 现有 Docker 启动链路
+- 仍未完成：
+  - 整体 non-API migration 目标仍远未完成，主战场还在 `app/core`、`app/db`、`upload`、`llm`、`agent`
+- 删除条件：
+  - `backend_old/main.py`：已删除，本 slice 完成
+- 下一刀：
+  - 回到 Phase C / Phase A 主线，继续收口真实 bridge，而不是只清 dead entry
