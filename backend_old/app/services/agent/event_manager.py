@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 import uuid
 
-from app.services.json_safe import dump_json_safe, normalize_json_safe
+from app.services.agent.json_safe import dump_json_safe, normalize_json_safe
 
 logger = logging.getLogger(__name__)
 

@@ -658,6 +658,28 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - D / config cleanup in progress
 
+### 1w. `json_safe.py` retired from top-level; helper absorbed into `agent/`
+
+- current state:
+  - 顶层 `backend_old/app/services/json_safe.py` 已迁入
+    `backend_old/app/services/agent/json_safe.py`
+  - agent caller 已改为域内 import
+  - `backend_old/tests/test_json_safe.py` 已同步指向新模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "from app\\.services\\.json_safe import|import app\\.services\\.json_safe|dump_json_safe|normalize_json_safe" backend_old/app backend_old/tests -S`
+      live caller 已收口到 agent 域内与测试
+- still missing:
+  - `flow_parser_runner.py`、`scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
+- delete gate:
+  - 顶层 `json_safe.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

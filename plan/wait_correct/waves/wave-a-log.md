@@ -1058,6 +1058,31 @@
 - 后续修复波次: Wave D / runtime helper cleanup
 - owner: Rust migration
 
+### 31. `json_safe.py` retired from top-level; helper absorbed into `agent/`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/json_safe.py`
+- Python 旧行为:
+  - 提供 `dump_json_safe` / `normalize_json_safe`
+  - 当前 live caller 已收缩到 agent 域
+- Rust / current behavior:
+  - 顶层 `json_safe.py` 已迁入 `backend_old/app/services/agent/json_safe.py`
+  - agent caller 已改为域内 import
+  - `backend_old/tests/test_json_safe.py` 已同步指向新模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+  - `rg -n "from app\\.services\\.json_safe import|import app\\.services\\.json_safe|dump_json_safe|normalize_json_safe" backend_old/app backend_old/tests -S`
+    live caller 已收口到 agent 域内与测试
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 agent helper 内聚退休，不代表 agent 内核已完成 Rust 迁移
+- 后续修复波次: Wave E / agent helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

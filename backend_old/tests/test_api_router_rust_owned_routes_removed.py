@@ -194,3 +194,8 @@ def test_legacy_backend_venv_service_has_been_retired():
 def test_legacy_user_config_service_has_been_retired():
     user_config_service_path = PROJECT_ROOT / "app/services/user_config_service.py"
     assert not user_config_service_path.exists()
+
+
+def test_legacy_json_safe_service_has_been_retired():
+    json_safe_path = PROJECT_ROOT / "app/services/json_safe.py"
+    assert not json_safe_path.exists()

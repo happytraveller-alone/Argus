@@ -18,7 +18,7 @@ import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from app.services.json_safe import dump_json_safe
+from app.services.agent.json_safe import dump_json_safe
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response

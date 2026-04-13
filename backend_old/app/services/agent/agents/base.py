@@ -29,7 +29,7 @@ import threading
 import tempfile
 from pathlib import Path
 
-from app.services.json_safe import dump_json_safe, normalize_json_safe
+from app.services.agent.json_safe import dump_json_safe, normalize_json_safe
 
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry

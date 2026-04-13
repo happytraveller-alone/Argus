@@ -2,7 +2,7 @@ import json
 
 from pydantic import BaseModel
 
-from app.services.json_safe import dump_json_safe, normalize_json_safe
+from app.services.agent.json_safe import dump_json_safe, normalize_json_safe
 
 
 class ReconRiskPointInput(BaseModel):
