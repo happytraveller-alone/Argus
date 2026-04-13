@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `227` 个文件：
+- 当前纳入本计划的 Python 存量一共 `226` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `227` 个
+  - `backend_old/app` 下除 `api` 外 `226` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `227`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `226`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -140,7 +140,7 @@
 | `services/upload` | 5 | `5 migrate_now` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
-| `services/scan/search/report/project` | 17 | `3 migrate_now`, `8 migrate_with_api`, `3 compat_only`, `3 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
+| `services/scan/search/report/project` | 17 | `2 migrate_now`, `8 migrate_with_api`, `3 compat_only`, `4 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
 | `utils` | 4 | `4 compat_only` | Batch 5 | 吸收到 `backend/src/core/*` 或具体模块内部 |
 
 ## 分桶明细
@@ -316,17 +316,17 @@
 
 ### 7. `services/scan/search/report/project` (`18`)
 
-#### `migrate_now` (`3`)
+#### `migrate_now` (`2`)
 
 - `backend_old/app/services/zip_storage.py`
 - `backend_old/app/services/json_safe.py`
-- `backend_old/app/services/runner_preflight.py`
 
-#### `retired_after_rust_takeover` (`3`)
+#### `retired_after_rust_takeover` (`4`)
 
 - `backend_old/app/services/zip_cache_manager.py`
 - `backend_old/app/services/search_service.py`
 - `backend_old/app/services/report_generator.py`
+- `backend_old/app/services/runner_preflight.py`
 
 #### `migrate_with_api` (`8`)
 
@@ -945,3 +945,28 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `search_service.py` / `report_generator.py`：已删除，本 slice 完成
 - 下一刀：
   - 回到仍有 live bridge 的 `zip_storage.py` / `runner_preflight.py` / upload contract
+
+### 2026-04-13 Batch 3 / Slice 5
+
+- 已完成：
+  - Python dead service 已物理删除：
+    - `backend_old/app/services/runner_preflight.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `226`
+    - `rg -n "runner_preflight.py|run_configured_runner_preflights|get_configured_runner_preflight_specs|RunnerPreflightSpec" backend_old backend plan scripts -S`
+      live runtime 命中只剩 Rust `backend/src/bootstrap/preflight.rs` 与 release template helper
+- 当前意义：
+  - runner preflight 的 live ownership 已明确在 Rust bootstrap，Python `runner_preflight.py` 不再作为运行时实现保留
+  - `services/scan/search/report/project` 桶中的真实 `migrate_now` 继续收缩到：
+    - `zip_storage.py`
+    - `json_safe.py`
+- 仍未完成：
+  - `zip_storage.py` 仍是活 bridge
+  - `json_safe.py` 仍被 Python agent/event manager live caller 使用
+  - release template helper `scripts/release-templates/runner_preflight.py` 仍存在，它不是 `backend_old` live service
+- 删除条件：
+  - `runner_preflight.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续收口真正仍有 live caller 的 `zip_storage.py` / `json_safe.py` / upload bridge

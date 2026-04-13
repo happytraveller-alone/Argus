@@ -734,6 +734,31 @@
 - 后续修复波次: Wave C / shared-service cleanup
 - owner: Rust migration
 
+### 19. `runner_preflight.py` retired; live preflight ownership is Rust bootstrap
+
+- endpoint / feature:
+  - Python dead service: `backend_old/app/services/runner_preflight.py`
+- Python 旧行为:
+  - `runner_preflight.py` 承担 runner image 自检 / warmup
+  - 当前仓库里已无 Python live caller 依赖它
+- Rust 当前行为:
+  - live preflight 由 `backend/src/bootstrap/preflight.rs` 承接
+  - Python `runner_preflight.py` 已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `226`
+  - `rg -n "runner_preflight.py|run_configured_runner_preflights|get_configured_runner_preflight_specs|RunnerPreflightSpec" backend_old backend plan scripts -S`
+    live runtime 命中只剩 Rust `backend/src/bootstrap/preflight.rs` 与 release template helper
+- 是否影响前端:
+  - 不影响，前端不直接依赖 runner preflight service
+- 边界说明:
+  - 退休的是 `backend_old` Python service，不是 release template helper
+  - Rust bootstrap 仍是这条能力的唯一 live owner
+- 后续修复波次: Wave C / shared-service cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

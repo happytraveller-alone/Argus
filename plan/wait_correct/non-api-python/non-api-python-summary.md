@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `227`
+- Total inventory: `226`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `227`
+- `backend_old/app` non-API Python: `226`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -396,6 +396,26 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
   - `zip_storage.py`、`json_safe.py`、`runner_preflight.py` 仍在 `migrate_now` 集合
 - delete gate:
   - `search_service.py` / `report_generator.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - C in progress
+
+### 1l. `runner_preflight.py` retired; live preflight ownership stays in Rust bootstrap
+
+- current state:
+  - `backend_old/app/services/runner_preflight.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `226`
+    - `rg -n "runner_preflight.py|run_configured_runner_preflights|get_configured_runner_preflight_specs|RunnerPreflightSpec" backend_old backend plan scripts -S`
+      live runtime 命中只剩 Rust `backend/src/bootstrap/preflight.rs` 与 release template helper
+- still missing:
+  - `zip_storage.py` 与 `json_safe.py` 仍在 `migrate_now` 集合
+  - release template helper `scripts/release-templates/runner_preflight.py` 仍存在，但不属于 `backend_old` live service
+- delete gate:
+  - `runner_preflight.py` 已达到删除门并已退休
 - owner: Rust migration
 - target phase:
   - C in progress

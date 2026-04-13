@@ -99,3 +99,8 @@ def test_legacy_search_service_has_been_retired():
 def test_legacy_report_generator_service_has_been_retired():
     report_generator_path = PROJECT_ROOT / "app/services/report_generator.py"
     assert not report_generator_path.exists()
+
+
+def test_legacy_runner_preflight_service_has_been_retired():
+    runner_preflight_path = PROJECT_ROOT / "app/services/runner_preflight.py"
+    assert not runner_preflight_path.exists()
