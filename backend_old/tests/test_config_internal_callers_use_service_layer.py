@@ -21,9 +21,8 @@ def test_internal_callers_no_longer_import_config_endpoint():
                 not in content
             ), "skill_test_runner.py still depends on config endpoint"
             assert (
-                "from app.services.project_test_service import normalize_extracted_project_root"
-                in content
-            ), "skill_test_runner.py should depend on project_test_service"
+                "def normalize_extracted_project_root(base_path: str) -> str:" in content
+            ), "skill_test_runner.py should host normalize_extracted_project_root locally"
             continue
 
         assert forbidden not in content, f"{path.name} still depends on config endpoint"

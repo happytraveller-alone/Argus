@@ -164,3 +164,8 @@ def test_legacy_scanner_service_has_been_retired():
 def test_legacy_gitleaks_rules_seed_service_has_been_retired():
     gitleaks_seed_path = PROJECT_ROOT / "app/services/gitleaks_rules_seed.py"
     assert not gitleaks_seed_path.exists()
+
+
+def test_legacy_project_test_service_has_been_retired():
+    project_test_service_path = PROJECT_ROOT / "app/services/project_test_service.py"
+    assert not project_test_service_path.exists()

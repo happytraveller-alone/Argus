@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `214`
+- Total inventory: `213`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `214`
+- `backend_old/app` non-API Python: `213`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -521,6 +521,30 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - C / D in progress
+
+### 1q. `project_test_service.py` retired; helper absorbed into `skill_test_runner.py`
+
+- current state:
+  - `backend_old/app/services/project_test_service.py` 已删除
+  - `normalize_extracted_project_root` 已回收到
+    `backend_old/app/services/agent/skill_test_runner.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 `skill_test_runner.py` 本地持有该 helper
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "project_test_service|normalize_extracted_project_root" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `skill_test_runner.py` 与退休守门测试
+- still missing:
+  - `json_safe.py`、`parser.py`、`flow_parser_runtime.py`、`flow_parser_runner.py`、
+    `scanner_runner.py`、`static_scan_runtime.py`、`user_config_service.py` 等仍有 live caller
+- delete gate:
+  - `project_test_service.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - E cleanup in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 

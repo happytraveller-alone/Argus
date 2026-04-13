@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `214` 个文件：
+- 当前纳入本计划的 Python 存量一共 `213` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `214` 个
+  - `backend_old/app` 下除 `api` 外 `213` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `214`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -1113,3 +1113,28 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 本 slice 无直接 Python 文件删除门；这是 Rust route 语义补全
 - 下一刀：
   - 继续补 static task / finding search，或转入 `json_safe.py` / `parser.py` 这类 live bridge 迁移
+
+### 2026-04-13 Batch 4 / Slice 2
+
+- 已完成：
+  - `backend_old/app/services/project_test_service.py` 已物理删除
+  - `normalize_extracted_project_root` 已内聚回
+    `backend_old/app/services/agent/skill_test_runner.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 `skill_test_runner.py` 本地持有该 helper
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "project_test_service|normalize_extracted_project_root" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `skill_test_runner.py` 与退休守门测试
+- 当前意义：
+  - 单点 helper 不再挂在顶层 `app/services`，而是回到唯一实际使用它的 agent 域内
+  - 这是顶层 helper 内聚退休，不涉及新的 Rust route/DB ownership
+- 仍未完成：
+  - `json_safe.py`、`parser.py`、`flow_parser_runtime.py`、`flow_parser_runner.py`、
+    `scanner_runner.py`、`static_scan_runtime.py`、`user_config_service.py` 等仍有 live caller
+- 删除条件：
+  - `project_test_service.py`：已删除，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 helper，或转入真正的 live bridge 迁移

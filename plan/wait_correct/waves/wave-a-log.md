@@ -900,6 +900,33 @@
 - 后续修复波次: Wave C / search parity cleanup
 - owner: Rust migration
 
+### 25. `project_test_service.py` retired; helper absorbed into `skill_test_runner.py`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/project_test_service.py`
+- Python 旧行为:
+  - 只提供 `normalize_extracted_project_root`
+  - 当前唯一 live caller 是 `agent/skill_test_runner.py`
+- Rust / current behavior:
+  - `project_test_service.py` 已从 repo 物理删除
+  - `normalize_extracted_project_root` 已内聚到
+    `backend_old/app/services/agent/skill_test_runner.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已改为要求 helper 本地存在于 `skill_test_runner.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+  - `rg -n "project_test_service|normalize_extracted_project_root" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已收口到 `skill_test_runner.py` 与退休守门测试
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 helper 内聚退休，不代表 `skill_test_runner` 已完成 Rust 迁移
+- 后续修复波次: Wave E / agent surface cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
