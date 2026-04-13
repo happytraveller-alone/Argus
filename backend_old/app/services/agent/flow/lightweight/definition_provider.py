@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Protocol
 
 from app.services.flow_parser_runner import get_flow_parser_runner_client
-from app.services.parser import TreeSitterParser
+
+from .tree_sitter_parser import TreeSitterParser
 
 
 class DefinitionProvider(Protocol):

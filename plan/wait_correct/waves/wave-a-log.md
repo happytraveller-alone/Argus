@@ -954,6 +954,33 @@
 - 后续修复波次: Wave D / flow helper cleanup
 - owner: Rust migration
 
+### 27. `parser.py` retired; tree-sitter parser absorbed into `agent/flow/lightweight`
+
+- endpoint / feature:
+  - Python top-level helper: `backend_old/app/services/parser.py`
+- Python 旧行为:
+  - 提供 `TreeSitterParser`
+  - 当前 live caller 已收缩到 `agent/flow/lightweight` 域
+- Rust / current behavior:
+  - `parser.py` 已从 repo 物理删除
+  - `TreeSitterParser` 已迁入
+    `backend_old/app/services/agent/flow/lightweight/tree_sitter_parser.py`
+  - `ast_index.py`、`function_locator.py`、`definition_provider.py`
+    已改为域内 import
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+  - `rg -n "from app\\.services\\.parser import|import app\\.services\\.parser|TreeSitterParser" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已收口到 `agent/flow/lightweight` 域内
+- 是否影响前端:
+  - 不影响，前端没有 active caller 依赖该 helper
+- 边界说明:
+  - 这是顶层 parser helper 内聚退休，不代表 flow-parser 能力已完成 Rust 迁移
+- 后续修复波次: Wave D / flow helper cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

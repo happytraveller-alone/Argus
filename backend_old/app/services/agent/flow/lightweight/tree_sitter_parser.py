@@ -16,7 +16,6 @@ class TreeSitterParser:
     提供 AST 级别的代码分析
     """
 
-    # 语言映射
     LANGUAGE_MAP = {
         ".py": "python",
         ".js": "javascript",
@@ -37,7 +36,6 @@ class TreeSitterParser:
         ".swift": "swift",
     }
 
-    # 各语言的函数/类节点类型
     DEFINITION_TYPES = {
         "python": {
             "class": ["class_definition"],
@@ -82,7 +80,6 @@ class TreeSitterParser:
         },
     }
 
-    # tree-sitter-languages 支持的语言列表
     SUPPORTED_LANGUAGES = {
         "python",
         "javascript",
@@ -112,13 +109,10 @@ class TreeSitterParser:
         self._initialized = False
 
     def _ensure_initialized(self, language: str) -> bool:
-        """确保语言解析器已初始化"""
         if language in self._parsers:
             return True
 
-        # 检查语言是否受支持
         if language not in self.SUPPORTED_LANGUAGES:
-            # 不是 tree-sitter 支持的语言，静默跳过
             return False
 
         try:
@@ -136,7 +130,6 @@ class TreeSitterParser:
             return False
 
     def parse(self, code: str, language: str) -> Any | None:
-        """解析代码返回 AST（同步方法）"""
         if not self._ensure_initialized(language):
             return None
 
@@ -152,16 +145,9 @@ class TreeSitterParser:
             return None
 
     async def parse_async(self, code: str, language: str) -> Any | None:
-        """
-        异步解析代码返回 AST
-
-        将 CPU 密集型的 Tree-sitter 解析操作放到线程池中执行，
-        避免阻塞事件循环
-        """
         return await asyncio.to_thread(self.parse, code, language)
 
     def extract_definitions(self, tree: Any, code: str, language: str) -> list[dict[str, Any]]:
-        """从 AST 提取定义"""
         if tree is None:
             return []
 
@@ -171,18 +157,15 @@ class TreeSitterParser:
         def traverse(node, parent_name=None):
             node_type = node.type
 
-            # 检查是否是定义节点
             matched = False
             for def_category, types in definition_types.items():
                 if node_type in types:
                     name = self._extract_name(node, language)
 
-                    # 根据是否有 parent_name 来区分 function 和 method
                     actual_category = def_category
                     if def_category == "function" and parent_name:
                         actual_category = "method"
                     elif def_category == "method" and not parent_name:
-                        # 跳过没有 parent 的 method 定义（由 function 类别处理）
                         continue
 
                     definitions.append(
@@ -199,17 +182,12 @@ class TreeSitterParser:
                     )
 
                     matched = True
-
-                    # 对于类，继续遍历子节点找方法
                     if def_category == "class":
                         for child in node.children:
                             traverse(child, name)
                         return
-
-                    # 匹配到一个类别后就不再匹配其他类别
                     break
 
-            # 如果没有匹配到定义，继续遍历子节点
             if not matched:
                 for child in node.children:
                     traverse(child, parent_name)
@@ -218,63 +196,19 @@ class TreeSitterParser:
         return definitions
 
     def _extract_name(self, node: Any, language: str) -> str | None:
-        """从节点提取名称（避免 C/C++ attribute 误判为函数名）。"""
-
-        def _node_text(target: Any) -> str:
-            value = target.text.decode() if isinstance(target.text, bytes) else target.text
-            return str(value or "").strip()
-
-        def _is_valid_name(name: str) -> bool:
-            lowered = str(name or "").strip().lower()
-            if not lowered:
-                return False
-            if lowered in {"__attribute__", "__declspec"}:
-                return False
-            return True
-
-        def _extract_identifier_recursive(target: Any) -> str | None:
-            node_type = str(getattr(target, "type", ""))
-            if node_type in {
+        for child in node.children:
+            if child.type in [
                 "identifier",
-                "name",
-                "type_identifier",
                 "property_identifier",
-                "simple_identifier",
+                "type_identifier",
                 "field_identifier",
-            }:
-                candidate = _node_text(target)
-                if _is_valid_name(candidate):
-                    return candidate
+                "name",
+            ]:
+                return child.text.decode("utf-8")
 
-            children = list(getattr(target, "children", []) or [])
-            for child in children:
-                candidate = _extract_identifier_recursive(child)
-                if candidate:
-                    return candidate
-            return None
+        if language == "python":
+            for child in node.children:
+                if child.type == "identifier":
+                    return child.text.decode("utf-8")
 
-        try:
-            field_name = node.child_by_field_name("name")
-        except Exception:
-            field_name = None
-        if field_name is not None:
-            candidate = _extract_identifier_recursive(field_name)
-            if candidate:
-                return candidate
-
-        if language in {"c", "cpp"}:
-            try:
-                declarator = node.child_by_field_name("declarator")
-            except Exception:
-                declarator = None
-            if declarator is not None:
-                candidate = _extract_identifier_recursive(declarator)
-                if candidate:
-                    return candidate
-            for child in list(getattr(node, "children", []) or []):
-                if str(getattr(child, "type", "")).endswith("declarator"):
-                    candidate = _extract_identifier_recursive(child)
-                    if candidate:
-                        return candidate
-
-        return _extract_identifier_recursive(node)
+        return None

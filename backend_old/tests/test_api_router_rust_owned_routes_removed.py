@@ -174,3 +174,8 @@ def test_legacy_project_test_service_has_been_retired():
 def test_legacy_flow_parser_runtime_service_has_been_retired():
     flow_parser_runtime_path = PROJECT_ROOT / "app/services/flow_parser_runtime.py"
     assert not flow_parser_runtime_path.exists()
+
+
+def test_legacy_tree_sitter_parser_service_has_been_retired():
+    parser_path = PROJECT_ROOT / "app/services/parser.py"
+    assert not parser_path.exists()

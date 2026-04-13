@@ -6,9 +6,9 @@ from typing import Dict, Iterable, List, Optional
 
 from app.core.config import settings
 from app.services.flow_parser_runner import get_flow_parser_runner_client
-from app.services.parser import TreeSitterParser
 
 from .function_locator_cli import locate_with_tree_sitter_cli
+from .tree_sitter_parser import TreeSitterParser
 
 logger = logging.getLogger(__name__)
 

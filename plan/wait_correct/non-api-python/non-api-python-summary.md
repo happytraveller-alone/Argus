@@ -569,6 +569,29 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - D / E cleanup in progress
 
+### 1s. `parser.py` retired; tree-sitter parser absorbed into `agent/flow/lightweight`
+
+- current state:
+  - `backend_old/app/services/parser.py` 已删除
+  - `TreeSitterParser` 已迁入
+    `backend_old/app/services/agent/flow/lightweight/tree_sitter_parser.py`
+  - `ast_index.py`、`function_locator.py`、`definition_provider.py`
+    已改为从 lightweight 域内 import
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+    - `rg -n "from app\\.services\\.parser import|import app\\.services\\.parser|TreeSitterParser" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已收口到 `agent/flow/lightweight` 域内
+- still missing:
+  - `flow_parser_runner.py`、`scanner_runner.py`、`static_scan_runtime.py`、`json_safe.py`、`user_config_service.py` 等仍有 live caller
+- delete gate:
+  - `parser.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:
