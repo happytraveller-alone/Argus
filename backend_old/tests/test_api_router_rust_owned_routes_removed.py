@@ -154,3 +154,13 @@ def test_legacy_upload_project_stats_has_been_retired():
 def test_legacy_upload_manager_has_been_retired():
     upload_manager_path = PROJECT_ROOT / "app/services/upload/upload_manager.py"
     assert not upload_manager_path.exists()
+
+
+def test_legacy_scanner_service_has_been_retired():
+    scanner_path = PROJECT_ROOT / "app/services/scanner.py"
+    assert not scanner_path.exists()
+
+
+def test_legacy_gitleaks_rules_seed_service_has_been_retired():
+    gitleaks_seed_path = PROJECT_ROOT / "app/services/gitleaks_rules_seed.py"
+    assert not gitleaks_seed_path.exists()

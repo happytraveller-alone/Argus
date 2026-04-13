@@ -847,6 +847,33 @@
 - 后续修复波次: Wave C / upload-contract cleanup
 - owner: Rust migration
 
+### 23. `scanner.py` and `gitleaks_rules_seed.py` retired from live tree
+
+- endpoint / feature:
+  - Python dead implementation:
+    - `backend_old/app/services/scanner.py`
+    - `backend_old/app/services/gitleaks_rules_seed.py`
+- Python 旧行为:
+  - `scanner.py` 提供 legacy ZIP 文件筛选 helper
+  - `gitleaks_rules_seed.py` 提供 builtin Gitleaks 规则初始化 helper
+  - 当前仓库里都已无 live caller
+- Rust 当前行为:
+  - 上述文件已从 repo 物理删除
+  - `backend_old/tests/test_file_selection.py` 与 `test_file_selection_e2e.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `214`
+  - `rg -n "from app\\.services\\.scanner import|import app\\.services\\.scanner|is_text_file\\(|should_exclude\\(|EXCLUDE_PATTERNS|from app\\.services\\.gitleaks_rules_seed import|import app\\.services\\.gitleaks_rules_seed|ensure_builtin_gitleaks_rules\\(" backend_old/app backend_old/tests backend/src frontend -S`
+    live caller 已清零，只剩退休守门测试与迁移文档
+- 是否影响前端:
+  - 不影响，前端没有 active caller 直接依赖这两个 Python 文件
+- 边界说明:
+  - 退休的是 dead implementation，不代表 scanner/runtime 全语义已完成 Rust 迁移
+- 后续修复波次: Wave C / shared-service cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

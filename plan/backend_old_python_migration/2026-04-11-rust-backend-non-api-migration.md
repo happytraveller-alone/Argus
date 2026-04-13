@@ -3,9 +3,9 @@
 ## 结论
 
 - 目标仍未完成。
-- 当前纳入本计划的 Python 存量一共 `216` 个文件：
+- 当前纳入本计划的 Python 存量一共 `214` 个文件：
   - `backend_old` 根目录 `0` 个
-  - `backend_old/app` 下除 `api` 外 `216` 个
+  - `backend_old/app` 下除 `api` 外 `214` 个
 - Rust backend 当前已直接挂载并承接以下路由组：
   - `/api/v1/agent-tasks/*`
   - `/api/v1/agent-test/*`
@@ -29,7 +29,7 @@
 
 - read-only evidence:
   - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
-  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `216`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `214`
   - `awk -F, 'NR>1{...}' plan/wait_correct/route-inventory/python-endpoints-inventory.csv` =>
     `total=179`, `proxy=114`, `migrate=38`, `retire=20`, `defer=7`
   - `rg -n 'nest\\("/api/v1/(agent-tasks|agent-test|static-tasks)' backend/src/routes -S`
@@ -136,11 +136,11 @@
 | --- | ---: | --- | --- | --- |
 | `root bootstrap / diagnostics` | 4 | `4 retired_after_rust_takeover` | A + F | `backend/src/main.rs`, 后续 `backend/src/bin/*` 或 `scripts/` |
 | `core + db + models + schemas` | 39 | `39 migrate_now` | A + B | `backend/src/core/*`, `backend/src/db/*`, `backend/src/domain/*` |
-| `runtime + launchers` | 18 | `17 migrate_with_api`, `1 retired_after_rust_takeover` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
+| `runtime + launchers` | 18 | `16 migrate_with_api`, `2 retired_after_rust_takeover` | D | `backend/src/runtime/*`, `backend/src/scan/*` |
 | `services/upload` | 5 | `5 retired_after_rust_takeover` | C + D | `backend/src/upload/*`, `backend/src/projects/*` |
 | `services/llm + llm_rule` | 23 | `23 migrate_with_api` | E | `backend/src/llm/*` |
 | `services/agent` | 142 | `142 migrate_with_api` | E | `backend/src/agent/*` |
-| `services/scan/search/report/project` | 17 | `1 migrate_now`, `6 migrate_with_api`, `3 compat_only`, `7 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
+| `services/scan/search/report/project` | 17 | `1 migrate_now`, `5 migrate_with_api`, `3 compat_only`, `8 retired_after_rust_takeover` | C + D + Batch 5 | `backend/src/scan/*`, `backend/src/search/*`, `backend/src/projects/*`, `backend/src/report/*` |
 | `utils` | 4 | `4 compat_only` | Batch 5 | 吸收到 `backend/src/core/*` 或具体模块内部 |
 
 ## 分桶明细
@@ -205,9 +205,10 @@
 - `backend_old/app/services/sandbox_runner_client.py`
 - `backend_old/app/services/backend_venv.py`
 
-#### `retired_after_rust_takeover` (`1`)
+#### `retired_after_rust_takeover` (`2`)
 
 - `backend_old/app/services/opengrep_confidence.py`
+- `backend_old/app/services/scanner.py`
 
 #### 迁移要求
 
@@ -324,7 +325,7 @@
 
 - `backend_old/app/services/json_safe.py`
 
-#### `retired_after_rust_takeover` (`7`)
+#### `retired_after_rust_takeover` (`8`)
 
 - `backend_old/app/services/zip_cache_manager.py`
 - `backend_old/app/services/zip_storage.py`
@@ -333,10 +334,10 @@
 - `backend_old/app/services/runner_preflight.py`
 - `backend_old/app/services/init_templates.py`
 - `backend_old/app/services/seed_archive.py`
-
-#### `migrate_with_api` (`6`)
-
 - `backend_old/app/services/gitleaks_rules_seed.py`
+
+#### `migrate_with_api` (`5`)
+
 - `backend_old/app/services/pmd_rulesets.py`
 - `backend_old/app/services/parser.py`
 - `backend_old/app/services/rule.py`
@@ -1060,3 +1061,29 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `zip_storage.py` / `upload/*` / `project_stats.py`：已删除，本 slice 完成
 - 下一刀：
   - 回到真正仍有 live caller 的 `json_safe.py` / `parser.py` / runtime bridge
+
+### 2026-04-13 Batch 3 / Slice 9
+
+- 已完成：
+  - Python dead implementation 已物理删除：
+    - `backend_old/app/services/scanner.py`
+    - `backend_old/app/services/gitleaks_rules_seed.py`
+  - 旧专属测试已删除：
+    - `backend_old/tests/test_file_selection.py`
+    - `backend_old/tests/test_file_selection_e2e.py`
+  - 退休守门测试已补到 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `214`
+    - `rg -n "from app\\.services\\.scanner import|import app\\.services\\.scanner|is_text_file\\(|should_exclude\\(|EXCLUDE_PATTERNS|from app\\.services\\.gitleaks_rules_seed import|import app\\.services\\.gitleaks_rules_seed|ensure_builtin_gitleaks_rules\\(" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已清零，只剩退休守门测试与迁移文档
+- 当前意义：
+  - `scanner.py` 与 `gitleaks_rules_seed.py` 已确认没有 live caller，不再作为待迁 implementation 保留
+  - runtime / project-service 两个桶里的 dead implementation 继续收缩
+- 仍未完成：
+  - `json_safe.py`、`parser.py`、`flow_parser_runtime.py`、`flow_parser_runner.py`、`scanner_runner.py`、
+    `static_scan_runtime.py`、`user_config_service.py` 等仍有 live caller
+- 删除条件：
+  - `scanner.py` / `gitleaks_rules_seed.py`：已删除，本 slice 完成
+- 下一刀：
+  - 转入真正还有 live caller 的桥，优先 `json_safe.py` 或 `parser.py`

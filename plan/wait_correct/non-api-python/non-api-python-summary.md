@@ -1,8 +1,8 @@
 # Non-API Python Migration Summary
 
-- Total inventory: `216`
+- Total inventory: `214`
 - `backend_old` root Python: `0`
-- `backend_old/app` non-API Python: `216`
+- `backend_old/app` non-API Python: `214`
 - `migrate_now`: `54`
 - `migrate_with_api`: `191`
 - `retire`: `3`
@@ -496,6 +496,31 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - target phase:
   - C in progress
+
+### 1p. `scanner.py` and `gitleaks_rules_seed.py` retired from live tree
+
+- current state:
+  - 已删除：
+    - `backend_old/app/services/scanner.py`
+    - `backend_old/app/services/gitleaks_rules_seed.py`
+  - 已删除旧专属测试：
+    - `backend_old/tests/test_file_selection.py`
+    - `backend_old/tests/test_file_selection_e2e.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `214`
+    - `rg -n "from app\\.services\\.scanner import|import app\\.services\\.scanner|is_text_file\\(|should_exclude\\(|EXCLUDE_PATTERNS|from app\\.services\\.gitleaks_rules_seed import|import app\\.services\\.gitleaks_rules_seed|ensure_builtin_gitleaks_rules\\(" backend_old/app backend_old/tests backend/src frontend -S`
+      live caller 已清零，只剩退休守门测试与迁移文档
+- still missing:
+  - `json_safe.py`、`parser.py`、`flow_parser_runtime.py`、`flow_parser_runner.py`、
+    `scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
+- delete gate:
+  - `scanner.py` / `gitleaks_rules_seed.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - C / D in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 
