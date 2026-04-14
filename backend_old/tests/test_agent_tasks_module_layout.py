@@ -108,3 +108,18 @@ def test_agent_tasks_facade_does_not_reexport_retired_runtime_helpers():
         "agent_tasks facade should not re-export retired runtime helpers: "
         + ", ".join(leaked)
     )
+
+
+def test_agent_tasks_facade_does_not_reexport_retired_execution_results_helpers():
+    from app.api.v1.endpoints import agent_tasks
+
+    retired_symbols = {
+        "_collect_project_info",
+        "get_agent_finding",
+    }
+
+    leaked = sorted(name for name in retired_symbols if hasattr(agent_tasks, name))
+    assert not leaked, (
+        "agent_tasks facade should not re-export retired execution/results helpers: "
+        + ", ".join(leaked)
+    )

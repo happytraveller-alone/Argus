@@ -2,9 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from app.api.v1.endpoints.agent_tasks import (
-    _collect_project_info,
-)
 from app.services.agent.bootstrap_entrypoints import _discover_entry_points_deterministic
 from app.services.agent.scope_filters import (
     _build_core_audit_exclude_patterns,
@@ -92,28 +89,6 @@ def test_discover_entry_points_deterministic_ignores_hidden_test_and_config_path
     assert ".github/scanner.py" not in files
     assert "app/settings.py" not in files
     assert ".vscode/ext.ts" not in files
-
-
-@pytest.mark.asyncio
-async def test_collect_project_info_ignores_hidden_test_and_config_scope(tmp_path):
-    _write_file(tmp_path / "src" / "main.py", "def main():\n    return 1\n")
-    _write_file(tmp_path / "src" / "util.py", "def util():\n    return 2\n")
-    _write_file(tmp_path / "tests" / "test_main.py", "def test_main():\n    pass\n")
-    _write_file(tmp_path / ".vscode" / "tasks.json", "{}\n")
-    _write_file(tmp_path / ".github" / "workflows" / "ci.yml", "name: ci\n")
-    _write_file(tmp_path / "app" / "settings.py", "DEBUG=True\n")
-    _write_file(tmp_path / "config" / "app.yml", "port: 8080\n")
-
-    info = await _collect_project_info(str(tmp_path), "demo")
-
-    assert info["file_count"] == 2
-    assert "Python" in info["languages"]
-    assert "src" in info["structure"]["directories"]
-    assert "tests" not in info["structure"]["directories"]
-    assert ".github" not in info["structure"]["directories"]
-    assert ".vscode" not in info["structure"]["directories"]
-    assert "app/settings.py" not in info["structure"]["files"]
-
 
 @pytest.mark.asyncio
 async def test_smart_scan_collect_files_ignores_hidden_test_and_config_scope(tmp_path):

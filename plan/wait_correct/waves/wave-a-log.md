@@ -1226,6 +1226,38 @@
 - 后续修复波次: Wave E / agent facade cleanup
 - owner: Rust migration
 
+### 37. `get_agent_finding` and `_collect_project_info` dead tests retired after route/execution removal
+
+- endpoint / feature:
+  - Python dead tests:
+    - `backend_old/tests/test_agent_finding_detail_endpoint.py`
+    - `backend_old/tests/test_agent_core_scope_filtering.py` 中仅依赖 `_collect_project_info` 的用例
+- repo evidence before deletion:
+  - `uv run --project . pytest -s tests/test_agent_finding_detail_endpoint.py tests/test_agent_core_scope_filtering.py`
+    在当前 `main` 上直接 collection error：
+    - `get_agent_finding`
+    - `_collect_project_info`
+    均已无法从 `app.api.v1.endpoints.agent_tasks` 导入
+  - `get_agent_finding` 原本来自已退休的 `agent_tasks_routes_results.py`
+  - `_collect_project_info` 原本来自已退休的 `agent_tasks_execution.py`
+- current behavior:
+  - `backend_old/tests/test_agent_finding_detail_endpoint.py` 已从 repo 物理删除
+  - `backend_old/tests/test_agent_core_scope_filtering.py`
+    仅移除依赖 `_collect_project_info` 的 dead 用例，保留
+    `_filter_bootstrap_findings` / `_discover_entry_points_deterministic` /
+    `SmartScanTool._collect_files` 的 live helper coverage
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    已补负向守门，要求 `agent_tasks` facade 不得重新 re-export
+    `_collect_project_info` / `get_agent_finding`
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py`
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks import (_collect_project_info|get_agent_finding)" backend_old/tests -S`
+- 边界说明:
+  - 这是 dead test retirement，不是把旧 execution/results helper 接回 Python facade
+  - 本 slice 不处理 `agent_tasks_findings.py` 里仍存活的 `_save_findings` / structured title helper
+- 后续修复波次: Wave E / agent facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
