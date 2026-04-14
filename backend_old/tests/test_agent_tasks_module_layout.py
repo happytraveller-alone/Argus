@@ -92,3 +92,19 @@ def test_agent_tasks_facade_does_not_reexport_retired_initialize_tools():
     assert not hasattr(agent_tasks, "_initialize_tools"), (
         "agent_tasks facade should not re-export retired _initialize_tools helper"
     )
+
+
+def test_agent_tasks_facade_does_not_reexport_retired_runtime_helpers():
+    from app.api.v1.endpoints import agent_tasks
+
+    retired_runtime_symbols = {
+        "_compute_verification_pending_gate",
+        "_classify_retry_error",
+        "_snapshot_runtime_stats_to_task",
+    }
+
+    leaked = sorted(name for name in retired_runtime_symbols if hasattr(agent_tasks, name))
+    assert not leaked, (
+        "agent_tasks facade should not re-export retired runtime helpers: "
+        + ", ".join(leaked)
+    )

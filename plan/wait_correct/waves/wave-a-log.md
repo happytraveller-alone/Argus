@@ -1196,6 +1196,36 @@
 - 后续修复波次: Wave E / agent facade cleanup
 - owner: Rust migration
 
+### 36. `agent_tasks_runtime.py` dead tests retired after runtime helper removal
+
+- endpoint / feature:
+  - Python dead tests:
+    - `backend_old/tests/test_agent_task_verification_gate.py`
+    - `backend_old/tests/test_agent_task_retry_classification.py`
+    - `backend_old/tests/test_agent_task_cancel_preserve_stats.py`
+- repo evidence before deletion:
+  - `uv run --project . pytest -s tests/test_agent_task_verification_gate.py tests/test_agent_task_retry_classification.py tests/test_agent_task_cancel_preserve_stats.py`
+    在当前 `main` 上直接 collection error：
+    - `_compute_verification_pending_gate`
+    - `_classify_retry_error`
+    - `_snapshot_runtime_stats_to_task`
+    均已无法从 `app.api.v1.endpoints.agent_tasks` 导入
+  - 上述 3 个 helper 原本来自已退休的 `agent_tasks_runtime.py`
+- current behavior:
+  - 上述 3 条 dead tests 已从 repo 物理删除
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    已补负向守门，要求 `agent_tasks` facade 不得重新 re-export
+    `_compute_verification_pending_gate` / `_classify_retry_error` /
+    `_snapshot_runtime_stats_to_task`
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py`
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks import (_compute_verification_pending_gate|_classify_retry_error|_snapshot_runtime_stats_to_task)" backend_old/tests -S`
+- 边界说明:
+  - 这是 dead test retirement，不是把旧 runtime helper 接回 Python facade
+  - 本 slice 不处理 `get_agent_finding` / `_collect_project_info` 这两组独立 broken import
+- 后续修复波次: Wave E / agent facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
