@@ -118,7 +118,6 @@
     - `backend_old/app/core/security.py`
     - `backend_old/app/core/encryption.py`
   - 当前直接依赖方仍包括：
-    - `backend_old/app/db/session.py`
     - `backend_old/app/services/user_config_service.py`
     - `backend_old/app/services/llm/*`
     - `backend_old/app/services/agent/*`
@@ -158,7 +157,7 @@
   - `rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路，不能删
   - `yasa_builtin` 仍仅由 Python `yasa_rules_snapshot.py` 消费，Rust 明确未继续接管，不能删
   - `schema_snapshots/*` 仍是 Alembic baseline 兼容件，不能删
-  - `base.py` / `session.py` 仍是 Python live 入口，不能删；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
+  - `base.py` 仍是 Python live 入口，不能删；`session.py` 已在 live caller 清零后退休；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
 - delete gate:
   - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
   - `yasa_builtin` 只有在 YASA 彻底退出 Python live 路径或被完全 retire 后才能删

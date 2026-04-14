@@ -49,6 +49,11 @@ def test_legacy_init_db_module_has_been_retired():
     assert not init_db_path.exists()
 
 
+def test_legacy_db_session_module_has_been_retired():
+    session_path = PROJECT_ROOT / "app/db/session.py"
+    assert not session_path.exists()
+
+
 def test_legacy_scan_path_db_helper_module_has_been_retired():
     retired_helper_path = PROJECT_ROOT / "app/db" / "_".join(["static", "finding_paths.py"])
     assert not retired_helper_path.exists()

@@ -770,18 +770,18 @@
   - 这一步是真删除，不是只写台账
 - 仍未完成：
   - `backend_old/app/db/base.py` 仍是 Python ORM / Alembic live 入口
-  - `backend_old/app/db/session.py` 仍是 Python FastAPI / service 层 DB session 入口
+  - `backend_old/app/db/session.py` 已在后续 slice 中退休；live Python 路径不再依赖该 DB session shell
   - 路径归一化 helper已迁入 `backend_old/app/services/scan_path_utils.py`，`static_finding_paths.py` 不再出现在 live tree，agent_tasks_bootstrap、phpstan、bandit、opengrep 皆在调用新 helper
   - `backend_old/app/db/schema_snapshots/*` 仍被 Alembic baseline 兼容迁移使用
   - `backend_old/app/db/rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路
   - `backend_old/app/db/yasa_builtin` 仍由 Python YASA snapshot/service 直接消费，Rust 未接管
 - 删除条件：
-  - `base.py` / `session.py` 只有在对应 Python live caller 全部退场后才能删；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
+  - `base.py` 只有在对应 Python live caller 全部退场后才能删；`session.py` 已在 live caller 清零后退休；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
   - `schema_snapshots/*` 只有在 `backend_old/alembic` 不再依赖 baseline snapshot 后才能删
   - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
   - `yasa_builtin` 只有在 YASA 被彻底 retire 或迁离 Python live 路径后才能删
 - 下一刀：
-  - 继续 Phase A / C，优先决定 `session.py` 与 `static_finding_paths.py` 哪些职责可以从 Python live 路径抽走
+  - 继续 Phase A / C，优先处理 `base.py` 与其余 DB/model live caller 的收口
 
 ## backend_old/app/db 迁移清单
 

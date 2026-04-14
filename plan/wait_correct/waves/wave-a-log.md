@@ -441,7 +441,6 @@
   - 本次没有删除 `backend_old/app/core/security.py`
   - 本次没有删除 `backend_old/app/core/encryption.py`
 - 仍然只是 bridge 的 Python 代码:
-  - `backend_old/app/db/session.py`
   - `backend_old/app/services/user_config_service.py`
   - `backend_old/app/services/llm/*`
   - `backend_old/app/services/agent/*`
@@ -482,7 +481,6 @@
   - `backend_old/app/db/yasa_builtin`
   - `backend_old/app/db/schema_snapshots/*`
   - `backend_old/app/db/base.py`
-  - `backend_old/app/db/session.py`
   - 路径归一化 helper已转至 `backend_old/app/services/scan_path_utils.py`，旧 `static_finding_paths.py` 不再 live
 - 是否影响前端: 否，Python static-tasks / seed / rules 页继续可用，只是资产根收敛到 Rust owner root
 - 后续修复波次: Wave A 后续 / Phase A-C db asset cleanup
@@ -1451,6 +1449,29 @@
   - 这是空包壳退休，不是新的 Rust takeover
   - 本 slice 不改 `backend_old/app/services/agent/task_findings.py` 或其他存活 helper
 - 后续修复波次: Wave A / API package cleanup
+- owner: Rust migration
+
+### 48. `app/db/session.py` retired after DB-session caller set reached zero
+
+- endpoint / feature:
+  - Python DB session shell:
+    - `backend_old/app/db/session.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts -S`
+    已经清零，说明 repo 内 live Python 路径不再依赖该模块
+- current behavior:
+  - `backend_old/app/db/session.py` 已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 DB session retirement guard
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补“repo 内 live Python 模块不得再 import app.db.session”守门
+- operational verification:
+  - `uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py tests/test_config_internal_callers_use_service_layer.py`
+  - `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts -S`
+- 边界说明:
+  - 这是 dead DB session shell retirement，不是 `app.db.base` / Alembic ownership 已完成的信号
+  - 本 slice 不处理 `backend_old/app/db/base.py`、`backend_old/alembic/env.py` 或 models 对 `Base` 的依赖
+- 后续修复波次: Wave A / db shell cleanup
 - owner: Rust migration
 
 ### 46. `agent_tasks_findings.py` moved out of API path into `services/agent/task_findings.py`

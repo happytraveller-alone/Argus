@@ -97,3 +97,36 @@ def test_no_live_python_module_imports_static_scan_runtime():
         "retired static_scan_runtime service shell should have no live Python importers:\n"
         + "\n".join(offenders)
     )
+
+
+def test_no_live_python_module_imports_db_session():
+    retired_module = PROJECT_ROOT / "app/db/session.py"
+    assert not retired_module.exists(), "retired db.session module should stay deleted"
+
+    python_roots = [
+        PROJECT_ROOT / "app",
+        PROJECT_ROOT / "scripts",
+        PROJECT_ROOT / "tests",
+    ]
+    offenders: list[str] = []
+
+    for root in python_roots:
+        for path in sorted(root.rglob("*.py")):
+            module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(module):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "app.db.session":
+                            offenders.append(f"{path}: import {alias.name}")
+                if isinstance(node, ast.ImportFrom):
+                    if node.module == "app.db.session":
+                        offenders.append(f"{path}: from {node.module} import ...")
+                    if node.module == "app.db":
+                        for alias in node.names:
+                            if alias.name == "session":
+                                offenders.append(f"{path}: from app.db import session")
+
+    assert not offenders, (
+        "retired db.session module should have no live Python importers:\n"
+        + "\n".join(offenders)
+    )
