@@ -1363,6 +1363,30 @@
 - 后续修复波次: Wave A / API facade cleanup
 - owner: Rust migration
 
+### 42. `agent_tasks_bootstrap.py` retired as dead API-local bootstrap shell
+
+- endpoint / feature:
+  - Python API-local bootstrap shell:
+    - `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks_bootstrap|app\\.api\\.v1\\.endpoints\\.agent_tasks_bootstrap" backend_old/app backend_old/tests backend_old/scripts -S`
+    只剩 `test_agent_tasks_module_layout.py` 的模块存在性/alias 断言命中，没有 app/runtime/script caller
+  - 模块内容主要是对 `app.services.agent.*` bootstrap helper 的 API-local re-export
+- current behavior:
+  - `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py` 已从 repo 物理删除
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    不再把它列为 split module，并新增 retirement guard
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 bootstrap-module retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_findings_persistence.py tests/test_agent_findings_strict_validation.py tests/test_agent_result_consistency.py tests/test_report_finding_update_flow.py tests/test_agent_title_normalization.py`
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks_bootstrap|app\\.api\\.v1\\.endpoints\\.agent_tasks_bootstrap" backend_old/app backend_old/tests backend_old/scripts -S`
+- 边界说明:
+  - 这是 API-local bootstrap shell retirement，不是把 bootstrap helper 语义从 `services/agent/*` 回流到别处
+  - 本 slice 不处理 `agent_tasks_contracts.py` / `agent_tasks_findings.py` / `rule_flows.py`
+- 后续修复波次: Wave A / API facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
