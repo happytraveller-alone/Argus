@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import app.models.gitleaks  # noqa: F401
 import app.models.opengrep  # noqa: F401
 
-from app.api.v1.endpoints.agent_tasks_findings import (
+from app.services.agent.task_findings import (
     _build_structured_cn_description,
     _build_structured_cn_display_title,
 )

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.api.v1.endpoints.agent_tasks_findings import _save_findings
+from app.services.agent.task_findings import _save_findings
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 

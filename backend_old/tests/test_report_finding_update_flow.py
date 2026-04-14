@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 import pytest
 from sqlalchemy import select
 
-from app.api.v1.endpoints.agent_tasks_findings import _save_findings
+from app.services.agent.task_findings import _save_findings
 from app.models.agent_task import AgentFinding
 from app.services.agent.agents.report import ReportAgent
 from app.services.agent.tools.base import AgentTool, ToolResult

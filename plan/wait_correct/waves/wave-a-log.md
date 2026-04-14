@@ -1433,6 +1433,32 @@
 - 后续修复波次: Wave A / API package cleanup
 - owner: Rust migration
 
+### 46. `agent_tasks_findings.py` moved out of API path into `services/agent/task_findings.py`
+
+- endpoint / feature:
+  - Retained Python findings helper:
+    - old path: `backend_old/app/api/v1/endpoints/agent_tasks_findings.py`
+    - new path: `backend_old/app/services/agent/task_findings.py`
+- repo evidence before move:
+  - 源码已迁出后，仓内测试仍通过旧 import path 命中，
+    进一步排查发现依赖的是 `backend_old/app/api/v1/endpoints/__pycache__/agent_tasks_findings.cpython-311.pyc`
+    这类陈旧字节码，而不是 live source file
+- current behavior:
+  - `backend_old/app/api/v1/endpoints/agent_tasks_findings.py` 已从 repo 物理删除
+  - 相关活测试已改为直连 `app.services.agent.task_findings`
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    改为守住 retained findings helper 现在位于 `services/agent/task_findings.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 findings-module retirement guard
+  - `backend_old/app/api/v1/endpoints/__pycache__` 已清理，避免 stale `.pyc` 造成假绿
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_findings_persistence.py tests/test_agent_findings_strict_validation.py tests/test_agent_result_consistency.py tests/test_report_finding_update_flow.py tests/test_agent_title_normalization.py`
+- 边界说明:
+  - 这是 retained helper path migration，不是新的 Rust takeover
+  - 本 slice 不改 `task_findings.py` 的 helper 语义，只修正宿主路径与测试引用
+- 后续修复波次: Wave E / retained helper path cleanup
+- owner: Rust migration
+
 ### 43. `rule_flows.py` transitional DTO host retired from API path
 
 - endpoint / feature:
