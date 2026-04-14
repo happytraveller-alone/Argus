@@ -1456,13 +1456,27 @@ async def _save_findings(
                     context_window_rebuild_skipped_reason
                 ),
             }
+            if (
+                declared_function_start_line is None
+                and declared_function_end_line is None
+                and not hit_line_correction_applied
+                and not verification_result_payload["function_range_validation"].get(
+                    "hit_line_correction_skipped_reason"
+                )
+            ):
+                verification_result_payload["function_range_validation"][
+                    "hit_line_correction_skipped_reason"
+                ] = "missing_function_range"
             # status 映射：由 LLM/status 输入表达漏洞是否存在，程序只负责规范化
             if normalized_status == FindingStatus.FALSE_POSITIVE:
                 db_status = FindingStatus.FALSE_POSITIVE
+            elif normalized_status == FindingStatus.LIKELY:
+                db_status = FindingStatus.LIKELY
             elif is_verified:
                 db_status = FindingStatus.VERIFIED
             else:
                 db_status = FindingStatus.NEEDS_REVIEW
+            verification_result_payload["status"] = db_status
             verified_at_value = datetime.now(timezone.utc) if is_verified else None
             
             # verification_result_payload 中添加新字段

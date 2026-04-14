@@ -1281,6 +1281,32 @@
 - 后续修复波次: Wave E / retained helper correctness
 - owner: Rust migration
 
+### 39. `_save_findings` keeps `likely` status and missing-range diagnostics for retained findings helper
+
+- endpoint / feature:
+  - Retained Python helper:
+    - `backend_old/app/api/v1/endpoints/agent_tasks_findings.py`
+- repo evidence before fix:
+  - `uv run --project . pytest -s tests/test_agent_result_consistency.py -k "normalizes_legacy_uncertain_status_to_likely_and_keeps_rich_fields or skips_hit_line_correction_when_function_range_missing"`
+    失败：
+    - legacy `status="uncertain"` 被压成 `needs_review`
+    - `function_range_validation.hit_line_correction_skipped_reason`
+      未保留 `missing_function_range`
+- current behavior:
+  - `normalized_status == FindingStatus.LIKELY` 时，`db_status` 与
+    `verification_result["status"]` 都保留为 `likely`
+  - 当上游未提供 function range 且本次没有发生 hit-line correction 时，
+    `function_range_validation.hit_line_correction_skipped_reason`
+    会显式记录为 `missing_function_range`
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_result_consistency.py -k "normalizes_legacy_uncertain_status_to_likely_and_keeps_rich_fields or skips_hit_line_correction_when_function_range_missing"`
+  - `uv run --project . pytest -s tests/test_function_locator_tree_sitter.py tests/test_agent_result_consistency.py`
+- 边界说明:
+  - 这是 retained live helper correctness fix，不是新的 Rust takeover slice
+  - 本 slice 不处理 `test_tool_skills_memory_sync.py` 里的 skill snapshot 期望漂移
+- 后续修复波次: Wave E / retained helper correctness
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
