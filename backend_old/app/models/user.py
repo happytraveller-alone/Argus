@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, Index
 from sqlalchemy.sql import func
-from app.db.base import Base
+from app.models.base import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -31,7 +31,6 @@ class User(Base):
             created_at.desc(),
         ),
     )
-
 
 
 

@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Integer, Index, text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.models.base import Base
 
 
 class PromptTemplate(Base):

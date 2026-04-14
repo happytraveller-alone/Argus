@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, DateTime, JSON, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
-from app.db.base import Base
+from app.models.base import Base
 import uuid
 from sqlalchemy.sql import func
 

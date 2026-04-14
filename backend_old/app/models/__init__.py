@@ -1,3 +1,4 @@
+from .base import Base
 from .user import User
 from .user_config import UserConfig
 from .project import Project, ProjectMember

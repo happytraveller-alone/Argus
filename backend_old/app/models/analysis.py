@@ -4,7 +4,7 @@ from typing import Tuple
 from sqlalchemy import Column, String, Integer, DateTime, Float, Text, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.models.base import Base
 
 
 # 业务逻辑漏洞推送时，必须具备的 source/sink 真实性校验字段
@@ -60,6 +60,5 @@ class InstantAnalysis(Base):
 
     # Relationships
     user = relationship("User", backref="instant_analyses")
-
 
 

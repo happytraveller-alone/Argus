@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import Boolean, Column, DateTime, Index, String, Text
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from app.models.base import Base
 
 
 class PmdRuleConfig(Base):

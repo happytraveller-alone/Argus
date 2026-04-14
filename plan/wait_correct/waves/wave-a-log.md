@@ -491,7 +491,7 @@
 - Rust 要接管并最终删掉 `backend_old/app/db`，必须依序通过下列八个门。第 1、2 项的 Rust 侧实现已完成，但本目录仍被 live Python 模块 import，因此还不能删除。
 - 1. 环境/配置 DB 拆分（已完成）：Rust 与 Python DB env/config plumbing 已分离，`PYTHON_DB_*` 与 `PYTHON_ALEMBIC_ENABLED` 仅留给 Python runtime，Rust `AppConfig`/`bootstrap` 直接读 `DATABASE_URL` 并自行检查 schema。
 - 2. 启动/迁移/健康分离（已完成）：Rust `bootstrap` 负责 startup preflight、legacy schema 校验与 `/health` 报告，Python 只服务尚未迁出的 runtime 功能，确认 Rust 的健康态覆盖这部分即可认定该门已过。
-- 3. 替换 `app.db.base` ownership：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前 blocker 是 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py` 和 `backend_old/app/models/*`。翻门条件是这些命中清零或只剩待删历史文件；owner 是 Rust migration Phase A/B。
+- 3. 替换 `app.db.base` ownership（已完成）：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前该命令已清零；`Base` 宿主已迁到 `backend_old/app/models/base.py`，`backend_old/app/db/base.py` 已退休；owner 是 Rust migration Phase A/B。
 - 4. 替换 `app.db.session` 调用者：验证命令是 `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts`。当前 blocker 已清零，说明 live Python 路径已不再依赖 `app.db.session`；后续只需继续用退休守门测试和 Rust 合同测试守住该状态；owner 是 Rust migration Phase A/D。
 - 5. `init_db` 语义迁入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blocker 已清零，说明 demo user、seed project、legacy rule seed、schema bootstrap 不再依赖 Python `init_db.py`；后续只需继续用 Rust bootstrap/preflight 合同测试守住该语义；owner 是 Rust migration Phase A。
 - 6. 路径归一化 helper迁新家：验证命令是 `rg -n "scan_path_utils|normalize_scan_file_path|resolve_scan_finding_location" backend_old/app backend_old/tests`。当前 blocker 是 `agent_tasks_bootstrap.py`、`app/services/agent/bootstrap/phpstan.py`、`bandit.py`、`opengrep.py` 和 `tests/test_scan_path_utils.py`，它们都该 import `backend_old/app/services/scan_path_utils.py`；旧 `static_finding_paths.py` 不再命中；owner 是 Rust migration Phase C/D。
@@ -1471,6 +1471,33 @@
 - 边界说明:
   - 这是 dead DB session shell retirement，不是 `app.db.base` / Alembic ownership 已完成的信号
   - 本 slice 不处理 `backend_old/app/db/base.py`、`backend_old/alembic/env.py` 或 models 对 `Base` 的依赖
+- 后续修复波次: Wave A / db shell cleanup
+- owner: Rust migration
+
+### 49. `app.db.base` import blocker cleared and shell retired
+
+- endpoint / feature:
+  - Python DB base shell:
+    - `backend_old/app/db/base.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests -S`
+    在切片前只剩 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py` 与 `backend_old/app/models/*` 命中
+- current behavior:
+  - `Base` 宿主已迁到 `backend_old/app/models/base.py`
+  - models、`alembic/env.py` 与 `tests/conftest.py` 已改为从 `app.models.base` 导入
+  - `backend_old/app/db/base.py` 已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 DB base retirement guard
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补“repo 内 live Python 模块不得再 import app.db.base”守门
+- operational verification:
+  - `uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py tests/test_config_internal_callers_use_service_layer.py`
+  - `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests backend_old/scripts -S`
+  - 已知主干历史问题：
+    - `tests/test_alembic_project.py` 中对 linearized revision/head 的期望仍与当前仓库 revision 集合不一致；这是 Alembic 迁移链条既有差异，不是本 slice 的 import 回归
+- 边界说明:
+  - 这是 `app.db.base` import blocker 清零，不是整个 ORM / Alembic ownership 已完成
+  - 本 slice 不处理 `schema_snapshots/*`、`backend_old/alembic/versions/*` 或 models 对 `Base.metadata` 的长期退休策略
 - 后续修复波次: Wave A / db shell cleanup
 - owner: Rust migration
 

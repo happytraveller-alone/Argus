@@ -769,14 +769,18 @@
   - Python live caller 继续保留，但其资产 source of truth 已开始收敛到 Rust owner root
   - 这一步是真删除，不是只写台账
 - 仍未完成：
-  - `backend_old/app/db/base.py` 仍是 Python ORM / Alembic live 入口
+  - `backend_old/app/models/*`、`backend_old/alembic/env.py` 与 `backend_old/tests/conftest.py`
+    仍在使用 SQLAlchemy `Base.metadata`，但宿主已从 `app.db.base` 迁到
+    `app.models.base`
   - `backend_old/app/db/session.py` 已在后续 slice 中退休；live Python 路径不再依赖该 DB session shell
   - 路径归一化 helper已迁入 `backend_old/app/services/scan_path_utils.py`，`static_finding_paths.py` 不再出现在 live tree，agent_tasks_bootstrap、phpstan、bandit、opengrep 皆在调用新 helper
   - `backend_old/app/db/schema_snapshots/*` 仍被 Alembic baseline 兼容迁移使用
   - `backend_old/app/db/rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路
   - `backend_old/app/db/yasa_builtin` 仍由 Python YASA snapshot/service 直接消费，Rust 未接管
 - 删除条件：
-  - `base.py` 只有在对应 Python live caller 全部退场后才能删；`session.py` 已在 live caller 清零后退休；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
+  - `app.db.base` import blocker 已清零并完成退休；后续只需继续收口 `app.models.base` /
+    Alembic / tests 对 `Base.metadata` 的依赖，再决定何时整体退休 ORM
+  - `session.py` 已在 live caller 清零后退休；路径归一化逻辑已迁入 `backend_old/app/services/scan_path_utils.py`
   - `schema_snapshots/*` 只有在 `backend_old/alembic` 不再依赖 baseline snapshot 后才能删
   - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
   - `yasa_builtin` 只有在 YASA 被彻底 retire 或迁离 Python live 路径后才能删
@@ -789,7 +793,7 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 
 1. 环境/配置 DB 拆分（已完成）：Rust/Python 的 DB 环境配置 plumbing 已分离，`PYTHON_DB_*` 和 `PYTHON_ALEMBIC_ENABLED` 只作用于 Python runtime；Rust 通过 `DATABASE_URL`/`AppConfig` 直接构建自己的 schema 检查，后续只需确认没有 bridge 共享 env 即可。
 2. 启动/迁移/健康分离（已完成）：Rust `bootstrap` 负责 startup preflight、legacy schema 对齐、`/health` 报表与迁移 gating，Python 只继续运行未迁出的模块；校验 Rust 的 `bootstrap` 状态暴露与迁移检查覆盖面后即可认定本项完成。
-3. 替换 `app.db.base`：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前必须迁走或消失的命中包括 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py`，以及 `backend_old/app/models/*` 对 `Base` 的直接依赖。翻门条件是这些命中要么为 `0`，要么只剩已经标记为待删除的历史文件；owner 是 Rust migration Phase A/B，验收人是接管 domain model 的 Rust backend owner。
+3. 替换 `app.db.base`（已完成）：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前该命令已清零；`Base` 宿主已迁到 `backend_old/app/models/base.py`，`backend_old/app/db/base.py` 已退休。owner 是 Rust migration Phase A/B。
 4. 替换 `app.db.session` 调用者：验证命令是 `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts`。当前 live blockers 已清零，说明 live Python 路径已不再依赖 `app.db.session`；后续只需继续用退休守门测试和 Rust 合同测试守住该状态；owner 是 Rust migration Phase A/D。
 5. 将 `init_db` 语义移入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blockers 已清零，说明 demo user、seed project、legacy rule seed、schema bootstrap 不再依赖 Python `init_db.py`；后续只需继续用 Rust bootstrap/preflight 合同测试守住该语义；owner 是 Rust migration Phase A。
 6. 路径归一化 helper迁新家：验证命令是 `rg -n "scan_path_utils|normalize_scan_file_path|resolve_scan_finding_location" backend_old/app backend_old/tests`。当前 live caller 包括 `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`、`backend_old/app/services/agent/bootstrap/phpstan.py`、`backend_old/app/services/agent/bootstrap/bandit.py`、`backend_old/app/services/agent/bootstrap/opengrep.py` 与 `backend_old/tests/test_scan_path_utils.py`，它们都应 import 自 `backend_old/app/services/scan_path_utils.py`，不再提旧的 `static_finding_paths.py`。翻门条件是 `backend_old/app` 和 `backend_old/tests` 只剩 `scan_path_utils` 相关命中，旧 helper 字串彻底下架；owner 是 Rust migration Phase C/D。

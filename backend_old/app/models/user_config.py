@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.models.base import Base
 
 
 class UserConfig(Base):
@@ -27,7 +27,6 @@ class UserConfig(Base):
 
     # Relationships
     user = relationship("User", backref="config")
-
 
 
 

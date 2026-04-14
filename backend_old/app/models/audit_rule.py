@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from app.models.base import Base
 
 
 class AuditRuleSet(Base):
