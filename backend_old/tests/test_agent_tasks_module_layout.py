@@ -7,7 +7,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_agent_tasks_split_modules_exist():
     module_names = [
-        "app.api.v1.endpoints.agent_tasks_contracts",
         "app.api.v1.endpoints.agent_tasks_findings",
     ]
 
@@ -16,11 +15,10 @@ def test_agent_tasks_split_modules_exist():
 
 
 def test_agent_tasks_split_modules_expose_key_symbols_directly():
-    from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_findings
     from app.services.agent import scope_filters
 
-    assert agent_tasks_contracts.AgentTaskCreate is not None
+    assert agent_tasks_findings.AgentFindingResponse is not None
     assert agent_tasks_findings._is_core_ignored_path is scope_filters._is_core_ignored_path
     assert agent_tasks_findings._save_findings is not None
 
@@ -39,3 +37,7 @@ def test_agent_tasks_tool_runtime_shell_has_been_retired():
 
 def test_agent_tasks_bootstrap_shell_has_been_retired():
     assert not (PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_bootstrap.py").exists()
+
+
+def test_agent_tasks_contracts_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_contracts.py").exists()

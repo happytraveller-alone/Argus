@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +28,77 @@ from app.services.agent.utils.vulnerability_naming import (
 )
 from app.services.agent.scope_filters import _is_core_ignored_path
 
-from .agent_tasks_contracts import AgentFindingResponse
-
 logger = logging.getLogger(__name__)
+
+
+class AgentFindingResponse(BaseModel):
+    """Agent finding response."""
+
+    id: str
+    task_id: str
+    vulnerability_type: str
+    severity: str
+    title: str
+    display_title: Optional[str] = None
+    description: Optional[str]
+    description_markdown: Optional[str] = None
+    file_path: Optional[str]
+    line_start: Optional[int]
+    line_end: Optional[int]
+    resolved_file_path: Optional[str] = None
+    resolved_line_start: Optional[int] = None
+    function_name: Optional[str] = None
+    code_snippet: Optional[str]
+    code_context: Optional[str] = None
+    source: Optional[str] = None
+    sink: Optional[str] = None
+    dataflow_path: Optional[List[str]] = None
+    cwe_id: Optional[str] = None
+    cwe_name: Optional[str] = None
+    cvss_score: Optional[float] = None
+    cvss_vector: Optional[str] = None
+    context_start_line: Optional[int] = None
+    context_end_line: Optional[int] = None
+
+    is_verified: bool
+    confidence: Optional[float] = Field(
+        default=0.5,
+        validation_alias="ai_confidence",
+    )
+    reachability: Optional[str] = None
+    authenticity: Optional[str] = None
+    verification_evidence: Optional[str] = None
+    verification_todo_id: Optional[str] = None
+    verification_fingerprint: Optional[str] = None
+    flow_path_score: Optional[float] = None
+    flow_call_chain: Optional[List[str]] = None
+    function_trigger_flow: Optional[List[str]] = None
+    flow_control_conditions: Optional[List[str]] = None
+    logic_authz_evidence: Optional[List[str]] = None
+    reachability_file: Optional[str] = None
+    reachability_function: Optional[str] = None
+    reachability_function_start_line: Optional[int] = None
+    reachability_function_end_line: Optional[int] = None
+    trigger_flow: Optional[dict] = None
+    poc_trigger_chain: Optional[dict] = None
+    status: str
+
+    suggestion: Optional[str] = None
+    fix_code: Optional[str] = None
+    fix_description: Optional[str] = None
+    report: Optional[str] = None
+    has_poc: bool = False
+    poc_code: Optional[str] = None
+    poc_description: Optional[str] = None
+    poc_steps: Optional[List[str]] = None
+    poc: Optional[dict] = None
+
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
 
 def _safe_text(value: Any) -> str:
     """将任意结构安全转换为文本，避免保存时意外截断或类型错误。"""

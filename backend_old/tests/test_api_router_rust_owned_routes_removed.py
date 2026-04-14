@@ -70,6 +70,11 @@ def test_legacy_agent_tasks_bootstrap_module_has_been_retired():
     assert not bootstrap_path.exists()
 
 
+def test_legacy_agent_tasks_contracts_module_has_been_retired():
+    contracts_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_contracts.py"
+    assert not contracts_path.exists()
+
+
 def test_legacy_rule_flows_schema_module_has_been_retired():
     rule_flows_path = PROJECT_ROOT / "app/api/v1/schemas/rule_flows.py"
     schemas_init_path = PROJECT_ROOT / "app/api/v1/schemas/__init__.py"

@@ -1387,6 +1387,30 @@
 - 后续修复波次: Wave A / API facade cleanup
 - owner: Rust migration
 
+### 44. `agent_tasks_contracts.py` retired; `AgentFindingResponse` moved into findings module
+
+- endpoint / feature:
+  - Python API-local contracts shell:
+    - `backend_old/app/api/v1/endpoints/agent_tasks_contracts.py`
+- repo evidence before deletion:
+  - `rg -n "AgentTaskCreate|AgentTaskResponse|AgentEventResponse|TaskSummaryResponse" backend_old/app backend_old/tests backend_old/scripts -S`
+    只剩 contracts module 本体与 module-layout test 命中
+  - `AgentFindingResponse` 的唯一活 caller 是 `agent_tasks_findings.py`
+- current behavior:
+  - `backend_old/app/api/v1/endpoints/agent_tasks_contracts.py` 已从 repo 物理删除
+  - `AgentFindingResponse` 已内联到 `backend_old/app/api/v1/endpoints/agent_tasks_findings.py`
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    改为直接守住 `AgentFindingResponse` 由 findings module 承载，并补 contracts-module retirement guard
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 contracts-module retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_findings_persistence.py tests/test_agent_findings_strict_validation.py tests/test_agent_result_consistency.py tests/test_report_finding_update_flow.py tests/test_agent_title_normalization.py`
+- 边界说明:
+  - 这是 API-local contracts shell retirement，不是新的 Rust takeover
+  - 本 slice 不处理 `agent_tasks_findings.py` 的 helper 语义，只改变 response model 宿主位置
+- 后续修复波次: Wave A / API facade cleanup
+- owner: Rust migration
+
 ### 43. `rule_flows.py` transitional DTO host retired from API path
 
 - endpoint / feature:
