@@ -1411,6 +1411,28 @@
 - 后续修复波次: Wave A / API facade cleanup
 - owner: Rust migration
 
+### 45. Empty `api/v1` package init shells retired
+
+- endpoint / feature:
+  - Python package shells:
+    - `backend_old/app/api/v1/__init__.py`
+    - `backend_old/app/api/v1/endpoints/__init__.py`
+- repo evidence before deletion:
+  - 两个文件均为空壳，不承载代码或导出
+  - 仓内活引用已直接指向模块级路径，如
+    `app.api.v1.endpoints.agent_tasks_findings`
+- current behavior:
+  - 两个 `__init__.py` 已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 package-shell retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_tasks_module_layout.py`
+- 边界说明:
+  - 这是空包壳退休，不是新的 Rust takeover
+  - 本 slice 不改 `agent_tasks_findings.py` 的活逻辑与测试语义
+- 后续修复波次: Wave A / API package cleanup
+- owner: Rust migration
+
 ### 43. `rule_flows.py` transitional DTO host retired from API path
 
 - endpoint / feature:

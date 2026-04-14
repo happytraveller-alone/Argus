@@ -8,6 +8,13 @@ def test_legacy_api_router_module_has_been_retired():
     assert not api_router_path.exists()
 
 
+def test_legacy_api_package_init_modules_have_been_retired():
+    api_v1_init_path = PROJECT_ROOT / "app/api/v1/__init__.py"
+    endpoints_init_path = PROJECT_ROOT / "app/api/v1/endpoints/__init__.py"
+    assert not api_v1_init_path.exists()
+    assert not endpoints_init_path.exists()
+
+
 def test_legacy_config_endpoint_module_has_been_retired():
     config_path = PROJECT_ROOT / "app/api/v1/endpoints/config.py"
     assert not config_path.exists()
