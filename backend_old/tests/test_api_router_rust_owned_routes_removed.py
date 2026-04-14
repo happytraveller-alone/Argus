@@ -60,6 +60,11 @@ def test_legacy_agent_tasks_access_module_has_been_retired():
     assert not access_path.exists()
 
 
+def test_legacy_agent_tasks_tool_runtime_module_has_been_retired():
+    runtime_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_tool_runtime.py"
+    assert not runtime_path.exists()
+
+
 def test_legacy_project_metrics_service_module_has_been_retired():
     metrics_path = PROJECT_ROOT / "app/services/project_metrics.py"
     assert not metrics_path.exists()

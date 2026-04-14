@@ -1336,6 +1336,33 @@
 - 后续修复波次: Wave A / API facade cleanup
 - owner: Rust migration
 
+### 41. `agent_tasks_tool_runtime.py` retired as dead API-local tooling
+
+- endpoint / feature:
+  - Python API-local tooling shell:
+    - `backend_old/app/api/v1/endpoints/agent_tasks_tool_runtime.py`
+  - Associated dead tests:
+    - `backend_old/tests/test_tool_catalog_memory_sync.py`
+    - `backend_old/tests/test_tool_skills_memory_sync.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks_tool_runtime|build_task_write_scope_guard|_run_task_llm_connection_test|_sync_tool_catalog_to_memory|_sync_tool_playbook_to_memory|_build_tool_skills_snapshot|_sync_tool_skills_to_memory" backend_old/app backend_old/tests backend_old/scripts -S`
+    只剩模块本体与测试命中，没有 app/runtime/script caller
+- current behavior:
+  - `backend_old/app/api/v1/endpoints/agent_tasks_tool_runtime.py` 已从 repo 物理删除
+  - 上述两条 dead tests 已删除
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    改为不再要求 split modules 中存在 `agent_tasks_tool_runtime.py`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补该 module retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_findings_persistence.py tests/test_agent_findings_strict_validation.py tests/test_agent_result_consistency.py tests/test_report_finding_update_flow.py tests/test_agent_title_normalization.py`
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks_tool_runtime" backend_old/tests backend_old/scripts backend_old/app -S`
+- 边界说明:
+  - 这是 API-local dead tooling retirement，不是把 write-scope / LLM test / tool docs sync 接回其他 Python facade
+  - 本 slice 不处理 `agent_tasks_bootstrap.py` / `agent_tasks_findings.py` / `agent_tasks_contracts.py`
+- 后续修复波次: Wave A / API facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

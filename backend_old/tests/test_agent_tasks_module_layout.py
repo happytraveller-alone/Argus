@@ -8,7 +8,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_agent_tasks_split_modules_exist():
     module_names = [
         "app.api.v1.endpoints.agent_tasks_contracts",
-        "app.api.v1.endpoints.agent_tasks_tool_runtime",
         "app.api.v1.endpoints.agent_tasks_bootstrap",
         "app.api.v1.endpoints.agent_tasks_findings",
     ]
@@ -21,7 +20,6 @@ def test_agent_tasks_split_modules_expose_key_symbols_directly():
     from app.api.v1.endpoints import agent_tasks_bootstrap
     from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_findings
-    from app.api.v1.endpoints import agent_tasks_tool_runtime
     from app.services.agent import bandit_bootstrap_rules
     from app.services.agent import bootstrap_entrypoints
     from app.services.agent import bootstrap_findings
@@ -31,8 +29,6 @@ def test_agent_tasks_split_modules_expose_key_symbols_directly():
     from app.services.agent import scope_filters
 
     assert agent_tasks_contracts.AgentTaskCreate is not None
-    assert agent_tasks_tool_runtime.build_task_write_scope_guard is not None
-    assert agent_tasks_tool_runtime._sync_tool_playbook_to_memory is not None
     assert (
         agent_tasks_bootstrap._resolve_static_bootstrap_config
         is bootstrap_policy._resolve_static_bootstrap_config
@@ -80,3 +76,7 @@ def test_agent_tasks_api_router_shell_has_been_retired():
 
 def test_agent_tasks_facade_shell_has_been_retired():
     assert not (PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks.py").exists()
+
+
+def test_agent_tasks_tool_runtime_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_tool_runtime.py").exists()
