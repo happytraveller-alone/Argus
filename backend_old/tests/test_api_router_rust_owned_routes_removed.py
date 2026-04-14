@@ -30,6 +30,11 @@ def test_legacy_static_scan_runtime_endpoint_module_has_been_retired():
     assert not runtime_helpers_path.exists()
 
 
+def test_legacy_agent_tasks_facade_module_has_been_retired():
+    facade_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks.py"
+    assert not facade_path.exists()
+
+
 def test_legacy_init_db_module_has_been_retired():
     init_db_path = PROJECT_ROOT / "app/db/init_db.py"
     assert not init_db_path.exists()

@@ -17,8 +17,7 @@ def test_agent_tasks_split_modules_exist():
         importlib.import_module(module_name)
 
 
-def test_agent_tasks_facade_re_exports_key_symbols():
-    from app.api.v1.endpoints import agent_tasks
+def test_agent_tasks_split_modules_expose_key_symbols_directly():
     from app.api.v1.endpoints import agent_tasks_bootstrap
     from app.api.v1.endpoints import agent_tasks_contracts
     from app.api.v1.endpoints import agent_tasks_findings
@@ -31,19 +30,9 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     from app.services.agent import bootstrap_seeds
     from app.services.agent import scope_filters
 
-    assert agent_tasks.AgentTaskCreate is agent_tasks_contracts.AgentTaskCreate
-    assert (
-        agent_tasks.build_task_write_scope_guard
-        is agent_tasks_tool_runtime.build_task_write_scope_guard
-    )
-    assert (
-        agent_tasks._sync_tool_playbook_to_memory
-        is agent_tasks_tool_runtime._sync_tool_playbook_to_memory
-    )
-    assert (
-        agent_tasks._resolve_static_bootstrap_config
-        is bootstrap_policy._resolve_static_bootstrap_config
-    )
+    assert agent_tasks_contracts.AgentTaskCreate is not None
+    assert agent_tasks_tool_runtime.build_task_write_scope_guard is not None
+    assert agent_tasks_tool_runtime._sync_tool_playbook_to_memory is not None
     assert (
         agent_tasks_bootstrap._resolve_static_bootstrap_config
         is bootstrap_policy._resolve_static_bootstrap_config
@@ -57,15 +46,15 @@ def test_agent_tasks_facade_re_exports_key_symbols():
         is bootstrap_gitleaks_runner._run_bootstrap_gitleaks_scan
     )
     assert (
-        agent_tasks._normalize_bootstrap_finding_from_gitleaks_payload
+        agent_tasks_bootstrap._normalize_bootstrap_finding_from_gitleaks_payload
         is bootstrap_findings._normalize_bootstrap_finding_from_gitleaks_payload
     )
     assert (
-        agent_tasks._build_seed_from_entrypoints
+        agent_tasks_bootstrap._build_seed_from_entrypoints
         is bootstrap_entrypoints._build_seed_from_entrypoints
     )
     assert (
-        agent_tasks._discover_entry_points_deterministic
+        agent_tasks_bootstrap._discover_entry_points_deterministic
         is bootstrap_entrypoints._discover_entry_points_deterministic
     )
     assert (
@@ -73,53 +62,21 @@ def test_agent_tasks_facade_re_exports_key_symbols():
         is bootstrap_findings._dedupe_bootstrap_findings
     )
     assert (
-        agent_tasks._merge_seed_and_agent_findings
+        agent_tasks_bootstrap._merge_seed_and_agent_findings
         is bootstrap_seeds._merge_seed_and_agent_findings
     )
     assert agent_tasks_bootstrap.MAX_SEED_FINDINGS == bootstrap_seeds.MAX_SEED_FINDINGS
-    assert agent_tasks._filter_bootstrap_findings is scope_filters._filter_bootstrap_findings
+    assert (
+        agent_tasks_bootstrap._filter_bootstrap_findings
+        is scope_filters._filter_bootstrap_findings
+    )
     assert agent_tasks_findings._is_core_ignored_path is scope_filters._is_core_ignored_path
-    assert agent_tasks._save_findings is agent_tasks_findings._save_findings
+    assert agent_tasks_findings._save_findings is not None
 
 
 def test_agent_tasks_api_router_shell_has_been_retired():
     assert not (PROJECT_ROOT / "app/api/v1/api.py").exists()
 
 
-def test_agent_tasks_facade_does_not_reexport_retired_initialize_tools():
-    from app.api.v1.endpoints import agent_tasks
-
-    assert not hasattr(agent_tasks, "_initialize_tools"), (
-        "agent_tasks facade should not re-export retired _initialize_tools helper"
-    )
-
-
-def test_agent_tasks_facade_does_not_reexport_retired_runtime_helpers():
-    from app.api.v1.endpoints import agent_tasks
-
-    retired_runtime_symbols = {
-        "_compute_verification_pending_gate",
-        "_classify_retry_error",
-        "_snapshot_runtime_stats_to_task",
-    }
-
-    leaked = sorted(name for name in retired_runtime_symbols if hasattr(agent_tasks, name))
-    assert not leaked, (
-        "agent_tasks facade should not re-export retired runtime helpers: "
-        + ", ".join(leaked)
-    )
-
-
-def test_agent_tasks_facade_does_not_reexport_retired_execution_results_helpers():
-    from app.api.v1.endpoints import agent_tasks
-
-    retired_symbols = {
-        "_collect_project_info",
-        "get_agent_finding",
-    }
-
-    leaked = sorted(name for name in retired_symbols if hasattr(agent_tasks, name))
-    assert not leaked, (
-        "agent_tasks facade should not re-export retired execution/results helpers: "
-        + ", ".join(leaked)
-    )
+def test_agent_tasks_facade_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks.py").exists()

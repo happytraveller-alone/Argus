@@ -1,4 +1,4 @@
-from app.api.v1.endpoints.agent_tasks import _sync_tool_catalog_to_memory
+from app.api.v1.endpoints.agent_tasks_tool_runtime import _sync_tool_catalog_to_memory
 from app.services.agent.memory.markdown_memory import MarkdownMemoryStore
 
 

@@ -1307,6 +1307,35 @@
 - 后续修复波次: Wave E / retained helper correctness
 - owner: Rust migration
 
+### 40. `backend_old/app/api/v1/endpoints/agent_tasks.py` facade retired
+
+- endpoint / feature:
+  - Python API facade shell:
+    - `backend_old/app/api/v1/endpoints/agent_tasks.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks import|from app\\.api\\.v1\\.endpoints import agent_tasks" backend_old/tests backend_old/scripts backend_old/app -S`
+    只剩测试命中，无 script/runtime caller
+  - facade 文件本体仅做 wildcard re-export 与空 `APIRouter()` 壳，不再承载 live route mount
+- current behavior:
+  - `backend_old/app/api/v1/endpoints/agent_tasks.py` 已从 repo 物理删除
+  - 仍存活的 helper 测试已改为直连真实模块：
+    - `agent_tasks_findings.py`
+    - `agent_tasks_tool_runtime.py`
+    - `agent_tasks_bootstrap.py`
+    - `agent_tasks_contracts.py`
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    改为守住 split modules 直接暴露关键符号，以及 facade 文件不得回流
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 facade-module retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_findings_persistence.py tests/test_agent_findings_strict_validation.py tests/test_agent_result_consistency.py tests/test_report_finding_update_flow.py tests/test_tool_catalog_memory_sync.py tests/test_tool_skills_memory_sync.py tests/test_agent_title_normalization.py`
+- 边界说明:
+  - 这是 API facade retirement，不是新的 Rust route takeover
+  - 本 slice 不改 `agent_tasks_bootstrap.py` / `agent_tasks_findings.py` /
+    `agent_tasks_tool_runtime.py` / `agent_tasks_contracts.py` 的 helper 语义
+- 后续修复波次: Wave A / API facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers
