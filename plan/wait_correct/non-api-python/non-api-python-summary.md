@@ -648,6 +648,8 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
   - repo facts refresh:
     - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
     - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "from app\\.services\\.scanner_runner import|import app\\.services\\.scanner_runner|from app\\.services import scanner_runner" backend_old/app backend_old/tests -S`
+      => no matches
     - `rg -n "user_config_service|load_effective_user_config|_load_effective_user_config|sanitize_other_config|strip_runtime_config|_default_user_config" backend_old/app backend_old/tests backend/src frontend -S`
       live caller 已收口到 `static_scan_runtime.py` 与退休守门测试
 - still missing:
@@ -699,6 +701,31 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
   - `scanner_runner.py`、`static_scan_runtime.py` 等仍有 live caller
 - delete gate:
   - 顶层 `flow_parser_runner.py` 已达到删除门并已退休
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
+### 1y. `scanner_runner.py` retired from top-level; helper absorbed into `agent/`
+
+- current state:
+  - 顶层 `backend_old/app/services/scanner_runner.py` 已迁入
+    `backend_old/app/services/agent/scanner_runner.py`
+  - bandit / opengrep / phpstan / gitleaks bootstrap、
+    `agent/flow/flow_parser_runner.py`、`agent/tools/external_tools.py`、
+    `static_scan_runtime.py` 已改为域内 import
+  - `backend_old/tests/test_scanner_runner.py`
+    已同步指向新模块路径
+  - `backend_old/tests/test_flow_parser_runner_client.py`
+    已改为 monkeypatch live agent.flow 模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补退休守门测试
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+- still missing:
+  - `static_scan_runtime.py` 等仍有 live caller
+- delete gate:
+  - 顶层 `scanner_runner.py` 已达到删除门并已退休
 - owner: Rust migration
 - target phase:
   - D / E cleanup in progress

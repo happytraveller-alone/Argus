@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.services import scanner_runner
+from app.services.agent import scanner_runner
 
 
 def test_run_scanner_container_passes_mounts_env_and_command(tmp_path, monkeypatch):

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.services.scanner_runner import SCANNER_MOUNT_PATH, ScannerRunSpec, run_scanner_container
+from app.services.agent.scanner_runner import SCANNER_MOUNT_PATH, ScannerRunSpec, run_scanner_container
 
 
 def _run_coroutine_blocking(coro):

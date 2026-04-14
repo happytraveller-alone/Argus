@@ -31,7 +31,7 @@ def test_flow_parser_runner_client_writes_request_and_reads_response(monkeypatch
         )
 
     monkeypatch.setattr(
-        "app.services.flow_parser_runner.run_scanner_container",
+        "app.services.agent.flow.flow_parser_runner.run_scanner_container",
         _fake_run,
     )
     monkeypatch.setattr(settings, "SCAN_WORKSPACE_ROOT", str(shared_root))
@@ -81,7 +81,7 @@ def test_flow_parser_runner_client_uses_scan_workspace_root_for_bind_mount(monke
 
     monkeypatch.setattr(settings, "SCAN_WORKSPACE_ROOT", str(shared_root))
     monkeypatch.setattr(
-        "app.services.flow_parser_runner.run_scanner_container",
+        "app.services.agent.flow.flow_parser_runner.run_scanner_container",
         _fake_run,
     )
 
@@ -136,11 +136,11 @@ def test_flow_parser_runner_client_falls_back_to_system_tempdir_when_workspace_r
 
     monkeypatch.setattr(settings, "SCAN_WORKSPACE_ROOT", str(shared_root))
     monkeypatch.setattr(
-        "app.services.flow_parser_runner.tempfile.TemporaryDirectory",
+        "app.services.agent.flow.flow_parser_runner.tempfile.TemporaryDirectory",
         _TemporaryDirectoryWithPermissionFallback,
     )
     monkeypatch.setattr(
-        "app.services.flow_parser_runner.run_scanner_container",
+        "app.services.agent.flow.flow_parser_runner.run_scanner_container",
         _fake_run,
     )
 

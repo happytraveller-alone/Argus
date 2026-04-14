@@ -1231,6 +1231,8 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - repo facts refresh：
     - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
     - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+    - `rg -n "from app\\.services\\.scanner_runner import|import app\\.services\\.scanner_runner|from app\\.services import scanner_runner" backend_old/app backend_old/tests -S`
+      => no matches
     - `rg -n "user_config_service|load_effective_user_config|_load_effective_user_config|sanitize_other_config|strip_runtime_config|_default_user_config" backend_old/app backend_old/tests backend/src frontend -S`
       live caller 已收口到 `static_scan_runtime.py` 与退休守门测试
 - 当前意义：
@@ -1299,6 +1301,41 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 顶层 `flow_parser_runner.py`：已退休，本 slice 完成
 - 下一刀：
   - 继续收口顶层 runtime helper，优先 `scanner_runner.py`
+
+### 2026-04-14 Batch 4 / Slice 9
+
+- 已完成：
+  - 顶层 `backend_old/app/services/scanner_runner.py` 已迁入
+    `backend_old/app/services/agent/scanner_runner.py`
+  - 下列 live caller 已改为域内 import：
+    - `agent/bootstrap/bandit.py`
+    - `agent/bootstrap/opengrep.py`
+    - `agent/bootstrap/phpstan.py`
+    - `agent/bootstrap_gitleaks_runner.py`
+    - `agent/flow/flow_parser_runner.py`
+    - `agent/tools/external_tools.py`
+    - `static_scan_runtime.py`
+  - `backend_old/tests/test_scanner_runner.py` 已同步指向新模块路径
+  - `backend_old/tests/test_flow_parser_runner_client.py`
+    已改为 monkeypatch live `agent/flow/flow_parser_runner.py` 模块路径
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 `scanner_runner.py` 退休守门测试
+  - `stop_scanner_container_sync()` 缺失容器分支改为运行时读取
+    `docker.errors.NotFound`，保留原有行为但修复 monkeypatch 不生效问题
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `211`
+- 当前意义：
+  - `scanner_runner.py` 不再作为顶层 runtime bridge 保留，而是下沉到实际消费它的 agent 域
+  - `run_scanner_container*` / `stop_scanner_container*`、`ScannerRunSpec` /
+    `ScannerRunResult`、`SCANNER_MOUNT_PATH="/scan"`、workspace volume/root rewrite、
+    `logs/` 与 `meta/runner.json` 语义均保持不变
+- 仍未完成：
+  - `static_scan_runtime.py` 仍是顶层 live runtime bridge
+- 删除条件：
+  - 顶层 `scanner_runner.py`：已退休，本 slice 完成
+- 下一刀：
+  - 继续收口顶层 runtime helper，优先 `static_scan_runtime.py`
 
 ### 2026-04-13 Batch 4 / Slice 3
 

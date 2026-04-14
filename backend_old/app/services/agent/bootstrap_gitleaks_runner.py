@@ -63,7 +63,7 @@ async def _run_bootstrap_gitleaks_scan(
     if prepare_scan_project_dir_async_fn is None:
         prepare_scan_project_dir_async_fn = _prepare_scan_project_dir_async
     if run_scanner_container_fn is None:
-        from app.services.scanner_runner import run_scanner_container as run_fn
+        from app.services.agent.scanner_runner import run_scanner_container as run_fn
 
         run_scanner_container_fn = run_fn
     if cleanup_scan_workspace_fn is None:
@@ -77,7 +77,7 @@ async def _run_bootstrap_gitleaks_scan(
             getattr(settings, "SCANNER_GITLEAKS_IMAGE", "vulhunter/gitleaks-runner:latest")
         )
     if scanner_run_spec_cls is None:
-        from app.services.scanner_runner import ScannerRunSpec
+        from app.services.agent.scanner_runner import ScannerRunSpec
 
         scanner_run_spec_cls = ScannerRunSpec
 

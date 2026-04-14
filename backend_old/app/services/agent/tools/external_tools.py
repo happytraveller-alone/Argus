@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.services.pmd_rulesets import PMD_RULESET_ALIASES
-from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
+from app.services.agent.scanner_runner import ScannerRunSpec, run_scanner_container
 from .base import AgentTool, ToolResult
 from .sandbox_tool import SandboxManager
 

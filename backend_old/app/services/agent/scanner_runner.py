@@ -13,8 +13,14 @@ from app.core.config import settings
 
 SCANNER_MOUNT_PATH = "/scan"
 MAX_RETAINED_LOG_CHARS = 12000
-DOCKER_EXCEPTION = getattr(getattr(docker, "errors", None), "DockerException", Exception)
-DOCKER_NOT_FOUND = getattr(getattr(docker, "errors", None), "NotFound", Exception)
+
+
+def _docker_exception_type():
+    return getattr(getattr(docker, "errors", None), "DockerException", Exception)
+
+
+def _docker_not_found_type():
+    return getattr(getattr(docker, "errors", None), "NotFound", Exception)
 
 
 @dataclass
@@ -194,7 +200,7 @@ def run_scanner_container_sync(
             stderr_path=captured_stderr_path or retained_stderr_path,
             error=None if exit_code in expected_exit_codes else f"scanner container exited with code {exit_code}",
         )
-    except DOCKER_EXCEPTION as exc:
+    except _docker_exception_type() as exc:
         retained_stderr_path = _write_retained_log(stderr_log_path, str(exc))
         runner_meta_path.write_text(
             json.dumps(
@@ -251,7 +257,7 @@ def run_scanner_container_sync(
         if container is not None:
             try:
                 container.remove(force=True)
-            except DOCKER_EXCEPTION:
+            except _docker_exception_type():
                 pass
 
 
@@ -271,7 +277,7 @@ def stop_scanner_container_sync(container_id: str) -> bool:
     try:
         client = docker.from_env()
         container = client.containers.get(container_id)
-    except DOCKER_NOT_FOUND:
+    except _docker_not_found_type():
         return False
 
     container.stop(timeout=2)

@@ -22,7 +22,7 @@ from app.core.encryption import decrypt_sensitive_data
 from app.models.opengrep import OpengrepRule
 from app.models.user_config import UserConfig
 from app.services.llm.service import LLMConfigError, LLMService
-from app.services.scanner_runner import stop_scanner_container_sync
+from app.services.agent.scanner_runner import stop_scanner_container_sync
 
 logger = logging.getLogger(__name__)
 SCAN_PROGRESS_MAX_LOGS = 120
