@@ -10,10 +10,10 @@ def test_build_tool_skills_snapshot_has_core_tools():
     snapshot = _build_tool_skills_snapshot(max_chars=12000)
 
     assert "Tool Playbook" in snapshot
-    assert "Skill: push_finding_to_queue" in snapshot
-    assert "Skill: get_recon_risk_queue_status" in snapshot
     assert "Skill: read_file" in snapshot
     assert "Skill: search_code" in snapshot
+    assert "Skill: list_files" in snapshot
+    assert "`get_symbol_body`" in snapshot
     assert "Skill: locate_enclosing_function" in snapshot
 
 
@@ -38,9 +38,9 @@ def test_tool_skills_sync_writes_skills_memory(tmp_path):
     first_220_lines = "\n".join(skills_text.splitlines()[:220])
 
     assert "Agent Tool Skills Snapshot" in skills_text
-    assert "Skill: push_finding_to_queue" in first_220_lines
-    assert "Skill: get_recon_risk_queue_status" in first_220_lines
+    assert "Skill: search_code" in first_220_lines
     assert "Skill: read_file" in skills_text
     assert "Skill: list_files" in skills_text
+    assert "`get_symbol_body`" in skills_text
     assert "工具说明同步" in shared_text
     assert "MCP 工具说明同步" not in shared_text
