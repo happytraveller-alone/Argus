@@ -84,3 +84,11 @@ def test_agent_tasks_facade_re_exports_key_symbols():
 
 def test_agent_tasks_api_router_shell_has_been_retired():
     assert not (PROJECT_ROOT / "app/api/v1/api.py").exists()
+
+
+def test_agent_tasks_facade_does_not_reexport_retired_initialize_tools():
+    from app.api.v1.endpoints import agent_tasks
+
+    assert not hasattr(agent_tasks, "_initialize_tools"), (
+        "agent_tasks facade should not re-export retired _initialize_tools helper"
+    )

@@ -1166,6 +1166,36 @@
 - 后续修复波次: Wave A / API shell cleanup
 - owner: Rust migration
 
+### 35. `_initialize_tools` dead tooling retired after `agent_tasks_execution.py` removal
+
+- endpoint / feature:
+  - Python dead tooling:
+    - `backend_old/scripts/generate_runtime_tool_docs.py`
+    - `backend_old/scripts/validate_runtime_tool_docs.py`
+    - `backend_old/tests/test_agent_tool_registry.py`
+    - `backend_old/tests/test_runtime_tool_docs_coverage.py`
+- repo evidence before deletion:
+  - `uv run --project . pytest -s tests/test_agent_tool_registry.py tests/test_runtime_tool_docs_coverage.py`
+    在当前 `main` 上直接 collection error：
+    `ImportError: cannot import name '_initialize_tools' from 'app.api.v1.endpoints.agent_tasks'`
+  - `_initialize_tools` 与 `_collect_project_info` 原本来自已退休的
+    `agent_tasks_execution.py`，当前 facade `agent_tasks.py` 已不再 re-export
+- current behavior:
+  - 上述两个脚本与两个测试已从 repo 物理删除
+  - `backend_old/tests/test_agent_tasks_module_layout.py`
+    已补负向守门，要求 `agent_tasks` facade 不得重新 re-export
+    `_initialize_tools`
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 runtime tool docs script retirement guard
+- operational verification:
+  - `uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py tests/test_agent_tasks_module_layout.py`
+  - `rg -n "from app\\.api\\.v1\\.endpoints\\.agent_tasks import _initialize_tools|from scripts\\.generate_runtime_tool_docs import" backend_old/tests backend_old/scripts -S`
+- 边界说明:
+  - 这是 dead tooling retirement，不是把 `_initialize_tools` 等旧 Python 执行逻辑重新接回
+  - 本 slice 不修改 `agent_tasks*.py` 存活 helper 的语义，也不改 Rust 路由或 route inventory
+- 后续修复波次: Wave E / agent facade cleanup
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

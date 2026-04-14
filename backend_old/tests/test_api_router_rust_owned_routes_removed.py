@@ -188,3 +188,10 @@ def test_legacy_scanner_runner_service_has_been_retired():
 def test_legacy_static_scan_runtime_service_shell_has_been_retired():
     runtime_service_path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
     assert not runtime_service_path.exists()
+
+
+def test_legacy_runtime_tool_docs_scripts_have_been_retired():
+    generate_script_path = PROJECT_ROOT / "scripts/generate_runtime_tool_docs.py"
+    validate_script_path = PROJECT_ROOT / "scripts/validate_runtime_tool_docs.py"
+    assert not generate_script_path.exists()
+    assert not validate_script_path.exists()
