@@ -1389,6 +1389,74 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 继续收口 `static_scan_runtime.py` 剩余 capability cluster，
     优先避免触碰 ZIP contract 与 task/progress API 契约
 
+### 2026-04-14 Batch 4 / Slice 11
+
+- 已完成：
+  - `static_scan_runtime.py` 中 task-tracking / cancellation cluster 已迁入
+    `backend_old/app/services/agent/scan_tracking.py`：
+    - `_static_scan_process_lock`
+    - `_static_running_scan_processes`
+    - `_static_running_scan_containers`
+    - `_static_cancelled_scan_tasks`
+    - `_static_background_jobs`
+    - `_scan_task_key`
+    - `_register_static_background_job`
+    - `_pop_static_background_job`
+    - `_get_static_background_job`
+    - `_launch_static_background_job`
+    - `_shutdown_static_background_jobs`
+    - `_is_scan_task_cancelled`
+    - `_clear_scan_task_cancel`
+    - `_register_scan_container`
+    - `_pop_scan_container`
+    - `_stop_scan_container`
+    - `_request_scan_task_cancel`
+    - `_is_scan_process_active`
+    - `_terminate_scan_process`
+    - `_run_subprocess_with_tracking`
+  - `backend_old/app/services/static_scan_runtime.py`
+    已改为从 `agent/scan_tracking.py` 显式 import 这一整组 helper/state，
+    不再本地定义或持有第二份 tracking state
+  - `backend_old/tests/test_static_scan_runtime.py`
+    与 `backend_old/tests/test_background_task_launch_refactor.py`
+    已改为直接覆盖 `agent/scan_tracking.py` 的 shared-state / cancel / background-job 契约
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补 AST import/ownership guard，要求 `static_scan_runtime.py`
+    从 `app.services.agent.scan_tracking` 导入整组符号，防止 helper/state 回流
+  - 验证命令：
+    - `uv run --project . pytest -s tests/test_static_scan_runtime.py tests/test_background_task_launch_refactor.py tests/test_config_internal_callers_use_service_layer.py tests/test_scanner_runner.py`
+      => `22 passed`
+    - `rg -n "static_scan_runtime\\.(?:_scan_task_key|_register_static_background_job|_pop_static_background_job|_get_static_background_job|_launch_static_background_job|_shutdown_static_background_jobs|_is_scan_task_cancelled|_clear_scan_task_cancel|_register_scan_container|_pop_scan_container|_stop_scan_container|_request_scan_task_cancel|_is_scan_process_active|_terminate_scan_process|_run_subprocess_with_tracking)|from app\\.services\\.static_scan_runtime import|import app\\.services\\.static_scan_runtime" backend_old/app backend_old/tests -S`
+      => 无命中（不只是不再有 live caller，连当前测试中的负向断言文本也未命中这条模式）
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- 当前意义：
+  - `static_scan_runtime.py` 不再拥有任务追踪、后台任务注册、进程/容器取消与 subprocess tracking 这一整组 runtime helper
+  - 单例共享状态语义保持不变：共享 lock / dict / set 现在只存在于
+    `agent/scan_tracking.py`，`static_scan_runtime.py` 只是兼容消费方
+  - `_scan_task_key` 格式、`_request_scan_task_cancel()` 布尔返回语义、
+    `_run_subprocess_with_tracking()` / `_terminate_scan_process()` /
+    `_shutdown_static_background_jobs()` / `_stop_scan_container()` 行为契约保持不变
+  - 这一步仍然是顶层 live runtime bridge 的 ownership shrinkage，
+    不是 Rust takeover，也不表示 `static_scan_runtime.py` 已退休
+  - `backend_old/app` non-API Python 文件数本 slice 临时从 `212` 增至 `213`，
+    原因是把单文件中的 tracking/cancel cluster 拆成独立 agent shared module；
+    这是结构收口，不是迁移回退
+- 仍未完成：
+  - `static_scan_runtime.py` 仍持有：
+    - ZIP bridge / `_get_project_root`
+    - backend venv helper
+    - progress store
+    - user config / LLM validation
+- 删除条件：
+  - `agent/scan_tracking.py`：作为当前 live shared module 保留
+  - `static_scan_runtime.py`：只有在剩余 ZIP/runtime/config 能力继续拆空后，
+    才能进入退休门
+- 下一刀：
+  - 继续收口 `static_scan_runtime.py` 剩余 capability cluster，
+    优先 progress store 或 ZIP/config 之外、且不改变 API/runtime contract 的内部 helper
+
 ### 2026-04-13 Batch 4 / Slice 3
 
 - 已完成：

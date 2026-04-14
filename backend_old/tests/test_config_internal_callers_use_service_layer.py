@@ -12,6 +12,28 @@ WORKSPACE_HELPER_IMPORTS = (
     "cleanup_scan_workspace",
     "copy_project_tree_to_scan_dir",
 )
+SCAN_TRACKING_EXPORTS = {
+    "_static_scan_process_lock",
+    "_static_running_scan_processes",
+    "_static_running_scan_containers",
+    "_static_cancelled_scan_tasks",
+    "_static_background_jobs",
+    "_scan_task_key",
+    "_register_static_background_job",
+    "_pop_static_background_job",
+    "_get_static_background_job",
+    "_launch_static_background_job",
+    "_shutdown_static_background_jobs",
+    "_is_scan_task_cancelled",
+    "_clear_scan_task_cancel",
+    "_register_scan_container",
+    "_pop_scan_container",
+    "_stop_scan_container",
+    "_request_scan_task_cancel",
+    "_is_scan_process_active",
+    "_terminate_scan_process",
+    "_run_subprocess_with_tracking",
+}
 
 
 def test_internal_callers_no_longer_import_config_endpoint():
@@ -79,3 +101,46 @@ def test_bootstrap_callers_use_agent_scan_workspace_module():
             f"{path.name} still imports workspace helpers from static_scan_runtime: "
             f"{', '.join(leaked_helpers)}"
         )
+
+
+def test_static_scan_runtime_imports_scan_tracking_cluster_from_agent_module():
+    path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
+    content = path.read_text(encoding="utf-8")
+    module = ast.parse(content, filename=str(path))
+
+    import_nodes = [node for node in ast.walk(module) if isinstance(node, ast.ImportFrom)]
+    scan_tracking_imports = [
+        node for node in import_nodes if node.module == "app.services.agent.scan_tracking"
+    ]
+    assert scan_tracking_imports, "static_scan_runtime.py should import scan tracking helpers"
+
+    imported_names = {
+        alias.name for node in scan_tracking_imports for alias in node.names if alias.name != "*"
+    }
+    missing_imports = sorted(SCAN_TRACKING_EXPORTS - imported_names)
+    assert not missing_imports, (
+        "static_scan_runtime.py should source the whole scan tracking cluster from "
+        f"agent.scan_tracking: {', '.join(missing_imports)}"
+    )
+
+    for node in module.body:
+        defined_name = getattr(node, "name", None)
+        if defined_name in SCAN_TRACKING_EXPORTS:
+            raise AssertionError(
+                f"static_scan_runtime.py should not locally define {defined_name}; "
+                "ownership belongs to agent.scan_tracking"
+            )
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in SCAN_TRACKING_EXPORTS:
+                    raise AssertionError(
+                        f"static_scan_runtime.py should not locally assign {target.id}; "
+                        "ownership belongs to agent.scan_tracking"
+                    )
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id in SCAN_TRACKING_EXPORTS:
+                raise AssertionError(
+                    f"static_scan_runtime.py should not locally assign {target.id}; "
+                    "ownership belongs to agent.scan_tracking"
+                )

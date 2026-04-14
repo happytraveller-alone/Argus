@@ -16,7 +16,7 @@ docker_stub.errors = types.SimpleNamespace(
 sys.modules.setdefault("docker", docker_stub)
 
 from app.services import static_scan_runtime
-from app.services.agent import scan_workspace
+from app.services.agent import scan_tracking, scan_workspace
 
 
 def test_ensure_scan_workspace_under_configured_root(tmp_path, monkeypatch):
@@ -97,17 +97,17 @@ def test_resolve_backend_venv_executable_uses_configured_dir(tmp_path, monkeypat
 
 
 def test_scan_container_registry_tracks_container_id():
-    static_scan_runtime._static_running_scan_containers.clear()
+    scan_tracking._static_running_scan_containers.clear()
 
-    static_scan_runtime._register_scan_container("phpstan", "task-container", "container-123")
+    scan_tracking._register_scan_container("phpstan", "task-container", "container-123")
 
     assert (
-        static_scan_runtime._static_running_scan_containers[
-            static_scan_runtime._scan_task_key("phpstan", "task-container")
+        scan_tracking._static_running_scan_containers[
+            scan_tracking._scan_task_key("phpstan", "task-container")
         ]
         == "container-123"
     )
-    assert static_scan_runtime._pop_scan_container("phpstan", "task-container") == "container-123"
+    assert scan_tracking._pop_scan_container("phpstan", "task-container") == "container-123"
 
 
 def test_record_scan_progress_initializes_shared_store():
@@ -193,7 +193,7 @@ def test_scan_process_active_and_cancel_uses_shared_tracking():
     result_holder: dict[str, object] = {}
 
     def _runner():
-        result_holder["result"] = static_scan_runtime._run_subprocess_with_tracking(
+        result_holder["result"] = scan_tracking._run_subprocess_with_tracking(
             "phpstan",
             task_id,
             ["bash", "-lc", "sleep 5"],
@@ -204,12 +204,12 @@ def test_scan_process_active_and_cancel_uses_shared_tracking():
     worker.start()
     time.sleep(0.2)
 
-    assert static_scan_runtime._is_scan_process_active("phpstan", task_id) is True
-    assert static_scan_runtime._request_scan_task_cancel("phpstan", task_id) is True
+    assert scan_tracking._is_scan_process_active("phpstan", task_id) is True
+    assert scan_tracking._request_scan_task_cancel("phpstan", task_id) is True
 
     worker.join(timeout=5)
     assert worker.is_alive() is False
-    assert static_scan_runtime._is_scan_process_active("phpstan", task_id) is False
+    assert scan_tracking._is_scan_process_active("phpstan", task_id) is False
     assert "result" in result_holder
     completed = result_holder["result"]
     assert isinstance(completed, subprocess.CompletedProcess)
@@ -219,11 +219,11 @@ def test_scan_process_active_and_cancel_uses_shared_tracking():
 def test_scan_process_timeout_cleans_tracking_state():
     task_id = "shared-timeout-1"
     with pytest.raises(subprocess.TimeoutExpired):
-        static_scan_runtime._run_subprocess_with_tracking(
+        scan_tracking._run_subprocess_with_tracking(
             "phpstan",
             task_id,
             ["bash", "-lc", "sleep 3"],
             timeout=1,
         )
 
-    assert static_scan_runtime._is_scan_process_active("phpstan", task_id) is False
+    assert scan_tracking._is_scan_process_active("phpstan", task_id) is False

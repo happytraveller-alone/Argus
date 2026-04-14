@@ -772,6 +772,61 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - D / E cleanup in progress
 
+### 1aa. task-tracking and cancellation cluster extracted from `static_scan_runtime.py` into `agent/scan_tracking.py`
+
+- current state:
+  - `static_scan_runtime.py` 中 task-tracking / cancellation cluster 已迁入
+    `backend_old/app/services/agent/scan_tracking.py`
+  - 已迁移的 helper/state 包括：
+    - `_static_scan_process_lock`
+    - `_static_running_scan_processes`
+    - `_static_running_scan_containers`
+    - `_static_cancelled_scan_tasks`
+    - `_static_background_jobs`
+    - `_scan_task_key`
+    - `_register_static_background_job`
+    - `_pop_static_background_job`
+    - `_get_static_background_job`
+    - `_launch_static_background_job`
+    - `_shutdown_static_background_jobs`
+    - `_is_scan_task_cancelled`
+    - `_clear_scan_task_cancel`
+    - `_register_scan_container`
+    - `_pop_scan_container`
+    - `_stop_scan_container`
+    - `_request_scan_task_cancel`
+    - `_is_scan_process_active`
+    - `_terminate_scan_process`
+    - `_run_subprocess_with_tracking`
+  - `backend_old/app/services/static_scan_runtime.py`
+    已改为显式 import 该 cluster，不再本地持有 duplicate state
+  - `backend_old/tests/test_static_scan_runtime.py`
+    与 `backend_old/tests/test_background_task_launch_refactor.py`
+    已直接覆盖 `agent/scan_tracking.py` 契约
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补 AST import/ownership guard，要求 `static_scan_runtime.py`
+    从 `app.services.agent.scan_tracking` 导入整组 helper/state
+  - verification:
+    - `uv run --project . pytest -s tests/test_static_scan_runtime.py tests/test_background_task_launch_refactor.py tests/test_config_internal_callers_use_service_layer.py tests/test_scanner_runner.py`
+      => `22 passed`
+    - `rg -n "static_scan_runtime\\.(?:_scan_task_key|_register_static_background_job|_pop_static_background_job|_get_static_background_job|_launch_static_background_job|_shutdown_static_background_jobs|_is_scan_task_cancelled|_clear_scan_task_cancel|_register_scan_container|_pop_scan_container|_stop_scan_container|_request_scan_task_cancel|_is_scan_process_active|_terminate_scan_process|_run_subprocess_with_tracking)|from app\\.services\\.static_scan_runtime import|import app\\.services\\.static_scan_runtime" backend_old/app backend_old/tests -S`
+      => `0` live matches
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- still missing:
+  - `static_scan_runtime.py` 仍是 live runtime bridge，尚未迁出的能力至少包括：
+    - ZIP bridge / `_get_project_root`
+    - backend venv helper
+    - progress store
+    - user config / LLM validation
+- delete gate:
+  - `agent/scan_tracking.py` 当前是 live shared module，不进入删除门
+  - `static_scan_runtime.py` 只有在剩余 runtime/config/ZIP 能力继续拆空后，才可进入退休门
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:
