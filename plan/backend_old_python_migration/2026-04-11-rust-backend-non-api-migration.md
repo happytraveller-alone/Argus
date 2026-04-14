@@ -186,9 +186,9 @@
   - prompt skill
   - user/system config
 - 禁止新增 Python `models` / `schemas` 依赖点。
-- `backend_old/app/schemas` 已退出运行时：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 被 retired，只留下 `backend_old/app/api/v1/schemas`（当前 rule-flow DTO 暂存 `rule_flows.py`，作为 endpoint-local/API-local 过渡宿主）。
+- `backend_old/app/schemas` 已退出运行时：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 被 retired；`backend_old/app/api/v1/schemas/rule_flows.py` 也已删除，`OpengrepRuleCreateRequest` 改由非 API 路径 `backend_old/app/services/rule_contracts.py` 承接。
 - 这并不意味着 `static-tasks` 已经完全 Rust-owned；静态任务功能链路仍沿用 Python runtime/compat bridge。
-- operational verification：`find backend_old/app -type d -name schemas -print` 应只列出 `backend_old/app/api/v1/schemas`，确认原 `backend_old/app/schemas` 目录不在 live tree 内。
+- operational verification：`find backend_old/app -type d -name schemas -print` 不应再列出 live Python schema package；若目录仍存在，也不应再包含 `rule_flows.py` 或 `__init__.py`。
 
 ### 3. `runtime + launchers` (`18`)
 
@@ -401,7 +401,7 @@
 
 - 处理：
   - `backend_old/app/models/*`
-  - `backend_old/app/schemas/*`（dead/retired schemas：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 已被移除；live rule-flow DTOs 暂存于 `backend_old/app/api/v1/schemas/rule_flows.py` 作为 endpoint-local/API-local 过渡宿主）
+  - `backend_old/app/schemas/*`（dead/retired schemas：`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema package 已被移除；`rule_flows.py` DTO 已迁离 API 路径）
 - 目标：
   - Rust 自己拥有 typed domain / DTO 层
   - 不再新增 Python model/schema 依赖点

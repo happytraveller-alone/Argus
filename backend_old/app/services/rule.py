@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from app.api.v1.schemas.rule_flows import OpengrepRuleCreateRequest
 from app.core.config import settings
+from app.services.rule_contracts import OpengrepRuleCreateRequest
 
 from .llm_rule.config import Config
 from .llm_rule.git_manager import GitManager

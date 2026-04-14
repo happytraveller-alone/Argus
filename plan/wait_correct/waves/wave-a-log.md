@@ -277,21 +277,21 @@
 - delete gate:
   - 运行时已确认无 `backend_old/app/utils` 依赖，剩余的 `app.utils` 文本只是 offline patch asset，不构成 run-time breakage。
 
-### 13. `backend_old/app/schemas` package retired; only API-local DTO pod remains
+### 13. `backend_old/app/schemas` package retired; API-local DTO pod later removed too
 
 - endpoint / feature: Python schema definition bundle (`backend_old/app/schemas/*`)
 - Python 旧行为: schema module 集中提供 `search/token/user/audit_rule/prompt_template` 等 DTO definitions 供 Python runtime/endpoint 共享。
 - Rust 当前行为:
   - `backend_old/app/schemas` package 已从 live tree 中移除；`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema set 都已 retired。
-  - 当前还需要暴露的 rule-flow DTOs 暂存于 `backend_old/app/api/v1/schemas/rule_flows.py`，保持 endpoint-local/API-local 过渡契约。
+  - `backend_old/app/api/v1/schemas/rule_flows.py` 后续也已删除，`OpengrepRuleCreateRequest` 改由 `backend_old/app/services/rule_contracts.py` 承接。
   - 这不意味着 `static-tasks` 已经完全 Rust-owned；static-tasks runtime 仍翻到 Python bridge，schema cleanup 只是记录 ownership shrinkage。
   - operational verification: `find backend_old/app -type d -name schemas -print | sort`
-  - expected output: 仅 `backend_old/app/api/v1/schemas`，证明 `backend_old/app/schemas` 不在 live tree。
+  - expected output: 不再出现 live Python schema package；若目录仍存在，也不应再包含 `rule_flows.py` 或 `__init__.py`
 - 是否影响前端: 否；schema cleanup 只影响迁移 ledger，不改变 HTTP contract。
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration
 - delete gate:
-  - rule-flow DTOs 完全迁入 Rust 或 transitional package 被删除之后，重新执行 `find backend_old/app -type d -name schemas -print | sort` 可确认是否 safe to drop。
+  - `rg -n "app\\.api\\.v1\\.schemas\\.rule_flows|from app\\.api\\.v1\\.schemas import" backend_old/app backend_old/tests backend_old/scripts -S` 为空
 
 ### 3. Static tasks and agent tasks are still not Rust-owned
 
@@ -1385,6 +1385,33 @@
   - 这是 API-local bootstrap shell retirement，不是把 bootstrap helper 语义从 `services/agent/*` 回流到别处
   - 本 slice 不处理 `agent_tasks_contracts.py` / `agent_tasks_findings.py` / `rule_flows.py`
 - 后续修复波次: Wave A / API facade cleanup
+- owner: Rust migration
+
+### 43. `rule_flows.py` transitional DTO host retired from API path
+
+- endpoint / feature:
+  - API-local transitional DTO host:
+    - `backend_old/app/api/v1/schemas/rule_flows.py`
+    - `backend_old/app/api/v1/schemas/__init__.py`
+  - dead manual script:
+    - `backend_old/tests/test_rule.py`
+- repo evidence before deletion:
+  - `rg -n "from app\\.api\\.v1\\.schemas\\.rule_flows import|app\\.api\\.v1\\.schemas" backend_old/app backend_old/tests backend_old/scripts -S`
+    只剩 `app/services/rule.py` 与 `tests/test_rule.py` 的 `OpengrepRuleCreateRequest` 命中
+  - `tests/test_rule.py` 是无断言的手工脚本式文件，不是稳定单元测试
+- current behavior:
+  - `OpengrepRuleCreateRequest` 已迁入 `backend_old/app/services/rule_contracts.py`
+  - `backend_old/app/services/rule.py` 已改为从非 API 路径导入
+  - `backend_old/app/api/v1/schemas/rule_flows.py` 与 `__init__.py` 已从 repo 物理删除
+  - `backend_old/tests/test_rule.py` 已删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已补 `rule_flows.py` / `schemas/__init__.py` retirement guard
+- operational verification:
+  - `rg -n "from app\\.api\\.v1\\.schemas\\.rule_flows import|app\\.api\\.v1\\.schemas" backend_old/app backend_old/tests backend_old/scripts -S`
+- 边界说明:
+  - 这是 transitional DTO host retirement，不是新的 Rust rule-flow takeover
+  - 本 slice 不处理 `app/services/rule.py` 的业务逻辑，只改 DTO 承载位置
+- 后续修复波次: Wave A / API schema cleanup
 - owner: Rust migration
 
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface

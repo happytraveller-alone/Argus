@@ -218,19 +218,19 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - F / retire cleanup
 
-### 1f. `backend_old/app/schemas` package retired; only `api/v1/schemas` survives as transitional DTO host
+### 1f. `backend_old/app/schemas` package retired; API-local `rule_flows.py` host also retired
 
 - current state:
   - `backend_old/app/schemas` package 已整体移除，`search`、`token`、`user`、`audit_rule`、`prompt_template` 以及 legacy `opengrep/gitleaks` schema 定义不再出现在 live Python tree。
-  - 目前仍需要留存的 live rule-flow DTOs 暂存于 `backend_old/app/api/v1/schemas/rule_flows.py`，以 endpoint-local/API-local 方式承接过渡契约。
-  - 这不等于 `static-tasks` 已被 Rust 全面接管；静态任务功能链路仍经由 Python runtime/bridge，因此 schema 的 retire 只是 ledger 记录，并不代表 static-tasks ownership 已完成。
+  - `backend_old/app/api/v1/schemas/rule_flows.py` 也已删除；仍存活的 `OpengrepRuleCreateRequest` 已迁入 `backend_old/app/services/rule_contracts.py`，不再作为 API-local DTO 宿主保留。
+  - 这不等于 `static-tasks` 已被 Rust 全面接管；静态任务功能链路仍经由 Python runtime/bridge，因此 schema host 的 retire 只是 ledger 记录，并不代表 static-tasks ownership 已完成。
   - operational verification:
     - `find backend_old/app -type d -name schemas -print | sort`
-    - expected output: 仅 `backend_old/app/api/v1/schemas`，证明 `backend_old/app/schemas` 已经不在 live tree。
+    - expected output: 不再出现 live Python schema package；若目录仍存在，也不应再包含 `rule_flows.py` 或 `__init__.py`
 - still missing:
-  - rule-flow DTOs 什么时候真正迁至 Rust 或可以在 Rust-owned bridge 被删除之前，`backend_old/app/api/v1/schemas/rule_flows.py` 还要继续作为过渡宿主。
+  - none for this transitional host；后续若有 rule-flow DTO 需求，应直接落到非 API 路径或 Rust-owned contract。
 - delete gate:
-  - rule-flow DTOs 入 Rust 之后，重新执行 `find backend_old/app -type d -name schemas -print` 可以确认 transitional package 是否 safe to drop。
+  - `rg -n "app\\.api\\.v1\\.schemas\\.rule_flows|from app\\.api\\.v1\\.schemas import" backend_old/app backend_old/tests backend_old/scripts -S` 持续为空。
 - owner: Rust migration
 
 ### 1g. `backend_old/app/runtime` removed; Rust runtime entrypoints now own the live startup/launcher surface
