@@ -730,6 +730,48 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - target phase:
   - D / E cleanup in progress
 
+### 1z. workspace helper cluster extracted from `static_scan_runtime.py` into `agent/scan_workspace.py`
+
+- current state:
+  - `static_scan_runtime.py` 顶部 workspace/helper cluster 已迁入
+    `backend_old/app/services/agent/scan_workspace.py`
+  - 已迁移的 helper 包括：
+    - `_scan_workspace_root`
+    - `ensure_scan_workspace`
+    - `ensure_scan_project_dir`
+    - `ensure_scan_output_dir`
+    - `ensure_scan_logs_dir`
+    - `ensure_scan_meta_dir`
+    - `cleanup_scan_workspace`
+    - `copy_project_tree_to_scan_dir`
+  - live caller 已改为 agent 域共享 import：
+    - `agent/bootstrap/bandit.py`
+    - `agent/bootstrap/opengrep.py`
+    - `agent/bootstrap/phpstan.py`
+    - `agent/bootstrap_gitleaks_runner.py`
+  - `backend_old/tests/test_static_scan_runtime.py`
+    已直接覆盖新模块的 helper 契约
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补 import guard，防止 workspace helper 回流到 `static_scan_runtime.py`
+  - repo facts refresh:
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
+    - `rg -n "from app\\.services\\.static_scan_runtime import|import app\\.services\\.static_scan_runtime|static_scan_runtime\\.(ensure_scan_workspace|ensure_scan_project_dir|ensure_scan_output_dir|ensure_scan_logs_dir|ensure_scan_meta_dir|cleanup_scan_workspace|copy_project_tree_to_scan_dir)" backend_old/app backend_old/tests -S`
+      只剩 `test_config_internal_callers_use_service_layer.py` 的负向断言文本
+- still missing:
+  - `static_scan_runtime.py` 仍是 live runtime bridge，尚未迁出的能力至少包括：
+    - ZIP bridge / `_get_project_root`
+    - backend venv helper
+    - process/container cancel & tracking
+    - progress store
+    - user config / LLM validation
+- delete gate:
+  - `agent/scan_workspace.py` 当前是 live shared module，不进入删除门
+  - `static_scan_runtime.py` 只有在剩余 runtime/config/ZIP 能力继续拆空后，才可进入退休门
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

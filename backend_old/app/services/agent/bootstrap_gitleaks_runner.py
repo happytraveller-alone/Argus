@@ -18,7 +18,7 @@ async def _prepare_scan_project_dir_async(
     copy_project_tree_to_scan_dir_fn: Optional[Callable[[str | Path, str | Path], None]] = None,
 ) -> None:
     if copy_project_tree_to_scan_dir_fn is None:
-        from app.services.static_scan_runtime import copy_project_tree_to_scan_dir as copy_fn
+        from app.services.agent.scan_workspace import copy_project_tree_to_scan_dir as copy_fn
 
         copy_project_tree_to_scan_dir_fn = copy_fn
 
@@ -41,23 +41,23 @@ async def _run_bootstrap_gitleaks_scan(
     scanner_gitleaks_image: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     if ensure_scan_workspace_fn is None:
-        from app.services.static_scan_runtime import ensure_scan_workspace as ensure_fn
+        from app.services.agent.scan_workspace import ensure_scan_workspace as ensure_fn
 
         ensure_scan_workspace_fn = ensure_fn
     if ensure_scan_project_dir_fn is None:
-        from app.services.static_scan_runtime import ensure_scan_project_dir as ensure_fn
+        from app.services.agent.scan_workspace import ensure_scan_project_dir as ensure_fn
 
         ensure_scan_project_dir_fn = ensure_fn
     if ensure_scan_output_dir_fn is None:
-        from app.services.static_scan_runtime import ensure_scan_output_dir as ensure_fn
+        from app.services.agent.scan_workspace import ensure_scan_output_dir as ensure_fn
 
         ensure_scan_output_dir_fn = ensure_fn
     if ensure_scan_logs_dir_fn is None:
-        from app.services.static_scan_runtime import ensure_scan_logs_dir as ensure_fn
+        from app.services.agent.scan_workspace import ensure_scan_logs_dir as ensure_fn
 
         ensure_scan_logs_dir_fn = ensure_fn
     if ensure_scan_meta_dir_fn is None:
-        from app.services.static_scan_runtime import ensure_scan_meta_dir as ensure_fn
+        from app.services.agent.scan_workspace import ensure_scan_meta_dir as ensure_fn
 
         ensure_scan_meta_dir_fn = ensure_fn
     if prepare_scan_project_dir_async_fn is None:
@@ -67,7 +67,7 @@ async def _run_bootstrap_gitleaks_scan(
 
         run_scanner_container_fn = run_fn
     if cleanup_scan_workspace_fn is None:
-        from app.services.static_scan_runtime import cleanup_scan_workspace as cleanup_fn
+        from app.services.agent.scan_workspace import cleanup_scan_workspace as cleanup_fn
 
         cleanup_scan_workspace_fn = cleanup_fn
     if scanner_gitleaks_image is None:

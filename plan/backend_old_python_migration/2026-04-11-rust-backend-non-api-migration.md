@@ -1337,6 +1337,58 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
 - 下一刀：
   - 继续收口顶层 runtime helper，优先 `static_scan_runtime.py`
 
+### 2026-04-14 Batch 4 / Slice 10
+
+- 已完成：
+  - `static_scan_runtime.py` 顶部 workspace/helper cluster 已迁入
+    `backend_old/app/services/agent/scan_workspace.py`：
+    - `_scan_workspace_root`
+    - `ensure_scan_workspace`
+    - `ensure_scan_project_dir`
+    - `ensure_scan_output_dir`
+    - `ensure_scan_logs_dir`
+    - `ensure_scan_meta_dir`
+    - `cleanup_scan_workspace`
+    - `copy_project_tree_to_scan_dir`
+  - 下列 live caller 已改为从 agent 域共享模块 import：
+    - `agent/bootstrap/bandit.py`
+    - `agent/bootstrap/opengrep.py`
+    - `agent/bootstrap/phpstan.py`
+    - `agent/bootstrap_gitleaks_runner.py`
+  - `backend_old/tests/test_static_scan_runtime.py`
+    已改为直接覆盖 `agent/scan_workspace.py` 的 workspace helper 契约
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    已补 bootstrap caller import guard，防止 workspace helper 回流到
+    `static_scan_runtime.py`
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `212`
+    - `rg -n "from app\\.services\\.static_scan_runtime import|import app\\.services\\.static_scan_runtime|static_scan_runtime\\.(ensure_scan_workspace|ensure_scan_project_dir|ensure_scan_output_dir|ensure_scan_logs_dir|ensure_scan_meta_dir|cleanup_scan_workspace|copy_project_tree_to_scan_dir)" backend_old/app backend_old/tests -S`
+      只剩 `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+      里的负向守门断言文本，不再有 live caller 命中
+- 当前意义：
+  - `static_scan_runtime.py` 不再拥有 scan workspace root、目录树创建/清理与
+    project tree staging 这组纯文件系统 helper
+  - 这一步是顶层 live bridge 的 ownership shrinkage，不是 Rust takeover，
+    也不代表 `static_scan_runtime.py` 已退休
+  - `backend_old/app` non-API Python 文件数本 slice 临时从 `211` 增至 `212`，
+    原因是把单文件里的 helper cluster 拆成独立 agent 共享模块；
+    这是结构收口，不是迁移回退
+- 仍未完成：
+  - `static_scan_runtime.py` 仍持有：
+    - ZIP bridge / `_get_project_root`
+    - backend venv helper
+    - process/container cancel & tracking
+    - progress store
+    - user config / LLM validation
+- 删除条件：
+  - `agent/scan_workspace.py`：作为当前 live shared module 保留
+  - `static_scan_runtime.py`：只有在剩余 ZIP/runtime/config 状态机能力继续拆空后，
+    才能进入退休门
+- 下一刀：
+  - 继续收口 `static_scan_runtime.py` 剩余 capability cluster，
+    优先避免触碰 ZIP contract 与 task/progress API 契约
+
 ### 2026-04-13 Batch 4 / Slice 3
 
 - 已完成：

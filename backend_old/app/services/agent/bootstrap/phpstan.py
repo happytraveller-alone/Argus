@@ -19,8 +19,7 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.services.scan_path_utils import normalize_scan_file_path
-from app.services.agent.scanner_runner import ScannerRunSpec, run_scanner_container
-from app.services.static_scan_runtime import (
+from app.services.agent.scan_workspace import (
     cleanup_scan_workspace,
     copy_project_tree_to_scan_dir,
     ensure_scan_logs_dir,
@@ -29,6 +28,7 @@ from app.services.static_scan_runtime import (
     ensure_scan_project_dir,
     ensure_scan_workspace,
 )
+from app.services.agent.scanner_runner import ScannerRunSpec, run_scanner_container
 
 from .base import (
     StaticBootstrapFinding,
