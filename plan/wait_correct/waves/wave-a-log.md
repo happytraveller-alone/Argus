@@ -1433,6 +1433,26 @@
 - 后续修复波次: Wave A / API package cleanup
 - owner: Rust migration
 
+### 47. Empty `app/api/__init__.py` shell retired
+
+- endpoint / feature:
+  - Python package shell:
+    - `backend_old/app/api/__init__.py`
+- repo evidence before deletion:
+  - 文件为空壳
+  - 仓内未检到 `from app.api import ...` 或 `import app.api` 的活引用
+- current behavior:
+  - `backend_old/app/api/__init__.py` 已从 repo 物理删除
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    已把 `app/api/__init__.py` 纳入退休守门
+- operational verification:
+  - `uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py`
+- 边界说明:
+  - 这是空包壳退休，不是新的 Rust takeover
+  - 本 slice 不改 `backend_old/app/services/agent/task_findings.py` 或其他存活 helper
+- 后续修复波次: Wave A / API package cleanup
+- owner: Rust migration
+
 ### 46. `agent_tasks_findings.py` moved out of API path into `services/agent/task_findings.py`
 
 - endpoint / feature:
