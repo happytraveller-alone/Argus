@@ -3,7 +3,7 @@ import types
 import subprocess
 import threading
 import time
-from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -15,8 +15,13 @@ docker_stub.errors = types.SimpleNamespace(
 )
 sys.modules.setdefault("docker", docker_stub)
 
-from app.services import static_scan_runtime
 from app.services.agent import scan_tracking, scan_workspace
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_static_scan_runtime_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/services/static_scan_runtime.py").exists()
 
 
 def test_ensure_scan_workspace_under_configured_root(tmp_path, monkeypatch):
@@ -72,30 +77,6 @@ def test_copy_project_tree_to_scan_dir_ignores_nested_destination(tmp_path):
     assert not (nested_scan_dir / "scans").exists()
 
 
-def test_build_backend_venv_env_prefixes_backend_venv_bin(monkeypatch):
-    monkeypatch.setattr(static_scan_runtime.settings, "BACKEND_VENV_PATH", "/opt/backend-venv")
-
-    env = static_scan_runtime._build_backend_venv_env({"PATH": "/usr/local/bin:/usr/bin"})
-
-    assert env["VIRTUAL_ENV"] == "/opt/backend-venv"
-    assert env["PYTHONNOUSERSITE"] == "1"
-    assert env["PATH"].startswith("/opt/backend-venv/bin:")
-
-
-def test_resolve_backend_venv_executable_uses_configured_dir(tmp_path, monkeypatch):
-    venv_dir = tmp_path / "backend-venv"
-    bin_dir = venv_dir / "bin"
-    bin_dir.mkdir(parents=True)
-    bandit_bin = bin_dir / "bandit"
-    bandit_bin.write_text("#!/bin/sh\n", encoding="utf-8")
-
-    monkeypatch.setattr(static_scan_runtime.settings, "BACKEND_VENV_PATH", str(venv_dir))
-
-    resolved = static_scan_runtime._resolve_backend_venv_executable("bandit")
-
-    assert resolved == str(bandit_bin)
-
-
 def test_scan_container_registry_tracks_container_id():
     scan_tracking._static_running_scan_containers.clear()
 
@@ -108,84 +89,6 @@ def test_scan_container_registry_tracks_container_id():
         == "container-123"
     )
     assert scan_tracking._pop_scan_container("phpstan", "task-container") == "container-123"
-
-
-def test_record_scan_progress_initializes_shared_store():
-    task_id = "task-progress-1"
-    static_scan_runtime._scan_progress_store.clear()
-
-    static_scan_runtime._record_scan_progress(
-        task_id,
-        status="pending",
-        progress=5,
-        stage="pending",
-        message="queued",
-    )
-
-    state = static_scan_runtime._scan_progress_store[task_id]
-    assert state["status"] == "pending"
-    assert state["progress"] == 5
-    assert state["current_stage"] == "pending"
-    assert state["message"] == "queued"
-    assert len(state["logs"]) == 1
-
-
-def test_record_scan_progress_clears_terminal_state():
-    task_id = "task-progress-terminal"
-    static_scan_runtime._scan_progress_store.clear()
-
-    static_scan_runtime._record_scan_progress(
-        task_id,
-        status="running",
-        progress=42,
-        stage="scan",
-        message="scanning",
-    )
-
-    static_scan_runtime._record_scan_progress(
-        task_id,
-        status="completed",
-        progress=100,
-        stage="completed",
-        message="done",
-    )
-
-    assert task_id not in static_scan_runtime._scan_progress_store
-
-
-def test_prune_scan_progress_store_removes_expired_entries():
-    static_scan_runtime._scan_progress_store.clear()
-    now = datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc)
-    static_scan_runtime._scan_progress_store.update(
-        {
-            "expired-task": {
-                "task_id": "expired-task",
-                "status": "running",
-                "progress": 50,
-                "current_stage": "scan",
-                "message": "old",
-                "started_at": "2026-04-10T10:00:00Z",
-                "updated_at": "2026-04-10T10:00:00Z",
-                "logs": [],
-            },
-            "fresh-task": {
-                "task_id": "fresh-task",
-                "status": "running",
-                "progress": 10,
-                "current_stage": "init",
-                "message": "fresh",
-                "started_at": "2026-04-10T11:59:45Z",
-                "updated_at": "2026-04-10T11:59:45Z",
-                "logs": [],
-            },
-        }
-    )
-
-    removed = static_scan_runtime.prune_scan_progress_store(ttl_seconds=60, now=now)
-
-    assert removed == 1
-    assert "expired-task" not in static_scan_runtime._scan_progress_store
-    assert "fresh-task" in static_scan_runtime._scan_progress_store
 
 
 def test_scan_process_active_and_cancel_uses_shared_tracking():

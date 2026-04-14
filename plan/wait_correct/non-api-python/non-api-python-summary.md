@@ -178,7 +178,7 @@
 5. `init_db` 语义迁入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blocker 已清零，说明 demo user、seed project、legacy rule seed、schema bootstrap 不再依赖 Python `init_db.py`；后续只需继续用 Rust bootstrap/preflight 合同测试守住该语义；owner 是 Rust migration Phase A。
 6. 路径归一化 helper迁新家：验证命令是 `rg -n "scan_path_utils|normalize_scan_file_path|resolve_scan_finding_location" backend_old/app backend_old/tests`。当前 blocker 是 `agent_tasks_bootstrap.py`、`app/services/agent/bootstrap/phpstan.py`、`bandit.py`、`opengrep.py` 和 `tests/test_scan_path_utils.py`，它们都该 import `backend_old/app/services/scan_path_utils.py`；旧 `static_finding_paths.py` 不再命中；owner 是 Rust migration Phase C/D。
 7. Alembic/schema_snapshots Removal Gate：验证命令是 `rg -n "schema_snapshots|baseline_5b0f3c9a6d7e|normalize_static_finding_paths" backend_old/alembic backend_old/tests`。当前 blocker 是 `backend_old/alembic/versions/5b0f3c9a6d7e_squashed_baseline.py`、`backend_old/alembic/versions/7f8e9d0c1b2a_normalize_static_finding_paths.py`、`backend_old/tests/test_alembic_project.py`。翻门条件是 Rust 完成 legacy baseline/schema compatibility 替代，命令不再命中 `schema_snapshots/*` 或 static-finding normalization 迁移，测试改写或删除；owner 是 Rust migration legacy-schema owner。
-8. backend_old/app/db 最终删除门：验证命令依次是 `rg -n "app\\.db\\." backend_old/app backend_old/tests backend_old/alembic backend_old/scripts` 与 `rg --files backend_old/app/db`。当前 blocker 仍包括 `static_scan_runtime.py`、`agent_tasks_bootstrap.py`（执行/mixed-test helper 残留，scope filtering、bootstrap policy、bootstrap findings、Bandit bootstrap rule 选择、bootstrap seeds、bootstrap entrypoint fallback、Gitleaks bootstrap runtime 已迁入 `backend_old/app/services/agent/{scope_filters,bootstrap_policy,bootstrap_findings,bandit_bootstrap_rules,bootstrap_seeds,bootstrap_entrypoints,bootstrap_gitleaks_runner}.py`）、`backend_old/alembic/env.py` 和相关测试。翻门条件是第一条命令在 live 路径清零，第二条命令不再列出 live 模块，并且 Rust-only startup smoke/health 通过；owner 是整个 Rust migration owner。
+8. backend_old/app/db 最终删除门：验证命令依次是 `rg -n "app\\.db\\." backend_old/app backend_old/tests backend_old/alembic backend_old/scripts` 与 `rg --files backend_old/app/db`。当前 blocker 仍包括 `agent_tasks_bootstrap.py`（执行/mixed-test helper 残留，scope filtering、bootstrap policy、bootstrap findings、Bandit bootstrap rule 选择、bootstrap seeds、bootstrap entrypoint fallback、Gitleaks bootstrap runtime 已迁入 `backend_old/app/services/agent/{scope_filters,bootstrap_policy,bootstrap_findings,bandit_bootstrap_rules,bootstrap_seeds,bootstrap_entrypoints,bootstrap_gitleaks_runner}.py`）、`backend_old/alembic/env.py` 和相关测试。`static_scan_runtime.py` 已在 2026-04-14 的 dead-shell retirement slice 中退休，不再计入当前 blocker。翻门条件是第一条命令在 live 路径清零，第二条命令不再列出 live 模块，并且 Rust-only startup smoke/health 通过；owner 是整个 Rust migration owner。
 
 Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部分 FastAPI endpoints、测试等 import，因此该目录还不安全删除。
 
@@ -823,6 +823,37 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - delete gate:
   - `agent/scan_tracking.py` 当前是 live shared module，不进入删除门
   - `static_scan_runtime.py` 只有在剩余 runtime/config/ZIP 能力继续拆空后，才可进入退休门
+- owner: Rust migration
+- target phase:
+  - D / E cleanup in progress
+
+### 1ab. `static_scan_runtime.py` retired as a dead shell, not as a Rust takeover milestone
+
+- current state:
+  - repo 内删除前证据显示：
+    - `rg -n "from app\\.services\\.static_scan_runtime import|import app\\.services\\.static_scan_runtime|static_scan_runtime\\." backend_old/app backend_old/tests -S`
+      只剩测试命中，没有 live Python caller
+    - `rg -n "importlib\\.(import_module|__import__)\\(|__import__\\(|app\\.services\\.static_scan_runtime|services/static_scan_runtime\\.py|static_scan_runtime" backend_old/app backend_old/scripts backend_old/tests -S`
+      只剩测试与迁移文本，没有动态导入或脚本入口证据
+  - `backend_old/app/services/static_scan_runtime.py` 已删除
+  - `backend_old/tests/test_static_scan_runtime.py`
+    继续覆盖 `agent/scan_workspace.py` 与 `agent/scan_tracking.py` 契约，不再 import 退休模块
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    现在守住“repo 内 live Python 模块不得 import `static_scan_runtime`”
+  - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    现在守住 `backend_old/app/services/static_scan_runtime.py` 物理不存在
+  - verification:
+    - `uv run --project . pytest -s tests/test_static_scan_runtime.py tests/test_background_task_launch_refactor.py tests/test_config_internal_callers_use_service_layer.py tests/test_scanner_runner.py tests/test_api_router_rust_owned_routes_removed.py`
+      => `54 passed, 1 warning`
+    - warning 备注：
+      `app/services/agent/knowledge/vulnerabilities/open_redirect.py:12`
+      存在未触及的既有 `DeprecationWarning: invalid escape sequence '\/'`
+- current meaning:
+  - 这是 dead shell retirement：删除的是一个已经脱离 repo 内 live runtime 的顶层 Python 壳
+  - 这不表示 Rust 新接管了 `static-tasks` runtime，也不表示 route inventory 或静态任务响应契约发生变化
+  - 本条覆盖 1z/1aa 中“`static_scan_runtime.py` 仍是 live runtime bridge”的旧判断；那些判断保留为历史切片，不再代表当前事实
+- delete gate:
+  - 当前删除门只基于 repo 内证据成立；如果仓外还有未登记调用方，需要开发者另行指出
 - owner: Rust migration
 - target phase:
   - D / E cleanup in progress

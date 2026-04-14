@@ -1,4 +1,8 @@
 import importlib
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_agent_tasks_split_modules_exist():
@@ -78,8 +82,5 @@ def test_agent_tasks_facade_re_exports_key_symbols():
     assert agent_tasks._save_findings is agent_tasks_findings._save_findings
 
 
-def test_agent_tasks_api_router_import_remains_healthy():
-    from app.api.v1.api import api_router
-
-    paths = {route.path for route in api_router.routes}
-    assert paths == set()
+def test_agent_tasks_api_router_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/api/v1/api.py").exists()

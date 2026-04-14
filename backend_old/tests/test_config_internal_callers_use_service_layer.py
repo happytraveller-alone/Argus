@@ -12,62 +12,25 @@ WORKSPACE_HELPER_IMPORTS = (
     "cleanup_scan_workspace",
     "copy_project_tree_to_scan_dir",
 )
-SCAN_TRACKING_EXPORTS = {
-    "_static_scan_process_lock",
-    "_static_running_scan_processes",
-    "_static_running_scan_containers",
-    "_static_cancelled_scan_tasks",
-    "_static_background_jobs",
-    "_scan_task_key",
-    "_register_static_background_job",
-    "_pop_static_background_job",
-    "_get_static_background_job",
-    "_launch_static_background_job",
-    "_shutdown_static_background_jobs",
-    "_is_scan_task_cancelled",
-    "_clear_scan_task_cancel",
-    "_register_scan_container",
-    "_pop_scan_container",
-    "_stop_scan_container",
-    "_request_scan_task_cancel",
-    "_is_scan_process_active",
-    "_terminate_scan_process",
-    "_run_subprocess_with_tracking",
-}
 
 
 def test_internal_callers_no_longer_import_config_endpoint():
     caller_paths = [
-        PROJECT_ROOT / "app/services/static_scan_runtime.py",
         PROJECT_ROOT / "app/services/agent/skill_test_runner.py",
     ]
 
     forbidden = "from app.api.v1.endpoints.config import _load_effective_user_config"
-    required = "async def _load_effective_user_config("
 
     for path in caller_paths:
         content = path.read_text(encoding="utf-8")
-        if path.name == "skill_test_runner.py":
-            assert (
-                "from app.api.v1.endpoints.config import (\n    _normalize_extracted_project_root,\n)"
-                not in content
-            ), "skill_test_runner.py still depends on config endpoint"
-            assert (
-                "def normalize_extracted_project_root(base_path: str) -> str:" in content
-            ), "skill_test_runner.py should host normalize_extracted_project_root locally"
-            continue
-
         assert forbidden not in content, f"{path.name} still depends on config endpoint"
-        assert required in content, f"{path.name} should host _load_effective_user_config locally"
-
-
-def test_static_scan_runtime_no_longer_imports_db_session_module():
-    path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
-    content = path.read_text(encoding="utf-8")
-
-    assert "from app.db.session import" not in content
-    assert "async_session_factory" not in content
-    assert "get_db" not in content
+        assert (
+            "from app.api.v1.endpoints.config import (\n    _normalize_extracted_project_root,\n)"
+            not in content
+        ), "skill_test_runner.py still depends on config endpoint"
+        assert (
+            "def normalize_extracted_project_root(base_path: str) -> str:" in content
+        ), "skill_test_runner.py should host normalize_extracted_project_root locally"
 
 
 def test_bootstrap_callers_use_agent_scan_workspace_module():
@@ -103,44 +66,34 @@ def test_bootstrap_callers_use_agent_scan_workspace_module():
         )
 
 
-def test_static_scan_runtime_imports_scan_tracking_cluster_from_agent_module():
-    path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
-    content = path.read_text(encoding="utf-8")
-    module = ast.parse(content, filename=str(path))
+def test_no_live_python_module_imports_static_scan_runtime():
+    retired_module = PROJECT_ROOT / "app/services/static_scan_runtime.py"
+    assert not retired_module.exists(), "retired static_scan_runtime service shell should stay deleted"
 
-    import_nodes = [node for node in ast.walk(module) if isinstance(node, ast.ImportFrom)]
-    scan_tracking_imports = [
-        node for node in import_nodes if node.module == "app.services.agent.scan_tracking"
+    python_roots = [
+        PROJECT_ROOT / "app",
+        PROJECT_ROOT / "scripts",
+        PROJECT_ROOT / "tests",
     ]
-    assert scan_tracking_imports, "static_scan_runtime.py should import scan tracking helpers"
+    offenders: list[str] = []
 
-    imported_names = {
-        alias.name for node in scan_tracking_imports for alias in node.names if alias.name != "*"
-    }
-    missing_imports = sorted(SCAN_TRACKING_EXPORTS - imported_names)
-    assert not missing_imports, (
-        "static_scan_runtime.py should source the whole scan tracking cluster from "
-        f"agent.scan_tracking: {', '.join(missing_imports)}"
+    for root in python_roots:
+        for path in sorted(root.rglob("*.py")):
+            module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(module):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "app.services.static_scan_runtime":
+                            offenders.append(f"{path}: import {alias.name}")
+                if isinstance(node, ast.ImportFrom):
+                    if node.module == "app.services.static_scan_runtime":
+                        offenders.append(f"{path}: from {node.module} import ...")
+                    if node.module == "app.services":
+                        for alias in node.names:
+                            if alias.name == "static_scan_runtime":
+                                offenders.append(f"{path}: from app.services import static_scan_runtime")
+
+    assert not offenders, (
+        "retired static_scan_runtime service shell should have no live Python importers:\n"
+        + "\n".join(offenders)
     )
-
-    for node in module.body:
-        defined_name = getattr(node, "name", None)
-        if defined_name in SCAN_TRACKING_EXPORTS:
-            raise AssertionError(
-                f"static_scan_runtime.py should not locally define {defined_name}; "
-                "ownership belongs to agent.scan_tracking"
-            )
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id in SCAN_TRACKING_EXPORTS:
-                    raise AssertionError(
-                        f"static_scan_runtime.py should not locally assign {target.id}; "
-                        "ownership belongs to agent.scan_tracking"
-                    )
-        if isinstance(node, ast.AnnAssign):
-            target = node.target
-            if isinstance(target, ast.Name) and target.id in SCAN_TRACKING_EXPORTS:
-                raise AssertionError(
-                    f"static_scan_runtime.py should not locally assign {target.id}; "
-                    "ownership belongs to agent.scan_tracking"
-                )

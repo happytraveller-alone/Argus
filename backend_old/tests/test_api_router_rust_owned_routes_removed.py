@@ -1,37 +1,11 @@
 from pathlib import Path
 
-from app.api.v1.api import api_router
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-
-def test_api_router_excludes_rust_owned_route_modules():
-    endpoint_modules = {
-        getattr(route.endpoint, "__module__", "")
-        for route in api_router.routes
-        if hasattr(route, "endpoint")
-    }
-
-    rust_owned_modules = {
-        "app.api.v1.endpoints.config",
-        "app.api.v1.endpoints.members",
-        "app.api.v1.endpoints.projects",
-        "app.api.v1.endpoints.search",
-        "app.api.v1.endpoints.skills",
-        "app.api.v1.endpoints.prompts",
-        "app.api.v1.endpoints.rules",
-        "app.api.v1.endpoints.projects_crud",
-        "app.api.v1.endpoints.projects_files",
-        "app.api.v1.endpoints.projects_insights",
-        "app.api.v1.endpoints.projects_transfer",
-        "app.api.v1.endpoints.projects_uploads",
-        "app.api.v1.endpoints.users",
-    }
-
-    assert endpoint_modules.isdisjoint(rust_owned_modules)
-
-    assert endpoint_modules == set()
+def test_legacy_api_router_module_has_been_retired():
+    api_router_path = PROJECT_ROOT / "app/api/v1/api.py"
+    assert not api_router_path.exists()
 
 
 def test_legacy_config_endpoint_module_has_been_retired():
@@ -209,3 +183,8 @@ def test_legacy_flow_parser_runner_service_has_been_retired():
 def test_legacy_scanner_runner_service_has_been_retired():
     scanner_runner_path = PROJECT_ROOT / "app/services/scanner_runner.py"
     assert not scanner_runner_path.exists()
+
+
+def test_legacy_static_scan_runtime_service_shell_has_been_retired():
+    runtime_service_path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
+    assert not runtime_service_path.exists()

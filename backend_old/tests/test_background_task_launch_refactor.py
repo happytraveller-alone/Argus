@@ -13,7 +13,9 @@ async def test_launch_static_background_job_registers_and_cleans_up():
 
     key = scan_tracking._scan_task_key("bandit", "task-1")
     assert scan_tracking._static_background_jobs[key] is task
+    assert scan_tracking._get_static_background_job("bandit", "task-1") is task
 
     await task
 
+    assert scan_tracking._get_static_background_job("bandit", "task-1") is None
     assert key not in scan_tracking._static_background_jobs
