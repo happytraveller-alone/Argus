@@ -1258,6 +1258,29 @@
 - 后续修复波次: Wave E / agent facade cleanup
 - owner: Rust migration
 
+### 38. C `__attribute__` function fallback fixed for retained function locator
+
+- endpoint / feature:
+  - Retained Python helper:
+    - `backend_old/app/services/agent/flow/lightweight/function_locator_cli.py`
+- repo evidence before fix:
+  - `uv run --project . pytest -s tests/test_function_locator_tree_sitter.py -q`
+    在当前环境里失败：
+    `c_result["function"] == None`
+  - 同一根因会连带打坏
+    `tests/test_agent_result_consistency.py::test_save_findings_filters_pseudo_c_attribute_function_name`
+- current behavior:
+  - C/CPP regex fallback 现在会从同一行的多个 `name(` 候选里选择最后一个非伪函数名，
+    从而跳过 `__attribute__` / `unused` 并命中真实函数名 `parse_node`
+- operational verification:
+  - `uv run --project . pytest -s tests/test_function_locator_tree_sitter.py -q`
+  - `uv run --project . pytest -s tests/test_agent_result_consistency.py -k "pseudo_c_attribute_function_name"`
+- 边界说明:
+  - 这是 retained live helper correctness fix，不是新的 Rust takeover slice
+  - 本 slice 不处理 `_save_findings` 里 status 归一或 function-range diagnostics 的其他失败
+- 后续修复波次: Wave E / retained helper correctness
+- owner: Rust migration
+
 ### 13. `backend_old/app/runtime` removed; Rust entrypoints own startup/launcher surface
 
 - endpoint / feature: `backend_old/app/runtime/*`, backend-py image startup, opengrep/phpstan runner launchers

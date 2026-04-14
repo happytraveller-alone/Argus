@@ -88,6 +88,25 @@ def _regex_locate_enclosing_function(
         if stripped.startswith(("//", "#")):
             continue
 
+        if language in {"c", "cpp"}:
+            candidate_names = [
+                str(name or "").strip()
+                for name in re.findall(r"([A-Za-z_~][A-Za-z0-9_:]*)\s*\(", line)
+            ]
+            candidate_names = [
+                name
+                for name in candidate_names
+                if name
+                and name.lower() not in _CONTROL_KEYWORDS
+                and not _is_pseudo_function_name(name)
+            ]
+            if candidate_names:
+                name = candidate_names[-1]
+                start_line = idx + 1
+                end_line = _detect_block_end(file_lines, idx, language)
+                if start_line <= line_start <= end_line:
+                    return name, start_line, end_line, "regex_enclosing_match"
+
         for pattern in patterns:
             match = pattern.match(line)
             if not match:
