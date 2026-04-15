@@ -1,5 +1,15 @@
 # Non-API Python Migration Summary
 
+> 历史 raw ledger。
+> 这里保留的是分波次迁移时的原始账本，数字、镜像入口和本地绝对路径可能已经过时。
+> 当前 authoritative 入口请改看：
+> `plan/rust_full_takeover/README.md`
+> `plan/rust_full_takeover/03-current-state-and-ledger.md`
+> `plan/rust_full_takeover/08-remaining-python-function-inventory.md`
+
+> 额外说明：
+> 文中出现的 `backend-runtime-startup`、旧本地路径、旧计数，默认视为历史兼容上下文，不应直接当成当前发布入口或当前剩余面统计。
+
 - Total inventory: `211`
 - `backend_old` root Python: `0`
 - `backend_old/app` non-API Python: `211`
@@ -9,7 +19,7 @@
 - `compat_only`: `7`
 
 - Source migration plan:
-  - `/Users/apple/Project/AuditTool_private/plan/backend_old_python_migration/2026-04-11-rust-backend-non-api-migration.md`
+  - historical source 已归并进 `plan/rust_full_takeover/archive/legacy-ledgers/backend-old-python-ledger.md`
 
 ## Active Ledger
 

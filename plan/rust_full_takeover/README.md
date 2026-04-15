@@ -2,7 +2,7 @@
 
 `plan/rust_full_takeover/` 是当前唯一的迁移主入口。
 
-目标已经统一为：Rust 接管迁移范围内所有 Python 代码，而不是只接管 API 表面或部分 non-API 辅助模块。
+目标已经统一为：Rust 接管迁移范围内所有仍承担 live backend / scan / deploy 责任的 Python 代码，而不是只接管 API 表面或部分 non-API 辅助模块。
 
 ## 阅读顺序
 
@@ -12,7 +12,8 @@
 4. [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
 5. [06-open-risks-and-bridges.md](/home/xyf/audittool_personal/plan/rust_full_takeover/06-open-risks-and-bridges.md)
 6. [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
-7. [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md)
+7. [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
+8. [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md)
 
 ## 文档分工
 
@@ -30,16 +31,36 @@
   列出尚存的 compat bridge、风险和删除前置条件。
 - [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
   给后续开发者一个可直接接手的短目标列表。
+- [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
+  统一列出当前仍待 Rust 接管的 Python 功能块、文件和推荐 Rust 落点。
+
+## 统计口径
+
+当前 canonical 文档默认区分两层范围：
+
+- runtime core：`backend_old/app` 下仍承担 live 责任的 Python 代码
+- retirement tail：`backend_old/alembic`、`backend_old/scripts`、release preflight 等不在 `app` 内、但仍阻止“Python 全退役”的运行/运维 Python 面
+
+不计入 runtime 退役主计数、但仍需保持同步的内容：
+
+- `scripts/migration/*.py` 这类 inventory / diff tooling
+- `plan/wait_correct/*` raw ledger
+- `.venv/**` 或其它 vendored Python 文件
 
 ## 当前快照
 
 - `backend_old` 根目录 Python：`0`
+- `backend_old/app/api` Python：`0`
 - `backend_old/app` 非 API Python：`172`
+- `backend_old/alembic` Python：`21`
+- `backend_old/scripts` Python：`2`
+- `scripts/release-templates` 运行相关 Python：`1`
 
 ## 兼容说明
 
 - `plan/wait_correct/` 暂时保留为 raw ledger / CSV / wave 记录路径。
-- `plan/backend_old_python_migration/` 与 `plan/skill_manage/` 现在只保留跳转说明；原长账本已归档。
+- 旧的 `backend_old_python_migration` / `skill_manage` 长账本已并入 `plan/rust_full_takeover/`，不再作为独立 canonical 入口。
+- `wait_correct/*` 中的个别数字、路径和镜像入口说明可能是历史快照；当前真相以本目录下 canonical 文档为准。
 
 ## 归档入口
 

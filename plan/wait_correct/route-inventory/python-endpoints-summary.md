@@ -1,5 +1,8 @@
 # Python Endpoint Inventory Summary
 
+> 这是 raw inventory snapshot，不是 canonical 真相源。
+> 当前总路线、阶段和最终门请优先看 `plan/rust_full_takeover/*`。
+
 - Total routes: `195`
 - Migrate: `155`
 - Retire: `33`
@@ -35,4 +38,17 @@
   - `PYTHON_UPSTREAM_BASE_URL` 在 `docker-compose.yml`、`docker-compose.hybrid.yml`、`docker-compose.full.yml` 无命中
   - compose 变量层已满足“移除 Python backend bridge” gate，后续重点转向清理 Python runtime live surface
 
-- Source inventory: `/Users/apple/Project/AuditTool_private/plan/wait_correct/route-inventory/python-endpoints-inventory.csv`
+## Frontend-Sensitive Surfaces
+
+| 路由组 | 当前 owner | 前端/consumer 关注点 |
+| --- | --- | --- |
+| `/api/v1/projects/*` | Rust | project CRUD、导入导出、ZIP-only 行为、project members consumer debt |
+| `/api/v1/system-config/*` | Rust | payload key 风格与 defaults 行为 |
+| `/api/v1/skills/*` | Rust | catalog/detail、prompt-skill、SSE test/tool-test stream |
+| `/api/v1/search/*` | Rust | 旧 `/findings/search`、`/tasks/search` 已由此替代 |
+| `/api/v1/agent-tasks/*` | Rust | SSE、finding status query 参数、报告下载 |
+| `/api/v1/static-tasks/*` | Rust | runner family 行为、finding status query 参数、规则/任务 contract |
+| `/users/*` | planned retire | 当前仍需先确认 frontend caller 是否已清零 |
+| `/projects/*/members*` | planned retire | 当前仍需先确认 frontend caller 是否已清零 |
+
+- Source inventory: `plan/wait_correct/route-inventory/python-endpoints-inventory.csv`

@@ -2,6 +2,19 @@
 
 ## 最近完成的工作类型
 
+### Canonical 文档重构 / 剩余功能台账刷新
+
+- `rust_full_takeover` 文档明确区分：
+  - `backend_old/app` runtime core
+  - `alembic / scripts / release preflight` retirement tail
+- `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
+  - runtime core `172`
+  - alembic `21`
+  - backend_old scripts `2`
+  - release preflight `1`
+- canonical 文档补进 frontend / API invariants、retired route consumer debt、operations / readiness gate
+- raw ledger 增加“历史快照、非 authoritative”提示，避免旧计数和旧入口误导后续开发者
+
 ### Rust Contract 收口
 
 - `skills` 默认 contract 切到 prompt-effective unified surface

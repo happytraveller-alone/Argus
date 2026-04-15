@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- Canonical 迁移文档已重构为 `plan/rust_full_takeover/*` 主索引：
+  - 统计口径明确拆成 `backend_old/app` runtime core 与 `alembic / scripts / release preflight` retirement tail
+  - `08-remaining-python-function-inventory.md` 改成自洽的功能分组台账
+  - frontend / API invariants、retired route consumer debt、operations / readiness gate 已写入 canonical 文档
+  - raw ledger 增加“历史快照、非 authoritative”提示
 - 新增 Rust 迁移控制面：
   - 路由 inventory 生成脚本
   - Python vs Rust 合同对比脚本
