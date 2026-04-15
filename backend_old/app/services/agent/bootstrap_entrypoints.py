@@ -185,7 +185,7 @@ async def _build_seed_from_entrypoints(
     exclude_patterns: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """基于入口点提示，使用 SmartScanTool 生成固定数量的 seed findings。"""
-    from app.services.agent.tools import SmartScanTool
+    from app.services.agent.tools.smart_scan_tool import SmartScanTool
 
     severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     confidence_by_severity = {"critical": 0.9, "high": 0.8, "medium": 0.6, "low": 0.4, "info": 0.3}

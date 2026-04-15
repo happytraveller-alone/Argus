@@ -1,4 +1,4 @@
-from app.services.agent import event_manager
+import app.services.agent.event_manager as event_manager
 
 
 def test_truncate_payload_respects_2mb_limit():
@@ -11,4 +11,3 @@ def test_truncate_payload_respects_2mb_limit():
     value, truncated = event_manager._truncate_payload(huge)
     assert truncated is True
     assert len(value) == event_manager.MAX_EVENT_PAYLOAD_CHARS
-

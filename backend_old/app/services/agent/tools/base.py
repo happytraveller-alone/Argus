@@ -120,7 +120,7 @@ class AgentTool(ABC):
     
     async def execute(self, **kwargs) -> ToolResult:
         """执行工具（统一交给运行时协调器处理）"""
-        from .runtime import ToolExecutionCoordinator
+        from .runtime.coordinator import ToolExecutionCoordinator
 
         payload = dict(kwargs or {})
         logger.debug("Tool '%s' executing with args: %s", self.name, payload)

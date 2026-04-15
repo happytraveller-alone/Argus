@@ -143,7 +143,7 @@ class CreateSubAgentTool(AgentTool):
         
         # 验证知识模块（如果有）
         if modules:
-            from ..knowledge import knowledge_loader
+            from ..knowledge.loader import knowledge_loader
             validation = knowledge_loader.validate_modules(modules)
             if validation["invalid"]:
                 available = knowledge_loader.get_all_module_names()

@@ -9,13 +9,16 @@ import os
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # 导入工具
-from app.services.agent.tools import (
-    FileReadTool, FileSearchTool, ListFilesTool,
-    PatternMatchTool, ExtractFunctionTool, CreateVulnerabilityReportTool,
-    DataFlowAnalysisTool, ControlFlowAnalysisLightTool,
-    SmartScanTool, QuickAuditTool, VulnerabilityVerifyTool, LogicAuthzAnalysisTool,
-)
 from app.services.agent.tools.base import ToolResult
+from app.services.agent.tools.code_analysis_tool import DataFlowAnalysisTool
+from app.services.agent.tools.control_flow_tool import ControlFlowAnalysisLightTool
+from app.services.agent.tools.file_tool import FileReadTool, FileSearchTool, ListFilesTool
+from app.services.agent.tools.logic_authz_tool import LogicAuthzAnalysisTool
+from app.services.agent.tools.pattern_tool import PatternMatchTool
+from app.services.agent.tools.reporting_tool import CreateVulnerabilityReportTool
+from app.services.agent.tools.run_code import ExtractFunctionTool
+from app.services.agent.tools.sandbox_tool import VulnerabilityVerifyTool
+from app.services.agent.tools.smart_scan_tool import QuickAuditTool, SmartScanTool
 
 
 class TestFileTools:

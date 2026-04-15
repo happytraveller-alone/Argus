@@ -5,13 +5,21 @@ from app.services.agent.agents.business_logic_analysis import BusinessLogicAnaly
 from app.services.agent.agents.business_logic_recon import BusinessLogicReconAgent
 from app.services.agent.agents.recon import ReconAgent
 from app.services.agent.agents.verification import VerificationAgent
-from app.services.agent.skills.prompt_skills import build_effective_prompt_skills
+
+
+PROMPT_SKILLS_FIXTURE = {
+    "recon": "fixture recon prompt skill",
+    "business_logic_recon": "fixture business logic recon prompt skill",
+    "analysis": "fixture analysis prompt skill",
+    "business_logic_analysis": "fixture business logic analysis prompt skill",
+    "verification": "fixture verification prompt skill",
+}
 
 
 def _build_config(enabled: bool) -> dict:
     return {
         "use_prompt_skills": enabled,
-        "prompt_skills": build_effective_prompt_skills(enabled),
+        "prompt_skills": dict(PROMPT_SKILLS_FIXTURE) if enabled else {},
     }
 
 
@@ -137,4 +145,4 @@ async def test_recon_initial_prompt_includes_queue_and_coverage_requirements(
     assert "## 最低覆盖清单" in initial_message
     assert "Webhook/Callback/OAuth/第三方集成" in initial_message
     assert "## 结束前自检" in initial_message
-    assert "Final Answer 里除了总结，还要明确列出高风险区域和初步发现" in initial_message
+    assert "Final Answer 里除了总结，还要明确列出高风险区域、初步发现、风险点、coverage_summary" in initial_message

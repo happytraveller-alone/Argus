@@ -3,14 +3,14 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.agent.tools import (
+from app.services.agent.tools.file_tool import (
     CodeWindowTool,
     FileOutlineTool,
     FileSearchTool,
     ListFilesTool,
+    LocateEnclosingFunctionTool,
 )
 from app.services.agent.tools.evidence_protocol import validate_evidence_metadata
-from app.services.agent.tools.file_tool import LocateEnclosingFunctionTool
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.agent.bootstrap import bandit as bandit_bootstrap
+import app.services.agent.bootstrap.bandit as bandit_bootstrap
 from app.services.agent.bootstrap.bandit import BanditBootstrapScanner
 
 

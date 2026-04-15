@@ -699,6 +699,535 @@
   - Wave E / prompt runtime producer ownership
 - owner: Rust migration
 
+### 46. dead Python prompt-skill helper retired
+
+- endpoint / feature:
+  - Python helper:
+    - `backend_old/app/services/agent/skills/prompt_skills.py`
+  - related test-only surface:
+    - `backend_old/tests/test_prompt_skills_module.py`
+- Python 旧行为:
+  - helper 提供 builtin prompt template、scope 和 merge 逻辑
+  - 但 repo 内 live caller 已不存在，只剩测试和 package export
+- Rust 当前行为:
+  - prompt skill persistence boundary 已由 Rust-owned
+    `db::prompt_skills` 承接
+  - Python agents 仍只消费 `config.prompt_skills`，不再需要这个 helper 模块存在
+- current behavior:
+  - `backend_old/app/services/agent/skills/prompt_skills.py` 已从 repo 删除
+  - `backend_old/app/services/agent/skills/__init__.py`
+    已移除 retired helper 的导出
+  - `backend_old/tests/test_prompt_skills_module.py`
+    已删除
+  - `backend_old/tests/agent/test_prompt_skills_injection.py`
+    改为局部 fixture，不再 import retired helper
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `212`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k prompt_skills tests/test_config_internal_callers_use_service_layer.py -k prompt_skills`
+    => `2 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/agent/test_prompt_skills_injection.py -k 'not verification' tests/test_api_router_rust_owned_routes_removed.py tests/test_config_internal_callers_use_service_layer.py`
+    => `63 passed, 2 deselected, 4 warnings`
+- 边界说明:
+  - 这是 dead helper retirement，不是新的 Rust runtime takeover
+  - 当前只能说明该 helper 不再是 live owner，不能说明
+    `config.prompt_skills` producer 已经 Rust-owned
+- 后续修复波次:
+  - Wave E / prompt runtime producer ownership
+- owner: Rust migration
+
+### 47. dead Python skill resource catalog helper retired
+
+- endpoint / feature:
+  - Python helper:
+    - `backend_old/app/services/agent/skills/resource_catalog.py`
+- Python 旧行为:
+  - helper 提供 external-tool / prompt resource catalog 的纯拼装函数
+  - 当前 repo 内已无 live import 命中
+- Rust 当前行为:
+  - `skills` catalog/resource surface 已由 Rust `backend/src/routes/skills.rs` 承接
+  - 该 Python helper 不再是 live owner
+- current behavior:
+  - `backend_old/app/services/agent/skills/resource_catalog.py` 已从 repo 删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `211`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'prompt_skills or resource_catalog' tests/test_config_internal_callers_use_service_layer.py -k 'prompt_skills or resource_catalog'`
+    => `4 passed, 52 deselected, 2 warnings`
+- 边界说明:
+  - 这是 dead helper retirement，不是新的 Rust runtime takeover
+  - 当前只能说明该 helper 不再是 live owner，不能说明 prompt runtime 主链路已 Rust-owned
+- 后续修复波次:
+  - Wave E / prompt runtime producer ownership
+- owner: Rust migration
+
+### 48. dead Python skill-test runner helper retired
+
+- endpoint / feature:
+  - Python helper:
+    - `backend_old/app/services/agent/skill_test_runner.py`
+  - dead tests:
+    - `backend_old/tests/test_skill_test_project_lifecycle.py`
+    - `backend_old/tests/test_structured_tool_test_runner.py`
+- Python 旧行为:
+  - helper 曾承接单技能测试/结构化工具测试的 Python runner 逻辑
+  - 当前 repo 内已无 live import，只剩测试资产
+- Rust 当前行为:
+  - Rust `/api/v1/skills/{id}/test` 与 `/tool-test`
+    继续承接 HTTP surface
+  - 这不等于真正 Rust skill-test runtime 等价；当前仅说明 Python helper 已脱离 live caller
+- current behavior:
+  - `backend_old/app/services/agent/skill_test_runner.py` 已从 repo 删除
+  - 只覆盖该 dead helper 的测试已删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `210`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'prompt_skills or resource_catalog or skill_test_runner' tests/test_config_internal_callers_use_service_layer.py -k 'prompt_skills or resource_catalog or skill_test_runner'`
+    => `6 passed, 51 deselected, 3 warnings`
+- 边界说明:
+  - 这是 dead helper / dead test retirement，不是新的 Rust runtime takeover
+  - 当前只能证明 repo 内无 live caller，不能把 Rust stub route 当成等价 skill-test runtime 实现
+- 后续修复波次:
+  - Wave E / runtime producer ownership or retained live helper audit
+- owner: Rust migration
+
+### 49. dead Python workflow package convenience module retired
+
+- endpoint / feature:
+  - Python package convenience module:
+    - `backend_old/app/services/agent/workflow/__init__.py`
+- Python 旧行为:
+  - package init 仅提供 convenience export
+  - repo 内命中已收口到测试
+- Rust 当前行为:
+  - 无直接对应 Rust 变更；这是 Python dead shell cleanup
+- current behavior:
+  - `backend_old/app/services/agent/workflow/__init__.py` 已从 repo 删除
+  - 原本依赖 package import 的测试已改为直引具体模块：
+    - `backend_old/tests/test_parallel_workflow.py`
+    - `backend_old/tests/test_workflow_engine.py`
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+  - `test_parallel_workflow.py`
+    已改为 runtime fixture，不再依赖 repo 内已退役测试项目文件
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `209`
+  - `cd backend_old && uv run --project . pytest -s tests/test_parallel_workflow.py tests/test_workflow_engine.py`
+    => `36 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k workflow tests/test_config_internal_callers_use_service_layer.py -k workflow`
+    => `2 passed, 57 deselected, 1 warning`
+- 边界说明:
+  - 这是 dead package convenience module retirement，不是新的 Rust workflow takeover
+  - 当前只能说明 package init 不再是 live owner，workflow engine/orchestrator 本体仍在 Python retained runtime 中
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 50. dead Python telemetry shell retired
+
+- endpoint / feature:
+  - Python telemetry shell:
+    - `backend_old/app/services/agent/telemetry/tracer.py`
+    - `backend_old/app/services/agent/telemetry/__init__.py`
+  - agent package lazy exports:
+    - `Tracer`
+    - `get_global_tracer`
+    - `set_global_tracer`
+- Python 旧行为:
+  - telemetry package 对外暴露 tracer class / global tracer helper
+  - 当前 repo 内已无 live importer
+- Rust 当前行为:
+  - 无直接对应 Rust 变更；这是 Python dead shell cleanup
+- current behavior:
+  - telemetry shell 文件已从 repo 删除
+  - `backend_old/app/services/agent/__init__.py`
+    已移除 telemetry 相关 lazy exports
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `207`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k telemetry tests/test_config_internal_callers_use_service_layer.py -k telemetry`
+    => `3 passed, 59 deselected, 1 warning`
+- 边界说明:
+  - 这是 dead telemetry shell retirement，不是新的 Rust runtime takeover
+  - 当前只能说明 repo 内无 live importer 消费 telemetry 包和 tracer symbol
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 51. empty Python agent-skills package shell retired
+
+- endpoint / feature:
+  - Python package shell:
+    - `backend_old/app/services/agent/skills/__init__.py`
+- Python 旧行为:
+  - package init 只剩空壳，不再承接 helper export
+- Rust 当前行为:
+  - 无直接对应 Rust 变更；这是 Python dead shell cleanup
+- current behavior:
+  - `backend_old/app/services/agent/skills/__init__.py` 已从 repo 删除
+  - direct submodule import 已验证仍正常：
+    - `from app.services.agent.skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS`
+      => `17`
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `206`
+  - `cd backend_old && uv run --project . python -c "from app.services.agent.skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS; print(len(SCAN_CORE_LOCAL_SKILL_IDS))"`
+    => `17`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'skills' tests/test_config_internal_callers_use_service_layer.py -k 'skills'`
+    => `4 passed, 60 deselected, 2 warnings`
+- 边界说明:
+  - 这是空 package shell retirement，不是新的 Rust scan-core takeover
+  - 当前只能说明 package shell 不再是 live owner，`scan_core.py` 仍是 Python retained live surface
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 52. dead Python agent convenience package shell retired
+
+- endpoint / feature:
+  - Python package convenience module:
+    - `backend_old/app/services/agent/__init__.py`
+- Python 旧行为:
+  - package root 通过 lazy export 对 tests/consumers 暴露多个子模块
+  - 当前 repo 内 live usage 已收口到 tests
+- Rust 当前行为:
+  - 无直接对应 Rust 变更；这是 Python dead shell cleanup
+- current behavior:
+  - `backend_old/app/services/agent/__init__.py` 已从 repo 删除
+  - 原先依赖 package convenience import 的测试
+    已改为直引具体子模块
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `205`
+  - `cd backend_old && uv run --project . pytest -s tests/test_agent_tasks_module_layout.py tests/test_static_scan_runtime.py tests/test_agent_event_payload_limits.py tests/test_background_task_launch_refactor.py tests/test_scanner_runner.py`
+    => `23 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py tests/test_config_internal_callers_use_service_layer.py -k 'agent and package'`
+    => `7 passed, 59 deselected, 3 warnings`
+- 边界说明:
+  - 这是 convenience package shell retirement，不是新的 Rust runtime takeover
+  - 当前只能说明 package root 不再是 live owner，retained helper 本体仍在 Python runtime 中
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 53. zero-caller Python agent subpackage shells retired in batch
+
+- endpoint / feature:
+  - Python subpackage shells:
+    - `core/__init__.py`
+    - `knowledge/frameworks/__init__.py`
+    - `knowledge/vulnerabilities/__init__.py`
+    - `memory/__init__.py`
+    - `prompts/__init__.py`
+    - `streaming/__init__.py`
+    - `tool_runtime/__init__.py`
+- Python 旧行为:
+  - 这些 package shell 提供 convenience export，但 repo 内已无 direct package-shell caller
+- Rust 当前行为:
+  - 无直接对应 Rust 变更；这是 Python dead shell cleanup
+- current behavior:
+  - 上述 7 个 `__init__.py` 已从 repo 删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+  - 明确保留：
+    - `bootstrap/__init__.py`
+    - `tools/runtime/__init__.py`
+    因为仍有 repo 内 caller
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `197`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'core or frameworks or vulnerabilities or memory or prompts or streaming or tool_runtime' tests/test_config_internal_callers_use_service_layer.py -k 'core or frameworks or vulnerabilities or memory or prompts or streaming or tool_runtime'`
+    => `15 passed, 68 deselected, 7 warnings`
+- 边界说明:
+  - 这是 zero-caller subpackage shell cleanup，不是新的 Rust runtime takeover
+  - 当前只能说明这些 package shell 不再是 live owner，retained live modules 本体仍在 Python runtime 中
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 54. retained knowledge package convenience module retired
+
+- endpoint / feature:
+  - Python package convenience module:
+    - `backend_old/app/services/agent/knowledge/__init__.py`
+- Python 旧行为:
+  - package root 对 internal caller 暴露 `knowledge_loader`
+- current behavior:
+  - `backend_old/app/services/agent/knowledge/__init__.py` 已从 repo 删除
+  - internal live caller 已改为直引具体模块：
+    - `backend_old/app/services/agent/agents/base.py`
+    - `backend_old/app/services/agent/tools/agent_tools.py`
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `196`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k knowledge tests/test_config_internal_callers_use_service_layer.py -k knowledge`
+    => `3 passed, 66 deselected, 1 warning`
+- 边界说明:
+  - 这是 retained convenience module retirement，不是新的 Rust runtime takeover
+  - 当前仅说明 internal caller 已不再依赖 knowledge package root
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 55. retained bootstrap package shell retired
+
+- endpoint / feature:
+  - Python package shell:
+    - `backend_old/app/services/agent/bootstrap/__init__.py`
+- Python 旧行为:
+  - package shell 仅被 3 个测试直接引用
+- current behavior:
+  - `backend_old/app/services/agent/bootstrap/__init__.py` 已从 repo 删除
+  - 3 个测试已改为直引具体子模块：
+    - `test_bandit_bootstrap_scanner.py`
+    - `test_opengrep_bootstrap_scanner.py`
+    - `test_phpstan_bootstrap_scanner.py`
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `193`
+  - `cd backend_old && uv run --project . pytest -s tests/test_bandit_bootstrap_scanner.py tests/test_opengrep_bootstrap_scanner.py tests/test_phpstan_bootstrap_scanner.py`
+    => `17 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k bootstrap tests/test_config_internal_callers_use_service_layer.py -k bootstrap`
+    => `4 passed, 87 deselected, 1 warning`
+- 边界说明:
+  - 这是 retained package shell retirement，不是新的 Rust bootstrap takeover
+  - 当前保留的是 bootstrap 子模块本体，不是 package shell
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 56. retained tools.runtime package shell retired
+
+- endpoint / feature:
+  - Python package shell:
+    - `backend_old/app/services/agent/tools/runtime/__init__.py`
+- Python 旧行为:
+  - package shell 对 internal caller 暴露 `ToolExecutionCoordinator` 等 runtime helper
+- current behavior:
+  - `backend_old/app/services/agent/tools/runtime/__init__.py`
+    已从 repo 删除
+  - live caller 已改为直引具体模块：
+    - `backend_old/app/services/agent/tools/base.py`
+      -> `.runtime.coordinator`
+    - `backend_old/tests/test_tool_runtime_coordinator.py`
+      -> `app.services.agent.tools.runtime.coordinator`
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+    - guard 额外覆盖相对 `from .runtime import ...` 形式
+  - `prompts` package shell 删除后暴露的导入链断裂已同步修到：
+    - `analysis.py`
+    - `verification.py`
+    - `orchestrator.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `192`
+  - `cd backend_old && uv run --project . pytest -s tests/test_tool_runtime_coordinator.py`
+    => `5 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k tool_runtime tests/test_config_internal_callers_use_service_layer.py -k tool_runtime`
+    => `3 passed, 91 deselected, 1 warning`
+- 边界说明:
+  - 这是 retained package shell retirement，不是新的 Rust tool runtime takeover
+  - 当前仅说明 `tools.runtime` package root 不再是 live owner，runtime 子模块本体仍保留
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 57. retained tools convenience package retired
+
+- endpoint / feature:
+  - Python convenience package:
+    - `backend_old/app/services/agent/tools/__init__.py`
+- Python 旧行为:
+  - package root 对 internal/test caller 暴露大量 tool symbol
+- current behavior:
+  - `backend_old/app/services/agent/tools/__init__.py` 已从 repo 删除
+  - direct package caller 已改为直引具体子模块或 symbol
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `191`
+  - `cd backend_old && uv run --project . pytest -s tests/test_tool_runtime_coordinator.py`
+    => `5 passed`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k tool_runtime tests/test_config_internal_callers_use_service_layer.py -k tool_runtime`
+    => `3 passed, 91 deselected, 1 warning`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k tools tests/test_config_internal_callers_use_service_layer.py -k tools`
+    => `5 passed`
+- 边界说明:
+  - 这是 retained convenience package retirement，不是新的 Rust tool/runtime takeover
+  - 当前保留的是具体 tool 模块本体，不再保留 package root
+  - 相关更大测试组里仍有既有 `.env` 环境依赖，本 slice 不处理
+- 后续修复波次:
+  - Wave E / retained runtime helper audit
+- owner: Rust migration
+
+### 58. retained workflow cluster retired as test-only code
+
+- endpoint / feature:
+  - Python retained workflow cluster:
+    - `workflow/engine.py`
+    - `workflow/models.py`
+    - `workflow/parallel_executor.py`
+    - `workflow/memory_monitor.py`
+    - `workflow/workflow_orchestrator.py`
+- Python 旧行为:
+  - 该 cluster 在 repo 内已只剩测试 caller
+- current behavior:
+  - 上述 5 个源文件已从 repo 删除
+  - 对应 5 个测试文件已删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `186`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k workflow tests/test_config_internal_callers_use_service_layer.py -k workflow`
+    => `8 passed, 94 deselected`
+- 边界说明:
+  - 这是 retained test-only workflow cluster retirement，不是新的 Rust workflow takeover
+- 后续修复波次:
+  - Wave E / retained live helper audit
+- owner: Rust migration
+
+### 59. retained business-logic-scan pair retired
+
+- endpoint / feature:
+  - Python retained pair:
+    - `agents/business_logic_scan.py`
+    - `tools/business_logic_scan_tool.py`
+- Python 旧行为:
+  - 该 pair 在 repo 内已只剩测试 caller + package re-export
+- current behavior:
+  - 上述 2 个源文件已从 repo 删除
+  - `agents/__init__.py` 已移除 `BusinessLogicScanAgent` re-export
+  - 对应测试 `test_refactored_business_logic_scan.py` 已删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `184`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'business_logic_scan' tests/test_config_internal_callers_use_service_layer.py -k 'business_logic_scan'`
+    => `4 passed, 102 deselected, 2 warnings`
+- 边界说明:
+  - 这是 retained test-only pair retirement，不是新的 Rust business-logic-scan takeover
+- 后续修复波次:
+  - Wave E / retained live helper audit
+- owner: Rust migration
+
+### 60. orphan knowledge tools module retired
+
+- endpoint / feature:
+  - Python orphan module:
+    - `backend_old/app/services/agent/knowledge/tools.py`
+- Python 旧行为:
+  - 提供安全知识查询工具定义
+  - 当前 repo 内已无 direct module caller
+- current behavior:
+  - `backend_old/app/services/agent/knowledge/tools.py`
+    已从 repo 删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `180`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'knowledge and tools' tests/test_config_internal_callers_use_service_layer.py -k 'knowledge and tools'`
+    => `2 passed, 112 deselected, 1 warning`
+- 边界说明:
+  - 这是 orphan module retirement，不是新的 Rust knowledge takeover
+  - 当前仅说明该工具定义模块已无 repo 内 direct caller
+- 后续修复波次:
+  - Wave E / retained live helper audit
+- owner: Rust migration
+
+### 61. orphan tool_runtime edge cluster retired
+
+- endpoint / feature:
+  - Python orphan cluster:
+    - `tool_runtime/probe_specs.py`
+    - `tool_runtime/protocol_verify.py`
+    - `tool_runtime/virtual_tools.py`
+- Python 旧行为:
+  - 这些模块在 repo 内已无 direct caller
+- current behavior:
+  - 上述 3 个模块已从 repo 删除
+  - retirement guard 已补：
+    - `backend_old/tests/test_api_router_rust_owned_routes_removed.py`
+    - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `180`
+  - `cd backend_old && uv run --project . pytest -s tests/test_api_router_rust_owned_routes_removed.py -k 'probe_specs or protocol_verify or virtual_tools' tests/test_config_internal_callers_use_service_layer.py -k 'probe_specs or protocol_verify or virtual_tools'`
+    => `6 passed, 108 deselected, 3 warnings`
+- 边界说明:
+  - 这是 orphan cluster retirement，不是新的 Rust tool runtime takeover
+  - 当前仅说明这 3 个边缘模块已无 direct caller
+- 后续修复波次:
+  - Wave E / retained live helper audit
+- owner: Rust migration
+
 ### 14. Ledger refresh: Rust task routes are mounted, compose bridge vars are cleared
 
 - endpoint / feature:

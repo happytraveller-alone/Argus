@@ -640,7 +640,7 @@ class BaseAgent(ABC):
             return
 
         try:
-            from ..knowledge import knowledge_loader
+            from ..knowledge.loader import knowledge_loader
 
             enhanced_prompt = knowledge_loader.build_system_prompt_with_modules(
                 self.config.system_prompt or "",

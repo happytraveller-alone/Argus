@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.agent.bootstrap import phpstan as phpstan_bootstrap
+import app.services.agent.bootstrap.phpstan as phpstan_bootstrap
 from app.services.agent.bootstrap.phpstan import PhpstanBootstrapScanner
 
 

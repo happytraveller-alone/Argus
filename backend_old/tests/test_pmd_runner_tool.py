@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.agent.tools import external_tools
+import app.services.agent.tools.external_tools as external_tools
 from app.services.agent.tools.external_tools import PMDTool
 
 

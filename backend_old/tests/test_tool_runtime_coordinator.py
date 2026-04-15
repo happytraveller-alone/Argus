@@ -3,7 +3,7 @@ import pytest
 
 from app.services.agent.tools.base import AgentTool, ToolResult
 from app.services.agent.tools.queue_tools import PushFindingToQueueTool
-from app.services.agent.tools.runtime import ToolExecutionCoordinator
+from app.services.agent.tools.runtime.coordinator import ToolExecutionCoordinator
 from app.services.agent.tools.runtime.hooks import ToolHook, ToolHookResult
 from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
 

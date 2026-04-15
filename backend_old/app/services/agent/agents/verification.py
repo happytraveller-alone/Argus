@@ -38,7 +38,7 @@ from ..flow.lightweight.function_locator_payload import (
     parse_locator_payload,
     select_locator_function,
 )
-from ..prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
+from ..prompts.system_prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 from ..utils.vulnerability_naming import (
     build_cn_structured_description,
     build_cn_structured_description_markdown,

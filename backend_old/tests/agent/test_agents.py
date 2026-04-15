@@ -20,8 +20,10 @@ class TestReconAgent:
     @pytest.fixture
     def recon_agent(self, temp_project_dir, mock_llm_service, mock_event_emitter):
         """创建 Recon Agent 实例"""
-        from app.services.agent.tools import (
-            FileReadTool, FileSearchTool, ListFilesTool,
+        from app.services.agent.tools.file_tool import (
+            FileReadTool,
+            FileSearchTool,
+            ListFilesTool,
         )
         
         tools = {
@@ -205,10 +207,9 @@ class TestAnalysisAgent:
     @pytest.fixture
     def analysis_agent(self, temp_project_dir, mock_llm_service, mock_event_emitter):
         """创建 Analysis Agent 实例"""
-        from app.services.agent.tools import (
-            FileReadTool, FileSearchTool, PatternMatchTool,
-        )
-        
+        from app.services.agent.tools.file_tool import FileReadTool, FileSearchTool
+        from app.services.agent.tools.pattern_tool import PatternMatchTool
+
         tools = {
             "read_file": FileReadTool(temp_project_dir),
             "search_code": FileSearchTool(temp_project_dir),

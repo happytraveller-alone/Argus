@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.services import pmd_rulesets
-from app.services.agent.tools import external_tools
+import app.services.agent.tools.external_tools as external_tools
 
 
 SECURITY_RULESET = "category/java/security.xml,category/java/errorprone.xml,category/apex/security.xml"

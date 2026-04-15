@@ -12,7 +12,6 @@ from .orchestrator import OrchestratorAgent
 from .recon import ReconAgent
 from .analysis import AnalysisAgent
 from .verification import VerificationAgent
-from .business_logic_scan import BusinessLogicScanAgent
 from .business_logic_recon import BusinessLogicReconAgent
 from .business_logic_analysis import BusinessLogicAnalysisAgent
 from .report import ReportAgent
@@ -26,9 +25,7 @@ __all__ = [
     "ReconAgent",
     "AnalysisAgent",
     "VerificationAgent",
-    "BusinessLogicScanAgent",
     "BusinessLogicReconAgent",
     "BusinessLogicAnalysisAgent",
     "ReportAgent",
 ]
-

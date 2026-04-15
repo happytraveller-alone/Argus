@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.agent import scan_tracking
+import app.services.agent.scan_tracking as scan_tracking
 
 
 @pytest.mark.asyncio

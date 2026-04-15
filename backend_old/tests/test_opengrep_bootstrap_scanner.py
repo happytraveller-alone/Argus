@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.agent.bootstrap import opengrep as opengrep_bootstrap
+import app.services.agent.bootstrap.opengrep as opengrep_bootstrap
 from app.services.agent.bootstrap.opengrep import OpenGrepBootstrapScanner
 
 

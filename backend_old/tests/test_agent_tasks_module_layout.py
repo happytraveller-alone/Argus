@@ -15,8 +15,8 @@ def test_agent_tasks_split_modules_exist():
 
 
 def test_agent_tasks_split_modules_expose_key_symbols_directly():
-    from app.services.agent import task_findings
-    from app.services.agent import scope_filters
+    import app.services.agent.scope_filters as scope_filters
+    import app.services.agent.task_findings as task_findings
 
     assert task_findings.AgentFindingResponse is not None
     assert task_findings._is_core_ignored_path is scope_filters._is_core_ignored_path

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
-from ..prompts import MULTI_AGENT_RULES, CORE_SECURITY_PRINCIPLES
+from ..prompts.system_prompts import MULTI_AGENT_RULES, CORE_SECURITY_PRINCIPLES
 from ..utils.vulnerability_naming import build_cn_structured_title, is_structured_cn_title, resolve_vulnerability_profile
 
 logger = logging.getLogger(__name__)

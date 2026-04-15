@@ -15,7 +15,8 @@ docker_stub.errors = types.SimpleNamespace(
 )
 sys.modules.setdefault("docker", docker_stub)
 
-from app.services.agent import scan_tracking, scan_workspace
+import app.services.agent.scan_tracking as scan_tracking
+import app.services.agent.scan_workspace as scan_workspace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

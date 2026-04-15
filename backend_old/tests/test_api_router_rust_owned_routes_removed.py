@@ -1,7 +1,46 @@
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RETIRED_AGENT_PACKAGE_SHELLS = (
+    ("bootstrap", "app/services/agent/bootstrap/__init__.py"),
+    ("core", "app/services/agent/core/__init__.py"),
+    ("flow", "app/services/agent/flow/__init__.py"),
+    ("frameworks", "app/services/agent/knowledge/frameworks/__init__.py"),
+    ("logic", "app/services/agent/logic/__init__.py"),
+    ("vulnerabilities", "app/services/agent/knowledge/vulnerabilities/__init__.py"),
+    ("memory", "app/services/agent/memory/__init__.py"),
+    ("prompts", "app/services/agent/prompts/__init__.py"),
+    ("streaming", "app/services/agent/streaming/__init__.py"),
+    ("tool_runtime", "app/services/agent/tool_runtime/__init__.py"),
+    ("tools", "app/services/agent/tools/__init__.py"),
+    ("tools_runtime", "app/services/agent/tools/runtime/__init__.py"),
+    ("utils", "app/services/agent/utils/__init__.py"),
+)
+RETIRED_AGENT_WORKFLOW_CLUSTER_FILES = (
+    ("engine", "app/services/agent/workflow/engine.py"),
+    ("models", "app/services/agent/workflow/models.py"),
+    ("parallel_executor", "app/services/agent/workflow/parallel_executor.py"),
+    ("memory_monitor", "app/services/agent/workflow/memory_monitor.py"),
+    ("workflow_orchestrator", "app/services/agent/workflow/workflow_orchestrator.py"),
+)
+RETIRED_TOOL_RUNTIME_ORPHAN_CLUSTER_FILES = (
+    ("probe_specs", "app/services/agent/tool_runtime/probe_specs.py"),
+    ("protocol_verify", "app/services/agent/tool_runtime/protocol_verify.py"),
+    ("virtual_tools", "app/services/agent/tool_runtime/virtual_tools.py"),
+)
+RETIRED_AGENT_CORE_ORPHAN_SUPPORT_CLUSTER_FILES = (
+    ("circuit_breaker", "app/services/agent/core/circuit_breaker.py"),
+    ("fallback", "app/services/agent/core/fallback.py"),
+    ("graph_controller", "app/services/agent/core/graph_controller.py"),
+    ("persistence", "app/services/agent/core/persistence.py"),
+    ("rate_limiter", "app/services/agent/core/rate_limiter.py"),
+    ("retry", "app/services/agent/core/retry.py"),
+    ("validation", "app/services/agent/core/validation.py"),
+)
+
 
 def test_legacy_api_router_module_has_been_retired():
     api_router_path = PROJECT_ROOT / "app/api/v1/api.py"
@@ -42,6 +81,51 @@ def test_legacy_static_scan_runtime_endpoint_module_has_been_retired():
 def test_legacy_agent_tasks_facade_module_has_been_retired():
     facade_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks.py"
     assert not facade_path.exists()
+
+
+def test_legacy_agent_package_convenience_module_has_been_retired():
+    package_init_path = PROJECT_ROOT / "app/services/agent/__init__.py"
+    assert not package_init_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("shell_name", "relative_path"),
+    RETIRED_AGENT_PACKAGE_SHELLS,
+    ids=[shell_name for shell_name, _ in RETIRED_AGENT_PACKAGE_SHELLS],
+)
+def test_legacy_agent_subpackage_shell_has_been_retired(shell_name: str, relative_path: str):
+    retired_shell_path = PROJECT_ROOT / relative_path
+    assert not retired_shell_path.exists(), f"retired agent {shell_name} package shell should stay deleted"
+
+
+@pytest.mark.parametrize(
+    ("module_name", "relative_path"),
+    RETIRED_TOOL_RUNTIME_ORPHAN_CLUSTER_FILES,
+    ids=[module_name for module_name, _ in RETIRED_TOOL_RUNTIME_ORPHAN_CLUSTER_FILES],
+)
+def test_legacy_tool_runtime_orphan_cluster_module_has_been_retired(
+    module_name: str,
+    relative_path: str,
+):
+    retired_module_path = PROJECT_ROOT / relative_path
+    assert not retired_module_path.exists(), (
+        f"retired tool_runtime orphan cluster module should stay deleted: {module_name}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("module_name", "relative_path"),
+    RETIRED_AGENT_CORE_ORPHAN_SUPPORT_CLUSTER_FILES,
+    ids=[module_name for module_name, _ in RETIRED_AGENT_CORE_ORPHAN_SUPPORT_CLUSTER_FILES],
+)
+def test_legacy_agent_core_orphan_support_cluster_module_has_been_retired(
+    module_name: str,
+    relative_path: str,
+):
+    retired_module_path = PROJECT_ROOT / relative_path
+    assert not retired_module_path.exists(), (
+        f"retired agent core orphan support cluster module should stay deleted: {module_name}"
+    )
 
 
 def test_legacy_init_db_module_has_been_retired():
@@ -201,6 +285,31 @@ def test_legacy_flow_parser_runtime_service_has_been_retired():
     assert not flow_parser_runtime_path.exists()
 
 
+def test_legacy_skill_test_runner_service_has_been_retired():
+    skill_test_runner_path = PROJECT_ROOT / "app/services/agent/skill_test_runner.py"
+    assert not skill_test_runner_path.exists()
+
+
+def test_legacy_skill_test_agent_module_has_been_retired():
+    skill_test_agent_path = PROJECT_ROOT / "app/services/agent/agents/skill_test.py"
+    assert not skill_test_agent_path.exists()
+
+
+def test_legacy_agent_skills_package_shell_has_been_retired():
+    skills_package_init_path = PROJECT_ROOT / "app/services/agent/skills/__init__.py"
+    assert not skills_package_init_path.exists()
+
+
+def test_legacy_agent_knowledge_package_shell_has_been_retired():
+    knowledge_package_init_path = PROJECT_ROOT / "app/services/agent/knowledge/__init__.py"
+    assert not knowledge_package_init_path.exists()
+
+
+def test_legacy_agent_knowledge_tools_module_has_been_retired():
+    knowledge_tools_path = PROJECT_ROOT / "app/services/agent/knowledge/tools.py"
+    assert not knowledge_tools_path.exists()
+
+
 def test_legacy_tree_sitter_parser_service_has_been_retired():
     parser_path = PROJECT_ROOT / "app/services/parser.py"
     assert not parser_path.exists()
@@ -246,3 +355,47 @@ def test_legacy_runtime_tool_docs_scripts_have_been_retired():
     validate_script_path = PROJECT_ROOT / "scripts/validate_runtime_tool_docs.py"
     assert not generate_script_path.exists()
     assert not validate_script_path.exists()
+
+
+def test_legacy_prompt_skills_helper_module_has_been_retired():
+    prompt_skills_path = PROJECT_ROOT / "app/services/agent/skills/prompt_skills.py"
+    assert not prompt_skills_path.exists()
+
+
+def test_legacy_agent_telemetry_modules_have_been_retired():
+    telemetry_init_path = PROJECT_ROOT / "app/services/agent/telemetry/__init__.py"
+    telemetry_tracer_path = PROJECT_ROOT / "app/services/agent/telemetry/tracer.py"
+    assert not telemetry_init_path.exists()
+    assert not telemetry_tracer_path.exists()
+
+
+def test_legacy_agent_workflow_package_init_has_been_retired():
+    workflow_init_path = PROJECT_ROOT / "app/services/agent/workflow/__init__.py"
+    assert not workflow_init_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("module_name", "relative_path"),
+    RETIRED_AGENT_WORKFLOW_CLUSTER_FILES,
+    ids=[module_name for module_name, _ in RETIRED_AGENT_WORKFLOW_CLUSTER_FILES],
+)
+def test_legacy_agent_workflow_cluster_modules_have_been_retired(
+    module_name: str, relative_path: str
+):
+    retired_module_path = PROJECT_ROOT / relative_path
+    assert not retired_module_path.exists(), (
+        f"retired agent workflow module {module_name} should stay deleted"
+    )
+
+
+def test_legacy_skill_resource_catalog_helper_has_been_retired():
+    resource_catalog_path = PROJECT_ROOT / "app/services/agent/skills/resource_catalog.py"
+    assert not resource_catalog_path.exists()
+
+
+def test_legacy_business_logic_scan_modules_have_been_retired():
+    tool_path = PROJECT_ROOT / "app/services/agent/tools/business_logic_scan_tool.py"
+    agent_path = PROJECT_ROOT / "app/services/agent/agents/business_logic_scan.py"
+
+    assert not tool_path.exists()
+    assert not agent_path.exists()
