@@ -632,19 +632,71 @@
   - `cd backend && cargo build --bin backend-rust`
     => exit `0`
   - `cd backend && cargo test`
-    => `FAILED`
-    - failing test:
-      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
-    - observed failure:
-      upload response status `400 != 200`
+    => exit `0`
+  - gate hygiene:
+    - `backend/tests/projects_api.rs`
+      的 multipart helper 已补 quoted-string 转义，避免把带引号的 UTF-8 文件名
+      拼成无效 `Content-Disposition` header
+    - `cd backend && cargo test --test projects_api download_project_archive_supports_utf8_filenames -- --exact --nocapture`
+      => `1 passed`
 - 边界说明:
   - 这一步推进的是 Rust `skills` HTTP contract，不是 prompt skill persistence ownership 完成
   - legacy `prompt_skills` 与 `user_configs.other_config.promptSkillBuiltinState`
     仍是当前 DB 模式下的 live 读路径
   - 这一步不改 frontend 页面，不移除 `/skills/resources/*`，也不把 workflow registry / runtime session 带入本 slice
-  - 当前 backend 全量 gate 仍未通过，因此这条记录只表示实现与定向验证完成，不表示可提交
+  - 当前 backend 全量 gate 已恢复绿色；后续 slice 可以继续推进
 - 后续修复波次:
   - Wave E / prompt-skill persistence boundary
+- owner: Rust migration
+
+### 45. prompt-skill persistence boundary moved to Rust-native storage
+
+- endpoint / feature:
+  - `GET /api/v1/skills/prompt-skills`
+  - `POST /api/v1/skills/prompt-skills`
+  - `PUT /api/v1/skills/prompt-skills/{prompt_skill_id}`
+  - `DELETE /api/v1/skills/prompt-skills/{prompt_skill_id}`
+  - `PUT /api/v1/skills/prompt-skills/builtin/{agent_key}`
+  - Rust startup init / bootstrap required tables
+- Python 旧行为:
+  - Rust `skills` route 虽然已接管 HTTP 面，但 DB mode 读路径仍直接查 legacy
+    `prompt_skills`
+    与 `user_configs.other_config.promptSkillBuiltinState`
+  - mutation 后再额外 mirror 回 legacy，真正的 source of truth 仍在旧表/旧 JSON 字段
+- Rust 当前行为:
+  - Rust 已新增 `backend/src/db/prompt_skills.rs`
+  - Rust DB required tables 新增：
+    - `rust_prompt_skills`
+    - `rust_prompt_skill_builtin_states`
+  - Rust startup init allowlist 新增：
+    - `rust_prompt_skill_compat_backfill`
+  - startup init 在 Rust-native store 为空时，会做一次 compat backfill：
+    - legacy `prompt_skills` -> `rust_prompt_skills`
+    - legacy `user_configs.other_config.promptSkillBuiltinState`
+      -> `rust_prompt_skill_builtin_states`
+    - backfill before import / in-transaction import 都再次检查 empty，避免覆盖已有 Rust-native 数据
+  - Rust `skills` route 的 DB mode steady-state 读写已切到 Rust-native store
+  - DB mode create / update / delete / builtin toggle 已改为记录级 helper
+  - Rust-native 与 legacy mirror 写入已收进单事务，避免主写成功而 mirror 失败造成 split-brain
+  - `skills` 分页响应中的 `total` 已修正为分页前总匹配数
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `213`
+  - `cd backend && cargo test --test skills_api`
+    => `7 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => exit `0`
+    - `64 passed`
+- 边界说明:
+  - 这一步收回的是 persistence boundary，不是 runtime injection boundary
+  - Python agents 仍消费 `config.prompt_skills`，所以 prompt skill runtime 主链路还没有完全 Rust-owned
+  - legacy `prompt_skills` / `user_configs.other_config` 仍保留 compat mirror，不可立即删除
+- 后续修复波次:
+  - Wave E / prompt runtime producer ownership
 - owner: Rust migration
 
 ### 14. Ledger refresh: Rust task routes are mounted, compose bridge vars are cleared

@@ -1566,16 +1566,14 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `cd backend && cargo build --bin backend-rust`
     => exit `0`
   - `cd backend && cargo test`
-    => `FAILED`
-    - 失败用例：
-      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
-    - 断言：
-      upload 响应状态 `400 != 200`
-    - 当前结论：
-      本 slice 的直接改动仅落在 `backend/src/routes/skills.rs`
-      与 `backend/tests/skills_api.rs`，未触及 `projects` 路由和
-      `projects_api` 测试，但由于没有旧基线对照，不能把这条失败
-      记成“已确认无关”；因此当前 backend commit gate 仍未通过
+    => exit `0`
+  - gate 修正：
+    - `backend/tests/projects_api.rs` 的 multipart test helper
+      已补 quoted-string 转义，避免把带引号的 UTF-8 文件名
+      组装成无效 `Content-Disposition` header
+    - 复跑：
+      `cd backend && cargo test --test projects_api download_project_archive_supports_utf8_filenames -- --exact --nocapture`
+      => `1 passed`
 - 当前意义：
   - 这一步把 Rust `skills` 默认 HTTP contract 往
     `prompt-effective unified catalog/detail` 推进了一刀
@@ -1584,6 +1582,7 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
     - 前端 external-tools compat resource catalog
   - 这一步仍然只是 Rust `skills` surface contract 收口，
     不是 prompt skill storage ownership 完成
+  - backend gate 现已恢复为绿色，可继续推进下一 slice
   - legacy `prompt_skills` 与 `user_configs.other_config.promptSkillBuiltinState`
     仍是当前 DB 模式下的 live 读路径
 - 仍未完成：
@@ -1606,3 +1605,82 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - 并把 legacy `prompt_skills` /
     `user_configs.other_config.promptSkillBuiltinState`
     降级为可删 compat mirror
+
+### 2026-04-15 Batch 4 / Slice 14
+
+- 已完成：
+  - Rust 已新增 prompt skill Rust-native 主存储：
+    - `rust_prompt_skills`
+    - `rust_prompt_skill_builtin_states`
+  - Rust 已新增：
+    - `backend/src/db/prompt_skills.rs`
+  - `backend/src/db/mod.rs` 已显式挂载 `prompt_skills`
+  - `bootstrap::ensure_rust_schema()` 已创建这两张 Rust-native 表
+  - `REQUIRED_RUST_TABLES` 与对应 bootstrap 测试已把这两张表纳入 Rust hard dependency
+  - startup init allowlist 已新增：
+    - `rust_prompt_skill_compat_backfill`
+  - startup init 已在 Rust DB ready 时执行幂等 compat backfill：
+    - 仅当 Rust-native prompt skill store 为空时，从 legacy `prompt_skills` 导入
+    - 仅当 Rust-native builtin state 为空时，从 legacy
+      `user_configs.other_config.promptSkillBuiltinState` 导入
+    - 导入前后都做“only if empty”检查，不覆盖已有 Rust-native 数据
+  - `backend/src/routes/skills.rs` 的 DB mode steady-state 主读路径已切到 Rust-native store：
+    - custom prompt skills 读取不再直接查 legacy `prompt_skills`
+    - builtin prompt state 读取不再直接查 legacy `user_configs.other_config`
+  - `backend/src/routes/skills.rs` 的 DB mode mutation 已收口到记录级 helper：
+    - create
+    - update
+    - delete
+    - builtin toggle
+  - 上述 DB mode mutation 现在在单个事务里同时写：
+    - Rust-native 主存储
+    - legacy compat mirror
+  - `routes/skills.rs` 的 DB mode 不再走
+    `load full set -> mutate in memory -> delete all + reinsert all`
+    这一整套旧模式
+  - `skills` 分页元数据已修正：
+    - `total` 现在表示分页前总匹配数
+    - 不再错误等于当前页 `items.len()`
+  - Rust 测试已补：
+    - `db::prompt_skills` backfill/owner/helper 纯逻辑测试
+    - `skills_api` 分页 total 回归测试
+- repo facts refresh：
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- 验证命令：
+  - `cd backend && cargo test --test skills_api`
+    => `7 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => exit `0`
+    - `64 passed`
+- 当前意义：
+  - 这一步把 prompt-skill persistence boundary 从
+    “Rust route + legacy DB 主存储” 推进到
+    “Rust route + Rust-native DB 主存储 + legacy compat mirror”
+  - 这一步把 custom prompt skills / builtin prompt state 的
+    steady-state read owner 收回到 Rust
+  - 这一步仍未完成 runtime 注入 owner 收口：
+    `use_prompt_skills -> config.prompt_skills`
+    的 live producer 还没有明确迁到 Rust
+- 仍未完成：
+  - legacy `prompt_skills` / `user_configs.other_config.promptSkillBuiltinState`
+    仍需保留一轮 compat mirror
+  - prompt skill runtime producer 仍未明确收口到 Rust
+  - Python agents 当前仍直接消费 `config.prompt_skills`
+    结果，而不是直接消费 Rust runtime session/protocol
+  - `skill_selection` / runtime session / guard / workflow registry
+    仍不在本 slice 范围
+- 删除条件：
+  - 只有当：
+    - compat mirror 不再被任何 live 路径依赖
+    - `config.prompt_skills` producer 改为 Rust-owned
+    - prompt skill runtime 主链路不再需要 Python helper
+    才能删除 legacy `prompt_skills` / builtin state mirror
+- 下一刀：
+  - 定位并收口
+    `use_prompt_skills -> config.prompt_skills`
+    的 live producer owner
+  - 目标是把 Python agents 对 prompt skill 的消费前置到
+    Rust runtime/task setup，而不是继续依赖 legacy Python helper

@@ -917,23 +917,70 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
   - `cd backend && cargo build --bin backend-rust`
     => exit `0`
   - `cd backend && cargo test`
-    => `FAILED`
-    - failing test:
-      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
-    - observed failure:
-      upload response status `400 != 200`
-    - note:
-      当前未把这条失败归因为本 slice；但在没有旧基线证明前，也不能把 backend gate 记成通过
+    => exit `0`
+  - gate hygiene:
+    - `backend/tests/projects_api.rs`
+      的 multipart helper 已补 quoted-string 转义
+    - `cd backend && cargo test --test projects_api download_project_archive_supports_utf8_filenames -- --exact --nocapture`
+      => `1 passed`
 - current meaning:
   - 这一步推进的是 Rust `skills` surface contract，不是 prompt skill storage ownership 完成
   - 默认 unified catalog 与 external-tools compat catalog 现在边界明确，不再混成同一份 prompt 资源列表
   - 这一步让 prompt-effective 进入 Rust 默认 detail surface，但并未改变 frontend 仍依赖 `/skills/resources/*` 的事实
+  - 当前 backend gate 已恢复绿色，后续 slice 可以继续在此基线上推进
 - still missing:
   - DB 模式下 custom prompt skills 仍直接读 legacy `prompt_skills`
   - DB 模式下 builtin prompt state 仍直接读 `user_configs.other_config`
   - `use_prompt_skills -> config.prompt_skills` 的 live producer owner 仍未完全收口到 Rust
   - `/skills/{id}/test` 与 `/tool-test` 仍只是 scan-core compat stub
   - `skill_selection` / runtime session / guard / workflow registry 仍未进入 live code path
+- owner: Rust migration
+- target phase:
+  - E in progress
+
+### 5. prompt-skill persistence boundary is now Rust-native, with legacy storage downgraded to compat mirror
+
+- current state:
+  - Rust 已新增 Rust-native 主存储：
+    - `rust_prompt_skills`
+    - `rust_prompt_skill_builtin_states`
+  - Rust 已新增：
+    - `backend/src/db/prompt_skills.rs`
+  - `backend/src/routes/skills.rs` 在 DB mode 下：
+    - custom prompt skills 读取已改走 Rust-native store
+    - builtin prompt state 读取已改走 Rust-native store
+    - create / update / delete / builtin toggle
+      已改走记录级 DB helper
+    - Rust-native 写入与 legacy mirror 写回
+      已收进同一事务
+  - startup init 现在会在 Rust DB ready 且 Rust-native 为空时做一次 compat backfill：
+    - 从 legacy `prompt_skills` 导入 custom prompt skills
+    - 从 legacy `user_configs.other_config.promptSkillBuiltinState`
+      导入 builtin state
+    - 已有 Rust-native 数据时不覆盖
+  - bootstrap required rust tables 现已包含：
+    - `rust_prompt_skills`
+    - `rust_prompt_skill_builtin_states`
+  - `skills` 分页 total 现已改成分页前总匹配数，不再等于当前页条数
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- verification:
+  - `cd backend && cargo test --test skills_api`
+    => `7 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => exit `0`
+    - `64 passed`
+- current meaning:
+  - 这一步把 custom prompt skills / builtin prompt state 的 steady-state DB read owner 收回到 Rust
+  - 这一步把 legacy `prompt_skills` / `user_configs.other_config` 从主存储降级成 compat mirror
+  - 这一步仍未让 Python agent runtime 直接退出 prompt skill 消费链；它们仍读取 `config.prompt_skills`
+- still missing:
+  - `use_prompt_skills -> config.prompt_skills` 的 live producer 还没有明确迁到 Rust
+  - compat mirror 仍未删除
+  - 真正的 runtime session / skill_selection / guard 仍未进入 live code path
 - owner: Rust migration
 - target phase:
   - E in progress

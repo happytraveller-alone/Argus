@@ -22,6 +22,8 @@ const REQUIRED_RUST_TABLES: &[&str] = &[
     "rust_projects",
     "rust_project_archives",
     "rust_scan_rule_assets",
+    "rust_prompt_skills",
+    "rust_prompt_skill_builtin_states",
 ];
 
 pub async fn run(state: &AppState) -> Result<BootstrapReport> {
@@ -208,7 +210,14 @@ async fn check_database(
             "SELECT table_name
              FROM information_schema.tables
              WHERE table_schema = 'public'
-               AND table_name IN ('system_configs', 'rust_projects', 'rust_project_archives', 'rust_scan_rule_assets')",
+               AND table_name IN (
+                    'system_configs',
+                    'rust_projects',
+                    'rust_project_archives',
+                    'rust_scan_rule_assets',
+                    'rust_prompt_skills',
+                    'rust_prompt_skill_builtin_states'
+               )",
         )
         .fetch_all(pool),
     )
@@ -346,6 +355,48 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
         r#"
         create index if not exists ix_rust_scan_rule_assets_engine_kind
             on rust_scan_rule_assets (engine, source_kind, is_active)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_prompt_skills (
+            owner_id text not null,
+            id text not null,
+            name text not null default '',
+            content text not null default '',
+            scope text not null default 'global',
+            agent_key text,
+            is_active boolean not null default true,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz,
+            primary key (owner_id, id)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_prompt_skills_owner_scope_agent
+            on rust_prompt_skills (owner_id, scope, agent_key, created_at desc)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_prompt_skill_builtin_states (
+            owner_id text not null,
+            agent_key text not null,
+            is_active boolean not null default true,
+            updated_at timestamptz not null default now(),
+            primary key (owner_id, agent_key)
+        )
         "#,
     )
     .execute(pool)
@@ -715,7 +766,9 @@ down_revision = (
             vec![
                 "rust_projects",
                 "rust_project_archives",
-                "rust_scan_rule_assets"
+                "rust_scan_rule_assets",
+                "rust_prompt_skills",
+                "rust_prompt_skill_builtin_states",
             ]
         );
     }
@@ -727,6 +780,8 @@ down_revision = (
             "rust_projects".to_string(),
             "rust_project_archives".to_string(),
             "rust_scan_rule_assets".to_string(),
+            "rust_prompt_skills".to_string(),
+            "rust_prompt_skill_builtin_states".to_string(),
         ];
         assert!(missing_required_tables(&present).is_empty());
     }

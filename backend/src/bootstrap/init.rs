@@ -3,7 +3,7 @@ use serde_json::json;
 
 use crate::{
     bootstrap::legacy_mirror_schema,
-    db::{projects, scan_rule_assets, system_config},
+    db::{projects, prompt_skills, scan_rule_assets, system_config},
     state::{AppState, BootstrapStatus, StartupInitPolicy, StartupInitStatus},
 };
 
@@ -12,6 +12,7 @@ fn startup_init_policy() -> StartupInitPolicy {
         allowed_at_startup: vec![
             "default_rust_system_config".to_string(),
             "empty_rust_project_store".to_string(),
+            "rust_prompt_skill_compat_backfill".to_string(),
             "rust_scan_rule_asset_sync".to_string(),
             "legacy_control_plane_mirror_schema_sync".to_string(),
         ],
@@ -77,6 +78,16 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
             ensured.join(", ")
         ));
 
+        let backfill = prompt_skills::compat_backfill_from_legacy_if_empty(
+            state,
+            &["recon", "business_logic_recon", "analysis", "business_logic_analysis", "verification"],
+        )
+        .await?;
+        actions.push(format!(
+            "prompt skill compat backfill: imported_custom={} imported_builtin_state={}",
+            backfill.imported_prompt_skill_count, backfill.imported_builtin_state_count
+        ));
+
         let summary = scan_rule_assets::ensure_initialized(state).await?;
         actions.push(format!(
             "scan rule assets synced: discovered={} inserted={} updated={} skipped={}",
@@ -107,6 +118,7 @@ mod tests {
             vec![
                 "default_rust_system_config",
                 "empty_rust_project_store",
+                "rust_prompt_skill_compat_backfill",
                 "rust_scan_rule_asset_sync",
                 "legacy_control_plane_mirror_schema_sync"
             ]

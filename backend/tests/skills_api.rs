@@ -439,6 +439,76 @@ async fn prompt_effective_detail_stays_visible_when_no_active_sources_exist() {
 }
 
 #[tokio::test]
+async fn skills_pagination_total_counts_all_matches_before_paging() {
+    let config = isolated_test_config("skills-pagination-total");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    for name in ["Prompt One", "Prompt Two"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/skills/prompt-skills")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": name,
+                            "content": format!("{name} content"),
+                            "scope": "global",
+                            "is_active": true
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let prompt_list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/skills/prompt-skills?limit=1&offset=0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(prompt_list_response.status(), StatusCode::OK);
+    let prompt_list_json: Value = serde_json::from_slice(
+        &to_bytes(prompt_list_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(prompt_list_json["total"], 2);
+    assert_eq!(prompt_list_json["items"].as_array().unwrap().len(), 1);
+
+    let catalog_response = app
+        .oneshot(
+            Request::get("/api/v1/skills/catalog?limit=1&offset=0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(catalog_response.status(), StatusCode::OK);
+    let catalog_json: Value = serde_json::from_slice(
+        &to_bytes(catalog_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(catalog_json["total"].as_u64().unwrap() > 1);
+    assert_eq!(catalog_json["items"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn skill_detail_and_test_streams_are_available() {
     let config = isolated_test_config("skills-stream");
     let state = AppState::from_config(config)

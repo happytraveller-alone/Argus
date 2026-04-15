@@ -730,7 +730,8 @@ fn test_zip_multipart_bytes(fields: Vec<(&str, Option<&str>, Option<&str>, Vec<u
             format!("Content-Disposition: form-data; name=\"{name}\"").as_bytes(),
         );
         if let Some(filename) = filename {
-            body.extend_from_slice(format!("; filename=\"{filename}\"").as_bytes());
+            let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
+            body.extend_from_slice(format!("; filename=\"{escaped}\"").as_bytes());
         }
         body.extend_from_slice(b"\r\n");
         if let Some(content_type) = content_type {

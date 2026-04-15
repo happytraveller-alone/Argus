@@ -66,6 +66,7 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
         vec![
             "default_rust_system_config",
             "empty_rust_project_store",
+            "rust_prompt_skill_compat_backfill",
             "rust_scan_rule_asset_sync",
             "legacy_control_plane_mirror_schema_sync"
         ]
@@ -133,7 +134,9 @@ async fn bootstrap_db_check_does_not_hard_fail_when_database_is_unreachable() {
             "system_configs",
             "rust_projects",
             "rust_project_archives",
-            "rust_scan_rule_assets"
+            "rust_scan_rule_assets",
+            "rust_prompt_skills",
+            "rust_prompt_skill_builtin_states"
         ]
     );
     assert_eq!(report.database.legacy_schema.status, report.database.status);
@@ -201,6 +204,7 @@ async fn health_includes_bootstrap_status() {
         serde_json::json!([
             "default_rust_system_config",
             "empty_rust_project_store",
+            "rust_prompt_skill_compat_backfill",
             "rust_scan_rule_asset_sync",
             "legacy_control_plane_mirror_schema_sync"
         ])
@@ -251,7 +255,9 @@ async fn health_reports_degraded_when_bootstrap_is_degraded() {
             "system_configs",
             "rust_projects",
             "rust_project_archives",
-            "rust_scan_rule_assets"
+            "rust_scan_rule_assets",
+            "rust_prompt_skills",
+            "rust_prompt_skill_builtin_states"
         ])
     );
     assert_eq!(

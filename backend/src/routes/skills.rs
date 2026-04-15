@@ -20,7 +20,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs;
 use uuid::Uuid;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{db::prompt_skills as prompt_skills_db, error::ApiError, state::AppState};
 
 const PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY: &str = "promptSkillBuiltinState";
 const PROMPT_SKILL_SCOPE_GLOBAL: &str = "global";
@@ -337,13 +337,14 @@ async fn get_skill_catalog(
         })
         .collect();
 
+    let total = filtered.len();
     let offset = query.offset.unwrap_or(0);
     let limit = query.limit.unwrap_or(200);
     let paged: Vec<SkillCatalogItem> = filtered.into_iter().skip(offset).take(limit).collect();
 
     Ok(Json(SkillCatalogResponse {
         enabled: true,
-        total: paged.len(),
+        total,
         limit,
         offset,
         supported_agent_keys: prompt_agent_keys(),
@@ -376,7 +377,13 @@ async fn create_prompt_skill(
         created_at: now.clone(),
         updated_at: Some(now),
     };
-    save_prompt_skill(&state, record.clone()).await?;
+    if state.db_pool.is_some() {
+        prompt_skills_db::create_prompt_skill(&state, &record.clone().into())
+            .await
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
+    } else {
+        save_prompt_skill(&state, record.clone()).await?;
+    }
     Ok(Json(record))
 }
 
@@ -385,15 +392,18 @@ async fn update_prompt_skill(
     AxumPath(prompt_skill_id): AxumPath<String>,
     Json(request): Json<PromptSkillUpdateRequest>,
 ) -> Result<Json<PromptSkillRecord>, ApiError> {
-    let mut items = load_prompt_skills(&state).await?;
-    let index = items
-        .iter()
-        .position(|item| item.id == prompt_skill_id)
-        .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?;
-    let existing = items
-        .get(index)
-        .cloned()
-        .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?;
+    let existing = if state.db_pool.is_some() {
+        prompt_skills_db::load_prompt_skill(&state, &prompt_skill_id)
+            .await
+            .map_err(|error| ApiError::Internal(error.to_string()))?
+            .map(Into::into)
+            .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?
+    } else {
+        let items = load_prompt_skills(&state).await?;
+        items.into_iter()
+            .find(|item| item.id == prompt_skill_id)
+            .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?
+    };
     let next_scope = normalize_scope(
         request.scope.as_deref().unwrap_or(&existing.scope),
         request
@@ -414,9 +424,21 @@ async fn update_prompt_skill(
     updated.scope = next_scope.0;
     updated.agent_key = next_scope.1;
     updated.updated_at = Some(now_rfc3339());
-    items[index] = updated.clone();
-    store_prompt_skills(&state, &items).await?;
-    sync_prompt_skills_mirror(&state, &items).await?;
+    if state.db_pool.is_some() {
+        prompt_skills_db::update_prompt_skill(&state, &updated.clone().into())
+            .await
+            .map_err(|error| ApiError::Internal(error.to_string()))?
+            .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?;
+    } else {
+        let mut items = load_prompt_skills(&state).await?;
+        let index = items
+            .iter()
+            .position(|item| item.id == prompt_skill_id)
+            .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?;
+        items[index] = updated.clone();
+        store_prompt_skills(&state, &items).await?;
+        sync_prompt_skills_mirror(&state, &items).await?;
+    }
     Ok(Json(updated))
 }
 
@@ -424,14 +446,23 @@ async fn delete_prompt_skill(
     State(state): State<AppState>,
     AxumPath(prompt_skill_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let mut items = load_prompt_skills(&state).await?;
-    let before = items.len();
-    items.retain(|item| item.id != prompt_skill_id);
-    if items.len() == before {
-        return Err(ApiError::NotFound("prompt skill not found".to_string()));
+    if state.db_pool.is_some() {
+        let deleted = prompt_skills_db::delete_prompt_skill(&state, &prompt_skill_id)
+            .await
+            .map_err(|error| ApiError::Internal(error.to_string()))?;
+        if !deleted {
+            return Err(ApiError::NotFound("prompt skill not found".to_string()));
+        }
+    } else {
+        let mut items = load_prompt_skills(&state).await?;
+        let before = items.len();
+        items.retain(|item| item.id != prompt_skill_id);
+        if items.len() == before {
+            return Err(ApiError::NotFound("prompt skill not found".to_string()));
+        }
+        store_prompt_skills(&state, &items).await?;
+        sync_prompt_skills_mirror(&state, &items).await?;
     }
-    store_prompt_skills(&state, &items).await?;
-    sync_prompt_skills_mirror(&state, &items).await?;
     Ok(Json(json!({ "deleted": true })))
 }
 
@@ -441,10 +472,21 @@ async fn update_builtin_prompt_skill(
     Json(request): Json<PromptSkillBuiltinUpdateRequest>,
 ) -> Result<Json<BuiltinPromptSkillItem>, ApiError> {
     ensure_valid_agent_key(&agent_key)?;
-    let mut builtin_state = load_builtin_prompt_state(&state).await?;
-    builtin_state.insert(agent_key.clone(), request.is_active);
-    store_builtin_prompt_state(&state, &builtin_state).await?;
-    sync_builtin_prompt_state_mirror(&state, &builtin_state).await?;
+    if state.db_pool.is_some() {
+        prompt_skills_db::set_builtin_prompt_state(
+            &state,
+            &agent_key,
+            request.is_active,
+            PROMPT_SKILL_AGENT_KEYS,
+        )
+        .await
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    } else {
+        let mut builtin_state = load_builtin_prompt_state(&state).await?;
+        builtin_state.insert(agent_key.clone(), request.is_active);
+        store_builtin_prompt_state(&state, &builtin_state).await?;
+        sync_builtin_prompt_state_mirror(&state, &builtin_state).await?;
+    }
     Ok(Json(BuiltinPromptSkillItem {
         agent_key: agent_key.clone(),
         content: builtin_prompt_templates()
@@ -670,9 +712,10 @@ async fn prompt_skill_payload(
             }
             true
         })
-        .skip(offset)
-        .take(limit)
         .collect();
+    let total = filtered_items.len();
+    let filtered_items: Vec<PromptSkillRecord> =
+        filtered_items.into_iter().skip(offset).take(limit).collect();
 
     let builtin_items = PROMPT_SKILL_AGENT_KEYS
         .iter()
@@ -690,7 +733,7 @@ async fn prompt_skill_payload(
 
     Ok(PromptSkillListResponse {
         enabled: true,
-        total: filtered_items.len(),
+        total,
         limit,
         offset,
         supported_agent_keys: prompt_agent_keys(),
@@ -701,41 +744,11 @@ async fn prompt_skill_payload(
 
 async fn load_prompt_skills(state: &AppState) -> Result<Vec<PromptSkillRecord>, ApiError> {
     if let Some(pool) = &state.db_pool {
-        let bootstrap_user_id: Option<String> =
-            sqlx::query_scalar("select id from users order by created_at asc limit 1")
-                .fetch_optional(pool)
-                .await
-                .map_err(|error| ApiError::Internal(error.to_string()))?;
-        let Some(user_id) = bootstrap_user_id else {
-            return Ok(Vec::new());
-        };
-        let rows = sqlx::query(
-            r#"
-            select id, name, content, scope, agent_key, is_active, created_at, updated_at
-            from prompt_skills
-            where user_id = $1
-            order by created_at desc
-            "#,
-        )
-        .bind(user_id)
-        .fetch_all(pool)
-        .await
-        .map_err(|error| ApiError::Internal(error.to_string()))?;
-        return Ok(rows
-            .into_iter()
-            .map(|row| PromptSkillRecord {
-                id: row.try_get("id").unwrap_or_default(),
-                name: row.try_get("name").unwrap_or_default(),
-                content: row.try_get("content").unwrap_or_default(),
-                scope: row
-                    .try_get("scope")
-                    .unwrap_or_else(|_| PROMPT_SKILL_SCOPE_GLOBAL.to_string()),
-                agent_key: row.try_get("agent_key").ok(),
-                is_active: row.try_get("is_active").unwrap_or(true),
-                created_at: format_db_timestamp(row.try_get("created_at").ok()),
-                updated_at: Some(format_db_timestamp(row.try_get("updated_at").ok())),
-            })
-            .collect());
+        let _ = pool;
+        return prompt_skills_db::load_prompt_skills(state)
+            .await
+            .map(|items| items.into_iter().map(Into::into).collect())
+            .map_err(|error| ApiError::Internal(error.to_string()));
     }
 
     let _guard = state.file_store_lock.lock().await;
@@ -820,38 +833,10 @@ async fn sync_prompt_skills_mirror(
 
 async fn load_builtin_prompt_state(state: &AppState) -> Result<BTreeMap<String, bool>, ApiError> {
     if let Some(pool) = &state.db_pool {
-        let bootstrap_user_id: Option<String> =
-            sqlx::query_scalar("select id from users order by created_at asc limit 1")
-                .fetch_optional(pool)
-                .await
-                .map_err(|error| ApiError::Internal(error.to_string()))?;
-        let Some(user_id) = bootstrap_user_id else {
-            return Ok(default_builtin_prompt_state());
-        };
-        let row = sqlx::query("select other_config from user_configs where user_id = $1")
-            .bind(user_id)
-            .fetch_optional(pool)
+        let _ = pool;
+        return prompt_skills_db::load_builtin_prompt_state(state, PROMPT_SKILL_AGENT_KEYS)
             .await
-            .map_err(|error| ApiError::Internal(error.to_string()))?;
-        if let Some(row) = row {
-            let raw: String = row
-                .try_get("other_config")
-                .unwrap_or_else(|_| "{}".to_string());
-            let value: Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
-            if let Some(map) = value
-                .get(PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY)
-                .and_then(Value::as_object)
-            {
-                let mut state_map = default_builtin_prompt_state();
-                for (key, value) in map {
-                    if let Some(flag) = value.as_bool() {
-                        state_map.insert(key.clone(), flag);
-                    }
-                }
-                return Ok(state_map);
-            }
-        }
-        return Ok(default_builtin_prompt_state());
+            .map_err(|error| ApiError::Internal(error.to_string()));
     }
 
     let _guard = state.file_store_lock.lock().await;
@@ -876,19 +861,20 @@ async fn store_builtin_prompt_state(
     state: &AppState,
     values: &BTreeMap<String, bool>,
 ) -> Result<(), ApiError> {
-    if state.db_pool.is_none() {
-        let _guard = state.file_store_lock.lock().await;
-        let path = builtin_prompt_state_file_path(state);
-        ensure_file_storage_root(state)
-            .await
-            .map_err(|error| ApiError::Internal(error.to_string()))?;
-        fs::write(
-            &path,
-            serde_json::to_vec(values).map_err(|error| ApiError::Internal(error.to_string()))?,
-        )
+    if state.db_pool.is_some() {
+        return Ok(());
+    }
+    let _guard = state.file_store_lock.lock().await;
+    let path = builtin_prompt_state_file_path(state);
+    ensure_file_storage_root(state)
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
-    }
+    fs::write(
+        &path,
+        serde_json::to_vec(values).map_err(|error| ApiError::Internal(error.to_string()))?,
+    )
+    .await
+    .map_err(|error| ApiError::Internal(error.to_string()))?;
     Ok(())
 }
 
@@ -1585,10 +1571,34 @@ fn now_ts() -> i64 {
     OffsetDateTime::now_utc().unix_timestamp()
 }
 
-fn format_db_timestamp(value: Option<OffsetDateTime>) -> String {
-    value
-        .and_then(|item| item.format(&Rfc3339).ok())
-        .unwrap_or_else(now_rfc3339)
+impl From<prompt_skills_db::StoredPromptSkillRecord> for PromptSkillRecord {
+    fn from(value: prompt_skills_db::StoredPromptSkillRecord) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            content: value.content,
+            scope: value.scope,
+            agent_key: value.agent_key,
+            is_active: value.is_active,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+impl From<PromptSkillRecord> for prompt_skills_db::StoredPromptSkillRecord {
+    fn from(value: PromptSkillRecord) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            content: value.content,
+            scope: value.scope,
+            agent_key: value.agent_key,
+            is_active: value.is_active,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
 }
 
 #[cfg(test)]
