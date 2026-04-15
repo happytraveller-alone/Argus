@@ -877,3 +877,63 @@ Checklist 说明：`backend_old/app/db` 当前仍被 static/agent services、部
 - owner: Rust migration
 - delete gate:
   - 任务、finding、规则等搜索索引和查询模型迁到 Rust domain / db 层
+
+### 4. default skills catalog/detail now expose prompt-effective, while external-tools compat remains separate
+
+- current state:
+  - Rust `GET /api/v1/skills/catalog` 默认返回：
+    - scan-core entries
+    - `prompt-<agent_key>@effective` unified prompt entries
+  - Rust `GET /api/v1/skills/catalog?resource_mode=external_tools`
+    继续返回前端外部工具页当前依赖的 compat resource list：
+    - scan-core resource
+    - `prompt-builtin`
+    - `prompt-custom`
+  - Rust `GET /api/v1/skills/{id}` 已支持 prompt-effective detail：
+    - `display_name`
+    - `kind=prompt`
+    - `source=prompt_effective`
+    - `agent_key`
+    - `runtime_ready`
+    - `reason`
+    - `load_mode`
+    - `effective_content`
+    - `prompt_sources`
+  - effective prompt merge 现已固定：
+    - builtin template
+    - active global custom prompt
+    - active agent-specific custom prompt
+  - custom prompt merge 顺序已去存储后端耦合：
+    - `created_at` 升序
+    - `id` tie-break
+  - repo facts refresh：
+    - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+    - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- verification:
+  - `cd backend && cargo test --test skills_api`
+    => `6 passed`
+  - `cd backend && cargo test routes::skills::tests::build_prompt_effective_skill_sorts_custom_prompts_deterministically`
+    => `1 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => `FAILED`
+    - failing test:
+      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
+    - observed failure:
+      upload response status `400 != 200`
+    - note:
+      当前未把这条失败归因为本 slice；但在没有旧基线证明前，也不能把 backend gate 记成通过
+- current meaning:
+  - 这一步推进的是 Rust `skills` surface contract，不是 prompt skill storage ownership 完成
+  - 默认 unified catalog 与 external-tools compat catalog 现在边界明确，不再混成同一份 prompt 资源列表
+  - 这一步让 prompt-effective 进入 Rust 默认 detail surface，但并未改变 frontend 仍依赖 `/skills/resources/*` 的事实
+- still missing:
+  - DB 模式下 custom prompt skills 仍直接读 legacy `prompt_skills`
+  - DB 模式下 builtin prompt state 仍直接读 `user_configs.other_config`
+  - `use_prompt_skills -> config.prompt_skills` 的 live producer owner 仍未完全收口到 Rust
+  - `/skills/{id}/test` 与 `/tool-test` 仍只是 scan-core compat stub
+  - `skill_selection` / runtime session / guard / workflow registry 仍未进入 live code path
+- owner: Rust migration
+- target phase:
+  - E in progress

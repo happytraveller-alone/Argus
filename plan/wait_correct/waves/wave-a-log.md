@@ -589,6 +589,64 @@
 - 后续修复波次: Wave D / runtime orchestration cleanup
 - owner: Rust migration
 
+### 44. default `skills` catalog/detail now expose prompt-effective, while external-tools compat remains intact
+
+- endpoint / feature:
+  - `GET /api/v1/skills/catalog`
+  - `GET /api/v1/skills/{skill_id}`
+  - `GET /api/v1/skills/catalog?resource_mode=external_tools`
+- Python 旧行为:
+  - Python 时代的 prompt skill 逻辑没有 unified prompt-effective catalog/detail surface
+  - 当前前端外部工具页仍依赖 builtin/custom prompt resource 语义与 `/skills/resources/*`
+- Rust 当前行为:
+  - 默认 `skills/catalog` 已返回：
+    - scan-core entries
+    - `prompt-<agent_key>@effective` unified prompt entries
+  - `resource_mode=external_tools` 继续返回前端 compat resource list：
+    - scan-core resource
+    - `prompt-builtin`
+    - `prompt-custom`
+  - `skills/{id}` 已支持 prompt-effective detail，并返回：
+    - `display_name`
+    - `kind=prompt`
+    - `source=prompt_effective`
+    - `agent_key`
+    - `runtime_ready`
+    - `reason`
+    - `load_mode`
+    - `effective_content`
+    - `prompt_sources`
+  - custom prompt merge 顺序已显式稳定：
+    - `created_at` 升序
+    - `id` tie-break
+  - 默认 unified catalog 中的 prompt-effective entry 不再带可被前端 fallback 误消费的 `tool_type/tool_id`
+- operational verification:
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l`
+    => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l`
+    => `213`
+  - `cd backend && cargo test --test skills_api`
+    => `6 passed`
+  - `cd backend && cargo test routes::skills::tests::build_prompt_effective_skill_sorts_custom_prompts_deterministically`
+    => `1 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => `FAILED`
+    - failing test:
+      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
+    - observed failure:
+      upload response status `400 != 200`
+- 边界说明:
+  - 这一步推进的是 Rust `skills` HTTP contract，不是 prompt skill persistence ownership 完成
+  - legacy `prompt_skills` 与 `user_configs.other_config.promptSkillBuiltinState`
+    仍是当前 DB 模式下的 live 读路径
+  - 这一步不改 frontend 页面，不移除 `/skills/resources/*`，也不把 workflow registry / runtime session 带入本 slice
+  - 当前 backend 全量 gate 仍未通过，因此这条记录只表示实现与定向验证完成，不表示可提交
+- 后续修复波次:
+  - Wave E / prompt-skill persistence boundary
+- owner: Rust migration
+
 ### 14. Ledger refresh: Rust task routes are mounted, compose bridge vars are cleared
 
 - endpoint / feature:

@@ -89,6 +89,18 @@ struct SkillCatalogItem {
     scope: Option<String>,
     display_name: Option<String>,
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_ready: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -170,6 +182,46 @@ struct SkillDetailResponse {
     test_reason: Option<String>,
     default_test_project_name: String,
     tool_test_preset: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_ready: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effective_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_sources: Option<Vec<PromptSourceDetail>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct PromptSourceDetail {
+    source: String,
+    name: Option<String>,
+    scope: Option<String>,
+    content: String,
+}
+
+#[derive(Debug, Clone)]
+struct PromptEffectiveSkill {
+    skill_id: String,
+    name: String,
+    display_name: String,
+    summary: String,
+    selection_label: String,
+    runtime_ready: bool,
+    reason: String,
+    effective_content: String,
+    prompt_sources: Vec<PromptSourceDetail>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -178,8 +230,7 @@ struct SkillCatalogQuery {
     namespace: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
-    #[serde(rename = "resource_mode")]
-    _resource_mode: Option<String>,
+    resource_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -248,22 +299,28 @@ async fn get_skill_catalog(
     State(state): State<AppState>,
     Query(query): Query<SkillCatalogQuery>,
 ) -> Result<Json<SkillCatalogResponse>, ApiError> {
-    let prompt_payload = prompt_skill_payload(&state, None).await?;
     let mut items = scan_core_catalog_items()?;
-    items.extend(
-        prompt_payload
-            .builtin_items
-            .iter()
-            .cloned()
-            .map(skill_catalog_from_builtin),
-    );
-    items.extend(
-        prompt_payload
-            .items
-            .iter()
-            .cloned()
-            .map(skill_catalog_from_custom_prompt),
-    );
+    if query.resource_mode.as_deref() == Some("external_tools") {
+        let prompt_payload = prompt_skill_payload(&state, None).await?;
+        items.extend(
+            prompt_payload
+                .builtin_items
+                .iter()
+                .cloned()
+                .map(skill_catalog_from_builtin),
+        );
+        items.extend(
+            prompt_payload
+                .items
+                .iter()
+                .cloned()
+                .map(skill_catalog_from_custom_prompt),
+        );
+    } else {
+        let prompt_skills = load_prompt_skills(&state).await?;
+        let builtin_state = load_builtin_prompt_state(&state).await?;
+        items.extend(prompt_effective_catalog_items(&prompt_skills, &builtin_state)?);
+    }
 
     let keyword = query.q.unwrap_or_default().trim().to_lowercase();
     let namespace_filter = query.namespace.unwrap_or_default().trim().to_lowercase();
@@ -401,9 +458,16 @@ async fn update_builtin_prompt_skill(
 }
 
 async fn get_skill_detail(
+    State(state): State<AppState>,
     AxumPath(skill_id): AxumPath<String>,
 ) -> Result<Json<SkillDetailResponse>, ApiError> {
-    let detail = scan_core_skill_detail(&skill_id)?;
+    let detail = if let Some(agent_key) = parse_prompt_effective_skill_id(&skill_id) {
+        let prompt_skills = load_prompt_skills(&state).await?;
+        let builtin_state = load_builtin_prompt_state(&state).await?;
+        prompt_effective_skill_detail(agent_key, &prompt_skills, &builtin_state)?
+    } else {
+        scan_core_skill_detail(&skill_id)?
+    };
     Ok(Json(detail))
 }
 
@@ -921,6 +985,12 @@ fn scan_core_catalog_items() -> Result<Vec<SkillCatalogItem>, ApiError> {
                 scope: None,
                 display_name: Some((*name).to_string()),
                 content: None,
+                kind: None,
+                source: None,
+                selection_label: None,
+                runtime_ready: None,
+                reason: None,
+                load_mode: None,
             })
             .collect()
     } else {
@@ -990,6 +1060,12 @@ fn discover_scan_core_skills() -> Vec<SkillCatalogItem> {
                 scope: None,
                 display_name: Some(skill_id),
                 content: None,
+                kind: None,
+                source: None,
+                selection_label: None,
+                runtime_ready: None,
+                reason: None,
+                load_mode: None,
             });
         }
         if !items.is_empty() {
@@ -1047,6 +1123,15 @@ fn scan_core_skill_detail(skill_id: &str) -> Result<SkillDetailResponse, ApiErro
             "line_end": 1,
             "tool_input": {}
         })),
+        display_name: None,
+        kind: None,
+        source: None,
+        agent_key: None,
+        runtime_ready: None,
+        reason: None,
+        load_mode: None,
+        effective_content: None,
+        prompt_sources: None,
     })
 }
 
@@ -1075,6 +1160,12 @@ fn skill_catalog_from_builtin(item: BuiltinPromptSkillItem) -> SkillCatalogItem 
         scope: None,
         display_name: item.display_name.clone(),
         content: Some(item.content),
+        kind: None,
+        source: None,
+        selection_label: None,
+        runtime_ready: None,
+        reason: None,
+        load_mode: None,
     }
 }
 
@@ -1106,6 +1197,285 @@ fn skill_catalog_from_custom_prompt(item: PromptSkillRecord) -> SkillCatalogItem
         scope: Some(item.scope.clone()),
         display_name: Some(item.name.clone()),
         content: Some(item.content.clone()),
+        kind: None,
+        source: None,
+        selection_label: None,
+        runtime_ready: None,
+        reason: None,
+        load_mode: None,
+    }
+}
+
+fn prompt_effective_catalog_items(
+    custom_prompt_skills: &[PromptSkillRecord],
+    builtin_state: &BTreeMap<String, bool>,
+) -> Result<Vec<SkillCatalogItem>, ApiError> {
+    PROMPT_SKILL_AGENT_KEYS
+        .iter()
+        .map(|agent_key| {
+            let effective = build_prompt_effective_skill(agent_key, custom_prompt_skills, builtin_state)?;
+            Ok(SkillCatalogItem {
+                skill_id: effective.skill_id.clone(),
+                tool_type: String::new(),
+                tool_id: String::new(),
+                name: effective.name.clone(),
+                namespace: "prompt".to_string(),
+                summary: effective.summary.clone(),
+                category: "prompt".to_string(),
+                capabilities: vec![],
+                entrypoint: String::new(),
+                aliases: vec![],
+                has_scripts: false,
+                has_bin: false,
+                has_assets: false,
+                status_label: if effective.runtime_ready {
+                    "就绪".to_string()
+                } else {
+                    "未就绪".to_string()
+                },
+                is_enabled: effective.runtime_ready,
+                is_available: true,
+                resource_kind_label: "Prompt Effective Skill".to_string(),
+                detail_supported: true,
+                agent_key: Some((*agent_key).to_string()),
+                agent_label: Some(agent_label(agent_key).to_string()),
+                scope: None,
+                display_name: Some(effective.display_name.clone()),
+                content: None,
+                kind: Some("prompt".to_string()),
+                source: Some("prompt_effective".to_string()),
+                selection_label: Some(effective.selection_label.clone()),
+                runtime_ready: Some(effective.runtime_ready),
+                reason: Some(effective.reason.clone()),
+                load_mode: Some("summary_only".to_string()),
+            })
+        })
+        .collect()
+}
+
+fn prompt_effective_skill_detail(
+    agent_key: &str,
+    custom_prompt_skills: &[PromptSkillRecord],
+    builtin_state: &BTreeMap<String, bool>,
+) -> Result<SkillDetailResponse, ApiError> {
+    let effective = build_prompt_effective_skill(agent_key, custom_prompt_skills, builtin_state)?;
+    Ok(SkillDetailResponse {
+        enabled: true,
+        skill_id: effective.skill_id.clone(),
+        name: effective.name.clone(),
+        namespace: "prompt".to_string(),
+        summary: effective.summary.clone(),
+        category: "prompt".to_string(),
+        goal: "Use the runtime-effective prompt for the selected agent.".to_string(),
+        task_list: vec![
+            "Review the effective prompt sources".to_string(),
+            "Use the merged prompt during agent execution".to_string(),
+        ],
+        input_checklist: vec!["Select one supported prompt agent key".to_string()],
+        example_input: format!("load {}", effective.skill_id),
+        pitfalls: vec![
+            "Inactive or empty custom prompt rows are ignored.".to_string(),
+            "Builtin prompt state still mirrors into legacy user_configs.other_config.".to_string(),
+        ],
+        sample_prompts: vec![format!("show {}", effective.skill_id)],
+        entrypoint: String::new(),
+        mirror_dir: String::new(),
+        source_root: String::new(),
+        source_dir: String::new(),
+        source_skill_md: String::new(),
+        aliases: vec![],
+        has_scripts: false,
+        has_bin: false,
+        has_assets: false,
+        files_count: 0,
+        workflow_content: None,
+        workflow_truncated: Some(false),
+        workflow_error: None,
+        test_supported: false,
+        test_mode: "prompt_effective".to_string(),
+        test_reason: Some("prompt-effective entries do not expose the scan-core SSE test contract".to_string()),
+        default_test_project_name: "libplist".to_string(),
+        tool_test_preset: None,
+        display_name: Some(effective.display_name),
+        kind: Some("prompt".to_string()),
+        source: Some("prompt_effective".to_string()),
+        agent_key: Some(agent_key.to_string()),
+        runtime_ready: Some(effective.runtime_ready),
+        reason: Some(effective.reason),
+        load_mode: Some("full".to_string()),
+        effective_content: Some(effective.effective_content),
+        prompt_sources: Some(effective.prompt_sources),
+    })
+}
+
+fn build_prompt_effective_skill(
+    agent_key: &str,
+    custom_prompt_skills: &[PromptSkillRecord],
+    builtin_state: &BTreeMap<String, bool>,
+) -> Result<PromptEffectiveSkill, ApiError> {
+    ensure_valid_agent_key(agent_key)?;
+
+    let builtin_templates = builtin_prompt_templates();
+    let mut fragments = Vec::new();
+    let mut prompt_sources = Vec::new();
+    let mut reason_parts = Vec::new();
+
+    if builtin_state.get(agent_key).copied().unwrap_or(true) {
+        if let Some(content) = builtin_templates
+            .get(agent_key)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+        {
+            fragments.push(content.to_string());
+            prompt_sources.push(PromptSourceDetail {
+                source: "builtin_template".to_string(),
+                name: Some(format!("Builtin Prompt · {}", agent_label(agent_key))),
+                scope: None,
+                content: content.to_string(),
+            });
+            reason_parts.push("builtin_template".to_string());
+        }
+    }
+
+    let ordered_prompt_skills = sorted_prompt_skills_for_merge(custom_prompt_skills);
+
+    let global_sources: Vec<PromptSourceDetail> = ordered_prompt_skills
+        .iter()
+        .filter(|item| item.is_active)
+        .filter_map(|item| build_custom_prompt_source(item, Some(agent_key)))
+        .filter(|item| item.source == "global_custom")
+        .collect();
+    if !global_sources.is_empty() {
+        fragments.push(join_prompt_source_content(&global_sources));
+        prompt_sources.extend(global_sources);
+        reason_parts.push("global_custom".to_string());
+    }
+
+    let agent_specific_sources: Vec<PromptSourceDetail> = ordered_prompt_skills
+        .iter()
+        .filter(|item| item.is_active)
+        .filter_map(|item| build_custom_prompt_source(item, Some(agent_key)))
+        .filter(|item| item.source == "agent_specific_custom")
+        .collect();
+    if !agent_specific_sources.is_empty() {
+        fragments.push(join_prompt_source_content(&agent_specific_sources));
+        prompt_sources.extend(agent_specific_sources);
+        reason_parts.push("agent_specific_custom".to_string());
+    }
+
+    let effective_content = fragments
+        .into_iter()
+        .filter(|fragment| !fragment.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let runtime_ready = !effective_content.trim().is_empty();
+    let reason = if runtime_ready {
+        reason_parts.join("+")
+    } else {
+        "no_active_prompt_sources".to_string()
+    };
+    let display_name = format!("Effective Prompt · {}", agent_label(agent_key));
+    let summary = if runtime_ready {
+        format!(
+            "Effective prompt summary for {} using {} active source(s).",
+            agent_label(agent_key),
+            prompt_sources.len()
+        )
+    } else {
+        format!("No active prompt sources for {}.", agent_label(agent_key))
+    };
+
+    Ok(PromptEffectiveSkill {
+        skill_id: format!("prompt-{agent_key}@effective"),
+        name: format!("prompt-{agent_key}@effective"),
+        display_name,
+        summary,
+        selection_label: format!("prompt:{agent_key}:effective"),
+        runtime_ready,
+        reason,
+        effective_content,
+        prompt_sources,
+    })
+}
+
+fn sorted_prompt_skills_for_merge(
+    custom_prompt_skills: &[PromptSkillRecord],
+) -> Vec<&PromptSkillRecord> {
+    let mut ordered = custom_prompt_skills.iter().collect::<Vec<_>>();
+    ordered.sort_by(|left, right| {
+        prompt_skill_created_at_sort_key(left)
+            .cmp(&prompt_skill_created_at_sort_key(right))
+            .then_with(|| left.created_at.cmp(&right.created_at))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    ordered
+}
+
+fn prompt_skill_created_at_sort_key(item: &PromptSkillRecord) -> Option<i128> {
+    OffsetDateTime::parse(&item.created_at, &Rfc3339)
+        .ok()
+        .map(|value| {
+            i128::from(value.unix_timestamp()) * 1_000_000_000
+                + i128::from(value.nanosecond())
+        })
+}
+
+fn build_custom_prompt_source(
+    item: &PromptSkillRecord,
+    target_agent_key: Option<&str>,
+) -> Option<PromptSourceDetail> {
+    let content = render_custom_prompt_content(item)?;
+    match item.scope.as_str() {
+        PROMPT_SKILL_SCOPE_GLOBAL => Some(PromptSourceDetail {
+            source: "global_custom".to_string(),
+            name: Some(item.name.clone()),
+            scope: Some(item.scope.clone()),
+            content,
+        }),
+        PROMPT_SKILL_SCOPE_AGENT_SPECIFIC => {
+            if item.agent_key.as_deref() != target_agent_key {
+                return None;
+            }
+            Some(PromptSourceDetail {
+                source: "agent_specific_custom".to_string(),
+                name: Some(item.name.clone()),
+                scope: Some(item.scope.clone()),
+                content,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn render_custom_prompt_content(item: &PromptSkillRecord) -> Option<String> {
+    let content = item.content.trim();
+    if content.is_empty() {
+        return None;
+    }
+    let name = item.name.trim();
+    Some(if name.is_empty() {
+        content.to_string()
+    } else {
+        format!("[{name}] {content}")
+    })
+}
+
+fn join_prompt_source_content(items: &[PromptSourceDetail]) -> String {
+    items.iter()
+        .map(|item| item.content.as_str())
+        .filter(|content| !content.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_prompt_effective_skill_id(skill_id: &str) -> Option<&str> {
+    let agent_key = skill_id
+        .strip_prefix("prompt-")?
+        .strip_suffix("@effective")?;
+    if ensure_valid_agent_key(agent_key).is_ok() {
+        Some(agent_key)
+    } else {
+        None
     }
 }
 
@@ -1219,4 +1589,87 @@ fn format_db_timestamp(value: Option<OffsetDateTime>) -> String {
     value
         .and_then(|item| item.format(&Rfc3339).ok())
         .unwrap_or_else(now_rfc3339)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_prompt_effective_skill_sorts_custom_prompts_deterministically() {
+        let custom_prompt_skills = vec![
+            PromptSkillRecord {
+                id: "agent-z".to_string(),
+                name: "Agent Z".to_string(),
+                content: "Agent-specific block.".to_string(),
+                scope: PROMPT_SKILL_SCOPE_AGENT_SPECIFIC.to_string(),
+                agent_key: Some("analysis".to_string()),
+                is_active: true,
+                created_at: "2026-04-15T00:00:03Z".to_string(),
+                updated_at: None,
+            },
+            PromptSkillRecord {
+                id: "global-b".to_string(),
+                name: "Global B".to_string(),
+                content: "Second global block.".to_string(),
+                scope: PROMPT_SKILL_SCOPE_GLOBAL.to_string(),
+                agent_key: None,
+                is_active: true,
+                created_at: "2026-04-15T00:00:02Z".to_string(),
+                updated_at: None,
+            },
+            PromptSkillRecord {
+                id: "global-earliest".to_string(),
+                name: "Global Earliest".to_string(),
+                content: "First global block.".to_string(),
+                scope: PROMPT_SKILL_SCOPE_GLOBAL.to_string(),
+                agent_key: None,
+                is_active: true,
+                created_at: "2026-04-15T00:00:01Z".to_string(),
+                updated_at: None,
+            },
+            PromptSkillRecord {
+                id: "global-a".to_string(),
+                name: "Global A".to_string(),
+                content: "Tie-break global block.".to_string(),
+                scope: PROMPT_SKILL_SCOPE_GLOBAL.to_string(),
+                agent_key: None,
+                is_active: true,
+                created_at: "2026-04-15T00:00:02Z".to_string(),
+                updated_at: None,
+            },
+        ];
+
+        let effective =
+            build_prompt_effective_skill("analysis", &custom_prompt_skills, &default_builtin_prompt_state())
+                .expect("effective prompt should build");
+
+        let effective_content = effective.effective_content;
+        let builtin_index = effective_content
+            .find("围绕单风险点做证据闭环")
+            .expect("builtin prompt should be first");
+        let global_earliest_index = effective_content
+            .find("[Global Earliest] First global block.")
+            .expect("earliest global prompt should be included");
+        let global_a_index = effective_content
+            .find("[Global A] Tie-break global block.")
+            .expect("tied global prompt should use id tie-break");
+        let global_b_index = effective_content
+            .find("[Global B] Second global block.")
+            .expect("later tied global prompt should follow id tie-break");
+        let agent_index = effective_content
+            .find("[Agent Z] Agent-specific block.")
+            .expect("agent-specific prompt should be included");
+
+        assert!(builtin_index < global_earliest_index);
+        assert!(global_earliest_index < global_a_index);
+        assert!(global_a_index < global_b_index);
+        assert!(global_b_index < agent_index);
+
+        let prompt_sources = effective.prompt_sources;
+        assert_eq!(prompt_sources[1].name.as_deref(), Some("Global Earliest"));
+        assert_eq!(prompt_sources[2].name.as_deref(), Some("Global A"));
+        assert_eq!(prompt_sources[3].name.as_deref(), Some("Global B"));
+        assert_eq!(prompt_sources[4].name.as_deref(), Some("Agent Z"));
+    }
 }

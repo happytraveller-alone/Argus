@@ -1514,3 +1514,95 @@ Rust 替代 `backend_old/app/db` 的全部 ownership 需要按照以下八个门
   - `flow_parser_runtime.py`：已删除，本 slice 完成
 - 下一刀：
   - 继续收口顶层 flow/runtime helper，或转入 `json_safe.py` 等 live bridge
+
+### 2026-04-15 Batch 4 / Slice 13
+
+- 已完成：
+  - Rust `GET /api/v1/skills/catalog` 默认语义已从
+    `scan-core + prompt-builtin/custom resource list`
+    切到 `scan-core + prompt-<agent_key>@effective` unified catalog
+  - Rust `GET /api/v1/skills/catalog?resource_mode=external_tools`
+    继续保留前端外部工具页所依赖的 compat resource shape：
+    - scan-core resource
+    - `prompt-builtin`
+    - `prompt-custom`
+  - Rust `GET /api/v1/skills/{skill_id}` 已支持：
+    - `prompt-recon@effective`
+    - `prompt-business_logic_recon@effective`
+    - `prompt-analysis@effective`
+    - `prompt-business_logic_analysis@effective`
+    - `prompt-verification@effective`
+  - prompt-effective detail 现已返回并显式区分：
+    - `display_name`
+    - `kind=prompt`
+    - `source=prompt_effective`
+    - `agent_key`
+    - `runtime_ready`
+    - `reason`
+    - `load_mode`
+    - `effective_content`
+    - `prompt_sources`
+  - effective prompt 合成顺序已固定为：
+    - builtin template
+    - active global custom prompt
+    - active agent-specific custom prompt
+  - custom prompt 合并顺序不再依赖存储后端返回顺序：
+    - 先按 `created_at` 升序
+    - 再按 `id` 做 tie-break
+  - Rust 测试已补：
+    - unified catalog 暴露五个 prompt-effective entry
+    - `resource_mode=external_tools` compat contract
+    - prompt-effective detail merge
+    - `no_active_prompt_sources` 降级
+    - merge 排序稳定性单测
+- repo facts refresh：
+  - `find backend_old -maxdepth 1 -type f -name '*.py' | wc -l` => `0`
+  - `find backend_old/app -type f -name '*.py' ! -path 'backend_old/app/api/*' | wc -l` => `213`
+- 验证命令：
+  - `cd backend && cargo test --test skills_api`
+    => `6 passed`
+  - `cd backend && cargo test routes::skills::tests::build_prompt_effective_skill_sorts_custom_prompts_deterministically`
+    => `1 passed`
+  - `cd backend && cargo build --bin backend-rust`
+    => exit `0`
+  - `cd backend && cargo test`
+    => `FAILED`
+    - 失败用例：
+      `tests/projects_api.rs::download_project_archive_supports_utf8_filenames`
+    - 断言：
+      upload 响应状态 `400 != 200`
+    - 当前结论：
+      本 slice 的直接改动仅落在 `backend/src/routes/skills.rs`
+      与 `backend/tests/skills_api.rs`，未触及 `projects` 路由和
+      `projects_api` 测试，但由于没有旧基线对照，不能把这条失败
+      记成“已确认无关”；因此当前 backend commit gate 仍未通过
+- 当前意义：
+  - 这一步把 Rust `skills` 默认 HTTP contract 往
+    `prompt-effective unified catalog/detail` 推进了一刀
+  - 这一步显式拆开了：
+    - 默认 unified catalog
+    - 前端 external-tools compat resource catalog
+  - 这一步仍然只是 Rust `skills` surface contract 收口，
+    不是 prompt skill storage ownership 完成
+  - legacy `prompt_skills` 与 `user_configs.other_config.promptSkillBuiltinState`
+    仍是当前 DB 模式下的 live 读路径
+- 仍未完成：
+  - prompt skill storage 尚未迁成 Rust-native source of truth
+  - builtin prompt state 尚未迁成 Rust-native source of truth
+  - `use_prompt_skills -> config.prompt_skills` 的 live 生产链路 owner
+    还未完全收口到 Rust
+  - `/skills/{id}/test` 与 `/tool-test` 仍是 scan-core SSE compat stub，
+    不是 prompt-effective runtime/skill-test takeover
+  - `skill_selection` / runtime session / guard / workflow registry
+    仍不在本 slice 范围
+- 删除条件：
+  - `skills` 只有在 prompt skill storage、builtin prompt state、
+    runtime injection producer、skill test runner / workflow contract
+    都完成 Rust-owned 后，才能算“吃掉”
+- 下一刀：
+  - 优先收回 prompt skill persistence boundary：
+    - custom prompt skill storage
+    - builtin prompt state
+  - 并把 legacy `prompt_skills` /
+    `user_configs.other_config.promptSkillBuiltinState`
+    降级为可删 compat mirror
