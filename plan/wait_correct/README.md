@@ -1,6 +1,6 @@
 # Legacy Raw Reference
 
-`plan/wait_correct/` 现在保留为 raw ledger / CSV / wave 记录兼容路径，不再是 canonical 迁移主入口。
+`plan/wait_correct/` 现在只保留最小 raw reference，不再是 canonical 迁移主入口。
 
 请优先阅读：
 
@@ -10,6 +10,11 @@
 这里仍保留的内容主要用于：
 
 - route inventory
-- raw non-api ledger
+- generated API contract diff 输出目录
 - wave 逐条记录
-- contract / stability / tooling 原始参考
+
+已经删除的历史遗留内容包括：
+
+- 只剩模板说明、没有实际数据沉淀的占位 README
+- 已被 canonical 文档吸收的 non-api summary
+- 不再使用的 template 文件

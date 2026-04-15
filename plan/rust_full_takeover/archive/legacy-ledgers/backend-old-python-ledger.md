@@ -523,7 +523,8 @@
 ### 每次执行后必须回写
 
 - 本计划文件
-- `plan/wait_correct/non-api-python/non-api-python-summary.md`
+- `plan/rust_full_takeover/03-current-state-and-ledger.md`
+- `plan/rust_full_takeover/04-slices-and-progress-log.md`
 - 对应的 `plan/wait_correct/waves/*.md`
 
 ## 本次基线

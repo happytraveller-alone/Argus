@@ -2,6 +2,25 @@
 
 ## 最近完成的工作类型
 
+### 文档树裁剪 / 历史遗留清理
+
+- `wait_correct` 收缩为最小 raw reference 集：
+  - `README.md`
+  - `api-contract/README.md`
+  - `route-inventory/*`
+  - `waves/wave-a-log.md`
+- 已删除只剩模板说明、没有实际沉淀内容的占位文档：
+  - `behavior-diff/README.md`
+  - `perf/README.md`
+  - `stability/README.md`
+  - `tooling/README.md`
+  - `non-api-python/*`
+  - `api-contract/contract-diff-template.md`
+  - `route-inventory/route-inventory-template.csv`
+  - `waves/wave-template.md`
+- `rust_full_takeover/archive/skill-runtime/*` 这组专门 skill-runtime 长计划已删除，避免和 canonical 文档重复
+- `reference/README.md`、`wait_correct/README.md`、`05-validation-and-gates.md` 已同步改成新入口和新回写规则
+
 ### Canonical 文档重构 / 剩余功能台账刷新
 
 - `rust_full_takeover` 文档明确区分：

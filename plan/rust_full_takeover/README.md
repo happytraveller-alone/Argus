@@ -58,13 +58,13 @@
 
 ## 兼容说明
 
-- `plan/wait_correct/` 暂时保留为 raw ledger / CSV / wave 记录路径。
+- `plan/wait_correct/` 仅保留最小 raw reference：route inventory、contract diff 输出目录、wave log。
 - 旧的 `backend_old_python_migration` / `skill_manage` 长账本已并入 `plan/rust_full_takeover/`，不再作为独立 canonical 入口。
 - `wait_correct/*` 中的个别数字、路径和镜像入口说明可能是历史快照；当前真相以本目录下 canonical 文档为准。
 
-## 归档入口
+## 保留参考
 
 - [archive/legacy-ledgers/backend-old-python-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/legacy-ledgers/backend-old-python-ledger.md)
-- [archive/skill-runtime/unified-skill-runtime-plan.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/skill-runtime/unified-skill-runtime-plan.md)
-- [archive/skill-runtime/unified-skill-runtime-execution.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/skill-runtime/unified-skill-runtime-execution.md)
 - [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)
+
+专门的 `skill-runtime` 长计划已视为历史重复文档，不再单独保留；相关结论已经收敛进当前 canonical 文档。

@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `wait_correct` 文档树已继续裁剪为最小 raw reference：
+  - 保留 `route-inventory/*`、`api-contract/README.md`、`waves/wave-a-log.md`
+  - 删除 `behavior-diff/`、`perf/`、`stability/`、`tooling/`、`non-api-python/` 等仅剩模板/占位说明的陈旧文档
+  - 删除 `contract-diff-template.md`、`route-inventory-template.csv`、`wave-template.md`
+- `rust_full_takeover/archive/skill-runtime/*` 专门 skill-runtime 长计划已删除，相关结论已并入 canonical 文档
 - Canonical 迁移文档已重构为 `plan/rust_full_takeover/*` 主索引：
   - 统计口径明确拆成 `backend_old/app` runtime core 与 `alembic / scripts / release preflight` retirement tail
   - `08-remaining-python-function-inventory.md` 改成自洽的功能分组台账

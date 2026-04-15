@@ -67,6 +67,7 @@ uv run --project . pytest -s ...
 
 - [03-current-state-and-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/03-current-state-and-ledger.md)
 - [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md)
-- raw ledger：
-  - [wait_correct/non-api-python/non-api-python-summary.md](/home/xyf/audittool_personal/plan/wait_correct/non-api-python/non-api-python-summary.md)
+- 如涉及 route ownership / contract：
+  - [wait_correct/route-inventory/python-endpoints-summary.md](/home/xyf/audittool_personal/plan/wait_correct/route-inventory/python-endpoints-summary.md)
+- 如涉及逐波次 raw 记录：
   - [wait_correct/waves/wave-a-log.md](/home/xyf/audittool_personal/plan/wait_correct/waves/wave-a-log.md)
