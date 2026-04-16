@@ -2,9 +2,11 @@
 
 ## 当前最优先 7 项
 
-### 1. 定位 `config.prompt_skills` 的 live producer owner
+### 1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover
 
-这是当前最重要的 open item，因为 prompt skill persistence 已 Rust-owned，但 runtime producer 还没明确 Rust-owned。
+prompt skill persistence 与 agent-task setup 已 Rust-owned；
+当前需要确认的是 retained Python consumer 是否仍需要 `config.prompt_skills` compat 投影，
+以及这条 compat 面何时可以删除。
 
 ### 2. 审计 retained `tool_runtime` 核心 cluster
 
@@ -74,7 +76,7 @@
 
 如果后续继续按功能逐一接管，建议按照下面顺序推进：
 
-1. prompt skill runtime producer
+1. prompt skill runtime compat projection / consumer cutover
 2. tool runtime retained core
 3. scanner / workspace / queue / bootstrap retained runtime
 4. agent orchestration / state / support runtime

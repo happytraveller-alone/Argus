@@ -148,7 +148,8 @@
 
 当前关键 open item：
 
-- `config.prompt_skills` 的 live producer owner 未明确
+- Rust 已在 agent-task creation 侧生成 `prompt_skill_runtime` snapshot；
+- retained Python consumer 是否还需要 `config.prompt_skills` compat projection 仍待收口
 
 目标状态：
 
@@ -363,7 +364,7 @@
 
 ## 当前推荐推进顺序
 
-1. `config.prompt_skills` producer owner
+1. `prompt_skill_runtime` snapshot downstream consumer cutover / `config.prompt_skills` 退出路径
 2. `tool_runtime` retained core
 3. `scanner / queue / workspace / bootstrap`
 4. `agent orchestration / state / support`

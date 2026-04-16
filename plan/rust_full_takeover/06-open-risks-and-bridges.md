@@ -4,7 +4,7 @@
 
 - projects mirror
 - system-config mirror
-- prompt skill mirror
+- prompt skill mirror / `prompt_skill_runtime` -> `config.prompt_skills` compat projection
 - legacy schema / prompt-skill compat backfill
 - runner preflight / startup 中仍保留的 Python-aware 兼容逻辑
 
@@ -29,11 +29,12 @@ Rust `projects` surface 当前是 ZIP-only。
 这属于 contract narrowing，不只是内部实现细节。
 如果要继续沿着这个方向收口，文档、前端类型和验证门都必须同步。
 
-### Prompt Skill Runtime Producer 未明确
+### Prompt Skill Runtime Compat Projection 仍未收口
 
-当前最重要的 open item：
+当前 prompt skill 相关的 open item 已收窄为：
 
-- 谁在 live 链路里把 Rust-side prompt skill 状态产生成 `config.prompt_skills`
+- retained Python consumer 是否继续依赖 `config.prompt_skills`
+- `prompt_skill_runtime` snapshot 是否还需要投影成 Python-side compat config
 
 ### Health 200 != Ready
 
@@ -49,7 +50,7 @@ Rust `projects` surface 当前是 ZIP-only。
 
 只有下面这些项同时过门，才可以把“Rust 已接管全部 Python”当成接近完成：
 
-1. `config.prompt_skills` producer 与 prompt injection 主链 Rust-owned。
+1. agent-task creation 写入 Rust-owned `prompt_skill_runtime` snapshot，且 `config.prompt_skills` 只剩 compat projection 或已退出主链。
 2. `tool_runtime`、scanner/bootstrap、agent orchestration 主链不再依赖 retained Python。
 3. `/health` JSON 为 `ok`，而不是仅 HTTP `200`。
 4. agent/static 真路径 smoke 与 runner preflight 成功。

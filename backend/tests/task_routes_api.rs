@@ -669,6 +669,297 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
 }
 
 #[tokio::test]
+async fn create_agent_task_snapshots_enabled_prompt_skill_runtime_in_audit_scope() {
+    let state = AppState::from_config(isolated_test_config("agent-task-prompt-runtime-enabled"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    for request_body in [
+        json!({
+            "name": "Global Analysis Prompt",
+            "content": "Global analysis instructions.",
+            "scope": "global",
+            "is_active": true
+        }),
+        json!({
+            "name": "Agent Analysis Prompt",
+            "content": "Agent-specific analysis instructions.",
+            "scope": "agent_specific",
+            "agent_key": "analysis",
+            "is_active": true
+        }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/skills/prompt-skills")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "prompt-runtime-enabled",
+                        "description": "snapshot effective prompt skills when enabled",
+                        "max_iterations": 2,
+                        "use_prompt_skills": true,
+                        "audit_scope": {
+                            "custom_flag": true
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(create_json["audit_scope"]["custom_flag"], true);
+    let prompt_skill_runtime = &create_json["audit_scope"]["prompt_skill_runtime"];
+    assert_eq!(
+        prompt_skill_runtime["source"],
+        "rust_prompt_effective_snapshot"
+    );
+    assert_eq!(prompt_skill_runtime["requested"], true);
+    assert_eq!(prompt_skill_runtime["enabled"], true);
+
+    let agent_keys = prompt_skill_runtime["agent_keys"].as_array().unwrap();
+    assert_eq!(agent_keys.len(), 5);
+    assert!(agent_keys
+        .iter()
+        .any(|agent_key| agent_key.as_str() == Some("analysis")));
+
+    let effective_analysis = &prompt_skill_runtime["effective_by_agent"]["analysis"];
+    assert_eq!(effective_analysis["runtime_ready"], true);
+    assert_eq!(
+        effective_analysis["reason"],
+        "builtin_template+global_custom+agent_specific_custom"
+    );
+
+    let effective_content = effective_analysis["effective_content"].as_str().unwrap();
+    let builtin_index = effective_content
+        .find("围绕单风险点做证据闭环")
+        .expect("builtin analysis prompt should be included");
+    let global_index = effective_content
+        .find("Global analysis instructions.")
+        .expect("global analysis prompt should be included");
+    let agent_index = effective_content
+        .find("Agent-specific analysis instructions.")
+        .expect("agent analysis prompt should be included");
+    assert!(builtin_index < global_index);
+    assert!(global_index < agent_index);
+}
+
+#[tokio::test]
+async fn create_agent_task_snapshots_disabled_prompt_skill_runtime_in_audit_scope() {
+    let state = AppState::from_config(isolated_test_config("agent-task-prompt-runtime-disabled"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "prompt-runtime-disabled",
+                        "description": "snapshot effective prompt skills when disabled",
+                        "max_iterations": 2,
+                        "use_prompt_skills": false,
+                        "audit_scope": {
+                            "secondary_flag": "kept"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(create_json["audit_scope"]["secondary_flag"], "kept");
+    let prompt_skill_runtime = &create_json["audit_scope"]["prompt_skill_runtime"];
+    assert_eq!(
+        prompt_skill_runtime["source"],
+        "rust_prompt_effective_snapshot"
+    );
+    assert_eq!(prompt_skill_runtime["requested"], false);
+    assert_eq!(prompt_skill_runtime["enabled"], false);
+    assert_eq!(prompt_skill_runtime["reason"], "disabled_by_request");
+    assert_eq!(prompt_skill_runtime["effective_by_agent"], json!({}));
+}
+
+#[tokio::test]
+async fn create_agent_task_defaults_prompt_skill_runtime_to_disabled_when_flag_is_omitted() {
+    let state = AppState::from_config(isolated_test_config(
+        "agent-task-prompt-runtime-default-disabled",
+    ))
+    .await
+    .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "prompt-runtime-default-disabled",
+                        "description": "legacy default compatibility",
+                        "max_iterations": 2,
+                        "audit_scope": {
+                            "custom_flag": true
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    let prompt_skill_runtime = &create_json["audit_scope"]["prompt_skill_runtime"];
+    assert_eq!(prompt_skill_runtime["requested"], false);
+    assert_eq!(prompt_skill_runtime["enabled"], false);
+    assert_eq!(prompt_skill_runtime["reason"], "disabled_by_request");
+    assert_eq!(prompt_skill_runtime["effective_by_agent"], json!({}));
+}
+
+#[tokio::test]
+async fn create_agent_task_rejects_non_object_audit_scope() {
+    let state = AppState::from_config(isolated_test_config("agent-task-invalid-audit-scope"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "invalid-audit-scope",
+                        "description": "invalid audit scope contract",
+                        "max_iterations": 2,
+                        "use_prompt_skills": true,
+                        "audit_scope": "not-an-object"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::BAD_REQUEST);
+    let error_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        error_json["error"],
+        "audit_scope must be an object when provided, got string"
+    );
+}
+
+#[tokio::test]
+async fn create_agent_task_rejects_null_audit_scope() {
+    let state = AppState::from_config(isolated_test_config("agent-task-null-audit-scope"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "null-audit-scope",
+                        "description": "null audit scope contract",
+                        "max_iterations": 2,
+                        "audit_scope": Value::Null
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::BAD_REQUEST);
+    let error_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        error_json["error"],
+        "audit_scope must be an object when provided, got null"
+    );
+}
+
+#[tokio::test]
 async fn agent_task_report_exports_cover_task_and_finding_downloads() {
     let state = AppState::from_config(isolated_test_config("agent-task-report-exports"))
         .await

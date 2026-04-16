@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
+    routes::skills,
     state::AppState,
 };
 
@@ -134,7 +135,14 @@ pub async fn create_agent_task(
         });
     let exclude_patterns = payload.get("exclude_patterns").and_then(string_array);
     let target_files = payload.get("target_files").and_then(string_array);
-    let audit_scope = payload.get("audit_scope").cloned();
+    let use_prompt_skills = payload
+        .get("use_prompt_skills")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let prompt_skill_runtime =
+        skills::prompt_skill_runtime_snapshot(&state, use_prompt_skills).await?;
+    let audit_scope =
+        prepare_audit_scope(payload.get("audit_scope").cloned(), prompt_skill_runtime)?;
     let max_iterations = payload
         .get("max_iterations")
         .and_then(|value| value.as_i64())
@@ -1682,6 +1690,36 @@ fn percent_encode_utf8(text: &str) -> String {
         }
     }
     encoded
+}
+
+fn prepare_audit_scope(
+    audit_scope: Option<Value>,
+    prompt_skill_runtime: Value,
+) -> Result<Option<Value>, ApiError> {
+    match audit_scope {
+        Some(Value::Object(mut object)) => {
+            object.insert("prompt_skill_runtime".to_string(), prompt_skill_runtime);
+            Ok(Some(Value::Object(object)))
+        }
+        Some(other) => Err(ApiError::BadRequest(format!(
+            "audit_scope must be an object when provided, got {}",
+            value_kind(&other),
+        ))),
+        _ => Ok(Some(json!({
+            "prompt_skill_runtime": prompt_skill_runtime,
+        }))),
+    }
+}
+
+fn value_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
 }
 
 fn agent_task_value(record: &task_state::AgentTaskRecord) -> Value {

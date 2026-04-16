@@ -25,6 +25,7 @@ use crate::{db::prompt_skills as prompt_skills_db, error::ApiError, state::AppSt
 const PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY: &str = "promptSkillBuiltinState";
 const PROMPT_SKILL_SCOPE_GLOBAL: &str = "global";
 const PROMPT_SKILL_SCOPE_AGENT_SPECIFIC: &str = "agent_specific";
+const PROMPT_SKILL_RUNTIME_SOURCE: &str = "rust_prompt_effective_snapshot";
 const PROMPT_SKILL_AGENT_KEYS: &[&str] = &[
     "recon",
     "business_logic_recon",
@@ -224,6 +225,26 @@ struct PromptEffectiveSkill {
     prompt_sources: Vec<PromptSourceDetail>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct PromptSkillRuntimeSnapshot {
+    source: String,
+    requested: bool,
+    enabled: bool,
+    reason: String,
+    agent_keys: Vec<String>,
+    effective_by_agent: BTreeMap<String, PromptEffectiveRuntimeEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct PromptEffectiveRuntimeEntry {
+    runtime_ready: bool,
+    reason: String,
+    effective_content: String,
+    prompt_sources: Vec<PromptSourceDetail>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct SkillCatalogQuery {
     q: Option<String>,
@@ -319,7 +340,10 @@ async fn get_skill_catalog(
     } else {
         let prompt_skills = load_prompt_skills(&state).await?;
         let builtin_state = load_builtin_prompt_state(&state).await?;
-        items.extend(prompt_effective_catalog_items(&prompt_skills, &builtin_state)?);
+        items.extend(prompt_effective_catalog_items(
+            &prompt_skills,
+            &builtin_state,
+        )?);
     }
 
     let keyword = query.q.unwrap_or_default().trim().to_lowercase();
@@ -400,7 +424,8 @@ async fn update_prompt_skill(
             .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?
     } else {
         let items = load_prompt_skills(&state).await?;
-        items.into_iter()
+        items
+            .into_iter()
             .find(|item| item.id == prompt_skill_id)
             .ok_or_else(|| ApiError::NotFound("prompt skill not found".to_string()))?
     };
@@ -714,8 +739,11 @@ async fn prompt_skill_payload(
         })
         .collect();
     let total = filtered_items.len();
-    let filtered_items: Vec<PromptSkillRecord> =
-        filtered_items.into_iter().skip(offset).take(limit).collect();
+    let filtered_items: Vec<PromptSkillRecord> = filtered_items
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
 
     let builtin_items = PROMPT_SKILL_AGENT_KEYS
         .iter()
@@ -1199,7 +1227,8 @@ fn prompt_effective_catalog_items(
     PROMPT_SKILL_AGENT_KEYS
         .iter()
         .map(|agent_key| {
-            let effective = build_prompt_effective_skill(agent_key, custom_prompt_skills, builtin_state)?;
+            let effective =
+                build_prompt_effective_skill(agent_key, custom_prompt_skills, builtin_state)?;
             Ok(SkillCatalogItem {
                 skill_id: effective.skill_id.clone(),
                 tool_type: String::new(),
@@ -1279,7 +1308,9 @@ fn prompt_effective_skill_detail(
         workflow_error: None,
         test_supported: false,
         test_mode: "prompt_effective".to_string(),
-        test_reason: Some("prompt-effective entries do not expose the scan-core SSE test contract".to_string()),
+        test_reason: Some(
+            "prompt-effective entries do not expose the scan-core SSE test contract".to_string(),
+        ),
         default_test_project_name: "libplist".to_string(),
         tool_test_preset: None,
         display_name: Some(effective.display_name),
@@ -1292,6 +1323,58 @@ fn prompt_effective_skill_detail(
         effective_content: Some(effective.effective_content),
         prompt_sources: Some(effective.prompt_sources),
     })
+}
+
+pub(crate) async fn prompt_skill_runtime_snapshot(
+    state: &AppState,
+    requested: bool,
+) -> Result<Value, ApiError> {
+    let agent_keys = prompt_agent_keys();
+    if !requested {
+        return serde_json::to_value(PromptSkillRuntimeSnapshot {
+            source: PROMPT_SKILL_RUNTIME_SOURCE.to_string(),
+            requested: false,
+            enabled: false,
+            reason: "disabled_by_request".to_string(),
+            agent_keys,
+            effective_by_agent: BTreeMap::new(),
+        })
+        .map_err(|error| ApiError::Internal(error.to_string()));
+    }
+
+    let custom_prompt_skills = load_prompt_skills(state).await?;
+    let builtin_state = load_builtin_prompt_state(state).await?;
+    let mut effective_by_agent = BTreeMap::new();
+    let mut enabled = false;
+
+    for agent_key in PROMPT_SKILL_AGENT_KEYS {
+        let effective =
+            build_prompt_effective_skill(agent_key, &custom_prompt_skills, &builtin_state)?;
+        enabled |= effective.runtime_ready;
+        effective_by_agent.insert(
+            (*agent_key).to_string(),
+            PromptEffectiveRuntimeEntry {
+                runtime_ready: effective.runtime_ready,
+                reason: effective.reason,
+                effective_content: effective.effective_content,
+                prompt_sources: effective.prompt_sources,
+            },
+        );
+    }
+
+    serde_json::to_value(PromptSkillRuntimeSnapshot {
+        source: PROMPT_SKILL_RUNTIME_SOURCE.to_string(),
+        requested: true,
+        enabled,
+        reason: if enabled {
+            "active_prompt_snapshot".to_string()
+        } else {
+            "no_active_prompt_sources".to_string()
+        },
+        agent_keys,
+        effective_by_agent,
+    })
+    .map_err(|error| ApiError::Internal(error.to_string()))
 }
 
 fn build_prompt_effective_skill(
@@ -1401,8 +1484,7 @@ fn prompt_skill_created_at_sort_key(item: &PromptSkillRecord) -> Option<i128> {
     OffsetDateTime::parse(&item.created_at, &Rfc3339)
         .ok()
         .map(|value| {
-            i128::from(value.unix_timestamp()) * 1_000_000_000
-                + i128::from(value.nanosecond())
+            i128::from(value.unix_timestamp()) * 1_000_000_000 + i128::from(value.nanosecond())
         })
 }
 
@@ -1447,7 +1529,8 @@ fn render_custom_prompt_content(item: &PromptSkillRecord) -> Option<String> {
 }
 
 fn join_prompt_source_content(items: &[PromptSourceDetail]) -> String {
-    items.iter()
+    items
+        .iter()
         .map(|item| item.content.as_str())
         .filter(|content| !content.trim().is_empty())
         .collect::<Vec<_>>()
@@ -1650,9 +1733,12 @@ mod tests {
             },
         ];
 
-        let effective =
-            build_prompt_effective_skill("analysis", &custom_prompt_skills, &default_builtin_prompt_state())
-                .expect("effective prompt should build");
+        let effective = build_prompt_effective_skill(
+            "analysis",
+            &custom_prompt_skills,
+            &default_builtin_prompt_state(),
+        )
+        .expect("effective prompt should build");
 
         let effective_content = effective.effective_content;
         let builtin_index = effective_content

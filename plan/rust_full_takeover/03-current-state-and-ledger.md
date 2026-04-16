@@ -40,7 +40,7 @@
 
 ## 当前最重要的 open items
 
-- `config.prompt_skills` 的 live producer owner 仍未明确。
+- `config.prompt_skills` 已不再是 owner 未明确的问题；Rust 已在 agent-task creation 侧写入 `prompt_skill_runtime` snapshot，剩余 open item 收窄为 retained Python consumer 的 compat projection / cutover。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

@@ -22,6 +22,7 @@
 
 - `skills` 默认 contract 已改成 Rust-owned unified surface
 - prompt skill persistence boundary 已迁到 Rust-native store
+- agent-task creation 已写入 Rust-owned `prompt_skill_runtime` snapshot
 - 大量 dead shell / convenience package / test-only helper 已退休
 - retained live Python runtime 仍未完全退出
 - frontend / deploy 层面的最终 cutover gate 还没有被完整写进 canonical 文档

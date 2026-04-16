@@ -39,6 +39,7 @@
 - `skills` 默认 contract 切到 prompt-effective unified surface
 - external-tools compat 面保留
 - prompt skill persistence boundary 切到 Rust-native store
+- agent-task creation 开始写入 Rust-owned `prompt_skill_runtime` snapshot
 
 ### Dead Shell / Convenience Package 清理
 
