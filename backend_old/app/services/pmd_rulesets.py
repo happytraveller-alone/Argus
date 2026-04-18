@@ -7,8 +7,8 @@ import re
 from typing import Any
 from xml.etree import ElementTree
 
-from app.db import pmd_builtin_ruleset_dir
-
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_RUST_SCAN_RULE_ASSETS_ROOT = _REPO_ROOT / "backend" / "assets" / "scan_rule_assets"
 
 PMD_RULESET_ALIASES = {
     "security": "category/java/security.xml,category/java/errorprone.xml,category/apex/security.xml",
@@ -57,7 +57,7 @@ PMD_PRESET_SUMMARIES = {
 
 
 def get_pmd_builtin_ruleset_dir() -> Path:
-    return pmd_builtin_ruleset_dir()
+    return _RUST_SCAN_RULE_ASSETS_ROOT / "rules_pmd"
 
 
 def _normalize_text(value: str | None) -> str | None:

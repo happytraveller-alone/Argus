@@ -17,11 +17,13 @@ from pathlib import Path
 import tempfile
 from typing import Any, Dict, List, Tuple
 
-from app.db import bandit_builtin_snapshot_path
-
 logger = logging.getLogger(__name__)
 
-_BANDIT_BUILTIN_JSON_PATH = bandit_builtin_snapshot_path()
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_RUST_SCAN_RULE_ASSETS_ROOT = _REPO_ROOT / "backend" / "assets" / "scan_rule_assets"
+_BANDIT_BUILTIN_JSON_PATH = (
+    _RUST_SCAN_RULE_ASSETS_ROOT / "bandit_builtin" / "bandit_builtin_rules.json"
+)
 _SCHEMA_VERSION = "1.0"
 _MAX_DOC_LENGTH = 4000
 

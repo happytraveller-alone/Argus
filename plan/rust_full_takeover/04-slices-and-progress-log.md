@@ -27,9 +27,9 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `167`
+  - runtime core `166`
   - alembic `21`
-  - backend_old scripts `2`
+  - backend_old scripts `1`
   - release preflight `1`
 - canonical 文档补进 frontend / API invariants、retired route consumer debt、operations / readiness gate
 - raw ledger 增加“历史快照、非 authoritative”提示，避免旧计数和旧入口误导后续开发者
@@ -81,6 +81,13 @@
 - Rust `backend/src/runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，去掉了对 `/usr/local/bin/package_source_selector.py` 的 Python subprocess 依赖。
 - `backend_old/scripts/dev-entrypoint.sh`、`docker/backend_old.Dockerfile` 与 `docker/flow-parser-runner.Dockerfile` 改为 shell 内按配置顺序去重选择镜像源，不再引用 Python selector。
 - 新增 `backend_old/tests/test_package_source_selector_retired.py` guard，要求脚本物理不存在，且 dev entrypoint / Dockerfile 不再保留任何 `package_source_selector.py` 文本引用。
+
+### DB Package Shell Retirement (2026-04-18)
+
+- `backend_old/app/db/__init__.py` 已退役，`backend_old/app` runtime core 计数 `167 -> 166`，`db / schema snapshot gate` 分组计数 `3 -> 2`。
+- `backend_old/app/services/bandit_rules_snapshot.py` 与 `backend_old/app/services/pmd_rulesets.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`，不再经过 `app.db` package shell bridge。
+- 新增 `backend_old/tests/test_db_package_shell_retired.py` guard，要求 `app/db/__init__.py` 物理不存在，且 live Python 路径不再保留 `from app.db import ...` importer。
+- 验证结果：`test_db_package_shell_retired.py`、`test_bandit_rules_snapshot.py`、`test_pmd_rules_service.py` 通过；`test_alembic_project.py` 中与本切片直接相关的 squashed-baseline/snapshot 用例通过，另有 revision-head 旧断言失败，属于现存 alembic baseline debt。
 
 ## 详细历史
 

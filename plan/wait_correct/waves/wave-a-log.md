@@ -2,6 +2,10 @@
 
 ## Completed in this turn
 
+- `backend_old/app/db/__init__.py` 已退役：
+  - `bandit_rules_snapshot.py` 与 `pmd_rulesets.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`
+  - 新增 `backend_old/tests/test_db_package_shell_retired.py` guard
+  - `db / schema snapshot gate` 计数 `3 -> 2`，`backend_old/app` runtime core 计数 `167 -> 166`
 - `backend_old/scripts/package_source_selector.py` 已退役：
   - Rust `backend/src/runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，不再调用 Python selector
   - `backend_old/scripts/dev-entrypoint.sh`、`docker/backend_old.Dockerfile`、`docker/flow-parser-runner.Dockerfile` 改成 shell 内按配置顺序去重选择镜像源
