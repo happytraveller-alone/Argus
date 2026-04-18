@@ -2,6 +2,12 @@
 
 ## Completed in this turn
 
+- `scan_tracking.py` 已退役：
+  - `backend_old/app/services/agent/scan_tracking.py` 已删除
+  - 新增 `backend_old/tests/test_scan_tracking_retired.py` guard
+  - `backend_old/tests/test_static_scan_runtime.py` 与 `backend_old/tests/test_background_task_launch_refactor.py` 已删除
+  - `backend_old/app` runtime core 计数 `138 -> 137`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `6 -> 5`
 - `scan_workspace.py` 已退役：
   - `backend_old/app/services/agent/scan_workspace.py` 已删除
   - 新增 `backend_old/tests/test_scan_workspace_retired.py` guard

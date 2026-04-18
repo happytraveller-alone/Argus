@@ -4,7 +4,7 @@
 
 当前策略补充：
 
-- 扫描引擎按 `opengrep-only` 收口；`bandit`、`gitleaks`、`phpstan`、`pmd` 已退役，下一轮转入 retained `scanner / workspace / queue / bootstrap` 主链清理。
+- 扫描引擎按 `opengrep-only` 收口；`bandit`、`gitleaks`、`phpstan`、`pmd` 与 retained bootstrap helpers 已退役，下一轮转入 retained `scanner / queue / runner` 主链清理。
 
 ### ~~1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover~~
 
@@ -41,9 +41,10 @@
 目标：
 
 - `scanner_runner.py`
-- `scan_tracking.py`
-- bootstrap scanners
-- queue / event manager
+- `recon_risk_queue.py`
+- `business_logic_risk_queue.py`
+- `vulnerability_queue.py`
+- `scope_filters.py`
 
 ### 4. 审计 support / prompt / stream / memory cluster
 
@@ -79,7 +80,7 @@
 
 如果后续继续按功能逐一接管，建议按照下面顺序推进：
 
-1. scanner / workspace / queue / bootstrap retained runtime
+1. scanner / queue / runner retained runtime
 2. agent orchestration / state / support runtime
 3. knowledge / flow / logic retained runtime
 4. llm / llm_rule retained runtime

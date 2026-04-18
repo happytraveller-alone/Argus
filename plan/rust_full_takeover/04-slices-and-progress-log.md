@@ -257,6 +257,15 @@
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_scan_workspace_retired.py backend_old/tests/test_static_scan_runtime.py backend_old/tests/test_config_internal_callers_use_service_layer.py`
   - `python -m compileall backend_old/app backend_old/tests`
 
+### Scan Tracking Helper Retirement (2026-04-18)
+
+- `backend_old/app/services/agent/scan_tracking.py` 已删除；确认它没有任何 live Python importer，只剩专用测试依赖。
+- `backend_old/tests/test_static_scan_runtime.py` 与 `backend_old/tests/test_background_task_launch_refactor.py` 已删除，改为 `backend_old/tests/test_scan_tracking_retired.py` guard，要求该模块物理不存在且 live importer 清零。
+- `backend_old/app` runtime core 计数 `138 -> 137`，`scanner / bootstrap / queue / workspace / tracking` 计数 `6 -> 5`。
+- 验证结果：
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_scan_tracking_retired.py backend_old/tests/test_scan_workspace_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py`
+  - `python -m compileall backend_old/app backend_old/tests`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：
