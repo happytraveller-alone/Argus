@@ -209,6 +209,15 @@
   - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_pmd_engine_retired.py tests/test_config_internal_callers_use_service_layer.py tests/test_external_tools_manual.py -k 'pmd_engine_retired or bootstrap_callers_use_agent_scan_workspace_module or not pmd'`
 
+### Bootstrap Policy Helper Retirement (2026-04-18)
+
+- `backend_old/app/services/agent/bootstrap_policy.py` 已删除；确认其没有任何 live Python importer，只剩专用测试依赖。
+- 旧专用测试 `backend_old/tests/test_agent_bootstrap_policy.py` 已删除，改为 `backend_old/tests/test_bootstrap_policy_retired.py` guard，要求该模块物理不存在且 live importer 清零。
+- `backend_old/app` runtime core 计数 `145 -> 144`，`scanner / bootstrap / queue / workspace / tracking` 计数 `13 -> 12`。
+- 验证结果：
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_policy_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_policy or no_live_python_module_imports'`
+  - `python -m compileall backend_old/app backend_old/tests`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：

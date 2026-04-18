@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `bootstrap_policy.py` 已退役：
+  - `backend_old/app/services/agent/bootstrap_policy.py` 已删除
+  - 新增 `backend_old/tests/test_bootstrap_policy_retired.py` guard
+  - `backend_old/app` runtime core 计数 `145 -> 144`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `13 -> 12`
 - `pmd` 已按 `opengrep-only` 方针退役：
   - Rust `static-tasks` / preflight / recovery / `scan::pmd` 不再保留 `pmd` route/runtime
   - Python `pmd.py`、`pmd_scan.py`、`pmd_rulesets.py`、`PMDTool` 已删除

@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`145`
+- `backend_old/app` 非 API Python：`144`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -26,7 +26,7 @@
 - models / persistence mirror：`12`
 - shared helpers：`3`
 - agent orchestration / state / payload：`24`
-- scanner / bootstrap / queue / workspace / tracking：`13`
+- scanner / bootstrap / queue / workspace / tracking：`12`
 - flow / logic：`13`
 - knowledge：`21`
 - tools / tool runtime：`27`
@@ -53,6 +53,7 @@
 - `gitleaks` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery 不再暴露 `gitleaks` surface，Python `gitleaks` model/bootstrap/runtime/tool cluster 已删除；`backend_old/app` runtime core 计数 `152 -> 150`，`models / persistence mirror` 计数 `16 -> 15`，`scanner / bootstrap / queue / workspace / tracking` 计数 `15 -> 14`。
 - `phpstan` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery 不再暴露 `phpstan` surface，Python `phpstan` model/bootstrap/runtime/tool cluster 已删除；`backend_old/app` runtime core 计数 `150 -> 148`，`models / persistence mirror` 计数 `15 -> 14`，`scanner / bootstrap / queue / workspace / tracking` 计数 `14 -> 13`。
 - `pmd` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery / scan::pmd 不再暴露 `pmd` surface，Python `pmd` model/helper/tool cluster 已删除；`backend_old/app` runtime core 计数 `148 -> 145`，`models / persistence mirror` 计数 `14 -> 12`，`shared helpers` 计数 `4 -> 3`。
+- `backend_old/app/services/agent/bootstrap_policy.py` 已于 2026-04-18 退役：该 helper 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `145 -> 144`，`scanner / bootstrap / queue / workspace / tracking` 计数 `13 -> 12`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 
