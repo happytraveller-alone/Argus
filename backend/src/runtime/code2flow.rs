@@ -233,8 +233,8 @@ fn build_files_payload(
 ) -> Result<Vec<Code2FlowFilePayload>, String> {
     let mut payload = Vec::new();
     for path in files {
-        let content = match fs::read_to_string(path) {
-            Ok(value) => value,
+        let content = match fs::read(path) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
             Err(_) => continue,
         };
         let rel = path
@@ -570,5 +570,20 @@ mod tests {
                 .replace('\\', "/"),
             "src/a.py"
         );
+    }
+
+    #[test]
+    fn build_files_payload_keeps_non_utf8_sources_via_lossy_decoding() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        let file_path = temp_dir.path().join("src").join("demo.py");
+        fs::write(&file_path, b"def caller():\n    return b'\xff'\n").unwrap();
+
+        let payload =
+            super::build_files_payload(temp_dir.path(), &[file_path]).expect("payload should build");
+
+        assert_eq!(payload.len(), 1);
+        assert_eq!(payload[0].file_path, "src/demo.py");
+        assert!(payload[0].content.contains('\u{fffd}'));
     }
 }
