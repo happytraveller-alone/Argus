@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    scan::{bandit, gitleaks, opengrep, phpstan, pmd},
+    scan::{gitleaks, opengrep, phpstan, pmd},
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -194,12 +194,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
             mounts: Vec::new(),
         },
         RunnerPreflightSpec {
-            name: "bandit",
-            image: config.scanner_bandit_image.clone(),
-            command: vec!["bandit".to_string(), "--version".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
             name: "gitleaks",
             image: config.scanner_gitleaks_image.clone(),
             command: vec!["gitleaks".to_string(), "version".to_string()],
@@ -255,15 +249,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         {
             opengrep_spec.command = command;
             opengrep_spec.mounts = mounts;
-            cleanup_dirs.push(workspace_dir);
-        }
-    }
-
-    if let Some(bandit_spec) = specs.iter_mut().find(|spec| spec.name == "bandit") {
-        if let Some((workspace_dir, command, mounts)) = build_bandit_preflight_inputs(state).await?
-        {
-            bandit_spec.command = command;
-            bandit_spec.mounts = mounts;
             cleanup_dirs.push(workspace_dir);
         }
     }
@@ -326,28 +311,6 @@ async fn build_opengrep_preflight_inputs(
     };
 
     let command = opengrep::build_validate_command("/work/opengrep-rules");
-    Ok(Some((
-        workspace_dir.clone(),
-        command,
-        vec![(workspace_dir, "/work".to_string())],
-    )))
-}
-
-async fn build_bandit_preflight_inputs(
-    state: &AppState,
-) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir =
-        std::env::temp_dir().join(format!("bandit-preflight-{}", uuid::Uuid::new_v4()));
-    let source_dir = workspace_dir.join("source");
-    tokio::fs::create_dir_all(&source_dir).await?;
-    tokio::fs::write(source_dir.join("demo.py"), "assert True\n").await?;
-    let snapshot = bandit::load_builtin_snapshot(state).await?;
-    let Some(snapshot) = snapshot else {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Ok(None);
-    };
-    let test_ids = bandit::select_preflight_test_ids(&snapshot, 2);
-    let command = bandit::build_scan_command("/work/source", "/work/report.json", &test_ids);
     Ok(Some((
         workspace_dir.clone(),
         command,
@@ -420,7 +383,6 @@ mod tests {
             names,
             vec![
                 "opengrep",
-                "bandit",
                 "gitleaks",
                 "phpstan",
                 "pmd",
@@ -446,14 +408,6 @@ mod tests {
             vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
         );
         assert_eq!(opengrep.mounts.len(), 1);
-
-        let bandit = specs
-            .iter()
-            .find(|spec| spec.name == "bandit")
-            .expect("bandit spec should exist");
-        assert!(bandit.command.iter().any(|part| part == "-t"));
-        assert!(bandit.command.iter().any(|part| part == "/work/source"));
-        assert_eq!(bandit.mounts.len(), 1);
 
         let pmd = specs
             .iter()

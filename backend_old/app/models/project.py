@@ -55,10 +55,6 @@ class Project(Base):
     gitleaks_scan_tasks = relationship(
         "GitleaksScanTask", back_populates="project", cascade="all, delete-orphan"
     )
-    # Bandit 静态扫描任务关系（新增）
-    bandit_scan_tasks = relationship(
-        "BanditScanTask", back_populates="project", cascade="all, delete-orphan"
-    )
     # PHPStan 静态扫描任务关系（新增）
     phpstan_scan_tasks = relationship(
         "PhpstanScanTask", back_populates="project", cascade="all, delete-orphan"

@@ -16,7 +16,6 @@ pub struct TaskStateSnapshot {
     pub opengrep_rules: BTreeMap<String, OpengrepRuleRecord>,
     pub gitleaks_rules: BTreeMap<String, GitleaksRuleRecord>,
     pub pmd_rule_configs: BTreeMap<String, PmdRuleConfigRecord>,
-    pub bandit_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
     pub phpstan_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
 }
 

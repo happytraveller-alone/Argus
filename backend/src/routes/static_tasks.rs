@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
-    scan::{bandit, gitleaks, opengrep, phpstan, pmd},
+    scan::{gitleaks, opengrep, phpstan, pmd},
     state::AppState,
 };
 
@@ -101,51 +101,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/gitleaks/findings/{finding_id}/status",
             post(update_gitleaks_finding_status),
-        )
-        .route("/bandit/rules", get(list_bandit_rules))
-        .route(
-            "/bandit/rules/batch-enabled",
-            post(batch_update_bandit_rules_enabled),
-        )
-        .route(
-            "/bandit/rules/batch-delete",
-            post(batch_delete_bandit_rules),
-        )
-        .route(
-            "/bandit/rules/batch-restore",
-            post(batch_restore_bandit_rules),
-        )
-        .route(
-            "/bandit/rules/{rule_id}",
-            get(get_bandit_rule).patch(update_bandit_rule),
-        )
-        .route(
-            "/bandit/rules/{rule_id}/enabled",
-            post(update_bandit_rule_enabled),
-        )
-        .route("/bandit/rules/{rule_id}/delete", post(delete_bandit_rule))
-        .route("/bandit/rules/{rule_id}/restore", post(restore_bandit_rule))
-        .route("/bandit/scan", post(create_bandit_task))
-        .route("/bandit/tasks", get(list_bandit_tasks))
-        .route(
-            "/bandit/tasks/{task_id}",
-            get(get_bandit_task).delete(delete_bandit_task),
-        )
-        .route(
-            "/bandit/tasks/{task_id}/interrupt",
-            post(interrupt_bandit_task),
-        )
-        .route(
-            "/bandit/tasks/{task_id}/findings",
-            get(list_bandit_findings),
-        )
-        .route(
-            "/bandit/tasks/{task_id}/findings/{finding_id}",
-            get(get_bandit_finding),
-        )
-        .route(
-            "/bandit/findings/{finding_id}/status",
-            post(update_bandit_finding_status),
         )
         .route("/phpstan/rules", get(list_phpstan_rules))
         .route(
@@ -917,239 +872,6 @@ async fn update_gitleaks_finding_status(
     update_static_finding_status(&state, "gitleaks", &finding_id, &query.status).await
 }
 
-async fn list_bandit_rules(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let overrides = load_task_snapshot(&state).await?.bandit_rule_overrides;
-    let items = builtin_bandit_rules(&state).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|rule| {
-                let rule_id = rule
-                    .get("test_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                apply_rule_override_value(bandit_rule_value(&rule), overrides.get(&rule_id))
-            })
-            .filter(|value| match query.is_active {
-                Some(is_active) => {
-                    value.get("is_active").and_then(Value::as_bool) == Some(is_active)
-                }
-                None => true,
-            })
-            .filter(|value| match query.deleted.as_deref() {
-                Some("true") => value.get("is_deleted").and_then(Value::as_bool) == Some(true),
-                Some("false") => value.get("is_deleted").and_then(Value::as_bool) != Some(true),
-                _ => true,
-            })
-            .filter(|value| {
-                contains_keyword(
-                    value
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default(),
-                    query.keyword.as_deref(),
-                )
-            })
-            .skip(query.skip.unwrap_or(0))
-            .take(query.limit.unwrap_or(1_000))
-            .collect(),
-    ))
-}
-
-async fn get_bandit_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let overrides = load_task_snapshot(&state).await?.bandit_rule_overrides;
-    let rule = builtin_bandit_rules(&state)
-        .await?
-        .into_iter()
-        .find(|rule| {
-            rule.get("test_id")
-                .and_then(Value::as_str)
-                .is_some_and(|value| value == rule_id)
-        })
-        .ok_or_else(|| ApiError::NotFound(format!("bandit rule not found: {rule_id}")))?;
-    Ok(Json(apply_rule_override_value(
-        bandit_rule_value(&rule),
-        overrides.get(&rule_id),
-    )))
-}
-
-async fn update_bandit_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "bandit", &rule_id, payload.clone()).await?;
-    Ok(Json(json!({
-        "message": "bandit rule updated in rust backend",
-        "rule": apply_rule_override_value((get_bandit_rule(State(state.clone()), AxumPath(rule_id.clone())).await?).0, Some(&task_state::RuleOverrideRecord {
-            id: rule_id,
-            is_active: None,
-            is_deleted: None,
-            patch: payload,
-        })),
-    })))
-}
-
-async fn update_bandit_rule_enabled(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    upsert_rule_override(
-        &state,
-        "bandit",
-        &rule_id,
-        json!({ "is_active": is_active }),
-    )
-    .await?;
-    Ok(Json(json!({
-        "message": "bandit rule enabled state updated in rust backend",
-        "rule_id": rule_id,
-        "is_active": is_active,
-    })))
-}
-
-async fn batch_update_bandit_rules_enabled(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    Ok(Json(json!({
-        "message": "bandit rule batch enabled updated in rust backend",
-        "updated_count": builtin_bandit_rules(&state).await?.len(),
-        "is_active": is_active,
-    })))
-}
-
-async fn delete_bandit_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "bandit", &rule_id, json!({ "is_deleted": true })).await?;
-    Ok(Json(json!({
-        "message": "bandit rule deleted in rust backend",
-        "rule_id": rule_id,
-        "is_deleted": true,
-    })))
-}
-
-async fn restore_bandit_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "bandit", &rule_id, json!({ "is_deleted": false })).await?;
-    Ok(Json(json!({
-        "message": "bandit rule restored in rust backend",
-        "rule_id": rule_id,
-        "is_deleted": false,
-    })))
-}
-
-async fn batch_delete_bandit_rules(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
-    Ok(Json(json!({
-        "message": "bandit rule batch delete acknowledged in rust backend",
-        "updated_count": builtin_bandit_rules(&state).await?.len(),
-        "is_deleted": true,
-    })))
-}
-
-async fn batch_restore_bandit_rules(
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    Ok(Json(json!({
-        "message": "bandit rule batch restore acknowledged in rust backend",
-        "updated_count": builtin_bandit_rules(&state).await?.len(),
-        "is_deleted": false,
-    })))
-}
-
-async fn create_bandit_task(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let severity_level =
-        optional_string(&payload, "severity_level").unwrap_or_else(|| "medium".to_string());
-    let confidence_level =
-        optional_string(&payload, "confidence_level").unwrap_or_else(|| "medium".to_string());
-    create_static_task(
-        &state,
-        "bandit",
-        payload,
-        json!({
-            "severity_level": severity_level,
-            "confidence_level": confidence_level,
-            "high_count": 0,
-            "medium_count": 0,
-            "low_count": 0,
-        }),
-    )
-    .await
-}
-
-async fn list_bandit_tasks(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_tasks(&state, "bandit", query).await
-}
-
-async fn get_bandit_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_task(&state, "bandit", &task_id).await
-}
-
-async fn delete_bandit_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    delete_static_task(&state, "bandit", &task_id).await
-}
-
-async fn interrupt_bandit_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    interrupt_static_task(&state, "bandit", &task_id).await
-}
-
-async fn list_bandit_findings(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_findings(&state, "bandit", &task_id).await
-}
-
-async fn get_bandit_finding(
-    State(state): State<AppState>,
-    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_finding(&state, "bandit", &task_id, &finding_id).await
-}
-
-async fn update_bandit_finding_status(
-    State(state): State<AppState>,
-    AxumPath(finding_id): AxumPath<String>,
-    Query(query): Query<StatusQuery>,
-) -> Result<Json<Value>, ApiError> {
-    update_static_finding_status(&state, "bandit", &finding_id, &query.status).await
-}
-
 async fn list_phpstan_rules(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
@@ -1707,22 +1429,6 @@ fn default_static_findings(
             "fingerprint": format!("fp-{task_id}"),
             "status": "open",
         }),
-        "bandit" => json!({
-            "id": finding_id,
-            "scan_task_id": task_id,
-            "test_id": "B101",
-            "test_name": "assert_used",
-            "issue_text": "placeholder bandit finding from rust backend",
-            "issue_severity": "MEDIUM",
-            "issue_confidence": "MEDIUM",
-            "file_path": file_path,
-            "line_number": 1,
-            "resolved_file_path": file_path,
-            "resolved_line_start": 1,
-            "code_snippet": "assert check",
-            "more_info": Value::Null,
-            "status": "open",
-        }),
         "phpstan" => json!({
             "id": finding_id,
             "scan_task_id": task_id,
@@ -1984,7 +1690,6 @@ async fn upsert_rule_override(
 ) -> Result<(), ApiError> {
     let mut snapshot = load_task_snapshot(state).await?;
     let target = match engine {
-        "bandit" => &mut snapshot.bandit_rule_overrides,
         "phpstan" => &mut snapshot.phpstan_rule_overrides,
         _ => {
             return Err(ApiError::BadRequest(format!(
@@ -2151,18 +1856,6 @@ async fn builtin_gitleaks_rules(
     Ok(parse_gitleaks_rules(&content))
 }
 
-async fn builtin_bandit_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
-    let snapshot = bandit::load_builtin_snapshot(state)
-        .await
-        .map_err(internal_error)?
-        .unwrap_or_else(|| json!({ "rules": [] }));
-    Ok(snapshot
-        .get("rules")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
-}
-
 async fn builtin_phpstan_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
     let assets = phpstan::load_builtin_assets(state)
         .await
@@ -2286,23 +1979,6 @@ fn gitleaks_rule_value(record: &task_state::GitleaksRuleRecord) -> Value {
         "source": record.source,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
-    })
-}
-
-fn bandit_rule_value(rule: &Value) -> Value {
-    json!({
-        "id": rule.get("test_id").cloned().unwrap_or(Value::Null),
-        "test_id": rule.get("test_id").cloned().unwrap_or(Value::Null),
-        "name": rule.get("name").cloned().unwrap_or(Value::Null),
-        "description": rule.get("description").cloned().unwrap_or(Value::Null),
-        "description_summary": rule.get("description_summary").cloned().unwrap_or(Value::Null),
-        "checks": rule.get("checks").cloned().unwrap_or_else(|| json!([])),
-        "source": rule.get("source").cloned().unwrap_or_else(|| json!("builtin")),
-        "bandit_version": rule.get("bandit_version").cloned().unwrap_or(Value::Null),
-        "is_active": true,
-        "is_deleted": false,
-        "created_at": Value::Null,
-        "updated_at": Value::Null,
     })
 }
 

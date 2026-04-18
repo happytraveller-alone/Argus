@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `156`
+  - runtime core `152`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -145,6 +145,24 @@
   - `tests/test_git_mirror_retired.py`
   - `tests/test_git_mirror.py`
   - `tests/test_llm_rule_git_manager_https_only.py`
+
+### Bandit Retirement For Opengrep-Only Runtime (2026-04-18)
+
+- Rust `static-tasks` / preflight 已移除 `bandit` route/runtime surface，`backend/tests/opengrep_only_static_tasks.rs` 改为要求 `bandit` routes 返回 `404`。
+- Python `bandit` cluster 已退役：
+  - `backend_old/app/models/bandit.py`
+  - `backend_old/app/services/bandit_rules_snapshot.py`
+  - `backend_old/app/services/agent/bandit_bootstrap_rules.py`
+  - `backend_old/app/services/agent/bootstrap/bandit.py`
+- `backend_old/app` runtime core 计数 `156 -> 152`，`models / persistence mirror` 计数 `17 -> 16`，`shared helpers` 计数 `5 -> 4`，`scanner / bootstrap / queue / workspace / tracking` 计数 `17 -> 15`。
+- 新增 `backend_old/tests/test_bandit_engine_retired.py` guard，要求 `bandit` Python cluster 物理不存在，且 live importer 清零。
+- 验证结果：
+  - `cargo test configured_specs_cover_all_runner_families --lib`
+  - `cargo test recovery_specs_cover_all_startup_task_families --lib`
+  - `cargo test bandit_routes_are_not_owned_when_static_tasks_are_opengrep_only --test opengrep_only_static_tasks`
+  - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_bandit_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py -k 'bandit_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module'`
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_external_tools_manual.py tests/test_generic_rule_yaml_validation.py -k 'not bandit'`
 
 ## 详细历史
 

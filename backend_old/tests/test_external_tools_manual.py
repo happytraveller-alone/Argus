@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
 手动测试 external_tools.py 中的安全工具集合
-支持 Opengrep、Bandit、Gitleaks、npm audit、Safety、TruffleHog、OSV-Scanner
+支持 Opengrep、Gitleaks、npm audit、Safety、TruffleHog、OSV-Scanner
 
 使用方法:
     python test_external_tools_manual.py --tool opengrep --path .
-    python test_external_tools_manual.py --tool bandit --path .
     python test_external_tools_manual.py --tool gitleaks --path .
     python test_external_tools_manual.py --tool npm_audit --path .
     python test_external_tools_manual.py --tool safety --path .
@@ -69,7 +68,7 @@ def project_root() -> str:
 # 现在安全地导入
 try:
     from app.services.agent.tools.external_tools import (
-        OpengrepTool, BanditTool, GitleaksTool, NpmAuditTool,
+        OpengrepTool, GitleaksTool, NpmAuditTool,
         SafetyTool, TruffleHogTool, OSVScannerTool
     )
     from app.services.agent.tools.sandbox_tool import SandboxManager
@@ -98,41 +97,6 @@ async def test_opengrep(project_root: str):
     result = await tool.execute(
         target_path=".",
         rules="p/security-audit",
-        max_results=10
-    )
-    
-    print(f"执行成功: {result.success}")
-    print(f"持续时间: {result.duration_ms}ms")
-    print(f"元数据: {result.metadata}")
-    print(f"\n结果:\n{result.to_string()[:2000]}")
-    
-    return result.success
-
-
-async def test_bandit(project_root: str):
-    """测试 Bandit 工具（仅限 Python 项目）"""
-    print("\n" + "="*60)
-    print("🐍 测试 Bandit 工具")
-    print("="*60)
-    
-    sandbox_manager = SandboxManager()
-    tool = BanditTool(project_root, sandbox_manager)
-    
-    print(f"工具名称: {tool.name}")
-    print(f"工具描述: {tool.description[:200]}...")
-    
-    # 检查是否是 Python 项目
-    py_files = list(Path(project_root).rglob("*.py"))
-    if not py_files:
-        print(" 该项目中未找到 Python 文件，跳过 Bandit 测试")
-        return None
-    
-    print(f"发现 {len(py_files)} 个 Python 文件")
-    
-    print("\n执行扫描...")
-    result = await tool.execute(
-        target_path=".",
-        severity="medium",
         max_results=10
     )
     
@@ -365,7 +329,7 @@ async def main():
     
     parser.add_argument(
         "--tool",
-        choices=["opengrep", "bandit", "gitleaks", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd","phpstan", "all"],
+        choices=["opengrep", "gitleaks", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd","phpstan", "all"],
         default="all",
         help="要测试的工具（默认: all）"
     )
@@ -405,9 +369,6 @@ async def main():
     try:
         if args.tool in ["all", "opengrep"]:
             results["opengrep"] = await test_opengrep(project_root)
-        
-        if args.tool in ["all", "bandit"]:
-            results["bandit"] = await test_bandit(project_root)
         
         if args.tool in ["all", "gitleaks"]:
             results["gitleaks"] = await test_gitleaks(project_root)

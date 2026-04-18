@@ -2,6 +2,14 @@
 
 ## Completed in this turn
 
+- `bandit` 已按 `opengrep-only` 方针退役：
+  - Rust `static-tasks` / preflight 不再保留 `bandit` route/runtime
+  - Python `bandit.py`、`bandit_rules_snapshot.py`、`bandit_bootstrap_rules.py`、`bootstrap/bandit.py` 已删除
+  - 新增 `backend/tests/opengrep_only_static_tasks.rs` 与 `backend_old/tests/test_bandit_engine_retired.py` guard
+  - `backend_old/app` runtime core 计数 `156 -> 152`
+  - `models / persistence mirror` 计数 `17 -> 16`
+  - `shared helpers` 计数 `5 -> 4`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `17 -> 15`
 - `backend_old/app/services/git_mirror.py` 已退役：
   - mirror candidate 逻辑已内联到 `llm_rule/git_manager.py`
   - 新增 `backend_old/tests/test_git_mirror_retired.py` guard

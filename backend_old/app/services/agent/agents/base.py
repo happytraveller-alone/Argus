@@ -2593,7 +2593,6 @@ class BaseAgent(ABC):
             return max(default_tool_timeout, 150)
         tool_timeouts = {
             "opengrep_scan": 120,
-            "bandit_scan": 90,
             "gitleaks_scan": 60,
             "npm_audit": 90,
             "safety_scan": 60,

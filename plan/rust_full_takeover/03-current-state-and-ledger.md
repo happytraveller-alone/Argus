@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`156`
+- `backend_old/app` 非 API Python：`152`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -23,10 +23,10 @@
 
 - app root / core / config / security：`3`
 - db / schema snapshot gate：`1`
-- models / persistence mirror：`17`
-- shared helpers：`5`
+- models / persistence mirror：`16`
+- shared helpers：`4`
 - agent orchestration / state / payload：`24`
-- scanner / bootstrap / queue / workspace / tracking：`17`
+- scanner / bootstrap / queue / workspace / tracking：`15`
 - flow / logic：`13`
 - knowledge：`21`
 - tools / tool runtime：`27`
@@ -49,6 +49,7 @@
 - `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已于 2026-04-18 退役：residual namespace/package shell 清零，`backend_old/app` runtime core 计数 `162 -> 158`，`app root / core / config / security` 计数 `4 -> 3`，`db / schema snapshot gate` 计数 `2 -> 1`，`flow / logic` 计数 `14 -> 13`，`llm` 计数 `14 -> 13`。
 - `backend_old/app/services/rule_contracts.py` 已于 2026-04-18 退役：`OpengrepRuleCreateRequest` 已内联到 `rule.py`，`backend_old/app` runtime core 计数 `158 -> 157`，`shared helpers` 计数 `7 -> 6`。
 - `backend_old/app/services/git_mirror.py` 已于 2026-04-18 退役：mirror candidate 逻辑已内联到 `llm_rule/git_manager.py`，`backend_old/app` runtime core 计数 `157 -> 156`，`shared helpers` 计数 `6 -> 5`。
+- `bandit` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight 不再暴露 `bandit` surface，Python `bandit` model/service/bootstrap cluster 已删除；`backend_old/app` runtime core 计数 `156 -> 152`，`models / persistence mirror` 计数 `17 -> 16`，`shared helpers` 计数 `5 -> 4`，`scanner / bootstrap / queue / workspace / tracking` 计数 `17 -> 15`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

@@ -2,6 +2,10 @@
 
 ## 当前最优先 6 项
 
+当前策略补充：
+
+- 扫描引擎按 `opengrep-only` 收口；`bandit` 已退役，下一轮优先继续清退 `gitleaks`、`phpstan`、`pmd`。
+
 ### ~~1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover~~
 
 ✅ 已完成（2026-04-18）。Rust 未落地的 `legacy_python_config` 投影撤销，Python 5 个 agent 注入块全部删除，`test_prompt_skills_injection.py` 删除。Rust mirror / backfill 保留用于 alembic 兼容，归入后续 DB final gate slice。

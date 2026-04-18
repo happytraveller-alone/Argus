@@ -1513,7 +1513,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         "/api/v1/static-tasks/rules?limit=5",
         "/api/v1/static-tasks/rules/generating/status",
         "/api/v1/static-tasks/gitleaks/rules?limit=5",
-        "/api/v1/static-tasks/bandit/rules?limit=5",
         "/api/v1/static-tasks/phpstan/rules?limit=5",
         "/api/v1/static-tasks/pmd/presets",
         "/api/v1/static-tasks/pmd/builtin-rulesets?limit=5",
@@ -1550,16 +1549,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
                 "name": "gitleaks task",
                 "target_path": ".",
                 "no_git": true
-            }),
-        ),
-        (
-            "/api/v1/static-tasks/bandit/scan",
-            json!({
-                "project_id": project_id,
-                "name": "bandit task",
-                "target_path": ".",
-                "severity_level": "medium",
-                "confidence_level": "medium"
             }),
         ),
         (
@@ -1647,20 +1636,15 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             "/api/v1/static-tasks/gitleaks/tasks/{}/findings?limit=20",
             created_task_ids[1]
         ),
-        format!("/api/v1/static-tasks/bandit/tasks/{}", created_task_ids[2]),
-        format!(
-            "/api/v1/static-tasks/bandit/tasks/{}/findings?limit=20",
-            created_task_ids[2]
-        ),
-        format!("/api/v1/static-tasks/phpstan/tasks/{}", created_task_ids[3]),
+        format!("/api/v1/static-tasks/phpstan/tasks/{}", created_task_ids[2]),
         format!(
             "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-            created_task_ids[3]
+            created_task_ids[2]
         ),
-        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[4]),
+        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[3]),
         format!(
             "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-            created_task_ids[4]
+            created_task_ids[3]
         ),
     ];
 
@@ -1784,40 +1768,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .unwrap();
     assert_eq!(gitleaks_rule_detail.status(), StatusCode::OK);
 
-    let bandit_rules_response = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v1/static-tasks/bandit/rules?limit=5")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(bandit_rules_response.status(), StatusCode::OK);
-    let bandit_rules_json: Value = serde_json::from_slice(
-        &to_bytes(bandit_rules_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let bandit_rule_id = bandit_rules_json[0]["id"].as_str().unwrap().to_string();
-
-    let bandit_toggle_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/static-tasks/bandit/rules/{bandit_rule_id}/enabled"
-                ))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({ "is_active": false }).to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(bandit_toggle_response.status(), StatusCode::OK);
-
     let phpstan_rules_response = app
         .clone()
         .oneshot(
@@ -1940,47 +1890,12 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .unwrap();
     assert_eq!(gitleaks_finding_status.status(), StatusCode::OK);
 
-    let bandit_findings_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/bandit/tasks/{}/findings?limit=20",
-                created_task_ids[2]
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    let bandit_findings_json: Value = serde_json::from_slice(
-        &to_bytes(bandit_findings_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let bandit_finding_id = bandit_findings_json[0]["id"].as_str().unwrap().to_string();
-
-    let bandit_finding_status = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/static-tasks/bandit/findings/{bandit_finding_id}/status?status=verified"
-                ))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(bandit_finding_status.status(), StatusCode::OK);
-
     let phpstan_findings_response = app
         .clone()
         .oneshot(
             Request::get(format!(
                 "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-                created_task_ids[3]
+                created_task_ids[2]
             ))
             .body(Body::empty())
             .unwrap(),
@@ -2015,7 +1930,7 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .oneshot(
             Request::get(format!(
                 "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-                created_task_ids[4]
+                created_task_ids[3]
             ))
             .body(Body::empty())
             .unwrap(),

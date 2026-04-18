@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`156`
+- `backend_old/app` 非 API Python：`152`
 
-`156` 是当前 runtime core 主计数。
+`152` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,16 +25,16 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `156`）
+### `backend_old/app` runtime core（共 `152`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
 | `app root + core/*` | 3 | retained live core config/security | `backend/src/core/*` |
 | `db/*` | 1 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
-| `models/*` | 17 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| `services/shared/*` | 5 | mixed retained helper | `backend/src/*` 对应 shared service |
+| `models/*` | 16 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| `services/shared/*` | 4 | mixed retained helper | `backend/src/*` 对应 shared service |
 | `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| `services/agent` bootstrap / scan / queue | 17 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
+| `services/agent` bootstrap / scan / queue | 15 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 13 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
 | `services/agent` knowledge | 21 | retained prompt/knowledge runtime | `backend/src/knowledge/*` |
 | `services/agent` tools + tool_runtime | 27 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
@@ -119,6 +119,7 @@
 
 已完成收口：
 
+- `backend_old/app/models/bandit.py` 已于 2026-04-18 退役。
 - `backend_old/app/models/__init__.py` 已于 2026-04-18 退役。
 - Alembic `env.py` 改为显式导入各 model module，不再通过 `app.models` package shell 触发表元数据注册。
 
@@ -126,7 +127,6 @@
 
 目标文件：
 
-- `services/bandit_rules_snapshot.py`
 - `services/pmd_rulesets.py`
 - `services/rule.py`
 - `services/sandbox_runner.py`
@@ -138,6 +138,7 @@
 
 已完成收口：
 
+- `services/bandit_rules_snapshot.py` 已于 2026-04-18 退役。
 - `services/git_mirror.py` 已于 2026-04-18 退役。
 - mirror candidate 逻辑已直接内联到 `services/llm_rule/git_manager.py`。
 - `services/rule_contracts.py` 已于 2026-04-18 退役。
@@ -190,7 +191,6 @@
 - `services/agent/bootstrap_gitleaks_runner.py`
 - `services/agent/bootstrap_policy.py`
 - `services/agent/bootstrap_seeds.py`
-- `services/agent/bandit_bootstrap_rules.py`
 - `services/agent/recon_risk_queue.py`
 - `services/agent/business_logic_risk_queue.py`
 - `services/agent/vulnerability_queue.py`
@@ -204,6 +204,11 @@
 - retained scanner bootstrap
 - risk queue / vulnerability queue
 - workspace / tracking / runner glue
+
+已完成收口：
+
+- `services/agent/bandit_bootstrap_rules.py` 与 `services/agent/bootstrap/bandit.py` 已于 2026-04-18 退役。
+- 扫描引擎方向已收口到 `opengrep-only`；剩余非 `opengrep` 引擎面继续按引擎逐个清退。
 
 目标状态：
 

@@ -24,7 +24,6 @@ from app.models.base import Base
 import app.models.agent_task  # noqa: F401
 import app.models.analysis  # noqa: F401
 import app.models.audit_rule  # noqa: F401
-import app.models.bandit  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 import app.models.opengrep  # noqa: F401
 import app.models.phpstan  # noqa: F401
@@ -102,7 +101,6 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_migrations_online())
-
 
 
 

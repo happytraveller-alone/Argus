@@ -1,6 +1,6 @@
 """
 外部安全工具集成
-集成 Opengrep、Bandit、Gitleaks、TruffleHog、npm audit 等专业安全工具
+集成 Opengrep、Gitleaks、TruffleHog、npm audit 等专业安全工具
 """
 
 import asyncio
@@ -311,178 +311,6 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
                 data=error_msg,  #  修复：设置 data 字段避免 None
                 error=error_msg
             )
-
-
-# ============ Bandit 工具 (Python) ============
-
-class BanditInput(BaseModel):
-    """Bandit 扫描输入"""
-    target_path: str = Field(
-        default=".",
-        description="要扫描的路径。使用 '.' 扫描整个项目（推荐），不要使用项目目录名！"
-    )
-    severity: str = Field(default="medium", description="最低严重程度: low, medium, high")
-    confidence: str = Field(default="medium", description="最低置信度: low, medium, high")
-    max_results: int = Field(default=50, description="最大返回结果数")
-
-
-class BanditTool(AgentTool):
-    """
-    Bandit Python 安全扫描工具
-    
-    Bandit 是专门用于 Python 代码的安全分析工具，
-    可以检测常见的 Python 安全问题，如：
-    - 硬编码密码
-    - SQL 注入
-    - 命令注入
-    - 不安全的随机数生成
-    - 不安全的反序列化
-    """
-    
-    def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
-        super().__init__()
-        #  将相对路径转换为绝对路径，Docker 需要绝对路径
-        self.project_root = os.path.abspath(project_root)
-        #  使用共享的 SandboxManager 实例，避免重复初始化
-        self.sandbox_manager = sandbox_manager or SandboxManager()
-
-    @property
-    def name(self) -> str:
-        return "bandit_scan"
-    
-    @property
-    def description(self) -> str:
-        return """使用 Bandit 扫描 Python 代码的安全问题。
-Bandit 是 Python 专用的安全分析工具。
-
-重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
-
-检测项目:
-- shell/SQL 注入
-- 硬编码密码
-- 不安全的反序列化
-- SSL/TLS 问题
-
-仅适用于 Python 项目。"""
-    
-    @property
-    def args_schema(self):
-        return BanditInput
-    
-    async def _execute(
-        self,
-        target_path: str = ".",
-        severity: str = "medium",
-        confidence: str = "medium",
-        max_results: int = 50,
-        **kwargs
-    ) -> ToolResult:
-        """执行 Bandit 扫描"""
-        # 确保 Docker 可用
-        await self.sandbox_manager.initialize()
-        if not self.sandbox_manager.is_available:
-            error_msg = f"Bandit unavailable: {self.sandbox_manager.get_diagnosis()}"
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        #  使用公共函数进行智能路径解析
-        safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
-            target_path, self.project_root, "Bandit"
-        )
-        if error_msg:
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        # 构建命令
-        # 使用 Bandit 接受的完整单词形式 (low, medium, high, all)
-        severity_map = {"low": "low", "medium": "medium", "high": "high", "all": "all"}
-        confidence_map = {"low": "low", "medium": "medium", "high": "high", "all": "all"}
-        
-        cmd = [
-            "bandit",
-            "-r",
-            "-f",
-            "json",
-        ]
-
-        # 显式构造等级与置信度参数，避免拼接产生不可预测的 flag
-        level = severity_map.get(severity, "m")
-        conf = confidence_map.get(confidence, "m")
-        # 使用长选项避免短选项解析歧义
-        cmd.extend(["--severity-level", level, "--confidence-level", conf, safe_target_path])
-
-        # 使用 shell-safe 的转义构造最终命令字符串
-        cmd_str = " ".join(shlex.quote(p) for p in cmd)
-
-        # 调试日志：记录将要执行的命令与工作目录
-        logger.info(f"[Bandit] command: {cmd_str}, host_workdir={self.project_root}")
-
-        try:
-            result = await self.sandbox_manager.execute_tool_command(
-                command=cmd_str,
-                host_workdir=self.project_root,
-                timeout=120
-            )
-
-            stdout = result.get('stdout', '') or ''
-            stderr = result.get('stderr', '') or ''
-            exit_code = int(result.get('exit_code', 0) or 0)
-
-            # 如果 exit_code > 1，视为执行错误（Bandit 通常用 0/1 表示结果），返回 stderr
-            if exit_code > 1:
-                err_snip = (stderr or stdout)[:1024]
-                error_msg = f"Bandit 执行失败 (exit_code={exit_code}): {err_snip}"
-                return ToolResult(success=False, data=error_msg, error=error_msg)
-
-            # 从 stdout 或 stderr 中查找 JSON 起始位置
-            json_start = -1
-            for buf in (stdout, stderr):
-                if buf:
-                    idx = buf.find('{')
-                    if idx >= 0:
-                        json_start = idx
-                        json_buf = buf
-                        break
-
-            if json_start >= 0:
-                try:
-                    results = json.loads(json_buf[json_start:])
-                except json.JSONDecodeError:
-                    error_msg = f"无法解析 Bandit 输出 JSON: {json_buf[json_start:json_start+200]}"
-                    return ToolResult(success=False, data=error_msg, error=error_msg,)
-            else:
-                results = {}
-
-            findings = results.get("results", [])[:max_results]
-            
-            if not findings:
-                return ToolResult(
-                    success=True,
-                    data="Bandit 扫描完成，未发现 Python 安全问题",
-                    metadata={"findings_count": 0}
-                )
-            
-            output_parts = ["🐍 Bandit Python 安全扫描结果\n"]
-            output_parts.append(f"发现 {len(findings)} 个问题:\n")
-            
-            severity_icons = {"HIGH": "🔴", "MEDIUM": "🟠", "LOW": "🟡"}
-            
-            for finding in findings:
-                sev = finding.get("issue_severity", "LOW")
-                icon = severity_icons.get(sev, "⚪")
-                
-                output_parts.append(f"\n{icon} [{sev}] {finding.get('test_id', '')}: {finding.get('test_name', '')}")
-                output_parts.append(f"   文件: {finding.get('filename', '')}:{finding.get('line_number', 0)}")
-                output_parts.append(f"   消息: {finding.get('issue_text', '')[:200]}")
-                output_parts.append(f"   代码: {finding.get('code', '')[:100]}")
-            
-            return ToolResult(
-                success=True,
-                data="\n".join(output_parts),
-                metadata={"findings_count": len(findings), "findings": findings[:10]}
-            )
-            
-        except Exception as e:
-            error_msg = f"Bandit 执行错误: {str(e)}"
-            return ToolResult(success=False, data=error_msg, error=error_msg)
 
 
 # ============ Gitleaks 工具 ============
@@ -1881,7 +1709,6 @@ PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
 
 __all__ = [
     "OpengrepTool",
-    "BanditTool",
     "GitleaksTool",
     "NpmAuditTool",
     "SafetyTool",

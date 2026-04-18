@@ -109,10 +109,6 @@ class AgentConfig(BaseSettings):
         default=True,
         description="Enable Opengrep scanner"
     )
-    bandit_enabled: bool = Field(
-        default=True,
-        description="Enable Bandit scanner"
-    )
     gitleaks_enabled: bool = Field(
         default=True,
         description="Enable Gitleaks scanner"
@@ -139,10 +135,6 @@ class AgentConfig(BaseSettings):
     opengrep_timeout_seconds: int = Field(
         default=120,
         description="Timeout for Opengrep scanner"
-    )
-    bandit_timeout_seconds: int = Field(
-        default=60,
-        description="Timeout for Bandit scanner"
     )
     gitleaks_timeout_seconds: int = Field(
         default=60,
@@ -488,7 +480,7 @@ def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
             tools=[
                 "smart_scan", "pattern_match", "dataflow_analysis",
                 "search_code", "get_code_window", "get_function_summary", "get_symbol_body",
-                "opengrep_scan", "bandit_scan"
+                "opengrep_scan"
             ],
             knowledge_modules=["sql_injection", "xss", "command_injection"],
         ),
