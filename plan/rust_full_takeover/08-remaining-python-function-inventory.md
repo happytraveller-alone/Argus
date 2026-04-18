@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`164`
+- `backend_old/app` 非 API Python：`162`
 
-`164` 是当前 runtime core 主计数。
+`162` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,13 +25,13 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `164`）
+### `backend_old/app` runtime core（共 `162`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
-| `app root + core/*` | 5 | retained live core config/security | `backend/src/core/*` |
+| `app root + core/*` | 4 | retained live core config/security | `backend/src/core/*` |
 | `db/*` | 2 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
-| `models/*` | 18 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| `models/*` | 17 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | `services/shared/*` | 7 | mixed retained helper | `backend/src/*` 对应 shared service |
 | `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/agent` bootstrap / scan / queue | 17 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -73,6 +73,10 @@
 - Rust 成为唯一配置、安全、加密 source of truth
 - Python runtime 不再 import 这些 core 模块
 
+已完成收口：
+
+- `backend_old/app/core/__init__.py` 已于 2026-04-18 退役。
+
 ### 2. DB Gate / Schema Snapshot
 
 目标文件：
@@ -110,6 +114,11 @@
 
 - Rust domain / persistence 完全替代
 - Python model 不再承担主读写职责
+
+已完成收口：
+
+- `backend_old/app/models/__init__.py` 已于 2026-04-18 退役。
+- Alembic `env.py` 改为显式导入各 model module，不再通过 `app.models` package shell 触发表元数据注册。
 
 ### 4. Shared Service Retained Helpers
 

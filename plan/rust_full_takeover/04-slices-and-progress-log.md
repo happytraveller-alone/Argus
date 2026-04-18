@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `164`
+  - runtime core `162`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -105,6 +105,13 @@
   - `tests/test_flow_parser_runner_client.py`
   - `tests/test_function_locator_cli.py`
   - `tests/test_config_internal_callers_use_service_layer.py -k 'retired_agent_subpackage_shell and flow'`
+
+### Top-Level Package Shell Retirement (2026-04-18)
+
+- `backend_old/app/core/__init__.py` 与 `backend_old/app/models/__init__.py` 已退役，`backend_old/app` runtime core 计数 `164 -> 162`，`app root / core / config / security` 计数 `5 -> 4`，`models / persistence mirror` 计数 `18 -> 17`。
+- `backend_old/alembic/env.py` 改为显式导入各 model module，metadata 注册不再依赖 `app.models` package shell。
+- 新增 `backend_old/tests/test_top_level_package_shells_retired.py` guard，要求 `app.core` 与 `app.models` package shell 物理不存在，且 live importer 不再通过它们取模块。
+- 验证结果：`tests/test_top_level_package_shells_retired.py` 通过；`tests/test_alembic_project.py` 中与本切片直接相关的 squashed-baseline/snapshot 用例继续通过，另有 revision-head 旧断言失败，属于现存 alembic baseline debt。
 
 ## 详细历史
 

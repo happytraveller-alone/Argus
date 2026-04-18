@@ -2,6 +2,12 @@
 
 ## Completed in this turn
 
+- `backend_old/app/core/__init__.py` 与 `backend_old/app/models/__init__.py` 已退役：
+  - Alembic `env.py` 改为显式导入各 model module
+  - 新增 `backend_old/tests/test_top_level_package_shells_retired.py` guard
+  - `backend_old/app` runtime core 计数 `164 -> 162`
+  - `app root / core / config / security` 计数 `5 -> 4`
+  - `models / persistence mirror` 计数 `18 -> 17`
 - `app.services.agent.flow` live caller 已切到 `app.services.agent.core.flow`，相关 agent/tool/test import 与 monkeypatch target 全部同步
 - `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已退役：
   - 新增 `backend_old/tests/test_service_package_shells_retired.py` guard

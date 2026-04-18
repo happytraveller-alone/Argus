@@ -21,7 +21,22 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from app.models.base import Base
-from app.models import *  # noqa
+import app.models.agent_task  # noqa: F401
+import app.models.analysis  # noqa: F401
+import app.models.audit_rule  # noqa: F401
+import app.models.bandit  # noqa: F401
+import app.models.gitleaks  # noqa: F401
+import app.models.opengrep  # noqa: F401
+import app.models.phpstan  # noqa: F401
+import app.models.pmd  # noqa: F401
+import app.models.pmd_scan  # noqa: F401
+import app.models.project  # noqa: F401
+import app.models.project_info  # noqa: F401
+import app.models.project_management_metrics  # noqa: F401
+import app.models.prompt_skill  # noqa: F401
+import app.models.prompt_template  # noqa: F401
+import app.models.user  # noqa: F401
+import app.models.user_config  # noqa: F401
 from app.core.config import settings
 
 target_metadata = Base.metadata
@@ -87,7 +102,6 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_migrations_online())
-
 
 
 
