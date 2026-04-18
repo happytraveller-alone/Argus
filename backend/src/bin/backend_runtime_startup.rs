@@ -1,19 +1,20 @@
 use anyhow::Result;
-use backend_rust::runtime::{bootstrap, runner};
+use backend_rust::runtime::{bootstrap, code2flow, runner};
 use std::{env, process};
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let first = args.next().unwrap_or_else(|| {
-        eprintln!("Usage: backend-runtime-startup <dev|prod|runner>");
+        eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow>");
         process::exit(1);
     });
 
     match first.as_str() {
         "dev" | "prod" => bootstrap::run(&first)?,
         "runner" => handle_runner(args)?,
+        "code2flow" => handle_code2flow(args)?,
         _ => {
-            eprintln!("Usage: backend-runtime-startup <dev|prod|runner>");
+            eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow>");
             process::exit(1);
         }
     }
@@ -65,5 +66,22 @@ fn handle_runner(mut args: impl Iterator<Item = String>) -> Result<()> {
             process::exit(1);
         }
     }
+    Ok(())
+}
+
+fn handle_code2flow(mut args: impl Iterator<Item = String>) -> Result<()> {
+    let flag = args.next().unwrap_or_default();
+    if flag != "--request" {
+        eprintln!("Usage: backend-runtime-startup code2flow --request <path>");
+        process::exit(1);
+    }
+    let request_path = args.next().unwrap_or_else(|| {
+        eprintln!("Usage: backend-runtime-startup code2flow --request <path>");
+        process::exit(1);
+    });
+    println!(
+        "{}",
+        serde_json::to_string(&code2flow::execute_from_request_path(request_path.as_ref()))?
+    );
     Ok(())
 }
