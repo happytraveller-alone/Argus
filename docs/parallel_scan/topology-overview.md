@@ -218,6 +218,7 @@ backend 继续承接：
    - `backend/app/services/agent/workflow/engine.py`
    - `backend/app/services/agent/workflow/parallel_executor.py`
 3. 当前队列与持久化工具：
+   - 历史说明：下面列出的 Python queue 模块已经退役；当前 Rust 宿主是 `backend/src/runtime/queue.rs`
    - `backend/app/services/agent/vulnerability_queue.py`
    - `backend/app/services/agent/recon_risk_queue.py`
    - `backend/app/services/agent/business_logic_risk_queue.py`

@@ -57,8 +57,8 @@
 | `backend/app/services/agent/workflow/engine.py` | 阶段推进和队列消费 | 从 `dequeue*` 迁到 `claim / ack / retry` 语义 |
 | `backend/app/services/agent/workflow/parallel_executor.py` | 并行 worker 克隆和阶段执行 | 输入改为 `PhaseRunnerInput`，结果改为 `PhaseRunnerResult` |
 | `backend/app/services/agent/tools/verification_result_tools.py` | verification/report 持久化工具 | 用 `FindingStorePort` 替代私有 `_save_callback` / `_update_callback` |
-| `backend/app/services/agent/vulnerability_queue.py` | 当前 vuln queue 实现 | 通过 adapter 暴露统一 `QueuePort` 语义 |
-| `backend/app/services/agent/recon_risk_queue.py` | 当前 recon queue 实现 | 通过 adapter 暴露统一 `QueuePort` 语义 |
+| `backend/app/services/agent/vulnerability_queue.py` | 历史 vuln queue 实现（已退役） | 当前 Rust 宿主见 `backend/src/runtime/queue.rs` |
+| `backend/app/services/agent/recon_risk_queue.py` | 历史 recon queue 实现（已退役） | 当前 Rust 宿主见 `backend/src/runtime/queue.rs` |
 | `backend/app/services/agent/business_logic_risk_queue.py` | 当前业务逻辑 risk queue 实现 | 通过 adapter 暴露统一 `QueuePort` 语义 |
 | `backend/app/api/v1/endpoints/static_tasks_shared.py` | 当前本地 scan workspace 辅助函数 | 作为 `WorkspaceResolver` 的本地路径语义来源 |
 | `backend/app/services/scanner_runner.py` | 当前 scanner 容器挂载 `/scan` 的执行器 | 作为 `ArtifactRef` / workspace 映射的执行侧约束来源 |
@@ -147,8 +147,8 @@
 - `backend/app/services/agent/workflow/engine.py`
 - `backend/app/services/agent/workflow/parallel_executor.py`
 - `backend/app/services/agent/tools/verification_result_tools.py`
-- `backend/app/services/agent/vulnerability_queue.py`
-- `backend/app/services/agent/recon_risk_queue.py`
+- `backend/app/services/agent/vulnerability_queue.py`（历史实现，当前 Rust 宿主见 `backend/src/runtime/queue.rs`）
+- `backend/app/services/agent/recon_risk_queue.py`（历史实现，当前 Rust 宿主见 `backend/src/runtime/queue.rs`）
 - `backend/app/services/agent/business_logic_risk_queue.py`
 
 ### 4.2 规范化新增模块的默认落点
