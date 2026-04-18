@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use time::OffsetDateTime;
 
-use crate::runtime::queue::{ReconQueue, VulnerabilityQueue};
+use crate::runtime::queue as runtime_queue;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -227,46 +227,5 @@ fn sse_response(kind: &str, payload: Value) -> Response<Body> {
 }
 
 fn queue_snapshot(kind: &str, payload: &Value) -> Value {
-    match kind {
-        "verification" => build_vulnerability_snapshot(payload),
-        "business_logic_recon" | "business_logic_analysis" | "business_logic" => {
-            build_recon_snapshot("bl_recon", "业务逻辑风险点队列", sample_risk_point(kind))
-        }
-        _ => build_recon_snapshot("recon", "风险点队列", sample_risk_point(kind)),
-    }
-}
-
-fn build_vulnerability_snapshot(payload: &Value) -> Value {
-    let mut queue = VulnerabilityQueue::default();
-    for finding in payload
-        .get("findings")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        queue.enqueue(finding.clone());
-    }
-    queue.snapshot("vuln", "漏洞队列", 10)
-}
-
-fn build_recon_snapshot(key: &str, label: &str, risk_point: Value) -> Value {
-    let mut queue = ReconQueue::default();
-    queue.enqueue(risk_point);
-    queue.snapshot(key, label, 10)
-}
-
-fn sample_risk_point(kind: &str) -> Value {
-    json!({
-        "title": format!("{kind}-candidate"),
-        "severity": "medium",
-        "description": format!("{kind} queue snapshot from rust backend"),
-        "file_path": format!("/agent-test/{kind}.rs"),
-        "line_start": 1,
-        "vulnerability_type": kind,
-        "entry_function": format!("{kind}_entry"),
-        "source": "request.payload",
-        "sink": "result.stream",
-        "input_surface": "http body",
-        "trust_boundary": "external input",
-    })
+    runtime_queue::queue_snapshot(kind, payload)
 }

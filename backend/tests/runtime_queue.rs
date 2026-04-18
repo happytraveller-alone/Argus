@@ -180,3 +180,44 @@ fn vulnerability_fingerprint_uses_expected_dedupe_fields() {
     assert!(queue.enqueue(finding.clone()));
     assert!(!queue.enqueue(same_fingerprint));
 }
+
+#[test]
+fn partial_recon_payloads_do_not_collapse_into_same_fingerprint() {
+    let first = json!({
+        "title": "first partial",
+        "severity": "high",
+    });
+    let second = json!({
+        "title": "second partial",
+        "severity": "high",
+    });
+
+    assert_ne!(recon_fingerprint(&first), recon_fingerprint(&second));
+
+    let mut queue = ReconQueue::default();
+    assert!(queue.enqueue(first));
+    assert!(queue.enqueue(second));
+    assert_eq!(queue.size(), 2);
+}
+
+#[test]
+fn partial_vulnerability_payloads_do_not_collapse_into_same_fingerprint() {
+    let first = json!({
+        "description": "first partial",
+        "severity": "medium",
+    });
+    let second = json!({
+        "description": "second partial",
+        "severity": "medium",
+    });
+
+    assert_ne!(
+        vulnerability_fingerprint(&first),
+        vulnerability_fingerprint(&second)
+    );
+
+    let mut queue = VulnerabilityQueue::default();
+    assert!(queue.enqueue(first));
+    assert!(queue.enqueue(second));
+    assert_eq!(queue.size(), 2);
+}
