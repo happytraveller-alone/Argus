@@ -218,6 +218,16 @@
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_policy_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_policy or no_live_python_module_imports'`
   - `python -m compileall backend_old/app backend_old/tests`
 
+### Bootstrap Entrypoint Fallback Helper Retirement (2026-04-18)
+
+- `backend_old/app/services/agent/bootstrap_entrypoints.py` 与 `bootstrap_seeds.py` 已删除；确认它们没有任何 live Python importer，只剩专用测试与彼此依赖。
+- 旧专用测试 `backend_old/tests/test_agent_bootstrap_entrypoints.py`、`test_agent_seed_fallback.py`、`test_agent_bootstrap_seeds.py` 已删除，改为 `backend_old/tests/test_bootstrap_entrypoint_helpers_retired.py` guard，要求该 helper cluster 物理不存在且 live importer 清零。
+- `backend_old/tests/test_agent_core_scope_filtering.py` 已移除只针对 entrypoint fallback 的断言，保留 `scope_filters` / `SmartScanTool` 相关活跃 contract。
+- `backend_old/app` runtime core 计数 `144 -> 142`，`scanner / bootstrap / queue / workspace / tracking` 计数 `12 -> 10`。
+- 验证结果：
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_entrypoint_helpers_retired.py backend_old/tests/test_agent_core_scope_filtering.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_entrypoint_helpers or no_live_python_module_imports or smart_scan_collect_files'`
+  - `python -m compileall backend_old/app backend_old/tests`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：

@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from app.services.agent.bootstrap_entrypoints import _discover_entry_points_deterministic
 from app.services.agent.scope_filters import (
     _build_core_audit_exclude_patterns,
     _filter_bootstrap_findings,
@@ -56,38 +55,6 @@ def test_filter_bootstrap_findings_ignores_non_core_scope_paths():
     )
 
     assert {item["id"] for item in filtered} == {"ok-src"}
-
-
-def test_discover_entry_points_deterministic_ignores_hidden_test_and_config_paths(tmp_path):
-    _write_file(
-        tmp_path / "src" / "main.py",
-        '@app.get("/alive")\ndef alive():\n    return "ok"\n',
-    )
-    _write_file(
-        tmp_path / "tests" / "test_api.py",
-        '@app.get("/from-test")\ndef from_test():\n    return "bad"\n',
-    )
-    _write_file(
-        tmp_path / ".github" / "scanner.py",
-        '@app.get("/from-hidden")\ndef from_hidden():\n    return "bad"\n',
-    )
-    _write_file(
-        tmp_path / "app" / "settings.py",
-        '@app.get("/from-settings")\ndef from_settings():\n    return "bad"\n',
-    )
-    _write_file(
-        tmp_path / ".vscode" / "ext.ts",
-        "router.get('/from-vscode', () => {})\n",
-    )
-
-    result = _discover_entry_points_deterministic(str(tmp_path))
-    files = {item["file"] for item in result["entry_points"]}
-
-    assert "src/main.py" in files
-    assert "tests/test_api.py" not in files
-    assert ".github/scanner.py" not in files
-    assert "app/settings.py" not in files
-    assert ".vscode/ext.ts" not in files
 
 @pytest.mark.asyncio
 async def test_smart_scan_collect_files_ignores_hidden_test_and_config_scope(tmp_path):
