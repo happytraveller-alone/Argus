@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `157`
+  - runtime core `156`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -135,6 +135,16 @@
 - 验证结果：
   - `tests/test_rule_contracts_retired.py`
   - `tests/test_generic_rule_yaml_validation.py`
+
+### Git Mirror Retirement (2026-04-18)
+
+- `backend_old/app/services/git_mirror.py` 已退役，`backend_old/app` runtime core 计数 `157 -> 156`，`shared helpers` 计数 `6 -> 5`。
+- mirror candidate 逻辑已直接内联到 `backend_old/app/services/llm_rule/git_manager.py`，`tests/test_git_mirror.py` 改为从 `llm_rule.git_manager` 取 helper。
+- 新增 `backend_old/tests/test_git_mirror_retired.py` guard，要求 `git_mirror.py` 物理不存在，且 live importer 不再指向旧模块。
+- 验证结果：
+  - `tests/test_git_mirror_retired.py`
+  - `tests/test_git_mirror.py`
+  - `tests/test_llm_rule_git_manager_https_only.py`
 
 ## 详细历史
 

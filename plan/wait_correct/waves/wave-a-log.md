@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `backend_old/app/services/git_mirror.py` 已退役：
+  - mirror candidate 逻辑已内联到 `llm_rule/git_manager.py`
+  - 新增 `backend_old/tests/test_git_mirror_retired.py` guard
+  - `backend_old/app` runtime core 计数 `157 -> 156`
+  - `shared helpers` 计数 `6 -> 5`
 - `backend_old/app/services/rule_contracts.py` 已退役：
   - `OpengrepRuleCreateRequest` 已内联到 `rule.py`
   - 新增 `backend_old/tests/test_rule_contracts_retired.py` guard

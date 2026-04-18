@@ -1,4 +1,4 @@
-from app.services.git_mirror import get_mirror_candidates
+from app.services.llm_rule.git_manager import get_mirror_candidates
 
 
 def test_get_mirror_candidates_multiple_prefix_order_and_dedup():

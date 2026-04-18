@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`157`
+- `backend_old/app` 非 API Python：`156`
 
-`157` 是当前 runtime core 主计数。
+`156` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,14 +25,14 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `157`）
+### `backend_old/app` runtime core（共 `156`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
 | `app root + core/*` | 3 | retained live core config/security | `backend/src/core/*` |
 | `db/*` | 1 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
 | `models/*` | 17 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| `services/shared/*` | 6 | mixed retained helper | `backend/src/*` 对应 shared service |
+| `services/shared/*` | 5 | mixed retained helper | `backend/src/*` 对应 shared service |
 | `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/agent` bootstrap / scan / queue | 17 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 13 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
@@ -127,7 +127,6 @@
 目标文件：
 
 - `services/bandit_rules_snapshot.py`
-- `services/git_mirror.py`
 - `services/pmd_rulesets.py`
 - `services/rule.py`
 - `services/sandbox_runner.py`
@@ -139,6 +138,8 @@
 
 已完成收口：
 
+- `services/git_mirror.py` 已于 2026-04-18 退役。
+- mirror candidate 逻辑已直接内联到 `services/llm_rule/git_manager.py`。
 - `services/rule_contracts.py` 已于 2026-04-18 退役。
 - `OpengrepRuleCreateRequest` 已直接内联到 `services/rule.py`。
 
