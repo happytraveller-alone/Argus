@@ -41,7 +41,6 @@
 目标：
 
 - `scanner_runner.py`
-- `scan_workspace.py`
 - `scan_tracking.py`
 - bootstrap scanners
 - queue / event manager

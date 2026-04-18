@@ -2,6 +2,12 @@
 
 ## Completed in this turn
 
+- `scan_workspace.py` 已退役：
+  - `backend_old/app/services/agent/scan_workspace.py` 已删除
+  - 新增 `backend_old/tests/test_scan_workspace_retired.py` guard
+  - `backend_old/tests/test_static_scan_runtime.py` 收缩为只覆盖 `scan_tracking` shared helper 契约
+  - `backend_old/app` runtime core 计数 `139 -> 138`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `7 -> 6`
 - `bootstrap/base.py` / `bootstrap/opengrep.py` 已退役：
   - `backend_old/app/services/agent/bootstrap/base.py` 与 `bootstrap/opengrep.py` 已删除
   - 新增 `backend_old/tests/test_opengrep_bootstrap_helpers_retired.py` guard

@@ -16,66 +16,12 @@ docker_stub.errors = types.SimpleNamespace(
 sys.modules.setdefault("docker", docker_stub)
 
 import app.services.agent.scan_tracking as scan_tracking
-import app.services.agent.scan_workspace as scan_workspace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_static_scan_runtime_shell_has_been_retired():
     assert not (PROJECT_ROOT / "app/services/static_scan_runtime.py").exists()
-
-
-def test_ensure_scan_workspace_under_configured_root(tmp_path, monkeypatch):
-    monkeypatch.setattr(scan_workspace.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
-
-    workspace = scan_workspace.ensure_scan_workspace("phpstan", "task-123")
-
-    assert workspace == tmp_path / "phpstan" / "task-123"
-    assert workspace.is_dir()
-
-
-def test_ensure_scan_project_and_output_dirs_are_stable(tmp_path, monkeypatch):
-    monkeypatch.setattr(scan_workspace.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
-
-    project_dir = scan_workspace.ensure_scan_project_dir("phpstan", "task-456")
-    output_dir = scan_workspace.ensure_scan_output_dir("phpstan", "task-456")
-    logs_dir = scan_workspace.ensure_scan_logs_dir("phpstan", "task-456")
-    meta_dir = scan_workspace.ensure_scan_meta_dir("phpstan", "task-456")
-
-    assert project_dir == tmp_path / "phpstan" / "task-456" / "project"
-    assert output_dir == tmp_path / "phpstan" / "task-456" / "output"
-    assert logs_dir == tmp_path / "phpstan" / "task-456" / "logs"
-    assert meta_dir == tmp_path / "phpstan" / "task-456" / "meta"
-    assert project_dir.is_dir()
-    assert output_dir.is_dir()
-    assert logs_dir.is_dir()
-    assert meta_dir.is_dir()
-
-
-def test_cleanup_scan_workspace_removes_task_tree(tmp_path, monkeypatch):
-    monkeypatch.setattr(scan_workspace.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
-
-    workspace = scan_workspace.ensure_scan_workspace("phpstan", "task-cleanup")
-    marker = workspace / "output" / "report.sarif"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text("{}", encoding="utf-8")
-
-    scan_workspace.cleanup_scan_workspace("phpstan", "task-cleanup")
-
-    assert not workspace.exists()
-
-
-def test_copy_project_tree_to_scan_dir_ignores_nested_destination(tmp_path):
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    (project_root / "src").mkdir()
-    (project_root / "src" / "app.py").write_text("dangerous()\n", encoding="utf-8")
-    nested_scan_dir = project_root / "scans" / "opengrep" / "task-1" / "project"
-
-    scan_workspace.copy_project_tree_to_scan_dir(project_root, nested_scan_dir)
-
-    assert (nested_scan_dir / "src" / "app.py").read_text(encoding="utf-8") == "dangerous()\n"
-    assert not (nested_scan_dir / "scans").exists()
 
 
 def test_scan_container_registry_tracks_container_id():

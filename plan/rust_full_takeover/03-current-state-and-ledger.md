@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`139`
+- `backend_old/app` 非 API Python：`138`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -26,7 +26,7 @@
 - models / persistence mirror：`12`
 - shared helpers：`3`
 - agent orchestration / state / payload：`24`
-- scanner / bootstrap / queue / workspace / tracking：`7`
+- scanner / bootstrap / queue / workspace / tracking：`6`
 - flow / logic：`13`
 - knowledge：`21`
 - tools / tool runtime：`27`
@@ -57,6 +57,7 @@
 - `backend_old/app/services/agent/bootstrap_entrypoints.py` 与 `bootstrap_seeds.py` 已于 2026-04-18 退役：该 fallback helper cluster 已无 live importer，只剩专用测试与彼此依赖；retirement guard 已补齐，`backend_old/app` runtime core 计数 `144 -> 142`，`scanner / bootstrap / queue / workspace / tracking` 计数 `12 -> 10`。
 - `backend_old/app/services/agent/bootstrap_findings.py` 已于 2026-04-18 退役：该 parsing/normalization helper 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `142 -> 141`，`scanner / bootstrap / queue / workspace / tracking` 计数 `10 -> 9`。
 - `backend_old/app/services/agent/bootstrap/base.py` 与 `bootstrap/opengrep.py` 已于 2026-04-18 退役：旧 OpenGrep bootstrap scanner cluster 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `141 -> 139`，`scanner / bootstrap / queue / workspace / tracking` 计数 `9 -> 7`。
+- `backend_old/app/services/agent/scan_workspace.py` 已于 2026-04-18 退役：该 workspace helper 已无 live importer，仅剩专用测试；`test_static_scan_runtime.py` 收缩为 `scan_tracking` 契约覆盖，新增 retirement guard，`backend_old/app` runtime core 计数 `139 -> 138`，`scanner / bootstrap / queue / workspace / tracking` 计数 `7 -> 6`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

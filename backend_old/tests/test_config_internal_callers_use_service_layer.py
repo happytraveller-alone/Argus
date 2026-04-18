@@ -5,15 +5,6 @@ import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_HELPER_IMPORTS = (
-    "ensure_scan_workspace",
-    "ensure_scan_project_dir",
-    "ensure_scan_output_dir",
-    "ensure_scan_logs_dir",
-    "ensure_scan_meta_dir",
-    "cleanup_scan_workspace",
-    "copy_project_tree_to_scan_dir",
-)
 RETIRED_AGENT_PACKAGE_SHELL_IMPORT_GUARDS = (
     ("bootstrap", "app.services.agent.bootstrap", "app.services.agent", "bootstrap"),
     ("core", "app.services.agent.core", "app.services.agent", "core"),
