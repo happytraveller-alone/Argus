@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`137`
+- `backend_old/app` 非 API Python：`133`
 
-`137` 是当前 runtime core 主计数。
+`133` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,7 +25,7 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `137`）
+### `backend_old/app` runtime core（共 `133`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
@@ -33,11 +33,11 @@
 | `db/*` | 1 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
 | `models/*` | 12 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | `services/shared/*` | 3 | mixed retained helper | `backend/src/*` 对应 shared service |
-| `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| `services/agent` bootstrap / scan / queue | 5 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
+| `services/agent` orchestration / state | 22 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
+| `services/agent` bootstrap / scan / queue | 4 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 13 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
 | `services/agent` knowledge | 21 | retained prompt/knowledge runtime | `backend/src/knowledge/*` |
-| `services/agent` tools + tool_runtime | 27 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
+| `services/agent` tools + tool_runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | `services/agent` support assets | 7 | retained stream/prompt/memory glue | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/llm/*` | 13 | retained live runtime | `backend/src/llm/*` |
 | `services/llm_rule/*` | 8 | retained live runtime | `backend/src/llm_rule/*` or rule-engine equivalent |
@@ -183,13 +183,13 @@
 
 - `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役。
 - live caller 已统一从旧 `app.services.agent.flow` 路径切到 `app.services.agent.core.flow`。
+- `backend_old/app/services/agent/agents/business_logic_recon.py` 与 `business_logic_analysis.py` 已于 2026-04-18 退役；Rust `/api/v1/agent-test/business-logic*` 与 `skills` catalog 已承担当前外层能力。
 
 ### 6. Scanner / Queue / Workspace / Tracking / Bootstrap
 
 目标文件：
 
 - `services/agent/recon_risk_queue.py`
-- `services/agent/business_logic_risk_queue.py`
 - `services/agent/vulnerability_queue.py`
 - `services/agent/scanner_runner.py`
 - `services/agent/scope_filters.py`
@@ -210,6 +210,7 @@
 - `services/agent/bootstrap/base.py` 与 `services/agent/bootstrap/opengrep.py` 已于 2026-04-18 退役。
 - `services/agent/scan_workspace.py` 已于 2026-04-18 退役。
 - `services/agent/scan_tracking.py` 已于 2026-04-18 退役。
+- `services/agent/business_logic_risk_queue.py` 已于 2026-04-18 退役；其外层 diagnostic / SSE surface 已由 Rust `agent-test` 承接。
 - 扫描引擎方向已收口到 `opengrep-only`；剩余非 `opengrep` 引擎面继续按引擎逐个清退。
 
 目标状态：
@@ -273,7 +274,6 @@
 
 - `services/agent/tools/base.py`
 - `services/agent/tools/agent_tools.py`
-- `services/agent/tools/business_logic_recon_queue_tools.py`
 - `services/agent/tools/code_analysis_tool.py`
 - `services/agent/tools/control_flow_tool.py`
 - `services/agent/tools/evidence_protocol.py`
@@ -304,6 +304,7 @@
 - `tools` package root 已退休
 - `tools/runtime` package shell 已退休
 - `business_logic_scan_tool.py` 已退休
+- `business_logic_recon_queue_tools.py` 已于 2026-04-18 退役
 - `tool_runtime` retained core 整组 2026-04-18 退役
 - `tool_runtime` orphan edge cluster 已退休：
   - `probe_specs.py`

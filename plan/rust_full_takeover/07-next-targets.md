@@ -42,7 +42,6 @@
 
 - `scanner_runner.py`
 - `recon_risk_queue.py`
-- `business_logic_risk_queue.py`
 - `vulnerability_queue.py`
 - `scope_filters.py`
 

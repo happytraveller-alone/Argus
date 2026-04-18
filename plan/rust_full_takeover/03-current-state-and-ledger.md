@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`137`
+- `backend_old/app` 非 API Python：`133`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -25,11 +25,11 @@
 - db / schema snapshot gate：`1`
 - models / persistence mirror：`12`
 - shared helpers：`3`
-- agent orchestration / state / payload：`24`
-- scanner / bootstrap / queue / workspace / tracking：`5`
+- agent orchestration / state / payload：`22`
+- scanner / bootstrap / queue / workspace / tracking：`4`
 - flow / logic：`13`
 - knowledge：`21`
-- tools / tool runtime：`27`
+- tools / tool runtime：`26`
 - agent support assets（memory / prompts / streaming / local-skill metadata）：`7`
 - llm：`13`
 - llm_rule：`8`
@@ -40,6 +40,7 @@
 
 ## 当前最重要的 open items
 
+- `business_logic` Python runtime cluster 已于 2026-04-18 退役：Rust `/api/v1/agent-test/business-logic*` SSE surface 与 `skills` catalog 已承担当前外部能力，Python `business_logic_risk_queue.py`、`agents/business_logic_recon.py`、`agents/business_logic_analysis.py`、`tools/business_logic_recon_queue_tools.py` 已删除；新增 `test_business_logic_runtime_retired.py` guard，`backend_old/app` runtime core 计数 `137 -> 133`，`agent orchestration / state / payload` 计数 `24 -> 22`，`scanner / bootstrap / queue / workspace / tracking` 计数 `5 -> 4`，`tools / tool_runtime` 计数 `27 -> 26`。
 - `prompt_skill_runtime` compat projection 已收口（2026-04-18）：Rust `legacy_python_config` 投影从未落地（WIP 已撤销），Python 5 个 agent（recon / analysis / verification / business_logic_recon / business_logic_analysis）的 `config.prompt_skills` 注入块全部删除，`test_prompt_skills_injection.py` 已删。Rust `upsert_legacy_prompt_skill` / `compat_backfill_from_legacy_if_empty` 仍保留以支撑 alembic legacy 表，属于后续 DB final gate slice 的目标。
 - `tool_runtime` retained core（`runtime` / `router` / `health_probe` / `write_scope` / `catalog`）2026-04-18 整组退役。
 - `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役：Rust `runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，`dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重回退；`backend_old/scripts` Python 计数 `2 -> 1`。

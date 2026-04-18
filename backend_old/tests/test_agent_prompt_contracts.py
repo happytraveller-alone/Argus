@@ -1,8 +1,6 @@
 import app.models.opengrep  # noqa: F401
 
 from app.services.agent.agents.analysis import ANALYSIS_SYSTEM_PROMPT
-from app.services.agent.agents.business_logic_analysis import BL_ANALYSIS_SYSTEM_PROMPT
-from app.services.agent.agents.business_logic_recon import BL_RECON_SYSTEM_PROMPT
 from app.services.agent.agents.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT
 from app.services.agent.agents.recon import RECON_SYSTEM_PROMPT
 from app.services.agent.agents.verification import VERIFICATION_SYSTEM_PROMPT
@@ -67,25 +65,6 @@ def test_analysis_prompt_requires_two_evidence_classes_and_structured_title():
     assert "Action Input: {\n    \"finding\": {" not in ANALYSIS_SYSTEM_PROMPT
     assert "file_path:line" in ANALYSIS_SYSTEM_PROMPT
     assert "line_start" in ANALYSIS_SYSTEM_PROMPT
-
-
-
-def test_business_logic_prompts_require_tool_usage_and_failure_handling():
-    assert "工具使用方法（必须遵循）" in BL_RECON_SYSTEM_PROMPT
-    assert "工具调用失败处理（关键）" in BL_RECON_SYSTEM_PROMPT
-    assert "Action Input" in BL_RECON_SYSTEM_PROMPT
-    assert "list_files" in BL_RECON_SYSTEM_PROMPT
-    assert "push_bl_risk_point_to_queue" in BL_RECON_SYSTEM_PROMPT
-    assert "tsconfig.json" in BL_RECON_SYSTEM_PROMPT
-    assert "@Controller" in BL_RECON_SYSTEM_PROMPT
-    assert "pages/api/" in BL_RECON_SYSTEM_PROMPT
-
-    assert "工具使用方法（必须遵循）" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "工具调用失败处理（关键）" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "Action Input" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "get_code_window" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "get_function_summary" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "push_finding_to_queue" in BL_ANALYSIS_SYSTEM_PROMPT
 
 
 

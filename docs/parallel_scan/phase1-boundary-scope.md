@@ -1,5 +1,7 @@
 # Phase 1 边界收口范围说明
 
+> 2026-04-18 更新：本文提到的 `business_logic_*` Python queue / agent / tool 设计仅代表历史 Phase 1 方案，不再表示当前 live runtime ownership。当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准；对外 business-logic route / skill surface 已由 Rust 承接。
+
 ## 阅读定位
 
 - **文档类型**：Explanation。

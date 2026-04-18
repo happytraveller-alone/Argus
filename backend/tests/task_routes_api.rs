@@ -2142,3 +2142,68 @@ async fn agent_test_streams_emit_structured_tool_and_result_events() {
     assert_eq!(result["data"]["project_name"], "demo-project");
     assert_eq!(result["data"]["test_mode"], "recon");
 }
+
+#[tokio::test]
+async fn business_logic_agent_test_streams_use_bl_queue_snapshot_contract() {
+    let state = AppState::from_config(isolated_test_config("agent-test-business-logic-events"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-test/business-logic-recon/run")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_path": "/tmp/demo-project",
+                        "project_name": "demo-project",
+                        "framework_hint": "fastapi",
+                        "max_iterations": 4
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for chunk in body.split("\n\n") {
+        if let Some(line) = chunk.lines().find(|line| line.starts_with("data: ")) {
+            let payload = serde_json::from_str::<Value>(&line[6..]).unwrap();
+            events.push(payload);
+        }
+    }
+
+    let queue_snapshot = events
+        .iter()
+        .find(|event| event["type"] == "queue_snapshot")
+        .expect("queue_snapshot event missing");
+    assert_eq!(
+        queue_snapshot["data"]["bl_recon"]["label"],
+        "业务逻辑风险点队列"
+    );
+    assert_eq!(
+        queue_snapshot["data"]["bl_recon"]["peek"][0]["title"],
+        "business_logic_recon-candidate"
+    );
+
+    let result = events
+        .iter()
+        .find(|event| event["type"] == "result")
+        .expect("result event missing");
+    assert_eq!(result["data"]["project_name"], "demo-project");
+    assert_eq!(result["data"]["test_mode"], "business_logic_recon");
+}

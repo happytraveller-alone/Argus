@@ -1,5 +1,7 @@
 # 智能扫描并行化拓扑总览
 
+> 2026-04-18 更新：文中的 `business_logic_queue`、`InMemoryBusinessLogicRiskQueue` 等 Python runtime 术语属于历史拓扑描述，不再表示当前 live 主链。当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准；Rust 已承接现有对外 business-logic surface。
+
 ## 阅读定位
 
 - **文档类型**：Explanation。

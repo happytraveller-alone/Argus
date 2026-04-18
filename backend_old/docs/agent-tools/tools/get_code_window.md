@@ -1,5 +1,7 @@
 # Tool: `get_code_window`
 
+> 2026-04-18 更新：本文中 `business_logic_recon` / `business_logic_analysis` 阶段标签属于历史 Python agent 文档语境，不再表示当前 live runtime ownership。当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准。
+
 ## Tool Purpose
 围绕锚点返回极小代码窗口，用于取证和前端代码展示。
 

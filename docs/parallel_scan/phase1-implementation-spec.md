@@ -1,5 +1,7 @@
 # Phase 1 实施总规格
 
+> 2026-04-18 更新：本文仍保留 `business_logic_risk_queue.py` 等 Python 边界作为历史规格锚点，但这些文件已不再代表当前 live runtime ownership。当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准。
+
 ## 阅读定位
 
 - **文档类型**：Reference（实施规格）。

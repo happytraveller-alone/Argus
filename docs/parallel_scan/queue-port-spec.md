@@ -1,5 +1,7 @@
 # Queue Port 实施规格
 
+> 2026-04-18 更新：本文中的 `InMemoryBusinessLogicRiskQueue` / `RedisBusinessLogicRiskQueue` 等 Python 实现描述保留为历史 queue-port 规格参考，不再表示当前 live runtime ownership。当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准。
+
 ## 阅读定位
 
 - **文档类型**：Reference（实施规格）。

@@ -68,6 +68,14 @@
 - `knowledge/tools.py`
 - `tool_runtime` orphan edge cluster
 
+### Business Logic Runtime Cluster Retirement (2026-04-18)
+
+- Rust `/api/v1/agent-test/business-logic*` SSE surface 与 `skills` catalog 已足以承接当前外部能力；新增 `backend/tests/task_routes_api.rs` contract 覆盖 `business_logic_recon` 的 `queue_snapshot` 形状，继续要求 `bl_recon.label == "业务逻辑风险点队列"`。
+- Python `backend_old/app/services/agent/business_logic_risk_queue.py`、`agents/business_logic_recon.py`、`agents/business_logic_analysis.py`、`tools/business_logic_recon_queue_tools.py` 已整簇退役。
+- 新增 `backend_old/tests/test_business_logic_runtime_retired.py` guard，要求上述 4 个文件物理不存在，且仓库内无 live Python importer。
+- `backend_old/tests/test_queue_tool_duplicate_semantics.py` 已收缩为只覆盖仍保留的 recon queue 幂等语义；`backend_old/tests/test_agent_prompt_contracts.py` 已移除只服务于 retired business-logic agents 的 prompt 合同断言。
+- `backend_old/app` runtime core 计数 `137 -> 133`，`agent orchestration / state / payload` 计数 `24 -> 22`，`scanner / bootstrap / queue / workspace / tracking` 计数 `5 -> 4`，`tools / tool_runtime` 计数 `27 -> 26`。
+
 ### Tool Runtime Retained Core Retirement (2026-04-18)
 
 - `tool_runtime/runtime.py`、`router.py`、`health_probe.py`、`write_scope.py`、`catalog.py` 整组退役，`backend_old/app` runtime core 计数 `172 -> 167`，`tools / tool_runtime` 分组计数 `32 -> 27`。

@@ -1,5 +1,7 @@
 # TOOL_SHARED_CATALOG
 
+> 2026-04-18 更新：本文提到的 `business_logic_recon` / `business_logic_analysis` Python agent 阶段说明已退役，仅保留为历史工具目录参考；当前 authoritative 迁移状态以 `plan/rust_full_takeover/*` 为准。
+
 该目录按“目标 -> 推荐工具 -> 可完成任务 -> 反例/误用”汇总运行时工具能力。
 
 ## 代码读取与定位

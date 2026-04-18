@@ -2,6 +2,16 @@
 
 ## Completed in this turn
 
+- `business_logic` Python runtime cluster 已退役：
+  - `backend_old/app/services/agent/business_logic_risk_queue.py`、`agents/business_logic_recon.py`、`agents/business_logic_analysis.py`、`tools/business_logic_recon_queue_tools.py` 已删除
+  - 新增 `backend_old/tests/test_business_logic_runtime_retired.py` guard
+  - `backend_old/tests/test_queue_tool_duplicate_semantics.py` 收缩为只覆盖 recon queue 幂等语义
+  - `backend_old/tests/test_agent_prompt_contracts.py` 已移除 retired business-logic agents 的 prompt 合同断言
+  - Rust `backend/tests/task_routes_api.rs` 已补 business-logic `queue_snapshot` contract 覆盖
+  - `backend_old/app` runtime core 计数 `137 -> 133`
+  - `agent orchestration / state / payload` 计数 `24 -> 22`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `5 -> 4`
+  - `tools / tool_runtime` 计数 `27 -> 26`
 - `scan_tracking.py` 已退役：
   - `backend_old/app/services/agent/scan_tracking.py` 已删除
   - 新增 `backend_old/tests/test_scan_tracking_retired.py` guard
