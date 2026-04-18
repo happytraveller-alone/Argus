@@ -91,9 +91,6 @@ COPY --from=uvbin /uv /usr/local/bin/uv
 ENV UV_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 ENV PIP_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 
-# 镜像源测速脚本（最先复制，几乎不会变化）
-COPY backend_old/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
-
 COPY backend_old/pyproject.toml backend_old/uv.lock backend_old/README.md ./
 
 RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
@@ -102,12 +99,6 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   uv_http_timeout=45; \
   pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://pypi.org/simple}"; \
   best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
-  ordered="$(python3 /usr/local/bin/package_source_selector.py \
-  --candidates "${pypi_index_candidates}" --kind pypi --timeout-seconds 2 2>/dev/null || true)"; \
-  if [ -n "${ordered}" ]; then \
-  first="$(printf '%s\n' "${ordered}" | head -1)"; \
-  [ -z "${first}" ] || best_index="${first}"; \
-  fi; \
   echo "Selected PyPI index: ${best_index}"; \
   uv venv "${BACKEND_VENV_PATH}"; \
   sync_with_index() { \
@@ -235,8 +226,6 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
   fc-cache -fv; \
   fi; \
   rm -rf /var/lib/apt/lists/*
-
-COPY backend_old/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 
 # 复制 docker CLI 及 buildx 插件，供 runner_preflight 以 subprocess 方式执行 docker build
 # buildx 是 Docker 23+ 执行 BuildKit 构建的必要插件（--mount=type=cache 等特性依赖它）

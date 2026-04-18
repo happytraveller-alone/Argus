@@ -23,8 +23,6 @@ ENV PYTHONNOUSERSITE=1
 ENV PYTHONPATH=/opt/flow-parser
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
-COPY backend_old/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
-
 RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-flow-parser-runner-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
@@ -63,7 +61,7 @@ RUN --mount=type=cache,id=vulhunter-flow-parser-runner-pip,target=/root/.cache/p
       if [ -n "${BACKEND_PYPI_INDEX_PRIMARY}" ]; then \
         raw_candidates="${BACKEND_PYPI_INDEX_PRIMARY},${raw_candidates}"; \
       fi; \
-      python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
+      printf '%s\n' "${raw_candidates}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | awk 'NF && !seen[$0]++'; \
     }; \
     install_runtime_deps() { \
       idx="$1"; \

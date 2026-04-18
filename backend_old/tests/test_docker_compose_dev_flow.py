@@ -151,7 +151,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
 
     backend_text = backend_dockerfile.read_text(encoding="utf-8")
     assert "FROM runtime-base AS dev-runtime" in backend_text
-    assert 'COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py' in backend_text
     assert "BACKEND_INSTALL_YASA" not in backend_text
     assert "ARG YASA_VERSION=" not in backend_text
     assert "backend-dev-entrypoint.sh" not in backend_text
@@ -159,7 +158,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'CMD ["/bin/sh", "/app/docker-entrypoint.sh"]' not in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" not in backend_text
     assert 'best_index="$(cat /tmp/pypi-best-index)"' not in backend_text
-    assert 'ordered="$(python3 /usr/local/bin/package_source_selector.py \\' in backend_text
     assert 'echo "Selected PyPI index: ${best_index}"' in backend_text
     assert 'for idx in "$@"; do \\' in backend_text
     assert 'sync_with_index "${BACKEND_PYPI_INDEX_PRIMARY}" || sync_with_index "${BACKEND_PYPI_INDEX_FALLBACK}"' not in backend_text
@@ -347,8 +345,9 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "code2flow" in flow_parser_runner_text
     assert "ARG BACKEND_PYPI_INDEX_CANDIDATES=" in flow_parser_runner_text
     assert 'ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}' in flow_parser_runner_text
-    assert "COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py" in flow_parser_runner_text
-    assert 'python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2' in flow_parser_runner_text
+    assert "package_source_selector.py" not in flow_parser_runner_text
+    assert "tr ',' '\\n'" in flow_parser_runner_text
+    assert "awk 'NF && !seen[$0]++'" in flow_parser_runner_text
     assert 'for idx in $(printf \'%s\\n\' "${ordered_pypi_indexes}"); do \\' in flow_parser_runner_text
     assert '/opt/flow-parser-venv/bin/pip install --disable-pip-version-check -i "${idx}" -r /tmp/flow-parser-runner.requirements.txt' in flow_parser_runner_text
     assert 'command -v code2flow >/dev/null 2>&1' in flow_parser_runner_text

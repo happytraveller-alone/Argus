@@ -75,6 +75,13 @@
 - 新增 `backend_old/tests/test_tool_runtime_cluster_retired.py` guard，复用既有 AST import offender helper，要求 5 个文件物理不存在，且 `app/`、`scripts/`、`tests/`、`alembic/` 无 live Python importer。
 - 验证结果：`backend_old` 下目标 pytest guard 通过，`backend` 下 `cargo test` 与 `cargo build --bin backend-rust` 通过，repo grep 只剩新 guard 中的断言/模块字符串。
 
+### Package Source Selector Retirement (2026-04-18)
+
+- `backend_old/scripts/package_source_selector.py` 已退役，`backend_old/scripts` Python 计数 `2 -> 1`。
+- Rust `backend/src/runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，去掉了对 `/usr/local/bin/package_source_selector.py` 的 Python subprocess 依赖。
+- `backend_old/scripts/dev-entrypoint.sh`、`docker/backend_old.Dockerfile` 与 `docker/flow-parser-runner.Dockerfile` 改为 shell 内按配置顺序去重选择镜像源，不再引用 Python selector。
+- 新增 `backend_old/tests/test_package_source_selector_retired.py` guard，要求脚本物理不存在，且 dev entrypoint / Dockerfile 不再保留任何 `package_source_selector.py` 文本引用。
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：

@@ -23,9 +23,19 @@ const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
     "https://pypi.mirrors.ustc.edu.cn/simple/,",
     "https://pypi.org/simple"
 );
-const PACKAGE_SELECTOR: &str = "/usr/local/bin/package_source_selector.py";
+const DEFAULT_PYPI_PROBE_TIMEOUT_SECONDS: f64 = 2.0;
+const PACKAGE_SELECTOR_USER_AGENT: &str = "AuditTool-package-source-selector/1.0";
+const DEFAULT_PYPI_PROBE_PATHS: [&str; 2] = ["/simple/pip/", "/simple/"];
 const WAIT_DB_MAX_RETRIES: u32 = 30;
 const WAIT_DB_SLEEP_SECONDS: u64 = 2;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ProbeResult {
+    url: String,
+    ok: bool,
+    latency_ms: Option<u128>,
+    matched_probe: Option<String>,
+}
 
 fn is_true(value: Option<&String>) -> bool {
     matches!(
@@ -163,6 +173,175 @@ fn compute_lock_hash(app_root: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn normalize_candidates(raw_candidates: &str) -> Vec<String> {
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for item in raw_candidates.split(',') {
+        let candidate = item.trim();
+        if candidate.is_empty() || !seen.insert(candidate.to_string()) {
+            continue;
+        }
+        normalized.push(candidate.to_string());
+    }
+    normalized
+}
+
+fn build_probe_url(candidate: &str, probe_path: &str) -> String {
+    if probe_path.starts_with("http://") || probe_path.starts_with("https://") {
+        return probe_path.to_string();
+    }
+    let candidate = candidate.trim_end_matches('/');
+    let probe_path = probe_path.trim();
+    if probe_path.is_empty() {
+        return candidate.to_string();
+    }
+
+    if candidate.ends_with("/simple") && probe_path.starts_with("/simple") {
+        let suffix = probe_path.trim_start_matches("/simple");
+        if suffix.is_empty() || suffix == "/" {
+            return format!("{candidate}/");
+        }
+        return format!("{candidate}{suffix}");
+    }
+
+    if probe_path.starts_with('/') {
+        return format!("{candidate}{probe_path}");
+    }
+    format!("{candidate}/{probe_path}")
+}
+
+fn sort_probe_results(candidates: &[String], results: &[ProbeResult]) -> Vec<String> {
+    let candidate_index = candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| (candidate.as_str(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let mut successful = results
+        .iter()
+        .filter(|result| result.ok)
+        .cloned()
+        .collect::<Vec<_>>();
+    successful.sort_by(|left, right| {
+        left.latency_ms
+            .unwrap_or(u128::MAX)
+            .cmp(&right.latency_ms.unwrap_or(u128::MAX))
+            .then_with(|| {
+                candidate_index
+                    .get(left.url.as_str())
+                    .copied()
+                    .unwrap_or(usize::MAX)
+                    .cmp(
+                        &candidate_index
+                            .get(right.url.as_str())
+                            .copied()
+                            .unwrap_or(usize::MAX),
+                    )
+            })
+    });
+
+    let mut ordered = successful
+        .into_iter()
+        .map(|result| result.url)
+        .collect::<Vec<_>>();
+    let successful_urls = ordered.iter().cloned().collect::<HashSet<_>>();
+    for candidate in candidates {
+        if !successful_urls.contains(candidate) {
+            ordered.push(candidate.clone());
+        }
+    }
+
+    ordered
+}
+
+async fn probe_candidate(
+    client: reqwest::Client,
+    candidate: String,
+    probe_paths: Vec<String>,
+    timeout: Duration,
+) -> ProbeResult {
+    for probe_path in probe_paths {
+        let probe_url = build_probe_url(&candidate, &probe_path);
+        let started_at = std::time::Instant::now();
+        let response = client
+            .get(&probe_url)
+            .header(reqwest::header::USER_AGENT, PACKAGE_SELECTOR_USER_AGENT)
+            .timeout(timeout)
+            .send()
+            .await;
+
+        if let Ok(response) = response {
+            let status = response.status();
+            if status.is_success() || status.is_redirection() {
+                return ProbeResult {
+                    url: candidate,
+                    ok: true,
+                    latency_ms: Some(started_at.elapsed().as_millis()),
+                    matched_probe: Some(probe_path),
+                };
+            }
+        }
+    }
+
+    ProbeResult {
+        url: candidate,
+        ok: false,
+        latency_ms: None,
+        matched_probe: None,
+    }
+}
+
+fn order_candidates_by_probe(
+    raw_candidates: &str,
+    probe_paths: &[&str],
+    timeout_seconds: f64,
+) -> Result<Vec<String>> {
+    let candidates = normalize_candidates(raw_candidates);
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let probe_paths = probe_paths
+        .iter()
+        .map(|probe_path| probe_path.to_string())
+        .collect::<Vec<_>>();
+    let timeout = Duration::from_secs_f64(timeout_seconds.max(0.2));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("build package-source probe runtime")?;
+
+    let results = runtime.block_on(async {
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .build()
+            .context("build package-source probe client")?;
+        let mut join_set = tokio::task::JoinSet::new();
+
+        for candidate in candidates.iter().cloned() {
+            let client = client.clone();
+            let probe_paths = probe_paths.clone();
+            join_set.spawn(async move {
+                probe_candidate(client, candidate, probe_paths, timeout).await
+            });
+        }
+
+        let mut results = Vec::new();
+        while let Some(join_result) = join_set.join_next().await {
+            match join_result {
+                Ok(result) => results.push(result),
+                Err(err) => {
+                    eprintln!("PyPI probe task failed: {err}");
+                }
+            }
+        }
+
+        Ok::<Vec<ProbeResult>, anyhow::Error>(results)
+    })?;
+
+    Ok(sort_probe_results(&candidates, &results))
+}
+
 fn get_ordered_pypi_candidates() -> Result<Vec<String>> {
     if let Some(explicit) = read_env_var("UV_INDEX_URL").or_else(|| read_env_var("PIP_INDEX_URL")) {
         return Ok(vec![explicit]);
@@ -170,50 +349,18 @@ fn get_ordered_pypi_candidates() -> Result<Vec<String>> {
 
     let raw = env::var("PYPI_INDEX_CANDIDATES")
         .unwrap_or_else(|_| DEFAULT_PYPI_INDEX_CANDIDATES.to_string());
-    let all_candidates: Vec<String> = raw
-        .split(',')
-        .map(|candidate| candidate.trim().to_string())
-        .filter(|candidate| !candidate.is_empty())
-        .collect();
-
-    let selector_path = Path::new(PACKAGE_SELECTOR);
-    if selector_path.exists() {
-        let output = Command::new("python3")
-            .args(&[
-                PACKAGE_SELECTOR,
-                "--candidates",
-                &raw,
-                "--kind",
-                "pypi",
-                "--timeout-seconds",
-                "2",
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()
-            .context("running package_source_selector")?;
-
-        if output.status.success() {
-            let mut ranked: Vec<String> = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(|line| line.trim().to_string())
-                .filter(|line| !line.is_empty())
-                .collect();
-
-            if !ranked.is_empty() {
-                let mut seen = HashSet::new();
-                ranked.retain(|candidate| seen.insert(candidate.clone()));
-                for candidate in &all_candidates {
-                    if seen.insert(candidate.clone()) {
-                        ranked.push(candidate.clone());
-                    }
-                }
-                return Ok(ranked);
-            }
+    match order_candidates_by_probe(
+        &raw,
+        &DEFAULT_PYPI_PROBE_PATHS,
+        DEFAULT_PYPI_PROBE_TIMEOUT_SECONDS,
+    ) {
+        Ok(candidates) if !candidates.is_empty() => Ok(candidates),
+        Ok(_) => Ok(normalize_candidates(&raw)),
+        Err(err) => {
+            eprintln!("PyPI index probe failed, falling back to configured order: {err}");
+            Ok(normalize_candidates(&raw))
         }
     }
-
-    Ok(all_candidates)
 }
 
 pub fn sync_backend_env_if_needed(app_root: &Path) -> Result<()> {
@@ -429,7 +576,10 @@ pub fn run(mode: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{backend_server_bin, run_optional_resets, DEFAULT_BACKEND_SERVER_BIN};
+    use super::{
+        backend_server_bin, build_probe_url, normalize_candidates, run_optional_resets,
+        sort_probe_results, ProbeResult, DEFAULT_BACKEND_SERVER_BIN,
+    };
     use std::{env, fs};
     use tempfile::TempDir;
 
@@ -454,6 +604,75 @@ mod tests {
             std::path::PathBuf::from("/tmp/custom-backend")
         );
         std::env::remove_var("BACKEND_SERVER_BIN");
+    }
+
+    #[test]
+    fn normalize_candidates_deduplicates_and_trims() {
+        let ordered = normalize_candidates(
+            " https://slow.example/simple,https://fast.example/simple, https://slow.example/simple ,, https://down.example/simple ",
+        );
+        assert_eq!(
+            ordered,
+            vec![
+                "https://slow.example/simple".to_string(),
+                "https://fast.example/simple".to_string(),
+                "https://down.example/simple".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_probe_results_prefers_fast_success_and_places_failures_last() {
+        let candidates = normalize_candidates(
+            "https://slow.example/simple,https://fast.example/simple,https://down.example/simple",
+        );
+        let ordered = sort_probe_results(
+            &candidates,
+            &[
+                ProbeResult {
+                    url: "https://slow.example/simple".to_string(),
+                    ok: true,
+                    latency_ms: Some(90),
+                    matched_probe: Some("/simple/".to_string()),
+                },
+                ProbeResult {
+                    url: "https://fast.example/simple".to_string(),
+                    ok: true,
+                    latency_ms: Some(10),
+                    matched_probe: Some("/simple/".to_string()),
+                },
+                ProbeResult {
+                    url: "https://down.example/simple".to_string(),
+                    ok: false,
+                    latency_ms: None,
+                    matched_probe: None,
+                },
+            ],
+        );
+
+        assert_eq!(
+            ordered,
+            vec![
+                "https://fast.example/simple".to_string(),
+                "https://slow.example/simple".to_string(),
+                "https://down.example/simple".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_probe_url_preserves_absolute_probes_and_joins_relative_paths() {
+        assert_eq!(
+            build_probe_url("https://mirror.example/simple/", "/simple/pip/"),
+            "https://mirror.example/simple/pip/"
+        );
+        assert_eq!(
+            build_probe_url(
+                "https://mirror.example/simple/",
+                "https://probe.example/health"
+            ),
+            "https://probe.example/health"
+        );
     }
 
     #[cfg(unix)]

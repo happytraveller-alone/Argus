@@ -17,7 +17,7 @@
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
 - `backend_old/alembic`：`21`
-- `backend_old/scripts`：`2`
+- `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
 另外还有 `scripts/migration/*.py`：`2`，它们属于 inventory / diff tooling，
@@ -47,7 +47,7 @@
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
 | `backend_old/alembic/*` | 21 | legacy schema / migration compatibility tail | Rust bootstrap + schema gate replacement |
-| `backend_old/scripts/*` | 2 | runtime-adjacent helper scripts | `backend/src/flow/*`, Rust bootstrap helper or retire |
+| `backend_old/scripts/*` | 1 | runtime-adjacent helper scripts | `backend/src/flow/*`, Rust bootstrap helper or retire |
 | `scripts/release-templates/runner_preflight.py` | 1 | release / ops preflight Python helper | Rust or shell-based release preflight |
 | `scripts/migration/*.py` | 2 | inventory / diff tooling | 可保留为 tooling，但必须与 canonical 文档同步 |
 
@@ -343,13 +343,19 @@
 - `backend_old/alembic/env.py`
 - `backend_old/alembic/versions/*.py`
 - `backend_old/scripts/flow_parser_runner.py`
-- `backend_old/scripts/package_source_selector.py`
 - `scripts/release-templates/runner_preflight.py`
 
 当前责任：
 
 - legacy schema compatibility / revision chain
 - flow parser script host
+- release / ops preflight Python helper
+
+已完成收口：
+
+- `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役。
+- Rust `backend/src/runtime/bootstrap.rs` 现在原生执行 PyPI candidate probe / 排序。
+- `backend_old/scripts/dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重选择，不再调用 Python selector。
 - package source probing
 - release / runner preflight
 

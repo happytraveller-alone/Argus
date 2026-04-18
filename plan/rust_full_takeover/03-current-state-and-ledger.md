@@ -6,7 +6,7 @@
 - `backend_old/app/api` Python：`0`
 - `backend_old/app` 非 API Python：`167`
 - `backend_old/alembic` Python：`21`
-- `backend_old/scripts` Python：`2`
+- `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
 
 ## Rust 已接管的主表面
@@ -42,6 +42,7 @@
 
 - `prompt_skill_runtime` compat projection 已收口（2026-04-18）：Rust `legacy_python_config` 投影从未落地（WIP 已撤销），Python 5 个 agent（recon / analysis / verification / business_logic_recon / business_logic_analysis）的 `config.prompt_skills` 注入块全部删除，`test_prompt_skills_injection.py` 已删。Rust `upsert_legacy_prompt_skill` / `compat_backfill_from_legacy_if_empty` 仍保留以支撑 alembic legacy 表，属于后续 DB final gate slice 的目标。
 - `tool_runtime` retained core（`runtime` / `router` / `health_probe` / `write_scope` / `catalog`）2026-04-18 整组退役。
+- `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役：Rust `runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，`dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重回退；`backend_old/scripts` Python 计数 `2 -> 1`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

@@ -2,6 +2,10 @@
 
 ## Completed in this turn
 
+- `backend_old/scripts/package_source_selector.py` 已退役：
+  - Rust `backend/src/runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，不再调用 Python selector
+  - `backend_old/scripts/dev-entrypoint.sh`、`docker/backend_old.Dockerfile`、`docker/flow-parser-runner.Dockerfile` 改成 shell 内按配置顺序去重选择镜像源
+  - 新增 `backend_old/tests/test_package_source_selector_retired.py` guard；`backend_old/scripts` Python 计数 `2 -> 1`
 - `wait_correct` 文档树已继续裁剪为最小 raw reference：
   - 保留 `route-inventory/*`、`api-contract/README.md`、`waves/wave-a-log.md`
   - 删除 `behavior-diff/`、`perf/`、`stability/`、`tooling/`、`non-api-python/` 等仅剩模板/占位说明的陈旧文档

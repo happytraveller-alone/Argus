@@ -74,10 +74,10 @@ select_pypi_index() {
 
     pypi_index_candidates="${PYPI_INDEX_CANDIDATES:-${DEFAULT_PYPI_INDEX_CANDIDATES}}"
     selected_pypi_index="$(
-        python3 /usr/local/bin/package_source_selector.py \
-            --candidates "${pypi_index_candidates}" \
-            --kind pypi \
-            --timeout-seconds 2 2>/dev/null | sed -n '1p'
+        printf '%s\n' "${pypi_index_candidates}" \
+            | tr ',' '\n' \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            | awk 'NF && !seen[$0]++ { print; exit }'
     )"
 
     if [ -z "${selected_pypi_index}" ]; then
