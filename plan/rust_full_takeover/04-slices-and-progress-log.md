@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `150`
+  - runtime core `148`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -179,6 +179,20 @@
   - `cargo test search_endpoints_are_rust_owned_and_return_project_matches --test search_api`
   - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_gitleaks_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py tests/test_agent_bootstrap_findings.py tests/test_external_tools_manual.py -k 'gitleaks_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module or not gitleaks'`
+
+### PHPStan Retirement For Opengrep-Only Runtime (2026-04-18)
+
+- Rust `static-tasks` / preflight / recovery 已移除 `phpstan` route/runtime surface，`backend/tests/opengrep_only_static_tasks.rs` 改为要求 `phpstan` routes 返回 `404`。
+- Python `phpstan` cluster 已退役：
+  - `backend_old/app/models/phpstan.py`
+  - `backend_old/app/services/agent/bootstrap/phpstan.py`
+  - `backend_old/app/services/agent/tools/external_tools.py` 中的 `PHPStanTool`
+- `backend_old/app` runtime core 计数 `150 -> 148`，`models / persistence mirror` 计数 `15 -> 14`，`scanner / bootstrap / queue / workspace / tracking` 计数 `14 -> 13`。
+- 新增 `backend_old/tests/test_phpstan_engine_retired.py` guard，要求 `phpstan` Python cluster 物理不存在，且 live importer 清零。
+- 验证结果：
+  - `cargo test phpstan_routes_are_not_owned_when_static_tasks_are_opengrep_only --test opengrep_only_static_tasks`
+  - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_phpstan_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py tests/test_external_tools_manual.py -k 'phpstan_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module or not phpstan'`
 
 ## 详细历史
 

@@ -25,7 +25,6 @@ import app.models.agent_task  # noqa: F401
 import app.models.analysis  # noqa: F401
 import app.models.audit_rule  # noqa: F401
 import app.models.opengrep  # noqa: F401
-import app.models.phpstan  # noqa: F401
 import app.models.pmd  # noqa: F401
 import app.models.pmd_scan  # noqa: F401
 import app.models.project  # noqa: F401
@@ -100,5 +99,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_migrations_online())
-
 

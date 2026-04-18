@@ -254,34 +254,6 @@ async def test_pmd(project_root: str):
     
     return result.success
 
-async def test_phpstan(project_root: str):
-    """测试 PHPStan 工具"""
-    print("\n" + "="*60)
-    print(" 测试 PHPStan PHP 静态分析工具")
-    print("="*60)
-    
-    sandbox_manager = SandboxManager()
-    
-    from app.services.agent.tools.external_tools import PHPStanTool
-    tool = PHPStanTool(project_root, sandbox_manager)
-    
-    print(f"工具名称: {tool.name}")
-    print(f"工具描述: {tool.description[:200]}...")
-    
-    print("\n执行扫描...")
-    result = await tool.execute(
-        target_path=".",
-        level=5,
-        max_results=30
-    )
-    
-    print(f"执行成功: {result.success}")
-    print(f"持续时间: {result.duration_ms}ms")
-    print(f"元数据: {result.metadata}")
-    print(f"\n结果:\n{result.to_string()[:2000]}")
-    
-    return result.success
-
 async def main():
     parser = argparse.ArgumentParser(
         description="手动测试外部安全工具",
@@ -301,7 +273,7 @@ async def main():
     
     parser.add_argument(
         "--tool",
-        choices=["opengrep", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd","phpstan", "all"],
+        choices=["opengrep", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd", "all"],
         default="all",
         help="要测试的工具（默认: all）"
     )
@@ -357,9 +329,6 @@ async def main():
         if args.tool in ["all", "pmd"]:
             results["pmd"] = await test_pmd(project_root)
 
-        if args.tool in ["all", "phpstan"]:
-            results["phpstan"] = await test_phpstan(project_root)
-        
     except KeyboardInterrupt:
         print("\n\n⏹️  测试被中断")
         sys.exit(0)

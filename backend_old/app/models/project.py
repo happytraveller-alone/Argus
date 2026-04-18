@@ -52,10 +52,6 @@ class Project(Base):
     opengrep_scan_tasks = relationship(
         "OpengrepScanTask", back_populates="project", cascade="all, delete-orphan"
     )
-    # PHPStan 静态扫描任务关系（新增）
-    phpstan_scan_tasks = relationship(
-        "PhpstanScanTask", back_populates="project", cascade="all, delete-orphan"
-    )
     # PMD 静态扫描任务关系（新增）
     pmd_scan_tasks = relationship(
         "PmdScanTask", back_populates="project", cascade="all, delete-orphan"

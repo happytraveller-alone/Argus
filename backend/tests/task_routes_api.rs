@@ -1512,7 +1512,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     let smoke_routes = [
         "/api/v1/static-tasks/rules?limit=5",
         "/api/v1/static-tasks/rules/generating/status",
-        "/api/v1/static-tasks/phpstan/rules?limit=5",
         "/api/v1/static-tasks/pmd/presets",
         "/api/v1/static-tasks/pmd/builtin-rulesets?limit=5",
         "/api/v1/static-tasks/cache/repo-stats",
@@ -1539,15 +1538,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
                 "name": "opengrep task",
                 "rule_ids": [],
                 "target_path": "."
-            }),
-        ),
-        (
-            "/api/v1/static-tasks/phpstan/scan",
-            json!({
-                "project_id": project_id,
-                "name": "phpstan task",
-                "target_path": ".",
-                "level": 5
             }),
         ),
         (
@@ -1618,18 +1608,10 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             "/api/v1/static-tasks/tasks/{}/findings?limit=20",
             created_task_ids[0]
         ),
-        format!(
-            "/api/v1/static-tasks/phpstan/tasks/{}",
-            created_task_ids[1]
-        ),
-        format!(
-            "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-            created_task_ids[1]
-        ),
-        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[2]),
+        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[1]),
         format!(
             "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-            created_task_ids[2]
+            created_task_ids[1]
         ),
     ];
 
@@ -1722,43 +1704,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .as_array()
         .is_some_and(|lines| !lines.is_empty()));
 
-    let phpstan_rules_response = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v1/static-tasks/phpstan/rules?limit=5")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(phpstan_rules_response.status(), StatusCode::OK);
-    let phpstan_rules_json: Value = serde_json::from_slice(
-        &to_bytes(phpstan_rules_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let phpstan_rule_id = phpstan_rules_json[0]["id"].as_str().unwrap().to_string();
-
-    let phpstan_rule_update = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::PATCH)
-                .uri(format!(
-                    "/api/v1/static-tasks/phpstan/rules/{}",
-                    encode_path_segment(&phpstan_rule_id)
-                ))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({ "name": "patched-rule-name" }).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(phpstan_rule_update.status(), StatusCode::OK);
-
     let pmd_builtin_response = app
         .clone()
         .oneshot(
@@ -1806,47 +1751,12 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .unwrap();
     assert_eq!(opengrep_finding_status.status(), StatusCode::OK);
 
-    let phpstan_findings_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-                created_task_ids[1]
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    let phpstan_findings_json: Value = serde_json::from_slice(
-        &to_bytes(phpstan_findings_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let phpstan_finding_id = phpstan_findings_json[0]["id"].as_str().unwrap().to_string();
-
-    let phpstan_finding_status = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/static-tasks/phpstan/findings/{phpstan_finding_id}/status?status=verified"
-                ))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(phpstan_finding_status.status(), StatusCode::OK);
-
     let pmd_findings_response = app
         .clone()
         .oneshot(
             Request::get(format!(
                 "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-                created_task_ids[2]
+                created_task_ids[1]
             ))
             .body(Body::empty())
             .unwrap(),

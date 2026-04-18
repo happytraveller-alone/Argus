@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
-    scan::{opengrep, phpstan, pmd},
+    scan::{opengrep, pmd},
     state::AppState,
 };
 
@@ -64,54 +64,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/findings/{finding_id}/status",
             post(update_opengrep_finding_status),
-        )
-        .route("/phpstan/rules", get(list_phpstan_rules))
-        .route(
-            "/phpstan/rules/batch/enabled",
-            post(batch_update_phpstan_rules_enabled),
-        )
-        .route(
-            "/phpstan/rules/batch/delete",
-            post(batch_delete_phpstan_rules),
-        )
-        .route(
-            "/phpstan/rules/batch/restore",
-            post(batch_restore_phpstan_rules),
-        )
-        .route(
-            "/phpstan/rules/{rule_id}",
-            get(get_phpstan_rule).patch(update_phpstan_rule),
-        )
-        .route(
-            "/phpstan/rules/{rule_id}/enabled",
-            post(update_phpstan_rule_enabled),
-        )
-        .route("/phpstan/rules/{rule_id}/delete", post(delete_phpstan_rule))
-        .route(
-            "/phpstan/rules/{rule_id}/restore",
-            post(restore_phpstan_rule),
-        )
-        .route("/phpstan/scan", post(create_phpstan_task))
-        .route("/phpstan/tasks", get(list_phpstan_tasks))
-        .route(
-            "/phpstan/tasks/{task_id}",
-            get(get_phpstan_task).delete(delete_phpstan_task),
-        )
-        .route(
-            "/phpstan/tasks/{task_id}/interrupt",
-            post(interrupt_phpstan_task),
-        )
-        .route(
-            "/phpstan/tasks/{task_id}/findings",
-            get(list_phpstan_findings),
-        )
-        .route(
-            "/phpstan/tasks/{task_id}/findings/{finding_id}",
-            get(get_phpstan_finding),
-        )
-        .route(
-            "/phpstan/findings/{finding_id}/status",
-            post(update_phpstan_finding_status),
         )
         .route("/pmd/presets", get(list_pmd_presets))
         .route("/pmd/builtin-rulesets", get(list_pmd_builtin_rulesets))
@@ -617,234 +569,6 @@ async fn update_opengrep_finding_status(
     update_static_finding_status(&state, "opengrep", &finding_id, &query.status).await
 }
 
-async fn list_phpstan_rules(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let overrides = load_task_snapshot(&state).await?.phpstan_rule_overrides;
-    let items = builtin_phpstan_rules(&state).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .map(|rule| {
-                let rule_id = rule
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                apply_rule_override_value(phpstan_rule_value(&rule), overrides.get(&rule_id))
-            })
-            .filter(|value| match query.is_active {
-                Some(is_active) => {
-                    value.get("is_active").and_then(Value::as_bool) == Some(is_active)
-                }
-                None => true,
-            })
-            .filter(|value| match query.deleted.as_deref() {
-                Some("true") => value.get("is_deleted").and_then(Value::as_bool) == Some(true),
-                Some("false") => value.get("is_deleted").and_then(Value::as_bool) != Some(true),
-                _ => true,
-            })
-            .filter(|value| {
-                contains_keyword(
-                    value
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default(),
-                    query.keyword.as_deref(),
-                )
-            })
-            .skip(query.skip.unwrap_or(0))
-            .take(query.limit.unwrap_or(1_000))
-            .collect(),
-    ))
-}
-
-async fn get_phpstan_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let overrides = load_task_snapshot(&state).await?.phpstan_rule_overrides;
-    let rule = builtin_phpstan_rules(&state)
-        .await?
-        .into_iter()
-        .find(|rule| {
-            rule.get("id")
-                .and_then(Value::as_str)
-                .is_some_and(|value| value == rule_id)
-        })
-        .ok_or_else(|| ApiError::NotFound(format!("phpstan rule not found: {rule_id}")))?;
-    Ok(Json(apply_rule_override_value(
-        phpstan_rule_value(&rule),
-        overrides.get(&rule_id),
-    )))
-}
-
-async fn update_phpstan_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "phpstan", &rule_id, payload.clone()).await?;
-    Ok(Json(json!({
-        "message": "phpstan rule updated in rust backend",
-        "rule": apply_rule_override_value((get_phpstan_rule(State(state.clone()), AxumPath(rule_id.clone())).await?).0, Some(&task_state::RuleOverrideRecord {
-            id: rule_id,
-            is_active: None,
-            is_deleted: None,
-            patch: payload,
-        })),
-    })))
-}
-
-async fn update_phpstan_rule_enabled(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    upsert_rule_override(
-        &state,
-        "phpstan",
-        &rule_id,
-        json!({ "is_active": is_active }),
-    )
-    .await?;
-    Ok(Json(json!({
-        "message": "phpstan rule enabled state updated in rust backend",
-        "rule_id": rule_id,
-        "is_active": is_active,
-    })))
-}
-
-async fn batch_update_phpstan_rules_enabled(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    Ok(Json(json!({
-        "message": "phpstan rule batch enabled updated in rust backend",
-        "updated_count": builtin_phpstan_rules(&state).await?.len(),
-        "is_active": is_active,
-    })))
-}
-
-async fn delete_phpstan_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "phpstan", &rule_id, json!({ "is_deleted": true })).await?;
-    Ok(Json(json!({
-        "message": "phpstan rule deleted in rust backend",
-        "rule_id": rule_id,
-        "is_deleted": true,
-    })))
-}
-
-async fn restore_phpstan_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    upsert_rule_override(&state, "phpstan", &rule_id, json!({ "is_deleted": false })).await?;
-    Ok(Json(json!({
-        "message": "phpstan rule restored in rust backend",
-        "rule_id": rule_id,
-        "is_deleted": false,
-    })))
-}
-
-async fn batch_delete_phpstan_rules(
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    Ok(Json(json!({
-        "message": "phpstan rule batch delete acknowledged in rust backend",
-        "updated_count": builtin_phpstan_rules(&state).await?.len(),
-        "is_deleted": true,
-    })))
-}
-
-async fn batch_restore_phpstan_rules(
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    Ok(Json(json!({
-        "message": "phpstan rule batch restore acknowledged in rust backend",
-        "updated_count": builtin_phpstan_rules(&state).await?.len(),
-        "is_deleted": false,
-    })))
-}
-
-async fn create_phpstan_task(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let level = payload.get("level").and_then(Value::as_i64).unwrap_or(5);
-    create_static_task(
-        &state,
-        "phpstan",
-        payload,
-        json!({
-            "level": level,
-        }),
-    )
-    .await
-}
-
-async fn list_phpstan_tasks(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_tasks(&state, "phpstan", query).await
-}
-
-async fn get_phpstan_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_task(&state, "phpstan", &task_id).await
-}
-
-async fn delete_phpstan_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    delete_static_task(&state, "phpstan", &task_id).await
-}
-
-async fn interrupt_phpstan_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    interrupt_static_task(&state, "phpstan", &task_id).await
-}
-
-async fn list_phpstan_findings(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_findings(&state, "phpstan", &task_id).await
-}
-
-async fn get_phpstan_finding(
-    State(state): State<AppState>,
-    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_finding(&state, "phpstan", &task_id, &finding_id).await
-}
-
-async fn update_phpstan_finding_status(
-    State(state): State<AppState>,
-    AxumPath(finding_id): AxumPath<String>,
-    Query(query): Query<StatusQuery>,
-) -> Result<Json<Value>, ApiError> {
-    update_static_finding_status(&state, "phpstan", &finding_id, &query.status).await
-}
-
 async fn list_pmd_presets() -> Json<Vec<Value>> {
     Json(vec![
         json!({"id": "security", "name": "Security", "alias": "security", "description": "Security-focused PMD preset", "categories": ["security"]}),
@@ -1155,18 +879,6 @@ fn default_static_findings(
             "status": "open",
             "confidence": "MEDIUM",
         }),
-        "phpstan" => json!({
-            "id": finding_id,
-            "scan_task_id": task_id,
-            "file_path": file_path,
-            "line": 1,
-            "resolved_file_path": file_path,
-            "resolved_line_start": 1,
-            "message": "placeholder phpstan finding from rust backend",
-            "identifier": "rust.placeholder",
-            "tip": Value::Null,
-            "status": "open",
-        }),
         "pmd" => json!({
             "id": finding_id,
             "scan_task_id": task_id,
@@ -1393,40 +1105,6 @@ async fn upsert_opengrep_rule(
     save_task_snapshot(state, &snapshot).await
 }
 
-async fn upsert_rule_override(
-    state: &AppState,
-    engine: &str,
-    rule_id: &str,
-    patch: Value,
-) -> Result<(), ApiError> {
-    let mut snapshot = load_task_snapshot(state).await?;
-    let target = match engine {
-        "phpstan" => &mut snapshot.phpstan_rule_overrides,
-        _ => {
-            return Err(ApiError::BadRequest(format!(
-                "unsupported rule override engine: {engine}"
-            )))
-        }
-    };
-    let entry =
-        target
-            .entry(rule_id.to_string())
-            .or_insert_with(|| task_state::RuleOverrideRecord {
-                id: rule_id.to_string(),
-                is_active: None,
-                is_deleted: None,
-                patch: json!({}),
-            });
-    if let Some(is_active) = patch.get("is_active").and_then(Value::as_bool) {
-        entry.is_active = Some(is_active);
-    }
-    if let Some(is_deleted) = patch.get("is_deleted").and_then(Value::as_bool) {
-        entry.is_deleted = Some(is_deleted);
-    }
-    merge_json_object(&mut entry.patch, &patch);
-    save_task_snapshot(state, &snapshot).await
-}
-
 async fn persist_uploaded_opengrep_rules(
     state: &AppState,
     mut multipart: Multipart,
@@ -1557,22 +1235,6 @@ async fn merged_opengrep_rules_from_snapshot(
     Ok(items)
 }
 
-async fn builtin_phpstan_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
-    let assets = phpstan::load_builtin_assets(state)
-        .await
-        .map_err(internal_error)?;
-    let combined = assets
-        .into_iter()
-        .find(|asset| asset.asset_path == "rules_phpstan/phpstan_rules_combined.json")
-        .ok_or_else(|| ApiError::Internal("missing phpstan combined rules asset".to_string()))?;
-    let payload = serde_json::from_str::<Value>(&combined.content).map_err(internal_error)?;
-    Ok(payload
-        .get("rules")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
-}
-
 async fn builtin_pmd_rulesets(
     state: &AppState,
 ) -> Result<Vec<task_state::PmdRuleConfigRecord>, ApiError> {
@@ -1662,24 +1324,6 @@ fn opengrep_rule_detail_value(record: &task_state::OpengrepRuleRecord) -> Value 
         }),
     );
     value
-}
-
-fn phpstan_rule_value(rule: &Value) -> Value {
-    json!({
-        "id": rule.get("id").cloned().unwrap_or(Value::Null),
-        "package": rule.get("package").cloned().unwrap_or(Value::Null),
-        "repo": rule.get("repo").cloned().unwrap_or(Value::Null),
-        "rule_class": rule.get("rule_class").cloned().unwrap_or(Value::Null),
-        "name": rule.get("name").cloned().unwrap_or(Value::Null),
-        "description_summary": rule.get("description_summary").cloned().unwrap_or(Value::Null),
-        "source_file": rule.get("source_file").cloned().unwrap_or(Value::Null),
-        "source": rule.get("source").cloned().unwrap_or_else(|| json!("official_extension")),
-        "source_content": Value::Null,
-        "is_active": true,
-        "is_deleted": false,
-        "created_at": Value::Null,
-        "updated_at": Value::Null,
-    })
 }
 
 fn pmd_rule_config_value(record: &task_state::PmdRuleConfigRecord) -> Value {

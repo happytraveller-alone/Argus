@@ -2,6 +2,13 @@
 
 ## Completed in this turn
 
+- `phpstan` 已按 `opengrep-only` 方针退役：
+  - Rust `static-tasks` / preflight / recovery 不再保留 `phpstan` route/runtime
+  - Python `phpstan.py`、`bootstrap/phpstan.py`、`PHPStanTool` 已删除
+  - 新增 `backend_old/tests/test_phpstan_engine_retired.py` guard
+  - `backend_old/app` runtime core 计数 `150 -> 148`
+  - `models / persistence mirror` 计数 `15 -> 14`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `14 -> 13`
 - `gitleaks` 已按 `opengrep-only` 方针退役：
   - Rust `static-tasks` / preflight / recovery 不再保留 `gitleaks` route/runtime
   - Python `gitleaks.py`、`bootstrap_gitleaks_runner.py`、`GitleaksTool` 及其专用 helper 已删除

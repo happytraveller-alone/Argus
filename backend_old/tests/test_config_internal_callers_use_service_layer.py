@@ -274,7 +274,6 @@ def test_no_live_python_module_imports_skill_test_agent_module():
 def test_bootstrap_callers_use_agent_scan_workspace_module():
     caller_paths = [
         PROJECT_ROOT / "app/services/agent/bootstrap/opengrep.py",
-        PROJECT_ROOT / "app/services/agent/bootstrap/phpstan.py",
     ]
 
     for path in caller_paths:

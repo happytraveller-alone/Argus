@@ -48,13 +48,11 @@ def _resolve_static_bootstrap_config(
     defaults: Dict[str, Any] = {
         "mode": "disabled",
         "opengrep_enabled": False,
-        "phpstan_enabled": False,
     }
     if source_mode == "hybrid":
         defaults = {
             "mode": "embedded",
             "opengrep_enabled": True,
-            "phpstan_enabled": False,
         }
 
     audit_scope = task.audit_scope if isinstance(getattr(task, "audit_scope", None), dict) else {}
@@ -72,16 +70,11 @@ def _resolve_static_bootstrap_config(
     opengrep_enabled = bool(
         static_bootstrap.get("opengrep_enabled", defaults["opengrep_enabled"])
     )
-    phpstan_enabled = bool(
-        static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
-    )
 
     if mode == "disabled":
         opengrep_enabled = False
-        phpstan_enabled = False
 
     return {
         "mode": mode,
         "opengrep_enabled": opengrep_enabled,
-        "phpstan_enabled": phpstan_enabled,
     }
