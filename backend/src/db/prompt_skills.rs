@@ -131,14 +131,8 @@ pub async fn set_builtin_prompt_state(
     let owner = resolve_owner_context(pool).await?;
     let mut tx = pool.begin().await?;
     upsert_rust_builtin_prompt_state(&mut tx, &owner, agent_key, is_active).await?;
-    upsert_legacy_builtin_prompt_state(
-        &mut tx,
-        &owner,
-        agent_key,
-        is_active,
-        supported_agent_keys,
-    )
-    .await?;
+    upsert_legacy_builtin_prompt_state(&mut tx, &owner, agent_key, is_active, supported_agent_keys)
+        .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -327,8 +321,8 @@ async fn load_legacy_prompt_skills(
         "#,
     )
     .bind(user_id)
-        .fetch_all(pool)
-        .await?;
+    .fetch_all(pool)
+    .await?;
 
     Ok(rows.into_iter().map(map_row_to_prompt_skill).collect())
 }
@@ -348,7 +342,9 @@ async fn load_legacy_builtin_prompt_state(
     let Some(row) = row else {
         return Ok(None);
     };
-    let raw: String = row.try_get("other_config").unwrap_or_else(|_| "{}".to_string());
+    let raw: String = row
+        .try_get("other_config")
+        .unwrap_or_else(|_| "{}".to_string());
     let parsed: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
     let Some(map) = parsed
         .get(LEGACY_PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY)
@@ -416,7 +412,11 @@ async fn insert_rust_prompt_skill(
     .bind(&item.agent_key)
     .bind(item.is_active)
     .bind(parse_timestamp(Some(item.created_at.as_str())))
-    .bind(item.updated_at.as_deref().map(|value| parse_timestamp(Some(value))))
+    .bind(
+        item.updated_at
+            .as_deref()
+            .map(|value| parse_timestamp(Some(value))),
+    )
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -446,7 +446,11 @@ async fn update_rust_prompt_skill(
     .bind(&item.scope)
     .bind(&item.agent_key)
     .bind(item.is_active)
-    .bind(item.updated_at.as_deref().map(|value| parse_timestamp(Some(value))))
+    .bind(
+        item.updated_at
+            .as_deref()
+            .map(|value| parse_timestamp(Some(value))),
+    )
     .execute(&mut **tx)
     .await?
     .rows_affected();
@@ -458,14 +462,13 @@ async fn delete_rust_prompt_skill(
     owner: &PromptSkillOwnerContext,
     prompt_skill_id: &str,
 ) -> Result<bool> {
-    let rows_affected = sqlx::query(
-        "delete from rust_prompt_skills where owner_id = $1 and id = $2",
-    )
-    .bind(&owner.rust_owner_id)
-    .bind(prompt_skill_id)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected();
+    let rows_affected =
+        sqlx::query("delete from rust_prompt_skills where owner_id = $1 and id = $2")
+            .bind(&owner.rust_owner_id)
+            .bind(prompt_skill_id)
+            .execute(&mut **tx)
+            .await?
+            .rows_affected();
     Ok(rows_affected > 0)
 }
 
@@ -579,10 +582,11 @@ async fn upsert_legacy_builtin_prompt_state(
     let Some(legacy_user_id) = owner.legacy_user_id.as_ref() else {
         return Ok(());
     };
-    let row = sqlx::query("select id, llm_config, other_config from user_configs where user_id = $1")
-        .bind(legacy_user_id)
-        .fetch_optional(&mut **tx)
-        .await?;
+    let row =
+        sqlx::query("select id, llm_config, other_config from user_configs where user_id = $1")
+            .bind(legacy_user_id)
+            .fetch_optional(&mut **tx)
+            .await?;
     let mut other_config = row
         .as_ref()
         .and_then(|row| row.try_get::<String, _>("other_config").ok())
@@ -591,7 +595,10 @@ async fn upsert_legacy_builtin_prompt_state(
     if !other_config.is_object() {
         other_config = Value::Object(Default::default());
     }
-    let mut builtin_state = extract_builtin_state_map(other_config.get(LEGACY_PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY), supported_agent_keys);
+    let mut builtin_state = extract_builtin_state_map(
+        other_config.get(LEGACY_PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY),
+        supported_agent_keys,
+    );
     builtin_state.insert(agent_key.to_string(), is_active);
     other_config[LEGACY_PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY] = serde_json::json!(builtin_state);
     let llm_config = row
@@ -645,7 +652,9 @@ fn map_row_to_prompt_skill(row: sqlx::postgres::PgRow) -> StoredPromptSkillRecor
         id: row.try_get("id").unwrap_or_default(),
         name: row.try_get("name").unwrap_or_default(),
         content: row.try_get("content").unwrap_or_default(),
-        scope: row.try_get("scope").unwrap_or_else(|_| "global".to_string()),
+        scope: row
+            .try_get("scope")
+            .unwrap_or_else(|_| "global".to_string()),
         agent_key: row.try_get("agent_key").unwrap_or(None),
         is_active: row.try_get("is_active").unwrap_or(true),
         created_at: format_timestamp(
@@ -684,8 +693,8 @@ fn format_timestamp(value: Option<OffsetDateTime>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     use super::{
         build_compat_backfill_plan, extract_builtin_state_map, prompt_skill_owner_context,
@@ -740,8 +749,11 @@ mod tests {
             builtin_state_count: 2,
         };
 
-        let plan =
-            build_compat_backfill_plan(&snapshot, &[legacy_prompt("legacy-1")], Some(&legacy_builtin));
+        let plan = build_compat_backfill_plan(
+            &snapshot,
+            &[legacy_prompt("legacy-1")],
+            Some(&legacy_builtin),
+        );
 
         assert_eq!(
             plan,
@@ -762,10 +774,16 @@ mod tests {
             builtin_state_count: 0,
         };
 
-        let plan =
-            build_compat_backfill_plan(&snapshot, &[legacy_prompt("legacy-1")], Some(&legacy_builtin));
+        let plan = build_compat_backfill_plan(
+            &snapshot,
+            &[legacy_prompt("legacy-1")],
+            Some(&legacy_builtin),
+        );
 
-        assert_eq!(plan.prompt_skills_to_import, Vec::<LegacyPromptSkillRecord>::new());
+        assert_eq!(
+            plan.prompt_skills_to_import,
+            Vec::<LegacyPromptSkillRecord>::new()
+        );
         assert_eq!(plan.builtin_state_to_import, Some(legacy_builtin));
     }
 
@@ -796,8 +814,7 @@ mod tests {
             "recon": "invalid"
         });
 
-        let values =
-            extract_builtin_state_map(Some(&raw), &["analysis", "verification", "recon"]);
+        let values = extract_builtin_state_map(Some(&raw), &["analysis", "verification", "recon"]);
 
         assert_eq!(
             values,

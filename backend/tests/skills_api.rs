@@ -207,7 +207,10 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
         assert_eq!(item["tool_type"], "");
         assert_eq!(item["tool_id"], "");
         assert_eq!(item["name"], skill_id);
-        assert!(item["selection_label"].as_str().unwrap().contains(agent_key));
+        assert!(item["selection_label"]
+            .as_str()
+            .unwrap()
+            .contains(agent_key));
         assert!(item["display_name"].as_str().unwrap().contains("Prompt"));
         assert!(!item["summary"]
             .as_str()
@@ -216,8 +219,12 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
         assert!(item["reason"].as_str().unwrap().len() > 0);
     }
 
-    assert!(items.iter().all(|item| item["tool_type"] != "prompt-builtin"));
-    assert!(items.iter().all(|item| item["tool_type"] != "prompt-custom"));
+    assert!(items
+        .iter()
+        .all(|item| item["tool_type"] != "prompt-builtin"));
+    assert!(items
+        .iter()
+        .all(|item| item["tool_type"] != "prompt-custom"));
 }
 
 #[tokio::test]

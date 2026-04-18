@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-18 12:22pm GMT+8
+# [audittool_personal] recent context, 2026-04-18 2:18pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 23 obs (9,163t read) | 608,241t work | 98% savings
+Stats: 39 obs (15,745t read) | 907,996t work | 98% savings
 
 ### Apr 18, 2026
 17 10:45a ✅ prompt_skill_runtime compat projection symmetrically retired
@@ -514,6 +514,22 @@ Stats: 23 obs (9,163t read) | 608,241t work | 98% savings
 106 11:55a ✅ All 5 acceptance criteria passed for tool_runtime retained core retirement
 108 11:57a ✅ cargo test full suite passed: 64 unit + 40 integration tests all green
 110 11:59a ✅ All 5 acceptance criteria verified and two residual stale-count fixes applied
+120 12:21p 🔵 stop-gate review confirmed: previous turn was explanation-only, no code edits
+133 12:55p ⚖️ rust_full_takeover plan execution initiated for agent/core cluster
+136 12:56p 🔵 rust_full_takeover: full plan state and codebase topology mapped for agent/core cluster audit
+138 1:00p 🔵 app/core cluster caller audit: config.py has 20+ live Python importers across retained runtime
+141 " 🔵 Rust runtime bootstrap still shells out to Python for DB readiness check and alembic upgrade
+144 1:01p 🔵 backend_old/scripts cluster: 3 files, 2 are active runtime assets used by Docker and Rust bootstrap
+147 1:03p 🟣 Rust-native PyPI mirror probe test added to bootstrap.rs
+150 1:05p 🔴 PyPI probe test failed: TcpListener::set_nonblocking PermissionDenied in sandbox — test approach needs revision
+155 1:06p 🟣 Rust-native PyPI mirror probe implemented in bootstrap.rs — package_source_selector.py Python subprocess removed
+157 1:07p 🔄 bootstrap.rs probe tests replaced: socket-based test removed, pure unit tests for normalize/sort/build_probe_url added
+159 1:08p 🔴 build_probe_url fixed: /simple path deduplication prevents double /simple/simple/ in probe URLs
+161 " ✅ package_source_selector.py retired: Python script deleted, Docker/shell references replaced with awk/tr fallback
+164 1:30p ⚖️ rust_full_takeover: Rust refactor execution plan resumed
+165 1:31p 🔄 package_source_selector.py retired: Rust native PyPI probe replaces Python subprocess
+166 " 🔵 git commit blocked: sandbox has read-only filesystem (.git/index.lock)
+169 2:12p ⚖️ rust_full_takeover: Rust refactor execution resumed per plan
 
-Access 608k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 908k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

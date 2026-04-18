@@ -30,12 +30,21 @@ args = ["/home/xyf/.nvm/versions/node/v22.17.0/lib/node_modules/oh-my-codex/dist
 enabled = true
 startup_timeout_sec = 5
 
+[mcp_servers.omx_state.tools.state_get_status]
+approval_mode = "approve"
+
 # OMX Project Memory MCP Server
 [mcp_servers.omx_memory]
 command = "node"
 args = ["/home/xyf/.nvm/versions/node/v22.17.0/lib/node_modules/oh-my-codex/dist/mcp/memory-server.js"]
 enabled = true
 startup_timeout_sec = 5
+
+[mcp_servers.omx_memory.tools.project_memory_read]
+approval_mode = "approve"
+
+[mcp_servers.omx_memory.tools.notepad_read]
+approval_mode = "approve"
 
 # OMX Code Intelligence MCP Server (LSP diagnostics, AST search)
 [mcp_servers.omx_code_intel]

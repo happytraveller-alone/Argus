@@ -80,7 +80,13 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
 
         let backfill = prompt_skills::compat_backfill_from_legacy_if_empty(
             state,
-            &["recon", "business_logic_recon", "analysis", "business_logic_analysis", "verification"],
+            &[
+                "recon",
+                "business_logic_recon",
+                "analysis",
+                "business_logic_analysis",
+                "verification",
+            ],
         )
         .await?;
         actions.push(format!(
