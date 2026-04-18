@@ -216,44 +216,6 @@ async def test_osv_scanner(project_root: str):
     
     return result.success
 
-async def test_pmd(project_root: str):
-    """测试 PMD 工具。
-
-    说明:
-    - PMD 现在依赖 SCANNER_PMD_IMAGE 提供扫描镜像
-    - 默认 `docker compose up` 会先拉取远程 backend 镜像；如需本地镜像构建，请显式叠加 `docker-compose.full.yml`
-    - 真正执行扫描时，backend 会通过 Docker SDK 基于 SCANNER_PMD_IMAGE 动态拉起临时 runner 容器
-    - 执行方式是运行期按需启动的一次性 runner 容器，不是 compose service 常驻参与扫描
-    - 这里只是可选的手工 smoke test，不属于默认自动验收
-    """
-    print("\n" + "="*60)
-    print(" 测试 PMD Java 源码扫描工具")
-    print("="*60)
-    
-    sandbox_manager = SandboxManager()
-    
-    from app.services.agent.tools.external_tools import PMDTool
-    tool = PMDTool(project_root, sandbox_manager)
-    
-    print(f"工具名称: {tool.name}")
-    print(f"工具描述: {tool.description[:200]}...")
-    
-    print("\n执行扫描...")
-    print("提示: 该 PMD 手工 smoke test 依赖 SCANNER_PMD_IMAGE，运行期会由 backend 通过 Docker SDK 动态拉起临时 runner 容器执行。")
-    # 使用本仓库内提供的 PMD 规则文件进行测试
-    result = await tool.execute(
-        target_path=".",
-        ruleset="backend/assets/scan_rule_assets/rules_pmd/HardCodedCryptoKey.xml",
-        max_results=30
-    )
-    
-    print(f"执行成功: {result.success}")
-    print(f"持续时间: {result.duration_ms}ms")
-    print(f"元数据: {result.metadata}")
-    print(f"\n结果:\n{result.to_string()[:2000]}")
-    
-    return result.success
-
 async def main():
     parser = argparse.ArgumentParser(
         description="手动测试外部安全工具",
@@ -273,7 +235,7 @@ async def main():
     
     parser.add_argument(
         "--tool",
-        choices=["opengrep", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd", "all"],
+        choices=["opengrep", "npm_audit", "safety", "trufflehog", "osv_scanner", "all"],
         default="all",
         help="要测试的工具（默认: all）"
     )
@@ -325,9 +287,6 @@ async def main():
         
         if args.tool in ["all", "osv_scanner"]:
             results["osv_scanner"] = await test_osv_scanner(project_root)
-
-        if args.tool in ["all", "pmd"]:
-            results["pmd"] = await test_pmd(project_root)
 
     except KeyboardInterrupt:
         print("\n\n⏹️  测试被中断")

@@ -194,6 +194,21 @@
   - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_phpstan_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py tests/test_external_tools_manual.py -k 'phpstan_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module or not phpstan'`
 
+### PMD Retirement For Opengrep-Only Runtime (2026-04-18)
+
+- Rust `static-tasks` / preflight / recovery / `scan::pmd` 已移除 `pmd` route/runtime surface，`backend/tests/opengrep_only_static_tasks.rs` 改为要求 `pmd` routes 返回 `404`。
+- Python `pmd` cluster 已退役：
+  - `backend_old/app/models/pmd.py`
+  - `backend_old/app/models/pmd_scan.py`
+  - `backend_old/app/services/pmd_rulesets.py`
+  - `backend_old/app/services/agent/tools/external_tools.py` 中的 `PMDTool`
+- `backend_old/app` runtime core 计数 `148 -> 145`，`models / persistence mirror` 计数 `14 -> 12`，`shared helpers` 计数 `4 -> 3`。
+- 新增 `backend_old/tests/test_pmd_engine_retired.py` guard，要求 `pmd` Python cluster 物理不存在，且 live importer 清零。
+- 验证结果：
+  - `cargo test pmd_routes_are_not_owned_when_static_tasks_are_opengrep_only --test opengrep_only_static_tasks`
+  - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_pmd_engine_retired.py tests/test_config_internal_callers_use_service_layer.py tests/test_external_tools_manual.py -k 'pmd_engine_retired or bootstrap_callers_use_agent_scan_workspace_module or not pmd'`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：

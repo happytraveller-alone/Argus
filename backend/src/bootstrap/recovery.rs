@@ -40,14 +40,6 @@ const RECOVERY_SPECS: &[RecoverySpec] = &[
         has_error_message: false,
         has_error_count: true,
     },
-    RecoverySpec {
-        name: "pmd",
-        table: "pmd_scan_tasks",
-        recoverable_statuses: &["pending", "running"],
-        has_completed_at: false,
-        has_error_message: true,
-        has_error_count: false,
-    },
 ];
 
 pub async fn run(state: &AppState, database_reachable: bool) -> Result<StartupRecoveryStatus> {
@@ -111,8 +103,7 @@ async fn fetch_present_tables(pool: &PgPool) -> Result<Vec<String>> {
          WHERE table_schema = 'public'
            AND table_name IN (
              'agent_tasks',
-             'opengrep_scan_tasks',
-             'pmd_scan_tasks'
+             'opengrep_scan_tasks'
            )",
     )
     .fetch_all(pool)
@@ -165,10 +156,7 @@ mod tests {
             .iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
-        assert_eq!(
-            names,
-            vec!["agent", "opengrep", "pmd"]
-        );
+        assert_eq!(names, vec!["agent", "opengrep"]);
     }
 
     #[test]

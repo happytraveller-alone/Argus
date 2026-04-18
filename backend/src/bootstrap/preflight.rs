@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    scan::{opengrep, pmd},
+    scan::opengrep,
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -194,12 +194,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
             mounts: Vec::new(),
         },
         RunnerPreflightSpec {
-            name: "pmd",
-            image: config.scanner_pmd_image.clone(),
-            command: vec!["pmd".to_string(), "--version".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
             name: "flow-parser",
             image: config.flow_parser_runner_image.clone(),
             command: vec![
@@ -231,14 +225,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         }
     }
 
-    if let Some(pmd_spec) = specs.iter_mut().find(|spec| spec.name == "pmd") {
-        if let Some((workspace_dir, command, mounts)) = build_pmd_preflight_inputs(state).await? {
-            pmd_spec.command = command;
-            pmd_spec.mounts = mounts;
-            cleanup_dirs.push(workspace_dir);
-        }
-    }
-
     Ok((specs, cleanup_dirs))
 }
 
@@ -261,35 +247,6 @@ async fn build_opengrep_preflight_inputs(
     )))
 }
 
-async fn build_pmd_preflight_inputs(
-    state: &AppState,
-) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir =
-        std::env::temp_dir().join(format!("pmd-preflight-{}", uuid::Uuid::new_v4()));
-    let source_dir = workspace_dir.join("source");
-    tokio::fs::create_dir_all(&source_dir).await?;
-    tokio::fs::write(
-        source_dir.join("Demo.java"),
-        "public class Demo { public void run() { try { int a = 1; } catch (Exception e) {} } }\n",
-    )
-    .await?;
-    let assets = pmd::load_builtin_rulesets(state).await?;
-    let Some(_rules_dir) = pmd::materialize_ruleset_directory(state, &workspace_dir).await? else {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Ok(None);
-    };
-    let Some(ruleset) = pmd::select_preflight_ruleset(&assets) else {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Ok(None);
-    };
-    let command = pmd::build_check_command("/work/source", &format!("/work/pmd-rules/{ruleset}"));
-    Ok(Some((
-        workspace_dir.clone(),
-        command,
-        vec![(workspace_dir, "/work".to_string())],
-    )))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{config::AppConfig, state::AppState};
@@ -304,10 +261,7 @@ mod tests {
             .expect("state should build");
         let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
         let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
-        assert_eq!(
-            names,
-            vec!["opengrep", "pmd", "flow-parser", "sandbox-runner"]
-        );
+        assert_eq!(names, vec!["opengrep", "flow-parser", "sandbox-runner"]);
 
         let opengrep = specs
             .iter()
@@ -318,18 +272,6 @@ mod tests {
             vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
         );
         assert_eq!(opengrep.mounts.len(), 1);
-
-        let pmd = specs
-            .iter()
-            .find(|spec| spec.name == "pmd")
-            .expect("pmd spec should exist");
-        assert_eq!(pmd.command.first().map(String::as_str), Some("pmd"));
-        assert!(pmd.command.iter().any(|part| part == "-R"));
-        assert!(pmd
-            .command
-            .iter()
-            .any(|part| part.starts_with("/work/pmd-rules/")));
-        assert_eq!(pmd.mounts.len(), 1);
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;

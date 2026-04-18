@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
-    scan::{opengrep, pmd},
+    scan::opengrep,
     state::AppState,
 };
 
@@ -65,36 +65,6 @@ pub fn router() -> Router<AppState> {
             "/findings/{finding_id}/status",
             post(update_opengrep_finding_status),
         )
-        .route("/pmd/presets", get(list_pmd_presets))
-        .route("/pmd/builtin-rulesets", get(list_pmd_builtin_rulesets))
-        .route(
-            "/pmd/builtin-rulesets/{ruleset_id}",
-            get(get_pmd_builtin_ruleset),
-        )
-        .route("/pmd/rule-configs", get(list_pmd_rule_configs))
-        .route("/pmd/rule-configs/import", post(import_pmd_rule_config))
-        .route(
-            "/pmd/rule-configs/{rule_config_id}",
-            get(get_pmd_rule_config)
-                .patch(update_pmd_rule_config)
-                .delete(delete_pmd_rule_config),
-        )
-        .route("/pmd/scan", post(create_pmd_task))
-        .route("/pmd/tasks", get(list_pmd_tasks))
-        .route(
-            "/pmd/tasks/{task_id}",
-            get(get_pmd_task).delete(delete_pmd_task),
-        )
-        .route("/pmd/tasks/{task_id}/interrupt", post(interrupt_pmd_task))
-        .route("/pmd/tasks/{task_id}/findings", get(list_pmd_findings))
-        .route(
-            "/pmd/tasks/{task_id}/findings/{finding_id}",
-            get(get_pmd_finding),
-        )
-        .route(
-            "/pmd/findings/{finding_id}/status",
-            post(update_pmd_finding_status),
-        )
         .route("/cache/repo-stats", get(get_repo_cache_stats))
         .route("/cache/cleanup-unused", post(cleanup_unused_cache))
         .route("/cache/clear-all", post(clear_all_cache))
@@ -109,7 +79,6 @@ struct ListQuery {
     source: Option<String>,
     keyword: Option<String>,
     language: Option<String>,
-    deleted: Option<String>,
     is_active: Option<bool>,
     skip: Option<usize>,
     limit: Option<usize>,
@@ -569,222 +538,6 @@ async fn update_opengrep_finding_status(
     update_static_finding_status(&state, "opengrep", &finding_id, &query.status).await
 }
 
-async fn list_pmd_presets() -> Json<Vec<Value>> {
-    Json(vec![
-        json!({"id": "security", "name": "Security", "alias": "security", "description": "Security-focused PMD preset", "categories": ["security"]}),
-        json!({"id": "performance", "name": "Performance", "alias": "performance", "description": "Performance-focused PMD preset", "categories": ["performance"]}),
-        json!({"id": "design", "name": "Design", "alias": "design", "description": "Design-focused PMD preset", "categories": ["design"]}),
-    ])
-}
-
-async fn list_pmd_builtin_rulesets(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let items = builtin_pmd_rulesets(&state).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .filter(|item| contains_keyword(&item.name, query.keyword.as_deref()))
-            .filter(|item| match query.language.as_deref() {
-                Some(language) => item
-                    .languages
-                    .iter()
-                    .any(|value| value.eq_ignore_ascii_case(language)),
-                None => true,
-            })
-            .take(query.limit.unwrap_or(1_000))
-            .map(|record| pmd_rule_config_value(&record))
-            .collect(),
-    ))
-}
-
-async fn get_pmd_builtin_ruleset(
-    State(state): State<AppState>,
-    AxumPath(ruleset_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let item = builtin_pmd_rulesets(&state)
-        .await?
-        .into_iter()
-        .find(|item| item.id == ruleset_id)
-        .ok_or_else(|| ApiError::NotFound(format!("pmd ruleset not found: {ruleset_id}")))?;
-    Ok(Json(pmd_rule_config_value(&item)))
-}
-
-async fn import_pmd_rule_config(
-    State(state): State<AppState>,
-    mut multipart: Multipart,
-) -> Result<Json<Value>, ApiError> {
-    let mut name = "custom-pmd-ruleset".to_string();
-    let mut description = None;
-    let mut raw_xml = "<ruleset />".to_string();
-    while let Some(field) = multipart.next_field().await.map_err(internal_error)? {
-        match field.name() {
-            Some("name") => {
-                name = field.text().await.map_err(internal_error)?;
-            }
-            Some("description") => {
-                description = Some(field.text().await.map_err(internal_error)?);
-            }
-            Some("xml_file") => {
-                raw_xml = String::from_utf8(field.bytes().await.map_err(internal_error)?.to_vec())
-                    .unwrap_or_else(|_| "<ruleset />".to_string());
-            }
-            _ => {}
-        }
-    }
-    let record = build_custom_pmd_rule_config(name, description, raw_xml);
-    let mut snapshot = load_task_snapshot(&state).await?;
-    snapshot
-        .pmd_rule_configs
-        .insert(record.id.clone(), record.clone());
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(pmd_rule_config_value(&record)))
-}
-
-async fn list_pmd_rule_configs(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let items = load_task_snapshot(&state)
-        .await?
-        .pmd_rule_configs
-        .into_values()
-        .filter(|item| match query.is_active {
-            Some(is_active) => item.is_active == is_active,
-            None => true,
-        })
-        .filter(|item| contains_keyword(&item.name, query.keyword.as_deref()))
-        .skip(query.skip.unwrap_or(0))
-        .take(query.limit.unwrap_or(1_000))
-        .map(|item| pmd_rule_config_value(&item))
-        .collect::<Vec<_>>();
-    Ok(Json(items))
-}
-
-async fn get_pmd_rule_config(
-    State(state): State<AppState>,
-    AxumPath(rule_config_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let snapshot = load_task_snapshot(&state).await?;
-    let item = snapshot
-        .pmd_rule_configs
-        .get(&rule_config_id)
-        .ok_or_else(|| {
-            ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}"))
-        })?;
-    Ok(Json(pmd_rule_config_value(item)))
-}
-
-async fn update_pmd_rule_config(
-    State(state): State<AppState>,
-    AxumPath(rule_config_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let mut snapshot = load_task_snapshot(&state).await?;
-    let item = snapshot
-        .pmd_rule_configs
-        .get_mut(&rule_config_id)
-        .ok_or_else(|| {
-            ApiError::NotFound(format!("pmd rule config not found: {rule_config_id}"))
-        })?;
-    if let Some(value) = optional_string(&payload, "name") {
-        item.name = value;
-    }
-    if let Some(value) = optional_string(&payload, "description") {
-        item.description = Some(value);
-    }
-    if let Some(value) = optional_bool(&payload, "is_active") {
-        item.is_active = value;
-    }
-    item.updated_at = Some(now_rfc3339());
-    let response_value = pmd_rule_config_value(item);
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(response_value))
-}
-
-async fn delete_pmd_rule_config(
-    State(state): State<AppState>,
-    AxumPath(rule_config_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let mut snapshot = load_task_snapshot(&state).await?;
-    snapshot.pmd_rule_configs.remove(&rule_config_id);
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(json!({
-        "message": "pmd rule config deleted in rust backend",
-        "id": rule_config_id,
-    })))
-}
-
-async fn create_pmd_task(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let ruleset = optional_string(&payload, "ruleset").unwrap_or_else(|| "security".to_string());
-    create_static_task(
-        &state,
-        "pmd",
-        payload,
-        json!({
-            "ruleset": ruleset,
-            "high_count": 0,
-            "medium_count": 0,
-            "low_count": 0,
-        }),
-    )
-    .await
-}
-
-async fn list_pmd_tasks(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_tasks(&state, "pmd", query).await
-}
-
-async fn get_pmd_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_task(&state, "pmd", &task_id).await
-}
-
-async fn delete_pmd_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    delete_static_task(&state, "pmd", &task_id).await
-}
-
-async fn interrupt_pmd_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    interrupt_static_task(&state, "pmd", &task_id).await
-}
-
-async fn list_pmd_findings(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_findings(&state, "pmd", &task_id).await
-}
-
-async fn get_pmd_finding(
-    State(state): State<AppState>,
-    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_finding(&state, "pmd", &task_id, &finding_id).await
-}
-
-async fn update_pmd_finding_status(
-    State(state): State<AppState>,
-    AxumPath(finding_id): AxumPath<String>,
-    Query(query): Query<StatusQuery>,
-) -> Result<Json<Value>, ApiError> {
-    update_static_finding_status(&state, "pmd", &finding_id, &query.status).await
-}
-
 async fn get_repo_cache_stats() -> Json<Value> {
     Json(json!({
         "total_repositories": 0,
@@ -878,20 +631,6 @@ fn default_static_findings(
             "severity": "WARNING",
             "status": "open",
             "confidence": "MEDIUM",
-        }),
-        "pmd" => json!({
-            "id": finding_id,
-            "scan_task_id": task_id,
-            "file_path": file_path,
-            "begin_line": 1,
-            "end_line": 1,
-            "resolved_file_path": file_path,
-            "resolved_line_start": 1,
-            "rule": "ApexBadCrypto",
-            "ruleset": "security",
-            "priority": 3,
-            "message": "placeholder pmd finding from rust backend",
-            "status": "open",
         }),
         _ => return Vec::new(),
     };
@@ -1235,51 +974,6 @@ async fn merged_opengrep_rules_from_snapshot(
     Ok(items)
 }
 
-async fn builtin_pmd_rulesets(
-    state: &AppState,
-) -> Result<Vec<task_state::PmdRuleConfigRecord>, ApiError> {
-    let assets = pmd::load_builtin_rulesets(state)
-        .await
-        .map_err(internal_error)?;
-    Ok(assets
-        .into_iter()
-        .map(|asset| {
-            let filename = asset
-                .asset_path
-                .strip_prefix("rules_pmd/")
-                .unwrap_or(asset.asset_path.as_str())
-                .to_string();
-            let name =
-                xml_attr(&asset.content, "ruleset", "name").unwrap_or_else(|| file_stem(&filename));
-            let description = xml_tag(&asset.content, "description");
-            let rule_count = asset.content.matches("<rule ").count() as i64;
-            let languages = xml_attr_values(&asset.content, "language");
-            let priorities = xml_tag_values(&asset.content, "priority")
-                .into_iter()
-                .filter_map(|value| value.parse::<i64>().ok())
-                .collect::<Vec<_>>();
-            let external_info_urls = xml_attr_values(&asset.content, "externalInfoUrl");
-            task_state::PmdRuleConfigRecord {
-                id: filename.clone(),
-                name: name.clone(),
-                description,
-                filename,
-                is_active: true,
-                source: "builtin".to_string(),
-                ruleset_name: name,
-                rule_count,
-                languages,
-                priorities,
-                external_info_urls,
-                rules: Vec::new(),
-                raw_xml: asset.content,
-                created_at: Some("2026-01-01T00:00:00Z".to_string()),
-                updated_at: None,
-            }
-        })
-        .collect())
-}
-
 fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
     let mut value = json!({
         "id": record.id,
@@ -1324,79 +1018,6 @@ fn opengrep_rule_detail_value(record: &task_state::OpengrepRuleRecord) -> Value 
         }),
     );
     value
-}
-
-fn pmd_rule_config_value(record: &task_state::PmdRuleConfigRecord) -> Value {
-    json!({
-        "id": record.id,
-        "name": record.name,
-        "description": record.description,
-        "filename": record.filename,
-        "is_active": record.is_active,
-        "source": record.source,
-        "ruleset_name": record.ruleset_name,
-        "rule_count": record.rule_count,
-        "languages": record.languages,
-        "priorities": record.priorities,
-        "external_info_urls": record.external_info_urls,
-        "rules": record.rules,
-        "raw_xml": record.raw_xml,
-        "created_by": Value::Null,
-        "created_at": record.created_at,
-        "updated_at": record.updated_at,
-    })
-}
-
-fn apply_rule_override_value(
-    mut value: Value,
-    override_record: Option<&task_state::RuleOverrideRecord>,
-) -> Value {
-    if let Some(override_record) = override_record {
-        if let Some(is_active) = override_record.is_active {
-            if let Some(object) = value.as_object_mut() {
-                object.insert("is_active".to_string(), json!(is_active));
-            }
-        }
-        if let Some(is_deleted) = override_record.is_deleted {
-            if let Some(object) = value.as_object_mut() {
-                object.insert("is_deleted".to_string(), json!(is_deleted));
-            }
-        }
-        merge_json_object(&mut value, &override_record.patch);
-    }
-    value
-}
-
-fn build_custom_pmd_rule_config(
-    name: String,
-    description: Option<String>,
-    raw_xml: String,
-) -> task_state::PmdRuleConfigRecord {
-    let filename = format!("{}.xml", slugify(&name));
-    let ruleset_name = xml_attr(&raw_xml, "ruleset", "name").unwrap_or_else(|| name.clone());
-    let languages = xml_attr_values(&raw_xml, "language");
-    let priorities = xml_tag_values(&raw_xml, "priority")
-        .into_iter()
-        .filter_map(|value| value.parse::<i64>().ok())
-        .collect::<Vec<_>>();
-    let external_info_urls = xml_attr_values(&raw_xml, "externalInfoUrl");
-    task_state::PmdRuleConfigRecord {
-        id: format!("cfg:{}", Uuid::new_v4()),
-        name,
-        description,
-        filename,
-        is_active: true,
-        source: "custom".to_string(),
-        ruleset_name,
-        rule_count: raw_xml.matches("<rule ").count() as i64,
-        languages,
-        priorities,
-        external_info_urls,
-        rules: Vec::new(),
-        raw_xml,
-        created_at: Some(now_rfc3339()),
-        updated_at: None,
-    }
 }
 
 async fn load_task_snapshot(state: &AppState) -> Result<task_state::TaskStateSnapshot, ApiError> {
@@ -1493,72 +1114,6 @@ fn file_stem(path: &str) -> String {
         .trim_end_matches(".xml")
         .trim_end_matches(".toml")
         .to_string()
-}
-
-fn xml_attr(content: &str, tag_name: &str, attr_name: &str) -> Option<String> {
-    let start = content.find(&format!("<{tag_name}"))?;
-    let rest = &content[start..];
-    let attr_token = format!("{attr_name}=\"");
-    let attr_start = rest.find(&attr_token)?;
-    let after = &rest[attr_start + attr_token.len()..];
-    let attr_end = after.find('"')?;
-    Some(after[..attr_end].to_string())
-}
-
-fn xml_attr_values(content: &str, attr_name: &str) -> Vec<String> {
-    let token = format!("{attr_name}=\"");
-    let mut values = BTreeSet::new();
-    let mut current = content;
-    while let Some(index) = current.find(&token) {
-        let after = &current[index + token.len()..];
-        if let Some(end) = after.find('"') {
-            values.insert(after[..end].to_string());
-            current = &after[end + 1..];
-        } else {
-            break;
-        }
-    }
-    values.into_iter().collect()
-}
-
-fn xml_tag(content: &str, tag_name: &str) -> Option<String> {
-    let start_token = format!("<{tag_name}>");
-    let end_token = format!("</{tag_name}>");
-    let start = content.find(&start_token)?;
-    let after = &content[start + start_token.len()..];
-    let end = after.find(&end_token)?;
-    Some(after[..end].trim().replace('\n', " "))
-}
-
-fn xml_tag_values(content: &str, tag_name: &str) -> Vec<String> {
-    let start_token = format!("<{tag_name}>");
-    let end_token = format!("</{tag_name}>");
-    let mut values = Vec::new();
-    let mut current = content;
-    while let Some(start) = current.find(&start_token) {
-        let after = &current[start + start_token.len()..];
-        if let Some(end) = after.find(&end_token) {
-            values.push(after[..end].trim().replace('\n', " "));
-            current = &after[end + end_token.len()..];
-        } else {
-            break;
-        }
-    }
-    values
-}
-
-fn slugify(input: &str) -> String {
-    input
-        .chars()
-        .map(|ch| match ch {
-            'a'..='z' | 'A'..='Z' | '0'..='9' => ch.to_ascii_lowercase(),
-            _ => '-',
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
 }
 
 fn merge_json_object(target: &mut Value, patch: &Value) {

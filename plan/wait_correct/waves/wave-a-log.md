@@ -2,6 +2,13 @@
 
 ## Completed in this turn
 
+- `pmd` 已按 `opengrep-only` 方针退役：
+  - Rust `static-tasks` / preflight / recovery / `scan::pmd` 不再保留 `pmd` route/runtime
+  - Python `pmd.py`、`pmd_scan.py`、`pmd_rulesets.py`、`PMDTool` 已删除
+  - 新增 `backend_old/tests/test_pmd_engine_retired.py` guard
+  - `backend_old/app` runtime core 计数 `148 -> 145`
+  - `models / persistence mirror` 计数 `14 -> 12`
+  - `shared helpers` 计数 `4 -> 3`
 - `phpstan` 已按 `opengrep-only` 方针退役：
   - Rust `static-tasks` / preflight / recovery 不再保留 `phpstan` route/runtime
   - Python `phpstan.py`、`bootstrap/phpstan.py`、`PHPStanTool` 已删除

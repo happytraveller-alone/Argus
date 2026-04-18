@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`148`
+- `backend_old/app` 非 API Python：`145`
 
-`148` 是当前 runtime core 主计数。
+`145` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,14 +25,14 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `148`）
+### `backend_old/app` runtime core（共 `145`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
 | `app root + core/*` | 3 | retained live core config/security | `backend/src/core/*` |
 | `db/*` | 1 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
-| `models/*` | 14 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| `services/shared/*` | 4 | mixed retained helper | `backend/src/*` 对应 shared service |
+| `models/*` | 12 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| `services/shared/*` | 3 | mixed retained helper | `backend/src/*` 对应 shared service |
 | `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/agent` bootstrap / scan / queue | 13 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 13 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
@@ -93,7 +93,7 @@
 
 - `backend_old/app/db/__init__.py` 已于 2026-04-18 退役。
 - `backend_old/app/db/schema_snapshots/__init__.py` 已于 2026-04-18 退役。
-- `services/bandit_rules_snapshot.py` 与 `services/pmd_rulesets.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`，不再通过 `app.db` package shell 桥接。
+- `services/bandit_rules_snapshot.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`，不再通过 `app.db` package shell 桥接。
 
 目标状态：
 
@@ -122,6 +122,7 @@
 - `backend_old/app/models/bandit.py` 已于 2026-04-18 退役。
 - `backend_old/app/models/gitleaks.py` 已于 2026-04-18 退役。
 - `backend_old/app/models/phpstan.py` 已于 2026-04-18 退役。
+- `backend_old/app/models/pmd.py` 与 `backend_old/app/models/pmd_scan.py` 已于 2026-04-18 退役。
 - `backend_old/app/models/__init__.py` 已于 2026-04-18 退役。
 - Alembic `env.py` 改为显式导入各 model module，不再通过 `app.models` package shell 触发表元数据注册。
 
@@ -129,7 +130,6 @@
 
 目标文件：
 
-- `services/pmd_rulesets.py`
 - `services/rule.py`
 - `services/sandbox_runner.py`
 - `services/scan_path_utils.py`
@@ -141,6 +141,7 @@
 已完成收口：
 
 - `services/bandit_rules_snapshot.py` 已于 2026-04-18 退役。
+- `services/pmd_rulesets.py` 已于 2026-04-18 退役。
 - `services/git_mirror.py` 已于 2026-04-18 退役。
 - mirror candidate 逻辑已直接内联到 `services/llm_rule/git_manager.py`。
 - `services/rule_contracts.py` 已于 2026-04-18 退役。

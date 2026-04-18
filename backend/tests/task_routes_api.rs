@@ -14,10 +14,6 @@ fn isolated_test_config(scope: &str) -> AppConfig {
     config
 }
 
-fn encode_path_segment(value: &str) -> String {
-    value.replace('%', "%25").replace('/', "%2F")
-}
-
 async fn create_project(app: &axum::Router) -> String {
     create_project_with_name(app, "task-api-project").await
 }
@@ -1512,8 +1508,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     let smoke_routes = [
         "/api/v1/static-tasks/rules?limit=5",
         "/api/v1/static-tasks/rules/generating/status",
-        "/api/v1/static-tasks/pmd/presets",
-        "/api/v1/static-tasks/pmd/builtin-rulesets?limit=5",
         "/api/v1/static-tasks/cache/repo-stats",
     ];
 
@@ -1530,26 +1524,15 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         );
     }
 
-    let create_payloads = [
-        (
-            "/api/v1/static-tasks/tasks",
-            json!({
-                "project_id": project_id,
-                "name": "opengrep task",
-                "rule_ids": [],
-                "target_path": "."
-            }),
-        ),
-        (
-            "/api/v1/static-tasks/pmd/scan",
-            json!({
-                "project_id": project_id,
-                "name": "pmd task",
-                "target_path": ".",
-                "ruleset": "security"
-            }),
-        ),
-    ];
+    let create_payloads = [(
+        "/api/v1/static-tasks/tasks",
+        json!({
+            "project_id": project_id,
+            "name": "opengrep task",
+            "rule_ids": [],
+            "target_path": "."
+        }),
+    )];
 
     let mut created_task_ids = Vec::new();
     for (route, payload) in create_payloads {
@@ -1607,11 +1590,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         format!(
             "/api/v1/static-tasks/tasks/{}/findings?limit=20",
             created_task_ids[0]
-        ),
-        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[1]),
-        format!(
-            "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-            created_task_ids[1]
         ),
     ];
 
@@ -1704,38 +1682,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .as_array()
         .is_some_and(|lines| !lines.is_empty()));
 
-    let pmd_builtin_response = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v1/static-tasks/pmd/builtin-rulesets?limit=5")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(pmd_builtin_response.status(), StatusCode::OK);
-    let pmd_builtin_json: Value = serde_json::from_slice(
-        &to_bytes(pmd_builtin_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let pmd_ruleset_id = pmd_builtin_json[0]["id"].as_str().unwrap().to_string();
-
-    let pmd_builtin_detail = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/pmd/builtin-rulesets/{}",
-                encode_path_segment(&pmd_ruleset_id)
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(pmd_builtin_detail.status(), StatusCode::OK);
-
     let opengrep_finding_status = app
         .clone()
         .oneshot(
@@ -1750,40 +1696,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .await
         .unwrap();
     assert_eq!(opengrep_finding_status.status(), StatusCode::OK);
-
-    let pmd_findings_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-                created_task_ids[1]
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    let pmd_findings_json: Value = serde_json::from_slice(
-        &to_bytes(pmd_findings_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let pmd_finding_id = pmd_findings_json[0]["id"].as_str().unwrap().to_string();
-
-    let pmd_finding_status = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/static-tasks/pmd/findings/{pmd_finding_id}/status?status=verified"
-                ))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(pmd_finding_status.status(), StatusCode::OK);
 }
 
 #[tokio::test]
