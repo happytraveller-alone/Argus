@@ -5,7 +5,23 @@ from app.services.agent.tools.base import AgentTool, ToolResult
 from app.services.agent.tools.queue_tools import PushFindingToQueueTool
 from app.services.agent.tools.runtime.coordinator import ToolExecutionCoordinator
 from app.services.agent.tools.runtime.hooks import ToolHook, ToolHookResult
-from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
+
+
+class _LocalVulnerabilityQueue:
+    def __init__(self):
+        self._items = []
+
+    def enqueue_finding(self, _task_id: str, finding: dict) -> bool:
+        self._items.append(dict(finding))
+        return True
+
+    def get_queue_size(self, _task_id: str) -> int:
+        return len(self._items)
+
+    def dequeue_finding(self, _task_id: str):
+        if not self._items:
+            return None
+        return self._items.pop(0)
 
 
 class _EchoArgs(BaseModel):
@@ -121,7 +137,7 @@ async def test_post_execute_hook_cannot_mutate_payload():
 
 @pytest.mark.asyncio
 async def test_push_finding_tool_accepts_rich_payload_without_unknown_field():
-    queue_service = InMemoryVulnerabilityQueue()
+    queue_service = _LocalVulnerabilityQueue()
     tool = PushFindingToQueueTool(queue_service, "task-rich-payload")
 
     result = await tool.execute(

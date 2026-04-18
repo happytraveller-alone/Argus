@@ -14,10 +14,34 @@ for all queue routing tools (push_*, get_*_queue_*, dequeue_*, peek_*, clear_*, 
 import pytest
 
 from app.services.agent.agents.base import NON_CACHEABLE_TOOL_NAMES
-from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
 from app.services.agent.tools.recon_queue_tools import (
     GetReconRiskQueueStatusTool,
 )
+
+
+class _LocalReconQueue:
+    def __init__(self):
+        self._items: list[dict] = []
+
+    def enqueue(self, _task_id: str, risk_point: dict) -> bool:
+        self._items.append(dict(risk_point))
+        return True
+
+    def size(self, _task_id: str) -> int:
+        return len(self._items)
+
+    def stats(self, _task_id: str) -> dict:
+        return {
+            "current_size": len(self._items),
+            "total_enqueued": len(self._items),
+            "total_dequeued": 0,
+            "total_deduplicated": 0,
+            "last_enqueue_time": None,
+            "last_dequeue_time": None,
+        }
+
+    def peek(self, _task_id: str, limit: int = 3) -> list[dict]:
+        return self._items[:limit]
 
 
 def test_non_cacheable_tool_names_includes_queue_tools():
@@ -53,7 +77,7 @@ async def test_agent_queue_status_tool_bypasses_cache_on_repeated_calls():
     4. Base.py cache logic should recognize tool is in NON_CACHEABLE_TOOL_NAMES
        and skip cache reuse (line ~4532: cache_bypass check)
     """
-    queue_service = InMemoryReconRiskQueue()
+    queue_service = _LocalReconQueue()
     task_id = "test-no-cache-regression"
     
     # Setup: Direct tool execution without agent

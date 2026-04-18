@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`132`
+- `backend_old/app` 非 API Python：`130`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -23,7 +23,7 @@
 | models / persistence mirror | 12 | retained domain / persistence mirror |
 | shared helpers | 3 | rule、sandbox、path normalization |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
-| scanner / queue / workspace / tracking | 3 | queue 语义、scope filtering、剩余 scanner 主链 |
+| scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
 | tools + tool runtime | 26 | retained tool execution 主链 |
@@ -48,7 +48,7 @@
 
 ## 当前最重要的 blocker
 
-1. `recon_risk_queue.py`、`vulnerability_queue.py`、`scope_filters.py` 仍在控制 retained scanner 主链。
+1. `scope_filters.py` 仍在控制 retained scanner 主链；queue service source of truth 已切到 Rust `runtime::queue`。
 2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
 3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*`、`llm/*` 仍是大块 live Python runtime。
 4. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
@@ -59,6 +59,8 @@
 - `backend_old/app/services/agent/scanner_runner.py` 已退役。
 - Rust `backend-runtime-startup runner execute|stop` 现在承担 scanner runner contract。
 - Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。
+- `backend_old/app/services/agent/recon_risk_queue.py` 与 `backend_old/app/services/agent/vulnerability_queue.py` 已退役。
+- Rust `backend/src/runtime/queue.rs` 现在承担 agent-test queue snapshot 与 queue fingerprint 语义宿主。
 
 ## 本目录内的使用方式
 

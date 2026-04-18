@@ -11,13 +11,11 @@
 
 目标文件：
 
-- `backend_old/app/services/agent/recon_risk_queue.py`
-- `backend_old/app/services/agent/vulnerability_queue.py`
 - `backend_old/app/services/agent/scope_filters.py`
 
 完成标准：
 
-- Rust 拿到 queue 语义、scope filtering 的 source of truth
+- Rust 拿到 scope filtering 的 source of truth，并让 scanner / queue cluster 清零
 - Python cluster 删除
 - 新增或更新 retirement guard
 
@@ -105,3 +103,4 @@
 ## 最近完成
 
 - `scanner_runner.py` 已完成 Rust 接管并退役。
+- `recon_risk_queue.py` 与 `vulnerability_queue.py` 已完成 Rust 接管并退役。

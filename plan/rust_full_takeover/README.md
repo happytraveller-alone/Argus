@@ -25,7 +25,7 @@ Python -> Rust 全接管的现状、顺序和验证门。
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`132`
+- `backend_old/app` 非 API Python：`130`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
