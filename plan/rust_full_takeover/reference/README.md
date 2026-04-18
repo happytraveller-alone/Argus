@@ -1,9 +1,8 @@
 # Reference Map
 
-这里只保留两类材料：
+这里只保留一类材料：
 
 1. canonical 路线图之外仍需保留的 raw ledger
-2. 已下沉的历史账本和专项 archive
 
 这些内容都不是当前执行入口。
 当前应优先阅读 `rust_full_takeover/` 下的 canonical 文档。
@@ -19,12 +18,9 @@
 - [wait_correct/route-inventory/python-endpoints-summary.md](/home/xyf/audittool_personal/plan/wait_correct/route-inventory/python-endpoints-summary.md)
 - [wait_correct/route-inventory/python-endpoints-inventory.csv](/home/xyf/audittool_personal/plan/wait_correct/route-inventory/python-endpoints-inventory.csv)
 
-## Archived History
-
-- [archive/legacy-ledgers/backend-old-python-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/legacy-ledgers/backend-old-python-ledger.md)
-
 ## 不再建议继续引用的旧材料
 
 - 仅保留模板说明、没有实际沉淀内容的旧 README / template
 - 已被 canonical 文档吸收的专项长计划
+- 已删除的历史 ledger
 - 与当前文件面、当前计数不一致的历史聊天摘要

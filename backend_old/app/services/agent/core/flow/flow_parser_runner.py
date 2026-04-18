@@ -1,37 +1,85 @@
 from __future__ import annotations
 
-import asyncio
 import json
+import subprocess
 import tempfile
-import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.services.agent.scanner_runner import SCANNER_MOUNT_PATH, ScannerRunSpec, run_scanner_container
+
+SCANNER_MOUNT_PATH = "/scan"
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[6]
 
 
-def _run_coroutine_blocking(coro):
+def _backend_runtime_startup_bin() -> str:
+    explicit = str(getattr(settings, "BACKEND_RUNTIME_STARTUP_BIN", "") or "").strip()
+    if explicit:
+        return explicit
+
+    candidates = [
+        Path("/usr/local/bin/backend-runtime-startup"),
+        _repo_root() / "backend" / "target" / "debug" / "backend-runtime-startup",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return str(candidates[0])
+
+
+def _run_runner_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
+    workspace = Path(str(spec.get("workspace_dir") or ""))
+    spec_path = workspace / "runner_spec.json"
+    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            _backend_runtime_startup_bin(),
+            "runner",
+            "execute",
+            "--spec",
+            str(spec_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        return {
+            "success": False,
+            "error": stderr or stdout or "runner_bridge_failed",
+            "exit_code": proc.returncode,
+            "container_id": None,
+            "stdout_path": None,
+            "stderr_path": None,
+        }
+
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
+        payload = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "invalid_runner_response",
+            "exit_code": 1,
+            "container_id": None,
+            "stdout_path": None,
+            "stderr_path": None,
+        }
 
-    result: Dict[str, Any] = {}
-    error: Dict[str, BaseException] = {}
-
-    def _target() -> None:
-        try:
-            result["value"] = asyncio.run(coro)
-        except BaseException as exc:  # pragma: no cover - defensive
-            error["value"] = exc
-
-    thread = threading.Thread(target=_target, daemon=True)
-    thread.start()
-    thread.join()
-    if "value" in error:
-        raise error["value"]
-    return result.get("value")
+    if not isinstance(payload, dict):
+        return {
+            "success": False,
+            "error": "invalid_runner_response",
+            "exit_code": 1,
+            "container_id": None,
+            "stdout_path": None,
+            "stderr_path": None,
+        }
+    return payload
 
 
 class FlowParserRunnerClient:
@@ -100,26 +148,35 @@ class FlowParserRunnerClient:
                 encoding="utf-8",
             )
 
-            spec = ScannerRunSpec(
-                scanner_type="flow_parser",
-                image=self.image,
-                workspace_dir=str(workspace),
-                command=[
-                    "python3",
-                    "/opt/flow-parser/flow_parser_runner.py",
-                    subcommand,
-                    "--request",
-                    f"{SCANNER_MOUNT_PATH}/request.json",
-                    "--response",
-                    f"{SCANNER_MOUNT_PATH}/response.json",
-                ],
-                timeout_seconds=int(timeout_seconds or self.timeout_seconds),
-                env={},
-                expected_exit_codes=[0],
+            workspace_root_override: Optional[str] = None
+            try:
+                if not workspace.is_relative_to(workspace_root):
+                    workspace_root_override = str(workspace.parent)
+            except Exception:
+                workspace_root_override = str(workspace.parent)
+
+            result = _run_runner_spec(
+                {
+                    "scanner_type": "flow_parser",
+                    "image": self.image,
+                    "workspace_dir": str(workspace),
+                    "command": [
+                        "python3",
+                        "/opt/flow-parser/flow_parser_runner.py",
+                        subcommand,
+                        "--request",
+                        f"{SCANNER_MOUNT_PATH}/request.json",
+                        "--response",
+                        f"{SCANNER_MOUNT_PATH}/response.json",
+                    ],
+                    "timeout_seconds": int(timeout_seconds or self.timeout_seconds),
+                    "env": {},
+                    "expected_exit_codes": [0],
+                    "workspace_root_override": workspace_root_override,
+                }
             )
-            result = _run_coroutine_blocking(run_scanner_container(spec))
-            if not getattr(result, "success", False):
-                return {"ok": False, "error": getattr(result, "error", None) or "flow_parser_runner_failed"}
+            if not result.get("success", False):
+                return {"ok": False, "error": result.get("error") or "flow_parser_runner_failed"}
             if not response_path.exists():
                 return {"ok": False, "error": "flow_parser_runner_missing_response"}
             return json.loads(response_path.read_text(encoding="utf-8"))

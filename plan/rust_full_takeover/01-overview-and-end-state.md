@@ -53,11 +53,11 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 - 字段命名保持现有 contract，不做隐式 snake_case / camelCase 统一
 - 某条 Python route 被标记为 `retire` 之前，必须先证明 frontend / consumer 已清零，或已有 compat stub
 
-## 当前判断
+## 当前状态
 
-当前还远未完成。
+按当前 inventory 和剩余功能组来看，迁移仍处于 retained Python runtime 大量存在的阶段。
 
-Rust 已经拿到一部分外层 route surface，但 retained Python runtime 仍集中存在于：
+当前可以直接确认的是：Rust 已承担一部分外层 route surface，但 retained Python runtime 仍集中存在于：
 
 - scanner / queue / runner
 - agent orchestration / state / payload

@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`133`
+- `backend_old/app` 非 API Python：`132`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -23,7 +23,7 @@
 | models / persistence mirror | 12 | retained domain / persistence mirror |
 | shared helpers | 3 | rule、sandbox、path normalization |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
-| scanner / queue / workspace / tracking | 4 | queue 语义、runner orchestration、scope filtering |
+| scanner / queue / workspace / tracking | 3 | queue 语义、scope filtering、剩余 scanner 主链 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
 | tools + tool runtime | 26 | retained tool execution 主链 |
@@ -48,15 +48,21 @@
 
 ## 当前最重要的 blocker
 
-1. `scanner_runner.py`、`recon_risk_queue.py`、`vulnerability_queue.py`、`scope_filters.py` 仍在控制 retained scanner 主链。
+1. `recon_risk_queue.py`、`vulnerability_queue.py`、`scope_filters.py` 仍在控制 retained scanner 主链。
 2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
 3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*`、`llm/*` 仍是大块 live Python runtime。
 4. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
 5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
+
+## 最近完成的 slice
+
+- `backend_old/app/services/agent/scanner_runner.py` 已退役。
+- Rust `backend-runtime-startup runner execute|stop` 现在承担 scanner runner contract。
+- Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。
 
 ## 本目录内的使用方式
 
 - 要看优先级：去 [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
 - 要看验证门：去 [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
 - 要看精确文件清单：去 [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
-- 要看历史背景：去 [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md) 和 archive
+- 要看原始证据入口：去 [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)

@@ -7,18 +7,17 @@
 
 ## 当前优先级
 
-### 1. Scanner / Queue / Runner 主链
+### 1. Scanner / Queue 主链
 
 目标文件：
 
 - `backend_old/app/services/agent/recon_risk_queue.py`
 - `backend_old/app/services/agent/vulnerability_queue.py`
-- `backend_old/app/services/agent/scanner_runner.py`
 - `backend_old/app/services/agent/scope_filters.py`
 
 完成标准：
 
-- Rust 拿到 queue 语义、runner orchestration、scope filtering 的 source of truth
+- Rust 拿到 queue 语义、scope filtering 的 source of truth
 - Python cluster 删除
 - 新增或更新 retirement guard
 
@@ -102,3 +101,7 @@
 1. 优先接管仍在主链上的 runtime cluster，不回头做低收益的历史壳层清理。
 2. 每完成一个功能 slice，就补 guard、跑验证、更新文档并提交一次 commit。
 3. 如果某块只能做到 Rust 外壳而不能切换 source of truth，就不要把它记成“已接管”。
+
+## 最近完成
+
+- `scanner_runner.py` 已完成 Rust 接管并退役。

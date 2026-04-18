@@ -18,7 +18,8 @@
 
 ## 当前阶段
 
-当前已跨过 A-C 的主体迁移，正在 D / E 两条主线并行推进，F 仍未到收尾条件。
+按当前剩余功能组来看，接下来的工作重心位于 D / E，
+F 仍是 final cutover 之前的最后收口阶段。
 
 现阶段的判断标准很简单：
 
@@ -28,7 +29,7 @@
 
 ## 当前执行顺序
 
-建议按下面顺序继续推进：
+建议继续按下面顺序推进：
 
 1. scanner / queue / runner retained runtime
 2. agent orchestration / state / payload

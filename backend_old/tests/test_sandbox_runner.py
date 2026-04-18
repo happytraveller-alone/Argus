@@ -1,7 +1,7 @@
 """
 测试 sandbox_runner.py - 底层容器执行抽象
 
-参考: tests/test_scanner_runner.py
+保持与已退役 scanner runner 相同的底层容器执行契约风格
 """
 
 import os

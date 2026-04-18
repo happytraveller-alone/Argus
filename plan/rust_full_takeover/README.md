@@ -25,7 +25,7 @@ Python -> Rust 全接管的现状、顺序和验证门。
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`133`
+- `backend_old/app` 非 API Python：`132`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -39,7 +39,7 @@ Python -> Rust 全接管的现状、顺序和验证门。
 5. [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
 6. [06-open-risks-and-bridges.md](/home/xyf/audittool_personal/plan/rust_full_takeover/06-open-risks-and-bridges.md)
 7. [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
-8. [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md)
+8. [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)
 
 ## 文档分工
 
@@ -49,8 +49,8 @@ Python -> Rust 全接管的现状、顺序和验证门。
   给出阶段划分、当前执行顺序和单个 slice 的标准动作。
 - [03-current-state-and-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/03-current-state-and-ledger.md)
   记录当前工作树事实、剩余功能组和活跃 blocker。
-- [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md)
-  只保留当前仍有解释价值的里程碑摘要；详细历史下沉到 archive。
+- [04-history-policy.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-history-policy.md)
+  说明为什么 canonical 文档不再维护逐次进度日志，以及哪些原始材料仍保留。
 - [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
   定义 Rust 接管每个 slice 时必须过的验证门。
 - [06-open-risks-and-bridges.md](/home/xyf/audittool_personal/plan/rust_full_takeover/06-open-risks-and-bridges.md)
@@ -63,10 +63,9 @@ Python -> Rust 全接管的现状、顺序和验证门。
 ## 使用原则
 
 - canonical 文档只写当前状态、当前顺序和当前 blocker。
-- 逐次操作流水账、过期计数变化、已完成但不再影响决策的历史，统一下沉到 archive / raw ledger。
+- 逐次操作流水账、过期计数变化、已完成但不再影响决策的历史，不再保留在本目录 canonical 文档中。
 - 当文档和旧聊天摘要冲突时，以当前工作树和本目录 canonical 文档为准。
 
-## Archive And Raw Reference
+## Raw Reference
 
 - [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)
-- [archive/legacy-ledgers/backend-old-python-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/legacy-ledgers/backend-old-python-ledger.md)
