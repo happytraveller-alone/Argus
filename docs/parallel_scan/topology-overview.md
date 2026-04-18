@@ -5,7 +5,7 @@
 ## 阅读定位
 
 - **文档类型**：Explanation。
-- **目标读者**：准备理解或改造智能扫描 / 混合扫描执行拓扑的开发者。
+- **目标读者**：准备理解或改造智能扫描执行拓扑的开发者。
 - **阅读目标**：看清当前真实执行链路、共享队列关系、关键耦合点，以及更现实的 Phase 1 演进顺序。
 - **建议前置**：先读 [../agentic_scan_core/workflow_overview.md](../agentic_scan_core/workflow_overview.md) 建立主流程认知，再读本文。
 - **本文不覆盖**：接口逐字段定义、数据库设计、最终部署拓扑。
@@ -37,7 +37,7 @@
 
 **[现状事实]**
 
-当前智能扫描和混合扫描都从 `backend/app/api/v1/endpoints/agent_tasks_execution.py` 中的 `_execute_agent_task(task_id)` 进入。
+当前智能扫描从 `backend/app/api/v1/endpoints/agent_tasks_execution.py` 中的 `_execute_agent_task(task_id)` 进入。
 
 这个入口在单个任务协程里完成整套装配：
 

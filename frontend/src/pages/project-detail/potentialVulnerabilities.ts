@@ -190,8 +190,7 @@ export function getProjectDetailPotentialTaskCategoryText(
 	category: ProjectCardTaskFindingCategory,
 ): string {
 	if (category === "static") return "静态扫描";
-	if (category === "intelligent") return "智能扫描";
-	return "混合扫描";
+	return "智能扫描";
 }
 
 export function toProjectRelativePotentialPath(
@@ -496,13 +495,7 @@ export function buildProjectDetailPotentialTree(params: {
 	>();
 
 	for (const task of params.agentTasks || []) {
-		const sourceMode = resolveSourceModeFromTaskMeta(
-			"intelligent_audit",
-			task.name,
-			task.description,
-		);
-		const taskCategory: ProjectCardTaskFindingCategory =
-			sourceMode === "hybrid" ? "hybrid" : "intelligent";
+		const taskCategory: ProjectCardTaskFindingCategory = "intelligent";
 		taskInfo.set(task.id, {
 			taskId: task.id,
 			taskCategory,

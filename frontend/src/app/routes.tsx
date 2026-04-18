@@ -31,7 +31,6 @@ const TaskManagementStatic = lazy(() => import("@/pages/TaskManagementStatic"));
 const TaskManagementIntelligent = lazy(
 	() => import("@/pages/TaskManagementIntelligent"),
 );
-const TaskManagementHybrid = lazy(() => import("@/pages/TaskManagementHybrid"));
 const DataManagementPage = lazy(() => import("@/pages/DataManagement"));
 
 function LegacyOpengrepRulesRedirect() {
@@ -150,16 +149,6 @@ const routes: RouteConfig[] = [
 		navVisible: true,
 		navGroup: "task",
 		navOrder: 30,
-	},
-	{
-		name: "混合扫描",
-		nameKey: "route.taskHybrid",
-		path: "/tasks/hybrid",
-		element: <TaskManagementHybrid />,
-		visible: true,
-		navVisible: true,
-		navGroup: "task",
-		navOrder: 40,
 	},
 	{
 		name: "扫描配置重定向",

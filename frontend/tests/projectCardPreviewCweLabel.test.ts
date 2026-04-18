@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getProjectCardPotentialVulnerabilities } from "../src/features/projects/services/projectCardPreview.ts";
+import {
+  getProjectCardPotentialVulnerabilities,
+  getProjectCardRecentTasks,
+  getProjectFoundIssuesBreakdown,
+} from "../src/features/projects/services/projectCardPreview.ts";
 
 test("projectCardPreview 为潜在漏洞展示 编号+中文 的 CWE 文案", () => {
   const items = getProjectCardPotentialVulnerabilities({
@@ -26,4 +30,67 @@ test("projectCardPreview 为潜在漏洞展示 编号+中文 的 CWE 文案", ()
 
   assert.equal(items.length, 1);
   assert.equal(items[0]?.cweLabel, "CWE-89 SQL注入");
+});
+
+test("projectCardPreview folds legacy agent tasks into intelligent preview state", () => {
+  const agentTasks = [
+    {
+      id: "agent-legacy",
+      project_id: "project-1",
+      name: "历史智能扫描-Demo",
+      description: "历史迁移前任务",
+      status: "completed",
+      created_at: "2026-03-15T00:00:00Z",
+      started_at: "2026-03-15T00:01:00Z",
+      completed_at: "2026-03-15T00:05:00Z",
+      progress_percentage: 100,
+      total_files: 12,
+      analyzed_files: 12,
+      verified_count: 3,
+      critical_count: 1,
+      high_count: 1,
+      medium_count: 1,
+      low_count: 0,
+    },
+  ] as any;
+
+  const breakdown = getProjectFoundIssuesBreakdown({
+    projectId: "project-1",
+    agentTasks,
+    opengrepTasks: [] as any,
+    gitleaksTasks: [] as any,
+  });
+  assert.equal(breakdown.intelligentIssues, 3);
+  assert.equal(breakdown.totalIssues, 3);
+
+  const recentTasks = getProjectCardRecentTasks({
+    projectId: "project-1",
+    agentTasks,
+    opengrepTasks: [] as any,
+    gitleaksTasks: [] as any,
+  });
+  assert.equal(recentTasks[0]?.label, "智能扫描");
+  assert.equal(recentTasks[0]?.taskCategory, "intelligent");
+
+  const potential = getProjectCardPotentialVulnerabilities({
+    verifiedAgentFindings: [
+      {
+        id: "finding-1",
+        task_id: "agent-legacy",
+        severity: "high",
+        ai_confidence: 0.95,
+        confidence: 0.95,
+        file_path: "src/api/user.ts",
+        line_start: 18,
+        created_at: "2026-03-15T00:00:00Z",
+        title: "SQL 注入",
+        display_title: "SQL 注入",
+        vulnerability_type: "SQL Injection",
+      },
+    ] as any,
+    agentTaskCategoryMap: {
+      "agent-legacy": "intelligent",
+    },
+  });
+  assert.equal(potential[0]?.taskCategory, "intelligent");
 });

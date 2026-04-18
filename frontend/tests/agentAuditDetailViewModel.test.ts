@@ -6,6 +6,8 @@ import {
   createTokenUsageAccumulator,
   isVerifiedFinding,
   readAgentAuditFindingsPagination,
+  resolveAgentAuditBackTarget,
+  resolveAgentAuditDetailTitle,
   shouldSyncFindingPageFromTableState,
   writeAgentAuditFindingsPagination,
   isVisibleVerifiedVulnerability,
@@ -180,6 +182,36 @@ test("agent audit findings pagination helpers fall back for invalid values and c
 
   assert.equal(next.has("findingsPage"), false);
   assert.equal(next.has("findingsPageSize"), false);
+});
+
+test("resolveAgentAuditDetailTitle always keeps the intelligent detail label", () => {
+  assert.equal(
+    resolveAgentAuditDetailTitle({
+      returnTo: "/tasks/legacy?openCreate=1",
+      name: "历史任务-Demo",
+      description: "[LEGACY]历史迁移任务",
+    }),
+    "智能扫描详情",
+  );
+  assert.equal(
+    resolveAgentAuditDetailTitle({
+      returnTo: "/tasks/intelligent",
+      name: "智能扫描-Demo",
+      description: "[INTELLIGENT]智能扫描任务",
+    }),
+    "智能扫描详情",
+  );
+});
+
+test("resolveAgentAuditBackTarget preserves normalized task routes", () => {
+  assert.equal(
+    resolveAgentAuditBackTarget("/tasks/static?openCreate=1", false),
+    "/tasks/static?openCreate=1",
+  );
+  assert.equal(
+    resolveAgentAuditBackTarget("/tasks/intelligent?openCreate=1", false),
+    "/tasks/intelligent?openCreate=1",
+  );
 });
 
 test("loading state should not eagerly reset agent audit finding page from URL", () => {

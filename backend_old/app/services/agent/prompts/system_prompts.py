@@ -156,7 +156,7 @@ TOOL_USAGE_GUIDE = """
 ## 工具使用指南
 
 ### 核心原则
-- 智能/混合扫描只暴露原子化工具集合，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
+- 智能扫描只暴露原子化工具集合，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
 - `search_code` / `list_files` / `get_code_window` / `get_file_outline` / `get_function_summary` / `get_symbol_body` / `locate_enclosing_function` 均优先走本地轻量实现。
 - 先用 `search_code` 定位到 `file_path:line`，再使用 `get_code_window` 获取极小证据窗口。
 - 所有结论都必须落到代码证据、流证据或动态验证证据，禁止无证据定结论。

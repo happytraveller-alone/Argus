@@ -22,7 +22,6 @@ import { createPmdScanTask } from "@/shared/api/pmd";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
 import {
-	HYBRID_TASK_NAME_MARKER,
 	INTELLIGENT_TASK_NAME_MARKER,
 } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
@@ -51,7 +50,6 @@ import {
 } from "./create-project-scan/llmGate";
 import {
 	CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
-	buildHybridStaticBootstrapConfig,
 	buildCreateProjectStaticTaskRoute,
 	extractCreateProjectScanApiErrorMessage,
 	isSevereCreateProjectScanRule,
@@ -59,7 +57,7 @@ import {
 	stripCreateProjectScanArchiveSuffix,
 } from "./create-project-scan/utils";
 
-export type ScanCreateMode = "static" | "agent" | "hybrid";
+export type ScanCreateMode = "static" | "agent";
 
 interface CreateProjectScanDialogProps {
 	open: boolean;
@@ -118,7 +116,7 @@ export default function CreateProjectScanDialog({
 	const [opengrepEnabled, setOpengrepEnabled] = useState(true);
 	const [gitleaksEnabled, setGitleaksEnabled] = useState(false);
 	const [banditEnabled, setBanditEnabled] = useState(false);
-	// PHPStan integration: static/hybrid creation option state.
+	// PHPStan integration: static creation option state.
 	const [phpstanEnabled, setPhpstanEnabled] = useState(false);
 	const [pmdEnabled, setPmdEnabled] = useState(false);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
@@ -187,11 +185,10 @@ export default function CreateProjectScanDialog({
 	const dialogTitle = useMemo(() => {
 		if (!lockMode) return "创建扫描";
 		if (initialMode === "agent") return "创建智能扫描";
-		if (initialMode === "hybrid") return "创建混合扫描";
 		return "创建静态扫描";
 	}, [initialMode, lockMode]);
 
-	const isLlmMode = mode === "agent" || mode === "hybrid";
+	const isLlmMode = mode === "agent";
 	const llmGateStatus = useMemo(
 		() =>
 			getLlmQuickGateStatus({
@@ -388,26 +385,13 @@ export default function CreateProjectScanDialog({
 			if (!newProjectName.trim() || !newProjectFile) return false;
 			if (mode === "agent") {
 				baseCanCreate = true;
-			} else if (mode === "hybrid") {
-				baseCanCreate =
-					opengrepEnabled || gitleaksEnabled || banditEnabled || phpstanEnabled || pmdEnabled;
 			} else {
 				baseCanCreate =
 					opengrepEnabled || gitleaksEnabled || banditEnabled || phpstanEnabled || pmdEnabled;
 			}
 		} else {
 			if (!selectedProject) return false;
-			if (mode === "hybrid") {
-				if (
-					!opengrepEnabled &&
-					!gitleaksEnabled &&
-					!banditEnabled &&
-					!phpstanEnabled &&
-					!pmdEnabled
-				) {
-					return false;
-				}
-			} else if (mode === "static") {
+			if (mode === "static") {
 				if (
 					!opengrepEnabled &&
 					!gitleaksEnabled &&
@@ -419,9 +403,6 @@ export default function CreateProjectScanDialog({
 				}
 			}
 			baseCanCreate = isZipProject(selectedProject);
-			if (mode === "hybrid" && !isZipProject(selectedProject)) {
-				return false;
-			}
 		}
 		if (!baseCanCreate) return false;
 		if (!isLlmMode) return true;
@@ -590,37 +571,12 @@ export default function CreateProjectScanDialog({
 
 	const buildAgentTaskPayload = (
 		project: Project,
-		source: "agent" | "hybrid" = "agent",
+		source: "agent" = "agent",
 	) => ({
 		project_id: project.id,
-		name:
-			source === "hybrid"
-				? `混合扫描-智能扫描-${project.name}`
-				: `智能扫描-${project.name}`,
-		description:
-			source === "hybrid"
-				? `${HYBRID_TASK_NAME_MARKER}混合扫描智能阶段任务`
-				: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
+		name: `智能扫描-${project.name}`,
+		description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
 		target_files: parsedTargetFiles.length > 0 ? parsedTargetFiles : undefined,
-		audit_scope: {
-			static_bootstrap:
-				source === "hybrid"
-					? buildHybridStaticBootstrapConfig({
-							opengrepEnabled,
-							banditEnabled,
-							gitleaksEnabled,
-							phpstanEnabled,
-							pmdEnabled,
-						})
-					: {
-							mode: "disabled" as const,
-							opengrep_enabled: false,
-							bandit_enabled: false,
-							gitleaks_enabled: false,
-							phpstan_enabled: false,
-							pmd_enabled: false,
-						},
-			},
 		use_prompt_skills: true,
 		verification_level: "analysis_with_poc_plan" as const,
 	});
@@ -636,9 +592,9 @@ export default function CreateProjectScanDialog({
 		}
 	};
 
-	const createHybridLiteAgentTaskForProject = async (
+	const createAgentTaskForProject = async (
 		project: Project,
-		source: "agent" | "hybrid" = "agent",
+		source: "agent" = "agent",
 	) => createAgentTask(buildAgentTaskPayload(project, source));
 
 	const handleQuickFixProviderChange = (nextProvider: string) => {
@@ -829,28 +785,11 @@ export default function CreateProjectScanDialog({
 		}
 	};
 
-	const handleCreateHybridFullForProject = async (
+	const handleCreateAgentTaskForProject = async (
 		project: Project,
 		action: "primary" | "secondary",
 	) => {
-		const agentTask = await createAgentTask(
-			buildAgentTaskPayload(project, "hybrid"),
-		);
-		onOpenChange(false);
-		onTaskCreated?.();
-		toast.success("混合扫描任务已创建（内嵌静态预扫 + 智能扫描）");
-		if (action === "secondary") {
-			onSecondaryCreateSuccess?.();
-		} else if (navigateOnSuccess) {
-			navigate(`/agent-audit/${agentTask.id}`);
-		}
-	};
-
-	const handleCreateHybridLiteAgentForProject = async (
-		project: Project,
-		action: "primary" | "secondary",
-	) => {
-		const agentTask = await createHybridLiteAgentTaskForProject(project, "agent");
+		const agentTask = await createAgentTaskForProject(project, "agent");
 		onOpenChange(false);
 		onTaskCreated?.();
 		toast.success("智能扫描任务已创建");
@@ -955,12 +894,7 @@ export default function CreateProjectScanDialog({
 						return;
 					}
 
-					if (mode === "hybrid") {
-						await handleCreateHybridFullForProject(createdProject, action);
-						return;
-					}
-
-					await handleCreateHybridLiteAgentForProject(createdProject, action);
+					await handleCreateAgentTaskForProject(createdProject, action);
 					return;
 				} catch (error) {
 					if (createdProject) {
@@ -979,13 +913,9 @@ export default function CreateProjectScanDialog({
 				return;
 			}
 
-			if (mode === "static" || mode === "hybrid") {
+			if (mode === "static") {
 				if (!isZipProject(selectedProject)) {
-					toast.error(
-						mode === "hybrid"
-							? "混合扫描当前仅支持源码压缩包项目"
-							: "静态扫描仅支持源码压缩包项目",
-					);
+					toast.error("静态扫描仅支持源码压缩包项目");
 					return;
 				}
 				const zipInfo = await getZipFileInfo(selectedProject.id);
@@ -1027,11 +957,6 @@ export default function CreateProjectScanDialog({
 				return;
 			}
 
-			if (mode === "hybrid") {
-				await handleCreateHybridFullForProject(selectedProject, action);
-				return;
-			}
-
 			if (isZipProject(selectedProject)) {
 				const zipInfo = await getZipFileInfo(selectedProject.id);
 				if (!zipInfo.has_file) {
@@ -1040,7 +965,7 @@ export default function CreateProjectScanDialog({
 				}
 			}
 
-			await handleCreateHybridLiteAgentForProject(selectedProject, action);
+			await handleCreateAgentTaskForProject(selectedProject, action);
 		} catch (error) {
 			const message = extractCreateProjectScanApiErrorMessage(error);
 			const failureText =

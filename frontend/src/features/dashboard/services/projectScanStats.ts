@@ -31,7 +31,6 @@ export interface ProjectScanRunsChartItem {
 	projectName: string;
 	staticRuns: number;
 	intelligentRuns: number;
-	hybridRuns: number;
 	totalRuns: number;
 }
 
@@ -40,7 +39,6 @@ export interface ProjectVulnsChartItem {
 	projectName: string;
 	staticVulns: number;
 	intelligentVulns: number;
-	hybridVulns: number;
 	totalVulns: number;
 }
 
@@ -193,7 +191,6 @@ export function buildProjectScanRunsChartData(params: {
 			projectName: projectNameMap.get(projectId) || "未知项目",
 			staticRuns: 0,
 			intelligentRuns: 0,
-			hybridRuns: 0,
 			totalRuns: 0,
 		};
 		aggregateMap.set(projectId, created);
@@ -225,22 +222,14 @@ export function buildProjectScanRunsChartData(params: {
 	for (const task of agentTasks) {
 		if (!isCompletedStatus(task.status)) continue;
 		const item = ensureItem(task.project_id);
-		const sourceMode = resolveSourceModeFromTaskMeta(
-			"intelligent_audit",
-			task.name,
-			task.description,
-		);
-		if (sourceMode === "intelligent") {
-			item.intelligentRuns += 1;
-		} else {
-			item.hybridRuns += 1;
-		}
+		resolveSourceModeFromTaskMeta("intelligent_audit", task.name, task.description);
+		item.intelligentRuns += 1;
 	}
 
 	return Array.from(aggregateMap.values())
 		.map((item) => ({
 			...item,
-			totalRuns: item.staticRuns + item.intelligentRuns + item.hybridRuns,
+			totalRuns: item.staticRuns + item.intelligentRuns,
 		}))
 		.filter((item) => item.totalRuns > 0)
 		.sort((a, b) => {
@@ -296,7 +285,6 @@ export function buildProjectVulnsChartData(params: {
 				projectName: projectNameMap.get(projectId) || "未知项目",
 				staticVulns: issueBreakdown.staticIssues,
 				intelligentVulns: issueBreakdown.intelligentIssues,
-				hybridVulns: issueBreakdown.hybridIssues,
 				totalVulns: issueBreakdown.totalIssues,
 			};
 		})

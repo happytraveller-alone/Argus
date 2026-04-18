@@ -11,7 +11,7 @@ import { buildScanEngineConfigRoute, type ScanEngineTab } from "@/shared/constan
 
 export interface StaticEngineConfigDialogContentProps {
   engine: ScanEngineTab;
-  scanMode: "static" | "hybrid";
+  scanMode: "static";
   enabled: boolean;
   blockedReason: string | null;
   creating: boolean;

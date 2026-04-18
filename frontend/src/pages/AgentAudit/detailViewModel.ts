@@ -144,39 +144,13 @@ export interface AgentAuditPaginationState {
 
 export type AgentAuditPaginationSource = "user" | "layout";
 
-function normalizeReturnToMode(returnTo: string | null | undefined): "intelligent" | "hybrid" | null {
-  const normalized = String(returnTo || "").trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized.startsWith("/tasks/hybrid")) return "hybrid";
-  if (normalized.startsWith("/tasks/intelligent")) return "intelligent";
-  return null;
-}
-
-function normalizeTaskMetaMode(
-  name: string | null | undefined,
-  description: string | null | undefined,
-): "intelligent" | "hybrid" {
-  const normalized = `${String(name || "").trim().toLowerCase()} ${String(description || "")
-    .trim()
-    .toLowerCase()}`;
-  if (normalized.includes("[hybrid]") || normalized.includes("混合扫描")) {
-    return "hybrid";
-  }
-  if (normalized.includes("[intelligent]")) {
-    return "intelligent";
-  }
-  return "intelligent";
-}
-
 export function resolveAgentAuditDetailTitle(input: {
   returnTo?: string | null;
   name?: string | null;
   description?: string | null;
 }): string {
-  const mode =
-    normalizeReturnToMode(input.returnTo) ||
-    normalizeTaskMetaMode(input.name, input.description);
-  return mode === "hybrid" ? "混合扫描详情" : "智能扫描详情";
+  void input;
+  return "智能扫描详情";
 }
 
 export function resolveAgentAuditBackTarget(

@@ -477,16 +477,6 @@ export default function CreateScanTaskDialog({
 							project_id: createdProject.id,
 							name: `智能扫描-${createdProject.name}`,
 							description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
-							audit_scope: {
-								static_bootstrap: {
-									mode: "disabled",
-									opengrep_enabled: false,
-									bandit_enabled: false,
-									gitleaks_enabled: false,
-									phpstan_enabled: false,
-									pmd_enabled: false,
-								},
-							},
 							target_files:
 								effectiveTargetFiles.length > 0
 									? effectiveTargetFiles
@@ -538,16 +528,6 @@ export default function CreateScanTaskDialog({
 					project_id: selectedProject.id,
 					name: `智能扫描-${selectedProject.name}`,
 					description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
-					audit_scope: {
-						static_bootstrap: {
-							mode: "disabled",
-							opengrep_enabled: false,
-							bandit_enabled: false,
-							gitleaks_enabled: false,
-							phpstan_enabled: false,
-							pmd_enabled: false,
-						},
-					},
 					exclude_patterns: excludePatterns,
 					target_files:
 						effectiveTargetFiles.length > 0 ? effectiveTargetFiles : undefined,

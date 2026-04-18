@@ -23,7 +23,6 @@ import {
 	Code,
 	// MessageSquare,
 	Bot,
-	ListChecks,
 	Wrench,
 	Zap,
 } from "lucide-react";
@@ -46,7 +45,6 @@ const routeIcons: Record<string, React.ReactNode> = {
 	"/opengrep-rules": <Code className="w-[1.125rem] h-[1.125rem]" />,
 	"/tasks/static": <Shield className="w-[1.125rem] h-[1.125rem]" />,
 	"/tasks/intelligent": <Bot className="w-[1.125rem] h-[1.125rem]" />,
-	"/tasks/hybrid": <ListChecks className="w-[1.125rem] h-[1.125rem]" />,
 	"/scan-config/engines": <Zap className="w-[1.125rem] h-[1.125rem]" />,
 	"/scan-config/intelligent-engine": <Bot className="w-[1.125rem] h-[1.125rem]" />,
 	"/scan-config/external-tools": <Wrench className="w-[1.125rem] h-[1.125rem]" />,
@@ -112,7 +110,6 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 		);
 		void import("@/pages/TaskManagementStatic");
 		void import("@/pages/TaskManagementIntelligent");
-		void import("@/pages/TaskManagementHybrid");
 	}, []);
 
 	const prefetchDashboardAssets = useCallback(() => {

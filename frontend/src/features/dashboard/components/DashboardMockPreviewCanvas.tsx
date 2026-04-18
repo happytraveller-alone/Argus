@@ -252,16 +252,11 @@ function TrendPanel() {
 					Number(item.intelligentVerifiedFindings || 0),
 					0,
 				);
-				const hybridVerifiedFindings = Math.max(
-					Number(item.hybridVerifiedFindings || 0),
-					0,
-				);
 				return {
 					...item,
 					staticShare: total > 0 ? staticFindings / total : 0,
 					intelligentShare:
 						total > 0 ? intelligentVerifiedFindings / total : 0,
-					hybridShare: total > 0 ? hybridVerifiedFindings / total : 0,
 				};
 			}),
 		[],
@@ -281,8 +276,7 @@ function TrendPanel() {
 				{[
 					{ label: "当日累计新增漏洞发现", value: "41", meta: "03-22 峰值" },
 					{ label: "当日静态扫描漏洞发现", value: "18", meta: "03-23 最新" },
-					{ label: "当日智能扫描漏洞发现", value: "6", meta: "03-23 最新" },
-					{ label: "当日混合扫描漏洞发现", value: "13", meta: "03-23 最新" },
+					{ label: "当日智能扫描漏洞发现", value: "19", meta: "03-23 最新" },
 				].map((item) => (
 					<div
 						key={item.label}
@@ -318,11 +312,6 @@ function TrendPanel() {
 						>
 							当日智能扫描漏洞发现
 						</span>
-						<span
-							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.critical.chip}`}
-						>
-							当日混合扫描漏洞发现
-						</span>
 					</div>
 				</div>
 				<div className="h-[calc(100%-52px)] w-full">
@@ -345,13 +334,9 @@ function TrendPanel() {
 							<Bar dataKey="intelligentShare" stackId="share" fill="#fb923c" fillOpacity={0.34}>
 								<LabelList dataKey="intelligentVerifiedFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
 							</Bar>
-							<Bar dataKey="hybridShare" stackId="share" fill="#f43f5e" fillOpacity={0.38}>
-								<LabelList dataKey="hybridVerifiedFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
-							</Bar>
 							<Line type="monotone" dataKey="totalNewFindings" name="当日累计新增漏洞发现" stroke="#38bdf8" strokeWidth={2.4} dot={{ r: 3 }} />
 							<Line type="monotone" dataKey="staticFindings" name="当日静态扫描漏洞发现" stroke="#fbbf24" strokeWidth={2} dot={false} />
 							<Line type="monotone" dataKey="intelligentVerifiedFindings" name="当日智能扫描漏洞发现" stroke="#fb923c" strokeWidth={2} dot={false} />
-							<Line type="monotone" dataKey="hybridVerifiedFindings" name="当日混合扫描漏洞发现" stroke="#f43f5e" strokeWidth={2} dot={false} />
 						</ComposedChart>
 					</ResponsiveContainer>
 				</div>

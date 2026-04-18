@@ -1,66 +1,63 @@
-# 智能扫描与混合扫描全流程总览
+# 智能扫描全流程总览
+
+> 2026-04-18 更新：本文只描述当前产品可见的智能扫描主链路。历史兼容字段、Python 旧 runtime 与迁移背景请以 `plan/rust_full_takeover/` 下的迁移文档为准。
 
 ## 阅读定位
 
 - **文档类型**：Explanation。
-- **目标读者**：需要先看懂智能扫描 / 混合扫描主线，再回到代码细节的开发者。
-- **阅读目标**：明确任务模型、创建差异、bootstrap 作用、阶段推进顺序和结果沉淀方式。
+- **目标读者**：需要先看懂智能扫描主线，再回到代码细节的开发者。
+- **阅读目标**：明确任务模型、创建入口、阶段推进顺序和结果沉淀方式。
 - **建议前置**：如果你还不熟悉系统全貌，先读 [../architecture.md](../architecture.md)；如果你要继续看角色边界，再读 [agent_tools.md](./agent_tools.md)。
 - **术语入口**：如果你对 `seed finding`、`risk point`、`vuln_queue` 这些词还不稳定，先看 [../glossary.md](../glossary.md)。
 
 ## 先记住三条判断
 
-- 智能扫描和混合扫描共用同一个主任务模型：`AgentTask`。
-- 混合扫描的差异不在于“换了一套工作流”，而在于是否把静态候选注入主流程。
+- 智能扫描的主任务模型是 `AgentTask`。
 - 全流程的阶段推进由 workflow 保持确定性，LLM 负责的是单阶段内部判断。
+- 前端展示的“过程 + 结果”来自 `AgentEvent`、`AgentFinding` 和 task 级报告的组合，而不是单一结果表。
 
 ## 1. 系统边界
 
-当前产品层面有三类扫描任务：
+当前产品层面只有两类扫描任务：
 
 - 静态扫描
 - 智能扫描
-- 混合扫描
 
 其中：
 
-- 智能扫描和混合扫描都统一使用 `AgentTask` 作为主任务模型。
-- 混合扫描不是第四套独立执行框架，而是“智能扫描主流程 + 静态 bootstrap 注入”。
-- 静态扫描仍是并行产品能力，但它不是混合扫描的主任务对象；混合扫描不会先创建一组独立静态任务再切换到另一套 Agent 模型，而是在 `AgentTask` 内部内嵌预扫并生成后续 seed。
+- 智能扫描统一使用 `AgentTask` 作为主任务模型。
+- 静态扫描仍是并行产品能力，但它有自己独立的任务与结果模型。
+- 如果你要理解智能扫描主线，优先看 `AgentTask` 如何驱动队列、阶段和结果沉淀，而不是把注意力放在历史来源模式上。
 
-这也是为什么当前链路里需要同时看：
+当前链路里最值得先看的三个锚点是：
 
 - `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-- `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
+- `backend/app/services/agent/workflow/`
 - `backend/app/models/agent_task.py`
 
 ## 2. 创建阶段
 
-前端创建入口在 `frontend/src/components/scan/CreateProjectScanDialog.tsx`。该页面在创建智能类任务时，不再区分两套后端 API，而是统一调用 `createAgentTask(...)`。
+前端创建入口在 `frontend/src/components/scan/CreateProjectScanDialog.tsx`。该页面在创建智能类任务时，统一调用 `createAgentTask(...)`。
 
-关键契约有两个：
+当前创建阶段最重要的契约有：
 
 - `CreateAgentTaskRequest`
-- `audit_scope.static_bootstrap`
+- `target_vulnerabilities`
+- `verification_level`
+- `target_files` / `exclude_patterns`
 
-前端创建 payload 时的核心差异只有一个：
+也就是说，当前产品视角下，智能扫描的创建重点是：
 
-- 智能扫描：`audit_scope.static_bootstrap.mode = "disabled"`
-- 混合扫描：`audit_scope.static_bootstrap.mode = "embedded"`
+1. 选择项目
+2. 选择审计范围与排除项
+3. 选择目标漏洞类型和验证策略
+4. 生成一条 `AgentTask`
 
-除此之外，前端还会通过任务描述中的 marker 帮助后端识别来源模式：
-
-- `HYBRID_TASK_NAME_MARKER = "[HYBRID]"`
-- `INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]"`
-
-后端在 `agent_tasks_bootstrap.py` 中通过 `_resolve_agent_task_source_mode(...)` 和 `_resolve_static_bootstrap_config(...)` 做最终归一化判断，所以真正的模式来源是：
-
-1. 任务名称/描述中的 marker
-2. `audit_scope.static_bootstrap`
+前端不再暴露额外的来源模式切换。对接智能扫描时，应该默认它是一条单一的 `AgentTask` 主链路。
 
 ## 3. 执行准备阶段
 
-`backend/app/api/v1/endpoints/agent_tasks_execution.py` 中的 `_execute_agent_task(task_id)` 是智能扫描和混合扫描的统一执行入口。执行准备阶段大致分为以下步骤：
+`backend/app/api/v1/endpoints/agent_tasks_execution.py` 中的 `_execute_agent_task(task_id)` 是当前智能扫描的统一执行入口。执行准备阶段大致分为以下步骤：
 
 1. 读取 `AgentTask` 与 `Project`
 2. 准备项目根目录
@@ -83,54 +80,32 @@
 - `vuln_queue`
 - `business_logic_queue`
 
-## 4. 混合扫描 bootstrap 阶段
+## 4. 初始种子与入口发现
 
-只有当 `static_bootstrap.mode = embedded` 时，任务才会进入内嵌静态预扫逻辑。实现位于 `agent_tasks_bootstrap.py` 的 `_prepare_embedded_bootstrap_findings(...)`。
+当前智能扫描不会依赖一个独立的前端模式切换来决定主链路，而是在统一任务入口下构造后续分析所需的初始输入。
 
-### 4.1 支持的预扫来源
+文档层面最重要的是记住三点：
 
-当前 embedded bootstrap 支持以下来源：
+- 初始输入的目标是为后续 Analysis 提供稳定的优先调查入口。
+- 这些输入不是最终漏洞结论，只是后续阶段消费的候选线索。
+- 即使某些历史兼容逻辑仍存在于旧 runtime 或迁移文档中，当前产品主线也只暴露单一的智能扫描入口。
 
-- `OpenGrep`
-- `Bandit`
-- `Gitleaks`
-- `PHPStan`
-- `YASA`
+### 4.1 当前输入来源
 
-这些来源不是为了直接生成最终漏洞，而是为了给后续 Agent 工作流提供“优先入口点”。
+当前智能扫描的初始输入主要来自：
 
-### 4.2 候选筛选规则
+- 项目文件树与目录结构
+- 目标文件、排除规则与项目元数据
+- 入口点发现与确定性 seed 构造
 
-内嵌静态预扫返回的结果会经过统一归一化和筛选，当前文档层面需要记住两条规则：
+### 4.2 候选与最终漏洞的区别
 
-- 只保留 `severity = ERROR`
-- 只保留 `confidence = HIGH / MEDIUM`
+这里有两个边界必须分清：
 
-因此 bootstrap 的输出不是“静态扫描所有命中”，而是“适合进入后续 Agent 流水线的高优先候选”。
-
-### 4.3 seed 与最终漏洞的区别
-
-bootstrap 输出会继续被转换成 `seed_findings`，再作为后续 Analysis 阶段的固定优先候选输入。这里有两个边界必须分清：
-
-- bootstrap candidate：静态预扫归一化后的候选
-- seed finding：喂给后续智能体的入口种子
+- risk point：供后续分析消费的风险点
 - final finding：经过分析、验证、报告收敛后的漏洞结论
 
-bootstrap candidate 和 seed finding 都不是最终漏洞。
-
-### 4.4 回退机制
-
-如果：
-
-- 当前模式不是 embedded
-- 或 embedded 预扫没有筛出有效候选
-
-系统不会直接放弃，而是走入口点回退流程：
-
-1. `_discover_entry_points_deterministic(...)` 发现入口点
-2. `_build_seed_from_entrypoints(...)` 构造 seed
-
-这样即便没有有效静态候选，智能扫描主流程仍然可以继续。
+risk point 不是最终漏洞，seed finding 也不是最终漏洞。真正面向用户的结果，始终要经过后续阶段收敛。
 
 ## 5. 编排阶段
 
@@ -163,33 +138,19 @@ bootstrap candidate 和 seed finding 都不是最终漏洞。
 - `REPORT`
   为运行期已收敛的 finding 生成漏洞报告素材，并生成项目级风险评估报告。
 
-### 5.2 混合扫描如何影响阶段推进
+### 5.2 当前阶段推进约束
 
-混合扫描在有 bootstrap 候选时可以跳过常规 `RECON`，这是当前实现里最容易误解的地方。
-
-实际行为是：
-
-- 当 `audit_source_mode == "hybrid"`
-- 且 `static_bootstrap_candidate_count > 0`
-- 且 `skip_recon_when_bootstrap_available == true`
-
-`AuditWorkflowEngine` 会把 bootstrap seeds 注入 `recon_queue`，然后跳过常规 `RECON` 阶段。
-
-这意味着混合扫描并不是把静态结果直接当最终结论，而是把静态结果变成“Analysis 的优先输入”。
-
-### 5.3 双轨并存
-
-当前工作流里有两条并存轨道：
+当前产品主线里，常规代码安全轨与业务逻辑轨并行存在，但它们都要遵守同一套队列与阶段推进规则：
 
 - 常规代码安全轨：`Recon -> Analysis -> Verification -> Report`
 - 业务逻辑轨：`BusinessLogicRecon -> BusinessLogicAnalysis -> Verification -> Report`
 
 两条轨道在验证前汇聚到统一的 `vuln_queue`，所以：
 
-- Verification 阶段是共享的
-- Report 阶段也是共享的
+- `VERIFICATION` 阶段是共享的
+- `REPORT` 阶段也是共享的
 
-### 5.4 队列的权威性
+### 5.3 队列的权威性
 
 当前实现中，队列不是“辅助缓存”，而是跨智能体交接的权威通道：
 
@@ -253,7 +214,7 @@ LLM 的职责主要集中在每个子智能体内部：
 
 ### 7.2 漏洞结果沉淀为 `AgentFinding`
 
-`AgentFinding` 是最终结果视图的核心实体，但它不是 bootstrap 直接产物，而是经过：
+`AgentFinding` 是最终结果视图的核心实体，但它不是侦察阶段的直接产物，而是经过：
 
 1. Analysis 或 BusinessLogicAnalysis 推入候选 finding
 2. Verification 收敛 verdict / reachability / confidence / evidence
@@ -274,11 +235,9 @@ LLM 的职责主要集中在每个子智能体内部：
 - `待确认`
 - `误报`
 
-导出阶段不会再沿用“仅 confirmed/likely 才可见”的旧假设，而是默认汇总当前任务下全部可导出的三态结果。
-
 ## 8. 前端为什么能展示“过程 + 结果”
 
-智能扫描 / 混合扫描结果页之所以和静态扫描体验不同，是因为它消费的不是单一“任务结束后结果”，而是两类并存数据：
+智能扫描结果页之所以和静态扫描体验不同，是因为它消费的不是单一“任务结束后结果”，而是两类并存数据：
 
 - 过程数据：`AgentEvent` + SSE 流
 - 结果数据：`AgentFinding` + task 级 report

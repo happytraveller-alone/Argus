@@ -7,7 +7,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Terminal,
   Bot,
-  Layers,
   Zap,
   Loader2,
   ArrowDown,
@@ -184,7 +183,7 @@ function limitRealtimeFindings(
 }
 
 type HomeScanCard = {
-  key: "static" | "agent" | "hybrid";
+  key: "static" | "agent";
   title: string;
   intro: string;
   icon: typeof Zap;
@@ -1053,15 +1052,6 @@ function AgentAuditPageContent() {
         accentClassName:
           "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
         targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
-      },
-      {
-        key: "hybrid",
-        title: "混合扫描",
-        intro: "静态 + 智能双阶段链路",
-        icon: Layers,
-        accentClassName:
-          "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
-        targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
       },
     ],
     [],
@@ -3566,7 +3556,7 @@ function AgentAuditPageContent() {
             </h1>
 
             <p className="mt-[2vh] text-lg md:text-xl text-muted-foreground leading-relaxed">
-              VulHunter 让你以静态、智能或混合方式快速发起代码安全扫描。
+              VulHunter 让你以静态或智能方式快速发起代码安全扫描。
             </p>
           </div>
 
@@ -3574,7 +3564,7 @@ function AgentAuditPageContent() {
           <div className="mb-[6vh]">
             <button
               onClick={() =>
-                navigate("/tasks/hybrid?openCreate=1&source=home-primary")
+                navigate("/tasks/intelligent?openCreate=1&source=home-primary")
               }
               className="group relative px-10 md:px-14 py-4 md:py-5 text-lg md:text-xl font-bold text-white bg-gradient-to-r from-primary via-primary to-primary/90 rounded-2xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/60 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 overflow-hidden"
             >
@@ -3589,8 +3579,8 @@ function AgentAuditPageContent() {
             </button>
           </div>
 
-          {/* 三种扫描方式卡片 */}
-          <div className="mx-auto w-full md:w-[85%] grid grid-cols-1 md:grid-cols-[repeat(3,1fr)] gap-5">
+          {/* 扫描方式卡片 */}
+          <div className="mx-auto w-full md:w-[70%] grid grid-cols-1 md:grid-cols-[repeat(2,1fr)] gap-5">
             {homeScanCards.map((card) => {
               const Icon = card.icon;
               return (

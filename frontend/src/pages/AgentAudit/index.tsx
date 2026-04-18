@@ -1,9 +1,9 @@
-import { Zap, Bot, Layers, ArrowRight } from "lucide-react";
+import { Zap, Bot, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
 
 type HomeScanCard = {
-  key: "static" | "agent" | "hybrid";
+  key: "static" | "agent";
   title: string;
   intro: string;
   icon: typeof Zap;
@@ -24,13 +24,6 @@ const homeScanCards: HomeScanCard[] = [
     intro: "AI Agent 代码推理",
     icon: Bot,
     targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
-  },
-  {
-    key: "hybrid",
-    title: "混合扫描",
-    intro: "静态分析 + AI 推理",
-    icon: Layers,
-    targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
   },
 ];
 
@@ -71,7 +64,7 @@ export function HomeScanCards() {
           <div className="mb-14">
             <button
               onClick={() =>
-                navigate("/tasks/hybrid?openCreate=1&source=home-primary")
+                navigate("/tasks/intelligent?openCreate=1&source=home-primary")
               }
               className="
                 pointer-events-auto
@@ -89,7 +82,7 @@ export function HomeScanCards() {
           </div>
         </div>
 
-        <div className="pb-20 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto w-full">
+        <div className="pb-20 grid md:grid-cols-2 gap-6 max-w-3xl mx-auto w-full">
           {homeScanCards.map((card) => {
             const Icon = card.icon;
 

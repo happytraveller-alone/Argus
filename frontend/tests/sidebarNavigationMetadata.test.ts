@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
+import fs from "node:fs";
+import path from "node:path";
 
 globalThis.React = React;
 
@@ -21,6 +23,30 @@ test("data management route is grouped under devTest navigation", () => {
 test("agent test route has been removed", () => {
 	const agentTestRoute = routes.find((route) => route.path === "/agent-test");
 	assert.equal(agentTestRoute, undefined);
+});
+
+test("task routes keep only the current static and intelligent pages", () => {
+	const taskRoutes = routes
+		.filter(
+			(route) =>
+				route.path === "/tasks/static" || route.path === "/tasks/intelligent",
+		)
+		.map((route) => route.path)
+		.sort();
+
+	assert.deepEqual(taskRoutes, ["/tasks/intelligent", "/tasks/static"]);
+	assert.equal(
+		fs.existsSync(
+			path.resolve(process.cwd(), "src/pages/TaskManagementStatic.tsx"),
+		),
+		true,
+	);
+	assert.equal(
+		fs.existsSync(
+			path.resolve(process.cwd(), "src/pages/TaskManagementIntelligent.tsx"),
+		),
+		true,
+	);
 });
 
 test("sidebar navigation groups keep the expected parent order", () => {

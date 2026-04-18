@@ -1,13 +1,15 @@
 # AuditTool / VulHunter 开发者架构指南
 
+> 2026-04-18 更新：当前产品扫描模式已收口为静态扫描与智能扫描。历史兼容字段与迁移背景请以 `plan/rust_full_takeover/` 下的文档为准。
+
 > 这份文档不是接口清单，也不是目录罗列。它的目标只有一个：让第一次接手这个项目的开发者，能在最短时间内看懂系统主线，并知道应该从哪里开始读代码。
 
 ## 阅读定位
 
 - **文档类型**：以 Explanation 为主，兼顾入门阶段最常用的 Reference 索引。
 - **目标读者**：第一次接手 AuditTool / VulHunter 的前端、后端或全栈开发者。
-- **阅读目标**：快速建立系统主线，理解三类扫描模式的边界，并知道该从哪些代码入口开始定位问题。
-- **建议搭配**：如果你接下来主要改智能扫描或混合扫描，再继续阅读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
+- **阅读目标**：快速建立系统主线，理解两类扫描模式的边界，并知道该从哪些代码入口开始定位问题。
+- **建议搭配**：如果你接下来主要改智能扫描，再继续阅读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
 - **术语入口**：如果你对 `Project`、`AgentTask`、bootstrap、finding 这些词还不熟，先看 [glossary.md](./glossary.md)。
 - **本文不覆盖**：接口字段逐项解释、数据库逐表说明、未来规划设计。
 
@@ -15,7 +17,7 @@
 
 按下面的顺序阅读，最容易形成稳定心智模型：
 
-1. 先看“这个系统是什么”和“三类扫描任务”，建立产品级边界。
+1. 先看“这个系统是什么”和“两类扫描任务”，建立产品级边界。
 2. 再看“核心运行模型”和“请求怎么流动”，理解对象关系与执行主线。
 3. 最后按“代码从哪里读”和“常见开发任务怎么定位”回到具体文件。
 
@@ -34,11 +36,11 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 如果只记一句话，可以这样理解它：
 
-**它是一个以 `Project` 为中心，把三类扫描任务统一组织起来的安全扫描工作台。**
+**它是一个以 `Project` 为中心，把两类扫描任务统一组织起来的安全扫描工作台。**
 
-### 先记住三类扫描任务
+### 先记住两类扫描任务
 
-当前产品视角下，系统只有三类主任务：
+当前产品视角下，系统只有两类主任务：
 
 #### 1. 静态扫描
 
@@ -69,19 +71,6 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 它们基本都属于智能扫描主链路。
 
-#### 3. 混合扫描
-
-混合扫描本质上仍然是 `AgentTask` 主导的智能扫描。  
-它和普通智能扫描的区别只有一个：
-
-**它会先把静态扫描结果作为漏洞入口点侦查输入，再交给 Agent 做后续分析和验证。**
-
-也就是说，混合扫描不是一套独立的第四种任务模型，而是：
-
-**智能扫描主流程 + 静态 bootstrap 结果注入**
-
----
-
 ## 核心运行模型
 
 ### `Project` 是整个系统的中心
@@ -95,7 +84,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 - 项目来源信息：远程仓库或 ZIP 包
 - 项目成员与归属
 - 代码文件与压缩包归档
-- 三类扫描任务
+- 两类扫描任务
 - 项目级统计与结果聚合
 
 所以你在定位任何功能时，都可以先问自己一句：
@@ -109,7 +98,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 如果你要理解智能扫描，只需要先看四个对象：
 
 - `AgentTask`
-  - 一次智能扫描或混合扫描任务
+  - 一次智能扫描任务
 - `AgentEvent`
   - 任务运行过程中的实时事件
 - `AgentFinding`
@@ -180,7 +169,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 1. 前端创建 `Project`
 2. 后端保存项目元数据
 3. 压缩包进入上传存储
-4. 后续文件树、文件内容、静态扫描、混合扫描都基于这份归档
+4. 后续文件树、文件内容、静态扫描、智能扫描都基于这份归档
 
 所以“项目上传”不是附属功能，而是后续扫描能力成立的前提。
 
@@ -209,7 +198,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 前端入口仍然是：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
 
-当模式是“智能扫描”时，前端会创建一个 `AgentTask`，并关闭静态 bootstrap。
+当模式是“智能扫描”时，前端会直接创建一个 `AgentTask`。
 
 后端主执行入口是：
 
@@ -223,28 +212,14 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 4. 启动 Agent 工作流
 5. 持续写入事件和发现
 
-### 混合扫描怎么创建
+### 智能扫描创建后的关键入口
 
-混合扫描最值得注意的地方，是它的后端模型并没有变。
-
-前端仍然创建 `AgentTask`，但会把：
-
-- `audit_scope.static_bootstrap.mode = embedded`
-
-写入任务配置。
-
-相关入口：
+当前产品只暴露单一的智能扫描创建入口，因此创建后的定位重点是：
 
 - 前端创建逻辑：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
-- 后端 bootstrap 逻辑：`backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
+- 后端执行入口：`backend/app/api/v1/endpoints/agent_tasks_execution.py`
 
-这条链路的真实含义是：
-
-1. 先从静态引擎收集候选漏洞入口点
-2. 把这些候选结果喂给 Agent
-3. 再由 Agent 继续做分析、验证和报告
-
-如果你要改“混合扫描为什么和智能扫描行为不同”，优先看这里，而不是先去看静态任务页面。
+如果你是在排查历史兼容字段、旧种子注入链路或 Python 旧 runtime 的迁移细节，再回到 `plan/rust_full_takeover/` 和相关归档文档。
 
 ### 结果如何回到前端
 
@@ -255,7 +230,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 - 页面：`/static-analysis/:taskId`
 - 聚合逻辑：`frontend/src/features/tasks/services/taskActivities.ts`
 
-#### 智能/混合扫描结果
+#### 智能扫描结果
 
 - 页面：`/agent-audit/:taskId`
 - 契约：`frontend/src/shared/api/agentTasks.ts`
@@ -264,7 +239,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 你可以把它理解成：
 
 - 静态扫描更偏“任务结果列表”
-- 智能/混合扫描更偏“任务执行过程 + 结果回放”
+- 智能扫描更偏“任务执行过程 + 结果回放”
 
 ---
 
@@ -301,13 +276,13 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 #### 5. `backend/app/api/v1/endpoints/agent_tasks_execution.py`
 
-如果你关心智能扫描或混合扫描，从这里切入。  
+如果你关心智能扫描，从这里切入。
 它是任务真正执行起来的地方。
 
 #### 6. `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
 
-如果你关心混合扫描和智能扫描的差异，从这里切入。  
-这就是“静态结果如何变成入口点侦查输入”的核心实现。
+如果你要追历史兼容或旧种子注入链路，从这里切入。
+这类代码主要用于理解迁移背景，而不是当前产品模式。
 
 ### 前端先看这几个入口
 
@@ -320,7 +295,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 #### 2. `frontend/src/components/scan/CreateProjectScanDialog.tsx`
 
 这是最值得优先阅读的前端入口。  
-它把静态扫描、智能扫描、混合扫描三种模式如何映射到后端能力，讲得最直白。
+它把静态扫描与智能扫描如何映射到后端能力，讲得最直白。
 
 #### 3. `frontend/src/pages/ProjectDetail.tsx`
 
@@ -346,22 +321,22 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 - `frontend/src/components/scan/CreateProjectScanDialog.tsx`
 
-这是三种扫描模式的统一入口。  
+这是两种扫描模式的统一入口。
 大多数“为什么创建逻辑不一样”的问题，都是从这里开始。
 
-### 如果你要改混合扫描行为
+### 如果你要改智能扫描创建或初始种子行为
 
 优先看：
 
 - `frontend/src/components/scan/CreateProjectScanDialog.tsx`
-- `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
 - `backend/app/api/v1/endpoints/agent_tasks_execution.py`
 
 原因很简单：
 
-- 前端决定任务以什么模式创建
-- bootstrap 决定静态结果如何注入
+- 前端决定任务如何创建
 - execution 决定任务如何真正运行
+
+如果你需要追历史兼容链路，再补读 `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py` 和迁移文档。
 
 ### 如果你要改智能扫描运行过程
 
@@ -413,7 +388,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 - 后端启动入口：`backend/app/main.py`
 - 后端 API 总入口：`backend/app/api/v1/api.py`
 - 智能扫描执行入口：`backend/app/api/v1/endpoints/agent_tasks_execution.py`
-- 混合扫描 bootstrap 入口：`backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
+- 历史兼容 / 种子注入入口：`backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
 - 静态扫描聚合入口：`backend/app/api/v1/endpoints/static_tasks.py`
 - 前端扫描创建入口：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
 - 前端任务聚合入口：`frontend/src/features/tasks/services/taskActivities.ts`
@@ -422,7 +397,7 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 
 ## 继续阅读
 
-- 想继续看智能扫描 / 混合扫描主线：读 [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)。
+- 想继续看智能扫描主线：读 [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)。
 - 想继续看智能体职责和工具边界：读 [agentic_scan_core/agent_tools.md](./agentic_scan_core/agent_tools.md)。
 - 想统一术语理解：回看 [glossary.md](./glossary.md)。
 
@@ -436,11 +411,10 @@ AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `Audit
 - `/api/v1/tasks/*`
 - `/api/v1/scan/*`
 
-当前系统只保留三类有效扫描模式：
+当前系统只保留两类有效扫描模式：
 
 - 静态扫描
 - 智能扫描
-- 混合扫描
 
 如果你在迁移历史、基线 schema 快照或专项清理文档里看到旧名称，把它们视为历史记录，而不是可继续接入的主流程。
 

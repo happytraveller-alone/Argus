@@ -3,8 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
     env, fs,
+    io::Read,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 pub const SCANNER_MOUNT_PATH: &str = "/scan";
@@ -63,12 +66,25 @@ fn scan_workspace_volume() -> String {
         .unwrap_or_else(|| DEFAULT_SCAN_WORKSPACE_VOLUME.to_string())
 }
 
-fn docker_bin() -> String {
-    env::var("VULHUNTER_DOCKER_BIN")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+fn docker_bin_with_priority(keys: &[&str]) -> String {
+    keys.iter()
+        .find_map(|key| {
+            env::var(key)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
         .unwrap_or_else(|| "docker".to_string())
+}
+
+fn docker_bin(scanner_type: Option<&str>) -> String {
+    let preferred_keys: &[&str] = if matches!(scanner_type, Some("flow_parser")) {
+        &["BACKEND_DOCKER_BIN", "VULHUNTER_DOCKER_BIN"]
+    } else {
+        &["VULHUNTER_DOCKER_BIN", "BACKEND_DOCKER_BIN"]
+    };
+
+    docker_bin_with_priority(preferred_keys)
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -161,7 +177,80 @@ fn run_command_capture(binary: &str, args: &[String]) -> Result<Output> {
     Command::new(binary)
         .args(args)
         .output()
-        .with_context(|| format!("failed to execute {binary} {}", args.join(" ")))
+        .with_context(|| format!("run docker command: {}", args.join(" ")))
+}
+
+struct CommandCapture {
+    timed_out: bool,
+}
+
+fn run_command_capture_with_timeout(
+    binary: &str,
+    args: &[String],
+    timeout: Option<Duration>,
+) -> Result<CommandCapture> {
+    let mut child = Command::new(binary)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("run docker command: {}", args.join(" ")))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .context("capture docker command stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("capture docker command stderr")?;
+
+    let stdout_handle = thread::spawn(move || -> Result<Vec<u8>> {
+        let mut reader = stdout;
+        let mut bytes = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .context("read docker stdout")?;
+        Ok(bytes)
+    });
+    let stderr_handle = thread::spawn(move || -> Result<Vec<u8>> {
+        let mut reader = stderr;
+        let mut bytes = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .context("read docker stderr")?;
+        Ok(bytes)
+    });
+
+    let started_at = Instant::now();
+    let mut timed_out = false;
+    loop {
+        if child.try_wait().context("poll docker child status")?.is_some() {
+            break;
+        }
+        if timeout.is_some_and(|limit| started_at.elapsed() >= limit) {
+            timed_out = true;
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    let _stdout = String::from_utf8_lossy(
+        &stdout_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("join docker stdout reader"))??,
+    )
+    .to_string();
+    let _stderr = String::from_utf8_lossy(
+        &stderr_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("join docker stderr reader"))??,
+    )
+    .to_string();
+
+    Ok(CommandCapture { timed_out })
 }
 
 fn docker_logs(binary: &str, container_id: &str, stdout: bool) -> Result<String> {
@@ -249,7 +338,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
     let stderr_log_path = logs_dir.join("stderr.log");
     let runner_meta_path = meta_dir.join("runner.json");
     let workspace_volume = scan_workspace_volume();
-    let docker_binary = docker_bin();
+    let docker_binary = docker_bin(Some(&spec.scanner_type));
     let expected_exit_codes = spec
         .expected_exit_codes
         .iter()
@@ -298,12 +387,23 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         }
         container_id = Some(created_id.clone());
 
-        let start_output = run_command_capture(
+        let start_args = vec!["start".to_string(), "-a".to_string(), created_id.clone()];
+        let start_output = run_command_capture_with_timeout(
             &docker_binary,
-            &["start".to_string(), created_id.clone()],
+            &start_args,
+            Some(Duration::from_secs(spec.timeout_seconds.max(1))),
         )?;
-        if !start_output.status.success() {
-            bail!("docker start failed: {}", output_error_text(&start_output));
+        if start_output.timed_out {
+            let _ = run_command_capture(
+                &docker_binary,
+                &[
+                    "stop".to_string(),
+                    "-t".to_string(),
+                    "2".to_string(),
+                    created_id.clone(),
+                ],
+            );
+            bail!("docker start timed out after {}s", spec.timeout_seconds.max(1));
         }
 
         let wait_output = run_command_capture(
@@ -413,8 +513,19 @@ pub fn execute_spec_file(spec_path: &Path) -> Result<RunnerResult> {
     Ok(execute(spec))
 }
 
+pub fn execute_from_spec_path(spec_path: &Path) -> RunnerResult {
+    execute_spec_file(spec_path).unwrap_or_else(|error| RunnerResult {
+        success: false,
+        container_id: None,
+        exit_code: 1,
+        stdout_path: None,
+        stderr_path: None,
+        error: Some(error.to_string()),
+    })
+}
+
 pub fn stop_container_sync(container_id: &str) -> bool {
-    let docker_binary = docker_bin();
+    let docker_binary = docker_bin(None);
     let inspect = run_command_capture(
         &docker_binary,
         &["inspect".to_string(), container_id.to_string()],
@@ -440,6 +551,10 @@ pub fn stop_container_sync(container_id: &str) -> bool {
         &["rm".to_string(), "-f".to_string(), container_id.to_string()],
     );
     matches!(remove, Ok(output) if output.status.success())
+}
+
+pub fn stop_container(container_id: &str) -> bool {
+    stop_container_sync(container_id)
 }
 
 #[cfg(test)]

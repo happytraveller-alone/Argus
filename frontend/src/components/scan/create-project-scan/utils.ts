@@ -42,20 +42,3 @@ export function stripCreateProjectScanArchiveSuffix(fileName: string) {
 		"",
 	);
 }
-
-export function buildHybridStaticBootstrapConfig(params: {
-	opengrepEnabled: boolean;
-	banditEnabled: boolean;
-	gitleaksEnabled: boolean;
-	phpstanEnabled: boolean;
-	pmdEnabled: boolean;
-}) {
-	return {
-		mode: "embedded" as const,
-		opengrep_enabled: params.opengrepEnabled,
-		bandit_enabled: params.banditEnabled,
-		gitleaks_enabled: params.gitleaksEnabled,
-		phpstan_enabled: params.phpstanEnabled,
-		pmd_enabled: params.pmdEnabled,
-	};
-}

@@ -1,17 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  extractCreateProjectScanApiErrorMessage,
-  normalizeCreateProjectScanProvider,
-  resolveCreateProjectScanEffectiveApiKey,
-  buildCreateProjectStaticTaskRoute,
-  buildHybridStaticBootstrapConfig,
-} from "../src/components/scan/create-project-scan/utils.ts";
+import * as createProjectScanUtils from "../src/components/scan/create-project-scan/utils.ts";
 import {
   extractCreateScanTaskApiErrorMessage,
   stripScanArchiveSuffix,
 } from "../src/components/scan/create-scan-task/utils.ts";
+
+const {
+  extractCreateProjectScanApiErrorMessage,
+  normalizeCreateProjectScanProvider,
+  resolveCreateProjectScanEffectiveApiKey,
+  buildCreateProjectStaticTaskRoute,
+} = createProjectScanUtils;
 
 test("stripScanArchiveSuffix removes common archive suffixes", () => {
   assert.equal(stripScanArchiveSuffix("demo.tar.gz"), "demo");
@@ -83,25 +84,5 @@ test("extractCreateProjectScanApiErrorMessage falls back to error.message", () =
   assert.equal(
     extractCreateProjectScanApiErrorMessage(new Error("请求失败")),
     "请求失败",
-  );
-});
-
-test("buildHybridStaticBootstrapConfig only preserves supported static engines", () => {
-  assert.deepEqual(
-    buildHybridStaticBootstrapConfig({
-      opengrepEnabled: true,
-      banditEnabled: false,
-      gitleaksEnabled: false,
-      phpstanEnabled: false,
-      pmdEnabled: true,
-    }),
-    {
-      mode: "embedded",
-      opengrep_enabled: true,
-      bandit_enabled: false,
-      gitleaks_enabled: false,
-      phpstan_enabled: false,
-      pmd_enabled: true,
-    },
   );
 });
