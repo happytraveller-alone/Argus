@@ -1,37 +1,76 @@
 from __future__ import annotations
 
-import asyncio
 import json
+import os
+import subprocess
 import tempfile
-import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
-from app.services.agent.scanner_runner import SCANNER_MOUNT_PATH, ScannerRunSpec, run_scanner_container
 
 
-def _run_coroutine_blocking(coro):
+SCANNER_MOUNT_PATH = "/scan"
+
+
+def _runtime_startup_binary() -> str:
+    env_configured = str(os.environ.get("BACKEND_RUNTIME_STARTUP_BIN", "") or "").strip()
+    if env_configured:
+        return env_configured
+    configured = str(
+        getattr(
+            settings,
+            "BACKEND_RUNTIME_STARTUP_BIN",
+            "/usr/local/bin/backend-runtime-startup",
+        )
+        or ""
+    ).strip()
+    return configured or "/usr/local/bin/backend-runtime-startup"
+
+
+def _run_runner_bridge(spec: Dict[str, Any]) -> Dict[str, Any]:
+    workspace_dir = Path(str(spec.get("workspace_dir") or "").strip())
+    spec_path = workspace_dir / "runner_spec.json"
+    spec_path.write_text(
+        json.dumps(spec, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
+        completed = subprocess.run(
+            [
+                _runtime_startup_binary(),
+                "runner",
+                "execute",
+                "--spec",
+                str(spec_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(1, int(spec.get("timeout_seconds") or 0)),
+        )
+    except OSError as exc:
+        return {"success": False, "error": str(exc)}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "flow_parser_runner_bridge_timeout"}
 
-    result: Dict[str, Any] = {}
-    error: Dict[str, BaseException] = {}
-
-    def _target() -> None:
+    stdout_text = (completed.stdout or "").strip()
+    if stdout_text:
         try:
-            result["value"] = asyncio.run(coro)
-        except BaseException as exc:  # pragma: no cover - defensive
-            error["value"] = exc
+            payload = json.loads(stdout_text)
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            pass
 
-    thread = threading.Thread(target=_target, daemon=True)
-    thread.start()
-    thread.join()
-    if "value" in error:
-        raise error["value"]
-    return result.get("value")
+    stderr_text = (completed.stderr or "").strip()
+    return {
+        "success": False,
+        "error": stderr_text
+        or stdout_text
+        or f"runner_bridge_failed:{completed.returncode}",
+    }
 
 
 class FlowParserRunnerClient:
@@ -100,26 +139,30 @@ class FlowParserRunnerClient:
                 encoding="utf-8",
             )
 
-            spec = ScannerRunSpec(
-                scanner_type="flow_parser",
-                image=self.image,
-                workspace_dir=str(workspace),
-                command=[
-                    "python3",
-                    "/opt/flow-parser/flow_parser_runner.py",
-                    subcommand,
-                    "--request",
-                    f"{SCANNER_MOUNT_PATH}/request.json",
-                    "--response",
-                    f"{SCANNER_MOUNT_PATH}/response.json",
-                ],
-                timeout_seconds=int(timeout_seconds or self.timeout_seconds),
-                env={},
-                expected_exit_codes=[0],
+            result = _run_runner_bridge(
+                {
+                    "scanner_type": "flow_parser",
+                    "image": self.image,
+                    "workspace_dir": str(workspace),
+                    "command": [
+                        "python3",
+                        "/opt/flow-parser/flow_parser_runner.py",
+                        subcommand,
+                        "--request",
+                        f"{SCANNER_MOUNT_PATH}/request.json",
+                        "--response",
+                        f"{SCANNER_MOUNT_PATH}/response.json",
+                    ],
+                    "timeout_seconds": int(timeout_seconds or self.timeout_seconds),
+                    "env": {},
+                    "expected_exit_codes": [0],
+                    "artifact_paths": [],
+                    "capture_stdout_path": None,
+                    "capture_stderr_path": None,
+                }
             )
-            result = _run_coroutine_blocking(run_scanner_container(spec))
-            if not getattr(result, "success", False):
-                return {"ok": False, "error": getattr(result, "error", None) or "flow_parser_runner_failed"}
+            if not result.get("success", False):
+                return {"ok": False, "error": result.get("error") or "flow_parser_runner_failed"}
             if not response_path.exists():
                 return {"ok": False, "error": "flow_parser_runner_missing_response"}
             return json.loads(response_path.read_text(encoding="utf-8"))
