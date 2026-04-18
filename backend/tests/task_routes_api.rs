@@ -1512,7 +1512,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     let smoke_routes = [
         "/api/v1/static-tasks/rules?limit=5",
         "/api/v1/static-tasks/rules/generating/status",
-        "/api/v1/static-tasks/gitleaks/rules?limit=5",
         "/api/v1/static-tasks/phpstan/rules?limit=5",
         "/api/v1/static-tasks/pmd/presets",
         "/api/v1/static-tasks/pmd/builtin-rulesets?limit=5",
@@ -1540,15 +1539,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
                 "name": "opengrep task",
                 "rule_ids": [],
                 "target_path": "."
-            }),
-        ),
-        (
-            "/api/v1/static-tasks/gitleaks/scan",
-            json!({
-                "project_id": project_id,
-                "name": "gitleaks task",
-                "target_path": ".",
-                "no_git": true
             }),
         ),
         (
@@ -1629,22 +1619,17 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             created_task_ids[0]
         ),
         format!(
-            "/api/v1/static-tasks/gitleaks/tasks/{}",
+            "/api/v1/static-tasks/phpstan/tasks/{}",
             created_task_ids[1]
         ),
-        format!(
-            "/api/v1/static-tasks/gitleaks/tasks/{}/findings?limit=20",
-            created_task_ids[1]
-        ),
-        format!("/api/v1/static-tasks/phpstan/tasks/{}", created_task_ids[2]),
         format!(
             "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-            created_task_ids[2]
+            created_task_ids[1]
         ),
-        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[3]),
+        format!("/api/v1/static-tasks/pmd/tasks/{}", created_task_ids[2]),
         format!(
             "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-            created_task_ids[3]
+            created_task_ids[2]
         ),
     ];
 
@@ -1737,37 +1722,6 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .as_array()
         .is_some_and(|lines| !lines.is_empty()));
 
-    let gitleaks_rules_response = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v1/static-tasks/gitleaks/rules?limit=5")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(gitleaks_rules_response.status(), StatusCode::OK);
-    let gitleaks_rules_json: Value = serde_json::from_slice(
-        &to_bytes(gitleaks_rules_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let gitleaks_rule_id = gitleaks_rules_json[0]["id"].as_str().unwrap().to_string();
-
-    let gitleaks_rule_detail = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/gitleaks/rules/{gitleaks_rule_id}"
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(gitleaks_rule_detail.status(), StatusCode::OK);
-
     let phpstan_rules_response = app
         .clone()
         .oneshot(
@@ -1852,50 +1806,12 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .unwrap();
     assert_eq!(opengrep_finding_status.status(), StatusCode::OK);
 
-    let gitleaks_findings_response = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/static-tasks/gitleaks/tasks/{}/findings?limit=20",
-                created_task_ids[1]
-            ))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    let gitleaks_findings_json: Value = serde_json::from_slice(
-        &to_bytes(gitleaks_findings_response.into_body(), usize::MAX)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let gitleaks_finding_id = gitleaks_findings_json[0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-
-    let gitleaks_finding_status = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/static-tasks/gitleaks/findings/{gitleaks_finding_id}/status?status=verified"
-                ))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(gitleaks_finding_status.status(), StatusCode::OK);
-
     let phpstan_findings_response = app
         .clone()
         .oneshot(
             Request::get(format!(
                 "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
-                created_task_ids[2]
+                created_task_ids[1]
             ))
             .body(Body::empty())
             .unwrap(),
@@ -1930,7 +1846,7 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
         .oneshot(
             Request::get(format!(
                 "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
-                created_task_ids[3]
+                created_task_ids[2]
             ))
             .body(Body::empty())
             .unwrap(),

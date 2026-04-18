@@ -4,7 +4,6 @@ from typing import Any, Dict, List
 import pytest
 
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 from app.services.agent.agents.verification import VerificationAgent
 from app.services.agent.tools.base import ToolResult
 

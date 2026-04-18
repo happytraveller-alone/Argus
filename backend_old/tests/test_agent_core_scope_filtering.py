@@ -9,7 +9,6 @@ from app.services.agent.scope_filters import (
 )
 from app.services.agent.tools.smart_scan_tool import SmartScanTool
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 def _write_file(path: Path, content: str) -> None:

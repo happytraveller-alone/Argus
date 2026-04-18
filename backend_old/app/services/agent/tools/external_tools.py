@@ -313,171 +313,6 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
             )
 
 
-# ============ Gitleaks 工具 ============
-# TODO
-class GitleaksInput(BaseModel):
-    """Gitleaks 扫描输入"""
-    target_path: str = Field(
-        default=".",
-        description="要扫描的路径。使用 '.' 扫描整个项目（推荐），不要使用项目目录名！"
-    )
-    no_git: bool = Field(default=True, description="不使用 git history，仅扫描文件")
-    max_results: int = Field(default=50, description="最大返回结果数")
-
-
-class GitleaksTool(AgentTool):
-    """
-    Gitleaks 密钥泄露检测工具
-    
-    Gitleaks 是一款专门用于检测代码中硬编码密钥的工具。
-    可以检测：
-    - API Keys (AWS, GCP, Azure, GitHub, etc.)
-    - 私钥 (RSA, SSH, PGP)
-    - 数据库凭据
-    - OAuth tokens
-    - JWT secrets
-    """
-    
-    def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
-        super().__init__()
-        #  将相对路径转换为绝对路径，Docker 需要绝对路径
-        self.project_root = os.path.abspath(project_root)
-        #  使用共享的 SandboxManager 实例，避免重复初始化
-        self.sandbox_manager = sandbox_manager or SandboxManager()
-
-    @property
-    def name(self) -> str:
-        return "gitleaks_scan"
-    
-    @property
-    def description(self) -> str:
-        return """使用 Gitleaks 检测代码中的密钥泄露。
-Gitleaks 是专业的密钥检测工具，支持 150+ 种密钥类型。
-
-重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
-
-检测类型:
-- AWS/GCP/Azure 凭据
-- GitHub/GitLab Tokens
-- 私钥 (RSA, SSH, PGP)
-- 数据库连接字符串
-- JWT Secrets
-
-建议在代码审计早期使用此工具。"""
-    
-    @property
-    def args_schema(self):
-        return GitleaksInput
-    
-    async def _execute(
-        self,
-        target_path: str = ".",
-        no_git: bool = True,
-        max_results: int = 50,
-        **kwargs
-    ) -> ToolResult:
-        """执行 Gitleaks 扫描"""
-        # 确保 Docker 可用
-        await self.sandbox_manager.initialize()
-        if not self.sandbox_manager.is_available:
-            error_msg = f"Gitleaks unavailable: {self.sandbox_manager.get_diagnosis()}"
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        #  使用公共函数进行智能路径解析
-        safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
-            target_path, self.project_root, "Gitleaks"
-        )
-        if error_msg:
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        #  修复：新版 gitleaks 需要使用 --report-path 输出到文件
-        # 使用 /tmp 目录（tmpfs 可写）
-        cmd = [
-            "gitleaks", "detect",
-            "--source", safe_target_path,
-            "--report-format", "json",
-            "--report-path", "/tmp/gitleaks-report.json",
-            "--exit-code", "0"  #  不要因为发现密钥而返回非零退出码
-        ]
-        if no_git:
-            cmd.append("--no-git")
-
-        # 执行 gitleaks 并读取报告文件
-        cmd_str = " ".join(cmd) + " && cat /tmp/gitleaks-report.json"
-
-        try:
-            result = await self.sandbox_manager.execute_tool_command(
-                command=cmd_str,
-                host_workdir=self.project_root,
-                timeout=180  #  增加超时时间
-            )
-
-            if result['exit_code'] != 0:
-                #  修复：错误信息可能在 error 或 stderr 中
-                error_msg = result.get('error') or result.get('stderr', '')[:300] or '未知错误'
-                return ToolResult(success=False, data=f"Gitleaks 执行失败: {error_msg}", error=f"Gitleaks 执行失败: {error_msg}")
-
-            stdout = result['stdout']
-            
-            if not stdout.strip():
-                return ToolResult(
-                    success=True,
-                    data="🔐 Gitleaks 扫描完成，未发现密钥泄露",
-                    metadata={"findings_count": 0}
-                )
-            
-            try:
-                # Find JSON start
-                json_start = stdout.find('[')
-                if json_start >= 0:
-                     findings = json.loads(stdout[json_start:])
-                else:
-                     findings = []
-            except json.JSONDecodeError:
-                findings = []
-            
-            if not findings:
-                 return ToolResult(
-                    success=True,
-                    data="🔐 Gitleaks 扫描完成，未发现密钥泄露",
-                    metadata={"findings_count": 0}
-                )
-            
-            findings = findings[:max_results]
-            
-            output_parts = ["🔐 Gitleaks 密钥泄露检测结果\n"]
-            output_parts.append(f"发现 {len(findings)} 处密钥泄露!\n")
-            
-            for i, finding in enumerate(findings):
-                output_parts.append(f"\n🔴 [{i+1}] {finding.get('RuleID', 'unknown')}")
-                output_parts.append(f"   描述: {finding.get('Description', '')}")
-                output_parts.append(f"   文件: {finding.get('File', '')}:{finding.get('StartLine', 0)}")
-                
-                # 部分遮盖密钥
-                secret = finding.get('Secret', '')
-                if len(secret) > 8:
-                    masked = secret[:4] + '*' * (len(secret) - 8) + secret[-4:]
-                else:
-                    masked = '*' * len(secret)
-                output_parts.append(f"   密钥: {masked}")
-            
-            return ToolResult(
-                success=True,
-                data="\n".join(output_parts),
-                metadata={
-                    "findings_count": len(findings),
-                    "findings": [
-                        {"rule": f.get("RuleID"), "file": f.get("File"), "line": f.get("StartLine")}
-                        for f in findings[:10]
-                    ]
-                }
-            )
-            
-        except Exception as e:
-            error_msg = f"Gitleaks 执行错误: {str(e)}"
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-
 # ============ npm audit 工具 ============
 
 class NpmAuditInput(BaseModel):
@@ -795,7 +630,7 @@ class TruffleHogTool(AgentTool):
 - 可以验证密钥是否仍然有效
 - 高精度，低误报
 
-建议与 Gitleaks 配合使用。"""
+建议与 Opengrep 组合使用。"""
     
     @property
     def args_schema(self):
@@ -1709,7 +1544,6 @@ PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
 
 __all__ = [
     "OpengrepTool",
-    "GitleaksTool",
     "NpmAuditTool",
     "SafetyTool",
     "TruffleHogTool",

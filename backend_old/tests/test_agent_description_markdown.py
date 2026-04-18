@@ -6,7 +6,6 @@ from app.services.agent.utils.vulnerability_naming import (
     build_cn_structured_description_markdown,
 )
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 @pytest.mark.asyncio

@@ -41,7 +41,6 @@ def test_resolve_static_bootstrap_config_respects_source_mode_and_scope_flags():
             "static_bootstrap": {
                 "mode": "embedded",
                 "opengrep_enabled": False,
-                "gitleaks_enabled": True,
                 "phpstan_enabled": True,
             }
         }
@@ -53,12 +52,10 @@ def test_resolve_static_bootstrap_config_respects_source_mode_and_scope_flags():
     assert hybrid == {
         "mode": "embedded",
         "opengrep_enabled": False,
-        "gitleaks_enabled": True,
         "phpstan_enabled": True,
     }
     assert intelligent == {
         "mode": "disabled",
         "opengrep_enabled": False,
-        "gitleaks_enabled": False,
         "phpstan_enabled": False,
     }

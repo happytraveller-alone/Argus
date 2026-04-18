@@ -13,7 +13,6 @@ from app.services.agent.agents.base import (
     BaseAgent,
 )
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 class _DummyAgent(BaseAgent):

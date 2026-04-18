@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    scan::{gitleaks, opengrep, phpstan, pmd},
+    scan::{opengrep, phpstan, pmd},
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -194,12 +194,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
             mounts: Vec::new(),
         },
         RunnerPreflightSpec {
-            name: "gitleaks",
-            image: config.scanner_gitleaks_image.clone(),
-            command: vec!["gitleaks".to_string(), "version".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
             name: "phpstan",
             image: config.scanner_phpstan_image.clone(),
             command: phpstan::build_preflight_command(),
@@ -233,16 +227,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         },
     ];
 
-    if let Some(gitleaks_spec) = specs.iter_mut().find(|spec| spec.name == "gitleaks") {
-        if let Some((workspace_dir, command, mounts)) =
-            build_gitleaks_preflight_inputs(state).await?
-        {
-            gitleaks_spec.command = command;
-            gitleaks_spec.mounts = mounts;
-            cleanup_dirs.push(workspace_dir);
-        }
-    }
-
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
         if let Some((workspace_dir, command, mounts)) =
             build_opengrep_preflight_inputs(state).await?
@@ -272,31 +256,6 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     }
 
     Ok((specs, cleanup_dirs))
-}
-
-async fn build_gitleaks_preflight_inputs(
-    state: &AppState,
-) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir =
-        std::env::temp_dir().join(format!("gitleaks-preflight-{}", uuid::Uuid::new_v4()));
-    let source_dir = workspace_dir.join("source");
-    tokio::fs::create_dir_all(&source_dir).await?;
-    let config_path = gitleaks::materialize_builtin_config(state, &workspace_dir).await?;
-    let Some(_config_path) = config_path else {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Ok(None);
-    };
-
-    let command = gitleaks::build_detect_command(
-        "/work/source",
-        "/work/report.json",
-        Some("/work/gitleaks.toml"),
-    );
-    Ok(Some((
-        workspace_dir.clone(),
-        command,
-        vec![(workspace_dir, "/work".to_string())],
-    )))
 }
 
 async fn build_opengrep_preflight_inputs(
@@ -381,23 +340,8 @@ mod tests {
         let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
         assert_eq!(
             names,
-            vec![
-                "opengrep",
-                "gitleaks",
-                "phpstan",
-                "pmd",
-                "flow-parser",
-                "sandbox-runner"
-            ]
+            vec!["opengrep", "phpstan", "pmd", "flow-parser", "sandbox-runner"]
         );
-
-        let gitleaks = specs
-            .iter()
-            .find(|spec| spec.name == "gitleaks")
-            .expect("gitleaks spec should exist");
-        assert!(gitleaks.command.iter().any(|part| part == "detect"));
-        assert!(gitleaks.command.iter().any(|part| part == "--config"));
-        assert_eq!(gitleaks.mounts.len(), 1);
 
         let opengrep = specs
             .iter()

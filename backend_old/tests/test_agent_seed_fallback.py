@@ -4,7 +4,6 @@ import pytest
 
 from app.services.agent.bootstrap_entrypoints import _build_seed_from_entrypoints
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 @pytest.mark.asyncio

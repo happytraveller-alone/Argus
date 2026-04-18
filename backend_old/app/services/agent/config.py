@@ -109,10 +109,6 @@ class AgentConfig(BaseSettings):
         default=True,
         description="Enable Opengrep scanner"
     )
-    gitleaks_enabled: bool = Field(
-        default=True,
-        description="Enable Gitleaks scanner"
-    )
     npm_audit_enabled: bool = Field(
         default=True,
         description="Enable npm audit"
@@ -135,10 +131,6 @@ class AgentConfig(BaseSettings):
     opengrep_timeout_seconds: int = Field(
         default=120,
         description="Timeout for Opengrep scanner"
-    )
-    gitleaks_timeout_seconds: int = Field(
-        default=60,
-        description="Timeout for Gitleaks scanner"
     )
     kunlun_timeout_seconds: int = Field(
         default=600,
@@ -380,14 +372,7 @@ def get_tool_config(tool_name: str) -> ToolConfig:
     config = get_agent_config()
 
     # Tool-specific configurations
-    tool_configs: Dict[str, ToolConfig] = {
-        "gitleaks_scan": ToolConfig(
-            name="gitleaks_scan",
-            enabled=config.gitleaks_enabled,
-            timeout_seconds=config.gitleaks_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-        ),
-    }
+    tool_configs: Dict[str, ToolConfig] = {}
 
     return tool_configs.get(
         tool_name,
@@ -418,12 +403,6 @@ def get_tool_config(tool_name: str) -> ToolConfig:
 #             timeout_seconds=config.bandit_timeout_seconds,
 #             rate_limit_per_second=config.external_tool_rate_per_second,
 #             fallback_tool="pattern_match",
-#         ),
-#         "gitleaks_scan": ToolConfig(
-#             name="gitleaks_scan",
-#             enabled=config.gitleaks_enabled,
-#             timeout_seconds=config.gitleaks_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
 #         ),
 #         "npm_audit": ToolConfig(
 #             name="npm_audit",

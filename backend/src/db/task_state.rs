@@ -14,7 +14,6 @@ pub struct TaskStateSnapshot {
     pub agent_tasks: BTreeMap<String, AgentTaskRecord>,
     pub static_tasks: BTreeMap<String, StaticTaskRecord>,
     pub opengrep_rules: BTreeMap<String, OpengrepRuleRecord>,
-    pub gitleaks_rules: BTreeMap<String, GitleaksRuleRecord>,
     pub pmd_rule_configs: BTreeMap<String, PmdRuleConfigRecord>,
     pub phpstan_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
 }
@@ -231,24 +230,6 @@ pub struct OpengrepRuleRecord {
     pub created_at: String,
     pub pattern_yaml: String,
     pub patch: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct GitleaksRuleRecord {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub rule_id: String,
-    pub secret_group: i64,
-    pub regex: String,
-    pub keywords: Vec<String>,
-    pub path: Option<String>,
-    pub tags: Vec<String>,
-    pub entropy: Option<f64>,
-    pub is_active: bool,
-    pub source: String,
-    pub created_at: String,
-    pub updated_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

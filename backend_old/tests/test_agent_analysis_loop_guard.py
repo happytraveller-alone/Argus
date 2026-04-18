@@ -6,7 +6,6 @@ import pytest
 from app.services.agent.agents.analysis import AnalysisAgent
 from app.services.agent.tools.base import ToolResult
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 class _DummyReadFileTool:

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
-    scan::{gitleaks, opengrep, phpstan, pmd},
+    scan::{opengrep, phpstan, pmd},
     state::AppState,
 };
 
@@ -64,43 +64,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/findings/{finding_id}/status",
             post(update_opengrep_finding_status),
-        )
-        .route(
-            "/gitleaks/rules",
-            get(list_gitleaks_rules).post(create_gitleaks_rule),
-        )
-        .route(
-            "/gitleaks/rules/import-builtin",
-            post(import_builtin_gitleaks_rules),
-        )
-        .route("/gitleaks/rules/select", post(batch_update_gitleaks_rules))
-        .route(
-            "/gitleaks/rules/{rule_id}",
-            get(get_gitleaks_rule)
-                .patch(update_gitleaks_rule)
-                .delete(delete_gitleaks_rule),
-        )
-        .route("/gitleaks/scan", post(create_gitleaks_task))
-        .route("/gitleaks/tasks", get(list_gitleaks_tasks))
-        .route(
-            "/gitleaks/tasks/{task_id}",
-            get(get_gitleaks_task).delete(delete_gitleaks_task),
-        )
-        .route(
-            "/gitleaks/tasks/{task_id}/interrupt",
-            post(interrupt_gitleaks_task),
-        )
-        .route(
-            "/gitleaks/tasks/{task_id}/findings",
-            get(list_gitleaks_findings),
-        )
-        .route(
-            "/gitleaks/tasks/{task_id}/findings/{finding_id}",
-            get(get_gitleaks_finding),
-        )
-        .route(
-            "/gitleaks/findings/{finding_id}/status",
-            post(update_gitleaks_finding_status),
         )
         .route("/phpstan/rules", get(list_phpstan_rules))
         .route(
@@ -194,7 +157,6 @@ struct ListQuery {
     source: Option<String>,
     keyword: Option<String>,
     language: Option<String>,
-    tag: Option<String>,
     deleted: Option<String>,
     is_active: Option<bool>,
     skip: Option<usize>,
@@ -653,223 +615,6 @@ async fn update_opengrep_finding_status(
     Query(query): Query<StatusQuery>,
 ) -> Result<Json<Value>, ApiError> {
     update_static_finding_status(&state, "opengrep", &finding_id, &query.status).await
-}
-
-async fn list_gitleaks_rules(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let snapshot = load_task_snapshot(&state).await?;
-    let mut items = builtin_gitleaks_rules(&state).await?;
-    items.extend(snapshot.gitleaks_rules.into_values());
-    Ok(Json(
-        items
-            .into_iter()
-            .filter(|rule| match query.is_active {
-                Some(is_active) => rule.is_active == is_active,
-                None => true,
-            })
-            .filter(|rule| match query.source.as_deref() {
-                Some(source) => rule.source == source,
-                None => true,
-            })
-            .filter(|rule| contains_keyword(&rule.name, query.keyword.as_deref()))
-            .filter(|rule| contains_tag(&rule.tags, query.tag.as_deref()))
-            .skip(query.skip.unwrap_or(0))
-            .take(query.limit.unwrap_or(1_000))
-            .map(|record| gitleaks_rule_value(&record))
-            .collect(),
-    ))
-}
-
-async fn get_gitleaks_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let rule = find_gitleaks_rule(&state, &rule_id).await?;
-    Ok(Json(gitleaks_rule_value(&rule)))
-}
-
-async fn create_gitleaks_rule(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let record = task_state::GitleaksRuleRecord {
-        id: format!("custom:{}", Uuid::new_v4()),
-        name: optional_string(&payload, "name")
-            .unwrap_or_else(|| "custom-gitleaks-rule".to_string()),
-        description: optional_string(&payload, "description"),
-        rule_id: required_string(&payload, "rule_id")?,
-        secret_group: payload
-            .get("secret_group")
-            .and_then(Value::as_i64)
-            .unwrap_or(0),
-        regex: required_string(&payload, "regex")?,
-        keywords: payload
-            .get("keywords")
-            .and_then(string_array)
-            .unwrap_or_default(),
-        path: optional_string(&payload, "path"),
-        tags: payload
-            .get("tags")
-            .and_then(string_array)
-            .unwrap_or_default(),
-        entropy: payload.get("entropy").and_then(Value::as_f64),
-        is_active: payload
-            .get("is_active")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        source: optional_string(&payload, "source").unwrap_or_else(|| "custom".to_string()),
-        created_at: now_rfc3339(),
-        updated_at: None,
-    };
-    let mut snapshot = load_task_snapshot(&state).await?;
-    snapshot
-        .gitleaks_rules
-        .insert(record.id.clone(), record.clone());
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(gitleaks_rule_value(&record)))
-}
-
-async fn update_gitleaks_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let mut snapshot = load_task_snapshot(&state).await?;
-    let mut rule = find_gitleaks_rule(&state, &rule_id).await?;
-    if let Some(value) = optional_string(&payload, "name") {
-        rule.name = value;
-    }
-    if let Some(value) = optional_string(&payload, "description") {
-        rule.description = Some(value);
-    }
-    if let Some(value) = optional_string(&payload, "rule_id") {
-        rule.rule_id = value;
-    }
-    if let Some(value) = optional_string(&payload, "regex") {
-        rule.regex = value;
-    }
-    if let Some(value) = payload.get("keywords").and_then(string_array) {
-        rule.keywords = value;
-    }
-    if let Some(value) = payload.get("tags").and_then(string_array) {
-        rule.tags = value;
-    }
-    if let Some(value) = payload.get("is_active").and_then(Value::as_bool) {
-        rule.is_active = value;
-    }
-    rule.updated_at = Some(now_rfc3339());
-    snapshot
-        .gitleaks_rules
-        .insert(rule_id.clone(), rule.clone());
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(gitleaks_rule_value(&rule)))
-}
-
-async fn delete_gitleaks_rule(
-    State(state): State<AppState>,
-    AxumPath(rule_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    let mut snapshot = load_task_snapshot(&state).await?;
-    snapshot.gitleaks_rules.remove(&rule_id);
-    save_task_snapshot(&state, &snapshot).await?;
-    Ok(Json(json!({
-        "message": "gitleaks rule deleted in rust backend",
-        "rule_id": rule_id,
-    })))
-}
-
-async fn batch_update_gitleaks_rules(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let updated = builtin_gitleaks_rules(&state).await?.len();
-    Ok(Json(json!({
-        "message": "gitleaks rule selection updated in rust backend",
-        "updated_count": updated,
-        "is_active": is_active,
-    })))
-}
-
-async fn import_builtin_gitleaks_rules() -> Json<Value> {
-    Json(json!({
-        "message": "builtin gitleaks rules are already served by rust backend"
-    }))
-}
-
-async fn create_gitleaks_task(
-    State(state): State<AppState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<Value>, ApiError> {
-    let no_git = payload
-        .get("no_git")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        .to_string();
-    create_static_task(
-        &state,
-        "gitleaks",
-        payload,
-        json!({
-            "no_git": no_git,
-        }),
-    )
-    .await
-}
-
-async fn list_gitleaks_tasks(
-    State(state): State<AppState>,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_tasks(&state, "gitleaks", query).await
-}
-
-async fn get_gitleaks_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_task(&state, "gitleaks", &task_id).await
-}
-
-async fn delete_gitleaks_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    delete_static_task(&state, "gitleaks", &task_id).await
-}
-
-async fn interrupt_gitleaks_task(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Value>, ApiError> {
-    interrupt_static_task(&state, "gitleaks", &task_id).await
-}
-
-async fn list_gitleaks_findings(
-    State(state): State<AppState>,
-    AxumPath(task_id): AxumPath<String>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_findings(&state, "gitleaks", &task_id).await
-}
-
-async fn get_gitleaks_finding(
-    State(state): State<AppState>,
-    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
-) -> Result<Json<Value>, ApiError> {
-    get_static_finding(&state, "gitleaks", &task_id, &finding_id).await
-}
-
-async fn update_gitleaks_finding_status(
-    State(state): State<AppState>,
-    AxumPath(finding_id): AxumPath<String>,
-    Query(query): Query<StatusQuery>,
-) -> Result<Json<Value>, ApiError> {
-    update_static_finding_status(&state, "gitleaks", &finding_id, &query.status).await
 }
 
 async fn list_phpstan_rules(
@@ -1410,25 +1155,6 @@ fn default_static_findings(
             "status": "open",
             "confidence": "MEDIUM",
         }),
-        "gitleaks" => json!({
-            "id": finding_id,
-            "scan_task_id": task_id,
-            "rule_id": "builtin:placeholder",
-            "description": "placeholder gitleaks finding from rust backend",
-            "file_path": file_path,
-            "start_line": 1,
-            "end_line": 1,
-            "resolved_file_path": file_path,
-            "resolved_line_start": 1,
-            "secret": "REDACTED",
-            "match": "secret=REDACTED",
-            "commit": Value::Null,
-            "author": Value::Null,
-            "email": Value::Null,
-            "date": Value::Null,
-            "fingerprint": format!("fp-{task_id}"),
-            "status": "open",
-        }),
         "phpstan" => json!({
             "id": finding_id,
             "scan_task_id": task_id,
@@ -1658,21 +1384,6 @@ async fn find_opengrep_rule(
         .ok_or_else(|| ApiError::NotFound(format!("opengrep rule not found: {rule_id}")))
 }
 
-async fn find_gitleaks_rule(
-    state: &AppState,
-    rule_id: &str,
-) -> Result<task_state::GitleaksRuleRecord, ApiError> {
-    let snapshot = load_task_snapshot(state).await?;
-    if let Some(rule) = snapshot.gitleaks_rules.get(rule_id) {
-        return Ok(rule.clone());
-    }
-    builtin_gitleaks_rules(state)
-        .await?
-        .into_iter()
-        .find(|rule| rule.id == rule_id)
-        .ok_or_else(|| ApiError::NotFound(format!("gitleaks rule not found: {rule_id}")))
-}
-
 async fn upsert_opengrep_rule(
     state: &AppState,
     record: task_state::OpengrepRuleRecord,
@@ -1846,16 +1557,6 @@ async fn merged_opengrep_rules_from_snapshot(
     Ok(items)
 }
 
-async fn builtin_gitleaks_rules(
-    state: &AppState,
-) -> Result<Vec<task_state::GitleaksRuleRecord>, ApiError> {
-    let content = gitleaks::load_builtin_config(state)
-        .await
-        .map_err(internal_error)?
-        .unwrap_or_default();
-    Ok(parse_gitleaks_rules(&content))
-}
-
 async fn builtin_phpstan_rules(state: &AppState) -> Result<Vec<Value>, ApiError> {
     let assets = phpstan::load_builtin_assets(state)
         .await
@@ -1961,25 +1662,6 @@ fn opengrep_rule_detail_value(record: &task_state::OpengrepRuleRecord) -> Value 
         }),
     );
     value
-}
-
-fn gitleaks_rule_value(record: &task_state::GitleaksRuleRecord) -> Value {
-    json!({
-        "id": record.id,
-        "name": record.name,
-        "description": record.description,
-        "rule_id": record.rule_id,
-        "secret_group": record.secret_group,
-        "regex": record.regex,
-        "keywords": record.keywords,
-        "path": record.path,
-        "tags": record.tags,
-        "entropy": record.entropy,
-        "is_active": record.is_active,
-        "source": record.source,
-        "created_at": record.created_at,
-        "updated_at": record.updated_at,
-    })
 }
 
 fn phpstan_rule_value(rule: &Value) -> Value {
@@ -2157,13 +1839,6 @@ fn contains_keyword(text: &str, keyword: Option<&str>) -> bool {
     }
 }
 
-fn contains_tag(tags: &[String], tag: Option<&str>) -> bool {
-    match tag.map(str::trim).filter(|value| !value.is_empty()) {
-        Some(tag) => tags.iter().any(|value| value.eq_ignore_ascii_case(tag)),
-        None => true,
-    }
-}
-
 fn file_stem(path: &str) -> String {
     path.rsplit('/')
         .next()
@@ -2173,71 +1848,6 @@ fn file_stem(path: &str) -> String {
         .trim_end_matches(".json")
         .trim_end_matches(".xml")
         .trim_end_matches(".toml")
-        .to_string()
-}
-
-fn parse_gitleaks_rules(content: &str) -> Vec<task_state::GitleaksRuleRecord> {
-    let mut out = Vec::new();
-    for section in content.split("[[rules]]").skip(1) {
-        let mut id = None;
-        let mut description = None;
-        let mut regex = None;
-        let mut entropy = None;
-        let mut keywords = Vec::new();
-        for line in section.lines() {
-            let trimmed = line.trim();
-            if let Some(value) = trimmed.strip_prefix("id = ") {
-                id = Some(unquote(value));
-            } else if let Some(value) = trimmed.strip_prefix("description = ") {
-                description = Some(unquote(value));
-            } else if let Some(value) = trimmed.strip_prefix("regex = ") {
-                regex = Some(unquote(value));
-            } else if let Some(value) = trimmed.strip_prefix("entropy = ") {
-                entropy = value.trim().parse::<f64>().ok();
-            } else if let Some(value) = trimmed.strip_prefix("keywords = ") {
-                keywords = parse_string_list(value);
-            }
-        }
-        let Some(id) = id else {
-            continue;
-        };
-        out.push(task_state::GitleaksRuleRecord {
-            id: format!("builtin:{id}"),
-            name: id.clone(),
-            description,
-            rule_id: id,
-            secret_group: 0,
-            regex: regex.unwrap_or_default(),
-            keywords,
-            path: None,
-            tags: Vec::new(),
-            entropy,
-            is_active: true,
-            source: "builtin".to_string(),
-            created_at: "2026-01-01T00:00:00Z".to_string(),
-            updated_at: None,
-        });
-    }
-    out
-}
-
-fn parse_string_list(input: &str) -> Vec<String> {
-    input
-        .trim()
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .split(',')
-        .map(unquote)
-        .filter(|item| !item.is_empty())
-        .collect()
-}
-
-fn unquote(value: &str) -> String {
-    value
-        .trim()
-        .trim_matches('\'')
-        .trim_matches('"')
-        .trim_matches('`')
         .to_string()
 }
 

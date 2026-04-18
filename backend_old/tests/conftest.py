@@ -12,7 +12,6 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.opengrep import OpengrepRule, OpengrepScanTask, OpengrepFinding
-from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
 from app.core.security import get_password_hash
 
 

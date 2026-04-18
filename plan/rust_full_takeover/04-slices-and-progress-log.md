@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `152`
+  - runtime core `150`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -163,6 +163,22 @@
   - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_bandit_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py -k 'bandit_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module'`
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_external_tools_manual.py tests/test_generic_rule_yaml_validation.py -k 'not bandit'`
+
+### Gitleaks Retirement For Opengrep-Only Runtime (2026-04-18)
+
+- Rust `static-tasks` / preflight / recovery 已移除 `gitleaks` route/runtime surface，`backend/tests/opengrep_only_static_tasks.rs` 改为要求 `gitleaks` routes 返回 `404`。
+- Python `gitleaks` cluster 已退役：
+  - `backend_old/app/models/gitleaks.py`
+  - `backend_old/app/services/agent/bootstrap_gitleaks_runner.py`
+  - `backend_old/app/services/agent/tools/external_tools.py` 中的 `GitleaksTool`
+  - `backend_old/app/services/agent/bootstrap_findings.py` 里仅服务于 gitleaks 的 helper
+- `backend_old/app` runtime core 计数 `152 -> 150`，`models / persistence mirror` 计数 `16 -> 15`，`scanner / bootstrap / queue / workspace / tracking` 计数 `15 -> 14`。
+- 新增 `backend_old/tests/test_gitleaks_engine_retired.py` guard，要求 `gitleaks` Python cluster 物理不存在，且 live importer 清零。
+- 验证结果：
+  - `cargo test gitleaks_routes_are_not_owned_when_static_tasks_are_opengrep_only --test opengrep_only_static_tasks`
+  - `cargo test search_endpoints_are_rust_owned_and_return_project_matches --test search_api`
+  - `cargo test static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upstream --test task_routes_api`
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest -s tests/test_gitleaks_engine_retired.py tests/test_agent_bootstrap_policy.py tests/test_config_internal_callers_use_service_layer.py tests/test_agent_bootstrap_findings.py tests/test_external_tools_manual.py -k 'gitleaks_engine_retired or resolve_static_bootstrap_config or bootstrap_callers_use_agent_scan_workspace_module or not gitleaks'`
 
 ## 详细历史
 

@@ -275,7 +275,6 @@ def test_bootstrap_callers_use_agent_scan_workspace_module():
     caller_paths = [
         PROJECT_ROOT / "app/services/agent/bootstrap/opengrep.py",
         PROJECT_ROOT / "app/services/agent/bootstrap/phpstan.py",
-        PROJECT_ROOT / "app/services/agent/bootstrap_gitleaks_runner.py",
     ]
 
     for path in caller_paths:
@@ -919,6 +918,8 @@ def test_no_live_python_module_imports_retired_agent_core_orphan_support_cluster
 
 def test_agents_package_no_longer_reexports_business_logic_scan_agent():
     agents_package_path = PROJECT_ROOT / "app/services/agent/agents/__init__.py"
+    if not agents_package_path.exists():
+        return
     module = ast.parse(agents_package_path.read_text(encoding="utf-8"), filename=str(agents_package_path))
 
     offending_imports: list[str] = []

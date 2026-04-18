@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
 手动测试 external_tools.py 中的安全工具集合
-支持 Opengrep、Gitleaks、npm audit、Safety、TruffleHog、OSV-Scanner
+支持 Opengrep、npm audit、Safety、TruffleHog、OSV-Scanner
 
 使用方法:
     python test_external_tools_manual.py --tool opengrep --path .
-    python test_external_tools_manual.py --tool gitleaks --path .
     python test_external_tools_manual.py --tool npm_audit --path .
     python test_external_tools_manual.py --tool safety --path .
     python test_external_tools_manual.py --help
@@ -68,7 +67,7 @@ def project_root() -> str:
 # 现在安全地导入
 try:
     from app.services.agent.tools.external_tools import (
-        OpengrepTool, GitleaksTool, NpmAuditTool,
+        OpengrepTool, NpmAuditTool,
         SafetyTool, TruffleHogTool, OSVScannerTool
     )
     from app.services.agent.tools.sandbox_tool import SandboxManager
@@ -97,33 +96,6 @@ async def test_opengrep(project_root: str):
     result = await tool.execute(
         target_path=".",
         rules="p/security-audit",
-        max_results=10
-    )
-    
-    print(f"执行成功: {result.success}")
-    print(f"持续时间: {result.duration_ms}ms")
-    print(f"元数据: {result.metadata}")
-    print(f"\n结果:\n{result.to_string()[:2000]}")
-    
-    return result.success
-
-
-async def test_gitleaks(project_root: str):
-    """测试 Gitleaks 工具"""
-    print("\n" + "="*60)
-    print("🔐 测试 Gitleaks 工具")
-    print("="*60)
-    
-    sandbox_manager = SandboxManager()
-    tool = GitleaksTool(project_root, sandbox_manager)
-    
-    print(f"工具名称: {tool.name}")
-    print(f"工具描述: {tool.description[:200]}...")
-    
-    print("\n执行扫描...")
-    result = await tool.execute(
-        target_path=".",
-        no_git=True,
         max_results=10
     )
     
@@ -329,7 +301,7 @@ async def main():
     
     parser.add_argument(
         "--tool",
-        choices=["opengrep", "gitleaks", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd","phpstan", "all"],
+        choices=["opengrep", "npm_audit", "safety", "trufflehog", "osv_scanner","pmd","phpstan", "all"],
         default="all",
         help="要测试的工具（默认: all）"
     )
@@ -369,9 +341,6 @@ async def main():
     try:
         if args.tool in ["all", "opengrep"]:
             results["opengrep"] = await test_opengrep(project_root)
-        
-        if args.tool in ["all", "gitleaks"]:
-            results["gitleaks"] = await test_gitleaks(project_root)
         
         if args.tool in ["all", "npm_audit"]:
             results["npm_audit"] = await test_npm_audit(project_root)

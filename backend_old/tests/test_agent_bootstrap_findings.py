@@ -3,9 +3,7 @@ from types import SimpleNamespace
 from app.services.agent.bootstrap_findings import (
     _build_bootstrap_confidence_map_from_rules,
     _dedupe_bootstrap_findings,
-    _normalize_bootstrap_finding_from_gitleaks_payload,
     _normalize_bootstrap_finding_from_opengrep_payload,
-    _parse_bootstrap_gitleaks_output,
     _parse_bootstrap_opengrep_output,
 )
 
@@ -51,32 +49,6 @@ def test_normalize_bootstrap_finding_from_opengrep_payload_uses_confidence_map_f
     assert finding["confidence"] == "HIGH"
 
 
-def test_normalize_bootstrap_finding_from_gitleaks_payload_normalizes_relative_path():
-    finding = _normalize_bootstrap_finding_from_gitleaks_payload(
-        {
-            "RuleID": "generic-api-key",
-            "Description": "secret candidate",
-            "File": "/scan/project/src/secret.py",
-            "StartLine": 3,
-            "EndLine": 4,
-            "Match": "token=abc",
-        },
-        2,
-    )
-
-    assert finding["id"] == "gitleaks-2"
-    assert finding["file_path"] == "src/secret.py"
-    assert finding["line_start"] == 3
-    assert finding["line_end"] == 4
-    assert finding["confidence"] == "HIGH"
-
-
-def test_parse_bootstrap_gitleaks_output_accepts_findings_wrapper():
-    output = _parse_bootstrap_gitleaks_output('{"findings":[{"RuleID":"x"}]}')
-
-    assert output == [{"RuleID": "x"}]
-
-
 def test_dedupe_bootstrap_findings_collapses_same_location_type_and_source():
     deduped = _dedupe_bootstrap_findings(
         [
@@ -92,13 +64,7 @@ def test_dedupe_bootstrap_findings_collapses_same_location_type_and_source():
                 "vulnerability_type": "sql",
                 "source": "opengrep_bootstrap",
             },
-            {
-                "file_path": "src/a.py",
-                "line_start": 5,
-                "vulnerability_type": "sql",
-                "source": "gitleaks_bootstrap",
-            },
         ]
     )
 
-    assert len(deduped) == 2
+    assert len(deduped) == 1

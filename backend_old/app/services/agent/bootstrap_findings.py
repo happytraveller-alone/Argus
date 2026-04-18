@@ -139,49 +139,6 @@ def _normalize_bootstrap_finding_from_opengrep_payload(
     }
 
 
-def _normalize_bootstrap_finding_from_gitleaks_payload(
-    finding: Dict[str, Any],
-    index: int,
-) -> Dict[str, Any]:
-    rule_id = str(finding.get("RuleID") or "gitleaks_secret").strip()
-    description = str(finding.get("Description") or "Gitleaks 密钥泄露候选").strip()
-    file_path = normalize_scan_file_path(
-        str(finding.get("File") or "").strip(),
-        "/scan/project",
-    )
-    start_line = int(finding.get("StartLine") or 0)
-    end_line = int(finding.get("EndLine") or start_line)
-    code_snippet = finding.get("Match") or finding.get("Secret")
-    title = f"Gitleaks: {rule_id}" if rule_id else "Gitleaks 密钥泄露候选"
-
-    return {
-        "id": f"gitleaks-{index}",
-        "title": title,
-        "description": description,
-        "file_path": file_path,
-        "line_start": start_line or None,
-        "line_end": end_line or None,
-        "code_snippet": code_snippet,
-        "severity": "ERROR",
-        "confidence": "HIGH",
-        "vulnerability_type": rule_id or "gitleaks_secret",
-        "source": "gitleaks_bootstrap",
-    }
-
-
-def _parse_bootstrap_gitleaks_output(stdout: str) -> List[Dict[str, Any]]:
-    if not stdout or not stdout.strip():
-        return []
-    output = json.loads(stdout)
-    if isinstance(output, list):
-        return [item for item in output if isinstance(item, dict)]
-    if isinstance(output, dict):
-        nested = output.get("findings")
-        if isinstance(nested, list):
-            return [item for item in nested if isinstance(item, dict)]
-    raise ValueError("Unexpected gitleaks output type")
-
-
 def _dedupe_bootstrap_findings(
     findings: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:

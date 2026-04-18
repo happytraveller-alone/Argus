@@ -4,7 +4,6 @@ import pytest
 
 from app.services.agent.task_findings import _save_findings
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 class _ScalarOneOrNoneResult:

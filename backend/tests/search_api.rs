@@ -100,14 +100,14 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri("/api/v1/static-tasks/gitleaks/scan")
+                .uri("/api/v1/static-tasks/tasks")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
                         "project_id": project_id,
-                        "name": "gitleaks search scan",
+                        "name": "opengrep search scan",
                         "target_path": ".",
-                        "no_git": true
+                        "rule_ids": []
                     })
                     .to_string(),
                 ))
@@ -215,7 +215,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     let static_task_search_response = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/search/tasks/search?keyword=gitleaks")
+            Request::get("/api/v1/search/tasks/search?keyword=opengrep")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -230,7 +230,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     .unwrap();
     assert_eq!(static_task_search_json["total"].as_i64().unwrap(), 1);
     assert_eq!(static_task_search_json["data"].as_array().unwrap().len(), 1);
-    assert_eq!(static_task_search_json["data"][0]["task_type"], "gitleaks");
+    assert_eq!(static_task_search_json["data"][0]["task_type"], "opengrep");
 
     let finding_response = app
         .clone()
@@ -254,7 +254,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
 
     let static_finding_response = app
         .oneshot(
-            Request::get("/api/v1/search/findings/search?keyword=placeholder%20gitleaks")
+            Request::get("/api/v1/search/findings/search?keyword=rust-placeholder-opengrep-rule")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -271,7 +271,7 @@ async fn search_endpoints_are_rust_owned_and_return_project_matches() {
     assert_eq!(static_finding_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(
         static_finding_json["data"][0]["vulnerability_type"],
-        "builtin:placeholder"
+        "rust-placeholder-opengrep-rule"
     );
 }
 

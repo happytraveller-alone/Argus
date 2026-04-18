@@ -41,14 +41,6 @@ const RECOVERY_SPECS: &[RecoverySpec] = &[
         has_error_count: true,
     },
     RecoverySpec {
-        name: "gitleaks",
-        table: "gitleaks_scan_tasks",
-        recoverable_statuses: &["pending", "running"],
-        has_completed_at: false,
-        has_error_message: true,
-        has_error_count: false,
-    },
-    RecoverySpec {
         name: "phpstan",
         table: "phpstan_scan_tasks",
         recoverable_statuses: &["pending", "running"],
@@ -128,7 +120,6 @@ async fn fetch_present_tables(pool: &PgPool) -> Result<Vec<String>> {
            AND table_name IN (
              'agent_tasks',
              'opengrep_scan_tasks',
-             'gitleaks_scan_tasks',
              'phpstan_scan_tasks',
              'pmd_scan_tasks'
            )",
@@ -185,7 +176,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             names,
-            vec!["agent", "opengrep", "gitleaks", "phpstan", "pmd"]
+            vec!["agent", "opengrep", "phpstan", "pmd"]
         );
     }
 

@@ -381,7 +381,6 @@ class AnalysisAgent(BaseAgent):
         blocked_actions = {
             "smart_scan",
             "semgrep_scan",
-            "gitleaks_scan",
             "npm_audit",
             "safety_scan",
             "opengrep_scan",

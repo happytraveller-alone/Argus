@@ -48,14 +48,12 @@ def _resolve_static_bootstrap_config(
     defaults: Dict[str, Any] = {
         "mode": "disabled",
         "opengrep_enabled": False,
-        "gitleaks_enabled": False,
         "phpstan_enabled": False,
     }
     if source_mode == "hybrid":
         defaults = {
             "mode": "embedded",
             "opengrep_enabled": True,
-            "gitleaks_enabled": False,
             "phpstan_enabled": False,
         }
 
@@ -74,21 +72,16 @@ def _resolve_static_bootstrap_config(
     opengrep_enabled = bool(
         static_bootstrap.get("opengrep_enabled", defaults["opengrep_enabled"])
     )
-    gitleaks_enabled = bool(
-        static_bootstrap.get("gitleaks_enabled", defaults["gitleaks_enabled"])
-    )
     phpstan_enabled = bool(
         static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
     )
 
     if mode == "disabled":
         opengrep_enabled = False
-        gitleaks_enabled = False
         phpstan_enabled = False
 
     return {
         "mode": mode,
         "opengrep_enabled": opengrep_enabled,
-        "gitleaks_enabled": gitleaks_enabled,
         "phpstan_enabled": phpstan_enabled,
     }

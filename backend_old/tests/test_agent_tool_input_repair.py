@@ -9,7 +9,6 @@ from app.services.agent.agents.base import AgentConfig, AgentResult, AgentType, 
 from app.services.agent.agents.analysis import AnalysisAgent
 from app.services.agent.tools.base import AgentTool, ToolResult
 import app.models.opengrep  # noqa: F401
-import app.models.gitleaks  # noqa: F401
 
 
 class _DummyAgent(BaseAgent):

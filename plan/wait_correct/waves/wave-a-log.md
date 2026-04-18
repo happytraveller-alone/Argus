@@ -2,6 +2,13 @@
 
 ## Completed in this turn
 
+- `gitleaks` 已按 `opengrep-only` 方针退役：
+  - Rust `static-tasks` / preflight / recovery 不再保留 `gitleaks` route/runtime
+  - Python `gitleaks.py`、`bootstrap_gitleaks_runner.py`、`GitleaksTool` 及其专用 helper 已删除
+  - 新增 `backend_old/tests/test_gitleaks_engine_retired.py` guard
+  - `backend_old/app` runtime core 计数 `152 -> 150`
+  - `models / persistence mirror` 计数 `16 -> 15`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `15 -> 14`
 - `bandit` 已按 `opengrep-only` 方针退役：
   - Rust `static-tasks` / preflight 不再保留 `bandit` route/runtime
   - Python `bandit.py`、`bandit_rules_snapshot.py`、`bandit_bootstrap_rules.py`、`bootstrap/bandit.py` 已删除

@@ -4,7 +4,7 @@
 
 当前策略补充：
 
-- 扫描引擎按 `opengrep-only` 收口；`bandit` 已退役，下一轮优先继续清退 `gitleaks`、`phpstan`、`pmd`。
+- 扫描引擎按 `opengrep-only` 收口；`bandit`、`gitleaks` 已退役，下一轮优先继续清退 `phpstan`、`pmd`。
 
 ### ~~1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover~~
 
