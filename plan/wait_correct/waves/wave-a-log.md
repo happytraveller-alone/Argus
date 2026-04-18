@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `bootstrap/base.py` / `bootstrap/opengrep.py` 已退役：
+  - `backend_old/app/services/agent/bootstrap/base.py` 与 `bootstrap/opengrep.py` 已删除
+  - 新增 `backend_old/tests/test_opengrep_bootstrap_helpers_retired.py` guard
+  - `backend_old/app` runtime core 计数 `141 -> 139`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `9 -> 7`
 - `bootstrap_findings.py` 已退役：
   - `backend_old/app/services/agent/bootstrap_findings.py` 已删除
   - 新增 `backend_old/tests/test_bootstrap_findings_retired.py` guard

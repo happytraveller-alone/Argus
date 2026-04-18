@@ -270,37 +270,6 @@ def test_no_live_python_module_imports_skill_test_agent_module():
         + "\n".join(offenders)
     )
 
-
-def test_bootstrap_callers_use_agent_scan_workspace_module():
-    caller_paths = [
-        PROJECT_ROOT / "app/services/agent/bootstrap/opengrep.py",
-    ]
-
-    for path in caller_paths:
-        content = path.read_text(encoding="utf-8")
-        module = ast.parse(content, filename=str(path))
-        import_from_nodes = [node for node in ast.walk(module) if isinstance(node, ast.ImportFrom)]
-
-        required_nodes = [
-            node
-            for node in import_from_nodes
-            if node.module == "app.services.agent.scan_workspace"
-        ]
-        assert required_nodes, f"{path.name} should import workspace helpers from agent.scan_workspace"
-
-        forbidden_names = {
-            alias.name
-            for node in import_from_nodes
-            if node.module == "app.services.static_scan_runtime"
-            for alias in node.names
-        }
-        leaked_helpers = sorted(forbidden_names.intersection(WORKSPACE_HELPER_IMPORTS))
-        assert not leaked_helpers, (
-            f"{path.name} still imports workspace helpers from static_scan_runtime: "
-            f"{', '.join(leaked_helpers)}"
-        )
-
-
 def test_no_live_python_module_imports_static_scan_runtime():
     retired_module = PROJECT_ROOT / "app/services/static_scan_runtime.py"
     assert not retired_module.exists(), "retired static_scan_runtime service shell should stay deleted"

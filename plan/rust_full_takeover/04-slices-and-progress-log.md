@@ -237,6 +237,16 @@
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_findings_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_findings or no_live_python_module_imports'`
   - `python -m compileall backend_old/app backend_old/tests`
 
+### OpenGrep Bootstrap Scanner Helper Retirement (2026-04-18)
+
+- `backend_old/app/services/agent/bootstrap/base.py` 与 `bootstrap/opengrep.py` 已删除；确认它们没有任何 live Python importer，只剩专用测试依赖。
+- 旧专用测试 `backend_old/tests/test_opengrep_bootstrap_scanner.py` 已删除，改为 `backend_old/tests/test_opengrep_bootstrap_helpers_retired.py` guard，要求该 helper cluster 物理不存在且 live importer 清零。
+- `backend_old/tests/test_config_internal_callers_use_service_layer.py` 已移除只针对 `bootstrap/opengrep.py` 的 workspace-import 断言，因为该 caller 已随 helper cluster 一并退役。
+- `backend_old/app` runtime core 计数 `141 -> 139`，`scanner / bootstrap / queue / workspace / tracking` 计数 `9 -> 7`。
+- 验证结果：
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_opengrep_bootstrap_helpers_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'opengrep_bootstrap_helpers or no_live_python_module_imports'`
+  - `python -m compileall backend_old/app backend_old/tests`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：
