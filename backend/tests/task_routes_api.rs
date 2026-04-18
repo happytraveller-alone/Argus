@@ -2207,3 +2207,131 @@ async fn business_logic_agent_test_streams_use_bl_queue_snapshot_contract() {
     assert_eq!(result["data"]["project_name"], "demo-project");
     assert_eq!(result["data"]["test_mode"], "business_logic_recon");
 }
+
+#[tokio::test]
+async fn verification_agent_test_snapshot_preserves_duplicate_findings() {
+    let state = AppState::from_config(isolated_test_config("agent-test-verification-events"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let duplicate = json!({
+        "file_path": "src/auth.rs",
+        "line_start": 21,
+        "title": "duplicate finding",
+        "vulnerability_type": "sql_injection"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-test/verification/run")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_path": "/tmp/demo-project",
+                        "findings": [duplicate.clone(), duplicate]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for chunk in body.split("\n\n") {
+        if let Some(line) = chunk.lines().find(|line| line.starts_with("data: ")) {
+            events.push(serde_json::from_str::<Value>(&line[6..]).unwrap());
+        }
+    }
+
+    let queue_snapshot = events
+        .iter()
+        .find(|event| event["type"] == "queue_snapshot")
+        .expect("queue_snapshot event missing");
+    assert_eq!(queue_snapshot["data"]["vuln"]["size"], 2);
+    assert_eq!(
+        queue_snapshot["data"]["vuln"]["peek"]
+            .as_array()
+            .expect("peek should be an array")
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn business_logic_analysis_snapshot_uses_supplied_risk_point() {
+    let state =
+        AppState::from_config(isolated_test_config("agent-test-business-logic-analysis-events"))
+            .await
+            .expect("state should build");
+    let app = build_router(state);
+    let risk_point = json!({
+        "title": "provided-business-logic-risk",
+        "severity": "high",
+        "description": "supplied by request",
+        "file_path": "src/checkout.rs",
+        "line_start": 77,
+        "vulnerability_type": "business_logic_issue",
+        "entry_function": "apply_discount",
+        "source": "request.body.discount_code",
+        "sink": "order.total",
+        "input_surface": "http body",
+        "trust_boundary": "checkout",
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-test/business-logic-analysis/run")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_path": "/tmp/demo-project",
+                        "risk_point": risk_point,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for chunk in body.split("\n\n") {
+        if let Some(line) = chunk.lines().find(|line| line.starts_with("data: ")) {
+            events.push(serde_json::from_str::<Value>(&line[6..]).unwrap());
+        }
+    }
+
+    let queue_snapshot = events
+        .iter()
+        .find(|event| event["type"] == "queue_snapshot")
+        .expect("queue_snapshot event missing");
+    assert_eq!(
+        queue_snapshot["data"]["bl_recon"]["peek"][0]["title"],
+        "provided-business-logic-risk"
+    );
+    assert_eq!(
+        queue_snapshot["data"]["bl_recon"]["peek"][0]["file_path"],
+        "src/checkout.rs"
+    );
+}
