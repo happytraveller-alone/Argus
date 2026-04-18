@@ -1,4 +1,4 @@
-from app.services.agent.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
+from app.services.agent.core.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
 
 
 def test_code2flow_runtime_prefers_flow_parser_runner(monkeypatch, tmp_path):
@@ -19,7 +19,7 @@ def test_code2flow_runtime_prefers_flow_parser_runner(monkeypatch, tmp_path):
             }
 
     monkeypatch.setattr(
-        "app.services.agent.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
+        "app.services.agent.core.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
         lambda: _FakeRunnerClient(),
     )
 
@@ -63,7 +63,7 @@ def test_code2flow_runtime_preserves_no_edges_reason(monkeypatch, tmp_path):
             }
 
     monkeypatch.setattr(
-        "app.services.agent.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
+        "app.services.agent.core.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
         lambda: _FakeRunnerClient(),
     )
 
@@ -97,7 +97,7 @@ def test_code2flow_runtime_preserves_exec_failed_reason(monkeypatch, tmp_path):
             }
 
     monkeypatch.setattr(
-        "app.services.agent.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
+        "app.services.agent.core.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
         lambda: _FakeRunnerClient(),
     )
 
@@ -129,7 +129,7 @@ def test_code2flow_runtime_maps_binary_not_found_to_not_installed(monkeypatch, t
             }
 
     monkeypatch.setattr(
-        "app.services.agent.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
+        "app.services.agent.core.flow.lightweight.callgraph_code2flow.get_flow_parser_runner_client",
         lambda: _FakeRunnerClient(),
     )
 

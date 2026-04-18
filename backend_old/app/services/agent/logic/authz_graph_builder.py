@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from app.services.agent.flow.lightweight.ast_index import ASTCallIndex, FunctionSymbol
+from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex, FunctionSymbol
 
 ROUTE_PATTERNS = [
     r"@app\.route",

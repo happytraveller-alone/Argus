@@ -34,7 +34,7 @@ from app.services.agent.json_safe import dump_json_safe, normalize_json_safe
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
 from ..core.message import message_bus, MessageType, AgentMessage
-from ..flow.lightweight.function_locator_payload import (
+from ..core.flow.lightweight.function_locator_payload import (
     parse_locator_payload,
     select_locator_function,
 )

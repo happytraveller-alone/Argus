@@ -1,6 +1,7 @@
 import pytest
 
-from app.services.llm import memory_compressor, tokenizer
+import app.services.llm.memory_compressor as memory_compressor
+import app.services.llm.tokenizer as tokenizer
 from app.services.llm.memory_compressor import MemoryCompressor
 
 
@@ -42,4 +43,3 @@ def test_memory_compressor_uses_fast_estimation_without_tiktoken(monkeypatch):
     compressed = compressor.compress_history(messages)
     assert compressed
     assert len(compressed) < len(messages)
-

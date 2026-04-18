@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`166`
+- `backend_old/app` 非 API Python：`164`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -25,13 +25,13 @@
 - db / schema snapshot gate：`2`
 - models / persistence mirror：`18`
 - shared helpers：`7`
-- agent orchestration / state / payload：`25`
+- agent orchestration / state / payload：`24`
 - scanner / bootstrap / queue / workspace / tracking：`17`
 - flow / logic：`14`
 - knowledge：`21`
 - tools / tool runtime：`27`
 - agent support assets（memory / prompts / streaming / local-skill metadata）：`7`
-- llm：`15`
+- llm：`14`
 - llm_rule：`8`
 - repo-adjacent ops tail：
   - `backend_old/alembic/*`
@@ -44,6 +44,7 @@
 - `tool_runtime` retained core（`runtime` / `router` / `health_probe` / `write_scope` / `catalog`）2026-04-18 整组退役。
 - `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役：Rust `runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，`dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重回退；`backend_old/scripts` Python 计数 `2 -> 1`。
 - `backend_old/app/db/__init__.py` 已于 2026-04-18 退役：`bandit_rules_snapshot.py` 与 `pmd_rulesets.py` 直接读取 Rust-owned scan-rule asset root，`db / schema snapshot gate` 分组计数 `3 -> 2`，`backend_old/app` runtime core 计数 `167 -> 166`。
+- `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役：live importer 已改为 direct-module imports，且 flow live caller 已从旧 `agent.flow` 路径切到 `agent.core.flow`；`backend_old/app` runtime core 计数 `166 -> 164`，`agent orchestration / state / payload` 计数 `25 -> 24`，`llm` 计数 `15 -> 14`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

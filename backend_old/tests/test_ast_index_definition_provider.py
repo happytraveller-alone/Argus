@@ -1,4 +1,4 @@
-from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex
 
 
 def test_ast_index_build_uses_definition_provider_batch(tmp_path):

@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `166`
+  - runtime core `164`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -88,6 +88,23 @@
 - `backend_old/app/services/bandit_rules_snapshot.py` 与 `backend_old/app/services/pmd_rulesets.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`，不再经过 `app.db` package shell bridge。
 - 新增 `backend_old/tests/test_db_package_shell_retired.py` guard，要求 `app/db/__init__.py` 物理不存在，且 live Python 路径不再保留 `from app.db import ...` importer。
 - 验证结果：`test_db_package_shell_retired.py`、`test_bandit_rules_snapshot.py`、`test_pmd_rules_service.py` 通过；`test_alembic_project.py` 中与本切片直接相关的 squashed-baseline/snapshot 用例通过，另有 revision-head 旧断言失败，属于现存 alembic baseline debt。
+
+### Flow Caller Cutover + Service Package Shell Retirement (2026-04-18)
+
+- live caller 已从旧 `app.services.agent.flow` 路径切到 `app.services.agent.core.flow`；相关 agent/tool/test import 与 monkeypatch target 已全部同步。
+- `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已退役，`backend_old/app` runtime core 计数 `166 -> 164`，`agent orchestration / state / payload` 计数 `25 -> 24`，`llm` 计数 `15 -> 14`。
+- 新增 `backend_old/tests/test_service_package_shells_retired.py` guard，要求 `app.services.llm` 与 `app.services.agent.agents` package shell 物理不存在，且 live importer 改为 direct-module 路径。
+- 验证结果：
+  - `tests/test_service_package_shells_retired.py`
+  - `tests/test_llm_tokenizer_runtime.py`
+  - `tests/agent/test_agents.py`
+  - `tests/test_agent_prompt_contracts.py`
+  - `tests/test_code2flow_runtime.py -k 'not unavailable'`
+  - `tests/test_function_locator_tree_sitter.py -k tries_runner_before_local_tree_sitter`
+  - `tests/test_ast_index_definition_provider.py`
+  - `tests/test_flow_parser_runner_client.py`
+  - `tests/test_function_locator_cli.py`
+  - `tests/test_config_internal_callers_use_service_layer.py -k 'retired_agent_subpackage_shell and flow'`
 
 ## 详细历史
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from app.services.agent.flow.flow_parser_runner import get_flow_parser_runner_client
+from app.services.agent.core.flow.flow_parser_runner import get_flow_parser_runner_client
 
 logger = logging.getLogger(__name__)
 

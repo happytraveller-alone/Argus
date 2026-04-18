@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
+from app.services.agent.core.flow.lightweight.function_locator import EnclosingFunctionLocator
 
 
 def test_function_locator_supports_java_kotlin_and_filters_c_attribute(tmp_path: Path):
@@ -96,7 +96,7 @@ def test_function_locator_tries_runner_before_local_tree_sitter(monkeypatch, tmp
             }
 
     monkeypatch.setattr(
-        "app.services.agent.flow.lightweight.function_locator.get_flow_parser_runner_client",
+        "app.services.agent.core.flow.lightweight.function_locator.get_flow_parser_runner_client",
         lambda: _FakeRunnerClient(),
     )
 

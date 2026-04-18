@@ -835,7 +835,9 @@ async def _save_findings(
     function_locator = None
     if project_root:
         try:
-            from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
+            from app.services.agent.core.flow.lightweight.function_locator import (
+                EnclosingFunctionLocator,
+            )
 
             function_locator = EnclosingFunctionLocator(project_root=project_root)
         except Exception as exc:

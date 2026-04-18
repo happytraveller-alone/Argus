@@ -155,7 +155,7 @@ def _discover_entry_points_deterministic(
 
     entry_function_names: List[str] = []
     try:
-        from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+        from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex
 
         ast_target_files = entry_files or (target_files or None)
         ast_index = ASTCallIndex(

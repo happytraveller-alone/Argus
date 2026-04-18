@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.services.agent.flow.models import FlowEvidence
+from app.services.agent.core.flow.models import FlowEvidence
 
 
 def clamp_score(value: float) -> float:

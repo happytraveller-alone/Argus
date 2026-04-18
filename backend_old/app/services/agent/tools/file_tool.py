@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, model_validator
 
-from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
+from app.services.agent.core.flow.lightweight.function_locator import EnclosingFunctionLocator
 
 from .base import AgentTool, ToolResult
 from .evidence_protocol import (

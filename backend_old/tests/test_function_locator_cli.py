@@ -1,7 +1,9 @@
 from pathlib import Path
 
-from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
-from app.services.agent.flow.lightweight.function_locator_cli import locate_with_tree_sitter_cli
+from app.services.agent.core.flow.lightweight.function_locator import EnclosingFunctionLocator
+from app.services.agent.core.flow.lightweight.function_locator_cli import (
+    locate_with_tree_sitter_cli,
+)
 
 
 def test_function_locator_cli_supports_multiline_c_signature(tmp_path: Path):

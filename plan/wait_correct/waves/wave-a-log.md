@@ -2,6 +2,12 @@
 
 ## Completed in this turn
 
+- `app.services.agent.flow` live caller 已切到 `app.services.agent.core.flow`，相关 agent/tool/test import 与 monkeypatch target 全部同步
+- `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已退役：
+  - 新增 `backend_old/tests/test_service_package_shells_retired.py` guard
+  - `backend_old/app` runtime core 计数 `166 -> 164`
+  - `agent orchestration / state / payload` 计数 `25 -> 24`
+  - `llm` 计数 `15 -> 14`
 - `backend_old/app/db/__init__.py` 已退役：
   - `bandit_rules_snapshot.py` 与 `pmd_rulesets.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`
   - 新增 `backend_old/tests/test_db_package_shell_retired.py` guard

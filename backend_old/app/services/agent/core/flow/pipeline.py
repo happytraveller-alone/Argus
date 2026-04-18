@@ -4,10 +4,12 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
-from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
-from app.services.agent.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
-from app.services.agent.flow.lightweight.path_scorer import build_lightweight_flow_evidence
-from app.services.agent.flow.models import FlowEvidence
+from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex
+from app.services.agent.core.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
+from app.services.agent.core.flow.lightweight.path_scorer import (
+    build_lightweight_flow_evidence,
+)
+from app.services.agent.core.flow.models import FlowEvidence
 from app.services.agent.logic.authz_rules import AuthzRuleEngine
 
 logger = logging.getLogger(__name__)

@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.services.agent.flow.pipeline import FlowEvidencePipeline
-from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex
+from app.services.agent.core.flow.pipeline import FlowEvidencePipeline
 from .base import AgentTool, ToolResult
 from .evidence_protocol import (
     build_display_command,

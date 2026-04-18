@@ -33,8 +33,8 @@ from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, 
 from .react_parser import parse_react_response
 from .verification_table import VerificationFindingTable
 from ..json_parser import AgentJsonParser
-from ..flow.lightweight.function_locator import EnclosingFunctionLocator
-from ..flow.lightweight.function_locator_payload import (
+from ..core.flow.lightweight.function_locator import EnclosingFunctionLocator
+from ..core.flow.lightweight.function_locator_payload import (
     parse_locator_payload,
     select_locator_function,
 )

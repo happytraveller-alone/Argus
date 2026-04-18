@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from app.core.config import settings
-from app.services.agent.flow.flow_parser_runner import get_flow_parser_runner_client
+from app.services.agent.core.flow.flow_parser_runner import get_flow_parser_runner_client
 
 from .function_locator_cli import locate_with_tree_sitter_cli
 from .tree_sitter_parser import TreeSitterParser

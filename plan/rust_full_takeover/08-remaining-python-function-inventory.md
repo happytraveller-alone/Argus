@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`166`
+- `backend_old/app` 非 API Python：`164`
 
-`166` 是当前 runtime core 主计数。
+`164` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,7 +25,7 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `166`）
+### `backend_old/app` runtime core（共 `164`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
@@ -33,13 +33,13 @@
 | `db/*` | 2 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
 | `models/*` | 18 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | `services/shared/*` | 7 | mixed retained helper | `backend/src/*` 对应 shared service |
-| `services/agent` orchestration / state | 25 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
+| `services/agent` orchestration / state | 24 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/agent` bootstrap / scan / queue | 17 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 14 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
 | `services/agent` knowledge | 21 | retained prompt/knowledge runtime | `backend/src/knowledge/*` |
 | `services/agent` tools + tool_runtime | 27 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | `services/agent` support assets | 7 | retained stream/prompt/memory glue | `backend/src/agent/*`, `backend/src/runtime/*` |
-| `services/llm/*` | 15 | retained live runtime | `backend/src/llm/*` |
+| `services/llm/*` | 14 | retained live runtime | `backend/src/llm/*` |
 | `services/llm_rule/*` | 8 | retained live runtime | `backend/src/llm_rule/*` or rule-engine equivalent |
 
 ### repo-adjacent retirement tail（不计入 `167`）
@@ -158,6 +158,11 @@
 目标状态：
 
 - Rust 拿到 agent orchestration / prompt injection / task execution 主链
+
+已完成收口：
+
+- `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役。
+- live caller 已统一从旧 `app.services.agent.flow` 路径切到 `app.services.agent.core.flow`。
 
 ### 6. Scanner / Queue / Workspace / Tracking / Bootstrap
 
@@ -319,6 +324,11 @@
 - adapter selection
 - prompt cache / tokenizer / memory compression
 - actual LLM runtime behavior
+
+已完成收口：
+
+- `backend_old/app/services/llm/__init__.py` 已于 2026-04-18 退役。
+- 剩余 caller 改为 direct-module imports（例如 `memory_compressor`、`tokenizer`）。
 
 目标状态：
 
