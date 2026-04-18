@@ -1,14 +1,14 @@
 # Next Targets
 
-## 当前最优先 7 项
+## 当前最优先 6 项
 
-### 1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover
+### ~~1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover~~
 
-prompt skill persistence 与 agent-task setup 已 Rust-owned；
-当前需要确认的是 retained Python consumer 是否仍需要 `config.prompt_skills` compat 投影，
-以及这条 compat 面何时可以删除。
+✅ 已完成（2026-04-18）。Rust 未落地的 `legacy_python_config` 投影撤销，Python 5 个 agent 注入块全部删除，`test_prompt_skills_injection.py` 删除。Rust mirror / backfill 保留用于 alembic 兼容，归入后续 DB final gate slice。
 
-### 2. 审计 retained `tool_runtime` 核心 cluster
+### ~~1. 审计 retained `tool_runtime` 核心 cluster~~
+
+✅ 已完成（2026-04-18）。`runtime.py`、`router.py`、`health_probe.py`、`write_scope.py`、`catalog.py` 已整组退役，`base.py` 的 dead `TYPE_CHECKING` import 已清理，retirement guard 已上线。
 
 目标：
 
@@ -18,7 +18,7 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 - `write_scope.py`
 - `catalog.py`
 
-### 3. 审计 retained `agent/core` cluster
+### 2. 审计 retained `agent/core` cluster
 
 目标：
 
@@ -32,7 +32,7 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 - `task_findings.py`
 - `write_scope.py`
 
-### 4. 审计 scanner / queue / workspace / tracking cluster
+### 3. 审计 scanner / queue / workspace / tracking cluster
 
 目标：
 
@@ -42,7 +42,7 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 - bootstrap scanners
 - queue / event manager
 
-### 5. 审计 support / prompt / stream / memory cluster
+### 4. 审计 support / prompt / stream / memory cluster
 
 目标：
 
@@ -52,7 +52,7 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 - `streaming/*`
 - `utils/vulnerability_naming.py`
 
-### 6. 审计 knowledge / flow / logic / llm cluster
+### 5. 审计 knowledge / flow / logic / llm cluster
 
 目标：
 
@@ -62,7 +62,7 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 - `services/llm/*`
 - `services/llm_rule/*`
 
-### 7. 准备 final gate：`db` / `alembic` / scripts / frontend consumer debt
+### 6. 准备 final gate：`db` / `alembic` / scripts / frontend consumer debt
 
 目标：
 
@@ -76,13 +76,13 @@ prompt skill persistence 与 agent-task setup 已 Rust-owned；
 
 如果后续继续按功能逐一接管，建议按照下面顺序推进：
 
-1. prompt skill runtime compat projection / consumer cutover
-2. tool runtime retained core
-3. scanner / workspace / queue / bootstrap retained runtime
-4. agent orchestration / state / support runtime
-5. knowledge / flow / logic retained runtime
-6. llm / llm_rule retained runtime
-7. models / db / alembic / scripts / release preflight final gate
+1. scanner / workspace / queue / bootstrap retained runtime
+2. agent orchestration / state / support runtime
+3. knowledge / flow / logic retained runtime
+4. llm / llm_rule retained runtime
+5. models / db / alembic / scripts / release preflight final gate
+
+（prompt skill runtime compat projection 已于 2026-04-18 对称退役。）
 
 并行关注的 contract blocker：
 

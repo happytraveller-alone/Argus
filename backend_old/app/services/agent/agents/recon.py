@@ -983,18 +983,6 @@ class ReconAgent(BaseAgent):
         
         if exclude_patterns:
             initial_message += f"\n排除模式: {', '.join(exclude_patterns[:5])}\n"
-
-        use_prompt_skills = bool(config.get("use_prompt_skills", False))
-        prompt_skills = config.get("prompt_skills") if isinstance(config, dict) else {}
-        recon_prompt_skill = ""
-        if use_prompt_skills and isinstance(prompt_skills, dict):
-            recon_prompt_skill = str(prompt_skills.get("recon") or "").strip()
-        if recon_prompt_skill:
-            initial_message += f"""
-
-## Prompt Skill（recon）
-{recon_prompt_skill}
-"""
         
         initial_message += f"""
 ## 任务上下文

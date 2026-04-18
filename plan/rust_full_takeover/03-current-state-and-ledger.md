@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`172`
+- `backend_old/app` 非 API Python：`167`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`2`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -29,7 +29,7 @@
 - scanner / bootstrap / queue / workspace / tracking：`17`
 - flow / logic：`14`
 - knowledge：`21`
-- tools / tool runtime：`32`
+- tools / tool runtime：`27`
 - agent support assets（memory / prompts / streaming / local-skill metadata）：`7`
 - llm：`15`
 - llm_rule：`8`
@@ -40,7 +40,8 @@
 
 ## 当前最重要的 open items
 
-- `config.prompt_skills` 已不再是 owner 未明确的问题；Rust 已在 agent-task creation 侧写入 `prompt_skill_runtime` snapshot，剩余 open item 收窄为 retained Python consumer 的 compat projection / cutover。
+- `prompt_skill_runtime` compat projection 已收口（2026-04-18）：Rust `legacy_python_config` 投影从未落地（WIP 已撤销），Python 5 个 agent（recon / analysis / verification / business_logic_recon / business_logic_analysis）的 `config.prompt_skills` 注入块全部删除，`test_prompt_skills_injection.py` 已删。Rust `upsert_legacy_prompt_skill` / `compat_backfill_from_legacy_if_empty` 仍保留以支撑 alembic legacy 表，属于后续 DB final gate slice 的目标。
+- `tool_runtime` retained core（`runtime` / `router` / `health_probe` / `write_scope` / `catalog`）2026-04-18 整组退役。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

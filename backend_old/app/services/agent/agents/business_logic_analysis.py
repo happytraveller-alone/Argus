@@ -713,17 +713,6 @@ class BusinessLogicAnalysisAgent(BaseAgent):
 不要只输出 Thought，必须紧接着输出 Action + Action Input。"""
 
         config = input_data.get("config", {}) if isinstance(input_data, dict) else {}
-        use_prompt_skills = bool(config.get("use_prompt_skills", False))
-        prompt_skills = config.get("prompt_skills") if isinstance(config, dict) else {}
-        bl_analysis_prompt_skill = ""
-        if use_prompt_skills and isinstance(prompt_skills, dict):
-            bl_analysis_prompt_skill = str(prompt_skills.get("business_logic_analysis") or "").strip()
-        if bl_analysis_prompt_skill:
-            initial_message += f"""
-
-## Prompt Skill（business_logic_analysis）
-{bl_analysis_prompt_skill}
-"""
 
         self._conversation_history = [
             {"role": "system", "content": self.config.system_prompt},

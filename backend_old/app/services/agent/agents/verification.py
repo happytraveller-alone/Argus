@@ -3017,18 +3017,6 @@ class VerificationAgent(BaseAgent):
 5. 输出结果时，必须把事实、推论和结论分开写；所有推理跳跃都要先检查是否有直接支持
 {f'特别注意 Analysis Agent 提到的关注点。' if handoff_context else ''}"""
 
-        use_prompt_skills = bool(config.get("use_prompt_skills", False))
-        prompt_skills = config.get("prompt_skills") if isinstance(config, dict) else {}
-        verification_prompt_skill = ""
-        if use_prompt_skills and isinstance(prompt_skills, dict):
-            verification_prompt_skill = str(prompt_skills.get("verification") or "").strip()
-        if verification_prompt_skill:
-            initial_message += f"""
-
-## Prompt Skill（verification）
-{verification_prompt_skill}
-"""
-
         self._conversation_history = [
             {"role": "system", "content": self.config.system_prompt},
             {"role": "user", "content": initial_message},

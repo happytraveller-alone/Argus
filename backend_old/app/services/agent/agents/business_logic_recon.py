@@ -532,18 +532,6 @@ class BusinessLogicReconAgent(BaseAgent):
 请开始业务逻辑侦察。先输出 Thought，然后**立即**输出 Action + Action Input。
 首轮必须优先执行 `list_files`，不要只输出 Thought。"""
 
-        use_prompt_skills = bool(config.get("use_prompt_skills", False))
-        prompt_skills = config.get("prompt_skills") if isinstance(config, dict) else {}
-        bl_recon_prompt_skill = ""
-        if use_prompt_skills and isinstance(prompt_skills, dict):
-            bl_recon_prompt_skill = str(prompt_skills.get("business_logic_recon") or "").strip()
-        if bl_recon_prompt_skill:
-            initial_message += f"""
-
-## Prompt Skill（business_logic_recon）
-{bl_recon_prompt_skill}
-"""
-
         self._conversation_history = [
             {"role": "system", "content": self.config.system_prompt},
             {"role": "user", "content": initial_message},

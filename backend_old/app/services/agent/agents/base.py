@@ -11,7 +11,7 @@ Agent 基类
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Set, TYPE_CHECKING
+from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import deque
@@ -147,11 +147,6 @@ STRICT_MODE_TRANSIENT_ERROR_HINTS: Tuple[str, ...] = (
     "connection refused",
     "network",
 )
-if TYPE_CHECKING:
-    from ..tool_runtime.runtime import ToolRuntime
-    from ..tool_runtime.write_scope import TaskWriteScopeGuard, WriteScopeDecision
-
-
 def _truncate_with_flag(text: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> Tuple[str, bool]:
     if len(text) <= max_chars:
         return text, False

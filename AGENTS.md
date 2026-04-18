@@ -429,6 +429,91 @@ Mode lifecycle requirements:
 
 ---
 
+## Codex Runtime Inspection (audittool_personal)
+
+After dispatching a task via `/codex:rescue --background`, use one of these channels to watch execution live from a terminal without blocking the Claude session.
+
+### Log file path
+
+```
+/home/xyf/.claude/plugins/data/codex-openai-codex/state/audittool_personal-<hash>/jobs/<job-id>.log
+```
+
+One log per tracked job. The companion script streams Codex stdout/stderr into this file as it runs.
+
+### Shell helpers (defined in `~/.bashrc`)
+
+| Command | Purpose |
+| --- | --- |
+| `codex-tail` | `tail -F` the most recent job log (auto-resolves newest `.log`). |
+| `codex-tail-all` | `tail -F` the five newest job logs concurrently (banner-separated). |
+| `codex-logs` | List the 20 newest job logs with mtime, newest first. |
+| `codex-layout [session]` | Launch or attach a 3-pane tmux session: Claude main (top-left), auxiliary shell (bottom-left), Codex live log (right). Default session name `audit`. |
+
+### tmux layout created by `codex-layout`
+
+```
+┌─────────────────────────┬──────────────────┐
+│  Claude Code 主对话     │                  │
+│  (top-left)             │   codex-tail     │
+├─────────────────────────┤   (right pane)   │
+│  git / 测试 / REPL      │                  │
+│  (bottom-left)          │                  │
+└─────────────────────────┴──────────────────┘
+```
+
+Re-running `codex-layout` re-attaches the existing session instead of rebuilding it, so panes/scrollback are preserved across reconnects.
+
+### Polling alternatives (no log path needed)
+
+- `/codex:status` — snapshot of all tracked jobs.
+- `/codex:status <job-id>` — single-job progress.
+- `/codex:result <job-id>` — final stdout for a completed job.
+
+Use these when you're inside the Claude session and just need a checkpoint, not a live stream.
+
+---
+
 ## Setup
 
 Run `omx setup` to install all components. Run `omx doctor` to verify installation.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [audittool_personal] recent context, 2026-04-18 12:22pm GMT+8
+
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 23 obs (9,163t read) | 608,241t work | 98% savings
+
+### Apr 18, 2026
+17 10:45a ✅ prompt_skill_runtime compat projection symmetrically retired
+18 " ⚖️ CLAUDE.md redesigned: task tiering L1/L2/L3 with Codex-led execution model
+22 10:47a 🔵 stop-review-gate hook mechanics confirmed: Codex reviews last Claude turn on Stop event
+29 10:56a ✅ stop-gate review ALLOW for CLAUDE.md model/effort guidance update
+31 " 🔵 CLAUDE.md model/effort edits not present in working tree; changes are elsewhere
+34 " ✅ prompt_skill_runtime compat projection symmetrically retired across Python and Rust
+36 10:57a 🔵 CLAUDE.md is gitignored; model/effort guidance exists on disk but is never committed
+42 11:04a ✅ stop-gate review ALLOW for Codex log monitoring shell helpers
+44 11:05a 🔵 codex-tail alias has empty-glob silent-exit bug when no logs exist
+46 11:06a 🔵 codex-tail alias confirmed broken when no logs exist: tail receives empty string argument
+65 11:26a 🔴 codex-layout tmux pane-index fix + codex-tail empty-glob fix
+67 11:27a 🔵 codex-layout final implementation confirmed in ~/.bashrc
+69 " 🔵 codex-layout and codex-tail function definitions verified via bash -li
+71 " 🔵 ~/.tmux.conf base-index 1 confirmed as root cause of original codex-layout failure
+74 11:28a 🔵 codex-layout 3-pane creation verified via live tmux test in stop-gate review
+77 11:31a 🔵 stop-gate review confirmed: previous turn was guidance-only, no code edits
+101 11:52a 🔄 tool_runtime retained core cluster orphan retirement executed
+103 11:53a ✅ tool_runtime retained core retirement: all file edits applied successfully
+104 " 🔵 base.py string-quoted forward references to retired tool_runtime types remain after TYPE_CHECKING cleanup
+105 " 🔵 Codex sandbox blocks uv pytest run due to read-only /home/xyf/.cache/uv filesystem
+106 11:55a ✅ All 5 acceptance criteria passed for tool_runtime retained core retirement
+108 11:57a ✅ cargo test full suite passed: 64 unit + 40 integration tests all green
+110 11:59a ✅ All 5 acceptance criteria verified and two residual stale-count fixes applied
+
+Access 608k tokens of past work via get_observations([IDs]) or mem-search skill.
+</claude-mem-context>

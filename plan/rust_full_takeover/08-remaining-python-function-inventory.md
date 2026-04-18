@@ -10,9 +10,9 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`172`
+- `backend_old/app` 非 API Python：`167`
 
-`172` 是当前 runtime core 主计数。
+`167` 是当前 runtime core 主计数。
 
 它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
 
@@ -25,7 +25,7 @@
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `172`）
+### `backend_old/app` runtime core（共 `167`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
@@ -37,12 +37,12 @@
 | `services/agent` bootstrap / scan / queue | 17 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
 | `services/agent` flow / logic | 14 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
 | `services/agent` knowledge | 21 | retained prompt/knowledge runtime | `backend/src/knowledge/*` |
-| `services/agent` tools + tool_runtime | 32 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
+| `services/agent` tools + tool_runtime | 27 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | `services/agent` support assets | 7 | retained stream/prompt/memory glue | `backend/src/agent/*`, `backend/src/runtime/*` |
 | `services/llm/*` | 15 | retained live runtime | `backend/src/llm/*` |
 | `services/llm_rule/*` | 8 | retained live runtime | `backend/src/llm_rule/*` or rule-engine equivalent |
 
-### repo-adjacent retirement tail（不计入 `172`）
+### repo-adjacent retirement tail（不计入 `167`）
 
 | 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
@@ -149,7 +149,7 @@
 当前关键 open item：
 
 - Rust 已在 agent-task creation 侧生成 `prompt_skill_runtime` snapshot；
-- retained Python consumer 是否还需要 `config.prompt_skills` compat projection 仍待收口
+- retained Python consumer 的 `config.prompt_skills` compat projection 已于 2026-04-18 对称退役（5 个 agent 注入块删除、测试删除、Rust WIP 投影字段撤销）。Rust mirror / backfill 保留以支撑 alembic legacy 表，归入后续 DB final gate slice。
 
 目标状态：
 
@@ -235,11 +235,6 @@
 
 目标文件：
 
-- `services/agent/tool_runtime/catalog.py`
-- `services/agent/tool_runtime/health_probe.py`
-- `services/agent/tool_runtime/router.py`
-- `services/agent/tool_runtime/runtime.py`
-- `services/agent/tool_runtime/write_scope.py`
 - `services/agent/tools/base.py`
 - `services/agent/tools/agent_tools.py`
 - `services/agent/tools/business_logic_recon_queue_tools.py`
@@ -273,6 +268,7 @@
 - `tools` package root 已退休
 - `tools/runtime` package shell 已退休
 - `business_logic_scan_tool.py` 已退休
+- `tool_runtime` retained core 整组 2026-04-18 退役
 - `tool_runtime` orphan edge cluster 已退休：
   - `probe_specs.py`
   - `protocol_verify.py`
@@ -364,13 +360,14 @@
 
 ## 当前推荐推进顺序
 
-1. `prompt_skill_runtime` snapshot downstream consumer cutover / `config.prompt_skills` 退出路径
-2. `tool_runtime` retained core
-3. `scanner / queue / workspace / bootstrap`
-4. `agent orchestration / state / support`
-5. `knowledge` + `flow` + `logic`
-6. `llm` / `llm_rule`
-7. `models` / `db` / `alembic` / scripts / release preflight 最终门
+1. `tool_runtime` retained core
+2. `scanner / queue / workspace / bootstrap`
+3. `agent orchestration / state / support`
+4. `knowledge` + `flow` + `logic`
+5. `llm` / `llm_rule`
+6. `models` / `db` / `alembic` / scripts / release preflight 最终门
+
+（`prompt_skill_runtime` compat projection / consumer cutover 已于 2026-04-18 对称退役。）
 
 并行关注：
 

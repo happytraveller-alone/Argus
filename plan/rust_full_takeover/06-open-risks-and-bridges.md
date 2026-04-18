@@ -4,7 +4,7 @@
 
 - projects mirror
 - system-config mirror
-- prompt skill mirror / `prompt_skill_runtime` -> `config.prompt_skills` compat projection
+- prompt skill mirror（Rust `upsert_legacy_prompt_skill` / `compat_backfill_from_legacy_if_empty` 仍在，用于 alembic legacy 表的 schema 支撑；`prompt_skill_runtime` -> `config.prompt_skills` compat projection 已对称退役，不再在此列）
 - legacy schema / prompt-skill compat backfill
 - runner preflight / startup 中仍保留的 Python-aware 兼容逻辑
 
@@ -29,12 +29,12 @@ Rust `projects` surface 当前是 ZIP-only。
 这属于 contract narrowing，不只是内部实现细节。
 如果要继续沿着这个方向收口，文档、前端类型和验证门都必须同步。
 
-### Prompt Skill Runtime Compat Projection 仍未收口
+### Prompt Skill Runtime Compat Projection 已收口（2026-04-18）
 
-当前 prompt skill 相关的 open item 已收窄为：
-
-- retained Python consumer 是否继续依赖 `config.prompt_skills`
-- `prompt_skill_runtime` snapshot 是否还需要投影成 Python-side compat config
+对称退役完成：
+- Rust 未落地的 `legacy_python_config` 字段连同投影 helper 撤销
+- Python 5 个 agent 的 `config.prompt_skills` 注入块删除
+- Rust mirror / backfill 保留，用于 alembic legacy 表的 schema 支撑（后续 DB final gate slice 处理）
 
 ### Health 200 != Ready
 
@@ -50,7 +50,7 @@ Rust `projects` surface 当前是 ZIP-only。
 
 只有下面这些项同时过门，才可以把“Rust 已接管全部 Python”当成接近完成：
 
-1. agent-task creation 写入 Rust-owned `prompt_skill_runtime` snapshot，且 `config.prompt_skills` 只剩 compat projection 或已退出主链。
+1. agent-task creation 写入 Rust-owned `prompt_skill_runtime` snapshot；`config.prompt_skills` compat projection 已对称退役（已完成，2026-04-18），剩余仅 Rust mirror / backfill 用于 alembic 兼容。
 2. `tool_runtime`、scanner/bootstrap、agent orchestration 主链不再依赖 retained Python。
 3. `/health` JSON 为 `ok`，而不是仅 HTTP `200`。
 4. agent/static 真路径 smoke 与 runner preflight 成功。
