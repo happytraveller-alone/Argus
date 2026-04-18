@@ -3,254 +3,220 @@
 ## 文档定位
 
 - 类型：Reference
-- 目标读者：需要逐块接管 Python retained runtime 的开发者
-- 阅读目标：清楚知道现在还有哪些 Python 功能没被 Rust 接管，以及建议从哪一块开始
+- 目标读者：需要按文件面继续拆 takeover slice 的开发者
+- 阅读目标：快速知道现在还有哪些 Python 功能没被 Rust 接管，以及它们应落到哪一类 Rust 模块
 
 ## 统计口径
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
 - `backend_old/app` 非 API Python：`133`
-
-`133` 是当前 runtime core 主计数。
-
-它不包含下面这些仍会阻止“Python 全退役”的运行/运维尾巴：
-
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-另外还有 `scripts/migration/*.py`：`2`，它们属于 inventory / diff tooling，
-默认不算 runtime blocker，但需要与 canonical 文档保持一致。
+`133` 是当前 runtime core 主计数。
+
+它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
+这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
 
 ## 分组总览
 
-### `backend_old/app` runtime core（共 `133`）
-
-| 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
+| 功能组 | 当前文件数 | 当前责任 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
-| `app root + core/*` | 3 | retained live core config/security | `backend/src/core/*` |
-| `db/*` | 1 | retained DB gate / schema snapshot | `backend/src/db/*`, bootstrap/alembic replacement |
-| `models/*` | 12 | retained domain/persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| `services/shared/*` | 3 | mixed retained helper | `backend/src/*` 对应 shared service |
-| `services/agent` orchestration / state | 22 | retained live runtime 主链 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| `services/agent` bootstrap / scan / queue | 4 | retained scanner/runtime 主链 | `backend/src/scan/*`, `backend/src/runtime/*` |
-| `services/agent` flow / logic | 13 | retained analysis/runtime 主链 | `backend/src/flow/*`, `backend/src/graph/*` |
-| `services/agent` knowledge | 21 | retained prompt/knowledge runtime | `backend/src/knowledge/*` |
-| `services/agent` tools + tool_runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
-| `services/agent` support assets | 7 | retained stream/prompt/memory glue | `backend/src/agent/*`, `backend/src/runtime/*` |
-| `services/llm/*` | 13 | retained live runtime | `backend/src/llm/*` |
-| `services/llm_rule/*` | 8 | retained live runtime | `backend/src/llm_rule/*` or rule-engine equivalent |
-
-### repo-adjacent retirement tail（不计入 `167`）
-
-| 功能组 | 当前文件数 | 当前状态 | 推荐 Rust 落点 |
-| --- | ---: | --- | --- |
-| `backend_old/alembic/*` | 21 | legacy schema / migration compatibility tail | Rust bootstrap + schema gate replacement |
-| `backend_old/scripts/*` | 1 | runtime-adjacent helper scripts | `backend/src/flow/*`, Rust bootstrap helper or retire |
-| `scripts/release-templates/runner_preflight.py` | 1 | release / ops preflight Python helper | Rust or shell-based release preflight |
-| `scripts/migration/*.py` | 2 | inventory / diff tooling | 可保留为 tooling，但必须与 canonical 文档同步 |
+| app root / core / config / security | 3 | retained config / encryption / security core | `backend/src/core/*` |
+| db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
+| models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| shared helpers | 3 | rule、sandbox、path normalization | `backend/src/*` 对应 shared service |
+| agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
+| scanner / queue / workspace / tracking | 4 | queue 语义、runner orchestration、scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
+| flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
+| knowledge | 21 | knowledge loader、framework / vuln knowledge | `backend/src/knowledge/*` |
+| tools + tool runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
+| support assets | 7 | memory、prompt、streaming、scan-core 元数据 | `backend/src/agent/*`, `backend/src/runtime/*` |
+| llm | 13 | provider / adapter / tokenizer / cache runtime | `backend/src/llm/*` |
+| llm_rule | 8 | rule repo、patch、validator、manager | `backend/src/llm_rule/*` |
+| repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
 
 ## 详细功能块
 
-### 1. App Root / Core / Config / Security
-
-目标文件：
-
-- `backend_old/app/__init__.py`
-- `backend_old/app/core/__init__.py`
-- `backend_old/app/core/config.py`
-- `backend_old/app/core/encryption.py`
-- `backend_old/app/core/security.py`
+### 1. App Root / Core / Config / Security (`3`)
 
 当前责任：
 
 - Python retained runtime 的设置读取
-- legacy 安全、加密、token 等兼容逻辑
+- legacy 加密 / 安全 / token 兼容逻辑
 
 目标状态：
 
 - Rust 成为唯一配置、安全、加密 source of truth
 - Python runtime 不再 import 这些 core 模块
 
-已完成收口：
+文件：
 
-- `backend_old/app/core/__init__.py` 已于 2026-04-18 退役。
-- `backend_old/app/__init__.py` 已于 2026-04-18 退役。
+```text
+backend_old/app/core/config.py
+backend_old/app/core/encryption.py
+backend_old/app/core/security.py
+```
 
-### 2. DB Gate / Schema Snapshot
-
-目标文件：
-
-- `backend_old/app/db/schema_snapshots/__init__.py`
-- `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py`
+### 2. DB Gate / Schema Snapshot (`1`)
 
 当前责任：
 
-- legacy schema snapshot / alembic 兼容门
-
-已完成收口：
-
-- `backend_old/app/db/__init__.py` 已于 2026-04-18 退役。
-- `backend_old/app/db/schema_snapshots/__init__.py` 已于 2026-04-18 退役。
-- `services/bandit_rules_snapshot.py` 直接读取 Rust-owned `backend/assets/scan_rule_assets/*`，不再通过 `app.db` package shell 桥接。
+- legacy schema snapshot / alembic 最终门
 
 目标状态：
 
 - Rust bootstrap / schema gate 完全替代
 - `backend_old/app/db` 整体删除
 
-### 3. Models / Persistence Mirror
+文件：
 
-目标文件：
+```text
+backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py
+```
 
-- `backend_old/app/models/*`
+### 3. Models / Persistence Mirror (`12`)
 
-主要内容：
+当前责任：
 
-- project / user / user_config / prompt_skill
-- agent_task / finding / checkpoint 相关模型
-- 各 scanner / rule 相关模型
+- retained domain / persistence mirror
 
 目标状态：
 
 - Rust domain / persistence 完全替代
 - Python model 不再承担主读写职责
 
-已完成收口：
+文件：
 
-- `backend_old/app/models/bandit.py` 已于 2026-04-18 退役。
-- `backend_old/app/models/gitleaks.py` 已于 2026-04-18 退役。
-- `backend_old/app/models/phpstan.py` 已于 2026-04-18 退役。
-- `backend_old/app/models/pmd.py` 与 `backend_old/app/models/pmd_scan.py` 已于 2026-04-18 退役。
-- `backend_old/app/models/__init__.py` 已于 2026-04-18 退役。
-- Alembic `env.py` 改为显式导入各 model module，不再通过 `app.models` package shell 触发表元数据注册。
+```text
+backend_old/app/models/agent_task.py
+backend_old/app/models/analysis.py
+backend_old/app/models/audit_rule.py
+backend_old/app/models/base.py
+backend_old/app/models/opengrep.py
+backend_old/app/models/project.py
+backend_old/app/models/project_info.py
+backend_old/app/models/project_management_metrics.py
+backend_old/app/models/prompt_skill.py
+backend_old/app/models/prompt_template.py
+backend_old/app/models/user.py
+backend_old/app/models/user_config.py
+```
 
-### 4. Shared Service Retained Helpers
-
-目标文件：
-
-- `services/rule.py`
-- `services/sandbox_runner.py`
-- `services/scan_path_utils.py`
+### 4. Shared Service Retained Helpers (`3`)
 
 当前责任：
 
-- 规则资产、git mirror、rule contract、sandbox helper、路径归一化
-
-已完成收口：
-
-- `services/bandit_rules_snapshot.py` 已于 2026-04-18 退役。
-- `services/pmd_rulesets.py` 已于 2026-04-18 退役。
-- `services/git_mirror.py` 已于 2026-04-18 退役。
-- mirror candidate 逻辑已直接内联到 `services/llm_rule/git_manager.py`。
-- `services/rule_contracts.py` 已于 2026-04-18 退役。
-- `OpengrepRuleCreateRequest` 已直接内联到 `services/rule.py`。
+- 规则资产
+- sandbox helper
+- 路径归一化
 
 目标状态：
 
 - 能迁的迁进 Rust shared service
-- 只剩 schema / contract 归档，不再参与主运行链
+- Python helper 不再参与主运行链
 
-### 5. Agent Orchestration / State / Payload
+文件：
 
-目标文件：
+```text
+backend_old/app/services/rule.py
+backend_old/app/services/sandbox_runner.py
+backend_old/app/services/scan_path_utils.py
+```
 
-- `services/agent/agents/*`
-- `services/agent/core/*`
-- `services/agent/event_manager.py`
-- `services/agent/config.py`
-- `services/agent/json_parser.py`
-- `services/agent/json_safe.py`
-- `services/agent/push_finding_payload.py`
-- `services/agent/task_findings.py`
-- `services/agent/write_scope.py`
+### 5. Agent Orchestration / State / Payload (`22`)
 
 当前责任：
 
-- agent 实际执行、消息、finding 归一化、上下文、状态、执行器
-
-当前关键 open item：
-
-- Rust 已在 agent-task creation 侧生成 `prompt_skill_runtime` snapshot；
-- retained Python consumer 的 `config.prompt_skills` compat projection 已于 2026-04-18 对称退役（5 个 agent 注入块删除、测试删除、Rust WIP 投影字段撤销）。Rust mirror / backfill 保留以支撑 alembic legacy 表，归入后续 DB final gate slice。
+- agent 实际执行
+- 状态、消息和上下文管理
+- finding / payload 归一化
 
 目标状态：
 
 - Rust 拿到 agent orchestration / prompt injection / task execution 主链
 
-已完成收口：
+文件：
 
-- `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役。
-- live caller 已统一从旧 `app.services.agent.flow` 路径切到 `app.services.agent.core.flow`。
-- `backend_old/app/services/agent/agents/business_logic_recon.py` 与 `business_logic_analysis.py` 已于 2026-04-18 退役；Rust `/api/v1/agent-test/business-logic*` 与 `skills` catalog 已承担当前外层能力。
+```text
+backend_old/app/services/agent/agents/analysis.py
+backend_old/app/services/agent/agents/base.py
+backend_old/app/services/agent/agents/orchestrator.py
+backend_old/app/services/agent/agents/react_parser.py
+backend_old/app/services/agent/agents/recon.py
+backend_old/app/services/agent/agents/report.py
+backend_old/app/services/agent/agents/verification.py
+backend_old/app/services/agent/agents/verification_table.py
+backend_old/app/services/agent/config.py
+backend_old/app/services/agent/core/context.py
+backend_old/app/services/agent/core/errors.py
+backend_old/app/services/agent/core/executor.py
+backend_old/app/services/agent/core/logging.py
+backend_old/app/services/agent/core/message.py
+backend_old/app/services/agent/core/registry.py
+backend_old/app/services/agent/core/state.py
+backend_old/app/services/agent/event_manager.py
+backend_old/app/services/agent/json_parser.py
+backend_old/app/services/agent/json_safe.py
+backend_old/app/services/agent/push_finding_payload.py
+backend_old/app/services/agent/task_findings.py
+backend_old/app/services/agent/write_scope.py
+```
 
-### 6. Scanner / Queue / Workspace / Tracking / Bootstrap
-
-目标文件：
-
-- `services/agent/recon_risk_queue.py`
-- `services/agent/vulnerability_queue.py`
-- `services/agent/scanner_runner.py`
-- `services/agent/scope_filters.py`
+### 6. Scanner / Queue / Workspace / Tracking (`4`)
 
 当前责任：
 
 - retained risk queue / vulnerability queue
-- runner / scope filtering glue
-
-已完成收口：
-
-- `services/agent/bandit_bootstrap_rules.py` 与 `services/agent/bootstrap/bandit.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap_gitleaks_runner.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap/phpstan.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap_policy.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap_entrypoints.py` 与 `services/agent/bootstrap_seeds.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap_findings.py` 已于 2026-04-18 退役。
-- `services/agent/bootstrap/base.py` 与 `services/agent/bootstrap/opengrep.py` 已于 2026-04-18 退役。
-- `services/agent/scan_workspace.py` 已于 2026-04-18 退役。
-- `services/agent/scan_tracking.py` 已于 2026-04-18 退役。
-- `services/agent/business_logic_risk_queue.py` 已于 2026-04-18 退役；其外层 diagnostic / SSE surface 已由 Rust `agent-test` 承接。
-- 扫描引擎方向已收口到 `opengrep-only`；剩余非 `opengrep` 引擎面继续按引擎逐个清退。
+- runner orchestration
+- scope filtering glue
 
 目标状态：
 
 - Rust scan/runtime cluster 完全接替
 
-### 7. Flow / Logic Retained Runtime
+文件：
 
-目标文件：
+```text
+backend_old/app/services/agent/recon_risk_queue.py
+backend_old/app/services/agent/scanner_runner.py
+backend_old/app/services/agent/scope_filters.py
+backend_old/app/services/agent/vulnerability_queue.py
+```
 
-- `services/agent/flow/flow_parser_runner.py`
-- `services/agent/flow/models.py`
-- `services/agent/flow/pipeline.py`
-- `services/agent/flow/lightweight/*`
-- `services/agent/logic/authz_graph_builder.py`
-- `services/agent/logic/authz_rules.py`
+### 7. Flow / Logic Retained Runtime (`13`)
 
 当前责任：
 
-- flow parser runner retained helper
+- flow parser runner
 - lightweight definition / AST / callgraph 分析
-- logic authz graph / rule engine
-
-已完成收口：
-
-- `backend_old/app/services/agent/core/flow/lightweight/__init__.py` 已于 2026-04-18 退役。
+- authz graph / rule engine
 
 目标状态：
 
 - Rust flow / graph / authz analysis 替代
 
-### 8. Knowledge Retained Runtime
+文件：
 
-目标文件：
+```text
+backend_old/app/services/agent/core/flow/flow_parser_runner.py
+backend_old/app/services/agent/core/flow/lightweight/ast_index.py
+backend_old/app/services/agent/core/flow/lightweight/callgraph_code2flow.py
+backend_old/app/services/agent/core/flow/lightweight/definition_provider.py
+backend_old/app/services/agent/core/flow/lightweight/function_locator.py
+backend_old/app/services/agent/core/flow/lightweight/function_locator_cli.py
+backend_old/app/services/agent/core/flow/lightweight/function_locator_payload.py
+backend_old/app/services/agent/core/flow/lightweight/path_scorer.py
+backend_old/app/services/agent/core/flow/lightweight/tree_sitter_parser.py
+backend_old/app/services/agent/core/flow/models.py
+backend_old/app/services/agent/core/flow/pipeline.py
+backend_old/app/services/agent/logic/authz_graph_builder.py
+backend_old/app/services/agent/logic/authz_rules.py
+```
 
-- `services/agent/knowledge/base.py`
-- `services/agent/knowledge/loader.py`
-- `services/agent/knowledge/rag_knowledge.py`
-- `services/agent/knowledge/frameworks/*.py`
-- `services/agent/knowledge/vulnerabilities/*.py`
+### 8. Knowledge Retained Runtime (`21`)
 
 当前责任：
 
@@ -258,74 +224,80 @@
 - loader / RAG
 - vulnerability / framework knowledge sources
 
-当前状态：
-
-- `knowledge/tools.py` 已退休
-- `knowledge` package root 已退休
-- retained 内容已收口到 loader / rag / documents 本体
-
 目标状态：
 
 - Rust knowledge / prompt / doc surface 替代，或明确声明这些知识不再作为 runtime 代码存在
 
-### 9. Tools / Tool Runtime
+文件：
 
-目标文件：
+```text
+backend_old/app/services/agent/knowledge/base.py
+backend_old/app/services/agent/knowledge/frameworks/django.py
+backend_old/app/services/agent/knowledge/frameworks/express.py
+backend_old/app/services/agent/knowledge/frameworks/fastapi.py
+backend_old/app/services/agent/knowledge/frameworks/flask.py
+backend_old/app/services/agent/knowledge/frameworks/react.py
+backend_old/app/services/agent/knowledge/frameworks/supabase.py
+backend_old/app/services/agent/knowledge/loader.py
+backend_old/app/services/agent/knowledge/rag_knowledge.py
+backend_old/app/services/agent/knowledge/vulnerabilities/auth.py
+backend_old/app/services/agent/knowledge/vulnerabilities/business_logic.py
+backend_old/app/services/agent/knowledge/vulnerabilities/crypto.py
+backend_old/app/services/agent/knowledge/vulnerabilities/csrf.py
+backend_old/app/services/agent/knowledge/vulnerabilities/deserialization.py
+backend_old/app/services/agent/knowledge/vulnerabilities/injection.py
+backend_old/app/services/agent/knowledge/vulnerabilities/open_redirect.py
+backend_old/app/services/agent/knowledge/vulnerabilities/path_traversal.py
+backend_old/app/services/agent/knowledge/vulnerabilities/race_condition.py
+backend_old/app/services/agent/knowledge/vulnerabilities/ssrf.py
+backend_old/app/services/agent/knowledge/vulnerabilities/xss.py
+backend_old/app/services/agent/knowledge/vulnerabilities/xxe.py
+```
 
-- `services/agent/tools/base.py`
-- `services/agent/tools/agent_tools.py`
-- `services/agent/tools/code_analysis_tool.py`
-- `services/agent/tools/control_flow_tool.py`
-- `services/agent/tools/evidence_protocol.py`
-- `services/agent/tools/external_tools.py`
-- `services/agent/tools/file_tool.py`
-- `services/agent/tools/finish_tool.py`
-- `services/agent/tools/kunlun_tool.py`
-- `services/agent/tools/logic_authz_tool.py`
-- `services/agent/tools/pattern_tool.py`
-- `services/agent/tools/queue_tools.py`
-- `services/agent/tools/recon_file_tree_tool.py`
-- `services/agent/tools/recon_queue_tools.py`
-- `services/agent/tools/reporting_tool.py`
-- `services/agent/tools/run_code.py`
-- `services/agent/tools/runtime/context.py`
-- `services/agent/tools/runtime/contracts.py`
-- `services/agent/tools/runtime/coordinator.py`
-- `services/agent/tools/runtime/hooks.py`
-- `services/agent/tools/sandbox_language.py`
-- `services/agent/tools/sandbox_runner_client.py`
-- `services/agent/tools/sandbox_tool.py`
-- `services/agent/tools/sandbox_vuln.py`
-- `services/agent/tools/smart_scan_tool.py`
-- `services/agent/tools/verification_result_tools.py`
+### 9. Tools / Tool Runtime (`26`)
 
-当前状态：
+当前责任：
 
-- `tools` package root 已退休
-- `tools/runtime` package shell 已退休
-- `business_logic_scan_tool.py` 已退休
-- `business_logic_recon_queue_tools.py` 已于 2026-04-18 退役
-- `tool_runtime` retained core 整组 2026-04-18 退役
-- `tool_runtime` orphan edge cluster 已退休：
-  - `probe_specs.py`
-  - `protocol_verify.py`
-  - `virtual_tools.py`
+- tool definitions
+- tool runtime coordinator / contracts
+- sandbox / code analysis / queue / reporting 等工具主链
 
 目标状态：
 
 - Rust tool runtime / tool implementations 完全替代 retained Python
 
-### 10. Agent Support Assets
+文件：
 
-目标文件：
+```text
+backend_old/app/services/agent/tools/agent_tools.py
+backend_old/app/services/agent/tools/base.py
+backend_old/app/services/agent/tools/code_analysis_tool.py
+backend_old/app/services/agent/tools/control_flow_tool.py
+backend_old/app/services/agent/tools/evidence_protocol.py
+backend_old/app/services/agent/tools/external_tools.py
+backend_old/app/services/agent/tools/file_tool.py
+backend_old/app/services/agent/tools/finish_tool.py
+backend_old/app/services/agent/tools/kunlun_tool.py
+backend_old/app/services/agent/tools/logic_authz_tool.py
+backend_old/app/services/agent/tools/pattern_tool.py
+backend_old/app/services/agent/tools/queue_tools.py
+backend_old/app/services/agent/tools/recon_file_tree_tool.py
+backend_old/app/services/agent/tools/recon_queue_tools.py
+backend_old/app/services/agent/tools/reporting_tool.py
+backend_old/app/services/agent/tools/run_code.py
+backend_old/app/services/agent/tools/runtime/context.py
+backend_old/app/services/agent/tools/runtime/contracts.py
+backend_old/app/services/agent/tools/runtime/coordinator.py
+backend_old/app/services/agent/tools/runtime/hooks.py
+backend_old/app/services/agent/tools/sandbox_language.py
+backend_old/app/services/agent/tools/sandbox_runner_client.py
+backend_old/app/services/agent/tools/sandbox_tool.py
+backend_old/app/services/agent/tools/sandbox_vuln.py
+backend_old/app/services/agent/tools/smart_scan_tool.py
+backend_old/app/services/agent/tools/verification_result_tools.py
+```
 
-- `services/agent/memory/markdown_memory.py`
-- `services/agent/prompts/system_prompts.py`
-- `services/agent/skills/scan_core.py`
-- `services/agent/streaming/stream_handler.py`
-- `services/agent/streaming/token_streamer.py`
-- `services/agent/streaming/tool_stream.py`
-- `services/agent/utils/vulnerability_naming.py`
+### 10. Agent Support Assets (`7`)
 
 当前责任：
 
@@ -339,12 +311,19 @@
 
 - Rust 侧吸收这些 runtime glue，或在上游功能被 Rust 接管后整体删除
 
-### 11. LLM Retained Runtime
+文件：
 
-目标文件：
+```text
+backend_old/app/services/agent/memory/markdown_memory.py
+backend_old/app/services/agent/prompts/system_prompts.py
+backend_old/app/services/agent/skills/scan_core.py
+backend_old/app/services/agent/streaming/stream_handler.py
+backend_old/app/services/agent/streaming/token_streamer.py
+backend_old/app/services/agent/streaming/tool_stream.py
+backend_old/app/services/agent/utils/vulnerability_naming.py
+```
 
-- `services/llm/*`
-- `services/llm/adapters/*`
+### 11. LLM Retained Runtime (`13`)
 
 当前责任：
 
@@ -353,21 +332,29 @@
 - prompt cache / tokenizer / memory compression
 - actual LLM runtime behavior
 
-已完成收口：
-
-- `backend_old/app/services/llm/__init__.py` 已于 2026-04-18 退役。
-- `backend_old/app/services/llm/adapters/__init__.py` 已于 2026-04-18 退役。
-- 剩余 caller 改为 direct-module imports（例如 `memory_compressor`、`tokenizer`）。
-
 目标状态：
 
 - Rust LLM stack 接管主链
 
-### 12. LLM Rule Retained Runtime
+文件：
 
-目标文件：
+```text
+backend_old/app/services/llm/adapters/baidu_adapter.py
+backend_old/app/services/llm/adapters/doubao_adapter.py
+backend_old/app/services/llm/adapters/litellm_adapter.py
+backend_old/app/services/llm/adapters/minimax_adapter.py
+backend_old/app/services/llm/base_adapter.py
+backend_old/app/services/llm/config_utils.py
+backend_old/app/services/llm/factory.py
+backend_old/app/services/llm/memory_compressor.py
+backend_old/app/services/llm/prompt_cache.py
+backend_old/app/services/llm/provider_registry.py
+backend_old/app/services/llm/service.py
+backend_old/app/services/llm/tokenizer.py
+backend_old/app/services/llm/types.py
+```
 
-- `services/llm_rule/*`
+### 12. LLM Rule Retained Runtime (`8`)
 
 当前责任：
 
@@ -377,48 +364,58 @@
 
 目标状态：
 
-- Rust rule pipeline 或明确废弃替代
+- Rust rule pipeline 接管，或被明确废弃替代
 
-### 13. Repo-Adjacent Operational Python Surfaces
+文件：
 
-目标文件：
+```text
+backend_old/app/services/llm_rule/cache_manager.py
+backend_old/app/services/llm_rule/config.py
+backend_old/app/services/llm_rule/git_manager.py
+backend_old/app/services/llm_rule/llm_client.py
+backend_old/app/services/llm_rule/patch_processor.py
+backend_old/app/services/llm_rule/repo_cache_manager.py
+backend_old/app/services/llm_rule/rule_manager.py
+backend_old/app/services/llm_rule/rule_validator.py
+```
 
-- `backend_old/alembic/env.py`
-- `backend_old/alembic/versions/*.py`
-- `backend_old/scripts/flow_parser_runner.py`
-- `scripts/release-templates/runner_preflight.py`
+### 13. Repo-Adjacent Operational Python Surfaces (`23`)
 
 当前责任：
 
 - legacy schema compatibility / revision chain
 - flow parser script host
-- release / ops preflight Python helper
-
-已完成收口：
-
-- `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役。
-- Rust `backend/src/runtime/bootstrap.rs` 现在原生执行 PyPI candidate probe / 排序。
-- `backend_old/scripts/dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重选择，不再调用 Python selector。
-- package source probing
-- release / runner preflight
+- release / ops preflight helper
 
 目标状态：
 
 - 这些 Python 文件不再承担 live runtime / deploy 责任
 - 如果保留，也必须被明确降级为 tooling，而不是被误算成仍依赖 Python backend
 
-## 当前推荐推进顺序
+文件：
 
-1. `tool_runtime` retained core
-2. `scanner / queue / workspace / bootstrap`
-3. `agent orchestration / state / support`
-4. `knowledge` + `flow` + `logic`
-5. `llm` / `llm_rule`
-6. `models` / `db` / `alembic` / scripts / release preflight 最终门
-
-（`prompt_skill_runtime` compat projection / consumer cutover 已于 2026-04-18 对称退役。）
-
-并行关注：
-
-- `/users/*`、`/projects/*/members*` 的 frontend consumer debt
-- `projects` ZIP-only contract 的显式确认与验证
+```text
+backend_old/alembic/env.py
+backend_old/alembic/versions/1f2e3d4c5b6a_add_verified_project_management_metrics.py
+backend_old/alembic/versions/5b0f3c9a6d7e_squashed_baseline.py
+backend_old/alembic/versions/6c8d9e0f1a2b_finalize_projects_zip_file_hash.py
+backend_old/alembic/versions/7f8e9d0c1b2a_normalize_static_finding_paths.py
+backend_old/alembic/versions/8c1d2e3f4a5b_add_agent_finding_identity.py
+backend_old/alembic/versions/9a7b6c5d4e3f_enforce_agent_finding_task_uniqueness.py
+backend_old/alembic/versions/9d3e4f5a6b7c_add_bandit_rule_states.py
+backend_old/alembic/versions/a1b2c3d4e5f6_add_phpstan_rule_states.py
+backend_old/alembic/versions/a8f1c2d3e4b5_add_agent_tasks_report_column.py
+backend_old/alembic/versions/b2c3d4e5f6a7_add_bandit_rule_soft_delete.py
+backend_old/alembic/versions/b7e8f9a0b1c2_add_yasa_scan_tables.py
+backend_old/alembic/versions/b9d8e7f6a5b4_drop_legacy_audit_tables.py
+backend_old/alembic/versions/c3d4e5f6a7b8_add_phpstan_rule_soft_delete.py
+backend_old/alembic/versions/c9d0e1f2a3b4_add_yasa_rule_configs_and_task_binding.py
+backend_old/alembic/versions/d4e5f6a7b8c9_add_prompt_skills_table.py
+backend_old/alembic/versions/da4e5f6a7b8c_add_pmd_rule_configs.py
+backend_old/alembic/versions/e1f2a3b4c5d6_add_pmd_scan_tables.py
+backend_old/alembic/versions/e5f6a7b8c9d0_add_project_management_metrics.py
+backend_old/alembic/versions/f1e2d3c4b5a6_scope_agent_tree_nodes_per_task.py
+backend_old/alembic/versions/f6a7b8c9d0e1_remove_fixed_static_finding_status.py
+backend_old/scripts/flow_parser_runner.py
+scripts/release-templates/runner_preflight.py
+```

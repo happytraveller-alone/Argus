@@ -1,5 +1,10 @@
 # Current State And Ledger
 
+## 文档定位
+
+- 类型：Reference
+- 目标读者：需要快速判断“现状”和“剩余面”的开发者
+
 ## 当前快照
 
 - `backend_old` 根目录 Python：`0`
@@ -7,9 +12,29 @@
 - `backend_old/app` 非 API Python：`133`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
-- `scripts/release-templates` 运行相关 Python：`1`
+- `scripts/release-templates/runner_preflight.py`：`1`
 
-## Rust 已接管的主表面
+## 剩余功能组总览
+
+| 功能组 | 当前文件数 | 仍承担的责任 |
+| --- | ---: | --- |
+| app root / core / config / security | 3 | retained config / encryption / security core |
+| db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate |
+| models / persistence mirror | 12 | retained domain / persistence mirror |
+| shared helpers | 3 | rule、sandbox、path normalization |
+| agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
+| scanner / queue / workspace / tracking | 4 | queue 语义、runner orchestration、scope filtering |
+| flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
+| knowledge | 21 | knowledge loader、framework / vuln knowledge |
+| tools + tool runtime | 26 | retained tool execution 主链 |
+| support assets | 7 | memory、prompt、streaming、scan-core 元数据 |
+| llm | 13 | provider / adapter / cache / tokenizer runtime |
+| llm_rule | 8 | rule repo、patch、validator、manager |
+| repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight |
+
+## Rust 已拿到的外层表面
+
+目前 Rust 已经承担了主要 route surface，至少包括：
 
 - `/api/v1/projects/*`
 - `/api/v1/system-config/*`
@@ -19,63 +44,19 @@
 - `/api/v1/agent-test/*`
 - `/api/v1/static-tasks/*`
 
-## 仍保留的 Python cluster
+这只能证明 route ownership 已迁到 Rust，不能证明 Python runtime 已经退出。
 
-- app root / core / config / security：`3`
-- db / schema snapshot gate：`1`
-- models / persistence mirror：`12`
-- shared helpers：`3`
-- agent orchestration / state / payload：`22`
-- scanner / bootstrap / queue / workspace / tracking：`4`
-- flow / logic：`13`
-- knowledge：`21`
-- tools / tool runtime：`26`
-- agent support assets（memory / prompts / streaming / local-skill metadata）：`7`
-- llm：`13`
-- llm_rule：`8`
-- repo-adjacent ops tail：
-  - `backend_old/alembic/*`
-  - `backend_old/scripts/*`
-  - `scripts/release-templates/runner_preflight.py`
+## 当前最重要的 blocker
 
-## 当前最重要的 open items
+1. `scanner_runner.py`、`recon_risk_queue.py`、`vulnerability_queue.py`、`scope_filters.py` 仍在控制 retained scanner 主链。
+2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
+3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*`、`llm/*` 仍是大块 live Python runtime。
+4. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
+5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
 
-- `business_logic` Python runtime cluster 已于 2026-04-18 退役：Rust `/api/v1/agent-test/business-logic*` SSE surface 与 `skills` catalog 已承担当前外部能力，Python `business_logic_risk_queue.py`、`agents/business_logic_recon.py`、`agents/business_logic_analysis.py`、`tools/business_logic_recon_queue_tools.py` 已删除；新增 `test_business_logic_runtime_retired.py` guard，`backend_old/app` runtime core 计数 `137 -> 133`，`agent orchestration / state / payload` 计数 `24 -> 22`，`scanner / bootstrap / queue / workspace / tracking` 计数 `5 -> 4`，`tools / tool_runtime` 计数 `27 -> 26`。
-- `prompt_skill_runtime` compat projection 已收口（2026-04-18）：Rust `legacy_python_config` 投影从未落地（WIP 已撤销），Python 5 个 agent（recon / analysis / verification / business_logic_recon / business_logic_analysis）的 `config.prompt_skills` 注入块全部删除，`test_prompt_skills_injection.py` 已删。Rust `upsert_legacy_prompt_skill` / `compat_backfill_from_legacy_if_empty` 仍保留以支撑 alembic legacy 表，属于后续 DB final gate slice 的目标。
-- `tool_runtime` retained core（`runtime` / `router` / `health_probe` / `write_scope` / `catalog`）2026-04-18 整组退役。
-- `backend_old/scripts/package_source_selector.py` 已于 2026-04-18 退役：Rust `runtime/bootstrap.rs` 原生接管 PyPI candidate probe / 排序，`dev-entrypoint.sh` 与相关 Dockerfile 改为 shell 内按配置顺序去重回退；`backend_old/scripts` Python 计数 `2 -> 1`。
-- `backend_old/app/db/__init__.py` 已于 2026-04-18 退役：`bandit_rules_snapshot.py` 与 `pmd_rulesets.py` 直接读取 Rust-owned scan-rule asset root，`db / schema snapshot gate` 分组计数 `3 -> 2`，`backend_old/app` runtime core 计数 `167 -> 166`。
-- `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役：live importer 已改为 direct-module imports，且 flow live caller 已从旧 `agent.flow` 路径切到 `agent.core.flow`；`backend_old/app` runtime core 计数 `166 -> 164`，`agent orchestration / state / payload` 计数 `25 -> 24`，`llm` 计数 `15 -> 14`。
-- `backend_old/app/core/__init__.py` 与 `backend_old/app/models/__init__.py` 已于 2026-04-18 退役：Alembic `env.py` 改为显式导入各 model module 完成 metadata 注册；`backend_old/app` runtime core 计数 `164 -> 162`，`app root / core / config / security` 计数 `5 -> 4`，`models / persistence mirror` 计数 `18 -> 17`。
-- `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已于 2026-04-18 退役：residual namespace/package shell 清零，`backend_old/app` runtime core 计数 `162 -> 158`，`app root / core / config / security` 计数 `4 -> 3`，`db / schema snapshot gate` 计数 `2 -> 1`，`flow / logic` 计数 `14 -> 13`，`llm` 计数 `14 -> 13`。
-- `backend_old/app/services/rule_contracts.py` 已于 2026-04-18 退役：`OpengrepRuleCreateRequest` 已内联到 `rule.py`，`backend_old/app` runtime core 计数 `158 -> 157`，`shared helpers` 计数 `7 -> 6`。
-- `backend_old/app/services/git_mirror.py` 已于 2026-04-18 退役：mirror candidate 逻辑已内联到 `llm_rule/git_manager.py`，`backend_old/app` runtime core 计数 `157 -> 156`，`shared helpers` 计数 `6 -> 5`。
-- `bandit` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight 不再暴露 `bandit` surface，Python `bandit` model/service/bootstrap cluster 已删除；`backend_old/app` runtime core 计数 `156 -> 152`，`models / persistence mirror` 计数 `17 -> 16`，`shared helpers` 计数 `5 -> 4`，`scanner / bootstrap / queue / workspace / tracking` 计数 `17 -> 15`。
-- `gitleaks` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery 不再暴露 `gitleaks` surface，Python `gitleaks` model/bootstrap/runtime/tool cluster 已删除；`backend_old/app` runtime core 计数 `152 -> 150`，`models / persistence mirror` 计数 `16 -> 15`，`scanner / bootstrap / queue / workspace / tracking` 计数 `15 -> 14`。
-- `phpstan` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery 不再暴露 `phpstan` surface，Python `phpstan` model/bootstrap/runtime/tool cluster 已删除；`backend_old/app` runtime core 计数 `150 -> 148`，`models / persistence mirror` 计数 `15 -> 14`，`scanner / bootstrap / queue / workspace / tracking` 计数 `14 -> 13`。
-- `pmd` 已于 2026-04-18 按 `opengrep-only` 方针退役：Rust `static-tasks` / preflight / recovery / scan::pmd 不再暴露 `pmd` surface，Python `pmd` model/helper/tool cluster 已删除；`backend_old/app` runtime core 计数 `148 -> 145`，`models / persistence mirror` 计数 `14 -> 12`，`shared helpers` 计数 `4 -> 3`。
-- `backend_old/app/services/agent/bootstrap_policy.py` 已于 2026-04-18 退役：该 helper 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `145 -> 144`，`scanner / bootstrap / queue / workspace / tracking` 计数 `13 -> 12`。
-- `backend_old/app/services/agent/bootstrap_entrypoints.py` 与 `bootstrap_seeds.py` 已于 2026-04-18 退役：该 fallback helper cluster 已无 live importer，只剩专用测试与彼此依赖；retirement guard 已补齐，`backend_old/app` runtime core 计数 `144 -> 142`，`scanner / bootstrap / queue / workspace / tracking` 计数 `12 -> 10`。
-- `backend_old/app/services/agent/bootstrap_findings.py` 已于 2026-04-18 退役：该 parsing/normalization helper 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `142 -> 141`，`scanner / bootstrap / queue / workspace / tracking` 计数 `10 -> 9`。
-- `backend_old/app/services/agent/bootstrap/base.py` 与 `bootstrap/opengrep.py` 已于 2026-04-18 退役：旧 OpenGrep bootstrap scanner cluster 已无 live importer，仅剩专用测试；retirement guard 已补齐，`backend_old/app` runtime core 计数 `141 -> 139`，`scanner / bootstrap / queue / workspace / tracking` 计数 `9 -> 7`。
-- `backend_old/app/services/agent/scan_workspace.py` 已于 2026-04-18 退役：该 workspace helper 已无 live importer，仅剩专用测试；`test_static_scan_runtime.py` 收缩为 `scan_tracking` 契约覆盖，新增 retirement guard，`backend_old/app` runtime core 计数 `139 -> 138`，`scanner / bootstrap / queue / workspace / tracking` 计数 `7 -> 6`。
-- `backend_old/app/services/agent/scan_tracking.py` 已于 2026-04-18 退役：该 tracking helper 已无 live importer，仅剩专用测试；`test_static_scan_runtime.py` 与 `test_background_task_launch_refactor.py` 已删除，新增 retirement guard，`backend_old/app` runtime core 计数 `138 -> 137`，`scanner / bootstrap / queue / workspace / tracking` 计数 `6 -> 5`。
-- `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
-- `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
+## 本目录内的使用方式
 
-## 待接管功能清单入口
-
-完整的按功能分组的剩余 Python 功能清单见：
-
-- [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
-
-API 路由历史分桶与 raw route inventory 见：
-
-- [wait_correct/route-inventory/python-endpoints-summary.md](/home/xyf/audittool_personal/plan/wait_correct/route-inventory/python-endpoints-summary.md)
-
-## 原始 ledger
-
-详细历史账本与 raw reference 保留在：
-
-- [archive/legacy-ledgers/backend-old-python-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/archive/legacy-ledgers/backend-old-python-ledger.md)
-- [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)
+- 要看优先级：去 [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
+- 要看验证门：去 [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
+- 要看精确文件清单：去 [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
+- 要看历史背景：去 [04-slices-and-progress-log.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-slices-and-progress-log.md) 和 archive

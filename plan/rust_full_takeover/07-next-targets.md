@@ -1,97 +1,104 @@
 # Next Targets
 
-## 当前最优先 6 项
+## 文档定位
 
-当前策略补充：
+- 类型：How-to
+- 目标读者：需要直接接手下一轮功能接管的开发者
 
-- 扫描引擎按 `opengrep-only` 收口；`bandit`、`gitleaks`、`phpstan`、`pmd` 与 retained bootstrap helpers 已退役，下一轮转入 retained `scanner / queue / runner` 主链清理。
+## 当前优先级
 
-### ~~1. 收口 `prompt_skill_runtime` -> `config.prompt_skills` 的 compat projection / consumer cutover~~
+### 1. Scanner / Queue / Runner 主链
 
-✅ 已完成（2026-04-18）。Rust 未落地的 `legacy_python_config` 投影撤销，Python 5 个 agent 注入块全部删除，`test_prompt_skills_injection.py` 删除。Rust mirror / backfill 保留用于 alembic 兼容，归入后续 DB final gate slice。
+目标文件：
 
-### ~~1. 审计 retained `tool_runtime` 核心 cluster~~
+- `backend_old/app/services/agent/recon_risk_queue.py`
+- `backend_old/app/services/agent/vulnerability_queue.py`
+- `backend_old/app/services/agent/scanner_runner.py`
+- `backend_old/app/services/agent/scope_filters.py`
 
-✅ 已完成（2026-04-18）。`runtime.py`、`router.py`、`health_probe.py`、`write_scope.py`、`catalog.py` 已整组退役，`base.py` 的 dead `TYPE_CHECKING` import 已清理，retirement guard 已上线。
+完成标准：
 
-目标：
+- Rust 拿到 queue 语义、runner orchestration、scope filtering 的 source of truth
+- Python cluster 删除
+- 新增或更新 retirement guard
 
-- `runtime.py`
-- `router.py`
-- `health_probe.py`
-- `write_scope.py`
-- `catalog.py`
+### 2. Agent Orchestration / State / Payload 主链
 
-### 2. 审计 retained `agent/core` cluster
+目标范围：
 
-目标：
+- `backend_old/app/services/agent/agents/*`
+- `backend_old/app/services/agent/core/{context,errors,executor,logging,message,registry,state}.py`
+- `backend_old/app/services/agent/event_manager.py`
+- `backend_old/app/services/agent/config.py`
+- `backend_old/app/services/agent/json_parser.py`
+- `backend_old/app/services/agent/json_safe.py`
+- `backend_old/app/services/agent/push_finding_payload.py`
+- `backend_old/app/services/agent/task_findings.py`
+- `backend_old/app/services/agent/write_scope.py`
 
-- `agents/*`
-- `core/*`
-- `event_manager.py`
-- `config.py`
-- `json_parser.py`
-- `json_safe.py`
-- `push_finding_payload.py`
-- `task_findings.py`
-- `write_scope.py`
+完成标准：
 
-### 3. 审计 scanner / queue / workspace / tracking cluster
+- agent 执行、状态、消息和 finding payload 主链由 Rust 承担
+- Python orchestrator 退到 0 或降级为非运行时资产
 
-目标：
+### 3. Flow / Logic 主链
 
-- `scanner_runner.py`
-- `recon_risk_queue.py`
-- `vulnerability_queue.py`
-- `scope_filters.py`
+目标范围：
 
-### 4. 审计 support / prompt / stream / memory cluster
+- `backend_old/app/services/agent/core/flow/*`
+- `backend_old/app/services/agent/logic/*`
 
-目标：
+完成标准：
 
-- `memory/markdown_memory.py`
-- `prompts/system_prompts.py`
-- `skills/scan_core.py`
-- `streaming/*`
-- `utils/vulnerability_naming.py`
+- flow parser、callgraph、definition lookup、authz logic 由 Rust 承担
+- Python flow runner / lightweight analysis 不再处于主链
 
-### 5. 审计 knowledge / flow / logic / llm cluster
+### 4. Tool Runtime + Support Glue
 
-目标：
+目标范围：
 
-- `knowledge/*`
-- `flow/*`
-- `logic/*`
-- `services/llm/*`
-- `services/llm_rule/*`
+- `backend_old/app/services/agent/tools/*`
+- `backend_old/app/services/agent/tools/runtime/*`
+- `backend_old/app/services/agent/memory/markdown_memory.py`
+- `backend_old/app/services/agent/prompts/system_prompts.py`
+- `backend_old/app/services/agent/skills/scan_core.py`
+- `backend_old/app/services/agent/streaming/*`
+- `backend_old/app/services/agent/utils/vulnerability_naming.py`
 
-### 6. 准备 final gate：`db` / `alembic` / scripts / frontend consumer debt
+完成标准：
 
-目标：
+- Rust 拿到工具执行主链、streaming glue、prompt / memory 宿主
+- Python 只剩 archive / tooling，不再承载 live tool runtime
 
-- 重新跑 import 图
-- 更新 blocker 清单
-- 缩小 alembic / snapshot retained surface
-- 清理 `/users/*` 与 `/projects/*/members*` 的 frontend caller debt
-- 把 `backend_old/scripts/*` 与 release preflight 放进最终删除/保留判定
+### 5. Knowledge + LLM + Rule Runtime
 
-## 执行顺序建议
+目标范围：
 
-如果后续继续按功能逐一接管，建议按照下面顺序推进：
+- `backend_old/app/services/agent/knowledge/*`
+- `backend_old/app/services/llm/*`
+- `backend_old/app/services/llm_rule/*`
 
-1. scanner / queue / runner retained runtime
-2. agent orchestration / state / support runtime
-3. knowledge / flow / logic retained runtime
-4. llm / llm_rule retained runtime
-5. models / db / alembic / scripts / release preflight final gate
+完成标准：
 
-（prompt skill runtime compat projection 已于 2026-04-18 对称退役。）
+- Rust 成为 knowledge、provider、prompt cache、rule repo / validator 的主运行时
 
-并行关注的 contract blocker：
+### 6. Models / DB / Alembic / Ops Tail Final Gate
 
-- `/users/*` 与 `/projects/*/members*` 的 frontend consumer debt
-- `projects` ZIP-only contract 是否继续保留
+目标范围：
 
-具体功能块和文件清单见：
+- `backend_old/app/models/*`
+- `backend_old/app/db/schema_snapshots/*`
+- `backend_old/alembic/*`
+- `backend_old/scripts/flow_parser_runner.py`
+- `scripts/release-templates/runner_preflight.py`
 
-- [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
+完成标准：
+
+- legacy schema / mirror / preflight 不再阻止 Python 退役
+- runtime tail 有明确删除或降级结论
+
+## 当前执行原则
+
+1. 优先接管仍在主链上的 runtime cluster，不回头做低收益的历史壳层清理。
+2. 每完成一个功能 slice，就补 guard、跑验证、更新文档并提交一次 commit。
+3. 如果某块只能做到 Rust 外壳而不能切换 source of truth，就不要把它记成“已接管”。

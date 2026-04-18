@@ -482,23 +482,15 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-18 2:18pm GMT+8
+# [audittool_personal] recent context, 2026-04-18 6:09pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 39 obs (15,745t read) | 907,996t work | 98% savings
+Stats: 50 obs (18,749t read) | 960,277t work | 98% savings
 
 ### Apr 18, 2026
-17 10:45a ✅ prompt_skill_runtime compat projection symmetrically retired
-18 " ⚖️ CLAUDE.md redesigned: task tiering L1/L2/L3 with Codex-led execution model
-22 10:47a 🔵 stop-review-gate hook mechanics confirmed: Codex reviews last Claude turn on Stop event
-29 10:56a ✅ stop-gate review ALLOW for CLAUDE.md model/effort guidance update
-31 " 🔵 CLAUDE.md model/effort edits not present in working tree; changes are elsewhere
-34 " ✅ prompt_skill_runtime compat projection symmetrically retired across Python and Rust
-36 10:57a 🔵 CLAUDE.md is gitignored; model/effort guidance exists on disk but is never committed
-42 11:04a ✅ stop-gate review ALLOW for Codex log monitoring shell helpers
 44 11:05a 🔵 codex-tail alias has empty-glob silent-exit bug when no logs exist
 46 11:06a 🔵 codex-tail alias confirmed broken when no logs exist: tail receives empty string argument
 65 11:26a 🔴 codex-layout tmux pane-index fix + codex-tail empty-glob fix
@@ -530,6 +522,25 @@ Stats: 39 obs (15,745t read) | 907,996t work | 98% savings
 165 1:31p 🔄 package_source_selector.py retired: Rust native PyPI probe replaces Python subprocess
 166 " 🔵 git commit blocked: sandbox has read-only filesystem (.git/index.lock)
 169 2:12p ⚖️ rust_full_takeover: Rust refactor execution resumed per plan
+176 3:02p 🔄 git_mirror.py retired — logic inlined into GitManager
+178 3:06p 🔵 rust_full_takeover Wave A fully committed — Wave B next
+179 " 🔵 rust_full_takeover: 155 Python files remain after Wave A (down from 172)
+180 " 🔵 llm_rule cluster: 6 files, 438 lines total — rule_runner.py is largest at 156 lines
+181 " 🔵 rule_runner.py pipeline: 4-step sequential flow — mirror → prompt → LLM → parse
+182 " 🔵 No Rust parity exists for llm_rule pipeline — Wave B starts from scratch
+183 " 🔵 Rust backend structure mapped: agents, API, app, services all have parity modules except llm_rule
+184 " 🟣 backend/src/services/llm_rule/mod.rs created — Rust llm_rule module scaffolded
+185 3:08p 🔵 Bandit retirement guard tests written and confirmed failing — both Rust and Python sides red
+188 3:09p 🔵 Bandit retirement scope in Rust mapped: routes (lines 105-151), handlers (920-1151), helper functions, task_state field, config field, recovery table reference
+190 3:10p 🔵 Bandit DB schema surface mapped: bandit_scan_tasks + bandit_rule_states tables referenced across Python models, alembic, and Rust legacy mirror schema
+193 " 🔵 static_task_routes_and_rule_catalogs test in task_routes_api.rs exercises bandit routes — must be updated when bandit is retired
+195 " 🔵 bandit_tasks column embedded in project_management_metrics SQL INSERT — DB schema change required for full bandit retirement
+197 3:11p 🔵 test_bootstrap_callers_use_agent_scan_workspace_module references bandit.py — must be updated when bandit bootstrap is retired
+199 " 🔵 Bandit Python surface fully mapped: 7 live files with bandit references beyond the 4 target retirement files
+202 3:13p 🔵 Bandit retirement full impact map complete: preflight.rs has build_bandit_preflight_inputs + configured_specs_cover_all_runner_families test asserts "bandit" in names list
+295 4:47p 🔵 phpstan surface map audit — full cross-stack reference inventory
+296 " 🔵 phpstan retirement guard tests passing — Python suite 53 passed, Rust integration test green
+297 4:50p 🟣 phpstan retirement guard tests written — both Rust and Python
 
-Access 908k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 960k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
