@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `bootstrap_findings.py` 已退役：
+  - `backend_old/app/services/agent/bootstrap_findings.py` 已删除
+  - 新增 `backend_old/tests/test_bootstrap_findings_retired.py` guard
+  - `backend_old/app` runtime core 计数 `142 -> 141`
+  - `scanner / bootstrap / queue / workspace / tracking` 计数 `10 -> 9`
 - `bootstrap_entrypoints.py` / `bootstrap_seeds.py` 已退役：
   - `backend_old/app/services/agent/bootstrap_entrypoints.py` 与 `bootstrap_seeds.py` 已删除
   - 新增 `backend_old/tests/test_bootstrap_entrypoint_helpers_retired.py` guard

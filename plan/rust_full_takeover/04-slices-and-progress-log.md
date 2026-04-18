@@ -228,6 +228,15 @@
   - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_entrypoint_helpers_retired.py backend_old/tests/test_agent_core_scope_filtering.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_entrypoint_helpers or no_live_python_module_imports or smart_scan_collect_files'`
   - `python -m compileall backend_old/app backend_old/tests`
 
+### Bootstrap Findings Helper Retirement (2026-04-18)
+
+- `backend_old/app/services/agent/bootstrap_findings.py` 已删除；确认它没有任何 live Python importer，只剩专用测试依赖。
+- 旧专用测试 `backend_old/tests/test_agent_bootstrap_findings.py` 已删除，改为 `backend_old/tests/test_bootstrap_findings_retired.py` guard，要求该模块物理不存在且 live importer 清零。
+- `backend_old/app` runtime core 计数 `142 -> 141`，`scanner / bootstrap / queue / workspace / tracking` 计数 `10 -> 9`。
+- 验证结果：
+  - `env UV_CACHE_DIR=/tmp/uv-cache uv run --project backend_old python -m pytest -s backend_old/tests/test_bootstrap_findings_retired.py backend_old/tests/test_config_internal_callers_use_service_layer.py -k 'bootstrap_findings or no_live_python_module_imports'`
+  - `python -m compileall backend_old/app backend_old/tests`
+
 ## 详细历史
 
 完整逐条 slice 历史保留在：
