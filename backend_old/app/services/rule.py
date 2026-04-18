@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
+from pydantic import BaseModel
 
 from app.core.config import settings
-from app.services.rule_contracts import OpengrepRuleCreateRequest
 
 from .llm_rule.config import Config
 from .llm_rule.git_manager import GitManager
@@ -17,6 +17,15 @@ from .llm_rule.llm_client import LLMClient
 from .llm_rule.patch_processor import PatchInfo, PatchProcessor
 from .llm_rule.rule_manager import RuleManager
 from .llm_rule.rule_validator import RuleValidator
+
+
+class OpengrepRuleCreateRequest(BaseModel):
+    """Payload used when generating Opengrep rules from patches."""
+
+    repo_owner: str
+    repo_name: str
+    commit_hash: str
+    commit_content: str
 
 
 class AutoGrep:

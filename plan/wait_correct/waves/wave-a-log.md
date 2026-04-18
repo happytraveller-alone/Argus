@@ -2,6 +2,11 @@
 
 ## Completed in this turn
 
+- `backend_old/app/services/rule_contracts.py` 已退役：
+  - `OpengrepRuleCreateRequest` 已内联到 `rule.py`
+  - 新增 `backend_old/tests/test_rule_contracts_retired.py` guard
+  - `backend_old/app` runtime core 计数 `158 -> 157`
+  - `shared helpers` 计数 `7 -> 6`
 - `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已退役：
   - `llm.factory` 与 `test_llm_stream_empty_handling.py` 改为 direct-module imports
   - 新增 `backend_old/tests/test_namespace_package_shells_retired.py` guard

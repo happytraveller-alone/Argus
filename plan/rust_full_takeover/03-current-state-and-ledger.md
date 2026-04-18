@@ -4,7 +4,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`158`
+- `backend_old/app` 非 API Python：`157`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates` 运行相关 Python：`1`
@@ -24,7 +24,7 @@
 - app root / core / config / security：`3`
 - db / schema snapshot gate：`1`
 - models / persistence mirror：`17`
-- shared helpers：`7`
+- shared helpers：`6`
 - agent orchestration / state / payload：`24`
 - scanner / bootstrap / queue / workspace / tracking：`17`
 - flow / logic：`13`
@@ -47,6 +47,7 @@
 - `backend_old/app/services/llm/__init__.py` 与 `backend_old/app/services/agent/agents/__init__.py` 已于 2026-04-18 退役：live importer 已改为 direct-module imports，且 flow live caller 已从旧 `agent.flow` 路径切到 `agent.core.flow`；`backend_old/app` runtime core 计数 `166 -> 164`，`agent orchestration / state / payload` 计数 `25 -> 24`，`llm` 计数 `15 -> 14`。
 - `backend_old/app/core/__init__.py` 与 `backend_old/app/models/__init__.py` 已于 2026-04-18 退役：Alembic `env.py` 改为显式导入各 model module 完成 metadata 注册；`backend_old/app` runtime core 计数 `164 -> 162`，`app root / core / config / security` 计数 `5 -> 4`，`models / persistence mirror` 计数 `18 -> 17`。
 - `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已于 2026-04-18 退役：residual namespace/package shell 清零，`backend_old/app` runtime core 计数 `162 -> 158`，`app root / core / config / security` 计数 `4 -> 3`，`db / schema snapshot gate` 计数 `2 -> 1`，`flow / logic` 计数 `14 -> 13`，`llm` 计数 `14 -> 13`。
+- `backend_old/app/services/rule_contracts.py` 已于 2026-04-18 退役：`OpengrepRuleCreateRequest` 已内联到 `rule.py`，`backend_old/app` runtime core 计数 `158 -> 157`，`shared helpers` 计数 `7 -> 6`。
 - `retire` bucket 里的 `/users/*` 与 `/projects/*/members*` 仍存在 frontend caller debt，不能被默认为“消费者已清零”。
 - `/health` HTTP `200` 不是最终 readiness 证据；最终 cutover 仍缺 JSON-level health / runner smoke / legacy DB gate。
 

@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `158`
+  - runtime core `157`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -126,6 +126,15 @@
     `app.services.llm.adapters.litellm_adapter`
     `app.services.agent.core.flow.lightweight.function_locator`
     `app.db.schema_snapshots.baseline_5b0f3c9a6d7e`
+
+### Rule Contracts Retirement (2026-04-18)
+
+- `backend_old/app/services/rule_contracts.py` 已退役，`backend_old/app` runtime core 计数 `158 -> 157`，`shared helpers` 计数 `7 -> 6`。
+- `OpengrepRuleCreateRequest` 已直接内联到 `backend_old/app/services/rule.py`，live caller 不再跨文件依赖 contract shim。
+- 新增 `backend_old/tests/test_rule_contracts_retired.py` guard，要求 `rule_contracts.py` 物理不存在，且 live importer 不再指向旧模块。
+- 验证结果：
+  - `tests/test_rule_contracts_retired.py`
+  - `tests/test_generic_rule_yaml_validation.py`
 
 ## 详细历史
 
