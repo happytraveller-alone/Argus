@@ -127,6 +127,7 @@ pub fn execute(request: Code2FlowRequest) -> Code2FlowResponse {
         scanner_type: "flow_parser".to_string(),
         image: request.image.unwrap_or_else(flow_parser_runner_image),
         workspace_dir: workspace_dir.display().to_string(),
+        workspace_root_override: None,
         command: vec![
             "python3".to_string(),
             "/opt/flow-parser/flow_parser_runner.py".to_string(),

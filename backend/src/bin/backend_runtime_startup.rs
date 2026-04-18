@@ -1,11 +1,11 @@
 use anyhow::Result;
-use backend_rust::runtime::{bootstrap, code2flow, runner};
+use backend_rust::runtime::{bootstrap, code2flow, flow_parser, runner};
 use std::{env, process};
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let first = args.next().unwrap_or_else(|| {
-        eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow>");
+        eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser>");
         process::exit(1);
     });
 
@@ -13,8 +13,9 @@ fn main() -> Result<()> {
         "dev" | "prod" => bootstrap::run(&first)?,
         "runner" => handle_runner(args)?,
         "code2flow" => handle_code2flow(args)?,
+        "flow-parser" => handle_flow_parser(args)?,
         _ => {
-            eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow>");
+            eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser>");
             process::exit(1);
         }
     }
@@ -82,6 +83,42 @@ fn handle_code2flow(mut args: impl Iterator<Item = String>) -> Result<()> {
     println!(
         "{}",
         serde_json::to_string(&code2flow::execute_from_request_path(request_path.as_ref()))?
+    );
+    Ok(())
+}
+
+fn handle_flow_parser(mut args: impl Iterator<Item = String>) -> Result<()> {
+    let operation = args.next().unwrap_or_else(|| {
+        eprintln!(
+            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
+        );
+        process::exit(1);
+    });
+    let operation = flow_parser::FlowParserOperation::from_cli(&operation).unwrap_or_else(|_| {
+        eprintln!(
+            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
+        );
+        process::exit(1);
+    });
+    let flag = args.next().unwrap_or_default();
+    if flag != "--request" {
+        eprintln!(
+            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
+        );
+        process::exit(1);
+    }
+    let request_path = args.next().unwrap_or_else(|| {
+        eprintln!(
+            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
+        );
+        process::exit(1);
+    });
+    println!(
+        "{}",
+        serde_json::to_string(&flow_parser::execute_from_request_path(
+            operation,
+            request_path.as_ref(),
+        ))?
     );
     Ok(())
 }

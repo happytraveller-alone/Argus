@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Protocol
 
-from app.services.agent.core.flow.flow_parser_runner import get_flow_parser_runner_client
-
+from .flow_parser_runtime import FlowParserRuntimeBridge
 from .tree_sitter_parser import TreeSitterParser
 
 
@@ -50,7 +49,7 @@ class LocalDefinitionProvider:
 
 class RunnerDefinitionProvider:
     def __init__(self) -> None:
-        self.client = get_flow_parser_runner_client()
+        self.client = FlowParserRuntimeBridge()
 
     def extract_definitions_batch(
         self, items: List[Dict[str, Any]]

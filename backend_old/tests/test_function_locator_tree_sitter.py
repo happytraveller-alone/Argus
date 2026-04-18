@@ -96,8 +96,8 @@ def test_function_locator_tries_runner_before_local_tree_sitter(monkeypatch, tmp
             }
 
     monkeypatch.setattr(
-        "app.services.agent.core.flow.lightweight.function_locator.get_flow_parser_runner_client",
-        lambda: _FakeRunnerClient(),
+        "app.services.agent.core.flow.lightweight.function_locator.FlowParserRuntimeBridge",
+        _FakeRunnerClient,
     )
 
     locator = EnclosingFunctionLocator(project_root=str(tmp_path))

@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from app.core.config import settings
-from app.services.agent.core.flow.flow_parser_runner import get_flow_parser_runner_client
 
+from .flow_parser_runtime import FlowParserRuntimeBridge
 from .function_locator_cli import locate_with_tree_sitter_cli
 from .tree_sitter_parser import TreeSitterParser
 
@@ -292,7 +292,7 @@ class EnclosingFunctionLocator:
             }
 
         try:
-            runner_client = get_flow_parser_runner_client()
+            runner_client = FlowParserRuntimeBridge()
             runner_result = runner_client.locate_enclosing_function(
                 file_path=relative_file_path or self._resolve_relative_path(file_path),
                 line_start=int(max(1, line_start)),

@@ -19,6 +19,8 @@ pub struct RunnerSpec {
     pub scanner_type: String,
     pub image: String,
     pub workspace_dir: String,
+    #[serde(default)]
+    pub workspace_root_override: Option<String>,
     pub command: Vec<String>,
     pub timeout_seconds: u64,
     #[serde(default)]
@@ -202,7 +204,10 @@ fn run_spec(
     stdout_log_path: &Path,
     stderr_log_path: &Path,
 ) -> RunOutcome {
-    let (workspace_root, runner_workspace) = match resolve_shared_workspace(workspace) {
+    let (workspace_root, runner_workspace) = match resolve_shared_workspace(
+        workspace,
+        spec.workspace_root_override.as_deref(),
+    ) {
         Ok(paths) => paths,
         Err(error) => {
             return RunOutcome::Failure(FailedRun {
@@ -414,11 +419,17 @@ fn ensure_workspace_artifacts(workspace: &Path) -> Result<(PathBuf, PathBuf)> {
     Ok((logs_dir, meta_dir))
 }
 
-fn scan_workspace_root() -> PathBuf {
-    env::var("SCAN_WORKSPACE_ROOT")
-        .ok()
-        .map(|value| PathBuf::from(value.trim()))
-        .filter(|value| !value.as_os_str().is_empty())
+fn scan_workspace_root(override_root: Option<&str>) -> PathBuf {
+    override_root
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            env::var("SCAN_WORKSPACE_ROOT")
+                .ok()
+                .map(|value| PathBuf::from(value.trim()))
+                .filter(|value| !value.as_os_str().is_empty())
+        })
         .unwrap_or_else(|| PathBuf::from("/tmp/vulhunter/scans"))
 }
 
@@ -438,8 +449,11 @@ fn docker_bin() -> String {
         .unwrap_or_else(|| "docker".to_string())
 }
 
-fn resolve_shared_workspace(workspace: &Path) -> Result<(PathBuf, PathBuf)> {
-    let workspace_root = scan_workspace_root();
+fn resolve_shared_workspace(
+    workspace: &Path,
+    workspace_root_override: Option<&str>,
+) -> Result<(PathBuf, PathBuf)> {
+    let workspace_root = scan_workspace_root(workspace_root_override);
     let resolved_workspace = workspace
         .canonicalize()
         .with_context(|| format!("canonicalize workspace {}", workspace.display()))?;
@@ -764,6 +778,7 @@ esac
             scanner_type: "flow_parser".to_string(),
             image: "vulhunter/flow-parser-runner:test".to_string(),
             workspace_dir: workspace.display().to_string(),
+            workspace_root_override: None,
             command: vec![
                 "python3".to_string(),
                 "/opt/flow-parser/flow_parser_runner.py".to_string(),
