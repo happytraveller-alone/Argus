@@ -26,17 +26,11 @@
 - **不是什么**：简单的规则扫描或静态引擎包装层。
 - **相关文档**：[architecture.md](./architecture.md), [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)
 
-### 混合扫描
-
-- **是什么**：仍以 `AgentTask` 为主任务模型，但会把静态候选结果作为后续分析的入口点输入。
-- **不是什么**：独立的第四套任务模型，也不是“先跑完整静态扫描，再切到另一套 Agent 系统”。
-- **相关文档**：[architecture.md](./architecture.md), [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)
-
 ## Agent 扫描主线术语
 
 ### `AgentTask`
 
-- **是什么**：智能扫描和混合扫描的主任务实体。
+- **是什么**：智能扫描的主任务实体。
 - **不是什么**：仅代表某一个子智能体的一次执行。
 - **相关文档**：[architecture.md](./architecture.md), [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)
 
@@ -123,5 +117,5 @@
 ## 阅读路线建议
 
 - 想先看系统全貌：读 [architecture.md](./architecture.md)。
-- 想看智能扫描和混合扫描主线：读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
+- 想看智能扫描主线：读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
 - 想看 DeerFlow runtime 改造计划：读 [deer-flow-runtime-phases/README.md](./deer-flow-runtime-phases/README.md)。

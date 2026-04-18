@@ -97,13 +97,10 @@ type TrendRow = {
 	totalNewFindings: number;
 	staticFindings: number;
 	intelligentVerifiedFindings: number;
-	hybridVerifiedFindings: number;
 	staticShare: number;
 	intelligentShare: number;
-	hybridShare: number;
 	staticLabel: number;
 	intelligentLabel: number;
-	hybridLabel: number;
 };
 
 const VIEW_ITEMS: DashboardViewMeta[] = [
@@ -128,7 +125,7 @@ const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "vulnerability-types",
 		label: "漏洞类型统计图",
-		description: "展示智能扫描与混合扫描中已验证漏洞类型 Top10。",
+		description: "展示智能扫描中已验证漏洞类型 Top10。",
 		yAxisLabel: "漏洞类型标号",
 	},
 	{
@@ -398,23 +395,16 @@ export function buildTrendRows(items: DashboardDailyActivityItem[]): TrendRow[] 
 			Number(item.intelligent_verified_findings || 0),
 			0,
 		);
-		const hybridVerifiedFindings = Math.max(
-			Number(item.hybrid_verified_findings || 0),
-			0,
-		);
 
 		return {
 			date: formatTrendDate(item.date),
 			totalNewFindings,
 			staticFindings,
 			intelligentVerifiedFindings,
-			hybridVerifiedFindings,
 			staticShare: toShare(staticFindings, totalNewFindings),
 			intelligentShare: toShare(intelligentVerifiedFindings, totalNewFindings),
-			hybridShare: toShare(hybridVerifiedFindings, totalNewFindings),
 			staticLabel: staticFindings,
 			intelligentLabel: intelligentVerifiedFindings,
-			hybridLabel: hybridVerifiedFindings,
 		};
 	});
 }
@@ -444,7 +434,6 @@ function renderTrendTooltip(payload: {
 				{/* <p>当日累计新增漏洞发现：{formatNumber(row.totalNewFindings)}</p> */}
 				<p>当日静态扫描漏洞发现：{formatNumber(row.staticFindings)}</p>
 				<p>当日智能扫描漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}</p>
-				<p>当日混合扫描漏洞发现：{formatNumber(row.hybridVerifiedFindings)}</p>
 			</div>
 		</div>
 	);
@@ -506,7 +495,7 @@ function buildEngineRows(
 		phpstan: "phpstan",
 	};
 	const metaMap: Record<string, string> = {
-		llm: "智能扫描 + 混合扫描",
+		llm: "智能扫描",
 		opengrep: "静态扫描",
 		gitleaks: "静态扫描",
 		bandit: "静态扫描",
@@ -635,7 +624,6 @@ export function buildTaskStatusTooltipItems(
 	return [
 		{ label: "静态扫描", value: breakdown.static },
 		{ label: "智能扫描", value: breakdown.intelligent },
-		{ label: "混合扫描", value: breakdown.hybrid },
 	];
 }
 
@@ -691,13 +679,18 @@ export function getRecentTaskProjectTitle(task: DashboardRecentTaskItem): string
 
 function getRecentTaskTypeBadgeClassName(taskType: string | null | undefined): string {
 	const normalized = String(taskType || "").trim();
-	if (normalized.includes("混合")) {
-		return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-	}
 	if (normalized.includes("智能")) {
 		return "border-sky-500/30 bg-sky-500/10 text-sky-300";
 	}
 	return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+}
+
+function normalizeRecentTaskTypeLabel(taskType: string | null | undefined): string {
+	const normalized = String(taskType || "").trim();
+	if (normalized.includes("混合")) {
+		return "智能扫描";
+	}
+	return normalized || "静态扫描";
 }
 
 export function paginateRecentTasks(
@@ -1010,7 +1003,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 			</div>
 			<div className="mt-3 flex items-center justify-between gap-1 text-xs text-muted-foreground">
 				<span>
-					{task.task_type}
+					{normalizeRecentTaskTypeLabel(task.task_type)}
 				</span>
 				<span>{progress}%</span>
 			</div>
@@ -1037,13 +1030,10 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 			totalNewFindings: 0,
 			staticFindings: 0,
 			intelligentVerifiedFindings: 0,
-			hybridVerifiedFindings: 0,
 			staticShare: 0,
 			intelligentShare: 0,
-			hybridShare: 0,
 			staticLabel: 0,
 			intelligentLabel: 0,
-			hybridLabel: 0,
 		},
 	);
 	const latestItem = trendRows[trendRows.length - 1];
@@ -1062,7 +1052,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 			<div className="flex flex-col gap-2">
 				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势统计图</h3>
 				<p className={DASHBOARD_PANEL_DESCRIPTION_CLASSNAME}>
-					查看近一段时间当日新增漏洞发现与静态、智能、混合来源构成的波动趋势。
+					查看近一段时间当日新增漏洞发现与静态、智能来源构成的波动趋势。
 				</p>
 			</div>
 			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1080,11 +1070,6 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 					{
 						label: "当日智能扫描漏洞发现",
 						value: formatNumber(latestItem?.intelligentVerifiedFindings ?? 0),
-						meta: latestItem ? `${latestItem.date} 最新` : "",
-					},
-					{
-						label: "当日混合扫描漏洞发现",
-						value: formatNumber(latestItem?.hybridVerifiedFindings ?? 0),
 						meta: latestItem ? `${latestItem.date} 最新` : "",
 					},
 				].map((item) => (
@@ -1124,11 +1109,6 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.high.chip}`}
 						>
 							当日智能扫描漏洞发现
-						</span>
-						<span
-							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.critical.chip}`}
-						>
-							当日混合扫描漏洞发现
 						</span>
 					</div>
 				</div>
@@ -1177,15 +1157,6 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 									formatter={renderTrendLabel}
 								/>
 							</Bar>
-							<Bar
-								dataKey="hybridShare"
-								stackId="share"
-								name="当日混合扫描漏洞发现"
-								fill={TONE_STYLES.critical.fill}
-								fillOpacity={0.36}
-							>
-								<LabelList dataKey="hybridLabel" position="insideTop" formatter={renderTrendLabel} />
-							</Bar>
 							{/* <Line
 								type="monotone"
 								dataKey="totalNewFindings"
@@ -1207,14 +1178,6 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 								dataKey="intelligentVerifiedFindings"
 								name="当日智能扫描漏洞发现"
 								stroke={TONE_STYLES.high.fill}
-								strokeWidth={2.2}
-								dot={false}
-							/>
-							<Line
-								type="monotone"
-								dataKey="hybridVerifiedFindings"
-								name="当日混合扫描漏洞发现"
-								stroke={TONE_STYLES.critical.fill}
 								strokeWidth={2.2}
 								dot={false}
 							/>

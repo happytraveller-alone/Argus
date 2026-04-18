@@ -225,17 +225,7 @@ export interface CreateAgentTaskRequest {
   use_prompt_skills?: boolean;
 }
 
-export interface AgentStaticBootstrapScope {
-  mode?: "embedded" | "disabled";
-  opengrep_enabled?: boolean;
-  bandit_enabled?: boolean;
-  gitleaks_enabled?: boolean;
-  phpstan_enabled?: boolean;
-  pmd_enabled?: boolean;
-}
-
 export interface AgentAuditScope extends Record<string, unknown> {
-  static_bootstrap?: AgentStaticBootstrapScope;
 }
 
 export interface AgentTaskSummary {

@@ -409,9 +409,7 @@ test("flattenProjectDetailPotentialFindings 输出排序后的平铺列表并保
 		["agent-critical", "agent-high-new", "agent-high-old", "static-medium"],
 	);
 	assert.ok(list[0]?.taskLabel.length);
-	assert.ok(
-		list[0]?.taskCategory === "intelligent" || list[0]?.taskCategory === "hybrid",
-	);
+	assert.equal(list[0]?.taskCategory, "intelligent");
 	assert.equal(list[3]?.taskCategory, "static");
 	assert.equal(list[3]?.taskLabel, "静态扫描");
 });

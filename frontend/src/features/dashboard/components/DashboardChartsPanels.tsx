@@ -73,7 +73,6 @@ const TOOLTIP_STYLE = {
 const CHART_COLORS = {
 	staticRuns: "#38bdf8",
 	intelligentRuns: "#34d399",
-	hybridRuns: "#a78bfa",
 	totalVulns: "#fbbf24",
 	enabledRules: "#38bdf8",
 	disabledRules: "#64748b",
@@ -87,7 +86,6 @@ const CHART_COLORS = {
 	opengrepFindings: "#818cf8",
 	tooltipStatic: "#7dd3fc",
 	tooltipIntelligent: "#6ee7b7",
-	tooltipHybrid: "#c4b5fd",
 };
 
 const TREEMAP_COLORS = [
@@ -244,10 +242,6 @@ export default function DashboardChartsPanels({
 				label: translate("dashboard.intelligentScan"),
 				color: CHART_COLORS.intelligentRuns,
 			},
-			{
-				label: translate("dashboard.hybridScan"),
-				color: CHART_COLORS.hybridRuns,
-			},
 		],
 		[translate],
 	);
@@ -313,9 +307,6 @@ export default function DashboardChartsPanels({
 					<p style={{ color: CHART_COLORS.tooltipIntelligent }}>
 						{translate("dashboard.intelligentScan")}：
 						{formatTick(row.intelligentVulns)}
-					</p>
-					<p style={{ color: CHART_COLORS.tooltipHybrid }}>
-						{translate("dashboard.hybridScan")}：{formatTick(row.hybridVulns)}
 					</p>
 				</div>
 			</div>
@@ -394,14 +385,6 @@ export default function DashboardChartsPanels({
 										stackId="runs"
 										fill={CHART_COLORS.intelligentRuns}
 										name={translate("dashboard.intelligentScan")}
-										radius={[2, 2, 2, 2]}
-										minPointSize={6}
-									/>
-									<Bar
-										dataKey="hybridRuns"
-										stackId="runs"
-										fill={CHART_COLORS.hybridRuns}
-										name={translate("dashboard.hybridScan")}
 										radius={[2, 2, 2, 2]}
 										minPointSize={6}
 									/>
@@ -704,13 +687,6 @@ export default function DashboardChartsPanels({
 										fill={CHART_COLORS.intelligentRuns}
 										fillOpacity={0.25}
 									/>
-									<Radar
-										name={translate("dashboard.hybridScan")}
-										dataKey="hybridRuns"
-										stroke={CHART_COLORS.hybridRuns}
-										fill={CHART_COLORS.hybridRuns}
-										fillOpacity={0.25}
-									/>
 									<Legend wrapperStyle={LEGEND_STYLE} />
 									<Tooltip contentStyle={TOOLTIP_STYLE} />
 								</RadarChart>
@@ -779,9 +755,9 @@ export default function DashboardChartsPanels({
 									/>
 									<ZAxis
 										type="number"
-										dataKey="hybridVulns"
+										dataKey="intelligentVulns"
 										range={[60, 400]}
-										name={translate("dashboard.hybridScan")}
+										name={translate("dashboard.intelligentScan")}
 									/>
 									<Tooltip
 										cursor={{ strokeDasharray: "3 3" }}

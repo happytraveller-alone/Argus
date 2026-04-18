@@ -31,7 +31,6 @@ export interface DashboardPreviewTrendPoint {
 	totalNewFindings: number;
 	staticFindings: number;
 	intelligentVerifiedFindings: number;
-	hybridVerifiedFindings: number;
 }
 
 export interface DashboardPreviewTaskStatus {
@@ -43,7 +42,7 @@ export interface DashboardPreviewTaskStatus {
 export interface DashboardPreviewRecentTask {
 	id: string;
 	title: string;
-	type: "静态扫描" | "智能扫描" | "混合扫描";
+	type: "静态扫描" | "智能扫描";
 	progress: number;
 	createdAt: string;
 	createdAtLabel: string;
@@ -90,13 +89,13 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 ];
 
 export const DASHBOARD_PREVIEW_TREND: DashboardPreviewTrendPoint[] = [
-	{ date: "03-17", totalNewFindings: 18, staticFindings: 9, intelligentVerifiedFindings: 3, hybridVerifiedFindings: 6 },
-	{ date: "03-18", totalNewFindings: 26, staticFindings: 14, intelligentVerifiedFindings: 4, hybridVerifiedFindings: 8 },
-	{ date: "03-19", totalNewFindings: 21, staticFindings: 11, intelligentVerifiedFindings: 3, hybridVerifiedFindings: 7 },
-	{ date: "03-20", totalNewFindings: 34, staticFindings: 18, intelligentVerifiedFindings: 5, hybridVerifiedFindings: 11 },
-	{ date: "03-21", totalNewFindings: 29, staticFindings: 15, intelligentVerifiedFindings: 4, hybridVerifiedFindings: 10 },
-	{ date: "03-22", totalNewFindings: 41, staticFindings: 20, intelligentVerifiedFindings: 7, hybridVerifiedFindings: 14 },
-	{ date: "03-23", totalNewFindings: 37, staticFindings: 18, intelligentVerifiedFindings: 6, hybridVerifiedFindings: 13 },
+	{ date: "03-17", totalNewFindings: 18, staticFindings: 9, intelligentVerifiedFindings: 9 },
+	{ date: "03-18", totalNewFindings: 26, staticFindings: 14, intelligentVerifiedFindings: 12 },
+	{ date: "03-19", totalNewFindings: 21, staticFindings: 11, intelligentVerifiedFindings: 10 },
+	{ date: "03-20", totalNewFindings: 34, staticFindings: 18, intelligentVerifiedFindings: 16 },
+	{ date: "03-21", totalNewFindings: 29, staticFindings: 15, intelligentVerifiedFindings: 14 },
+	{ date: "03-22", totalNewFindings: 41, staticFindings: 20, intelligentVerifiedFindings: 21 },
+	{ date: "03-23", totalNewFindings: 37, staticFindings: 18, intelligentVerifiedFindings: 19 },
 ];
 
 const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
@@ -124,7 +123,7 @@ const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 	{
 		label: "Orbit API",
-		meta: "开放接口 · 混合扫描验证加速",
+		meta: "开放接口 · 智能扫描验证加速",
 		segments: [
 			{ label: "严重", value: 3, tone: "critical" },
 			{ label: "高危", value: 7, tone: "high" },
@@ -201,7 +200,7 @@ const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 	{
 		label: "Quasar Web",
-		meta: "营销站点 · 混合扫描已清理一轮",
+		meta: "营销站点 · 智能扫描已清理一轮",
 		segments: [
 			{ label: "严重", value: 0, tone: "critical" },
 			{ label: "高危", value: 2, tone: "high" },
@@ -323,73 +322,73 @@ const LANGUAGE_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 const VULNERABILITY_TYPE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	{
 		label: "CWE-89",
-		meta: "SQL 注入 · 智能 / 混合扫描已验证",
+		meta: "SQL 注入 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 17, tone: "critical" }],
 		total: 17,
 	},
 	{
 		label: "CWE-862",
-		meta: "越权访问 · 智能 / 混合扫描已验证",
+		meta: "越权访问 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 13, tone: "high" }],
 		total: 13,
 	},
 	{
 		label: "CWE-78",
-		meta: "命令执行 · 智能 / 混合扫描已验证",
+		meta: "命令执行 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 11, tone: "medium" }],
 		total: 11,
 	},
 	{
 		label: "CWE-200",
-		meta: "敏感信息泄露 · 智能 / 混合扫描已验证",
+		meta: "敏感信息泄露 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 8, tone: "low" }],
 		total: 8,
 	},
 	{
 		label: "CWE-79",
-		meta: "跨站脚本 · 智能 / 混合扫描已验证",
+		meta: "跨站脚本 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 7, tone: "medium" }],
 		total: 7,
 	},
 	{
 		label: "CWE-22",
-		meta: "路径遍历 · 智能 / 混合扫描已验证",
+		meta: "路径遍历 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 6, tone: "high" }],
 		total: 6,
 	},
 	{
 		label: "CWE-287",
-		meta: "认证绕过 · 智能 / 混合扫描已验证",
+		meta: "认证绕过 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 6, tone: "critical" }],
 		total: 6,
 	},
 	{
 		label: "CWE-352",
-		meta: "CSRF · 智能 / 混合扫描已验证",
+		meta: "CSRF · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 5, tone: "medium" }],
 		total: 5,
 	},
 	{
 		label: "CWE-434",
-		meta: "任意文件上传 · 智能 / 混合扫描已验证",
+		meta: "任意文件上传 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 4, tone: "high" }],
 		total: 4,
 	},
 	{
 		label: "CWE-601",
-		meta: "开放重定向 · 智能 / 混合扫描已验证",
+		meta: "开放重定向 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 4, tone: "low" }],
 		total: 4,
 	},
 	{
 		label: "CWE-502",
-		meta: "不安全反序列化 · 智能 / 混合扫描已验证",
+		meta: "不安全反序列化 · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 3, tone: "critical" }],
 		total: 3,
 	},
 	{
 		label: "CWE-918",
-		meta: "SSRF · 智能 / 混合扫描已验证",
+		meta: "SSRF · 智能扫描已验证",
 		segments: [{ label: "已验证", value: 3, tone: "high" }],
 		total: 3,
 	},
@@ -398,7 +397,7 @@ const VULNERABILITY_TYPE_ROWS: DashboardPreviewLeaderboardRow[] = [
 const SCAN_ENGINE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	{
 		label: "llm",
-		meta: "智能扫描 + 混合扫描",
+		meta: "智能扫描",
 		segments: [{ label: "总数", value: 28, tone: "critical" }],
 		total: 28,
 	},
@@ -540,8 +539,8 @@ export const DASHBOARD_PREVIEW_TASK_STATUS: DashboardPreviewTaskStatus[] = [
 const DASHBOARD_PREVIEW_RECENT_TASKS: DashboardPreviewRecentTask[] = [
 	{
 		id: "task-206",
-		title: "混合扫描 · Alpha Gateway",
-		type: "混合扫描",
+		title: "智能扫描 · Alpha Gateway",
+		type: "智能扫描",
 		progress: 92,
 		createdAt: "2026-03-23T16:42:00+08:00",
 		createdAtLabel: "03-23 16:42",

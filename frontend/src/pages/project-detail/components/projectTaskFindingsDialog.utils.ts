@@ -1,4 +1,4 @@
-export type TaskFindingCategory = "static" | "intelligent" | "hybrid";
+export type TaskFindingCategory = "static" | "intelligent";
 export type TaskFindingSeverity =
 	| "CRITICAL"
 	| "HIGH"

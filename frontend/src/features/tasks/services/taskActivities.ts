@@ -41,13 +41,8 @@ export {
 } from "./staticScanGrouping";
 
 export type TaskActivityKind = "rule_scan" | "intelligent_audit";
-export type TaskActivitySourceMode =
-	| "static"
-	| "intelligent"
-	| "hybrid"
-	| "unknown";
+export type TaskActivitySourceMode = "static" | "intelligent";
 
-export const HYBRID_TASK_NAME_MARKER = "[HYBRID]";
 export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
 export type SeverityCounts = {
@@ -88,23 +83,19 @@ export function resolveSourceModeFromTaskMeta(
 	name: string | null | undefined,
 	description?: string | null | undefined,
 ): TaskActivitySourceMode {
-	const normalizedName = normalizeTaskName(name);
-	const normalizedDescription = normalizeTaskName(description);
-	const normalizedCombined = `${normalizedName} ${normalizedDescription}`;
-	if (
-		normalizedCombined.includes(HYBRID_TASK_NAME_MARKER.toLowerCase()) ||
-		normalizedCombined.includes("混合扫描")
-	) {
-		return "hybrid";
-	}
-	if (normalizedCombined.includes(INTELLIGENT_TASK_NAME_MARKER.toLowerCase())) {
-		return "intelligent";
-	}
 	if (kind === "rule_scan") {
 		return "static";
 	}
-	// Legacy intelligent_audit tasks created before markers are migrated to hybrid.
-	return "hybrid";
+
+	const normalizedName = normalizeTaskName(name);
+	const normalizedDescription = normalizeTaskName(description);
+	const normalizedCombined = `${normalizedName} ${normalizedDescription}`;
+	if (normalizedCombined.includes(INTELLIGENT_TASK_NAME_MARKER.toLowerCase())) {
+		return "intelligent";
+	}
+
+	// Legacy agent tasks are now all displayed as intelligent scans.
+	return "intelligent";
 }
 
 export function isIntelligentAgentActivity(
@@ -116,23 +107,11 @@ export function isIntelligentAgentActivity(
 	);
 }
 
-export function isHybridAgentActivity(
-	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
-): boolean {
-	return (
-		activity.kind === "intelligent_audit" &&
-		activity.sourceMode === "hybrid"
-	);
-}
-
 export function getTaskKindText(
 	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
 ): string {
 	if (activity.kind === "rule_scan") {
 		return "静态扫描";
-	}
-	if (activity.sourceMode === "hybrid") {
-		return "混合扫描";
 	}
 	return "智能扫描";
 }
@@ -521,17 +500,6 @@ export function filterIntelligentActivities(
 	);
 }
 
-export function filterHybridActivities(
-	activities: TaskActivityItem[],
-	keyword: string,
-): TaskActivityItem[] {
-	return activities.filter(
-		(activity) =>
-			isHybridAgentActivity(activity) &&
-			matchesActivityKeyword(activity, keyword),
-	);
-}
-
 export function filterMixedActivities(
 	activities: TaskActivityItem[],
 	keyword: string,
@@ -676,7 +644,6 @@ export function getActivityDurationLabel(
 export interface TaskActivitySummary {
 	staticTotal: number;
 	intelligentTotal: number;
-	hybridTotal: number;
 	running: number;
 	completed: number;
 	failed: number;
@@ -696,10 +663,8 @@ export function summarizeTaskActivities(
 		(acc, activity) => {
 			if (activity.kind === "rule_scan") {
 				acc.staticTotal += 1;
-			} else if (isIntelligentAgentActivity(activity)) {
-				acc.intelligentTotal += 1;
 			} else {
-				acc.hybridTotal += 1;
+				acc.intelligentTotal += 1;
 			}
 
 			if (activity.status === "running" || activity.status === "pending") acc.running += 1;
@@ -712,7 +677,6 @@ export function summarizeTaskActivities(
 		{
 			staticTotal: 0,
 			intelligentTotal: 0,
-			hybridTotal: 0,
 			running: 0,
 			completed: 0,
 			failed: 0,

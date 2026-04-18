@@ -31,12 +31,12 @@ const DASHBOARD_REFRESH_INTERVAL_MS = 30_000;
 
 function createEmptyTaskStatusByScanType() {
 	return {
-		pending: { static: 0, intelligent: 0, hybrid: 0 },
-		running: { static: 0, intelligent: 0, hybrid: 0 },
-		completed: { static: 0, intelligent: 0, hybrid: 0 },
-		failed: { static: 0, intelligent: 0, hybrid: 0 },
-		interrupted: { static: 0, intelligent: 0, hybrid: 0 },
-		cancelled: { static: 0, intelligent: 0, hybrid: 0 },
+		pending: { static: 0, intelligent: 0 },
+		running: { static: 0, intelligent: 0 },
+		completed: { static: 0, intelligent: 0 },
+		failed: { static: 0, intelligent: 0 },
+		interrupted: { static: 0, intelligent: 0 },
+		cancelled: { static: 0, intelligent: 0 },
 	};
 }
 
@@ -119,9 +119,26 @@ function DashboardFallback() {
 export function normalizeSnapshot(
 	snapshot: DashboardSnapshotResponse,
 ): DashboardSnapshotResponse {
+	const rawTaskStatusByScanType =
+		snapshot.task_status_by_scan_type || createEmptyTaskStatusByScanType();
+
+	const normalizeStatusBreakdown = (
+		statusKey: keyof ReturnType<typeof createEmptyTaskStatusByScanType>,
+	) => {
+		const current = rawTaskStatusByScanType[statusKey] || {};
+		return {
+			static: Math.max(Number(current.static || 0), 0),
+			intelligent: Math.max(Number(current.intelligent || 0), 0),
+		};
+	};
+
 	const taskStatusByScanType = {
-		...createEmptyTaskStatusByScanType(),
-		...(snapshot.task_status_by_scan_type || {}),
+		pending: normalizeStatusBreakdown("pending"),
+		running: normalizeStatusBreakdown("running"),
+		completed: normalizeStatusBreakdown("completed"),
+		failed: normalizeStatusBreakdown("failed"),
+		interrupted: normalizeStatusBreakdown("interrupted"),
+		cancelled: normalizeStatusBreakdown("cancelled"),
 	};
 
 	return {
@@ -162,10 +179,6 @@ export function normalizeSnapshot(
 			static_findings: Math.max(Number(item.static_findings || 0), 0),
 			intelligent_verified_findings: Math.max(
 				Number(item.intelligent_verified_findings || 0),
-				0,
-			),
-			hybrid_verified_findings: Math.max(
-				Number(item.hybrid_verified_findings || 0),
 				0,
 			),
 			total_new_findings: Math.max(Number(item.total_new_findings || 0), 0),

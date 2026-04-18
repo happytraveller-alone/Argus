@@ -31,7 +31,6 @@ test("Sidebar 默认宽版会展开全部分组子菜单", async () => {
 
 	assert.match(markup, /静态扫描/);
 	assert.match(markup, /智能扫描/);
-	assert.match(markup, /混合扫描/);
 	assert.match(markup, /扫描引擎/);
 	assert.match(markup, /智能引擎/);
 	assert.match(markup, /外部工具/);
@@ -71,7 +70,6 @@ test("Sidebar 折叠态仍隐藏分组子菜单但保留一级导航", async () 
 
 	assert.doesNotMatch(markup, /静态扫描/);
 	assert.doesNotMatch(markup, /智能扫描/);
-	assert.doesNotMatch(markup, /混合扫描/);
 	assert.doesNotMatch(markup, /扫描引擎/);
 	assert.doesNotMatch(markup, /智能引擎/);
 	assert.doesNotMatch(markup, /外部工具/);

@@ -308,12 +308,7 @@ export default function ProjectDetail() {
 						if (task.project_id !== projectId) return false;
 						const verifiedCount = Math.max(Number(task.verified_count ?? 0), 0);
 						if (verifiedCount <= 0) return false;
-						const sourceMode = resolveSourceModeFromTaskMeta(
-							"intelligent_audit",
-							task.name,
-							task.description,
-						);
-						return sourceMode === "intelligent" || sourceMode === "hybrid";
+						return true;
 					})
 					.sort(
 						(a, b) =>

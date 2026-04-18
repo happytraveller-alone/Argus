@@ -60,12 +60,12 @@ function createEmptySnapshot(): DashboardSnapshotResponse {
 			cancelled: 0,
 		},
 		task_status_by_scan_type: {
-			pending: { static: 0, intelligent: 0, hybrid: 0 },
-			running: { static: 0, intelligent: 0, hybrid: 0 },
-			completed: { static: 0, intelligent: 0, hybrid: 0 },
-			failed: { static: 0, intelligent: 0, hybrid: 0 },
-			interrupted: { static: 0, intelligent: 0, hybrid: 0 },
-			cancelled: { static: 0, intelligent: 0, hybrid: 0 },
+			pending: { static: 0, intelligent: 0 },
+			running: { static: 0, intelligent: 0 },
+			completed: { static: 0, intelligent: 0 },
+			failed: { static: 0, intelligent: 0 },
+			interrupted: { static: 0, intelligent: 0 },
+			cancelled: { static: 0, intelligent: 0 },
 		},
 		engine_breakdown: [],
 		project_hotspots: [],
@@ -200,11 +200,9 @@ test("dashboard snapshot consumers can tolerate older payloads without task_stat
 	assert.deepEqual(normalized.task_status_by_scan_type.running, {
 		static: 0,
 		intelligent: 0,
-		hybrid: 0,
 	});
 	assert.deepEqual(normalized.task_status_by_scan_type.completed, {
 		static: 0,
 		intelligent: 0,
-		hybrid: 0,
 	});
 });

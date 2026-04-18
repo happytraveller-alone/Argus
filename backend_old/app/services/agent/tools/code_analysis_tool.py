@@ -351,7 +351,7 @@ class DataFlowAnalysisTool(AgentTool):
             file_path=file_path,
         )
         fallback_used = llm_analysis is None
-        analysis_mode = "rules_only_fallback" if fallback_used else "hybrid"
+        analysis_mode = "rules_only_fallback" if fallback_used else "rules_plus_llm"
 
         return ToolResult(
             success=True,

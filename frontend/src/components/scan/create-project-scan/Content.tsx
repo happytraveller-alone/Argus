@@ -20,7 +20,6 @@ import {
 import {
   Bot,
   CheckCircle2,
-  Layers,
   Loader2,
   Settings2,
   Shield,
@@ -122,8 +121,8 @@ export default function CreateProjectScanDialogContent({
   setSourceMode: (mode: "existing" | "upload") => void;
   creating: boolean;
   lockMode: boolean;
-  mode: "static" | "agent" | "hybrid";
-  setMode: (mode: "static" | "agent" | "hybrid") => void;
+  mode: "static" | "agent";
+  setMode: (mode: "static" | "agent") => void;
   loadingProjects: boolean;
   lockProjectSelection: boolean;
   searchTerm: string;
@@ -184,7 +183,7 @@ export default function CreateProjectScanDialogContent({
   onNavigateToEngineConfig: (engine: StaticTool) => void;
 }) {
   const { t } = useI18n();
-  const shouldShowAgentPrecheckHint = mode === "agent" || mode === "hybrid";
+  const shouldShowAgentPrecheckHint = mode === "agent";
   const staticEngineItems: Array<{
     key: StaticTool;
     title: string;
@@ -290,7 +289,7 @@ export default function CreateProjectScanDialogContent({
                 扫描方式
               </p>
               {/* PHPStan integration: keep the same static-engine card layout */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant={mode === "static" ? "default" : "outline"}
@@ -318,20 +317,6 @@ export default function CreateProjectScanDialogContent({
                 >
                   <Bot className="w-4 h-4 mr-2" />
                   智能扫描
-                </Button>
-                <Button
-                  type="button"
-                  variant={mode === "hybrid" ? "default" : "outline"}
-                  className={
-                    mode === "hybrid"
-                      ? "h-10 justify-start border border-emerald-500/40 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30"
-                      : "cyber-btn-outline h-10 justify-start"
-                  }
-                  onClick={() => setMode("hybrid")}
-                  disabled={creating}
-                >
-                  <Layers className="w-4 h-4 mr-2" />
-                  混合扫描
                 </Button>
               </div>
             </div>
@@ -488,11 +473,11 @@ export default function CreateProjectScanDialogContent({
             </div>
           )}
 
-          {mode === "static" || mode === "hybrid" ? (
+          {mode === "static" ? (
             <div className="border border-border rounded-lg p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">
-                  {mode === "hybrid" ? "混合扫描 - 静态引擎" : "静态扫描引擎"}
+                  静态扫描引擎
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -531,11 +516,6 @@ export default function CreateProjectScanDialogContent({
               {mode === "static" && isPmdBlockedProject ? (
                 <p className="text-xs text-amber-300">{pmdBlockedMessage}</p>
               ) : null}
-              {mode === "hybrid" && selectedProject && !isZipProject(selectedProject) && (
-                <p className="text-xs text-rose-300">
-                  混合扫描当前仅支持源码压缩包项目（静态 + 智能）。
-                </p>
-              )}
             </div>
           ) : null}
 
@@ -804,7 +784,7 @@ export default function CreateProjectScanDialogContent({
       onOpenChange={(nextOpen) => {
         if (!nextOpen) setConfigEngine(null);
       }}
-      scanMode={mode === "hybrid" ? "hybrid" : "static"}
+      scanMode="static"
       enabled={configEngine ? staticEngineItems.find((item) => item.key === configEngine)?.checked ?? false : false}
       creating={creating}
       blockedReason={

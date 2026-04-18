@@ -111,7 +111,6 @@ export interface DashboardScanRunsItem {
   project_name: string;
   static_runs: number;
   intelligent_runs: number;
-  hybrid_runs: number;
   total_runs: number;
 }
 
@@ -120,7 +119,6 @@ export interface DashboardVulnsItem {
   project_name: string;
   static_vulns: number;
   intelligent_vulns: number;
-  hybrid_vulns: number;
   total_vulns: number;
 }
 
@@ -172,7 +170,6 @@ export interface DashboardDailyActivityItem {
   pmd_findings?: number;
   static_findings: number;
   intelligent_verified_findings: number;
-  hybrid_verified_findings: number;
   total_new_findings: number;
 }
 
@@ -240,7 +237,6 @@ export interface DashboardRecentTaskItem {
 export interface DashboardTaskStatusScanTypeBreakdown {
   static: number;
   intelligent: number;
-  hybrid: number;
 }
 
 export interface DashboardTaskStatusByScanTypeItem {

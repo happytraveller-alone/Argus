@@ -25,7 +25,7 @@ import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
 
 export type ProjectCardTaskKind = "static" | "intelligent";
-export type ProjectCardTaskFindingCategory = "static" | "intelligent" | "hybrid";
+export type ProjectCardTaskFindingCategory = "static" | "intelligent";
 
 export interface ProjectCardRecentTask {
   id: string;
@@ -73,7 +73,6 @@ export interface ProjectCardSummaryStats {
 export interface ProjectFoundIssuesBreakdown {
   staticIssues: number;
   intelligentIssues: number;
-  hybridIssues: number;
   totalIssues: number;
 }
 
@@ -418,26 +417,15 @@ export function getProjectFoundIssuesBreakdown(params: {
   const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
 
   let intelligentIssues = 0;
-  let hybridIssues = 0;
   for (const task of projectAgentTasks) {
     const total = getSeverityCountTotal(getAgentSeverityCounts(task));
-    const sourceMode = resolveSourceModeFromTaskMeta(
-      "intelligent_audit",
-      task.name,
-      task.description,
-    );
-    if (sourceMode === "intelligent") {
-      intelligentIssues += total;
-    } else {
-      hybridIssues += total;
-    }
+    intelligentIssues += total;
   }
 
   return {
     staticIssues,
     intelligentIssues,
-    hybridIssues,
-    totalIssues: staticIssues + intelligentIssues + hybridIssues,
+    totalIssues: staticIssues + intelligentIssues,
   };
 }
 
@@ -592,12 +580,7 @@ export function getProjectCardRecentTasks(params: {
 
       const analyzedFiles = toNullableNonNegativeNumber(task.analyzed_files);
       const totalFiles = toNullableNonNegativeNumber(task.total_files);
-      const sourceMode = resolveSourceModeFromTaskMeta(
-        "intelligent_audit",
-        task.name,
-        task.description,
-      );
-      const scanLabel = sourceMode === "hybrid" ? "混合扫描" : "智能扫描";
+      const scanLabel = "智能扫描";
 
       return {
         id: task.id,
@@ -622,7 +605,7 @@ export function getProjectCardRecentTasks(params: {
           dynamicTask.lines_scanned ?? dynamicTask.total_lines,
         ),
         vulnerabilities: toNullableNonNegativeNumber(task.verified_count),
-        taskCategory: sourceMode === "hybrid" ? "hybrid" : "intelligent",
+        taskCategory: "intelligent",
         supportsFindingsDetail: true,
         findingsButtonDisabledReason: null,
       };
@@ -674,7 +657,7 @@ function confidenceRank(confidence: ProjectCardVulnerabilityConfidence): number 
 export function getProjectCardPotentialVulnerabilities(params: {
   opengrepFindings?: OpengrepFinding[];
   verifiedAgentFindings?: AgentFinding[];
-  agentTaskCategoryMap?: Record<string, "intelligent" | "hybrid">;
+  agentTaskCategoryMap?: Record<string, ProjectCardTaskFindingCategory>;
   limit?: number;
 }): ProjectCardPotentialVulnerability[] {
   const limit = params.limit ?? 5;
@@ -724,8 +707,8 @@ export function getProjectCardPotentialVulnerabilities(params: {
           String(finding.vulnerability_type || "").trim() || title || "潜在漏洞",
       });
       const taskCategory: ProjectCardPotentialVulnerability["taskCategory"] =
-        params.agentTaskCategoryMap?.[finding.task_id] === "hybrid"
-          ? "hybrid"
+        params.agentTaskCategoryMap?.[finding.task_id] === "static"
+          ? "static"
           : "intelligent";
       return {
         id: finding.id,

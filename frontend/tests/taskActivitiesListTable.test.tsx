@@ -54,9 +54,9 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
           },
           {
             id: "agent-2",
-            projectName: "Demo Hybrid",
+            projectName: "Demo Agent",
             kind: "intelligent_audit",
-            sourceMode: "hybrid",
+            sourceMode: "intelligent",
             status: "running",
             createdAt: "2026-03-13T12:00:00.000Z",
             startedAt: "2026-03-13T12:01:00.000Z",
@@ -72,7 +72,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 
   assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
   assert.match(markup, /严重 0 \/ 高危 2 \/ 中危 3 \/ 低危 5/);
-  assert.match(markup, /Demo Hybrid[\s\S]*?">-<\/td>/);
+  assert.match(markup, /Demo Agent[\s\S]*?">-<\/td>/);
 });
 
 test("TaskActivitiesListTable merges running progress into the status column", async () => {

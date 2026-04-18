@@ -4,11 +4,10 @@ import assert from "node:assert/strict";
 import { apiClient } from "../src/shared/api/serverClient.ts";
 import {
   fetchTaskActivities,
-  filterHybridActivities,
   filterIntelligentActivities,
 } from "../src/features/tasks/services/taskActivities.ts";
 
-test("fetchTaskActivities maps effective severity stats for intelligent and hybrid task summaries", async () => {
+test("fetchTaskActivities maps effective severity stats for intelligent task summaries and folds legacy agent tasks into intelligent", async () => {
   const originalGet = apiClient.get;
 
   apiClient.get = (async (url: string) => {
@@ -73,10 +72,10 @@ test("fetchTaskActivities maps effective severity stats for intelligent and hybr
             error_message: null,
           },
           {
-            id: "agent-hybrid",
+            id: "agent-legacy",
             project_id: "project-1",
-            name: "混合扫描-Demo",
-            description: "[HYBRID]混合扫描智能阶段任务",
+            name: "历史智能扫描-Demo",
+            description: "历史迁移前任务",
             task_type: "agent_audit",
             status: "running",
             current_phase: null,
@@ -151,30 +150,50 @@ test("fetchTaskActivities maps effective severity stats for intelligent and hybr
     );
 
     const intelligent = filterIntelligentActivities(activities, "");
-    const hybrid = filterHybridActivities(activities, "");
+    assert.equal(intelligent.length, 2);
 
-    assert.equal(intelligent.length, 1);
-    assert.deepEqual(intelligent[0]?.agentFindingStats, {
-      critical: 1,
-      high: 2,
-      medium: 3,
-      low: 1,
-      total: 7,
-    });
+    const intelligentStats = intelligent
+      .map((activity) => activity.agentFindingStats)
+      .filter(Boolean)
+      .sort((left, right) => right.total - left.total);
+    const intelligentStatuses = intelligent.map((activity) => activity.status);
 
-    assert.equal(hybrid.length, 1);
-    assert.equal(hybrid[0]?.status, "running");
-    assert.deepEqual(hybrid[0]?.agentFindingStats, {
-      critical: 0,
-      high: 1,
-      medium: 2,
-      low: 1,
-      total: 4,
-    });
+    assert.deepEqual(
+      intelligentStats,
+      expectStatsArray([
+        {
+          critical: 1,
+          high: 2,
+          medium: 3,
+          low: 1,
+          total: 7,
+        },
+        {
+          critical: 0,
+          high: 1,
+          medium: 2,
+          low: 1,
+          total: 4,
+        },
+      ]),
+    );
+    assert.ok(intelligentStatuses.includes("running"));
   } finally {
     apiClient.get = originalGet;
   }
 });
+
+function expectStatsArray(
+  values: Array<{
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    total: number;
+  }>,
+) {
+  return values.sort((left, right) => right.total - left.total);
+}
 
 test("fetchTaskActivities falls back to effective severity stats when defect_summary is absent", async () => {
   const originalGet = apiClient.get;
