@@ -2,6 +2,14 @@
 
 ## Completed in this turn
 
+- `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已退役：
+  - `llm.factory` 与 `test_llm_stream_empty_handling.py` 改为 direct-module imports
+  - 新增 `backend_old/tests/test_namespace_package_shells_retired.py` guard
+  - `backend_old/app` runtime core 计数 `162 -> 158`
+  - `app root / core / config / security` 计数 `4 -> 3`
+  - `db / schema snapshot gate` 计数 `2 -> 1`
+  - `flow / logic` 计数 `14 -> 13`
+  - `llm` 计数 `14 -> 13`
 - `backend_old/app/core/__init__.py` 与 `backend_old/app/models/__init__.py` 已退役：
   - Alembic `env.py` 改为显式导入各 model module
   - 新增 `backend_old/tests/test_top_level_package_shells_retired.py` guard

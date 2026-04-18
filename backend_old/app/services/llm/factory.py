@@ -8,12 +8,10 @@ LLM工厂类 - 统一创建和管理LLM适配器
 from typing import Dict, List
 from .types import LLMConfig, LLMProvider, DEFAULT_MODELS
 from .base_adapter import BaseLLMAdapter
-from .adapters import (
-    LiteLLMAdapter,
-    BaiduAdapter,
-    MinimaxAdapter,
-    DoubaoAdapter,
-)
+from .adapters.baidu_adapter import BaiduAdapter
+from .adapters.doubao_adapter import DoubaoAdapter
+from .adapters.litellm_adapter import LiteLLMAdapter
+from .adapters.minimax_adapter import MinimaxAdapter
 
 
 # 必须使用原生适配器的提供商（API 格式特殊）

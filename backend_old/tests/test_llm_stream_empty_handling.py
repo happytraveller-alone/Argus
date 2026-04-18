@@ -134,7 +134,7 @@ async def test_stream_complete_does_not_estimate_prompt_tokens_before_first_chun
         return 2
 
     import litellm
-    from app.services.llm.adapters import litellm_adapter as litellm_adapter_module
+    import app.services.llm.adapters.litellm_adapter as litellm_adapter_module
 
     monkeypatch.setattr(litellm, "acompletion", _fake_acompletion)
     monkeypatch.setattr(litellm_adapter_module, "estimate_tokens", _fake_estimate_tokens)

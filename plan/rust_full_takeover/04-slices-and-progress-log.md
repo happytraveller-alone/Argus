@@ -27,7 +27,7 @@
   - `backend_old/app` runtime core
   - `alembic / scripts / release preflight` retirement tail
 - `08-remaining-python-function-inventory.md` 改成按功能分组的自洽清单：
-  - runtime core `162`
+  - runtime core `158`
   - alembic `21`
   - backend_old scripts `1`
   - release preflight `1`
@@ -112,6 +112,20 @@
 - `backend_old/alembic/env.py` 改为显式导入各 model module，metadata 注册不再依赖 `app.models` package shell。
 - 新增 `backend_old/tests/test_top_level_package_shells_retired.py` guard，要求 `app.core` 与 `app.models` package shell 物理不存在，且 live importer 不再通过它们取模块。
 - 验证结果：`tests/test_top_level_package_shells_retired.py` 通过；`tests/test_alembic_project.py` 中与本切片直接相关的 squashed-baseline/snapshot 用例继续通过，另有 revision-head 旧断言失败，属于现存 alembic baseline debt。
+
+### Residual Namespace Shell Retirement (2026-04-18)
+
+- `backend_old/app/__init__.py`、`backend_old/app/db/schema_snapshots/__init__.py`、`backend_old/app/services/agent/core/flow/lightweight/__init__.py`、`backend_old/app/services/llm/adapters/__init__.py` 已退役，`backend_old/app` runtime core 计数 `162 -> 158`。
+- `backend_old/app/services/llm/factory.py` 与 `tests/test_llm_stream_empty_handling.py` 改为 direct-module imports，不再通过 `app.services.llm.adapters` package shell 取 adapter 模块。
+- 新增 `backend_old/tests/test_namespace_package_shells_retired.py` guard，要求 residual namespace/package shell 物理不存在，且 live importer 不再经过它们。
+- 验证结果：
+  - `tests/test_namespace_package_shells_retired.py`
+  - `tests/test_llm_stream_empty_handling.py`
+  - `uv run --project . python` import smoke:
+    `app.services.llm.factory`
+    `app.services.llm.adapters.litellm_adapter`
+    `app.services.agent.core.flow.lightweight.function_locator`
+    `app.db.schema_snapshots.baseline_5b0f3c9a6d7e`
 
 ## 详细历史
 
