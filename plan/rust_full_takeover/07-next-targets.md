@@ -83,8 +83,8 @@
 
 - provider/config registry 语义已迁到 Rust `backend/src/llm/{providers,config}.rs`；`backend_old/app/services/llm/{config_utils,provider_registry}.py` 已退役。
 - request/response shell、prompt-cache policy、service/adapters cluster 的 Rust 宿主已迁到 `backend/src/llm/{types,prompt_cache,runtime}.rs`；`backend_old/app/services/llm/{service,factory,types,base_adapter,prompt_cache,adapters/*}.py` 已退役。
-- 剩余 Python LLM runtime 现在只剩 `tokenizer.py` 与 `memory_compressor.py`。
-- 下一刀只需要切 `tokenizer.py` 与 `memory_compressor.py`，并把 `agent/base.py` 上的 memory-compression live path 一起改到 Rust。
+- tokenizer / memory compression 语义已迁到 Rust `backend/src/llm/{tokenizer,compression}.rs`；`backend_old/app/services/llm/{tokenizer,memory_compressor}.py` 已退役。
+- `agent/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖，`backend_old/app/services/llm/*` 现已清零。
 - generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*` 与 `static_tasks` route。
 - HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
 - `backend_old/app/services/llm_rule/*` 与 `backend_old/app/services/rule.py` 已退役，剩余工作改为 Rust 侧 repo cache -> rule validator / manager -> generation flow 填补。

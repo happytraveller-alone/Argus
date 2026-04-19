@@ -1740,12 +1740,92 @@ class BaseAgent(ABC):
 
     @staticmethod
     def _estimate_conversation_tokens(messages: List[Dict[str, Any]]) -> int:
-        """A lightweight token estimate for diagnostics."""
-        total_chars = 0
+        """A lightweight token estimate aligned with the retired llm tokenizer heuristic."""
+        total = 0
         for msg in messages or []:
-            content = msg.get("content", "") if isinstance(msg, dict) else ""
-            total_chars += len(str(content or ""))
-        return max(0, total_chars // 4)
+            total += BaseAgent._estimate_message_tokens(msg)
+        return total
+
+    @staticmethod
+    def _estimate_text_tokens(text: str) -> int:
+        if not text:
+            return 0
+
+        ascii_chars = 0
+        cjk_chars = 0
+        other_chars = 0
+
+        for char in text:
+            code = ord(char)
+            if code < 128:
+                ascii_chars += 1
+            elif (
+                0x4E00 <= code <= 0x9FFF
+                or 0x3400 <= code <= 0x4DBF
+                or 0x20000 <= code <= 0x2A6DF
+                or 0x3000 <= code <= 0x303F
+                or 0xFF00 <= code <= 0xFFEF
+            ):
+                cjk_chars += 1
+            else:
+                other_chars += 1
+
+        tokens = ascii_chars / 4.0 + cjk_chars / 1.5 + other_chars / 2.0
+        return max(1, int(tokens + 0.5))
+
+    @classmethod
+    def _estimate_message_tokens(cls, message: Dict[str, Any]) -> int:
+        content = message.get("content", "") if isinstance(message, dict) else ""
+        if isinstance(content, str):
+            return cls._estimate_text_tokens(content)
+        if isinstance(content, list):
+            total = 0
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    total += cls._estimate_text_tokens(str(item.get("text", "")))
+            return total
+        return cls._estimate_text_tokens(str(content or ""))
+
+    @staticmethod
+    def _summarize_compressed_chunk(messages: List[Dict[str, Any]]) -> Dict[str, str]:
+        message_count = len(messages)
+        return {
+            "role": "assistant",
+            "content": f"<context_summary message_count='{message_count}'>[已压缩 {message_count} 条历史消息]</context_summary>",
+        }
+
+    @classmethod
+    def _compress_message_history(
+        cls,
+        messages: List[Dict[str, str]],
+        *,
+        max_total_tokens: int,
+        min_recent_messages: int = 15,
+    ) -> List[Dict[str, str]]:
+        system_msgs = []
+        regular_msgs = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_msgs.append(msg)
+            else:
+                regular_msgs.append(msg)
+
+        split_point = max(0, len(regular_msgs) - min_recent_messages)
+        old_msgs = regular_msgs[:split_point]
+        recent_msgs = regular_msgs[split_point:]
+        if not old_msgs:
+            return messages
+
+        compressed = []
+        for index in range(0, len(old_msgs), 10):
+            compressed.append(cls._summarize_compressed_chunk(old_msgs[index:index + 10]))
+
+        result = system_msgs + compressed + recent_msgs
+        result_tokens = sum(cls._estimate_message_tokens(msg) for msg in result)
+        logger.info(
+            f"Compression complete: {sum(cls._estimate_message_tokens(msg) for msg in messages)} -> {result_tokens} tokens"
+        )
+        return result
     
     # ============ Memory Compression ============
     
@@ -1764,18 +1844,18 @@ class BaseAgent(ABC):
         Returns:
             压缩后的消息列表
         """
-        from ...llm.memory_compressor import MemoryCompressor
-
         effective_max_tokens = max_tokens
         if effective_max_tokens is None:
             model_budget = int((self.config.max_tokens or 4096) * 4)
             effective_max_tokens = max(6000, min(24000, model_budget))
-        
-        compressor = MemoryCompressor(max_total_tokens=effective_max_tokens)
-        
-        if compressor.should_compress(messages):
+
+        total_tokens = sum(self._estimate_message_tokens(msg) for msg in messages)
+        if total_tokens > effective_max_tokens * 0.9:
             logger.info(f"[{self.name}] Compressing conversation history...")
-            compressed = compressor.compress_history(messages)
+            compressed = self._compress_message_history(
+                messages,
+                max_total_tokens=effective_max_tokens,
+            )
             logger.info(f"[{self.name}] Compressed {len(messages)} -> {len(compressed)} messages")
             return compressed
         

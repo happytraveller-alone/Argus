@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`109`
+- `backend_old/app` 非 API Python：`107`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`109` 是当前 runtime core 主计数。
+`107` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -34,7 +34,7 @@
 | knowledge | 21 | knowledge loader、framework / vuln knowledge | `backend/src/knowledge/*` |
 | tools + tool runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| llm | 2 | tokenizer / memory compression runtime | `backend/src/llm/*` |
+| llm | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm/*` | `backend/src/llm/*` |
 | llm_rule | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm_rule/*` | `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
 
@@ -328,34 +328,20 @@ backend_old/app/services/agent/streaming/tool_stream.py
 backend_old/app/services/agent/utils/vulnerability_naming.py
 ```
 
-### 11. LLM Retained Runtime (`2`)
+### 11. LLM Retained Runtime (`0`)
 
-当前责任：
-
-- tokenizer heuristic / token counting mode
-- memory compression live path（仍由 `agent/base.py` 调用）
-
-目标状态：
-
-- Rust LLM stack 接管主链
-
-文件：
-
-```text
-backend_old/app/services/llm/memory_compressor.py
-backend_old/app/services/llm/tokenizer.py
-```
-
-已完成收口：
+当前状态：
 
 - Rust `backend/src/llm/{providers,config}.rs` 已接管 provider/config registry 语义。
 - Rust `backend/src/llm/{types,prompt_cache,runtime}.rs` 已接管 request/response shell、prompt-cache policy 与 stream-empty diagnostics 宿主。
+- Rust `backend/src/llm/{tokenizer,compression}.rs` 已接管 token heuristic / message compression 宿主。
 - `backend_old/app/services/llm/{service,factory,types,base_adapter,prompt_cache,adapters/*}.py` 已退役。
+- `backend_old/app/services/llm/{tokenizer,memory_compressor}.py` 已退役。
+- `backend_old/app/services/agent/agents/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖。
 
-剩余 blocker：
+剩余工作：
 
-- `backend_old/app/services/agent/agents/base.py` 仍通过 `MemoryCompressor` 走 Python memory-compression path。
-- `tokenizer.py` 仍是 `memory_compressor.py` 的直接依赖，因此两者要作为同一刀收口。
+- LLM 相关剩余工作不再是 Python runtime blocker，而是 Rust fill-in / parity backlog。
 
 ### 12. LLM Rule Retained Runtime (`0`)
 
