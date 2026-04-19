@@ -53,7 +53,10 @@ fn recon_fingerprint_uses_expected_dedupe_fields() {
         "trust_boundary": "db boundary",
         "description": "unsanitized sql flows into sink",
     });
-    assert_ne!(recon_fingerprint(&risk_point), recon_fingerprint(&changed_sink));
+    assert_ne!(
+        recon_fingerprint(&risk_point),
+        recon_fingerprint(&changed_sink)
+    );
 }
 
 #[test]

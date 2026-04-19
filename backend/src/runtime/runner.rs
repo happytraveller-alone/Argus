@@ -91,8 +91,10 @@ fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, 
     let workspace = PathBuf::from(workspace_dir);
     let logs_dir = workspace.join("logs");
     let meta_dir = workspace.join("meta");
-    fs::create_dir_all(&logs_dir).with_context(|| format!("create logs dir: {}", logs_dir.display()))?;
-    fs::create_dir_all(&meta_dir).with_context(|| format!("create meta dir: {}", meta_dir.display()))?;
+    fs::create_dir_all(&logs_dir)
+        .with_context(|| format!("create logs dir: {}", logs_dir.display()))?;
+    fs::create_dir_all(&meta_dir)
+        .with_context(|| format!("create meta dir: {}", meta_dir.display()))?;
     Ok((workspace, logs_dir, meta_dir))
 }
 
@@ -136,7 +138,10 @@ fn rewrite_runner_command(command: &[String], workspace: &Path) -> Vec<String> {
         .collect()
 }
 
-fn rewrite_runner_env(env_map: &BTreeMap<String, String>, workspace: &Path) -> BTreeMap<String, String> {
+fn rewrite_runner_env(
+    env_map: &BTreeMap<String, String>,
+    workspace: &Path,
+) -> BTreeMap<String, String> {
     env_map
         .iter()
         .map(|(key, value)| (key.clone(), rewrite_mount_path(value, workspace)))
@@ -149,7 +154,10 @@ fn truncate_log_text(text: &str) -> String {
     }
     let tail_chars = MAX_RETAINED_LOG_CHARS.saturating_sub(64);
     let omitted_chars = text.len().saturating_sub(tail_chars);
-    format!("[truncated {omitted_chars} chars]\n{}", &text[text.len() - tail_chars..])
+    format!(
+        "[truncated {omitted_chars} chars]\n{}",
+        &text[text.len() - tail_chars..]
+    )
 }
 
 fn write_retained_log(path: &Path, text: &str) -> Result<Option<String>> {
@@ -167,7 +175,8 @@ fn write_retained_log(path: &Path, text: &str) -> Result<Option<String>> {
 
 fn write_full_text(path: &Path, text: &str) -> Result<String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("create output parent: {}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create output parent: {}", parent.display()))?;
     }
     fs::write(path, text).with_context(|| format!("write output file: {}", path.display()))?;
     Ok(path.display().to_string())
@@ -225,7 +234,11 @@ fn run_command_capture_with_timeout(
     let started_at = Instant::now();
     let mut timed_out = false;
     loop {
-        if child.try_wait().context("poll docker child status")?.is_some() {
+        if child
+            .try_wait()
+            .context("poll docker child status")?
+            .is_some()
+        {
             break;
         }
         if timeout.is_some_and(|limit| started_at.elapsed() >= limit) {
@@ -274,7 +287,11 @@ fn output_error_text(output: &Output) -> String {
 
 fn parse_exit_code(output: &Output) -> Result<i32> {
     let text = String::from_utf8_lossy(&output.stdout);
-    let line = text.lines().find(|line| !line.trim().is_empty()).unwrap_or("").trim();
+    let line = text
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("")
+        .trim();
     line.parse::<i32>()
         .with_context(|| format!("parse docker wait exit code from `{line}`"))
 }
@@ -362,11 +379,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             "-w".to_string(),
             resolved_workspace.display().to_string(),
             "-v".to_string(),
-            format!(
-                "{}:{}:rw",
-                workspace_volume,
-                resolved_root.display()
-            ),
+            format!("{}:{}:rw", workspace_volume, resolved_root.display()),
         ];
         for (key, value) in &runner_environment {
             create_args.push("-e".to_string());
@@ -377,7 +390,10 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
 
         let create_output = run_command_capture(&docker_binary, &create_args)?;
         if !create_output.status.success() {
-            bail!("docker create failed: {}", output_error_text(&create_output));
+            bail!(
+                "docker create failed: {}",
+                output_error_text(&create_output)
+            );
         }
         let created_id = String::from_utf8_lossy(&create_output.stdout)
             .trim()
@@ -403,13 +419,14 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
                     created_id.clone(),
                 ],
             );
-            bail!("docker start timed out after {}s", spec.timeout_seconds.max(1));
+            bail!(
+                "docker start timed out after {}s",
+                spec.timeout_seconds.max(1)
+            );
         }
 
-        let wait_output = run_command_capture(
-            &docker_binary,
-            &["wait".to_string(), created_id.clone()],
-        )?;
+        let wait_output =
+            run_command_capture(&docker_binary, &["wait".to_string(), created_id.clone()])?;
         if !wait_output.status.success() {
             bail!("docker wait failed: {}", output_error_text(&wait_output));
         }
@@ -560,10 +577,7 @@ pub fn stop_container(container_id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        os::unix::fs::PermissionsExt,
-        sync::Mutex,
-    };
+    use std::{os::unix::fs::PermissionsExt, sync::Mutex};
     use tempfile::TempDir;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -655,8 +669,10 @@ esac
 
         let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
-        let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
 
         let result = execute(RunnerSpec {
             scanner_type: "yasa".to_string(),
@@ -698,14 +714,8 @@ esac
             "-e YASA_RESOURCE_DIR={}/resource",
             workspace_dir.display()
         )));
-        assert!(logged.contains(&format!(
-            "-w {}",
-            workspace_dir.display()
-        )));
-        assert!(logged.contains(&format!(
-            "--project {}/project",
-            workspace_dir.display()
-        )));
+        assert!(logged.contains(&format!("-w {}", workspace_dir.display())));
+        assert!(logged.contains(&format!("--project {}/project", workspace_dir.display())));
 
         let runner_meta = fs::read_to_string(workspace_dir.join("meta/runner.json")).unwrap();
         assert!(runner_meta.contains("\"exit_code\": 0"));
@@ -726,8 +736,10 @@ esac
 
         let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
-        let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "2");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", &long_stderr);
 
@@ -773,8 +785,10 @@ esac
 
         let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
-        let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "1");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "runner stdout");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", "runner stderr");
@@ -824,12 +838,17 @@ esac
 
         let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
-        let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
 
         let result = execute(RunnerSpec {
             scanner_type: "phpstan".to_string(),
             image: "vulhunter/phpstan-runner:latest".to_string(),
-            workspace_dir: temp_dir.path().join("elsewhere/task-1").display().to_string(),
+            workspace_dir: temp_dir
+                .path()
+                .join("elsewhere/task-1")
+                .display()
+                .to_string(),
             command: vec![
                 "phpstan".to_string(),
                 "analyse".to_string(),
@@ -845,12 +864,10 @@ esac
         });
 
         assert!(!result.success);
-        assert!(
-            result
-                .error
-                .as_deref()
-                .is_some_and(|error| error.contains("shared workspace root"))
-        );
+        assert!(result
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("shared workspace root")));
     }
 
     #[test]

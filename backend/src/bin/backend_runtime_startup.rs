@@ -71,7 +71,9 @@ fn handle_code2flow(mut args: impl Iterator<Item = String>) -> Result<()> {
 
     println!(
         "{}",
-        serde_json::to_string(&code2flow::execute_from_request_path(Path::new(&request_path)))?
+        serde_json::to_string(&code2flow::execute_from_request_path(Path::new(
+            &request_path
+        )))?
     );
     Ok(())
 }

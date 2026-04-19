@@ -132,11 +132,9 @@ pub fn queue_snapshot(kind: &str, payload: &Value) -> Value {
                 .cloned()
                 .unwrap_or_else(|| sample_risk_point(kind)),
         ),
-        "business_logic_recon" | "business_logic" => build_recon_queue_snapshot(
-            "bl_recon",
-            "业务逻辑风险点队列",
-            sample_risk_point(kind),
-        ),
+        "business_logic_recon" | "business_logic" => {
+            build_recon_queue_snapshot("bl_recon", "业务逻辑风险点队列", sample_risk_point(kind))
+        }
         _ => build_recon_queue_snapshot("recon", "风险点队列", sample_risk_point(kind)),
     }
 }
@@ -230,13 +228,11 @@ fn normalized_description_component(value: Option<&Value>) -> (String, bool) {
 }
 
 fn normalized_line_start_component(value: &Value) -> (String, bool) {
-    let parsed = value
-        .get("line_start")
-        .and_then(|line| match line {
-            Value::Number(number) => number.as_i64(),
-            Value::String(text) => text.trim().parse::<i64>().ok(),
-            _ => None,
-        });
+    let parsed = value.get("line_start").and_then(|line| match line {
+        Value::Number(number) => number.as_i64(),
+        Value::String(text) => text.trim().parse::<i64>().ok(),
+        _ => None,
+    });
     let missing = parsed.is_none();
     (parsed.unwrap_or_default().to_string(), missing)
 }

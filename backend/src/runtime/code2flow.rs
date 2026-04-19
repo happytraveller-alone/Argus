@@ -11,8 +11,8 @@ use crate::runtime::runner::{self, RunnerSpec, SCANNER_MOUNT_PATH};
 const DEFAULT_TIMEOUT_SECONDS: u64 = 40;
 const DEFAULT_MAX_FILES: usize = 400;
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh",
-    ".hpp", ".hxx",
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp",
+    ".hxx",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -70,12 +70,14 @@ pub fn execute_from_request_path(request_path: &Path) -> Code2FlowResponse {
 pub fn execute(request: Code2FlowRequest) -> Code2FlowResponse {
     let project_root = PathBuf::from(&request.project_root);
 
-    let candidate_files =
-        match iter_candidate_files(&project_root, &request.target_files, request.max_files.max(1))
-        {
-            Ok(paths) => paths,
-            Err(error) => return failure_response("code2flow_exec_failed", &error),
-        };
+    let candidate_files = match iter_candidate_files(
+        &project_root,
+        &request.target_files,
+        request.max_files.max(1),
+    ) {
+        Ok(paths) => paths,
+        Err(error) => return failure_response("code2flow_exec_failed", &error),
+    };
     if candidate_files.is_empty() {
         return Code2FlowResponse {
             ok: false,
@@ -120,7 +122,10 @@ pub fn execute(request: Code2FlowRequest) -> Code2FlowResponse {
         Err(error) => return failure_response("code2flow_exec_failed", &error.to_string()),
     };
     if let Err(error) = fs::write(&request_path, payload_text) {
-        return failure_response("code2flow_exec_failed", &format!("write_request_failed:{error}"));
+        return failure_response(
+            "code2flow_exec_failed",
+            &format!("write_request_failed:{error}"),
+        );
     }
 
     let spec = RunnerSpec {
@@ -199,8 +204,8 @@ fn iter_candidate_files(
     let mut files = Vec::new();
     let mut stack = vec![project_root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let read_dir =
-            fs::read_dir(&dir).map_err(|error| format!("read_dir_failed:{}:{error}", dir.display()))?;
+        let read_dir = fs::read_dir(&dir)
+            .map_err(|error| format!("read_dir_failed:{}:{error}", dir.display()))?;
         for entry in read_dir.flatten() {
             let path = entry.path();
             let rel = path
@@ -368,9 +373,10 @@ fn normalize_blocked_reasons(
         })
         .unwrap_or_default();
 
-    if reasons.iter().any(|reason| {
-        reason == "code2flow_not_installed" || reason == "code2flow_binary_not_found"
-    }) {
+    if reasons
+        .iter()
+        .any(|reason| reason == "code2flow_not_installed" || reason == "code2flow_binary_not_found")
+    {
         return vec!["code2flow_not_installed".to_string()];
     }
     if matches!(error_text, Some(error) if error == "code2flow_binary_not_found") {
@@ -402,7 +408,10 @@ fn scan_workspace_root() -> PathBuf {
 }
 
 fn normalize_rel_path(raw_path: &str) -> String {
-    raw_path.replace('\\', "/").trim_start_matches("./").to_string()
+    raw_path
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .to_string()
 }
 
 fn is_supported_extension(path: &Path) -> bool {
@@ -518,7 +527,10 @@ mod tests {
         });
 
         assert!(!response.ok);
-        assert_eq!(response.blocked_reasons, vec!["code2flow_no_candidate_files"]);
+        assert_eq!(
+            response.blocked_reasons,
+            vec!["code2flow_no_candidate_files"]
+        );
     }
 
     #[test]
@@ -580,8 +592,8 @@ mod tests {
         let file_path = temp_dir.path().join("src").join("demo.py");
         fs::write(&file_path, b"def caller():\n    return b'\xff'\n").unwrap();
 
-        let payload =
-            super::build_files_payload(temp_dir.path(), &[file_path]).expect("payload should build");
+        let payload = super::build_files_payload(temp_dir.path(), &[file_path])
+            .expect("payload should build");
 
         assert_eq!(payload.len(), 1);
         assert_eq!(payload[0].file_path, "src/demo.py");

@@ -2270,10 +2270,11 @@ async fn verification_agent_test_snapshot_preserves_duplicate_findings() {
 
 #[tokio::test]
 async fn business_logic_analysis_snapshot_uses_supplied_risk_point() {
-    let state =
-        AppState::from_config(isolated_test_config("agent-test-business-logic-analysis-events"))
-            .await
-            .expect("state should build");
+    let state = AppState::from_config(isolated_test_config(
+        "agent-test-business-logic-analysis-events",
+    ))
+    .await
+    .expect("state should build");
     let app = build_router(state);
     let risk_point = json!({
         "title": "provided-business-logic-risk",

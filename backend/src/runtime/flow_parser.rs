@@ -333,12 +333,10 @@ esac
             execute_from_request_path(FlowParserOperation::DefinitionsBatch, &request_path);
 
         assert_eq!(result["ok"], false);
-        assert!(
-            result["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("invalid_flow_parser_request")
-        );
+        assert!(result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("invalid_flow_parser_request"));
     }
 
     #[test]
@@ -352,12 +350,10 @@ esac
         );
 
         assert_eq!(result["ok"], false);
-        assert!(
-            result["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("run docker command")
-        );
+        assert!(result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("run docker command"));
     }
 
     #[test]
@@ -373,7 +369,10 @@ esac
 
         assert!(workspace.starts_with(std::env::temp_dir()));
         assert!(!workspace.starts_with(blocking_file));
-        assert_eq!(workspace_root_override, Some(std::env::temp_dir().display().to_string()));
+        assert_eq!(
+            workspace_root_override,
+            Some(std::env::temp_dir().display().to_string())
+        );
     }
 
     #[test]
@@ -418,18 +417,19 @@ esac
         let create_args = fs::read_to_string(&args_file).expect("create args");
         assert!(create_args.contains("vulhunter/flow-parser-runner-custom:latest"));
         assert_eq!(result["ok"], false);
-        assert!(
-            result["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("timed out after 1s")
-        );
+        assert!(result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("timed out after 1s"));
 
         let runtime_root = scan_root.join("flow-parser-runtime");
         let entries = fs::read_dir(&runtime_root)
             .map(|items| items.filter_map(Result::ok).collect::<Vec<_>>())
             .unwrap_or_default();
-        assert!(entries.is_empty(), "workspace directories should be cleaned up");
+        assert!(
+            entries.is_empty(),
+            "workspace directories should be cleaned up"
+        );
     }
 
     #[test]
