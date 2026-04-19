@@ -38,10 +38,14 @@ def test_models_package_shell_has_no_live_python_importers():
     )
 
 
-def test_alembic_env_imports_model_modules_directly():
-    alembic_env = PROJECT_ROOT / "alembic/env.py"
-    source = alembic_env.read_text(encoding="utf-8")
+def test_alembic_tree_stays_deleted():
+    assert not (PROJECT_ROOT / "alembic").exists(), (
+        "retired backend_old/alembic tree should stay deleted"
+    )
 
-    assert "from app.models import *" not in source
-    assert "import app.models.agent_task" in source
-    assert "import app.models.user_config" in source
+
+def test_baseline_schema_snapshot_stays_deleted():
+    snapshot_file = PROJECT_ROOT / "app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py"
+    assert not snapshot_file.exists(), (
+        "retired Alembic baseline snapshot should stay deleted"
+    )
