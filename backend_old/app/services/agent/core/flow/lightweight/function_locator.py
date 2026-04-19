@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 from .flow_parser_runtime import FlowParserRuntimeBridge
 from .function_locator_cli import locate_with_tree_sitter_cli

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 from app.services.agent.core.flow.lightweight.ast_index import ASTCallIndex
 from app.services.agent.core.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
 from app.services.agent.core.flow.lightweight.path_scorer import (

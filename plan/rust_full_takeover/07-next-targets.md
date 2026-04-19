@@ -11,6 +11,7 @@
 
 - `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役；`backend_old/app/core` 当前只剩 `config.py`。
 - `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 与 `backend_old/alembic/*` 已整体退役；当前 Phase A 尾巴只剩 `backend_old/app/core/config.py`。
+- flow/lightweight cluster 已开始切走 `app.core.config` 依赖，剩余工作聚焦在 sandbox/base/preflight importer 与最终 `config.py` 退役。
 
 ### 1. Scanner / Queue 主链
 

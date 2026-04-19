@@ -3,7 +3,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 from app.services.agent.core.flow.lightweight.flow_parser_runtime import FlowParserRuntimeBridge
 
 

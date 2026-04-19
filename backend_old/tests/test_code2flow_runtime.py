@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 from app.services.agent.core.flow.lightweight.callgraph_code2flow import Code2FlowCallGraph
 
 

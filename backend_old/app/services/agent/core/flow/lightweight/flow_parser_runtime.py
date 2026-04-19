@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 
 def _runtime_startup_binary() -> str:

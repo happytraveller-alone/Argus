@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 from .flow_parser_runtime import _runtime_startup_binary
 
