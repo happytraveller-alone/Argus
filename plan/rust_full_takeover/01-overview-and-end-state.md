@@ -22,7 +22,7 @@ Rust 接管迁移范围内所有仍承担 live backend / scan / deploy 责任的
 本路线图覆盖：
 
 - `backend_old/app` 下仍承担 live 责任的 Python 运行时
-- `backend_old/alembic`、`backend_old/scripts`、`scripts/release-templates/runner_preflight.py` 这类运行 / 部署尾巴
+- `backend_old/scripts`、`scripts/release-templates/runner_preflight.py` 这类运行 / 部署尾巴
 - 与上述迁移直接相关的 canonical 计划文档
 
 默认不计入 runtime 主计数、但需要保持可解释的内容：
@@ -38,7 +38,7 @@ Rust 接管迁移范围内所有仍承担 live backend / scan / deploy 责任的
 1. `backend_old/app` 不再包含 live Python runtime、service、workflow、tool runtime、knowledge、launcher、scanner orchestration。
 2. Rust 路由和后台主链不再依赖 Python legacy 表、legacy JSON 字段或旧 helper 作为主存储。
 3. 剩余的 Python 代码不再承担运行 / 部署责任，只能是 archive、tooling 或已明确保留的外部脚本。
-4. `backend_old/alembic`、`backend_old/scripts`、release preflight 等尾巴完成删除，或被明确降级为非运行时资产。
+4. `backend_old/scripts`、release preflight 等尾巴完成删除，或被明确降级为非运行时资产。
 5. canonical 文档只描述 Rust takeover 的当前事实，不再混杂历史性流水账。
 
 ## External API Invariants
@@ -63,4 +63,4 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 - agent orchestration / state / payload
 - flow / logic / graph analysis
 - knowledge / tool runtime / LLM
-- db / alembic / release preflight 尾巴
+- script host / release preflight 尾巴

@@ -2,6 +2,12 @@
 
 ## Completed in this turn
 
+- `backend_old/alembic/*` 与 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 已退役：
+  - 数据库前向兼容不再保留；Rust `backend/src/bootstrap/*` 与 `backend/src/runtime/bootstrap.rs` 已删除 legacy schema / `alembic_version` / `alembic upgrade head` 路径
+  - `backend_old/tests/test_alembic_project.py`、`test_alembic_linear_history.py`、`test_alembic_revision_chain.py` 已删除；`test_top_level_package_shells_retired.py` 改为守住 Alembic 尾巴不得回流
+  - `backend_old/app` runtime core 计数 `104 -> 103`
+  - `db / schema snapshot gate` 计数 `1 -> 0`
+  - `repo-adjacent ops tail` 计数 `23 -> 2`
 - `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役：
   - Rust `backend/src/core/{security,encryption}.rs` 继续承担 password hashing / JWT 与 sensitive-field encryption 的唯一语义宿主
   - 新增 `backend_old/tests/test_core_security_encryption_retired.py` guard

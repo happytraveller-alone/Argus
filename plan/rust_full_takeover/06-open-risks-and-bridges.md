@@ -8,7 +8,6 @@
 ## 仍需明确处理的 bridge
 
 - Rust route surface 背后仍可能存在 retained Python runtime
-- legacy schema / alembic compatibility 仍未退出
 - `backend_old/scripts/flow_parser_runner.py` 仍承担 flow parser script host 角色
 - startup / preflight 仍有 Python-aware 运维尾巴
 
@@ -32,7 +31,7 @@ Rust 接管某些 surface 时，可能会顺带收窄行为。
 ### Health 200 != Ready
 
 容器 healthcheck 可以返回 HTTP `200`，
-但这并不等于 bootstrap / preflight / legacy schema gate 全部通过。
+但这并不等于 bootstrap / preflight gate 全部通过。
 
 ### Deletion-Only False Positive
 
@@ -52,6 +51,6 @@ Rust 接管某些 surface 时，可能会顺带收窄行为。
 2. agent orchestration / flow / tools / knowledge / llm 主链不再依赖 retained Python。
 3. `/health` JSON 为 `ok`，而不是仅 HTTP `200`。
 4. agent / static 真路径 smoke 与 runner preflight 成功。
-5. legacy schema / alembic / startup compat bridge 的退出路径明确且可验证。
+5. startup compat bridge 的退出路径明确且可验证。
 6. `/users/*`、`/projects/*/members*` 这类 retired route 没有剩余 frontend caller。
-7. `backend_old/alembic`、`backend_old/scripts`、release preflight 的 Python 尾巴完成删除或被明确降级为非运行时资产。
+7. `backend_old/scripts`、release preflight 的 Python 尾巴完成删除或被明确降级为非运行时资产。

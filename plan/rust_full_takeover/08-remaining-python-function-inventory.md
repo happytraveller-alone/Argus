@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`104`
-- `backend_old/alembic`：`21`
+- `backend_old/app` 非 API Python：`103`
+- `backend_old/alembic`：`0`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`104` 是当前 runtime core 主计数。
+`103` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -25,7 +25,7 @@
 | 功能组 | 当前文件数 | 当前责任 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
 | app root / core / config / security | 1 | retained config core | `backend/src/config.rs`, `backend/src/core/*` |
-| db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
+| db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
 | models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
@@ -36,7 +36,7 @@
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | llm | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm/*` | `backend/src/llm/*` |
 | llm_rule | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm_rule/*` | `backend/src/llm_rule/*` |
-| repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
+| repo-adjacent ops tail | 2 | flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
 
 ## 详细功能块
 
@@ -64,22 +64,16 @@
 backend_old/app/core/config.py
 ```
 
-### 2. DB Gate / Schema Snapshot (`1`)
+### 2. DB Gate / Schema Snapshot (`0`)
 
-当前责任：
+当前状态：
 
-- legacy schema snapshot / alembic 最终门
+- `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 已退役。
+- 数据库前向兼容不再保留，Rust bootstrap 也已删除 legacy schema / Alembic 兼容路径。
 
-目标状态：
+剩余工作：
 
-- Rust bootstrap / schema gate 完全替代
-- `backend_old/app/db` 整体删除
-
-文件：
-
-```text
-backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py
-```
+- DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
 ### 3. Models / Persistence Mirror (`12`)
 
@@ -352,11 +346,10 @@ backend_old/app/services/agent/utils/vulnerability_naming.py
 
 这些剩余项已经不再计入 Python runtime inventory，而是 Rust fill-in backlog。
 
-### 13. Repo-Adjacent Operational Python Surfaces (`23`)
+### 13. Repo-Adjacent Operational Python Surfaces (`2`)
 
 当前责任：
 
-- legacy schema compatibility / revision chain
 - flow parser script host
 - release / ops preflight helper
 
@@ -368,27 +361,6 @@ backend_old/app/services/agent/utils/vulnerability_naming.py
 文件：
 
 ```text
-backend_old/alembic/env.py
-backend_old/alembic/versions/1f2e3d4c5b6a_add_verified_project_management_metrics.py
-backend_old/alembic/versions/5b0f3c9a6d7e_squashed_baseline.py
-backend_old/alembic/versions/6c8d9e0f1a2b_finalize_projects_zip_file_hash.py
-backend_old/alembic/versions/7f8e9d0c1b2a_normalize_static_finding_paths.py
-backend_old/alembic/versions/8c1d2e3f4a5b_add_agent_finding_identity.py
-backend_old/alembic/versions/9a7b6c5d4e3f_enforce_agent_finding_task_uniqueness.py
-backend_old/alembic/versions/9d3e4f5a6b7c_add_bandit_rule_states.py
-backend_old/alembic/versions/a1b2c3d4e5f6_add_phpstan_rule_states.py
-backend_old/alembic/versions/a8f1c2d3e4b5_add_agent_tasks_report_column.py
-backend_old/alembic/versions/b2c3d4e5f6a7_add_bandit_rule_soft_delete.py
-backend_old/alembic/versions/b7e8f9a0b1c2_add_yasa_scan_tables.py
-backend_old/alembic/versions/b9d8e7f6a5b4_drop_legacy_audit_tables.py
-backend_old/alembic/versions/c3d4e5f6a7b8_add_phpstan_rule_soft_delete.py
-backend_old/alembic/versions/c9d0e1f2a3b4_add_yasa_rule_configs_and_task_binding.py
-backend_old/alembic/versions/d4e5f6a7b8c9_add_prompt_skills_table.py
-backend_old/alembic/versions/da4e5f6a7b8c_add_pmd_rule_configs.py
-backend_old/alembic/versions/e1f2a3b4c5d6_add_pmd_scan_tables.py
-backend_old/alembic/versions/e5f6a7b8c9d0_add_project_management_metrics.py
-backend_old/alembic/versions/f1e2d3c4b5a6_scope_agent_tree_nodes_per_task.py
-backend_old/alembic/versions/f6a7b8c9d0e1_remove_fixed_static_finding_status.py
 backend_old/scripts/flow_parser_runner.py
 scripts/release-templates/runner_preflight.py
 ```

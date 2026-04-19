@@ -10,7 +10,7 @@
 ### Phase A 尾巴子进度
 
 - `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役；`backend_old/app/core` 当前只剩 `config.py`。
-- 下一块 core/db 尾巴是 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 及其 Alembic 依赖链；在 Rust schema gate 完全替代前，不要把 `app/db` 记成已完成。
+- `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 与 `backend_old/alembic/*` 已整体退役；当前 Phase A 尾巴只剩 `backend_old/app/core/config.py`。
 
 ### 1. Scanner / Queue 主链
 
@@ -100,19 +100,17 @@
 - sandbox spec/result shell 已迁到 Rust `backend/src/runtime/sandbox.rs`；`backend_old/app/services/sandbox_runner.py` 已退役。
 - `backend_old/app/services` 根目录现已清零，不再有 retained shared helper Python 文件。
 
-### 6. Models / DB / Alembic / Ops Tail Final Gate
+### 6. Models / Ops Tail Final Gate
 
 目标范围：
 
 - `backend_old/app/models/*`
-- `backend_old/app/db/schema_snapshots/*`
-- `backend_old/alembic/*`
 - `backend_old/scripts/flow_parser_runner.py`
 - `scripts/release-templates/runner_preflight.py`
 
 完成标准：
 
-- legacy schema / mirror / preflight 不再阻止 Python 退役
+- legacy mirror / preflight 不再阻止 Python 退役
 - runtime tail 有明确删除或降级结论
 
 ## 当前执行原则
@@ -123,6 +121,7 @@
 
 ## 最近完成
 
+- `backend_old/alembic/*` 与 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 已完成 Python 退役；Rust bootstrap/runtime 不再保留 legacy schema / Alembic 兼容路径。
 - `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已完成 Python 退役；Rust `backend/src/core/{security,encryption}.rs` 继续承担唯一语义宿主，retirement guard 已补。
 - `scanner_runner.py` 已完成 Rust 接管并退役。
 - `recon_risk_queue.py` 与 `vulnerability_queue.py` 已完成 Rust 接管并退役。

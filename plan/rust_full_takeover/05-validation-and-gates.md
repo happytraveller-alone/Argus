@@ -56,7 +56,7 @@ uv run --project . pytest -s backend_old/tests/...
 至少需要确认：
 
 1. release / compose 启动后，`GET /health` 的 JSON `status` 为 `ok`，而不只是 HTTP `200`。
-2. `bootstrap.database`、`bootstrap.legacy_schema`、`bootstrap.preflight` 没有 `degraded` / `failed`。
+2. `bootstrap.database` 与 `bootstrap.preflight` 没有 `degraded` / `failed`。
 3. runner preflight 真正能拉起镜像和执行命令，而不是只有构建通过。
 4. 部署环境具备 Docker socket、runner image pull / run 能力，以及必要的 registry 网络连通性。
 
@@ -67,7 +67,7 @@ uv run --project . pytest -s backend_old/tests/...
 1. 至少一条 `agent-tasks` 真路径 smoke 通过。
 2. 至少一条 `static-tasks` 真路径 smoke 通过，并覆盖当前 runner family。
 3. legacy mirror / backfill / startup compat bridge 的退出条件被明确验证。
-4. `backend_old/alembic`、`backend_old/scripts`、release preflight 这类 ops tail 有明确 owner 和删除 / 保留判定。
+4. `backend_old/scripts`、release preflight 这类 ops tail 有明确 owner 和删除 / 保留判定。
 
 ## 文档回写门
 

@@ -15,7 +15,7 @@ Python -> Rust 全接管的现状、顺序和验证门。
 ## 当前范围
 
 - runtime core：`backend_old/app` 中仍承担 live backend / scan / agent / llm / tool 责任的 Python
-- retirement tail：`backend_old/alembic`、`backend_old/scripts`、`scripts/release-templates/runner_preflight.py`
+- retirement tail：`backend_old/scripts`、`scripts/release-templates/runner_preflight.py`
 - 不计入 runtime 主计数、但仍保留参考的内容：
   - `scripts/migration/*.py`
   - `plan/wait_correct/*`
@@ -25,8 +25,8 @@ Python -> Rust 全接管的现状、顺序和验证门。
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`104`
-- `backend_old/alembic` Python：`21`
+- `backend_old/app` 非 API Python：`103`
+- `backend_old/alembic` Python：`0`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
