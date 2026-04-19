@@ -287,3 +287,50 @@ rules:
         .as_str()
         .is_some_and(|value| value.contains("pattern: dangerous_call($X)")));
 }
+
+#[tokio::test]
+async fn create_rule_from_patch_uses_patch_metadata_when_available() {
+    let state = AppState::from_config(isolated_test_config("opengrep-create-from-patch"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/create")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "repo_owner": "octo",
+                        "repo_name": "demo",
+                        "commit_hash": "deadbeef",
+                        "commit_content": r#"
+diff --git a/src/app.py b/src/app.py
+--- a/src/app.py
++++ b/src/app.py
+@@
+-dangerous_call(user_input)
++safe_call(user_input)
+"#
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(payload["id"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("patch:")));
+    assert_eq!(payload["name"], "demo-deadbeef");
+    assert_eq!(payload["language"], "python");
+    assert_eq!(payload["severity"], "ERROR");
+    assert_eq!(payload["source"], "patch");
+}

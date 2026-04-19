@@ -63,6 +63,8 @@
 - Rust `backend/src/runtime/queue.rs` 现在承担 agent-test queue snapshot 与 queue fingerprint 语义宿主。
 - Rust `backend/src/llm_rule/mod.rs` 现在承担 generic opengrep rule YAML 的规范化与 schema 校验语义。
 - `/api/v1/static-tasks/rules/create-generic`、`/rules/upload/json` 与 rule update 已切到 Rust 校验链，不再依赖 `backend_old/app/services/rule.py` 里的 `validate_generic_rule()` helper。
+- Rust `backend/src/llm_rule/git.rs` 已拿到 HTTPS-only / git mirror candidate 语义宿主。
+- Rust `backend/src/llm_rule/patch.rs` 已拿到 patch 文件名与 diff 语言分组解析；`/api/v1/static-tasks/rules/create` 开始消费这些 patch 元数据来生成 rule shell。
 
 ## 本目录内的使用方式
 

@@ -174,21 +174,40 @@ async fn create_opengrep_rule_from_patch(
         optional_string(&payload, "repo_name").unwrap_or_else(|| "generated".to_string());
     let commit_hash =
         optional_string(&payload, "commit_hash").unwrap_or_else(|| Uuid::new_v4().to_string());
+    let repo_owner =
+        optional_string(&payload, "repo_owner").unwrap_or_else(|| "generated".to_string());
+    let commit_content = optional_string(&payload, "commit_content").unwrap_or_default();
+    let patch_filename = format!("github.com_{repo_owner}_{repo_name}_{commit_hash}.patch");
+    let patch_info = llm_rule::patch::process_patch_text(&patch_filename, &commit_content);
     let record = task_state::OpengrepRuleRecord {
-        id: format!("generated:{}", Uuid::new_v4()),
-        name: format!("{repo_name}-{commit_hash}"),
-        language: "generic".to_string(),
-        severity: "WARNING".to_string(),
+        id: format!("patch:{}", Uuid::new_v4()),
+        name: patch_info
+            .as_ref()
+            .map(|info| format!("{}-{}", info.repo_name, info.commit_id))
+            .unwrap_or_else(|| format!("{repo_name}-{commit_hash}")),
+        language: patch_info
+            .as_ref()
+            .and_then(|info| info.file_changes.first())
+            .map(|change| change.language.clone())
+            .unwrap_or_else(|| "generic".to_string()),
+        severity: "ERROR".to_string(),
         confidence: Some("MEDIUM".to_string()),
-        description: Some("generated from rust backend patch import".to_string()),
+        description: Some("patch-derived rule shell created in rust backend".to_string()),
         cwe: None,
         source: "patch".to_string(),
         correct: true,
         is_active: true,
         created_at: now_rfc3339(),
-        pattern_yaml: optional_string(&payload, "commit_content")
-            .unwrap_or_else(|| "rules: []".to_string()),
-        patch: optional_string(&payload, "commit_content"),
+        pattern_yaml: if commit_content.trim().is_empty() {
+            "rules: []".to_string()
+        } else {
+            commit_content.clone()
+        },
+        patch: if commit_content.trim().is_empty() {
+            None
+        } else {
+            Some(commit_content)
+        },
     };
     upsert_opengrep_rule(&state, record.clone()).await?;
     Ok(Json(opengrep_rule_detail_value(&record)))
@@ -886,13 +905,21 @@ async fn persist_uploaded_patch_rules(
         let filename = field.file_name().unwrap_or("uploaded.patch").to_string();
         let bytes = field.bytes().await.map_err(internal_error)?;
         let patch_text = String::from_utf8(bytes.to_vec()).unwrap_or_default();
+        let patch_info = llm_rule::patch::process_patch_text(&filename, &patch_text);
         let record = task_state::OpengrepRuleRecord {
             id: format!("patch:{}", Uuid::new_v4()),
-            name: filename,
-            language: "generic".to_string(),
-            severity: "WARNING".to_string(),
+            name: patch_info
+                .as_ref()
+                .map(|info| format!("{}-{}", info.repo_name, info.commit_id))
+                .unwrap_or_else(|| filename.clone()),
+            language: patch_info
+                .as_ref()
+                .and_then(|info| info.file_changes.first())
+                .map(|change| change.language.clone())
+                .unwrap_or_else(|| "generic".to_string()),
+            severity: "ERROR".to_string(),
             confidence: Some("MEDIUM".to_string()),
-            description: Some("patch-derived rule in rust backend".to_string()),
+            description: Some("patch-derived rule shell created in rust backend".to_string()),
             cwe: None,
             source: "patch".to_string(),
             correct: true,

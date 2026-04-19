@@ -1,3 +1,6 @@
+pub mod git;
+pub mod patch;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleSummary {
     pub id: String,

@@ -373,6 +373,8 @@ backend_old/app/services/llm/types.py
 
 - generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*`。
 - `backend_old/app/services/rule.py` 中对应 `validate_generic_rule()` helper 已删除，不再作为 retained Python 校验宿主。
+- HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
+- `backend_old/app/services/llm_rule/*` 当前主要剩 repo cache、validator / manager / client 与完整 generation flow。
 
 文件：
 
