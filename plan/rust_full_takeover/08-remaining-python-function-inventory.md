@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`130`
+- `backend_old/app` 非 API Python：`121`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`130` 是当前 runtime core 主计数。
+`121` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -27,7 +27,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core | `backend/src/core/*` |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
 | models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| shared helpers | 3 | rule、sandbox、path normalization | `backend/src/*` 对应 shared service |
+| shared helpers | 2 | sandbox、path normalization | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
@@ -35,7 +35,7 @@
 | tools + tool runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | llm | 13 | provider / adapter / tokenizer / cache runtime | `backend/src/llm/*` |
-| llm_rule | 8 | rule repo、patch、validator、manager | `backend/src/llm_rule/*` |
+| llm_rule | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm_rule/*` | `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
 
 ## 详细功能块
@@ -105,7 +105,7 @@ backend_old/app/models/user.py
 backend_old/app/models/user_config.py
 ```
 
-### 4. Shared Service Retained Helpers (`3`)
+### 4. Shared Service Retained Helpers (`2`)
 
 当前责任：
 
@@ -121,7 +121,6 @@ backend_old/app/models/user_config.py
 文件：
 
 ```text
-backend_old/app/services/rule.py
 backend_old/app/services/sandbox_runner.py
 backend_old/app/services/scan_path_utils.py
 ```
@@ -357,37 +356,20 @@ backend_old/app/services/llm/tokenizer.py
 backend_old/app/services/llm/types.py
 ```
 
-### 12. LLM Rule Retained Runtime (`8`)
+### 12. LLM Rule Retained Runtime (`0`)
 
-当前责任：
+当前状态：
 
-- rule repo cache
-- patch processor
-- rule validator / manager / client
+- `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已整体退役。
+- generic rule YAML 校验、git mirror policy、patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/*`。
 
-目标状态：
+剩余工作：
 
-- Rust rule pipeline 接管，或被明确废弃替代
+- repo cache
+- rule validator / manager
+- generation flow 的剩余语义填补
 
-当前收口：
-
-- generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*`。
-- `backend_old/app/services/rule.py` 中对应 `validate_generic_rule()` helper 已删除，不再作为 retained Python 校验宿主。
-- HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
-- `backend_old/app/services/llm_rule/*` 当前主要剩 repo cache、validator / manager / client 与完整 generation flow。
-
-文件：
-
-```text
-backend_old/app/services/llm_rule/cache_manager.py
-backend_old/app/services/llm_rule/config.py
-backend_old/app/services/llm_rule/git_manager.py
-backend_old/app/services/llm_rule/llm_client.py
-backend_old/app/services/llm_rule/patch_processor.py
-backend_old/app/services/llm_rule/repo_cache_manager.py
-backend_old/app/services/llm_rule/rule_manager.py
-backend_old/app/services/llm_rule/rule_validator.py
-```
+这些剩余项已经不再计入 Python runtime inventory，而是 Rust fill-in backlog。
 
 ### 13. Repo-Adjacent Operational Python Surfaces (`23`)
 

@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`130`
+- `backend_old/app` 非 API Python：`121`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -21,7 +21,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate |
 | models / persistence mirror | 12 | retained domain / persistence mirror |
-| shared helpers | 3 | rule、sandbox、path normalization |
+| shared helpers | 2 | sandbox、path normalization |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
@@ -29,7 +29,7 @@
 | tools + tool runtime | 26 | retained tool execution 主链 |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 |
 | llm | 13 | provider / adapter / cache / tokenizer runtime |
-| llm_rule | 8 | rule repo、patch、validator、manager |
+| llm_rule | 0 | Python rule runtime 已退役，剩余 fill-in 折到 Rust `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight |
 
 ## Rust 已拿到的外层表面
@@ -65,6 +65,7 @@
 - `/api/v1/static-tasks/rules/create-generic`、`/rules/upload/json` 与 rule update 已切到 Rust 校验链，不再依赖 `backend_old/app/services/rule.py` 里的 `validate_generic_rule()` helper。
 - Rust `backend/src/llm_rule/git.rs` 已拿到 HTTPS-only / git mirror candidate 语义宿主。
 - Rust `backend/src/llm_rule/patch.rs` 已拿到 patch 文件名与 diff 语言分组解析；`/api/v1/static-tasks/rules/create` 开始消费这些 patch 元数据来生成 rule shell。
+- `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已整体退役；Python 侧新增 retirement guard 防止旧 importer 回流。
 
 ## 本目录内的使用方式
 

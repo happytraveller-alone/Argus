@@ -73,7 +73,7 @@
 
 - `backend_old/app/services/agent/knowledge/*`
 - `backend_old/app/services/llm/*`
-- `backend_old/app/services/llm_rule/*`
+- `backend/src/llm_rule/*`
 
 完成标准：
 
@@ -83,7 +83,7 @@
 
 - generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*` 与 `static_tasks` route。
 - HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
-- `backend_old/app/services/llm_rule/*` 剩余主块优先顺序调整为：repo cache -> rule validator / manager -> generation flow -> old Python file retirement。
+- `backend_old/app/services/llm_rule/*` 与 `backend_old/app/services/rule.py` 已退役，剩余工作改为 Rust 侧 repo cache -> rule validator / manager -> generation flow 填补。
 
 ### 6. Models / DB / Alembic / Ops Tail Final Gate
 
@@ -112,3 +112,4 @@
 - `recon_risk_queue.py` 与 `vulnerability_queue.py` 已完成 Rust 接管并退役。
 - generic opengrep rule YAML 校验已完成 Rust 接管，Python `validate_generic_rule()` helper 已退役。
 - llm_rule 的 git mirror policy 与 patch parser 已完成 Rust 接管，patch route shell 开始消费 Rust patch 元数据。
+- `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已完成 Python 退役，retirement guard 已补。
