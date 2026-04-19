@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`103`
+- `backend_old/app` 非 API Python：`99`
 - `backend_old/alembic`：`0`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`103` 是当前 runtime core 主计数。
+`99` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -26,7 +26,7 @@
 | --- | ---: | --- | --- |
 | app root / core / config / security | 1 | retained config core | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
-| models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| models / persistence mirror | 8 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -75,7 +75,7 @@ backend_old/app/core/config.py
 
 - DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
-### 3. Models / Persistence Mirror (`12`)
+### 3. Models / Persistence Mirror (`8`)
 
 当前责任：
 
@@ -91,17 +91,19 @@ backend_old/app/core/config.py
 ```text
 backend_old/app/models/agent_task.py
 backend_old/app/models/analysis.py
-backend_old/app/models/audit_rule.py
 backend_old/app/models/base.py
 backend_old/app/models/opengrep.py
 backend_old/app/models/project.py
 backend_old/app/models/project_info.py
 backend_old/app/models/project_management_metrics.py
-backend_old/app/models/prompt_skill.py
-backend_old/app/models/prompt_template.py
 backend_old/app/models/user.py
-backend_old/app/models/user_config.py
 ```
+
+已完成收口：
+
+- `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役。
+- prompt skill CRUD / backfill / mirror 与 builtin prompt template surface 已由 Rust `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担。
+- `user_config` 仍保留 legacy table compat，但该兼容不再需要 Python ORM shell。
 
 ### 4. Shared Service Retained Helpers (`0`)
 

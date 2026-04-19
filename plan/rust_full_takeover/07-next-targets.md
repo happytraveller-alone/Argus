@@ -113,6 +113,12 @@
 - legacy mirror / preflight 不再阻止 Python 退役
 - runtime tail 有明确删除或降级结论
 
+当前子进度：
+
+- `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已确认无 live Python importer，并已完成退役。
+- prompt skill CRUD / backfill / mirror 与 builtin prompt template surface 继续由 Rust `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担；`user_config` 仅保留 legacy table compat，不再保留 Python ORM shell。
+- models tail 现收束到 `agent_task.py`、`analysis.py`、`base.py`、`opengrep.py`、`project.py`、`project_info.py`、`project_management_metrics.py`、`user.py`。
+
 ## 当前执行原则
 
 1. 优先接管仍在主链上的 runtime cluster，不回头做低收益的历史壳层清理。
@@ -129,3 +135,4 @@
 - llm_rule 的 git mirror policy 与 patch parser 已完成 Rust 接管，patch route shell 开始消费 Rust patch 元数据。
 - `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已完成 Python 退役，retirement guard 已补。
 - `backend_old/app/services/llm/{config_utils,provider_registry}.py` 已完成 Python 退役；`system-config` route 现由 Rust LLM provider/config module 提供 catalog 与 normalize 语义。
+- `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已完成 Python 退役；新增 retirement guard 防止 model shell 与 direct importer 回流。

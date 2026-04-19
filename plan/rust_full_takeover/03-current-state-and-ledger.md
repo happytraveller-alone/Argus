@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`103`
+- `backend_old/app` 非 API Python：`99`
 - `backend_old/alembic` Python：`0`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -20,7 +20,7 @@
 | --- | ---: | --- |
 | app root / core / config / security | 1 | retained config core；security/encryption 已退役 |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
-| models / persistence mirror | 12 | retained domain / persistence mirror |
+| models / persistence mirror | 8 | retained domain / persistence mirror |
 | shared helpers | 0 | Python shared helpers 已退役 |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
@@ -78,6 +78,7 @@
 - `backend_old/app/services/agent/agents/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖，`backend_old/app/services/llm/*` 现已清零。
 - Rust `backend/src/scan/path_utils.rs` 已接管 scan path normalization / archive member resolution 语义；`backend_old/app/services/scan_path_utils.py` 已退役。
 - Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell；`backend_old/app/services/sandbox_runner.py` 已退役，live Python caller 已收束到 `sandbox_runner_client.py`。
+- `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役；Rust prompt skill CRUD / builtin prompt template route 已继续由 `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担，legacy table compat 保留但不再需要 Python model shell。
 
 ## 本目录内的使用方式
 
