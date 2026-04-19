@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`99`
+- `backend_old/app` 非 API Python：`97`
 - `backend_old/alembic`：`0`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`99` 是当前 runtime core 主计数。
+`97` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -26,7 +26,7 @@
 | --- | ---: | --- | --- |
 | app root / core / config / security | 1 | retained config core | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
-| models / persistence mirror | 8 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| models / persistence mirror | 6 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -75,7 +75,7 @@ backend_old/app/core/config.py
 
 - DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
-### 3. Models / Persistence Mirror (`8`)
+### 3. Models / Persistence Mirror (`6`)
 
 当前责任：
 
@@ -94,8 +94,6 @@ backend_old/app/models/analysis.py
 backend_old/app/models/base.py
 backend_old/app/models/opengrep.py
 backend_old/app/models/project.py
-backend_old/app/models/project_info.py
-backend_old/app/models/project_management_metrics.py
 backend_old/app/models/user.py
 ```
 
@@ -104,6 +102,8 @@ backend_old/app/models/user.py
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役。
 - prompt skill CRUD / backfill / mirror 与 builtin prompt template surface 已由 Rust `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担。
 - `user_config` 仍保留 legacy table compat，但该兼容不再需要 Python ORM shell。
+- `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役。
+- Rust `backend/src/routes/projects.rs` 与 `backend/src/bootstrap/legacy_mirror_schema.rs` 已承担其 DB/route surface；Python `Project` model 已切掉对这两个 optional shell 的 relationship 依赖。
 
 ### 4. Shared Service Retained Helpers (`0`)
 

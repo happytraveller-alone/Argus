@@ -117,7 +117,8 @@
 
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已确认无 live Python importer，并已完成退役。
 - prompt skill CRUD / backfill / mirror 与 builtin prompt template surface 继续由 Rust `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担；`user_config` 仅保留 legacy table compat，不再保留 Python ORM shell。
-- models tail 现收束到 `agent_task.py`、`analysis.py`、`base.py`、`opengrep.py`、`project.py`、`project_info.py`、`project_management_metrics.py`、`user.py`。
+- `backend_old/app/models/{project_info,project_management_metrics}.py` 已确认无 live Python importer，并已完成退役；`backend_old/app/models/project.py` 已切掉对这两个 optional shell 的 relationship 依赖。
+- models tail 现收束到 `agent_task.py`、`analysis.py`、`base.py`、`opengrep.py`、`project.py`、`user.py`。
 
 ## 当前执行原则
 
@@ -136,3 +137,4 @@
 - `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已完成 Python 退役，retirement guard 已补。
 - `backend_old/app/services/llm/{config_utils,provider_registry}.py` 已完成 Python 退役；`system-config` route 现由 Rust LLM provider/config module 提供 catalog 与 normalize 语义。
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已完成 Python 退役；新增 retirement guard 防止 model shell 与 direct importer 回流。
+- `backend_old/app/models/{project_info,project_management_metrics}.py` 已完成 Python 退役；新增 mapper/usability guard，确保 `Project` 在没有这两个 legacy shell 的情况下仍可配置和实例化。

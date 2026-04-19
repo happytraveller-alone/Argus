@@ -48,15 +48,8 @@ class Project(Base):
     owner = relationship("User", backref="projects")
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
     agent_tasks = relationship("AgentTask", back_populates="project", cascade="all, delete-orphan")
-    infos = relationship("ProjectInfo", back_populates="project", cascade="all, delete-orphan")
     opengrep_scan_tasks = relationship(
         "OpengrepScanTask", back_populates="project", cascade="all, delete-orphan"
-    )
-    management_metrics = relationship(
-        "ProjectManagementMetrics",
-        back_populates="project",
-        cascade="all, delete-orphan",
-        uselist=False,
     )
 
 class ProjectMember(Base):
