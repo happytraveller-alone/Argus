@@ -85,7 +85,6 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "vulhunter"
     DATABASE_URL: str | None = None
     PYTHON_DATABASE_URL: str | None = None
-    PYTHON_ALEMBIC_ENABLED: bool = True
 
     @model_validator(mode="after")
     def assemble_db_connection(self) -> Self:

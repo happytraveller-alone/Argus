@@ -171,26 +171,7 @@ run_optional_resets() {
 
 sync_python_env_if_needed
 wait_for_db
-
-python_alembic_enabled() {
-    value="${PYTHON_ALEMBIC_ENABLED:-true}"
-    value="$(printf "%s" "$value" | tr '[:upper:]' '[:lower:]' | xargs)"
-    case "$value" in
-        0|false|off|no)
-            return 1
-            ;;
-        *)
-            return 0
-            ;;
-    esac
-}
-
-echo "Running database migrations ..."
-if python_alembic_enabled; then
-    "${VENV_DIR}/bin/alembic" upgrade head
-else
-    echo "Skipping alembic upgrade (PYTHON_ALEMBIC_ENABLED=${PYTHON_ALEMBIC_ENABLED:-false})"
-fi
+echo "Skipping legacy Alembic migrations; Rust bootstrap owns database setup."
 
 run_optional_resets
 

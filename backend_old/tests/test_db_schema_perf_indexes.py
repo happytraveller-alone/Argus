@@ -34,7 +34,7 @@ async def test_perf_indexes_and_constraints_exist():
         )
         existing = {row["indexname"] for row in existing_index_rows}
         if "ix_agent_events_task_sequence" not in existing:
-            pytest.skip("performance migration not applied yet; run alembic upgrade head")
+            pytest.skip("performance schema fixtures are not present in this database")
 
         ext = await conn.fetchval(
             "SELECT extname FROM pg_extension WHERE extname = 'pg_trgm'"

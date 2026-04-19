@@ -45,7 +45,7 @@ async def test_query_plans_use_perf_indexes():
         )
         index_names = {row["indexname"] for row in indexes}
         if "ix_agent_events_task_sequence" not in index_names:
-            pytest.skip("performance migration not applied yet; run alembic upgrade head")
+            pytest.skip("performance schema fixtures are not present in this database")
 
         await conn.execute("SET enable_seqscan = off")
         await conn.execute("SET enable_sort = off")

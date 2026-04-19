@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
@@ -108,7 +108,7 @@ fn venv_can_run_backend(venv_dir: &Path) -> Result<bool> {
     }
 
     let status = Command::new(python_bin)
-        .args(&["-c", "import sqlalchemy, alembic, uvicorn"])
+        .args(&["-c", "import sqlalchemy, uvicorn"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -506,19 +506,6 @@ raise SystemExit(0 if asyncio.run(check_db()) else 1)\n";
     bail!("Failed to connect to database");
 }
 
-pub fn run_database_migrations(app_root: &Path) -> Result<()> {
-    println!("Running database migrations...");
-    Command::new(venv_bin("alembic"))
-        .args(&["upgrade", "head"])
-        .current_dir(app_root)
-        .status()
-        .context("running alembic upgrade")?
-        .success()
-        .then_some(())
-        .ok_or_else(|| anyhow::anyhow!("alembic upgrade failed"))?;
-    Ok(())
-}
-
 pub fn run_optional_resets(app_root: &Path) -> Result<()> {
     if !is_true(env::var("RESET_STATIC_SCAN_TABLES_ON_DEPLOY").ok().as_ref()) {
         return Ok(());
@@ -563,7 +550,6 @@ pub fn run(mode: &str) -> Result<()> {
     }
 
     wait_for_db(WAIT_DB_MAX_RETRIES, WAIT_DB_SLEEP_SECONDS)?;
-    run_database_migrations(&app_root)?;
     run_optional_resets(&app_root)?;
 
     if mode == "dev" {
@@ -577,8 +563,8 @@ pub fn run(mode: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_server_bin, build_probe_url, normalize_candidates, run_optional_resets,
-        sort_probe_results, ProbeResult, DEFAULT_BACKEND_SERVER_BIN,
+        DEFAULT_BACKEND_SERVER_BIN, ProbeResult, backend_server_bin, build_probe_url,
+        normalize_candidates, run_optional_resets, sort_probe_results,
     };
     use std::{env, fs};
     use tempfile::TempDir;
