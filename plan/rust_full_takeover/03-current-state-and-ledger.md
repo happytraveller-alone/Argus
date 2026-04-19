@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`119`
+- `backend_old/app` 非 API Python：`110`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -28,7 +28,7 @@
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
 | tools + tool runtime | 26 | retained tool execution 主链 |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 |
-| llm | 11 | adapter / base / service / tokenizer / cache / compressor / types runtime |
+| llm | 2 | tokenizer / memory compression runtime；service/adapters shell 已迁 Rust 并退役 |
 | llm_rule | 0 | Python rule runtime 已退役，剩余 fill-in 折到 Rust `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight |
 
@@ -50,7 +50,7 @@
 
 1. `scope_filters.py` 仍在控制 retained scanner 主链；queue service source of truth 已切到 Rust `runtime::queue`。
 2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
-3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*`、`llm/*` 仍是大块 live Python runtime。
+3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` 现只剩 tokenizer / memory compression 两个 live Python 文件。
 4. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
 5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
 
@@ -67,6 +67,8 @@
 - Rust `backend/src/llm_rule/patch.rs` 已拿到 patch 文件名与 diff 语言分组解析；`/api/v1/static-tasks/rules/create` 开始消费这些 patch 元数据来生成 rule shell。
 - `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已整体退役；Python 侧新增 retirement guard 防止旧 importer 回流。
 - Rust `backend/src/llm/{providers,config}.rs` 已接管 provider alias / catalog、runtime provider metadata、base URL normalize 与 custom header parsing；`/api/v1/system-config/{llm-providers,fetch-llm-models}` 不再依赖 Python `config_utils.py` / `provider_registry.py`。
+- Rust `backend/src/llm/{types,prompt_cache,runtime}.rs` 已接管 llm request/response shell、prompt-cache policy 与 stream-empty diagnostics 宿主；`backend_old/app/services/llm/{service,factory,types,base_adapter,prompt_cache,adapters/*}.py` 已退役。
+- `backend_old/app/services/llm` 现只剩 `tokenizer.py` 与 `memory_compressor.py`，因为 `MemoryCompressor` 仍被 `agent/base.py` 调用，这一条 live path 将在下一刀单独切走。
 
 ## 本目录内的使用方式
 
