@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`121`
+- `backend_old/app` 非 API Python：`119`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -28,7 +28,7 @@
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
 | tools + tool runtime | 26 | retained tool execution 主链 |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 |
-| llm | 13 | provider / adapter / cache / tokenizer runtime |
+| llm | 11 | adapter / base / service / tokenizer / cache / compressor / types runtime |
 | llm_rule | 0 | Python rule runtime 已退役，剩余 fill-in 折到 Rust `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight |
 
@@ -66,6 +66,7 @@
 - Rust `backend/src/llm_rule/git.rs` 已拿到 HTTPS-only / git mirror candidate 语义宿主。
 - Rust `backend/src/llm_rule/patch.rs` 已拿到 patch 文件名与 diff 语言分组解析；`/api/v1/static-tasks/rules/create` 开始消费这些 patch 元数据来生成 rule shell。
 - `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已整体退役；Python 侧新增 retirement guard 防止旧 importer 回流。
+- Rust `backend/src/llm/{providers,config}.rs` 已接管 provider alias / catalog、runtime provider metadata、base URL normalize 与 custom header parsing；`/api/v1/system-config/{llm-providers,fetch-llm-models}` 不再依赖 Python `config_utils.py` / `provider_registry.py`。
 
 ## 本目录内的使用方式
 

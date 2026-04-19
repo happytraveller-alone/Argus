@@ -14,6 +14,11 @@ use crate::{
     core::encryption::encrypt_sensitive_fields,
     db::system_config,
     error::ApiError,
+    llm::{
+        normalize_base_url, normalize_provider_id, parse_custom_headers, provider_api_key_field,
+        provider_catalog, provider_catalog_entry_or_fallback, recommend_tokens,
+        ProviderCatalogItem as LlmProviderItem,
+    },
     state::{AppState, StoredSystemConfig},
 };
 
@@ -70,7 +75,7 @@ pub struct FetchModelsRequest {
     pub provider: String,
     pub api_key: String,
     pub base_url: Option<String>,
-    pub custom_headers: Option<String>,
+    pub custom_headers: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,22 +97,6 @@ pub struct FetchModelsResponse {
 #[serde(rename_all = "camelCase")]
 struct LlmProviderCatalogResponse {
     providers: Vec<LlmProviderItem>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct LlmProviderItem {
-    id: String,
-    name: String,
-    description: String,
-    default_model: String,
-    models: Vec<String>,
-    default_base_url: String,
-    requires_api_key: bool,
-    supports_model_fetch: bool,
-    fetch_style: &'static str,
-    example_base_urls: Vec<String>,
-    supports_custom_headers: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -166,14 +155,14 @@ pub async fn delete_current(
 
 async fn get_llm_providers() -> Json<LlmProviderCatalogResponse> {
     Json(LlmProviderCatalogResponse {
-        providers: builtin_providers(),
+        providers: provider_catalog(),
     })
 }
 
 pub async fn test_llm(
     Json(request): Json<LlmTestRequest>,
 ) -> Result<Json<LlmTestResponse>, ApiError> {
-    let provider = normalize_provider_id(&request.provider);
+    let provider = normalize_provider_for_route(&request.provider);
     let model = request.model.unwrap_or_default().trim().to_string();
     let base_url = request.base_url.unwrap_or_default().trim().to_string();
     let api_key = request.api_key.unwrap_or_default().trim().to_string();
@@ -214,11 +203,21 @@ pub async fn test_llm(
 pub async fn fetch_llm_models(
     Json(request): Json<FetchModelsRequest>,
 ) -> Result<Json<FetchModelsResponse>, ApiError> {
-    let provider = normalize_provider_id(&request.provider);
-    let provider_item = builtin_providers()
-        .into_iter()
-        .find(|item| item.id == provider)
-        .unwrap_or_else(|| fallback_provider(&provider));
+    let provider = normalize_provider_for_route(&request.provider);
+    let provider_item = provider_catalog_entry_or_fallback(&provider);
+    parse_custom_headers(request.custom_headers.as_ref()).map_err(ApiError::BadRequest)?;
+    let base_url_used = request
+        .base_url
+        .as_deref()
+        .map(normalize_base_url)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            if provider_item.default_base_url.is_empty() {
+                None
+            } else {
+                Some(provider_item.default_base_url.clone())
+            }
+        });
 
     let model_metadata = provider_item
         .models
@@ -244,7 +243,7 @@ pub async fn fetch_llm_models(
         models: provider_item.models,
         default_model: provider_item.default_model,
         source: "fallback_static".to_string(),
-        base_url_used: request.base_url.or(Some(provider_item.default_base_url)),
+        base_url_used,
         model_metadata,
         token_recommendation_source: "static_mapping".to_string(),
     }))
@@ -368,7 +367,7 @@ fn merge_json(defaults: &Value, overrides: &Value) -> Value {
 }
 
 fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
-    let provider = normalize_provider_id(
+    let provider = normalize_provider_for_route(
         read_string(llm_config, "llmProvider")
             .as_deref()
             .unwrap_or("openai"),
@@ -404,203 +403,17 @@ fn collect_missing_fields(snapshot: &LlmQuickConfigSnapshot) -> Vec<String> {
     missing
 }
 
-fn builtin_providers() -> Vec<LlmProviderItem> {
-    vec![
-        provider(
-            "custom",
-            "OpenAI Compatible",
-            "适用于 OpenAI 兼容站点、中转服务和自建网关。",
-            "gpt-5",
-            vec!["gpt-5", "kimi-k2", "deepseek-chat", "qwen-max"],
-            "",
-            true,
-            "openai_compatible",
-            vec![
-                "https://api.openai.com/v1",
-                "https://api.moonshot.cn/v1",
-                "http://localhost:11434/v1",
-            ],
-        ),
-        provider(
-            "openai",
-            "OpenAI",
-            "OpenAI 官方接口。",
-            "gpt-5",
-            vec!["gpt-5", "gpt-5.1", "gpt-4o", "gpt-4o-mini"],
-            "https://api.openai.com/v1",
-            true,
-            "openai_compatible",
-            vec!["https://api.openai.com/v1"],
-        ),
-        provider(
-            "openrouter",
-            "OpenRouter",
-            "统一多模型路由聚合服务（OpenAI 兼容）。",
-            "openai/gpt-5-mini",
-            vec![
-                "openai/gpt-5-mini",
-                "anthropic/claude-3.7-sonnet",
-                "google/gemini-2.5-pro",
-            ],
-            "https://openrouter.ai/api/v1",
-            true,
-            "openai_compatible",
-            vec!["https://openrouter.ai/api/v1"],
-        ),
-        provider(
-            "anthropic",
-            "Anthropic",
-            "Claude 系列模型服务。",
-            "claude-sonnet-4.5",
-            vec!["claude-sonnet-4.5", "claude-opus-4.5", "claude-haiku-4.5"],
-            "https://api.anthropic.com/v1",
-            true,
-            "anthropic",
-            vec!["https://api.anthropic.com/v1"],
-        ),
-        provider(
-            "azure_openai",
-            "Azure OpenAI",
-            "Azure 托管 OpenAI 接口。",
-            "gpt-5",
-            vec!["gpt-5", "gpt-4o", "o4-mini"],
-            "https://{resource}.openai.azure.com/openai/v1",
-            true,
-            "azure_openai",
-            vec!["https://{resource}.openai.azure.com/openai/v1"],
-        ),
-        provider(
-            "moonshot",
-            "Moonshot / Kimi",
-            "Moonshot Kimi 官方接口（OpenAI 兼容）。",
-            "kimi-k2",
-            vec!["kimi-k2", "kimi-k2-thinking", "moonshot-v1-128k"],
-            "https://api.moonshot.cn/v1",
-            true,
-            "openai_compatible",
-            vec!["https://api.moonshot.cn/v1"],
-        ),
-        provider(
-            "ollama",
-            "Ollama",
-            "本地部署 LLM（OpenAI 兼容，无需 API Key）。",
-            "llama3.3-70b",
-            vec!["llama3.3-70b", "qwen3-8b", "deepseek-r1"],
-            "http://localhost:11434/v1",
-            false,
-            "openai_compatible",
-            vec!["http://localhost:11434/v1"],
-        ),
-        provider(
-            "gemini",
-            "Google Gemini",
-            "Google Gemini 模型服务。",
-            "gemini-3-pro",
-            vec!["gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash"],
-            "https://generativelanguage.googleapis.com/v1beta",
-            true,
-            "openai_compatible",
-            vec![],
-        ),
-        provider(
-            "deepseek",
-            "DeepSeek",
-            "DeepSeek 推理与对话模型。",
-            "deepseek-v3.1-terminus",
-            vec![
-                "deepseek-v3.1-terminus",
-                "deepseek-chat",
-                "deepseek-reasoner",
-            ],
-            "https://api.deepseek.com",
-            true,
-            "openai_compatible",
-            vec![],
-        ),
-    ]
-}
-
-fn provider(
-    id: &str,
-    name: &str,
-    description: &str,
-    default_model: &str,
-    models: Vec<&str>,
-    default_base_url: &str,
-    requires_api_key: bool,
-    fetch_style: &'static str,
-    example_base_urls: Vec<&str>,
-) -> LlmProviderItem {
-    LlmProviderItem {
-        id: id.to_string(),
-        name: name.to_string(),
-        description: description.to_string(),
-        default_model: default_model.to_string(),
-        models: models.into_iter().map(str::to_string).collect(),
-        default_base_url: default_base_url.to_string(),
-        requires_api_key,
-        supports_model_fetch: true,
-        fetch_style,
-        example_base_urls: example_base_urls.into_iter().map(str::to_string).collect(),
-        supports_custom_headers: true,
-    }
-}
-
-fn fallback_provider(id: &str) -> LlmProviderItem {
-    provider(
-        id,
-        id,
-        "自定义模型提供商",
-        "",
-        vec![],
-        "",
-        id != "ollama",
-        "openai_compatible",
-        vec![],
-    )
-}
-
-fn provider_api_key_field(provider: &str) -> Option<&'static str> {
-    match provider {
-        "custom" | "openai" | "openrouter" | "azure_openai" => Some("openaiApiKey"),
-        "anthropic" | "claude" => Some("claudeApiKey"),
-        "gemini" => Some("geminiApiKey"),
-        "qwen" => Some("qwenApiKey"),
-        "deepseek" => Some("deepseekApiKey"),
-        "zhipu" => Some("zhipuApiKey"),
-        "moonshot" => Some("moonshotApiKey"),
-        "baidu" => Some("baiduApiKey"),
-        "minimax" => Some("minimaxApiKey"),
-        "doubao" => Some("doubaoApiKey"),
-        _ => None,
-    }
-}
-
-fn normalize_provider_id(provider: &str) -> String {
-    let normalized = provider.trim().to_lowercase();
-    match normalized.as_str() {
-        "" => "openai".to_string(),
-        "claude" => "anthropic".to_string(),
-        "openai_compatible" => "custom".to_string(),
-        _ => normalized,
+fn normalize_provider_for_route(provider: &str) -> String {
+    let normalized = normalize_provider_id(provider);
+    if normalized.is_empty() {
+        "openai".to_string()
+    } else {
+        normalized
     }
 }
 
 fn read_string(value: &Value, key: &str) -> Option<String> {
     value.get(key)?.as_str().map(str::to_string)
-}
-
-fn recommend_tokens(model: &str) -> i64 {
-    let normalized = model.to_lowercase();
-    if [
-        "gpt-5", "o3", "o4", "claude", "deepseek", "kimi", "glm", "gemini",
-    ]
-    .iter()
-    .any(|hint| normalized.contains(hint))
-    {
-        return 16_384;
-    }
-    8_192
 }
 
 fn internal_error(error: anyhow::Error) -> ApiError {

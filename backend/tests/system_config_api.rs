@@ -158,6 +158,154 @@ async fn system_config_helper_endpoints_are_available() {
 }
 
 #[tokio::test]
+async fn system_config_llm_provider_catalog_matches_rust_registry_semantics() {
+    let state = AppState::from_config(isolated_test_config("system-config-provider-catalog"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let providers_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config/llm-providers")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(providers_response.status(), StatusCode::OK);
+
+    let providers_json: Value = serde_json::from_slice(
+        &to_bytes(providers_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let providers = providers_json["providers"]
+        .as_array()
+        .expect("providers should be an array");
+
+    let ordered_ids: Vec<&str> = providers
+        .iter()
+        .map(|item| item["id"].as_str().expect("provider id should be a string"))
+        .collect();
+    assert_eq!(
+        &ordered_ids[..7],
+        &[
+            "custom",
+            "openai",
+            "openrouter",
+            "anthropic",
+            "azure_openai",
+            "moonshot",
+            "ollama",
+        ]
+    );
+
+    let gemini = providers
+        .iter()
+        .find(|item| item["id"] == "gemini")
+        .expect("gemini provider should exist");
+    assert_eq!(gemini["defaultModel"], "gemini-3-pro");
+    assert!(
+        gemini["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|model| model == "veo-3.1")
+    );
+
+    let baidu = providers
+        .iter()
+        .find(|item| item["id"] == "baidu")
+        .expect("baidu provider should exist");
+    assert_eq!(baidu["fetchStyle"], "native_static");
+    assert_eq!(baidu["supportsModelFetch"], false);
+
+    let custom = providers
+        .iter()
+        .find(|item| item["id"] == "custom")
+        .expect("custom provider should exist");
+    assert_eq!(custom["defaultBaseUrl"], "");
+    assert_eq!(custom["supportsCustomHeaders"], true);
+}
+
+#[tokio::test]
+async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module() {
+    let state = AppState::from_config(isolated_test_config("system-config-fetch-models"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/fetch-llm-models")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-custom",
+                        "baseUrl": "https://gateway.example/v1/chat/completions?foo=bar#frag",
+                        "customHeaders": "{\" Authorization \": 123, \"\": \"skip\", \"X-Trace\": null}",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["success"], true);
+    assert_eq!(payload["resolvedProvider"], "custom");
+    assert_eq!(payload["defaultModel"], "gpt-5");
+    assert_eq!(payload["baseUrlUsed"], "https://gateway.example/v1");
+    assert!(
+        payload["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|model| model == "gpt-5.1-codex-max")
+    );
+}
+
+#[tokio::test]
+async fn fetch_llm_models_rejects_non_flat_custom_headers() {
+    let state = AppState::from_config(isolated_test_config("system-config-fetch-models-errors"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/fetch-llm-models")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai",
+                        "apiKey": "sk-openai",
+                        "baseUrl": "https://api.openai.com/v1",
+                        "customHeaders": "{\"X-Nested\": {\"bad\": true}}",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["error"], "llmCustomHeaders 必须是扁平的 JSON 对象");
+}
+
+#[tokio::test]
 async fn system_config_defaults_follow_app_config() {
     let mut config = isolated_test_config("system-config-defaults");
     config.llm_provider = "gemini".to_string();

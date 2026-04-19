@@ -81,6 +81,8 @@
 
 当前子进度：
 
+- provider/config registry 语义已迁到 Rust `backend/src/llm/{providers,config}.rs`；`backend_old/app/services/llm/{config_utils,provider_registry}.py` 已退役。
+- 剩余 Python LLM runtime 现在只包含 adapters、base、factory、service、tokenizer、prompt_cache、memory_compressor、types。
 - generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*` 与 `static_tasks` route。
 - HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
 - `backend_old/app/services/llm_rule/*` 与 `backend_old/app/services/rule.py` 已退役，剩余工作改为 Rust 侧 repo cache -> rule validator / manager -> generation flow 填补。
@@ -113,3 +115,4 @@
 - generic opengrep rule YAML 校验已完成 Rust 接管，Python `validate_generic_rule()` helper 已退役。
 - llm_rule 的 git mirror policy 与 patch parser 已完成 Rust 接管，patch route shell 开始消费 Rust patch 元数据。
 - `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已完成 Python 退役，retirement guard 已补。
+- `backend_old/app/services/llm/{config_utils,provider_registry}.py` 已完成 Python 退役；`system-config` route 现由 Rust LLM provider/config module 提供 catalog 与 normalize 语义。

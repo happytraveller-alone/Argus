@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`121`
+- `backend_old/app` 非 API Python：`119`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`121` 是当前 runtime core 主计数。
+`119` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -34,7 +34,7 @@
 | knowledge | 21 | knowledge loader、framework / vuln knowledge | `backend/src/knowledge/*` |
 | tools + tool runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
 | support assets | 7 | memory、prompt、streaming、scan-core 元数据 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| llm | 13 | provider / adapter / tokenizer / cache runtime | `backend/src/llm/*` |
+| llm | 11 | adapter / tokenizer / cache / compressor / types runtime | `backend/src/llm/*` |
 | llm_rule | 0 | Python 已退役，剩余 fill-in 在 Rust `backend/src/llm_rule/*` | `backend/src/llm_rule/*` |
 | repo-adjacent ops tail | 23 | alembic、flow parser script host、release preflight | bootstrap / DB gate replacement or retire |
 
@@ -325,14 +325,14 @@ backend_old/app/services/agent/streaming/tool_stream.py
 backend_old/app/services/agent/utils/vulnerability_naming.py
 ```
 
-### 11. LLM Retained Runtime (`13`)
+### 11. LLM Retained Runtime (`11`)
 
 当前责任：
 
-- provider registry
 - adapter selection
 - prompt cache / tokenizer / memory compression
 - actual LLM runtime behavior
+- provider/config registry 已迁到 Rust `backend/src/llm/{providers,config}.rs`
 
 目标状态：
 
@@ -346,11 +346,9 @@ backend_old/app/services/llm/adapters/doubao_adapter.py
 backend_old/app/services/llm/adapters/litellm_adapter.py
 backend_old/app/services/llm/adapters/minimax_adapter.py
 backend_old/app/services/llm/base_adapter.py
-backend_old/app/services/llm/config_utils.py
 backend_old/app/services/llm/factory.py
 backend_old/app/services/llm/memory_compressor.py
 backend_old/app/services/llm/prompt_cache.py
-backend_old/app/services/llm/provider_registry.py
 backend_old/app/services/llm/service.py
 backend_old/app/services/llm/tokenizer.py
 backend_old/app/services/llm/types.py
