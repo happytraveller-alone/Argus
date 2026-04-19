@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`107`
+- `backend_old/app` 非 API Python：`106`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`107` 是当前 runtime core 主计数。
+`106` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -27,7 +27,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core | `backend/src/core/*` |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
 | models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| shared helpers | 1 | sandbox | `backend/src/*` 对应 shared service |
+| shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
@@ -105,28 +105,18 @@ backend_old/app/models/user.py
 backend_old/app/models/user_config.py
 ```
 
-### 4. Shared Service Retained Helpers (`1`)
+### 4. Shared Service Retained Helpers (`0`)
 
-当前责任：
-
-- sandbox helper
-- scan path normalization 已迁到 Rust `backend/src/scan/path_utils.rs`
-
-目标状态：
-
-- 能迁的迁进 Rust shared service
-- Python helper 不再参与主运行链
-
-文件：
-
-```text
-backend_old/app/services/sandbox_runner.py
-```
-
-已完成收口：
+当前状态：
 
 - `backend_old/app/services/scan_path_utils.py` 已退役。
 - Rust `backend/src/scan/path_utils.rs` 已接管 scan finding location、zip member candidate、archive path normalize 语义宿主。
+- `backend_old/app/services/sandbox_runner.py` 已退役。
+- Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell 宿主。
+
+剩余工作：
+
+- shared helper 相关剩余工作不再是 Python runtime blocker，而是 Rust caller / parity backlog。
 
 ### 5. Agent Orchestration / State / Payload (`22`)
 

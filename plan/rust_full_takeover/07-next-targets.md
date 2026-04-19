@@ -92,7 +92,8 @@
 ### Shared Helpers 子进度
 
 - scan path normalization / archive-member resolution 已迁到 Rust `backend/src/scan/path_utils.rs`；`backend_old/app/services/scan_path_utils.py` 已退役。
-- `backend_old/app/services` 根目录现在只剩 `sandbox_runner.py` 一个 live helper 文件。
+- sandbox spec/result shell 已迁到 Rust `backend/src/runtime/sandbox.rs`；`backend_old/app/services/sandbox_runner.py` 已退役。
+- `backend_old/app/services` 根目录现已清零，不再有 retained shared helper Python 文件。
 
 ### 6. Models / DB / Alembic / Ops Tail Final Gate
 

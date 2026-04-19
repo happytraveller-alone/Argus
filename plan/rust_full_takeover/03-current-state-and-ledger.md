@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`107`
+- `backend_old/app` 非 API Python：`106`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -21,7 +21,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate |
 | models / persistence mirror | 12 | retained domain / persistence mirror |
-| shared helpers | 1 | sandbox |
+| shared helpers | 0 | Python shared helpers 已退役 |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
@@ -71,6 +71,7 @@
 - Rust `backend/src/llm/{tokenizer,compression}.rs` 已接管 token heuristic / message compression 宿主；`backend_old/app/services/llm/{tokenizer,memory_compressor}.py` 已退役。
 - `backend_old/app/services/agent/agents/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖，`backend_old/app/services/llm/*` 现已清零。
 - Rust `backend/src/scan/path_utils.rs` 已接管 scan path normalization / archive member resolution 语义；`backend_old/app/services/scan_path_utils.py` 已退役。
+- Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell；`backend_old/app/services/sandbox_runner.py` 已退役，live Python caller 已收束到 `sandbox_runner_client.py`。
 
 ## 本目录内的使用方式
 
