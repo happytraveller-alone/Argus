@@ -369,6 +369,11 @@ backend_old/app/services/llm/types.py
 
 - Rust rule pipeline 接管，或被明确废弃替代
 
+当前收口：
+
+- generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*`。
+- `backend_old/app/services/rule.py` 中对应 `validate_generic_rule()` helper 已删除，不再作为 retained Python 校验宿主。
+
 文件：
 
 ```text

@@ -61,6 +61,8 @@
 - Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。
 - `backend_old/app/services/agent/recon_risk_queue.py` 与 `backend_old/app/services/agent/vulnerability_queue.py` 已退役。
 - Rust `backend/src/runtime/queue.rs` 现在承担 agent-test queue snapshot 与 queue fingerprint 语义宿主。
+- Rust `backend/src/llm_rule/mod.rs` 现在承担 generic opengrep rule YAML 的规范化与 schema 校验语义。
+- `/api/v1/static-tasks/rules/create-generic`、`/rules/upload/json` 与 rule update 已切到 Rust 校验链，不再依赖 `backend_old/app/services/rule.py` 里的 `validate_generic_rule()` helper。
 
 ## 本目录内的使用方式
 

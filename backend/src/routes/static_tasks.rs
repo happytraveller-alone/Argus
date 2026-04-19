@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::{
     db::{projects, task_state},
     error::ApiError,
+    llm_rule,
     scan::opengrep,
     state::AppState,
 };
@@ -197,21 +198,15 @@ async fn create_opengrep_generic_rule(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let record = task_state::OpengrepRuleRecord {
-        id: format!("generic:{}", Uuid::new_v4()),
-        name: "generic-rule".to_string(),
-        language: "generic".to_string(),
-        severity: "WARNING".to_string(),
-        confidence: Some("MEDIUM".to_string()),
-        description: Some("generic rule created in rust backend".to_string()),
-        cwe: None,
-        source: "json".to_string(),
-        correct: true,
-        is_active: true,
-        created_at: now_rfc3339(),
-        pattern_yaml: required_string(&payload, "rule_yaml")?,
-        patch: None,
-    };
+    let record = build_rule_record_from_payload(
+        &payload,
+        "rule_yaml",
+        "generic",
+        "json",
+        None,
+        None,
+        Some("generic rule created in rust backend"),
+    )?;
     upsert_opengrep_rule(&state, record.clone()).await?;
     Ok(Json(opengrep_rule_detail_value(&record)))
 }
@@ -220,27 +215,17 @@ async fn upload_opengrep_rule_json(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let record = task_state::OpengrepRuleRecord {
-        id: optional_string(&payload, "id").unwrap_or_else(|| format!("json:{}", Uuid::new_v4())),
-        name: optional_string(&payload, "name").unwrap_or_else(|| "uploaded-json-rule".to_string()),
-        language: optional_string(&payload, "language").unwrap_or_else(|| "generic".to_string()),
-        severity: optional_string(&payload, "severity").unwrap_or_else(|| "WARNING".to_string()),
-        confidence: optional_string(&payload, "confidence"),
-        description: optional_string(&payload, "description"),
-        cwe: payload.get("cwe").and_then(string_array),
-        source: optional_string(&payload, "source").unwrap_or_else(|| "json".to_string()),
-        correct: payload
-            .get("correct")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        is_active: payload
-            .get("is_active")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        created_at: now_rfc3339(),
-        pattern_yaml: required_string(&payload, "pattern_yaml")?,
-        patch: optional_string(&payload, "patch"),
-    };
+    let source = optional_string(&payload, "source").unwrap_or_else(|| "json".to_string());
+    let description = optional_string(&payload, "description");
+    let record = build_rule_record_from_payload(
+        &payload,
+        "pattern_yaml",
+        "json",
+        &source,
+        description.as_deref(),
+        payload.get("correct").and_then(Value::as_bool),
+        None,
+    )?;
     upsert_opengrep_rule(&state, record.clone()).await?;
     Ok(Json(opengrep_rule_detail_value(&record)))
 }
@@ -304,11 +289,24 @@ async fn update_opengrep_rule(
 ) -> Result<Json<Value>, ApiError> {
     let mut snapshot = load_task_snapshot(&state).await?;
     let mut rule = find_opengrep_rule(&state, &rule_id).await?;
+
+    if let Some(value) = optional_string(&payload, "pattern_yaml") {
+        let normalized =
+            llm_rule::normalize_and_validate_rule_yaml(&value).map_err(ApiError::BadRequest)?;
+        rule.pattern_yaml = normalized.pattern_yaml;
+        if payload.get("language").is_none() {
+            rule.language = normalized.summary.primary_language().to_string();
+        }
+        if payload.get("severity").is_none() {
+            rule.severity = normalized.summary.severity;
+        }
+        if payload.get("name").is_none() {
+            rule.name = normalized.summary.id.clone();
+        }
+    }
+
     if let Some(value) = optional_string(&payload, "name") {
         rule.name = value;
-    }
-    if let Some(value) = optional_string(&payload, "pattern_yaml") {
-        rule.pattern_yaml = value;
     }
     if let Some(value) = optional_string(&payload, "language") {
         rule.language = value;
@@ -1018,6 +1016,54 @@ fn opengrep_rule_detail_value(record: &task_state::OpengrepRuleRecord) -> Value 
         }),
     );
     value
+}
+
+fn build_rule_record_from_payload(
+    payload: &Value,
+    yaml_field: &str,
+    storage_id_prefix: &str,
+    default_source: &str,
+    default_description: Option<&str>,
+    default_correct: Option<bool>,
+    fallback_description: Option<&str>,
+) -> Result<task_state::OpengrepRuleRecord, ApiError> {
+    let normalized =
+        llm_rule::normalize_and_validate_rule_yaml(&required_string(payload, yaml_field)?)
+            .map_err(ApiError::BadRequest)?;
+
+    let rule_id = optional_string(payload, "id")
+        .unwrap_or_else(|| format!("{storage_id_prefix}:{}", Uuid::new_v4()));
+    let name = optional_string(payload, "name").unwrap_or_else(|| normalized.summary.id.clone());
+    let language = optional_string(payload, "language")
+        .unwrap_or_else(|| normalized.summary.primary_language().to_string());
+    let severity =
+        optional_string(payload, "severity").unwrap_or_else(|| normalized.summary.severity.clone());
+    let description = optional_string(payload, "description")
+        .or_else(|| default_description.map(ToString::to_string))
+        .or_else(|| fallback_description.map(ToString::to_string));
+
+    Ok(task_state::OpengrepRuleRecord {
+        id: rule_id,
+        name,
+        language,
+        severity,
+        confidence: optional_string(payload, "confidence").or(Some("MEDIUM".to_string())),
+        description,
+        cwe: payload.get("cwe").and_then(string_array),
+        source: optional_string(payload, "source").unwrap_or_else(|| default_source.to_string()),
+        correct: payload
+            .get("correct")
+            .and_then(Value::as_bool)
+            .or(default_correct)
+            .unwrap_or(true),
+        is_active: payload
+            .get("is_active")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        created_at: now_rfc3339(),
+        pattern_yaml: normalized.pattern_yaml,
+        patch: optional_string(payload, "patch"),
+    })
 }
 
 async fn load_task_snapshot(state: &AppState) -> Result<task_state::TaskStateSnapshot, ApiError> {

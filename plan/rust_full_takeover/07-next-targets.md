@@ -79,6 +79,11 @@
 
 - Rust 成为 knowledge、provider、prompt cache、rule repo / validator 的主运行时
 
+当前子进度：
+
+- generic opengrep rule YAML normalize / validate 已迁到 Rust `backend/src/llm_rule/*` 与 `static_tasks` route。
+- `backend_old/app/services/llm_rule/*` 剩余主块优先顺序调整为：git mirror policy -> patch processor -> repo cache -> rule validator / manager / generation flow。
+
 ### 6. Models / DB / Alembic / Ops Tail Final Gate
 
 目标范围：
@@ -104,3 +109,4 @@
 
 - `scanner_runner.py` 已完成 Rust 接管并退役。
 - `recon_risk_queue.py` 与 `vulnerability_queue.py` 已完成 Rust 接管并退役。
+- generic opengrep rule YAML 校验已完成 Rust 接管，Python `validate_generic_rule()` helper 已退役。
