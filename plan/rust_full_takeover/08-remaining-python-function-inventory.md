@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`110`
+- `backend_old/app` 非 API Python：`109`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`110` 是当前 runtime core 主计数。
+`109` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -27,7 +27,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core | `backend/src/core/*` |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
 | models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
-| shared helpers | 2 | sandbox、path normalization | `backend/src/*` 对应 shared service |
+| shared helpers | 1 | sandbox | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
@@ -105,13 +105,12 @@ backend_old/app/models/user.py
 backend_old/app/models/user_config.py
 ```
 
-### 4. Shared Service Retained Helpers (`2`)
+### 4. Shared Service Retained Helpers (`1`)
 
 当前责任：
 
-- 规则资产
 - sandbox helper
-- 路径归一化
+- scan path normalization 已迁到 Rust `backend/src/scan/path_utils.rs`
 
 目标状态：
 
@@ -122,8 +121,12 @@ backend_old/app/models/user_config.py
 
 ```text
 backend_old/app/services/sandbox_runner.py
-backend_old/app/services/scan_path_utils.py
 ```
+
+已完成收口：
+
+- `backend_old/app/services/scan_path_utils.py` 已退役。
+- Rust `backend/src/scan/path_utils.rs` 已接管 scan finding location、zip member candidate、archive path normalize 语义宿主。
 
 ### 5. Agent Orchestration / State / Payload (`22`)
 

@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`110`
+- `backend_old/app` 非 API Python：`109`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -21,7 +21,7 @@
 | app root / core / config / security | 3 | retained config / encryption / security core |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate |
 | models / persistence mirror | 12 | retained domain / persistence mirror |
-| shared helpers | 2 | sandbox、path normalization |
+| shared helpers | 1 | sandbox |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
@@ -69,6 +69,7 @@
 - Rust `backend/src/llm/{providers,config}.rs` 已接管 provider alias / catalog、runtime provider metadata、base URL normalize 与 custom header parsing；`/api/v1/system-config/{llm-providers,fetch-llm-models}` 不再依赖 Python `config_utils.py` / `provider_registry.py`。
 - Rust `backend/src/llm/{types,prompt_cache,runtime}.rs` 已接管 llm request/response shell、prompt-cache policy 与 stream-empty diagnostics 宿主；`backend_old/app/services/llm/{service,factory,types,base_adapter,prompt_cache,adapters/*}.py` 已退役。
 - `backend_old/app/services/llm` 现只剩 `tokenizer.py` 与 `memory_compressor.py`，因为 `MemoryCompressor` 仍被 `agent/base.py` 调用，这一条 live path 将在下一刀单独切走。
+- Rust `backend/src/scan/path_utils.rs` 已接管 scan path normalization / archive member resolution 语义；`backend_old/app/services/scan_path_utils.py` 已退役。
 
 ## 本目录内的使用方式
 

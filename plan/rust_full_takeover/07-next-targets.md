@@ -89,6 +89,11 @@
 - HTTPS-only / git mirror candidate 与 patch filename / diff language parsing 已迁到 Rust `backend/src/llm_rule/{git,patch}.rs`。
 - `backend_old/app/services/llm_rule/*` 与 `backend_old/app/services/rule.py` 已退役，剩余工作改为 Rust 侧 repo cache -> rule validator / manager -> generation flow 填补。
 
+### Shared Helpers 子进度
+
+- scan path normalization / archive-member resolution 已迁到 Rust `backend/src/scan/path_utils.rs`；`backend_old/app/services/scan_path_utils.py` 已退役。
+- `backend_old/app/services` 根目录现在只剩 `sandbox_runner.py` 一个 live helper 文件。
+
 ### 6. Models / DB / Alembic / Ops Tail Final Gate
 
 目标范围：
