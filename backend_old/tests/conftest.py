@@ -12,7 +12,11 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.opengrep import OpengrepRule, OpengrepScanTask, OpengrepFinding
-from app.core.security import get_password_hash
+
+
+TEST_USER_PASSWORD_HASH = (
+    "$2b$12$Avv3EVtio0wVYVLZqmSypu4bOipIqCSyXkZK0nMit/hMZ4ZRiT7YW"
+)
 
 
 def _is_sqlite_incompatible_index(index) -> bool:
@@ -88,7 +92,7 @@ async def test_user(db: AsyncSession):
     user = User(
         email="test@example.com",
         full_name="Test User",
-        hashed_password=get_password_hash("password123"),
+        hashed_password=TEST_USER_PASSWORD_HASH,
         is_active=True,
         role="admin",
     )

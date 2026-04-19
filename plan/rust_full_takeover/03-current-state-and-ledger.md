@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`106`
+- `backend_old/app` 非 API Python：`104`
 - `backend_old/alembic` Python：`21`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -18,7 +18,7 @@
 
 | 功能组 | 当前文件数 | 仍承担的责任 |
 | --- | ---: | --- |
-| app root / core / config / security | 3 | retained config / encryption / security core |
+| app root / core / config / security | 1 | retained config core；security/encryption 已退役 |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate |
 | models / persistence mirror | 12 | retained domain / persistence mirror |
 | shared helpers | 0 | Python shared helpers 已退役 |
@@ -51,11 +51,15 @@
 1. `scope_filters.py` 仍在控制 retained scanner 主链；queue service source of truth 已切到 Rust `runtime::queue`。
 2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
 3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` Python runtime 已清零。
-4. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
-5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
+4. `backend_old/app/core/config.py` 与 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 已成为当前 core/db 尾巴；它们仍被 flow/tool/alembic 依赖，尚不能误记为已退役。
+5. `backend_old/alembic/*`、`backend_old/scripts/flow_parser_runner.py`、`scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
+6. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
 
 ## 最近完成的 slice
 
+- Rust `backend/src/core/{security,encryption}.rs` 已成为 password hashing / JWT 与 sensitive-field encryption 的唯一语义宿主。
+- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役；Python 测试侧 direct importer 已清零。
+- 新增 `backend_old/tests/test_core_security_encryption_retired.py` guard；`backend_old/tests/conftest.py` 不再 import `app.core.security`，`test_startup_runtime_warnings.py` 已改为校验 retired module 的正确失败模式。
 - `backend_old/app/services/agent/scanner_runner.py` 已退役。
 - Rust `backend-runtime-startup runner execute|stop` 现在承担 scanner runner contract。
 - Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。

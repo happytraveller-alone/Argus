@@ -7,6 +7,11 @@
 
 ## 当前优先级
 
+### Phase A 尾巴子进度
+
+- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役；`backend_old/app/core` 当前只剩 `config.py`。
+- 下一块 core/db 尾巴是 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 及其 Alembic 依赖链；在 Rust schema gate 完全替代前，不要把 `app/db` 记成已完成。
+
 ### 1. Scanner / Queue 主链
 
 目标文件：
@@ -118,6 +123,7 @@
 
 ## 最近完成
 
+- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已完成 Python 退役；Rust `backend/src/core/{security,encryption}.rs` 继续承担唯一语义宿主，retirement guard 已补。
 - `scanner_runner.py` 已完成 Rust 接管并退役。
 - `recon_risk_queue.py` 与 `vulnerability_queue.py` 已完成 Rust 接管并退役。
 - generic opengrep rule YAML 校验已完成 Rust 接管，Python `validate_generic_rule()` helper 已退役。

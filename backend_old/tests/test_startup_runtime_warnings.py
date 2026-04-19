@@ -32,23 +32,19 @@ def _run_backend_python(
     )
 
 
-def test_password_hashing_does_not_log_bcrypt_version_warning():
+def test_retired_security_and_encryption_modules_fail_cleanly_without_deprecation_warnings():
     result = _run_backend_python(
-        "from app.core.security import get_password_hash, verify_password; "
-        "hashed = get_password_hash('secret'); "
-        "assert verify_password('secret', hashed)"
-    )
+        """
+import importlib
 
-    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    assert result.returncode == 0, combined_output
-    assert "error reading bcrypt version" not in combined_output, combined_output
-
-
-def test_password_hashing_import_and_usage_has_no_deprecation_warnings():
-    result = _run_backend_python(
-        "from app.core.security import get_password_hash, verify_password; "
-        "hashed = get_password_hash('secret'); "
-        "assert verify_password('secret', hashed)",
+for module_name in ("app.core.security", "app.core.encryption"):
+    try:
+        importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        assert exc.name == module_name, exc
+        continue
+    raise AssertionError(f"{module_name} should stay retired")
+""",
         warning_filters=["error::DeprecationWarning"],
     )
 

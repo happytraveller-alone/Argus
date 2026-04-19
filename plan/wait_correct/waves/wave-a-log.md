@@ -2,6 +2,13 @@
 
 ## Completed in this turn
 
+- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役：
+  - Rust `backend/src/core/{security,encryption}.rs` 继续承担 password hashing / JWT 与 sensitive-field encryption 的唯一语义宿主
+  - 新增 `backend_old/tests/test_core_security_encryption_retired.py` guard
+  - `backend_old/tests/conftest.py` 不再 import `app.core.security`，`backend_old/tests/test_startup_runtime_warnings.py` 改为验证 retired module 的正确失败模式
+  - `backend_old/app` runtime core 计数 `106 -> 104`
+  - `app root / core / config / security` 计数 `3 -> 1`
+  - `backend_old/tests/test_config_internal_callers_use_service_layer.py` 在正常模式通过；若启用 `-W error::DeprecationWarning`，仍会被 pre-existing `app/services/agent/knowledge/vulnerabilities/open_redirect.py` 的 invalid escape warning 干扰
 - `business_logic` Python runtime cluster 已退役：
   - `backend_old/app/services/agent/business_logic_risk_queue.py`、`agents/business_logic_recon.py`、`agents/business_logic_analysis.py`、`tools/business_logic_recon_queue_tools.py` 已删除
   - 新增 `backend_old/tests/test_business_logic_runtime_retired.py` guard

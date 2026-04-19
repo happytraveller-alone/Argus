@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`106`
+- `backend_old/app` 非 API Python：`104`
 - `backend_old/alembic`：`21`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`106` 是当前 runtime core 主计数。
+`104` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -24,7 +24,7 @@
 
 | 功能组 | 当前文件数 | 当前责任 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
-| app root / core / config / security | 3 | retained config / encryption / security core | `backend/src/core/*` |
+| app root / core / config / security | 1 | retained config core | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 1 | legacy schema snapshot / final DB gate | `backend/src/db/*` |
 | models / persistence mirror | 12 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
@@ -40,24 +40,28 @@
 
 ## 详细功能块
 
-### 1. App Root / Core / Config / Security (`3`)
+### 1. App Root / Core / Config / Security (`1`)
 
 当前责任：
 
 - Python retained runtime 的设置读取
-- legacy 加密 / 安全 / token 兼容逻辑
 
 目标状态：
 
-- Rust 成为唯一配置、安全、加密 source of truth
-- Python runtime 不再 import 这些 core 模块
+- Rust 已成为安全、加密 source of truth，剩余目标是让配置读取也完全脱离 Python `app.core`
+- Python runtime 不再 import retired core 模块
+
+当前状态：
+
+- Rust `backend/src/core/security.rs` 已承担 password hashing / JWT 语义宿主。
+- Rust `backend/src/core/encryption.rs` 已承担 sensitive-field encryption 语义宿主。
+- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役，并有 guard 防止 direct importer 回流。
+- `backend_old/app/core/config.py` 仍被 flow/tool/alembic 链路引用，是当前 app core 的唯一剩余 live 文件。
 
 文件：
 
 ```text
 backend_old/app/core/config.py
-backend_old/app/core/encryption.py
-backend_old/app/core/security.py
 ```
 
 ### 2. DB Gate / Schema Snapshot (`1`)
