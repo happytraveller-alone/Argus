@@ -5,7 +5,7 @@ Agent 审计任务模型
 
 import uuid
 from datetime import datetime
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List
 from sqlalchemy import (
     Column, String, Integer, Float, Text, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, JSON, Index, UniqueConstraint, text
@@ -14,9 +14,6 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
-
-if TYPE_CHECKING:
-    from .project import Project
 
 
 class AgentTaskStatus:

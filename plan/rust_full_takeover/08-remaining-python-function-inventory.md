@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`97`
+- `backend_old/app` 非 API Python：`94`
 - `backend_old/alembic`：`0`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`97` 是当前 runtime core 主计数。
+`94` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -26,7 +26,7 @@
 | --- | ---: | --- | --- |
 | app root / core / config / security | 0 | Python core runtime 已退役 | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
-| models / persistence mirror | 5 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| models / persistence mirror | 2 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -70,7 +70,7 @@
 
 - DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
-### 3. Models / Persistence Mirror (`5`)
+### 3. Models / Persistence Mirror (`2`)
 
 当前责任：
 
@@ -86,9 +86,6 @@
 ```text
 backend_old/app/models/agent_task.py
 backend_old/app/models/base.py
-backend_old/app/models/opengrep.py
-backend_old/app/models/project.py
-backend_old/app/models/user.py
 ```
 
 已完成收口：
@@ -100,6 +97,8 @@ backend_old/app/models/user.py
 - Rust `backend/src/routes/projects.rs` 与 `backend/src/bootstrap/legacy_mirror_schema.rs` 已承担其 DB/route surface；Python `Project` model 已切掉对这两个 optional shell 的 relationship 依赖。
 - `backend_old/app/models/analysis.py` 已退役。
 - verification dataflow gate 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`；`instant_analyses` 遗留 Python ORM shell 不再保留。
+- `backend_old/app/models/{user,project,opengrep}.py` 已退役。
+- 测试侧最小 SQLAlchemy 兼容定义已迁到 `backend_old/tests/support/legacy_orm_models.py`；运行时不再依赖这些 shell。
 
 ### 4. Shared Service Retained Helpers (`0`)
 

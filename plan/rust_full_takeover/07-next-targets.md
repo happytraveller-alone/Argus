@@ -120,7 +120,8 @@
 - prompt skill CRUD / backfill / mirror 与 builtin prompt template surface 继续由 Rust `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担；`user_config` 仅保留 legacy table compat，不再保留 Python ORM shell。
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已确认无 live Python importer，并已完成退役；`backend_old/app/models/project.py` 已切掉对这两个 optional shell 的 relationship 依赖。
 - `backend_old/app/models/analysis.py` 已确认无 live ORM caller，并已完成退役；verification dataflow 常量已迁到 `app.services.agent.verification_dataflow`。
-- models tail 现收束到 `agent_task.py`、`base.py`、`opengrep.py`、`project.py`、`user.py`。
+- `backend_old/app/models/{user,project,opengrep}.py` 已完成测试侧兼容下沉并退役；运行时不再直接依赖这些 shell。
+- models tail 现收束到 `agent_task.py`、`base.py`。
 
 ## 当前执行原则
 
@@ -141,3 +142,4 @@
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已完成 Python 退役；新增 retirement guard 防止 model shell 与 direct importer 回流。
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已完成 Python 退役；新增 mapper/usability guard，确保 `Project` 在没有这两个 legacy shell 的情况下仍可配置和实例化。
 - `backend_old/app/models/analysis.py` 已完成 Python 退役；新增 helper 常量模块承接 verification dataflow gate，schema perf index expectation 已同步移除 instant_analyses 遗留索引。
+- `backend_old/app/models/{user,project,opengrep}.py` 已完成 Python 退役；测试侧关系模型已迁到 `tests.support.legacy_orm_models`，并补充兼容配置 guard。

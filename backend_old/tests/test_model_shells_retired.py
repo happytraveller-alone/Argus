@@ -44,6 +44,21 @@ RETIRED_MODEL_SHELLS = (
         PROJECT_ROOT / "app/models/analysis.py",
         "app.models.analysis",
     ),
+    (
+        "user",
+        PROJECT_ROOT / "app/models/user.py",
+        "app.models.user",
+    ),
+    (
+        "project",
+        PROJECT_ROOT / "app/models/project.py",
+        "app.models.project",
+    ),
+    (
+        "opengrep",
+        PROJECT_ROOT / "app/models/opengrep.py",
+        "app.models.opengrep",
+    ),
 )
 
 
@@ -68,10 +83,9 @@ def test_retired_model_shells_have_no_live_python_importers():
 
 
 def test_project_model_stays_usable_without_retired_optional_model_shells():
-    import app.models.user  # noqa: F401
     import app.models.agent_task  # noqa: F401
-    import app.models.opengrep  # noqa: F401
-    from app.models.project import Project
+    import tests.support.legacy_orm_models  # noqa: F401
+    from tests.support.legacy_orm_models import Project
 
     project = Project(name="demo", owner_id="user-1")
 
@@ -79,10 +93,14 @@ def test_project_model_stays_usable_without_retired_optional_model_shells():
 
 
 def test_project_core_models_still_configure_without_optional_shells():
-    from app.models.user import User
-    from app.models.project import Project
     from app.models.agent_task import AgentTask
-    from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
+    from tests.support.legacy_orm_models import (
+        OpengrepFinding,
+        OpengrepRule,
+        OpengrepScanTask,
+        Project,
+        User,
+    )
 
     assert all(
         model is not None

@@ -2,16 +2,28 @@
 搜索功能测试配置和 Fixtures
 """
 
+import sys
 import pytest
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models.base import Base
-from app.models.user import User
-from app.models.project import Project
 from app.models.agent_task import AgentTask, AgentTaskStatus
-from app.models.opengrep import OpengrepRule, OpengrepScanTask, OpengrepFinding
+from tests.support.legacy_orm_models import (
+    OpengrepFinding,
+    OpengrepRule,
+    OpengrepScanTask,
+    Project,
+    User,
+)
+
+import tests.support.legacy_orm_models as legacy_orm_models
+
+
+sys.modules.setdefault("app.models.user", legacy_orm_models)
+sys.modules.setdefault("app.models.project", legacy_orm_models)
+sys.modules.setdefault("app.models.opengrep", legacy_orm_models)
 
 
 TEST_USER_PASSWORD_HASH = (

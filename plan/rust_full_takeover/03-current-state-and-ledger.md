@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`97`
+- `backend_old/app` 非 API Python：`94`
 - `backend_old/alembic` Python：`0`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -20,7 +20,7 @@
 | --- | ---: | --- |
 | app root / core / config / security | 0 | Python core runtime 已退役 |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
-| models / persistence mirror | 5 | retained domain / persistence mirror |
+| models / persistence mirror | 2 | retained domain / persistence mirror |
 | shared helpers | 0 | Python shared helpers 已退役 |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
@@ -81,6 +81,7 @@
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役；`backend_old/app/models/project.py` 已切掉对这些 legacy mirror shell 的 ORM relationship 依赖，Rust `backend/src/routes/projects.rs` / `backend/src/bootstrap/legacy_mirror_schema.rs` 继续承担对应表面的 source of truth。
 - `backend_old/app/core/config.py` 已退役；flow/lightweight 与 sandbox/base/preflight Python caller 已切到 `app.services.agent.runtime_settings`，`backend_old/app/core` 现已清零。
 - `backend_old/app/models/analysis.py` 已退役；verification dataflow 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`，`instant_analyses` Python ORM shell 不再保留。
+- `backend_old/app/models/{user,project,opengrep}.py` 已退役；测试侧最小 SQLAlchemy 兼容定义已下沉到 `backend_old/tests/support/legacy_orm_models.py`，运行时不再依赖这些 model shell。
 
 ## 本目录内的使用方式
 
