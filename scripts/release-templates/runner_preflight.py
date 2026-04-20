@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import docker
 
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 
 logger = logging.getLogger(__name__)

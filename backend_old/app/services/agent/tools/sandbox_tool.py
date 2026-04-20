@@ -22,7 +22,7 @@ from .evidence_protocol import (
     unique_command_chain,
     validate_evidence_metadata,
 )
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 class SandboxConfig:
     """沙箱配置"""
     image: str = None  # 默认从 settings.SANDBOX_IMAGE 读取
-    memory_limit: str = "512m"
-    cpu_limit: float = 1.0
-    timeout: int = 60
+    memory_limit: str | None = None
+    cpu_limit: float | None = None
+    timeout: int | None = None
     network_mode: str = "none"  # none, bridge, host
     read_only: bool = True
     user: str = "1000:1000"
@@ -41,6 +41,12 @@ class SandboxConfig:
     def __post_init__(self):
         if self.image is None:
             self.image = settings.SANDBOX_IMAGE
+        if self.memory_limit is None:
+            self.memory_limit = settings.SANDBOX_MEMORY_LIMIT
+        if self.cpu_limit is None:
+            self.cpu_limit = settings.SANDBOX_CPU_LIMIT
+        if self.timeout is None:
+            self.timeout = settings.SANDBOX_TIMEOUT
 
 
 class SandboxManager:

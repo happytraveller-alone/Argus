@@ -21,7 +21,7 @@ try:
     import docker
 except ImportError:  # pragma: no cover - optional dependency in unit-test environments
     docker = None
-from app.core.config import settings
+from app.services.agent.runtime_settings import settings
 
 
 ProfileType = Literal["isolated_exec", "network_verify", "tool_workdir"]

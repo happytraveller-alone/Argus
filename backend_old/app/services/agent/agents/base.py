@@ -656,7 +656,7 @@ class BaseAgent(ABC):
         Returns:
             包含各种超时配置的字典
         """
-        from app.core.config import settings
+        from app.services.agent.runtime_settings import settings
 
         # 尝试从 llm_service 获取用户配置的超时值
         if hasattr(self.llm_service, 'get_agent_timeout_config'):

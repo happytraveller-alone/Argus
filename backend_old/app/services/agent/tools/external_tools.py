@@ -12,7 +12,6 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from dataclasses import dataclass
 
-from app.core.config import settings
 from .base import AgentTool, ToolResult
 from .sandbox_tool import SandboxManager
 
