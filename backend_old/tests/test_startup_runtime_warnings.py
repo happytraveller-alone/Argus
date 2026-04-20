@@ -52,14 +52,18 @@ for module_name in ("app.core.security", "app.core.encryption"):
     assert result.returncode == 0, combined_output
 
 
-def test_settings_import_has_no_pydantic_deprecation_warnings():
+def test_retired_core_config_module_fails_cleanly_without_deprecation_warnings():
     result = _run_backend_python(
-        "from app.core.config import Settings; "
-        "settings = Settings(BACKEND_CORS_ORIGINS='http://localhost:3000,https://example.com',"
-        " FUNCTION_LOCATOR_LANGUAGES='python,typescript', DATABASE_URL=None); "
-        "assert len(settings.BACKEND_CORS_ORIGINS) == 2; "
-        "assert settings.FUNCTION_LOCATOR_LANGUAGES == ['python', 'typescript']; "
-        "assert settings.DATABASE_URL.startswith('postgresql+asyncpg://')",
+        """
+import importlib
+
+try:
+    importlib.import_module("app.core.config")
+except ModuleNotFoundError as exc:
+    assert exc.name == "app.core.config", exc
+else:
+    raise AssertionError("app.core.config should stay retired")
+""",
         warning_filters=["error::DeprecationWarning"],
     )
 

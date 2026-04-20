@@ -24,7 +24,7 @@
 
 | 功能组 | 当前文件数 | 当前责任 | 推荐 Rust 落点 |
 | --- | ---: | --- | --- |
-| app root / core / config / security | 1 | retained config core | `backend/src/config.rs`, `backend/src/core/*` |
+| app root / core / config / security | 0 | Python core runtime 已退役 | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
 | models / persistence mirror | 6 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
@@ -40,15 +40,11 @@
 
 ## 详细功能块
 
-### 1. App Root / Core / Config / Security (`1`)
-
-当前责任：
-
-- Python retained runtime 的设置读取
+### 1. App Root / Core / Config / Security (`0`)
 
 目标状态：
 
-- Rust 已成为安全、加密 source of truth，剩余目标是让配置读取也完全脱离 Python `app.core`
+- Rust 已成为安全、加密与配置读取的 source of truth
 - Python runtime 不再 import retired core 模块
 
 当前状态：
@@ -56,12 +52,11 @@
 - Rust `backend/src/core/security.rs` 已承担 password hashing / JWT 语义宿主。
 - Rust `backend/src/core/encryption.rs` 已承担 sensitive-field encryption 语义宿主。
 - `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役，并有 guard 防止 direct importer 回流。
-- `backend_old/app/core/config.py` 仍被 flow/tool/alembic 链路引用，是当前 app core 的唯一剩余 live 文件。
+- `backend_old/app/core/config.py` 已退役；flow/lightweight 与 sandbox/base/preflight Python caller 已切到 `app.services.agent.runtime_settings`。
 
 文件：
 
 ```text
-backend_old/app/core/config.py
 ```
 
 ### 2. DB Gate / Schema Snapshot (`0`)

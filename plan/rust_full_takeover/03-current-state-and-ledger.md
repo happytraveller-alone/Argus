@@ -18,7 +18,7 @@
 
 | 功能组 | 当前文件数 | 仍承担的责任 |
 | --- | ---: | --- |
-| app root / core / config / security | 1 | retained config core；security/encryption 已退役 |
+| app root / core / config / security | 0 | Python core runtime 已退役 |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
 | models / persistence mirror | 6 | retained domain / persistence mirror |
 | shared helpers | 0 | Python shared helpers 已退役 |
@@ -51,9 +51,8 @@
 1. `scope_filters.py` 仍在控制 retained scanner 主链；queue service source of truth 已切到 Rust `runtime::queue`。
 2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
 3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` Python runtime 已清零。
-4. `backend_old/app/core/config.py` 仍是当前 app core 的唯一剩余 live 文件；它仍被 flow/tool 链路依赖。
-5. `backend_old/scripts/flow_parser_runner.py` 与 `scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
-6. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
+4. `backend_old/scripts/flow_parser_runner.py` 与 `scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
+5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
 
 ## 最近完成的 slice
 
@@ -80,6 +79,7 @@
 - Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell；`backend_old/app/services/sandbox_runner.py` 已退役，live Python caller 已收束到 `sandbox_runner_client.py`。
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役；Rust prompt skill CRUD / builtin prompt template route 已继续由 `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担，legacy table compat 保留但不再需要 Python model shell。
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役；`backend_old/app/models/project.py` 已切掉对这些 legacy mirror shell 的 ORM relationship 依赖，Rust `backend/src/routes/projects.rs` / `backend/src/bootstrap/legacy_mirror_schema.rs` 继续承担对应表面的 source of truth。
+- `backend_old/app/core/config.py` 已退役；flow/lightweight 与 sandbox/base/preflight Python caller 已切到 `app.services.agent.runtime_settings`，`backend_old/app/core` 现已清零。
 
 ## 本目录内的使用方式
 
