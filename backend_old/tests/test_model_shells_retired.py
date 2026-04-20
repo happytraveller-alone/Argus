@@ -8,6 +8,7 @@ from tests.test_config_internal_callers_use_service_layer import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TEST_SHIMMED_RETIRED_MODEL_SHELLS = {"user", "project", "opengrep"}
 RETIRED_MODEL_SHELLS = (
     (
         "prompt_skill",
@@ -59,6 +60,11 @@ RETIRED_MODEL_SHELLS = (
         PROJECT_ROOT / "app/models/opengrep.py",
         "app.models.opengrep",
     ),
+    (
+        "base",
+        PROJECT_ROOT / "app/models/base.py",
+        "app.models.base",
+    ),
 )
 
 
@@ -76,6 +82,13 @@ def test_retired_model_shells_have_no_live_python_importers():
             ".".join(dotted_module.split(".")[:-1]),
             dotted_module.rsplit(".", 1)[-1],
         )
+        if module_name in TEST_SHIMMED_RETIRED_MODEL_SHELLS:
+            tests_root = PROJECT_ROOT / "tests"
+            offenders = [
+                offender
+                for offender in offenders
+                if not offender.startswith(str(tests_root))
+            ]
         assert not offenders, (
             f"retired model shell {module_name} should have no live Python importers:\n"
             + "\n".join(offenders)

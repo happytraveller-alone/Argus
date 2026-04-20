@@ -26,7 +26,7 @@
 | --- | ---: | --- | --- |
 | app root / core / config / security | 0 | Python core runtime 已退役 | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
-| models / persistence mirror | 2 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| models / persistence mirror | 1 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -70,7 +70,7 @@
 
 - DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
-### 3. Models / Persistence Mirror (`2`)
+### 3. Models / Persistence Mirror (`1`)
 
 当前责任：
 
@@ -85,7 +85,6 @@
 
 ```text
 backend_old/app/models/agent_task.py
-backend_old/app/models/base.py
 ```
 
 已完成收口：
@@ -99,6 +98,8 @@ backend_old/app/models/base.py
 - verification dataflow gate 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`；`instant_analyses` 遗留 Python ORM shell 不再保留。
 - `backend_old/app/models/{user,project,opengrep}.py` 已退役。
 - 测试侧最小 SQLAlchemy 兼容定义已迁到 `backend_old/tests/support/legacy_orm_models.py`；运行时不再依赖这些 shell。
+- `backend_old/app/models/base.py` 已退役。
+- 声明式 ORM base 已迁到 `backend_old/app/services/agent/orm_base.py`；剩余 `agent_task.py` 与测试侧兼容模型均不再依赖 `app.models.base`。
 
 ### 4. Shared Service Retained Helpers (`0`)
 

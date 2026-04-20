@@ -8,7 +8,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models.base import Base
+from app.services.agent.orm_base import Base
 from app.models.agent_task import AgentTask, AgentTaskStatus
 from tests.support.legacy_orm_models import (
     OpengrepFinding,
