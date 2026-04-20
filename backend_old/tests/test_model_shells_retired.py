@@ -39,6 +39,11 @@ RETIRED_MODEL_SHELLS = (
         PROJECT_ROOT / "app/models/project_management_metrics.py",
         "app.models.project_management_metrics",
     ),
+    (
+        "analysis",
+        PROJECT_ROOT / "app/models/analysis.py",
+        "app.models.analysis",
+    ),
 )
 
 

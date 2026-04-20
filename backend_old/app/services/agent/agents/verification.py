@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from app.services.agent.json_safe import dump_json_safe
-from app.models.analysis import (
+from app.services.agent.verification_dataflow import (
     REAL_DATAFLOW_EVIDENCE_LIST_FIELDS,
     REAL_DATAFLOW_PLACEHOLDER_VALUES,
 )

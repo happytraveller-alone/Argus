@@ -46,7 +46,6 @@ async def test_perf_indexes_and_constraints_exist():
             "ix_projects_owner_active_created_at",
             "ix_projects_name_trgm",
             "ix_project_members_project_joined_at",
-            "ix_instant_analyses_user_created_at",
             "ix_project_info_project_created_at",
             "ix_audit_rule_sets_active_language_type",
             "ix_audit_rules_rule_set_enabled_sort",

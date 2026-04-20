@@ -26,7 +26,7 @@
 | --- | ---: | --- | --- |
 | app root / core / config / security | 0 | Python core runtime 已退役 | `backend/src/config.rs`, `backend/src/core/*` |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
-| models / persistence mirror | 6 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
+| models / persistence mirror | 5 | retained domain / persistence mirror | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
@@ -70,7 +70,7 @@
 
 - DB 相关剩余项只在 Rust mirror / domain / query plan 收口中，不再是 `app/db` Python blocker。
 
-### 3. Models / Persistence Mirror (`6`)
+### 3. Models / Persistence Mirror (`5`)
 
 当前责任：
 
@@ -85,7 +85,6 @@
 
 ```text
 backend_old/app/models/agent_task.py
-backend_old/app/models/analysis.py
 backend_old/app/models/base.py
 backend_old/app/models/opengrep.py
 backend_old/app/models/project.py
@@ -99,6 +98,8 @@ backend_old/app/models/user.py
 - `user_config` 仍保留 legacy table compat，但该兼容不再需要 Python ORM shell。
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役。
 - Rust `backend/src/routes/projects.rs` 与 `backend/src/bootstrap/legacy_mirror_schema.rs` 已承担其 DB/route surface；Python `Project` model 已切掉对这两个 optional shell 的 relationship 依赖。
+- `backend_old/app/models/analysis.py` 已退役。
+- verification dataflow gate 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`；`instant_analyses` 遗留 Python ORM shell 不再保留。
 
 ### 4. Shared Service Retained Helpers (`0`)
 
