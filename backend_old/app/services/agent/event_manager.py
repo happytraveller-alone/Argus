@@ -612,7 +612,7 @@ class EventManager:
     
     async def _save_event_to_db(self, event_data: Dict):
         """保存事件到数据库"""
-        from app.models.agent_task import AgentEvent
+        from app.services.agent.task_models import AgentEvent
 
         #  清理无效的 UTF-8 字符（如二进制内容）
         def sanitize_string(s):
@@ -698,7 +698,7 @@ class EventManager:
             return []
         
         from sqlalchemy.future import select
-        from app.models.agent_task import AgentEvent
+        from app.services.agent.task_models import AgentEvent
         
         async with self.db_session_factory() as db:
             result = await db.execute(

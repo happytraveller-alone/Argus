@@ -1,4 +1,4 @@
-from app.models.agent_task import AgentTask, AgentTaskPhase, AgentTaskStatus
+from app.services.agent.task_models import AgentTask, AgentTaskPhase, AgentTaskStatus
 import app.models.opengrep  # noqa: F401
 
 

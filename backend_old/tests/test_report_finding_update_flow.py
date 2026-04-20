@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.services.agent.task_findings import _save_findings
-from app.models.agent_task import AgentFinding
+from app.services.agent.task_models import AgentFinding
 from app.services.agent.agents.report import ReportAgent
 from app.services.agent.tools.base import AgentTool, ToolResult
 from app.services.agent.tools.verification_result_tools import (

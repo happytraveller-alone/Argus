@@ -2,7 +2,7 @@ import importlib
 
 from sqlalchemy.orm import configure_mappers
 
-from app.models.agent_task import AgentTask
+from app.services.agent.task_models import AgentTask
 from tests.support.legacy_orm_models import (
     OpengrepFinding,
     OpengrepRule,

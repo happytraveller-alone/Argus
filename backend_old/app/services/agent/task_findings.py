@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.agent_task import AgentFinding, FindingStatus, VulnerabilitySeverity
+from app.services.agent.task_models import AgentFinding, FindingStatus, VulnerabilitySeverity
 from app.services.agent.utils.vulnerability_naming import (
     build_cn_structured_description,
     build_cn_structured_description_markdown,
@@ -789,7 +789,7 @@ async def _save_findings(
     Returns:
         int: 实际保存的发现数量
     """
-    from app.models.agent_task import VulnerabilityType
+    from app.services.agent.task_models import VulnerabilityType
     from app.services.agent.tools.verification_result_tools import ensure_finding_identity
 
     logger.info(f"[SaveFindings] Starting to save {len(findings)} findings for task {task_id}")

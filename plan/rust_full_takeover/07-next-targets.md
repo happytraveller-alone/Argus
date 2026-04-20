@@ -122,7 +122,7 @@
 - `backend_old/app/models/analysis.py` 已确认无 live ORM caller，并已完成退役；verification dataflow 常量已迁到 `app.services.agent.verification_dataflow`。
 - `backend_old/app/models/{user,project,opengrep}.py` 已完成测试侧兼容下沉并退役；运行时不再直接依赖这些 shell。
 - `backend_old/app/models/base.py` 已退役；声明式 ORM base 已迁到 `app.services.agent.orm_base`。
-- models tail 现收束到 `agent_task.py`。
+- `backend_old/app/models/agent_task.py` 已迁到 `app.services.agent.task_models`；`backend_old/app/models` 现已清零，接下来转入 agent orchestration/state/tool 主链。
 
 ## 当前执行原则
 
@@ -145,3 +145,4 @@
 - `backend_old/app/models/analysis.py` 已完成 Python 退役；新增 helper 常量模块承接 verification dataflow gate，schema perf index expectation 已同步移除 instant_analyses 遗留索引。
 - `backend_old/app/models/{user,project,opengrep}.py` 已完成 Python 退役；测试侧关系模型已迁到 `tests.support.legacy_orm_models`，并补充兼容配置 guard。
 - `backend_old/app/models/base.py` 已完成 Python 退役；新增 `app.services.agent.orm_base` 承接声明式 base，retirement guard 已覆盖 base shell。
+- `backend_old/app/models/agent_task.py` 已完成 Python 退役；运行时 ORM 与常量已迁到 `app.services.agent.task_models`，测试/运行时 direct importer 已切换，`app/models` 目录清零。

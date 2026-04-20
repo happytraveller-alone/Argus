@@ -20,7 +20,7 @@
 | --- | ---: | --- |
 | app root / core / config / security | 0 | Python core runtime 已退役 |
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
-| models / persistence mirror | 1 | retained domain / persistence mirror |
+| models / persistence mirror | 0 | Python model runtime 已退役 |
 | shared helpers | 0 | Python shared helpers 已退役 |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
 | scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
@@ -83,6 +83,7 @@
 - `backend_old/app/models/analysis.py` 已退役；verification dataflow 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`，`instant_analyses` Python ORM shell 不再保留。
 - `backend_old/app/models/{user,project,opengrep}.py` 已退役；测试侧最小 SQLAlchemy 兼容定义已下沉到 `backend_old/tests/support/legacy_orm_models.py`，运行时不再依赖这些 model shell。
 - `backend_old/app/models/base.py` 已退役；声明式 ORM base 已迁到 `backend_old/app/services/agent/orm_base.py`，测试侧兼容模型与剩余 `agent_task.py` 均不再依赖 `app.models.base`。
+- `backend_old/app/models/agent_task.py` 已退役；运行时 ORM 已迁到 `backend_old/app/services/agent/task_models.py`，`backend_old/app/models` 现已清零。
 
 ## 本目录内的使用方式
 
