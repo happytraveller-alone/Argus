@@ -482,71 +482,73 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-22 11:51am GMT+8
+# [audittool_personal] recent context, 2026-04-22 9:41pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (13,937t read) | 387,659t work | 96% savings
+Stats: 50 obs (20,506t read) | 1,169,665t work | 98% savings
 
 ### Apr 18, 2026
 S5 Add self-inferred model and reasoning intensity selection for both Claude and Codex to CLAUDE.md (Apr 18, 10:27 AM)
 S1 omx-setup: refresh oh-my-codex user-scope installation in /home/xyf/audittool_personal (Apr 18, 10:27 AM)
 S6 Clarify Codex model and reasoning intensity configuration: make Claude's own model selection and Codex's `--model`/`--effort` parameters both task-scenario-aware and self-determined (Apr 18, 10:54 AM)
 S7 Write Codex runtime inspection bash aliases and tmux layout into ~/.bashrc and AGENTS.md, then verify tmux works (Apr 18, 11:00 AM)
-S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 12:19 PM)
+S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 11:02 AM)
+S43 清除 backend_old/tests 下已被 Rust 接管功能的废弃 Python 测试代码 — 完成删除并进行 Rust vs Python 功能域全面盘点 (Apr 18, 12:19 PM)
 ### Apr 22, 2026
-562 11:08a 🔵 cargo test 阻塞问题处理
-563 " 🔵 audittool_personal Rust 后端当前改动范围
-564 11:09a 🔵 cargo test 阻塞根因：并发编译时 package cache 和 build directory 文件锁争用
-565 11:10a 🔵 链接器 OOM：ld 被 SIGKILL（signal 9）终止，多个集成测试二进制链接失败
-566 11:11a 🔵 lld 可用，lib 单元测试全部通过，OOM 仅影响集成测试二进制链接
-567 " 🔵 使用 lld 链接器触发全量重新编译
-568 11:13a 🔵 lld 链接成功，全量测试 128 通过，1 个测试失败：flow_parser tempdir fallback
-569 " 🔵 execute_uses_tempdir_fallback 测试失败为并发环境变量竞争，单独运行时通过
-570 11:14a 🔴 flow_parser 并发测试 flaky 问题确认：ENV_MUTEX 跨模块不共享导致环境变量竞争
-571 11:15a 🔵 全量集成测试发现新失败：opengrep_rule_batch_select 返回 400 而非预期 200
-572 " 🔵 opengrep_rule_batch_select 400 失败：测试在行 1741 断言，失败可复现，非 flaky
-573 " 🔵 400 失败根因定位：upload/json 端点调用 build_rule_record_from_payload，pattern_yaml 验证失败
-574 11:16a 🔵 400 根因确认：task_routes_api.rs 行 1716 pattern_yaml 使用 \\\\n 字面量而非实际换行
-575 11:17a 🔵 debug 脚本确认：\\n 字面量导致 pattern_yaml 被视为空，错误信息为"规则YAML不能为空"
-576 " 🔵 根因最终确认：JSON 序列化后 \n 变为实际换行，服务端可正常解析；测试代码中 \\\\n 未经 JSON 序列化直接传入导致失败
-577 11:18a 🔵 task_routes_api.rs 测试不使用环境变量，isolated_test_config 通过 zip_storage_path 隔离，排除环境竞争
-578 11:19a 🔵 关键发现：debug 脚本与测试使用完全相同的 create_rule 闭包，debug 返回 200，测试返回 400，问题在测试运行环境而非代码逻辑
-579 11:20a 🔴 修复 task_routes_api.rs 中 create_rule 闭包的 pattern_yaml 转义层级错误
-580 11:22a 🔴 opengrep_rule_batch_select 测试修复通过，lld 链接器配置持久化到 .cargo/config.toml
-581 " 🔵 新 flaky 失败：execute_reports_runner_failures 断言 error 字段不含 "run docker command"
-582 11:23a 🔵 execute_reports_runner_failures 单独运行通过，确认为并发 flaky；RUST_TEST_THREADS=1 全量串行运行启动
-583 11:24a 🔴 RUST_TEST_THREADS=1 串行运行：129 个 lib 单元测试全部通过，flow_parser flaky 问题消除
-584 11:26a 🔴 全量测试套件在 RUST_TEST_THREADS=1 下完全通过，cargo test 阻塞问题彻底解决
-585 11:27a ✅ RUST_TEST_THREADS=1 固化到 .cargo/config.toml [env] 节，cargo test 无需手动传递环境变量
-586 11:28a 🔴 cargo test 阻塞问题完全解决：.cargo/config.toml 配置生效，全量测试无需额外参数稳定通过
-587 11:29a 🔴 cargo test 阻塞问题最终验证完成：全量测试套件两次连续通过，exit code 0
-588 11:31a 🔵 cargo build 成功（9s 增量），Python 测试因 conftest.py 导入 app 模块失败
-589 " 🔵 Python 测试需要 PYTHONPATH=backend_old，两个测试文件全部通过
-590 11:32a 🔵 Python 后端测试套件全部通过：findings 相关 3 个测试文件共 17 个测试均绿灯
-591 " ✅ rust_full_takeover 计划文档更新：scope_filters 迁移完成，scanner/queue 功能组清零
-593 " ⚖️ Rust Backend Architecture Verification: APPROVE
-592 11:33a ✅ Ralph 验证分支提交 architect review：scope_filters 迁移 + cargo test 修复
-594 " 🟣 Rust scope_filters CLI bridge: backend-runtime-startup scan-scope subcommand
-595 " ✅ Test suite updated: scope_filters retirement guards and new ignored-scope-path coverage
-596 " ✅ Plan docs updated: scanner/queue group cleared to 0, blocker list renumbered
-597 11:34a 🔵 Live verification: scope_filters.py deleted, non-API Python count confirmed at 93
-598 11:35a 🔵 Python vs Rust scope_filters semantic parity confirmed via HEAD diff
-600 " 🔵 Rust wildcard matcher does not support ? (single-char) — behavioral gap vs Python fnmatch
-599 " 🔵 cargo fmt --check 通过，Python 文件语法编译通过，architect review 进行中
-601 11:36a 🔵 Architect Review REJECT：Rust wildcard_matches_bytes 未实现 fnmatch 的 ? 和 [] 语义，静默收窄 contract
-602 " 🔴 修复 wildcard_matches：实现完整 fnmatch 语义（? 和 [] 字符类），补充 parity regression tests
-603 11:37a 🔵 Python bridge 测试失败：? 和 [] 模式通过 Rust bridge 时未生效，Rust 单测通过但 Python 侧 bridge 未传递 fnmatch 模式
-604 11:38a ⚖️ Rust Full Takeover of Python Functionality
-605 11:47a 🟣 Rust Backend Test Suite Passes 131 Tests
-606 11:48a 🟣 Rust Backend 131 Unit Tests All Pass — Full Module Coverage Confirmed
-607 " 🟣 Rust Integration Tests: Bootstrap Startup Suite Running
-608 " 🟣 Rust Integration Test Suites All Pass — Full API Coverage Confirmed
-609 11:49a 🟣 Rust Test Suite Completed — All Tests Pass
-610 11:50a 🟣 task_routes_api Integration Suite: 16/16 Passed — Python Upstream Fully Retired
-611 " 🟣 Rust Backend Dev Build Succeeds in 1.39s
+630 8:16p 🔵 ralplan selected push_finding_payload as next Rust takeover slice
+633 8:18p ✅ rust_full_takeover ralplan session initiated
+634 " ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
+635 " ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
+636 8:19p ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
+637 8:20p ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
+638 8:21p ✅ rust_full_takeover ralplan session initiated
+639 8:22p ⚖️ push_finding_payload slice selected as next rust_full_takeover target with required PRD revisions
+642 " ✅ PRD and test-spec for push_finding_payload slice revised per architect review
+641 " ⚖️ ralplan draft for rust_full_takeover finding-payload slice submitted for architect review
+644 8:23p 🔵 push_finding_payload slice: full codebase surface map confirmed for ralplan review
+645 8:25p ✅ ralplan session initiated for rust_full_takeover finding-payload slice
+647 " ⚖️ ralplan architect review verdict: ITERATE on finding-payload PRD draft
+648 " 🔵 FlowParserRuntimeBridge subprocess/request-file pattern confirmed as canonical bridge template
+654 8:27p ✅ finding-payload PRD and test-spec updated after ITERATE verdict — second architect review dispatched
+655 " ⚖️ ralplan APPROVE verdict on revised finding-payload slice PRD
+656 8:29p ⚖️ ralplan APPROVE verdict on finding-payload slice PRD after required edits applied
+657 8:30p ⚖️ ralplan session initiated for rust_full_takeover finding-payload slice
+658 " ⚖️ ralplan session initiated for rust_full_takeover finding-payload slice
+659 8:31p ✅ ralplan session initiated for rust_full_takeover finding-payload slice
+661 " ⚖️ ralplan approved for push_finding_payload Rust takeover slice
+662 8:49p ✅ rust_full_takeover ralph plan execution initiated
+663 " 🔵 push_finding_payload.py — full normalization contract confirmed
+664 " 🔵 backend_runtime_startup.rs — scan-scope and flow-parser subcommands confirmed in Rust binary
+665 8:50p 🔵 flow_parser.rs — full Rust bridge implementation and test suite confirmed
+666 " 🔵 ralph session state — phase "planning", iteration 0, max 50
+667 8:53p 🟣 rust_full_takeover finding-payload slice — full implementation shipped
+668 " 🔵 active-plan.md — Phase 2 finding-payload slice: 6 tasks, 0 complete at plan start
+669 " 🔵 NON_CACHEABLE_TOOL_NAMES — queue tools bypass agent result cache
+671 8:55p 🔴 Rust finding-payload 4/4 tests green; parity test reveals two divergences from Python
+676 8:56p 🔴 natural_key_cmp added to Rust finding_payload.rs — parity test PARITY_OK 5
+677 " ✅ push_finding_payload.py retired — all 3 callers migrated to finding_payload_runtime
+678 " 🔵 test_agent_tool_input_repair.py — 6 pre-existing failures unrelated to finding-payload cutover
+687 9:10p ⚖️ Architect APPROVE: push_finding_payload Rust takeover — finding-payload slice
+688 " 🔵 Rust finding_payload.rs implementation details — natural_key_cmp resolves BTreeMap ordering parity issue
+690 9:13p 🔵 stop-gate review confirmed: previous turn was ralplan APPROVE output with no direct edits
+689 " 🔵 Python file count confirmed at 93 after push_finding_payload retirement — net-zero change
+691 9:14p ⚖️ Python test cleanup initiated — retire tests for Rust-owned functionality
+692 9:20p 🔵 backend_old/tests Python test inventory confirmed — 10 files across unit and integration
+693 9:21p ✅ stop-gate review ALLOW — previous turn was verification output only
+694 9:24p 🔄 39 obsolete Python test files deleted from backend_old/tests
+696 9:27p 🔵 Python remaining function inventory vs Rust implementation status — 89 files still Python-only
+695 " 🔵 rust_full_takeover plan files confirmed in plan/ not .omx/plans/
+697 9:28p 🔵 Rust vs Python functional domain boundary fully mapped — Agent intelligence layer remains Python-only
+700 9:29p ⚖️ Architect APPROVE verdict on finding_payload Rust takeover slice — second review
+698 " 🔄 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers
+S44 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers (Apr 22, 9:29 PM)
+701 " 🔄 knowledge/ directory fully removed — 17 Python source files deleted
+702 9:33p 🟣 finding_payload slice architect-approved after residual gap fixes
+707 " 🔵 Python external tools inventory — 20+ tools catalogued
+705 9:34p 🔵 audittool_personal repo dirty state — full surface map of uncommitted Rust/Python migration work
 
-Access 388k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1170k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

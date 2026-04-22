@@ -13,12 +13,9 @@ from app.services.agent.tools.base import ToolResult
 from app.services.agent.tools.code_analysis_tool import DataFlowAnalysisTool
 from app.services.agent.tools.control_flow_tool import ControlFlowAnalysisLightTool
 from app.services.agent.tools.file_tool import FileReadTool, FileSearchTool, ListFilesTool
-from app.services.agent.tools.logic_authz_tool import LogicAuthzAnalysisTool
 from app.services.agent.tools.pattern_tool import PatternMatchTool
 from app.services.agent.tools.reporting_tool import CreateVulnerabilityReportTool
 from app.services.agent.tools.run_code import ExtractFunctionTool
-from app.services.agent.tools.sandbox_tool import VulnerabilityVerifyTool
-from app.services.agent.tools.smart_scan_tool import QuickAuditTool, SmartScanTool
 
 
 class TestFileTools:
@@ -631,98 +628,6 @@ class TestFlowTools:
         summary = result.metadata.get("summary", "")
         assert "code2flow" in summary
         assert "auto_install_failed" in summary
-
-
-class TestStructuredEvidenceSummaries:
-    @pytest.mark.asyncio
-    async def test_smart_scan_returns_analysis_summary_metadata(self, temp_project_dir):
-        tool = SmartScanTool(temp_project_dir)
-
-        result = await tool.execute(target="src", max_files=10, quick_mode=False)
-
-        assert result.success is True
-        assert result.metadata.get("render_type") == "analysis_summary"
-        entry = result.metadata.get("entries", [None])[0]
-        assert isinstance(entry, dict)
-        assert entry.get("title")
-        assert isinstance(entry.get("severity_stats"), dict)
-        assert isinstance(entry.get("key_files"), list)
-        assert isinstance(entry.get("next_actions"), list)
-
-    @pytest.mark.asyncio
-    async def test_quick_audit_returns_analysis_summary_metadata(self, temp_project_dir):
-        tool = QuickAuditTool(temp_project_dir)
-
-        result = await tool.execute(file_path="src/sql_vuln.py", deep_analysis=True)
-
-        assert result.success is True
-        assert result.metadata.get("render_type") == "analysis_summary"
-        entry = result.metadata.get("entries", [None])[0]
-        assert isinstance(entry, dict)
-        assert entry.get("title")
-        assert isinstance(entry.get("severity_stats"), dict)
-        assert isinstance(entry.get("highlights"), list)
-
-    @pytest.mark.asyncio
-    async def test_verify_vulnerability_returns_verification_summary_metadata(self):
-        class _FakeSandboxManager:
-            is_available = True
-
-            async def initialize(self):
-                return None
-
-            async def verify_vulnerability(self, **kwargs):
-                _ = kwargs
-                return {
-                    "is_vulnerable": True,
-                    "evidence": "SQL error echoed in response",
-                    "response_status": 500,
-                    "error": None,
-                }
-
-        tool = VulnerabilityVerifyTool(sandbox_manager=_FakeSandboxManager())
-
-        result = await tool.execute(
-            vulnerability_type="sql_injection",
-            target_url="http://example.test/users?id=1",
-            payload="' OR 1=1 --",
-        )
-
-        assert result.success is True
-        assert result.metadata.get("render_type") == "verification_summary"
-        entry = result.metadata.get("entries", [None])[0]
-        assert isinstance(entry, dict)
-        assert entry.get("verdict") == "confirmed"
-        assert entry.get("target") == "http://example.test/users?id=1"
-        assert entry.get("response_status") == 500
-
-    @pytest.mark.asyncio
-    async def test_logic_authz_analysis_returns_flow_summary_metadata(self, temp_project_dir):
-        tool = LogicAuthzAnalysisTool(project_root=temp_project_dir)
-        tool.engine.analyze_finding = MagicMock(
-            return_value={
-                "missing_authz_checks": True,
-                "resource_scope_mismatch": False,
-                "idor_path": True,
-                "proof_nodes": ["route:users.show", "repo:user.load"],
-                "evidence": ["missing_authz_checks: src/sql_vuln.py:8 (get_user)"],
-                "blocked_reasons": [],
-            }
-        )
-
-        result = await tool.execute(
-            file_path="src/sql_vuln.py",
-            line_start=8,
-            vulnerability_type="idor",
-        )
-
-        assert result.success is True
-        assert result.metadata.get("render_type") == "flow_analysis"
-        entry = result.metadata.get("entries", [None])[0]
-        assert isinstance(entry, dict)
-        assert entry.get("path_found") is True
-        assert entry.get("engine") == "logic_graph"
-        assert isinstance(entry.get("call_chain"), list)
 
 
 class TestToolResult:

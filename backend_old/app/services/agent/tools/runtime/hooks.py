@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import os
 from typing import Any, Dict
 
-from ...push_finding_payload import normalize_push_finding_payload
+from ...finding_payload_runtime import normalize_push_finding_payload
 from .context import ToolCallContext, ToolFailureState
 from .contracts import ToolContractViolation
 

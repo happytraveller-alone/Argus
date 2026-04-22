@@ -28,7 +28,7 @@
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 | `backend/src/db/*` |
 | models / persistence mirror | 0 | Python model runtime 已退役 | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
-| agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
+| agent orchestration / state / payload | 22 | agent 执行、状态、消息、剩余 payload transport shim | `backend/src/runtime/*` |
 | scanner / queue / workspace / tracking | 0 | legacy `scope_filters.py` 已退役；SmartScanTool 并行 exclude 逻辑仍待后续统一 | `backend/src/scan/*` |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge | `backend/src/knowledge/*` |
@@ -121,7 +121,7 @@
 
 - agent 实际执行
 - 状态、消息和上下文管理
-- finding / payload 归一化
+- finding / payload transport shim
 
 目标状态：
 
@@ -149,10 +149,18 @@ backend_old/app/services/agent/core/state.py
 backend_old/app/services/agent/event_manager.py
 backend_old/app/services/agent/json_parser.py
 backend_old/app/services/agent/json_safe.py
-backend_old/app/services/agent/push_finding_payload.py
+backend_old/app/services/agent/finding_payload_runtime.py
 backend_old/app/services/agent/task_findings.py
 backend_old/app/services/agent/write_scope.py
 ```
+
+当前子进度：
+
+- Rust `backend/src/runtime/finding_payload.rs` 已接管 push-finding payload normalize / repair-map 语义。
+- `backend-runtime-startup finding-payload normalize --request <path>` 已成为该 contract 的唯一 bridge surface。
+- Python caller 已统一收束到 `backend_old/app/services/agent/finding_payload_runtime.py` 单一 transport shim；该 shim 不是 source of truth。
+- `backend_old/app/services/agent/push_finding_payload.py` 已退役。
+- 因为本刀是“删业务 helper + 增单一 shim”，所以组内 Python 文件数保持 `22`，`backend_old/app` 非 API Python 总数保持 `93`。
 
 ### 6. Scanner / Queue / Workspace / Tracking (`0`)
 

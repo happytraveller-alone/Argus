@@ -30,7 +30,7 @@
 - `backend_old/app/services/agent/config.py`
 - `backend_old/app/services/agent/json_parser.py`
 - `backend_old/app/services/agent/json_safe.py`
-- `backend_old/app/services/agent/push_finding_payload.py`
+- `backend_old/app/services/agent/finding_payload_runtime.py`
 - `backend_old/app/services/agent/task_findings.py`
 - `backend_old/app/services/agent/write_scope.py`
 
@@ -38,6 +38,14 @@
 
 - agent 执行、状态、消息和 finding payload 主链由 Rust 承担
 - Python orchestrator 退到 0 或降级为非运行时资产
+
+当前子进度：
+
+- Rust `backend/src/runtime/finding_payload.rs` 已承担 push-finding payload normalize / repair-map 语义宿主。
+- `backend-runtime-startup finding-payload normalize --request <path>` 已成为该 contract 的 bridge surface。
+- `backend_old/app/services/agent/agents/base.py`、`tools/queue_tools.py`、`tools/runtime/hooks.py` 已切到 `app.services.agent.finding_payload_runtime` 单一 shim。
+- `backend_old/app/services/agent/push_finding_payload.py` 已退役。
+- 这一刀只完成 payload normalization contract extraction；`event_manager.py`、`write_scope.py`、`task_findings.py` 主体与 agent state/message 主链仍在后续范围内。
 
 ### 2. Flow / Logic 主链
 

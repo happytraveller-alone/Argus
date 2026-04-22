@@ -1,6 +1,6 @@
 use anyhow::Result;
 use backend_rust::{
-    runtime::{bootstrap, code2flow, flow_parser, runner},
+    runtime::{bootstrap, code2flow, finding_payload, flow_parser, runner},
     scan::scope_filters,
 };
 use std::{env, path::Path, process};
@@ -9,7 +9,7 @@ fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| {
         eprintln!(
-            "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope>"
+            "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope|finding-payload>"
         );
         process::exit(1);
     });
@@ -20,14 +20,49 @@ fn main() -> Result<()> {
         "code2flow" => handle_code2flow(args)?,
         "flow-parser" => handle_flow_parser(args)?,
         "scan-scope" => handle_scan_scope(args)?,
+        "finding-payload" => handle_finding_payload(args)?,
         _ => {
             eprintln!(
-                "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope>"
+                "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope|finding-payload>"
             );
             process::exit(1);
         }
     }
 
+    Ok(())
+}
+
+fn handle_finding_payload(mut args: impl Iterator<Item = String>) -> Result<()> {
+    let operation = args.next().unwrap_or_else(|| {
+        eprintln!(
+            "Usage: backend-runtime-startup finding-payload <normalize> --request <path>"
+        );
+        process::exit(1);
+    });
+    let operation =
+        finding_payload::FindingPayloadOperation::from_cli(&operation).unwrap_or_else(|_| {
+            eprintln!(
+                "Usage: backend-runtime-startup finding-payload <normalize> --request <path>"
+            );
+            process::exit(1);
+        });
+
+    let flag = args.next().unwrap_or_default();
+    let request_path = args.next().unwrap_or_default();
+    if flag != "--request" || request_path.is_empty() {
+        eprintln!(
+            "Usage: backend-runtime-startup finding-payload <normalize> --request <path>"
+        );
+        process::exit(1);
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string(&finding_payload::execute_from_request_path(
+            operation,
+            Path::new(&request_path),
+        ))?
+    );
     Ok(())
 }
 

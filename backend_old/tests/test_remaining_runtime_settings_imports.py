@@ -16,7 +16,6 @@ REMAINING_RUNTIME_SETTING_TARGETS = (
     BACKEND_OLD_ROOT / "app/services/agent/agents/base.py",
     BACKEND_OLD_ROOT / "app/services/agent/tools/sandbox_tool.py",
     BACKEND_OLD_ROOT / "app/services/agent/tools/sandbox_runner_client.py",
-    BACKEND_OLD_ROOT / "app/services/agent/tools/external_tools.py",
     REPO_ROOT / "scripts/release-templates/runner_preflight.py",
 )
 

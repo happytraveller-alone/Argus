@@ -22,7 +22,7 @@
 | db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
 | models / persistence mirror | 0 | Python model runtime 已退役 |
 | shared helpers | 0 | Python shared helpers 已退役 |
-| agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
+| agent orchestration / state / payload | 22 | agent 执行、状态、消息、剩余 payload transport shim |
 | scanner / queue / workspace / tracking | 0 | legacy `scope_filters.py` 已退役；SmartScanTool 并行 exclude 逻辑仍待后续统一 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
@@ -79,6 +79,9 @@
 - `backend_old/app/services/agent/agents/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖，`backend_old/app/services/llm/*` 现已清零。
 - Rust `backend/src/scan/path_utils.rs` 已接管 scan path normalization / archive member resolution 语义；`backend_old/app/services/scan_path_utils.py` 已退役。
 - Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell；`backend_old/app/services/sandbox_runner.py` 已退役，live Python caller 已收束到 `sandbox_runner_client.py`。
+- Rust `backend/src/runtime/finding_payload.rs` 已接管 push-finding payload normalize / repair-map 语义；`backend-runtime-startup finding-payload normalize` 现在承担 request-file -> JSON bridge。
+- `backend_old/app/services/agent/agents/base.py`、`tools/queue_tools.py`、`tools/runtime/hooks.py` 已切到 `app.services.agent.finding_payload_runtime` 单一 shim，不再 direct import `app.services.agent.push_finding_payload`。
+- `backend_old/app/services/agent/push_finding_payload.py` 已退役；Python 侧仅保留 `finding_payload_runtime.py` transport shim，因此 `backend_old/app` 非 API Python 总数保持 `93` 不变。
 - `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役；Rust prompt skill CRUD / builtin prompt template route 已继续由 `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担，legacy table compat 保留但不再需要 Python model shell。
 - `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役；`backend_old/app/models/project.py` 已切掉对这些 legacy mirror shell 的 ORM relationship 依赖，Rust `backend/src/routes/projects.rs` / `backend/src/bootstrap/legacy_mirror_schema.rs` 继续承担对应表面的 source of truth。
 - `backend_old/app/core/config.py` 已退役；flow/lightweight 与 sandbox/base/preflight Python caller 已切到 `app.services.agent.runtime_settings`，`backend_old/app/core` 现已清零。

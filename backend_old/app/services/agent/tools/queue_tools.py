@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 
-from ..push_finding_payload import normalize_push_finding_payload
+from ..finding_payload_runtime import normalize_push_finding_payload
 from .base import AgentTool, ToolResult
 
 logger = logging.getLogger(__name__)

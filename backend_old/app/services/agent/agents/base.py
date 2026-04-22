@@ -43,7 +43,7 @@ from ..utils.vulnerability_naming import (
     normalize_cwe_id,
 )
 from ..skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS
-from ..push_finding_payload import normalize_push_finding_payload
+from ..finding_payload_runtime import normalize_push_finding_payload
 
 logger = logging.getLogger(__name__)
 
