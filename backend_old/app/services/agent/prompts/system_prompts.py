@@ -156,7 +156,7 @@ TOOL_USAGE_GUIDE = """
 ## 工具使用指南
 
 ### 核心原则
-- 智能扫描只暴露原子化工具集合，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
+- 使用原子化工具集合，优先走代码检索建立候选，再补代码证据与验证证据。
 - `search_code` / `list_files` / `get_code_window` / `get_file_outline` / `get_function_summary` / `get_symbol_body` / `locate_enclosing_function` 均优先走本地轻量实现。
 - 先用 `search_code` 定位到 `file_path:line`，再使用 `get_code_window` 获取极小证据窗口。
 - 所有结论都必须落到代码证据、流证据或动态验证证据，禁止无证据定结论。
@@ -164,8 +164,6 @@ TOOL_USAGE_GUIDE = """
 ### 核心工具
 | 分类 | 工具 | 用途 |
 |------|------|------|
-| 智能扫描 | `smart_scan` | 综合智能扫描，快速定位高风险区域 |
-| 智能扫描 | `quick_audit` | 轻量快速审计模式 |
 | 代码检索 | `list_files` | 按目录/模式列出候选文件 |
 | 代码检索 | `search_code` | 检索关键调用、入口与危险模式 |
 | 代码检索 | `get_code_window` | 围绕锚点提取极小代码窗口 |
@@ -175,18 +173,16 @@ TOOL_USAGE_GUIDE = """
 | 证据分析 | `pattern_match` | 快速筛查危险模式 |
 | 证据分析 | `dataflow_analysis` | 追踪 Source -> Sink |
 | 证据分析 | `controlflow_analysis_light` | 验证可达性与控制条件 |
-| 证据分析 | `logic_authz_analysis` | 分析认证/授权与业务逻辑边界 |
 | 动态验证 | `sandbox_exec` | 在沙箱中执行命令与收集运行时证据 |
 | 动态验证 | `run_code` | 运行 Harness/PoC 验证漏洞 |
 | 动态验证 | `verify_vulnerability` | 编排验证流程并沉淀结论 |
 | 报告输出 | `create_vulnerability_report` | 创建正式漏洞报告 |
 
 ### 推荐流程
-1. 使用 `smart_scan` 或 `quick_audit` 建立候选。
-2. 使用 `search_code`、`list_files`、`get_code_window`、`get_file_outline`、`get_function_summary`、`get_symbol_body` 收集代码证据。
-3. 使用 `dataflow_analysis`、`controlflow_analysis_light`、`logic_authz_analysis` 补齐流证据。
-4. 使用 `run_code`、`sandbox_exec`、`verify_vulnerability` 做动态验证。
-5. 确认后调用 `create_vulnerability_report` 输出正式结论。
+1. 使用 `search_code`、`list_files`、`get_code_window`、`get_file_outline`、`get_function_summary`、`get_symbol_body` 收集代码证据。
+2. 使用 `dataflow_analysis`、`controlflow_analysis_light` 补齐流证据。
+3. 使用 `run_code`、`sandbox_exec`、`verify_vulnerability` 做动态验证。
+4. 确认后调用 `create_vulnerability_report` 输出正式结论。
 
 ### 禁止事项
 - 不要使用已删除工具或 skill。

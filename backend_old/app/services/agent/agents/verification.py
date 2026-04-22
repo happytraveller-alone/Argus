@@ -33,11 +33,6 @@ from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, 
 from .react_parser import parse_react_response
 from .verification_table import VerificationFindingTable
 from ..json_parser import AgentJsonParser
-from ..core.flow.lightweight.function_locator import EnclosingFunctionLocator
-from ..core.flow.lightweight.function_locator_payload import (
-    parse_locator_payload,
-    select_locator_function,
-)
 from ..prompts.system_prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 from ..utils.vulnerability_naming import (
     build_cn_structured_description,
@@ -183,7 +178,6 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 
 **辅助工具**：
 - `sandbox_exec`：沙箱命令执行（验证命令注入）
-- `sandbox_http`：HTTP 请求（如有运行服务）
 
 ### 工具调用原则
 1. **必须先调工具再输出结论** - 禁止仅凭已知信息判断
@@ -1643,14 +1637,14 @@ class VerificationAgent(BaseAgent):
         self,
         raw_output: str,
     ) -> Optional[Dict[str, Any]]:
-        return parse_locator_payload(raw_output)
+        return None
 
     def _extract_function_from_locator_payload(
         self,
         payload: Dict[str, Any],
         line_start: int,
     ) -> Optional[Dict[str, Any]]:
-        return select_locator_function(payload, line_start=line_start)
+        return None
 
     async def _enrich_function_metadata_with_locator(
         self,
@@ -1763,7 +1757,7 @@ class VerificationAgent(BaseAgent):
         project_root: Optional[str],
         ast_cache: Dict[str, tuple[Optional[str], Optional[int], Optional[int]]],
         file_cache: Dict[str, List[str]],
-        locator: Optional[EnclosingFunctionLocator] = None,
+        locator: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         改进的函数定位方法：4层降级策略 + 详细诊断日志
@@ -2060,7 +2054,7 @@ class VerificationAgent(BaseAgent):
 
         ast_cache: Dict[str, tuple[Optional[str], Optional[int], Optional[int]]] = {}
         file_cache: Dict[str, List[str]] = {}
-        locator = EnclosingFunctionLocator(project_root=project_root) if project_root else None
+        locator = None
         for index, base in enumerate(source_findings):
             file_path, line_start, _line_end = self._normalize_file_location(base)
             key = (self._normalize_vulnerability_key(base), file_path, line_start)

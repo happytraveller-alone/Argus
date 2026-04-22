@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = BACKEND_ROOT / "scripts" / "flow_parser_runner.py"
+PROJECT_ROOT = BACKEND_ROOT.parent
+SCRIPT_PATH = PROJECT_ROOT / "backend" / "scripts" / "flow_parser_runner.py"
 
 
 def _load_flow_parser_runner_module():
@@ -14,6 +15,14 @@ def _load_flow_parser_runner_module():
     (runtime_root / "app" / "services" / "rag").mkdir(parents=True, exist_ok=True)
     (runtime_root / "flow_parser_runner.py").write_text(
         SCRIPT_PATH.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (runtime_root / "app" / "services" / "parser.py").write_text(
+        "class TreeSitterParser:\n"
+        "    def parse(self, content, language):\n"
+        "        return None\n"
+        "    def extract_definitions(self, tree, content, language):\n"
+        "        return []\n",
         encoding="utf-8",
     )
     (runtime_root / "app" / "services" / "rag" / "splitter.py").write_text(

@@ -23,14 +23,6 @@
   - 目标: 快速发现候选漏洞与高风险模式。
   - 推荐任务: 批量扫描候选风险点。；按漏洞类型或语义检索相关代码。；为后续验证阶段提供优先级线索。
   - 反例/误用: 在无有效输入或无证据时直接下结论。
-- 工具: `quick_audit`
-  - 目标: 快速发现候选漏洞与高风险模式。
-  - 推荐任务: 批量扫描候选风险点。；按漏洞类型或语义检索相关代码。；为后续验证阶段提供优先级线索。
-  - 反例/误用: 在无有效输入或无证据时直接下结论。
-- 工具: `smart_scan`
-  - 目标: 快速发现候选漏洞与高风险模式。
-  - 推荐任务: 批量扫描候选风险点。；按漏洞类型或语义检索相关代码。；为后续验证阶段提供优先级线索。
-  - 反例/误用: 在无有效输入或无证据时直接下结论。
 
 ## 可达性与逻辑分析
 - 工具: `controlflow_analysis_light`
@@ -42,11 +34,6 @@
   - 目标: 追踪污点从 Source 到 Sink 的传播链路，评估净化与污染路径。
   - 推荐任务: 识别 source/sink 节点与 taint_steps。；判断是否存在净化器与绕过路径。；输出数据流证据供后续验证/报告使用。
   - 关键输入: `source_code`（或 `file_path`）+ `variable_name`（可选 `sink_code/start_line/end_line/source_hints/sink_hints`）。
-  - 反例/误用: 在无有效输入或无证据时直接下结论。
-- 工具: `logic_authz_analysis`
-  - 目标: 分析认证/授权/业务规则是否存在越权或逻辑缺陷。
-  - 推荐任务: 校验所有权、角色、状态跃迁与金额规则。；识别全局补偿逻辑与局部绕过点。；输出业务逻辑证据与修复方向。
-  - 关键输入: `file_path` + `line_start`（可选 `line_end/function_name/vulnerability_type`）。
   - 反例/误用: 在无有效输入或无证据时直接下结论。
 
 ## 漏洞验证与 PoC 规划
@@ -91,11 +78,8 @@
 - `get_symbol_body`
 - `list_files`
 - `locate_enclosing_function`
-- `logic_authz_analysis`
 - `pattern_match`
-- `quick_audit`
 - `run_code`
 - `sandbox_exec`
 - `search_code`
-- `smart_scan`
 - `verify_vulnerability`

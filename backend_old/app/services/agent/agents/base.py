@@ -34,10 +34,6 @@ from app.services.agent.json_safe import dump_json_safe, normalize_json_safe
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
 from ..core.message import message_bus, MessageType, AgentMessage
-from ..core.flow.lightweight.function_locator_payload import (
-    parse_locator_payload,
-    select_locator_function,
-)
 from ..utils.vulnerability_naming import (
     build_cn_structured_description_markdown,
     normalize_cwe_id,
@@ -53,8 +49,6 @@ MAX_EVENT_PAYLOAD_CHARS = 120000
 
 TOOL_ALIAS_CANDIDATES: Dict[str, List[str]] = {
     "list": ["list_files"],
-    "smart_scan": ["smart_scan", "quick_audit", "pattern_match", "search_code", "get_code_window"],
-    "quick_audit": ["quick_audit", "smart_scan", "pattern_match", "search_code", "get_code_window"],
     "save_verification_results": ["save_verification_result"],
 }
 VIRTUAL_TOOL_NAMES: Set[str] = set()
@@ -837,6 +831,10 @@ class BaseAgent(ABC):
                 self._write_scope_guard = runtime.get_write_scope_guard()
             except Exception:
                 self._write_scope_guard = None
+
+    def set_mcp_runtime(self, runtime) -> None:
+        """设置 MCP 运行时（向后兼容别名，委托给 set_tool_runtime）。"""
+        self.set_tool_runtime(runtime)
 
     def set_write_scope_guard(self, guard: Optional["TaskWriteScopeGuard"]) -> None:
         """设置写入范围守卫。"""
@@ -2540,7 +2538,7 @@ class BaseAgent(ABC):
             if isinstance(matched_files, list):
                 candidates.extend(matched_files[:30])
 
-        if normalized_tool in {"dataflow_analysis", "logic_authz_analysis"}:
+        if normalized_tool in {"dataflow_analysis"}:
             candidates.extend(
                 [
                     tool_input.get("file_path"),
@@ -2672,17 +2670,7 @@ class BaseAgent(ABC):
         if normalized_tool_name == "dataflow_analysis":
             return max(default_tool_timeout, 150)
         tool_timeouts = {
-            "opengrep_scan": 120,
-            "npm_audit": 90,
-            "safety_scan": 60,
-            "kunlun_scan": 180,
-            "osv_scanner": 60,
-            "trufflehog_scan": 90,
             "sandbox_exec": 60,
-            "php_test": 30,
-            "command_injection_test": 30,
-            "sql_injection_test": 30,
-            "xss_test": 30,
         }
         return tool_timeouts.get(normalized_tool_name, default_tool_timeout)
 
@@ -2894,12 +2882,8 @@ class BaseAgent(ABC):
         *,
         target_line: Optional[int] = None,
     ) -> Dict[str, Any]:
-        payload = parse_locator_payload(output)
-        selected = (
-            select_locator_function(payload, line_start=target_line)
-            if isinstance(payload, dict)
-            else None
-        )
+        payload = None
+        selected = None
 
         best_name: Optional[str] = None
         best_start: Optional[int] = None

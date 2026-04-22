@@ -219,7 +219,7 @@ class AgentFindingResponse(BaseModel):
     flow_call_chain: Optional[List[str]] = None
     function_trigger_flow: Optional[List[str]] = None
     flow_control_conditions: Optional[List[str]] = None
-    logic_authz_evidence: Optional[List[str]] = None
+    logic_authz_evidence: Optional[List[str]] = None  # deprecated, kept for schema compat
     reachability_file: Optional[str] = None
     reachability_function: Optional[str] = None
     reachability_function_start_line: Optional[int] = None
@@ -2229,22 +2229,7 @@ def _serialize_agent_findings(
         if function_trigger_flow:
             flow_call_chain = function_trigger_flow
 
-        logic_payload = (
-            verification_payload.get("logic_authz")
-            if isinstance(verification_payload, dict)
-            else None
-        )
         logic_authz_evidence = None
-        if isinstance(logic_payload, dict):
-            raw_logic_evidence = logic_payload.get("evidence")
-            if isinstance(raw_logic_evidence, list):
-                logic_authz_evidence = [
-                    str(raw_item)
-                    for raw_item in raw_logic_evidence
-                    if str(raw_item).strip()
-                ]
-            elif isinstance(raw_logic_evidence, str) and raw_logic_evidence.strip():
-                logic_authz_evidence = [raw_logic_evidence.strip()]
 
         cwe_id = _extract_cwe_from_references(getattr(item, "references", None))
         if not cwe_id:

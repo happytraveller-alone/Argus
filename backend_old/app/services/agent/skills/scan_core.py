@@ -11,12 +11,9 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
     {"skill_id": "get_function_summary", "name": "get_function_summary", "summary": "解释单个函数的职责、输入输出、关键调用与风险点。"},
     {"skill_id": "get_symbol_body", "name": "get_symbol_body", "summary": "提取目标函数/符号主体源码，不承担语义解释。"},
     {"skill_id": "locate_enclosing_function", "name": "locate_enclosing_function", "summary": "根据文件与行号定位所属函数及其范围，辅助补全函数级证据。"},
-    {"skill_id": "smart_scan", "name": "smart_scan", "summary": "执行智能扫描，快速定位高风险区域。"},
-    {"skill_id": "quick_audit", "name": "quick_audit", "summary": "执行轻量快速审计，输出优先检查点。"},
     {"skill_id": "pattern_match", "name": "pattern_match", "summary": "用规则/模式快速筛查危险调用与脆弱代码模式。"},
     {"skill_id": "dataflow_analysis", "name": "dataflow_analysis", "summary": "分析 Source 到 Sink 的传播链与污点证据。"},
     {"skill_id": "controlflow_analysis_light", "name": "controlflow_analysis_light", "summary": "分析控制流、可达性与关键条件分支。"},
-    {"skill_id": "logic_authz_analysis", "name": "logic_authz_analysis", "summary": "分析认证、授权与业务逻辑边界。"},
     {"skill_id": "run_code", "name": "run_code", "summary": "运行验证 Harness/PoC，收集动态执行证据。"},
     {"skill_id": "sandbox_exec", "name": "sandbox_exec", "summary": "在隔离沙箱中执行命令，验证运行时行为。"},
     {"skill_id": "verify_vulnerability", "name": "verify_vulnerability", "summary": "编排漏洞验证步骤并收敛最终验证结论。"},
@@ -24,30 +21,6 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
 ]
 
 _SCAN_CORE_DISPLAY_METADATA: Dict[str, Dict[str, Any]] = {
-    "smart_scan": {
-        "category": "模型基础增强类",
-        "goal": "建立高价值候选集合，缩小后续分析范围。",
-        "task_list": ["执行整体扫描", "输出高风险区域", "给出下一步建议"],
-        "input_checklist": ["`target_path` (string, required): 扫描根路径"],
-        "example_input": "```json\n{\n  \"target_path\": \".\"\n}\n```",
-        "pitfalls": ["不要把 smart_scan 结果直接当成最终漏洞结论。"],
-        "sample_prompts": [
-            "请快速扫描 libplist 的高风险区域",
-            "用 smart_scan 看看哪些文件值得优先阅读",
-        ],
-    },
-    "quick_audit": {
-        "category": "模型基础增强类",
-        "goal": "在较短时间内建立初步风险画像。",
-        "task_list": ["执行快速审计", "输出关键候选", "标记优先级"],
-        "input_checklist": ["`target_path` (string, optional): 目标路径"],
-        "example_input": "```json\n{\n  \"target_path\": \".\"\n}\n```",
-        "pitfalls": ["不要在需要完整证据链时只停留在 quick_audit。"],
-        "sample_prompts": [
-            "对 libplist 做一次快速审计",
-            "请总结 libplist 的优先检查点",
-        ],
-    },
     "get_code_window": {
         "category": "代码读取与定位",
         "goal": "在完成定位后提取最小证据窗口，避免大段盲读源码。",
@@ -212,18 +185,6 @@ _SCAN_CORE_DISPLAY_METADATA: Dict[str, Dict[str, Any]] = {
             "分析 plist_from_xml 的入口与阻断条件",
         ],
     },
-    "logic_authz_analysis": {
-        "category": "可达性与逻辑分析",
-        "goal": "识别鉴权漏洞、越权与边界失效。",
-        "task_list": ["识别鉴权点", "分析边界条件", "输出授权风险"],
-        "input_checklist": ["`file_path` (string, required): 文件路径"],
-        "example_input": "```json\n{\n  \"file_path\": \"src/auth/controller.py\"\n}\n```",
-        "pitfalls": ["不要忽略业务前置条件和角色边界。"],
-        "sample_prompts": [
-            "分析 src/auth/controller.py 的鉴权边界",
-            "检查该入口是否存在越权风险",
-        ],
-    },
     "run_code": {
         "category": "漏洞验证与 PoC 规划",
         "goal": "用非武器化方式验证候选漏洞，并保留执行命令、退出码、输出摘要与执行代码。",
@@ -324,14 +285,11 @@ SCAN_CORE_SKILL_TEST_SUPPORTED_IDS = frozenset(
         "get_function_summary",
         "get_symbol_body",
         "pattern_match",
-        "smart_scan",
-        "quick_audit",
     }
 )
 SCAN_CORE_SKILL_TEST_DISABLED_REASONS: Dict[str, str] = {
     "dataflow_analysis": "首版仅开放可直接基于 libplist 自然语言提问的 skill；数据流分析依赖更复杂的上下文建模。",
     "controlflow_analysis_light": "首版仅开放可直接基于 libplist 自然语言提问的 skill；控制流分析依赖更复杂的上下文建模。",
-    "logic_authz_analysis": "首版仅开放可直接基于 libplist 自然语言提问的 skill；鉴权/业务逻辑分析依赖更复杂的上下文建模。",
     "run_code": "首版详情页暂不开放动态执行类 skill，避免引入额外运行时依赖。",
     "sandbox_exec": "首版详情页暂不开放动态执行类 skill，避免引入额外运行时依赖。",
     "verify_vulnerability": "首版详情页暂不开放多步骤编排型验证 skill。",

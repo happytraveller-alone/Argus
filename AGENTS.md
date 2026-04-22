@@ -482,73 +482,76 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-22 9:41pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 6:38am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (20,506t read) | 1,169,665t work | 98% savings
+Stats: 50 obs (18,724t read) | 917,612t work | 98% savings
 
 ### Apr 18, 2026
-S5 Add self-inferred model and reasoning intensity selection for both Claude and Codex to CLAUDE.md (Apr 18, 10:27 AM)
-S1 omx-setup: refresh oh-my-codex user-scope installation in /home/xyf/audittool_personal (Apr 18, 10:27 AM)
-S6 Clarify Codex model and reasoning intensity configuration: make Claude's own model selection and Codex's `--model`/`--effort` parameters both task-scenario-aware and self-determined (Apr 18, 10:54 AM)
-S7 Write Codex runtime inspection bash aliases and tmux layout into ~/.bashrc and AGENTS.md, then verify tmux works (Apr 18, 11:00 AM)
 S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 11:02 AM)
 S43 清除 backend_old/tests 下已被 Rust 接管功能的废弃 Python 测试代码 — 完成删除并进行 Rust vs Python 功能域全面盘点 (Apr 18, 12:19 PM)
 ### Apr 22, 2026
-630 8:16p 🔵 ralplan selected push_finding_payload as next Rust takeover slice
-633 8:18p ✅ rust_full_takeover ralplan session initiated
-634 " ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
-635 " ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
-636 8:19p ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
-637 8:20p ⚖️ ralplan review: push_finding_payload as next rust_full_takeover slice
-638 8:21p ✅ rust_full_takeover ralplan session initiated
-639 8:22p ⚖️ push_finding_payload slice selected as next rust_full_takeover target with required PRD revisions
-642 " ✅ PRD and test-spec for push_finding_payload slice revised per architect review
-641 " ⚖️ ralplan draft for rust_full_takeover finding-payload slice submitted for architect review
-644 8:23p 🔵 push_finding_payload slice: full codebase surface map confirmed for ralplan review
-645 8:25p ✅ ralplan session initiated for rust_full_takeover finding-payload slice
-647 " ⚖️ ralplan architect review verdict: ITERATE on finding-payload PRD draft
-648 " 🔵 FlowParserRuntimeBridge subprocess/request-file pattern confirmed as canonical bridge template
-654 8:27p ✅ finding-payload PRD and test-spec updated after ITERATE verdict — second architect review dispatched
-655 " ⚖️ ralplan APPROVE verdict on revised finding-payload slice PRD
-656 8:29p ⚖️ ralplan APPROVE verdict on finding-payload slice PRD after required edits applied
-657 8:30p ⚖️ ralplan session initiated for rust_full_takeover finding-payload slice
-658 " ⚖️ ralplan session initiated for rust_full_takeover finding-payload slice
-659 8:31p ✅ ralplan session initiated for rust_full_takeover finding-payload slice
-661 " ⚖️ ralplan approved for push_finding_payload Rust takeover slice
-662 8:49p ✅ rust_full_takeover ralph plan execution initiated
-663 " 🔵 push_finding_payload.py — full normalization contract confirmed
-664 " 🔵 backend_runtime_startup.rs — scan-scope and flow-parser subcommands confirmed in Rust binary
-665 8:50p 🔵 flow_parser.rs — full Rust bridge implementation and test suite confirmed
-666 " 🔵 ralph session state — phase "planning", iteration 0, max 50
-667 8:53p 🟣 rust_full_takeover finding-payload slice — full implementation shipped
-668 " 🔵 active-plan.md — Phase 2 finding-payload slice: 6 tasks, 0 complete at plan start
-669 " 🔵 NON_CACHEABLE_TOOL_NAMES — queue tools bypass agent result cache
-671 8:55p 🔴 Rust finding-payload 4/4 tests green; parity test reveals two divergences from Python
-676 8:56p 🔴 natural_key_cmp added to Rust finding_payload.rs — parity test PARITY_OK 5
-677 " ✅ push_finding_payload.py retired — all 3 callers migrated to finding_payload_runtime
-678 " 🔵 test_agent_tool_input_repair.py — 6 pre-existing failures unrelated to finding-payload cutover
-687 9:10p ⚖️ Architect APPROVE: push_finding_payload Rust takeover — finding-payload slice
-688 " 🔵 Rust finding_payload.rs implementation details — natural_key_cmp resolves BTreeMap ordering parity issue
-690 9:13p 🔵 stop-gate review confirmed: previous turn was ralplan APPROVE output with no direct edits
-689 " 🔵 Python file count confirmed at 93 after push_finding_payload retirement — net-zero change
 691 9:14p ⚖️ Python test cleanup initiated — retire tests for Rust-owned functionality
 692 9:20p 🔵 backend_old/tests Python test inventory confirmed — 10 files across unit and integration
 693 9:21p ✅ stop-gate review ALLOW — previous turn was verification output only
 694 9:24p 🔄 39 obsolete Python test files deleted from backend_old/tests
+S44 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers (Apr 22, 9:26 PM)
 696 9:27p 🔵 Python remaining function inventory vs Rust implementation status — 89 files still Python-only
 695 " 🔵 rust_full_takeover plan files confirmed in plan/ not .omx/plans/
 697 9:28p 🔵 Rust vs Python functional domain boundary fully mapped — Agent intelligence layer remains Python-only
 700 9:29p ⚖️ Architect APPROVE verdict on finding_payload Rust takeover slice — second review
 698 " 🔄 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers
-S44 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers (Apr 22, 9:29 PM)
+S56 Python external tool inventory (20+) enumerated and zero-caller tools deleted (Apr 22, 9:29 PM)
 701 " 🔄 knowledge/ directory fully removed — 17 Python source files deleted
 702 9:33p 🟣 finding_payload slice architect-approved after residual gap fixes
 707 " 🔵 Python external tools inventory — 20+ tools catalogued
 705 9:34p 🔵 audittool_personal repo dirty state — full surface map of uncommitted Rust/Python migration work
+709 9:40p 🔵 Python agent tool inventory — 68 AgentTool subclasses across 15 files
+710 " 🔄 6 zero-caller Python tool files deleted from backend_old/app/services/agent/tools/
+711 " 🔄 Test files cleaned up after tool file deletions
+712 " 🔵 logic_authz_analysis skill still referenced in prompts and pipeline despite tool deletion
+S86 smart-explore skill invoked in primary session (Apr 22, 9:40 PM)
+713 9:41p 🔄 stop-gate review ALLOW — Python tool file purge passed review
+716 9:45p 🔄 Python external tool modules deleted — 7 files removed, sandbox_tool.py truncated
+718 9:49p 🔵 Deleted tool IDs still referenced as skill names in prompts, config, and agent logic
+723 9:57p 🔵 Python Agent system inventory — 5 concrete agents + BaseAgent confirmed
+724 9:58p 🔵 git status snapshot — rust_full_takeover working tree state after finding_payload slice
+726 10:08p ✅ Stop-gate review ALLOW — bulk Python cleanup turn verified stable
+728 10:10p ⚖️ Stop-gate BLOCK risk identified — stale tool references in test, docs, and frontend after Python tool purge
+733 10:12p ✅ Stop-gate review initiated for bulk Python tool purge turn
+736 10:20p 🔵 smart-explore skill invoked in primary session
+S99 flow_parser_runner.py migration — update Dockerfile and CI workflow to source script from backend/scripts (Apr 22, 10:20 PM)
+738 " ✅ Stop-gate review ALLOW — logic/ directory deletion verified stable
+740 10:24p 🔵 Stale tool references remain in docs and tests after Python tool purge
+742 10:25p ✅ Agent tool docs purged of retired tool references — INDEX.md and TOOL_SHARED_CATALOG.md updated
+744 " ✅ dynamic_verification.skill.md fully purged of sandbox_http and multi-language test tool references
+745 " ✅ TOOL_SHARED_CATALOG.md fully purged — logic_authz_analysis, quick_audit, smart_scan removed from all sections
+746 " 🔵 Test suite: 58 failures remain after doc cleanup — pre-existing failures unrelated to doc edits
+752 10:33p 🔵 test_agent_prompt_contracts.py asserts sandbox_http in TOOL_USAGE_GUIDE — but TOOL_USAGE_GUIDE already has 16 tools without sandbox_http
+754 10:34p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified stable
+756 10:35p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified via session log
+758 10:36p 🔵 flow-parser-runner.Dockerfile still references backend_old path after migration
+760 10:37p 🔵 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK
+761 10:39p ✅ flow-parser-runner Dockerfile and CI workflow updated to source flow_parser_runner.py from backend/scripts
+S107 rust_full_takeover cleanup — full Python purge, flow_parser_runner.py migration, and CI/Dockerfile synchronization completed (Apr 22, 10:41 PM)
+765 10:41p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified stable
+S109 Add regression assertions to test_docker_compose_dev_flow.py for flow_parser_runner.py migration — verify Dockerfile and CI workflow path changes (Apr 22, 10:43 PM)
+S103 CI workflow path filter synchronization — update top-level push.paths and flow_parser_runner filter to reference backend/scripts after migration (Apr 22, 10:43 PM)
+766 10:44p ✅ Stop-gate review ALLOW — GitHub Actions workflow path filter update verified stable
+767 10:48p ✅ Stop-gate review ALLOW — GitHub Actions workflow path filter update verified stable
+772 10:50p ✅ Stop-gate regression assertions added for flow_parser_runner migration
+773 10:52p 🔵 Stop-gate reviewer confirmed previous turn was edit-producing via session log evidence
+776 10:54p ✅ Workflow path filter assertions added for flow_parser_runner migration
+779 10:57p 🔵 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK
+S114 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK (Apr 22, 10:57 PM)
+781 10:59p 🔵 Stop-gate review ALLOW — verification-only turn with no new edits
+783 " 🔴 Stop-gate BLOCK resolved — workflow path-filter assertions now cover both quote styles
+785 11:01p 🔵 Stop-gate review ALLOW — flow_parser_runner migration regression tests passed
+786 11:03p ⚖️ Rust full takeover loop initiated — target: halve backend non-test source files
+787 11:04p 🔵 backend_old agent services inventory — 64 Python files across 8 subdirectories
 
-Access 1170k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 918k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

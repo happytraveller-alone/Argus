@@ -379,12 +379,7 @@ class AnalysisAgent(BaseAgent):
             return "Action 为空"
 
         blocked_actions = {
-            "smart_scan",
             "semgrep_scan",
-            "npm_audit",
-            "safety_scan",
-            "opengrep_scan",
-            "kunlun_scan",
         }
         if action_name in blocked_actions:
             return f"单风险点模式禁止调用全局扫描工具: {action_name}"

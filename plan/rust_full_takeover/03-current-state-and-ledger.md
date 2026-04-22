@@ -1,98 +1,155 @@
 # Current State And Ledger
 
-## 文档定位
+> 最后更新：2026-04-22
 
-- 类型：Reference
-- 目标读者：需要快速判断“现状”和“剩余面”的开发者
+## 总览
 
-## 当前快照
+| 指标 | 数值 |
+|------|------|
+| Python 源文件（`backend_old/app`，不含 `__init__.py`） | 66 |
+| Python `__init__.py`（全部为空壳） | 0 个非空 |
+| Python 脚本（`backend_old/scripts`） | 1（`flow_parser_runner.py`） |
+| Python 测试文件（`backend_old/tests`） | ~80 |
+| Rust 源文件（`backend/src`） | 46 |
+| Rust 集成测试（`backend/tests`） | 12 |
 
-- `backend_old` 根目录 Python：`0`
-- `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`93`
-- `backend_old/alembic` Python：`0`
-- `backend_old/scripts` Python：`1`
-- `scripts/release-templates/runner_preflight.py`：`1`
+## Rust 已完全接管的功能域
 
-## 剩余功能组总览
+### HTTP API 路由（7 个 router，100% Rust）
 
-| 功能组 | 当前文件数 | 仍承担的责任 |
-| --- | ---: | --- |
-| app root / core / config / security | 0 | Python core runtime 已退役 |
-| db / schema snapshot gate | 0 | Python db/schema snapshot 已退役 |
-| models / persistence mirror | 0 | Python model runtime 已退役 |
-| shared helpers | 0 | Python shared helpers 已退役 |
-| agent orchestration / state / payload | 22 | agent 执行、状态、消息、剩余 payload transport shim |
-| scanner / queue / workspace / tracking | 0 | legacy `scope_filters.py` 已退役；SmartScanTool 并行 exclude 逻辑仍待后续统一 |
-| flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
-| knowledge | 21 | knowledge loader、framework / vuln knowledge |
-| tools + tool runtime | 26 | retained tool execution 主链 |
-| support assets | 7 | memory、prompt、streaming、scan-core 元数据 |
-| llm | 0 | Python llm runtime 已退役，剩余 fill-in 只在 Rust `backend/src/llm/*` |
-| llm_rule | 0 | Python rule runtime 已退役，剩余 fill-in 折到 Rust `backend/src/llm_rule/*` |
-| repo-adjacent ops tail | 2 | flow parser script host、release preflight |
+| Router | 路径前缀 | 主要端点数 |
+|--------|----------|-----------|
+| `agent_tasks` | `/api/v1/agent-tasks` | 16（CRUD + stream + findings + report） |
+| `agent_test` | `/api/v1/agent-test` | 6（recon/analysis/verification/business-logic） |
+| `projects` | `/api/v1/projects` | 27（CRUD + zip + files + cache + dashboard + export） |
+| `search` | `/api/v1/search` | 4（global + projects + tasks + findings） |
+| `skills` | `/api/v1/skills` | 8（catalog + CRUD + detail + test） |
+| `static_tasks` | `/api/v1/static-tasks` | 20+（rules CRUD + tasks + findings + cache） |
+| `system_config` | `/api/v1/system-config` | 7（defaults + CRUD + test-llm + models + preflight） |
+| `health` | `/health` | 1 |
 
-## Rust 已拿到的外层表面
+### 基础设施层（100% Rust）
 
-目前 Rust 已经承担了主要 route surface，至少包括：
+- DB 层：projects, prompt_skills, scan_rule_assets, system_config, task_state
+- Bootstrap/启动：dev/prod 模式、env 同步、DB 等待、optional resets
+- LLM：config, providers, tokenizer, compression, prompt_cache, runtime
+- Core：encryption, security, date_utils
+- Scan：opengrep, path_utils, scope_filters
 
-- `/api/v1/projects/*`
-- `/api/v1/system-config/*`
-- `/api/v1/search/*`
-- `/api/v1/skills/*`
-- `/api/v1/agent-tasks/*`
-- `/api/v1/agent-test/*`
-- `/api/v1/static-tasks/*`
+### Runtime 计算内核（Rust 实现，Python 通过 subprocess bridge 调用）
 
-这只能证明 route ownership 已迁到 Rust，不能证明 Python runtime 已经退出。
+| 子命令 | Rust 模块 | Python Bridge |
+|--------|-----------|---------------|
+| `runner execute/stop` | `runtime/runner.rs` | `sandbox_runner_client.py` |
+| `code2flow` | `runtime/code2flow.rs` | `callgraph_code2flow.py` |
+| `flow-parser` | `runtime/flow_parser.rs` | `flow_parser_runtime.py` |
+| `scan-scope` | `scan/scope_filters.rs` | `task_findings.py`（部分） |
+| `finding-payload normalize` | `runtime/finding_payload.rs` | `finding_payload_runtime.py` |
+| `queue` | `runtime/queue.rs` | `queue_tools.py` / `recon_queue_tools.py` |
+| `sandbox` | `runtime/sandbox.rs` | `sandbox_tool.py` |
 
-## 当前最重要的 blocker
+## Python 仍为唯一实现的功能域（66 个文件）
 
-1. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
-2. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` Python runtime 已清零。
-3. `backend_old/scripts/flow_parser_runner.py` 与 `scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
-4. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
+### Agent 框架（8 个文件）
 
-## 最近完成的 slice
+- `agents/base.py` — BaseAgent 基类 + AgentConfig/AgentResult/AgentType
+- `agents/react_parser.py` — ReAct 输出解析器
+- `core/context.py` — Agent 上下文
+- `core/errors.py` — Agent 错误类型
+- `core/executor.py` — Agent 执行器
+- `core/registry.py` — Agent 注册表
+- `core/state.py` — Agent 状态管理
+- `core/logging.py` — Agent 日志
+- `core/message.py` — Agent 消息
 
-- `backend_old/alembic/*` 与 `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 已退役；数据库前向兼容尾巴不再保留。
-- Rust `backend/src/bootstrap/*` 与 `backend/src/runtime/bootstrap.rs` 已切掉 legacy schema / alembic_version / `alembic upgrade head` 兼容路径；`/health` bootstrap payload 不再暴露 `database.legacy_schema`。
-- Rust `backend/src/core/{security,encryption}.rs` 已成为 password hashing / JWT 与 sensitive-field encryption 的唯一语义宿主。
-- `backend_old/app/core/security.py` 与 `backend_old/app/core/encryption.py` 已退役；Python 测试侧 direct importer 已清零。
-- 新增 `backend_old/tests/test_core_security_encryption_retired.py` guard；`backend_old/tests/conftest.py` 不再 import `app.core.security`，`test_startup_runtime_warnings.py` 已改为校验 retired module 的正确失败模式。
-- `backend_old/app/services/agent/scanner_runner.py` 已退役。
-- Rust `backend-runtime-startup runner execute|stop` 现在承担 scanner runner contract。
-- Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。
-- `backend_old/app/services/agent/recon_risk_queue.py` 与 `backend_old/app/services/agent/vulnerability_queue.py` 已退役。
-- Rust `backend/src/runtime/queue.rs` 现在承担 agent-test queue snapshot 与 queue fingerprint 语义宿主。
-- Rust `backend/src/scan/scope_filters.rs` 已成为 legacy `scope_filters.py` 的语义宿主；`backend-runtime-startup scan-scope` 现在承担 ignored-scope path 与 bootstrap finding filter 的最小桥接。
-- `backend_old/app/services/agent/task_findings.py` 已切走对 `app.services.agent.scope_filters` 的 direct import，并通过 Rust bridge 消费 ignored-scope path 语义。
-- `backend_old/app/services/agent/scope_filters.py` 已退役；scanner / queue / workspace / tracking 功能组现已清零，但 SmartScanTool 自带 exclude 逻辑仍在后续切片范围内。
-- Rust `backend/src/llm_rule/mod.rs` 现在承担 generic opengrep rule YAML 的规范化与 schema 校验语义。
-- `/api/v1/static-tasks/rules/create-generic`、`/rules/upload/json` 与 rule update 已切到 Rust 校验链，不再依赖 `backend_old/app/services/rule.py` 里的 `validate_generic_rule()` helper。
-- Rust `backend/src/llm_rule/git.rs` 已拿到 HTTPS-only / git mirror candidate 语义宿主。
-- Rust `backend/src/llm_rule/patch.rs` 已拿到 patch 文件名与 diff 语言分组解析；`/api/v1/static-tasks/rules/create` 开始消费这些 patch 元数据来生成 rule shell。
-- `backend_old/app/services/rule.py` 与 `backend_old/app/services/llm_rule/*` 已整体退役；Python 侧新增 retirement guard 防止旧 importer 回流。
-- Rust `backend/src/llm/{providers,config}.rs` 已接管 provider alias / catalog、runtime provider metadata、base URL normalize 与 custom header parsing；`/api/v1/system-config/{llm-providers,fetch-llm-models}` 不再依赖 Python `config_utils.py` / `provider_registry.py`。
-- Rust `backend/src/llm/{types,prompt_cache,runtime}.rs` 已接管 llm request/response shell、prompt-cache policy 与 stream-empty diagnostics 宿主；`backend_old/app/services/llm/{service,factory,types,base_adapter,prompt_cache,adapters/*}.py` 已退役。
-- Rust `backend/src/llm/{tokenizer,compression}.rs` 已接管 token heuristic / message compression 宿主；`backend_old/app/services/llm/{tokenizer,memory_compressor}.py` 已退役。
-- `backend_old/app/services/agent/agents/base.py` 已切走对 Python llm tokenizer/compression 模块的依赖，`backend_old/app/services/llm/*` 现已清零。
-- Rust `backend/src/scan/path_utils.rs` 已接管 scan path normalization / archive member resolution 语义；`backend_old/app/services/scan_path_utils.py` 已退役。
-- Rust `backend/src/runtime/sandbox.rs` 已接管 sandbox spec/result shell；`backend_old/app/services/sandbox_runner.py` 已退役，live Python caller 已收束到 `sandbox_runner_client.py`。
-- Rust `backend/src/runtime/finding_payload.rs` 已接管 push-finding payload normalize / repair-map 语义；`backend-runtime-startup finding-payload normalize` 现在承担 request-file -> JSON bridge。
-- `backend_old/app/services/agent/agents/base.py`、`tools/queue_tools.py`、`tools/runtime/hooks.py` 已切到 `app.services.agent.finding_payload_runtime` 单一 shim，不再 direct import `app.services.agent.push_finding_payload`。
-- `backend_old/app/services/agent/push_finding_payload.py` 已退役；Python 侧仅保留 `finding_payload_runtime.py` transport shim，因此 `backend_old/app` 非 API Python 总数保持 `93` 不变。
-- `backend_old/app/models/{prompt_skill,user_config,prompt_template,audit_rule}.py` 已退役；Rust prompt skill CRUD / builtin prompt template route 已继续由 `backend/src/{db/prompt_skills.rs,routes/skills.rs}` 承担，legacy table compat 保留但不再需要 Python model shell。
-- `backend_old/app/models/{project_info,project_management_metrics}.py` 已退役；`backend_old/app/models/project.py` 已切掉对这些 legacy mirror shell 的 ORM relationship 依赖，Rust `backend/src/routes/projects.rs` / `backend/src/bootstrap/legacy_mirror_schema.rs` 继续承担对应表面的 source of truth。
-- `backend_old/app/core/config.py` 已退役；flow/lightweight 与 sandbox/base/preflight Python caller 已切到 `app.services.agent.runtime_settings`，`backend_old/app/core` 现已清零。
-- `backend_old/app/models/analysis.py` 已退役；verification dataflow 常量已迁到 `backend_old/app/services/agent/verification_dataflow.py`，`instant_analyses` Python ORM shell 不再保留。
-- `backend_old/app/models/{user,project,opengrep}.py` 已退役；测试侧最小 SQLAlchemy 兼容定义已下沉到 `backend_old/tests/support/legacy_orm_models.py`，运行时不再依赖这些 model shell。
-- `backend_old/app/models/base.py` 已退役；声明式 ORM base 已迁到 `backend_old/app/services/agent/orm_base.py`，测试侧兼容模型与剩余 `agent_task.py` 均不再依赖 `app.models.base`。
-- `backend_old/app/models/agent_task.py` 已退役；运行时 ORM 已迁到 `backend_old/app/services/agent/task_models.py`，`backend_old/app/models` 现已清零。
+### Agent 类型实现（7 个文件）
 
-## 本目录内的使用方式
+- `agents/analysis.py` — AnalysisAgent
+- `agents/orchestrator.py` — OrchestratorAgent
+- `agents/recon.py` — ReconAgent
+- `agents/report.py` — ReportAgent
+- `agents/verification.py` — VerificationAgent
+- `agents/verification_table.py` — 验证表
 
-- 要看优先级：去 [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
-- 要看验证门：去 [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
-- 要看精确文件清单：去 [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
-- 要看原始证据入口：去 [reference/README.md](/home/xyf/audittool_personal/plan/rust_full_takeover/reference/README.md)
+### 工具系统（14 个文件）
+
+- `tools/base.py` — AgentTool 基类 + ToolResult
+- `tools/agent_tools.py` — 7 个 Agent 协作工具
+- `tools/code_analysis_tool.py` — 代码分析 + 数据流 + 漏洞验证
+- `tools/control_flow_tool.py` — 控制流分析
+- `tools/evidence_protocol.py` — 证据协议
+- `tools/file_tool.py` — 8 个文件操作工具
+- `tools/finish_tool.py` — 扫描完成
+- `tools/pattern_tool.py` — 模式匹配
+- `tools/queue_tools.py` — 4 个队列工具（调用 Rust queue）
+- `tools/recon_file_tree_tool.py` — 侦察文件树
+- `tools/recon_queue_tools.py` — 8 个侦察队列工具
+- `tools/reporting_tool.py` — 漏洞报告生成
+- `tools/run_code.py` — 代码运行 + 函数提取
+- `tools/sandbox_tool.py` — SandboxManager + SandboxConfig + SandboxTool
+- `tools/sandbox_runner_client.py` — 沙箱 Runner 客户端（调用 Rust runner）
+- `tools/verification_result_tools.py` — 验证结果保存/更新
+
+### 工具运行时协调（4 个文件）
+
+- `tools/runtime/context.py`
+- `tools/runtime/contracts.py`
+- `tools/runtime/coordinator.py`
+- `tools/runtime/hooks.py`
+
+### 流分析 / AST（11 个文件）
+
+- `core/flow/models.py` — 流模型
+- `core/flow/pipeline.py` — 流 pipeline
+- `core/flow/lightweight/ast_index.py` — AST 索引
+- `core/flow/lightweight/callgraph_code2flow.py` — 调用图（调用 Rust code2flow）
+- `core/flow/lightweight/definition_provider.py` — 定义提供者
+- `core/flow/lightweight/flow_parser_runtime.py` — Flow Parser Bridge（调用 Rust）
+- `core/flow/lightweight/function_locator.py` — 函数定位器
+- `core/flow/lightweight/function_locator_cli.py` — 函数定位器 CLI
+- `core/flow/lightweight/function_locator_payload.py` — 函数定位器 payload
+- `core/flow/lightweight/path_scorer.py` — 路径评分器
+- `core/flow/lightweight/tree_sitter_parser.py` — Tree-sitter 解析器
+
+### 其他独立模块（16 个文件）
+
+- `config.py` — Agent 配置
+- `event_manager.py` — 事件管理器
+- `finding_payload_runtime.py` — Finding Payload Bridge（调用 Rust）
+- `json_parser.py` — JSON 解析
+- `json_safe.py` — JSON 安全序列化
+- `logic/authz_graph_builder.py` — 授权图构建
+- `logic/authz_rules.py` — 授权规则引擎
+- `memory/markdown_memory.py` — Markdown 记忆存储
+- `orm_base.py` — ORM 基类
+- `prompts/system_prompts.py` — 系统提示词
+- `runtime_settings.py` — 运行时设置（含 Rust binary 路径配置）
+- `skills/scan_core.py` — 扫描核心 skill 目录
+- `streaming/stream_handler.py` — 流处理器
+- `streaming/token_streamer.py` — Token 流
+- `streaming/tool_stream.py` — 工具流
+- `task_findings.py` — 任务 findings 管理（含 scope filter bridge）
+- `task_models.py` — AgentTask / AgentTaskPhase / AgentTaskStatus
+- `utils/vulnerability_naming.py` — 漏洞命名
+- `verification_dataflow.py` — 验证数据流常量
+- `write_scope.py` — 写入范围控制
+
+## 已删除的功能域（本轮清理）
+
+- 知识库（`knowledge/`）：17 个文件（base + loader + rag + 6 frameworks + 12 vulnerabilities）
+- 外部扫描引擎工具（`external_tools.py`）：Opengrep/NpmAudit/Safety/TruffleHog/OSVScanner
+- 智能扫描工具（`smart_scan_tool.py`）：SmartScanTool + QuickAuditTool
+- 沙箱语言工具（`sandbox_language.py`）：8 个语言测试工具 + UniversalCodeTestTool
+- 漏洞专项沙箱（`sandbox_vuln.py`）：7 个漏洞类型测试工具
+- 昆仑引擎（`kunlun_tool.py`）：3 个昆仑工具
+- 授权逻辑工具（`logic_authz_tool.py`）：LogicAuthzAnalysisTool
+- sandbox_tool.py 中的非通用工具：SandboxHttpTool/VulnerabilityVerifyTool/PhpTestTool/CommandInjectionTestTool
+- 34 个 `_retired` 守卫测试 + 5 个废弃测试文件 + chat2rule 模块
+
+## Scripts 遗留
+
+| 文件 | 状态 |
+|------|------|
+| `scripts/flow_parser_runner.py` | 活跃，被 `function_locator.py` 和 Docker 构建引用 |
+| `scripts/dev-entrypoint.sh` | 活跃，开发环境入口 |
+| `scripts/release-templates/runner_preflight.py` | 已删除 |

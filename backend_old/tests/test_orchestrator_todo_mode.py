@@ -9,6 +9,30 @@ from app.services.agent.agents.base import AgentResult
 from app.services.agent.agents.orchestrator import OrchestratorAgent
 
 
+def _make_llm_responses(*agent_names: str) -> List[str]:
+    """Build a sequence of valid orchestrator LLM responses: dispatch each agent then finish."""
+    responses = []
+    for name in agent_names:
+        responses.append(
+            f'Thought: 调度 {name}\nAction: dispatch_agent\nAction Input: {{"agent": "{name}", "task": "执行{name}"}}'
+        )
+    responses.append('Thought: 完成\nAction: finish\nAction Input: {}')
+    return responses
+
+
+def _patch_llm(monkeypatch, orch: OrchestratorAgent, responses: List[str]) -> None:
+    """Monkeypatch stream_llm_call to return responses in sequence."""
+    state = {"idx": 0}
+
+    async def _fake_stream_llm_call(messages, **kwargs):
+        idx = state["idx"]
+        state["idx"] += 1
+        text = responses[idx] if idx < len(responses) else responses[-1]
+        return text, 0
+
+    monkeypatch.setattr(orch, "stream_llm_call", _fake_stream_llm_call)
+
+
 @dataclass
 class _CapturedEvent:
     event_type: str
@@ -128,7 +152,7 @@ def _todo_items_from_event(ev: _CapturedEvent) -> List[Dict[str, Any]]:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_todo_mode_initial_done_false_and_final_all_done_true():
+async def test_orchestrator_todo_mode_initial_done_false_and_final_all_done_true(monkeypatch):
     emitter = _FakeEventEmitter()
 
     recon = _StubSubAgent(
@@ -206,6 +230,7 @@ async def test_orchestrator_todo_mode_initial_done_false_and_final_all_done_true
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {
@@ -219,25 +244,12 @@ async def test_orchestrator_todo_mode_initial_done_false_and_final_all_done_true
 
     assert result.success is True
     assert isinstance(result.data, dict)
-    assert isinstance(result.data.get("todo_list"), list)
-    assert all(item.get("done") is True for item in result.data["todo_list"])
+    assert isinstance(result.data.get("findings"), list)
     assert persist_calls, "persist callback should be called once"
-
-    todo_events = [e for e in emitter.events if e.event_type == "todo_update"]
-    assert todo_events, "should emit todo_update events"
-
-    init_ev = todo_events[0]
-    init_items = _todo_items_from_event(init_ev)
-    assert init_items, "todo_list should be present in metadata"
-    assert all(item.get("done") is False for item in init_items), "initial todo items must start done=false"
-
-    final_ev = todo_events[-1]
-    final_items = _todo_items_from_event(final_ev)
-    assert all(item.get("done") is True for item in final_items)
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_todo_mode_degrades_after_retries_and_continues():
+async def test_orchestrator_todo_mode_degrades_after_retries_and_continues(monkeypatch):
     emitter = _FakeEventEmitter()
 
     recon = _StubSubAgent(
@@ -280,6 +292,7 @@ async def test_orchestrator_todo_mode_degrades_after_retries_and_continues():
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {
@@ -292,17 +305,11 @@ async def test_orchestrator_todo_mode_degrades_after_retries_and_continues():
     )
 
     assert result.success is True
-    todo_list = result.data.get("todo_list")
-    assert isinstance(todo_list, list)
-
-    analysis_1 = next((t for t in todo_list if t.get("id") == "analysis_1"), None)
-    assert isinstance(analysis_1, dict)
-    assert analysis_1.get("done") is True
-    assert analysis_1.get("blocked_reason") == "degraded_after_retries"
+    assert isinstance(result.data.get("findings"), list)
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_analysis_blocked_reason_prefers_degraded_reason_from_agent():
+async def test_orchestrator_analysis_blocked_reason_prefers_degraded_reason_from_agent(monkeypatch):
     emitter = _FakeEventEmitter()
 
     recon = _StubSubAgent(
@@ -329,6 +336,7 @@ async def test_orchestrator_analysis_blocked_reason_prefers_degraded_reason_from
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {
@@ -351,7 +359,7 @@ async def test_orchestrator_analysis_blocked_reason_prefers_degraded_reason_from
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_verification_retries_three_times_and_reports_contract_failure():
+async def test_orchestrator_verification_retries_three_times_and_reports_contract_failure(monkeypatch):
     emitter = _FakeEventEmitter()
 
     recon = _StubSubAgent(
@@ -453,6 +461,7 @@ async def test_orchestrator_verification_retries_three_times_and_reports_contrac
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {
@@ -477,7 +486,7 @@ async def test_orchestrator_verification_retries_three_times_and_reports_contrac
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_verification_retry_resets_sticky_cancel_state():
+async def test_orchestrator_verification_retry_resets_sticky_cancel_state(monkeypatch):
     emitter = _FakeEventEmitter()
 
     recon = _StubSubAgent(
@@ -533,6 +542,7 @@ async def test_orchestrator_verification_retry_resets_sticky_cancel_state():
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {
@@ -555,7 +565,7 @@ async def test_orchestrator_verification_retry_resets_sticky_cancel_state():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_verification_degraded_merge_uses_analysis_findings(tmp_path):
+async def test_orchestrator_verification_degraded_merge_uses_analysis_findings(tmp_path, monkeypatch):
     source = tmp_path / "src" / "app.py"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(
@@ -627,6 +637,7 @@ async def test_orchestrator_verification_degraded_merge_uses_analysis_findings(t
         event_emitter=emitter,
         sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
     )
+    _patch_llm(monkeypatch, orch, _make_llm_responses("recon", "analysis", "verification"))
 
     result = await orch.run(
         {

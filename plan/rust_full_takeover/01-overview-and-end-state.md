@@ -55,12 +55,11 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 
 ## 当前状态
 
-按当前 inventory 和剩余功能组来看，迁移仍处于 retained Python runtime 大量存在的阶段。
+按 2026-04-22 最新 inventory：
 
-当前可以直接确认的是：Rust 已承担一部分外层 route surface，但 retained Python runtime 仍集中存在于：
-
-- scanner / queue / runner
-- agent orchestration / state / payload
-- flow / logic / graph analysis
-- knowledge / tool runtime / LLM
-- script host / release preflight 尾巴
+- Rust 已完全接管：HTTP API 路由（7 router，89+ 端点）、DB 层、Bootstrap、LLM、Core、Scan、Runtime 计算内核
+- Python 剩余 66 个源文件，全部集中在 `app/services/agent/`，构成 LLM 驱动的 Agent 智能层
+- Python 通过 subprocess bridge 调用 Rust binary（runner/code2flow/flow-parser/scan-scope/finding-payload/queue/sandbox）
+- 知识库、外部扫描引擎、智能扫描、沙箱语言/漏洞专项工具、昆仑引擎已删除（不再做 Rust 接管）
+- `scripts/release-templates/runner_preflight.py` 已删除
+- `scripts/flow_parser_runner.py` 仍活跃（Docker 构建 + function_locator 引用）

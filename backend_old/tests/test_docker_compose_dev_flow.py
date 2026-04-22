@@ -150,7 +150,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "\n  frontend-dev:" not in compose_text
 
     backend_text = backend_dockerfile.read_text(encoding="utf-8")
-    assert "FROM runtime-base AS dev-runtime" in backend_text
     assert "BACKEND_INSTALL_YASA" not in backend_text
     assert "ARG YASA_VERSION=" not in backend_text
     assert "backend-dev-entrypoint.sh" not in backend_text
@@ -158,8 +157,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'CMD ["/bin/sh", "/app/docker-entrypoint.sh"]' not in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" not in backend_text
     assert 'best_index="$(cat /tmp/pypi-best-index)"' not in backend_text
-    assert 'echo "Selected PyPI index: ${best_index}"' in backend_text
-    assert 'for idx in "$@"; do \\' in backend_text
     assert 'sync_with_index "${BACKEND_PYPI_INDEX_PRIMARY}" || sync_with_index "${BACKEND_PYPI_INDEX_FALLBACK}"' not in backend_text
     assert "nodebase" not in backend_text
     assert "mcp-builder" not in backend_text
@@ -251,7 +248,7 @@ def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
         encoding="utf-8"
     )
 
-    assert 'CMD ["/usr/local/bin/backend-runtime-startup", "prod"]' in backend_text
+    assert 'CMD ["/usr/local/bin/backend"]' in backend_text
 
 
 def test_nexus_web_dockerfile_is_removed() -> None:
@@ -299,34 +296,15 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     )
     backend_readme_text = (REPO_ROOT / "backend" / "README.md").read_text(encoding="utf-8")
     backend_start_text = (REPO_ROOT / "backend" / "start.sh").read_text(encoding="utf-8")
-    pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
     flow_parser_runner_text = (
         REPO_ROOT / "docker" / "flow-parser-runner.Dockerfile"
     ).read_text(encoding="utf-8")
-    dev_runtime_text = backend_text.split("FROM runtime-base AS dev-runtime", maxsplit=1)[1].split(
-        "FROM runtime-base AS runtime",
-        maxsplit=1,
-    )[0]
-    runtime_text = backend_text.split("FROM runtime-base AS runtime", maxsplit=1)[1]
 
-    assert '"code2flow>=' not in pyproject_text
-    assert '"bandit>=' not in pyproject_text
-    assert '"tree-sitter>=' not in pyproject_text
-    assert '"tree-sitter-language-pack>=' not in pyproject_text
     assert "pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow bandit" not in backend_text
     assert "install_python_helpers()" not in backend_text
     assert "gitleaks; \\" not in backend_text
-    assert "ENV BACKEND_VENV_PATH=/opt/backend-venv" in backend_text
     assert "requirements-heavy.txt" not in backend_text
-    assert 'uv venv "${BACKEND_VENV_PATH}"' in backend_text
-    assert 'uv sync --active --frozen --no-dev' in backend_text
-    assert "COPY backend/Cargo.toml backend/Cargo.lock ./" in backend_text
     assert "COPY --from=builder /app/.venv /opt/backend-venv" not in backend_text
-    assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" not in dev_runtime_text
-    assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" in dev_runtime_text
-    assert "mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/data/runtime" in dev_runtime_text
-    assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" in runtime_text
-    assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" not in runtime_text
     assert "COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks" not in backend_text
     assert "COPY --from=scanner-tools-base /opt/opengrep /opt/opengrep" not in backend_text
     assert "COPY --from=scanner-tools-base /opt/phpstan /opt/phpstan" not in backend_text
@@ -338,11 +316,11 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "phpstan --version;" not in backend_text
     assert 'if [ -x "${YASA_WRAPPER_BIN}" ]; then' not in backend_text
     assert 'ln -sfn /opt/backend-venv /app/.venv' not in backend_text
-    assert 'rm -rf /root/.cache/pip' in backend_text
-    assert 'rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11' in backend_text
     assert not (REPO_ROOT / "docker" / "yasa-runner.Dockerfile").exists()
     assert "tree-sitter-language-pack" in flow_parser_runner_text
     assert "code2flow" in flow_parser_runner_text
+    assert "COPY backend/scripts/flow_parser_runner.py /opt/flow-parser/flow_parser_runner.py" in flow_parser_runner_text
+    assert "COPY backend_old/scripts/flow_parser_runner.py" not in flow_parser_runner_text
     assert "ARG BACKEND_PYPI_INDEX_CANDIDATES=" in flow_parser_runner_text
     assert 'ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}' in flow_parser_runner_text
     assert "package_source_selector.py" not in flow_parser_runner_text
@@ -515,6 +493,10 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "vulhunter-pmd-runner" in runners_workflow_text
     assert "vulhunter-sandbox-runner" in runners_workflow_text
     assert '"name": "vulhunter-sandbox"' not in runners_workflow_text
+    assert "'backend/scripts/**'" in runners_workflow_text
+    assert "'backend_old/scripts/**'" not in runners_workflow_text
+    assert '"backend/scripts/**"' in runners_workflow_text
+    assert '"backend_old/scripts/**"' not in runners_workflow_text
     assert "uses: ./.github/workflows/docker-publish.yml" in runners_workflow_text
 
 

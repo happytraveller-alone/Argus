@@ -18,25 +18,28 @@
 
 ## 当前阶段
 
-按当前剩余功能组来看，接下来的工作重心位于 D / E，
-F 仍是 final cutover 之前的最后收口阶段。
+Phase A-C 已完成，Phase D 大部分完成（runtime 计算内核全部 Rust 化）。
+当前工作重心位于 Phase E（Agent 智能层，66 个 Python 文件）。
+知识库、外部扫描引擎等已决定不做 Rust 接管，直接删除。
 
-现阶段的判断标准很简单：
+现阶段的判断标准：
 
-- 还能独立承担 runtime 行为的 Python 文件，优先级高于 package shell / namespace 清理
-- 能直接切换 source of truth 的 slice，优先级高于纯 helper 收纳
-- 未进入 `backend_old/app == 0` 之前，不得宣称“Python 已基本完成退役”
+- Agent 框架是最大单体，需要按功能域整体接管而非逐文件切片
+- Tool 系统先于 Agent 框架接管（Agent 依赖 Tool）
+- Flow/AST pipeline 已有 Rust bridge，Python 层主要是胶水
 
 ## 当前执行顺序
 
-建议继续按下面顺序推进：
+建议按以下顺序推进 Phase E：
 
-1. scanner / queue / runner retained runtime
-2. agent orchestration / state / payload
-3. flow / logic retained runtime
-4. tool runtime + support glue
-5. knowledge + llm + llm_rule
-6. models / db / alembic / scripts / release preflight 最终门
+1. ORM / Task Models（纯数据结构，Rust DB 层已有对应 schema）
+2. Event Manager / Streaming（SSE 事件推送）
+3. Config / Runtime Settings / JSON 工具
+4. Tool Base + Runtime Coordinator
+5. Queue / Recon / File / Code Analysis Tools
+6. Flow / AST Pipeline
+7. Agent 框架 + 类型实现（最后接管）
+8. Prompts / Skills / Memory / Logic
 
 ## 单个 Slice 的标准动作
 

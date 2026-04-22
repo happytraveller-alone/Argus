@@ -82,9 +82,6 @@ def test_verification_prompt_requires_flow_fields_and_report_preconditions():
 def test_shared_tool_usage_prompt_only_mentions_core_scan_tools():
     assert "dataflow_analysis" in TOOL_USAGE_GUIDE
     assert "controlflow_analysis_light" in TOOL_USAGE_GUIDE
-    assert "logic_authz_analysis" in TOOL_USAGE_GUIDE
-    assert "smart_scan" in TOOL_USAGE_GUIDE
-    assert "quick_audit" in TOOL_USAGE_GUIDE
     assert "run_code" in TOOL_USAGE_GUIDE
     assert "verify_vulnerability" in TOOL_USAGE_GUIDE
     assert "先用 `search_code` 定位到 `file_path:line`" in TOOL_USAGE_GUIDE
@@ -94,5 +91,8 @@ def test_shared_tool_usage_prompt_only_mentions_core_scan_tools():
     assert "code_search" not in TOOL_USAGE_GUIDE
     assert "read_file" not in TOOL_USAGE_GUIDE
     assert "extract_function" not in TOOL_USAGE_GUIDE
+    assert "logic_authz_analysis" not in TOOL_USAGE_GUIDE
+    assert "smart_scan" not in TOOL_USAGE_GUIDE
+    assert "quick_audit" not in TOOL_USAGE_GUIDE
     for token in REMOVED_PROMPT_TOKENS:
         assert token not in TOOL_USAGE_GUIDE

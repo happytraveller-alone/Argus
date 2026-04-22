@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, model_validator
 
-from app.services.agent.core.flow.lightweight.function_locator import EnclosingFunctionLocator
-
 from .base import AgentTool, ToolResult
 from .evidence_protocol import (
     build_display_command as _build_display_command,
@@ -1578,7 +1576,7 @@ class FunctionSummaryTool(AgentTool):
             if target_files
             else None
         )
-        self.locator = EnclosingFunctionLocator(project_root=project_root)
+        self.locator = None  # flow analysis retired
 
     @property
     def name(self) -> str:
@@ -2314,7 +2312,7 @@ class LocateEnclosingFunctionTool(AgentTool):
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
         self.target_files = set(target_files) if target_files else None
-        self.locator = EnclosingFunctionLocator(project_root=project_root)
+        self.locator = None  # flow analysis retired
 
     @property
     def name(self) -> str:

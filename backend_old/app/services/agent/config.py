@@ -109,34 +109,6 @@ class AgentConfig(BaseSettings):
         default=True,
         description="Enable Opengrep scanner"
     )
-    npm_audit_enabled: bool = Field(
-        default=True,
-        description="Enable npm audit"
-    )
-    safety_enabled: bool = Field(
-        default=True,
-        description="Enable Safety (Python) scanner"
-    )
-    osv_scanner_enabled: bool = Field(
-        default=True,
-        description="Enable OSV scanner"
-    )
-    # Kunlun-M (MIT License - https://github.com/LoRexxar/Kunlun-M)
-    kunlun_enabled: bool = Field(
-        default=True,
-        description="Enable Kunlun-M static code analyzer"
-    )
-
-    # External Tool Timeouts
-    opengrep_timeout_seconds: int = Field(
-        default=120,
-        description="Timeout for Opengrep scanner"
-    )
-    kunlun_timeout_seconds: int = Field(
-        default=600,
-        description="Timeout for Kunlun-M scanner (10 minutes for deep analysis)"
-    )
-
     # ============ Rate Limiting ============
     rate_limit_enabled: bool = Field(
         default=True,
@@ -384,56 +356,6 @@ def get_tool_config(tool_name: str) -> ToolConfig:
     )
 
 
-# def get_tool_config(tool_name: str) -> ToolConfig:
-#     """Get configuration for a specific tool"""
-#     config = get_agent_config()
-
-#     # Tool-specific configurations
-#     tool_configs: Dict[str, ToolConfig] = {
-#         "opengrep_scan": ToolConfig(
-#             name="opengrep_scan",
-#             enabled=config.opengrep_enabled,
-#             timeout_seconds=config.opengrep_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
-#             fallback_tool="pattern_match",
-#         ),
-#         "bandit_scan": ToolConfig(
-#             name="bandit_scan",
-#             enabled=config.bandit_enabled,
-#             timeout_seconds=config.bandit_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
-#             fallback_tool="pattern_match",
-#         ),
-#         "npm_audit": ToolConfig(
-#             name="npm_audit",
-#             enabled=config.npm_audit_enabled,
-#             timeout_seconds=config.tool_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
-#         ),
-#         "safety_check": ToolConfig(
-#             name="safety_check",
-#             enabled=config.safety_enabled,
-#             timeout_seconds=config.tool_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
-#         ),
-#         "osv_scanner": ToolConfig(
-#             name="osv_scanner",
-#             enabled=config.osv_scanner_enabled,
-#             timeout_seconds=config.tool_timeout_seconds,
-#             rate_limit_per_second=config.external_tool_rate_per_second,
-#         ),
-#     }
-
-#     return tool_configs.get(
-#         tool_name,
-#         ToolConfig(
-#             name=tool_name,
-#             timeout_seconds=config.tool_timeout_seconds,
-#             max_retries=config.tool_max_retries,
-#         )
-#     )
-
-
 def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
     """Get configuration for a specific agent type"""
     config = get_agent_config()
@@ -457,9 +379,8 @@ def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
             max_iterations=config.analysis_max_iterations,
             timeout_seconds=config.sub_agent_timeout_seconds,
             tools=[
-                "smart_scan", "pattern_match", "dataflow_analysis",
+                "pattern_match", "dataflow_analysis",
                 "search_code", "get_code_window", "get_function_summary", "get_symbol_body",
-                "opengrep_scan"
             ],
             knowledge_modules=["sql_injection", "xss", "command_injection"],
         ),

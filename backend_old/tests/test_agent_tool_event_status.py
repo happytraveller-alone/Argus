@@ -78,7 +78,7 @@ class _McpSuccessRuntime:
     def can_handle(self, tool_name):
         return tool_name == "demo_tool"
 
-    def should_prefer_mcp(self):
+    def should_prefer_runtime(self):
         return True
 
     async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
@@ -113,7 +113,7 @@ class _McpFallbackRuntime:
     def can_handle(self, tool_name):
         return tool_name == "demo_tool"
 
-    def should_prefer_mcp(self):
+    def should_prefer_runtime(self):
         return True
 
     async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
@@ -241,7 +241,7 @@ async def test_tool_result_keeps_native_metadata_for_mcp_success():
     result_event = tool_result_events[0]
     assert result_event.metadata.get("tool_status") == "completed"
     assert result_event.tool_output["metadata"]["display_command"] == "demo_tool"
-    assert result_event.metadata.get("mcp_used") is True
+    assert result_event.metadata.get("runtime_used") is True
 
 
 @pytest.mark.asyncio
@@ -256,7 +256,7 @@ async def test_tool_result_keeps_native_metadata_for_mcp_fallback_success():
     assert len(tool_result_events) == 1
     result_event = tool_result_events[0]
     assert result_event.metadata.get("tool_status") == "completed"
-    assert result_event.metadata.get("mcp_fallback_used") is True
+    assert result_event.metadata.get("runtime_fallback_used") is True
     assert result_event.tool_output["metadata"]["render_type"] == "analysis_summary"
 
 

@@ -289,11 +289,12 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::discover_rule_assets;
+    use std::collections::BTreeSet;
 
     #[test]
-    fn discovers_all_supported_rule_asset_families() {
+    fn discovers_only_retained_rule_asset_families() {
         let assets = discover_rule_assets().expect("rule assets should load");
-        assert!(assets.len() > 7000);
+        assert!(assets.len() > 1000);
 
         let paths = assets
             .iter()
@@ -304,17 +305,21 @@ mod tests {
             .any(|path| path == &"rules_opengrep/X509-subject-name-validation.yaml"));
         assert!(paths
             .iter()
-            .any(|path| path == &"gitleaks_builtin/gitleaks-default.toml"));
-        assert!(paths
+            .any(|path| path.starts_with("rules_from_patches/")));
+        assert!(paths.iter().any(|path| path.starts_with("patches/")));
+
+        let roots = paths
             .iter()
-            .any(|path| path == &"bandit_builtin/bandit_builtin_rules.json"));
-        assert!(paths
-            .iter()
-            .any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
+            .filter_map(|path| path.split('/').next())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            roots,
+            BTreeSet::from(["patches", "rules_from_patches", "rules_opengrep"])
+        );
     }
 
     #[test]
-    fn classifies_patch_and_builtin_assets_by_engine() {
+    fn classifies_retained_assets_as_opengrep_sources() {
         let assets = discover_rule_assets().expect("rule assets should load");
 
         let patch_rule = assets
@@ -331,11 +336,11 @@ mod tests {
         assert_eq!(patch_artifact.engine, "opengrep");
         assert_eq!(patch_artifact.source_kind, "patch_artifact");
 
-        let pmd = assets
+        let builtin_rule = assets
             .iter()
-            .find(|asset| asset.asset_path.starts_with("rules_pmd/"))
-            .expect("pmd asset should exist");
-        assert_eq!(pmd.engine, "pmd");
-        assert_eq!(pmd.source_kind, "builtin");
+            .find(|asset| asset.asset_path.starts_with("rules_opengrep/"))
+            .expect("builtin rule asset should exist");
+        assert_eq!(builtin_rule.engine, "opengrep");
+        assert_eq!(builtin_rule.source_kind, "internal_rule");
     }
 }

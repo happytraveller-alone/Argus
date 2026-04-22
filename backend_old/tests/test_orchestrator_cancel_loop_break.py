@@ -28,6 +28,16 @@ class _FakeEventEmitter:
         )
 
 
+def _patch_llm_dispatch(monkeypatch, orch: OrchestratorAgent) -> None:
+    """Patch stream_llm_call to return a single dispatch_agent response."""
+    async def _fake_stream_llm_call(messages, **kwargs):
+        return (
+            'Thought: 调度 recon\nAction: dispatch_agent\nAction Input: {"agent": "recon", "task": "侦察"}',
+            0,
+        )
+    monkeypatch.setattr(orch, "stream_llm_call", _fake_stream_llm_call)
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_todo_cancel_breaks_current_retry_loop(monkeypatch):
     emitter = _FakeEventEmitter()
@@ -37,6 +47,7 @@ async def test_orchestrator_todo_cancel_breaks_current_retry_loop(monkeypatch):
         event_emitter=emitter,
         sub_agents={"recon": object(), "analysis": object(), "verification": object()},
     )
+    _patch_llm_dispatch(monkeypatch, orch)
 
     dispatch_calls = {"count": 0}
 

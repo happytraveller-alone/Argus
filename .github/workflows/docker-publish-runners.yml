@@ -20,7 +20,7 @@ on:
       - "backend/Cargo.lock"
       - "backend/src/**"
       - "backend_old/app/**"
-      - "backend_old/scripts/**"
+      - "backend/scripts/**"
   workflow_dispatch:
     inputs:
       build_opengrep_runner:
@@ -120,7 +120,7 @@ jobs:
               - 'docker/flow-parser-runner.Dockerfile'
               - 'docker/flow-parser-runner.requirements.txt'
               - 'backend_old/app/**'
-              - 'backend_old/scripts/**'
+              - 'backend/scripts/**'
             pmd_runner:
               - '.github/workflows/docker-publish.yml'
               - '.github/workflows/docker-publish-runners.yml'
