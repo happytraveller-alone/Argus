@@ -482,21 +482,18 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 6:38am GMT+8
+# [audittool_personal] recent context, 2026-04-23 6:47am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,724t read) | 917,612t work | 98% savings
+Stats: 50 obs (18,887t read) | 941,166t work | 98% savings
 
 ### Apr 18, 2026
 S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 11:02 AM)
 S43 清除 backend_old/tests 下已被 Rust 接管功能的废弃 Python 测试代码 — 完成删除并进行 Rust vs Python 功能域全面盘点 (Apr 18, 12:19 PM)
 ### Apr 22, 2026
-691 9:14p ⚖️ Python test cleanup initiated — retire tests for Rust-owned functionality
-692 9:20p 🔵 backend_old/tests Python test inventory confirmed — 10 files across unit and integration
-693 9:21p ✅ stop-gate review ALLOW — previous turn was verification output only
 694 9:24p 🔄 39 obsolete Python test files deleted from backend_old/tests
 S44 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers (Apr 22, 9:26 PM)
 696 9:27p 🔵 Python remaining function inventory vs Rust implementation status — 89 files still Python-only
@@ -552,6 +549,10 @@ S114 Identity clarification — Kiro is not a Claude agent built on Anthropic's 
 785 11:01p 🔵 Stop-gate review ALLOW — flow_parser_runner migration regression tests passed
 786 11:03p ⚖️ Rust full takeover loop initiated — target: halve backend non-test source files
 787 11:04p 🔵 backend_old agent services inventory — 64 Python files across 8 subdirectories
+### Apr 23, 2026
+788 6:38a ✅ backend/assets/scan_rule_assets cleanup — retain only 3 subdirectories
+790 " 🔵 scan_rule_assets contains 7 subdirectories — 4 candidates for deletion
+791 6:39a 🔵 Rust scan_rule_assets.rs hardcodes all 7 subdirectory names — deletion requires code changes
 
-Access 918k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 941k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
