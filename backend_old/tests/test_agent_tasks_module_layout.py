@@ -14,13 +14,19 @@ def test_agent_tasks_split_modules_exist():
         importlib.import_module(module_name)
 
 
-def test_agent_tasks_split_modules_expose_key_symbols_directly():
-    import app.services.agent.scope_filters as scope_filters
+def test_agent_tasks_split_modules_expose_behavior_contracts_directly():
     import app.services.agent.task_findings as task_findings
 
     assert task_findings.AgentFindingResponse is not None
-    assert task_findings._is_core_ignored_path is scope_filters._is_core_ignored_path
+    assert callable(task_findings._build_core_audit_exclude_patterns)
+    assert callable(task_findings._is_core_ignored_path)
+    assert task_findings._is_core_ignored_path("tests/test_api.py") is True
+    assert task_findings._is_core_ignored_path("src/api.py") is False
     assert task_findings._save_findings is not None
+
+
+def test_agent_tasks_scope_filters_shell_has_been_retired():
+    assert not (PROJECT_ROOT / "app/services/agent/scope_filters.py").exists()
 
 
 def test_agent_tasks_api_router_shell_has_been_retired():

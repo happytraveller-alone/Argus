@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.agent.scope_filters import (
+from app.services.agent.task_findings import (
     _build_core_audit_exclude_patterns,
     _filter_bootstrap_findings,
 )
@@ -13,6 +13,21 @@ import app.models.opengrep  # noqa: F401
 def _write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def test_scope_filter_bridge_preserves_fnmatch_question_mark_and_char_class_support():
+    patterns = _build_core_audit_exclude_patterns(["src/file?.py", "file[ab].py"])
+
+    filtered = _filter_bootstrap_findings(
+        [
+            {"id": "drop-question", "severity": "ERROR", "confidence": "HIGH", "file_path": "src/file1.py"},
+            {"id": "drop-basename-class", "severity": "ERROR", "confidence": "HIGH", "file_path": "nested/filea.py"},
+            {"id": "keep", "severity": "ERROR", "confidence": "HIGH", "file_path": "src/file10.py"},
+        ],
+        exclude_patterns=patterns,
+    )
+
+    assert {item["id"] for item in filtered} == {"keep"}
 
 
 def test_filter_bootstrap_findings_ignores_non_core_scope_paths():

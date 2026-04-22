@@ -482,65 +482,71 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-19 9:57pm GMT+8
+# [audittool_personal] recent context, 2026-04-22 11:51am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,749t read) | 960,277t work | 98% savings
+Stats: 50 obs (13,937t read) | 387,659t work | 96% savings
 
 ### Apr 18, 2026
-44 11:05a 🔵 codex-tail alias has empty-glob silent-exit bug when no logs exist
-46 11:06a 🔵 codex-tail alias confirmed broken when no logs exist: tail receives empty string argument
-65 11:26a 🔴 codex-layout tmux pane-index fix + codex-tail empty-glob fix
-67 11:27a 🔵 codex-layout final implementation confirmed in ~/.bashrc
-69 " 🔵 codex-layout and codex-tail function definitions verified via bash -li
-71 " 🔵 ~/.tmux.conf base-index 1 confirmed as root cause of original codex-layout failure
-74 11:28a 🔵 codex-layout 3-pane creation verified via live tmux test in stop-gate review
-77 11:31a 🔵 stop-gate review confirmed: previous turn was guidance-only, no code edits
-101 11:52a 🔄 tool_runtime retained core cluster orphan retirement executed
-103 11:53a ✅ tool_runtime retained core retirement: all file edits applied successfully
-104 " 🔵 base.py string-quoted forward references to retired tool_runtime types remain after TYPE_CHECKING cleanup
-105 " 🔵 Codex sandbox blocks uv pytest run due to read-only /home/xyf/.cache/uv filesystem
-106 11:55a ✅ All 5 acceptance criteria passed for tool_runtime retained core retirement
-108 11:57a ✅ cargo test full suite passed: 64 unit + 40 integration tests all green
-110 11:59a ✅ All 5 acceptance criteria verified and two residual stale-count fixes applied
-120 12:21p 🔵 stop-gate review confirmed: previous turn was explanation-only, no code edits
-133 12:55p ⚖️ rust_full_takeover plan execution initiated for agent/core cluster
-136 12:56p 🔵 rust_full_takeover: full plan state and codebase topology mapped for agent/core cluster audit
-138 1:00p 🔵 app/core cluster caller audit: config.py has 20+ live Python importers across retained runtime
-141 " 🔵 Rust runtime bootstrap still shells out to Python for DB readiness check and alembic upgrade
-144 1:01p 🔵 backend_old/scripts cluster: 3 files, 2 are active runtime assets used by Docker and Rust bootstrap
-147 1:03p 🟣 Rust-native PyPI mirror probe test added to bootstrap.rs
-150 1:05p 🔴 PyPI probe test failed: TcpListener::set_nonblocking PermissionDenied in sandbox — test approach needs revision
-155 1:06p 🟣 Rust-native PyPI mirror probe implemented in bootstrap.rs — package_source_selector.py Python subprocess removed
-157 1:07p 🔄 bootstrap.rs probe tests replaced: socket-based test removed, pure unit tests for normalize/sort/build_probe_url added
-159 1:08p 🔴 build_probe_url fixed: /simple path deduplication prevents double /simple/simple/ in probe URLs
-161 " ✅ package_source_selector.py retired: Python script deleted, Docker/shell references replaced with awk/tr fallback
-164 1:30p ⚖️ rust_full_takeover: Rust refactor execution plan resumed
-165 1:31p 🔄 package_source_selector.py retired: Rust native PyPI probe replaces Python subprocess
-166 " 🔵 git commit blocked: sandbox has read-only filesystem (.git/index.lock)
-169 2:12p ⚖️ rust_full_takeover: Rust refactor execution resumed per plan
-176 3:02p 🔄 git_mirror.py retired — logic inlined into GitManager
-178 3:06p 🔵 rust_full_takeover Wave A fully committed — Wave B next
-179 " 🔵 rust_full_takeover: 155 Python files remain after Wave A (down from 172)
-180 " 🔵 llm_rule cluster: 6 files, 438 lines total — rule_runner.py is largest at 156 lines
-181 " 🔵 rule_runner.py pipeline: 4-step sequential flow — mirror → prompt → LLM → parse
-182 " 🔵 No Rust parity exists for llm_rule pipeline — Wave B starts from scratch
-183 " 🔵 Rust backend structure mapped: agents, API, app, services all have parity modules except llm_rule
-184 " 🟣 backend/src/services/llm_rule/mod.rs created — Rust llm_rule module scaffolded
-185 3:08p 🔵 Bandit retirement guard tests written and confirmed failing — both Rust and Python sides red
-188 3:09p 🔵 Bandit retirement scope in Rust mapped: routes (lines 105-151), handlers (920-1151), helper functions, task_state field, config field, recovery table reference
-190 3:10p 🔵 Bandit DB schema surface mapped: bandit_scan_tasks + bandit_rule_states tables referenced across Python models, alembic, and Rust legacy mirror schema
-193 " 🔵 static_task_routes_and_rule_catalogs test in task_routes_api.rs exercises bandit routes — must be updated when bandit is retired
-195 " 🔵 bandit_tasks column embedded in project_management_metrics SQL INSERT — DB schema change required for full bandit retirement
-197 3:11p 🔵 test_bootstrap_callers_use_agent_scan_workspace_module references bandit.py — must be updated when bandit bootstrap is retired
-199 " 🔵 Bandit Python surface fully mapped: 7 live files with bandit references beyond the 4 target retirement files
-202 3:13p 🔵 Bandit retirement full impact map complete: preflight.rs has build_bandit_preflight_inputs + configured_specs_cover_all_runner_families test asserts "bandit" in names list
-295 4:47p 🔵 phpstan surface map audit — full cross-stack reference inventory
-296 " 🔵 phpstan retirement guard tests passing — Python suite 53 passed, Rust integration test green
-297 4:50p 🟣 phpstan retirement guard tests written — both Rust and Python
+S5 Add self-inferred model and reasoning intensity selection for both Claude and Codex to CLAUDE.md (Apr 18, 10:27 AM)
+S1 omx-setup: refresh oh-my-codex user-scope installation in /home/xyf/audittool_personal (Apr 18, 10:27 AM)
+S6 Clarify Codex model and reasoning intensity configuration: make Claude's own model selection and Codex's `--model`/`--effort` parameters both task-scenario-aware and self-determined (Apr 18, 10:54 AM)
+S7 Write Codex runtime inspection bash aliases and tmux layout into ~/.bashrc and AGENTS.md, then verify tmux works (Apr 18, 11:00 AM)
+S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 12:19 PM)
+### Apr 22, 2026
+562 11:08a 🔵 cargo test 阻塞问题处理
+563 " 🔵 audittool_personal Rust 后端当前改动范围
+564 11:09a 🔵 cargo test 阻塞根因：并发编译时 package cache 和 build directory 文件锁争用
+565 11:10a 🔵 链接器 OOM：ld 被 SIGKILL（signal 9）终止，多个集成测试二进制链接失败
+566 11:11a 🔵 lld 可用，lib 单元测试全部通过，OOM 仅影响集成测试二进制链接
+567 " 🔵 使用 lld 链接器触发全量重新编译
+568 11:13a 🔵 lld 链接成功，全量测试 128 通过，1 个测试失败：flow_parser tempdir fallback
+569 " 🔵 execute_uses_tempdir_fallback 测试失败为并发环境变量竞争，单独运行时通过
+570 11:14a 🔴 flow_parser 并发测试 flaky 问题确认：ENV_MUTEX 跨模块不共享导致环境变量竞争
+571 11:15a 🔵 全量集成测试发现新失败：opengrep_rule_batch_select 返回 400 而非预期 200
+572 " 🔵 opengrep_rule_batch_select 400 失败：测试在行 1741 断言，失败可复现，非 flaky
+573 " 🔵 400 失败根因定位：upload/json 端点调用 build_rule_record_from_payload，pattern_yaml 验证失败
+574 11:16a 🔵 400 根因确认：task_routes_api.rs 行 1716 pattern_yaml 使用 \\\\n 字面量而非实际换行
+575 11:17a 🔵 debug 脚本确认：\\n 字面量导致 pattern_yaml 被视为空，错误信息为"规则YAML不能为空"
+576 " 🔵 根因最终确认：JSON 序列化后 \n 变为实际换行，服务端可正常解析；测试代码中 \\\\n 未经 JSON 序列化直接传入导致失败
+577 11:18a 🔵 task_routes_api.rs 测试不使用环境变量，isolated_test_config 通过 zip_storage_path 隔离，排除环境竞争
+578 11:19a 🔵 关键发现：debug 脚本与测试使用完全相同的 create_rule 闭包，debug 返回 200，测试返回 400，问题在测试运行环境而非代码逻辑
+579 11:20a 🔴 修复 task_routes_api.rs 中 create_rule 闭包的 pattern_yaml 转义层级错误
+580 11:22a 🔴 opengrep_rule_batch_select 测试修复通过，lld 链接器配置持久化到 .cargo/config.toml
+581 " 🔵 新 flaky 失败：execute_reports_runner_failures 断言 error 字段不含 "run docker command"
+582 11:23a 🔵 execute_reports_runner_failures 单独运行通过，确认为并发 flaky；RUST_TEST_THREADS=1 全量串行运行启动
+583 11:24a 🔴 RUST_TEST_THREADS=1 串行运行：129 个 lib 单元测试全部通过，flow_parser flaky 问题消除
+584 11:26a 🔴 全量测试套件在 RUST_TEST_THREADS=1 下完全通过，cargo test 阻塞问题彻底解决
+585 11:27a ✅ RUST_TEST_THREADS=1 固化到 .cargo/config.toml [env] 节，cargo test 无需手动传递环境变量
+586 11:28a 🔴 cargo test 阻塞问题完全解决：.cargo/config.toml 配置生效，全量测试无需额外参数稳定通过
+587 11:29a 🔴 cargo test 阻塞问题最终验证完成：全量测试套件两次连续通过，exit code 0
+588 11:31a 🔵 cargo build 成功（9s 增量），Python 测试因 conftest.py 导入 app 模块失败
+589 " 🔵 Python 测试需要 PYTHONPATH=backend_old，两个测试文件全部通过
+590 11:32a 🔵 Python 后端测试套件全部通过：findings 相关 3 个测试文件共 17 个测试均绿灯
+591 " ✅ rust_full_takeover 计划文档更新：scope_filters 迁移完成，scanner/queue 功能组清零
+593 " ⚖️ Rust Backend Architecture Verification: APPROVE
+592 11:33a ✅ Ralph 验证分支提交 architect review：scope_filters 迁移 + cargo test 修复
+594 " 🟣 Rust scope_filters CLI bridge: backend-runtime-startup scan-scope subcommand
+595 " ✅ Test suite updated: scope_filters retirement guards and new ignored-scope-path coverage
+596 " ✅ Plan docs updated: scanner/queue group cleared to 0, blocker list renumbered
+597 11:34a 🔵 Live verification: scope_filters.py deleted, non-API Python count confirmed at 93
+598 11:35a 🔵 Python vs Rust scope_filters semantic parity confirmed via HEAD diff
+600 " 🔵 Rust wildcard matcher does not support ? (single-char) — behavioral gap vs Python fnmatch
+599 " 🔵 cargo fmt --check 通过，Python 文件语法编译通过，architect review 进行中
+601 11:36a 🔵 Architect Review REJECT：Rust wildcard_matches_bytes 未实现 fnmatch 的 ? 和 [] 语义，静默收窄 contract
+602 " 🔴 修复 wildcard_matches：实现完整 fnmatch 语义（? 和 [] 字符类），补充 parity regression tests
+603 11:37a 🔵 Python bridge 测试失败：? 和 [] 模式通过 Rust bridge 时未生效，Rust 单测通过但 Python 侧 bridge 未传递 fnmatch 模式
+604 11:38a ⚖️ Rust Full Takeover of Python Functionality
+605 11:47a 🟣 Rust Backend Test Suite Passes 131 Tests
+606 11:48a 🟣 Rust Backend 131 Unit Tests All Pass — Full Module Coverage Confirmed
+607 " 🟣 Rust Integration Tests: Bootstrap Startup Suite Running
+608 " 🟣 Rust Integration Test Suites All Pass — Full API Coverage Confirmed
+609 11:49a 🟣 Rust Test Suite Completed — All Tests Pass
+610 11:50a 🟣 task_routes_api Integration Suite: 16/16 Passed — Python Upstream Fully Retired
+611 " 🟣 Rust Backend Dev Build Succeeds in 1.39s
 
-Access 960k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 388k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

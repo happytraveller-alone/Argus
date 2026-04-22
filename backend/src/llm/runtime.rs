@@ -69,11 +69,7 @@ impl StreamAccumulator {
         })
     }
 
-    pub fn finish(
-        &self,
-        finish_reason: Option<&str>,
-        usage: Option<LlmUsage>,
-    ) -> StreamEvent {
+    pub fn finish(&self, finish_reason: Option<&str>, usage: Option<LlmUsage>) -> StreamEvent {
         if !self.saw_any_delta {
             if let Some(reason) = finish_reason {
                 return StreamEvent {
@@ -121,7 +117,10 @@ mod tests {
     fn adapter_mode_matches_retired_python_runtime_split() {
         assert_eq!(adapter_mode_for_provider("claude"), AdapterMode::Anthropic);
         assert_eq!(adapter_mode_for_provider("baidu"), AdapterMode::NativeOnly);
-        assert_eq!(adapter_mode_for_provider("custom"), AdapterMode::OpenAiCompatible);
+        assert_eq!(
+            adapter_mode_for_provider("custom"),
+            AdapterMode::OpenAiCompatible
+        );
     }
 
     #[test]
@@ -138,13 +137,11 @@ mod tests {
 
         assert_eq!(event.kind, StreamEventKind::Error);
         assert_eq!(event.error_type.as_deref(), Some("empty_response"));
-        assert!(
-            event
-                .error
-                .as_deref()
-                .unwrap_or_default()
-                .contains("finish_reason=content_filter")
-        );
+        assert!(event
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("finish_reason=content_filter"));
     }
 
     #[test]

@@ -9,7 +9,7 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`94`
+- `backend_old/app` 非 API Python：`93`
 - `backend_old/alembic` Python：`0`
 - `backend_old/scripts` Python：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
@@ -23,7 +23,7 @@
 | models / persistence mirror | 0 | Python model runtime 已退役 |
 | shared helpers | 0 | Python shared helpers 已退役 |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 |
-| scanner / queue / workspace / tracking | 1 | scope filtering、剩余 scanner 主链 |
+| scanner / queue / workspace / tracking | 0 | legacy `scope_filters.py` 已退役；SmartScanTool 并行 exclude 逻辑仍待后续统一 |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 逻辑 |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge |
 | tools + tool runtime | 26 | retained tool execution 主链 |
@@ -48,11 +48,10 @@
 
 ## 当前最重要的 blocker
 
-1. `scope_filters.py` 仍在控制 retained scanner 主链；queue service source of truth 已切到 Rust `runtime::queue`。
-2. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
-3. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` Python runtime 已清零。
-4. `backend_old/scripts/flow_parser_runner.py` 与 `scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
-5. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
+1. `services/agent/agents/*`、`core/*`、`event_manager.py` 等仍承担 agent orchestration / state 主链。
+2. `core/flow/*`、`logic/*`、`tools/*`、`knowledge/*` 仍是大块 live Python runtime；`llm/*` Python runtime 已清零。
+3. `backend_old/scripts/flow_parser_runner.py` 与 `scripts/release-templates/runner_preflight.py` 仍阻止最终退休。
+4. retired route 的 frontend caller debt 与最终 readiness gate 还没有被完全验证。
 
 ## 最近完成的 slice
 
@@ -66,6 +65,9 @@
 - Python `flow_parser_runner.py` 已改为直接调用 Rust runner bridge，不再 import `app.services.agent.scanner_runner`。
 - `backend_old/app/services/agent/recon_risk_queue.py` 与 `backend_old/app/services/agent/vulnerability_queue.py` 已退役。
 - Rust `backend/src/runtime/queue.rs` 现在承担 agent-test queue snapshot 与 queue fingerprint 语义宿主。
+- Rust `backend/src/scan/scope_filters.rs` 已成为 legacy `scope_filters.py` 的语义宿主；`backend-runtime-startup scan-scope` 现在承担 ignored-scope path 与 bootstrap finding filter 的最小桥接。
+- `backend_old/app/services/agent/task_findings.py` 已切走对 `app.services.agent.scope_filters` 的 direct import，并通过 Rust bridge 消费 ignored-scope path 语义。
+- `backend_old/app/services/agent/scope_filters.py` 已退役；scanner / queue / workspace / tracking 功能组现已清零，但 SmartScanTool 自带 exclude 逻辑仍在后续切片范围内。
 - Rust `backend/src/llm_rule/mod.rs` 现在承担 generic opengrep rule YAML 的规范化与 schema 校验语义。
 - `/api/v1/static-tasks/rules/create-generic`、`/rules/upload/json` 与 rule update 已切到 Rust 校验链，不再依赖 `backend_old/app/services/rule.py` 里的 `validate_generic_rule()` helper。
 - Rust `backend/src/llm_rule/git.rs` 已拿到 HTTPS-only / git mirror candidate 语义宿主。

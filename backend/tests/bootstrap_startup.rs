@@ -1,5 +1,5 @@
 use axum::{
-    body::{Body, to_bytes},
+    body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
 use backend_rust::{app::build_router, bootstrap, config::AppConfig, state::AppState};
@@ -73,49 +73,37 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
             "legacy_control_plane_mirror_schema_sync"
         ]
     );
-    assert!(
-        report
-            .init
-            .policy
-            .forbidden_at_startup
-            .contains(&"demo_user_bootstrap".to_string())
-    );
-    assert!(
-        report
-            .init
-            .policy
-            .deferred_until_rust_owned
-            .contains(&"agent_task_seed_data".to_string())
-    );
-    assert!(
-        report
-            .init
-            .actions
-            .iter()
-            .any(|action| action == "created default rust system config")
-    );
-    assert!(
-        report
-            .init
-            .actions
-            .iter()
-            .any(|action| action == "created empty rust project store")
-    );
-    assert!(
-        report
-            .init
-            .actions
-            .iter()
-            .any(|action| action == "scan rule asset import skipped without rust db")
-    );
+    assert!(report
+        .init
+        .policy
+        .forbidden_at_startup
+        .contains(&"demo_user_bootstrap".to_string()));
+    assert!(report
+        .init
+        .policy
+        .deferred_until_rust_owned
+        .contains(&"agent_task_seed_data".to_string()));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "created default rust system config"));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "created empty rust project store"));
+    assert!(report
+        .init
+        .actions
+        .iter()
+        .any(|action| action == "scan rule asset import skipped without rust db"));
     assert_eq!(report.recovery.status, "skipped");
     assert_eq!(report.preflight.status, "skipped");
-    assert!(
-        config
-            .zip_storage_path
-            .join("rust-system-config.json")
-            .exists()
-    );
+    assert!(config
+        .zip_storage_path
+        .join("rust-system-config.json")
+        .exists());
     assert!(config.zip_storage_path.join("rust-projects.json").exists());
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
@@ -295,11 +283,9 @@ async fn bootstrap_fails_when_zip_storage_root_cannot_be_created() {
 
     let report = state.bootstrap.read().await.clone();
     assert_eq!(report.file_store.status, "error");
-    assert!(
-        error
-            .to_string()
-            .contains("bootstrap failed to initialize file storage root")
-    );
+    assert!(error
+        .to_string()
+        .contains("bootstrap failed to initialize file storage root"));
 
     let _ = tokio::fs::remove_file(&blocked_parent).await;
 }

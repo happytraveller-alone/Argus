@@ -105,6 +105,48 @@ async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriche
 
 
 @pytest.mark.asyncio
+async def test_save_findings_filters_ignored_scope_paths(tmp_path):
+    ignored_file = tmp_path / ".github" / "workflows" / "pipeline.py"
+    ignored_file.parent.mkdir(parents=True, exist_ok=True)
+    ignored_file.write_text("def hidden():\n    return 1\n", encoding="utf-8")
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    diagnostics = {}
+    findings = [
+        {
+            "title": "ignored scope finding",
+            "file_path": ".github/workflows/pipeline.py",
+            "line_start": 1,
+            "line_end": 1,
+            "description": "should be filtered by ignored scope path",
+            "verdict": "likely",
+            "reachability": "likely_reachable",
+            "verification_result": {},
+        },
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-ignored-scope",
+        findings=findings,
+        project_root=str(tmp_path),
+        save_diagnostics=diagnostics,
+    )
+
+    assert saved_count == 0
+    db.add.assert_not_called()
+    db.commit.assert_awaited_once()
+    assert diagnostics["saved_count"] == 0
+    assert diagnostics["filtered_count"] == 1
+    assert diagnostics["filtered_reasons"]["ignored_scope_path"] == 1
+
+
+@pytest.mark.asyncio
 async def test_save_findings_keeps_false_positive_payload_with_minimal_fields(tmp_path):
     db = AsyncMock()
     db.add = MagicMock()

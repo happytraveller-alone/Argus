@@ -1,11 +1,16 @@
 use anyhow::Result;
-use backend_rust::runtime::{bootstrap, code2flow, flow_parser, runner};
+use backend_rust::{
+    runtime::{bootstrap, code2flow, flow_parser, runner},
+    scan::scope_filters,
+};
 use std::{env, path::Path, process};
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| {
-        eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser>");
+        eprintln!(
+            "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope>"
+        );
         process::exit(1);
     });
 
@@ -14,8 +19,11 @@ fn main() -> Result<()> {
         "runner" => handle_runner(args)?,
         "code2flow" => handle_code2flow(args)?,
         "flow-parser" => handle_flow_parser(args)?,
+        "scan-scope" => handle_scan_scope(args)?,
         _ => {
-            eprintln!("Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser>");
+            eprintln!(
+                "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope>"
+            );
             process::exit(1);
         }
     }
@@ -74,6 +82,39 @@ fn handle_code2flow(mut args: impl Iterator<Item = String>) -> Result<()> {
         serde_json::to_string(&code2flow::execute_from_request_path(Path::new(
             &request_path
         )))?
+    );
+    Ok(())
+}
+
+fn handle_scan_scope(mut args: impl Iterator<Item = String>) -> Result<()> {
+    let operation = args.next().unwrap_or_else(|| {
+        eprintln!(
+            "Usage: backend-runtime-startup scan-scope <build-patterns|is-ignored|filter-bootstrap-findings> --request <path>"
+        );
+        process::exit(1);
+    });
+    let operation = scope_filters::ScopeFilterOperation::from_cli(&operation).unwrap_or_else(|_| {
+        eprintln!(
+            "Usage: backend-runtime-startup scan-scope <build-patterns|is-ignored|filter-bootstrap-findings> --request <path>"
+        );
+        process::exit(1);
+    });
+
+    let flag = args.next().unwrap_or_default();
+    let request_path = args.next().unwrap_or_default();
+    if flag != "--request" || request_path.is_empty() {
+        eprintln!(
+            "Usage: backend-runtime-startup scan-scope <build-patterns|is-ignored|filter-bootstrap-findings> --request <path>"
+        );
+        process::exit(1);
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string(&scope_filters::execute_from_request_path(
+            operation,
+            Path::new(&request_path),
+        ))?
     );
     Ok(())
 }

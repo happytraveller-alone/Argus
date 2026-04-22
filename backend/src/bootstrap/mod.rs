@@ -5,7 +5,7 @@ mod recovery;
 
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use sqlx::PgPool;
 use tokio::time::timeout;
 

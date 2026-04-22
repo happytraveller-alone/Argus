@@ -10,12 +10,12 @@
 
 - `backend_old` 根目录 Python：`0`
 - `backend_old/app/api` Python：`0`
-- `backend_old/app` 非 API Python：`94`
+- `backend_old/app` 非 API Python：`93`
 - `backend_old/alembic`：`0`
 - `backend_old/scripts`：`1`
 - `scripts/release-templates/runner_preflight.py`：`1`
 
-`94` 是当前 runtime core 主计数。
+`93` 是当前 runtime core 主计数。
 
 它不包含 `scripts/migration/*.py` 这类 inventory / diff tooling；
 这类文件默认不算 runtime blocker，但需要与 canonical 文档保持一致。
@@ -29,7 +29,7 @@
 | models / persistence mirror | 0 | Python model runtime 已退役 | `backend/src/domain/*`, `backend/src/db/*` |
 | shared helpers | 0 | Python 已退役，剩余 fill-in 在 Rust runtime / tool caller | `backend/src/*` 对应 shared service |
 | agent orchestration / state / payload | 22 | agent 执行、状态、消息、payload 归一化 | `backend/src/agent/*`, `backend/src/runtime/*` |
-| scanner / queue / workspace / tracking | 1 | scope filtering | `backend/src/scan/*`, `backend/src/runtime/*` |
+| scanner / queue / workspace / tracking | 0 | legacy `scope_filters.py` 已退役；SmartScanTool 并行 exclude 逻辑仍待后续统一 | `backend/src/scan/*` |
 | flow / logic | 13 | flow parser、callgraph、AST / authz 分析 | `backend/src/flow/*`, `backend/src/graph/*` |
 | knowledge | 21 | knowledge loader、framework / vuln knowledge | `backend/src/knowledge/*` |
 | tools + tool runtime | 26 | retained tool execution 主链 | `backend/src/tools/*`, `backend/src/runtime/*` |
@@ -154,29 +154,21 @@ backend_old/app/services/agent/task_findings.py
 backend_old/app/services/agent/write_scope.py
 ```
 
-### 6. Scanner / Queue / Workspace / Tracking (`1`)
+### 6. Scanner / Queue / Workspace / Tracking (`0`)
 
-当前责任：
-
-- scope filtering glue
-
-目标状态：
-
-- Rust scan/runtime cluster 完全接替
-
-文件：
-
-```text
-backend_old/app/services/agent/scope_filters.py
-```
-
-已完成收口：
+当前状态：
 
 - `backend_old/app/services/agent/scanner_runner.py` 已退役。
 - Rust `backend-runtime-startup runner execute|stop` 已接管 scanner runner contract。
 - Rust `backend/src/runtime/queue.rs` 已接管 recon / vulnerability queue fingerprint 与 queue snapshot 语义。
 - `backend_old/app/services/agent/recon_risk_queue.py` 与 `backend_old/app/services/agent/vulnerability_queue.py` 已退役。
 - `backend_old/app/services/agent/core/flow/flow_parser_runner.py` 不再 import `app.services.agent.scanner_runner`。
+- `backend_old/app/services/agent/scope_filters.py` 已退役。
+- Rust `backend/src/scan/scope_filters.rs` + `backend-runtime-startup scan-scope` 现在承担 legacy ignored-scope path / bootstrap finding filter 语义；`task_findings.py` 已切到该 Rust bridge。
+
+剩余工作：
+
+- SmartScanTool 的并行 exclude / collect-files 逻辑仍不在本次收口范围内；不要把这一刀记成“全局 scope filtering 已全部迁 Rust”。
 
 ### 7. Flow / Logic Retained Runtime (`13`)
 

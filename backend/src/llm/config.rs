@@ -124,7 +124,10 @@ mod tests {
         )))
         .expect("custom headers should parse");
 
-        assert_eq!(headers.get("Authorization").map(String::as_str), Some("123"));
+        assert_eq!(
+            headers.get("Authorization").map(String::as_str),
+            Some("123")
+        );
         assert_eq!(headers.get("X-Trace").map(String::as_str), Some(""));
         assert_eq!(headers.get("X-Mode").map(String::as_str), Some("True"));
         assert!(!headers.contains_key(""));

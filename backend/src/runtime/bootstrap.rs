@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
@@ -563,8 +563,8 @@ pub fn run(mode: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_BACKEND_SERVER_BIN, ProbeResult, backend_server_bin, build_probe_url,
-        normalize_candidates, run_optional_resets, sort_probe_results,
+        backend_server_bin, build_probe_url, normalize_candidates, run_optional_resets,
+        sort_probe_results, ProbeResult, DEFAULT_BACKEND_SERVER_BIN,
     };
     use std::{env, fs};
     use tempfile::TempDir;

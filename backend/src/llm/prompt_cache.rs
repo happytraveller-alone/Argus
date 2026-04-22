@@ -88,7 +88,10 @@ impl PromptCacheManager {
         if !self.config.enabled || !self.cache_enabled_for_session {
             return false;
         }
-        if !matches!(provider.to_ascii_lowercase().as_str(), "anthropic" | "claude") {
+        if !matches!(
+            provider.to_ascii_lowercase().as_str(),
+            "anthropic" | "claude"
+        ) {
             return false;
         }
 

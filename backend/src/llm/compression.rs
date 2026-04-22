@@ -48,7 +48,9 @@ impl MemoryCompressor {
             }
         }
 
-        let split_point = regular_messages.len().saturating_sub(self.min_recent_messages);
+        let split_point = regular_messages
+            .len()
+            .saturating_sub(self.min_recent_messages);
         let (old_messages, recent_messages) = regular_messages.split_at(split_point);
         if old_messages.is_empty() {
             return messages.to_vec();

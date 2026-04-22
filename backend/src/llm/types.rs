@@ -86,7 +86,10 @@ mod tests {
         let config = LlmConfig::default();
         assert_eq!(config.provider, "openai");
         assert_eq!(config.model, "gpt-5");
-        assert_eq!(config.base_url.as_deref(), Some("https://api.openai.com/v1"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
         assert_eq!(config.timeout_seconds, 150);
         assert_eq!(config.max_tokens, 4_096);
     }

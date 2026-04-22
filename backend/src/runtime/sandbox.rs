@@ -27,7 +27,11 @@ pub struct SandboxRunSpec {
 }
 
 impl SandboxRunSpec {
-    pub fn with_defaults(image: &str, command: Vec<String>, workspace_dir: &str) -> Result<Self, String> {
+    pub fn with_defaults(
+        image: &str,
+        command: Vec<String>,
+        workspace_dir: &str,
+    ) -> Result<Self, String> {
         let spec = Self {
             image: image.to_string(),
             command,
@@ -96,7 +100,10 @@ pub fn truncate_log_text(text: &str) -> String {
 
     let tail_chars = MAX_RETAINED_LOG_CHARS.saturating_sub(64);
     let omitted_chars = text.len().saturating_sub(tail_chars);
-    format!("[truncated {omitted_chars} chars]\n{}", &text[text.len() - tail_chars..])
+    format!(
+        "[truncated {omitted_chars} chars]\n{}",
+        &text[text.len() - tail_chars..]
+    )
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{config::AppConfig, project_file_cache::ProjectFileCache};

@@ -13,19 +13,14 @@
 - `backend_old/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 与 `backend_old/alembic/*` 已整体退役；Phase A 尾巴完成。
 - flow/lightweight 与 sandbox/base/preflight importer 已切到 `app.services.agent.runtime_settings`，核心配置读取不再依赖 `app.core`。
 
-### 1. Scanner / Queue 主链
+### Scanner / Queue 主链收口（已完成）
 
-目标文件：
+- `backend_old/app/services/agent/scope_filters.py` 已退役。
+- Rust `backend/src/scan/scope_filters.rs` + `backend-runtime-startup scan-scope` 现在承担 legacy ignored-scope path / bootstrap finding filter 语义。
+- `backend_old/app/services/agent/task_findings.py` 已切到 Rust bridge。
+- 本收口不等于 SmartScanTool 或全局 scope filtering 已全部统一 Rust；其并行 exclude 逻辑仍留在后续 slice。
 
-- `backend_old/app/services/agent/scope_filters.py`
-
-完成标准：
-
-- Rust 拿到 scope filtering 的 source of truth，并让 scanner / queue cluster 清零
-- Python cluster 删除
-- 新增或更新 retirement guard
-
-### 2. Agent Orchestration / State / Payload 主链
+### 1. Agent Orchestration / State / Payload 主链
 
 目标范围：
 
@@ -44,7 +39,7 @@
 - agent 执行、状态、消息和 finding payload 主链由 Rust 承担
 - Python orchestrator 退到 0 或降级为非运行时资产
 
-### 3. Flow / Logic 主链
+### 2. Flow / Logic 主链
 
 目标范围：
 
@@ -56,7 +51,7 @@
 - flow parser、callgraph、definition lookup、authz logic 由 Rust 承担
 - Python flow runner / lightweight analysis 不再处于主链
 
-### 4. Tool Runtime + Support Glue
+### 3. Tool Runtime + Support Glue
 
 目标范围：
 
@@ -73,7 +68,7 @@
 - Rust 拿到工具执行主链、streaming glue、prompt / memory 宿主
 - Python 只剩 archive / tooling，不再承载 live tool runtime
 
-### 5. Knowledge + LLM + Rule Runtime
+### 4. Knowledge + LLM + Rule Runtime
 
 目标范围：
 
@@ -101,7 +96,7 @@
 - sandbox spec/result shell 已迁到 Rust `backend/src/runtime/sandbox.rs`；`backend_old/app/services/sandbox_runner.py` 已退役。
 - `backend_old/app/services` 根目录现已清零，不再有 retained shared helper Python 文件。
 
-### 6. Models / Ops Tail Final Gate
+### 5. Models / Ops Tail Final Gate
 
 目标范围：
 

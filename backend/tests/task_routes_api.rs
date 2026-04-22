@@ -1713,7 +1713,7 @@ async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_
                        confidence: &str| {
         json!({
             "name": name,
-            "pattern_yaml": format!("rules:\\n  - id: {}\\n    languages: [python]\\n    severity: WARNING\\n    message: demo\\n    pattern: dangerous_call", name.replace(' ', "-")),
+            "pattern_yaml": format!("rules:\n  - id: {}\n    languages:\n      - python\n    severity: WARNING\n    message: demo\n    pattern: dangerous_call($X)", name.replace(' ', "-")),
             "language": language,
             "severity": severity,
             "source": source,

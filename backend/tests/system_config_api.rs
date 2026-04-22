@@ -206,13 +206,11 @@ async fn system_config_llm_provider_catalog_matches_rust_registry_semantics() {
         .find(|item| item["id"] == "gemini")
         .expect("gemini provider should exist");
     assert_eq!(gemini["defaultModel"], "gemini-3-pro");
-    assert!(
-        gemini["models"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|model| model == "veo-3.1")
-    );
+    assert!(gemini["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|model| model == "veo-3.1"));
 
     let baidu = providers
         .iter()
@@ -263,13 +261,11 @@ async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module()
     assert_eq!(payload["resolvedProvider"], "custom");
     assert_eq!(payload["defaultModel"], "gpt-5");
     assert_eq!(payload["baseUrlUsed"], "https://gateway.example/v1");
-    assert!(
-        payload["models"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|model| model == "gpt-5.1-codex-max")
-    );
+    assert!(payload["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|model| model == "gpt-5.1-codex-max"));
 }
 
 #[tokio::test]

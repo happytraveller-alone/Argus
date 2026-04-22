@@ -8,7 +8,12 @@ pub enum RuntimeTokenCountingMode {
 }
 
 pub fn normalize_runtime_token_counting_mode(value: Option<&str>) -> RuntimeTokenCountingMode {
-    match value.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
+    match value
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "auto" => RuntimeTokenCountingMode::Auto,
         "precise" => RuntimeTokenCountingMode::Precise,
         _ => RuntimeTokenCountingMode::Heuristic,
@@ -89,8 +94,7 @@ pub fn estimate_message_tokens(messages: &[Value], model: &str) -> i64 {
                 for part in parts {
                     if part.get("type").and_then(Value::as_str) == Some("text") {
                         if let Some(text) = part.get("text").and_then(Value::as_str) {
-                            total +=
-                                count_tokens(text, model, RuntimeTokenCountingMode::Heuristic);
+                            total += count_tokens(text, model, RuntimeTokenCountingMode::Heuristic);
                         }
                     }
                 }
@@ -144,7 +148,11 @@ mod tests {
     fn heuristic_counting_matches_retired_python_behavior() {
         let expected = heuristic_estimate("hello world");
         assert_eq!(
-            count_tokens("hello world", "gpt-4o-mini", RuntimeTokenCountingMode::Heuristic),
+            count_tokens(
+                "hello world",
+                "gpt-4o-mini",
+                RuntimeTokenCountingMode::Heuristic
+            ),
             expected
         );
         assert_eq!(fast_count_tokens("hello world", "gpt-4o-mini"), expected);

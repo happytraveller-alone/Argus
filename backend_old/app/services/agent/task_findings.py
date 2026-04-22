@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path
@@ -26,9 +28,152 @@ from app.services.agent.utils.vulnerability_naming import (
     resolve_cwe_id as resolve_cwe_id_util,
     resolve_vulnerability_profile as resolve_vulnerability_profile_util,
 )
-from app.services.agent.scope_filters import _is_core_ignored_path
+from app.services.agent.runtime_settings import settings
 
 logger = logging.getLogger(__name__)
+
+_SCOPE_FILTER_RUNTIME_TIMEOUT_SECONDS = 30
+_SCOPE_FILTER_IGNORED_CACHE: Dict[Tuple[str, Tuple[str, ...]], bool] = {}
+
+
+def _runtime_startup_command() -> List[str]:
+    env_configured = str(os.environ.get("BACKEND_RUNTIME_STARTUP_BIN", "") or "").strip()
+    configured = str(
+        getattr(
+            settings,
+            "BACKEND_RUNTIME_STARTUP_BIN",
+            "/usr/local/bin/backend-runtime-startup",
+        )
+        or ""
+    ).strip()
+    repo_root = Path(__file__).resolve().parents[4]
+    repo_fallback = repo_root / "backend" / "target" / "debug" / "backend-runtime-startup"
+
+    for candidate in (env_configured, configured, str(repo_fallback)):
+        if not candidate:
+            continue
+        candidate_path = Path(candidate)
+        if candidate_path.is_file():
+            return [str(candidate_path)]
+
+    return [configured or "/usr/local/bin/backend-runtime-startup"]
+
+
+def _normalize_scope_filter_patterns(
+    patterns: Optional[List[str]],
+) -> List[str]:
+    normalized: List[str] = []
+    for raw in patterns or []:
+        if not isinstance(raw, str):
+            continue
+        item = raw.strip().replace("\\", "/")
+        if item:
+            normalized.append(item)
+    return normalized
+
+
+def _invoke_scope_filter_runtime(
+    operation: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="scope-filter-runtime-") as workspace_dir:
+        request_path = Path(workspace_dir) / "request.json"
+        request_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        try:
+            completed = subprocess.run(
+                [
+                    *_runtime_startup_command(),
+                    "scan-scope",
+                    operation,
+                    "--request",
+                    str(request_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_SCOPE_FILTER_RUNTIME_TIMEOUT_SECONDS,
+            )
+        except OSError as exc:
+            raise RuntimeError(f"scope_filter_runtime_unavailable:{exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("scope_filter_runtime_timeout") from exc
+
+    stdout_text = (completed.stdout or "").strip()
+    stderr_text = (completed.stderr or "").strip()
+    if not stdout_text:
+        raise RuntimeError(
+            stderr_text or f"scope_filter_runtime_empty_response:{completed.returncode}"
+        )
+
+    try:
+        parsed = json.loads(stdout_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            stderr_text or f"scope_filter_runtime_invalid_json:{stdout_text}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"scope_filter_runtime_invalid_payload:{type(parsed).__name__}")
+    if not parsed.get("ok", False):
+        raise RuntimeError(str(parsed.get("error") or "scope_filter_runtime_failed"))
+    return parsed
+
+
+def _build_core_audit_exclude_patterns(
+    user_patterns: Optional[List[str]],
+) -> List[str]:
+    response = _invoke_scope_filter_runtime(
+        "build-patterns",
+        {"exclude_patterns": _normalize_scope_filter_patterns(user_patterns)},
+    )
+    patterns = response.get("patterns")
+    if not isinstance(patterns, list):
+        raise RuntimeError("scope_filter_runtime_missing_patterns")
+    return [str(item) for item in patterns if isinstance(item, str)]
+
+
+def _is_core_ignored_path(
+    path: str,
+    exclude_patterns: Optional[List[str]] = None,
+) -> bool:
+    cache_key = (
+        str(path or ""),
+        tuple(_normalize_scope_filter_patterns(exclude_patterns)),
+    )
+    if cache_key in _SCOPE_FILTER_IGNORED_CACHE:
+        return _SCOPE_FILTER_IGNORED_CACHE[cache_key]
+
+    response = _invoke_scope_filter_runtime(
+        "is-ignored",
+        {
+            "path": str(path or ""),
+            "exclude_patterns": list(cache_key[1]),
+        },
+    )
+    ignored = bool(response.get("ignored", False))
+    _SCOPE_FILTER_IGNORED_CACHE[cache_key] = ignored
+    return ignored
+
+
+def _filter_bootstrap_findings(
+    normalized_findings: List[Dict[str, Any]],
+    exclude_patterns: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    response = _invoke_scope_filter_runtime(
+        "filter-bootstrap-findings",
+        {
+            "findings": normalized_findings,
+            "exclude_patterns": _normalize_scope_filter_patterns(exclude_patterns),
+        },
+    )
+    items = response.get("items")
+    if not isinstance(items, list):
+        raise RuntimeError("scope_filter_runtime_missing_items")
+    return [item for item in items if isinstance(item, dict)]
 
 
 class AgentFindingResponse(BaseModel):
