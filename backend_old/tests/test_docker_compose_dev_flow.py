@@ -2,10 +2,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNER_SERVICE_NAMES = (
-    "opengrep-runner",
-    "flow-parser-runner",
-)
+RETIRED_RUNNER_SERVICE_NAMES = ("flow-parser-runner",)
 
 
 def test_default_compose_uses_backend_managed_runner_preflight() -> None:
@@ -26,8 +23,16 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "runner preflight / warmup" not in compose_text
     assert "一次性预热/自检容器" not in compose_text
     assert "执行完检查后按预期退出" not in compose_text
-    assert 'condition: service_completed_successfully' not in compose_text
-    for runner_service in RUNNER_SERVICE_NAMES:
+    assert "\n  opengrep-runner:\n" in compose_text
+    assert 'condition: service_completed_successfully' in compose_text
+    assert 'image: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}' in compose_text
+    assert 'pull_policy: never' in compose_text
+    assert "dockerfile: docker/opengrep-runner.Dockerfile" in compose_text
+    assert 'command:' in compose_text
+    assert '- "opengrep"' in compose_text
+    assert '- "--version"' in compose_text
+    assert 'restart: "no"' in compose_text
+    for runner_service in RETIRED_RUNNER_SERVICE_NAMES:
         assert f"\n  {runner_service}:" not in compose_text
     assert "vulhunter/backend-dev:latest" not in compose_text
     assert "vulhunter/frontend-dev:latest" not in compose_text
@@ -115,7 +120,7 @@ def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
         encoding="utf-8"
     )
 
-    assert 'CMD ["/usr/local/bin/backend"]' in backend_text
+    assert 'CMD ["/usr/local/bin/backend-entrypoint.sh"]' in backend_text
 
 
 def test_nexus_web_dockerfile_is_removed() -> None:
@@ -218,6 +223,9 @@ def test_backend_dockerfile_copies_rule_assets_into_runtime_image() -> None:
     backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
 
     assert "COPY backend/assets ./assets" in backend_text
+    assert "COPY docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh" in backend_text
+    assert 'CMD ["/usr/local/bin/backend-entrypoint.sh"]' in backend_text
+    assert "USER appuser" not in backend_text
 
 
 def test_backend_dockerfile_bootstraps_apt_sources_over_http() -> None:

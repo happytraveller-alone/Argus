@@ -338,25 +338,7 @@ export default function DataManagementPage() {
                       ) : null}
                     </div>
 
-                    <div className="rounded border border-border/30 bg-background/70 px-3 py-2">
-                      {selectedBundle ? (
-                        <div className="space-y-1">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            已选择文件
-                          </p>
-                          <p className="break-all text-sm text-foreground">
-                            {selectedBundle.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            大小：{Math.max(1, Math.round(selectedBundle.size / 1024))} KB
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-xs leading-5 text-muted-foreground">
-                          请选择由“项目迁移导出”生成的 ZIP 包。
-                        </p>
-                      )}
-                    </div>
+
                   </div>
                 </div>
 

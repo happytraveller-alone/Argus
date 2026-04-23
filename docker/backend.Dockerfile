@@ -141,10 +141,12 @@ RUN groupadd --gid 1001 appgroup \
 WORKDIR /app
 
 COPY backend/assets ./assets
+COPY docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
 
-RUN chown -R appuser:appgroup /app
+RUN chmod +x /usr/local/bin/backend-entrypoint.sh \
+  && chown -R appuser:appgroup /app
 
 ENV BIND_ADDR=0.0.0.0:8000
 ENV ZIP_STORAGE_PATH=/app/uploads/zip_files
@@ -152,11 +154,9 @@ ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
 ENV XDG_CACHE_HOME=/app/data/runtime/xdg-cache
 ENV XDG_CONFIG_HOME=/app/data/runtime/xdg-config
 
-USER appuser
-
 EXPOSE 8000
 
-CMD ["/usr/local/bin/backend"]
+CMD ["/usr/local/bin/backend-entrypoint.sh"]
 
 FROM runtime-base AS runtime-plain
 FROM runtime-base AS runtime-release

@@ -14,12 +14,11 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     volumes:
-      - ./backend/agents/recon/data:/opt/data
-      - ./backend/agents/recon/hermes-home:/opt/seed:ro
-      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+      - ../backend/agents/recon/data:/opt/data
+      - ../backend/agents/recon/hermes-home:/opt/seed:ro
+      - ${PROJECT_SOURCE_PATH:-..}:/scan:ro
     env_file:
-      # copy from backend/agents/recon/container.env.example
-      - path: ./backend/agents/recon/container.env
+      - path: ../backend/agents/recon/container.env
         required: false
     healthcheck:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
@@ -39,12 +38,11 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     volumes:
-      - ./backend/agents/analysis/data:/opt/data
-      - ./backend/agents/analysis/hermes-home:/opt/seed:ro
-      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+      - ../backend/agents/analysis/data:/opt/data
+      - ../backend/agents/analysis/hermes-home:/opt/seed:ro
+      - ${PROJECT_SOURCE_PATH:-..}:/scan:ro
     env_file:
-      # copy from backend/agents/analysis/container.env.example
-      - path: ./backend/agents/analysis/container.env
+      - path: ../backend/agents/analysis/container.env
         required: false
     healthcheck:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
@@ -64,13 +62,12 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     volumes:
-      - ./backend/agents/verification/data:/opt/data
-      - ./backend/agents/verification/hermes-home:/opt/seed:ro
-      - ./backend/agents/verification/scratch:/opt/scratch
-      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+      - ../backend/agents/verification/data:/opt/data
+      - ../backend/agents/verification/hermes-home:/opt/seed:ro
+      - ../backend/agents/verification/scratch:/opt/scratch
+      - ${PROJECT_SOURCE_PATH:-..}:/scan:ro
     env_file:
-      # copy from backend/agents/verification/container.env.example
-      - path: ./backend/agents/verification/container.env
+      - path: ../backend/agents/verification/container.env
         required: false
     healthcheck:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
@@ -90,13 +87,12 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     volumes:
-      - ./backend/agents/report/data:/opt/data
-      - ./backend/agents/report/hermes-home:/opt/seed:ro
-      - ./backend/agents/report/output:/opt/output
-      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+      - ../backend/agents/report/data:/opt/data
+      - ../backend/agents/report/hermes-home:/opt/seed:ro
+      - ../backend/agents/report/output:/opt/output
+      - ${PROJECT_SOURCE_PATH:-..}:/scan:ro
     env_file:
-      # copy from backend/agents/report/container.env.example
-      - path: ./backend/agents/report/container.env
+      - path: ../backend/agents/report/container.env
         required: false
     healthcheck:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]

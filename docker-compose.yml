@@ -3,11 +3,30 @@
 # =============================================
 # 启动: docker compose up --build
 # backend 会在启动期通过 Docker SDK 执行 runner preflight。
-# 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
-# 真正执行扫描时，backend 按 SCANNER_*_IMAGE / FLOW_PARSER_RUNNER_IMAGE
-# 动态拉起临时 runner 容器。
+# opengrep-runner compose service 仅用于在 `docker compose up` 时构建/预热本地镜像，
+# 服务本身为一次性成功退出；真正执行扫描时，backend 仍按 SCANNER_*_IMAGE
+# 动态拉起临时 runner 容器，并在结束后清理。
 
 services:
+  opengrep-runner:
+    image: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/opengrep-runner.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+    restart: "no"
+    command:
+      - "opengrep"
+      - "--version"
+    networks:
+      - vulhunter-network
+
   db:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:15-alpine
     restart: unless-stopped
@@ -124,6 +143,8 @@ services:
       start_period: 180s
       retries: 120
     depends_on:
+      opengrep-runner:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:

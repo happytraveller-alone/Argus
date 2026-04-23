@@ -40,14 +40,14 @@ export async function getOpengrepRules(params?: {
     limit?: number;
 }): Promise<OpengrepRule[]> {
     const searchParams = new URLSearchParams();
+    const limit = params?.limit ?? 10_000;
     if (params?.language) searchParams.set("language", params.language);
     if (params?.source) searchParams.set("source", params.source);
     if (params?.is_active !== undefined)
         searchParams.set("is_active", String(params.is_active));
     if (params?.skip !== undefined)
         searchParams.set("skip", String(params.skip));
-    if (params?.limit !== undefined)
-        searchParams.set("limit", String(params.limit));
+    searchParams.set("limit", String(limit));
 
     const query = searchParams.toString();
     const response = await apiClient.get(

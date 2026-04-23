@@ -482,59 +482,26 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 8:54pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 9:31pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,316t read) | 1,896,808t work | 99% savings
+Stats: 50 obs (21,015t read) | 1,472,586t work | 99% savings
 
 ### Apr 23, 2026
-S174 Strengthen release pipeline tests with precise compose validation count assertion to enforce single-compose-only architecture (Apr 23, 8:27 AM)
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
-S173 Strengthen release pipeline tests to enforce Docker infrastructure consolidation — verify hybrid/full compose removal and scanner engine deprecation (Apr 23, 8:33 AM)
 S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr 23, 8:43 AM)
 S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
 S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
 S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 4:07 PM)
-1495 7:35p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
-1498 7:36p 🟣 Hermes Integration Tests — All 14 Tests Pass After Crate Name Fix
-1499 7:38p 🔵 fetchTaskActivities Still Imports All Static Engine APIs Despite OpenGrep-Only Fetch
-1500 " 🔵 CreateProjectScanDialog Hardcodes Non-OpenGrep Engines to false/no-op
-1501 " 🔵 ProjectDetail and Dashboard Services Retain Multi-Engine Task Fetching
-1502 " 🔵 ScanConfigEngines Non-OpenGrep Tab Tests Remain — Now Test Fallback Behavior
-1512 7:44p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only (Code Review)
-1514 7:47p 🔵 Residual Risk — CreateScanTaskDialog and Dashboard projectScanStats Still Reference Retired Engines
-1515 " 🔄 ScanConfigIntelligentEngine and Project Dialogs — Indentation Reformatted to Spaces
-1518 7:48p 🔵 Stop-Gate Review — Previous Turn Confirmed Non-Edit (Summary Only)
-1519 7:49p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
-1520 " 🔴 Dashboard/Task/Scan-Engine Page Loading Errors Fixed
-1521 " ✅ Test Suite Updated for OpenGrep-Only and API Path Changes
-1528 " 🔵 Docker Build Failure — SSL Certificate Verify Failed on All Debian APT Mirrors
-1522 " 🔵 Frontend Static Scan Engine Retirement — OpenGrep Only (Final Review)
-1525 7:54p 🔵 OpenGrep-Only Migration — Residual PHPStan/PMD/Gitleaks Code Paths Confirmed as Intentional Dead Code
-1540 8:01p 🔵 Backend Runtime Container Missing scan_rule_assets — Root Cause Confirmed
-1541 8:04p 🔴 backend.Dockerfile Fixed — COPY backend/assets Added to Runtime Image
-1547 8:05p 🔵 Docker Build Failure — SSL Certificate Verify Failed on All APT Sources Including Fallback
-1549 8:07p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Plan Invoked
-1552 8:08p 🔵 Hermes Docker Compose Architecture — Full Integration Map Discovered
-1553 " 🟣 Work Plan Created — Hermes Compose Integration with Real Healthchecks
-1562 8:15p ⚖️ Hermes Agent Startup Dependency Direction — Agents Depend on Backend, Not Vice Versa
-1563 8:24p 🔵 Docker Build Fails — SSL Bootstrap Deadlock in Debian Trixie runtime-base Stage
-1564 " 🔴 OpenGrep Rule Loading Fixed — Severity Preserved and Assets Deployed to Runtime Container
-1565 " 🔵 OpenGrep Rule Loading Fix Verified — 3813 Rules Active, 2111 with ERROR Severity
-1566 " 🔵 PRD and Test Spec for Hermes Containerized Agents — Full Requirements Documented
-1567 " 🟣 Hermes Agents Merged into Main docker-compose.yml with Real Healthchecks and Backend Dependency
-1568 " 🔵 backend_old Python Tests Cannot Run Standalone — Missing `app` Module
-1570 8:26p 🔴 OpenGrep Rules Not Loading — Two Root Causes Fixed
-1578 8:27p 🔵 Debian Trixie SSL Bootstrap Deadlock — HTTPS APT Fails Before ca-certificates Installed
-1571 8:28p 🔵 Live API Verification — Rules Endpoint Returns 3813 Active Rules with Correct Severity
+S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
 1577 8:29p 🔵 Rules API Severity Breakdown Confirmed — 2111 ERROR, 1440 WARNING, 262 INFO out of 3813 Active Rules
 1579 " 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 8:29 PM)
+S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 1581 8:30p 🔵 Stop-Gate Review — ALLOW on Summary-Only Turn
 1576 " 🔵 Architect Review — Backend Asset Copy + OpenGrep Severity Preservation
 1580 8:32p 🔵 Frontend Static Engine Retirement Incomplete — ProjectDetail and Tests Still Reference Retired Engines
@@ -551,6 +518,39 @@ S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initi
 1605 " 🔵 Builtin Opengrep Severity Fix Incomplete — First-Match Strategy Misclassifies 273 Mixed-Severity Asset Files
 1606 " 🔵 Frontend /scan-config/engines Loads 981 Rules After Docker Fix — API Returns 3813 Total, 2384 activeError
 1613 8:49p 🟣 Hermes Containerized Functional Agents — Implementation Plan Requested from PRD + Test Spec
+1635 8:51p 🟣 Hermes Containerized Agents — All 4 Containers Fully Operational with Seed Bootstrap and Healthchecks
+1621 8:55p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1622 8:56p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1624 8:58p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1628 8:59p 🟣 Hermes Agent Entrypoint Bootstrap — Seed-to-Data Copy on Container Start
+1629 " ⚖️ Hermes Agent Container Strategy — Sidecar Seed Volume + tail -f Instead of Direct hermes Exec
+1631 9:00p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1633 9:01p 🔵 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1634 " 🔵 Static Scan Engine Opengrep — Permission Denied Error and Incomplete Rule Loading
+1636 9:04p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1641 9:05p 🔵 Opengrep Scan Permission Denied — Root Cause: scan_workspace Volume Owned by Root
+1642 " 🔴 Opengrep Permission Denied Fixed — Root-Privilege Entrypoint Chowns Scan Workspace at Startup
+1643 " 🔴 Opengrep Rules UI Undercounting Fixed — getOpengrepRules Now Defaults to limit=10000
+1637 9:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1647 9:07p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1656 9:08p 🔴 Opengrep Static Scan — Four Root Causes Fixed, Full Verification Passed
+1638 9:10p 🔵 Stop-Gate Review Confirmed ALLOW — Hermes Summary Turn Had No Direct Edits
+1639 " 🟣 Hermes Agent Bootstrap Entrypoint Rewritten to Seed /opt/data on Container Start
+1640 " 🔵 Hermes Containers Smoke Test — All 4 Agents Verified Healthy with Full Bootstrap
+1646 " 🔵 Hermes Agent Directory Contract — data/ and hermes-home/ Structure Confirmed on Disk
+1644 " 🔵 Opengrep UI Rule Count Fix Verified — 2384 Rules and 13 Languages Now Displayed Correctly
+1645 " 🔵 Runner Architecture — Docker create/start/wait Pattern with Volume-Based Workspace Sharing
+1648 9:12p 🔴 Hermes Dockerfile Fixed — FROM Missing Mirror Prefix Caused Docker Pull Timeout
+1650 9:15p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1653 " 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1651 9:16p 🔵 Hermes Agent Data Directories Live at backend/agents/*/data, Not docker/backend/agents/*/data
+1652 9:17p 🔵 docker-compose.hermes-agents.yml Volume Paths Resolve to Wrong docker/ Subdirectory
+1655 9:18p 🔴 Static Scan Engine — Full Fix Verified Across All Layers
+S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 9:20 PM)
+1658 9:23p 🟣 Opengrep Static Scan Pipeline — Full End-to-End Fix Verified
+1660 " 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1661 9:29p 🔵 Hermes Opengrep Static Scan Fix — Full Verification Passed
+1663 9:31p 🔵 Opengrep Fix — Two New Files Untracked in Git After All Tests Pass
 
-Access 1897k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1473k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
