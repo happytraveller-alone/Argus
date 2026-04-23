@@ -482,76 +482,76 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 8:55am GMT+8
+# [audittool_personal] recent context, 2026-04-23 9:24am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (16,166t read) | 1,447,421t work | 99% savings
+Stats: 50 obs (17,356t read) | 1,247,318t work | 99% savings
 
 ### Apr 22, 2026
-S114 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK (Apr 22, 10:50 PM)
 S120 Clean up backend/assets/scan_rule_assets — retain only patches, rules_from_patches, and rules_opengrep (Apr 22, 10:57 PM)
 ### Apr 23, 2026
 S139 Fix 9 failing backend_old tests after Python tool purge — test_orchestrator_todo_mode, test_run_code_tool, test_release_slim_branch_pipeline (Apr 23, 6:51 AM)
 S164 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation (Apr 23, 7:19 AM)
-908 8:13a 🔴 Rust config.rs — deprecated scanner fields removed, cargo check passes
-909 " ✅ docker-compose.yml rewritten — local build only, deprecated scanner env vars removed
-912 8:15a 🔴 runtime_settings.py — four deprecated scanner image fields removed
-913 " 🔴 runner_preflight.py — bandit/gitleaks/phpstan/pmd preflight specs removed
-914 " 🔴 test_docker_compose_dev_flow.py — stale constants and assertions cleaned up
-915 " 🔵 generate-release-branch.sh — still references docker-compose.hybrid.yml in validate and overlay steps
-916 " 🔵 test_compose_backend_env_optional.py — reads docker-compose.hybrid.yml and docker-compose.full.yml
-917 " 🔵 test_ghcr_publish_namespace_defaults.py — asserts SCANNER_BANDIT_IMAGE and hybrid compose file existence
-919 8:19a 🔵 OMX skill-active-state.json is stale — ralplan stuck in context-intake phase since Apr 22
-921 8:21a 🔵 4 pytest failures remaining after Docker infrastructure consolidation
-922 8:22a 🔴 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation
 S166 Remove deprecated docker-compose.hybrid.yml and docker-compose.full.yml validation from release workflow (Apr 23, 8:22 AM)
-923 8:24a 🔄 Stop-gate review ALLOW — Docker infrastructure consolidation verified complete
-924 " ✅ Stop-gate review ALLOW — Docker infrastructure consolidation verified complete
-926 8:25a ✅ ACP + Rust runtime strategy adopted — PRD and test-spec generated
-927 " ✅ scan_rule_assets mass deletion staged — 567 files, 53k lines removed
-928 " 🔵 release.yml CI still validates deprecated hybrid/full compose entrypoints — stale after consolidation
-929 " 🔄 docker-publish-runners.yml — bandit/gitleaks/phpstan/pmd runner build jobs removed
-930 " 🔄 README.md, README_EN.md, Makefile — hybrid/full compose launch instructions removed
-931 8:27a 🔵 Release workflow references deprecated docker-compose.hybrid.yml and docker-compose.full.yml
-942 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
 S174 Strengthen release pipeline tests with precise compose validation count assertion to enforce single-compose-only architecture (Apr 23, 8:27 AM)
-932 8:29a 🔵 Stop-gate review ALLOW — previous turn was reporting-only
-934 8:30a 🔴 Release docs test — stale hybrid/full compose assertions replaced with slim-only contract
-936 8:32a 🔵 Stop-gate review evidence chain confirmed — previous turn was edit-producing
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
 S173 Strengthen release pipeline tests to enforce Docker infrastructure consolidation — verify hybrid/full compose removal and scanner engine deprecation (Apr 23, 8:33 AM)
-944 8:35a 🔵 Stop-gate review ALLOW — 329 tests passed, no blocking issues
-945 8:37a 🔴 Stop-gate review ALLOW — orchestrator regression tests strengthened and release workflow compose validation updated
-958 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
-946 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only, no direct edits confirmed
-950 8:40a 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
-949 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
-952 8:42a 🔴 Release pipeline test assertions strengthened — compose entrypoint count locked to exactly one
-951 " 🔵 ralplan state cleanup — stale sessions terminalized via direct file writes after MCP transport failure
-953 8:43a 🔵 OMX stop hook ralplan blocker mechanism — TERMINAL_MODE_PHASES mismatch with state files
-954 " ✅ scan_rule_assets directory cleanup — non-essential rule directories removed
 S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr 23, 8:43 AM)
-959 8:45a 🔵 ACP Rust SDK repository identified
-956 " 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
-966 " 🔵 Stop-gate review ALLOW — Docker infrastructure consolidation passed
-971 8:46a 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
-962 " ✅ Frontend dead code cleanup PRD and test-spec hardened — owner/use proof protocol and Wave 1 exact gates added
-960 " 🔵 oh-my-codex shell_snapshots directory is read-only to the current user
-961 8:47a 🔵 oh-my-codex Stop hook stopReason taxonomy mapped
 964 8:48a ⚖️ Frontend dead code cleanup ralplan consensus reached — APPROVE, Wave 1 execution authorized
 963 " 🔵 oh-my-codex Stop hook exempts subagent threads from skill-active blocking
 969 " ✅ scan_rule_assets directory cleanup — legacy rule directories removed
+S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 967 8:49a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
 968 " 🔵 fuse-overlayfs and tmpfs mount both blocked in current environment
 972 8:51a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
 974 8:52a 🔵 Stop-gate review ALLOW — previous turn was reporting-only
-S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:52 AM)
 977 8:53a 🔵 Stop-gate review ALLOW — 329 tests passed, no blocking issues
 975 8:54a 🔵 ollama and lmstudio confirmed absent from audittool_personal host
 976 " ⚖️ ACP/Ruflo suitability ralplan completed — 4-iteration consensus reached
+980 8:59a 🔵 Frontend dead code cleanup plan and test spec located
+981 " ✅ Frontend dead code cleanup task pipeline created with wave-based execution order
+983 9:00a 🔴 Wave 1: DashboardCommandCenter.tmp.tsx deleted with verification gates passed
+987 " 🔵 Frontend test suite shows 7 pre-existing failures unrelated to DashboardCommandCenter.tmp.tsx deletion
+989 9:02a 🔵 Pre-existing test failures confirmed independent of Wave 1 deletion; Wave 2 reachability inventory started
+990 " 🔵 Wave 2 reachability analysis identified 84 zero-incoming-reference candidates for dead code review
+991 9:03a 🔄 Frontend dead code cleanup initiated per PRD and test spec
+992 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
+993 9:04a 🔄 Frontend dead code cleanup initiated per PRD and test spec
+994 " 🟣 Frontend dead code cleanup initiated per PRD and test spec
+995 " ✅ Frontend dead code cleanup — DashboardCommandCenter.tmp.tsx deleted
+996 9:05a 🔄 Frontend dead code cleanup initiated per PRD and test spec
+998 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1001 9:06a 🔵 Frontend node test suite — 9 failures identified after Wave 2 dead code deletion
+1002 " ⚖️ ACP跨语言Agent互操作性架构规划 — RALPLAN-DR共识摘要
+S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 9:07 AM)
+1006 9:09a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
+1011 9:10a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
+1012 9:11a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
+1014 9:12a 🔵 Frontend node test suite — 3 failing tests identified after dead code cleanup
+1015 " ⚖️ ACP跨语言Agent互操作性架构规划 — Critic评审第四轮
+1016 " 🔵 Frontend node test suite — full results: 10 failing tests out of 131 after dead code cleanup
+1018 9:13a 🔵 tsconfigTestProject.test.ts and frontendTypecheck.test.ts — TypeScript API-based tests that run full program diagnostics via tsconfig.test.json
+1021 9:14a 🔵 tsconfig.test.json has 32 TypeScript diagnostics — pre-existing errors unrelated to dead code deletion
+1020 9:15a ⚖️ ACP跨语言Agent互操作性架构规划 — Critic评审第五轮 verdict请求
+1022 9:16a 🔵 15 unused npm dependencies confirmed — no imports anywhere in frontend source or tests
+1023 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1024 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1027 9:17a 🟣 Frontend dead code cleanup initiated per PRD and test spec
+1028 " 🔵 Frontend node test suite — 3 failing tests identified during dead code cleanup verification
+1030 " ✅ Frontend dead code cleanup — Wave 3 modules and tests deleted
+1032 9:20a 🔵 Stop-gate review ALLOW — frontend dead code cleanup passed
+1033 " 🔄 Stop-gate review ALLOW — frontend dead code cleanup passed
+1034 " 🔄 Stop-gate review ALLOW — frontend dead code cleanup passed
+1037 9:21a 🔵 Stop-gate review ALLOW — frontend dead code cleanup verified from session transcript
+1038 9:22a 🔵 Stop-gate review ALLOW — frontend dead code cleanup reporting-only turn
+1039 " 🔵 Stop-gate review ALLOW — frontend dead code cleanup reporting-only turn
+1040 " 🔵 Frontend dead code cleanup verified — zero residual references to deleted modules
+1042 9:23a 🔵 fetchWrapper side-effect removal confirmed safe — no window.fetch monkey-patching remains
+1044 " 🔵 Frontend test suite baseline confirmed — 7 pre-existing failures are not caused by dead code cleanup
+1045 " 🔵 OMC project-memory learner hook has a recurring TypeError on background task output
 
-Access 1447k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1247k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

@@ -1,4 +1,13 @@
-import type { SseEvent } from "./types";
+interface SseEvent {
+  id: number;
+  type: string;
+  message?: string;
+  tool_name?: string;
+  tool_input?: unknown;
+  tool_output?: string;
+  data?: unknown;
+  ts: number;
+}
 
 const SKIP_TYPES = new Set([
   "thinking_token",
