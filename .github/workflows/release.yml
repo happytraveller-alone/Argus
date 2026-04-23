@@ -1,6 +1,11 @@
 name: Release Branch
 
 on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
   push:
     branches:
       - main
@@ -14,7 +19,72 @@ permissions:
   contents: write
 
 jobs:
+  detect-release-carrying-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+
+    steps:
+      - name: Checkout main
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Detect release-carrying changes
+        if: ${{ github.event_name == 'push' }}
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            release_carrying:
+              - 'backend/**'
+              - 'frontend/**'
+              - 'docker/frontend.Dockerfile'
+              - 'docker/env/backend/env.example'
+              - 'docker/env/frontend/.env.example'
+              - 'LICENSE'
+              - 'scripts/generate-release-branch.sh'
+              - 'scripts/release-allowlist.txt'
+              - 'scripts/release-templates/**'
+              - '!backend/tests/**'
+              - '!backend/docs/**'
+              - '!backend/.venv/**'
+              - '!backend/.pytest_cache/**'
+              - '!backend/.mypy_cache/**'
+              - '!backend/target/**'
+              - '!backend/uploads/**'
+              - '!backend/log/**'
+              - '!backend/data/**'
+              - '!backend/.env'
+              - '!backend/README.md'
+              - '!backend/SANDBOX_RUNNER_MIGRATION.md'
+              - '!frontend/tests/**'
+              - '!frontend/docs/**'
+              - '!frontend/dist/**'
+              - '!frontend/node_modules/**'
+              - '!frontend/scripts/dev-entrypoint.sh'
+              - '!frontend/scripts/generate-cwe-catalog.mjs'
+              - '!frontend/scripts/run-in-dev-container.sh'
+              - '!frontend/scripts/run-node-tests.mjs'
+              - '!frontend/scripts/setup.cjs'
+              - '!frontend/scripts/setup.sh'
+
+      - name: Resolve release gate
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_CARRYING: ${{ steps.filter.outputs.release_carrying || 'false' }}
+        run: |
+          if [ "${EVENT_NAME}" != "push" ] || [ "${RELEASE_CARRYING}" = "true" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   generate-release-branch:
+    needs: detect-release-carrying-changes
+    if: ${{ needs.detect-release-carrying-changes.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +92,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_call' && inputs.source_sha || github.sha }}
 
       - name: Generate slim release tree
         run: |

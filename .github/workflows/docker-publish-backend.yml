@@ -6,11 +6,11 @@ on:
       - main
     paths:
       - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/publish-runtime-images.yml"
       - ".github/workflows/docker-publish-backend.yml"
       - ".dockerignore"
       - "docker/backend.Dockerfile"
       - "backend/**"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,12 +20,11 @@ permissions:
 
 jobs:
   publish-backend:
-    uses: ./.github/workflows/docker-publish.yml
+    uses: ./.github/workflows/publish-runtime-images.yml
     with:
-      image_name: vulhunter-backend
-      context: .
-      file: ./docker/backend.Dockerfile
-      build_args: |
-        DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-      platforms: linux/amd64,linux/arm64
+      build_backend: true
+      build_frontend: false
+      build_opengrep_runner: false
+      build_flow_parser_runner: false
+      build_sandbox_runner: false
     secrets: inherit

@@ -35,9 +35,10 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
 - `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
-- GitHub Actions reusable workflow 默认使用当前仓库 owner 作为 namespace；如需覆盖，可在调用 `.github/workflows/docker-publish.yml` 时传入 `image_namespace`，如果覆盖到其他组织或账号，需要同时提供 `GHCR_USERNAME` 和 `GHCR_TOKEN`。
-- GitHub Actions 默认会把 GHCR 包设为 public，并验证匿名拉取。
-- 如需覆盖默认行为，可在调用 reusable workflow 时传入 `package_visibility`；只要它不是 `public`，workflow 就会跳过匿名拉取校验。
+- `.github/workflows/docker-publish.yml` 仍然是 reusable leaf builder；它默认使用当前仓库 owner 作为 namespace，并继续接受 `image_namespace` 和 `package_visibility`。
+- 如需覆盖 namespace，调用 `.github/workflows/docker-publish.yml` 时传入 `image_namespace`；如果覆盖到其他组织或账号，需要同时提供 `GHCR_USERNAME` 和 `GHCR_TOKEN`。
+- GitHub Actions 默认会把 GHCR 包设为 public，并验证匿名拉取；只要 `package_visibility` 不是 `public`，workflow 就会跳过匿名拉取校验。
+- 人工触发的多镜像发布只保留 `.github/workflows/docker-publish-runtime-images.yml` 这一处。
 
 ## 三个受支持的命令
 

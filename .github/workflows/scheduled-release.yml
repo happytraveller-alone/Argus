@@ -3,28 +3,21 @@ name: 定时发布
 on:
   schedule:
     - cron: '0 0 1 * *'
-  workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
+  packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish-latest-images:
     name: 刷新 latest 镜像
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 触发 Docker Publish 工作流
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run docker-publish.yml \
-            --ref main \
-            -f tag=latest \
-            -f build_opengrep_runner=true \
-            -f build_flow_parser_runner=true \
-            -f build_sandbox=true \
-            -f build_sandbox_runner=true
-
-          echo "已触发 docker-publish.yml 刷新 latest 镜像。"
+    uses: ./.github/workflows/publish-runtime-images.yml
+    with:
+      build_backend: false
+      build_frontend: false
+      build_opengrep_runner: true
+      build_flow_parser_runner: true
+      build_sandbox_runner: true
+    secrets: inherit

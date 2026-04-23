@@ -253,6 +253,8 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     reusable_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
         encoding="utf-8"
     )
+    orchestrator_workflow_path = REPO_ROOT / ".github" / "workflows" / "publish-runtime-images.yml"
+    orchestrator_workflow_text = orchestrator_workflow_path.read_text(encoding="utf-8")
     runners_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish-runners.yml").read_text(
         encoding="utf-8"
     )
@@ -280,11 +282,40 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "steps.package-visibility.outputs.visibility == 'public'" in reusable_workflow_text
     assert "Skipping anonymous pull validation because the workflow could not confirm that the package is public with the current GHCR credentials." in reusable_workflow_text
 
+    assert orchestrator_workflow_path.exists()
+    assert "workflow_call:" in orchestrator_workflow_text
+    assert "build_backend:" in orchestrator_workflow_text
+    assert "build_frontend:" in orchestrator_workflow_text
+    assert "build_opengrep_runner:" in orchestrator_workflow_text
+    assert "build_flow_parser_runner:" in orchestrator_workflow_text
+    assert "build_sandbox_runner:" in orchestrator_workflow_text
+    assert "selected_count:" in orchestrator_workflow_text
+    assert "publish_summary_json:" in orchestrator_workflow_text
+    assert '"schema_version": 1' in orchestrator_workflow_text
+    assert '"channel": "latest"' in orchestrator_workflow_text
+    assert '"selected_images": selected' in orchestrator_workflow_text
+    assert '"published_images": published' in orchestrator_workflow_text
+    assert 'selected_count={len(selected)}' in orchestrator_workflow_text
+    assert "uses: ./.github/workflows/docker-publish.yml" in orchestrator_workflow_text
+    assert "vulhunter-backend" in orchestrator_workflow_text
+    assert "vulhunter-frontend" in orchestrator_workflow_text
+    assert "vulhunter-opengrep-runner" in orchestrator_workflow_text
+    assert "vulhunter-flow-parser-runner" in orchestrator_workflow_text
+    assert "vulhunter-sandbox-runner" in orchestrator_workflow_text
+    assert "./docker/opengrep-runner.Dockerfile" in orchestrator_workflow_text
+    assert "./docker/flow-parser-runner.Dockerfile" in orchestrator_workflow_text
+    assert "./docker/sandbox-runner.Dockerfile" in orchestrator_workflow_text
+    assert "./docker/bandit-runner.Dockerfile" not in orchestrator_workflow_text
+    assert "./docker/gitleaks-runner.Dockerfile" not in orchestrator_workflow_text
+    assert "./docker/phpstan-runner.Dockerfile" not in orchestrator_workflow_text
+    assert "./docker/pmd-runner.Dockerfile" not in orchestrator_workflow_text
+
     assert "\n  push:\n" in runners_workflow_text
     assert "\n    branches:\n      - main\n" in runners_workflow_text
     assert "\n    paths:\n" in runners_workflow_text
-    assert "workflow_dispatch:" in runners_workflow_text
-    assert "prepare-matrix:" in runners_workflow_text
+    assert ".github/workflows/publish-runtime-images.yml" in runners_workflow_text
+    assert "workflow_dispatch:" not in runners_workflow_text
+    assert "detect-runner-changes:" in runners_workflow_text
     assert "dorny/paths-filter@v3" in runners_workflow_text
     assert "publish-runners:" in runners_workflow_text
     assert "nothing-to-publish:" in runners_workflow_text
@@ -296,26 +327,11 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "build_pmd_runner" not in runners_workflow_text
     assert "build_sandbox_runner" in runners_workflow_text
     assert "build_sandbox:" not in runners_workflow_text
-    assert "./docker/opengrep-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/bandit-runner.Dockerfile" not in runners_workflow_text
-    assert "./docker/gitleaks-runner.Dockerfile" not in runners_workflow_text
-    assert "./docker/phpstan-runner.Dockerfile" not in runners_workflow_text
-    assert "./docker/flow-parser-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/pmd-runner.Dockerfile" not in runners_workflow_text
-    assert "./docker/sandbox-runner.Dockerfile" in runners_workflow_text
-    assert "vulhunter-opengrep-runner" in runners_workflow_text
-    assert "vulhunter-bandit-runner" not in runners_workflow_text
-    assert "vulhunter-gitleaks-runner" not in runners_workflow_text
-    assert "vulhunter-phpstan-runner" not in runners_workflow_text
-    assert "vulhunter-flow-parser-runner" in runners_workflow_text
-    assert "vulhunter-pmd-runner" not in runners_workflow_text
-    assert "vulhunter-sandbox-runner" in runners_workflow_text
-    assert '"name": "vulhunter-sandbox"' not in runners_workflow_text
     assert "'backend/scripts/**'" in runners_workflow_text
     assert "'backend_old/scripts/**'" not in runners_workflow_text
     assert '"backend/scripts/**"' in runners_workflow_text
     assert '"backend_old/scripts/**"' not in runners_workflow_text
-    assert "uses: ./.github/workflows/docker-publish.yml" in runners_workflow_text
+    assert "uses: ./.github/workflows/publish-runtime-images.yml" in runners_workflow_text
 
 
 def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
@@ -328,28 +344,37 @@ def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
     reusable_workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
         encoding="utf-8"
     )
+    manual_entrypoint_workflow_text = (
+        REPO_ROOT / ".github" / "workflows" / "docker-publish-runtime-images.yml"
+    ).read_text(encoding="utf-8")
 
     assert "\n  push:\n" in frontend_workflow_text
-    assert "workflow_dispatch:" in frontend_workflow_text
     assert "- \"frontend/**\"" in frontend_workflow_text
     assert "- \"docker/frontend.Dockerfile\"" in frontend_workflow_text
-    assert "uses: ./.github/workflows/docker-publish.yml" in frontend_workflow_text
-    assert "image_name: vulhunter-frontend" in frontend_workflow_text
-    assert "context: ./frontend" in frontend_workflow_text
-    assert "platforms: linux/amd64,linux/arm64" in frontend_workflow_text
+    assert "- \".github/workflows/publish-runtime-images.yml\"" in frontend_workflow_text
+    assert "workflow_dispatch:" not in frontend_workflow_text
+    assert "uses: ./.github/workflows/publish-runtime-images.yml" in frontend_workflow_text
+    assert "build_frontend: true" in frontend_workflow_text
+    assert "build_backend: false" in frontend_workflow_text
 
     assert "\n  push:\n" in backend_workflow_text
-    assert "workflow_dispatch:" in backend_workflow_text
     assert "- \"backend/**\"" in backend_workflow_text
     assert "- \"docker/backend.Dockerfile\"" in backend_workflow_text
-    assert "uses: ./.github/workflows/docker-publish.yml" in backend_workflow_text
-    assert "image_name: vulhunter-backend" in backend_workflow_text
-    assert "context: ." in backend_workflow_text
-    assert "platforms: linux/amd64,linux/arm64" in backend_workflow_text
-    assert "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library" in backend_workflow_text
+    assert "- \".github/workflows/publish-runtime-images.yml\"" in backend_workflow_text
+    assert "workflow_dispatch:" not in backend_workflow_text
+    assert "uses: ./.github/workflows/publish-runtime-images.yml" in backend_workflow_text
+    assert "build_backend: true" in backend_workflow_text
+    assert "build_frontend: false" in backend_workflow_text
 
     assert "VULHUNTER_IMAGE_TAG: latest" in reusable_workflow_text
     assert 'default: "linux/amd64,linux/arm64"' in reusable_workflow_text
+    assert "workflow_dispatch:" in manual_entrypoint_workflow_text
+    assert "uses: ./.github/workflows/publish-runtime-images.yml" in manual_entrypoint_workflow_text
+    assert "build_backend:" in manual_entrypoint_workflow_text
+    assert "build_frontend:" in manual_entrypoint_workflow_text
+    assert "build_opengrep_runner:" in manual_entrypoint_workflow_text
+    assert "build_flow_parser_runner:" in manual_entrypoint_workflow_text
+    assert "build_sandbox_runner:" in manual_entrypoint_workflow_text
 
 
 def test_release_workflow_builds_slim_release_tree() -> None:

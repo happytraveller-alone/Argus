@@ -6,12 +6,12 @@ on:
       - main
     paths:
       - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/publish-runtime-images.yml"
       - ".github/workflows/docker-publish-frontend.yml"
       - ".dockerignore"
       - "docker/frontend.Dockerfile"
       - "frontend/**"
       - "frontend/.dockerignore"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,10 +21,11 @@ permissions:
 
 jobs:
   publish-frontend:
-    uses: ./.github/workflows/docker-publish.yml
+    uses: ./.github/workflows/publish-runtime-images.yml
     with:
-      image_name: vulhunter-frontend
-      context: ./frontend
-      file: ./docker/frontend.Dockerfile
-      platforms: linux/amd64,linux/arm64
+      build_backend: false
+      build_frontend: true
+      build_opengrep_runner: false
+      build_flow_parser_runner: false
+      build_sandbox_runner: false
     secrets: inherit

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/publish-runtime-images.yml"
       - ".github/workflows/docker-publish-runners.yml"
       - ".dockerignore"
       - "docker/opengrep-runner.Dockerfile"
@@ -17,23 +18,6 @@ on:
       - "backend/src/**"
       - "backend_old/app/**"
       - "backend/scripts/**"
-  workflow_dispatch:
-    inputs:
-      build_opengrep_runner:
-        description: "构建 OpenGrep runner 镜像"
-        required: false
-        type: boolean
-        default: false
-      build_flow_parser_runner:
-        description: "构建 flow/parser runner 镜像"
-        required: false
-        type: boolean
-        default: false
-      build_sandbox_runner:
-        description: "构建 sandbox-runner 镜像"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -42,29 +26,29 @@ permissions:
   attestations: write
 
 jobs:
-  prepare-matrix:
+  detect-runner-changes:
     name: 计算需要发布的 runner 镜像
     runs-on: ubuntu-latest
 
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-      count: ${{ steps.matrix.outputs.count }}
+      opengrep_runner: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
+      flow_parser_runner: ${{ steps.filter.outputs.flow_parser_runner || 'false' }}
+      sandbox_runner: ${{ steps.filter.outputs.sandbox_runner || 'false' }}
 
     steps:
       - name: 检出代码
-        if: github.event_name == 'push'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: 检测 runner 相关变更
-        if: github.event_name == 'push'
         id: filter
         uses: dorny/paths-filter@v3
         with:
           filters: |
             opengrep_runner:
               - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/publish-runtime-images.yml'
               - '.github/workflows/docker-publish-runners.yml'
               - '.dockerignore'
               - 'backend/Cargo.toml'
@@ -73,6 +57,7 @@ jobs:
               - 'docker/opengrep-runner.Dockerfile'
             flow_parser_runner:
               - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/publish-runtime-images.yml'
               - '.github/workflows/docker-publish-runners.yml'
               - '.dockerignore'
               - 'docker/flow-parser-runner.Dockerfile'
@@ -81,90 +66,28 @@ jobs:
               - 'backend/scripts/**'
             sandbox_runner:
               - '.github/workflows/docker-publish.yml'
+              - '.github/workflows/publish-runtime-images.yml'
               - '.github/workflows/docker-publish-runners.yml'
               - '.dockerignore'
               - 'docker/sandbox-runner.Dockerfile'
 
-      - name: 生成构建矩阵
-        id: matrix
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          OPENGREP_RUNNER_CHANGED: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
-          FLOW_PARSER_RUNNER_CHANGED: ${{ steps.filter.outputs.flow_parser_runner || 'false' }}
-          SANDBOX_RUNNER_CHANGED: ${{ steps.filter.outputs.sandbox_runner || 'false' }}
-          BUILD_OPENGREP_RUNNER: ${{ github.event.inputs.build_opengrep_runner || 'false' }}
-          BUILD_FLOW_PARSER_RUNNER: ${{ github.event.inputs.build_flow_parser_runner || 'false' }}
-          BUILD_SANDBOX_RUNNER: ${{ github.event.inputs.build_sandbox_runner || 'false' }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-
-          def is_true(value: str) -> bool:
-              return str(value).strip().lower() == "true"
-
-          event_name = os.environ["EVENT_NAME"]
-          images = [
-              {
-                  "name": "vulhunter-opengrep-runner",
-                  "context": ".",
-                  "file": "./docker/opengrep-runner.Dockerfile",
-                  "build_args": "",
-                  "changed_env": "OPENGREP_RUNNER_CHANGED",
-                  "manual_env": "BUILD_OPENGREP_RUNNER",
-              },
-              {
-                  "name": "vulhunter-flow-parser-runner",
-                  "context": ".",
-                  "file": "./docker/flow-parser-runner.Dockerfile",
-                  "build_args": "",
-                  "changed_env": "FLOW_PARSER_RUNNER_CHANGED",
-                  "manual_env": "BUILD_FLOW_PARSER_RUNNER",
-              },
-              {
-                  "name": "vulhunter-sandbox-runner",
-                  "context": ".",
-                  "file": "./docker/sandbox-runner.Dockerfile",
-                  "build_args": "",
-                  "changed_env": "SANDBOX_RUNNER_CHANGED",
-                  "manual_env": "BUILD_SANDBOX_RUNNER",
-              },
-          ]
-
-          selected = []
-          for image in images:
-              env_name = image["changed_env"] if event_name == "push" else image["manual_env"]
-              if is_true(os.environ.get(env_name, "false")):
-                  selected.append(image)
-
-          matrix = {"include": selected}
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"matrix={json.dumps(matrix, separators=(',', ':'))}\n")
-              output.write(f"count={len(selected)}\n")
-          PY
-
   publish-runners:
-    name: 发布 ${{ matrix.name }}
-    needs: prepare-matrix
-    if: needs.prepare-matrix.outputs.count != '0'
-
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
-
-    uses: ./.github/workflows/docker-publish.yml
+    name: 发布选中的 runner 镜像
+    needs: detect-runner-changes
+    if: ${{ needs.detect-runner-changes.outputs.opengrep_runner == 'true' || needs.detect-runner-changes.outputs.flow_parser_runner == 'true' || needs.detect-runner-changes.outputs.sandbox_runner == 'true' }}
+    uses: ./.github/workflows/publish-runtime-images.yml
     with:
-      image_name: ${{ matrix.name }}
-      context: ${{ matrix.context }}
-      file: ${{ matrix.file }}
-      build_args: ${{ matrix.build_args }}
-      platforms: linux/amd64,linux/arm64
+      build_backend: false
+      build_frontend: false
+      build_opengrep_runner: ${{ needs.detect-runner-changes.outputs.opengrep_runner == 'true' }}
+      build_flow_parser_runner: ${{ needs.detect-runner-changes.outputs.flow_parser_runner == 'true' }}
+      build_sandbox_runner: ${{ needs.detect-runner-changes.outputs.sandbox_runner == 'true' }}
     secrets: inherit
 
   nothing-to-publish:
     name: 无需发布
-    needs: prepare-matrix
-    if: needs.prepare-matrix.outputs.count == '0'
+    needs: detect-runner-changes
+    if: ${{ needs.detect-runner-changes.outputs.opengrep_runner != 'true' && needs.detect-runner-changes.outputs.flow_parser_runner != 'true' && needs.detect-runner-changes.outputs.sandbox_runner != 'true' }}
     runs-on: ubuntu-latest
 
     steps:

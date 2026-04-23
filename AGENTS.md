@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 4:10pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 4:35pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,707t read) | 1,396,048t work | 98% savings
+Stats: 50 obs (22,539t read) | 1,366,239t work | 98% savings
 
 ### Apr 23, 2026
 S164 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation (Apr 23, 7:19 AM)
@@ -500,32 +500,6 @@ S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr
 S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
-1163 2:43p 🔵 Explore agent confirmed: static audit execution path is placeholder-only, not wired to Docker runner
-1165 " 🟣 Hermes容器化功能Agent ralplan完成 — 三份规划产出物已写入repo
-1166 2:45p 🔵 runtime/runner.rs execute() function — full Docker container lifecycle implementation
-1168 2:49p 🔵 Static audit backend architecture — opengrep-only task model with multi-engine support
-1171 2:50p 🔵 Frontend static audit flow architecture — 5-engine unified API with batch grouping
-1172 " 🔵 Backend Rust runtime architecture — Docker container lifecycle management with workspace isolation
-1173 " 🔵 OpenGrep preflight validation — concurrent rule materialization with Docker image verification
-1174 " 🔵 Backend containerization — multi-stage Dockerfile with Docker CLI for container orchestration
-1175 " 🔵 OpenGrep runner image — Python-based wrapper with binary download and validation
-1176 2:52p ⚖️ Hermes containerized functional agents — directory-first architecture planning guidance
-1177 " 🔵 Stop-gate review ALLOW — no code changes in previous turn
-1178 2:55p ⚖️ ralplan workflow completed — Hermes containerized functional agents planning artifacts finalized
-1180 " ⚖️ Hermes containerized agent directory layout — challenge review and architecture verdict
-1181 2:56p 🔵 Stop-gate review ALLOW — stop-gate task was reporting-only turn
-1182 " ⚖️ 基于Hermes ACP构建基座Agent — ralplan启动
-1183 2:57p 🔵 Shell session TTY output not returning — echo hi produces no stdout in audittool_personal
-1184 2:58p ⚖️ PRD directory contract revised — seed/home/artifacts replaced with hermes-home/data/agent.toml
-1185 " 🔵 Architect review verdict ITERATE — Hermes PRD freezes directory contract before Rust control plane exists
-1186 3:01p ✅ PRD and test spec fully updated — product truth boundary and revised execution slices finalized
-1188 3:04p ⚖️ Hermes PRD — control-plane-first slice sequencing confirmed
-1189 3:06p ⚖️ OpenGrep end-to-end scan plan finalized — placeholder replaced with real Docker execution
-1190 " ✅ config.rs — opengrep_scan_timeout_seconds field added to AppConfig
-1193 " ⚖️ Hermes PRD final re-review — APPROVE with residual risks
-1191 3:10p 🟣 scan/opengrep.rs — build_scan_command and parse_scan_output implemented
-1192 3:12p ⚖️ Hermes backend-resident agent architecture — challenge review and verdict
-1194 3:21p 🔴 static_tasks.rs — removed unwrap_or_else fallback on read_file_lines_from_zip result
 1195 3:36p 🔵 Rust backend static audit task initiated — audittool_personal codebase
 1197 3:37p 🔵 Rust backend static audit task initiated — audittool_personal codebase
 1199 3:38p 🔵 static_tasks.rs — full opengrep scan pipeline architecture mapped
@@ -548,9 +522,35 @@ S237 Frontend dead code cleanup per PRD and test spec — full session completed
 1219 " ✅ Test suite cleanup — removed heavy bootstrap and search API integration tests
 1223 4:05p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
 1225 4:06p ⚖️ ralplan GitHub Actions workflow optimization plan finalized for audittool_personal
+1239 " 🟣 Rust backend static audit fully implemented and all 190 tests passing
 1227 4:07p ⚖️ ralplan plan finalized — release gate paths narrowed to actual release-tree files
 1226 " 🟣 Rust backend static audit — all 190 tests passing after full implementation
 S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 4:07 PM)
+1228 4:08p ✅ Stop-gate review ALLOW — static audit implementation turn
+1229 " ⚖️ ralplan Critic review — GitHub Actions workflow optimization plan re-reviewed for architectural gaps
+1230 4:09p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
+1234 4:10p ⚖️ ralplan Critic review — GitHub Actions workflow optimization plan for audittool_personal
+1231 " ✅ Stop-gate review ALLOW — static audit implementation turn was reporting-only
+1233 4:11p 🔵 audittool_personal shell execution environment — commands not producing output
+1232 " ⚖️ ralplan Critic review — release gate whitelist precision blocker identified
+1236 4:12p ⚖️ ralplan plan finalized — GitHub Actions workflow optimization architecture approved
+1235 4:13p 🔵 Stop-gate review ALLOW — static audit implementation turn was reporting-only
+1238 4:14p ⚖️ ralplan GitHub Actions plan — architectural gap resolution verified via source cross-reference
+1240 4:16p ⚖️ ralplan final re-review — GitHub Actions workflow optimization plan for audittool_personal
+1237 " ⚖️ ralplan APPROVED — GitHub Actions workflow optimization plan finalized for audittool_personal
+1241 4:18p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
+1244 4:20p ⚖️ ralplan GitHub Actions workflow optimization — approved plan with Architect+Critic APPROVE verdicts
+1246 4:23p 🟣 Ralph execution launched — three parallel agents dispatched for workflow optimization implementation
+1253 " 🟣 Ralph execution lane — workflow contract tests updated for new CI/CD contracts
+1248 " 🟣 GitHub Actions workflow restructure — publish-runtime-images.yml reusable orchestrator added
+1249 " 🟣 docker-publish-runtime-images.yml — sole manual workflow_dispatch owner added
+1250 " ✅ scheduled-release.yml updated to use publish-runtime-images.yml with runner-only booleans
+1251 " 🟣 release.yml — workflow_call with source_sha input and detect-release-carrying-changes job added
+1247 " ✅ README.md and README_EN.md updated — GHCR workflow docs revised for new publish entrypoint
+1254 4:26p 🔵 Rust backend static audit task — audittool_personal codebase structure and task
+1255 4:27p ⚖️ ralplan initiated — optimize audittool_personal GitHub Actions workflows by referencing AuditTool reference workflows
+1256 4:30p ⚖️ Ralph architect verification APPROVED — audittool_personal GitHub Actions workflow optimization
+1257 4:32p ⚖️ GitHub Actions workflow optimization — architect APPROVE verdict
 
-Access 1396k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1366k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

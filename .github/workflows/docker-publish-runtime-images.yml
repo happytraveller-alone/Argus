@@ -1,0 +1,47 @@
+name: Docker Publish Runtime Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_backend:
+        description: "构建 backend 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_frontend:
+        description: "构建 frontend 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_opengrep_runner:
+        description: "构建 OpenGrep runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_flow_parser_runner:
+        description: "构建 flow/parser runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_sandbox_runner:
+        description: "构建 sandbox-runner 镜像"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish-runtime-images:
+    uses: ./.github/workflows/publish-runtime-images.yml
+    with:
+      build_backend: ${{ inputs.build_backend }}
+      build_frontend: ${{ inputs.build_frontend }}
+      build_opengrep_runner: ${{ inputs.build_opengrep_runner }}
+      build_flow_parser_runner: ${{ inputs.build_flow_parser_runner }}
+      build_sandbox_runner: ${{ inputs.build_sandbox_runner }}
+    secrets: inherit

@@ -5,6 +5,41 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+RELEASE_FILTER_INCLUDE_PATHS = [
+    "backend/**",
+    "frontend/**",
+    "docker/frontend.Dockerfile",
+    "docker/env/backend/env.example",
+    "docker/env/frontend/.env.example",
+    "LICENSE",
+    "scripts/generate-release-branch.sh",
+    "scripts/release-allowlist.txt",
+    "scripts/release-templates/**",
+]
+RELEASE_FILTER_EXCLUDE_PATHS = [
+    "backend/tests/**",
+    "backend/docs/**",
+    "backend/.venv/**",
+    "backend/.pytest_cache/**",
+    "backend/.mypy_cache/**",
+    "backend/target/**",
+    "backend/uploads/**",
+    "backend/log/**",
+    "backend/data/**",
+    "backend/.env",
+    "backend/README.md",
+    "backend/SANDBOX_RUNNER_MIGRATION.md",
+    "frontend/tests/**",
+    "frontend/docs/**",
+    "frontend/dist/**",
+    "frontend/node_modules/**",
+    "frontend/scripts/dev-entrypoint.sh",
+    "frontend/scripts/generate-cwe-catalog.mjs",
+    "frontend/scripts/run-in-dev-container.sh",
+    "frontend/scripts/run-node-tests.mjs",
+    "frontend/scripts/setup.cjs",
+    "frontend/scripts/setup.sh",
+]
 
 
 def _run_release_generator(output_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -26,12 +61,31 @@ def test_release_workflow_generates_validates_and_force_pushes_release_branch() 
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
+    generator_text = (REPO_ROOT / "scripts" / "generate-release-branch.sh").read_text(
+        encoding="utf-8"
+    )
 
     generator_path = REPO_ROOT / "scripts" / "generate-release-branch.sh"
     assert generator_path.exists()
     assert "branches:" in workflow_text
     assert "- main" in workflow_text
     assert "workflow_dispatch:" in workflow_text
+    assert "workflow_call:" in workflow_text
+    assert "source_sha:" in workflow_text
+    assert "publish_summary_json" not in workflow_text
+    assert "build_sandbox" not in workflow_text
+    assert "gh workflow run" not in workflow_text
+    assert "detect-release-carrying-changes:" in workflow_text
+    assert "dorny/paths-filter@v3" in workflow_text
+    for rel_path in RELEASE_FILTER_INCLUDE_PATHS:
+        assert rel_path in workflow_text
+    for rel_path in RELEASE_FILTER_EXCLUDE_PATHS:
+        assert rel_path in workflow_text
+    assert "cp \"$TEMPLATE_DIR/docker-compose.release-slim.yml\" \"$OUTPUT_DIR/docker-compose.yml\"" in generator_text
+    assert "cp \"$TEMPLATE_DIR/backend.Dockerfile\" \"$OUTPUT_DIR/docker/backend.Dockerfile\"" in generator_text
+    assert "scripts/release-templates/**" in workflow_text
+    assert "'docker/backend.Dockerfile'" not in workflow_text
+    assert "'docker-compose.yml'" not in workflow_text
     assert "generate-release-branch.sh" in workflow_text
     assert "--output" in workflow_text
     assert "--validate" in workflow_text
@@ -72,6 +126,14 @@ def test_scheduled_release_workflow_no_longer_uses_git_tags_as_release_state() -
         encoding="utf-8"
     )
 
+    assert "uses: ./.github/workflows/publish-runtime-images.yml" in workflow_text
+    assert "gh workflow run" not in workflow_text
+    assert "build_backend: false" in workflow_text
+    assert "build_frontend: false" in workflow_text
+    assert "build_opengrep_runner: true" in workflow_text
+    assert "build_flow_parser_runner: true" in workflow_text
+    assert "build_sandbox_runner: true" in workflow_text
+    assert "build_sandbox:" not in workflow_text
     assert "git describe --tags" not in workflow_text
     assert "git tag -a" not in workflow_text
     assert "git push origin ${{ steps.check.outputs.version }}" not in workflow_text
