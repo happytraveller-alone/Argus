@@ -213,6 +213,46 @@ def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> N
     assert "ARG DOCKER_CLI_IMAGE=docker.m.daocloud.io/docker:cli" not in backend_text
 
 
+def test_backend_dockerfile_bootstraps_apt_sources_over_http() -> None:
+    backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
+
+    builder_section = backend_text.split('99-backend-builder-network; \\\n', 1)[1].split(
+        "COPY backend/Cargo.toml backend/Cargo.lock ./", 1
+    )[0]
+    runtime_section = backend_text.split('99-backend-runtime-network; \\\n', 1)[1].split(
+        "RUN groupadd --gid 1001 appgroup", 1
+    )[0]
+
+    def assert_stage_contract(
+        section: str,
+        initial_install_marker: str,
+        fallback_install_marker: str,
+    ) -> None:
+        assert "write_sources() {" in section
+        assert "write_secure_sources() {" in section
+        assert "printf 'deb http://%s/debian %s main\\n'" in section
+        assert "printf 'deb http://%s/debian %s-updates main\\n'" in section
+        assert "printf 'deb http://%s/debian-security %s-security main\\n'" in section
+        assert "printf 'deb https://%s/debian %s main\\n'" in section
+        assert "printf 'deb https://%s/debian %s-updates main\\n'" in section
+        assert "printf 'deb https://%s/debian-security %s-security main\\n'" in section
+        bootstrap_call = 'write_sources "${main_host}" "${security_host}"; \\'
+        secure_call = 'write_secure_sources "${main_host}" "${security_host}"; \\'
+        assert bootstrap_call in section
+        assert secure_call in section
+        assert section.index(bootstrap_call) < section.index(initial_install_marker)
+        assert section.rindex(fallback_install_marker) < section.index(secure_call)
+
+    assert_stage_contract(
+        builder_section,
+        'if ! install_build_packages; then \\',
+        'install_build_packages; \\',
+    )
+    assert_stage_contract(
+        runtime_section,
+        'if ! install_runtime_packages; then \\',
+        'install_runtime_packages; \\',
+    )
 def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     opengrep_runner_text = (
         REPO_ROOT / "docker" / "opengrep-runner.Dockerfile"

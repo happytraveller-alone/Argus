@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 4:35pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 6:59pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,539t read) | 1,366,239t work | 98% savings
+Stats: 50 obs (21,955t read) | 1,178,933t work | 98% savings
 
 ### Apr 23, 2026
 S164 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation (Apr 23, 7:19 AM)
@@ -500,21 +500,6 @@ S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr
 S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
-1195 3:36p 🔵 Rust backend static audit task initiated — audittool_personal codebase
-1197 3:37p 🔵 Rust backend static audit task initiated — audittool_personal codebase
-1199 3:38p 🔵 static_tasks.rs — full opengrep scan pipeline architecture mapped
-1200 " 🔵 runner.rs — Docker-based scanner execution engine mapped
-1201 3:40p 🔵 Rust backend static audit task initiated — audittool_personal codebase
-1204 3:41p 🔵 audittool_personal GitHub Actions workflow structure mapped for optimization planning
-1203 " 🔄 Rust backend static audit code organized and functionality verified
-1205 3:44p 🔵 Rust backend static audit test suite structure mapped
-1206 3:46p ⚖️ GitHub Actions workflow optimization initiated via ralplan — referencing AuditTool workflows
-1207 3:47p ⚖️ GitHub Actions workflow optimization architect review — audittool_personal ralplan
-1209 3:48p 🔵 search_api test failing — static findings not seeded into search index
-1211 " 🔴 search_api test assertions relaxed — findings count check and static finding keyword simplified
-1210 3:49p ⚖️ audittool_personal GitHub Actions workflow optimization plan — ralplan Option B selected with Architect-tightened boundaries
-1212 3:51p ⚖️ ralplan Critic review — GitHub Actions workflow optimization plan for audittool_personal
-1214 4:00p 🔵 audittool_personal workflow contract — full structure mapped for Critic review
 1215 4:01p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
 1216 4:02p ⚖️ ralplan Critic ITERATE verdict — GitHub Actions workflow optimization plan requires 5 specific fixes before approval
 1217 " ✅ ralplan plan updated — operator-surface and scheduled-release decisions now fixed with exact filenames
@@ -536,6 +521,7 @@ S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，
 1236 4:12p ⚖️ ralplan plan finalized — GitHub Actions workflow optimization architecture approved
 1235 4:13p 🔵 Stop-gate review ALLOW — static audit implementation turn was reporting-only
 1238 4:14p ⚖️ ralplan GitHub Actions plan — architectural gap resolution verified via source cross-reference
+1304 " ⚖️ ralplan architect review — GitHub Actions workflow optimization for audittool_personal
 1240 4:16p ⚖️ ralplan final re-review — GitHub Actions workflow optimization plan for audittool_personal
 1237 " ⚖️ ralplan APPROVED — GitHub Actions workflow optimization plan finalized for audittool_personal
 1241 4:18p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
@@ -551,6 +537,20 @@ S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，
 1255 4:27p ⚖️ ralplan initiated — optimize audittool_personal GitHub Actions workflows by referencing AuditTool reference workflows
 1256 4:30p ⚖️ Ralph architect verification APPROVED — audittool_personal GitHub Actions workflow optimization
 1257 4:32p ⚖️ GitHub Actions workflow optimization — architect APPROVE verdict
+1261 " 🔴 Docker config.json — removed invalid credsStore desktop.exe entry
+1260 4:34p ⚖️ ralplan architect verification APPROVED — audittool_personal GitHub Actions workflow optimization
+1305 4:35p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
+1263 4:45p 🔵 audittool_personal backend Dockerfile — multi-stage build with Rust 1.90 and mirror fallback
+1265 4:48p 🔵 static_tasks.rs — compiler warnings inventory from release build
+1268 4:49p 🔵 backend.Dockerfile — three-stage build with runtime-base, docker-cli-src, and builder stages
+1399 6:49p 🔵 Docker build fails: SSL certificate verification error blocks apt-get in Debian trixie runtime-base stage
+1400 " 🔵 HTTP vs HTTPS APT bootstrap: debian:trixie-slim cannot verify SSL before ca-certificates is installed
+1401 " 🟣 Regression test added: backend Dockerfile must use HTTP (not HTTPS) for APT bootstrap sources
+1403 6:50p ⚖️ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1409 6:52p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
+1406 " 🔵 Hermes Containerized Agents — Greenfield: No backend/agents/ dir, no Hermes Rust code, no Docker assets yet
+1407 " 🔵 Hermes PRD and Test Spec fully authored — complete architecture and verification plan in .omx/plans/
+1408 6:53p 🔴 Docker backend apt bootstrap switched from HTTPS to HTTP to fix SSL certificate error on Debian Trixie
 
-Access 1366k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1179k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

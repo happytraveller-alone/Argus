@@ -33,6 +33,14 @@ RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/ap
       main_host="$1"; \
       security_host="$2"; \
       rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      printf 'deb http://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
+      printf 'deb http://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+      printf 'deb http://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+    }; \
+    write_secure_sources() { \
+      main_host="$1"; \
+      security_host="$2"; \
+      rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
       printf 'deb https://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
       printf 'deb https://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
       printf 'deb https://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
@@ -43,12 +51,17 @@ RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/ap
         pkg-config \
         libssl-dev; \
     }; \
-    write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
+    main_host="${BACKEND_APT_MIRROR_PRIMARY}"; \
+    security_host="${BACKEND_APT_SECURITY_PRIMARY}"; \
+    write_sources "${main_host}" "${security_host}"; \
     if ! install_build_packages; then \
       rm -rf /var/lib/apt/lists/*; \
-      write_sources "${BACKEND_APT_MIRROR_FALLBACK}" "${BACKEND_APT_SECURITY_FALLBACK}"; \
+      main_host="${BACKEND_APT_MIRROR_FALLBACK}"; \
+      security_host="${BACKEND_APT_SECURITY_FALLBACK}"; \
+      write_sources "${main_host}" "${security_host}"; \
       install_build_packages; \
     fi; \
+    write_secure_sources "${main_host}" "${security_host}"; \
     rm -rf /var/lib/apt/lists/*
 
 COPY backend/Cargo.toml backend/Cargo.lock ./
@@ -90,6 +103,14 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
       main_host="$1"; \
       security_host="$2"; \
       rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      printf 'deb http://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
+      printf 'deb http://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+      printf 'deb http://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+    }; \
+    write_secure_sources() { \
+      main_host="$1"; \
+      security_host="$2"; \
+      rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
       printf 'deb https://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
       printf 'deb https://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
       printf 'deb https://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
@@ -100,12 +121,17 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
         ca-certificates \
         curl; \
     }; \
-    write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
+    main_host="${BACKEND_APT_MIRROR_PRIMARY}"; \
+    security_host="${BACKEND_APT_SECURITY_PRIMARY}"; \
+    write_sources "${main_host}" "${security_host}"; \
     if ! install_runtime_packages; then \
       rm -rf /var/lib/apt/lists/*; \
-      write_sources "${BACKEND_APT_MIRROR_FALLBACK}" "${BACKEND_APT_SECURITY_FALLBACK}"; \
+      main_host="${BACKEND_APT_MIRROR_FALLBACK}"; \
+      security_host="${BACKEND_APT_SECURITY_FALLBACK}"; \
+      write_sources "${main_host}" "${security_host}"; \
       install_runtime_packages; \
     fi; \
+    write_secure_sources "${main_host}" "${security_host}"; \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 appgroup \
