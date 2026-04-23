@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use serde_json::Value;
 use tokio::fs;
+use uuid::Uuid;
 
 use crate::{
-    db::scan_rule_assets,
+    db::{scan_rule_assets, task_state},
+    scan::path_utils,
     state::{AppState, ScanRuleAsset},
 };
 
@@ -45,6 +48,124 @@ pub fn build_validate_command(config_dir: &str) -> Vec<String> {
         config_dir.to_string(),
         "--validate".to_string(),
     ]
+}
+
+pub fn build_scan_command(config_dir: &str, target_dir: &str) -> Vec<String> {
+    vec![
+        "opengrep".to_string(),
+        "--config".to_string(),
+        config_dir.to_string(),
+        "--json".to_string(),
+        target_dir.to_string(),
+    ]
+}
+
+pub fn parse_scan_output(
+    json_text: &str,
+    task_id: &str,
+    project_root: Option<&str>,
+    known_paths: Option<&std::collections::BTreeSet<String>>,
+) -> Vec<task_state::StaticFindingRecord> {
+    let parsed: Value = match serde_json::from_str(json_text) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let results = match parsed.get("results").and_then(Value::as_array) {
+        Some(arr) => arr,
+        None => return Vec::new(),
+    };
+
+    results
+        .iter()
+        .filter_map(|result| parse_single_result(result, task_id, project_root, known_paths))
+        .collect()
+}
+
+fn parse_single_result(
+    result: &Value,
+    task_id: &str,
+    project_root: Option<&str>,
+    known_paths: Option<&std::collections::BTreeSet<String>>,
+) -> Option<task_state::StaticFindingRecord> {
+    let check_id = result.get("check_id").and_then(Value::as_str).unwrap_or("unknown-rule");
+    let raw_path = result.get("path").and_then(Value::as_str).unwrap_or("");
+    if raw_path.is_empty() {
+        return None;
+    }
+
+    let start_line = result
+        .get("start")
+        .and_then(|s| s.get("line"))
+        .and_then(Value::as_u64)
+        .unwrap_or(1);
+    let end_line = result
+        .get("end")
+        .and_then(|e| e.get("line"))
+        .and_then(Value::as_u64)
+        .unwrap_or(start_line);
+
+    let extra = result.get("extra");
+    let message = extra
+        .and_then(|e| e.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let severity = extra
+        .and_then(|e| e.get("severity"))
+        .and_then(Value::as_str)
+        .unwrap_or("WARNING");
+    let metadata = extra.and_then(|e| e.get("metadata"));
+    let confidence = metadata
+        .and_then(|m| m.get("confidence"))
+        .and_then(Value::as_str)
+        .unwrap_or("MEDIUM");
+    let cwe: Vec<String> = metadata
+        .and_then(|m| m.get("cwe"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let (resolved_path, resolved_line) = path_utils::resolve_scan_finding_location(
+        Some(raw_path),
+        result.get("start").and_then(|s| s.get("line")),
+        project_root,
+        known_paths,
+    );
+
+    let lines = extra
+        .and_then(|e| e.get("lines"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    let finding_id = format!("opengrep-finding-{}", Uuid::new_v4());
+    let payload = serde_json::json!({
+        "id": finding_id,
+        "scan_task_id": task_id,
+        "rule": { "id": check_id },
+        "rule_name": check_id,
+        "cwe": cwe,
+        "description": message,
+        "file_path": raw_path,
+        "start_line": start_line,
+        "end_line": end_line,
+        "resolved_file_path": resolved_path,
+        "resolved_line_start": resolved_line,
+        "code_snippet": lines,
+        "severity": severity,
+        "status": "open",
+        "confidence": confidence,
+    });
+
+    Some(task_state::StaticFindingRecord {
+        id: finding_id,
+        scan_task_id: task_id.to_string(),
+        status: "open".to_string(),
+        payload,
+    })
 }
 
 fn relative_rule_path(asset_path: &str) -> PathBuf {

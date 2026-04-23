@@ -47,6 +47,7 @@ pub struct AppConfig {
     pub scanner_opengrep_image: String,
     pub flow_parser_runner_image: String,
     pub sandbox_runner_image: String,
+    pub opengrep_scan_timeout_seconds: u64,
 }
 
 impl AppConfig {
@@ -113,6 +114,7 @@ impl AppConfig {
                 .unwrap_or_else(|_| "vulhunter/flow-parser-runner:latest".to_string()),
             sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
                 .unwrap_or_else(|_| "vulhunter/sandbox-runner:latest".to_string()),
+            opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 300),
         })
     }
 
@@ -167,6 +169,7 @@ impl AppConfig {
             scanner_opengrep_image: "vulhunter/opengrep-runner:test".to_string(),
             flow_parser_runner_image: "vulhunter/flow-parser-runner:test".to_string(),
             sandbox_runner_image: "vulhunter/sandbox-runner:test".to_string(),
+            opengrep_scan_timeout_seconds: 300,
         }
     }
 }

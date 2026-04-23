@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::io::{Cursor, Read as IoRead};
+use std::path::PathBuf;
 
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
@@ -9,11 +11,13 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
+use zip::ZipArchive;
 
 use crate::{
     db::{projects, task_state},
     error::ApiError,
     llm_rule,
+    runtime::runner::{self, RunnerSpec},
     scan::opengrep,
     state::AppState,
 };
@@ -425,18 +429,75 @@ async fn create_opengrep_task(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    create_static_task(
-        &state,
-        "opengrep",
-        payload,
-        json!({
+    let project_id = required_string(&payload, "project_id")?;
+    ensure_project_exists(&state, &project_id).await?;
+
+    let now = now_rfc3339();
+    let task_id = Uuid::new_v4().to_string();
+    let target_path =
+        optional_string(&payload, "target_path").unwrap_or_else(|| ".".to_string());
+    let rule_ids = payload
+        .get("rule_ids")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let record = task_state::StaticTaskRecord {
+        id: task_id.clone(),
+        engine: "opengrep".to_string(),
+        project_id: project_id.clone(),
+        name: optional_string(&payload, "name")
+            .unwrap_or_else(|| "opengrep-task".to_string()),
+        status: "running".to_string(),
+        target_path: target_path.clone(),
+        total_findings: 0,
+        scan_duration_ms: 0,
+        files_scanned: 0,
+        error_message: None,
+        created_at: now.clone(),
+        updated_at: Some(now.clone()),
+        extra: json!({
             "error_count": 0,
             "warning_count": 0,
             "high_confidence_count": 0,
             "lines_scanned": 0,
         }),
-    )
-    .await
+        progress: task_state::StaticTaskProgressRecord {
+            progress: 0.0,
+            current_stage: Some("initializing".to_string()),
+            message: Some("preparing opengrep scan".to_string()),
+            started_at: Some(now.clone()),
+            updated_at: Some(now.clone()),
+            logs: vec![task_state::StaticTaskProgressLogRecord {
+                timestamp: now,
+                stage: "initializing".to_string(),
+                message: "opengrep scan task created".to_string(),
+                progress: 0.0,
+                level: "info".to_string(),
+            }],
+        },
+        findings: Vec::new(),
+    };
+
+    let mut snapshot = load_task_snapshot(&state).await?;
+    snapshot
+        .static_tasks
+        .insert(task_id.clone(), record.clone());
+    save_task_snapshot(&state, &snapshot).await?;
+
+    let response = static_task_value(&record);
+
+    let bg_state = state.clone();
+    let bg_task_id = task_id.clone();
+    tokio::spawn(async move {
+        run_opengrep_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+    });
+
+    Ok(Json(response))
 }
 
 async fn list_opengrep_tasks(
@@ -521,29 +582,64 @@ async fn get_opengrep_finding_context(
     State(state): State<AppState>,
     AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
+    let task = find_static_task(&state, "opengrep", &task_id).await?;
     let finding = get_static_finding_value(&state, "opengrep", &task_id, &finding_id).await?;
+
     let file_path = finding
-        .get("file_path")
-        .cloned()
-        .unwrap_or_else(|| json!("unknown"));
-    let line = finding
+        .get("resolved_file_path")
+        .or_else(|| finding.get("file_path"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let start_line = finding
         .get("start_line")
-        .cloned()
-        .unwrap_or_else(|| json!(1));
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as usize;
+    let end_line = finding
+        .get("end_line")
+        .and_then(Value::as_u64)
+        .unwrap_or(start_line as u64) as usize;
+
+    let context_before = 5usize;
+    let context_after = 5usize;
+    let range_start = start_line.saturating_sub(context_before).max(1);
+    let range_end = end_line + context_after;
+
+    let zip_path = state
+        .config
+        .zip_storage_path
+        .join(format!("{}.zip", task.project_id));
+
+    let file_path_owned = file_path.to_string();
+    let lines_result = tokio::task::spawn_blocking(move || {
+        read_file_lines_from_zip(&zip_path, &file_path_owned, range_start, range_end)
+    })
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let (source_lines, total_lines) = lines_result;
+
+    let lines_json: Vec<Value> = source_lines
+        .iter()
+        .map(|(line_number, content)| {
+            let is_hit = *line_number >= start_line && *line_number <= end_line;
+            json!({
+                "line_number": line_number,
+                "content": content,
+                "is_hit": is_hit,
+            })
+        })
+        .collect();
+
     Ok(Json(json!({
         "task_id": task_id,
         "finding_id": finding_id,
         "file_path": file_path,
-        "start_line": line,
-        "end_line": line,
-        "before": 5,
-        "after": 5,
-        "total_lines": 1,
-        "lines": [{
-            "line_number": line,
-            "content": "// rust backend placeholder context",
-            "is_hit": true
-        }],
+        "start_line": start_line,
+        "end_line": end_line,
+        "before": context_before,
+        "after": context_after,
+        "total_lines": total_lines,
+        "lines": lines_json,
     })))
 }
 
@@ -577,88 +673,334 @@ async fn clear_all_cache() -> Json<Value> {
     }))
 }
 
-async fn create_static_task(
+async fn run_opengrep_scan(
+    state: AppState,
+    task_id: String,
+    project_id: String,
+    _target_path: String,
+    rule_ids: Vec<String>,
+) {
+    let started_at = std::time::Instant::now();
+    if let Err(error) = run_opengrep_scan_inner(&state, &task_id, &project_id, &rule_ids).await {
+        let elapsed_ms = started_at.elapsed().as_millis() as i64;
+        let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
+    }
+}
+
+async fn run_opengrep_scan_inner(
     state: &AppState,
-    engine: &str,
-    payload: Value,
-    extra: Value,
-) -> Result<Json<Value>, ApiError> {
-    let project_id = required_string(&payload, "project_id")?;
-    ensure_project_exists(state, &project_id).await?;
+    task_id: &str,
+    project_id: &str,
+    rule_ids: &[String],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let started_at = std::time::Instant::now();
+
+    update_scan_progress(state, task_id, 5.0, "preparing", "locating project archive").await;
+
+    let zip_path = state
+        .config
+        .zip_storage_path
+        .join(format!("{project_id}.zip"));
+    if !zip_path.exists() {
+        return Err(format!("project archive not found: {}", zip_path.display()).into());
+    }
+
+    let workspace_root = scan_workspace_root();
+    let workspace_dir = workspace_root
+        .join("opengrep-runtime")
+        .join(Uuid::new_v4().to_string());
+    let source_dir = workspace_dir.join("source");
+    let output_dir = workspace_dir.join("output");
+    tokio::fs::create_dir_all(&source_dir).await?;
+    tokio::fs::create_dir_all(&output_dir).await?;
+
+    update_scan_progress(state, task_id, 15.0, "extracting", "extracting project archive").await;
+
+    let zip_bytes = tokio::fs::read(&zip_path).await?;
+    let source_dir_clone = source_dir.clone();
+    let files_extracted = tokio::task::spawn_blocking(move || -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let reader = Cursor::new(zip_bytes);
+        let mut archive = ZipArchive::new(reader)?;
+        let mut count = 0usize;
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i)?;
+            if entry.is_dir() {
+                continue;
+            }
+            let name = entry.name().to_string();
+            let target = source_dir_clone.join(&name);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)?;
+            std::fs::write(&target, &buf)?;
+            count += 1;
+        }
+        Ok(count)
+    })
+    .await??;
+
+    update_scan_progress(state, task_id, 30.0, "preparing_rules", "materializing opengrep rules").await;
+
+    let rules_dir = materialize_filtered_rules(state, &workspace_dir, rule_ids).await?;
+    if rules_dir.is_none() {
+        return Err("no opengrep rules available for scan".into());
+    }
+
+    update_scan_progress(state, task_id, 40.0, "scanning", "running opengrep scanner").await;
+
+    let scanner_image = state.config.scanner_opengrep_image.clone();
+    let timeout_seconds = state.config.opengrep_scan_timeout_seconds;
+    let container_rules_dir = "/scan/opengrep-rules";
+    let container_source_dir = "/scan/source";
+
+    let spec = RunnerSpec {
+        scanner_type: "opengrep".to_string(),
+        image: scanner_image,
+        workspace_dir: workspace_dir.display().to_string(),
+        command: opengrep::build_scan_command(container_rules_dir, container_source_dir),
+        timeout_seconds,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0, 1],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some("output/results.json".to_string()),
+        capture_stderr_path: None,
+        workspace_root_override: None,
+    };
+
+    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+
+    update_scan_progress(state, task_id, 75.0, "parsing", "parsing scan results").await;
+
+    if !runner_result.success {
+        let error_msg = runner_result
+            .error
+            .unwrap_or_else(|| format!("opengrep exited with code {}", runner_result.exit_code));
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err(format!("opengrep scan failed: {error_msg}").into());
+    }
+
+    let results_path = workspace_dir.join("output/results.json");
+    let json_text = match tokio::fs::read_to_string(&results_path).await {
+        Ok(text) => text,
+        Err(_) => {
+            if let Some(stdout_path) = &runner_result.stdout_path {
+                tokio::fs::read_to_string(stdout_path)
+                    .await
+                    .unwrap_or_else(|_| r#"{"results":[]}"#.to_string())
+            } else {
+                r#"{"results":[]}"#.to_string()
+            }
+        }
+    };
+
+    let known_paths = crate::scan::path_utils::collect_zip_relative_paths(&zip_path).ok();
+    let findings = opengrep::parse_scan_output(
+        &json_text,
+        task_id,
+        None,
+        known_paths.as_ref(),
+    );
+
+    update_scan_progress(state, task_id, 90.0, "finalizing", "saving findings").await;
+
+    let elapsed_ms = started_at.elapsed().as_millis() as i64;
+    let error_count = findings
+        .iter()
+        .filter(|f| {
+            f.payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.eq_ignore_ascii_case("ERROR"))
+        })
+        .count();
+    let warning_count = findings
+        .iter()
+        .filter(|f| {
+            f.payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.eq_ignore_ascii_case("WARNING"))
+        })
+        .count();
+    let high_confidence_count = findings
+        .iter()
+        .filter(|f| {
+            f.payload
+                .get("confidence")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.eq_ignore_ascii_case("HIGH"))
+        })
+        .count();
+
     let now = now_rfc3339();
-    let task_id = Uuid::new_v4().to_string();
-    let findings = default_static_findings(engine, &task_id, ".");
-    let record = task_state::StaticTaskRecord {
-        id: task_id.clone(),
-        engine: engine.to_string(),
-        project_id,
-        name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine}-task")),
-        status: "completed".to_string(),
-        target_path: optional_string(&payload, "target_path").unwrap_or_else(|| ".".to_string()),
-        total_findings: findings.len() as i64,
-        scan_duration_ms: 0,
-        files_scanned: 0,
-        error_message: None,
-        created_at: now.clone(),
-        updated_at: Some(now.clone()),
-        extra,
-        progress: task_state::StaticTaskProgressRecord {
+    let mut snapshot = match task_state::load_snapshot(state).await {
+        Ok(s) => s,
+        Err(_) => {
+            let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+            return Err("failed to load task snapshot".into());
+        }
+    };
+
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "completed".to_string();
+        record.total_findings = findings.len() as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.files_scanned = files_extracted as i64;
+        record.updated_at = Some(now.clone());
+        record.extra = json!({
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "high_confidence_count": high_confidence_count,
+            "lines_scanned": 0,
+        });
+        record.progress = task_state::StaticTaskProgressRecord {
             progress: 100.0,
             current_stage: Some("completed".to_string()),
-            message: Some(format!("{engine} task completed in rust backend")),
-            started_at: Some(now.clone()),
+            message: Some(format!(
+                "opengrep scan completed: {} findings in {}ms",
+                findings.len(),
+                elapsed_ms
+            )),
+            started_at: record.progress.started_at.clone(),
             updated_at: Some(now.clone()),
-            logs: vec![task_state::StaticTaskProgressLogRecord {
-                timestamp: now.clone(),
-                stage: "completed".to_string(),
-                message: format!("{engine} task completed in rust backend"),
-                progress: 100.0,
-                level: "info".to_string(),
-            }],
-        },
-        findings,
-    };
-    let mut snapshot = load_task_snapshot(state).await?;
-    snapshot
-        .static_tasks
-        .insert(task_id.clone(), record.clone());
-    save_task_snapshot(state, &snapshot).await?;
-    Ok(Json(static_task_value(&record)))
+            logs: {
+                let mut logs = record.progress.logs.clone();
+                logs.push(task_state::StaticTaskProgressLogRecord {
+                    timestamp: now,
+                    stage: "completed".to_string(),
+                    message: format!(
+                        "scan completed: {} findings, {} files scanned",
+                        findings.len(),
+                        files_extracted
+                    ),
+                    progress: 100.0,
+                    level: "info".to_string(),
+                });
+                logs
+            },
+        };
+        record.findings = findings;
+    }
+
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+    Ok(())
 }
 
-fn default_static_findings(
-    engine: &str,
+async fn materialize_filtered_rules(
+    state: &AppState,
+    workspace_dir: &std::path::Path,
+    rule_ids: &[String],
+) -> Result<Option<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
+    if rule_ids.is_empty() {
+        let result = opengrep::materialize_rule_directory(state, workspace_dir).await?;
+        return Ok(result);
+    }
+
+    let rules_root = workspace_dir.join("opengrep-rules");
+    let mut written = 0usize;
+
+    let all_assets = opengrep::load_rule_assets(state).await?;
+    for asset in all_assets
+        .into_iter()
+        .filter(|a| rule_ids.iter().any(|id| a.asset_path == *id))
+    {
+        let target = rules_root.join(&asset.asset_path);
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(target, asset.content).await?;
+        written += 1;
+    }
+
+    let snapshot = task_state::load_snapshot(state).await?;
+    for rule in snapshot.opengrep_rules.values().filter(|r| {
+        r.is_active && rule_ids.iter().any(|id| r.id == *id)
+    }) {
+        let filename = format!("{}.yaml", rule.id.replace([':', '/'], "_"));
+        let target = rules_root.join("user").join(&filename);
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(target, &rule.pattern_yaml).await?;
+        written += 1;
+    }
+
+    if written == 0 {
+        let result = opengrep::materialize_rule_directory(state, workspace_dir).await?;
+        return Ok(result);
+    }
+
+    Ok(Some(rules_root))
+}
+
+async fn update_scan_progress(
+    state: &AppState,
     task_id: &str,
-    file_path: &str,
-) -> Vec<task_state::StaticFindingRecord> {
-    let finding_id = format!("{engine}-finding-{}", Uuid::new_v4());
-    let payload = match engine {
-        "opengrep" => json!({
-            "id": finding_id,
-            "scan_task_id": task_id,
-            "rule": {},
-            "rule_name": "rust-placeholder-opengrep-rule",
-            "cwe": ["CWE-000"],
-            "description": "placeholder opengrep finding from rust backend",
-            "file_path": file_path,
-            "start_line": 1,
-            "resolved_file_path": file_path,
-            "resolved_line_start": 1,
-            "code_snippet": "dangerous_call()",
-            "severity": "WARNING",
-            "status": "open",
-            "confidence": "MEDIUM",
-        }),
-        _ => return Vec::new(),
+    progress: f64,
+    stage: &str,
+    message: &str,
+) {
+    let now = now_rfc3339();
+    let Ok(mut snapshot) = task_state::load_snapshot(state).await else {
+        return;
     };
-
-    vec![task_state::StaticFindingRecord {
-        id: finding_id,
-        scan_task_id: task_id.to_string(),
-        status: "open".to_string(),
-        payload,
-    }]
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.progress.progress = progress;
+        record.progress.current_stage = Some(stage.to_string());
+        record.progress.message = Some(message.to_string());
+        record.progress.updated_at = Some(now.clone());
+        record.updated_at = Some(now.clone());
+        record.progress.logs.push(task_state::StaticTaskProgressLogRecord {
+            timestamp: now,
+            stage: stage.to_string(),
+            message: message.to_string(),
+            progress,
+            level: "info".to_string(),
+        });
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
 }
+
+async fn update_scan_task_failed(
+    state: &AppState,
+    task_id: &str,
+    error_message: &str,
+    elapsed_ms: i64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let now = now_rfc3339();
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "failed".to_string();
+        record.error_message = Some(error_message.to_string());
+        record.scan_duration_ms = elapsed_ms;
+        record.updated_at = Some(now.clone());
+        record.progress.progress = 100.0;
+        record.progress.current_stage = Some("failed".to_string());
+        record.progress.message = Some(error_message.to_string());
+        record.progress.updated_at = Some(now.clone());
+        record.progress.logs.push(task_state::StaticTaskProgressLogRecord {
+            timestamp: now,
+            stage: "failed".to_string(),
+            message: error_message.to_string(),
+            progress: 100.0,
+            level: "error".to_string(),
+        });
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(())
+}
+
+fn scan_workspace_root() -> PathBuf {
+    std::env::var("SCAN_WORKSPACE_ROOT")
+        .ok()
+        .map(|v| PathBuf::from(v.trim()))
+        .filter(|v| !v.as_os_str().is_empty())
+        .unwrap_or_else(|| PathBuf::from("/tmp/vulhunter/scans"))
+}
+
 
 async fn list_static_tasks(
     state: &AppState,
@@ -1205,6 +1547,65 @@ fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn read_file_lines_from_zip(
+    zip_path: &std::path::Path,
+    file_path: &str,
+    range_start: usize,
+    range_end: usize,
+) -> (Vec<(usize, String)>, usize) {
+    let Ok(reader) = std::fs::File::open(zip_path) else {
+        return (Vec::new(), 0);
+    };
+    let Ok(mut archive) = ZipArchive::new(reader) else {
+        return (Vec::new(), 0);
+    };
+
+    let normalized_target = file_path.trim_start_matches('/').replace('\\', "/");
+    let entry_name = (0..archive.len())
+        .filter_map(|i| {
+            let entry = archive.by_index(i).ok()?;
+            if entry.is_dir() {
+                return None;
+            }
+            let name = entry.name().to_string();
+            let normalized = name.trim_start_matches('/').replace('\\', "/");
+            if normalized == normalized_target || normalized.ends_with(&format!("/{normalized_target}")) {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .next();
+
+    let Some(entry_name) = entry_name else {
+        return (Vec::new(), 0);
+    };
+
+    let Ok(mut entry) = archive.by_name(&entry_name) else {
+        return (Vec::new(), 0);
+    };
+
+    let mut content = String::new();
+    if entry.read_to_string(&mut content).is_err() {
+        return (Vec::new(), 0);
+    }
+
+    let all_lines: Vec<&str> = content.lines().collect();
+    let total_lines = all_lines.len();
+    let clamped_end = range_end.min(total_lines);
+    let lines: Vec<(usize, String)> = all_lines
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            let line_number = i + 1;
+            line_number >= range_start && line_number <= clamped_end
+        })
+        .map(|(i, line)| (i + 1, line.to_string()))
+        .collect();
+
+    (lines, total_lines)
 }
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
