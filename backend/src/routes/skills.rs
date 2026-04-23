@@ -32,6 +32,7 @@ const PROMPT_SKILL_AGENT_KEYS: &[&str] = &[
     "analysis",
     "business_logic_analysis",
     "verification",
+    "report",
 ];
 const SKILL_FALLBACK_CATALOG: &[(&str, &str, &str)] = &[(
     "scan-core-fallback",
@@ -1625,6 +1626,7 @@ fn agent_label(agent_key: &str) -> &'static str {
         "analysis" => "Analysis Agent",
         "business_logic_analysis" => "Business Logic Analysis Agent",
         "verification" => "Verification Agent",
+        "report" => "Report Agent",
         _ => "Agent",
     }
 }

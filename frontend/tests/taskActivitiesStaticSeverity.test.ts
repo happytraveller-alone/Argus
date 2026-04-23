@@ -5,7 +5,7 @@ import { appendStaticScanBatchMarker } from "../src/shared/utils/staticScanBatch
 import { apiClient } from "../src/shared/api/serverClient.ts";
 import { fetchTaskActivities } from "../src/features/tasks/services/taskActivities.ts";
 
-test("fetchTaskActivities aggregates grouped static task severities by detail-page mapping", async () => {
+test("fetchTaskActivities aggregates opengrep static task severities by detail-page mapping", async () => {
 	const originalGet = apiClient.get;
 	const batchId = "static-batch-1";
 
@@ -34,54 +34,6 @@ test("fetchTaskActivities aggregates grouped static task severities by detail-pa
 				],
 			};
 		}
-		if (url.startsWith("/static-tasks/gitleaks/tasks")) {
-			return {
-				data: [
-					{
-						id: "gl-1",
-						project_id: "project-1",
-						name: appendStaticScanBatchMarker("静态分析-Gitleaks", batchId),
-						status: "completed",
-						target_path: ".",
-						no_git: "true",
-						total_findings: 4,
-						scan_duration_ms: 2000,
-						files_scanned: 10,
-						created_at: "2026-03-13T10:00:30.000Z",
-						updated_at: "2026-03-13T10:01:00.000Z",
-					},
-				],
-			};
-		}
-		if (url.startsWith("/static-tasks/bandit/tasks")) {
-			return {
-				data: [
-					{
-						id: "ba-1",
-						project_id: "project-1",
-						name: appendStaticScanBatchMarker("静态分析-Bandit", batchId),
-						status: "completed",
-						target_path: ".",
-						severity_level: "medium",
-						confidence_level: "medium",
-						total_findings: 6,
-						high_count: 2,
-						medium_count: 3,
-						low_count: 1,
-						scan_duration_ms: 3000,
-						files_scanned: 8,
-						created_at: "2026-03-13T10:00:45.000Z",
-						updated_at: "2026-03-13T10:01:00.000Z",
-					},
-				],
-			};
-		}
-		if (url.startsWith("/static-tasks/phpstan/tasks")) {
-			return { data: [] };
-		}
-		if (url.startsWith("/static-tasks/pmd/tasks")) {
-			return { data: [] };
-		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -94,9 +46,9 @@ test("fetchTaskActivities aggregates grouped static task severities by detail-pa
 		assert.equal(activities.length, 1);
 		assert.deepEqual(activities[0]?.staticFindingStats, {
 			critical: 0,
-			high: 2,
-			medium: 6,
-			low: 7,
+			high: 0,
+			medium: 3,
+			low: 2,
 		});
 	} finally {
 		apiClient.get = originalGet;
@@ -132,14 +84,6 @@ test("fetchTaskActivities clamps opengrep low severity count at zero", async () 
 				],
 			};
 		}
-		if (
-			url.startsWith("/static-tasks/gitleaks/tasks") ||
-			url.startsWith("/static-tasks/bandit/tasks") ||
-			url.startsWith("/static-tasks/phpstan/tasks") ||
-			url.startsWith("/static-tasks/pmd/tasks")
-		) {
-			return { data: [] };
-		}
 		throw new Error(`Unexpected apiClient.get call: ${url}`);
 	}) as typeof apiClient.get;
 
@@ -156,6 +100,63 @@ test("fetchTaskActivities clamps opengrep low severity count at zero", async () 
 			medium: 4,
 			low: 0,
 		});
+	} finally {
+		apiClient.get = originalGet;
+	}
+});
+
+test("fetchTaskActivities does not request removed static engine task endpoints", async () => {
+	const originalGet = apiClient.get;
+	const batchId = "static-batch-3";
+	const calls: string[] = [];
+
+	apiClient.get = (async (url: string) => {
+		calls.push(url);
+		if (url.startsWith("/agent-tasks")) {
+			return { data: [] };
+		}
+		if (url.startsWith("/static-tasks/tasks")) {
+			return {
+				data: [
+					{
+						id: "og-3",
+						project_id: "project-3",
+						name: appendStaticScanBatchMarker("静态分析-Opengrep", batchId),
+						status: "completed",
+						target_path: ".",
+						total_findings: 1,
+						error_count: 0,
+						warning_count: 1,
+						scan_duration_ms: 1000,
+						files_scanned: 2,
+						lines_scanned: 20,
+						created_at: "2026-03-13T12:00:00.000Z",
+						updated_at: "2026-03-13T12:01:00.000Z",
+					},
+				],
+			};
+		}
+		throw new Error(`Unexpected apiClient.get call: ${url}`);
+	}) as typeof apiClient.get;
+
+	try {
+		const activities = await fetchTaskActivities(
+			[{ id: "project-3", name: "Graceful Project" }] as any,
+			20,
+		);
+
+		assert.equal(activities.length, 1);
+		assert.equal(activities[0]?.projectName, "Graceful Project");
+		assert.deepEqual(activities[0]?.staticFindingStats, {
+			critical: 0,
+			high: 0,
+			medium: 1,
+			low: 0,
+		});
+		assert.deepEqual(calls, [
+			"/agent-tasks/",
+			"/static-tasks/tasks?limit=20",
+		]);
 	} finally {
 		apiClient.get = originalGet;
 	}

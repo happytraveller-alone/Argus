@@ -423,14 +423,9 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks, phpstanTasks, pmdTasks] =
-		await Promise.all([
+	const [agentTasks, opengrepTasks] = await Promise.all([
 		getAgentTasks({ limit }),
 		getOpengrepScanTasks({ limit }),
-		getGitleaksScanTasks({ limit }),
-		getBanditScanTasks({ limit }),
-		getPhpstanScanTasks({ limit }),
-		getPmdScanTasks({ limit }),
 	]);
 
 	const projectNameMap = mapProjectNames(projects);
@@ -440,10 +435,10 @@ export async function fetchTaskActivities(
 	const activities = [
 		...toRuleScanActivities(
 			opengrepTasks,
-			gitleaksTasks,
-			banditTasks,
-			phpstanTasks,
-			pmdTasks,
+			[],
+			[],
+			[],
+			[],
 			resolveProjectName,
 		),
 		...toAgentActivities(agentTasks, resolveProjectName),

@@ -56,6 +56,13 @@ struct BusinessLogicAnalysisTestRequest {
     max_iterations: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReportTestRequest {
+    project_path: String,
+    findings: Option<Vec<Value>>,
+    max_iterations: Option<i64>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/recon/run", post(run_recon))
@@ -67,6 +74,7 @@ pub fn router() -> Router<AppState> {
             "/business-logic-analysis/run",
             post(run_business_logic_analysis),
         )
+        .route("/report/run", post(run_report))
 }
 
 async fn run_recon(Json(payload): Json<ReconTestRequest>) -> Response<Body> {
@@ -142,6 +150,17 @@ async fn run_business_logic_analysis(
             "project_path": payload.project_path,
             "risk_point": payload.risk_point,
             "max_iterations": payload.max_iterations.unwrap_or(10),
+        }),
+    )
+}
+
+async fn run_report(Json(payload): Json<ReportTestRequest>) -> Response<Body> {
+    sse_response(
+        "report",
+        json!({
+            "project_path": payload.project_path,
+            "findings": payload.findings.unwrap_or_default(),
+            "max_iterations": payload.max_iterations.unwrap_or(4),
         }),
     )
 }

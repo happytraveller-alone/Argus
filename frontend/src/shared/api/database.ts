@@ -398,7 +398,7 @@ export const api = {
       params.include_metrics = true;
     }
     const res = await retryProjectReads(() =>
-      apiClient.get('/projects/', { params }),
+      apiClient.get('/projects', { params }),
     );
     return res.data;
   },
@@ -496,7 +496,7 @@ export const api = {
   },
 
   async createProject(project: CreateProjectForm): Promise<Project> {
-    const res = await apiClient.post('/projects/', {
+    const res = await apiClient.post('/projects', {
       name: project.name,
       description: project.description,
       source_type: project.source_type || 'zip',

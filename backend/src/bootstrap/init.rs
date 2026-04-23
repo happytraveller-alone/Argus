@@ -86,6 +86,7 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
                 "analysis",
                 "business_logic_analysis",
                 "verification",
+                "report",
             ],
         )
         .await?;

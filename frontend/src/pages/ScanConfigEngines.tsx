@@ -1,14 +1,9 @@
 import { useMemo } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import OpengrepRules from "@/pages/OpengrepRules";
-import GitleaksRules from "@/pages/GitleaksRules";
-import BanditRules from "@/pages/BanditRules";
-import PhpstanRules from "@/pages/PhpstanRules";
-import PmdRules from "@/pages/PmdRules";
 import {
   DEFAULT_SCAN_ENGINE_TAB,
   isScanEngineTab,
-  type ScanEngineTab,
 } from "@/shared/constants/scanEngines";
 
 const DATA_TABLE_URL_STATE_KEYS = ["q", "sort", "order", "page", "pageSize", "filters"];
@@ -17,7 +12,7 @@ export function buildScanConfigEngineSearchParams(
   currentParams: URLSearchParams,
   value: string,
 ) {
-  const next = isScanEngineTab(value) ? value : DEFAULT_SCAN_ENGINE_TAB;
+  const next = value === "opengrep" ? value : DEFAULT_SCAN_ENGINE_TAB;
   const nextParams = new URLSearchParams(currentParams);
   for (const key of DATA_TABLE_URL_STATE_KEYS) {
     nextParams.delete(key);
@@ -33,8 +28,10 @@ export default function ScanConfigEngines() {
 		return <Navigate to="/scan-config/intelligent-engine" replace />;
 	}
 
-	const currentTab = useMemo<ScanEngineTab>(() => {
-		return isScanEngineTab(rawTab) ? rawTab : DEFAULT_SCAN_ENGINE_TAB;
+	const currentTab = useMemo(() => {
+		return rawTab === "opengrep" && isScanEngineTab(rawTab)
+			? rawTab
+			: DEFAULT_SCAN_ENGINE_TAB;
 	}, [rawTab]);
 
 	const handleEngineChange = (value: string) => {
@@ -46,38 +43,12 @@ export default function ScanConfigEngines() {
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 			<div className="relative z-10">
 				<div className="cyber-card p-0">
-					{currentTab === "opengrep" ? (
-						<OpengrepRules
-							embedded
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
-					) : currentTab === "gitleaks" ? (
-						<GitleaksRules
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
-					) : currentTab === "bandit" ? (
-						<BanditRules
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
-					) : currentTab === "phpstan" ? (
-						<PhpstanRules
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
-					) : (
-						<PmdRules
-							showEngineSelector
-							engineValue={currentTab}
-							onEngineChange={handleEngineChange}
-						/>
-					)}
+					<OpengrepRules
+						embedded
+						showEngineSelector
+						engineValue={currentTab}
+						onEngineChange={handleEngineChange}
+					/>
 				</div>
 			</div>
 		</div>

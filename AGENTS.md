@@ -482,16 +482,15 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 6:59pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 7:54pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,955t read) | 1,178,933t work | 98% savings
+Stats: 50 obs (19,249t read) | 1,916,475t work | 99% savings
 
 ### Apr 23, 2026
-S164 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation (Apr 23, 7:19 AM)
 S166 Remove deprecated docker-compose.hybrid.yml and docker-compose.full.yml validation from release workflow (Apr 23, 8:22 AM)
 S174 Strengthen release pipeline tests with precise compose validation count assertion to enforce single-compose-only architecture (Apr 23, 8:27 AM)
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
@@ -500,57 +499,58 @@ S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr
 S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
-1215 4:01p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
-1216 4:02p ⚖️ ralplan Critic ITERATE verdict — GitHub Actions workflow optimization plan requires 5 specific fixes before approval
-1217 " ✅ ralplan plan updated — operator-surface and scheduled-release decisions now fixed with exact filenames
-1218 " 🔵 Rust backend bootstrap architecture — Rust-owned control plane with legacy schema mirroring
-1219 " ✅ Test suite cleanup — removed heavy bootstrap and search API integration tests
-1223 4:05p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
-1225 4:06p ⚖️ ralplan GitHub Actions workflow optimization plan finalized for audittool_personal
-1239 " 🟣 Rust backend static audit fully implemented and all 190 tests passing
-1227 4:07p ⚖️ ralplan plan finalized — release gate paths narrowed to actual release-tree files
-1226 " 🟣 Rust backend static audit — all 190 tests passing after full implementation
-S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 4:07 PM)
-1228 4:08p ✅ Stop-gate review ALLOW — static audit implementation turn
-1229 " ⚖️ ralplan Critic review — GitHub Actions workflow optimization plan re-reviewed for architectural gaps
-1230 4:09p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
-1234 4:10p ⚖️ ralplan Critic review — GitHub Actions workflow optimization plan for audittool_personal
-1231 " ✅ Stop-gate review ALLOW — static audit implementation turn was reporting-only
-1233 4:11p 🔵 audittool_personal shell execution environment — commands not producing output
-1232 " ⚖️ ralplan Critic review — release gate whitelist precision blocker identified
-1236 4:12p ⚖️ ralplan plan finalized — GitHub Actions workflow optimization architecture approved
-1235 4:13p 🔵 Stop-gate review ALLOW — static audit implementation turn was reporting-only
-1238 4:14p ⚖️ ralplan GitHub Actions plan — architectural gap resolution verified via source cross-reference
-1304 " ⚖️ ralplan architect review — GitHub Actions workflow optimization for audittool_personal
-1240 4:16p ⚖️ ralplan final re-review — GitHub Actions workflow optimization plan for audittool_personal
-1237 " ⚖️ ralplan APPROVED — GitHub Actions workflow optimization plan finalized for audittool_personal
-1241 4:18p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
-1244 4:20p ⚖️ ralplan GitHub Actions workflow optimization — approved plan with Architect+Critic APPROVE verdicts
-1246 4:23p 🟣 Ralph execution launched — three parallel agents dispatched for workflow optimization implementation
-1253 " 🟣 Ralph execution lane — workflow contract tests updated for new CI/CD contracts
-1248 " 🟣 GitHub Actions workflow restructure — publish-runtime-images.yml reusable orchestrator added
-1249 " 🟣 docker-publish-runtime-images.yml — sole manual workflow_dispatch owner added
-1250 " ✅ scheduled-release.yml updated to use publish-runtime-images.yml with runner-only booleans
-1251 " 🟣 release.yml — workflow_call with source_sha input and detect-release-carrying-changes job added
-1247 " ✅ README.md and README_EN.md updated — GHCR workflow docs revised for new publish entrypoint
-1254 4:26p 🔵 Rust backend static audit task — audittool_personal codebase structure and task
-1255 4:27p ⚖️ ralplan initiated — optimize audittool_personal GitHub Actions workflows by referencing AuditTool reference workflows
-1256 4:30p ⚖️ Ralph architect verification APPROVED — audittool_personal GitHub Actions workflow optimization
-1257 4:32p ⚖️ GitHub Actions workflow optimization — architect APPROVE verdict
-1261 " 🔴 Docker config.json — removed invalid credsStore desktop.exe entry
-1260 4:34p ⚖️ ralplan architect verification APPROVED — audittool_personal GitHub Actions workflow optimization
-1305 4:35p ⚖️ ralplan initiated — GitHub Actions workflow optimization for audittool_personal
-1263 4:45p 🔵 audittool_personal backend Dockerfile — multi-stage build with Rust 1.90 and mirror fallback
-1265 4:48p 🔵 static_tasks.rs — compiler warnings inventory from release build
-1268 4:49p 🔵 backend.Dockerfile — three-stage build with runtime-base, docker-cli-src, and builder stages
-1399 6:49p 🔵 Docker build fails: SSL certificate verification error blocks apt-get in Debian trixie runtime-base stage
-1400 " 🔵 HTTP vs HTTPS APT bootstrap: debian:trixie-slim cannot verify SSL before ca-certificates is installed
-1401 " 🟣 Regression test added: backend Dockerfile must use HTTP (not HTTPS) for APT bootstrap sources
-1403 6:50p ⚖️ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1409 6:52p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
-1406 " 🔵 Hermes Containerized Agents — Greenfield: No backend/agents/ dir, no Hermes Rust code, no Docker assets yet
-1407 " 🔵 Hermes PRD and Test Spec fully authored — complete architecture and verification plan in .omx/plans/
+S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
 1408 6:53p 🔴 Docker backend apt bootstrap switched from HTTPS to HTTP to fix SSL certificate error on Debian Trixie
+1418 6:56p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
+1415 6:57p ⚖️ Docker backend.Dockerfile SSL bootstrap fix — code review verdict
+1420 6:58p ✅ Hermes Containerized Functional Agents — Plan Execution Initiated
+1414 6:59p ⚖️ Docker backend.Dockerfile apt SSL bootstrap — final review verdict: no findings
+1417 7:00p 🔴 Docker backend.Dockerfile apt SSL bootstrap fix — full implementation confirmed
+1422 7:02p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
+1421 7:03p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1425 7:04p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
+1430 7:08p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1433 7:09p 🟣 Hermes Containerized Functional Agents — Team Orchestration Initiated
+1440 7:12p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1442 " 🔵 Hermes Agent Implementation — Three-Slice Task Breakdown Confirmed
+1443 7:13p 🟣 Hermes Agent Directory Contracts Created for Four Roles
+1444 " 🔵 VulHunter docker-compose.yml — Full Service Topology and Mirror Strategy
+1446 7:14p 🟣 hermes-agent-base.Dockerfile and docker-compose.hermes-agents.yml Created and Validated
+1447 " 🟣 Hermes Agent SOUL.md Role Definitions and .gitkeep Scaffolding Added
+1448 " 🔵 Existing Rust Backend Agent Keys and Queue Architecture Confirmed
+1450 7:17p 🟣 Hermes Agent Shared Schemas and Entrypoint Script Created
+1451 " ✅ .gitignore Updated to Exclude Hermes Agent Runtime Data Directories
+1455 7:18p ✅ Task #3 Completed — Agent Directory Contract Scaffolding Verified and Unblocked Task #1
+1456 " ✅ toml crate added to backend/Cargo.toml for Hermes Runtime Module
+1461 7:20p ✅ Hermes Containerized Functional Agents — /plan Command Invoked on PRD and Test Spec
+1462 7:22p 🟣 Hermes Runtime Rust Module — contracts.rs, registry.rs, layout.rs Created
+1469 " 🟣 Hermes Runtime Module — discovery, bootstrap, executor, launcher, parser, result, health Created
+1471 7:24p 🟣 Report Agent Role Added to PROMPT_SKILL_AGENT_KEYS and Bootstrap Init
+1472 7:25p 🟣 Report Agent Wired Into queue.rs, agent_test.rs Routes, and Integration Test Created
+1473 7:28p 🟣 Hermes Integration Test Suite — Four Test Files Created
+1476 " 🔵 Hermes Task Board — Task #1 Still In-Progress While Tasks #2 and #3 Completed
+1483 7:29p 🔴 bootstrap.rs Unused Import Warning Fixed — hermes_seed_home Removed
+1491 7:33p 🔴 Hermes Integration Tests — Wrong Crate Name Fixed (audittool_personal → backend_rust)
+1488 7:35p 🔄 Frontend Static Scan Engine Retired to OpenGrep-Only
+1489 " 🔴 Dashboard, Task, and Scan-Engine Page Loading Errors Fixed
+1490 " ✅ Tests Updated for OpenGrep-Only and API Path Changes
+1495 " 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
+1496 " 🔴 Dashboard/Task/Scan-Engine Page Loading Errors Fixed
+1497 " ✅ Test Suite Updated for OpenGrep-Only and API Path Changes
+1498 7:36p 🟣 Hermes Integration Tests — All 14 Tests Pass After Crate Name Fix
+1499 7:38p 🔵 fetchTaskActivities Still Imports All Static Engine APIs Despite OpenGrep-Only Fetch
+1500 " 🔵 CreateProjectScanDialog Hardcodes Non-OpenGrep Engines to false/no-op
+1501 " 🔵 ProjectDetail and Dashboard Services Retain Multi-Engine Task Fetching
+1502 " 🔵 ScanConfigEngines Non-OpenGrep Tab Tests Remain — Now Test Fallback Behavior
+S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 7:41 PM)
+1512 7:44p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only (Code Review)
+1514 7:47p 🔵 Residual Risk — CreateScanTaskDialog and Dashboard projectScanStats Still Reference Retired Engines
+1515 " 🔄 ScanConfigIntelligentEngine and Project Dialogs — Indentation Reformatted to Spaces
+1518 7:48p 🔵 Stop-Gate Review — Previous Turn Confirmed Non-Edit (Summary Only)
+1519 7:49p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
+1520 " 🔴 Dashboard/Task/Scan-Engine Page Loading Errors Fixed
+1521 " ✅ Test Suite Updated for OpenGrep-Only and API Path Changes
+1522 " 🔵 Frontend Static Scan Engine Retirement — OpenGrep Only (Final Review)
 
-Access 1179k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1916k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

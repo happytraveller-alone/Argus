@@ -125,7 +125,9 @@ export function normalizeSnapshot(
 	const normalizeStatusBreakdown = (
 		statusKey: keyof ReturnType<typeof createEmptyTaskStatusByScanType>,
 	) => {
-		const current = rawTaskStatusByScanType[statusKey] || {};
+		const current = rawTaskStatusByScanType[statusKey] as
+			| { static?: number; intelligent?: number }
+			| undefined;
 		return {
 			static: Math.max(Number(current.static || 0), 0),
 			intelligent: Math.max(Number(current.intelligent || 0), 0),

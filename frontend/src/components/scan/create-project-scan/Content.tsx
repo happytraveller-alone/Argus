@@ -189,40 +189,12 @@ export default function CreateProjectScanDialogContent({
     title: string;
     checked: boolean;
     setChecked: (enabled: boolean) => void;
-    disabled?: boolean;
-    visible?: boolean;
   }> = [
     {
       key: "opengrep",
       title: "Opengrep",
       checked: opengrepEnabled,
       setChecked: setOpengrepEnabled,
-    },
-    {
-      key: "gitleaks",
-      title: "Gitleaks",
-      checked: gitleaksEnabled,
-      setChecked: setGitleaksEnabled,
-    },
-    {
-      key: "bandit",
-      title: "Bandit",
-      checked: banditEnabled,
-      setChecked: setBanditEnabled,
-    },
-    {
-      key: "phpstan",
-      title: "PHPStan",
-      checked: phpstanEnabled,
-      setChecked: setPhpstanEnabled,
-    },
-    {
-      key: "pmd",
-      title: "PMD",
-      checked: pmdEnabled,
-      setChecked: setPmdEnabled,
-      disabled: isPmdBlockedProject,
-      visible: mode === "static",
     },
   ];
 
@@ -481,9 +453,7 @@ export default function CreateProjectScanDialogContent({
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {staticEngineItems
-                  .filter((item) => item.visible !== false)
-                  .map((item) => (
+                {staticEngineItems.map((item) => (
                     <div
                       key={item.key}
                       className="border border-border rounded p-3 flex items-center justify-between gap-3 hover:border-sky-500/30"
@@ -492,7 +462,7 @@ export default function CreateProjectScanDialogContent({
                         <Checkbox
                           checked={item.checked}
                           onCheckedChange={(checked) => item.setChecked(Boolean(checked))}
-                          disabled={creating || item.disabled}
+                          disabled={creating}
                           className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
                         />
                         <div>
@@ -513,9 +483,6 @@ export default function CreateProjectScanDialogContent({
                     </div>
                   ))}
               </div>
-              {mode === "static" && isPmdBlockedProject ? (
-                <p className="text-xs text-amber-300">{pmdBlockedMessage}</p>
-              ) : null}
             </div>
           ) : null}
 

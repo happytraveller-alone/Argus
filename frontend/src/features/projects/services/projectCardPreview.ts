@@ -432,13 +432,14 @@ export function getProjectCardRecentTasks(params: {
   projectId: string;
   agentTasks: AgentTask[];
   opengrepTasks: OpengrepScanTask[];
-  gitleaksTasks: GitleaksScanTask[];
+  gitleaksTasks?: GitleaksScanTask[];
   banditTasks?: BanditScanTask[];
   phpstanTasks?: PhpstanScanTask[];
   pmdTasks?: PmdScanTask[];
   limit?: number;
 }): ProjectCardRecentTask[] {
-  const { projectId, agentTasks, opengrepTasks, gitleaksTasks } = params;
+  const { projectId, agentTasks, opengrepTasks } = params;
+  const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const pmdTasks = params.pmdTasks || [];

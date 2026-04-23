@@ -185,7 +185,7 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
         .iter()
         .filter(|item| item["namespace"] == "prompt" && item["source"] == "prompt_effective")
         .collect();
-    assert_eq!(prompt_items.len(), 5);
+    assert_eq!(prompt_items.len(), 6);
 
     for agent_key in [
         "recon",
@@ -193,6 +193,7 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
         "analysis",
         "business_logic_analysis",
         "verification",
+        "report",
     ] {
         let skill_id = format!("prompt-{agent_key}@effective");
         let item = prompt_items
@@ -203,7 +204,9 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
         assert_eq!(item["namespace"], "prompt");
         assert_eq!(item["source"], "prompt_effective");
         assert_eq!(item["load_mode"], "summary_only");
-        assert_eq!(item["runtime_ready"], true);
+        if agent_key != "report" {
+            assert_eq!(item["runtime_ready"], true);
+        }
         assert_eq!(item["tool_type"], "");
         assert_eq!(item["tool_id"], "");
         assert_eq!(item["name"], skill_id);

@@ -15,10 +15,6 @@ import {
 	getOpengrepRules,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
-import { createGitleaksScanTask } from "@/shared/api/gitleaks";
-import { createBanditScanTask } from "@/shared/api/bandit";
-import { createPhpstanScanTask } from "@/shared/api/phpstan";
-import { createPmdScanTask } from "@/shared/api/pmd";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
 import {
@@ -36,10 +32,6 @@ import {
 	buildLlmProviderOptions,
 	type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
-import {
-	getPmdBlockedProjectMessage,
-	isPmdBlockedProjectLanguage,
-} from "@/shared/utils/pmdLanguage";
 import {
 	getLlmQuickGateStatus,
 	invalidateSuccessfulManualTest,
@@ -114,11 +106,6 @@ export default function CreateProjectScanDialog({
 	const [mode, setMode] = useState<ScanCreateMode>("static");
 	const [targetFilesInput, setTargetFilesInput] = useState("");
 	const [opengrepEnabled, setOpengrepEnabled] = useState(true);
-	const [gitleaksEnabled, setGitleaksEnabled] = useState(false);
-	const [banditEnabled, setBanditEnabled] = useState(false);
-	// PHPStan integration: static creation option state.
-	const [phpstanEnabled, setPhpstanEnabled] = useState(false);
-	const [pmdEnabled, setPmdEnabled] = useState(false);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
 
@@ -257,10 +244,6 @@ export default function CreateProjectScanDialog({
 		setMode(initialMode || "static");
 		setTargetFilesInput("");
 		setOpengrepEnabled(true);
-		setGitleaksEnabled(false);
-		setBanditEnabled(false);
-		setPhpstanEnabled(false);
-		setPmdEnabled(false);
 		setConfigEngine(null);
 		setShowLlmQuickFixPanel(false);
 		setLlmProviderOptions(
@@ -382,22 +365,11 @@ export default function CreateProjectScanDialog({
 			if (mode === "agent") {
 				baseCanCreate = true;
 			} else {
-				baseCanCreate =
-					opengrepEnabled || gitleaksEnabled || banditEnabled || phpstanEnabled || pmdEnabled;
+				baseCanCreate = opengrepEnabled;
 			}
 		} else {
 			if (!selectedProject) return false;
-			if (mode === "static") {
-				if (
-					!opengrepEnabled &&
-					!gitleaksEnabled &&
-					!banditEnabled &&
-					!phpstanEnabled &&
-					!pmdEnabled
-				) {
-					return false;
-				}
-			}
+			if (mode === "static" && !opengrepEnabled) return false;
 			baseCanCreate = isZipProject(selectedProject);
 		}
 		if (!baseCanCreate) return false;
@@ -411,50 +383,17 @@ export default function CreateProjectScanDialog({
 		selectedProject,
 		mode,
 		opengrepEnabled,
-		gitleaksEnabled,
-		banditEnabled,
-		phpstanEnabled,
-		pmdEnabled,
 		isLlmMode,
 		llmQuickInitialized,
 		quickFixPanelOpening,
 		llmGateStatus.canCreate,
 	]);
 
-	const selectedOrUploadedProjectLanguages = useMemo(() => {
-		if (sourceMode === "existing") {
-			return selectedProject?.programming_languages;
-		}
-		return undefined;
-	}, [sourceMode, selectedProject?.programming_languages]);
-
-	const isPmdBlockedProject = useMemo(
-		() => isPmdBlockedProjectLanguage(selectedOrUploadedProjectLanguages),
-		[selectedOrUploadedProjectLanguages],
-	);
-
-	useEffect(() => {
-		if (isPmdBlockedProject && pmdEnabled) {
-			setPmdEnabled(false);
-			toast.info(getPmdBlockedProjectMessage());
-		}
-	}, [isPmdBlockedProject, pmdEnabled]);
-
 	const createStaticTasksForProject = async (
 		project: Project,
 	): Promise<StaticTaskCreateResult> => {
 		let opengrepTask: { id: string } | null = null;
-		let gitleaksTask: { id: string } | null = null;
-		let banditTask: { id: string } | null = null;
-		let phpstanTask: { id: string } | null = null;
-		let pmdTask: { id: string } | null = null;
-		if (
-			!opengrepEnabled &&
-			!gitleaksEnabled &&
-			!banditEnabled &&
-			!phpstanEnabled &&
-			!pmdEnabled
-		) {
+		if (!opengrepEnabled) {
 			throw new Error("请至少启用一个扫描引擎");
 		}
 		const taskNamePrefix = "静态分析";
@@ -477,59 +416,7 @@ export default function CreateProjectScanDialog({
 				target_path: ".",
 			});
 		}
-
-		if (gitleaksEnabled) {
-			gitleaksTask = await createGitleaksScanTask({
-				project_id: project.id,
-				name: appendStaticScanBatchMarker(
-					`${taskNamePrefix}-Gitleaks-${project.name}`,
-					staticBatchId,
-				),
-				target_path: ".",
-				no_git: true,
-			});
-		}
-
-		if (banditEnabled) {
-			banditTask = await createBanditScanTask({
-				project_id: project.id,
-				name: appendStaticScanBatchMarker(
-					`${taskNamePrefix}-Bandit-${project.name}`,
-					staticBatchId,
-				),
-				target_path: ".",
-			});
-		}
-		// PHPStan integration: create task in the same static batch.
-		if (phpstanEnabled) {
-			phpstanTask = await createPhpstanScanTask({
-				project_id: project.id,
-				name: appendStaticScanBatchMarker(
-					`${taskNamePrefix}-PHPStan-${project.name}`,
-					staticBatchId,
-				),
-				target_path: ".",
-			});
-		}
-
-		if (pmdEnabled) {
-			pmdTask = await createPmdScanTask({
-				project_id: project.id,
-				name: appendStaticScanBatchMarker(
-					`${taskNamePrefix}-PMD-${project.name}`,
-					staticBatchId,
-				),
-				target_path: ".",
-				ruleset: "security",
-			});
-		}
-
-		const primaryTaskId =
-			opengrepTask?.id ||
-			gitleaksTask?.id ||
-			banditTask?.id ||
-			phpstanTask?.id ||
-			pmdTask?.id;
+		const primaryTaskId = opengrepTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态审计任务创建失败");
 		}
@@ -537,30 +424,6 @@ export default function CreateProjectScanDialog({
 		const params = new URLSearchParams();
 		if (opengrepTask) {
 			params.set("opengrepTaskId", opengrepTask.id);
-		}
-		if (gitleaksTask) {
-			params.set("gitleaksTaskId", gitleaksTask.id);
-		}
-		if (banditTask) {
-			params.set("banditTaskId", banditTask.id);
-		}
-		if (phpstanTask) {
-			params.set("phpstanTaskId", phpstanTask.id);
-		}
-		if (pmdTask) {
-			params.set("pmdTaskId", pmdTask.id);
-		}
-		if (!opengrepTask && !banditTask && !phpstanTask && !pmdTask && gitleaksTask) {
-			params.set("tool", "gitleaks");
-		}
-		if (!opengrepTask && !gitleaksTask && !phpstanTask && !pmdTask && banditTask) {
-			params.set("tool", "bandit");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !pmdTask && phpstanTask) {
-			params.set("tool", "phpstan");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && pmdTask) {
-			params.set("tool", "pmd");
 		}
 		return { primaryTaskId, params };
 	};
@@ -917,13 +780,7 @@ export default function CreateProjectScanDialog({
 					toast.error("该项目未上传源码压缩包");
 					return;
 				}
-				if (
-					!opengrepEnabled &&
-					!gitleaksEnabled &&
-					!banditEnabled &&
-					!phpstanEnabled &&
-					!pmdEnabled
-				) {
+				if (!opengrepEnabled) {
 					toast.error("请至少启用一个扫描引擎");
 					return;
 				}
@@ -1008,16 +865,16 @@ export default function CreateProjectScanDialog({
 			handleNewProjectFileSelect={handleNewProjectFileSelect}
 			opengrepEnabled={opengrepEnabled}
 			setOpengrepEnabled={setOpengrepEnabled}
-			gitleaksEnabled={gitleaksEnabled}
-			setGitleaksEnabled={setGitleaksEnabled}
-			banditEnabled={banditEnabled}
-			setBanditEnabled={setBanditEnabled}
-			phpstanEnabled={phpstanEnabled}
-			setPhpstanEnabled={setPhpstanEnabled}
-			pmdEnabled={pmdEnabled}
-			setPmdEnabled={setPmdEnabled}
-			isPmdBlockedProject={isPmdBlockedProject}
-			pmdBlockedMessage={getPmdBlockedProjectMessage()}
+			gitleaksEnabled={false}
+			setGitleaksEnabled={() => {}}
+			banditEnabled={false}
+			setBanditEnabled={() => {}}
+			phpstanEnabled={false}
+			setPhpstanEnabled={() => {}}
+			pmdEnabled={false}
+			setPmdEnabled={() => {}}
+			isPmdBlockedProject={false}
+			pmdBlockedMessage=""
 			showLlmQuickFixPanel={showLlmQuickFixPanel}
 			openLlmQuickFixPanelManual={openLlmQuickFixPanelManual}
 			quickFixSaving={quickFixSaving}

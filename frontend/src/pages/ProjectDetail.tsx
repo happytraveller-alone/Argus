@@ -42,18 +42,6 @@ import {
 	getAgentTasks,
 } from "@/shared/api/agentTasks";
 import {
-	type GitleaksScanTask,
-	getGitleaksScanTasks,
-} from "@/shared/api/gitleaks";
-import {
-	type BanditScanTask,
-	getBanditScanTasks,
-} from "@/shared/api/bandit";
-import {
-	type PhpstanScanTask,
-	getPhpstanScanTasks,
-} from "@/shared/api/phpstan";
-import {
 	getOpengrepScanFindings,
 	getOpengrepScanTasks,
 	type OpengrepFinding,
@@ -219,9 +207,6 @@ export default function ProjectDetail() {
 	const [project, setProject] = useState<Project | null>(null);
 	const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
 	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
-	const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
-	const [banditTasks, setBanditTasks] = useState<BanditScanTask[]>([]);
-	const [phpstanTasks, setPhpstanTasks] = useState<PhpstanScanTask[]>([]);
 	const [potentialFindings, setPotentialFindings] = useState<
 		ProjectDetailPotentialListItem[]
 	>([]);
@@ -388,16 +373,10 @@ export default function ProjectDetail() {
 				projectRes,
 				agentTasksRes,
 				staticTasksRes,
-				gitleaksTasksRes,
-				banditTasksRes,
-				phpstanTasksRes,
 			] = await Promise.allSettled([
 				api.getProjectById(id),
 				getAgentTasks({ project_id: id }),
 				getOpengrepScanTasks({ projectId: id }),
-				getGitleaksScanTasks({ projectId: id }),
-				getBanditScanTasks({ projectId: id }),
-				getPhpstanScanTasks({ projectId: id }),
 			]);
 
 			const nextAgentTasks =
@@ -409,21 +388,6 @@ export default function ProjectDetail() {
 				staticTasksRes.status === "fulfilled" &&
 				Array.isArray(staticTasksRes.value)
 					? staticTasksRes.value
-					: [];
-			const nextGitleaksTasks =
-				gitleaksTasksRes.status === "fulfilled" &&
-				Array.isArray(gitleaksTasksRes.value)
-					? gitleaksTasksRes.value
-					: [];
-			const nextBanditTasks =
-				banditTasksRes.status === "fulfilled" &&
-				Array.isArray(banditTasksRes.value)
-					? banditTasksRes.value
-					: [];
-			const nextPhpstanTasks =
-				phpstanTasksRes.status === "fulfilled" &&
-				Array.isArray(phpstanTasksRes.value)
-					? phpstanTasksRes.value
 					: [];
 
 			if (projectRes.status === "fulfilled") {
@@ -439,21 +403,9 @@ export default function ProjectDetail() {
 			if (staticTasksRes.status !== "fulfilled") {
 				console.warn("Failed to load static tasks:", staticTasksRes.reason);
 			}
-			if (gitleaksTasksRes.status !== "fulfilled") {
-				console.warn("Failed to load gitleaks tasks:", gitleaksTasksRes.reason);
-			}
-			if (banditTasksRes.status !== "fulfilled") {
-				console.warn("Failed to load bandit tasks:", banditTasksRes.reason);
-			}
-			if (phpstanTasksRes.status !== "fulfilled") {
-				console.warn("Failed to load phpstan tasks:", phpstanTasksRes.reason);
-			}
 
 			setAgentTasks(nextAgentTasks);
 			setStaticTasks(nextStaticTasks);
-			setGitleaksTasks(nextGitleaksTasks);
-			setBanditTasks(nextBanditTasks);
-			setPhpstanTasks(nextPhpstanTasks);
 
 			const projectName =
 				projectRes.status === "fulfilled"
@@ -568,12 +520,9 @@ export default function ProjectDetail() {
 			projectId: id,
 			agentTasks,
 			opengrepTasks: staticTasks,
-			gitleaksTasks,
-			banditTasks,
-			phpstanTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, agentTasks, staticTasks, gitleaksTasks, banditTasks, phpstanTasks]);
+	}, [id, agentTasks, staticTasks]);
 
 	const handleTaskCreated = () => {
 		toast.success("扫描任务已创建", {

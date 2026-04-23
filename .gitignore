@@ -260,3 +260,11 @@ codex/
 .codex/skills/.system/**
 !.codex/prompts/
 !.codex/prompts/**
+
+# Hermes agent runtime data (live state, not tracked)
+backend/agents/*/data/**
+!backend/agents/*/data/.gitkeep
+backend/agents/verification/scratch/**
+!backend/agents/verification/scratch/.gitkeep
+backend/agents/report/output/**
+!backend/agents/report/output/.gitkeep

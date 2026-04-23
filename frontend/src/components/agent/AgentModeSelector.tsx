@@ -64,10 +64,6 @@ export default function AgentModeSelector({
     label: string;
   }> = [
     { key: "opengrep", label: "规则扫描" },
-    { key: "gitleaks", label: "密钥泄露扫描" },
-    { key: "bandit", label: "Python 安全扫描" },
-    { key: "phpstan", label: "PHPStan 扫描" },
-    { key: "pmd", label: "PMD Java 扫描" },
   ];
 
   return (
@@ -182,11 +178,6 @@ export default function AgentModeSelector({
                   </Button>
                 </div>
               ))}
-              {blockedStaticToolMessages?.pmd ? (
-                <p className="text-[10px] text-amber-300">
-                  {blockedStaticToolMessages.pmd}
-                </p>
-              ) : null}
             </div>
           )}
 
@@ -298,8 +289,8 @@ export default function AgentModeSelector({
           <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
           <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
             <li>基于规则引擎快速扫描代码漏洞</li>
-            <li>支持按工具组合执行（Opengrep / Gitleaks）</li>
-            <li>支持 Python Bandit 扫描</li>
+            <li>静态引擎仅保留 Opengrep</li>
+            <li>基于规则的源码静态审计</li>
             <li>结果稳定、反馈快，适合日常基线检查</li>
           </ul>
         </div>

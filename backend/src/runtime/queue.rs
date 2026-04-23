@@ -135,6 +135,7 @@ pub fn queue_snapshot(kind: &str, payload: &Value) -> Value {
         "business_logic_recon" | "business_logic" => {
             build_recon_queue_snapshot("bl_recon", "业务逻辑风险点队列", sample_risk_point(kind))
         }
+        "report" => build_recon_queue_snapshot("report", "报告生成队列", sample_risk_point(kind)),
         _ => build_recon_queue_snapshot("recon", "风险点队列", sample_risk_point(kind)),
     }
 }

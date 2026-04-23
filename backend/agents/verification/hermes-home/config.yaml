@@ -1,0 +1,5 @@
+model: default
+provider: openrouter
+
+terminal:
+  cwd: /scan

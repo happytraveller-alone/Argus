@@ -1550,7 +1550,9 @@ export default function OpengrepRules({
 												<SelectValue placeholder="选择引擎" />
 											</SelectTrigger>
 											<SelectContent className="cyber-dialog border-border">
-												{SCAN_ENGINE_SELECTOR_OPTIONS.map((option) => (
+												{SCAN_ENGINE_SELECTOR_OPTIONS.filter(
+													(option) => option.value === "opengrep",
+												).map((option) => (
 													<SelectItem key={option.value} value={option.value}>
 														{option.label}
 													</SelectItem>

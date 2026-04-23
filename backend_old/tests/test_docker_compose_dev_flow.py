@@ -40,6 +40,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "target: dev" in compose_text
     assert "./frontend:/app" in compose_text
     assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
+    assert "VITE_API_TARGET: ${VITE_API_TARGET:-http://backend:8000}" in compose_text
     assert "BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
     assert "BACKEND_INSTALL_YASA" not in compose_text

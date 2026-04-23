@@ -25,5 +25,5 @@ test("AgentModeSelector renders config buttons for static tools", () => {
   );
 
   assert.match(markup, /配置 规则扫描/);
-  assert.match(markup, /配置 PMD Java 扫描/);
+  assert.doesNotMatch(markup, /配置 PMD Java 扫描/);
 });

@@ -1,0 +1,102 @@
+# Hermes Agent Services — 四个角色容器
+# 启动前请将各角色目录下的 container.env.example 复制为 container.env
+# docker compose -f docker/docker-compose.hermes-agents.yml up
+
+services:
+  hermes-recon:
+    build:
+      context: ..
+      dockerfile: docker/hermes-agent-base.Dockerfile
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-recon
+    restart: unless-stopped
+    mem_limit: 2g
+    volumes:
+      - ./backend/agents/recon/data:/opt/data
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      # copy from backend/agents/recon/container.env.example
+      - path: ./backend/agents/recon/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "echo", "ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - vulhunter-network
+
+  hermes-analysis:
+    build:
+      context: ..
+      dockerfile: docker/hermes-agent-base.Dockerfile
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-analysis
+    restart: unless-stopped
+    mem_limit: 2g
+    volumes:
+      - ./backend/agents/analysis/data:/opt/data
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      # copy from backend/agents/analysis/container.env.example
+      - path: ./backend/agents/analysis/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "echo", "ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - vulhunter-network
+
+  hermes-verification:
+    build:
+      context: ..
+      dockerfile: docker/hermes-agent-base.Dockerfile
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-verification
+    restart: unless-stopped
+    mem_limit: 2g
+    volumes:
+      - ./backend/agents/verification/data:/opt/data
+      - ./backend/agents/verification/scratch:/opt/scratch
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      # copy from backend/agents/verification/container.env.example
+      - path: ./backend/agents/verification/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "echo", "ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - vulhunter-network
+
+  hermes-report:
+    build:
+      context: ..
+      dockerfile: docker/hermes-agent-base.Dockerfile
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-report
+    restart: unless-stopped
+    mem_limit: 2g
+    volumes:
+      - ./backend/agents/report/data:/opt/data
+      - ./backend/agents/report/output:/opt/output
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      # copy from backend/agents/report/container.env.example
+      - path: ./backend/agents/report/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "echo", "ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - vulhunter-network
+
+networks:
+  vulhunter-network:
+    external: true
