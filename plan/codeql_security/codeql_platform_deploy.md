@@ -1,6 +1,6 @@
 # AuditTool CodeQL 平台实施部署手册（平台原生 + Docker + 全链路）
 
-> 文档定位：本手册用于把 CodeQL 作为 AuditTool 平台内置静态扫描能力落地，不是单纯 CI 示例。  
+> 文档定位：本手册用于把 CodeQL 作为 AuditTool 平台内置静态审计能力落地，不是单纯 CI 示例。  
 > 参考来源：`/root/AuditTool/codeql.md`（官方摘要）与 `/root/AuditTool/codeql_standard_implementation.md`（标准化实现规格，主参考）。
 
 ---
@@ -34,7 +34,7 @@
 
 ### 2.1 扫描执行架构现状
 
-当前 AuditTool 静态扫描采用统一模式：
+当前 AuditTool 静态审计采用统一模式：
 
 1. 后端 API 创建扫描任务。
 2. 后端通过 `ScannerRunSpec + run_scanner_container` 启动一次性 runner 容器。
@@ -477,7 +477,7 @@ codeql database analyze /scan/output/db/cpp \
 ### 10.4 任务和结果展示
 
 - 在任务聚合统计中纳入 `codeql_tasks` 与 `codeql_findings`。
-- 在静态扫描结果页中新增 CodeQL 过滤与详情展示。
+- 在静态审计结果页中新增 CodeQL 过滤与详情展示。
 
 ---
 

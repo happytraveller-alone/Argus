@@ -475,8 +475,8 @@ export default function CreateScanTaskDialog({
 					if (scanMode === "agent") {
 						const agentTask = await createAgentTask({
 							project_id: createdProject.id,
-							name: `智能扫描-${createdProject.name}`,
-							description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
+							name: `智能审计-${createdProject.name}`,
+							description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
 							target_files:
 								effectiveTargetFiles.length > 0
 									? effectiveTargetFiles
@@ -487,7 +487,7 @@ export default function CreateScanTaskDialog({
 
 						onOpenChange(false);
 						onTaskCreated();
-						toast.success("智能扫描任务已创建");
+						toast.success("智能审计任务已创建");
 						if (navigateOnSuccess) {
 							navigate(`/agent-audit/${agentTask.id}`);
 						}
@@ -526,8 +526,8 @@ export default function CreateScanTaskDialog({
 			if (scanMode === "agent") {
 				const agentTask = await createAgentTask({
 					project_id: selectedProject.id,
-					name: `智能扫描-${selectedProject.name}`,
-					description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
+					name: `智能审计-${selectedProject.name}`,
+					description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
 					exclude_patterns: excludePatterns,
 					target_files:
 						effectiveTargetFiles.length > 0 ? effectiveTargetFiles : undefined,
@@ -537,7 +537,7 @@ export default function CreateScanTaskDialog({
 
 				onOpenChange(false);
 				onTaskCreated();
-				toast.success("智能扫描任务已创建");
+				toast.success("智能审计任务已创建");
 				if (navigateOnSuccess) {
 					navigate(`/agent-audit/${agentTask.id}`);
 				}
@@ -910,7 +910,7 @@ export default function CreateScanTaskDialog({
 							) : scanMode === "agent" ? (
 								<>
 									<Bot className="w-4 h-4 mr-2" />
-									启动智能扫描
+									启动智能审计
 								</>
 							) : (
 								<>

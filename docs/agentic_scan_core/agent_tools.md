@@ -1,8 +1,8 @@
 # 智能体职责与工具矩阵
 
-> 2026-04-18 更新：本文只描述当前智能扫描职责矩阵。历史模式差异与迁移背景请以 `plan/rust_full_takeover/` 下的文档为准。
+> 2026-04-18 更新：本文只描述当前智能审计职责矩阵。历史模式差异与迁移背景请以 `plan/rust_full_takeover/` 下的文档为准。
 
-本文档整理当前智能扫描真实运行态中各智能体的职责边界、输入输出和工具注入情况。
+本文档整理当前智能审计真实运行态中各智能体的职责边界、输入输出和工具注入情况。
 
 ## 阅读定位
 
@@ -159,9 +159,9 @@ Recon 队列工具：
 - 下游：调度 `Recon / Analysis / Verification / Report / BusinessLogicRecon / BusinessLogicAnalysis`
 - 交接介质：三类队列 + `WorkflowState`
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：通常从常规 Recon 开始，并把风险点写入 `recon_queue`
+- 当前智能审计：通常从常规 Recon 开始，并把风险点写入 `recon_queue`
 
 ### 5.2 `ReconAgent`
 
@@ -212,9 +212,9 @@ Recon 队列工具：
 - 下游：`AnalysisAgent`
 - 交接介质：`recon_queue`
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：正常执行，承担常规代码安全侦察入口的职责
+- 当前智能审计：正常执行，承担常规代码安全侦察入口的职责
 
 ### 5.3 `BusinessLogicReconAgent`
 
@@ -267,9 +267,9 @@ Recon 队列工具：
 - 下游：`BusinessLogicAnalysisAgent`
 - 交接介质：`business_logic_queue`
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：业务逻辑侦察轨独立运行，并把结果写入 `business_logic_queue`
+- 当前智能审计：业务逻辑侦察轨独立运行，并把结果写入 `business_logic_queue`
 
 ### 5.4 `AnalysisAgent`
 
@@ -329,9 +329,9 @@ Recon 队列工具：
 - 下游：`VerificationAgent`
 - 交接介质：`vuln_queue`
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：通常消费 Recon 发现的风险点，并把确认 finding 推入 `vuln_queue`
+- 当前智能审计：通常消费 Recon 发现的风险点，并把确认 finding 推入 `vuln_queue`
 
 ### 5.5 `BusinessLogicAnalysisAgent`
 
@@ -384,9 +384,9 @@ Recon 队列工具：
 - 下游：`VerificationAgent`
 - 交接介质：统一 `vuln_queue`
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：它始终走业务逻辑双轨，并在统一 `vuln_queue` 前汇合
+- 当前智能审计：它始终走业务逻辑双轨，并在统一 `vuln_queue` 前汇合
 
 ### 5.6 `VerificationAgent`
 
@@ -446,9 +446,9 @@ Recon 队列工具：
 - 下游：`ReportAgent`
 - 交接介质：`vuln_queue` 消费结果 + 持久化 finding
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：统一消费 `vuln_queue`，负责验证收敛与结果持久化
+- 当前智能审计：统一消费 `vuln_queue`，负责验证收敛与结果持久化
 
 ### 5.7 `ReportAgent`
 
@@ -506,9 +506,9 @@ Recon 队列工具：
 - 下游：任务级 report 展示与 finding 详情展示
 - 交接介质：更新后的 `AgentFinding` + task.report
 
-**在当前智能扫描中的位置**
+**在当前智能审计中的位置**
 
-- 当前智能扫描：共用统一的 report 阶段，负责报告生成与二次复审
+- 当前智能审计：共用统一的 report 阶段，负责报告生成与二次复审
 
 ## 6. 工具分组速查
 

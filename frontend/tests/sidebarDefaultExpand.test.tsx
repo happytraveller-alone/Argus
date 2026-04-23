@@ -29,8 +29,8 @@ async function renderSidebar(collapsed: boolean) {
 test("Sidebar 默认宽版会展开全部分组子菜单", async () => {
 	const markup = await renderSidebar(false);
 
-	assert.match(markup, /静态扫描/);
-	assert.match(markup, /智能扫描/);
+	assert.match(markup, /静态审计/);
+	assert.match(markup, /智能审计/);
 	assert.match(markup, /扫描引擎/);
 	assert.match(markup, /智能引擎/);
 	assert.match(markup, /外部工具/);
@@ -68,8 +68,8 @@ test("Sidebar 分组父项不是可点击链接", async () => {
 test("Sidebar 折叠态仍隐藏分组子菜单但保留一级导航", async () => {
 	const markup = await renderSidebar(true);
 
-	assert.doesNotMatch(markup, /静态扫描/);
-	assert.doesNotMatch(markup, /智能扫描/);
+	assert.doesNotMatch(markup, /静态审计/);
+	assert.doesNotMatch(markup, /智能审计/);
 	assert.doesNotMatch(markup, /扫描引擎/);
 	assert.doesNotMatch(markup, /智能引擎/);
 	assert.doesNotMatch(markup, /外部工具/);

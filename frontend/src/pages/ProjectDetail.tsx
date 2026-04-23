@@ -35,7 +35,6 @@ import {
 	getProjectCardRecentTasks,
 	type ProjectCardTaskFindingCategory,
 } from "@/features/projects/services/projectCardPreview";
-import { resolveSourceModeFromTaskMeta } from "@/features/tasks/services/taskActivities";
 import {
 	type AgentFinding,
 	type AgentTask,

@@ -455,7 +455,7 @@ function AdvancedConfigDialog(props: {
 			},
 			agentTimeout: {
 				label: "Agent 总超时 (秒)",
-				desc: "智能扫描任务整体超时阈值。",
+				desc: "智能审计任务整体超时阈值。",
 				input: (
 					<Input
 						type="number"

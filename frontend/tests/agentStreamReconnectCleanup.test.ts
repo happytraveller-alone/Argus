@@ -14,7 +14,7 @@ test("AgentStreamHandler disconnect clears any scheduled reconnect timeout", asy
     scheduled.push({ id, delay: Number(delay ?? 0) });
     void callback;
     return id as unknown as ReturnType<typeof setTimeout>;
-  }) as typeof globalThis.setTimeout;
+  }) as unknown as typeof globalThis.setTimeout;
   globalThis.clearTimeout = ((id?: number | ReturnType<typeof setTimeout>) => {
     cleared.push(Number(id));
   }) as typeof globalThis.clearTimeout;

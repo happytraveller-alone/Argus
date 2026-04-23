@@ -14,13 +14,13 @@
 - **不是什么**：单次扫描任务本身；扫描任务是挂在 `Project` 下的。
 - **相关文档**：[architecture.md](./architecture.md)
 
-### 静态扫描
+### 静态审计
 
 - **是什么**：由多个静态引擎并列执行、在产品层聚合展示的一类扫描体验。
 - **不是什么**：单一后端模型；代码里仍保留各引擎自己的 task / finding 边界。
 - **相关文档**：[architecture.md](./architecture.md)
 
-### 智能扫描
+### 智能审计
 
 - **是什么**：以 `AgentTask` 为主任务模型，由 Agent 做侦察、分析、验证和报告生成的扫描流程。
 - **不是什么**：简单的规则扫描或静态引擎包装层。
@@ -30,7 +30,7 @@
 
 ### `AgentTask`
 
-- **是什么**：智能扫描的主任务实体。
+- **是什么**：智能审计的主任务实体。
 - **不是什么**：仅代表某一个子智能体的一次执行。
 - **相关文档**：[architecture.md](./architecture.md), [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)
 
@@ -117,5 +117,5 @@
 ## 阅读路线建议
 
 - 想先看系统全貌：读 [architecture.md](./architecture.md)。
-- 想看智能扫描主线：读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
+- 想看智能审计主线：读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
 - 想看 DeerFlow runtime 改造计划：读 [deer-flow-runtime-phases/README.md](./deer-flow-runtime-phases/README.md)。

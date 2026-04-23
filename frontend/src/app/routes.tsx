@@ -131,7 +131,7 @@ const routes: RouteConfig[] = [
 		navVisible: false,
 	},
 	{
-		name: "静态扫描",
+		name: "静态审计",
 		nameKey: "route.taskStatic",
 		path: "/tasks/static",
 		element: <TaskManagementStatic />,
@@ -141,7 +141,7 @@ const routes: RouteConfig[] = [
 		navOrder: 20,
 	},
 	{
-		name: "智能扫描",
+		name: "智能审计",
 		nameKey: "route.taskIntelligent",
 		path: "/tasks/intelligent",
 		element: <TaskManagementIntelligent />,

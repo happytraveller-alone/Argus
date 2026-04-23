@@ -321,11 +321,6 @@ function extractEventTimestamp(
   return null;
 }
 
-function getMcpRouteLabel(metadata?: Record<string, unknown>): string {
-  void metadata;
-  return "";
-}
-
 function buildToolTitle(statusLabel: string, toolName: string, metadata?: Record<string, unknown>): string {
   void metadata;
   return `${statusLabel}：${toolName}`;
@@ -1037,7 +1032,7 @@ function AgentAuditPageContent() {
     () => [
       {
         key: "static",
-        title: "静态扫描",
+        title: "静态审计",
         intro: "通过严重规则快速、准确定位漏洞",
         icon: Zap,
         accentClassName:
@@ -1046,7 +1041,7 @@ function AgentAuditPageContent() {
       },
       {
         key: "agent",
-        title: "智能扫描",
+        title: "智能审计",
         intro: "智能体上下文推理扫描",
         icon: Bot,
         accentClassName:
@@ -3357,7 +3352,7 @@ function AgentAuditPageContent() {
       scrollGuardTimeoutRef.current = window.setTimeout(() => {
         markProgrammaticScroll();
         scrollGuardTimeoutRef.current = null;
-      }, 120);
+      }, 120) as unknown as ReturnType<typeof setTimeout>;
     }
   }, [markProgrammaticScroll]);
 
@@ -3473,7 +3468,7 @@ function AgentAuditPageContent() {
       }
 
       const lines: string[] = [];
-      lines.push(`# 智能扫描活动日志`);
+      lines.push(`# 智能审计活动日志`);
       lines.push(`- task_id: ${task.id}`);
       lines.push(`- task_name: ${task.name || "-"}`);
       lines.push(`- project_id: ${task.project_id}`);
@@ -3682,7 +3677,7 @@ function AgentAuditPageContent() {
               className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3"
             >
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-300">
-                智能扫描失败{failedStep ? `（${failedStep}）` : ""}
+                智能审计失败{failedStep ? `（${failedStep}）` : ""}
               </div>
               <div className="mt-1 text-xs font-mono text-rose-700 dark:text-rose-200 whitespace-pre-wrap break-words">
                 {failedReason}
@@ -3820,12 +3815,8 @@ function AgentAuditPageContent() {
                     <div
                       ref={logsContainerRef}
                       onScroll={handleLogsScroll}
-                      className={
-                        isSmallScreenSplit
-                          ? "overflow-y-auto custom-scrollbar-dark h-full min-h-0"
-                          : "overflow-y-auto custom-scrollbar-dark transition-[height] duration-150"
-                      }
-                      style={isSmallScreenSplit ? undefined : { height: logViewportHeight }}
+                      className="overflow-y-auto custom-scrollbar-dark"
+                      style={isSmallScreenSplit ? { height: "100%", minHeight: 0 } : { height: logViewportHeight, transition: "height 150ms" }}
                     >
                       {filteredLogs.length === 0 ? (
                         <div className="flex h-full items-center justify-center px-3">

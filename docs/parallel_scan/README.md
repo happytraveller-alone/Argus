@@ -31,7 +31,7 @@
 
 适合第一次接手并行扫描改造的开发者。
 
-1. [智能扫描并行化拓扑总览](./topology-overview.md)
+1. [智能审计并行化拓扑总览](./topology-overview.md)
 2. [Phase 1 边界收口范围说明](./phase1-boundary-scope.md)
 3. [Control Plane 与 Execution Plane 边界说明](./control-plane-execution-plane-boundary.md)
 4. [Redis、DB、Workspace 与 Worker 交互时序](./redis-db-workspace-worker-sequence.md)

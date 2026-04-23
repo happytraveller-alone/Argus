@@ -13,8 +13,8 @@ function renderPanel(props: {
 }) {
   return renderToStaticMarkup(
     createElement(EnhancedStatsPanel, {
-      task: props.task,
-      findings: props.findings,
+      task: props.task as any,
+      findings: props.findings as any,
     }),
   );
 }

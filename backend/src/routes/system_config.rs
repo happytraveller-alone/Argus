@@ -281,7 +281,7 @@ pub async fn agent_preflight(
             ok: false,
             stage: Some("llm_config".to_string()),
             message: format!(
-                "智能扫描初始化失败：LLM 缺少必填配置 {}，请先补全并保存。",
+                "智能审计初始化失败：LLM 缺少必填配置 {}，请先补全并保存。",
                 missing_fields.join("、")
             ),
             reason_code: Some("missing_fields".to_string()),

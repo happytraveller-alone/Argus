@@ -1,5 +1,5 @@
 /**
- * PHPStan 静态扫描 API 客户端封装
+ * PHPStan 静态审计 API 客户端封装
  */
 
 import { apiClient } from "@/shared/api/serverClient";

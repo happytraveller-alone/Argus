@@ -114,11 +114,11 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.doesNotMatch(markup, /全选当前页/);
 	assert.doesNotMatch(markup, /选择项目/);
 	assert.match(markup, /<thead[\s\S]*?<\/thead>/);
-	assert.match(markup, /<th[^>]*>项目名称<\/th>/);
-	assert.match(markup, /<th[^>]*>项目大小<\/th>/);
-	// assert.match(markup, /<th[^>]*>执行任务<\/th>/);
-	assert.match(markup, /<th[^>]*>发现潜在漏洞<\/th>/);
-	assert.match(markup, /<th[^>]*>AI验证漏洞<\/th>/);
+	assert.match(markup, /<th[\s\S]*?项目名称[\s\S]*?<\/th>/);
+	assert.match(markup, /<th[\s\S]*?项目大小[\s\S]*?<\/th>/);
+	// assert.match(markup, /<th[\s\S]*?执行任务[\s\S]*?<\/th>/);
+	assert.match(markup, /<th[\s\S]*?发现潜在漏洞[\s\S]*?<\/th>/);
+	assert.match(markup, /<th[\s\S]*?AI验证漏洞[\s\S]*?<\/th>/);
 	assert.match(markup, /<th[^>]*>操作<\/th>/);
 	assert.doesNotMatch(markup, /项目概览|体量概览|快捷操作|任务概览|风险概览/);
 	assert.doesNotMatch(markup, /名称与入口|规模与体量|详情 \/ 浏览 \/ 扫描|完成 \/ 运行中|按风险等级分布/);

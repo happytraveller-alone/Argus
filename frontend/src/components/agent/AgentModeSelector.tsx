@@ -136,7 +136,7 @@ export default function AgentModeSelector({
           >
             <li className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              基于规则的静态扫描
+              基于规则的静态审计
             </li>
             <li className="flex items-center gap-1">
               <Code className="w-3 h-3" />
@@ -238,7 +238,7 @@ export default function AgentModeSelector({
               "font-bold text-sm font-mono uppercase",
               isAgentSelected ? "text-violet-700 dark:text-violet-300" : "text-foreground/70"
             )}>
-              智能扫描
+              智能审计
             </span>
             {isAgentSelected && (
               <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 ml-auto" />
@@ -284,7 +284,7 @@ export default function AgentModeSelector({
       {/* 模式说明 */}
       {value === "agent" ? (
         <div className="p-3 bg-violet-50 dark:bg-violet-950/30 border border-violet-500/30 text-xs text-violet-700 dark:text-violet-300 rounded font-mono">
-          <p className="font-bold mb-1 uppercase text-violet-700 dark:text-violet-400">智能扫描模式说明：</p>
+          <p className="font-bold mb-1 uppercase text-violet-700 dark:text-violet-400">智能审计模式说明：</p>
           <ul className="list-disc list-inside space-y-0.5 text-violet-600 dark:text-violet-300/80">
             <li>AI Agent 会自主规划扫描策略</li>
             <li>使用跨文件关联与结构化代码分析定位风险</li>

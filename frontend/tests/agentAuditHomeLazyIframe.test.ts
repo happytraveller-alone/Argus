@@ -20,7 +20,7 @@ test("AgentAudit 首页不再保留任何 Nexus iframe 懒加载状态机", () =
   assert.doesNotMatch(source, /加载 GitNexus/);
   assert.doesNotMatch(source, /http:\/\/\$\{window\.location\.hostname\}:5174/);
   assert.match(source, /一键开始安全审计/);
-  assert.match(source, /静态扫描/);
-  assert.match(source, /智能扫描/);
+  assert.match(source, /静态审计/);
+  assert.match(source, /智能审计/);
   assert.doesNotMatch(source, /findIndex\(\(item\) => item\.key === card\.key\)/);
 });

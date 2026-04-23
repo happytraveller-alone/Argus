@@ -237,7 +237,7 @@ export default function FindingDetailCodePanel({
 	return (
 		<section
 			aria-label={title}
-			className="order-2 xl:order-2 rounded-[24px] border border-border/70 bg-background p-5 min-h-0 flex flex-col gap-4 shadow-sm"
+			className="order-2 xl:order-2 rounded-xl border border-border/70 bg-card/35 p-5 min-h-0 flex flex-col gap-4 shadow-sm"
 		>
 			<div>
 				<p className="text-[0.975rem] font-mono uppercase tracking-[0.24em] text-muted-foreground">

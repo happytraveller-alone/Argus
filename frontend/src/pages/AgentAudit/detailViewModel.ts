@@ -150,7 +150,7 @@ export function resolveAgentAuditDetailTitle(input: {
   description?: string | null;
 }): string {
   void input;
-  return "智能扫描详情";
+  return "智能审计详情";
 }
 
 export function resolveAgentAuditBackTarget(

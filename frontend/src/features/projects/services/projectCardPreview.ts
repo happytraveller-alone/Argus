@@ -14,7 +14,6 @@ import {
   getAgentSeverityCounts,
   getSeverityCountTotal,
   mergeSeverityCounts,
-  resolveSourceModeFromTaskMeta,
   type SeverityCounts,
 } from "@/features/tasks/services/taskActivities";
 import {
@@ -556,8 +555,8 @@ export function getProjectCardRecentTasks(params: {
         completedAt: status === "running" ? null : latestUpdatedAt,
         durationMs,
         route: `/static-analysis/${primaryTask.id}?${params.toString()}`,
-        label: "静态扫描",
-        scanTypeLabel: "静态扫描",
+        label: "静态审计",
+        scanTypeLabel: "静态审计",
         scannedFiles: filesScanned,
         scannedLines,
         vulnerabilities,
@@ -580,7 +579,7 @@ export function getProjectCardRecentTasks(params: {
 
       const analyzedFiles = toNullableNonNegativeNumber(task.analyzed_files);
       const totalFiles = toNullableNonNegativeNumber(task.total_files);
-      const scanLabel = "智能扫描";
+      const scanLabel = "智能审计";
 
       return {
         id: task.id,

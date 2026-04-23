@@ -275,8 +275,8 @@ function TrendPanel() {
 			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				{[
 					{ label: "当日累计新增漏洞发现", value: "41", meta: "03-22 峰值" },
-					{ label: "当日静态扫描漏洞发现", value: "18", meta: "03-23 最新" },
-					{ label: "当日智能扫描漏洞发现", value: "19", meta: "03-23 最新" },
+					{ label: "当日静态审计漏洞发现", value: "18", meta: "03-23 最新" },
+					{ label: "当日智能审计漏洞发现", value: "19", meta: "03-23 最新" },
 				].map((item) => (
 					<div
 						key={item.label}
@@ -305,12 +305,12 @@ function TrendPanel() {
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.medium.chip}`}
 						>
-							当日静态扫描漏洞发现
+							当日静态审计漏洞发现
 						</span>
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.high.chip}`}
 						>
-							当日智能扫描漏洞发现
+							当日智能审计漏洞发现
 						</span>
 					</div>
 				</div>
@@ -335,8 +335,8 @@ function TrendPanel() {
 								<LabelList dataKey="intelligentVerifiedFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
 							</Bar>
 							<Line type="monotone" dataKey="totalNewFindings" name="当日累计新增漏洞发现" stroke="#38bdf8" strokeWidth={2.4} dot={{ r: 3 }} />
-							<Line type="monotone" dataKey="staticFindings" name="当日静态扫描漏洞发现" stroke="#fbbf24" strokeWidth={2} dot={false} />
-							<Line type="monotone" dataKey="intelligentVerifiedFindings" name="当日智能扫描漏洞发现" stroke="#fb923c" strokeWidth={2} dot={false} />
+							<Line type="monotone" dataKey="staticFindings" name="当日静态审计漏洞发现" stroke="#fbbf24" strokeWidth={2} dot={false} />
+							<Line type="monotone" dataKey="intelligentVerifiedFindings" name="当日智能审计漏洞发现" stroke="#fb923c" strokeWidth={2} dot={false} />
 						</ComposedChart>
 					</ResponsiveContainer>
 				</div>

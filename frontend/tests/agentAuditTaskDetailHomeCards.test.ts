@@ -8,7 +8,7 @@ const taskDetailPagePath = path.resolve(
   "src/pages/AgentAudit/TaskDetailPage.tsx",
 );
 
-test("AgentAudit 详情页首页卡片直接保留静态扫描和智能扫描，不再依赖重复定义后去重", () => {
+test("AgentAudit 详情页首页卡片直接保留静态审计和智能审计，不再依赖重复定义后去重", () => {
   const source = fs.readFileSync(taskDetailPagePath, "utf8");
   const homeScanCardsBlock = source.match(
     /const homeScanCards: HomeScanCard\[] = useMemo\(\s*\(\) => \[(.*?)\],\s*\[\],\s*\);/s,

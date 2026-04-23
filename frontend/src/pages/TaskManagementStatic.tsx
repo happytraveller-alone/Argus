@@ -88,7 +88,7 @@ export default function TaskManagementStatic() {
 							className="flex-1 text-left font-mono font-bold leading-none tracking-tight text-muted-foreground"
 							style={{ fontSize: "1.5rem" }}
 						>
-							静态扫描任务
+							静态审计任务
 						</p>
 						<p className="stat-value shrink-0 text-right text-[clamp(1.25rem,2.6vw,2rem)] leading-none">
 							{stats.total}
@@ -152,7 +152,7 @@ export default function TaskManagementStatic() {
 						activities={staticActivities}
 						loading={loading}
 						nowMs={nowMs}
-						emptyText="暂无静态扫描任务"
+						emptyText="暂无静态审计任务"
 					/>
 				</DeferredSection>
 			{/* </div> */}
@@ -168,7 +168,7 @@ export default function TaskManagementStatic() {
 						initialMode="static"
 						lockMode
 						allowUploadProject
-						primaryCreateLabel="创建静态扫描任务"
+						primaryCreateLabel="创建静态审计任务"
 					/>
 				</Suspense>
 			) : null}

@@ -3,7 +3,6 @@ import {
 	type ProjectCardVulnerabilityConfidence,
 	type ProjectCardVulnerabilitySeverity,
 } from "@/features/projects/services/projectCardPreview";
-import { resolveSourceModeFromTaskMeta } from "@/features/tasks/services/taskActivities";
 import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
@@ -189,8 +188,8 @@ function shouldIncludeFinding(params: {
 export function getProjectDetailPotentialTaskCategoryText(
 	category: ProjectCardTaskFindingCategory,
 ): string {
-	if (category === "static") return "静态扫描";
-	return "智能扫描";
+	if (category === "static") return "静态审计";
+	return "智能审计";
 }
 
 export function toProjectRelativePotentialPath(

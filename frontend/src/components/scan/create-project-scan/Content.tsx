@@ -33,7 +33,7 @@ import {
   getCreateProjectScanProviderLabel,
   type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
-import { isZipProject } from "@/shared/utils/projectUtils";
+
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
 import {
@@ -302,7 +302,7 @@ export default function CreateProjectScanDialogContent({
                   disabled={creating}
                 >
                   <Zap className="w-4 h-4 mr-2" />
-                  静态扫描
+                  静态审计
                 </Button>
                 <Button
                   type="button"
@@ -316,7 +316,7 @@ export default function CreateProjectScanDialogContent({
                   disabled={creating}
                 >
                   <Bot className="w-4 h-4 mr-2" />
-                  智能扫描
+                  智能审计
                 </Button>
               </div>
             </div>
@@ -477,7 +477,7 @@ export default function CreateProjectScanDialogContent({
             <div className="border border-border rounded-lg p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">
-                  静态扫描引擎
+                  静态审计引擎
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">

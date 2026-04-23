@@ -13,14 +13,14 @@ type HomeScanCard = {
 const homeScanCards: HomeScanCard[] = [
   {
     key: "static",
-    title: "静态扫描",
+    title: "静态审计",
     intro: "规则驱动漏洞检测",
     icon: Zap,
     targetRoute: "/tasks/static?openCreate=1&source=home-card",
   },
   {
     key: "agent",
-    title: "智能扫描",
+    title: "智能审计",
     intro: "AI Agent 代码推理",
     icon: Bot,
     targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",

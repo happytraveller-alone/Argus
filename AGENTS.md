@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 9:24am GMT+8
+# [audittool_personal] recent context, 2026-04-23 10:10am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (17,356t read) | 1,247,318t work | 99% savings
+Stats: 50 obs (15,020t read) | 1,136,408t work | 99% savings
 
 ### Apr 22, 2026
 S120 Clean up backend/assets/scan_rule_assets — retain only patches, rules_from_patches, and rules_opengrep (Apr 22, 10:57 PM)
@@ -500,58 +500,58 @@ S174 Strengthen release pipeline tests with precise compose validation count ass
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
 S173 Strengthen release pipeline tests to enforce Docker infrastructure consolidation — verify hybrid/full compose removal and scanner engine deprecation (Apr 23, 8:33 AM)
 S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr 23, 8:43 AM)
-964 8:48a ⚖️ Frontend dead code cleanup ralplan consensus reached — APPROVE, Wave 1 execution authorized
-963 " 🔵 oh-my-codex Stop hook exempts subagent threads from skill-active blocking
-969 " ✅ scan_rule_assets directory cleanup — legacy rule directories removed
 S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
-967 8:49a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
-968 " 🔵 fuse-overlayfs and tmpfs mount both blocked in current environment
-972 8:51a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
-974 8:52a 🔵 Stop-gate review ALLOW — previous turn was reporting-only
-977 8:53a 🔵 Stop-gate review ALLOW — 329 tests passed, no blocking issues
-975 8:54a 🔵 ollama and lmstudio confirmed absent from audittool_personal host
-976 " ⚖️ ACP/Ruflo suitability ralplan completed — 4-iteration consensus reached
-980 8:59a 🔵 Frontend dead code cleanup plan and test spec located
-981 " ✅ Frontend dead code cleanup task pipeline created with wave-based execution order
-983 9:00a 🔴 Wave 1: DashboardCommandCenter.tmp.tsx deleted with verification gates passed
-987 " 🔵 Frontend test suite shows 7 pre-existing failures unrelated to DashboardCommandCenter.tmp.tsx deletion
-989 9:02a 🔵 Pre-existing test failures confirmed independent of Wave 1 deletion; Wave 2 reachability inventory started
-990 " 🔵 Wave 2 reachability analysis identified 84 zero-incoming-reference candidates for dead code review
-991 9:03a 🔄 Frontend dead code cleanup initiated per PRD and test spec
-992 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
-993 9:04a 🔄 Frontend dead code cleanup initiated per PRD and test spec
-994 " 🟣 Frontend dead code cleanup initiated per PRD and test spec
-995 " ✅ Frontend dead code cleanup — DashboardCommandCenter.tmp.tsx deleted
-996 9:05a 🔄 Frontend dead code cleanup initiated per PRD and test spec
-998 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
-1001 9:06a 🔵 Frontend node test suite — 9 failures identified after Wave 2 dead code deletion
-1002 " ⚖️ ACP跨语言Agent互操作性架构规划 — RALPLAN-DR共识摘要
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 9:07 AM)
-1006 9:09a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
-1011 9:10a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
-1012 9:11a 🔵 Stop-gate review — previous turn was reporting-only, no code changes
-1014 9:12a 🔵 Frontend node test suite — 3 failing tests identified after dead code cleanup
-1015 " ⚖️ ACP跨语言Agent互操作性架构规划 — Critic评审第四轮
-1016 " 🔵 Frontend node test suite — full results: 10 failing tests out of 131 after dead code cleanup
-1018 9:13a 🔵 tsconfigTestProject.test.ts and frontendTypecheck.test.ts — TypeScript API-based tests that run full program diagnostics via tsconfig.test.json
-1021 9:14a 🔵 tsconfig.test.json has 32 TypeScript diagnostics — pre-existing errors unrelated to dead code deletion
-1020 9:15a ⚖️ ACP跨语言Agent互操作性架构规划 — Critic评审第五轮 verdict请求
-1022 9:16a 🔵 15 unused npm dependencies confirmed — no imports anywhere in frontend source or tests
-1023 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
-1024 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
-1027 9:17a 🟣 Frontend dead code cleanup initiated per PRD and test spec
-1028 " 🔵 Frontend node test suite — 3 failing tests identified during dead code cleanup verification
-1030 " ✅ Frontend dead code cleanup — Wave 3 modules and tests deleted
-1032 9:20a 🔵 Stop-gate review ALLOW — frontend dead code cleanup passed
-1033 " 🔄 Stop-gate review ALLOW — frontend dead code cleanup passed
-1034 " 🔄 Stop-gate review ALLOW — frontend dead code cleanup passed
-1037 9:21a 🔵 Stop-gate review ALLOW — frontend dead code cleanup verified from session transcript
-1038 9:22a 🔵 Stop-gate review ALLOW — frontend dead code cleanup reporting-only turn
-1039 " 🔵 Stop-gate review ALLOW — frontend dead code cleanup reporting-only turn
-1040 " 🔵 Frontend dead code cleanup verified — zero residual references to deleted modules
-1042 9:23a 🔵 fetchWrapper side-effect removal confirmed safe — no window.fetch monkey-patching remains
-1044 " 🔵 Frontend test suite baseline confirmed — 7 pre-existing failures are not caused by dead code cleanup
-1045 " 🔵 OMC project-memory learner hook has a recurring TypeError on background task output
+1051 9:26a 🔵 Pre-existing test baseline — 7 failing tests before dead code cleanup changes
+1052 " 🔵 ralplan session state stuck in non-terminal phase — read-only filesystem blocks recovery
+1055 9:27a 🔴 Stale ralplan session state terminalized via stop-hook recovery
+1057 " 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1059 9:28a 🔵 7 failing frontend node tests identified — source code mismatches with test expectations
+1061 9:30a 🔵 FindingDetailCodePanel test 170 failure root cause — "查看文件" text inside JSX comment block, not rendered HTML
+1062 " 🔄 Frontend dead code cleanup task initiated
+1065 " 🔵 Frontend project structure — dual repo layout confirmed
+1067 9:31a 🔄 Frontend dead code cleanup task initiated
+1070 9:32a 🔵 Frontend dead code cleanup test specifications loaded — 5 test suites with 15+ assertions mapped
+1071 " ✅ DashboardCommandCenter recent task title styling downgraded from semibold to muted
+1073 9:33a ✅ DashboardCommandCenter recent task metadata spacing increased from gap-1 to gap-3
+1074 " 🔵 TaskDetailPage event log scrollbar implementation verified — dark scrollbar classes present
+1077 9:34a ✅ TaskDetailPage event log container refactored — conditional className moved to inline styles
+1078 " 🔵 ProjectsTable containerClassName set to overflow-visible — removes inner scrollbar
+1081 " ✅ ProjectsTable test file fixed — hardcoded path replaced with relative path resolution
+1082 " ✅ FindingDetailCodePanel section container styling updated — rounded-xl with bg-card/35
+1088 9:38a 🔵 Frontend dead code cleanup — 44 files deleted, 6,347 lines removed; TypeScript compilation now shows 33 errors requiring fixes
+1091 " 🔄 Frontend dead code cleanup task initiated
+1096 9:39a 🔄 Dead code removal — unused imports and unexported symbols prefixed with underscore
+1097 9:40a 🔄 Frontend dead code cleanup task initiated
+1098 9:41a ⚖️ ACP协议与ruflo框架适用性研究报告请求
+1099 " 🔄 Frontend dead code cleanup task initiated
+1100 " 🔴 toolEvidence.ts dead code deletion caused missing wrapParsedEvidence references
+1103 9:42a 🔄 Frontend dead code cleanup task initiated
+1101 " ⚖️ ACP异构Agent互操作层架构定位确立
+1102 " 🔵 项目已有完整ACP+Ruflo评估报告和跨语言互操作PRD
+1104 9:48a ⚖️ ACP协议与ruflo框架适用性研究报告请求
+1106 " ⚖️ ACP跨语言Agent互操作架构 — PRD与测试规范完整内容确认
+1107 " ⚖️ ACP架构升级 — 所有agent统一容器化，引入REST+ACP双平面模型
+1105 " 🔵 Frontend node test suite — 7 failing tests with root causes mapped
+1109 9:50a 🔴 CreateProjectScanDialog.tsx — two TS errors fixed, toolEvidence.ts restored from git
+1108 9:52a ⚖️ ACP+ruflo框架适用性研究报告请求 — 第二轮ralplan启动
+1110 " ✅ ACP架构文档全面更新 — Rust agent容器化、REST+ACP双平面、Hermes集成约束
+1111 9:53a 🔴 DashboardCommandCenter.tsx — 3 unused dead code items deleted
+1114 9:54a ⚖️ ACP+ruflo框架适用性研究报告请求 — 持续进行中
+1115 9:55a ✅ PRD和测试规范全面更新 — 所有agent统一Docker化约束落地
+1116 " ⚖️ ACP跨语言Agent互操作性架构规划 — Architect评审（第五轮）
+1121 9:57a 🔄 Frontend dead code cleanup task initiated
+1123 10:00a 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1124 " ⚖️ ACP跨语言Agent互操作性架构 — 基座Agent + Docker容器化功能Agent设计方案评估
+1125 10:01a 🔴 ProjectsTable — 1 failing test fixed by updating column header text
+1127 " 🔵 ACP跨语言Agent互操作性架构 — 现有仓库约束与双平面设计完整文档体系
+1126 10:02a 🔴 ProjectsTable — serialNumber column deleted to fix remaining test failure
+1128 10:03a 🔄 Frontend dead code cleanup initiated per PRD and test spec
+1131 10:04a 🔴 projectsPageTable.test.tsx — th header regex relaxed to allow child elements
+1130 10:05a ⚖️ ACP跨语言Agent互操作性架构 — 基座Agent + Docker容器化功能Agent方案评估
+1132 10:06a 🔵 VulHunter仓库现状深度探查 — Rust控制面、synthetic runtime与Docker基础设施
+1133 " 🔴 ProjectsTable header font size changed from text-base to text-[15px] to fix failing test
+1134 10:08a 🔄 Frontend dead code cleanup completed — 62 files changed, 1090 lines deleted
 
-Access 1247k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1136k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

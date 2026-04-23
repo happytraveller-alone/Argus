@@ -143,7 +143,7 @@
 |--------|--------|----------|
 | 知识库（knowledge/） | 17 | 2026-04-22 |
 | 外部扫描引擎（external_tools.py） | 1 | 2026-04-22 |
-| 智能扫描（smart_scan_tool.py） | 1 | 2026-04-22 |
+| 智能审计（smart_scan_tool.py） | 1 | 2026-04-22 |
 | 沙箱语言工具（sandbox_language.py） | 1 | 2026-04-22 |
 | 漏洞专项沙箱（sandbox_vuln.py） | 1 | 2026-04-22 |
 | 昆仑引擎（kunlun_tool.py） | 1 | 2026-04-22 |

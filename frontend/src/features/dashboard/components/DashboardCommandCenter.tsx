@@ -125,19 +125,19 @@ const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "vulnerability-types",
 		label: "漏洞类型统计图",
-		description: "展示智能扫描中已验证漏洞类型 Top10。",
+		description: "展示智能审计中已验证漏洞类型 Top10。",
 		yAxisLabel: "漏洞类型标号",
 	},
 	{
 		id: "scan-engines",
 		label: "扫描引擎统计图",
-		description: "展示各扫描引擎发现漏洞数量，覆盖静态扫描与智能扫描。",
+		description: "展示各扫描引擎发现漏洞数量，覆盖静态审计与智能审计。",
 		yAxisLabel: "引擎名称",
 	},
 	{
 		id: "static-engine-rules",
 		label: "扫描规则统计图",
-		description: "展示各静态扫描引擎当前规则数量。",
+		description: "展示各静态审计引擎当前规则数量。",
 		yAxisLabel: "引擎名称",
 	},
 	{
@@ -353,18 +353,6 @@ function formatTrendDate(value: string) {
 	return value;
 }
 
-function formatCreatedAt(value: string) {
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) {
-		return value || "-";
-	}
-	const month = `${date.getMonth() + 1}`.padStart(2, "0");
-	const day = `${date.getDate()}`.padStart(2, "0");
-	const hour = `${date.getHours()}`.padStart(2, "0");
-	const minute = `${date.getMinutes()}`.padStart(2, "0");
-	return `${month}-${day} ${hour}:${minute}`;
-}
-
 export function formatCumulativeDuration(
 	durationMs: number | null | undefined,
 ) {
@@ -432,8 +420,8 @@ function renderTrendTooltip(payload: {
 			<p className="font-semibold text-foreground">{row.date}</p>
 			<div className="mt-2 space-y-1 text-muted-foreground">
 				{/* <p>当日累计新增漏洞发现：{formatNumber(row.totalNewFindings)}</p> */}
-				<p>当日静态扫描漏洞发现：{formatNumber(row.staticFindings)}</p>
-				<p>当日智能扫描漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}</p>
+				<p>当日静态审计漏洞发现：{formatNumber(row.staticFindings)}</p>
+				<p>当日智能审计漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}</p>
 			</div>
 		</div>
 	);
@@ -495,11 +483,11 @@ function buildEngineRows(
 		phpstan: "phpstan",
 	};
 	const metaMap: Record<string, string> = {
-		llm: "智能扫描",
-		opengrep: "静态扫描",
-		gitleaks: "静态扫描",
-		bandit: "静态扫描",
-		phpstan: "静态扫描",
+		llm: "智能审计",
+		opengrep: "静态审计",
+		gitleaks: "静态审计",
+		bandit: "静态审计",
+		phpstan: "静态审计",
 	};
 	return items
 		.slice()
@@ -622,8 +610,8 @@ export function buildTaskStatusTooltipItems(
 	breakdown: DashboardTaskStatusScanTypeBreakdown,
 ): TaskStatusTooltipItem[] {
 	return [
-		{ label: "静态扫描", value: breakdown.static },
-		{ label: "智能扫描", value: breakdown.intelligent },
+		{ label: "静态审计", value: breakdown.static },
+		{ label: "智能审计", value: breakdown.intelligent },
 	];
 }
 
@@ -677,20 +665,12 @@ export function getRecentTaskProjectTitle(task: DashboardRecentTaskItem): string
 	return segments[segments.length - 1]?.trim() || title;
 }
 
-function getRecentTaskTypeBadgeClassName(taskType: string | null | undefined): string {
-	const normalized = String(taskType || "").trim();
-	if (normalized.includes("智能")) {
-		return "border-sky-500/30 bg-sky-500/10 text-sky-300";
-	}
-	return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-}
-
 function normalizeRecentTaskTypeLabel(taskType: string | null | undefined): string {
 	const normalized = String(taskType || "").trim();
 	if (normalized.includes("混合")) {
-		return "智能扫描";
+		return "智能审计";
 	}
-	return normalized || "静态扫描";
+	return normalized || "静态审计";
 }
 
 export function paginateRecentTasks(
@@ -988,7 +968,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 		<div className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}>
 			<div className="flex items-start justify-between gap-1">
 				<div className="min-w-0">
-					<p className="truncate text-sm font-semibold tracking-[0.01em] text-foreground">
+					<p className="truncate text-xs text-muted-foreground">
 						{projectTitle}
 					</p>
 				</div>
@@ -1001,7 +981,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 					<Eye className="h-3 w-4" />
 				</a>
 			</div>
-			<div className="mt-3 flex items-center justify-between gap-1 text-xs text-muted-foreground">
+			<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
 				<span>
 					{normalizeRecentTaskTypeLabel(task.task_type)}
 				</span>
@@ -1021,20 +1001,6 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	const trendRows = useMemo(
 		() => buildTrendRows(snapshot.daily_activity),
 		[snapshot.daily_activity],
-	);
-	const peakItem = trendRows.reduce(
-		(result, item) =>
-			item.totalNewFindings > result.totalNewFindings ? item : result,
-		{
-			date: "-",
-			totalNewFindings: 0,
-			staticFindings: 0,
-			intelligentVerifiedFindings: 0,
-			staticShare: 0,
-			intelligentShare: 0,
-			staticLabel: 0,
-			intelligentLabel: 0,
-		},
 	);
 	const latestItem = trendRows[trendRows.length - 1];
 
@@ -1063,12 +1029,12 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 					// 	meta: peakItem.date === "-" ? "" : `峰值 ${peakItem.date}`,
 					// },
 					{
-						label: "当日静态扫描漏洞发现",
+						label: "当日静态审计漏洞发现",
 						value: formatNumber(latestItem?.staticFindings ?? 0),
 						meta: latestItem ? `${latestItem.date} 最新` : "",
 					},
 					{
-						label: "当日智能扫描漏洞发现",
+						label: "当日智能审计漏洞发现",
 						value: formatNumber(latestItem?.intelligentVerifiedFindings ?? 0),
 						meta: latestItem ? `${latestItem.date} 最新` : "",
 					},
@@ -1103,12 +1069,12 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.medium.chip}`}
 						>
-							当日静态扫描漏洞发现
+							当日静态审计漏洞发现
 						</span>
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.high.chip}`}
 						>
-							当日智能扫描漏洞发现
+							当日智能审计漏洞发现
 						</span>
 					</div>
 				</div>
@@ -1137,7 +1103,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 							<Bar
 								dataKey="staticShare"
 								stackId="share"
-								name="当日静态扫描漏洞发现"
+								name="当日静态审计漏洞发现"
 								fill={TONE_STYLES.medium.fill}
 								fillOpacity={0.28}
 								barSize={18}
@@ -1147,7 +1113,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 							<Bar
 								dataKey="intelligentShare"
 								stackId="share"
-								name="当日智能扫描漏洞发现"
+								name="当日智能审计漏洞发现"
 								fill={TONE_STYLES.high.fill}
 								fillOpacity={0.32}
 							>
@@ -1168,7 +1134,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 							<Line
 								type="monotone"
 								dataKey="staticFindings"
-								name="当日静态扫描漏洞发现"
+								name="当日静态审计漏洞发现"
 								stroke={TONE_STYLES.medium.fill}
 								strokeWidth={2}
 								dot={false}
@@ -1176,7 +1142,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 							<Line
 								type="monotone"
 								dataKey="intelligentVerifiedFindings"
-								name="当日智能扫描漏洞发现"
+								name="当日智能审计漏洞发现"
 								stroke={TONE_STYLES.high.fill}
 								strokeWidth={2.2}
 								dot={false}

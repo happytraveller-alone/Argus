@@ -247,7 +247,7 @@ export default function StaticAnalysis() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
-            静态扫描详情
+            静态审计详情
           </h1>
         </div>
         <div className="flex items-center gap-2">

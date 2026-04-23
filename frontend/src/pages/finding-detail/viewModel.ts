@@ -823,7 +823,7 @@ export function buildAgentFindingDetailModel(params: {
     fallbackLabel: String(finding.vulnerability_type || "").trim() || MISSING_VALUE,
   });
   const trackingItems = buildTrackingItems({
-    sourceLabel: "智能扫描",
+    sourceLabel: "智能审计",
     taskId: params.taskId,
     findingId: params.findingId,
     location,
@@ -941,7 +941,7 @@ export function buildOpengrepFindingDetailModel(params: {
     { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
   ];
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · Opengrep",
+    sourceLabel: "静态审计 · Opengrep",
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
@@ -1008,7 +1008,7 @@ export function buildGitleaksFindingDetailModel(params: {
   ];
   const headlineValue = String(finding.rule_id || "").trim() || "gitleaks-rule";
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · Gitleaks",
+    sourceLabel: "静态审计 · Gitleaks",
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
@@ -1075,7 +1075,7 @@ export function buildBanditFindingDetailModel(params: {
     { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
   ];
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · Bandit",
+    sourceLabel: "静态审计 · Bandit",
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
@@ -1141,7 +1141,7 @@ export function buildPhpstanFindingDetailModel(params: {
     String(finding.message || "").trim() ||
     "phpstan-rule";
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · PHPStan",
+    sourceLabel: "静态审计 · PHPStan",
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
@@ -1219,7 +1219,7 @@ export function buildPmdFindingDetailModel(params: {
     String(finding.message || "").trim() ||
     "pmd-rule";
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态扫描 · PMD",
+    sourceLabel: "静态审计 · PMD",
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,

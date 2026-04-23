@@ -292,6 +292,8 @@ test("ScanConfigExternalToolDetailContent 对 builtin Prompt Skill 渲染只读�
         toolType: "prompt-builtin",
         toolId: "analysis",
         toolName: "Analysis Agent Prompt Skill",
+        prompt: "",
+        examplePrompts: [],
         promptSkillDetail: {
           tool_type: "prompt-builtin",
           tool_id: "analysis",
@@ -314,7 +316,7 @@ test("ScanConfigExternalToolDetailContent 对 builtin Prompt Skill 渲染只读�
         onPromptChange: () => {},
         onRun: () => {},
         onStop: () => {},
-      } as ExternalToolDetailContentProps),
+      } as unknown as ExternalToolDetailContentProps),
     ),
   );
 
@@ -337,6 +339,8 @@ test("ScanConfigExternalToolDetailContent 对 custom Prompt Skill 渲染编辑�
         toolType: "prompt-custom",
         toolId: "custom-1",
         toolName: "Verification Notes",
+        prompt: "",
+        examplePrompts: [],
         promptSkillDetail: {
           tool_type: "prompt-custom",
           tool_id: "custom-1",
@@ -359,7 +363,7 @@ test("ScanConfigExternalToolDetailContent 对 custom Prompt Skill 渲染编辑�
         onPromptChange: () => {},
         onRun: () => {},
         onStop: () => {},
-      } as ExternalToolDetailContentProps),
+      } as unknown as ExternalToolDetailContentProps),
     ),
   );
 

@@ -17,8 +17,8 @@ test("fetchTaskActivities maps effective severity stats for intelligent task sum
           {
             id: "agent-intelligent",
             project_id: "project-1",
-            name: "智能扫描-Demo",
-            description: "[INTELLIGENT]智能扫描任务",
+            name: "智能审计-Demo",
+            description: "[INTELLIGENT]智能审计任务",
             task_type: "agent_audit",
             status: "completed",
             current_phase: null,
@@ -74,7 +74,7 @@ test("fetchTaskActivities maps effective severity stats for intelligent task sum
           {
             id: "agent-legacy",
             project_id: "project-1",
-            name: "历史智能扫描-Demo",
+            name: "历史智能审计-Demo",
             description: "历史迁移前任务",
             task_type: "agent_audit",
             status: "running",
@@ -155,7 +155,7 @@ test("fetchTaskActivities maps effective severity stats for intelligent task sum
     const intelligentStats = intelligent
       .map((activity) => activity.agentFindingStats)
       .filter(Boolean)
-      .sort((left, right) => right.total - left.total);
+      .sort((left, right) => right!.total - left!.total);
     const intelligentStatuses = intelligent.map((activity) => activity.status);
 
     assert.deepEqual(
@@ -205,8 +205,8 @@ test("fetchTaskActivities falls back to effective severity stats when defect_sum
           {
             id: "agent-fallback",
             project_id: "project-1",
-            name: "智能扫描-Fallback",
-            description: "[INTELLIGENT]智能扫描任务",
+            name: "智能审计-Fallback",
+            description: "[INTELLIGENT]智能审计任务",
             task_type: "agent_audit",
             status: "completed",
             current_phase: null,

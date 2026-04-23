@@ -4,13 +4,14 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import ScanConfigExternalTools from "../src/pages/ScanConfigExternalTools.tsx";
+import type { ExternalToolResourcePayload } from "../src/shared/api/database.ts";
 import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
 const initialResources = [
   {
-    tool_type: "skill",
+    tool_type: "skill" as const,
     tool_id: "search_code",
     name: "search_code",
     summary: "在项目中检索代码片段、关键字与命中位置。",
@@ -25,7 +26,7 @@ const initialResources = [
     scope: null,
   },
   {
-    tool_type: "prompt-builtin",
+    tool_type: "prompt-builtin" as const,
     tool_id: "analysis",
     name: "Analysis Agent Prompt Skill",
     summary: "围绕单风险点做证据闭环。",
@@ -40,7 +41,7 @@ const initialResources = [
     scope: null,
   },
   {
-    tool_type: "prompt-custom",
+    tool_type: "prompt-custom" as const,
     tool_id: "custom-1",
     name: "Verification Notes",
     summary: "补充验证阶段的证据约束。",
@@ -54,7 +55,7 @@ const initialResources = [
     agent_key: "verification",
     scope: "agent_specific",
   },
-];
+] as ExternalToolResourcePayload[];
 
 test("ScanConfigExternalTools 渲染统一混合表并暴露 Prompt Skill 创建入口", () => {
   const markup = renderToStaticMarkup(

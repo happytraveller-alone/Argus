@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 test("ProjectDetail 最近任务工具栏只保留搜索并隐藏筛选重置密度", () => {
 	const source = readFileSync(
-		"/home/xyf/AuditTool/frontend/src/pages/ProjectDetail.tsx",
+		path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src/pages/ProjectDetail.tsx"),
 		"utf8",
 	);
 
@@ -20,7 +22,7 @@ test("ProjectDetail 最近任务工具栏只保留搜索并隐藏筛选重置密
 
 test("ProjectDetail 最近任务表格在最左侧增加连续序号列", () => {
 	const source = readFileSync(
-		"/home/xyf/AuditTool/frontend/src/pages/ProjectDetail.tsx",
+		path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src/pages/ProjectDetail.tsx"),
 		"utf8",
 	);
 
@@ -31,7 +33,7 @@ test("ProjectDetail 最近任务表格在最左侧增加连续序号列", () => 
 
 test("ProjectDetail 最近任务状态 badge 统一使用非加粗字重", () => {
 	const source = readFileSync(
-		"/home/xyf/AuditTool/frontend/src/pages/ProjectDetail.tsx",
+		path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src/pages/ProjectDetail.tsx"),
 		"utf8",
 	);
 

@@ -37,7 +37,7 @@ test("projectCardPreview folds legacy agent tasks into intelligent preview state
     {
       id: "agent-legacy",
       project_id: "project-1",
-      name: "历史智能扫描-Demo",
+      name: "历史智能审计-Demo",
       description: "历史迁移前任务",
       status: "completed",
       created_at: "2026-03-15T00:00:00Z",
@@ -69,7 +69,7 @@ test("projectCardPreview folds legacy agent tasks into intelligent preview state
     opengrepTasks: [] as any,
     gitleaksTasks: [] as any,
   });
-  assert.equal(recentTasks[0]?.label, "智能扫描");
+  assert.equal(recentTasks[0]?.label, "智能审计");
   assert.equal(recentTasks[0]?.taskCategory, "intelligent");
 
   const potential = getProjectCardPotentialVulnerabilities({

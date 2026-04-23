@@ -62,8 +62,8 @@ const VULNERABILITY_METRIC_CHIP_CLASSNAMES = {
 const METRIC_CHIP_VALUE_CLASSNAME =
   "text-center font-semibold tabular-nums text-[18px]";
 const HEADER_CELL_CLASSNAME =
-  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-base font-semibold uppercase tracking-[0.18em] text-foreground/80";
-const HEADER_CONTENT_CLASSNAME = "text-base";
+  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-[15px] font-semibold uppercase tracking-[0.18em] text-foreground/80";
+const HEADER_CONTENT_CLASSNAME = "text-[15px]";
 const BODY_CELL_CLASSNAME = "border-b-2 border-border/95";
 const DIVIDER_CELL_CLASSNAME = "border-r-2 border-border/90";
 const SECTION_DIVIDER_CLASSNAME = "border-l-2 border-border/95";
@@ -244,19 +244,6 @@ function buildColumns(
 ): AppColumnDef<ProjectsPageRowViewModel, unknown>[] {
   return [
     {
-      id: "serialNumber",
-      accessorFn: (row) => row.serialNumber,
-      header: "序号",
-      meta: {
-        label: "序号",
-        minWidth: 76,
-        headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
-        headerContentClassName: HEADER_CONTENT_CLASSNAME,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center font-mono text-[17px] font-semibold text-foreground/85`,
-      },
-      cell: ({ row }) => row.original.serialNumber,
-    },
-    {
       accessorKey: "name",
       header: "项目名称",
       meta: {
@@ -334,7 +321,7 @@ function buildColumns(
     {
       id: "vulnerabilities",
       accessorFn: (row) => row.vulnerabilityStats.total,
-      header: "发现漏洞",
+      header: "发现潜在漏洞",
       meta: {
         label: "发现漏洞",
         minWidth: 120,

@@ -191,15 +191,15 @@ test("resolveAgentAuditDetailTitle always keeps the intelligent detail label", (
       name: "历史任务-Demo",
       description: "[LEGACY]历史迁移任务",
     }),
-    "智能扫描详情",
+    "智能审计详情",
   );
   assert.equal(
     resolveAgentAuditDetailTitle({
       returnTo: "/tasks/intelligent",
-      name: "智能扫描-Demo",
-      description: "[INTELLIGENT]智能扫描任务",
+      name: "智能审计-Demo",
+      description: "[INTELLIGENT]智能审计任务",
     }),
-    "智能扫描详情",
+    "智能审计详情",
   );
 });
 

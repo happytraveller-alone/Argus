@@ -121,7 +121,6 @@ export default function CreateProjectScanDialog({
 	const [pmdEnabled, setPmdEnabled] = useState(false);
 	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
-	const [loadingRules, setLoadingRules] = useState(false);
 
 	const [showLlmQuickFixPanel, setShowLlmQuickFixPanel] = useState(false);
 	const [llmProviderOptions, setLlmProviderOptions] = useState<LLMProviderItem[]>(
@@ -184,8 +183,8 @@ export default function CreateProjectScanDialog({
 
 	const dialogTitle = useMemo(() => {
 		if (!lockMode) return "创建扫描";
-		if (initialMode === "agent") return "创建智能扫描";
-		return "创建静态扫描";
+		if (initialMode === "agent") return "创建智能审计";
+		return "创建静态审计";
 	}, [initialMode, lockMode]);
 
 	const isLlmMode = mode === "agent";
@@ -295,14 +294,11 @@ export default function CreateProjectScanDialog({
 
 		const loadRules = async () => {
 			try {
-				setLoadingRules(true);
 				const rules = await getOpengrepRules({ is_active: true });
 				setActiveRules(rules.filter(isSevereCreateProjectScanRule));
 			} catch (error) {
 				console.error("加载启用规则失败:", error);
 				toast.error("加载启用规则失败");
-			} finally {
-				setLoadingRules(false);
 			}
 		};
 
@@ -535,7 +531,7 @@ export default function CreateProjectScanDialog({
 			phpstanTask?.id ||
 			pmdTask?.id;
 		if (!primaryTaskId) {
-			throw new Error("静态扫描任务创建失败");
+			throw new Error("静态审计任务创建失败");
 		}
 
 		const params = new URLSearchParams();
@@ -571,11 +567,10 @@ export default function CreateProjectScanDialog({
 
 	const buildAgentTaskPayload = (
 		project: Project,
-		source: "agent" = "agent",
 	) => ({
 		project_id: project.id,
-		name: `智能扫描-${project.name}`,
-		description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
+		name: `智能审计-${project.name}`,
+		description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
 		target_files: parsedTargetFiles.length > 0 ? parsedTargetFiles : undefined,
 		use_prompt_skills: true,
 		verification_level: "analysis_with_poc_plan" as const,
@@ -594,8 +589,7 @@ export default function CreateProjectScanDialog({
 
 	const createAgentTaskForProject = async (
 		project: Project,
-		source: "agent" = "agent",
-	) => createAgentTask(buildAgentTaskPayload(project, source));
+	) => createAgentTask(buildAgentTaskPayload(project));
 
 	const handleQuickFixProviderChange = (nextProvider: string) => {
 		const nextConfig = resolveQuickConfigAfterProviderChange({
@@ -789,10 +783,10 @@ export default function CreateProjectScanDialog({
 		project: Project,
 		action: "primary" | "secondary",
 	) => {
-		const agentTask = await createAgentTaskForProject(project, "agent");
+		const agentTask = await createAgentTaskForProject(project);
 		onOpenChange(false);
 		onTaskCreated?.();
-		toast.success("智能扫描任务已创建");
+		toast.success("智能审计任务已创建");
 		if (action === "secondary") {
 			onSecondaryCreateSuccess?.();
 		} else if (navigateOnSuccess) {
@@ -876,7 +870,7 @@ export default function CreateProjectScanDialog({
 						const result = await createStaticTasksForProject(createdProject);
 						onOpenChange(false);
 						onTaskCreated?.();
-						toast.success("静态扫描任务已创建");
+						toast.success("静态审计任务已创建");
 						if (action === "secondary") {
 							onSecondaryCreateSuccess?.();
 						} else if (navigateOnSuccess) {
@@ -915,7 +909,7 @@ export default function CreateProjectScanDialog({
 
 			if (mode === "static") {
 				if (!isZipProject(selectedProject)) {
-					toast.error("静态扫描仅支持源码压缩包项目");
+					toast.error("静态审计仅支持源码压缩包项目");
 					return;
 				}
 				const zipInfo = await getZipFileInfo(selectedProject.id);
@@ -939,7 +933,7 @@ export default function CreateProjectScanDialog({
 				const result = await createStaticTasksForProject(selectedProject);
 				onOpenChange(false);
 				onTaskCreated?.();
-				toast.success("静态扫描任务已创建");
+				toast.success("静态审计任务已创建");
 				if (action === "secondary") {
 					onSecondaryCreateSuccess?.();
 				} else if (navigateOnSuccess) {
@@ -969,7 +963,7 @@ export default function CreateProjectScanDialog({
 		} catch (error) {
 			const message = extractCreateProjectScanApiErrorMessage(error);
 			const failureText =
-				mode === "agent" ? `智能扫描创建失败：${message}` : `创建失败: ${message}`;
+				mode === "agent" ? `智能审计创建失败：${message}` : `创建失败: ${message}`;
 			toast.error(failureText);
 		} finally {
 			setCreating(false);

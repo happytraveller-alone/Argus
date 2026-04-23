@@ -819,7 +819,7 @@ export default function ScanConfigExternalToolDetail() {
       setError(null);
       try {
         const [detailPayload, promptPayload] = await Promise.all([
-          api.getExternalToolResourceDetail(toolType, toolId),
+          api.getExternalToolResourceDetail(toolType!, toolId),
           toolType === "skill" ? Promise.resolve(null) : api.getPromptSkills({ limit: 1 }),
         ]);
 

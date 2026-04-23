@@ -300,7 +300,7 @@ test("FindingDetailView 渲染 opengrep 场景并将描述降级为扫描说明"
   assert.match(markup, /严重/);
   assert.match(markup, /高/);
   assert.match(markup, /扫描说明/);
-  assert.match(markup, /静态扫描 . Opengrep/);
+  assert.match(markup, /静态审计 . Opengrep/);
 });
 
 test("FindingDetailView 渲染 gitleaks 场景并补齐未提供字段文案", () => {
@@ -317,7 +317,7 @@ test("FindingDetailView 渲染 gitleaks 场景并补齐未提供字段文案", (
   assert.match(markup, /未分级/);
   assert.match(markup, /未提供/);
   assert.match(markup, /扫描说明/);
-  assert.match(markup, /静态扫描 . Gitleaks/);
+  assert.match(markup, /静态审计 . Gitleaks/);
 });
 
 test("FindingDetailView 渲染 bandit 场景并保留核心漏洞信息", () => {
@@ -337,7 +337,7 @@ test("FindingDetailView 渲染 bandit 场景并保留核心漏洞信息", () => 
   assert.match(markup, /高危/);
   assert.match(markup, /高/);
   assert.match(markup, /扫描说明/);
-  assert.match(markup, /静态扫描 . Bandit/);
+  assert.match(markup, /静态审计 . Bandit/);
   assert.match(markup, /当前项目暂不支持查看完整文件，仅展示漏洞相关代码/);
 });
 

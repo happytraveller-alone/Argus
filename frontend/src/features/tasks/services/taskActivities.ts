@@ -111,9 +111,9 @@ export function getTaskKindText(
 	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
 ): string {
 	if (activity.kind === "rule_scan") {
-		return "静态扫描";
+		return "静态审计";
 	}
-	return "智能扫描";
+	return "智能审计";
 }
 
 function mapProjectNames(projects: Project[]) {
@@ -465,7 +465,7 @@ export function filterActivitiesByKind(
 	);
 	if (!trimmed) return filteredByKind;
 
-	const kindText = kind === "rule_scan" ? "静态扫描" : "智能扫描";
+	const kindText = kind === "rule_scan" ? "静态审计" : "智能审计";
 	return filteredByKind.filter((activity) => {
 		return (
 			activity.projectName.toLowerCase().includes(trimmed) ||

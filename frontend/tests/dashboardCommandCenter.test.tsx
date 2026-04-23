@@ -191,8 +191,8 @@ function createSnapshotFixture() {
 		recent_tasks: [
 			{
 				task_id: "at-1",
-				task_type: "智能扫描",
-				title: "智能扫描 · Alpha Gateway",
+				task_type: "智能审计",
+				title: "智能审计 · Alpha Gateway",
 				engine: "llm",
 				status: "running",
 				created_at: "2026-03-23T02:30:00.000Z",
@@ -200,8 +200,8 @@ function createSnapshotFixture() {
 			},
 			{
 				task_id: "at-2",
-				task_type: "智能扫描",
-				title: "智能扫描 · Beta API",
+				task_type: "智能审计",
+				title: "智能审计 · Beta API",
 				engine: "llm",
 				status: "completed",
 				created_at: "2026-03-23T01:30:00.000Z",
@@ -209,8 +209,8 @@ function createSnapshotFixture() {
 			},
 			{
 				task_id: "og-1",
-				task_type: "静态扫描",
-				title: "静态扫描 · Gamma Portal",
+				task_type: "静态审计",
+				title: "静态审计 · Gamma Portal",
 				engine: "opengrep",
 				status: "failed",
 				created_at: "2026-03-23T00:30:00.000Z",
@@ -218,8 +218,8 @@ function createSnapshotFixture() {
 			},
 			{
 				task_id: "ps-1",
-				task_type: "静态扫描",
-				title: "静态扫描 · Delta PHP",
+				task_type: "静态审计",
+				title: "静态审计 · Delta PHP",
 				engine: "phpstan",
 				status: "completed",
 				created_at: "2026-03-22T23:30:00.000Z",
@@ -300,7 +300,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /Gamma Portal/);
 	assert.match(markup, /Delta PHP/);
 	assert.match(markup, /查看已完成状态下的扫描类型细分/);
-	assert.doesNotMatch(markup, /静态扫描 · Echo Console/);
+	assert.doesNotMatch(markup, /静态审计 · Echo Console/);
 	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
 	assert.doesNotMatch(markup, /共 \d+ 条/);
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
@@ -350,8 +350,8 @@ test("task status tooltip items preserve subtype counts, including zero values",
 			intelligent: 2,
 		}),
 		[
-			{ label: "静态扫描", value: 10 },
-			{ label: "智能扫描", value: 2 },
+			{ label: "静态审计", value: 10 },
+			{ label: "智能审计", value: 2 },
 		],
 	);
 	assert.deepEqual(
@@ -360,8 +360,8 @@ test("task status tooltip items preserve subtype counts, including zero values",
 			intelligent: 0,
 		}),
 		[
-			{ label: "静态扫描", value: 0 },
-			{ label: "智能扫描", value: 0 },
+			{ label: "静态审计", value: 0 },
+			{ label: "智能审计", value: 0 },
 		],
 	);
 });
@@ -374,8 +374,8 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 	snapshot.recent_tasks = [
 		{
 			task_id: "gl-batch",
-			task_type: "静态扫描",
-			title: "静态扫描 · Gamma Portal",
+			task_type: "静态审计",
+			title: "静态审计 · Gamma Portal",
 			engine: "gitleaks",
 			status: "completed",
 			created_at: "2026-03-23T00:30:00.000Z",

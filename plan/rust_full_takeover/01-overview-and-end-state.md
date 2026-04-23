@@ -77,6 +77,6 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 - ACP 官方 Rust SDK 已存在，当前 Phase E 把它视为内部 runtime / capability 建模输入，而不是公开 API 替代品
 - Python 剩余 66 个源文件，全部集中在 `app/services/agent/`，构成 LLM 驱动的 Agent 智能层
 - Python 通过 subprocess bridge 调用 Rust binary（runner/code2flow/flow-parser/scan-scope/finding-payload/queue/sandbox）
-- 知识库、外部扫描引擎、智能扫描、沙箱语言/漏洞专项工具、昆仑引擎已删除（不再做 Rust 接管）
+- 知识库、外部扫描引擎、智能审计、沙箱语言/漏洞专项工具、昆仑引擎已删除（不再做 Rust 接管）
 - `scripts/release-templates/runner_preflight.py` 已删除
 - `scripts/flow_parser_runner.py` 仍活跃（Docker 构建 + function_locator 引用）

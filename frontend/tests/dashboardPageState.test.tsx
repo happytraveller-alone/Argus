@@ -192,7 +192,7 @@ test("dashboard page state ignores cwe buckets that only contain zero findings",
 
 test("dashboard snapshot consumers can tolerate older payloads without task_status_by_scan_type", async () => {
 	const source = await importOrFail<any>("../src/pages/Dashboard.tsx");
-	const snapshot = createSnapshotWithContent() as Record<string, unknown>;
+	const snapshot = createSnapshotWithContent() as unknown as Record<string, unknown>;
 	delete snapshot.task_status_by_scan_type;
 
 	const normalized = source.normalizeSnapshot(snapshot);

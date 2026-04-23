@@ -146,7 +146,7 @@
 
 - 知识库（`knowledge/`）：17 个文件（base + loader + rag + 6 frameworks + 12 vulnerabilities）
 - 外部扫描引擎工具（`external_tools.py`）：Opengrep/NpmAudit/Safety/TruffleHog/OSVScanner
-- 智能扫描工具（`smart_scan_tool.py`）：SmartScanTool + QuickAuditTool
+- 智能审计工具（`smart_scan_tool.py`）：SmartScanTool + QuickAuditTool
 - 沙箱语言工具（`sandbox_language.py`）：8 个语言测试工具 + UniversalCodeTestTool
 - 漏洞专项沙箱（`sandbox_vuln.py`）：7 个漏洞类型测试工具
 - 昆仑引擎（`kunlun_tool.py`）：3 个昆仑工具

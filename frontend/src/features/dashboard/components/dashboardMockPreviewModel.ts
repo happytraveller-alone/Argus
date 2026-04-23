@@ -42,7 +42,7 @@ export interface DashboardPreviewTaskStatus {
 export interface DashboardPreviewRecentTask {
 	id: string;
 	title: string;
-	type: "静态扫描" | "智能扫描";
+	type: "静态审计" | "智能审计";
 	progress: number;
 	createdAt: string;
 	createdAtLabel: string;
@@ -79,7 +79,7 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 	{
 		id: "static-engine-rules",
 		label: "扫描规则统计图",
-		description: "查看各静态扫描引擎规则数量分布情况",
+		description: "查看各静态审计引擎规则数量分布情况",
 	},
 	{
 		id: "language-lines",
@@ -112,7 +112,7 @@ const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 	{
 		label: "Nebula Console",
-		meta: "后台门户 · 智能扫描命中率提升",
+		meta: "后台门户 · 智能审计命中率提升",
 		segments: [
 			{ label: "严重", value: 4, tone: "critical" },
 			{ label: "高危", value: 9, tone: "high" },
@@ -123,7 +123,7 @@ const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 	{
 		label: "Orbit API",
-		meta: "开放接口 · 智能扫描验证加速",
+		meta: "开放接口 · 智能审计验证加速",
 		segments: [
 			{ label: "严重", value: 3, tone: "critical" },
 			{ label: "高危", value: 7, tone: "high" },
@@ -200,7 +200,7 @@ const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 	{
 		label: "Quasar Web",
-		meta: "营销站点 · 智能扫描已清理一轮",
+		meta: "营销站点 · 智能审计已清理一轮",
 		segments: [
 			{ label: "严重", value: 0, tone: "critical" },
 			{ label: "高危", value: 2, tone: "high" },
@@ -322,73 +322,73 @@ const LANGUAGE_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [
 const VULNERABILITY_TYPE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	{
 		label: "CWE-89",
-		meta: "SQL 注入 · 智能扫描已验证",
+		meta: "SQL 注入 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 17, tone: "critical" }],
 		total: 17,
 	},
 	{
 		label: "CWE-862",
-		meta: "越权访问 · 智能扫描已验证",
+		meta: "越权访问 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 13, tone: "high" }],
 		total: 13,
 	},
 	{
 		label: "CWE-78",
-		meta: "命令执行 · 智能扫描已验证",
+		meta: "命令执行 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 11, tone: "medium" }],
 		total: 11,
 	},
 	{
 		label: "CWE-200",
-		meta: "敏感信息泄露 · 智能扫描已验证",
+		meta: "敏感信息泄露 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 8, tone: "low" }],
 		total: 8,
 	},
 	{
 		label: "CWE-79",
-		meta: "跨站脚本 · 智能扫描已验证",
+		meta: "跨站脚本 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 7, tone: "medium" }],
 		total: 7,
 	},
 	{
 		label: "CWE-22",
-		meta: "路径遍历 · 智能扫描已验证",
+		meta: "路径遍历 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 6, tone: "high" }],
 		total: 6,
 	},
 	{
 		label: "CWE-287",
-		meta: "认证绕过 · 智能扫描已验证",
+		meta: "认证绕过 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 6, tone: "critical" }],
 		total: 6,
 	},
 	{
 		label: "CWE-352",
-		meta: "CSRF · 智能扫描已验证",
+		meta: "CSRF · 智能审计已验证",
 		segments: [{ label: "已验证", value: 5, tone: "medium" }],
 		total: 5,
 	},
 	{
 		label: "CWE-434",
-		meta: "任意文件上传 · 智能扫描已验证",
+		meta: "任意文件上传 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 4, tone: "high" }],
 		total: 4,
 	},
 	{
 		label: "CWE-601",
-		meta: "开放重定向 · 智能扫描已验证",
+		meta: "开放重定向 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 4, tone: "low" }],
 		total: 4,
 	},
 	{
 		label: "CWE-502",
-		meta: "不安全反序列化 · 智能扫描已验证",
+		meta: "不安全反序列化 · 智能审计已验证",
 		segments: [{ label: "已验证", value: 3, tone: "critical" }],
 		total: 3,
 	},
 	{
 		label: "CWE-918",
-		meta: "SSRF · 智能扫描已验证",
+		meta: "SSRF · 智能审计已验证",
 		segments: [{ label: "已验证", value: 3, tone: "high" }],
 		total: 3,
 	},
@@ -397,31 +397,31 @@ const VULNERABILITY_TYPE_ROWS: DashboardPreviewLeaderboardRow[] = [
 const SCAN_ENGINE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	{
 		label: "llm",
-		meta: "智能扫描",
+		meta: "智能审计",
 		segments: [{ label: "总数", value: 28, tone: "critical" }],
 		total: 28,
 	},
 	{
 		label: "opengrep",
-		meta: "静态扫描",
+		meta: "静态审计",
 		segments: [{ label: "总数", value: 21, tone: "high" }],
 		total: 21,
 	},
 	{
 		label: "gitleaks",
-		meta: "静态扫描",
+		meta: "静态审计",
 		segments: [{ label: "总数", value: 17, tone: "medium" }],
 		total: 17,
 	},
 	{
 		label: "bandit",
-		meta: "静态扫描",
+		meta: "静态审计",
 		segments: [{ label: "总数", value: 14, tone: "low" }],
 		total: 14,
 	},
 	{
 		label: "phpstan",
-		meta: "静态扫描",
+		meta: "静态审计",
 		segments: [{ label: "总数", value: 11, tone: "medium" }],
 		total: 11,
 	},
@@ -539,48 +539,48 @@ export const DASHBOARD_PREVIEW_TASK_STATUS: DashboardPreviewTaskStatus[] = [
 const DASHBOARD_PREVIEW_RECENT_TASKS: DashboardPreviewRecentTask[] = [
 	{
 		id: "task-206",
-		title: "智能扫描 · Alpha Gateway",
-		type: "智能扫描",
+		title: "智能审计 · Alpha Gateway",
+		type: "智能审计",
 		progress: 92,
 		createdAt: "2026-03-23T16:42:00+08:00",
 		createdAtLabel: "03-23 16:42",
 	},
 	{
 		id: "task-205",
-		title: "智能扫描 · Nebula Console",
-		type: "智能扫描",
+		title: "智能审计 · Nebula Console",
+		type: "智能审计",
 		progress: 81,
 		createdAt: "2026-03-23T16:18:00+08:00",
 		createdAtLabel: "03-23 16:18",
 	},
 	{
 		id: "task-204",
-		title: "静态扫描 · Orbit API",
-		type: "静态扫描",
+		title: "静态审计 · Orbit API",
+		type: "静态审计",
 		progress: 68,
 		createdAt: "2026-03-23T15:56:00+08:00",
 		createdAtLabel: "03-23 15:56",
 	},
 	{
 		id: "task-203",
-		title: "智能扫描 · Mercury Admin",
-		type: "智能扫描",
+		title: "智能审计 · Mercury Admin",
+		type: "智能审计",
 		progress: 54,
 		createdAt: "2026-03-23T15:11:00+08:00",
 		createdAtLabel: "03-23 15:11",
 	},
 	{
 		id: "task-202",
-		title: "静态扫描 · Vega Billing",
-		type: "静态扫描",
+		title: "静态审计 · Vega Billing",
+		type: "静态审计",
 		progress: 37,
 		createdAt: "2026-03-23T14:28:00+08:00",
 		createdAtLabel: "03-23 14:28",
 	},
 	{
 		id: "task-201",
-		title: "静态扫描 · Helios CRM",
-		type: "静态扫描",
+		title: "静态审计 · Helios CRM",
+		type: "静态审计",
 		progress: 19,
 		createdAt: "2026-03-23T13:42:00+08:00",
 		createdAtLabel: "03-23 13:42",

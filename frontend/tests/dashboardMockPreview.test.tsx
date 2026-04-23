@@ -47,9 +47,9 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.match(markup, /查看近七日当日新增漏洞发现与来源构成的波动/);
 	// assert.match(markup, /最近创建任务/);
 	assert.match(markup, /查看详情/);
-	assert.match(markup, /智能扫描 · Alpha Gateway/);
+	assert.match(markup, /智能审计 · Alpha Gateway/);
 	assert.match(markup, /执行进度 92%/);
-	assert.doesNotMatch(markup, /静态扫描 · Helios CRM/);
+	assert.doesNotMatch(markup, /静态审计 · Helios CRM/);
 	assert.doesNotMatch(markup, /模拟数据预览/);
 	assert.doesNotMatch(markup, /排行榜/);
 	assert.doesNotMatch(markup, /等待中/);
@@ -102,7 +102,7 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 	const engineRows = module.getPreviewLeaderboardRows("scan-engines");
 	assert.equal(engineRows[0].label, "llm");
 	assert.equal(engineRows[0].total >= engineRows[1].total, true);
-	assert.match(engineRows[0].meta, /智能扫描/);
+	assert.match(engineRows[0].meta, /智能审计/);
 	assert.equal(engineRows.every((row: { segments: unknown[] }) => row.segments.length === 1), true);
 	assert.equal(engineRows.length, 5);
 	assert.equal(engineRows[4].total <= engineRows[3].total, true);
@@ -133,10 +133,10 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 
 	const recentTasks = module.getRecentPreviewTasks();
 	assert.equal(recentTasks.length, 5);
-	assert.equal(recentTasks[0].title, "智能扫描 · Alpha Gateway");
+	assert.equal(recentTasks[0].title, "智能审计 · Alpha Gateway");
 	assert.equal(recentTasks[0].progress, 92);
 	assert.equal(recentTasks[0].createdAt >= recentTasks[1].createdAt, true);
-	assert.equal(recentTasks[4].title, "静态扫描 · Vega Billing");
+	assert.equal(recentTasks[4].title, "静态审计 · Vega Billing");
 	assert.deepEqual(module.DASHBOARD_PREVIEW_TREND[0], {
 		date: "03-17",
 		totalNewFindings: 18,

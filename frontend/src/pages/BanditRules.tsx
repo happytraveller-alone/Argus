@@ -141,7 +141,7 @@ export default function BanditRules({
 	const [loadingDetail, setLoadingDetail] = useState(false);
 	const [isEditingRule, setIsEditingRule] = useState(false);
 	const [savingRule, setSavingRule] = useState(false);
-	// Bandit integration: 规则编辑用于维护规则页字段，启停/删除状态会影响静态扫描执行。
+	// Bandit integration: 规则编辑用于维护规则页字段，启停/删除状态会影响静态审计执行。
 	const [editRuleForm, setEditRuleForm] = useState({
 		name: "",
 		description_summary: "",

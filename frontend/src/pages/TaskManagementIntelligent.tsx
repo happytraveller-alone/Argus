@@ -95,7 +95,7 @@ export default function TaskManagementIntelligent() {
 							className="flex-1 text-left font-mono font-bold leading-none tracking-tight text-muted-foreground"
 							style={{ fontSize: "1.5rem" }}
 						>
-							智能扫描任务
+							智能审计任务
 						</p>
 						<p className="stat-value shrink-0 text-right text-[clamp(1.25rem,2.6vw,2rem)] leading-none">
 							{stats.total}
@@ -158,7 +158,7 @@ export default function TaskManagementIntelligent() {
 						activities={filteredActivities}
 						loading={loading}
 						nowMs={nowMs}
-						emptyText="暂无智能扫描任务"
+						emptyText="暂无智能审计任务"
 					/>
 				</DeferredSection>
 			
@@ -174,7 +174,7 @@ export default function TaskManagementIntelligent() {
 						initialMode="agent"
 						lockMode
 						allowUploadProject
-						primaryCreateLabel="创建智能扫描任务"
+						primaryCreateLabel="创建智能审计任务"
 					/>
 				</Suspense>
 			) : null}

@@ -21,7 +21,7 @@ const treeNodePath = path.join(
 	"src/pages/AgentAudit/components/AgentTreeNode.tsx",
 );
 
-test("智能扫描详情页相关计数字样和 root agent 计数都使用已验证漏洞口径", () => {
+test("智能审计详情页相关计数字样和 root agent 计数都使用已验证漏洞口径", () => {
 	const statsSource = readFileSync(statsPanelPath, "utf8");
 	const detailPanelSource = readFileSync(detailPanelPath, "utf8");
 	const treeNodeSource = readFileSync(treeNodePath, "utf8");
