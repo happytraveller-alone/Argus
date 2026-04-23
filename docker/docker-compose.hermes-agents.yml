@@ -24,7 +24,7 @@ services:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      start_period: 30s
+      start_period: 60s
       retries: 5
     networks:
       - vulhunter-network
@@ -48,7 +48,7 @@ services:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      start_period: 30s
+      start_period: 60s
       retries: 5
     networks:
       - vulhunter-network
@@ -73,7 +73,7 @@ services:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      start_period: 30s
+      start_period: 60s
       retries: 5
     networks:
       - vulhunter-network
@@ -98,7 +98,7 @@ services:
       test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      start_period: 30s
+      start_period: 60s
       retries: 5
     networks:
       - vulhunter-network

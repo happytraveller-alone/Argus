@@ -54,6 +54,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "YASA_ENABLED" not in compose_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
+    assert 'OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"' in compose_text
     assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in compose_text
     assert "SCANNER_BANDIT_IMAGE" not in compose_text
     assert "SCANNER_GITLEAKS_IMAGE" not in compose_text

@@ -1,17 +1,5 @@
 import { getAgentTasks, type AgentTask } from "@/shared/api/agentTasks";
 import {
-	getBanditScanTasks,
-	type BanditScanTask,
-} from "@/shared/api/bandit";
-import {
-	getPhpstanScanTasks,
-	type PhpstanScanTask,
-} from "@/shared/api/phpstan";
-import {
-	getGitleaksScanTasks,
-	type GitleaksScanTask,
-} from "@/shared/api/gitleaks";
-import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
@@ -46,9 +34,6 @@ export interface TaskPoolsData {
 	projects: Project[];
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
-	gitleaksTasks: GitleaksScanTask[];
-	banditTasks: BanditScanTask[];
-	phpstanTasks: PhpstanScanTask[];
 }
 
 function isCompletedStatus(status: string | null | undefined): boolean {
@@ -89,80 +74,20 @@ async function fetchOpengrepTasksWithPagination(
 	return tasks.slice(0, maxTotal);
 }
 
-async function fetchGitleaksTasksWithPagination(
-	maxTotal: number,
-): Promise<GitleaksScanTask[]> {
-	const tasks: GitleaksScanTask[] = [];
-	let skip = 0;
-	while (tasks.length < maxTotal) {
-		const batch = await getGitleaksScanTasks({
-			skip,
-			limit: STATIC_TASK_PAGE_LIMIT,
-		});
-		if (!Array.isArray(batch) || batch.length === 0) break;
-		tasks.push(...batch);
-		if (batch.length < STATIC_TASK_PAGE_LIMIT) break;
-		skip += batch.length;
-	}
-	return tasks.slice(0, maxTotal);
-}
-
-async function fetchBanditTasksWithPagination(
-	maxTotal: number,
-): Promise<BanditScanTask[]> {
-	const tasks: BanditScanTask[] = [];
-	let skip = 0;
-	while (tasks.length < maxTotal) {
-		const batch = await getBanditScanTasks({
-			skip,
-			limit: STATIC_TASK_PAGE_LIMIT,
-		});
-		if (!Array.isArray(batch) || batch.length === 0) break;
-		tasks.push(...batch);
-		if (batch.length < STATIC_TASK_PAGE_LIMIT) break;
-		skip += batch.length;
-	}
-	return tasks.slice(0, maxTotal);
-}
-
-async function fetchPhpstanTasksWithPagination(
-	maxTotal: number,
-): Promise<PhpstanScanTask[]> {
-	const tasks: PhpstanScanTask[] = [];
-	let skip = 0;
-	while (tasks.length < maxTotal) {
-		const batch = await getPhpstanScanTasks({
-			skip,
-			limit: STATIC_TASK_PAGE_LIMIT,
-		});
-		if (!Array.isArray(batch) || batch.length === 0) break;
-		tasks.push(...batch);
-		if (batch.length < STATIC_TASK_PAGE_LIMIT) break;
-		skip += batch.length;
-	}
-	return tasks.slice(0, maxTotal);
-}
-
 export async function fetchTaskPoolsWithPagination(
 	maxTotal = TASK_POOL_MAX_TOTAL,
 ): Promise<TaskPoolsData> {
-	const [projects, agentTasks, opengrepTasks, gitleaksTasks, banditTasks, phpstanTasks] =
+	const [projects, agentTasks, opengrepTasks] =
 		await Promise.all([
 		api.getProjects(),
 		fetchAgentTasksWithPagination(maxTotal),
 		fetchOpengrepTasksWithPagination(maxTotal),
-		fetchGitleaksTasksWithPagination(maxTotal),
-		fetchBanditTasksWithPagination(maxTotal),
-		fetchPhpstanTasksWithPagination(maxTotal),
 	]);
 
 	return {
 		projects: Array.isArray(projects) ? projects : [],
 		agentTasks,
 		opengrepTasks,
-		gitleaksTasks,
-		banditTasks,
-		phpstanTasks,
 	};
 }
 
@@ -170,14 +95,8 @@ export function buildProjectScanRunsChartData(params: {
 	projects: Project[];
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
-	gitleaksTasks?: GitleaksScanTask[];
-	banditTasks?: BanditScanTask[];
-	phpstanTasks?: PhpstanScanTask[];
 }): ProjectScanRunsChartItem[] {
 	const { projects, agentTasks, opengrepTasks } = params;
-	const gitleaksTasks = params.gitleaksTasks || [];
-	const banditTasks = params.banditTasks || [];
-	const phpstanTasks = params.phpstanTasks || [];
 	const projectNameMap = new Map(
 		projects.map((project) => [project.id, project.name || "未知项目"]),
 	);
@@ -199,22 +118,6 @@ export function buildProjectScanRunsChartData(params: {
 
 	for (const task of opengrepTasks) {
 		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		item.staticRuns += 1;
-	}
-	for (const task of gitleaksTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		item.staticRuns += 1;
-	}
-	for (const task of banditTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		item.staticRuns += 1;
-	}
-	for (const task of phpstanTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		// PHPStan integration: completed phpstan tasks count as static runs.
 		const item = ensureItem(task.project_id);
 		item.staticRuns += 1;
 	}
@@ -242,28 +145,13 @@ export function buildProjectVulnsChartData(params: {
 	projects: Project[];
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
-	gitleaksTasks?: GitleaksScanTask[];
-	banditTasks?: BanditScanTask[];
-	phpstanTasks?: PhpstanScanTask[];
 }): ProjectVulnsChartItem[] {
 	const { projects, agentTasks, opengrepTasks } = params;
-	const gitleaksTasks = params.gitleaksTasks || [];
-	const banditTasks = params.banditTasks || [];
-	const phpstanTasks = params.phpstanTasks || [];
 	const projectNameMap = new Map(
 		projects.map((project) => [project.id, project.name || "未知项目"]),
 	);
 	const projectIdSet = new Set<string>();
 	for (const task of opengrepTasks) {
-		projectIdSet.add(task.project_id);
-	}
-	for (const task of gitleaksTasks) {
-		projectIdSet.add(task.project_id);
-	}
-	for (const task of banditTasks) {
-		projectIdSet.add(task.project_id);
-	}
-	for (const task of phpstanTasks) {
 		projectIdSet.add(task.project_id);
 	}
 	for (const task of agentTasks) {
@@ -276,9 +164,6 @@ export function buildProjectVulnsChartData(params: {
 				projectId,
 				agentTasks,
 				opengrepTasks,
-				gitleaksTasks,
-				banditTasks,
-				phpstanTasks,
 			});
 			return {
 				projectId,

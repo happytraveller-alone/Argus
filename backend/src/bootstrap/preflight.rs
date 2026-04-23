@@ -8,7 +8,6 @@ use tokio::{
 };
 
 use crate::{
-    scan::opengrep,
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -229,22 +228,13 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
 }
 
 async fn build_opengrep_preflight_inputs(
-    state: &AppState,
+    _state: &AppState,
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir =
-        std::env::temp_dir().join(format!("opengrep-preflight-{}", uuid::Uuid::new_v4()));
-    let rules_dir = opengrep::materialize_rule_directory(state, &workspace_dir).await?;
-    let Some(_rules_dir) = rules_dir else {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Ok(None);
-    };
-
-    let command = opengrep::build_validate_command("/work/opengrep-rules");
-    Ok(Some((
-        workspace_dir.clone(),
-        command,
-        vec![(workspace_dir, "/work".to_string())],
-    )))
+    // Preflight only verifies the opengrep binary is functional.
+    // Rule validation happens at scan time via the named workspace volume.
+    // Bind-mounting a temp dir fails in Docker-in-Docker because the Docker
+    // daemon resolves host paths, not container paths.
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -267,11 +257,8 @@ mod tests {
             .iter()
             .find(|spec| spec.name == "opengrep")
             .expect("opengrep spec should exist");
-        assert_eq!(
-            opengrep.command,
-            vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
-        );
-        assert_eq!(opengrep.mounts.len(), 1);
+        assert_eq!(opengrep.command, vec!["opengrep", "--version"]);
+        assert!(opengrep.mounts.is_empty());
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;

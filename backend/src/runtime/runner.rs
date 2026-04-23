@@ -404,11 +404,13 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         container_id = Some(created_id.clone());
 
         let start_args = vec!["start".to_string(), "-a".to_string(), created_id.clone()];
-        let start_output = run_command_capture_with_timeout(
-            &docker_binary,
-            &start_args,
-            Some(Duration::from_secs(spec.timeout_seconds.max(1))),
-        )?;
+        let start_timeout = if spec.timeout_seconds == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(spec.timeout_seconds))
+        };
+        let start_output =
+            run_command_capture_with_timeout(&docker_binary, &start_args, start_timeout)?;
         if start_output.timed_out {
             let _ = run_command_capture(
                 &docker_binary,
@@ -421,7 +423,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             );
             bail!(
                 "docker start timed out after {}s",
-                spec.timeout_seconds.max(1)
+                spec.timeout_seconds
             );
         }
 
@@ -621,6 +623,9 @@ case "$cmd" in
     printf '%s\n' "${FAKE_CONTAINER_ID:-container-xyz}"
     ;;
   start)
+    if [ -n "${FAKE_START_SLEEP:-}" ]; then
+      sleep "${FAKE_START_SLEEP}"
+    fi
     printf '%s\n' "${FAKE_CONTAINER_ID:-container-xyz}"
     ;;
   wait)
@@ -868,6 +873,42 @@ esac
             .error
             .as_deref()
             .is_some_and(|error| error.contains("shared workspace root")));
+    }
+
+    #[test]
+    fn execute_allows_disabling_hard_timeout_with_zero_seconds() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-1");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _start_sleep = EnvVarGuard::set("FAKE_START_SLEEP", "2");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep".to_string(), "--version".to_string()],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            workspace_root_override: None,
+        });
+
+        assert!(result.success);
+        assert_eq!(result.exit_code, 0);
     }
 
     #[test]

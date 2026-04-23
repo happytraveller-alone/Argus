@@ -617,8 +617,8 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(agent_tree_json["total_agents"], 3);
-    assert_eq!(agent_tree_json["nodes"].as_array().unwrap().len(), 3);
+    assert_eq!(agent_tree_json["total_agents"], 5);
+    assert_eq!(agent_tree_json["nodes"].as_array().unwrap().len(), 5);
 
     let checkpoints_response = app
         .clone()

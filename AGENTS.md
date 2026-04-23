@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 9:31pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 11:37pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,015t read) | 1,472,586t work | 99% savings
+Stats: 50 obs (19,277t read) | 1,252,438t work | 98% savings
 
 ### Apr 23, 2026
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
@@ -499,58 +499,58 @@ S237 Frontend dead code cleanup per PRD and test spec — full session completed
 S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
 S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 4:07 PM)
 S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
-1577 8:29p 🔵 Rules API Severity Breakdown Confirmed — 2111 ERROR, 1440 WARNING, 262 INFO out of 3813 Active Rules
-1579 " 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
-1581 8:30p 🔵 Stop-Gate Review — ALLOW on Summary-Only Turn
-1576 " 🔵 Architect Review — Backend Asset Copy + OpenGrep Severity Preservation
-1580 8:32p 🔵 Frontend Static Engine Retirement Incomplete — ProjectDetail and Tests Still Reference Retired Engines
-1583 " 🔴 Backend Runtime Container Missing scan_rule_assets — Root Cause Fixed
-1595 8:33p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1585 8:34p 🔵 Severity Extraction Implementation — extract_builtin_rule_severity Line-Scan Parser
-1586 " 🔵 Rule Asset Root Uses CARGO_MANIFEST_DIR — Compile-Time Path, Not Runtime /app/assets
-1587 " 🔵 Frontend Severity Filter Is Client-Side Only — Backend Returns All Rules Unsorted by Severity
-1592 8:35p 🔵 Multi-Rule YAML Files Contain Mixed Severities — Line-Scan Extractor Returns First Match Only
-1593 " 🔵 Fix Diff Confirmed — 4 Files Changed, 62 Insertions, 4 Deletions
-1602 8:41p 🔴 Docker backend.Dockerfile SSL Bootstrap Deadlock Fixed — HTTP-First APT Strategy
-1603 8:42p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1610 8:44p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1605 " 🔵 Builtin Opengrep Severity Fix Incomplete — First-Match Strategy Misclassifies 273 Mixed-Severity Asset Files
-1606 " 🔵 Frontend /scan-config/engines Loads 981 Rules After Docker Fix — API Returns 3813 Total, 2384 activeError
-1613 8:49p 🟣 Hermes Containerized Functional Agents — Implementation Plan Requested from PRD + Test Spec
-1635 8:51p 🟣 Hermes Containerized Agents — All 4 Containers Fully Operational with Seed Bootstrap and Healthchecks
-1621 8:55p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1622 8:56p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1624 8:58p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1628 8:59p 🟣 Hermes Agent Entrypoint Bootstrap — Seed-to-Data Copy on Container Start
-1629 " ⚖️ Hermes Agent Container Strategy — Sidecar Seed Volume + tail -f Instead of Direct hermes Exec
-1631 9:00p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1633 9:01p 🔵 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1634 " 🔵 Static Scan Engine Opengrep — Permission Denied Error and Incomplete Rule Loading
-1636 9:04p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1641 9:05p 🔵 Opengrep Scan Permission Denied — Root Cause: scan_workspace Volume Owned by Root
-1642 " 🔴 Opengrep Permission Denied Fixed — Root-Privilege Entrypoint Chowns Scan Workspace at Startup
-1643 " 🔴 Opengrep Rules UI Undercounting Fixed — getOpengrepRules Now Defaults to limit=10000
-1637 9:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1647 9:07p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1656 9:08p 🔴 Opengrep Static Scan — Four Root Causes Fixed, Full Verification Passed
-1638 9:10p 🔵 Stop-Gate Review Confirmed ALLOW — Hermes Summary Turn Had No Direct Edits
-1639 " 🟣 Hermes Agent Bootstrap Entrypoint Rewritten to Seed /opt/data on Container Start
-1640 " 🔵 Hermes Containers Smoke Test — All 4 Agents Verified Healthy with Full Bootstrap
-1646 " 🔵 Hermes Agent Directory Contract — data/ and hermes-home/ Structure Confirmed on Disk
-1644 " 🔵 Opengrep UI Rule Count Fix Verified — 2384 Rules and 13 Languages Now Displayed Correctly
-1645 " 🔵 Runner Architecture — Docker create/start/wait Pattern with Volume-Based Workspace Sharing
-1648 9:12p 🔴 Hermes Dockerfile Fixed — FROM Missing Mirror Prefix Caused Docker Pull Timeout
-1650 9:15p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1653 " 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1651 9:16p 🔵 Hermes Agent Data Directories Live at backend/agents/*/data, Not docker/backend/agents/*/data
-1652 9:17p 🔵 docker-compose.hermes-agents.yml Volume Paths Resolve to Wrong docker/ Subdirectory
-1655 9:18p 🔴 Static Scan Engine — Full Fix Verified Across All Layers
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 9:20 PM)
-1658 9:23p 🟣 Opengrep Static Scan Pipeline — Full End-to-End Fix Verified
-1660 " 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
 1661 9:29p 🔵 Hermes Opengrep Static Scan Fix — Full Verification Passed
 1663 9:31p 🔵 Opengrep Fix — Two New Files Untracked in Git After All Tests Pass
+1668 9:32p 🟣 Frontend Static Scan Engine Pages Removal — All Non-Opengrep Engines Deleted
+1671 9:35p ⚖️ Frontend Consolidation — Remove All Non-Opengrep Static Scan Engine Pages
+1675 9:37p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1672 " ✅ Frontend Non-Opengrep Static Scan Rule Pages Deleted — Files and Tests Removed
+1676 9:46p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1684 " 🟣 hermes-agent-base.Dockerfile Replaced — Ubuntu Placeholder Swapped for Official nousresearch/hermes-agent Image
+1685 " 🔵 Official nousresearch/hermes-agent Entrypoint Behavior Confirmed
+1686 " 🟣 Slice 6 and Slice 7 Tasks Created — Real Hermes Dispatch and Synthetic Runtime Retirement
+1681 9:47p 🔵 Debian Trixie SSL Bootstrap Deadlock — HTTPS APT Fails on All Sources in Docker
+1682 9:49p 🔴 Runner Timeout Logic Fixed — Zero Seconds Now Disables Hard Timeout
+1687 9:50p 🔵 Debian Trixie SSL Bootstrap Deadlock Confirmed — HTTPS APT Fails on All Sources
+1688 9:51p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1689 9:59p 🔵 Docker Build Fails — Debian Trixie SSL Bootstrap Deadlock on All APT Sources
+1691 10:04p 🔵 Backend Rust Tests Pass — All Suites Green After Docker Fix
+1692 " 🔵 Static Scan Task Stuck in "running" — Backend Connection Reset and Orphaned opengrep-runner Container
+1690 10:05p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1693 10:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1694 10:07p 🔵 Debian Trixie Docker APT SSL Bootstrap Deadlock — Confirmed Root Cause
+1695 10:08p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1696 10:11p 🔵 Static Scan Task Lifecycle Verified — opengrep-runner Completes Cleanly
+1697 " 🔄 CreateScanTaskDialog Stripped to Opengrep-Only — Non-Opengrep Engine Code Removed
+1698 " 🔵 hermes-agent-base.Dockerfile Build Fails — chmod Denied on /opt/bin in Non-Root Build Context
+1700 10:13p 🔵 nousresearch/hermes-agent Base Image — /opt/bin Does Not Exist and hermes User Cannot Write to /opt
+1701 " 🔴 hermes-agent-base.Dockerfile Fixed — USER root + mkdir + COPY --chmod=755 Pattern
+1702 " 🔴 Backend Dockerfile APT SSL Bootstrap Fixed — HTTP Sources for Initial ca-certificates Install
+1699 10:14p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1703 10:16p 🔵 Non-Opengrep Frontend API Surfaces Still Present — CreateScanTaskDialog Patch Did Not Apply
+1704 " 🔴 Backend runner.rs — Zero Timeout Now Disables Hard Timeout for Docker Start
+1705 " 🔵 Full Docker Compose Build Succeeds — Backend, Frontend, and All Hermes Agents Build Clean
+1706 10:20p 🔵 Two Distinct Docker Compose Failures — Opengrep Missing Rules Dir + Hermes Permission Denied on /opt/data
+1707 10:21p 🔵 Hermes Agent /opt/data Permission Root Cause — Host data/ Dirs Owned by xyf (UID 1000) but Container Runs as Different User
+1708 " 🔴 Hermes Agent Containers — HERMES_UID/HERMES_GID Env Vars Added to All Four Services in docker-compose.yml
+1709 10:24p 🔴 Hermes Agent Permission Fix Verified — All Four Containers Start Successfully After HERMES_UID/GID Env Vars Added
+1710 10:26p 🔵 Hermes Agent Permission Fix Incomplete — HERMES_UID/GID Env Vars Not Used by Entrypoint; Container Still Runs as Non-Root User
+1712 10:28p 🔵 hermes-agent-base.Dockerfile Root Cause — Base Image Sets Non-Root USER; RUN mkdir Fails Without Explicit USER root
+1715 10:31p 🔵 Opengrep Container Error Is a Backend-Triggered Scan Issue, Not a Compose Startup Issue
+1718 10:35p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1720 " 🔵 Hermes Containers Healthy but Require API Key for Inference
+1721 " 🔵 Each Hermes Container Has Role-Specific SOUL.md Identity
+1725 10:37p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1726 10:38p 🔵 Backend Test Suite — 2 Failing Tests in scan_rule_assets Module
+1727 10:48p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1729 10:49p 🔵 Hermes Agent Base Dockerfile and Healthcheck Script — Current State Confirmed
+1735 11:02p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1736 11:03p 🔵 Backend Test Suite — 2 Failing Tests in scan_rule_assets Module Confirmed Pre-existing
+1737 11:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1741 11:07p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1743 11:08p 🔵 Stop-Gate Cargo Check Fails — Read-Only /tmp Filesystem in Sandbox
 
-Access 1473k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1252k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

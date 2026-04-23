@@ -1,21 +1,5 @@
 import { type AgentTask, getAgentTasks } from "@/shared/api/agentTasks";
 import {
-	type GitleaksScanTask,
-	getGitleaksScanTasks,
-} from "@/shared/api/gitleaks";
-import {
-	type BanditScanTask,
-	getBanditScanTasks,
-} from "@/shared/api/bandit";
-import {
-	type PhpstanScanTask,
-	getPhpstanScanTasks,
-} from "@/shared/api/phpstan";
-import {
-	type PmdScanTask,
-	getPmdScanTasks,
-} from "@/shared/api/pmd";
-import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
@@ -146,51 +130,6 @@ export function buildOpengrepSeverityCounts(
 	};
 }
 
-export function buildGitleaksSeverityCounts(
-	task?: GitleaksScanTask | null,
-): SeverityCounts {
-	return {
-		critical: 0,
-		high: 0,
-		medium: 0,
-		low: toNonNegativeInt(task?.total_findings),
-	};
-}
-
-export function buildBanditSeverityCounts(
-	task?: BanditScanTask | null,
-): SeverityCounts {
-	return {
-		critical: 0,
-		high: toNonNegativeInt(task?.high_count),
-		medium: toNonNegativeInt(task?.medium_count),
-		low: toNonNegativeInt(task?.low_count),
-	};
-}
-
-export function buildPhpstanSeverityCounts(
-	task?: PhpstanScanTask | null,
-): SeverityCounts {
-	// PHPStan integration: dashboard/task活动口径将 phpstan 发现全部归入 low(hint)。
-	return {
-		critical: 0,
-		high: 0,
-		medium: 0,
-		low: toNonNegativeInt(task?.total_findings),
-	};
-}
-
-export function buildPmdSeverityCounts(
-	task?: PmdScanTask | null,
-): SeverityCounts {
-	return {
-		critical: 0,
-		high: 0,
-		medium: 0,
-		low: toNonNegativeInt(task?.total_findings),
-	};
-}
-
 export function getAgentSeverityCounts(
 	task?:
 		| Pick<
@@ -257,32 +196,20 @@ export function getSeverityCountTotal(counts: SeverityCounts): number {
 
 function toRuleScanActivities(
 	opengrepTasks: OpengrepScanTask[],
-	gitleaksTasks: GitleaksScanTask[],
-	banditTasks: BanditScanTask[],
-	phpstanTasks: PhpstanScanTask[],
-	pmdTasks: PmdScanTask[],
 	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem[] {
-	// Multi-engine grouping: one activity item can contain any selected static engines.
 	const visibleOpengrepTasks = opengrepTasks.filter(
 		(task) => !task.name.startsWith("Agent Bootstrap OpenGrep"),
 	);
 	const groups = buildStaticScanGroups({
 		opengrepTasks: visibleOpengrepTasks,
-		gitleaksTasks,
-		banditTasks,
-		phpstanTasks,
-		pmdTasks,
+		gitleaksTasks: [],
 	});
 
 	return groups
 		.map((group): TaskActivityItem | null => {
 		const opengrepTask = group.opengrepTask;
-		const gitleaksTask = group.gitleaksTask;
-		const banditTask = group.banditTask;
-		const phpstanTask = group.phpstanTask;
-		const pmdTask = group.pmdTask;
-		const primaryTask = opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask;
+		const primaryTask = opengrepTask;
 		if (!primaryTask) {
 			return null;
 		}
@@ -292,38 +219,8 @@ function toRuleScanActivities(
 		if (opengrepTask) {
 			params.set("opengrepTaskId", opengrepTask.id);
 		}
-		if (gitleaksTask) {
-			params.set("gitleaksTaskId", gitleaksTask.id);
-		}
-		if (banditTask) {
-			params.set("banditTaskId", banditTask.id);
-		}
-		if (phpstanTask) {
-			params.set("phpstanTaskId", phpstanTask.id);
-		}
-		if (pmdTask) {
-			params.set("pmdTaskId", pmdTask.id);
-		}
-		if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask && !pmdTask) {
-			params.set("tool", "gitleaks");
-		}
-		if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask && !pmdTask) {
-			params.set("tool", "bandit");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask && !pmdTask) {
-			params.set("tool", "phpstan");
-		}
-		if (!opengrepTask && !gitleaksTask && !banditTask && !phpstanTask && pmdTask) {
-			params.set("tool", "pmd");
-		}
 
-		const durationCandidates = [
-			opengrepTask?.scan_duration_ms,
-			gitleaksTask?.scan_duration_ms,
-			banditTask?.scan_duration_ms,
-			phpstanTask?.scan_duration_ms,
-			pmdTask?.scan_duration_ms,
-		];
+		const durationCandidates = [opengrepTask?.scan_duration_ms];
 		const durationMs = durationCandidates.reduce<number | null>((total, value) => {
 			if (
 				typeof value !== "number" ||
@@ -335,33 +232,15 @@ function toRuleScanActivities(
 			return (total ?? 0) + value;
 		}, null);
 
-		const staticFindingStats = mergeSeverityCounts(
-			buildOpengrepSeverityCounts(opengrepTask),
-			buildGitleaksSeverityCounts(gitleaksTask),
-			buildBanditSeverityCounts(banditTask),
-			buildPhpstanSeverityCounts(phpstanTask),
-			buildPmdSeverityCounts(pmdTask),
-		);
+		const staticFindingStats = buildOpengrepSeverityCounts(opengrepTask);
 
-		const candidateStatuses = [
-			opengrepTask,
-			gitleaksTask,
-			banditTask,
-			phpstanTask,
-			pmdTask,
-		]
+		const candidateStatuses = [opengrepTask]
 			.map((task) => normalizeStatus(task?.status))
 			.filter(Boolean);
 		const hasRunningStatus = candidateStatuses.some(
 			(status) => status === "running" || status === "pending",
 		);
-		const latestUpdatedAt = [
-			opengrepTask,
-			gitleaksTask,
-			banditTask,
-			phpstanTask,
-			pmdTask,
-		].reduce<string | null>((latest, task) => {
+		const latestUpdatedAt = [opengrepTask].reduce<string | null>((latest, task) => {
 			const current = task?.updated_at || null;
 			if (!current) return latest;
 			if (!latest) return current;
@@ -375,16 +254,9 @@ function toRuleScanActivities(
 			id: `static-${primaryTask.id}`,
 			projectName: resolveProjectName(group.projectId),
 			kind: "rule_scan",
-			sourceMode: resolveSourceModeFromTaskMeta(
-				"rule_scan",
-				opengrepTask?.name ||
-					gitleaksTask?.name ||
-					banditTask?.name ||
-					phpstanTask?.name ||
-					pmdTask?.name,
-			),
+			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", opengrepTask?.name),
 			status: resolveStaticScanGroupStatus(group),
-			gitleaksEnabled: Boolean(gitleaksTask),
+			gitleaksEnabled: false,
 			staticFindingStats,
 			createdAt: group.createdAt,
 			startedAt: group.createdAt,
@@ -433,14 +305,7 @@ export async function fetchTaskActivities(
 		projectNameMap.get(projectId) || "未知项目";
 
 	const activities = [
-		...toRuleScanActivities(
-			opengrepTasks,
-			[],
-			[],
-			[],
-			[],
-			resolveProjectName,
-		),
+		...toRuleScanActivities(opengrepTasks, resolveProjectName),
 		...toAgentActivities(agentTasks, resolveProjectName),
 	].sort(
 		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),

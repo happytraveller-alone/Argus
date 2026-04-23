@@ -221,7 +221,7 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .and_then(|part| part.as_os_str().to_str());
         if matches!(
             top,
-            Some("rules_opengrep" | "rules_from_patches" | "patches")
+            Some("rules_opengrep" | "rules_from_patches")
         ) && seen.insert(relative.clone())
         {
             out.push(relative);
@@ -260,7 +260,6 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
     match top {
         "rules_opengrep" => Ok(("opengrep", "internal_rule")),
         "rules_from_patches" => Ok(("opengrep", "patch_rule")),
-        "patches" => Ok(("opengrep", "patch_artifact")),
         _ => Err(anyhow!(
             "unsupported rule asset root: {}",
             relative.display()
@@ -294,7 +293,6 @@ mod tests {
         assert!(paths
             .iter()
             .any(|path| path.starts_with("rules_from_patches/")));
-        assert!(paths.iter().any(|path| path.starts_with("patches/")));
 
         let roots = paths
             .iter()
@@ -302,7 +300,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(
             roots,
-            BTreeSet::from(["patches", "rules_from_patches", "rules_opengrep"])
+            BTreeSet::from(["rules_from_patches", "rules_opengrep"])
         );
     }
 
@@ -316,13 +314,6 @@ mod tests {
             .expect("patch rule asset should exist");
         assert_eq!(patch_rule.engine, "opengrep");
         assert_eq!(patch_rule.source_kind, "patch_rule");
-
-        let patch_artifact = assets
-            .iter()
-            .find(|asset| asset.asset_path.starts_with("patches/"))
-            .expect("patch artifact should exist");
-        assert_eq!(patch_artifact.engine, "opengrep");
-        assert_eq!(patch_artifact.source_kind, "patch_artifact");
 
         let builtin_rule = assets
             .iter()
