@@ -214,6 +214,12 @@ def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> N
     assert "ARG DOCKER_CLI_IMAGE=docker.m.daocloud.io/docker:cli" not in backend_text
 
 
+def test_backend_dockerfile_copies_rule_assets_into_runtime_image() -> None:
+    backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY backend/assets ./assets" in backend_text
+
+
 def test_backend_dockerfile_bootstraps_apt_sources_over_http() -> None:
     backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
 

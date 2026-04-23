@@ -104,6 +104,10 @@ services:
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
       DOCKER_HOST: ${DOCKER_HOST:-}
       CONTAINER_CLI: ${CONTAINER_CLI:-docker}
+      HERMES_RECON_CONTAINER: hermes-recon
+      HERMES_ANALYSIS_CONTAINER: hermes-analysis
+      HERMES_VERIFICATION_CONTAINER: hermes-verification
+      HERMES_REPORT_CONTAINER: hermes-report
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -187,6 +191,146 @@ services:
       - "8081:8080"
     depends_on:
       db:
+        condition: service_healthy
+    networks:
+      - vulhunter-network
+
+  # ----- Hermes Functional Agents -----
+
+  hermes-recon:
+    build:
+      context: .
+      dockerfile: docker/hermes-agent-base.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        HERMES_APT_MIRROR_PRIMARY: ${HERMES_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_SECURITY_PRIMARY: ${HERMES_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_MIRROR_FALLBACK: ${HERMES_APT_MIRROR_FALLBACK:-deb.debian.org}
+        HERMES_APT_SECURITY_FALLBACK: ${HERMES_APT_SECURITY_FALLBACK:-security.debian.org}
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-recon
+    restart: unless-stopped
+    mem_limit: 2g
+    pids_limit: 512
+    volumes:
+      - ./backend/agents/recon/data:/opt/data
+      - ./backend/agents/recon/hermes-home:/opt/seed:ro
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      - path: ./backend/agents/recon/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vulhunter-network
+
+  hermes-analysis:
+    build:
+      context: .
+      dockerfile: docker/hermes-agent-base.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        HERMES_APT_MIRROR_PRIMARY: ${HERMES_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_SECURITY_PRIMARY: ${HERMES_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_MIRROR_FALLBACK: ${HERMES_APT_MIRROR_FALLBACK:-deb.debian.org}
+        HERMES_APT_SECURITY_FALLBACK: ${HERMES_APT_SECURITY_FALLBACK:-security.debian.org}
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-analysis
+    restart: unless-stopped
+    mem_limit: 2g
+    pids_limit: 512
+    volumes:
+      - ./backend/agents/analysis/data:/opt/data
+      - ./backend/agents/analysis/hermes-home:/opt/seed:ro
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      - path: ./backend/agents/analysis/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vulhunter-network
+
+  hermes-verification:
+    build:
+      context: .
+      dockerfile: docker/hermes-agent-base.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        HERMES_APT_MIRROR_PRIMARY: ${HERMES_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_SECURITY_PRIMARY: ${HERMES_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_MIRROR_FALLBACK: ${HERMES_APT_MIRROR_FALLBACK:-deb.debian.org}
+        HERMES_APT_SECURITY_FALLBACK: ${HERMES_APT_SECURITY_FALLBACK:-security.debian.org}
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-verification
+    restart: unless-stopped
+    mem_limit: 2g
+    pids_limit: 512
+    volumes:
+      - ./backend/agents/verification/data:/opt/data
+      - ./backend/agents/verification/hermes-home:/opt/seed:ro
+      - ./backend/agents/verification/scratch:/opt/scratch
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      - path: ./backend/agents/verification/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vulhunter-network
+
+  hermes-report:
+    build:
+      context: .
+      dockerfile: docker/hermes-agent-base.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        HERMES_APT_MIRROR_PRIMARY: ${HERMES_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_SECURITY_PRIMARY: ${HERMES_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        HERMES_APT_MIRROR_FALLBACK: ${HERMES_APT_MIRROR_FALLBACK:-deb.debian.org}
+        HERMES_APT_SECURITY_FALLBACK: ${HERMES_APT_SECURITY_FALLBACK:-security.debian.org}
+    image: vulhunter/hermes-agent:latest
+    container_name: hermes-report
+    restart: unless-stopped
+    mem_limit: 2g
+    pids_limit: 512
+    volumes:
+      - ./backend/agents/report/data:/opt/data
+      - ./backend/agents/report/hermes-home:/opt/seed:ro
+      - ./backend/agents/report/output:/opt/output
+      - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
+    env_file:
+      - path: ./backend/agents/report/container.env
+        required: false
+    healthcheck:
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      backend:
         condition: service_healthy
     networks:
       - vulhunter-network

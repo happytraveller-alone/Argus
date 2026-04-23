@@ -482,16 +482,15 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 7:54pm GMT+8
+# [audittool_personal] recent context, 2026-04-23 8:54pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (19,249t read) | 1,916,475t work | 99% savings
+Stats: 50 obs (22,316t read) | 1,896,808t work | 99% savings
 
 ### Apr 23, 2026
-S166 Remove deprecated docker-compose.hybrid.yml and docker-compose.full.yml validation from release workflow (Apr 23, 8:22 AM)
 S174 Strengthen release pipeline tests with precise compose validation count assertion to enforce single-compose-only architecture (Apr 23, 8:27 AM)
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
 S173 Strengthen release pipeline tests to enforce Docker infrastructure consolidation — verify hybrid/full compose removal and scanner engine deprecation (Apr 23, 8:33 AM)
@@ -500,49 +499,13 @@ S183 Strengthen release workflow test — validate step run block assertion made
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
 S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
-1408 6:53p 🔴 Docker backend apt bootstrap switched from HTTPS to HTTP to fix SSL certificate error on Debian Trixie
-1418 6:56p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
-1415 6:57p ⚖️ Docker backend.Dockerfile SSL bootstrap fix — code review verdict
-1420 6:58p ✅ Hermes Containerized Functional Agents — Plan Execution Initiated
-1414 6:59p ⚖️ Docker backend.Dockerfile apt SSL bootstrap — final review verdict: no findings
-1417 7:00p 🔴 Docker backend.Dockerfile apt SSL bootstrap fix — full implementation confirmed
-1422 7:02p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
-1421 7:03p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1425 7:04p 🔵 Docker Build Fails: SSL Certificate Verification Error on Debian Trixie apt-get
-1430 7:08p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1433 7:09p 🟣 Hermes Containerized Functional Agents — Team Orchestration Initiated
-1440 7:12p ✅ Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1442 " 🔵 Hermes Agent Implementation — Three-Slice Task Breakdown Confirmed
-1443 7:13p 🟣 Hermes Agent Directory Contracts Created for Four Roles
-1444 " 🔵 VulHunter docker-compose.yml — Full Service Topology and Mirror Strategy
-1446 7:14p 🟣 hermes-agent-base.Dockerfile and docker-compose.hermes-agents.yml Created and Validated
-1447 " 🟣 Hermes Agent SOUL.md Role Definitions and .gitkeep Scaffolding Added
-1448 " 🔵 Existing Rust Backend Agent Keys and Queue Architecture Confirmed
-1450 7:17p 🟣 Hermes Agent Shared Schemas and Entrypoint Script Created
-1451 " ✅ .gitignore Updated to Exclude Hermes Agent Runtime Data Directories
-1455 7:18p ✅ Task #3 Completed — Agent Directory Contract Scaffolding Verified and Unblocked Task #1
-1456 " ✅ toml crate added to backend/Cargo.toml for Hermes Runtime Module
-1461 7:20p ✅ Hermes Containerized Functional Agents — /plan Command Invoked on PRD and Test Spec
-1462 7:22p 🟣 Hermes Runtime Rust Module — contracts.rs, registry.rs, layout.rs Created
-1469 " 🟣 Hermes Runtime Module — discovery, bootstrap, executor, launcher, parser, result, health Created
-1471 7:24p 🟣 Report Agent Role Added to PROMPT_SKILL_AGENT_KEYS and Bootstrap Init
-1472 7:25p 🟣 Report Agent Wired Into queue.rs, agent_test.rs Routes, and Integration Test Created
-1473 7:28p 🟣 Hermes Integration Test Suite — Four Test Files Created
-1476 " 🔵 Hermes Task Board — Task #1 Still In-Progress While Tasks #2 and #3 Completed
-1483 7:29p 🔴 bootstrap.rs Unused Import Warning Fixed — hermes_seed_home Removed
-1491 7:33p 🔴 Hermes Integration Tests — Wrong Crate Name Fixed (audittool_personal → backend_rust)
-1488 7:35p 🔄 Frontend Static Scan Engine Retired to OpenGrep-Only
-1489 " 🔴 Dashboard, Task, and Scan-Engine Page Loading Errors Fixed
-1490 " ✅ Tests Updated for OpenGrep-Only and API Path Changes
-1495 " 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
-1496 " 🔴 Dashboard/Task/Scan-Engine Page Loading Errors Fixed
-1497 " ✅ Test Suite Updated for OpenGrep-Only and API Path Changes
+S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 4:07 PM)
+1495 7:35p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
 1498 7:36p 🟣 Hermes Integration Tests — All 14 Tests Pass After Crate Name Fix
 1499 7:38p 🔵 fetchTaskActivities Still Imports All Static Engine APIs Despite OpenGrep-Only Fetch
 1500 " 🔵 CreateProjectScanDialog Hardcodes Non-OpenGrep Engines to false/no-op
 1501 " 🔵 ProjectDetail and Dashboard Services Retain Multi-Engine Task Fetching
 1502 " 🔵 ScanConfigEngines Non-OpenGrep Tab Tests Remain — Now Test Fallback Behavior
-S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 7:41 PM)
 1512 7:44p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only (Code Review)
 1514 7:47p 🔵 Residual Risk — CreateScanTaskDialog and Dashboard projectScanStats Still Reference Retired Engines
 1515 " 🔄 ScanConfigIntelligentEngine and Project Dialogs — Indentation Reformatted to Spaces
@@ -550,7 +513,44 @@ S420 Hermes Containerized Functional Agents — Full Implementation Complete, Te
 1519 7:49p 🔄 Frontend Static Scan Engine Retirement — OpenGrep Only
 1520 " 🔴 Dashboard/Task/Scan-Engine Page Loading Errors Fixed
 1521 " ✅ Test Suite Updated for OpenGrep-Only and API Path Changes
+1528 " 🔵 Docker Build Failure — SSL Certificate Verify Failed on All Debian APT Mirrors
 1522 " 🔵 Frontend Static Scan Engine Retirement — OpenGrep Only (Final Review)
+1525 7:54p 🔵 OpenGrep-Only Migration — Residual PHPStan/PMD/Gitleaks Code Paths Confirmed as Intentional Dead Code
+1540 8:01p 🔵 Backend Runtime Container Missing scan_rule_assets — Root Cause Confirmed
+1541 8:04p 🔴 backend.Dockerfile Fixed — COPY backend/assets Added to Runtime Image
+1547 8:05p 🔵 Docker Build Failure — SSL Certificate Verify Failed on All APT Sources Including Fallback
+1549 8:07p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Plan Invoked
+1552 8:08p 🔵 Hermes Docker Compose Architecture — Full Integration Map Discovered
+1553 " 🟣 Work Plan Created — Hermes Compose Integration with Real Healthchecks
+1562 8:15p ⚖️ Hermes Agent Startup Dependency Direction — Agents Depend on Backend, Not Vice Versa
+1563 8:24p 🔵 Docker Build Fails — SSL Bootstrap Deadlock in Debian Trixie runtime-base Stage
+1564 " 🔴 OpenGrep Rule Loading Fixed — Severity Preserved and Assets Deployed to Runtime Container
+1565 " 🔵 OpenGrep Rule Loading Fix Verified — 3813 Rules Active, 2111 with ERROR Severity
+1566 " 🔵 PRD and Test Spec for Hermes Containerized Agents — Full Requirements Documented
+1567 " 🟣 Hermes Agents Merged into Main docker-compose.yml with Real Healthchecks and Backend Dependency
+1568 " 🔵 backend_old Python Tests Cannot Run Standalone — Missing `app` Module
+1570 8:26p 🔴 OpenGrep Rules Not Loading — Two Root Causes Fixed
+1578 8:27p 🔵 Debian Trixie SSL Bootstrap Deadlock — HTTPS APT Fails Before ca-certificates Installed
+1571 8:28p 🔵 Live API Verification — Rules Endpoint Returns 3813 Active Rules with Correct Severity
+1577 8:29p 🔵 Rules API Severity Breakdown Confirmed — 2111 ERROR, 1440 WARNING, 262 INFO out of 3813 Active Rules
+1579 " 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 8:29 PM)
+1581 8:30p 🔵 Stop-Gate Review — ALLOW on Summary-Only Turn
+1576 " 🔵 Architect Review — Backend Asset Copy + OpenGrep Severity Preservation
+1580 8:32p 🔵 Frontend Static Engine Retirement Incomplete — ProjectDetail and Tests Still Reference Retired Engines
+1583 " 🔴 Backend Runtime Container Missing scan_rule_assets — Root Cause Fixed
+1595 8:33p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1585 8:34p 🔵 Severity Extraction Implementation — extract_builtin_rule_severity Line-Scan Parser
+1586 " 🔵 Rule Asset Root Uses CARGO_MANIFEST_DIR — Compile-Time Path, Not Runtime /app/assets
+1587 " 🔵 Frontend Severity Filter Is Client-Side Only — Backend Returns All Rules Unsorted by Severity
+1592 8:35p 🔵 Multi-Rule YAML Files Contain Mixed Severities — Line-Scan Extractor Returns First Match Only
+1593 " 🔵 Fix Diff Confirmed — 4 Files Changed, 62 Insertions, 4 Deletions
+1602 8:41p 🔴 Docker backend.Dockerfile SSL Bootstrap Deadlock Fixed — HTTP-First APT Strategy
+1603 8:42p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
+1610 8:44p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
+1605 " 🔵 Builtin Opengrep Severity Fix Incomplete — First-Match Strategy Misclassifies 273 Mixed-Severity Asset Files
+1606 " 🔵 Frontend /scan-config/engines Loads 981 Rules After Docker Fix — API Returns 3813 Total, 2384 activeError
+1613 8:49p 🟣 Hermes Containerized Functional Agents — Implementation Plan Requested from PRD + Test Spec
 
-Access 1916k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1897k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

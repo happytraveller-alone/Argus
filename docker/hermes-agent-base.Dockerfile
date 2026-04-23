@@ -5,7 +5,7 @@ ARG HERMES_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG HERMES_APT_MIRROR_FALLBACK=deb.debian.org
 ARG HERMES_APT_SECURITY_FALLBACK=security.debian.org
 
-FROM ubuntu:22.04 AS base
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/ubuntu:22.04 AS base
 
 ARG HERMES_APT_MIRROR_PRIMARY
 ARG HERMES_APT_SECURITY_PRIMARY
@@ -52,11 +52,17 @@ RUN --mount=type=cache,id=vulhunter-hermes-apt-lists,target=/var/lib/apt/lists,s
     fi; \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/data
+RUN mkdir -p /opt/data /opt/bin /opt/seed
+
+COPY backend/agents/shared/bin/healthcheck.sh /opt/bin/healthcheck.sh
+COPY backend/agents/shared/bin/run-agent.sh /opt/bin/run-agent.sh
+RUN chmod +x /opt/bin/healthcheck.sh /opt/bin/run-agent.sh
 
 VOLUME ["/opt/data"]
 
 WORKDIR /opt/data
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD echo ok
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD ["sh", "/opt/bin/healthcheck.sh"]
+
+ENTRYPOINT ["/opt/bin/run-agent.sh"]

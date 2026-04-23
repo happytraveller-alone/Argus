@@ -744,7 +744,7 @@ async fn create_agent_task_snapshots_enabled_prompt_skill_runtime_in_audit_scope
     assert_eq!(prompt_skill_runtime["enabled"], true);
 
     let agent_keys = prompt_skill_runtime["agent_keys"].as_array().unwrap();
-    assert_eq!(agent_keys.len(), 5);
+    assert_eq!(agent_keys.len(), 6);
     assert!(agent_keys
         .iter()
         .any(|agent_key| agent_key.as_str() == Some("analysis")));

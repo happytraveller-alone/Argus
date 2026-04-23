@@ -1221,7 +1221,8 @@ async fn persist_uploaded_opengrep_rules(
             id: format!("{source}:{}", Uuid::new_v4()),
             name: filename.clone(),
             language: "generic".to_string(),
-            severity: "WARNING".to_string(),
+            severity: extract_highest_rule_severity(&pattern_yaml)
+                .unwrap_or_else(|| "WARNING".to_string()),
             confidence: Some("MEDIUM".to_string()),
             description: Some("uploaded opengrep rule in rust backend".to_string()),
             cwe: None,
@@ -1287,12 +1288,13 @@ async fn builtin_opengrep_rules(
         .into_iter()
         .filter(|asset| asset.source_kind == "internal_rule" || asset.source_kind == "patch_rule")
         .map(|asset| {
-            let language = asset
+            let fallback_language = asset
                 .asset_path
                 .strip_prefix("rules_from_patches/")
                 .and_then(|path| path.split('/').next())
                 .unwrap_or("generic")
                 .to_string();
+            let language = fallback_language;
             let source = if asset.source_kind == "patch_rule" {
                 "patch"
             } else {
@@ -1302,7 +1304,8 @@ async fn builtin_opengrep_rules(
                 id: asset.asset_path.clone(),
                 name: file_stem(&asset.asset_path),
                 language,
-                severity: "WARNING".to_string(),
+                severity: extract_highest_rule_severity(&asset.content)
+                    .unwrap_or_else(|| "WARNING".to_string()),
                 confidence: Some("MEDIUM".to_string()),
                 description: Some("builtin opengrep rule served by rust backend".to_string()),
                 cwe: None,
@@ -1531,6 +1534,39 @@ fn file_stem(path: &str) -> String {
         .to_string()
 }
 
+fn extract_highest_rule_severity(content: &str) -> Option<String> {
+    let mut highest = None::<&'static str>;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        let Some(value) = trimmed.strip_prefix("severity:") else {
+            continue;
+        };
+        let normalized = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_uppercase();
+        let candidate = match normalized.as_str() {
+            "ERROR" => Some("ERROR"),
+            "WARNING" => Some("WARNING"),
+            "INFO" => Some("INFO"),
+            _ => None,
+        };
+        let Some(candidate) = candidate else {
+            continue;
+        };
+        highest = match (highest, candidate) {
+            (Some("ERROR"), _) | (_, "ERROR") => Some("ERROR"),
+            (Some("WARNING"), _) | (_, "WARNING") => Some("WARNING"),
+            _ => Some("INFO"),
+        };
+        if highest == Some("ERROR") {
+            break;
+        }
+    }
+    highest.map(str::to_string)
+}
+
 fn merge_json_object(target: &mut Value, patch: &Value) {
     let Some(target_obj) = target.as_object_mut() else {
         return;
@@ -1610,4 +1646,41 @@ fn read_file_lines_from_zip(
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
     ApiError::Internal(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_highest_rule_severity;
+
+    #[test]
+    fn extract_highest_rule_severity_prefers_error_over_warning_and_info() {
+        let content = r#"
+rules:
+  - id: first-rule
+    severity: WARNING
+  - id: second-rule
+    severity: INFO
+  - id: third-rule
+    severity: ERROR
+"#;
+
+        assert_eq!(
+            extract_highest_rule_severity(content),
+            Some("ERROR".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_highest_rule_severity_handles_warning_only_assets() {
+        let content = r#"
+rules:
+  - id: only-warning
+    severity: WARNING
+"#;
+
+        assert_eq!(
+            extract_highest_rule_severity(content),
+            Some("WARNING".to_string())
+        );
+    }
 }

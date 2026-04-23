@@ -140,6 +140,7 @@ RUN groupadd --gid 1001 appgroup \
 
 WORKDIR /app
 
+COPY backend/assets ./assets
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
 

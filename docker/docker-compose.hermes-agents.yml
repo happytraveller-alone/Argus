@@ -1,4 +1,6 @@
-# Hermes Agent Services — 四个角色容器
+# Hermes Agent Services — 四个角色容器（Standalone 备选）
+# 主 compose (docker-compose.yml) 已包含这些服务。
+# 此文件仅用于独立启动 hermes agents（需先启动主 compose 创建 vulhunter-network）。
 # 启动前请将各角色目录下的 container.env.example 复制为 container.env
 # docker compose -f docker/docker-compose.hermes-agents.yml up
 
@@ -13,16 +15,18 @@ services:
     mem_limit: 2g
     volumes:
       - ./backend/agents/recon/data:/opt/data
+      - ./backend/agents/recon/hermes-home:/opt/seed:ro
       - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
     env_file:
       # copy from backend/agents/recon/container.env.example
       - path: ./backend/agents/recon/container.env
         required: false
     healthcheck:
-      test: ["CMD", "echo", "ok"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
     networks:
       - vulhunter-network
 
@@ -36,16 +40,18 @@ services:
     mem_limit: 2g
     volumes:
       - ./backend/agents/analysis/data:/opt/data
+      - ./backend/agents/analysis/hermes-home:/opt/seed:ro
       - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
     env_file:
       # copy from backend/agents/analysis/container.env.example
       - path: ./backend/agents/analysis/container.env
         required: false
     healthcheck:
-      test: ["CMD", "echo", "ok"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
     networks:
       - vulhunter-network
 
@@ -59,6 +65,7 @@ services:
     mem_limit: 2g
     volumes:
       - ./backend/agents/verification/data:/opt/data
+      - ./backend/agents/verification/hermes-home:/opt/seed:ro
       - ./backend/agents/verification/scratch:/opt/scratch
       - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
     env_file:
@@ -66,10 +73,11 @@ services:
       - path: ./backend/agents/verification/container.env
         required: false
     healthcheck:
-      test: ["CMD", "echo", "ok"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
     networks:
       - vulhunter-network
 
@@ -83,6 +91,7 @@ services:
     mem_limit: 2g
     volumes:
       - ./backend/agents/report/data:/opt/data
+      - ./backend/agents/report/hermes-home:/opt/seed:ro
       - ./backend/agents/report/output:/opt/output
       - ${PROJECT_SOURCE_PATH:-.}:/scan:ro
     env_file:
@@ -90,10 +99,11 @@ services:
       - path: ./backend/agents/report/container.env
         required: false
     healthcheck:
-      test: ["CMD", "echo", "ok"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "sh", "/opt/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
     networks:
       - vulhunter-network
 
