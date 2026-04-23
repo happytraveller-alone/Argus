@@ -98,8 +98,7 @@ validate_release_tree() {
     "README.md"
     "README_EN.md"
     "docker-compose.yml"
-    "docker-compose.hybrid.yml"
-    "docker-compose.full.yml"
+
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"
     "docker/env/backend/env.example"
@@ -210,7 +209,7 @@ overlay_release_templates() {
   cp "$TEMPLATE_DIR/README.md" "$OUTPUT_DIR/README.md"
   cp "$TEMPLATE_DIR/README_EN.md" "$OUTPUT_DIR/README_EN.md"
   cp "$TEMPLATE_DIR/docker-compose.release-slim.yml" "$OUTPUT_DIR/docker-compose.yml"
-  cp "$TEMPLATE_DIR/docker-compose.hybrid.release-slim.yml" "$OUTPUT_DIR/docker-compose.hybrid.yml"
+
   cp "$TEMPLATE_DIR/backend.Dockerfile" "$OUTPUT_DIR/docker/backend.Dockerfile"
 }
 
@@ -413,7 +412,6 @@ if [[ "$VALIDATE" == "true" ]]; then
   validate_release_tree
   if command -v docker >/dev/null 2>&1; then
     (cd "$OUTPUT_DIR" && docker compose -f docker-compose.yml config >/dev/null)
-    (cd "$OUTPUT_DIR" && docker compose -f docker-compose.yml -f docker-compose.hybrid.yml config >/dev/null)
   fi
 fi
 

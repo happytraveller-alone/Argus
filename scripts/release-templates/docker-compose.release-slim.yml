@@ -60,10 +60,6 @@ services:
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"

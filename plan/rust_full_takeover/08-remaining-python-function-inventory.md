@@ -1,12 +1,37 @@
 # Remaining Python Function Inventory
 
-> 最后更新：2026-04-22
+> 最后更新：2026-04-23
 
 ## 统计
 
 - `backend_old/app/services/agent/` 源文件（不含 `__init__.py`）：**66**
 - `backend_old/scripts/` Python 脚本：**1**（`flow_parser_runner.py`）
 - `backend_old/tests/` 测试文件：**~80**
+
+## 当前主线优先级（ACP + Rust runtime）
+
+当前不是按全目录平均推进，而是优先服务 `agent_tasks` runtime 真接管。
+
+一阶 blocker：
+
+1. `task_models.py`
+2. `event_manager.py`
+3. `streaming/*.py`
+4. `core/state.py`
+5. `core/executor.py`
+6. `agents/base.py`
+7. `tools/runtime/*.py`
+8. `tools/queue_tools.py` / `tools/recon_queue_tools.py`
+
+二阶依赖：
+
+1. `tools/file_tool.py`
+2. `tools/code_analysis_tool.py`
+3. `tools/control_flow_tool.py`
+4. `tools/pattern_tool.py`
+5. `core/flow/lightweight/*`
+
+这份 inventory 仍是完整文件面清单，但执行顺序以 [.omx/plans/prd-acp-rust-runtime-agent-tasks.md](/home/xyf/audittool_personal/.omx/plans/prd-acp-rust-runtime-agent-tasks.md) 为准。
 
 ## 按功能域分类
 

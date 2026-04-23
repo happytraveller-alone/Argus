@@ -23,6 +23,29 @@ cargo test --manifest-path backend/Cargo.toml
 cargo build --manifest-path backend/Cargo.toml
 ```
 
+## ACP + Rust Runtime Gate
+
+如果当前 slice 触及 `agent_tasks` runtime 真路径：
+
+```bash
+cd /home/xyf/audittool_personal
+cargo test --manifest-path backend/Cargo.toml --test task_routes_api
+cargo test --manifest-path backend/Cargo.toml --test skills_api
+cargo test --manifest-path backend/Cargo.toml
+cargo build --manifest-path backend/Cargo.toml
+pnpm --dir frontend type-check
+pnpm --dir frontend test:node
+```
+
+并且至少证明：
+
+1. `start` 先进入非终态，而不是 immediate-complete。
+2. `/stream` 继续是 `text/event-stream` + `data: <json>\n\n`。
+3. `after_sequence` 回放不重复终态事件。
+4. `findings` / `agent-tree` / `checkpoints` / `report` 来自真实 runtime 投影，而不是 seeded placeholder。
+5. ACP SDK-native 类型没有直接泄露到 route JSON。
+6. `agentTasks.ts`、`agentStream.ts`、`TaskDetailPage.tsx` 不需要 breaking rewrite。
+
 ## Python Retained Gate
 
 如果改动触及 `backend_old/`：
@@ -65,6 +88,7 @@ uv run --project . pytest -s backend_old/tests/...
 在宣称“Python 已接近全退役”前，还必须过下面的最终门：
 
 1. 至少一条 `agent-tasks` 真路径 smoke 通过。
+   这里的“真路径”明确指：不是 synthetic completion，而是 non-terminal start + live/replayable stream + runtime-backed artifacts。
 2. 至少一条 `static-tasks` 真路径 smoke 通过，并覆盖当前 runner family。
 3. legacy mirror / backfill / startup compat bridge 的退出条件被明确验证。
 4. `backend_old/scripts`、release preflight 这类 ops tail 有明确 owner 和删除 / 保留判定。

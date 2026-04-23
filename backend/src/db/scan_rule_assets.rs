@@ -221,15 +221,7 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .and_then(|part| part.as_os_str().to_str());
         if matches!(
             top,
-            Some(
-                "rules_opengrep"
-                    | "rules_from_patches"
-                    | "patches"
-                    | "gitleaks_builtin"
-                    | "bandit_builtin"
-                    | "rules_phpstan"
-                    | "rules_pmd"
-            )
+            Some("rules_opengrep" | "rules_from_patches" | "patches")
         ) && seen.insert(relative.clone())
         {
             out.push(relative);
@@ -269,10 +261,6 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
         "rules_opengrep" => Ok(("opengrep", "internal_rule")),
         "rules_from_patches" => Ok(("opengrep", "patch_rule")),
         "patches" => Ok(("opengrep", "patch_artifact")),
-        "gitleaks_builtin" => Ok(("gitleaks", "builtin")),
-        "bandit_builtin" => Ok(("bandit", "builtin")),
-        "rules_phpstan" => Ok(("phpstan", "builtin")),
-        "rules_pmd" => Ok(("pmd", "builtin")),
         _ => Err(anyhow!(
             "unsupported rule asset root: {}",
             relative.display()

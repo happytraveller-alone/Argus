@@ -35,7 +35,23 @@ def test_release_workflow_generates_validates_and_force_pushes_release_branch() 
     assert "generate-release-branch.sh" in workflow_text
     assert "--output" in workflow_text
     assert "--validate" in workflow_text
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml config >/dev/null" in workflow_text
+    assert "docker compose config >/dev/null" in workflow_text
+    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml config >/dev/null" not in workflow_text
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml config >/dev/null" not in workflow_text
+    validate_marker = "- name: Validate compose entrypoints"
+    assert validate_marker in workflow_text
+    validate_start = workflow_text.index(validate_marker)
+    next_step_idx = workflow_text.find("\n      - name:", validate_start + len(validate_marker))
+    validate_block = workflow_text[validate_start:next_step_idx].strip()
+    run_marker = "run: |"
+    run_idx = validate_block.index(run_marker) + len(run_marker)
+    run_body_lines = [
+        line.strip() for line in validate_block[run_idx:].splitlines()
+        if line.strip()
+    ]
+    assert run_body_lines == ["docker compose config >/dev/null"], (
+        f"Validate step run block should contain exactly one command, got: {run_body_lines}"
+    )
     assert "git push --force origin HEAD:release" in workflow_text
     assert "fetch-depth: 0" in workflow_text
     assert "git checkout --orphan" in workflow_text
@@ -79,8 +95,6 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "README.md",
         "README_EN.md",
         "docker-compose.yml",
-        "docker-compose.hybrid.yml",
-        "docker-compose.full.yml",
         "docker/backend.Dockerfile",
         "docker/frontend.Dockerfile",
         "docker/env/backend/env.example",
@@ -108,6 +122,8 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "deploy",
         "docs",
         "docker-compose.self-contained.yml",
+        "docker-compose.hybrid.yml",
+        "docker-compose.full.yml",
         "backend/tests",
         "frontend/tests",
         "frontend/scripts/dev-entrypoint.sh",
@@ -135,9 +151,9 @@ def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> Non
     assert result.returncode == 0, combined_output
 
     compose_text = (output_dir / "docker-compose.yml").read_text(encoding="utf-8")
-    hybrid_text = (output_dir / "docker-compose.hybrid.yml").read_text(encoding="utf-8")
 
-    assert "docker-compose.full.yml" not in compose_text
+    assert not (output_dir / "docker-compose.hybrid.yml").exists()
+    assert not (output_dir / "docker-compose.full.yml").exists()
     assert "docker-compose.self-contained.yml" not in compose_text
     assert "backend:" in compose_text
     assert "frontend:" in compose_text
@@ -145,22 +161,15 @@ def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> Non
     assert "redis:" in compose_text
     assert "nexus-web:" not in compose_text
     assert "nexus-itemDetail:" not in compose_text
-    assert "context: ./nexus-web" not in compose_text
-    assert "context: ./nexus-itemDetail" not in compose_text
-    assert "dockerfile: ../docker/nexus-web.Dockerfile" not in compose_text
     assert "NEXUS_WEB_IMAGE" not in compose_text
     assert "NEXUS_ITEM_DETAIL_IMAGE" not in compose_text
-
-    assert "docker-compose.full.yml" not in hybrid_text
-    assert "docker-compose.self-contained.yml" not in hybrid_text
-    assert "nexus-web" not in hybrid_text
-    assert "nexus-itemDetail" not in hybrid_text
-    assert "image: vulhunter/backend-local:latest" in hybrid_text
-    assert "image: vulhunter/frontend-local:latest" in hybrid_text
-    assert "context: ." in hybrid_text
-    assert "context: ./frontend" in hybrid_text
-    assert "target: runtime-release" in hybrid_text
-    assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in hybrid_text
+    assert "SCANNER_BANDIT_IMAGE" not in compose_text
+    assert "SCANNER_GITLEAKS_IMAGE" not in compose_text
+    assert "SCANNER_PHPSTAN_IMAGE" not in compose_text
+    assert "SCANNER_PMD_IMAGE" not in compose_text
+    assert "SCANNER_OPENGREP_IMAGE" in compose_text
+    assert "FLOW_PARSER_RUNNER_IMAGE" in compose_text
+    assert "SANDBOX_RUNNER_IMAGE" in compose_text
 
 
 def test_release_backend_template_no_longer_copies_removed_backend_static_tree() -> None:
@@ -184,8 +193,8 @@ def test_generated_release_docs_only_publish_three_supported_commands(tmp_path: 
     )
     for doc in docs:
         assert "docker compose up --build" in doc
-        assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in doc
-        assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in doc
+        assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml" not in doc
+        assert "docker compose -f docker-compose.yml -f docker-compose.full.yml" not in doc
         assert "docker-compose.self-contained.yml" not in doc
         assert "package-release-artifacts.sh" not in doc
         assert "deploy-release-artifacts.sh" not in doc

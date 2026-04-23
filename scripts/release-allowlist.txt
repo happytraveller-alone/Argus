@@ -3,7 +3,6 @@ backend/
 frontend/
 
 # Runtime Docker files and env templates needed by the release tree.
-docker-compose.full.yml
 docker/frontend.Dockerfile
 docker/env/backend/env.example
 docker/env/frontend/.env.example

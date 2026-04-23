@@ -21,23 +21,15 @@ def test_reusable_publish_workflow_defaults_to_repo_owner_with_optional_override
 def test_active_compose_files_default_to_current_repo_owner_namespace() -> None:
     compose_paths = [
         REPO_ROOT / "docker-compose.yml",
-        REPO_ROOT / "docker-compose.hybrid.yml",
         REPO_ROOT / "scripts" / "release-templates" / "docker-compose.release-slim.yml",
-        REPO_ROOT / "scripts" / "release-templates" / "docker-compose.hybrid.release-slim.yml",
     ]
 
     expected_namespace = f"VULHUNTER_IMAGE_NAMESPACE: ${{VULHUNTER_IMAGE_NAMESPACE:-{DEFAULT_NAMESPACE}}}"
-    expected_bandit = (
-        "SCANNER_BANDIT_IMAGE: "
-        f"${{SCANNER_BANDIT_IMAGE:-${{GHCR_REGISTRY:-ghcr.io}}/${{VULHUNTER_IMAGE_NAMESPACE:-{DEFAULT_NAMESPACE}}}/"
-        "vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    )
 
     for compose_path in compose_paths:
         compose_text = compose_path.read_text(encoding="utf-8")
-
         assert expected_namespace in compose_text, compose_path.as_posix()
-        assert expected_bandit in compose_text, compose_path.as_posix()
+        assert "SCANNER_BANDIT_IMAGE" not in compose_text, compose_path.as_posix()
 
 
 def test_docs_and_env_example_explain_ghcr_owner_rules() -> None:

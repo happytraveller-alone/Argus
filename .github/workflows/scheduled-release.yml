@@ -23,11 +23,7 @@ jobs:
             --ref main \
             -f tag=latest \
             -f build_opengrep_runner=true \
-            -f build_bandit_runner=true \
-            -f build_gitleaks_runner=true \
-            -f build_phpstan_runner=true \
             -f build_flow_parser_runner=true \
-            -f build_pmd_runner=true \
             -f build_sandbox=true \
             -f build_sandbox_runner=true
 

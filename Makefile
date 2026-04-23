@@ -2,10 +2,8 @@
 # VulHunter Makefile
 # =====================================================
 # 只保留 compose 状态/日志辅助命令。
-# 启动统一使用以下三种原生命令：
+# 启动统一使用以下命令：
 #   docker compose up --build
-#   docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
-#   docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 # =====================================================
 
 SHELL := /bin/bash
@@ -43,8 +41,6 @@ help:
 	@echo ""
 	@echo "  启动请直接使用:"
 	@echo "    docker compose up --build"
-	@echo "    docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build"
-	@echo "    docker compose -f docker-compose.yml -f docker-compose.full.yml up --build"
 	@echo ""
 
 .PHONY: down

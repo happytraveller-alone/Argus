@@ -4,38 +4,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER_SERVICE_NAMES = (
     "opengrep-runner",
-    "bandit-runner",
-    "gitleaks-runner",
-    "phpstan-runner",
-    "pmd-runner",
     "flow-parser-runner",
-)
-DEFAULT_BACKEND_IMAGE = (
-    "${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
-    "/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}"
-)
-DEFAULT_FRONTEND_IMAGE = (
-    "${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
-    "/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}"
-)
-DEFAULT_SANDBOX_IMAGE = (
-    "${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
-    "/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-)
-DEFAULT_SCANNER_PMD_IMAGE = (
-    "${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}"
-    "/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
 )
 
 
 def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     compose_path = REPO_ROOT / "docker-compose.yml"
-    full_overlay_path = REPO_ROOT / "docker-compose.full.yml"
     backend_dockerfile = REPO_ROOT / "docker" / "backend.Dockerfile"
     frontend_dockerfile = REPO_ROOT / "docker" / "frontend.Dockerfile"
 
     assert compose_path.exists()
-    assert full_overlay_path.exists()
+    assert not (REPO_ROOT / "docker-compose.full.yml").exists()
+    assert not (REPO_ROOT / "docker-compose.hybrid.yml").exists()
     assert not (REPO_ROOT / "docker-compose.dev.yml").exists()
     assert not (REPO_ROOT / "docker-compose.frontend-dev.yml").exists()
     assert not (REPO_ROOT / "docker-compose.override.yml").exists()
@@ -49,30 +29,17 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'condition: service_completed_successfully' not in compose_text
     for runner_service in RUNNER_SERVICE_NAMES:
         assert f"\n  {runner_service}:" not in compose_text
-    assert f"image: {DEFAULT_BACKEND_IMAGE}" in compose_text
-    assert f"image: {DEFAULT_FRONTEND_IMAGE}" in compose_text
     assert "vulhunter/backend-dev:latest" not in compose_text
     assert "vulhunter/frontend-dev:latest" not in compose_text
-    assert "target: dev-runtime" not in compose_text
-    assert "target: dev" not in compose_text
     assert "\n  backend:\n" in compose_text
     assert "\n  frontend:\n" in compose_text
     assert "\n  nexus-web:\n" not in compose_text
     assert "\n  nexus-itemDetail:\n" not in compose_text
-    assert "./backend:/app" not in compose_text
-    assert ".:/workspace:ro" not in compose_text
-    assert "./frontend:/app" not in compose_text
-    assert "./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" not in compose_text
-    assert "- /opt/backend-venv" not in compose_text
-    assert "/app/.venv" not in compose_text
-    assert "/root/.cache/uv" not in compose_text
-    assert "/app/node_modules" not in compose_text
-    assert "/pnpm/store" not in compose_text
-    assert "${VULHUNTER_FRONTEND_PORT:-3000}:80" in compose_text
-    assert 'FRONTEND_PUBLIC_URL: http://localhost:${VULHUNTER_FRONTEND_PORT:-3000}' not in compose_text
-    assert 'BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}' not in compose_text
-    assert "command: /app/scripts/dev-entrypoint.sh" not in compose_text
-    assert "command:\n      - sh\n      - /app/scripts/dev-entrypoint.sh" not in compose_text
+    assert "dockerfile: docker/backend.Dockerfile" in compose_text
+    assert "target: runtime-plain" in compose_text
+    assert "target: dev" in compose_text
+    assert "./frontend:/app" in compose_text
+    assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
     assert "BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
     assert "BACKEND_INSTALL_YASA" not in compose_text
@@ -81,38 +48,19 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "YASA_ENABLED" not in compose_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
-    assert "GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}" in compose_text
-    assert "VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}" in compose_text
-    assert "VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}" in compose_text
+    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in compose_text
+    assert "SCANNER_BANDIT_IMAGE" not in compose_text
+    assert "SCANNER_GITLEAKS_IMAGE" not in compose_text
+    assert "SCANNER_PHPSTAN_IMAGE" not in compose_text
+    assert "SCANNER_PMD_IMAGE" not in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text
-    assert (
-        "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
-    assert (
-        "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
-    assert (
-        "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
-    assert (
-        "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
-    assert f"SCANNER_PMD_IMAGE: {DEFAULT_SCANNER_PMD_IMAGE}" in compose_text
-    assert (
-        "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
+    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
     assert "YASA_TIMEOUT_SECONDS" not in compose_text
     assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" not in compose_text
     assert "scan_workspace:/tmp/vulhunter/scans" in compose_text
     assert "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock" in compose_text
-    assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in compose_text
     assert 'RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"' in compose_text
     assert "mem_limit: 4g" in compose_text
     assert "pids_limit: 1024" in compose_text
@@ -120,34 +68,17 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "pids_limit: 256" in compose_text
     assert "mem_limit: 1g" in compose_text
     assert "MCP_REQUIRE_ALL_READY_ON_STARTUP" not in compose_text
-    assert '/bin/sh", "-lc"' not in compose_text
-    assert (
-        "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}/"
-        "vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
-    ) in compose_text
+    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}" in compose_text
     assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
     assert "BACKEND_NPM_REGISTRY_CANDIDATES" not in compose_text
     assert "BACKEND_PNPM_VERSION" not in compose_text
-    assert "BACKEND_PNPM_CMD_TIMEOUT_SECONDS" not in compose_text
-    assert "BACKEND_PNPM_INSTALL_OPTIONAL" not in compose_text
     assert "MCP_REQUIRED_RUNTIME_DOMAIN" not in compose_text
     assert "MCP_CODE_INDEX_ENABLED" not in compose_text
-    assert "SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP" not in compose_text
-    assert "CODEX_SKILLS_AUTO_INSTALL" not in compose_text
     assert 'profiles: [ "tools" ]' in compose_text
     assert "adminer:" in compose_text
     assert "NEXUS_WEB_IMAGE" not in compose_text
-    assert "NEXUS_ITEM_DETAIL_IMAGE" not in compose_text
-    assert "./nexus-web" not in compose_text
-    assert "./nexus-itemDetail" not in compose_text
-    assert "docker/nexus-web.Dockerfile" not in compose_text
-    assert "YASA_HOST_BIN_PATH" not in compose_text
-    assert "YASA_HOST_RESOURCE_DIR" not in compose_text
-    assert "YASA_BIN_PATH:" not in compose_text
-    assert "YASA_RESOURCE_DIR:" not in compose_text
-    assert "\n  frontend-dev:" not in compose_text
 
     backend_text = backend_dockerfile.read_text(encoding="utf-8")
     assert "BACKEND_INSTALL_YASA" not in backend_text
@@ -176,71 +107,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "frontend-dev-entrypoint.sh" not in frontend_text
     assert 'CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]' not in frontend_text
     assert 'ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]' not in frontend_text
-
-
-def test_full_overlay_restores_full_local_build_defaults() -> None:
-    full_overlay_text = (REPO_ROOT / "docker-compose.full.yml").read_text(encoding="utf-8")
-
-    assert "runner preflight / warmup" not in full_overlay_text
-    assert "一次性预热/自检容器" not in full_overlay_text
-    assert "执行完检查后按预期退出" not in full_overlay_text
-    assert 'condition: service_completed_successfully' not in full_overlay_text
-    for runner_service in RUNNER_SERVICE_NAMES:
-        assert f"\n  {runner_service}:" not in full_overlay_text
-    assert "vulhunter/backend-local:latest" in full_overlay_text
-    assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
-    assert "vulhunter/frontend-local:latest" in full_overlay_text
-    assert "NEXUS_WEB_IMAGE" not in full_overlay_text
-    assert "NEXUS_ITEM_DETAIL_IMAGE" not in full_overlay_text
-    assert "./nexus-web" not in full_overlay_text
-    assert "./nexus-itemDetail" not in full_overlay_text
-    assert "docker/nexus-web.Dockerfile" not in full_overlay_text
-    assert "context: ." in full_overlay_text
-    assert "dockerfile: docker/backend.Dockerfile" in full_overlay_text
-    assert "working_dir: !reset null" in full_overlay_text
-    assert "command: !reset null" in full_overlay_text
-    assert "./frontend:/app" in full_overlay_text
-    assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in full_overlay_text
-    assert "VITE_API_TARGET: http://backend:8000" in full_overlay_text
-    assert "CODEX_SKILLS_AUTO_INSTALL" not in full_overlay_text
-    assert "BACKEND_INSTALL_YASA" not in full_overlay_text
-    assert "YASA_VERSION=" not in full_overlay_text
-    assert "SCANNER_YASA_IMAGE" not in full_overlay_text
-    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in full_overlay_text
-    assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in full_overlay_text
-    assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in full_overlay_text
-    assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in full_overlay_text
-    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in full_overlay_text
-    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in full_overlay_text
-    assert "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/" in full_overlay_text
-    assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
-    assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in full_overlay_text
-    assert "YASA_ENABLED" not in full_overlay_text
-    assert "YASA_TIMEOUT_SECONDS" not in full_overlay_text
-    assert "mem_limit: 1536m" in full_overlay_text
-    assert "pids_limit: 512" in full_overlay_text
-    assert "CHOKIDAR_USEPOLLING: ${FRONTEND_CHOKIDAR_USEPOLLING:-false}" in full_overlay_text
-    assert "BACKEND_NPM_REGISTRY_PRIMARY" not in full_overlay_text
-    assert "BACKEND_NPM_REGISTRY_FALLBACK" not in full_overlay_text
-    assert "BACKEND_NPM_REGISTRY_CANDIDATES" not in full_overlay_text
-    assert "BACKEND_PNPM_VERSION" not in full_overlay_text
-    assert "BACKEND_PNPM_CMD_TIMEOUT_SECONDS" not in full_overlay_text
-    assert "BACKEND_PNPM_INSTALL_OPTIONAL" not in full_overlay_text
-    assert "MCP_REQUIRED_RUNTIME_DOMAIN" not in full_overlay_text
-    assert "SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-runner-local:latest}" in full_overlay_text
-    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}" in full_overlay_text
-    assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in full_overlay_text
-    assert "\n  frontend-dev:" not in full_overlay_text
-
-
-def test_hybrid_overlay_uses_frontend_dev_without_default_polling_and_with_resource_limits() -> None:
-    hybrid_overlay_text = (REPO_ROOT / "docker-compose.hybrid.yml").read_text(encoding="utf-8")
-
-    assert "target: dev" in hybrid_overlay_text
-    assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in hybrid_overlay_text
-    assert "CHOKIDAR_USEPOLLING: ${FRONTEND_CHOKIDAR_USEPOLLING:-false}" in hybrid_overlay_text
-    assert "mem_limit: 1536m" in hybrid_overlay_text
-    assert "pids_limit: 512" in hybrid_overlay_text
 
 
 def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
@@ -277,14 +143,14 @@ def test_readmes_document_backend_managed_preflight_behavior() -> None:
     root_readme_en = (REPO_ROOT / "README_EN.md").read_text(encoding="utf-8")
 
     assert "docker compose up --build" in root_readme
-    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" not in root_readme
+    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" not in root_readme
     assert "docker-compose.self-contained.yml" not in root_readme
     assert "package-release-artifacts.sh" not in root_readme
     assert "scripts/README-COMPOSE.md" not in root_readme
     assert "docker compose up --build" in root_readme_en
-    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme_en
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme_en
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" not in root_readme_en
+    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" not in root_readme_en
     assert "docker-compose.self-contained.yml" not in root_readme_en
     assert "package-release-artifacts.sh" not in root_readme_en
     assert "scripts/README-COMPOSE.md" not in root_readme_en
@@ -351,28 +217,18 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     opengrep_runner_text = (
         REPO_ROOT / "docker" / "opengrep-runner.Dockerfile"
     ).read_text(encoding="utf-8")
-    bandit_runner_text = (
-        REPO_ROOT / "docker" / "bandit-runner.Dockerfile"
-    ).read_text(encoding="utf-8")
-    gitleaks_runner_text = (
-        REPO_ROOT / "docker" / "gitleaks-runner.Dockerfile"
-    ).read_text(encoding="utf-8")
-    phpstan_runner_text = (
-        REPO_ROOT / "docker" / "phpstan-runner.Dockerfile"
-    ).read_text(encoding="utf-8")
-    pmd_runner_text = (REPO_ROOT / "docker" / "pmd-runner.Dockerfile").read_text(
-        encoding="utf-8"
-    )
     flow_parser_runner_text = (
         REPO_ROOT / "docker" / "flow-parser-runner.Dockerfile"
     ).read_text(encoding="utf-8")
 
+    assert not (REPO_ROOT / "docker" / "bandit-runner.Dockerfile").exists()
+    assert not (REPO_ROOT / "docker" / "gitleaks-runner.Dockerfile").exists()
+    assert not (REPO_ROOT / "docker" / "phpstan-runner.Dockerfile").exists()
+    assert not (REPO_ROOT / "docker" / "pmd-runner.Dockerfile").exists()
+    assert not (REPO_ROOT / "docker" / "backend_old.Dockerfile").exists()
+
     runner_texts = [
         opengrep_runner_text,
-        bandit_runner_text,
-        gitleaks_runner_text,
-        phpstan_runner_text,
-        pmd_runner_text,
         flow_parser_runner_text,
     ]
 
@@ -381,44 +237,6 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     assert "XDG_CACHE_HOME" in opengrep_runner_text
     assert "backend-opengrep-launcher" not in opengrep_runner_text
     assert "exec /opt/opengrep/opengrep.real \"$@\"" in opengrep_runner_text
-    assert "WORKDIR /scan" in bandit_runner_text
-    assert "bandit" in bandit_runner_text
-    assert "/opt/bandit-venv" in bandit_runner_text
-    assert "WORKDIR /scan" in gitleaks_runner_text
-    assert "gitleaks" in gitleaks_runner_text
-    assert "download_with_fallback() {" in gitleaks_runner_text
-    assert "backend-phpstan-launcher" not in phpstan_runner_text
-    assert "exec php /opt/phpstan/phpstan \"$@\"" in phpstan_runner_text
-    assert (
-        "https://gh-proxy.com/https://github.com/gitleaks/gitleaks/releases/download/"
-        in gitleaks_runner_text
-    )
-    assert (
-        "https://v6.gh-proxy.org/https://github.com/gitleaks/gitleaks/releases/download/"
-        in gitleaks_runner_text
-    )
-    assert "WORKDIR /scan" in phpstan_runner_text
-    assert "phpstan" in phpstan_runner_text
-    assert "download_with_fallback() {" in phpstan_runner_text
-    assert (
-        "https://gh-proxy.com/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar"
-        in phpstan_runner_text
-    )
-    assert (
-        "https://v6.gh-proxy.org/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar"
-        in phpstan_runner_text
-    )
-    assert "WORKDIR /scan" in pmd_runner_text
-    assert "pmd" in pmd_runner_text
-    assert "download_with_fallback() {" in pmd_runner_text
-    assert (
-        "https://gh-proxy.com/https://github.com/pmd/pmd/releases/download/pmd_releases%2F"
-        in pmd_runner_text
-    )
-    assert (
-        "https://v6.gh-proxy.org/https://github.com/pmd/pmd/releases/download/pmd_releases%2F"
-        in pmd_runner_text
-    )
     assert "WORKDIR /scan" in flow_parser_runner_text
     assert "flow_parser_runner.py" in flow_parser_runner_text
 
@@ -471,26 +289,26 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "publish-runners:" in runners_workflow_text
     assert "nothing-to-publish:" in runners_workflow_text
     assert "build_opengrep_runner" in runners_workflow_text
-    assert "build_bandit_runner" in runners_workflow_text
-    assert "build_gitleaks_runner" in runners_workflow_text
-    assert "build_phpstan_runner" in runners_workflow_text
+    assert "build_bandit_runner" not in runners_workflow_text
+    assert "build_gitleaks_runner" not in runners_workflow_text
+    assert "build_phpstan_runner" not in runners_workflow_text
     assert "build_flow_parser_runner" in runners_workflow_text
-    assert "build_pmd_runner" in runners_workflow_text
+    assert "build_pmd_runner" not in runners_workflow_text
     assert "build_sandbox_runner" in runners_workflow_text
     assert "build_sandbox:" not in runners_workflow_text
     assert "./docker/opengrep-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/bandit-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/gitleaks-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/phpstan-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/bandit-runner.Dockerfile" not in runners_workflow_text
+    assert "./docker/gitleaks-runner.Dockerfile" not in runners_workflow_text
+    assert "./docker/phpstan-runner.Dockerfile" not in runners_workflow_text
     assert "./docker/flow-parser-runner.Dockerfile" in runners_workflow_text
-    assert "./docker/pmd-runner.Dockerfile" in runners_workflow_text
+    assert "./docker/pmd-runner.Dockerfile" not in runners_workflow_text
     assert "./docker/sandbox-runner.Dockerfile" in runners_workflow_text
     assert "vulhunter-opengrep-runner" in runners_workflow_text
-    assert "vulhunter-bandit-runner" in runners_workflow_text
-    assert "vulhunter-gitleaks-runner" in runners_workflow_text
-    assert "vulhunter-phpstan-runner" in runners_workflow_text
+    assert "vulhunter-bandit-runner" not in runners_workflow_text
+    assert "vulhunter-gitleaks-runner" not in runners_workflow_text
+    assert "vulhunter-phpstan-runner" not in runners_workflow_text
     assert "vulhunter-flow-parser-runner" in runners_workflow_text
-    assert "vulhunter-pmd-runner" in runners_workflow_text
+    assert "vulhunter-pmd-runner" not in runners_workflow_text
     assert "vulhunter-sandbox-runner" in runners_workflow_text
     assert '"name": "vulhunter-sandbox"' not in runners_workflow_text
     assert "'backend/scripts/**'" in runners_workflow_text

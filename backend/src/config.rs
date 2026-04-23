@@ -45,10 +45,6 @@ pub struct AppConfig {
     pub llm_concurrency: i64,
     pub llm_gap_ms: i64,
     pub scanner_opengrep_image: String,
-    pub scanner_bandit_image: String,
-    pub scanner_gitleaks_image: String,
-    pub scanner_phpstan_image: String,
-    pub scanner_pmd_image: String,
     pub flow_parser_runner_image: String,
     pub sandbox_runner_image: String,
 }
@@ -113,14 +109,6 @@ impl AppConfig {
             llm_gap_ms: parse_i64_env("LLM_GAP_MS", 3_000),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
                 .unwrap_or_else(|_| "vulhunter/opengrep-runner:latest".to_string()),
-            scanner_bandit_image: env::var("SCANNER_BANDIT_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/bandit-runner:latest".to_string()),
-            scanner_gitleaks_image: env::var("SCANNER_GITLEAKS_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/gitleaks-runner:latest".to_string()),
-            scanner_phpstan_image: env::var("SCANNER_PHPSTAN_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/phpstan-runner:latest".to_string()),
-            scanner_pmd_image: env::var("SCANNER_PMD_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/pmd-runner:latest".to_string()),
             flow_parser_runner_image: env::var("FLOW_PARSER_RUNNER_IMAGE")
                 .unwrap_or_else(|_| "vulhunter/flow-parser-runner:latest".to_string()),
             sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
@@ -177,10 +165,6 @@ impl AppConfig {
             llm_concurrency: 1,
             llm_gap_ms: 3_000,
             scanner_opengrep_image: "vulhunter/opengrep-runner:test".to_string(),
-            scanner_bandit_image: "vulhunter/bandit-runner:test".to_string(),
-            scanner_gitleaks_image: "vulhunter/gitleaks-runner:test".to_string(),
-            scanner_phpstan_image: "vulhunter/phpstan-runner:test".to_string(),
-            scanner_pmd_image: "vulhunter/pmd-runner:test".to_string(),
             flow_parser_runner_image: "vulhunter/flow-parser-runner:test".to_string(),
             sandbox_runner_image: "vulhunter/sandbox-runner:test".to_string(),
         }

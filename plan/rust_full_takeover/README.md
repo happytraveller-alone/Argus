@@ -21,6 +21,19 @@ Python -> Rust 全接管的现状、顺序和验证门。
   - `plan/wait_correct/*`
   - vendored / cache / `.venv/**`
 
+## 当前主线
+
+当前 Phase E 已切到 **ACP + Rust runtime for `agent_tasks`**：
+
+1. Rust 继续做唯一对外 owner（route / state / SSE contract）
+2. 内部 runtime 采用 ACP-aligned 生命周期建模
+3. 不直接把 frontend 或公开 API 改成 ACP wire protocol
+
+当前执行入口：
+
+1. [.omx/plans/prd-acp-rust-runtime-agent-tasks.md](/home/xyf/audittool_personal/.omx/plans/prd-acp-rust-runtime-agent-tasks.md)
+2. [.omx/plans/test-spec-acp-rust-runtime-agent-tasks.md](/home/xyf/audittool_personal/.omx/plans/test-spec-acp-rust-runtime-agent-tasks.md)
+
 ## 当前快照
 
 - `backend_old` 根目录 Python：`0`
@@ -46,17 +59,17 @@ Python -> Rust 全接管的现状、顺序和验证门。
 - [01-overview-and-end-state.md](/home/xyf/audittool_personal/plan/rust_full_takeover/01-overview-and-end-state.md)
   解释为什么目标是 Rust 全接管，以及什么叫“完成”。
 - [02-roadmap-and-phases.md](/home/xyf/audittool_personal/plan/rust_full_takeover/02-roadmap-and-phases.md)
-  给出阶段划分、当前执行顺序和单个 slice 的标准动作。
+  给出阶段划分、当前 ACP + Rust runtime 主线顺序和单个 slice 的标准动作。
 - [03-current-state-and-ledger.md](/home/xyf/audittool_personal/plan/rust_full_takeover/03-current-state-and-ledger.md)
   记录当前工作树事实、剩余功能组和活跃 blocker。
 - [04-history-policy.md](/home/xyf/audittool_personal/plan/rust_full_takeover/04-history-policy.md)
   说明为什么 canonical 文档不再维护逐次进度日志，以及哪些原始材料仍保留。
 - [05-validation-and-gates.md](/home/xyf/audittool_personal/plan/rust_full_takeover/05-validation-and-gates.md)
-  定义 Rust 接管每个 slice 时必须过的验证门。
+  定义 Rust 接管每个 slice 时必须过的验证门，含当前 `agent_tasks` runtime 真路径门。
 - [06-open-risks-and-bridges.md](/home/xyf/audittool_personal/plan/rust_full_takeover/06-open-risks-and-bridges.md)
   记录仍在主链周围存活的 compat bridge 和误判风险。
 - [07-next-targets.md](/home/xyf/audittool_personal/plan/rust_full_takeover/07-next-targets.md)
-  给后续开发者一个可直接执行的优先级列表。
+  给后续开发者一个可直接执行的优先级列表，优先围绕 ACP + Rust runtime 主线。
 - [08-remaining-python-function-inventory.md](/home/xyf/audittool_personal/plan/rust_full_takeover/08-remaining-python-function-inventory.md)
   按当前文件面列出所有仍待 Rust 接管的 Python 功能块。
 

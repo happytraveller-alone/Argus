@@ -1,6 +1,6 @@
 # Next Targets
 
-> 最后更新：2026-04-22
+> 最后更新：2026-04-23
 
 ## 当前阶段判断
 
@@ -8,28 +8,45 @@ Rust 已完成 Phase A-C（基础设施 + DB + 路由 + 共享服务），Phase 
 
 剩余工作集中在 Phase E（Agent 智能层）和 Phase F（最终收口）。
 
+当前主线已明确为：**ACP + Rust runtime for `agent_tasks`**。
+
 ## Phase E：Agent / Tool Runtime（主战场）
 
 Python 66 个文件全部集中在 `app/services/agent/`，构成完整的 LLM 驱动审计 Agent 系统。这是最大也是最复杂的接管目标。
 
-### 建议切片顺序
+### 当前主线切片顺序
 
-1. **ORM / Task Models**（2 个文件）— `orm_base.py` + `task_models.py`，纯数据结构，Rust DB 层已有对应 schema
-2. **Event Manager / Streaming**（4 个文件）— `event_manager.py` + `streaming/*.py`，SSE 事件推送，Rust route 已有 stream 端点
-3. **Config / Runtime Settings**（2 个文件）— `config.py` + `runtime_settings.py`，Agent 配置层
-4. **JSON 工具**（2 个文件）— `json_parser.py` + `json_safe.py`，纯工具函数
-5. **Tool Base + Runtime Coordinator**（6 个文件）— `tools/base.py` + `tools/runtime/*.py` + `tools/evidence_protocol.py`
-6. **Queue / Recon Tools**（3 个文件）— 已调用 Rust queue，Python 层仅做 LLM tool schema 包装
-7. **File / Code Analysis Tools**（4 个文件）— `file_tool.py` + `code_analysis_tool.py` + `control_flow_tool.py` + `pattern_tool.py`
-8. **Flow / AST Pipeline**（11 个文件）— 流分析核心，依赖 Rust flow-parser/code2flow bridge
-9. **Agent 框架 + 类型实现**（15 个文件）— BaseAgent + 5 个 Agent 类型 + react_parser + core/*
-10. **Prompts / Skills / Memory / Logic**（8 个文件）— 提示词、skill 目录、记忆、授权逻辑
+1. **Contract Freeze / Ownership Ledger**
+   - 冻结现有 `agent_tasks` / frontend-visible contract
+2. **Runtime Core + ACP Adapter Boundary**
+   - 在 Rust 内部建立 runtime 状态机与 ACP adapter
+3. **Real Start / Stream / Cancel Lifecycle**
+   - 先去掉 immediate-complete，再做 live + replayable stream
+4. **Real Artifact Projection**
+   - findings / tree / checkpoints / report 改为真实 runtime 投影
+5. **Capability Mapping**
+   - 把 `skills` / prompt-skill runtime 对齐到内部 ACP-aligned capability 表示
+6. **First Real Product Flow**
+   - 落一条真实 Rust-owned `agent_tasks` 真路径
 
 ### 关键依赖
 
-- Agent 框架依赖几乎所有其他模块，应最后接管
-- Tool 系统是 Agent 的手脚，需要先于 Agent 框架接管
-- Flow/AST pipeline 已有 Rust bridge，Python 层主要是胶水
+- `task_models`、event manager / streaming、tool runtime、core state / executor 是当前主线的一阶依赖。
+- Agent 框架依赖几乎所有其他模块，仍不适合一上来全量接管。
+- Flow/AST pipeline 已有 Rust bridge，Python 层主要是胶水，可在 runtime core 稳定后继续收口。
+- ACP 官方 Rust SDK 只负责降低协议/lifecycle 建模成本，不替代产品 contract projection。
+
+### 主线之后的剩余顺序
+
+在 `agent_tasks` runtime 真接管之后，再按下面顺序继续扫尾：
+
+1. Event Manager / Streaming cluster
+2. ORM / Task Models
+3. Tool Base + Runtime Coordinator
+4. Queue / Recon / File / Code Analysis Tools
+5. Flow / AST Pipeline
+6. Agent 框架 + 类型实现
+7. Prompts / Skills / Memory / Logic
 
 ## Phase F：最终收口
 

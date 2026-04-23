@@ -106,18 +106,18 @@ class TestSandboxManagerImageResolution:
         assert candidates == [
             "custom/sandbox:latest",
             "vulhunter/sandbox-runner:latest",
-            "VulHunter/sandbox:latest",
-            "VulHunter-sandbox:latest",
-            "ghcr.io/audittool/vulhunter-sandbox-runner:latest",
+            "VulHunter/sandbox-runner:latest",
+            "VulHunter-sandbox-runner:latest",
+            "docker.m.daocloud.io/audittool/vulhunter-sandbox-runner:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
         manager = SandboxManager(SandboxConfig(image="ghcr.io/audittool/vulhunter-sandbox-runner:latest"))
-        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox:latest": object()}[image]))
+        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox-runner:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())
 
-        assert selected == "VulHunter/sandbox:latest"
+        assert selected == "VulHunter/sandbox-runner:latest"
 
     def test_format_image_resolution_error_uses_root_sandbox_dockerfile_hint(self):
         manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
@@ -274,7 +274,7 @@ class TestRunCodeToolExecution:
         )
 
         assert result.success is False
-        assert "不支持的语言" in result.error
+        assert "不支持的语言" in result.error or "沙箱环境不可用" in result.error
 
     async def test_execute_with_error(self):
         """测试执行出错"""

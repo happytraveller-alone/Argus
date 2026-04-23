@@ -106,10 +106,6 @@ def test_runner_preflight_uses_runtime_settings(monkeypatch):
 
     monkeypatch.setattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 91)
     monkeypatch.setattr(settings, "SCANNER_OPENGREP_IMAGE", "example.com/opengrep:latest")
-    monkeypatch.setattr(settings, "SCANNER_BANDIT_IMAGE", "example.com/bandit:latest")
-    monkeypatch.setattr(settings, "SCANNER_GITLEAKS_IMAGE", "example.com/gitleaks:latest")
-    monkeypatch.setattr(settings, "SCANNER_PHPSTAN_IMAGE", "example.com/phpstan:latest")
-    monkeypatch.setattr(settings, "SCANNER_PMD_IMAGE", "example.com/pmd:latest")
     monkeypatch.setattr(settings, "FLOW_PARSER_RUNNER_IMAGE", "example.com/flow-parser:latest")
     monkeypatch.setattr(settings, "SANDBOX_RUNNER_IMAGE", "example.com/sandbox-runner:latest")
 
@@ -118,10 +114,6 @@ def test_runner_preflight_uses_runtime_settings(monkeypatch):
     assert all(spec.timeout_seconds == 91 for spec in specs)
     assert [spec.image for spec in specs] == [
         "example.com/opengrep:latest",
-        "example.com/bandit:latest",
-        "example.com/gitleaks:latest",
-        "example.com/phpstan:latest",
-        "example.com/pmd:latest",
         "example.com/flow-parser:latest",
         "example.com/sandbox-runner:latest",
     ]

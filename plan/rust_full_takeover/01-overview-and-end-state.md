@@ -10,6 +10,12 @@
 当前迁移目标已经统一为：
 Rust 接管迁移范围内所有仍承担 live backend / scan / deploy 责任的 Python 代码。
 
+对 `agent_tasks` 这条产品主链，当前选定策略是：
+
+1. Rust 保持唯一对外 owner
+2. 内部 runtime 采用 ACP-aligned 生命周期建模
+3. ACP 只先进入内部 adapter / runtime 边界，不直接替换 frontend 可见 contract
+
 这里的“接管”包含 4 层含义：
 
 1. Rust 成为对应能力的唯一 source of truth。
@@ -53,11 +59,22 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 - 字段命名保持现有 contract，不做隐式 snake_case / camelCase 统一
 - 某条 Python route 被标记为 `retire` 之前，必须先证明 frontend / consumer 已清零，或已有 compat stub
 
+## Agent Task Runtime Invariants
+
+在 `agent_tasks` runtime 真接管这条主线里，还要额外保持：
+
+1. ACP Rust SDK 只能通过本地 adapter 进入 Rust runtime，不直接泄露到 route JSON。
+2. `POST /api/v1/agent-tasks/{id}/start` 必须先进入非终态，再进入终态。
+3. `/stream` 继续输出 `text/event-stream`，并维持 `data: <json>\n\n` framing。
+4. `findings` / `agent-tree` / `checkpoints` / `report` 必须来自真实 runtime 投影，不能继续由 seeded placeholder 充当主路径。
+
 ## 当前状态
 
-按 2026-04-22 最新 inventory：
+按 2026-04-23 最新计划口径：
 
 - Rust 已完全接管：HTTP API 路由（7 router，89+ 端点）、DB 层、Bootstrap、LLM、Core、Scan、Runtime 计算内核
+- `agent_tasks` / `skills` / `task_state` 的外部 contract 与持久化已由 Rust 持有，但 `agent_tasks/start` 当前仍是 synthetic runtime 路径，不等于真实 Rust-owned execution
+- ACP 官方 Rust SDK 已存在，当前 Phase E 把它视为内部 runtime / capability 建模输入，而不是公开 API 替代品
 - Python 剩余 66 个源文件，全部集中在 `app/services/agent/`，构成 LLM 驱动的 Agent 智能层
 - Python 通过 subprocess bridge 调用 Rust binary（runner/code2flow/flow-parser/scan-scope/finding-payload/queue/sandbox）
 - 知识库、外部扫描引擎、智能扫描、沙箱语言/漏洞专项工具、昆仑引擎已删除（不再做 Rust 接管）

@@ -1,6 +1,6 @@
 # Current State And Ledger
 
-> 最后更新：2026-04-22
+> 最后更新：2026-04-23
 
 ## 总览
 
@@ -19,7 +19,7 @@
 
 | Router | 路径前缀 | 主要端点数 |
 |--------|----------|-----------|
-| `agent_tasks` | `/api/v1/agent-tasks` | 16（CRUD + stream + findings + report） |
+| `agent_tasks` | `/api/v1/agent-tasks` | 16（CRUD + stream + findings + report；route Rust-owned，但 runtime 仍未真接管） |
 | `agent_test` | `/api/v1/agent-test` | 6（recon/analysis/verification/business-logic） |
 | `projects` | `/api/v1/projects` | 27（CRUD + zip + files + cache + dashboard + export） |
 | `search` | `/api/v1/search` | 4（global + projects + tasks + findings） |
@@ -35,6 +35,14 @@
 - LLM：config, providers, tokenizer, compression, prompt_cache, runtime
 - Core：encryption, security, date_utils
 - Scan：opengrep, path_utils, scope_filters
+
+### Agent Task Runtime 当前状态
+
+- `agent_tasks`、`skills`、`task_state` 的外部 surface 已由 Rust 持有。
+- 当前 `start_agent_task` 仍会直接把任务推进到 terminal，并 seeded findings / tree / checkpoints / report。
+- 当前 `/stream` 主要回放已存事件，不是实时反映真实 Rust runtime 执行。
+- 当前 Phase E 主线已改为：在 Rust 内部引入 ACP-aligned runtime + 本地 ACP adapter boundary，用它替换 synthetic runtime。
+- ACP 官方 Rust SDK 已存在，但本路线图要求它先作为内部 runtime 建模输入，不直接替换当前前端 contract。
 
 ### Runtime 计算内核（Rust 实现，Python 通过 subprocess bridge 调用）
 

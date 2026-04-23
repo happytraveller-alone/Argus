@@ -196,22 +196,7 @@ class RuntimeSettings:
             "SCANNER_OPENGREP_IMAGE",
             _default_image("vulhunter-opengrep-runner"),
         )
-        self.SCANNER_BANDIT_IMAGE = _env_text(
-            "SCANNER_BANDIT_IMAGE",
-            _default_image("vulhunter-bandit-runner"),
-        )
-        self.SCANNER_GITLEAKS_IMAGE = _env_text(
-            "SCANNER_GITLEAKS_IMAGE",
-            _default_image("vulhunter-gitleaks-runner"),
-        )
-        self.SCANNER_PHPSTAN_IMAGE = _env_text(
-            "SCANNER_PHPSTAN_IMAGE",
-            _default_image("vulhunter-phpstan-runner"),
-        )
-        self.SCANNER_PMD_IMAGE = _env_text(
-            "SCANNER_PMD_IMAGE",
-            _default_image("vulhunter-pmd-runner"),
-        )
+
 
 
 settings = RuntimeSettings()

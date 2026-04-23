@@ -482,77 +482,76 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 6:47am GMT+8
+# [audittool_personal] recent context, 2026-04-23 8:55am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,887t read) | 941,166t work | 98% savings
+Stats: 50 obs (16,166t read) | 1,447,421t work | 99% savings
 
-### Apr 18, 2026
-S10 How Claude invokes Codex and what Codex configuration is used — full call chain mapped (Apr 18, 11:02 AM)
-S43 清除 backend_old/tests 下已被 Rust 接管功能的废弃 Python 测试代码 — 完成删除并进行 Rust vs Python 功能域全面盘点 (Apr 18, 12:19 PM)
 ### Apr 22, 2026
-694 9:24p 🔄 39 obsolete Python test files deleted from backend_old/tests
-S44 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers (Apr 22, 9:26 PM)
-696 9:27p 🔵 Python remaining function inventory vs Rust implementation status — 89 files still Python-only
-695 " 🔵 rust_full_takeover plan files confirmed in plan/ not .omx/plans/
-697 9:28p 🔵 Rust vs Python functional domain boundary fully mapped — Agent intelligence layer remains Python-only
-700 9:29p ⚖️ Architect APPROVE verdict on finding_payload Rust takeover slice — second review
-698 " 🔄 backend_old/app/services/agent/knowledge/ directory fully deleted — 21 files, zero active callers
-S56 Python external tool inventory (20+) enumerated and zero-caller tools deleted (Apr 22, 9:29 PM)
-701 " 🔄 knowledge/ directory fully removed — 17 Python source files deleted
-702 9:33p 🟣 finding_payload slice architect-approved after residual gap fixes
-707 " 🔵 Python external tools inventory — 20+ tools catalogued
-705 9:34p 🔵 audittool_personal repo dirty state — full surface map of uncommitted Rust/Python migration work
-709 9:40p 🔵 Python agent tool inventory — 68 AgentTool subclasses across 15 files
-710 " 🔄 6 zero-caller Python tool files deleted from backend_old/app/services/agent/tools/
-711 " 🔄 Test files cleaned up after tool file deletions
-712 " 🔵 logic_authz_analysis skill still referenced in prompts and pipeline despite tool deletion
-S86 smart-explore skill invoked in primary session (Apr 22, 9:40 PM)
-713 9:41p 🔄 stop-gate review ALLOW — Python tool file purge passed review
-716 9:45p 🔄 Python external tool modules deleted — 7 files removed, sandbox_tool.py truncated
-718 9:49p 🔵 Deleted tool IDs still referenced as skill names in prompts, config, and agent logic
-723 9:57p 🔵 Python Agent system inventory — 5 concrete agents + BaseAgent confirmed
-724 9:58p 🔵 git status snapshot — rust_full_takeover working tree state after finding_payload slice
-726 10:08p ✅ Stop-gate review ALLOW — bulk Python cleanup turn verified stable
-728 10:10p ⚖️ Stop-gate BLOCK risk identified — stale tool references in test, docs, and frontend after Python tool purge
-733 10:12p ✅ Stop-gate review initiated for bulk Python tool purge turn
-736 10:20p 🔵 smart-explore skill invoked in primary session
-S99 flow_parser_runner.py migration — update Dockerfile and CI workflow to source script from backend/scripts (Apr 22, 10:20 PM)
-738 " ✅ Stop-gate review ALLOW — logic/ directory deletion verified stable
-740 10:24p 🔵 Stale tool references remain in docs and tests after Python tool purge
-742 10:25p ✅ Agent tool docs purged of retired tool references — INDEX.md and TOOL_SHARED_CATALOG.md updated
-744 " ✅ dynamic_verification.skill.md fully purged of sandbox_http and multi-language test tool references
-745 " ✅ TOOL_SHARED_CATALOG.md fully purged — logic_authz_analysis, quick_audit, smart_scan removed from all sections
-746 " 🔵 Test suite: 58 failures remain after doc cleanup — pre-existing failures unrelated to doc edits
-752 10:33p 🔵 test_agent_prompt_contracts.py asserts sandbox_http in TOOL_USAGE_GUIDE — but TOOL_USAGE_GUIDE already has 16 tools without sandbox_http
-754 10:34p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified stable
-756 10:35p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified via session log
-758 10:36p 🔵 flow-parser-runner.Dockerfile still references backend_old path after migration
-760 10:37p 🔵 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK
-761 10:39p ✅ flow-parser-runner Dockerfile and CI workflow updated to source flow_parser_runner.py from backend/scripts
-S107 rust_full_takeover cleanup — full Python purge, flow_parser_runner.py migration, and CI/Dockerfile synchronization completed (Apr 22, 10:41 PM)
-765 10:41p ✅ Stop-gate review ALLOW — flow_parser_runner.py migration verified stable
-S109 Add regression assertions to test_docker_compose_dev_flow.py for flow_parser_runner.py migration — verify Dockerfile and CI workflow path changes (Apr 22, 10:43 PM)
-S103 CI workflow path filter synchronization — update top-level push.paths and flow_parser_runner filter to reference backend/scripts after migration (Apr 22, 10:43 PM)
-766 10:44p ✅ Stop-gate review ALLOW — GitHub Actions workflow path filter update verified stable
-767 10:48p ✅ Stop-gate review ALLOW — GitHub Actions workflow path filter update verified stable
-772 10:50p ✅ Stop-gate regression assertions added for flow_parser_runner migration
-773 10:52p 🔵 Stop-gate reviewer confirmed previous turn was edit-producing via session log evidence
-776 10:54p ✅ Workflow path filter assertions added for flow_parser_runner migration
-779 10:57p 🔵 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK
-S114 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK (Apr 22, 10:57 PM)
-781 10:59p 🔵 Stop-gate review ALLOW — verification-only turn with no new edits
-783 " 🔴 Stop-gate BLOCK resolved — workflow path-filter assertions now cover both quote styles
-785 11:01p 🔵 Stop-gate review ALLOW — flow_parser_runner migration regression tests passed
-786 11:03p ⚖️ Rust full takeover loop initiated — target: halve backend non-test source files
-787 11:04p 🔵 backend_old agent services inventory — 64 Python files across 8 subdirectories
+S114 Identity clarification — Kiro is not a Claude agent built on Anthropic's Claude Agent SDK (Apr 22, 10:50 PM)
+S120 Clean up backend/assets/scan_rule_assets — retain only patches, rules_from_patches, and rules_opengrep (Apr 22, 10:57 PM)
 ### Apr 23, 2026
-788 6:38a ✅ backend/assets/scan_rule_assets cleanup — retain only 3 subdirectories
-790 " 🔵 scan_rule_assets contains 7 subdirectories — 4 candidates for deletion
-791 6:39a 🔵 Rust scan_rule_assets.rs hardcodes all 7 subdirectory names — deletion requires code changes
+S139 Fix 9 failing backend_old tests after Python tool purge — test_orchestrator_todo_mode, test_run_code_tool, test_release_slim_branch_pipeline (Apr 23, 6:51 AM)
+S164 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation (Apr 23, 7:19 AM)
+908 8:13a 🔴 Rust config.rs — deprecated scanner fields removed, cargo check passes
+909 " ✅ docker-compose.yml rewritten — local build only, deprecated scanner env vars removed
+912 8:15a 🔴 runtime_settings.py — four deprecated scanner image fields removed
+913 " 🔴 runner_preflight.py — bandit/gitleaks/phpstan/pmd preflight specs removed
+914 " 🔴 test_docker_compose_dev_flow.py — stale constants and assertions cleaned up
+915 " 🔵 generate-release-branch.sh — still references docker-compose.hybrid.yml in validate and overlay steps
+916 " 🔵 test_compose_backend_env_optional.py — reads docker-compose.hybrid.yml and docker-compose.full.yml
+917 " 🔵 test_ghcr_publish_namespace_defaults.py — asserts SCANNER_BANDIT_IMAGE and hybrid compose file existence
+919 8:19a 🔵 OMX skill-active-state.json is stale — ralplan stuck in context-intake phase since Apr 22
+921 8:21a 🔵 4 pytest failures remaining after Docker infrastructure consolidation
+922 8:22a 🔴 Fixed 4 remaining pytest failures by updating test assertions for Docker infrastructure consolidation
+S166 Remove deprecated docker-compose.hybrid.yml and docker-compose.full.yml validation from release workflow (Apr 23, 8:22 AM)
+923 8:24a 🔄 Stop-gate review ALLOW — Docker infrastructure consolidation verified complete
+924 " ✅ Stop-gate review ALLOW — Docker infrastructure consolidation verified complete
+926 8:25a ✅ ACP + Rust runtime strategy adopted — PRD and test-spec generated
+927 " ✅ scan_rule_assets mass deletion staged — 567 files, 53k lines removed
+928 " 🔵 release.yml CI still validates deprecated hybrid/full compose entrypoints — stale after consolidation
+929 " 🔄 docker-publish-runners.yml — bandit/gitleaks/phpstan/pmd runner build jobs removed
+930 " 🔄 README.md, README_EN.md, Makefile — hybrid/full compose launch instructions removed
+931 8:27a 🔵 Release workflow references deprecated docker-compose.hybrid.yml and docker-compose.full.yml
+942 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
+S174 Strengthen release pipeline tests with precise compose validation count assertion to enforce single-compose-only architecture (Apr 23, 8:27 AM)
+932 8:29a 🔵 Stop-gate review ALLOW — previous turn was reporting-only
+934 8:30a 🔴 Release docs test — stale hybrid/full compose assertions replaced with slim-only contract
+936 8:32a 🔵 Stop-gate review evidence chain confirmed — previous turn was edit-producing
+S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
+S173 Strengthen release pipeline tests to enforce Docker infrastructure consolidation — verify hybrid/full compose removal and scanner engine deprecation (Apr 23, 8:33 AM)
+944 8:35a 🔵 Stop-gate review ALLOW — 329 tests passed, no blocking issues
+945 8:37a 🔴 Stop-gate review ALLOW — orchestrator regression tests strengthened and release workflow compose validation updated
+958 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
+946 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only, no direct edits confirmed
+950 8:40a 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
+949 " 🔵 Stop-gate review ALLOW — previous turn was reporting-only
+952 8:42a 🔴 Release pipeline test assertions strengthened — compose entrypoint count locked to exactly one
+951 " 🔵 ralplan state cleanup — stale sessions terminalized via direct file writes after MCP transport failure
+953 8:43a 🔵 OMX stop hook ralplan blocker mechanism — TERMINAL_MODE_PHASES mismatch with state files
+954 " ✅ scan_rule_assets directory cleanup — non-essential rule directories removed
+S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr 23, 8:43 AM)
+959 8:45a 🔵 ACP Rust SDK repository identified
+956 " 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
+966 " 🔵 Stop-gate review ALLOW — Docker infrastructure consolidation passed
+971 8:46a 🔵 Stop-gate review ALLOW — release workflow and test suite hardening passed
+962 " ✅ Frontend dead code cleanup PRD and test-spec hardened — owner/use proof protocol and Wave 1 exact gates added
+960 " 🔵 oh-my-codex shell_snapshots directory is read-only to the current user
+961 8:47a 🔵 oh-my-codex Stop hook stopReason taxonomy mapped
+964 8:48a ⚖️ Frontend dead code cleanup ralplan consensus reached — APPROVE, Wave 1 execution authorized
+963 " 🔵 oh-my-codex Stop hook exempts subagent threads from skill-active blocking
+969 " ✅ scan_rule_assets directory cleanup — legacy rule directories removed
+967 8:49a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
+968 " 🔵 fuse-overlayfs and tmpfs mount both blocked in current environment
+972 8:51a 🔵 Stop-gate review ALLOW — reporting-only turn, no code changes
+974 8:52a 🔵 Stop-gate review ALLOW — previous turn was reporting-only
+S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:52 AM)
+977 8:53a 🔵 Stop-gate review ALLOW — 329 tests passed, no blocking issues
+975 8:54a 🔵 ollama and lmstudio confirmed absent from audittool_personal host
+976 " ⚖️ ACP/Ruflo suitability ralplan completed — 4-iteration consensus reached
 
-Access 941k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1447k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
