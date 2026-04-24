@@ -51,4 +51,4 @@ jobs:
           ZIP_STORAGE_PATH: /tmp/vulhunter-zip-storage
         run: |
           mkdir -p "$ZIP_STORAGE_PATH"
-          cargo test -- --nocapture
+          cargo test -j 2 -- --test-threads=1 --nocapture

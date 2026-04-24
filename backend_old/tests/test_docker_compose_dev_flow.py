@@ -207,7 +207,7 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'CMD ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"]' in flow_parser_runner_text
     assert "uvicorn app.main:app" not in backend_readme_text
     assert "cargo run --bin backend-rust" in backend_readme_text
-    assert "cargo test" in backend_readme_text
+    assert "cargo test -j 2 -- --test-threads=1" in backend_readme_text
     assert "cargo build --bin backend-rust" in backend_start_text
     assert "cargo run --bin backend-rust" in backend_start_text
     assert "uvicorn app.main:app" not in backend_start_text

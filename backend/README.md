@@ -18,8 +18,11 @@ cargo run --bin backend-rust
 
 ### 3. Run tests
 
+Use the resource-conscious full-suite command so Cargo limits build fanout and
+the Rust test harness runs serially:
+
 ```bash
-cargo test
+cargo test -j 2 -- --test-threads=1
 ```
 
 ### 4. Build a release binary

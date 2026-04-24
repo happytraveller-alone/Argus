@@ -11,7 +11,8 @@ def test_backend_migration_smoke_workflow_runs_rust_bootstrap_only() -> None:
 
     assert "uses: dtolnay/rust-toolchain@stable" in workflow_text
     assert "working-directory: backend" in workflow_text
-    assert "cargo test -- --nocapture" in workflow_text
+    assert "cargo test -j 2 -- --test-threads=1 --nocapture" in workflow_text
+    assert "cargo test -- --nocapture" not in workflow_text
     assert "DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/vulhunter" in workflow_text
     assert "pip install -r backend/requirements.txt" not in workflow_text
     assert "uv sync --frozen --no-dev" not in workflow_text
@@ -25,7 +26,7 @@ def test_backend_local_commands_use_uv_only() -> None:
 
     assert "uvicorn app.main:app" not in backend_readme_text
     assert "cargo run --bin backend-rust" in backend_readme_text
-    assert "cargo test" in backend_readme_text
+    assert "cargo test -j 2 -- --test-threads=1" in backend_readme_text
     assert "uv run pytest" not in backend_readme_text
     assert "cargo build --bin backend-rust" in start_script_text
     assert "cargo run --bin backend-rust" in start_script_text

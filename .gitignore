@@ -230,6 +230,11 @@ CLAUDE.md
 !.github/workflows/*.yml
 !.github/workflows/*.yaml
 
+# Repo-local Cargo config
+!.cargo/
+.cargo/*
+!.cargo/config.toml
+
 # Repo-local Codex config
 .codex.local/
 !.codex/

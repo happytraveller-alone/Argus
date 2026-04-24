@@ -19,8 +19,8 @@
 
 ```bash
 cd /home/xyf/audittool_personal
-cargo test --manifest-path backend/Cargo.toml
-cargo build --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml -j 2 -- --test-threads=1
+cargo build --manifest-path backend/Cargo.toml -j 2
 ```
 
 ## ACP + Rust Runtime Gate
@@ -29,10 +29,10 @@ cargo build --manifest-path backend/Cargo.toml
 
 ```bash
 cd /home/xyf/audittool_personal
-cargo test --manifest-path backend/Cargo.toml --test task_routes_api
-cargo test --manifest-path backend/Cargo.toml --test skills_api
-cargo test --manifest-path backend/Cargo.toml
-cargo build --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml -j 2 --test task_routes_api -- --test-threads=1
+cargo test --manifest-path backend/Cargo.toml -j 2 --test skills_api -- --test-threads=1
+cargo test --manifest-path backend/Cargo.toml -j 2 -- --test-threads=1
+cargo build --manifest-path backend/Cargo.toml -j 2
 pnpm --dir frontend type-check
 pnpm --dir frontend test:node
 ```
