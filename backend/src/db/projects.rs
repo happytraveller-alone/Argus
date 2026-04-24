@@ -7,7 +7,10 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs;
 use uuid::Uuid;
 
-use crate::state::{AppState, StoredProject, StoredProjectArchive};
+use crate::{
+    db::task_state,
+    state::{AppState, StoredProject, StoredProjectArchive},
+};
 
 const PROJECTS_FILE_NAME: &str = "rust-projects.json";
 
@@ -65,6 +68,50 @@ pub async fn delete_project(state: &AppState, project_id: &str) -> Result<Option
         delete_project_db(state, project_id).await
     } else {
         delete_project_file(state, project_id).await
+    }
+}
+
+pub async fn delete_project_with_related_tasks(
+    state: &AppState,
+    project_id: &str,
+) -> Result<Option<StoredProject>> {
+    let _guard = state.file_store_lock.lock().await;
+
+    let project = get_project_while_locked(state, project_id).await?;
+    let Some(project) = project else {
+        return Ok(None);
+    };
+
+    let original_snapshot = task_state::load_snapshot_unlocked(state).await?;
+    let mut next_snapshot = original_snapshot.clone();
+    let cleanup_summary =
+        task_state::remove_project_tasks_from_snapshot(&mut next_snapshot, project_id);
+    let snapshot_changed =
+        cleanup_summary.removed_agent_tasks > 0 || cleanup_summary.removed_static_tasks > 0;
+
+    if snapshot_changed {
+        task_state::save_snapshot_unlocked(state, &next_snapshot).await?;
+    }
+
+    if let Err(error) = delete_project_while_locked(state, project_id).await {
+        if snapshot_changed {
+            let _ = task_state::save_snapshot_unlocked(state, &original_snapshot).await;
+        }
+        return Err(error);
+    }
+
+    Ok(Some(project))
+}
+
+pub async fn get_project_while_locked(
+    state: &AppState,
+    project_id: &str,
+) -> Result<Option<StoredProject>> {
+    if state.db_pool.is_some() {
+        get_project_db(state, project_id).await
+    } else {
+        let projects = load_projects_unlocked(state).await?;
+        Ok(projects.get(project_id).cloned())
     }
 }
 
@@ -262,6 +309,29 @@ async fn delete_project_db(state: &AppState, project_id: &str) -> Result<Option<
         .execute(pool)
         .await?;
     Ok(Some(project))
+}
+
+async fn delete_project_while_locked(
+    state: &AppState,
+    project_id: &str,
+) -> Result<Option<StoredProject>> {
+    if state.db_pool.is_some() {
+        let current = get_project_db(state, project_id).await?;
+        let Some(project) = current else {
+            return Ok(None);
+        };
+        let pool = state.db_pool.as_ref().expect("db_pool checked");
+        sqlx::query("delete from rust_projects where id = $1")
+            .bind(parse_uuid(project_id)?)
+            .execute(pool)
+            .await?;
+        Ok(Some(project))
+    } else {
+        let mut projects = load_projects_unlocked(state).await?;
+        let removed = projects.remove(project_id);
+        save_projects_unlocked(state, &projects).await?;
+        Ok(removed)
+    }
 }
 
 async fn save_archive_db(

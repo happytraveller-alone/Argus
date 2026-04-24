@@ -11,6 +11,8 @@ import { PROJECT_ACTION_BTN_SUBTLE } from "../constants";
 interface ProjectsTableProps {
   rows: ProjectsPageRowViewModel[];
   onCreateScan: (projectId: string) => void;
+  onDeleteProject: (projectId: string, projectName: string) => void;
+  deletingProjectId?: string | null;
 }
 
 // const EXECUTION_COLUMNS = [
@@ -62,8 +64,8 @@ const VULNERABILITY_METRIC_CHIP_CLASSNAMES = {
 const METRIC_CHIP_VALUE_CLASSNAME =
   "text-center font-semibold tabular-nums text-[18px]";
 const HEADER_CELL_CLASSNAME =
-  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-[15px] font-semibold uppercase tracking-[0.18em] text-foreground/80";
-const HEADER_CONTENT_CLASSNAME = "text-[15px]";
+  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-[14px] font-semibold uppercase tracking-[0.18em] text-foreground/80";
+const HEADER_CONTENT_CLASSNAME = "text-[14px]";
 const BODY_CELL_CLASSNAME = "border-b-2 border-border/95";
 const DIVIDER_CELL_CLASSNAME = "border-r-2 border-border/90";
 const SECTION_DIVIDER_CLASSNAME = "border-l-2 border-border/95";
@@ -241,6 +243,8 @@ function MetricSummaryCell({
 
 function buildColumns(
   onCreateScan: (projectId: string) => void,
+  onDeleteProject: (projectId: string, projectName: string) => void,
+  deletingProjectId?: string | null,
 ): AppColumnDef<ProjectsPageRowViewModel, unknown>[] {
   return [
     {
@@ -258,7 +262,7 @@ function buildColumns(
           to={row.original.detailPath}
           state={row.original.detailState}
           title={row.original.name}
-          className="mx-auto block max-w-[180px] truncate text-center text-[18px] font-semibold text-foreground transition-colors hover:text-primary"
+          className="mx-auto block max-w-[180px] truncate text-center text-[16px] font-semibold text-foreground transition-colors hover:text-primary"
         >
           {row.original.name}
         </Link>
@@ -273,7 +277,7 @@ function buildColumns(
         minWidth: 110,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
         headerContentClassName: HEADER_CONTENT_CLASSNAME,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center text-[17px] text-muted-foreground`,
+        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center text-[16px] text-muted-foreground`,
       },
       cell: ({ row }) => (
         <span title={row.original.metricsStatusMessage ?? undefined}>
@@ -420,6 +424,20 @@ function buildColumns(
           >
             创建扫描
           </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            className="cyber-btn-ghost h-8 px-2.5 border-rose-500/35 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100"
+            onClick={() =>
+              onDeleteProject(row.original.id, row.original.name)
+            }
+            disabled={
+              !row.original.actions.canDelete ||
+              deletingProjectId === row.original.id
+            }
+          >
+            {deletingProjectId === row.original.id ? "删除中..." : "删除项目"}
+          </Button>
         </div>
       ),
     },
@@ -429,8 +447,14 @@ function buildColumns(
 export default function ProjectsTable({
   rows,
   onCreateScan,
+  onDeleteProject,
+  deletingProjectId = null,
 }: ProjectsTableProps) {
-  const columns = buildColumns(onCreateScan) as ColumnDef<ProjectsPageRowViewModel>[];
+  const columns = buildColumns(
+    onCreateScan,
+    onDeleteProject,
+    deletingProjectId,
+  ) as ColumnDef<ProjectsPageRowViewModel>[];
 
   return (
     <DataTable

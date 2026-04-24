@@ -241,6 +241,10 @@ pub struct RuleOverrideRecord {
 
 pub async fn load_snapshot(state: &AppState) -> Result<TaskStateSnapshot> {
     let _guard = state.file_store_lock.lock().await;
+    load_snapshot_unlocked(state).await
+}
+
+pub(crate) async fn load_snapshot_unlocked(state: &AppState) -> Result<TaskStateSnapshot> {
     let path = task_state_file_path(state);
     match fs::read_to_string(&path).await {
         Ok(raw) => serde_json::from_str(&raw)
@@ -255,7 +259,50 @@ pub async fn save_snapshot(state: &AppState, snapshot: &TaskStateSnapshot) -> Re
     save_snapshot_unlocked(state, snapshot).await
 }
 
-async fn save_snapshot_unlocked(state: &AppState, snapshot: &TaskStateSnapshot) -> Result<()> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProjectTaskCleanupSummary {
+    pub removed_agent_tasks: usize,
+    pub removed_static_tasks: usize,
+}
+
+pub async fn remove_project_tasks(
+    state: &AppState,
+    project_id: &str,
+) -> Result<ProjectTaskCleanupSummary> {
+    let _guard = state.file_store_lock.lock().await;
+    let mut snapshot = load_snapshot_unlocked(state).await?;
+    let summary = remove_project_tasks_from_snapshot(&mut snapshot, project_id);
+
+    if summary.removed_agent_tasks > 0 || summary.removed_static_tasks > 0 {
+        save_snapshot_unlocked(state, &snapshot).await?;
+    }
+
+    Ok(summary)
+}
+
+pub(crate) fn remove_project_tasks_from_snapshot(
+    snapshot: &mut TaskStateSnapshot,
+    project_id: &str,
+) -> ProjectTaskCleanupSummary {
+    let agent_before = snapshot.agent_tasks.len();
+    snapshot
+        .agent_tasks
+        .retain(|_, record| record.project_id != project_id);
+    let static_before = snapshot.static_tasks.len();
+    snapshot
+        .static_tasks
+        .retain(|_, record| record.project_id != project_id);
+
+    ProjectTaskCleanupSummary {
+        removed_agent_tasks: agent_before.saturating_sub(snapshot.agent_tasks.len()),
+        removed_static_tasks: static_before.saturating_sub(snapshot.static_tasks.len()),
+    }
+}
+
+pub(crate) async fn save_snapshot_unlocked(
+    state: &AppState,
+    snapshot: &TaskStateSnapshot,
+) -> Result<()> {
     ensure_file_storage_root(state).await?;
     let path = task_state_file_path(state);
     let tmp_path = path.with_extension("tmp");

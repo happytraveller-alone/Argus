@@ -297,6 +297,7 @@ test("projects view model exposes vulnerability stats and browse guards", async 
 	assert.equal(row.aiVerifiedStats.medium, 1);
 	assert.equal(row.aiVerifiedStats.total, 1);
 	assert.equal(row.actions.canBrowseCode, false);
+	assert.equal(row.actions.canDelete, true);
 	assert.equal(
 		row.actions.browseCodeDisabledReason,
 		"仅 ZIP 类型项目支持代码浏览",

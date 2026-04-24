@@ -47,3 +47,26 @@ test("ProjectsTable 为项目页传入专用表格容器样式以移除内层滑
 	assert.match(source, /tableContainerClassName="overflow-visible border-0 rounded-none"/);
 	assert.doesNotMatch(source, /tableClassName="min-w-\[1360px\]"/);
 });
+
+test("ProjectsPage wires delete-project action with confirm copy and refresh flow", () => {
+	const source = readFileSync(projectsPagePath, "utf8");
+
+	assert.match(source, /async function handleDeleteProject\(projectId: string, projectName: string\)/);
+	assert.match(source, /window\.confirm\(/);
+	assert.match(source, /与该项目相关的扫描任务也会一并删除/);
+	assert.match(source, /await data\.deleteProject\(projectId\)/);
+	assert.match(source, /onDeleteProject=\{handleDeleteProject\}/);
+	assert.match(source, /deletingProjectId=\{deletingProjectId\}/);
+});
+
+test("ProjectsTable source includes delete-project action button", () => {
+	const projectsTablePath = path.join(
+		frontendDir,
+		"src/pages/projects/components/ProjectsTable.tsx",
+	);
+	const source = readFileSync(projectsTablePath, "utf8");
+
+	assert.match(source, /onDeleteProject: \(projectId: string, projectName: string\) => void;/);
+	assert.match(source, /删除项目/);
+	assert.match(source, /删除中\.\.\./);
+});

@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 9:53pm GMT+8
+# [audittool_personal] recent context, 2026-04-24 10:11pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,724t read) | 1,653,403t work | 99% savings
+Stats: 50 obs (23,006t read) | 1,633,291t work | 99% savings
 
 ### Apr 23, 2026
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
@@ -496,20 +496,10 @@ S497 Plan two PRD and test spec documents for Hermes containerized functional ag
 S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
 ### Apr 24, 2026
 S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
-1819 8:52a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
-1822 8:57a 🟣 Opengrep Language-Aware Rule Filtering Implemented
-1823 " 🔴 Stale Test Fixtures Fixed — X509-subject-name-validation.yaml Removed from Rule Set
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
-1820 9:24a ✅ Stop-gate review — previous turn was a status-only message, no code changes
-1821 9:25a 🟣 Opengrep Language-Aware Rule Filtering Implemented
-1824 9:30a ⚖️ Systematic Debugging Plan — Cargo Test High CPU/Memory Analysis
-1826 10:01a 🔵 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory
 S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
 1827 10:02a 🟣 Opengrep Language-Aware Rule Filtering Implemented
 1828 " 🟣 discover_rule_assets OnceLock Process-Level Cache Added
-1834 " 🟣 Opengrep Language-Aware Rule Filtering Implemented
-1835 " 🟣 OnceLock Process-Level Cache Added to discover_rule_assets
-1836 " 🔵 Stop-Gate Review Correctly ALLOWed Status-Only Turn After Verifying Session Trace
 1829 10:28a 🔵 Opengrep Container High CPU/Memory — Root Cause Confirmed as Rule Volume, Not Backend Re-reads
 1830 10:43a 🔵 Frontend Scan Rules Page — Component and Route Entrypoints Located
 1831 10:44a 🔵 Frontend Scan Rules Page — Full Component Map for OpengrepRules
@@ -552,6 +542,16 @@ S649 Save opengrep expertise skill + post-fix verification of scan task findings
 1908 9:31p 🔵 OMC Skill Discovery — Flat-File vs Directory Layout for omc-learned
 1910 9:33p 🔵 Static Tasks API — Finding Schema and Severity Filtering Architecture
 S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
+1916 9:53p 🔵 Stop-Gate Review — Previous Turn Was Verification-Only, ALLOW Confirmed
+1919 9:54p 🔴 Opengrep Scan — Severity Filtering and Language-Aware Rule Loading for Batch Path
+1926 9:56p 🔵 Stop-Gate Code Review — Severity Filtering Architecture Verified Across Full Stack
+1932 10:02p 🔵 Stop-Gate Review — Opengrep WARNING Severity in Test vs ERROR-Only Backend Policy
+1933 10:03p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix (Compilation Confirmed)
+1935 10:05p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix
+1936 " 🔵 Frontend Scan Dialogs Enforce ERROR-Only Rule Loading at UI Layer
+1937 10:06p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix
+1943 10:07p 🔵 Opengrep Scan — WARNING/INFO Findings Preserved for User Custom Rules, Filtered at Asset Source for Builtins
+1944 10:08p 🔵 Opengrep Severity Architecture — Full Stack Code Path Confirmed
 
-Access 1653k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1633k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

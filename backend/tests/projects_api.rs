@@ -2,7 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, state::AppState};
+use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
 use serde_json::{json, Value};
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -152,6 +152,127 @@ async fn project_crud_and_zip_routes_work_end_to_end() {
         .await
         .unwrap();
     assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
+    let config = isolated_test_config("projects-delete-cascades-task-state");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+
+    async fn create_project(app: &axum::Router) -> String {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/projects")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "delete-target",
+                            "source_type": "zip",
+                            "default_branch": "main",
+                            "programming_languages": []
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        payload["id"]
+            .as_str()
+            .expect("project id should exist")
+            .to_string()
+    }
+
+    let target_project_id = create_project(&app).await;
+    let other_project_id = create_project(&app).await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.agent_tasks.insert(
+        "agent-target".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-target".to_string(),
+            project_id: target_project_id.clone(),
+            task_type: "agent".to_string(),
+            status: "running".to_string(),
+            created_at: "2026-04-24T00:00:00Z".to_string(),
+            ..Default::default()
+        },
+    );
+    snapshot.agent_tasks.insert(
+        "agent-other".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-other".to_string(),
+            project_id: other_project_id.clone(),
+            task_type: "agent".to_string(),
+            status: "running".to_string(),
+            created_at: "2026-04-24T00:00:00Z".to_string(),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
+        "static-target".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-target".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: target_project_id.clone(),
+            name: "static target".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T00:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
+        "static-other".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-other".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: other_project_id.clone(),
+            name: "static other".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T00:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/v1/projects/{target_project_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should reload");
+    assert!(!snapshot.agent_tasks.contains_key("agent-target"));
+    assert!(!snapshot.static_tasks.contains_key("static-target"));
+    assert!(snapshot.agent_tasks.contains_key("agent-other"));
+    assert!(snapshot.static_tasks.contains_key("static-other"));
 }
 
 #[tokio::test]

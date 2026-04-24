@@ -318,7 +318,7 @@ pub async fn delete_project(
     State(state): State<AppState>,
     AxumPath(project_id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = projects::delete_project(&state, &project_id)
+    let deleted = projects::delete_project_with_related_tasks(&state, &project_id)
         .await
         .map_err(internal_error)?;
     let Some(project) = deleted else {

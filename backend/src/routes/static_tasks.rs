@@ -462,7 +462,6 @@ async fn create_opengrep_task(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
-    ensure_project_exists(&state, &project_id).await?;
 
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
@@ -513,11 +512,24 @@ async fn create_opengrep_task(
         findings: Vec::new(),
     };
 
-    let mut snapshot = load_task_snapshot(&state).await?;
+    let _guard = state.file_store_lock.lock().await;
+    let project = projects::get_project_while_locked(&state, &project_id)
+        .await
+        .map_err(internal_error)?;
+    if project.is_none() {
+        return Err(ApiError::NotFound(format!(
+            "project not found: {project_id}"
+        )));
+    }
+    let mut snapshot = task_state::load_snapshot_unlocked(&state)
+        .await
+        .map_err(internal_error)?;
     snapshot
         .static_tasks
         .insert(task_id.clone(), record.clone());
-    save_task_snapshot(&state, &snapshot).await?;
+    task_state::save_snapshot_unlocked(&state, &snapshot)
+        .await
+        .map_err(internal_error)?;
 
     let response = static_task_value(&record);
 
@@ -850,14 +862,13 @@ async fn run_opengrep_scan_inner(
     let summary_path = workspace_dir.join(&summary_rel_path);
     if let Ok(summary_text) = tokio::fs::read_to_string(&summary_path).await {
         if summary_text.contains("\"status\":\"scan_failed\"") {
-            let log_excerpt =
-                read_text_excerpt(Some(&workspace_dir.join(&log_rel_path))).await;
+            let log_excerpt = read_text_excerpt(Some(&workspace_dir.join(&log_rel_path))).await;
             let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
             let detail = log_excerpt.unwrap_or_else(|| "no log available".to_string());
-            return Err(
-                format!("opengrep scan failed: scanner produced no valid results; log={detail}")
-                    .into(),
-            );
+            return Err(format!(
+                "opengrep scan failed: scanner produced no valid results; log={detail}"
+            )
+            .into());
         }
     }
 
@@ -878,15 +889,6 @@ async fn run_opengrep_scan_inner(
         source_dir.to_str(),
         known_paths.as_ref(),
     );
-    let findings: Vec<_> = findings
-        .into_iter()
-        .filter(|f| {
-            f.payload
-                .get("severity")
-                .and_then(Value::as_str)
-                .is_some_and(|s| s.eq_ignore_ascii_case("ERROR"))
-        })
-        .collect();
 
     update_scan_progress(state, task_id, 90.0, "finalizing", "saving findings").await;
 
@@ -1718,18 +1720,6 @@ async fn save_task_snapshot(
     task_state::save_snapshot(state, snapshot)
         .await
         .map_err(internal_error)
-}
-
-async fn ensure_project_exists(state: &AppState, project_id: &str) -> Result<(), ApiError> {
-    let project = projects::get_project(state, project_id)
-        .await
-        .map_err(internal_error)?;
-    if project.is_none() {
-        return Err(ApiError::NotFound(format!(
-            "project not found: {project_id}"
-        )));
-    }
-    Ok(())
 }
 
 fn required_string(payload: &Value, key: &str) -> Result<String, ApiError> {

@@ -137,6 +137,7 @@ export function buildProjectsPageViewModel(
 				actions: {
 					canCreateScan: true,
 					canBrowseCode: project.source_type === "zip",
+					canDelete: true,
 					browseCodePath: `/projects/${project.id}/code-browser`,
 					browseCodeState: { from: projectDetailFrom },
 					browseCodeDisabledReason:

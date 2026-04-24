@@ -13,6 +13,7 @@ type ApiSurface = Pick<
 	| "getProjects"
 	| "createProject"
 	| "createProjectWithZip"
+	| "deleteProject"
 	| "updateProject"
 >;
 
@@ -73,6 +74,10 @@ export function createApiProjectsPageDataSource(
 				createProjectWithZip: (nextInput, nextFile) =>
 					apiSurface.createProjectWithZip(nextInput, nextFile),
 			});
+		},
+
+		async deleteProject(projectId) {
+			await apiSurface.deleteProject(projectId);
 		},
 
 		async updateProject(projectId, input, zipFile) {

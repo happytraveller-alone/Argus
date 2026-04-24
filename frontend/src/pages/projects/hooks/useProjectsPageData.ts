@@ -34,6 +34,10 @@ export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 			await loadProjects();
 			return createdProject;
 		},
+		async deleteProject(projectId: string) {
+			await dataSource.deleteProject(projectId);
+			await loadProjects();
+		},
 		async updateProject(
 			projectId: string,
 			input: Partial<CreateProjectForm>,

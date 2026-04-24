@@ -124,6 +124,7 @@ export default function ProjectsPage({
 	const tableViewportRef = useRef<HTMLDivElement | null>(null);
 	const paginationRef = useRef<HTMLDivElement | null>(null);
 	const [projectPageSize, setProjectPageSize] = useState(PROJECT_PAGE_SIZE);
+	const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 	const projectPageSizeRef = useRef(projectPageSize);
 
 	const filteredProjects = useMemo(
@@ -294,6 +295,36 @@ export default function ProjectsPage({
 		}
 	}
 
+	async function handleDeleteProject(projectId: string, projectName: string) {
+		if (
+			typeof window !== "undefined" &&
+			!window.confirm(
+				`确认删除项目「${projectName}」？与该项目相关的扫描任务也会一并删除，且不可恢复。`,
+			)
+		) {
+			return;
+		}
+
+		setDeletingProjectId(projectId);
+		try {
+			await data.deleteProject(projectId);
+			toast.success(`项目 "${projectName}" 已删除`, {
+				description: "与该项目相关的扫描任务已一并删除。",
+				duration: 5000,
+			});
+			pinToProjectBrowserHash();
+			scrollToProjectBrowser();
+		} catch (error) {
+			console.error("Failed to delete project:", error);
+			toast.error("删除项目失败");
+			throw error;
+		} finally {
+			setDeletingProjectId((current) =>
+				current === projectId ? null : current,
+			);
+		}
+	}
+
 	function handleTaskCreated() {
 		void data.loadProjects();
 		toast.success("扫描任务已创建", {
@@ -349,6 +380,8 @@ export default function ProjectsPage({
 									navigateOnSuccess: true,
 								});
 							}}
+							onDeleteProject={handleDeleteProject}
+							deletingProjectId={deletingProjectId}
 						/>
 						<div ref={paginationRef}>
 							<ProjectsPagination

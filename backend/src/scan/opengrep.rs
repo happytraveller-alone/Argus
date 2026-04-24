@@ -639,6 +639,24 @@ mod tests {
     }
 
     #[test]
+    fn retains_warning_and_info_severity_findings() {
+        let json = r#"{"version":"1.15.1","results":[
+            {"check_id":"err-rule","path":"app.c","start":{"line":1,"col":1,"offset":0},"end":{"line":1,"col":10,"offset":9},"extra":{"message":"error","severity":"ERROR","metadata":{},"lines":"x()"}},
+            {"check_id":"warn-rule","path":"app.c","start":{"line":2,"col":1,"offset":0},"end":{"line":2,"col":10,"offset":9},"extra":{"message":"warning","severity":"WARNING","metadata":{},"lines":"y()"}},
+            {"check_id":"info-rule","path":"app.c","start":{"line":3,"col":1,"offset":0},"end":{"line":3,"col":10,"offset":9},"extra":{"message":"info","severity":"INFO","metadata":{},"lines":"z()"}}
+        ],"errors":[]}"#;
+        let findings = super::parse_scan_output(json, "task-sev", None, None);
+        assert_eq!(findings.len(), 3, "all severity levels must be retained");
+        let severities: Vec<&str> = findings
+            .iter()
+            .map(|f| f.payload["severity"].as_str().unwrap())
+            .collect();
+        assert!(severities.contains(&"ERROR"));
+        assert!(severities.contains(&"WARNING"));
+        assert!(severities.contains(&"INFO"));
+    }
+
+    #[test]
     fn detects_when_scan_output_has_results_array() {
         assert!(super::scan_output_has_results_array(
             r#"{"version":"1.15.1","results":[]}"#

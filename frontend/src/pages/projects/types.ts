@@ -40,6 +40,7 @@ export interface ProjectsPageRowViewModel {
 	actions: {
 		canCreateScan: boolean;
 		canBrowseCode: boolean;
+		canDelete: boolean;
 		browseCodePath: string;
 		browseCodeState: { from: string };
 		browseCodeDisabledReason: string | null;

@@ -111,7 +111,6 @@ pub async fn create_agent_task(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
-    ensure_project_exists(&state, &project_id).await?;
 
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
@@ -152,9 +151,6 @@ pub async fn create_agent_task(
         .and_then(|value| value.as_i64())
         .unwrap_or(8);
 
-    let mut snapshot = task_state::load_snapshot(&state)
-        .await
-        .map_err(internal_error)?;
     let mut record = task_state::AgentTaskRecord {
         id: task_id.clone(),
         project_id: project_id.clone(),
@@ -232,8 +228,20 @@ pub async fn create_agent_task(
         "children": Vec::<Value>::new(),
     })];
 
+    let _guard = state.file_store_lock.lock().await;
+    let project = projects::get_project_while_locked(&state, &project_id)
+        .await
+        .map_err(internal_error)?;
+    if project.is_none() {
+        return Err(ApiError::NotFound(format!(
+            "project not found: {project_id}"
+        )));
+    }
+    let mut snapshot = task_state::load_snapshot_unlocked(&state)
+        .await
+        .map_err(internal_error)?;
     snapshot.agent_tasks.insert(task_id.clone(), record.clone());
-    task_state::save_snapshot(&state, &snapshot)
+    task_state::save_snapshot_unlocked(&state, &snapshot)
         .await
         .map_err(internal_error)?;
     Ok(Json(agent_task_value(&record)))
@@ -2025,18 +2033,6 @@ fn push_checkpoint(
         }),
         metadata: Some(json!({"source": "rust-backend"})),
     });
-}
-
-async fn ensure_project_exists(state: &AppState, project_id: &str) -> Result<(), ApiError> {
-    let project = projects::get_project(state, project_id)
-        .await
-        .map_err(internal_error)?;
-    if project.is_none() {
-        return Err(ApiError::NotFound(format!(
-            "project not found: {project_id}"
-        )));
-    }
-    Ok(())
 }
 
 fn required_string(payload: &Value, key: &str) -> Result<String, ApiError> {
