@@ -4,8 +4,16 @@ use axum::{
 };
 use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
 use serde_json::{json, Value};
+use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
+use tempfile::TempDir;
+use tokio::{
+    sync::Mutex,
+    time::{sleep, Duration},
+};
 use tower::util::ServiceExt;
 use uuid::Uuid;
+
+static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 fn isolated_test_config(scope: &str) -> AppConfig {
     let mut config = AppConfig::for_tests();
@@ -16,6 +24,145 @@ fn isolated_test_config(scope: &str) -> AppConfig {
 
 async fn create_project(app: &axum::Router) -> String {
     create_project_with_name(app, "task-api-project").await
+}
+
+fn test_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        writer.start_file("src/main.py", options).unwrap();
+        writer.write_all(b"print('hello')\n").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
+struct EnvVarGuard {
+    key: String,
+    original: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &str, value: &str) -> Self {
+        let original = env::var(key).ok();
+        env::set_var(key, value);
+        Self {
+            key: key.to_string(),
+            original,
+        }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(original) = &self.original {
+            env::set_var(&self.key, original);
+        } else {
+            env::remove_var(&self.key);
+        }
+    }
+}
+
+fn fake_opengrep_task_docker(temp_dir: &TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("fake-opengrep-task-docker.sh");
+    let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_DOCKER_LOG:?}"
+state_dir="${FAKE_TASK_DOCKER_STATE_DIR:?}"
+cmd="${1:-}"
+shift || true
+printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
+case "$cmd" in
+  create)
+    output_path=""
+    summary_path=""
+    log_path=""
+    prev=""
+    for arg in "$@"; do
+      case "$prev" in
+        output)
+          output_path="$arg"
+          prev=""
+          ;;
+        summary)
+          summary_path="$arg"
+          prev=""
+          ;;
+        log)
+          log_path="$arg"
+          prev=""
+          ;;
+        *)
+          case "$arg" in
+            --output) prev="output" ;;
+            --summary) prev="summary" ;;
+            --log) prev="log" ;;
+          esac
+          ;;
+      esac
+    done
+    printf '%s' "$output_path" > "$state_dir/output_path"
+    printf '%s' "$summary_path" > "$state_dir/summary_path"
+    printf '%s' "$log_path" > "$state_dir/log_path"
+    printf '%s\n' "${FAKE_CONTAINER_ID:-task-container-xyz}"
+    ;;
+  start)
+    output_path="$(cat "$state_dir/output_path" 2>/dev/null || true)"
+    summary_path="$(cat "$state_dir/summary_path" 2>/dev/null || true)"
+    log_path="$(cat "$state_dir/log_path" 2>/dev/null || true)"
+    if [ -n "$output_path" ] && [ "${FAKE_TASK_SKIP_RESULTS:-0}" != "1" ]; then
+      mkdir -p "$(dirname "$output_path")"
+      printf '%s\n' "${FAKE_TASK_RESULTS_JSON:-{\"results\":[]}}" > "$output_path"
+      if [ -n "${FAKE_TASK_RESULTS_COPY_PATH:-}" ]; then
+        mkdir -p "$(dirname "${FAKE_TASK_RESULTS_COPY_PATH}")"
+        cp "$output_path" "${FAKE_TASK_RESULTS_COPY_PATH}"
+      fi
+    fi
+    if [ -n "$log_path" ]; then
+      mkdir -p "$(dirname "$log_path")"
+      printf '%s\n' "${FAKE_TASK_LOG_BODY:-scan completed}" > "$log_path"
+    fi
+    if [ -n "$summary_path" ] && [ "${FAKE_TASK_SKIP_SUMMARY:-0}" != "1" ]; then
+      mkdir -p "$(dirname "$summary_path")"
+      printf '{"status":"%s","results_path":"%s","log_path":"%s"}\n' \
+        "${FAKE_TASK_SUMMARY_STATUS:-scan_completed}" "$output_path" "$log_path" > "$summary_path"
+    fi
+    ;;
+  wait)
+    printf '%s\n' "${FAKE_TASK_WAIT_EXIT_CODE:-0}"
+    ;;
+  logs)
+    if [ "${1:-}" = "--stdout" ]; then
+      printf '%s' "${FAKE_TASK_STDOUT:-}"
+      exit 0
+    fi
+    if [ "${1:-}" = "--stderr" ]; then
+      printf '%s' "${FAKE_TASK_STDERR:-}"
+      exit 0
+    fi
+    ;;
+  inspect)
+    if [ "${1:-}" = "--format" ]; then
+      printf '%s\n' "${FAKE_TASK_INSPECT_RUNNING:-false}"
+      exit 0
+    fi
+    printf '[]\n'
+    ;;
+  stop)
+    printf 'stopped\n'
+    ;;
+  rm)
+    printf 'removed\n'
+    ;;
+esac
+"#;
+    fs::write(&script_path, script).expect("write fake docker script");
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
 }
 
 async fn create_project_with_name(app: &axum::Router, name: &str) -> String {
@@ -1631,6 +1778,241 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
     )
     .unwrap();
     assert!(opengrep_finding_detail_json.as_array().is_some());
+}
+
+#[tokio::test]
+async fn opengrep_task_completes_without_missing_results_when_summary_is_completion_safe() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_opengrep_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    let preserved_results = temp_dir.path().join("preserved-results.json");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _results_copy = EnvVarGuard::set(
+        "FAKE_TASK_RESULTS_COPY_PATH",
+        preserved_results.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _results_json = EnvVarGuard::set(
+        "FAKE_TASK_RESULTS_JSON",
+        r#"{"results":[{"check_id":"demo.rule","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo finding","severity":"ERROR","metadata":{"confidence":"HIGH"},"lines":"print('hello')"}}]}"#,
+    );
+
+    let state = AppState::from_config(isolated_test_config("opengrep-results-integrity-route"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project(&app).await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        test_zip_bytes(),
+    )
+    .expect("write project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "opengrep completion-safe task",
+                        "rule_ids": [],
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert!(!final_status.findings.is_empty(), "{final_status:?}");
+    assert!(
+        final_status
+            .progress
+            .logs
+            .iter()
+            .all(|log| !log.message.contains("missing opengrep results output")),
+        "{:?}",
+        final_status.progress.logs
+    );
+    assert!(fs::read_to_string(&preserved_results)
+        .expect("preserved results")
+        .contains("\"results\""));
+
+    let logged = fs::read_to_string(&fake_log).expect("docker log");
+    assert!(logged.contains("create|"), "{logged}");
+    assert!(logged.contains("start|task-container-xyz"), "{logged}");
+    assert!(logged.contains("wait|task-container-xyz"), "{logged}");
+    assert!(!logged.contains("stop|-t 2 task-container-xyz"), "{logged}");
+}
+
+#[tokio::test]
+async fn opengrep_task_uses_single_container_and_captures_terminal_output() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_opengrep_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _stdout = EnvVarGuard::set("FAKE_TASK_STDOUT", "opengrep stdout from container");
+    let _stderr = EnvVarGuard::set("FAKE_TASK_STDERR", "opengrep stderr from container");
+    let _results_json = EnvVarGuard::set(
+        "FAKE_TASK_RESULTS_JSON",
+        r#"{"results":[{"check_id":"demo.rule","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo finding","severity":"ERROR","metadata":{"confidence":"HIGH"},"lines":"print('hello')"}}]}"#,
+    );
+
+    let state = AppState::from_config(isolated_test_config("opengrep-single-container-contract"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project(&app).await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        test_zip_bytes(),
+    )
+    .expect("write project zip");
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("load snapshot for custom rules");
+    let mut selected_rule_ids = Vec::new();
+    for idx in 0..3 {
+        let rule_id = format!("custom-python-rule-{idx}");
+        selected_rule_ids.push(rule_id.clone());
+        snapshot.opengrep_rules.insert(
+            rule_id.clone(),
+            task_state::OpengrepRuleRecord {
+                id: rule_id.clone(),
+                name: format!("Custom Python Rule {idx}"),
+                language: "python".to_string(),
+                severity: "WARNING".to_string(),
+                confidence: Some("MEDIUM".to_string()),
+                description: Some("custom test rule".to_string()),
+                cwe: None,
+                source: "upload".to_string(),
+                correct: true,
+                is_active: true,
+                created_at: "2026-04-24T00:00:00Z".to_string(),
+                pattern_yaml: format!(
+                    "rules:\n  - id: custom-python-rule-{idx}\n    languages:\n      - python\n    severity: WARNING\n    message: custom rule {idx}\n    pattern: dangerous_call($X)"
+                ),
+                patch: None,
+            },
+        );
+    }
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("save snapshot with custom rules");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "opengrep single-container task",
+                        "rule_ids": selected_rule_ids,
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert!(!final_status.findings.is_empty(), "{final_status:?}");
+
+    let logged = fs::read_to_string(&fake_log).expect("docker log");
+    let create_count = logged
+        .lines()
+        .filter(|line| line.starts_with("create|"))
+        .count();
+    assert_eq!(
+        create_count, 1,
+        "one scan task should only create one opengrep container\n{logged}"
+    );
+    assert!(
+        logged.contains("logs|--stdout task-container-xyz"),
+        "stdout should be collected by rust after the container exits\n{logged}"
+    );
+    assert!(
+        logged.contains("logs|--stderr task-container-xyz"),
+        "stderr should be collected by rust after the container exits\n{logged}"
+    );
 }
 
 #[tokio::test]

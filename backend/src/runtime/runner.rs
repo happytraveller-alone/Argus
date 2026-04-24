@@ -391,6 +391,28 @@ fn summary_gate_exit_timeout() -> Duration {
         .unwrap_or_else(|| Duration::from_secs(15))
 }
 
+fn summary_gate_post_exit_grace() -> Duration {
+    env::var("VULHUNTER_SUMMARY_GATE_POST_EXIT_GRACE_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .map(Duration::from_millis)
+        .unwrap_or_else(|| Duration::from_millis(1_000))
+}
+
+fn wait_for_summary_path(summary_path: &Path, timeout: Duration) -> bool {
+    let started_at = Instant::now();
+    loop {
+        if summary_path.is_file() {
+            return true;
+        }
+        if started_at.elapsed() >= timeout {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
 fn poll_summary_gate(
     binary: &str,
     container_id: &str,
@@ -400,7 +422,6 @@ fn poll_summary_gate(
     let started_at = Instant::now();
     loop {
         if summary_path.is_file() {
-            request_container_stop(binary, container_id)?;
             return Ok(SummaryGateOutcome {
                 summary_observed: true,
                 timed_out: false,
@@ -409,7 +430,10 @@ fn poll_summary_gate(
 
         if !inspect_container_running(binary, container_id)? {
             return Ok(SummaryGateOutcome {
-                summary_observed: false,
+                summary_observed: wait_for_summary_path(
+                    summary_path,
+                    summary_gate_post_exit_grace(),
+                ),
                 timed_out: false,
             });
         }
@@ -633,10 +657,12 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             }
             parse_exit_code(&wait_output)?
         };
-        let should_capture_stdout =
-            spec.capture_stdout_path.is_some() || (exit_code != 0 && !summary_observed);
-        let should_capture_stderr =
-            spec.capture_stderr_path.is_some() || (exit_code != 0 && !summary_observed);
+        let summary_required = spec.completion_summary_path.is_some();
+        let success =
+            expected_exit_codes.contains(&exit_code) && (!summary_required || summary_observed);
+        let needs_debug_capture = exit_code != 0 || !success;
+        let should_capture_stdout = spec.capture_stdout_path.is_some() || needs_debug_capture;
+        let should_capture_stderr = spec.capture_stderr_path.is_some() || needs_debug_capture;
         let mut stdout_text = if should_capture_stdout {
             start_output.stdout.clone()
         } else {
@@ -665,7 +691,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             .map(|relative| write_full_text(&workspace.join(relative), &stderr_text))
             .transpose()?;
 
-        let keep_logs = exit_code != 0 && !summary_observed;
+        let keep_logs = needs_debug_capture;
         let retained_stdout_path = if keep_logs {
             write_retained_log(&stdout_log_path, &stdout_text)?
         } else {
@@ -677,7 +703,6 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             None
         };
 
-        let success = expected_exit_codes.contains(&exit_code) || summary_observed;
         Ok(RunnerResult {
             success,
             container_id: Some(created_id),
@@ -686,6 +711,11 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             stderr_path: captured_stderr_path.or(retained_stderr_path),
             error: if success {
                 None
+            } else if summary_required
+                && !summary_observed
+                && expected_exit_codes.contains(&exit_code)
+            {
+                Some("scanner completion summary was not observed".to_string())
             } else {
                 Some(format!("scanner container exited with code {exit_code}"))
             },
@@ -694,10 +724,12 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
 
     let (result, log_retention) = match execution {
         Ok(result) => {
-            let log_retention = if result.exit_code != 0 {
-                "nonzero_exit"
-            } else {
+            let log_retention = if result.success && result.exit_code != 0 {
+                "accepted_nonzero_exit"
+            } else if result.success {
                 "dropped"
+            } else {
+                "failure_retained"
             };
             (result, log_retention.to_string())
         }
@@ -836,7 +868,7 @@ case "$cmd" in
     fi
     if [ -n "${FAKE_COMPLETION_SUMMARY_PATH:-}" ]; then
       mkdir -p "$(dirname "${FAKE_COMPLETION_SUMMARY_PATH}")"
-      printf '{"status":"scan_summary_observed"}\n' > "${FAKE_COMPLETION_SUMMARY_PATH}"
+      printf '{"status":"%s"}\n' "${FAKE_COMPLETION_SUMMARY_STATUS:-scan_completed}" > "${FAKE_COMPLETION_SUMMARY_PATH}"
     fi
     printf '%s' "${FAKE_START_STDOUT:-}"
     printf '%s' "${FAKE_START_STDERR:-}" >&2
@@ -1067,7 +1099,7 @@ esac
 
         let runner_meta = fs::read_to_string(workspace_dir.join("meta/runner.json")).unwrap();
         assert!(runner_meta.contains("\"success\": true"));
-        assert!(runner_meta.contains("\"log_retention\": \"nonzero_exit\""));
+        assert!(runner_meta.contains("\"log_retention\": \"accepted_nonzero_exit\""));
     }
 
     #[test]
@@ -1267,7 +1299,7 @@ esac
     }
 
     #[test]
-    fn execute_stops_container_after_completion_summary_marker() {
+    fn execute_waits_for_container_exit_after_completion_summary_marker() {
         let _lock = ENV_LOCK.lock().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let fake_log = temp_dir.path().join("docker.log");
@@ -1287,7 +1319,7 @@ esac
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
         );
-        let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "143");
+        let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "0");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
@@ -1309,26 +1341,65 @@ esac
         });
 
         assert!(result.success);
-        assert_eq!(result.exit_code, 143);
+        assert_eq!(result.exit_code, 0);
         assert!(summary_path.is_file());
 
         let logged = fs::read_to_string(&fake_log).unwrap();
         assert!(logged.contains("start|container-xyz"), "{logged}");
-        assert!(logged.contains("stop|-t 2 container-xyz"), "{logged}");
+        assert!(logged.contains("wait|container-xyz"), "{logged}");
         assert!(logged.contains("rm|-f container-xyz"), "{logged}");
         assert!(!logged.contains("start|-a"), "{logged}");
+        assert!(!logged.contains("stop|-t 2 container-xyz"), "{logged}");
         assert!(!logged.contains("logs|--stdout"), "{logged}");
         assert!(!logged.contains("logs|--stderr"), "{logged}");
     }
 
     #[test]
-    fn execute_fails_when_summary_gate_stop_does_not_stop_container() {
+    fn poll_summary_gate_waits_briefly_for_post_exit_summary_flush() {
         let _lock = ENV_LOCK.lock().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("opengrep/task-stop-failure");
+        let workspace_dir = workspace_root.join("opengrep/task-summary-race");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        let summary_path = workspace_dir.join("output/scan-summary.json");
+
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _post_exit_grace = EnvVarGuard::set("VULHUNTER_SUMMARY_GATE_POST_EXIT_GRACE_MS", "200");
+
+        let summary_path_for_writer = summary_path.clone();
+        let writer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            fs::create_dir_all(summary_path_for_writer.parent().unwrap()).unwrap();
+            fs::write(summary_path_for_writer, "{\"status\":\"scan_completed\"}\n").unwrap();
+        });
+
+        let outcome = poll_summary_gate(
+            fake_docker.to_str().unwrap(),
+            "container-xyz",
+            &summary_path,
+            Some(Duration::from_secs(1)),
+        )
+        .unwrap();
+
+        writer.join().unwrap();
+
+        assert!(
+            outcome.summary_observed,
+            "summary should still be observed when it flushes immediately after container exit"
+        );
+        assert!(!outcome.timed_out);
+    }
+
+    #[test]
+    fn execute_summary_observed_does_not_override_unexpected_exit() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-unexpected-exit");
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
@@ -1342,8 +1413,8 @@ esac
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
         );
-        let _inspect_running = EnvVarGuard::set("FAKE_INSPECT_RUNNING", "true");
-        let _stop_exit = EnvVarGuard::set("FAKE_STOP_EXIT_CODE", "1");
+        let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "143");
+        let _stderr = EnvVarGuard::set("FAKE_STDERR", "unexpected detached stderr");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
@@ -1365,13 +1436,28 @@ esac
         });
 
         assert!(!result.success);
+        assert_eq!(result.exit_code, 143);
         assert!(
             result
                 .error
                 .as_deref()
-                .is_some_and(|error| error.contains("docker stop failed")),
+                .is_some_and(|error| error.contains("scanner container exited with code 143")),
             "{result:?}"
         );
+        assert!(
+            result
+                .stderr_path
+                .as_ref()
+                .is_some_and(|path| fs::read_to_string(path)
+                    .unwrap()
+                    .contains("unexpected detached stderr")),
+            "{result:?}"
+        );
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("wait|container-xyz"), "{logged}");
+        assert!(!logged.contains("stop|-t 2 container-xyz"), "{logged}");
+        assert!(logged.contains("logs|--stderr"), "{logged}");
     }
 
     #[test]
@@ -1429,6 +1515,64 @@ esac
         let logged = fs::read_to_string(&fake_log).unwrap();
         assert!(logged.contains("wait|container-xyz"), "{logged}");
         assert!(logged.contains("rm|-f container-xyz"), "{logged}");
+        assert!(!logged.contains("stop|-t 2 container-xyz"), "{logged}");
+    }
+
+    #[test]
+    fn execute_requires_completion_summary_for_summary_gated_success() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-missing-summary");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _stdout = EnvVarGuard::set("FAKE_STDOUT", "detached stdout without summary");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0, 1],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: Some("output/scan-summary.json".to_string()),
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+        });
+
+        assert!(!result.success);
+        assert_eq!(result.exit_code, 0);
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("completion summary was not observed")),
+            "{result:?}"
+        );
+        assert!(
+            result
+                .stdout_path
+                .as_ref()
+                .is_some_and(|path| fs::read_to_string(path)
+                    .unwrap()
+                    .contains("detached stdout without summary")),
+            "{result:?}"
+        );
     }
 
     #[test]

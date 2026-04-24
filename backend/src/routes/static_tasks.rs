@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::io::{Cursor, Read as IoRead};
 use std::path::PathBuf;
 
@@ -797,98 +797,74 @@ async fn run_opengrep_scan_inner(
         _ => Vec::new(),
     };
 
-    let rule_batches = prepare_opengrep_rule_batches(
-        state,
-        &workspace_dir,
-        rule_ids,
-        &project_languages,
-        state.config.opengrep_scan_rules_per_batch,
-    )
-    .await?;
-    if rule_batches.is_empty() {
+    let Some(rule_inputs) =
+        prepare_opengrep_runner_inputs(state, &workspace_dir, rule_ids, &project_languages).await?
+    else {
         return Err("no opengrep rules available for scan".into());
-    }
+    };
 
     update_scan_progress(state, task_id, 40.0, "scanning", "running opengrep scanner").await;
 
     let scanner_image = state.config.scanner_opengrep_image.clone();
     let container_source_dir = "/scan/source";
 
-    update_scan_progress(state, task_id, 75.0, "parsing", "parsing scan results").await;
     let known_paths = crate::scan::path_utils::collect_zip_relative_paths(&zip_path).ok();
-    let mut findings = Vec::new();
-    let mut pending_batches: VecDeque<OpengrepRuleBatch> = rule_batches.into();
+    let manifest_container_path = rule_inputs
+        .image_manifest_path
+        .as_ref()
+        .map(|path| workspace_container_path(&workspace_dir, path))
+        .transpose()?;
+    let config_container_path = rule_inputs
+        .workspace_rules_dir
+        .as_ref()
+        .map(|path| workspace_container_path(&workspace_dir, path))
+        .transpose()?;
+    let output_rel_path = format!("output/results-{}.json", Uuid::new_v4());
+    let summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
+    let log_rel_path = format!("output/log-{}.txt", Uuid::new_v4());
+    let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
+    let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
+    let output_container_path = format!("/scan/{output_rel_path}");
+    let summary_container_path = format!("/scan/{summary_rel_path}");
+    let log_container_path = format!("/scan/{log_rel_path}");
+    let spec = build_opengrep_runner_spec(
+        &state.config,
+        scanner_image,
+        &workspace_dir,
+        OpengrepRunnerPaths {
+            container_source_dir,
+            manifest_container_path: manifest_container_path.as_deref(),
+            config_container_path: config_container_path.as_deref(),
+            output_container_path: &output_container_path,
+            summary_rel_path: &summary_rel_path,
+            summary_container_path: &summary_container_path,
+            log_container_path: &log_container_path,
+            stdout_rel_path: &stdout_rel_path,
+            stderr_rel_path: &stderr_rel_path,
+        },
+    );
 
-    while let Some(batch) = pending_batches.pop_front() {
-        let manifest_container_path = batch
-            .image_manifest_path
-            .as_ref()
-            .map(|path| workspace_container_path(&workspace_dir, path))
-            .transpose()?;
-        let config_container_path = batch
-            .workspace_rules_dir
-            .as_ref()
-            .map(|path| workspace_container_path(&workspace_dir, path))
-            .transpose()?;
-        let output_rel_path = format!("output/results-{}.json", Uuid::new_v4());
-        let summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
-        let log_rel_path = format!("output/log-{}.txt", Uuid::new_v4());
-        let output_container_path = format!("/scan/{output_rel_path}");
-        let summary_container_path = format!("/scan/{summary_rel_path}");
-        let log_container_path = format!("/scan/{log_rel_path}");
-        let spec = build_opengrep_runner_spec(
-            &state.config,
-            scanner_image.clone(),
-            &workspace_dir,
-            OpengrepRunnerPaths {
-                container_source_dir,
-                manifest_container_path: manifest_container_path.as_deref(),
-                config_container_path: config_container_path.as_deref(),
-                output_container_path: &output_container_path,
-                summary_rel_path: &summary_rel_path,
-                summary_container_path: &summary_container_path,
-                log_container_path: &log_container_path,
-            },
-        );
-
-        let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
-        if !runner_result.success {
-            let error_msg = runner_result.error.unwrap_or_else(|| {
-                format!("opengrep exited with code {}", runner_result.exit_code)
-            });
-            let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-            return Err(format!("opengrep scan failed: {error_msg}").into());
-        }
-
-        let batch_results_path = workspace_dir.join(&output_rel_path);
-        let json_text =
-            read_opengrep_results_text(&batch_results_path, runner_result.stdout_path.as_deref())
-                .await
-                .map_err(|error| format!("opengrep results unavailable: {error}"))?;
-
-        if !opengrep::scan_output_has_results_array(&json_text) {
-            if batch.rule_count <= 1 {
-                let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-                return Err("opengrep batch output missing results array at 1-rule floor".into());
-            }
-
-            let retry_batch_size = (batch.rule_count / 2).max(1);
-            let retry_batches =
-                split_opengrep_rule_batch(&workspace_dir, &batch, retry_batch_size).await?;
-
-            for retry_batch in retry_batches.into_iter().rev() {
-                pending_batches.push_front(retry_batch);
-            }
-            continue;
-        }
-
-        findings.extend(opengrep::parse_scan_output(
-            &json_text,
-            task_id,
-            None,
-            known_paths.as_ref(),
-        ));
+    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+    if !runner_result.success {
+        let error_msg =
+            format_opengrep_runner_error(&runner_result, Some(&workspace_dir.join(&log_rel_path)))
+                .await;
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err(format!("opengrep scan failed: {error_msg}").into());
     }
+
+    update_scan_progress(state, task_id, 75.0, "parsing", "parsing scan results").await;
+
+    let results_path = workspace_dir.join(&output_rel_path);
+    let json_text = read_opengrep_results_text(&results_path)
+        .await
+        .map_err(|error| format!("opengrep results unavailable: {error}"))?;
+    if !opengrep::scan_output_has_results_array(&json_text) {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err("opengrep output missing results array".into());
+    }
+
+    let findings = opengrep::parse_scan_output(&json_text, task_id, None, known_paths.as_ref());
 
     update_scan_progress(state, task_id, 90.0, "finalizing", "saving findings").await;
 
@@ -976,26 +952,12 @@ async fn run_opengrep_scan_inner(
     Ok(())
 }
 
-async fn read_opengrep_results_text(
-    results_path: &std::path::Path,
-    stdout_path: Option<&str>,
-) -> Result<String, String> {
-    match tokio::fs::read_to_string(results_path).await {
-        Ok(text) => Ok(text),
-        Err(results_error) => {
-            if let Some(stdout_path) = stdout_path {
-                tokio::fs::read_to_string(stdout_path).await.map_err(|stdout_error| {
-                    format!(
-                        "missing opengrep results output: results_error={results_error}; stdout_error={stdout_error}"
-                    )
-                })
-            } else {
-                Err(format!(
-                    "missing opengrep results output: results_error={results_error}"
-                ))
-            }
-        }
-    }
+async fn read_opengrep_results_text(results_path: &std::path::Path) -> Result<String, String> {
+    tokio::fs::read_to_string(results_path)
+        .await
+        .map_err(|results_error| {
+            format!("missing opengrep results output: results_error={results_error}")
+        })
 }
 
 struct OpengrepRunnerPaths<'a> {
@@ -1006,6 +968,8 @@ struct OpengrepRunnerPaths<'a> {
     summary_rel_path: &'a str,
     summary_container_path: &'a str,
     log_container_path: &'a str,
+    stdout_rel_path: &'a str,
+    stderr_rel_path: &'a str,
 }
 
 fn build_opengrep_runner_spec(
@@ -1032,8 +996,8 @@ fn build_opengrep_runner_spec(
         env: BTreeMap::new(),
         expected_exit_codes: vec![0, 1],
         artifact_paths: Vec::new(),
-        capture_stdout_path: None,
-        capture_stderr_path: None,
+        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
+        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
         completion_summary_path: Some(paths.summary_rel_path.to_string()),
         workspace_root_override: None,
         memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
@@ -1044,55 +1008,44 @@ fn build_opengrep_runner_spec(
 }
 
 #[derive(Clone, Debug)]
-struct OpengrepRuleBatch {
+struct OpengrepRunnerInputs {
     image_manifest_path: Option<PathBuf>,
     workspace_rules_dir: Option<PathBuf>,
-    image_rule_paths: Vec<String>,
-    rule_count: usize,
 }
 
-async fn prepare_opengrep_rule_batches(
+async fn prepare_opengrep_runner_inputs(
     state: &AppState,
     workspace_dir: &std::path::Path,
     rule_ids: &[String],
     project_languages: &[String],
-    max_rules_per_batch: usize,
-) -> Result<Vec<OpengrepRuleBatch>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut batches = Vec::new();
+) -> Result<Option<OpengrepRunnerInputs>, Box<dyn std::error::Error + Send + Sync>> {
     let image_rule_paths =
         selected_image_rule_asset_paths(state, rule_ids, project_languages).await?;
-    batches.extend(write_image_rule_manifest_batches(
+    let image_manifest_path = write_image_rule_manifest(
         &image_rule_paths,
-        &workspace_dir.join("opengrep-rule-manifests"),
-        max_rules_per_batch,
-    )?);
+        &workspace_dir
+            .join("opengrep-rule-manifests")
+            .join("manifest.txt"),
+    )?;
+    let workspace_rules_dir =
+        materialize_selected_user_rules(state, workspace_dir, rule_ids).await?;
 
-    if let Some(user_rules_root) =
-        materialize_selected_user_rules(state, workspace_dir, rule_ids).await?
-    {
-        let batch_root = workspace_dir.join("opengrep-rule-batches").join("user");
-        let user_batch_dirs = tokio::task::spawn_blocking({
+    let mut rule_count = image_rule_paths.len();
+    if let Some(user_rules_root) = workspace_rules_dir.as_ref() {
+        rule_count += tokio::task::spawn_blocking({
             let user_rules_root = user_rules_root.clone();
-            move || build_rule_batch_dirs(&user_rules_root, &batch_root, max_rules_per_batch)
+            move || count_rule_files(&user_rules_root)
         })
         .await??;
-
-        for batch_dir in user_batch_dirs {
-            let rule_count = tokio::task::spawn_blocking({
-                let batch_dir = batch_dir.clone();
-                move || count_rule_files(&batch_dir)
-            })
-            .await??;
-            batches.push(OpengrepRuleBatch {
-                image_manifest_path: None,
-                workspace_rules_dir: Some(batch_dir),
-                image_rule_paths: Vec::new(),
-                rule_count,
-            });
-        }
+    }
+    if rule_count == 0 {
+        return Ok(None);
     }
 
-    Ok(batches)
+    Ok(Some(OpengrepRunnerInputs {
+        image_manifest_path,
+        workspace_rules_dir,
+    }))
 }
 
 async fn selected_image_rule_asset_paths(
@@ -1146,110 +1099,20 @@ async fn materialize_selected_user_rules(
     }
 }
 
-async fn split_opengrep_rule_batch(
-    workspace_dir: &std::path::Path,
-    batch: &OpengrepRuleBatch,
-    max_rules_per_batch: usize,
-) -> Result<Vec<OpengrepRuleBatch>, Box<dyn std::error::Error + Send + Sync>> {
-    if !batch.image_rule_paths.is_empty() {
-        return write_image_rule_manifest_batches(
-            &batch.image_rule_paths,
-            &workspace_dir
-                .join("opengrep-rule-manifests")
-                .join(format!("retry-{}", Uuid::new_v4())),
-            max_rules_per_batch,
-        );
-    }
-
-    if let Some(workspace_rules_dir) = &batch.workspace_rules_dir {
-        let retry_root = workspace_dir
-            .join("opengrep-rule-batches")
-            .join(format!("retry-{}", Uuid::new_v4()));
-        let retry_batches = tokio::task::spawn_blocking({
-            let workspace_rules_dir = workspace_rules_dir.clone();
-            move || build_rule_batch_dirs(&workspace_rules_dir, &retry_root, max_rules_per_batch)
-        })
-        .await??;
-
-        let mut out = Vec::new();
-        for retry_batch in retry_batches {
-            let rule_count = tokio::task::spawn_blocking({
-                let retry_batch = retry_batch.clone();
-                move || count_rule_files(&retry_batch)
-            })
-            .await??;
-            out.push(OpengrepRuleBatch {
-                image_manifest_path: None,
-                workspace_rules_dir: Some(retry_batch),
-                image_rule_paths: Vec::new(),
-                rule_count,
-            });
-        }
-        return Ok(out);
-    }
-
-    Ok(Vec::new())
-}
-
-fn write_image_rule_manifest_batches(
+fn write_image_rule_manifest(
     image_rule_paths: &[String],
-    manifest_root: &std::path::Path,
-    max_rules_per_batch: usize,
-) -> Result<Vec<OpengrepRuleBatch>, Box<dyn std::error::Error + Send + Sync>> {
+    manifest_path: &std::path::Path,
+) -> Result<Option<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
     if image_rule_paths.is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
-    let batch_size = max_rules_per_batch.max(1);
-    std::fs::create_dir_all(manifest_root)?;
-    let mut batches = Vec::new();
-    for (index, chunk) in image_rule_paths.chunks(batch_size).enumerate() {
-        let manifest_path = manifest_root.join(format!("manifest-batch-{:03}.txt", index + 1));
-        let content = format!("{}\n", chunk.join("\n"));
-        std::fs::write(&manifest_path, content)?;
-        batches.push(OpengrepRuleBatch {
-            image_manifest_path: Some(manifest_path),
-            workspace_rules_dir: None,
-            image_rule_paths: chunk.to_vec(),
-            rule_count: chunk.len(),
-        });
+    if let Some(parent) = manifest_path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
-    Ok(batches)
-}
-
-fn build_rule_batch_dirs(
-    rules_root: &std::path::Path,
-    batch_root: &std::path::Path,
-    max_rules_per_batch: usize,
-) -> Result<Vec<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
-    let max_rules_per_batch = max_rules_per_batch.max(1);
-    let mut rule_files = Vec::new();
-    collect_rule_files(rules_root, rules_root, &mut rule_files)?;
-    rule_files.sort();
-
-    if rule_files.is_empty() {
-        return Ok(vec![rules_root.to_path_buf()]);
-    }
-    if rule_files.len() <= max_rules_per_batch {
-        return Ok(vec![rules_root.to_path_buf()]);
-    }
-
-    let mut batch_dirs = Vec::new();
-    for (index, chunk) in rule_files.chunks(max_rules_per_batch).enumerate() {
-        let batch_dir = batch_root.join(format!("batch-{:03}", index + 1));
-        std::fs::create_dir_all(&batch_dir)?;
-        for rel_path in chunk {
-            let source = rules_root.join(rel_path);
-            let target = batch_dir.join(rel_path);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::copy(source, target)?;
-        }
-        batch_dirs.push(batch_dir);
-    }
-
-    Ok(batch_dirs)
+    let content = format!("{}\n", image_rule_paths.join("\n"));
+    std::fs::write(manifest_path, content)?;
+    Ok(Some(manifest_path.to_path_buf()))
 }
 
 fn count_rule_files(
@@ -1258,6 +1121,57 @@ fn count_rule_files(
     let mut rule_files = Vec::new();
     collect_rule_files(rules_root, rules_root, &mut rule_files)?;
     Ok(rule_files.len())
+}
+
+async fn format_opengrep_runner_error(
+    result: &runner::RunnerResult,
+    opengrep_log_path: Option<&std::path::Path>,
+) -> String {
+    let mut parts = vec![result
+        .error
+        .clone()
+        .unwrap_or_else(|| format!("opengrep exited with code {}", result.exit_code))];
+
+    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
+        parts.push(format!("stdout={stdout_excerpt}"));
+    }
+    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
+        parts.push(format!("stderr={stderr_excerpt}"));
+    }
+    if let Some(log_excerpt) = read_text_excerpt(opengrep_log_path).await {
+        parts.push(format!("log={log_excerpt}"));
+    }
+
+    parts.join("; ")
+}
+
+async fn read_runner_output_excerpt(path: Option<&str>) -> Option<String> {
+    read_text_excerpt(path.map(std::path::Path::new)).await
+}
+
+async fn read_text_excerpt(path: Option<&std::path::Path>) -> Option<String> {
+    let path = path?;
+    let text = tokio::fs::read_to_string(path).await.ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    const MAX_EXCERPT_CHARS: usize = 400;
+    let excerpt = if trimmed.chars().count() > MAX_EXCERPT_CHARS {
+        let tail: String = trimmed
+            .chars()
+            .rev()
+            .take(MAX_EXCERPT_CHARS)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("[truncated] {tail}")
+    } else {
+        trimmed.to_string()
+    };
+    Some(excerpt.replace('\n', "\\n"))
 }
 
 fn collect_rule_files(
@@ -2047,8 +1961,8 @@ mod tests {
     use crate::config::AppConfig;
 
     use super::{
-        build_opengrep_runner_spec, build_rule_batch_dirs, extract_highest_rule_severity,
-        read_opengrep_results_text, write_image_rule_manifest_batches, OpengrepRunnerPaths,
+        build_opengrep_runner_spec, extract_highest_rule_severity, format_opengrep_runner_error,
+        read_opengrep_results_text, write_image_rule_manifest, OpengrepRunnerPaths,
     };
 
     #[test]
@@ -2099,12 +2013,20 @@ rules:
                 summary_rel_path: "output/summary-001.json",
                 summary_container_path: "/scan/output/summary-001.json",
                 log_container_path: "/scan/output/log-001.txt",
+                stdout_rel_path: "output/stdout-001.txt",
+                stderr_rel_path: "output/stderr-001.txt",
             },
         );
 
         assert_eq!(spec.scanner_type, "opengrep");
-        assert_eq!(spec.capture_stdout_path, None);
-        assert_eq!(spec.capture_stderr_path, None);
+        assert_eq!(
+            spec.capture_stdout_path.as_deref(),
+            Some("output/stdout-001.txt")
+        );
+        assert_eq!(
+            spec.capture_stderr_path.as_deref(),
+            Some("output/stderr-001.txt")
+        );
         assert_eq!(
             spec.completion_summary_path.as_deref(),
             Some("output/summary-001.json")
@@ -2130,58 +2052,20 @@ rules:
     }
 
     #[test]
-    fn build_rule_batch_dirs_splits_rules_and_preserves_relative_paths() {
+    fn write_image_rule_manifest_preserves_asset_paths() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let rules_root = temp_dir.path().join("opengrep-rules");
-        let batch_root = temp_dir.path().join("rule-batches");
-
-        for rel in [
-            "internal/a.yaml",
-            "internal/b.yaml",
-            "patch/c.yaml",
-            "patch/d.yaml",
-            "patch/e.yaml",
-        ] {
-            let path = rules_root.join(rel);
-            std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
-            std::fs::write(path, "rule").expect("write");
-        }
-
-        let batches = build_rule_batch_dirs(&rules_root, &batch_root, 2).expect("batch dirs");
-
-        assert_eq!(batches.len(), 3);
-        assert!(batches[0].join("internal/a.yaml").exists());
-        assert!(batches[0].join("internal/b.yaml").exists());
-        assert!(batches[1].join("patch/c.yaml").exists());
-        assert!(batches[1].join("patch/d.yaml").exists());
-        assert!(batches[2].join("patch/e.yaml").exists());
-    }
-
-    #[test]
-    fn write_image_rule_manifest_batches_preserves_asset_paths() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let manifest_root = temp_dir.path().join("manifests");
+        let manifest_path = temp_dir.path().join("manifests/manifest.txt");
         let rule_paths = vec![
             "rules_opengrep/a.yaml".to_string(),
             "rules_opengrep/b.yaml".to_string(),
             "rules_from_patches/python/c.yaml".to_string(),
         ];
 
-        let batches =
-            write_image_rule_manifest_batches(&rule_paths, &manifest_root, 2).expect("manifests");
-
-        assert_eq!(batches.len(), 2);
-        assert_eq!(batches[0].rule_count, 2);
-        assert_eq!(batches[1].rule_count, 1);
+        let manifest = write_image_rule_manifest(&rule_paths, &manifest_path).expect("manifest");
+        assert_eq!(manifest.as_deref(), Some(manifest_path.as_path()));
         assert_eq!(
-            std::fs::read_to_string(batches[0].image_manifest_path.as_ref().unwrap())
-                .expect("read first manifest"),
-            "rules_opengrep/a.yaml\nrules_opengrep/b.yaml\n"
-        );
-        assert_eq!(
-            std::fs::read_to_string(batches[1].image_manifest_path.as_ref().unwrap())
-                .expect("read second manifest"),
-            "rules_from_patches/python/c.yaml\n"
+            std::fs::read_to_string(&manifest_path).expect("read manifest"),
+            "rules_opengrep/a.yaml\nrules_opengrep/b.yaml\nrules_from_patches/python/c.yaml\n"
         );
     }
 
@@ -2190,7 +2074,7 @@ rules:
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let missing_path = temp_dir.path().join("missing-results.json");
 
-        let error = read_opengrep_results_text(&missing_path, None)
+        let error = read_opengrep_results_text(&missing_path)
             .await
             .expect_err("missing results should error");
 
@@ -2205,10 +2089,42 @@ rules:
             .await
             .expect("write results");
 
-        let text = read_opengrep_results_text(&results_path, Some("/tmp/ignored"))
+        let text = read_opengrep_results_text(&results_path)
             .await
             .expect("results file should be read");
 
         assert!(text.contains("\"check_id\":\"demo\""), "{text}");
+    }
+
+    #[tokio::test]
+    async fn format_opengrep_runner_error_includes_scanner_log_excerpt() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("opengrep.log");
+        tokio::fs::write(
+            &log_path,
+            "SIGPIPE signal intercepted\nException: Common.UnixExit(-141)\n",
+        )
+        .await
+        .expect("write log");
+
+        let error = format_opengrep_runner_error(
+            &crate::runtime::runner::RunnerResult {
+                success: false,
+                container_id: Some("container-xyz".to_string()),
+                exit_code: 0,
+                stdout_path: None,
+                stderr_path: None,
+                error: Some("scanner completion summary was not observed".to_string()),
+            },
+            Some(&log_path),
+        )
+        .await;
+
+        assert!(
+            error.contains("completion summary was not observed"),
+            "{error}"
+        );
+        assert!(error.contains("SIGPIPE signal intercepted"), "{error}");
+        assert!(error.contains("Common.UnixExit(-141)"), "{error}");
     }
 }

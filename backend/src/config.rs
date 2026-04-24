@@ -53,7 +53,6 @@ pub struct AppConfig {
     pub opengrep_runner_memory_limit_mb: u64,
     pub opengrep_runner_cpu_limit: f64,
     pub opengrep_runner_pids_limit: u64,
-    pub opengrep_scan_rules_per_batch: usize,
 }
 
 impl AppConfig {
@@ -126,7 +125,6 @@ impl AppConfig {
             opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 500),
             opengrep_runner_cpu_limit: parse_f64_env("OPENGREP_RUNNER_CPU_LIMIT", 1.5),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 256),
-            opengrep_scan_rules_per_batch: parse_usize_env("OPENGREP_SCAN_RULES_PER_BATCH", 32),
         })
     }
 
@@ -187,7 +185,6 @@ impl AppConfig {
             opengrep_runner_memory_limit_mb: 500,
             opengrep_runner_cpu_limit: 1.5,
             opengrep_runner_pids_limit: 256,
-            opengrep_scan_rules_per_batch: 32,
         }
     }
 }

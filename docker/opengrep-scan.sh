@@ -31,11 +31,12 @@ self_test() {
   results_json_ready "$valid_output"
   ! results_json_ready "$invalid_output"
 
-  json_summary "scan_summary_observed" "$invalid_output" "$temp_dir/opengrep.log" "$summary_invalid_path"
+  json_summary "scan_completed" "$invalid_output" "$temp_dir/opengrep.log" "$summary_invalid_path"
   test ! -e "$summary_invalid_path"
 
-  json_summary "scan_summary_observed" "$valid_output" "$temp_dir/opengrep.log" "$summary_path"
+  json_summary "scan_completed" "$valid_output" "$temp_dir/opengrep.log" "$summary_path"
   test -s "$summary_path"
+  grep -q '"status":"scan_completed"' "$summary_path"
 
   rm -rf "$temp_dir"
 }
@@ -183,17 +184,10 @@ rm -f "$output_path" "$summary_path"
 : > "$log_path"
 
 selected_root=""
-summary_seen_file="$(mktemp "${TMPDIR:-/tmp}/opengrep-summary-seen.XXXXXX")"
-summary_watcher_pid=""
-rm -f "$summary_seen_file"
 cleanup() {
-  if [ -n "${summary_watcher_pid:-}" ]; then
-    kill "$summary_watcher_pid" >/dev/null 2>&1 || true
-  fi
   if [ -n "$selected_root" ] && [ -d "$selected_root" ]; then
     rm -rf "$selected_root"
   fi
-  rm -f "$summary_seen_file"
 }
 trap cleanup EXIT
 
@@ -213,35 +207,10 @@ for config_path in "${config_paths[@]}"; do
 done
 cmd+=(--json --output "$output_path" "$target_dir")
 
-(
-  while true; do
-    if [ -f "$summary_seen_file" ]; then
-      json_summary "scan_summary_observed" "$output_path" "$log_path" "$summary_path"
-      if [ -s "$summary_path" ]; then
-        exit 0
-      fi
-    fi
-    sleep 0.1
-  done
-) &
-summary_watcher_pid=$!
-
 set +e
-"${cmd[@]}" 2>&1 | while IFS= read -r line; do
-  printf '%s\n' "$line"
-  printf '%s\n' "$line" >> "$log_path"
-  if [[ "$line" == *"Scan Summary"* ]]; then
-    : > "$summary_seen_file"
-    json_summary "scan_summary_observed" "$output_path" "$log_path" "$summary_path"
-  elif [[ "$line" =~ Ran[[:space:]][0-9]+[[:space:]]+rules ]]; then
-    : > "$summary_seen_file"
-    json_summary "scan_summary_observed" "$output_path" "$log_path" "$summary_path"
-  fi
-done
-status=${PIPESTATUS[0]}
+"${cmd[@]}" >> "$log_path" 2>&1
+status=$?
 set -e
 
-kill "$summary_watcher_pid" >/dev/null 2>&1 || true
-wait "$summary_watcher_pid" >/dev/null 2>&1 || true
 json_summary "scan_completed" "$output_path" "$log_path" "$summary_path"
 exit "$status"
