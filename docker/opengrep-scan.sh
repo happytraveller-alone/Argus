@@ -49,7 +49,7 @@ results_json_ready() {
     return 1
   fi
 
-  python - "$output_path" <<'PY'
+  python3 - "$output_path" <<'PY'
 import json
 import sys
 
@@ -72,7 +72,7 @@ recover_json_document() {
     return 1
   fi
 
-  python - "$input_path" "$output_path" <<'PY'
+  python3 - "$input_path" "$output_path" <<'PY'
 import json
 import sys
 

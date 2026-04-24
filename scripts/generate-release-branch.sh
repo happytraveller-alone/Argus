@@ -142,6 +142,11 @@ validate_release_tree() {
     [[ ! -e "$OUTPUT_DIR/$rel_path" ]] || die "forbidden path present in release tree: $rel_path"
   done
 
+  if [[ -e "$OUTPUT_DIR/docker/hermes-agent-base.Dockerfile" ]]; then
+    "$SOURCE_DIR/docker/hermes-agent-submodule-check.sh" --source-root "$OUTPUT_DIR" || \
+      die "Hermes source snapshot missing: initialize submodules recursively or include Hermes source in the release tree"
+  fi
+
   if find "$OUTPUT_DIR" \
     \( -name '.github' -o -name 'tests' -o -name '__pycache__' -o -name '.pytest_cache' -o -name 'node_modules' \) \
     -print -quit | grep -q .; then

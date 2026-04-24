@@ -3,6 +3,10 @@ use backend_rust::runtime::hermes::contracts::{
 };
 use backend_rust::runtime::hermes::layout::{runtime_data_root, validate_isolation};
 
+fn fixture(name: &str) -> String {
+    std::fs::read_to_string(format!("tests/fixtures/hermes/{name}")).unwrap()
+}
+
 #[test]
 fn handoff_schema_includes_required_fields() {
     let req = HandoffRequest {
@@ -18,6 +22,10 @@ fn handoff_schema_includes_required_fields() {
     assert!(json.get("project_id").is_some());
     assert!(json.get("correlation_id").is_some());
     assert!(json.get("payload").is_some());
+
+    let fixture_json: serde_json::Value =
+        serde_json::from_str(&fixture("handoff-request.json")).unwrap();
+    assert_eq!(json, fixture_json);
 }
 
 #[test]
@@ -32,6 +40,10 @@ fn result_schema_includes_required_fields() {
     assert!(json.get("status").is_some());
     assert!(json.get("summary").is_some());
     assert!(json.get("structured_outputs").is_some());
+
+    let fixture_json: serde_json::Value =
+        serde_json::from_str(&fixture("handoff-result.json")).unwrap();
+    assert_eq!(json, fixture_json);
 }
 
 #[test]
