@@ -182,7 +182,7 @@ async fn pmd_routes_are_not_owned_when_static_tasks_are_opengrep_only() {
 }
 
 #[tokio::test]
-async fn opengrep_builtin_rules_preserve_error_severity_from_assets() {
+async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
     let state = AppState::from_config(AppConfig::for_tests())
         .await
         .expect("state should build");
@@ -206,25 +206,25 @@ async fn opengrep_builtin_rules_preserve_error_severity_from_assets() {
 
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    let items = payload.as_array().expect("rules response should be an array");
+    let items = payload
+        .as_array()
+        .expect("rules response should be an array");
     assert!(
-        items.iter().any(|item| {
+        items.iter().all(|item| {
             item.get("is_active").and_then(Value::as_bool) == Some(true)
                 && item.get("severity").and_then(Value::as_str) == Some("ERROR")
         }),
-        "expected at least one active builtin opengrep rule with ERROR severity"
+        "expected builtin opengrep assets to expose only active ERROR-severity rules"
     );
-    let mixed_severity_rule = items
+    let representative_rule = items
         .iter()
         .find(|item| {
             item.get("id").and_then(Value::as_str)
                 == Some("rules_opengrep/go_blocklist_rule-blocklist-rc4.yaml")
         })
-        .expect("expected mixed-severity builtin asset to be present");
+        .expect("expected representative builtin asset to be present");
     assert_eq!(
-        mixed_severity_rule
-            .get("severity")
-            .and_then(Value::as_str),
+        representative_rule.get("severity").and_then(Value::as_str),
         Some("ERROR")
     );
 }

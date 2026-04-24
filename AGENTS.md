@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-23 11:37pm GMT+8
+# [audittool_personal] recent context, 2026-04-24 8:32am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (19,277t read) | 1,252,438t work | 98% savings
+Stats: 50 obs (17,879t read) | 1,323,213t work | 99% savings
 
 ### Apr 23, 2026
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
@@ -501,16 +501,6 @@ S420 Hermes Containerized Functional Agents — Full Implementation Complete, Te
 S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 9:20 PM)
-1661 9:29p 🔵 Hermes Opengrep Static Scan Fix — Full Verification Passed
-1663 9:31p 🔵 Opengrep Fix — Two New Files Untracked in Git After All Tests Pass
-1668 9:32p 🟣 Frontend Static Scan Engine Pages Removal — All Non-Opengrep Engines Deleted
-1671 9:35p ⚖️ Frontend Consolidation — Remove All Non-Opengrep Static Scan Engine Pages
-1675 9:37p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1672 " ✅ Frontend Non-Opengrep Static Scan Rule Pages Deleted — Files and Tests Removed
-1676 9:46p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1684 " 🟣 hermes-agent-base.Dockerfile Replaced — Ubuntu Placeholder Swapped for Official nousresearch/hermes-agent Image
-1685 " 🔵 Official nousresearch/hermes-agent Entrypoint Behavior Confirmed
-1686 " 🟣 Slice 6 and Slice 7 Tasks Created — Real Hermes Dispatch and Synthetic Runtime Retirement
 1681 9:47p 🔵 Debian Trixie SSL Bootstrap Deadlock — HTTPS APT Fails on All Sources in Docker
 1682 9:49p 🔴 Runner Timeout Logic Fixed — Zero Seconds Now Disables Hard Timeout
 1687 9:50p 🔵 Debian Trixie SSL Bootstrap Deadlock Confirmed — HTTPS APT Fails on All Sources
@@ -551,6 +541,17 @@ S497 Plan two PRD and test spec documents for Hermes containerized functional ag
 1737 11:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
 1741 11:07p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
 1743 11:08p 🔵 Stop-Gate Cargo Check Fails — Read-Only /tmp Filesystem in Sandbox
+### Apr 24, 2026
+1764 7:59a ✅ Scan Rule Assets Filtered to Severity ERROR Only
+1766 " ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1768 8:00a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1773 8:01a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1776 8:02a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1778 " 🟣 Rust Test Added to Enforce ERROR-Only Severity in Retained Rule Assets
+1779 8:07a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1782 8:21a 🔵 Scan Rule Asset Files — Structure and Failing Tests Identified
+1786 8:22a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1788 8:29a ✅ Scan Rule Assets Filtered to ERROR Severity Only
 
-Access 1252k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1323k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

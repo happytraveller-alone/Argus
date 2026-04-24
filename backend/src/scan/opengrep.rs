@@ -88,7 +88,10 @@ fn parse_single_result(
     project_root: Option<&str>,
     known_paths: Option<&std::collections::BTreeSet<String>>,
 ) -> Option<task_state::StaticFindingRecord> {
-    let check_id = result.get("check_id").and_then(Value::as_str).unwrap_or("unknown-rule");
+    let check_id = result
+        .get("check_id")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown-rule");
     let raw_path = result.get("path").and_then(Value::as_str).unwrap_or("");
     if raw_path.is_empty() {
         return None;
@@ -194,7 +197,7 @@ mod tests {
         let assets = load_rule_assets(&state)
             .await
             .expect("opengrep assets should load");
-        assert!(assets.len() > 3000);
+        assert!(assets.len() > 2000);
         assert!(assets
             .iter()
             .any(|asset| asset.asset_path == "rules_opengrep/X509-subject-name-validation.yaml"));
@@ -204,6 +207,12 @@ mod tests {
         assert!(assets
             .iter()
             .all(|asset| asset.source_kind != "patch_artifact"));
+        assert!(assets.iter().all(|asset| asset.content.lines().all(|line| {
+            let Some(value) = line.trim().strip_prefix("severity:") else {
+                return true;
+            };
+            value.trim().trim_matches('"').trim_matches('\'') == "ERROR"
+        })));
     }
 
     #[tokio::test]

@@ -219,10 +219,8 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .components()
             .next()
             .and_then(|part| part.as_os_str().to_str());
-        if matches!(
-            top,
-            Some("rules_opengrep" | "rules_from_patches")
-        ) && seen.insert(relative.clone())
+        if matches!(top, Some("rules_opengrep" | "rules_from_patches"))
+            && seen.insert(relative.clone())
         {
             out.push(relative);
         }
@@ -278,6 +276,21 @@ mod tests {
     use super::discover_rule_assets;
     use std::collections::BTreeSet;
 
+    fn severity_tokens(content: &str) -> Vec<String> {
+        content
+            .lines()
+            .filter_map(|line| {
+                line.trim().strip_prefix("severity:").map(|value| {
+                    value
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_uppercase()
+                })
+            })
+            .collect()
+    }
+
     #[test]
     fn discovers_only_retained_rule_asset_families() {
         let assets = discover_rule_assets().expect("rule assets should load");
@@ -321,5 +334,28 @@ mod tests {
             .expect("builtin rule asset should exist");
         assert_eq!(builtin_rule.engine, "opengrep");
         assert_eq!(builtin_rule.source_kind, "internal_rule");
+    }
+
+    #[test]
+    fn retained_assets_only_contain_error_rules() {
+        let assets = discover_rule_assets().expect("rule assets should load");
+
+        for asset in assets {
+            let severities = severity_tokens(&asset.content);
+            assert!(
+                !severities.is_empty(),
+                "expected severity markers in {}",
+                asset.asset_path
+            );
+            assert!(
+                severities.iter().all(|severity| severity == "ERROR"),
+                "expected only ERROR severities in {}, got {:?}",
+                asset.asset_path,
+                severities
+                    .into_iter()
+                    .filter(|severity| severity != "ERROR")
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 }
