@@ -878,6 +878,15 @@ async fn run_opengrep_scan_inner(
         source_dir.to_str(),
         known_paths.as_ref(),
     );
+    let findings: Vec<_> = findings
+        .into_iter()
+        .filter(|f| {
+            f.payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.eq_ignore_ascii_case("ERROR"))
+        })
+        .collect();
 
     update_scan_progress(state, task_id, 90.0, "finalizing", "saving findings").await;
 
@@ -1055,7 +1064,7 @@ async fn selected_image_rule_assets(
     let assets = if rule_ids.is_empty() {
         opengrep::load_rule_assets_for_languages(state, project_languages).await?
     } else {
-        opengrep::load_rule_assets(state)
+        opengrep::load_rule_assets_for_languages(state, project_languages)
             .await?
             .into_iter()
             .filter(|asset| rule_ids.iter().any(|id| id == &asset.asset_path))

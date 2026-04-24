@@ -183,34 +183,12 @@ fn ensure_runner_image(image: &str) -> Result<()> {
 async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>, Vec<PathBuf>)> {
     let config = &state.config;
     let mut cleanup_dirs = Vec::new();
-    let mut specs = vec![
-        RunnerPreflightSpec {
-            name: "opengrep",
-            image: config.scanner_opengrep_image.clone(),
-            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
-            name: "flow-parser",
-            image: config.flow_parser_runner_image.clone(),
-            command: vec![
-                "python3".to_string(),
-                "/opt/flow-parser/flow_parser_runner.py".to_string(),
-                "--help".to_string(),
-            ],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
-            name: "sandbox-runner",
-            image: config.sandbox_runner_image.clone(),
-            command: vec![
-                "python3".to_string(),
-                "-c".to_string(),
-                "import requests; import httpx; import jwt; print('Sandbox Runner OK')".to_string(),
-            ],
-            mounts: Vec::new(),
-        },
-    ];
+    let mut specs = vec![RunnerPreflightSpec {
+        name: "opengrep",
+        image: config.scanner_opengrep_image.clone(),
+        command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+        mounts: Vec::new(),
+    }];
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
         if let Some((workspace_dir, command, mounts)) =
@@ -242,14 +220,14 @@ mod tests {
     use super::configured_specs;
 
     #[tokio::test]
-    async fn configured_specs_cover_all_runner_families() {
+    async fn configured_specs_only_include_opengrep_preflight() {
         let config = AppConfig::for_tests();
         let state = AppState::from_config(config)
             .await
             .expect("state should build");
         let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
         let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
-        assert_eq!(names, vec!["opengrep", "flow-parser", "sandbox-runner"]);
+        assert_eq!(names, vec!["opengrep"]);
 
         let opengrep = specs
             .iter()

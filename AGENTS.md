@@ -482,43 +482,29 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 8:58pm GMT+8
+# [audittool_personal] recent context, 2026-04-24 9:53pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,357t read) | 1,484,401t work | 99% savings
+Stats: 50 obs (21,724t read) | 1,653,403t work | 99% savings
 
 ### Apr 23, 2026
-S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
-S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
-S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
-S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 4:07 PM)
-S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
 S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
 ### Apr 24, 2026
-1803 8:34a 🔵 Frontend TypeScript Type-Check Passes Despite Broken Runtime Imports
-1813 8:35a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
 S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
-1805 " 🔴 Root Cause Confirmed — Vite Build Fails on Missing Non-Opengrep Severity Exports
-1806 8:36a 🔴 projectCardPreview.ts Converged to Opengrep-Only — Non-Opengrep Engine Remnants Removed
-1807 8:39a 🔴 Frontend Build Passes — projectCardPreview Opengrep-Only Cleanup Verified
-1808 " 🔴 projectCardPreview.ts Refactored to Opengrep-Only — Retired Engine Imports Removed
-1812 8:42a ⚖️ Architect Verification Dispatched for projectCardPreview Opengrep-Only Cleanup
-1817 8:43a 🔵 Stop-Gate Review — Previous Turn Confirmed as Plan-Writing Only (No Code Changes)
-1818 " ⚖️ Opengrep Language-Aware Rule Filtering — Plan Written, Implementation Pending
-1816 8:51a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
 1819 8:52a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
 1822 8:57a 🟣 Opengrep Language-Aware Rule Filtering Implemented
 1823 " 🔴 Stale Test Fixtures Fixed — X509-subject-name-validation.yaml Removed from Rule Set
+S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
 1820 9:24a ✅ Stop-gate review — previous turn was a status-only message, no code changes
 1821 9:25a 🟣 Opengrep Language-Aware Rule Filtering Implemented
 1824 9:30a ⚖️ Systematic Debugging Plan — Cargo Test High CPU/Memory Analysis
 1826 10:01a 🔵 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory
-S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 10:01 AM)
+S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
 1827 10:02a 🟣 Opengrep Language-Aware Rule Filtering Implemented
 1828 " 🟣 discover_rule_assets OnceLock Process-Level Cache Added
 1834 " 🟣 Opengrep Language-Aware Rule Filtering Implemented
@@ -552,6 +538,20 @@ S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memor
 1884 8:51p 🔴 Opengrep Scan Failure Fixed — Memory Limits Increased and Summary Gate Hardened
 1886 8:52p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
 1888 8:55p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
+1890 8:59p 🔴 Stop-Gate Review — ALLOW for Opengrep Memory Fix
+1892 " 🔴 Stop-Gate BLOCK — scan_failed Summary Status Not Consumed by Runner
+1893 " 🔵 Opengrep Runner — scan_failed Summary Contract Gap Between Shell Script and Rust Consumer
+1894 " 🔴 Opengrep Scan — Full Fix Including stdout Recovery and Manifest-to-Config-Dir Migration
+S640 audittool_personal .gitignore Blocks .omc/skills/ via ".*/" Pattern (Apr 24, 9:16 PM)
+S636 Learner skill — codify Opengrep SIGPIPE/OOM silent failure expertise into a reusable skill file (Apr 24, 9:16 PM)
+1896 9:17p 🟣 Opengrep SIGPIPE/OOM Skill Saved to .omc/skills
+1897 9:19p 🔵 Stop-Gate Review — .omc/skills Write Counts as Edit-Producing Turn
+1900 9:22p 🔵 audittool_personal .gitignore Blocks .omc/skills/ via ".*/" Pattern
+S649 Save opengrep expertise skill + post-fix verification of scan task findings via API (Apr 24, 9:22 PM)
+1902 9:30p ✅ Opengrep SIGPIPE/OOM Skill Promoted to User-Level Directory
+1908 9:31p 🔵 OMC Skill Discovery — Flat-File vs Directory Layout for omc-learned
+1910 9:33p 🔵 Static Tasks API — Finding Schema and Severity Filtering Architecture
+S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
 
-Access 1484k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1653k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
