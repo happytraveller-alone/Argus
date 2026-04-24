@@ -8,7 +8,7 @@ import {
 	useState,
 } from "react";
 import DeferredSection from "@/components/performance/DeferredSection";
-import { Skeleton } from "@/components/ui/skeleton";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import {
 	DashboardPageFeedback,
 	resolveDashboardPageState,
@@ -90,30 +90,7 @@ const EMPTY_SNAPSHOT: DashboardSnapshotResponse = {
 };
 
 function DashboardFallback() {
-	return (
-		<div className="space-y-4">
-			<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-				{Array.from({ length: 6 }).map((_, index) => (
-					<div key={index} className="cyber-card rounded-3xl p-4">
-						<Skeleton className="h-4 w-24" />
-						<Skeleton className="mt-4 h-9 w-24" />
-						<Skeleton className="mt-3 h-4 w-full" />
-						<Skeleton className="mt-4 h-10 w-full" />
-					</div>
-				))}
-			</div>
-			<div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-				<Skeleton className="h-[22rem] rounded-3xl lg:col-span-7" />
-				<Skeleton className="h-[18rem] rounded-3xl lg:col-span-5" />
-				<Skeleton className="h-[24rem] rounded-3xl lg:col-span-7" />
-				<Skeleton className="h-[22rem] rounded-3xl lg:col-span-5" />
-				<Skeleton className="h-[24rem] rounded-3xl lg:col-span-7" />
-				<Skeleton className="h-[22rem] rounded-3xl lg:col-span-5" />
-			</div>
-			<Skeleton className="h-[24rem] rounded-3xl" />
-			<Skeleton className="h-[24rem] rounded-3xl" />
-		</div>
-	);
+	return <SilentLoadingState minHeight={960} />;
 }
 
 export function normalizeSnapshot(
@@ -129,8 +106,8 @@ export function normalizeSnapshot(
 			| { static?: number; intelligent?: number }
 			| undefined;
 		return {
-			static: Math.max(Number(current.static || 0), 0),
-			intelligent: Math.max(Number(current.intelligent || 0), 0),
+			static: Math.max(Number(current?.static || 0), 0),
+			intelligent: Math.max(Number(current?.intelligent || 0), 0),
 		};
 	};
 
@@ -316,11 +293,6 @@ export default function Dashboard() {
 	return (
 		<div className="min-h-screen space-y-6 bg-background p-6 font-mono relative xl:flex xl:h-[100dvh] xl:min-h-0 xl:flex-col xl:overflow-hidden">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-			{loading ? (
-				<div className="relative z-10 text-xs text-muted-foreground">
-					同步最新数据中...
-				</div>
-			) : null}
 
 			<DeferredSection className="xl:min-h-0 xl:flex-1" minHeight={960} priority>
 				{pageState.showFallback ? (

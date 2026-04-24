@@ -17,15 +17,17 @@ import {
 export function DataTablePagination<TData>({
   table,
   config,
+  filteredCount,
+  totalCount,
 }: {
   table: Table<TData>;
   config?: false | DataTablePaginationConfig<TData>;
+  filteredCount: number;
+  totalCount: number;
 }) {
   if (config === false || config?.enabled === false) return null;
 
   const pageSizeOptions = config?.pageSizeOptions ?? [...DATA_TABLE_PAGE_SIZE_OPTIONS];
-  const filteredCount = table.getFilteredRowModel().rows.length;
-  const totalCount = table.getCoreRowModel().rows.length;
   const pageIndex = table.getState().pagination.pageIndex;
   const pageSize = table.getState().pagination.pageSize;
   const pageCount = Math.max(1, table.getPageCount());

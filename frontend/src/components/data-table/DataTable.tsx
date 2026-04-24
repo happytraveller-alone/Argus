@@ -173,6 +173,13 @@ export function DataTable<TData extends RowData>({
     () => buildColumnsWithDefaults(columns, Boolean(selection?.enableRowSelection)),
     [columns, selection?.enableRowSelection],
   );
+  const paginationConfig = pagination === false ? undefined : pagination;
+
+  const isManualPagination =
+    mode === "manual" || Boolean(paginationConfig?.manual);
+  const remoteTotalCount = isManualPagination
+    ? Math.max(Number(paginationConfig?.totalCount ?? data.length), 0)
+    : null;
 
   const table = useReactTable({
     data,
@@ -185,6 +192,10 @@ export function DataTable<TData extends RowData>({
       columnVisibility: resolvedState.columnVisibility,
       rowSelection: resolvedState.rowSelection,
     },
+    manualPagination: isManualPagination,
+    manualFiltering: isManualPagination,
+    manualSorting: isManualPagination,
+    rowCount: remoteTotalCount ?? undefined,
     enableRowSelection: selection?.enableRowSelection,
     getRowId,
     onGlobalFilterChange: (updater) =>
@@ -209,6 +220,7 @@ export function DataTable<TData extends RowData>({
       updateState((old) => ({
         ...old,
         pagination: functionalUpdate(updater, old.pagination),
+        rowSelection: isManualPagination ? {} : old.rowSelection,
       })),
     onColumnVisibilityChange: (updater) =>
       updateState((old) => ({
@@ -227,8 +239,8 @@ export function DataTable<TData extends RowData>({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const filteredCount = table.getFilteredRowModel().rows.length;
-  const totalCount = table.getCoreRowModel().rows.length;
+  const filteredCount = remoteTotalCount ?? table.getFilteredRowModel().rows.length;
+  const totalCount = remoteTotalCount ?? table.getCoreRowModel().rows.length;
   const visibleRows =
     pagination === false || pagination?.enabled === false
       ? table.getPrePaginationRowModel().rows
@@ -257,7 +269,11 @@ export function DataTable<TData extends RowData>({
           }))
         }
       />
-      <DataTableSelectionBar table={table} selection={selection} />
+      <DataTableSelectionBar
+        table={table}
+        selection={selection}
+        filteredCount={filteredCount}
+      />
       <DataTableScrollContainer className={containerClassName}>
         <Table className={tableClassName} containerClassName={tableContainerClassName}>
           <TableHeader>
@@ -383,7 +399,12 @@ export function DataTable<TData extends RowData>({
           </TableBody>
         </Table>
       </DataTableScrollContainer>
-      <DataTablePagination table={table} config={pagination} />
+      <DataTablePagination
+        table={table}
+        config={pagination}
+        filteredCount={filteredCount}
+        totalCount={totalCount}
+      />
     </div>
   );
 }

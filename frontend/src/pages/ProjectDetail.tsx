@@ -22,6 +22,7 @@ import {
 } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectTaskFindingsDialog from "@/pages/project-detail/components/ProjectTaskFindingsDialog";
 import ProjectPotentialVulnerabilitiesSection from "@/pages/project-detail/components/ProjectPotentialVulnerabilitiesSection";
@@ -739,16 +740,7 @@ export default function ProjectDetail() {
 		],
 	);
 	if (loading) {
-		return (
-			<div className="flex items-center justify-center min-h-[60vh]">
-				<div className="text-center space-y-4">
-					<div className="loading-spinner mx-auto" />
-					<p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">
-						加载项目数据...
-					</p>
-				</div>
-			</div>
-		);
+		return <SilentLoadingState className="min-h-[60vh]" />;
 	}
 
 	if (!project) {

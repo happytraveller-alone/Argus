@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, Edit, Upload } from "lucide-react";
+import { Edit, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -39,7 +39,6 @@ interface EditProjectDialogProps {
 export default function EditProjectDialog({
     open,
     project,
-    supportedLanguages,
     onOpenChange,
     onSubmit,
 }: EditProjectDialogProps) {
@@ -101,14 +100,6 @@ export default function EditProjectDialog({
         } catch {
             // keep dialog state for retry
         }
-    }
-
-    function toggleLanguage(language: string) {
-        updateForm({
-            programming_languages: form.programming_languages.includes(language)
-                ? form.programming_languages.filter((item) => item !== language)
-                : [...form.programming_languages, language],
-        });
     }
 
     return (

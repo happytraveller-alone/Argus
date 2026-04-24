@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 export const DATA_TABLE_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 export type DataTableDensity = "compact" | "comfortable" | "spacious";
-export type DataTableMode = "local" | "controlled";
+export type DataTableMode = "local" | "controlled" | "manual";
 export type DataTableAlign = "left" | "center" | "right";
 export type DataTableSticky = "left" | "right";
 export type DataTableFilterVariant =
@@ -126,6 +126,8 @@ export interface DataTableSummaryContext<TData> {
 
 export interface DataTablePaginationConfig<TData> {
   enabled?: boolean;
+  manual?: boolean;
+  totalCount?: number;
   pageSizeOptions?: number[];
   infoLabel?: (context: DataTableSummaryContext<TData>) => ReactNode;
 }

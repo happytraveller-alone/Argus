@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { cn } from "@/shared/utils/utils";
 
 interface DeferredSectionProps {
@@ -119,14 +119,7 @@ export default function DeferredSection({
 			{isMounted
 				? children
 				: (fallback ?? (
-					<div
-						className="rounded-lg border border-border/60 bg-muted/15 p-3 space-y-3"
-						style={{ minHeight }}
-					>
-						<Skeleton className="h-4 w-28" />
-						<Skeleton className="h-20 w-full" />
-						<Skeleton className="h-20 w-full" />
-					</div>
+					<SilentLoadingState minHeight={minHeight} />
 				))}
 		</div>
 	);

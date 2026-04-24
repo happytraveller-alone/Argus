@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -53,8 +53,9 @@ import {
     type DataTableSelectionContext,
 } from "@/components/data-table";
 import {
-    getOpengrepRules,
+    getOpengrepRulesPage,
     getOpengrepRule,
+    getOpengrepRuleStats,
     getGeneratingRules,
     toggleOpengrepRule,
     deleteOpengrepRule,
@@ -66,6 +67,7 @@ import {
     uploadPatchDirectory,
     updateOpengrepRule,
     batchUpdateOpengrepRules,
+    type OpengrepRulesQueryParams,
     RULE_SOURCES,
     ACTIVE_STATUS,
     type OpengrepRule,
@@ -73,10 +75,8 @@ import {
 } from "@/shared/api/opengrep";
 import {
     formatCweDisplayLabel,
-    normalizeCweId,
     resolveCweDisplay,
 } from "@/shared/security/cweCatalog";
-import { setOpengrepActiveRules } from "@/shared/stores/opengrepRulesStore";
 import { useI18n } from "@/shared/i18n";
 import {
     SCAN_ENGINE_SELECTOR_OPTIONS,
@@ -102,6 +102,22 @@ interface OpengrepRulesProps {
 
 const DEFAULT_PAGE_SIZE = 10;
 
+type RuleStats = {
+    total: number | null;
+    languageCount: number | null;
+    vulnerabilityTypeCount: number | null;
+};
+
+const EMPTY_RULE_STATS: RuleStats = {
+    total: null,
+    languageCount: null,
+    vulnerabilityTypeCount: null,
+};
+
+function formatRuleStatValue(value: number | null) {
+    return value === null ? "\u00a0" : value.toLocaleString();
+}
+
 function getColumnFilterValue(state: DataTableQueryState, columnId: string) {
     return state.columnFilters.find((filter) => filter.id === columnId)?.value;
 }
@@ -113,6 +129,39 @@ function getStringColumnFilter(
 ) {
     const value = getColumnFilterValue(state, columnId);
     return typeof value === "string" ? value : fallback;
+}
+
+function resolveRuleKeyword(state: DataTableQueryState) {
+    return (
+        getStringColumnFilter(state, "ruleName").trim() ||
+        String(state.globalFilter || "").trim()
+    );
+}
+
+function buildRuleListQuery(
+    state: DataTableQueryState,
+): Pick<
+    OpengrepRulesQueryParams,
+    "keyword" | "language" | "source" | "confidence" | "is_active" | "severity"
+> {
+    const sourceFilter = getStringColumnFilter(state, "source");
+    const statusFilter = getStringColumnFilter(state, "status");
+    return {
+        keyword: resolveRuleKeyword(state) || undefined,
+        language: getStringColumnFilter(state, "language") || undefined,
+        source:
+            sourceFilter === "internal" || sourceFilter === "patch"
+                ? sourceFilter
+                : undefined,
+        confidence: getStringColumnFilter(state, "confidence") || undefined,
+        is_active:
+            statusFilter === "true"
+                ? true
+                : statusFilter === "false"
+                  ? false
+                  : undefined,
+        severity: "ERROR" as const,
+    };
 }
 
 function buildSelectionSummary({
@@ -163,13 +212,8 @@ export default function OpengrepRules({
     const navigate = useNavigate();
     const location = useLocation();
     const [rules, setRules] = useState<OpengrepRule[]>([]);
-    const [ruleStats, setRuleStats] = useState({
-        total: 0,
-        active: 0,
-        inactive: 0,
-        languageCount: 0,
-        vulnerabilityTypeCount: 0,
-    });
+    const [pageTotal, setPageTotal] = useState(0);
+    const [ruleStats, setRuleStats] = useState<RuleStats>(EMPTY_RULE_STATS);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [showRuleDetail, setShowRuleDetail] = useState(false);
@@ -220,6 +264,9 @@ export default function OpengrepRules({
         >
     >(new Map());
     const [showGeneratingQueue, setShowGeneratingQueue] = useState(false);
+    const activeEngineRef = useRef(activeEngine);
+    const pageRequestSeqRef = useRef(0);
+    const statsRequestSeqRef = useRef(0);
     const [manualRuleForm, setManualRuleForm] = useState({
         id: "",
         name: "",
@@ -246,17 +293,21 @@ export default function OpengrepRules({
     const [tableState, setTableState] = useState<DataTableQueryState>(() =>
         createInitialTableState(highlightRuleKeyword),
     );
+    const ruleNameFilter = getStringColumnFilter(tableState, "ruleName");
     const languageFilter = getStringColumnFilter(tableState, "language");
     const sourceFilter = getStringColumnFilter(tableState, "source");
     const confidenceFilter = getStringColumnFilter(tableState, "confidence");
     const activeFilter = getStringColumnFilter(tableState, "status");
 
     useEffect(() => {
+        activeEngineRef.current = activeEngine;
+    }, [activeEngine]);
+
+    useEffect(() => {
         if (isGitleaksEngine) {
             setGeneratingRules(new Map());
             setShowGeneratingQueue(false);
         }
-        void loadRules();
         void loadRuleStats();
         if (!isGitleaksEngine) {
             void loadGeneratingRules();
@@ -264,16 +315,140 @@ export default function OpengrepRules({
     }, [activeEngine, isGitleaksEngine]);
 
     useEffect(() => {
+        void loadRulesPage();
+    }, [
+        activeEngine,
+        tableState.pagination.pageIndex,
+        tableState.pagination.pageSize,
+        tableState.globalFilter,
+        ruleNameFilter,
+        languageFilter,
+        sourceFilter,
+        confidenceFilter,
+        activeFilter,
+    ]);
+
+    useEffect(() => {
         if (!highlightRuleKeyword) return;
         setTableState((current) => ({
             ...current,
-            globalFilter: highlightRuleKeyword,
+            globalFilter: "",
+            columnFilters: [
+                ...current.columnFilters.filter(
+                    (filter) => filter.id !== "ruleName",
+                ),
+                {
+                    id: "ruleName",
+                    value: highlightRuleKeyword,
+                },
+            ],
             pagination: {
                 ...current.pagination,
                 pageIndex: 0,
             },
         }));
     }, [highlightRuleKeyword]);
+
+    const loadRulesPage = async (options?: {
+        silent?: boolean;
+        nextState?: DataTableQueryState;
+    }) => {
+        const silent = options?.silent ?? false;
+        const requestState = options?.nextState ?? tableState;
+        const requestSeq = pageRequestSeqRef.current + 1;
+        pageRequestSeqRef.current = requestSeq;
+
+        try {
+            if (!silent) {
+                setLoading(true);
+            }
+            setLoadError(null);
+
+            if (isGitleaksEngine) {
+                setRules([]);
+                setPageTotal(0);
+                return;
+            }
+
+            const pageIndex = requestState.pagination.pageIndex;
+            const pageSize = requestState.pagination.pageSize;
+            const query = buildRuleListQuery(requestState);
+
+            const response = await getOpengrepRulesPage({
+                ...query,
+                skip: pageIndex * pageSize,
+                limit: pageSize,
+            });
+
+            if (
+                requestSeq !== pageRequestSeqRef.current ||
+                activeEngineRef.current !== "opengrep"
+            ) {
+                return;
+            }
+
+            const maxPageIndex =
+                response.total > 0
+                    ? Math.max(0, Math.ceil(response.total / pageSize) - 1)
+                    : 0;
+            if (pageIndex > maxPageIndex) {
+                setTableState((current) => ({
+                    ...current,
+                    pagination: {
+                        ...current.pagination,
+                        pageIndex: maxPageIndex,
+                    },
+                }));
+                return;
+            }
+
+            setRules(response.data);
+            setPageTotal(response.total);
+        } catch (error) {
+            console.error("Failed to load rules page:", error);
+            setLoadError("加载规则失败");
+            toast.error("加载规则失败");
+        } finally {
+            if (!silent) {
+                setLoading(false);
+            }
+        }
+    };
+
+    const loadRuleStats = async () => {
+        const requestSeq = statsRequestSeqRef.current + 1;
+        statsRequestSeqRef.current = requestSeq;
+        try {
+            if (isGitleaksEngine) {
+                setRuleStats(EMPTY_RULE_STATS);
+                setAvailableLanguages([]);
+                return;
+            }
+
+            const stats = await getOpengrepRuleStats();
+            if (
+                requestSeq !== statsRequestSeqRef.current ||
+                activeEngineRef.current !== "opengrep"
+            ) {
+                return;
+            }
+
+            setRuleStats({
+                total: stats.total,
+                languageCount: stats.language_count,
+                vulnerabilityTypeCount: stats.vulnerability_type_count,
+            });
+            setAvailableLanguages(stats.languages);
+        } catch (error) {
+            console.error("Failed to load rule stats:", error);
+            setRuleStats(EMPTY_RULE_STATS);
+            setAvailableLanguages([]);
+        }
+    };
+
+    const refreshRulesPageAndStats = async () => {
+        await Promise.all([loadRulesPage({ silent: true }), loadRuleStats()]);
+    };
 
     const loadGeneratingRules = async () => {
         try {
@@ -374,88 +549,6 @@ export default function OpengrepRules({
         return () => window.clearInterval(timer);
     }, [generatingRules.size, isGitleaksEngine]);
 
-    const loadRules = async (options?: { silent?: boolean }) => {
-        const silent = options?.silent ?? false;
-        try {
-            if (!silent) {
-                setLoading(true);
-            }
-            setLoadError(null);
-
-            if (isGitleaksEngine) {
-                setRules([]);
-                setAvailableLanguages([]);
-                setOpengrepActiveRules([]);
-                return;
-            }
-
-            const data = await getOpengrepRules();
-            const severeRules = data.filter(
-                (rule) => String(rule.severity || "").toUpperCase() === "ERROR",
-            );
-            setRules(severeRules);
-
-            const languages = Array.from(
-                new Set(severeRules.map((rule) => rule.language)),
-            ).sort();
-            setAvailableLanguages(languages);
-
-            setOpengrepActiveRules(
-                severeRules.filter((rule) => rule.is_active),
-            );
-        } catch (error) {
-            console.error("Failed to load rules:", error);
-            setLoadError("加载规则失败");
-            toast.error("加载规则失败");
-        } finally {
-            if (!silent) {
-                setLoading(false);
-            }
-        }
-    };
-
-    const loadRuleStats = async () => {
-        try {
-            const allRules = (await getOpengrepRules()).filter(
-                (rule) => String(rule.severity || "").toUpperCase() === "ERROR",
-            );
-            const languageSet = new Set<string>();
-            const vulnerabilityTypeSet = new Set<string>();
-
-            for (const rule of allRules) {
-                const normalizedLanguage = String(rule.language || "")
-                    .trim()
-                    .toLowerCase();
-                if (normalizedLanguage) {
-                    languageSet.add(normalizedLanguage);
-                }
-
-                if (Array.isArray(rule.cwe)) {
-                    for (const cwe of rule.cwe) {
-                        const normalizedCwe = normalizeCweId(cwe);
-                        if (normalizedCwe) {
-                            vulnerabilityTypeSet.add(normalizedCwe);
-                        }
-                    }
-                }
-            }
-
-            const activeCount = allRules.filter(
-                (rule) => rule.is_active,
-            ).length;
-
-            setRuleStats({
-                total: allRules.length,
-                active: activeCount,
-                inactive: Math.max(allRules.length - activeCount, 0),
-                languageCount: languageSet.size,
-                vulnerabilityTypeCount: vulnerabilityTypeSet.size,
-            });
-        } catch (error) {
-            console.error("Failed to load rule stats:", error);
-        }
-    };
-
     const syncEditForm = (detail: OpengrepRuleDetail) => {
         setEditRuleForm({
             name: detail.name,
@@ -512,17 +605,13 @@ export default function OpengrepRules({
         );
 
         setRules(nextRules);
-        setOpengrepActiveRules(nextRules.filter((item) => item.is_active));
 
         try {
             await toggleOpengrepRule(rule.id);
-            loadRuleStats();
+            void refreshRulesPageAndStats();
             toast.success(`规则已${rule.is_active ? "禁用" : "启用"}`);
         } catch (error) {
             setRules(previousRules);
-            setOpengrepActiveRules(
-                previousRules.filter((item) => item.is_active),
-            );
             console.error("Failed to toggle rule:", error);
             toast.error("更新规则失败");
         }
@@ -572,25 +661,8 @@ export default function OpengrepRules({
             syncEditForm(updatedRule);
             setIsEditingRule(false);
 
-            const nextRules = rules.map((ruleItem) =>
-                ruleItem.id === updatedRule.id
-                    ? {
-                          ...ruleItem,
-                          name: updatedRule.name,
-                          language: updatedRule.language,
-                          severity: updatedRule.severity,
-                          source: updatedRule.source,
-                          correct: updatedRule.correct,
-                          is_active: updatedRule.is_active,
-                          created_at: updatedRule.created_at,
-                      }
-                    : ruleItem,
-            );
-            setRules(nextRules);
-            setOpengrepActiveRules(nextRules.filter((item) => item.is_active));
-
+            await refreshRulesPageAndStats();
             toast.success(result.message || "规则保存成功");
-            loadRuleStats();
         } catch (error: any) {
             console.error("Failed to update rule:", error);
             const message = error?.response?.data?.detail || "保存规则失败";
@@ -622,8 +694,7 @@ export default function OpengrepRules({
                 }
                 return next;
             });
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
             // 从生成队列中移除已删除的规则
             await loadGeneratingRules();
             setShowRuleDetail(false);
@@ -662,8 +733,7 @@ export default function OpengrepRules({
                 commit_hash: "",
                 commit_content: "",
             });
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
         } catch (error) {
             console.error("Failed to generate rule:", error);
             toast.error("生成规则失败");
@@ -781,8 +851,7 @@ export default function OpengrepRules({
                 is_active: true,
             });
             setGenericRuleUploadTab("manual");
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail ||
@@ -812,8 +881,7 @@ export default function OpengrepRules({
             setShowGenericDialog(false);
             setCompressedFile(null);
             setGenericRuleUploadTab("manual");
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail ||
@@ -843,8 +911,7 @@ export default function OpengrepRules({
             setShowGenericDialog(false);
             setDirectoryFiles([]);
             setGenericRuleUploadTab("manual");
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail ||
@@ -1050,8 +1117,7 @@ export default function OpengrepRules({
                     setGeneratingRules(new Map());
                 }, 3000);
 
-                await loadRules({ silent: true });
-                await loadRuleStats();
+                await refreshRulesPageAndStats();
                 await loadGeneratingRules();
                 break;
             }
@@ -1068,30 +1134,38 @@ export default function OpengrepRules({
 
     const handleBatchUpdateRules = async (
         selectedRows: OpengrepRule[],
-        filteredRows: OpengrepRule[],
         isActive: boolean,
     ) => {
         if (isGitleaksEngine) {
             showGitleaksNotReady();
             return;
         }
-        const targetRows =
-            selectedRows.length > 0 ? selectedRows : filteredRows;
-        if (targetRows.length === 0) {
+        if (selectedRows.length === 0 && pageTotal === 0) {
             toast.error("当前没有可操作的规则");
             return;
         }
 
         try {
             setBatchOperating(true);
+            const query = buildRuleListQuery(tableState);
             const result = await batchUpdateOpengrepRules({
-                rule_ids: targetRows.map((row) => row.id),
+                ...(selectedRows.length > 0
+                    ? {
+                          rule_ids: selectedRows.map((row) => row.id),
+                      }
+                    : {
+                          ...query,
+                          ...(activeFilter === "true"
+                              ? { current_is_active: true }
+                              : activeFilter === "false"
+                                ? { current_is_active: false }
+                                : { current_is_active: !isActive }),
+                      }),
                 is_active: isActive,
             });
             toast.success(result.message);
             setTableState((current) => ({ ...current, rowSelection: {} }));
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            await refreshRulesPageAndStats();
         } catch (error) {
             console.error("Batch operation failed:", error);
             toast.error("批量操作失败");
@@ -1194,6 +1268,7 @@ export default function OpengrepRules({
                 accessorFn: (row) =>
                     [row.name, row.id].filter(Boolean).join(" "),
                 header: "规则名称",
+                enableSorting: false,
                 meta: {
                     label: "规则名称",
                     minWidth: 240,
@@ -1432,8 +1507,10 @@ export default function OpengrepRules({
                                 <div>
                                     <p className="stat-label">有效规则总数</p>
                                     <div className="flex items-end gap-3">
-                                        <p className="stat-value">
-                                            {ruleStats.total}
+                                        <p className="stat-value min-h-[2.5rem]">
+                                            {formatRuleStatValue(
+                                                ruleStats.total,
+                                            )}
                                         </p>
                                     </div>
                                 </div>
@@ -1449,8 +1526,10 @@ export default function OpengrepRules({
                                     <p className="stat-label">
                                         支持编程语言个数
                                     </p>
-                                    <p className="stat-value">
-                                        {ruleStats.languageCount}
+                                    <p className="stat-value min-h-[2.5rem]">
+                                        {formatRuleStatValue(
+                                            ruleStats.languageCount,
+                                        )}
                                     </p>
                                 </div>
                                 <div className="stat-icon text-indigo-400">
@@ -1465,8 +1544,10 @@ export default function OpengrepRules({
                                     <p className="stat-label">
                                         支持漏洞类型数量
                                     </p>
-                                    <p className="stat-value">
-                                        {ruleStats.vulnerabilityTypeCount}
+                                    <p className="stat-value min-h-[2.5rem]">
+                                        {formatRuleStatValue(
+                                            ruleStats.vulnerabilityTypeCount,
+                                        )}
                                     </p>
                                 </div>
                                 <div className="stat-icon text-amber-400">
@@ -1567,6 +1648,7 @@ export default function OpengrepRules({
                         <DataTable
                             data={rules}
                             columns={columns}
+                            mode="manual"
                             state={tableState}
                             onStateChange={setTableState}
                             loading={loading}
@@ -1574,7 +1656,7 @@ export default function OpengrepRules({
                             emptyState={{
                                 title: "未找到规则",
                                 description:
-                                    tableState.globalFilter ||
+                                    ruleNameFilter ||
                                     languageFilter ||
                                     sourceFilter ||
                                     confidenceFilter ||
@@ -1618,19 +1700,18 @@ export default function OpengrepRules({
                                     </div>
                                 ) : undefined,
                                 trailingActions: (
-                                    <>
-                                        {/* {generatingRules.size > 0 ? (
-											<Button
-												onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
-												className="cyber-btn-primary h-9 bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
-											>
-												<div className="relative mr-2 h-3 w-3">
-													<div className="absolute inset-0 rounded-full bg-cyan-400 opacity-50 animate-pulse" />
-												</div>
-												生成队列 ({generatingRules.size})
-											</Button>
-										) : null} */}
-                                    </>
+                                    <Button
+                                        onClick={() => {
+                                            if (isGitleaksEngine) {
+                                                showGitleaksNotReady();
+                                                return;
+                                            }
+                                            setShowRuleTypeDialog(true);
+                                        }}
+                                        className="cyber-btn-primary h-9"
+                                    >
+                                        新建规则
+                                    </Button>
                                 ),
                                 showGlobalSearch: false,
                                 showColumnVisibility: false,
@@ -1638,26 +1719,17 @@ export default function OpengrepRules({
                                 showReset: false,
                             }}
                             selection={
-                                !loading && rules.length > 0
+                                !loading && pageTotal > 0
                                     ? {
                                           enableRowSelection: true,
                                           summary: buildSelectionSummary,
-                                          actions: ({
-                                              selectedRows,
-                                              table,
-                                          }) => {
-                                              const filteredRows = table
-                                                  .getFilteredRowModel()
-                                                  .rows.map(
-                                                      (row) => row.original,
-                                                  );
+                                          actions: ({ selectedRows }) => {
                                               return (
                                                   <>
                                                       <Button
                                                           onClick={() =>
                                                               void handleBatchUpdateRules(
                                                                   selectedRows,
-                                                                  filteredRows,
                                                                   true,
                                                               )
                                                           }
@@ -1674,7 +1746,6 @@ export default function OpengrepRules({
                                                           onClick={() =>
                                                               void handleBatchUpdateRules(
                                                                   selectedRows,
-                                                                  filteredRows,
                                                                   false,
                                                               )
                                                           }
@@ -1687,22 +1758,6 @@ export default function OpengrepRules({
                                                               ? "处理中..."
                                                               : "批量禁用"}
                                                       </Button>
-                                                      <Button
-                                                          onClick={() => {
-                                                              if (
-                                                                  isGitleaksEngine
-                                                              ) {
-                                                                  showGitleaksNotReady();
-                                                                  return;
-                                                              }
-                                                              setShowRuleTypeDialog(
-                                                                  true,
-                                                              );
-                                                          }}
-                                                          className="cyber-btn-primary h-9"
-                                                      >
-                                                          新建规则
-                                                      </Button>
                                                   </>
                                               );
                                           },
@@ -1711,6 +1766,8 @@ export default function OpengrepRules({
                             }
                             pagination={{
                                 enabled: true,
+                                manual: true,
+                                totalCount: pageTotal,
                                 pageSizeOptions: [10, 20, 50, 100],
                             }}
                             tableClassName="min-w-[1380px]"

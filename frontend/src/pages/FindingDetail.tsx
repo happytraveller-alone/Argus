@@ -60,6 +60,7 @@ import {
   normalizeReturnToPath,
   resolveFindingDetailBackTarget,
 } from "@/shared/utils/findingRoute";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 
 type FindingSource = "static" | "agent";
 type StaticEngine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
@@ -497,9 +498,7 @@ export default function FindingDetail() {
         onBack={handleBack}
         codeBrowserAction={codeBrowserAction}
       >
-        <div className="rounded-[24px] border border-border/70 bg-background p-8 text-base text-muted-foreground shadow-sm">
-          漏洞详情加载中...
-        </div>
+        <SilentLoadingState className="rounded-[24px]" minHeight={240} />
       </FindingDetailShell>
     );
   }

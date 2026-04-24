@@ -7,6 +7,7 @@ import ToolEvidencePreview from "@/pages/AgentAudit/components/ToolEvidencePrevi
 import { parseToolEvidenceFromLog } from "@/pages/AgentAudit/toolEvidence";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { Textarea } from "@/components/ui/textarea";
 import {
   api,
@@ -700,7 +701,10 @@ export function ScanConfigExternalToolDetailContent({
             returnToSearch={returnToSearch}
           />
           {loading ? (
-            <div className="border-t border-border/50 pt-6 text-sm text-muted-foreground">加载技能详情中…</div>
+            <SilentLoadingState
+              className="border-t border-border/50 pt-6"
+              minHeight={96}
+            />
           ) : error ? (
             <div className="border-t border-border/50 pt-6 text-sm text-red-300">{error}</div>
           ) : toolType !== "skill" && promptSkillDetail ? (

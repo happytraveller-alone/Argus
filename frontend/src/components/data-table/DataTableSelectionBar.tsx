@@ -5,15 +5,16 @@ import type { DataTableSelectionConfig } from "./types";
 export function DataTableSelectionBar<TData>({
   table,
   selection,
+  filteredCount,
 }: {
   table: Table<TData>;
   selection?: DataTableSelectionConfig<TData>;
+  filteredCount: number;
 }) {
   if (!selection?.enableRowSelection) return null;
 
-  const selectedRows = table.getFilteredSelectedRowModel().rows.map((row) => row.original);
+  const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
   const selectedCount = selectedRows.length;
-  const filteredCount = table.getFilteredRowModel().rows.length;
   if (selectedCount === 0 && !selection.actions) return null;
 
   const context = {

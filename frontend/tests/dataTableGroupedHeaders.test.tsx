@@ -68,3 +68,35 @@ test("DataTable renders grouped headers and local pagination summary", async () 
   assert.match(markup, /<th[^>]*colSpan="2"[^>]*>指标<\/th>/);
   assert.match(markup, /共 2 条/);
 });
+
+test("DataTable remote pagination uses server total instead of current page row count", async () => {
+  const dataTableModule = await importOrFail<any>(
+    "../src/components/data-table/index.ts",
+  );
+
+  const markup = renderToStaticMarkup(
+    createElement(dataTableModule.DataTable, {
+      data: [{ id: "p11", name: "Project Eleven" }],
+      columns: [
+        {
+          accessorKey: "name",
+          header: "项目名称",
+        },
+      ],
+      mode: "manual",
+      state: {
+        pagination: {
+          pageIndex: 1,
+          pageSize: 10,
+        },
+      },
+      pagination: {
+        enabled: true,
+        manual: true,
+        totalCount: 37,
+      },
+    }),
+  );
+
+  assert.match(markup, /共 37 条，第 2 \/ 4 页/);
+});

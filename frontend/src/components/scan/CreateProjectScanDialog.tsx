@@ -12,7 +12,7 @@ import {
 } from "@/shared/api/agentPreflight";
 import {
 	createOpengrepScanTask,
-	getOpengrepRules,
+	getAllOpengrepRules,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
@@ -277,7 +277,10 @@ export default function CreateProjectScanDialog({
 
 		const loadRules = async () => {
 			try {
-				const rules = await getOpengrepRules({ is_active: true });
+				const rules = await getAllOpengrepRules({
+					is_active: true,
+					severity: "ERROR",
+				});
 				setActiveRules(rules.filter(isSevereCreateProjectScanRule));
 			} catch (error) {
 				console.error("加载启用规则失败:", error);

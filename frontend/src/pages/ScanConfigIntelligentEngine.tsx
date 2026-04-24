@@ -1,6 +1,5 @@
 import { Brain, KeyRound, Settings, Zap } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import type {
     LlmModelStatsSource,
     LlmModelStatsStatus,
@@ -9,7 +8,6 @@ import {
     SystemConfig,
     useSystemConfigDraftState,
 } from "@/components/system/SystemConfig";
-import { Button } from "@/components/ui/button";
 
 type LlmSummaryState = {
     providerLabel: string;

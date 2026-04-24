@@ -30,7 +30,7 @@ import { api } from "@/shared/api/database";
 import { createAgentTask } from "@/shared/api/agentTasks";
 import {
 	createOpengrepScanTask,
-	getOpengrepRules,
+	getAllOpengrepRules,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
 import {
@@ -155,7 +155,12 @@ export default function CreateScanTaskDialog({
 		const loadStaticRules = async () => {
 			if (!open || scanMode !== "static" || !staticTools.opengrep) return;
 			try {
-				const rules = (await getOpengrepRules({ is_active: true })).filter(
+				const rules = (
+					await getAllOpengrepRules({
+						is_active: true,
+						severity: "ERROR",
+					})
+				).filter(
 					isSevereRule,
 				);
 				setStaticRules(rules);
@@ -294,9 +299,12 @@ export default function CreateScanTaskDialog({
 					apiMsg.includes("部分规则不存在") || apiMsg.includes("规则不存在");
 				if (!shouldReloadRules) throw error;
 
-				const freshRules = (await getOpengrepRules({ is_active: true })).filter(
-					isSevereRule,
-				);
+				const freshRules = (
+					await getAllOpengrepRules({
+						is_active: true,
+						severity: "ERROR",
+					})
+				).filter(isSevereRule);
 				setStaticRules(freshRules);
 				setOpengrepActiveRules(freshRules);
 

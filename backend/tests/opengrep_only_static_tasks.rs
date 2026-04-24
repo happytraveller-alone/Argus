@@ -206,9 +206,13 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
 
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    let items = payload
+    let items = payload["data"]
         .as_array()
-        .expect("rules response should be an array");
+        .expect("rules response should expose data array");
+    assert_eq!(
+        payload.get("total").and_then(Value::as_u64),
+        Some(items.len() as u64)
+    );
     assert!(
         items.iter().all(|item| {
             item.get("is_active").and_then(Value::as_bool) == Some(true)
@@ -226,5 +230,35 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
     assert_eq!(
         representative_rule.get("severity").and_then(Value::as_str),
         Some("ERROR")
+    );
+
+    let stats_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/rules/stats")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("stats request should complete");
+    assert_eq!(stats_response.status(), StatusCode::OK);
+    let stats_payload: Value = serde_json::from_slice(
+        &to_bytes(stats_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(stats_payload.get("total").and_then(Value::as_u64), Some(items.len() as u64));
+    assert_eq!(
+        stats_payload.get("inactive").and_then(Value::as_u64),
+        Some(0)
+    );
+    assert!(
+        stats_payload["languages"]
+            .as_array()
+            .is_some_and(|languages| !languages.is_empty()),
+        "stats response should include language metadata"
     );
 }

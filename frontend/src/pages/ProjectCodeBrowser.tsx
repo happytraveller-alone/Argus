@@ -20,6 +20,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FindingCodeWindow, {
 	type FindingCodeWindowAppearance,
 } from "@/pages/AgentAudit/components/FindingCodeWindow";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { Button } from "@/components/ui/button";
 import { api } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
@@ -824,9 +825,10 @@ export function ProjectCodeBrowserContent({
 			</section>
 
 			{loading ? (
-				<section className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-black/80 p-6 text-sm text-white/56">
-					正在加载项目代码浏览数据...
-				</section>
+				<SilentLoadingState
+					className="flex-1 rounded-2xl"
+					minHeight={320}
+				/>
 			) : error ? (
 				<section className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-black/80 p-6 text-sm text-white/56">
 					{error}

@@ -25,6 +25,7 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/rules", get(list_opengrep_rules))
+        .route("/rules/stats", get(get_opengrep_rule_stats))
         .route("/rules/generating/status", get(get_generating_rules))
         .route("/rules/create", post(create_opengrep_rule_from_patch))
         .route("/rules/create-generic", post(create_opengrep_generic_rule))
@@ -84,6 +85,8 @@ struct ListQuery {
     source: Option<String>,
     keyword: Option<String>,
     language: Option<String>,
+    confidence: Option<String>,
+    severity: Option<String>,
     is_active: Option<bool>,
     skip: Option<usize>,
     limit: Option<usize>,
@@ -102,29 +105,56 @@ struct ProgressQuery {
 async fn list_opengrep_rules(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Value>>, ApiError> {
-    let items = merged_opengrep_rules(&state).await?;
-    Ok(Json(
-        items
-            .into_iter()
-            .filter(|rule| match query.source.as_deref() {
-                Some(source) => rule.source == source,
-                None => true,
-            })
-            .filter(|rule| match query.language.as_deref() {
-                Some(language) => rule.language.eq_ignore_ascii_case(language),
-                None => true,
-            })
-            .filter(|rule| match query.is_active {
-                Some(is_active) => rule.is_active == is_active,
-                None => true,
-            })
-            .filter(|rule| contains_keyword(&rule.name, query.keyword.as_deref()))
-            .skip(query.skip.unwrap_or(0))
-            .take(query.limit.unwrap_or(1_000))
-            .map(|record| opengrep_rule_value(&record))
-            .collect(),
-    ))
+) -> Result<Json<Value>, ApiError> {
+    let filtered = filter_opengrep_rules(merged_opengrep_rules(&state).await?, &query);
+    let total = filtered.len();
+    let items = filtered
+        .into_iter()
+        .skip(query.skip.unwrap_or(0))
+        .take(query.limit.unwrap_or(1_000))
+        .map(|record| opengrep_rule_value(&record))
+        .collect::<Vec<_>>();
+    Ok(Json(json!({
+        "data": items,
+        "total": total,
+    })))
+}
+
+async fn get_opengrep_rule_stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let rules = merged_opengrep_rules(&state)
+        .await?
+        .into_iter()
+        .filter(|rule| rule.severity.eq_ignore_ascii_case("ERROR"))
+        .collect::<Vec<_>>();
+
+    let mut languages = std::collections::BTreeSet::new();
+    let mut vulnerability_types = std::collections::BTreeSet::new();
+    let active = rules.iter().filter(|rule| rule.is_active).count();
+
+    for rule in &rules {
+        let language = rule.language.trim().to_ascii_lowercase();
+        if !language.is_empty() {
+            languages.insert(language);
+        }
+        if let Some(cwe) = &rule.cwe {
+            for item in cwe {
+                let normalized = item.trim();
+                if !normalized.is_empty() {
+                    vulnerability_types.insert(normalized.to_string());
+                }
+            }
+        }
+    }
+
+    let total = rules.len();
+    Ok(Json(json!({
+        "total": total,
+        "active": active,
+        "inactive": total.saturating_sub(active),
+        "language_count": languages.len(),
+        "languages": languages.into_iter().collect::<Vec<_>>(),
+        "vulnerability_type_count": vulnerability_types.len(),
+    })))
 }
 
 async fn get_generating_rules() -> Json<Vec<Value>> {
@@ -380,7 +410,9 @@ async fn batch_update_opengrep_rules(
             return false;
         }
         if !contains_keyword(&rule.name, keyword.as_deref()) {
-            return false;
+            if !contains_keyword(&rule.id, keyword.as_deref()) {
+                return false;
+            }
         }
         if let Some(language) = language.as_deref() {
             if !rule.language.eq_ignore_ascii_case(language) {
@@ -1399,6 +1431,42 @@ fn opengrep_rule_detail_value(record: &task_state::OpengrepRuleRecord) -> Value 
         }),
     );
     value
+}
+
+fn filter_opengrep_rules(
+    items: Vec<task_state::OpengrepRuleRecord>,
+    query: &ListQuery,
+) -> Vec<task_state::OpengrepRuleRecord> {
+    items
+        .into_iter()
+        .filter(|rule| match query.source.as_deref() {
+            Some(source) => rule.source == source,
+            None => true,
+        })
+        .filter(|rule| match query.language.as_deref() {
+            Some(language) => rule.language.eq_ignore_ascii_case(language),
+            None => true,
+        })
+        .filter(|rule| match query.confidence.as_deref() {
+            Some(confidence) => rule
+                .confidence
+                .as_deref()
+                .is_some_and(|value| value.eq_ignore_ascii_case(confidence)),
+            None => true,
+        })
+        .filter(|rule| match query.severity.as_deref() {
+            Some(severity) => rule.severity.eq_ignore_ascii_case(severity),
+            None => true,
+        })
+        .filter(|rule| match query.is_active {
+            Some(is_active) => rule.is_active == is_active,
+            None => true,
+        })
+        .filter(|rule| {
+            contains_keyword(&rule.name, query.keyword.as_deref())
+                || contains_keyword(&rule.id, query.keyword.as_deref())
+        })
+        .collect()
 }
 
 fn build_rule_record_from_payload(

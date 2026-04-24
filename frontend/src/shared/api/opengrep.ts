@@ -5,6 +5,9 @@
 
 import { apiClient } from "@/shared/api/serverClient";
 
+export const DEFAULT_OPENGREP_RULES_LIMIT = 10;
+export const ALL_OPENGREP_RULES_LIMIT = 10_000;
+
 export interface OpengrepRule {
     id: string;
     name: string;
@@ -29,22 +32,64 @@ export interface OpengrepRulesListResponse {
     total: number;
 }
 
-/**
- * Get opengrep rules list
- */
-export async function getOpengrepRules(params?: {
+export interface OpengrepRuleStatsResponse {
+    total: number;
+    active: number;
+    inactive: number;
+    language_count: number;
+    languages: string[];
+    vulnerability_type_count: number;
+}
+
+export interface OpengrepRulesQueryParams {
     language?: string;
     source?: "internal" | "patch";
     is_active?: boolean;
+    keyword?: string;
+    confidence?: string;
+    severity?: string;
     skip?: number;
     limit?: number;
-}): Promise<OpengrepRule[]> {
+}
+
+function normalizeOpengrepRulesListResponse(
+    payload: unknown,
+): OpengrepRulesListResponse {
+    if (Array.isArray(payload)) {
+        return {
+            data: payload as OpengrepRule[],
+            total: payload.length,
+        };
+    }
+
+    const normalized = payload as Partial<OpengrepRulesListResponse> | null;
+    const data = Array.isArray(normalized?.data) ? normalized.data : [];
+    const total =
+        typeof normalized?.total === "number" && Number.isFinite(normalized.total)
+            ? normalized.total
+            : data.length;
+
+    return {
+        data,
+        total,
+    };
+}
+
+/**
+ * Get opengrep rules list
+ */
+export async function getOpengrepRulesPage(
+    params?: OpengrepRulesQueryParams,
+): Promise<OpengrepRulesListResponse> {
     const searchParams = new URLSearchParams();
-    const limit = params?.limit ?? 10_000;
+    const limit = params?.limit ?? DEFAULT_OPENGREP_RULES_LIMIT;
     if (params?.language) searchParams.set("language", params.language);
     if (params?.source) searchParams.set("source", params.source);
     if (params?.is_active !== undefined)
         searchParams.set("is_active", String(params.is_active));
+    if (params?.keyword) searchParams.set("keyword", params.keyword);
+    if (params?.confidence) searchParams.set("confidence", params.confidence);
+    if (params?.severity) searchParams.set("severity", params.severity);
     if (params?.skip !== undefined)
         searchParams.set("skip", String(params.skip));
     searchParams.set("limit", String(limit));
@@ -53,6 +98,33 @@ export async function getOpengrepRules(params?: {
     const response = await apiClient.get(
         `/static-tasks/rules${query ? `?${query}` : ""}`,
     );
+    return normalizeOpengrepRulesListResponse(response.data);
+}
+
+export async function getOpengrepRules(
+    params?: OpengrepRulesQueryParams,
+): Promise<OpengrepRule[]> {
+    const response = await getOpengrepRulesPage(params);
+    return response.data;
+}
+
+export async function getAllOpengrepRules(params?: {
+    language?: string;
+    source?: "internal" | "patch";
+    is_active?: boolean;
+    keyword?: string;
+    confidence?: string;
+    severity?: string;
+    skip?: number;
+}): Promise<OpengrepRule[]> {
+    return getOpengrepRules({
+        ...params,
+        limit: ALL_OPENGREP_RULES_LIMIT,
+    });
+}
+
+export async function getOpengrepRuleStats(): Promise<OpengrepRuleStatsResponse> {
+    const response = await apiClient.get(`/static-tasks/rules/stats`);
     return response.data;
 }
 

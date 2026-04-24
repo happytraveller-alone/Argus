@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
 import { useI18n } from "@/shared/i18n";
 import { useLocation } from "react-router-dom";
 import {
@@ -306,12 +306,6 @@ export default function ProjectsPage({
 	return (
 		<div className="p-6 bg-background min-h-screen font-mono relative flex flex-col gap-6">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-			{viewModel.loading ? (
-				<div className="relative z-10 text-xs text-muted-foreground">
-					加载项目列表中...
-				</div>
-			) : null}
-
 			<CreateProjectDialog
 				open={browser.showCreateDialog}
 				supportedLanguages={SUPPORTED_PROJECT_LANGUAGES}
@@ -341,10 +335,7 @@ export default function ProjectsPage({
 				/>
 
 				{viewModel.loading && data.projects.length === 0 ? (
-					<div className="cyber-card p-4 space-y-3">
-						<Skeleton className="h-9 w-full" />
-						<Skeleton className="h-48 w-full" />
-					</div>
+					<SilentLoadingState className="w-full" minHeight={240} />
 				) : viewModel.rows.length > 0 ? (
 					<div
 						ref={tableViewportRef}

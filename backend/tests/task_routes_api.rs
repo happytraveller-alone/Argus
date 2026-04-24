@@ -1507,6 +1507,7 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
 
     let smoke_routes = [
         "/api/v1/static-tasks/rules?limit=5",
+        "/api/v1/static-tasks/rules/stats",
         "/api/v1/static-tasks/rules/generating/status",
         "/api/v1/static-tasks/cache/repo-stats",
     ];

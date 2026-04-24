@@ -38,7 +38,6 @@ export default function AgentModeSelector({
   staticTools,
   onStaticToolsChange,
   disabledStaticTools,
-  blockedStaticToolMessages,
   onOpenStaticToolConfig,
 }: AgentModeSelectorProps) {
   const isStaticSelected = value === "static";

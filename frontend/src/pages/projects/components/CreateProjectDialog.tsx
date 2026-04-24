@@ -89,7 +89,6 @@ function getStatusLabel(status: ZipBatchItemStatus) {
 
 export default function CreateProjectDialog({
     open,
-    supportedLanguages,
     onOpenChange,
     onCreateZipProjects,
 }: CreateProjectDialogProps) {
@@ -122,17 +121,6 @@ export default function CreateProjectDialog({
             setForm(createEmptyProjectForm());
         }
     }, [open]);
-
-    function toggleLanguage(language: string, checked: boolean) {
-        setForm((previous) => ({
-            ...previous,
-            programming_languages: checked
-                ? [...previous.programming_languages, language]
-                : previous.programming_languages.filter(
-                      (item) => item !== language,
-                  ),
-        }));
-    }
 
     function pushFiles(nextFiles: File[]) {
         if (nextFiles.length === 0) return;
