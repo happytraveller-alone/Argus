@@ -51,14 +51,42 @@ pub fn build_validate_command(config_dir: &str) -> Vec<String> {
     ]
 }
 
-pub fn build_scan_command(config_dir: &str, target_dir: &str) -> Vec<String> {
-    vec![
-        "opengrep".to_string(),
-        "--config".to_string(),
-        config_dir.to_string(),
-        "--json".to_string(),
-        target_dir.to_string(),
-    ]
+pub struct ScanCommandArgs<'a> {
+    pub manifest_path: Option<&'a str>,
+    pub config_dir: Option<&'a str>,
+    pub target_dir: &'a str,
+    pub output_path: &'a str,
+    pub summary_path: &'a str,
+    pub log_path: &'a str,
+    pub jobs: usize,
+    pub max_memory_mb: u64,
+}
+
+pub fn build_scan_command(args: &ScanCommandArgs<'_>) -> Vec<String> {
+    let mut command = vec![
+        "opengrep-scan".to_string(),
+        "--target".to_string(),
+        args.target_dir.to_string(),
+        "--output".to_string(),
+        args.output_path.to_string(),
+        "--summary".to_string(),
+        args.summary_path.to_string(),
+        "--log".to_string(),
+        args.log_path.to_string(),
+        "--jobs".to_string(),
+        args.jobs.to_string(),
+        "--max-memory".to_string(),
+        args.max_memory_mb.to_string(),
+    ];
+    if let Some(manifest_path) = args.manifest_path {
+        command.push("--manifest".to_string());
+        command.push(manifest_path.to_string());
+    }
+    if let Some(config_dir) = args.config_dir {
+        command.push("--config".to_string());
+        command.push(config_dir.to_string());
+    }
+    command
 }
 
 pub fn parse_scan_output(
@@ -67,12 +95,9 @@ pub fn parse_scan_output(
     project_root: Option<&str>,
     known_paths: Option<&std::collections::BTreeSet<String>>,
 ) -> Vec<task_state::StaticFindingRecord> {
-    let parsed: Value = match serde_json::from_str(json_text) {
-        Ok(v) => v,
-        Err(_) => match extract_json_object(json_text) {
-            Some(v) => v,
-            None => return Vec::new(),
-        },
+    let parsed = match parse_scan_output_document(json_text) {
+        Some(value) => value,
+        None => return Vec::new(),
     };
 
     let results = match parsed.get("results").and_then(Value::as_array) {
@@ -84,6 +109,13 @@ pub fn parse_scan_output(
         .iter()
         .filter_map(|result| parse_single_result(result, task_id, project_root, known_paths))
         .collect()
+}
+
+pub fn scan_output_has_results_array(json_text: &str) -> bool {
+    match parse_scan_output_document(json_text) {
+        Some(parsed) => parsed.get("results").and_then(Value::as_array).is_some(),
+        None => false,
+    }
 }
 
 fn parse_single_result(
@@ -175,8 +207,14 @@ fn parse_single_result(
     })
 }
 
+fn parse_scan_output_document(text: &str) -> Option<Value> {
+    serde_json::from_str(text)
+        .ok()
+        .or_else(|| extract_json_object(text))
+}
+
 fn extract_json_object(text: &str) -> Option<Value> {
-    let start = text.find('{')? ;
+    let start = text.find('{')?;
     let candidate = &text[start..];
     let mut depth = 0i32;
     let mut end_pos = None;
@@ -269,7 +307,8 @@ pub async fn load_rule_assets_for_languages(
     if languages.is_empty() {
         return Ok(all);
     }
-    let mut normalized: BTreeSet<String> = languages.iter().map(|l| normalize_language(l)).collect();
+    let mut normalized: BTreeSet<String> =
+        languages.iter().map(|l| normalize_language(l)).collect();
     if normalized.contains("c") {
         normalized.insert("cpp".to_string());
     }
@@ -313,9 +352,9 @@ mod tests {
     use crate::{config::AppConfig, state::AppState};
 
     use super::{
-        build_validate_command, extract_language_from_asset_path, extract_rule_languages,
-        load_rule_assets, load_rule_assets_for_languages, materialize_rule_directory,
-        normalize_language,
+        build_scan_command, build_validate_command, extract_language_from_asset_path,
+        extract_rule_languages, load_rule_assets, load_rule_assets_for_languages,
+        materialize_rule_directory, normalize_language, ScanCommandArgs,
     };
 
     #[tokio::test]
@@ -368,6 +407,39 @@ mod tests {
         assert_eq!(
             build_validate_command("/work/opengrep-rules"),
             vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
+        );
+    }
+
+    #[test]
+    fn builds_scan_command_with_bounded_resources_and_stdout_output() {
+        assert_eq!(
+            build_scan_command(&ScanCommandArgs {
+                manifest_path: Some("/work/rules.manifest"),
+                config_dir: None,
+                target_dir: "/work/source",
+                output_path: "/work/output/results.json",
+                summary_path: "/work/output/summary.json",
+                log_path: "/work/output/opengrep.log",
+                jobs: 1,
+                max_memory_mb: 384,
+            }),
+            vec![
+                "opengrep-scan",
+                "--target",
+                "/work/source",
+                "--output",
+                "/work/output/results.json",
+                "--summary",
+                "/work/output/summary.json",
+                "--log",
+                "/work/output/opengrep.log",
+                "--jobs",
+                "1",
+                "--max-memory",
+                "384",
+                "--manifest",
+                "/work/rules.manifest",
+            ]
         );
     }
 
@@ -442,11 +514,18 @@ mod tests {
         let java_only = load_rule_assets_for_languages(&state, &["Java".to_string()])
             .await
             .expect("should load java rules");
-        assert!(java_only.len() < all.len(), "filtered should be fewer than all");
+        assert!(
+            java_only.len() < all.len(),
+            "filtered should be fewer than all"
+        );
         assert!(!java_only.is_empty(), "java rules should not be empty");
         for asset in &java_only {
             if let Some(lang) = extract_language_from_asset_path(&asset.asset_path) {
-                assert_eq!(lang, "java", "patch rule should be java: {}", asset.asset_path);
+                assert_eq!(
+                    lang, "java",
+                    "patch rule should be java: {}",
+                    asset.asset_path
+                );
             }
         }
     }
@@ -495,7 +574,11 @@ mod tests {
   Ran 1168 rules on 1 file: 1 finding.
 "#;
         let findings = super::parse_scan_output(mixed, "task-1", None, None);
-        assert_eq!(findings.len(), 1, "should extract finding from mixed stdout");
+        assert_eq!(
+            findings.len(),
+            1,
+            "should extract finding from mixed stdout"
+        );
         assert_eq!(findings[0].payload["rule_name"], "test-rule");
     }
 
@@ -504,5 +587,17 @@ mod tests {
         let json = r#"{"version":"1.15.1","results":[{"check_id":"pure-rule","path":"app.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"pure test","severity":"ERROR","metadata":{},"lines":"x = eval(input())","is_ignored":false,"validation_state":"NO_VALIDATOR","engine_kind":"OSS"}}],"errors":[]}"#;
         let findings = super::parse_scan_output(json, "task-2", None, None);
         assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn detects_when_scan_output_has_results_array() {
+        assert!(super::scan_output_has_results_array(
+            r#"{"version":"1.15.1","results":[]}"#
+        ));
+        assert!(!super::scan_output_has_results_array(""));
+        assert!(!super::scan_output_has_results_array(
+            r#"{"version":"1.15.1"}"#
+        ));
+        assert!(!super::scan_output_has_results_array("not-json"));
     }
 }

@@ -22,8 +22,8 @@ services:
         BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
     restart: "no"
     command:
-      - "opengrep"
-      - "--version"
+      - "opengrep-scan"
+      - "--self-test"
     networks:
       - vulhunter-network
 

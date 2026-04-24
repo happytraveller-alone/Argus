@@ -122,7 +122,10 @@ fn normalize_push_finding_payload_with_order(
     let mut normalized_order = ordered_keys_for_path("payload", &normalized, ordering);
 
     for source_name in ["arguments", "finding"] {
-        let nested_payload = normalized.get(source_name).and_then(Value::as_object).cloned();
+        let nested_payload = normalized
+            .get(source_name)
+            .and_then(Value::as_object)
+            .cloned();
         if let Some(source_payload) = nested_payload.as_ref() {
             merge_payload_fields(
                 &mut normalized,
@@ -172,10 +175,15 @@ fn normalize_push_finding_payload_with_order(
     for (alias_key, target_key) in PUSH_FINDING_ALIAS_MAP {
         let alias_value = normalized.get(*alias_key).cloned();
         let target_value = normalized.get(*target_key).cloned();
-        if alias_value.as_ref().is_some_and(|value| !is_empty_like(value))
+        if alias_value
+            .as_ref()
+            .is_some_and(|value| !is_empty_like(value))
             && target_value.as_ref().is_none_or(is_empty_like)
         {
-            normalized.insert((*target_key).to_string(), alias_value.unwrap_or(Value::Null));
+            normalized.insert(
+                (*target_key).to_string(),
+                alias_value.unwrap_or(Value::Null),
+            );
             repair_map.insert((*alias_key).to_string(), (*target_key).to_string());
             if !normalized_order.iter().any(|key| key == target_key) {
                 normalized_order.push((*target_key).to_string());
@@ -187,7 +195,8 @@ fn normalize_push_finding_payload_with_order(
         }
     }
 
-    let mut metadata_payload = parse_object_payload(normalized.get("finding_metadata")).unwrap_or_default();
+    let mut metadata_payload =
+        parse_object_payload(normalized.get("finding_metadata")).unwrap_or_default();
     let existing_extra = metadata_payload
         .get("extra_tool_input")
         .and_then(Value::as_object)
@@ -226,10 +235,7 @@ fn normalize_push_finding_payload_with_order(
     if !extra_tool_input_entries.is_empty() {
         let (limited_extra, truncated) = limit_extra_tool_input(&extra_tool_input_entries);
         if !limited_extra.is_empty() {
-            metadata_payload.insert(
-                "extra_tool_input".to_string(),
-                Value::Object(limited_extra),
-            );
+            metadata_payload.insert("extra_tool_input".to_string(), Value::Object(limited_extra));
         }
         if truncated {
             metadata_payload.insert("extra_tool_input_truncated".to_string(), Value::Bool(true));
@@ -239,7 +245,10 @@ fn normalize_push_finding_payload_with_order(
     if metadata_payload.is_empty() {
         normalized.remove("finding_metadata");
     } else {
-        normalized.insert("finding_metadata".to_string(), Value::Object(metadata_payload));
+        normalized.insert(
+            "finding_metadata".to_string(),
+            Value::Object(metadata_payload),
+        );
     }
 
     for line_key in ["line_start", "line_end"] {
@@ -329,9 +338,9 @@ fn is_placeholder_payload(payload: &Map<String, Value>) -> bool {
     if public_items.is_empty() {
         return false;
     }
-    public_items.iter().all(|(key, value)| {
-        is_placeholder_key(key) || is_placeholder_text(value)
-    })
+    public_items
+        .iter()
+        .all(|(key, value)| is_placeholder_key(key) || is_placeholder_text(value))
 }
 
 fn is_placeholder_key(key: &str) -> bool {

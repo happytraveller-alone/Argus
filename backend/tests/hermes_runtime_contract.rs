@@ -44,7 +44,11 @@ fn each_agent_resolves_to_its_own_data_dir() {
     ];
     let paths: Vec<_> = roles.iter().map(runtime_data_root).collect();
     let unique: std::collections::HashSet<_> = paths.iter().collect();
-    assert_eq!(paths.len(), unique.len(), "each role must have a unique data root");
+    assert_eq!(
+        paths.len(),
+        unique.len(),
+        "each role must have a unique data root"
+    );
 }
 
 #[test]

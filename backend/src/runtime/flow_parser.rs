@@ -121,6 +121,11 @@ pub fn execute(operation: FlowParserOperation, payload: Value) -> Value {
         artifact_paths: Vec::new(),
         capture_stdout_path: None,
         capture_stderr_path: None,
+        completion_summary_path: None,
+        memory_limit_mb: None,
+        memory_swap_limit_mb: None,
+        cpu_limit: None,
+        pids_limit: None,
     };
 
     let runner_result = runner::execute(spec);

@@ -250,7 +250,10 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(stats_payload.get("total").and_then(Value::as_u64), Some(items.len() as u64));
+    assert_eq!(
+        stats_payload.get("total").and_then(Value::as_u64),
+        Some(items.len() as u64)
+    );
     assert_eq!(
         stats_payload.get("inactive").and_then(Value::as_u64),
         Some(0)

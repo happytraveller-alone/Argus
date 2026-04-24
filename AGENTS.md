@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 10:43am GMT+8
+# [audittool_personal] recent context, 2026-04-24 3:49pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,193t read) | 1,053,039t work | 98% savings
+Stats: 50 obs (18,280t read) | 1,231,072t work | 99% savings
 
 ### Apr 23, 2026
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
@@ -499,13 +499,7 @@ S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initi
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
 S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
-1707 10:21p 🔵 Hermes Agent /opt/data Permission Root Cause — Host data/ Dirs Owned by xyf (UID 1000) but Container Runs as Different User
-1709 10:24p 🔴 Hermes Agent Permission Fix Verified — All Four Containers Start Successfully After HERMES_UID/GID Env Vars Added
-1710 10:26p 🔵 Hermes Agent Permission Fix Incomplete — HERMES_UID/GID Env Vars Not Used by Entrypoint; Container Still Runs as Non-Root User
-1712 10:28p 🔵 hermes-agent-base.Dockerfile Root Cause — Base Image Sets Non-Root USER; RUN mkdir Fails Without Explicit USER root
-1715 10:31p 🔵 Opengrep Container Error Is a Backend-Triggered Scan Issue, Not a Compose Startup Issue
-1718 10:35p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1720 " 🔵 Hermes Containers Healthy but Require API Key for Inference
+1720 10:35p 🔵 Hermes Containers Healthy but Require API Key for Inference
 1721 " 🔵 Each Hermes Container Has Role-Specific SOUL.md Identity
 1725 10:37p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
 1726 10:38p 🔵 Backend Test Suite — 2 Failing Tests in scan_rule_assets Module
@@ -551,7 +545,13 @@ S598 Optimize opengrep scan strategy — detect project languages first, then fi
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 10:01 AM)
 1827 10:02a 🟣 Opengrep Language-Aware Rule Filtering Implemented
 1828 " 🟣 discover_rule_assets OnceLock Process-Level Cache Added
+1834 " 🟣 Opengrep Language-Aware Rule Filtering Implemented
+1835 " 🟣 OnceLock Process-Level Cache Added to discover_rule_assets
+1836 " 🔵 Stop-Gate Review Correctly ALLOWed Status-Only Turn After Verifying Session Trace
 1829 10:28a 🔵 Opengrep Container High CPU/Memory — Root Cause Confirmed as Rule Volume, Not Backend Re-reads
+1830 10:43a 🔵 Frontend Scan Rules Page — Component and Route Entrypoints Located
+1831 10:44a 🔵 Frontend Scan Rules Page — Full Component Map for OpengrepRules
+1833 3:39p ⚖️ Architect Review — Opengrep Runner / Summary-Gated Shutdown
 
-Access 1053k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1231k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

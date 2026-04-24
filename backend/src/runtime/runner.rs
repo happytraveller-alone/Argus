@@ -33,7 +33,17 @@ pub struct RunnerSpec {
     #[serde(default)]
     pub capture_stderr_path: Option<String>,
     #[serde(default)]
+    pub completion_summary_path: Option<String>,
+    #[serde(default)]
     pub workspace_root_override: Option<String>,
+    #[serde(default)]
+    pub memory_limit_mb: Option<u64>,
+    #[serde(default)]
+    pub memory_swap_limit_mb: Option<u64>,
+    #[serde(default)]
+    pub cpu_limit: Option<f64>,
+    #[serde(default)]
+    pub pids_limit: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -182,6 +192,18 @@ fn write_full_text(path: &Path, text: &str) -> Result<String> {
     Ok(path.display().to_string())
 }
 
+fn format_memory_limit_mb(limit_mb: u64) -> String {
+    format!("{limit_mb}m")
+}
+
+fn format_cpu_limit(limit: f64) -> String {
+    if limit.fract() == 0.0 {
+        format!("{limit:.0}")
+    } else {
+        limit.to_string()
+    }
+}
+
 fn run_command_capture(binary: &str, args: &[String]) -> Result<Output> {
     Command::new(binary)
         .args(args)
@@ -190,6 +212,14 @@ fn run_command_capture(binary: &str, args: &[String]) -> Result<Output> {
 }
 
 struct CommandCapture {
+    timed_out: bool,
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+struct SummaryGateOutcome {
+    summary_observed: bool,
     timed_out: bool,
 }
 
@@ -233,37 +263,37 @@ fn run_command_capture_with_timeout(
 
     let started_at = Instant::now();
     let mut timed_out = false;
-    loop {
-        if child
-            .try_wait()
-            .context("poll docker child status")?
-            .is_some()
-        {
-            break;
+    let exit_status = loop {
+        if let Some(status) = child.try_wait().context("poll docker child status")? {
+            break Some(status);
         }
         if timeout.is_some_and(|limit| started_at.elapsed() >= limit) {
             timed_out = true;
             let _ = child.kill();
-            let _ = child.wait();
-            break;
+            break child.wait().ok();
         }
         thread::sleep(Duration::from_millis(50));
-    }
+    };
 
-    let _stdout = String::from_utf8_lossy(
+    let stdout = String::from_utf8_lossy(
         &stdout_handle
             .join()
             .map_err(|_| anyhow::anyhow!("join docker stdout reader"))??,
     )
     .to_string();
-    let _stderr = String::from_utf8_lossy(
+    let stderr = String::from_utf8_lossy(
         &stderr_handle
             .join()
             .map_err(|_| anyhow::anyhow!("join docker stderr reader"))??,
     )
     .to_string();
 
-    Ok(CommandCapture { timed_out })
+    Ok(CommandCapture {
+        timed_out,
+        success: exit_status.as_ref().is_some_and(|status| status.success()),
+        stdout,
+        stderr,
+    })
 }
 
 fn docker_logs(binary: &str, container_id: &str, stdout: bool) -> Result<String> {
@@ -287,6 +317,10 @@ fn output_error_text(output: &Output) -> String {
 
 fn parse_exit_code(output: &Output) -> Result<i32> {
     let text = String::from_utf8_lossy(&output.stdout);
+    parse_wait_exit_code_text(&text)
+}
+
+fn parse_wait_exit_code_text(text: &str) -> Result<i32> {
     let line = text
         .lines()
         .find(|line| !line.trim().is_empty())
@@ -296,29 +330,128 @@ fn parse_exit_code(output: &Output) -> Result<i32> {
         .with_context(|| format!("parse docker wait exit code from `{line}`"))
 }
 
+fn inspect_container_running(binary: &str, container_id: &str) -> Result<bool> {
+    let inspect = run_command_capture(
+        binary,
+        &[
+            "inspect".to_string(),
+            "--format".to_string(),
+            "{{.State.Running}}".to_string(),
+            container_id.to_string(),
+        ],
+    )?;
+    if !inspect.status.success() {
+        bail!("docker inspect failed: {}", output_error_text(&inspect));
+    }
+    Ok(String::from_utf8_lossy(&inspect.stdout)
+        .trim()
+        .eq_ignore_ascii_case("true"))
+}
+
+fn request_container_stop(binary: &str, container_id: &str) -> Result<()> {
+    let stop_output = run_command_capture(
+        binary,
+        &[
+            "stop".to_string(),
+            "-t".to_string(),
+            "2".to_string(),
+            container_id.to_string(),
+        ],
+    )?;
+    if stop_output.status.success() {
+        return Ok(());
+    }
+    let inspect = run_command_capture(
+        binary,
+        &[
+            "inspect".to_string(),
+            "--format".to_string(),
+            "{{.State.Running}}".to_string(),
+            container_id.to_string(),
+        ],
+    )?;
+    if !inspect.status.success() {
+        return Ok(());
+    }
+    if !String::from_utf8_lossy(&inspect.stdout)
+        .trim()
+        .eq_ignore_ascii_case("true")
+    {
+        return Ok(());
+    }
+    bail!("docker stop failed: {}", output_error_text(&stop_output));
+}
+
+fn summary_gate_exit_timeout() -> Duration {
+    env::var("VULHUNTER_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(15))
+}
+
+fn poll_summary_gate(
+    binary: &str,
+    container_id: &str,
+    summary_path: &Path,
+    timeout: Option<Duration>,
+) -> Result<SummaryGateOutcome> {
+    let started_at = Instant::now();
+    loop {
+        if summary_path.is_file() {
+            request_container_stop(binary, container_id)?;
+            return Ok(SummaryGateOutcome {
+                summary_observed: true,
+                timed_out: false,
+            });
+        }
+
+        if !inspect_container_running(binary, container_id)? {
+            return Ok(SummaryGateOutcome {
+                summary_observed: false,
+                timed_out: false,
+            });
+        }
+
+        if timeout.is_some_and(|limit| started_at.elapsed() >= limit) {
+            request_container_stop(binary, container_id)?;
+            return Ok(SummaryGateOutcome {
+                summary_observed: false,
+                timed_out: true,
+            });
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+struct RunnerMetaContext<'a> {
+    runner_command: &'a [String],
+    runner_environment: &'a BTreeMap<String, String>,
+    workspace_volume: &'a str,
+    workspace_root: Option<&'a Path>,
+    result: &'a RunnerResult,
+    log_retention: &'a str,
+}
+
 fn write_runner_meta(
     runner_meta_path: &Path,
     spec: &RunnerSpec,
-    runner_command: &[String],
-    runner_environment: &BTreeMap<String, String>,
-    workspace_volume: &str,
-    workspace_root: Option<&Path>,
-    result: &RunnerResult,
-    log_retention: &str,
+    context: &RunnerMetaContext<'_>,
 ) -> Result<()> {
     let payload = serde_json::json!({
         "spec": spec,
-        "runner_command": runner_command,
-        "runner_environment": runner_environment,
-        "workspace_volume": workspace_volume,
-        "workspace_root": workspace_root.map(|path| path.display().to_string()),
-        "container_id": result.container_id,
-        "exit_code": result.exit_code,
-        "success": result.success,
-        "stdout_path": result.stdout_path,
-        "stderr_path": result.stderr_path,
-        "error": result.error,
-        "log_retention": log_retention,
+        "runner_command": context.runner_command,
+        "runner_environment": context.runner_environment,
+        "workspace_volume": context.workspace_volume,
+        "workspace_root": context.workspace_root.map(|path| path.display().to_string()),
+        "container_id": context.result.container_id,
+        "exit_code": context.result.exit_code,
+        "success": context.result.success,
+        "stdout_path": context.result.stdout_path,
+        "stderr_path": context.result.stderr_path,
+        "error": context.result.error,
+        "log_retention": context.log_retention,
     });
     fs::write(
         runner_meta_path,
@@ -381,6 +514,22 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             "-v".to_string(),
             format!("{}:{}:rw", workspace_volume, resolved_root.display()),
         ];
+        if let Some(limit_mb) = spec.memory_limit_mb {
+            create_args.push("--memory".to_string());
+            create_args.push(format_memory_limit_mb(limit_mb));
+        }
+        if let Some(limit_mb) = spec.memory_swap_limit_mb {
+            create_args.push("--memory-swap".to_string());
+            create_args.push(format_memory_limit_mb(limit_mb));
+        }
+        if let Some(limit) = spec.cpu_limit {
+            create_args.push("--cpus".to_string());
+            create_args.push(format_cpu_limit(limit));
+        }
+        if let Some(limit) = spec.pids_limit {
+            create_args.push("--pids-limit".to_string());
+            create_args.push(limit.to_string());
+        }
         for (key, value) in &runner_environment {
             create_args.push("-e".to_string());
             create_args.push(format!("{key}={value}"));
@@ -403,47 +552,107 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         }
         container_id = Some(created_id.clone());
 
-        let start_args = vec!["start".to_string(), "-a".to_string(), created_id.clone()];
         let start_timeout = if spec.timeout_seconds == 0 {
             None
         } else {
             Some(Duration::from_secs(spec.timeout_seconds))
         };
-        let start_output =
-            run_command_capture_with_timeout(&docker_binary, &start_args, start_timeout)?;
-        if start_output.timed_out {
-            let _ = run_command_capture(
+
+        let mut summary_observed = false;
+        let start_output = if let Some(summary_path) = &spec.completion_summary_path {
+            let start_output =
+                run_command_capture(&docker_binary, &["start".to_string(), created_id.clone()])?;
+            if !start_output.status.success() {
+                bail!("docker start failed: {}", output_error_text(&start_output));
+            }
+            let gate = poll_summary_gate(
                 &docker_binary,
-                &[
-                    "stop".to_string(),
-                    "-t".to_string(),
-                    "2".to_string(),
-                    created_id.clone(),
-                ],
-            );
-            bail!(
-                "docker start timed out after {}s",
-                spec.timeout_seconds
-            );
-        }
+                &created_id,
+                &workspace.join(summary_path),
+                start_timeout,
+            )?;
+            if gate.timed_out {
+                bail!(
+                    "docker summary gate timed out after {}s",
+                    spec.timeout_seconds
+                );
+            }
+            summary_observed = gate.summary_observed;
+            CommandCapture {
+                timed_out: false,
+                success: true,
+                stdout: String::new(),
+                stderr: String::new(),
+            }
+        } else {
+            let start_args = vec!["start".to_string(), "-a".to_string(), created_id.clone()];
+            let start_output =
+                run_command_capture_with_timeout(&docker_binary, &start_args, start_timeout)?;
+            if start_output.timed_out {
+                let _ = run_command_capture(
+                    &docker_binary,
+                    &[
+                        "stop".to_string(),
+                        "-t".to_string(),
+                        "2".to_string(),
+                        created_id.clone(),
+                    ],
+                );
+                bail!("docker start timed out after {}s", spec.timeout_seconds);
+            }
+            start_output
+        };
 
-        let wait_output =
-            run_command_capture(&docker_binary, &["wait".to_string(), created_id.clone()])?;
-        if !wait_output.status.success() {
-            bail!("docker wait failed: {}", output_error_text(&wait_output));
-        }
-
-        let exit_code = parse_exit_code(&wait_output)?;
-        let stdout_text = if spec.capture_stdout_path.is_some() || exit_code != 0 {
-            docker_logs(&docker_binary, &created_id, true)?
+        let exit_code = if summary_observed {
+            let wait_output = run_command_capture_with_timeout(
+                &docker_binary,
+                &["wait".to_string(), created_id.clone()],
+                Some(summary_gate_exit_timeout()),
+            )?;
+            if wait_output.timed_out {
+                cleanup_container(&docker_binary, Some(&created_id));
+                bail!(
+                    "docker wait timed out after summary gate after {}s",
+                    summary_gate_exit_timeout().as_secs()
+                );
+            }
+            if !wait_output.success {
+                let error_text = if !wait_output.stderr.trim().is_empty() {
+                    wait_output.stderr.trim().to_string()
+                } else {
+                    wait_output.stdout.trim().to_string()
+                };
+                bail!("docker wait failed: {error_text}");
+            }
+            parse_wait_exit_code_text(&wait_output.stdout)?
+        } else {
+            let wait_output =
+                run_command_capture(&docker_binary, &["wait".to_string(), created_id.clone()])?;
+            if !wait_output.status.success() {
+                bail!("docker wait failed: {}", output_error_text(&wait_output));
+            }
+            parse_exit_code(&wait_output)?
+        };
+        let should_capture_stdout =
+            spec.capture_stdout_path.is_some() || (exit_code != 0 && !summary_observed);
+        let should_capture_stderr =
+            spec.capture_stderr_path.is_some() || (exit_code != 0 && !summary_observed);
+        let mut stdout_text = if should_capture_stdout {
+            start_output.stdout.clone()
         } else {
             String::new()
         };
-        let stderr_text = if spec.capture_stderr_path.is_some() || exit_code != 0 {
-            docker_logs(&docker_binary, &created_id, false)?
+        let mut stderr_text = if should_capture_stderr {
+            start_output.stderr.clone()
         } else {
             String::new()
         };
+        if stdout_text.is_empty() && should_capture_stdout {
+            stdout_text = docker_logs(&docker_binary, &created_id, true)?;
+        }
+        if stderr_text.is_empty() && should_capture_stderr {
+            stderr_text = docker_logs(&docker_binary, &created_id, false)?;
+        }
 
         let captured_stdout_path = spec
             .capture_stdout_path
@@ -456,7 +665,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             .map(|relative| write_full_text(&workspace.join(relative), &stderr_text))
             .transpose()?;
 
-        let keep_logs = exit_code != 0;
+        let keep_logs = exit_code != 0 && !summary_observed;
         let retained_stdout_path = if keep_logs {
             write_retained_log(&stdout_log_path, &stdout_text)?
         } else {
@@ -468,7 +677,7 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             None
         };
 
-        let success = expected_exit_codes.contains(&exit_code);
+        let success = expected_exit_codes.contains(&exit_code) || summary_observed;
         Ok(RunnerResult {
             success,
             container_id: Some(created_id),
@@ -510,16 +719,15 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
         }
     };
 
-    let _ = write_runner_meta(
-        &runner_meta_path,
-        &spec,
-        &runner_command,
-        &runner_environment,
-        &workspace_volume,
-        workspace_root.as_deref(),
-        &result,
-        &log_retention,
-    );
+    let meta_context = RunnerMetaContext {
+        runner_command: &runner_command,
+        runner_environment: &runner_environment,
+        workspace_volume: &workspace_volume,
+        workspace_root: workspace_root.as_deref(),
+        result: &result,
+        log_retention: &log_retention,
+    };
+    let _ = write_runner_meta(&runner_meta_path, &spec, &meta_context);
     cleanup_container(&docker_binary, container_id.as_deref());
     result
 }
@@ -626,9 +834,17 @@ case "$cmd" in
     if [ -n "${FAKE_START_SLEEP:-}" ]; then
       sleep "${FAKE_START_SLEEP}"
     fi
-    printf '%s\n' "${FAKE_CONTAINER_ID:-container-xyz}"
+    if [ -n "${FAKE_COMPLETION_SUMMARY_PATH:-}" ]; then
+      mkdir -p "$(dirname "${FAKE_COMPLETION_SUMMARY_PATH}")"
+      printf '{"status":"scan_summary_observed"}\n' > "${FAKE_COMPLETION_SUMMARY_PATH}"
+    fi
+    printf '%s' "${FAKE_START_STDOUT:-}"
+    printf '%s' "${FAKE_START_STDERR:-}" >&2
     ;;
   wait)
+    if [ -n "${FAKE_WAIT_SLEEP:-}" ]; then
+      sleep "${FAKE_WAIT_SLEEP}"
+    fi
     printf '%s\n' "${FAKE_WAIT_EXIT_CODE:-0}"
     ;;
   logs)
@@ -645,9 +861,16 @@ case "$cmd" in
     if [ "${FAKE_INSPECT_MISSING:-0}" = "1" ]; then
       exit 1
     fi
+    if [ "${1:-}" = "--format" ]; then
+      printf '%s\n' "${FAKE_INSPECT_RUNNING:-false}"
+      exit 0
+    fi
     printf '[]\n'
     ;;
   stop)
+    if [ -n "${FAKE_STOP_EXIT_CODE:-}" ]; then
+      exit "${FAKE_STOP_EXIT_CODE}"
+    fi
     printf 'stopped\n'
     ;;
   rm)
@@ -698,7 +921,12 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            completion_summary_path: None,
             workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
         });
 
         assert!(result.success);
@@ -763,7 +991,12 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            completion_summary_path: None,
             workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
         });
 
         assert!(!result.success);
@@ -813,7 +1046,12 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            completion_summary_path: None,
             workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
         });
 
         assert!(result.success);
@@ -865,7 +1103,12 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            completion_summary_path: None,
             workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
         });
 
         assert!(!result.success);
@@ -904,11 +1147,288 @@ esac
             artifact_paths: vec![],
             capture_stdout_path: None,
             capture_stderr_path: None,
+            completion_summary_path: None,
             workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
         });
 
         assert!(result.success);
         assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn execute_opengrep_includes_container_resource_limits() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-resource-limits");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec![
+                "opengrep".to_string(),
+                "scan".to_string(),
+                "--config".to_string(),
+                "/scan/opengrep-rules".to_string(),
+                "--json".to_string(),
+                "/scan/source".to_string(),
+            ],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: Some(500),
+            memory_swap_limit_mb: Some(500),
+            cpu_limit: Some(1.5),
+            pids_limit: Some(256),
+        });
+
+        assert!(result.success);
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("--memory 500m"), "{logged}");
+        assert!(logged.contains("--memory-swap 500m"), "{logged}");
+        assert!(logged.contains("--cpus 1.5"), "{logged}");
+        assert!(logged.contains("--pids-limit 256"), "{logged}");
+    }
+
+    #[test]
+    fn execute_uses_attached_start_output_without_followup_logs_roundtrip() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-attached-output");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _start_stdout = EnvVarGuard::set("FAKE_START_STDOUT", "attached stdout");
+        let _start_stderr = EnvVarGuard::set("FAKE_START_STDERR", "attached stderr");
+        let _stdout = EnvVarGuard::set("FAKE_STDOUT", "docker logs stdout");
+        let _stderr = EnvVarGuard::set("FAKE_STDERR", "docker logs stderr");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep".to_string(), "scan".to_string()],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: Some("output/results.txt".to_string()),
+            capture_stderr_path: Some("output/stderr.txt".to_string()),
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+        });
+
+        assert!(result.success);
+        assert_eq!(
+            fs::read_to_string(result.stdout_path.clone().unwrap()).unwrap(),
+            "attached stdout"
+        );
+        assert_eq!(
+            fs::read_to_string(result.stderr_path.clone().unwrap()).unwrap(),
+            "attached stderr"
+        );
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(!logged.contains("logs|--stdout"), "{logged}");
+        assert!(!logged.contains("logs|--stderr"), "{logged}");
+    }
+
+    #[test]
+    fn execute_stops_container_after_completion_summary_marker() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-summary-gate");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        let summary_path = workspace_dir.join("output/scan-summary.json");
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _summary_path = EnvVarGuard::set(
+            "FAKE_COMPLETION_SUMMARY_PATH",
+            summary_path.to_str().unwrap(),
+        );
+        let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "143");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0, 1],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: Some("output/scan-summary.json".to_string()),
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+        });
+
+        assert!(result.success);
+        assert_eq!(result.exit_code, 143);
+        assert!(summary_path.is_file());
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("start|container-xyz"), "{logged}");
+        assert!(logged.contains("stop|-t 2 container-xyz"), "{logged}");
+        assert!(logged.contains("rm|-f container-xyz"), "{logged}");
+        assert!(!logged.contains("start|-a"), "{logged}");
+        assert!(!logged.contains("logs|--stdout"), "{logged}");
+        assert!(!logged.contains("logs|--stderr"), "{logged}");
+    }
+
+    #[test]
+    fn execute_fails_when_summary_gate_stop_does_not_stop_container() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-stop-failure");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        let summary_path = workspace_dir.join("output/scan-summary.json");
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _summary_path = EnvVarGuard::set(
+            "FAKE_COMPLETION_SUMMARY_PATH",
+            summary_path.to_str().unwrap(),
+        );
+        let _inspect_running = EnvVarGuard::set("FAKE_INSPECT_RUNNING", "true");
+        let _stop_exit = EnvVarGuard::set("FAKE_STOP_EXIT_CODE", "1");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0, 1],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: Some("output/scan-summary.json".to_string()),
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+        });
+
+        assert!(!result.success);
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("docker stop failed")),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn execute_summary_gate_wait_has_bounded_cleanup_timeout() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-wait-timeout");
+        fs::create_dir_all(&workspace_dir).unwrap();
+        let summary_path = workspace_dir.join("output/scan-summary.json");
+
+        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume =
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+        let _summary_path = EnvVarGuard::set(
+            "FAKE_COMPLETION_SUMMARY_PATH",
+            summary_path.to_str().unwrap(),
+        );
+        let _wait_sleep = EnvVarGuard::set("FAKE_WAIT_SLEEP", "2");
+        let _wait_timeout = EnvVarGuard::set("VULHUNTER_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS", "1");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0, 1],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: Some("output/scan-summary.json".to_string()),
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+        });
+
+        assert!(!result.success);
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("docker wait timed out after summary gate")),
+            "{result:?}"
+        );
+
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("wait|container-xyz"), "{logged}");
+        assert!(logged.contains("rm|-f container-xyz"), "{logged}");
     }
 
     #[test]

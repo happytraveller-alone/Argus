@@ -34,9 +34,7 @@ fn main() -> Result<()> {
 
 fn handle_finding_payload(mut args: impl Iterator<Item = String>) -> Result<()> {
     let operation = args.next().unwrap_or_else(|| {
-        eprintln!(
-            "Usage: backend-runtime-startup finding-payload <normalize> --request <path>"
-        );
+        eprintln!("Usage: backend-runtime-startup finding-payload <normalize> --request <path>");
         process::exit(1);
     });
     let operation =
@@ -50,9 +48,7 @@ fn handle_finding_payload(mut args: impl Iterator<Item = String>) -> Result<()> 
     let flag = args.next().unwrap_or_default();
     let request_path = args.next().unwrap_or_default();
     if flag != "--request" || request_path.is_empty() {
-        eprintln!(
-            "Usage: backend-runtime-startup finding-payload <normalize> --request <path>"
-        );
+        eprintln!("Usage: backend-runtime-startup finding-payload <normalize> --request <path>");
         process::exit(1);
     }
 

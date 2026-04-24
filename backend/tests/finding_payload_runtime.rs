@@ -65,7 +65,10 @@ fn execute_from_request_path_returns_normalized_round_trip_for_valid_request() {
     assert_eq!(result["ok"], true);
     assert_eq!(result["normalized_payload"]["file_path"], "src/auth.py");
     assert_eq!(result["normalized_payload"]["line_start"], 18);
-    assert_eq!(result["normalized_payload"]["vulnerability_type"], "sql_injection");
+    assert_eq!(
+        result["normalized_payload"]["vulnerability_type"],
+        "sql_injection"
+    );
     assert_eq!(result["repair_map"]["line"], "line_start");
 }
 
@@ -88,7 +91,10 @@ fn normalize_payload_repairs_nested_envelope_aliases_and_extra_metadata() {
     assert_eq!(normalized["line_start"], 18);
     assert_eq!(normalized["line_end"], 21);
     assert_eq!(normalized["vulnerability_type"], "sql_injection");
-    assert_eq!(normalized["code_snippet"], "cursor.execute(query + user_input)");
+    assert_eq!(
+        normalized["code_snippet"],
+        "cursor.execute(query + user_input)"
+    );
     assert_eq!(normalized["suggestion"], "use parameters");
     assert_eq!(
         normalized["finding_metadata"]["extra_tool_input"]["custom_extra"],
@@ -124,7 +130,10 @@ fn execute_returns_normalized_payload_and_repair_map() {
 
     assert_eq!(result["ok"], true);
     assert_eq!(result["normalized_payload"]["line_start"], 18);
-    assert_eq!(result["normalized_payload"]["vulnerability_type"], "sql_injection");
+    assert_eq!(
+        result["normalized_payload"]["vulnerability_type"],
+        "sql_injection"
+    );
     assert_eq!(result["repair_map"]["line"], "line_start");
 }
 
@@ -178,9 +187,11 @@ fn execute_uses_ordering_hints_for_extra_tool_input_truncation() {
     let extra = result["normalized_payload"]["finding_metadata"]["extra_tool_input"]
         .as_object()
         .expect("extra_tool_input object");
-    assert!(result["normalized_payload"]["finding_metadata"]["extra_tool_input_truncated"]
-        .as_bool()
-        .unwrap_or(false));
+    assert!(
+        result["normalized_payload"]["finding_metadata"]["extra_tool_input_truncated"]
+            .as_bool()
+            .unwrap_or(false)
+    );
     for kept in 0..=12 {
         assert!(extra.contains_key(&format!("k{kept}")));
     }

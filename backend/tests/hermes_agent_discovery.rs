@@ -37,8 +37,7 @@ fn discovers_four_agents() {
         write_agent_toml(tmp.path(), role);
     }
 
-    let manifests =
-        backend_rust::runtime::hermes::discovery::discover_agents(tmp.path()).unwrap();
+    let manifests = backend_rust::runtime::hermes::discovery::discover_agents(tmp.path()).unwrap();
     assert_eq!(manifests.len(), 4);
 }
 

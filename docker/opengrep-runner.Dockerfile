@@ -39,7 +39,8 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
-        curl; \
+        curl \
+        bash; \
     }; \
     write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
     if ! install_runtime_packages; then \
@@ -87,6 +88,11 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
     chmod +x /usr/local/bin/opengrep; \
     opengrep --version >/dev/null
 
+COPY backend/assets/scan_rule_assets/rules_opengrep /opt/opengrep/rules/rules_opengrep
+COPY backend/assets/scan_rule_assets/rules_from_patches /opt/opengrep/rules/rules_from_patches
+COPY docker/opengrep-scan.sh /usr/local/bin/opengrep-scan
+RUN chmod +x /usr/local/bin/opengrep-scan && /usr/local/bin/opengrep-scan --self-test
+
 WORKDIR /scan
 
-CMD ["opengrep", "--version"]
+CMD ["opengrep-scan", "--self-test"]

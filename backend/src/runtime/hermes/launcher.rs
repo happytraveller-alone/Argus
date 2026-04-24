@@ -25,12 +25,7 @@ pub async fn stop_container(manifest: &AgentManifest) -> Result<()> {
 
 async fn inspect_container(container_name: &str) -> Result<ContainerStatus> {
     let output = Command::new("docker")
-        .args([
-            "inspect",
-            "--format",
-            "{{.State.Status}}",
-            container_name,
-        ])
+        .args(["inspect", "--format", "{{.State.Status}}", container_name])
         .output()
         .await?;
 

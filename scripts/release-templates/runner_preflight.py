@@ -42,7 +42,7 @@ class RunnerPreflightResult:
 def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
     timeout_seconds = int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30))
     return [
-        RunnerPreflightSpec("opengrep", str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "")), ["opengrep", "--version"], timeout_seconds),
+        RunnerPreflightSpec("opengrep", str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "")), ["opengrep-scan", "--self-test"], timeout_seconds),
         RunnerPreflightSpec("flow-parser", str(getattr(settings, "FLOW_PARSER_RUNNER_IMAGE", "")), ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"], timeout_seconds),
         RunnerPreflightSpec("sandbox-runner", str(getattr(settings, "SANDBOX_RUNNER_IMAGE", "")), ["python3", "-c", "import requests; import httpx; import jwt; print('Sandbox Runner OK')"], timeout_seconds),
     ]

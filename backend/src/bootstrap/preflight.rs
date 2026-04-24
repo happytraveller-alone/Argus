@@ -7,9 +7,7 @@ use tokio::{
     time::{timeout, Duration},
 };
 
-use crate::{
-    state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
-};
+use crate::state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus};
 
 #[derive(Clone, Debug)]
 struct RunnerPreflightSpec {
@@ -189,7 +187,7 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         RunnerPreflightSpec {
             name: "opengrep",
             image: config.scanner_opengrep_image.clone(),
-            command: vec!["opengrep".to_string(), "--version".to_string()],
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             mounts: Vec::new(),
         },
         RunnerPreflightSpec {
@@ -257,7 +255,7 @@ mod tests {
             .iter()
             .find(|spec| spec.name == "opengrep")
             .expect("opengrep spec should exist");
-        assert_eq!(opengrep.command, vec!["opengrep", "--version"]);
+        assert_eq!(opengrep.command, vec!["opengrep-scan", "--self-test"]);
         assert!(opengrep.mounts.is_empty());
 
         for cleanup_dir in cleanup_dirs {

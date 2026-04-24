@@ -39,7 +39,8 @@ fn can_serialize_deserialize_handoff() {
 
 #[test]
 fn parser_handles_valid_json_output() {
-    let raw = r#"{"status":"success","summary":"all good","structured_outputs":[],"diagnostics":null}"#;
+    let raw =
+        r#"{"status":"success","summary":"all good","structured_outputs":[],"diagnostics":null}"#;
     let result = parse_hermes_output(raw).unwrap();
     assert_eq!(result.status, HandoffStatus::Success);
     assert_eq!(result.summary, "all good");

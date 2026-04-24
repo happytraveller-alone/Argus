@@ -10,11 +10,13 @@ on:
       - ".github/workflows/docker-publish-runners.yml"
       - ".dockerignore"
       - "docker/opengrep-runner.Dockerfile"
+      - "docker/opengrep-scan.sh"
       - "docker/flow-parser-runner.Dockerfile"
       - "docker/flow-parser-runner.requirements.txt"
       - "docker/sandbox-runner.Dockerfile"
       - "backend/Cargo.toml"
       - "backend/Cargo.lock"
+      - "backend/assets/scan_rule_assets/**"
       - "backend/src/**"
       - "backend_old/app/**"
       - "backend/scripts/**"
@@ -53,8 +55,10 @@ jobs:
               - '.dockerignore'
               - 'backend/Cargo.toml'
               - 'backend/Cargo.lock'
+              - 'backend/assets/scan_rule_assets/**'
               - 'backend/src/**'
               - 'docker/opengrep-runner.Dockerfile'
+              - 'docker/opengrep-scan.sh'
             flow_parser_runner:
               - '.github/workflows/docker-publish.yml'
               - '.github/workflows/publish-runtime-images.yml'
