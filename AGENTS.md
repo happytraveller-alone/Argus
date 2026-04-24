@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 6:12pm GMT+8
+# [audittool_personal] recent context, 2026-04-24 8:58pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,280t read) | 1,231,072t work | 99% savings
+Stats: 50 obs (21,357t read) | 1,484,401t work | 99% savings
 
 ### Apr 23, 2026
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
@@ -499,31 +499,7 @@ S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initi
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
 S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
-1720 10:35p 🔵 Hermes Containers Healthy but Require API Key for Inference
-1721 " 🔵 Each Hermes Container Has Role-Specific SOUL.md Identity
-1725 10:37p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1726 10:38p 🔵 Backend Test Suite — 2 Failing Tests in scan_rule_assets Module
-1727 10:48p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1729 10:49p 🔵 Hermes Agent Base Dockerfile and Healthcheck Script — Current State Confirmed
-1735 11:02p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1736 11:03p 🔵 Backend Test Suite — 2 Failing Tests in scan_rule_assets Module Confirmed Pre-existing
-1737 11:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1741 11:07p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1743 11:08p 🔵 Stop-Gate Cargo Check Fails — Read-Only /tmp Filesystem in Sandbox
 ### Apr 24, 2026
-1764 7:59a ✅ Scan Rule Assets Filtered to Severity ERROR Only
-1766 " ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1768 8:00a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1773 8:01a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1776 8:02a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1778 " 🟣 Rust Test Added to Enforce ERROR-Only Severity in Retained Rule Assets
-1779 8:07a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1782 8:21a 🔵 Scan Rule Asset Files — Structure and Failing Tests Identified
-1786 8:22a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1788 8:29a ✅ Scan Rule Assets Filtered to ERROR Severity Only
-1791 8:31a 🔵 Frontend Vite Proxy Failure — getaddrinfo EAI_AGAIN backend
-1792 " 🔵 Rust Test Suite — retained_assets_only_contain_error_rules Passes
-1796 8:32a 🔵 Frontend Import Break — projectCardPreview.ts Imports Non-Existent Exports from taskActivities.ts
 1803 8:34a 🔵 Frontend TypeScript Type-Check Passes Despite Broken Runtime Imports
 1813 8:35a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
 S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
@@ -552,6 +528,30 @@ S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memor
 1830 10:43a 🔵 Frontend Scan Rules Page — Component and Route Entrypoints Located
 1831 10:44a 🔵 Frontend Scan Rules Page — Full Component Map for OpengrepRules
 1833 3:39p ⚖️ Architect Review — Opengrep Runner / Summary-Gated Shutdown
+1837 6:13p 🔵 Static Audit Failure — Opengrep SIGPIPE / UnixExit(-141) on Scan Completion
+1838 7:33p 🔵 OpenGrep Static Scan Fix — Design Review Requested
+1839 7:34p 🔵 OpenGrep Scan Design Review — APPROVED with Minor Caveats
+1840 " 🔵 Test Name Mismatch — builds_opengrep_runner_spec_with_materialized_config_directory_and_artifact_captures Not Found
+1841 7:35p 🔵 Static Audit SIGPIPE Failures — Opengrep Scanner Exits with UnixExit(-141)
+1842 7:36p 🔵 OpenGrep Static Scan Fix Design Review — APPROVED
+1844 7:38p 🔴 Opengrep Static Audit — Root Cause Investigation and Multi-Layer Fix
+1843 7:39p 🔵 OpenGrep Scan Fix — Code Review APPROVED with All Blockers Resolved
+1845 8:01p 🔵 Opengrep Container Scan Confirmed Working — Log Shows 254 Rules on 2 Files
+1851 8:03p 🔵 Opengrep Runner Fails with --manifest Flag, Succeeds with --config Flag
+1853 8:12p 🔵 build_scan_command Supports Both --manifest and --config But Caller Determines Which Is Used
+1855 8:14p 🔵 Opengrep Scan Failure — Workspace Retained for Diagnosis, Root Cause Identified
+1860 8:19p 🔵 Opengrep --json-output Writes Empty File When Results Exist — Root Cause Identified
+1861 8:23p 🔵 Opengrep Scan Succeeds with Small Rule Set (10 Rules)
+1865 " 🔵 Opengrep Scan Failure Root Cause — Memory Exhaustion Causes SIGPIPE
+1866 " 🔴 Opengrep Container Memory Limits Raised — 500MB→2048MB, 384MB→1024MB
+1867 " 🔴 Debug Workspace Retention Removed — Scan Failure Path Now Cleans Up
+1868 8:38p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Root Cause Investigation
+1875 8:39p 🔴 opengrep-scan.sh Self-Test — Invalid Output Now Asserts scan_failed Summary Written
+1879 8:41p 🔴 Opengrep Runner Memory Limit Raised to 2048 MB — Test Config Stale Value Fixed
+1882 8:45p 🔵 Opengrep Scan Failure — "Scanner Completion Summary Not Observed" Error
+1884 8:51p 🔴 Opengrep Scan Failure Fixed — Memory Limits Increased and Summary Gate Hardened
+1886 8:52p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
+1888 8:55p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
 
-Access 1231k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1484k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

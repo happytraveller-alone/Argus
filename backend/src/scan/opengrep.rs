@@ -29,6 +29,17 @@ pub async fn materialize_rule_directory(
         return Ok(None);
     }
 
+    materialize_rule_assets(workspace_dir, assets).await
+}
+
+pub async fn materialize_rule_assets(
+    workspace_dir: &Path,
+    assets: Vec<ScanRuleAsset>,
+) -> Result<Option<PathBuf>> {
+    if assets.is_empty() {
+        return Ok(None);
+    }
+
     let rules_root = workspace_dir.join("opengrep-rules");
     for asset in assets {
         let relative_path = relative_rule_path(&asset.asset_path);
@@ -174,6 +185,7 @@ fn parse_single_result(
         project_root,
         known_paths,
     );
+    let display_path = resolved_path.as_deref().unwrap_or(raw_path);
 
     let lines = extra
         .and_then(|e| e.get("lines"))
@@ -188,7 +200,8 @@ fn parse_single_result(
         "rule_name": check_id,
         "cwe": cwe,
         "description": message,
-        "file_path": raw_path,
+        "file_path": display_path,
+        "raw_file_path": raw_path,
         "start_line": start_line,
         "end_line": end_line,
         "resolved_file_path": resolved_path,
@@ -332,17 +345,7 @@ pub async fn materialize_rule_directory_for_languages(
         return Ok(None);
     }
 
-    let rules_root = workspace_dir.join("opengrep-rules");
-    for asset in assets {
-        let relative_path = relative_rule_path(&asset.asset_path);
-        let target = rules_root.join(relative_path);
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).await?;
-        }
-        fs::write(target, asset.content).await?;
-    }
-
-    Ok(Some(rules_root))
+    materialize_rule_assets(workspace_dir, assets).await
 }
 
 #[cfg(test)]
@@ -354,7 +357,7 @@ mod tests {
     use super::{
         build_scan_command, build_validate_command, extract_language_from_asset_path,
         extract_rule_languages, load_rule_assets, load_rule_assets_for_languages,
-        materialize_rule_directory, normalize_language, ScanCommandArgs,
+        materialize_rule_assets, materialize_rule_directory, normalize_language, ScanCommandArgs,
     };
 
     #[tokio::test]
@@ -399,6 +402,32 @@ mod tests {
         assert!(internal_rule.exists());
         let patch_rules_dir = path.join("patch");
         assert!(patch_rules_dir.exists());
+        let _ = fs::remove_dir_all(&workspace).await;
+    }
+
+    #[tokio::test]
+    async fn materializes_selected_rule_assets_without_image_manifest_dependency() {
+        let workspace = std::env::temp_dir().join(format!(
+            "opengrep-selected-materialize-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let selected = vec![crate::state::ScanRuleAsset {
+            engine: "opengrep".to_string(),
+            source_kind: "internal_rule".to_string(),
+            asset_path: "rules_opengrep/demo-rule.yaml".to_string(),
+            file_format: "yaml".to_string(),
+            sha256: "sha".to_string(),
+            content: "rules:\n  - id: demo\n    languages: [python]\n    message: demo\n    severity: ERROR\n    pattern: print($X)\n".to_string(),
+            metadata_json: serde_json::json!({}),
+        }];
+
+        let path = materialize_rule_assets(&workspace, selected)
+            .await
+            .expect("materialize selected assets")
+            .expect("rules directory should exist");
+
+        let materialized = path.join("internal/demo-rule.yaml");
+        assert!(materialized.exists(), "{}", materialized.display());
         let _ = fs::remove_dir_all(&workspace).await;
     }
 
@@ -587,6 +616,26 @@ mod tests {
         let json = r#"{"version":"1.15.1","results":[{"check_id":"pure-rule","path":"app.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"pure test","severity":"ERROR","metadata":{},"lines":"x = eval(input())","is_ignored":false,"validation_state":"NO_VALIDATOR","engine_kind":"OSS"}}],"errors":[]}"#;
         let findings = super::parse_scan_output(json, "task-2", None, None);
         assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn parses_container_absolute_paths_as_project_relative_for_frontend_rows() {
+        let json = r#"{"version":"1.15.1","results":[{"check_id":"path-rule","path":"/tmp/vulhunter/scans/opengrep-runtime/abc/source/src/main.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"path test","severity":"ERROR","metadata":{},"lines":"dangerous_call()"}}],"errors":[]}"#;
+        let known_paths = std::collections::BTreeSet::from(["src/main.py".to_string()]);
+        let findings = super::parse_scan_output(
+            json,
+            "task-3",
+            Some("/tmp/vulhunter/scans/opengrep-runtime/abc/source"),
+            Some(&known_paths),
+        );
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].payload["file_path"], "src/main.py");
+        assert_eq!(
+            findings[0].payload["raw_file_path"],
+            "/tmp/vulhunter/scans/opengrep-runtime/abc/source/src/main.py"
+        );
+        assert_eq!(findings[0].payload["resolved_file_path"], "src/main.py");
     }
 
     #[test]

@@ -32,7 +32,8 @@ self_test() {
   ! results_json_ready "$invalid_output"
 
   json_summary "scan_completed" "$invalid_output" "$temp_dir/opengrep.log" "$summary_invalid_path"
-  test ! -e "$summary_invalid_path"
+  test -s "$summary_invalid_path"
+  grep -q '"status":"scan_failed"' "$summary_invalid_path"
 
   json_summary "scan_completed" "$valid_output" "$temp_dir/opengrep.log" "$summary_path"
   test -s "$summary_path"
@@ -63,6 +64,40 @@ raise SystemExit(0 if isinstance(payload.get("results"), list) else 1)
 PY
 }
 
+recover_json_document() {
+  local input_path="$1"
+  local output_path="$2"
+
+  if [ ! -s "$input_path" ]; then
+    return 1
+  fi
+
+  python - "$input_path" "$output_path" <<'PY'
+import json
+import sys
+
+source_path, target_path = sys.argv[1], sys.argv[2]
+with open(source_path, "r", encoding="utf-8", errors="replace") as handle:
+    text = handle.read()
+
+decoder = json.JSONDecoder()
+for index, char in enumerate(text):
+    if char != "{":
+        continue
+    try:
+        payload, _ = decoder.raw_decode(text[index:])
+    except json.JSONDecodeError:
+        continue
+    if isinstance(payload, dict) and isinstance(payload.get("results"), list):
+        with open(target_path, "w", encoding="utf-8") as output:
+            json.dump(payload, output, separators=(",", ":"))
+            output.write("\n")
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 json_summary() {
   local status="$1"
   local output_path="$2"
@@ -72,13 +107,15 @@ json_summary() {
   if [ -s "$summary_path" ]; then
     return 0
   fi
+
+  local effective_status="$status"
   if ! results_json_ready "$output_path"; then
-    return 0
+    effective_status="scan_failed"
   fi
 
   mkdir -p "$(dirname "$summary_path")"
   printf '{"status":"%s","results_path":"%s","log_path":"%s"}\n' \
-    "$status" "$output_path" "$log_path" > "$summary_path"
+    "$effective_status" "$output_path" "$log_path" > "$summary_path"
 }
 
 stage_manifest_rules() {
@@ -182,6 +219,8 @@ fi
 mkdir -p "$(dirname "$output_path")" "$(dirname "$summary_path")" "$(dirname "$log_path")"
 rm -f "$output_path" "$summary_path"
 : > "$log_path"
+stdout_capture="${output_path}.stdout"
+rm -f "$stdout_capture"
 
 selected_root=""
 cleanup() {
@@ -205,12 +244,24 @@ cmd=(opengrep scan --disable-version-check --jobs "$jobs" --max-memory "$max_mem
 for config_path in "${config_paths[@]}"; do
   cmd+=(--config "$config_path")
 done
-cmd+=(--json --output "$output_path" "$target_dir")
+cmd+=(--json --json-output "$output_path" "$target_dir")
 
 set +e
-"${cmd[@]}" >> "$log_path" 2>&1
+"${cmd[@]}" > "$stdout_capture" 2>> "$log_path"
 status=$?
 set -e
+
+if ! results_json_ready "$output_path" && recover_json_document "$stdout_capture" "$output_path"; then
+  printf 'recovered opengrep JSON results from stdout\n' >> "$log_path"
+fi
+
+if ! results_json_ready "$output_path" && [ -s "$stdout_capture" ]; then
+  {
+    printf '\n--- opengrep stdout tail ---\n'
+    tail -c 4000 "$stdout_capture" || true
+    printf '\n--- end opengrep stdout tail ---\n'
+  } >> "$log_path"
+fi
 
 json_summary "scan_completed" "$output_path" "$log_path" "$summary_path"
 exit "$status"

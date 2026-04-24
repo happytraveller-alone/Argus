@@ -46,8 +46,8 @@ fn opengrep_scan_does_not_pipe_scanner_stdout_to_caller_stdout() {
     assert!(fs::read_to_string(&fixture.summary_path)
         .expect("summary")
         .contains("\"status\":\"scan_completed\""));
-    assert!(fs::read_to_string(&fixture.log_path)
-        .expect("log")
+    assert!(fs::read_to_string(fixture.stdout_capture_path())
+        .expect("stdout capture")
         .contains("scanner line 5000"));
 }
 
@@ -75,6 +75,82 @@ fn opengrep_scan_writes_summary_for_accepted_nonzero_scan_exit() {
     assert!(fs::read_to_string(&fixture.summary_path)
         .expect("summary")
         .contains("\"status\":\"scan_completed\""));
+}
+
+#[test]
+fn opengrep_scan_recovers_results_from_json_stdout_when_output_file_is_missing() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_SKIP_OUTPUT", "1")
+        .env("FAKE_OPENGREP_STDOUT_JSON_ONLY", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should recover valid JSON stdout\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    assert!(fs::read_to_string(&fixture.output_path)
+        .expect("recovered results")
+        .contains("\"results\""));
+    assert!(fs::read_to_string(&fixture.log_path)
+        .expect("log")
+        .contains("recovered opengrep JSON results from stdout"));
+}
+
+#[test]
+fn opengrep_scan_recovers_results_from_mixed_stdout_when_output_file_is_missing() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_SKIP_OUTPUT", "1")
+        .env("FAKE_OPENGREP_MIXED_STDOUT_JSON", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should recover valid JSON embedded in stdout\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    assert!(fs::read_to_string(&fixture.output_path)
+        .expect("recovered results")
+        .contains("\"results\""));
+    assert!(fs::read_to_string(&fixture.log_path)
+        .expect("log")
+        .contains("recovered opengrep JSON results from stdout"));
 }
 
 struct ScriptFixture {
@@ -113,7 +189,7 @@ fi
 output_path=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --output)
+    --output|--json-output)
       output_path="${2:?missing output}"
       shift 2
       ;;
@@ -122,11 +198,21 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-for i in $(seq 1 5000); do
-  printf 'scanner line %s\n' "$i"
-done
-mkdir -p "$(dirname "$output_path")"
-printf '%s\n' '{"results":[]}' > "$output_path"
+if [ "${FAKE_OPENGREP_STDOUT_JSON_ONLY:-0}" = "1" ]; then
+  printf '%s\n' '{"results":[]}'
+elif [ "${FAKE_OPENGREP_MIXED_STDOUT_JSON:-0}" = "1" ]; then
+  printf '%s\n' 'scan banner before json'
+  printf '%s\n' '{"results":[]}'
+  printf '%s\n' 'scan summary after json'
+else
+  for i in $(seq 1 5000); do
+    printf 'scanner line %s\n' "$i"
+  done
+fi
+if [ "${FAKE_OPENGREP_SKIP_OUTPUT:-0}" != "1" ]; then
+  mkdir -p "$(dirname "$output_path")"
+  printf '%s\n' '{"results":[]}' > "$output_path"
+fi
 exit "${FAKE_OPENGREP_EXIT:-0}"
 "#,
         )
@@ -153,6 +239,10 @@ exit "${FAKE_OPENGREP_EXIT:-0}"
             summary_path,
             log_path,
         }
+    }
+
+    fn stdout_capture_path(&self) -> std::path::PathBuf {
+        std::path::PathBuf::from(format!("{}.stdout", self.output_path.display()))
     }
 }
 

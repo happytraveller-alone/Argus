@@ -121,8 +121,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "vulhunter/sandbox-runner:latest".to_string()),
             opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 0),
             opengrep_scan_jobs: parse_usize_env("OPENGREP_SCAN_JOBS", 1),
-            opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 384),
-            opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 500),
+            opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 1024),
+            opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 2048),
             opengrep_runner_cpu_limit: parse_f64_env("OPENGREP_RUNNER_CPU_LIMIT", 1.5),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 256),
         })
@@ -181,8 +181,8 @@ impl AppConfig {
             sandbox_runner_image: "vulhunter/sandbox-runner:test".to_string(),
             opengrep_scan_timeout_seconds: 0,
             opengrep_scan_jobs: 1,
-            opengrep_scan_max_memory_mb: 384,
-            opengrep_runner_memory_limit_mb: 500,
+            opengrep_scan_max_memory_mb: 1024,
+            opengrep_runner_memory_limit_mb: 2048,
             opengrep_runner_cpu_limit: 1.5,
             opengrep_runner_pids_limit: 256,
         }
