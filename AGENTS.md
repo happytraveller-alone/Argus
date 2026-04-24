@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 8:32am GMT+8
+# [audittool_personal] recent context, 2026-04-24 8:43am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (17,879t read) | 1,323,213t work | 99% savings
+Stats: 50 obs (18,494t read) | 1,320,949t work | 99% savings
 
 ### Apr 23, 2026
 S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
@@ -501,15 +501,6 @@ S420 Hermes Containerized Functional Agents — Full Implementation Complete, Te
 S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 9:20 PM)
-1681 9:47p 🔵 Debian Trixie SSL Bootstrap Deadlock — HTTPS APT Fails on All Sources in Docker
-1682 9:49p 🔴 Runner Timeout Logic Fixed — Zero Seconds Now Disables Hard Timeout
-1687 9:50p 🔵 Debian Trixie SSL Bootstrap Deadlock Confirmed — HTTPS APT Fails on All Sources
-1688 9:51p 🟣 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated
-1689 9:59p 🔵 Docker Build Fails — Debian Trixie SSL Bootstrap Deadlock on All APT Sources
-1691 10:04p 🔵 Backend Rust Tests Pass — All Suites Green After Docker Fix
-1692 " 🔵 Static Scan Task Stuck in "running" — Backend Connection Reset and Orphaned opengrep-runner Container
-1690 10:05p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1693 10:06p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
 1694 10:07p 🔵 Debian Trixie Docker APT SSL Bootstrap Deadlock — Confirmed Root Cause
 1695 10:08p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
 1696 10:11p 🔵 Static Scan Task Lifecycle Verified — opengrep-runner Completes Cleanly
@@ -552,6 +543,15 @@ S497 Plan two PRD and test spec documents for Hermes containerized functional ag
 1782 8:21a 🔵 Scan Rule Asset Files — Structure and Failing Tests Identified
 1786 8:22a ✅ Scan Rule Assets Filtered to ERROR Severity Only
 1788 8:29a ✅ Scan Rule Assets Filtered to ERROR Severity Only
+1791 8:31a 🔵 Frontend Vite Proxy Failure — getaddrinfo EAI_AGAIN backend
+1792 " 🔵 Rust Test Suite — retained_assets_only_contain_error_rules Passes
+1796 8:32a 🔵 Frontend Import Break — projectCardPreview.ts Imports Non-Existent Exports from taskActivities.ts
+1803 8:34a 🔵 Frontend TypeScript Type-Check Passes Despite Broken Runtime Imports
+1805 8:35a 🔴 Root Cause Confirmed — Vite Build Fails on Missing Non-Opengrep Severity Exports
+1806 8:36a 🔴 projectCardPreview.ts Converged to Opengrep-Only — Non-Opengrep Engine Remnants Removed
+1807 8:39a 🔴 Frontend Build Passes — projectCardPreview Opengrep-Only Cleanup Verified
+1808 " 🔴 projectCardPreview.ts Refactored to Opengrep-Only — Retired Engine Imports Removed
+1812 8:42a ⚖️ Architect Verification Dispatched for projectCardPreview Opengrep-Only Cleanup
 
-Access 1323k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1321k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
