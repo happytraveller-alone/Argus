@@ -69,7 +69,10 @@ pub fn parse_scan_output(
 ) -> Vec<task_state::StaticFindingRecord> {
     let parsed: Value = match serde_json::from_str(json_text) {
         Ok(v) => v,
-        Err(_) => return Vec::new(),
+        Err(_) => match extract_json_object(json_text) {
+            Some(v) => v,
+            None => return Vec::new(),
+        },
     };
 
     let results = match parsed.get("results").and_then(Value::as_array) {
@@ -170,6 +173,28 @@ fn parse_single_result(
         status: "open".to_string(),
         payload,
     })
+}
+
+fn extract_json_object(text: &str) -> Option<Value> {
+    let start = text.find('{')? ;
+    let candidate = &text[start..];
+    let mut depth = 0i32;
+    let mut end_pos = None;
+    for (i, ch) in candidate.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    end_pos = Some(i + 1);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let json_str = &candidate[..end_pos?];
+    serde_json::from_str(json_str).ok()
 }
 
 fn relative_rule_path(asset_path: &str) -> PathBuf {
@@ -452,5 +477,32 @@ mod tests {
             }),
             "C project should also include cpp patch rules"
         );
+    }
+
+    #[test]
+    fn parses_findings_from_mixed_stdout() {
+        let mixed = r#"
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 1 file with 2182 rules:
+
+{"version":"1.15.1","results":[{"check_id":"test-rule","path":"src/main.c","start":{"line":10,"col":1,"offset":0},"end":{"line":10,"col":50,"offset":49},"extra":{"message":"test finding","severity":"ERROR","metadata":{},"lines":"int x = 0;","is_ignored":false,"validation_state":"NO_VALIDATOR","engine_kind":"OSS"}}],"errors":[],"paths":{"scanned":["src/main.c"]}}
+
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+  Ran 1168 rules on 1 file: 1 finding.
+"#;
+        let findings = super::parse_scan_output(mixed, "task-1", None, None);
+        assert_eq!(findings.len(), 1, "should extract finding from mixed stdout");
+        assert_eq!(findings[0].payload["rule_name"], "test-rule");
+    }
+
+    #[test]
+    fn parses_findings_from_pure_json() {
+        let json = r#"{"version":"1.15.1","results":[{"check_id":"pure-rule","path":"app.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"pure test","severity":"ERROR","metadata":{},"lines":"x = eval(input())","is_ignored":false,"validation_state":"NO_VALIDATOR","engine_kind":"OSS"}}],"errors":[]}"#;
+        let findings = super::parse_scan_output(json, "task-2", None, None);
+        assert_eq!(findings.len(), 1);
     }
 }
