@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -174,7 +175,18 @@ pub async fn load_assets_by_engine(
         .collect())
 }
 
+static RULE_ASSET_CACHE: OnceLock<Vec<ScanRuleAsset>> = OnceLock::new();
+
 pub fn discover_rule_assets() -> Result<Vec<ScanRuleAsset>> {
+    if let Some(cached) = RULE_ASSET_CACHE.get() {
+        return Ok(cached.clone());
+    }
+    let assets = discover_rule_assets_uncached()?;
+    let _ = RULE_ASSET_CACHE.set(assets.clone());
+    Ok(assets)
+}
+
+fn discover_rule_assets_uncached() -> Result<Vec<ScanRuleAsset>> {
     let root = rule_asset_root();
     let mut assets = Vec::new();
     for relative in collect_rule_asset_paths(&root)? {
@@ -302,7 +314,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(paths
             .iter()
-            .any(|path| path == &"rules_opengrep/X509-subject-name-validation.yaml"));
+            .any(|path| path == &"rules_opengrep/aes_ecb_mode.yaml"));
         assert!(paths
             .iter()
             .any(|path| path.starts_with("rules_from_patches/")));

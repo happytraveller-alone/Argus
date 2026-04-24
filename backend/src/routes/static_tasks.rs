@@ -743,7 +743,15 @@ async fn run_opengrep_scan_inner(
 
     update_scan_progress(state, task_id, 30.0, "preparing_rules", "materializing opengrep rules").await;
 
-    let rules_dir = materialize_filtered_rules(state, &workspace_dir, rule_ids).await?;
+    let project_languages = match projects::get_project(state, project_id).await {
+        Ok(Some(project)) => {
+            serde_json::from_str::<Vec<String>>(&project.programming_languages_json)
+                .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+
+    let rules_dir = materialize_filtered_rules(state, &workspace_dir, rule_ids, &project_languages).await?;
     if rules_dir.is_none() {
         return Err("no opengrep rules available for scan".into());
     }
@@ -893,9 +901,12 @@ async fn materialize_filtered_rules(
     state: &AppState,
     workspace_dir: &std::path::Path,
     rule_ids: &[String],
+    project_languages: &[String],
 ) -> Result<Option<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
     if rule_ids.is_empty() {
-        let result = opengrep::materialize_rule_directory(state, workspace_dir).await?;
+        let result =
+            opengrep::materialize_rule_directory_for_languages(state, workspace_dir, project_languages)
+                .await?;
         return Ok(result);
     }
 

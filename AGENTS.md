@@ -482,40 +482,24 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 8:43am GMT+8
+# [audittool_personal] recent context, 2026-04-24 10:41am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,494t read) | 1,320,949t work | 99% savings
+Stats: 50 obs (18,193t read) | 1,053,039t work | 98% savings
 
 ### Apr 23, 2026
-S177 scan_rule_assets directory cleanup — non-essential rule directories removed (Apr 23, 8:33 AM)
-S181 scan_rule_assets directory cleanup — legacy rule directories removed (Apr 23, 8:43 AM)
-S183 Strengthen release workflow test — validate step run block assertion made more precise (Apr 23, 8:48 AM)
 S198 Frontend dead code cleanup per PRD and test spec — Wave 1 and Wave 2 completed (Apr 23, 8:52 AM)
 S237 Frontend dead code cleanup per PRD and test spec — full session completed with all tests passing (Apr 23, 9:07 AM)
 S261 整理 audittool_personal Rust backend 代码，调通静态审计功能，确保静态审计可以正常运行 (Apr 23, 10:09 AM)
 S420 Hermes Containerized Functional Agents — Full Implementation Complete, Team Shutdown and Cleanup (Apr 23, 4:07 PM)
 S455 Hermes Containerized Functional Agents — PRD and Test Spec Planning Initiated (Apr 23, 7:41 PM)
 S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
-S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 9:20 PM)
-1694 10:07p 🔵 Debian Trixie Docker APT SSL Bootstrap Deadlock — Confirmed Root Cause
-1695 10:08p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1696 10:11p 🔵 Static Scan Task Lifecycle Verified — opengrep-runner Completes Cleanly
-1697 " 🔄 CreateScanTaskDialog Stripped to Opengrep-Only — Non-Opengrep Engine Code Removed
-1698 " 🔵 hermes-agent-base.Dockerfile Build Fails — chmod Denied on /opt/bin in Non-Root Build Context
-1700 10:13p 🔵 nousresearch/hermes-agent Base Image — /opt/bin Does Not Exist and hermes User Cannot Write to /opt
-1701 " 🔴 hermes-agent-base.Dockerfile Fixed — USER root + mkdir + COPY --chmod=755 Pattern
-1702 " 🔴 Backend Dockerfile APT SSL Bootstrap Fixed — HTTP Sources for Initial ca-certificates Install
-1699 10:14p 🔵 Stop-Gate Review — ALLOW on Hermes Integration Summary Turn
-1703 10:16p 🔵 Non-Opengrep Frontend API Surfaces Still Present — CreateScanTaskDialog Patch Did Not Apply
-1704 " 🔴 Backend runner.rs — Zero Timeout Now Disables Hard Timeout for Docker Start
-1705 " 🔵 Full Docker Compose Build Succeeds — Backend, Frontend, and All Hermes Agents Build Clean
-1706 10:20p 🔵 Two Distinct Docker Compose Failures — Opengrep Missing Rules Dir + Hermes Permission Denied on /opt/data
+S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
+S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
 1707 10:21p 🔵 Hermes Agent /opt/data Permission Root Cause — Host data/ Dirs Owned by xyf (UID 1000) but Container Runs as Different User
-1708 " 🔴 Hermes Agent Containers — HERMES_UID/HERMES_GID Env Vars Added to All Four Services in docker-compose.yml
 1709 10:24p 🔴 Hermes Agent Permission Fix Verified — All Four Containers Start Successfully After HERMES_UID/GID Env Vars Added
 1710 10:26p 🔵 Hermes Agent Permission Fix Incomplete — HERMES_UID/GID Env Vars Not Used by Entrypoint; Container Still Runs as Non-Root User
 1712 10:28p 🔵 hermes-agent-base.Dockerfile Root Cause — Base Image Sets Non-Root USER; RUN mkdir Fails Without Explicit USER root
@@ -547,11 +531,27 @@ S497 Plan two PRD and test spec documents for Hermes containerized functional ag
 1792 " 🔵 Rust Test Suite — retained_assets_only_contain_error_rules Passes
 1796 8:32a 🔵 Frontend Import Break — projectCardPreview.ts Imports Non-Existent Exports from taskActivities.ts
 1803 8:34a 🔵 Frontend TypeScript Type-Check Passes Despite Broken Runtime Imports
-1805 8:35a 🔴 Root Cause Confirmed — Vite Build Fails on Missing Non-Opengrep Severity Exports
+1813 8:35a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
+S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
+1805 " 🔴 Root Cause Confirmed — Vite Build Fails on Missing Non-Opengrep Severity Exports
 1806 8:36a 🔴 projectCardPreview.ts Converged to Opengrep-Only — Non-Opengrep Engine Remnants Removed
 1807 8:39a 🔴 Frontend Build Passes — projectCardPreview Opengrep-Only Cleanup Verified
 1808 " 🔴 projectCardPreview.ts Refactored to Opengrep-Only — Retired Engine Imports Removed
 1812 8:42a ⚖️ Architect Verification Dispatched for projectCardPreview Opengrep-Only Cleanup
+1817 8:43a 🔵 Stop-Gate Review — Previous Turn Confirmed as Plan-Writing Only (No Code Changes)
+1818 " ⚖️ Opengrep Language-Aware Rule Filtering — Plan Written, Implementation Pending
+1816 8:51a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
+1819 8:52a ⚖️ Opengrep Scan Strategy — Language-Aware Rule Filtering Planned
+1822 8:57a 🟣 Opengrep Language-Aware Rule Filtering Implemented
+1823 " 🔴 Stale Test Fixtures Fixed — X509-subject-name-validation.yaml Removed from Rule Set
+1820 9:24a ✅ Stop-gate review — previous turn was a status-only message, no code changes
+1821 9:25a 🟣 Opengrep Language-Aware Rule Filtering Implemented
+1824 9:30a ⚖️ Systematic Debugging Plan — Cargo Test High CPU/Memory Analysis
+1826 10:01a 🔵 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory
+S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 10:01 AM)
+1827 10:02a 🟣 Opengrep Language-Aware Rule Filtering Implemented
+1828 " 🟣 discover_rule_assets OnceLock Process-Level Cache Added
+1829 10:28a 🔵 Opengrep Container High CPU/Memory — Root Cause Confirmed as Rule Volume, Not Backend Re-reads
 
-Access 1321k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1053k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

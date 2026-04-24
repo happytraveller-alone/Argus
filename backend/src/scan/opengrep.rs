@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -181,13 +182,116 @@ fn relative_rule_path(asset_path: &str) -> PathBuf {
     PathBuf::from(asset_path)
 }
 
+fn normalize_language(lang: &str) -> String {
+    match lang.to_lowercase().as_str() {
+        "c#" => "csharp".to_string(),
+        "c++" => "cpp".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn extract_language_from_asset_path(asset_path: &str) -> Option<String> {
+    let rest = asset_path.strip_prefix("rules_from_patches/")?;
+    let lang = rest.split('/').next()?;
+    if lang.is_empty() {
+        return None;
+    }
+    Some(normalize_language(lang))
+}
+
+fn extract_rule_languages(content: &str) -> BTreeSet<String> {
+    let mut languages = BTreeSet::new();
+    let mut in_languages_block = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("languages:") {
+            in_languages_block = true;
+            continue;
+        }
+        if in_languages_block {
+            if let Some(lang) = trimmed.strip_prefix("- ") {
+                let lang = lang.trim().trim_matches('"').trim_matches('\'');
+                if !lang.is_empty() {
+                    languages.insert(normalize_language(lang));
+                }
+            } else {
+                in_languages_block = false;
+            }
+        }
+    }
+    languages
+}
+
+fn rule_matches_languages(asset: &ScanRuleAsset, project_languages: &BTreeSet<String>) -> bool {
+    if let Some(lang) = extract_language_from_asset_path(&asset.asset_path) {
+        return project_languages.contains(&lang);
+    }
+    let rule_langs = extract_rule_languages(&asset.content);
+    if rule_langs.is_empty() {
+        return true;
+    }
+    if rule_langs.contains("generic") || rule_langs.contains("regex") {
+        return true;
+    }
+    rule_langs.iter().any(|l| project_languages.contains(l))
+}
+
+pub async fn load_rule_assets_for_languages(
+    state: &AppState,
+    languages: &[String],
+) -> Result<Vec<ScanRuleAsset>> {
+    let all = load_rule_assets(state).await?;
+    if languages.is_empty() {
+        return Ok(all);
+    }
+    let mut normalized: BTreeSet<String> = languages.iter().map(|l| normalize_language(l)).collect();
+    if normalized.contains("c") {
+        normalized.insert("cpp".to_string());
+    }
+    let filtered: Vec<ScanRuleAsset> = all
+        .into_iter()
+        .filter(|asset| rule_matches_languages(asset, &normalized))
+        .collect();
+    if filtered.is_empty() {
+        return load_rule_assets(state).await;
+    }
+    Ok(filtered)
+}
+
+pub async fn materialize_rule_directory_for_languages(
+    state: &AppState,
+    workspace_dir: &Path,
+    languages: &[String],
+) -> Result<Option<PathBuf>> {
+    let assets = load_rule_assets_for_languages(state, languages).await?;
+    if assets.is_empty() {
+        return Ok(None);
+    }
+
+    let rules_root = workspace_dir.join("opengrep-rules");
+    for asset in assets {
+        let relative_path = relative_rule_path(&asset.asset_path);
+        let target = rules_root.join(relative_path);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        fs::write(target, asset.content).await?;
+    }
+
+    Ok(Some(rules_root))
+}
+
 #[cfg(test)]
 mod tests {
     use tokio::fs;
 
     use crate::{config::AppConfig, state::AppState};
 
-    use super::{build_validate_command, load_rule_assets, materialize_rule_directory};
+    use super::{
+        build_validate_command, extract_language_from_asset_path, extract_rule_languages,
+        load_rule_assets, load_rule_assets_for_languages, materialize_rule_directory,
+        normalize_language,
+    };
 
     #[tokio::test]
     async fn loads_opengrep_internal_and_patch_rule_assets() {
@@ -200,7 +304,7 @@ mod tests {
         assert!(assets.len() > 2000);
         assert!(assets
             .iter()
-            .any(|asset| asset.asset_path == "rules_opengrep/X509-subject-name-validation.yaml"));
+            .any(|asset| asset.asset_path == "rules_opengrep/aes_ecb_mode.yaml"));
         assert!(assets
             .iter()
             .any(|asset| asset.asset_path.starts_with("rules_from_patches/")));
@@ -227,7 +331,7 @@ mod tests {
             .expect("materialize should succeed")
             .expect("rules directory should exist");
 
-        let internal_rule = path.join("internal/X509-subject-name-validation.yaml");
+        let internal_rule = path.join("internal/aes_ecb_mode.yaml");
         assert!(internal_rule.exists());
         let patch_rules_dir = path.join("patch");
         assert!(patch_rules_dir.exists());
@@ -239,6 +343,114 @@ mod tests {
         assert_eq!(
             build_validate_command("/work/opengrep-rules"),
             vec!["opengrep", "--config", "/work/opengrep-rules", "--validate"]
+        );
+    }
+
+    #[test]
+    fn normalizes_language_names() {
+        assert_eq!(normalize_language("Java"), "java");
+        assert_eq!(normalize_language("C#"), "csharp");
+        assert_eq!(normalize_language("C++"), "cpp");
+        assert_eq!(normalize_language("python"), "python");
+        assert_eq!(normalize_language("TypeScript"), "typescript");
+    }
+
+    #[test]
+    fn extracts_language_from_patch_rule_path() {
+        assert_eq!(
+            extract_language_from_asset_path("rules_from_patches/java/vuln-cxf.yml"),
+            Some("java".to_string())
+        );
+        assert_eq!(
+            extract_language_from_asset_path("rules_from_patches/cpp/vuln-test.yml"),
+            Some("cpp".to_string())
+        );
+        assert_eq!(
+            extract_language_from_asset_path("rules_opengrep/some-rule.yaml"),
+            None
+        );
+    }
+
+    #[test]
+    fn extracts_languages_from_rule_yaml() {
+        let yaml = r#"rules:
+- id: test-rule
+  languages:
+  - java
+  - kotlin
+  severity: ERROR
+"#;
+        let langs = extract_rule_languages(yaml);
+        assert!(langs.contains("java"));
+        assert!(langs.contains("kotlin"));
+        assert_eq!(langs.len(), 2);
+    }
+
+    #[test]
+    fn extracts_languages_handles_generic() {
+        let yaml = r#"rules:
+- id: generic-rule
+  languages:
+  - generic
+  severity: ERROR
+"#;
+        let langs = extract_rule_languages(yaml);
+        assert!(langs.contains("generic"));
+    }
+
+    #[test]
+    fn extracts_languages_empty_when_no_languages_field() {
+        let yaml = r#"rules:
+- id: test-rule
+  severity: ERROR
+"#;
+        let langs = extract_rule_languages(yaml);
+        assert!(langs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn loads_filtered_rules_for_java_project() {
+        let state = AppState::from_config(AppConfig::for_tests())
+            .await
+            .expect("state should build");
+        let all = load_rule_assets(&state).await.expect("should load all");
+        let java_only = load_rule_assets_for_languages(&state, &["Java".to_string()])
+            .await
+            .expect("should load java rules");
+        assert!(java_only.len() < all.len(), "filtered should be fewer than all");
+        assert!(!java_only.is_empty(), "java rules should not be empty");
+        for asset in &java_only {
+            if let Some(lang) = extract_language_from_asset_path(&asset.asset_path) {
+                assert_eq!(lang, "java", "patch rule should be java: {}", asset.asset_path);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_languages_returns_all_rules() {
+        let state = AppState::from_config(AppConfig::for_tests())
+            .await
+            .expect("state should build");
+        let all = load_rule_assets(&state).await.expect("should load all");
+        let unfiltered = load_rule_assets_for_languages(&state, &[])
+            .await
+            .expect("should load all when empty");
+        assert_eq!(all.len(), unfiltered.len());
+    }
+
+    #[tokio::test]
+    async fn c_project_also_includes_cpp_rules() {
+        let state = AppState::from_config(AppConfig::for_tests())
+            .await
+            .expect("state should build");
+        let c_rules = load_rule_assets_for_languages(&state, &["C".to_string()])
+            .await
+            .expect("should load c rules");
+        assert!(
+            c_rules.iter().any(|a| {
+                extract_language_from_asset_path(&a.asset_path) == Some("cpp".to_string())
+            }),
+            "C project should also include cpp patch rules"
         );
     }
 }
