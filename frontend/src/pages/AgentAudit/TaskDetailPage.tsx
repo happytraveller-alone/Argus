@@ -774,7 +774,7 @@ function AgentAuditPageContent() {
   const [afterSequence, setAfterSequence] = useState<number>(0);
   const [historicalEventsLoaded, setHistoricalEventsLoaded] =
     useState<boolean>(false);
-  const { logoSrc, cycleLogoVariant } = useLogoVariant();
+  const { logoSrc } = useLogoVariant();
   const visibleManagedFindings = useMemo(
     () => realtimeFindings,
     [realtimeFindings],
@@ -3533,18 +3533,13 @@ function AgentAuditPageContent() {
         <div className="relative z-10 w-full max-w-[1800px] mx-auto px-6 text-center py-[5vh]">
           {/* Logo + Title + Description */}
           <div className="mb-[6vh]">
-            <button
-              type="button"
-              onClick={cycleLogoVariant}
-              className="mx-auto mb-[3vh] w-48 h-48 rounded-[2.5rem] border border-primary/40 bg-primary/10 flex items-center justify-center shadow-[0_0_48px_rgba(59,130,246,0.4)] cursor-pointer transition-transform duration-200 hover:scale-[1.02]"
-              title="点击切换 Logo"
-            >
+            <div className="mx-auto mb-[3vh] w-48 h-48 rounded-[2.5rem] border border-primary/40 bg-primary/10 flex items-center justify-center shadow-[0_0_48px_rgba(59,130,246,0.4)]">
               <img
                 src={logoSrc}
                 alt="Argus"
                 className="w-32 h-32 object-contain"
               />
-            </button>
+            </div>
 
             <h1 className="text-6xl md:text-7xl font-mono font-bold tracking-wider text-foreground">
               Argus

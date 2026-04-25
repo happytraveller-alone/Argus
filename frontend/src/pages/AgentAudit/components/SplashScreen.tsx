@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Shield, Zap } from "lucide-react";
+import { ARGUS_LOGO_SRC } from "@/shared/branding/useLogoVariant";
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -229,23 +230,12 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         <div className="w-full max-w-2xl">
           {/* Logo with adaptive styling */}
           <div className={`text-center mb-10 transition-all duration-1000 ${showLogo ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-8"}`}>
-            {/* Logo text - light mode: clean, dark mode: neon glow */}
-            <div className="logo-glitch relative inline-block">
-              <div
-                className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-wider mb-3 font-mono relative logo-text"
-              >
-                <span className="text-primary">Vul</span>
-                <span className="text-gray-800 dark:text-white">Hunter</span>
-              </div>
-              {/* Glitch layers - dark mode only, opacity controlled by CSS */}
-              <div className="glitch-layer glitch-layer-1 text-5xl sm:text-6xl md:text-7xl font-bold tracking-wider font-mono absolute top-0 left-0 w-full opacity-0 dark:opacity-0">
-                <span className="text-cyan-500">Vul</span>
-                <span className="text-white">Hunter</span>
-              </div>
-              <div className="glitch-layer glitch-layer-2 text-5xl sm:text-6xl md:text-7xl font-bold tracking-wider font-mono absolute top-0 left-0 w-full opacity-0 dark:opacity-0">
-                <span className="text-red-500">Vul</span>
-                <span className="text-white">Hunter</span>
-              </div>
+            <div className="relative inline-flex h-32 w-32 items-center justify-center rounded-[2rem] border border-primary/40 bg-primary/10 shadow-[0_0_45px_rgba(255,107,44,0.35)] sm:h-40 sm:w-40">
+              <img
+                src={ARGUS_LOGO_SRC}
+                alt="Argus"
+                className="h-24 w-24 object-contain sm:h-32 sm:w-32"
+              />
             </div>
             {/* Subtitle - adaptive styling */}
             <div className="flex items-center justify-center gap-3 text-gray-500 dark:text-gray-400 text-sm tracking-[0.3em] uppercase mt-4">
@@ -512,49 +502,6 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         @keyframes glowPulse {
           0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 2px currentColor); }
           50% { opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
-        }
-
-        /* Logo glitch effect - dark mode only on hover */
-        .logo-glitch .glitch-layer {
-          opacity: 0;
-          pointer-events: none;
-        }
-
-        .dark .logo-glitch:hover .glitch-layer-1 {
-          animation: glitch1 0.3s infinite;
-        }
-
-        .dark .logo-glitch:hover .glitch-layer-2 {
-          animation: glitch2 0.3s infinite;
-        }
-
-        @keyframes glitch1 {
-          0%, 100% { opacity: 0; transform: translate(0); }
-          20% { opacity: 0.8; transform: translate(-2px, 2px); }
-          40% { opacity: 0; transform: translate(0); }
-          60% { opacity: 0.8; transform: translate(2px, -1px); }
-          80% { opacity: 0; transform: translate(0); }
-        }
-
-        @keyframes glitch2 {
-          0%, 100% { opacity: 0; transform: translate(0); }
-          25% { opacity: 0.6; transform: translate(2px, -2px); }
-          50% { opacity: 0; transform: translate(0); }
-          75% { opacity: 0.6; transform: translate(-2px, 1px); }
-        }
-
-        /* Neon text effect - dark mode only */
-        .dark .logo-text {
-          text-shadow:
-            0 0 10px rgba(255,107,44,0.8),
-            0 0 20px rgba(255,107,44,0.6),
-            0 0 40px rgba(255,107,44,0.4),
-            0 0 80px rgba(255,107,44,0.2);
-        }
-
-        /* Light mode logo - subtle shadow */
-        .logo-text {
-          text-shadow: 0 2px 10px rgba(255,107,44,0.2);
         }
 
         /* Cyber text styling - dark mode only */

@@ -29,7 +29,7 @@ const homeScanCards: HomeScanCard[] = [
 
 export function HomeScanCards() {
   const navigate = useNavigate();
-  const { logoSrc, cycleLogoVariant } = useLogoVariant();
+  const { logoSrc } = useLogoVariant();
 
   return (
     <div className="min-h-[100dvh] relative overflow-hidden">
@@ -38,15 +38,12 @@ export function HomeScanCards() {
       <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none min-h-[100dvh] flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="mb-12 flex items-center justify-center gap-5">
-            <button
-              onClick={cycleLogoVariant}
+            <div
               className="
-                pointer-events-auto
                 w-20 h-20 rounded-3xl
                 border border-primary/40 bg-primary/10
                 flex items-center justify-center
                 shadow-[0_0_50px_rgba(59,130,246,0.5)]
-                transition hover:scale-105
               "
             >
               <img
@@ -54,7 +51,7 @@ export function HomeScanCards() {
                 alt="Argus"
                 className="w-16 h-16 object-contain"
               />
-            </button>
+            </div>
 
             <h1 className="text-6xl font-bold tracking-wider font-mono">
               Argus
