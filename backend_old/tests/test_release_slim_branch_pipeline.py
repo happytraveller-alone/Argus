@@ -232,6 +232,10 @@ def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> Non
     assert "SCANNER_OPENGREP_IMAGE" in compose_text
     assert "FLOW_PARSER_RUNNER_IMAGE" in compose_text
     assert "SANDBOX_RUNNER_IMAGE" in compose_text
+    assert "${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23" in compose_text
+    assert "postgres_data:/var/lib/postgresql" in compose_text
+    assert "postgres_data:/var/lib/postgresql/data" not in compose_text
+    assert "${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23" in compose_text
 
 
 def test_release_backend_template_no_longer_copies_removed_backend_static_tree() -> None:
@@ -258,6 +262,9 @@ def test_generated_release_docs_only_publish_three_supported_commands(tmp_path: 
         assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml" not in doc
         assert "docker compose -f docker-compose.yml -f docker-compose.full.yml" not in doc
         assert "docker-compose.self-contained.yml" not in doc
+        assert "postgres_data" in doc
+        assert "docker compose down -v" in doc
+        assert "PG15" in doc or "PostgreSQL 15" in doc
         assert "package-release-artifacts.sh" not in doc
         assert "deploy-release-artifacts.sh" not in doc
         assert "docker-compose.release-static-frontend.yml" not in doc

@@ -7,30 +7,18 @@ from types import SimpleNamespace
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
 SCRIPT_PATH = PROJECT_ROOT / "backend" / "scripts" / "flow_parser_runner.py"
+HOST_PATH = PROJECT_ROOT / "backend" / "scripts" / "flow_parser_host.py"
 
 
 def _load_flow_parser_runner_module():
     temp_root = tempfile.mkdtemp(prefix="flow-parser-runner-test-")
     runtime_root = Path(temp_root)
-    (runtime_root / "app" / "services" / "rag").mkdir(parents=True, exist_ok=True)
     (runtime_root / "flow_parser_runner.py").write_text(
         SCRIPT_PATH.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    (runtime_root / "app" / "services" / "parser.py").write_text(
-        "class TreeSitterParser:\n"
-        "    def parse(self, content, language):\n"
-        "        return None\n"
-        "    def extract_definitions(self, tree, content, language):\n"
-        "        return []\n",
-        encoding="utf-8",
-    )
-    (runtime_root / "app" / "services" / "rag" / "splitter.py").write_text(
-        "class TreeSitterParser:\n"
-        "    def parse(self, content, language):\n"
-        "        return None\n"
-        "    def extract_definitions(self, tree, content, language):\n"
-        "        return []\n",
+    (runtime_root / "flow_parser_host.py").write_text(
+        HOST_PATH.read_text(encoding="utf-8"),
         encoding="utf-8",
     )
 
@@ -43,6 +31,88 @@ def _load_flow_parser_runner_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_flow_parser_runner_module_loads_non_legacy_host_artifact():
+    module = _load_flow_parser_runner_module()
+    assert module.TreeSitterParser is not None
+
+
+def test_extract_definitions_batch_uses_non_legacy_host_parser(monkeypatch):
+    module = _load_flow_parser_runner_module()
+
+    class FakeParser:
+        def parse(self, content, language):
+            assert language == "python"
+            assert "demo" in content
+            return object()
+
+        def extract_definitions(self, tree, content, language):
+            assert tree is not None
+            return [
+                {
+                    "name": "demo",
+                    "type": "function",
+                    "start_point": [0, 0],
+                    "end_point": [2, 0],
+                    "language": language,
+                }
+            ]
+
+    monkeypatch.setattr(module, "TreeSitterParser", FakeParser)
+
+    result = module._extract_definitions_batch(
+        {
+            "items": [
+                {
+                    "file_path": "demo.py",
+                    "language": "python",
+                    "content": "def demo():\n    return 1\n",
+                }
+            ]
+        }
+    )
+
+    assert result["items"][0]["ok"] is True
+    assert result["items"][0]["definitions"][0]["name"] == "demo"
+    assert "runner_tree_sitter" in result["items"][0]["diagnostics"]
+
+
+def test_locate_enclosing_function_uses_non_legacy_host_parser(monkeypatch):
+    module = _load_flow_parser_runner_module()
+
+    class FakeParser:
+        def parse(self, content, language):
+            assert language == "python"
+            return object()
+
+        def extract_definitions(self, tree, content, language):
+            return [
+                {
+                    "name": "demo",
+                    "type": "function",
+                    "start_point": [0, 0],
+                    "end_point": [2, 0],
+                    "language": language,
+                }
+            ]
+
+    monkeypatch.setattr(module, "TreeSitterParser", FakeParser)
+
+    result = module._locate_enclosing_function(
+        {
+            "file_path": "demo.py",
+            "language": "python",
+            "content": "def demo():\n    print('x')\n    return 1\n",
+            "line_start": 2,
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["function"] == "demo"
+    assert result["resolution_engine"] == "python_tree_sitter"
+    assert result["start_line"] == 1
+    assert result["end_line"] == 3
 
 
 def test_code2flow_callgraph_reports_binary_probe_details_when_missing(monkeypatch):

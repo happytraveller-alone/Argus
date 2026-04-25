@@ -49,6 +49,18 @@ docker compose up --build
 
 首次启动会拉取镜像并初始化数据库，时间可能较长。
 
+如果你之前已经用 PostgreSQL 15 启动过这套发布分支，请先处理旧的 `postgres_data` 数据卷，再切换到当前默认的 PostgreSQL 18 镜像。
+
+- 保留数据：先按你自己的流程完成 PG15 -> PG18 迁移，再启动当前版本。注意，PostgreSQL 18 官方镜像的卷挂载点也调整为 `/var/lib/postgresql`，不再继续使用旧的 `/var/lib/postgresql/data` 挂载方式。
+- 不保留数据：直接删除旧卷后重新初始化。
+
+最直接的重建方式：
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
 如果想在后台运行：
 
 ```bash
@@ -82,6 +94,11 @@ docker compose down
 ```bash
 docker compose down -v
 ```
+
+说明：
+
+- 这条命令也会删除旧的 `postgres_data` 卷。
+- 如果该卷来自 PostgreSQL 15，而你又不准备做数据迁移，这是切到 PostgreSQL 18 默认镜像前最安全的重建路径。
 
 ## 6. 其他启动文件
 

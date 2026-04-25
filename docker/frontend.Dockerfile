@@ -50,11 +50,24 @@ RUN --mount=type=cache,id=vulhunter-frontend-npm,target=/root/.npm \
     pnpm config set registry "${FRONTEND_NPM_REGISTRY}" && \
     pnpm config set store-dir /pnpm/store
 
-FROM pnpm-base AS dev
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-alpine AS dev
 
 WORKDIR /app
 
+ENV http_proxy=""
+ENV https_proxy=""
+ENV HTTP_PROXY=""
+ENV HTTPS_PROXY=""
+ENV all_proxy=""
+ENV ALL_PROXY=""
+ENV no_proxy="*"
+ENV NO_PROXY="*"
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
+
 COPY scripts/dev-launcher.mjs /usr/local/bin/frontend-dev-launcher.mjs
+
+RUN corepack enable
 
 EXPOSE 5173
 

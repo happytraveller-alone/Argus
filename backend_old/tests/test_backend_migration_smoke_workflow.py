@@ -9,6 +9,8 @@ def test_backend_migration_smoke_workflow_runs_rust_bootstrap_only() -> None:
         REPO_ROOT / ".github" / "workflows" / "backend-migration-smoke.yml"
     ).read_text(encoding="utf-8")
 
+    assert "image: postgres:15-alpine3.23" in workflow_text
+    assert "legacy migration smoke coverage" in workflow_text
     assert "uses: dtolnay/rust-toolchain@stable" in workflow_text
     assert "working-directory: backend" in workflow_text
     assert "cargo test -j 2 -- --test-threads=1 --nocapture" in workflow_text
@@ -18,6 +20,15 @@ def test_backend_migration_smoke_workflow_runs_rust_bootstrap_only() -> None:
     assert "uv sync --frozen --no-dev" not in workflow_text
     assert "uv run alembic upgrade head" not in workflow_text
     assert "uv run python - <<'PY'" not in workflow_text
+
+
+def test_backend_migration_smoke_workflow_does_not_claim_pg18_runtime_coverage() -> None:
+    workflow_text = (
+        REPO_ROOT / ".github" / "workflows" / "backend-migration-smoke.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "fresh-init PG18 coverage" not in workflow_text
+    assert "PG18 runtime validation" not in workflow_text
 
 
 def test_backend_local_commands_use_uv_only() -> None:

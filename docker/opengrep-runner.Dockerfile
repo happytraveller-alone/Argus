@@ -93,6 +93,12 @@ COPY backend/assets/scan_rule_assets/rules_from_patches /opt/opengrep/rules/rule
 COPY docker/opengrep-scan.sh /usr/local/bin/opengrep-scan
 RUN chmod +x /usr/local/bin/opengrep-scan && /usr/local/bin/opengrep-scan --self-test
 
+FROM opengrep-builder AS opengrep-runtime-assets
+
+RUN mkdir -p /opt/opengrep-archive \
+    && tar -C /opt/opengrep/rules -czf /opt/opengrep-archive/rules.tar.gz rules_opengrep rules_from_patches \
+    && tar -tzf /opt/opengrep-archive/rules.tar.gz >/dev/null
+
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS opengrep-runner
 
 ARG BACKEND_APT_MIRROR_PRIMARY
@@ -133,7 +139,7 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-runtime-apt-lists,target=/va
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=opengrep-builder /opt/opengrep/opengrep.real /opt/opengrep/opengrep.real
-COPY --from=opengrep-builder /opt/opengrep/rules /opt/opengrep/rules
+COPY --from=opengrep-runtime-assets /opt/opengrep-archive/rules.tar.gz /opt/opengrep/rules.tar.gz
 COPY --from=opengrep-builder /usr/local/bin/opengrep /usr/local/bin/opengrep
 COPY --from=opengrep-builder /usr/local/bin/opengrep-scan /usr/local/bin/opengrep-scan
 

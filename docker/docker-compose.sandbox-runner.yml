@@ -31,7 +31,7 @@ services:
     restart: "no"
 
 # 环境变量配置示例
-# 在 .env 或 docker/env/backend_old/.env 中添加:
+# 在 .env 或 docker/env/backend/.env 中添加:
 # SANDBOX_RUNNER_ENABLED=true
 # SANDBOX_RUNNER_IMAGE=vulhunter/sandbox-runner:latest
 # SANDBOX_RUNNER_TIMEOUT=60

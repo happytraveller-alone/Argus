@@ -16,10 +16,13 @@ env:
 
 jobs:
   migration-smoke:
+    # Explicit legacy migration smoke coverage:
+    # keep PostgreSQL 15 here so this lane continues to validate
+    # the old schema/runtime contract instead of claiming PostgreSQL 18 runtime coverage.
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine3.23
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

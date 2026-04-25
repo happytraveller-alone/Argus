@@ -20,7 +20,6 @@ ENV PYTHONUNBUFFERED=1
 ENV VIRTUAL_ENV=/opt/flow-parser-venv
 ENV PATH=/opt/flow-parser-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
-ENV PYTHONPATH=/opt/flow-parser
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
 RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
@@ -83,8 +82,8 @@ RUN --mount=type=cache,id=vulhunter-flow-parser-runner-pip,target=/root/.cache/p
 
 WORKDIR /opt/flow-parser
 
-COPY backend_old/app /opt/flow-parser/app
 COPY backend/scripts/flow_parser_runner.py /opt/flow-parser/flow_parser_runner.py
+COPY backend/scripts/flow_parser_host.py /opt/flow-parser/flow_parser_host.py
 
 RUN set -eux; \
     mkdir -p /scan; \

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 RULES_ROOT="${OPENGREP_RULES_ROOT:-/opt/opengrep/rules}"
+RULES_ARCHIVE="${OPENGREP_RULES_ARCHIVE:-/opt/opengrep/rules.tar.gz}"
 
 usage() {
   cat <<'EOF'
@@ -13,6 +14,7 @@ EOF
 }
 
 self_test() {
+  ensure_rules_root
   command -v opengrep >/dev/null
   test -d "$RULES_ROOT/rules_opengrep"
   test -d "$RULES_ROOT/rules_from_patches"
@@ -40,6 +42,20 @@ self_test() {
   grep -q '"status":"scan_completed"' "$summary_path"
 
   rm -rf "$temp_dir"
+}
+
+ensure_rules_root() {
+  if [ -d "$RULES_ROOT/rules_opengrep" ] && [ -d "$RULES_ROOT/rules_from_patches" ]; then
+    return 0
+  fi
+
+  if [ ! -f "$RULES_ARCHIVE" ]; then
+    echo "missing rule archive: $RULES_ARCHIVE" >&2
+    return 1
+  fi
+
+  mkdir -p "$RULES_ROOT"
+  tar -xzf "$RULES_ARCHIVE" -C "$RULES_ROOT"
 }
 
 results_json_ready() {
@@ -211,6 +227,8 @@ if [ -z "$target_dir" ] || [ -z "$output_path" ] || [ -z "$summary_path" ]; then
   usage >&2
   exit 2
 fi
+
+ensure_rules_root
 
 if [ -z "$log_path" ]; then
   log_path="$(dirname "$output_path")/opengrep.log"

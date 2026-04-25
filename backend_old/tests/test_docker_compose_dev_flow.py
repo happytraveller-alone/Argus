@@ -40,6 +40,10 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "\n  frontend:\n" in compose_text
     assert "\n  nexus-web:\n" not in compose_text
     assert "\n  nexus-itemDetail:\n" not in compose_text
+    assert "${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23" in compose_text
+    assert "postgres_data:/var/lib/postgresql" in compose_text
+    assert "postgres_data:/var/lib/postgresql/data" not in compose_text
+    assert "${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23" in compose_text
     assert "dockerfile: docker/backend.Dockerfile" in compose_text
     assert "target: runtime-plain" in compose_text
     assert "target: dev" in compose_text
