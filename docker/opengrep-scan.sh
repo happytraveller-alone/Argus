@@ -169,8 +169,8 @@ target_dir=""
 output_path=""
 summary_path=""
 log_path=""
-jobs="${OPENGREP_SCAN_JOBS:-1}"
-max_memory="${OPENGREP_SCAN_MAX_MEMORY_MB:-384}"
+jobs="${OPENGREP_SCAN_JOBS:-4}"
+max_memory="${OPENGREP_SCAN_MAX_MEMORY_MB:-1536}"
 config_paths=()
 
 while [ "$#" -gt 0 ]; do

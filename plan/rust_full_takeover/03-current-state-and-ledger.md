@@ -158,6 +158,6 @@
 
 | 文件 | 状态 |
 |------|------|
-| `scripts/flow_parser_runner.py` | 活跃，被 `function_locator.py` 和 Docker 构建引用 |
+| `scripts/flow_parser_runner.py` | 活跃，当前包装 `backend/scripts/flow_parser_host.py`；已去除对 `backend_old/app` 的构建依赖 |
 | `scripts/dev-entrypoint.sh` | 活跃，开发环境入口 |
 | `scripts/release-templates/runner_preflight.py` | 已删除 |

@@ -135,7 +135,7 @@
 
 | 文件 | 职责 | 状态 |
 |------|------|------|
-| `scripts/flow_parser_runner.py` | Flow Parser 脚本宿主 | 活跃，Docker 构建 + function_locator 引用 |
+| `scripts/flow_parser_runner.py` | Flow Parser 脚本宿主 | 活跃，当前包装 `backend/scripts/flow_parser_host.py`；已不再以 `backend_old/app` 作为构建输入 |
 
 ## 已删除功能域汇总
 

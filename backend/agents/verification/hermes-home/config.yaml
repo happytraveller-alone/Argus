@@ -1,5 +1,7 @@
-model: default
-provider: openrouter
+model:
+  default: claude-sonnet-4-6
+  provider: anthropic
+  base_url: https://cdn.apiport.cc.cd/v1
 
 terminal:
   cwd: /scan

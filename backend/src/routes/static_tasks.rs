@@ -1983,8 +1983,8 @@ rules:
         );
         assert_eq!(spec.memory_limit_mb, Some(2048));
         assert_eq!(spec.memory_swap_limit_mb, Some(2048));
-        assert_eq!(spec.cpu_limit, Some(1.5));
-        assert_eq!(spec.pids_limit, Some(256));
+        assert_eq!(spec.cpu_limit, Some(4.0));
+        assert_eq!(spec.pids_limit, Some(512));
         assert_eq!(spec.timeout_seconds, 0);
         assert_eq!(
             spec.command,
@@ -1995,8 +1995,8 @@ rules:
                 output_path: "/scan/output/results-001.json",
                 summary_path: "/scan/output/summary-001.json",
                 log_path: "/scan/output/log-001.txt",
-                jobs: 1,
-                max_memory_mb: 1024,
+                jobs: 4,
+                max_memory_mb: 1536,
             })
         );
     }

@@ -79,4 +79,4 @@ Rust 接管默认是 ownership 迁移，不自动授权改动前端可见 contra
 - Python 通过 subprocess bridge 调用 Rust binary（runner/code2flow/flow-parser/scan-scope/finding-payload/queue/sandbox）
 - 知识库、外部扫描引擎、智能审计、沙箱语言/漏洞专项工具、昆仑引擎已删除（不再做 Rust 接管）
 - `scripts/release-templates/runner_preflight.py` 已删除
-- `scripts/flow_parser_runner.py` 仍活跃（Docker 构建 + function_locator 引用）
+- `scripts/flow_parser_runner.py` 仍活跃，但 Phase 2A 已将 parser host 收敛到 `backend/scripts/flow_parser_host.py`，不再以 `backend_old/app` 作为脚本宿主输入

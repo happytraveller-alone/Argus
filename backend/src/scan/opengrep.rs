@@ -449,8 +449,8 @@ mod tests {
                 output_path: "/work/output/results.json",
                 summary_path: "/work/output/summary.json",
                 log_path: "/work/output/opengrep.log",
-                jobs: 1,
-                max_memory_mb: 384,
+                jobs: 4,
+                max_memory_mb: 1536,
             }),
             vec![
                 "opengrep-scan",
@@ -463,9 +463,9 @@ mod tests {
                 "--log",
                 "/work/output/opengrep.log",
                 "--jobs",
-                "1",
+                "4",
                 "--max-memory",
-                "384",
+                "1536",
                 "--manifest",
                 "/work/rules.manifest",
             ]
