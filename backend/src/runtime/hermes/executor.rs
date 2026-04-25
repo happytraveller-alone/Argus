@@ -64,9 +64,46 @@ async fn run_docker_exec(manifest: &AgentManifest, payload_json: &str) -> Result
         .await?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("docker exec failed: {}", stderr);
+        bail!("docker exec failed: {}", format_docker_exec_failure(&output));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn format_docker_exec_failure(output: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    match (stderr.is_empty(), stdout.is_empty()) {
+        (false, false) => format!("stderr:\n{}\nstdout:\n{}", stderr, stdout),
+        (false, true) => stderr,
+        (true, false) => stdout,
+        (true, true) => "docker exec exited non-zero with no output".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_docker_exec_failure;
+
+    fn output(stdout: &str, stderr: &str) -> std::process::Output {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(1 << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn format_docker_exec_failure_prefers_both_streams_when_available() {
+        let rendered = format_docker_exec_failure(&output("stdout line", "stderr line"));
+        assert!(rendered.contains("stderr:\nstderr line"));
+        assert!(rendered.contains("stdout:\nstdout line"));
+    }
+
+    #[test]
+    fn format_docker_exec_failure_uses_stdout_when_stderr_is_empty() {
+        let rendered = format_docker_exec_failure(&output("session_id: abc123", ""));
+        assert_eq!(rendered, "session_id: abc123");
+    }
 }

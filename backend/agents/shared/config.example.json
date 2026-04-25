@@ -2,7 +2,7 @@
   "config": {
     "model": {
       "default": "",
-      "provider": "",
+      "provider": "custom",
       "base_url": ""
     },
     "terminal": {

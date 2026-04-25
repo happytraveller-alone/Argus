@@ -2,6 +2,8 @@
 # 主 compose (docker-compose.yml) 已包含这些服务。
 # 此文件仅用于独立启动 hermes agents（需先启动主 compose 创建 vulhunter-network）。
 # docker compose -f docker/docker-compose.hermes-agents.yml up
+# Worker-only Hermes containers built from docker/hermes-agent-base.Dockerfile;
+# they do not expose upstream dashboard/web, Playwright, or Node runtime surfaces.
 
 x-hermes-build-args: &hermes-build-args
   DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}

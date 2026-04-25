@@ -10,6 +10,8 @@ FROM ${HERMES_UV_IMAGE} AS uv_source
 FROM ${HERMES_GOSU_IMAGE} AS gosu_source
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:13.4
 
+# Worker-only runtime image: upstream Hermes may still carry dashboard/web code,
+# but VulHunter workers intentionally exclude web, Playwright, and Node surfaces.
 ARG VCS_REF=unknown
 ARG HERMES_UPSTREAM_SHA=bf196a3fc0fd1f79353369e8732051db275c6276
 ARG HERMES_SUBMODULE_STATUS=third_party/hermes-agent=bf196a3fc0fd1f79353369e8732051db275c6276;third_party/hermes-agent/tinker-atropos=65f084ee8054a5d02aeac76e24ed60388511c82b

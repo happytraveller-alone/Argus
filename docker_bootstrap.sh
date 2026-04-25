@@ -84,6 +84,14 @@ else:
         config_payload["model"] = model_payload
 
 env_payload = structured_env.copy() if structured_env is not None else {}
+if "HERMES_MODEL" not in env_payload:
+    model_default = str((config_payload.get("model") or {}).get("default") or "").strip()
+    if model_default:
+        env_payload["HERMES_MODEL"] = model_default
+if "HERMES_PROVIDER" not in env_payload:
+    model_provider = str((config_payload.get("model") or {}).get("provider") or "").strip()
+    if model_provider:
+        env_payload["HERMES_PROVIDER"] = model_provider
 for key in (
     "HERMES_MODEL",
     "HERMES_PROVIDER",
@@ -94,6 +102,44 @@ for key in (
 ):
     if key not in env_payload and key in config:
         env_payload[key] = config.get(key, "")
+
+required_missing = []
+model_cfg = config_payload.get("model") if isinstance(config_payload.get("model"), dict) else {}
+if not str(model_cfg.get("default") or "").strip():
+    required_missing.append("config.model.default")
+if not str(model_cfg.get("provider") or "").strip():
+    required_missing.append("config.model.provider")
+if not str(model_cfg.get("base_url") or "").strip():
+    required_missing.append("config.model.base_url")
+
+provider = str(model_cfg.get("provider") or "").strip().lower()
+if provider == "anthropic":
+    anth_key = str(env_payload.get("ANTHROPIC_API_KEY") or env_payload.get("ANTHROPIC_TOKEN") or "").strip()
+    if not anth_key:
+        required_missing.append("env.ANTHROPIC_API_KEY or env.ANTHROPIC_TOKEN")
+elif provider == "openai":
+    if not str(env_payload.get("OPENAI_API_KEY") or "").strip():
+        required_missing.append("env.OPENAI_API_KEY")
+elif provider == "custom":
+    if not str(env_payload.get("OPENAI_API_KEY") or "").strip():
+        required_missing.append("env.OPENAI_API_KEY")
+elif provider == "openrouter":
+    if not str(env_payload.get("OPENROUTER_API_KEY") or "").strip():
+        required_missing.append("env.OPENROUTER_API_KEY")
+
+if required_missing:
+    print("ERROR: backend/agents/shared/config.json is missing required fields:")
+    for item in required_missing:
+        print(f"  - {item}")
+    print("")
+    print("Please copy backend/agents/shared/config.example.json to")
+    print("backend/agents/shared/config.json and fill in your deployment values.")
+    raise SystemExit(1)
+
+if provider == "anthropic":
+    base_url = str(model_cfg.get("base_url") or "").strip()
+    if base_url.endswith("/v1"):
+        model_cfg["base_url"] = base_url[:-3]
 
 roles = ("recon", "analysis", "verification", "report")
 
@@ -136,7 +182,7 @@ def existing_cwd(path: Path) -> str:
         return "/scan"
     text = path.read_text(encoding="utf-8")
     match = re.search(r"(?m)^\s*cwd:\s*(\S+)\s*$", text)
-        return match.group(1) if match else "/scan"
+    return match.group(1) if match else "/scan"
 
 
 def write_config_yaml(path: Path) -> None:
@@ -158,6 +204,12 @@ for role in roles:
     role_root = root / "backend" / "agents" / role
     update_env_file(role_root / "data" / ".env")
     write_config_yaml(role_root / "data" / "config.yaml")
+    role_model = str((config_payload.get("model") or {}).get("default") or "").strip()
+    role_provider = str((config_payload.get("model") or {}).get("provider") or "").strip()
+    role_base_url = str((config_payload.get("model") or {}).get("base_url") or "").strip()
+    print(
+        f"[projected] role={role} model={role_model or '-'} provider={role_provider or '-'} base_url={role_base_url or '-'}"
+    )
 PY
 
 if [[ "${DRY_RUN}" == "1" ]]; then

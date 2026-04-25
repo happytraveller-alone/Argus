@@ -57,6 +57,12 @@ pub fn router() -> Router<AppState> {
         .route("/{task_id}/report", get(download_report))
 }
 
+enum HermesDispatchOutcome {
+    Succeeded,
+    Failed(String),
+    Unavailable,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AgentTaskListQuery {
     project_id: Option<String>,
@@ -306,95 +312,16 @@ async fn start_agent_task(
         .get_mut(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
     let now = now_rfc3339();
-    record.status = "completed".to_string();
-    record.current_phase = Some("reporting".to_string());
-    record.current_step = Some("completed by rust backend".to_string());
     record.started_at = Some(now.clone());
-    record.completed_at = Some(now.clone());
-    record.progress_percentage = 100.0;
-    record.quality_score = 100.0;
-    record.security_score = Some(100.0);
-    record.tool_calls_count = 6;
-    record.tokens_used = 384;
     record.total_iterations = record.total_iterations.max(1);
-    seed_agent_task_findings(record);
-    refresh_agent_task_aggregates(record);
-    if !try_hermes_dispatch(record).await {
-        seed_agent_task_tree(record);
+
+    match try_hermes_dispatch(record).await {
+        HermesDispatchOutcome::Succeeded => finalize_agent_task_completed(record, &now),
+        HermesDispatchOutcome::Failed(error) => {
+            finalize_agent_task_failed(record, &now, &error);
+        }
+        HermesDispatchOutcome::Unavailable => finalize_agent_task_mock_completed(record, &now),
     }
-    push_agent_event(
-        record,
-        "phase_start",
-        Some("analysis"),
-        Some("agent task execution started in rust backend"),
-        None,
-    );
-    push_agent_event(
-        record,
-        "task_complete",
-        Some("reporting"),
-        Some("agent task execution completed in rust backend"),
-        Some(json!({
-            "findings_count": record.findings_count,
-            "security_score": record.security_score.unwrap_or(0.0),
-        })),
-    );
-    let finding_events = record
-        .findings
-        .iter()
-        .map(|finding| {
-            (
-                finding.id.clone(),
-                finding.title.clone(),
-                finding.severity.clone(),
-                finding.status.clone(),
-            )
-        })
-        .collect::<Vec<_>>();
-    for (finding_id, title, severity, status) in finding_events {
-        push_agent_event(
-            record,
-            "finding_detected",
-            Some("reporting"),
-            Some(&format!("captured finding {title}")),
-            Some(json!({
-                "finding_id": finding_id,
-                "severity": severity,
-                "status": status,
-            })),
-        );
-    }
-    append_agent_checkpoint(
-        record,
-        &format!("analysis-{}", record.id),
-        "HermesAnalysisAgent",
-        "analysis",
-        Some(&format!("root-{}", record.id)),
-        "auto",
-        Some("analysis-complete"),
-        "completed",
-        record.total_iterations.max(1).saturating_sub(1),
-        record.findings_count,
-        record.tokens_used.saturating_sub(96),
-        record.tool_calls_count.saturating_sub(2),
-        json!({"phase": "analysis", "status": "completed"}),
-    );
-    append_agent_checkpoint(
-        record,
-        &format!("verification-{}", record.id),
-        "HermesVerificationAgent",
-        "verification",
-        Some(&format!("root-{}", record.id)),
-        "auto",
-        Some("verification-complete"),
-        "completed",
-        record.total_iterations.max(1),
-        record.findings_count,
-        96,
-        2,
-        json!({"phase": "verification", "status": "completed"}),
-    );
-    push_checkpoint(record, "final", Some("completed"));
 
     task_state::save_snapshot(&state, &snapshot)
         .await
@@ -1170,11 +1097,169 @@ fn seed_agent_task_tree(record: &mut task_state::AgentTaskRecord) {
     ];
 }
 
-async fn try_hermes_dispatch(record: &mut task_state::AgentTaskRecord) -> bool {
-    let base_path = std::path::Path::new("backend/agents");
+fn seed_failed_agent_task_tree(record: &mut task_state::AgentTaskRecord, summary: &str) {
+    record.agent_tree = vec![json!({
+        "id": format!("root-{}", record.id),
+        "agent_id": format!("root-{}", record.id),
+        "agent_name": "RustAgentRoot",
+        "agent_type": "root",
+        "parent_agent_id": Value::Null,
+        "depth": 0,
+        "task_description": record.description,
+        "status": "failed",
+        "result_summary": summary,
+        "findings_count": 0,
+        "verified_findings_count": 0,
+        "iterations": record.total_iterations.max(1),
+        "tokens_used": 0,
+        "tool_calls": 0,
+        "duration_ms": 0,
+        "children": Vec::<Value>::new(),
+    })];
+}
+
+fn finalize_agent_task_completed(record: &mut task_state::AgentTaskRecord, now: &str) {
+    record.status = "completed".to_string();
+    record.current_phase = Some("reporting".to_string());
+    record.current_step = Some("completed by rust backend".to_string());
+    record.completed_at = Some(now.to_string());
+    record.progress_percentage = 100.0;
+    record.quality_score = 100.0;
+    record.security_score = Some(100.0);
+    record.error_message = None;
+    if record.tool_calls_count == 0 {
+        record.tool_calls_count = record.agent_tree.len().saturating_sub(1) as i64;
+    }
+    push_agent_event(
+        record,
+        "phase_start",
+        Some("analysis"),
+        Some("agent task execution started in rust backend"),
+        None,
+    );
+    push_agent_event(
+        record,
+        "task_complete",
+        Some("reporting"),
+        Some("agent task execution completed in rust backend"),
+        Some(json!({
+            "findings_count": record.findings_count,
+            "security_score": record.security_score.unwrap_or(0.0),
+        })),
+    );
+    let finding_events = record
+        .findings
+        .iter()
+        .map(|finding| {
+            (
+                finding.id.clone(),
+                finding.title.clone(),
+                finding.severity.clone(),
+                finding.status.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    for (finding_id, title, severity, status) in finding_events {
+        push_agent_event(
+            record,
+            "finding_detected",
+            Some("reporting"),
+            Some(&format!("captured finding {title}")),
+            Some(json!({
+                "finding_id": finding_id,
+                "severity": severity,
+                "status": status,
+            })),
+        );
+    }
+    push_checkpoint(record, "final", Some("completed"));
+}
+
+fn finalize_agent_task_mock_completed(record: &mut task_state::AgentTaskRecord, now: &str) {
+    record.tool_calls_count = 6;
+    record.tokens_used = 384;
+    seed_agent_task_findings(record);
+    refresh_agent_task_aggregates(record);
+    seed_agent_task_tree(record);
+    append_agent_checkpoint(
+        record,
+        &format!("analysis-{}", record.id),
+        "HermesAnalysisAgent",
+        "analysis",
+        Some(&format!("root-{}", record.id)),
+        "auto",
+        Some("analysis-complete"),
+        "completed",
+        record.total_iterations.max(1).saturating_sub(1),
+        record.findings_count,
+        record.tokens_used.saturating_sub(96),
+        record.tool_calls_count.saturating_sub(2),
+        json!({"phase": "analysis", "status": "completed"}),
+    );
+    append_agent_checkpoint(
+        record,
+        &format!("verification-{}", record.id),
+        "HermesVerificationAgent",
+        "verification",
+        Some(&format!("root-{}", record.id)),
+        "auto",
+        Some("verification-complete"),
+        "completed",
+        record.total_iterations.max(1),
+        record.findings_count,
+        96,
+        2,
+        json!({"phase": "verification", "status": "completed"}),
+    );
+    finalize_agent_task_completed(record, now);
+}
+
+fn finalize_agent_task_failed(record: &mut task_state::AgentTaskRecord, now: &str, error: &str) {
+    if record.agent_tree.is_empty() {
+        seed_failed_agent_task_tree(record, error);
+    }
+    record.status = "failed".to_string();
+    record.current_phase = Some("failed".to_string());
+    record.current_step = Some("hermes dispatch failed".to_string());
+    record.completed_at = Some(now.to_string());
+    record.progress_percentage = 100.0;
+    record.quality_score = 0.0;
+    record.security_score = Some(0.0);
+    record.error_message = Some(error.to_string());
+    record.tool_calls_count = record.agent_tree.len().saturating_sub(1) as i64;
+    record.tokens_used = 0;
+    push_agent_event(
+        record,
+        "phase_start",
+        Some("analysis"),
+        Some("agent task execution started in rust backend"),
+        None,
+    );
+    push_agent_event(
+        record,
+        "task_error",
+        Some("failed"),
+        Some("hermes dispatch failed in rust backend"),
+        Some(json!({"error": error})),
+    );
+    push_checkpoint(record, "final", Some("failed"));
+}
+
+async fn try_hermes_dispatch(record: &mut task_state::AgentTaskRecord) -> HermesDispatchOutcome {
+    let agents_base_path = std::env::var("HERMES_AGENTS_BASE_PATH")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "backend/agents".to_string());
+    let base_path = std::path::Path::new(&agents_base_path);
     let manifests = match discovery::discover_agents(base_path) {
         Ok(m) if !m.is_empty() => m,
-        _ => return false,
+        Ok(_) => {
+            return HermesDispatchOutcome::Unavailable
+        }
+        Err(e) => {
+            let _ = e;
+            return HermesDispatchOutcome::Unavailable
+        }
     };
 
     let roles = [
@@ -1257,17 +1342,22 @@ async fn try_hermes_dispatch(record: &mut task_state::AgentTaskRecord) -> bool {
         }));
     }
 
+    let root_summary = if all_succeeded {
+        "hermes dispatch completed".to_string()
+    } else {
+        "hermes dispatch partially failed, check child agents".to_string()
+    };
     if let Some(root) = tree.first_mut() {
         root["status"] = json!(if all_succeeded { "completed" } else { "failed" });
-        root["result_summary"] = json!(if all_succeeded {
-            "hermes dispatch completed"
-        } else {
-            "hermes dispatch partially failed, check child agents"
-        });
+        root["result_summary"] = json!(root_summary.clone());
     }
 
     record.agent_tree = tree;
-    all_succeeded
+    if all_succeeded {
+        HermesDispatchOutcome::Succeeded
+    } else {
+        HermesDispatchOutcome::Failed(root_summary)
+    }
 }
 
 fn capitalize_first(s: &str) -> String {
@@ -2033,6 +2123,89 @@ fn push_checkpoint(
         }),
         metadata: Some(json!({"source": "rust-backend"})),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{finalize_agent_task_failed, task_state};
+    use serde_json::json;
+
+    #[test]
+    fn finalize_failed_dispatch_marks_task_failed_and_surfaces_error() {
+        let mut record = task_state::AgentTaskRecord {
+            id: "task-1".to_string(),
+            project_id: "project-1".to_string(),
+            name: Some("demo".to_string()),
+            description: Some("demo task".to_string()),
+            task_type: "agent_audit".to_string(),
+            status: "pending".to_string(),
+            current_phase: Some("created".to_string()),
+            current_step: Some("waiting".to_string()),
+            total_files: 0,
+            indexed_files: 0,
+            analyzed_files: 0,
+            files_with_findings: 0,
+            total_chunks: 0,
+            findings_count: 0,
+            verified_count: 0,
+            false_positive_count: 0,
+            total_iterations: 1,
+            tool_calls_count: 0,
+            tokens_used: 0,
+            critical_count: 0,
+            high_count: 0,
+            medium_count: 0,
+            low_count: 0,
+            verified_critical_count: 0,
+            verified_high_count: 0,
+            verified_medium_count: 0,
+            verified_low_count: 0,
+            quality_score: 0.0,
+            security_score: Some(0.0),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: Some("2026-01-01T00:00:01Z".to_string()),
+            completed_at: None,
+            progress_percentage: 0.0,
+            audit_scope: Some(json!({})),
+            target_vulnerabilities: None,
+            verification_level: None,
+            tool_evidence_protocol: None,
+            exclude_patterns: None,
+            target_files: None,
+            error_message: None,
+            report: None,
+            events: Vec::new(),
+            findings: Vec::new(),
+            checkpoints: Vec::new(),
+            agent_tree: Vec::new(),
+        };
+
+        finalize_agent_task_failed(
+            &mut record,
+            "2026-01-01T00:00:02Z",
+            "hermes dispatch partially failed",
+        );
+
+        assert_eq!(record.status, "failed");
+        assert_eq!(record.current_phase.as_deref(), Some("failed"));
+        assert_eq!(
+            record.current_step.as_deref(),
+            Some("hermes dispatch failed")
+        );
+        assert_eq!(
+            record.error_message.as_deref(),
+            Some("hermes dispatch partially failed")
+        );
+        assert_eq!(record.agent_tree[0]["status"], "failed");
+        assert_eq!(
+            record.agent_tree[0]["result_summary"],
+            "hermes dispatch partially failed"
+        );
+        assert!(record
+            .events
+            .iter()
+            .any(|event| event.event_type == "task_error"));
+    }
 }
 
 fn required_string(payload: &Value, key: &str) -> Result<String, ApiError> {

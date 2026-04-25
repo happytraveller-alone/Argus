@@ -1,6 +1,50 @@
 const HERMES_DOCKERFILE: &str = include_str!("../../docker/hermes-agent-base.Dockerfile");
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const STANDALONE_COMPOSE: &str = include_str!("../../docker/docker-compose.hermes-agents.yml");
+const HERMES_WORKER_DOCKERFILE: &str = "docker/hermes-agent-base.Dockerfile";
+const HERMES_WORKER_SERVICES: [&str; 4] = [
+    "hermes-report",
+    "hermes-analysis",
+    "hermes-recon",
+    "hermes-verification",
+];
+
+fn compose_service_block(compose: &str, service: &str) -> String {
+    let marker = format!("  {service}:");
+    let mut block = String::new();
+    let mut in_service = false;
+
+    for line in compose.lines() {
+        if line == marker {
+            in_service = true;
+        } else if in_service
+            && ((line.starts_with("  ") && !line.starts_with("    "))
+                || line == "networks:"
+                || line == "volumes:")
+        {
+            break;
+        }
+
+        if in_service {
+            block.push_str(line);
+            block.push('\n');
+        }
+    }
+
+    assert!(
+        !block.is_empty(),
+        "Hermes compose file must define service {service:?}"
+    );
+    block
+}
+
+fn hermes_service_names(compose: &str) -> Vec<&str> {
+    compose
+        .lines()
+        .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
+        .filter(|service| service.starts_with("hermes-"))
+        .collect()
+}
 
 #[test]
 fn hermes_worker_image_excludes_playwright_and_web_build_surfaces() {
@@ -68,6 +112,34 @@ fn hermes_compose_files_pass_image_pull_optimization_args() {
             assert!(
                 compose.contains(required),
                 "Hermes compose build args missing {required:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn hermes_compose_files_define_all_worker_services_from_base_dockerfile() {
+    for (compose_name, compose) in [
+        ("root docker-compose.yml", ROOT_COMPOSE),
+        (
+            "standalone docker/docker-compose.hermes-agents.yml",
+            STANDALONE_COMPOSE,
+        ),
+    ] {
+        let mut actual_services = hermes_service_names(compose);
+        actual_services.sort_unstable();
+        let mut expected_services = HERMES_WORKER_SERVICES.to_vec();
+        expected_services.sort_unstable();
+        assert_eq!(
+            actual_services, expected_services,
+            "{compose_name} must expose exactly the Hermes worker service set"
+        );
+
+        for service in HERMES_WORKER_SERVICES {
+            let service_block = compose_service_block(compose, service);
+            assert!(
+                service_block.contains(&format!("dockerfile: {HERMES_WORKER_DOCKERFILE}")),
+                "{compose_name} service {service:?} must build from {HERMES_WORKER_DOCKERFILE}"
             );
         }
     }
