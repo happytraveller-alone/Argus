@@ -1,3 +1,5 @@
+import { stripSupportedArchiveSuffix } from "@/features/projects/services/repoZipScan";
+
 export const DEFAULT_SCAN_EXCLUDES = [
   "node_modules/**",
   ".git/**",
@@ -6,23 +8,8 @@ export const DEFAULT_SCAN_EXCLUDES = [
   "*.log",
 ];
 
-const ARCHIVE_SUFFIXES = [
-  ".tar.gz",
-  ".tar.bz2",
-  ".tar.xz",
-  ".tgz",
-  ".tbz2",
-  ".zip",
-  ".tar",
-  ".7z",
-  ".rar",
-];
-
 export function stripScanArchiveSuffix(filename: string) {
-  const lower = filename.toLowerCase();
-  const matched = ARCHIVE_SUFFIXES.find((suffix) => lower.endsWith(suffix));
-  if (!matched) return filename;
-  return filename.slice(0, filename.length - matched.length);
+  return stripSupportedArchiveSuffix(filename);
 }
 
 export function extractCreateScanTaskApiErrorMessage(error: unknown): string {

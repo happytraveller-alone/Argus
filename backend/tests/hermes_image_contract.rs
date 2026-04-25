@@ -1,7 +1,10 @@
 const HERMES_DOCKERFILE: &str = include_str!("../../docker/hermes-agent-base.Dockerfile");
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const STANDALONE_COMPOSE: &str = include_str!("../../docker/docker-compose.hermes-agents.yml");
+const HERMES_WORKER_IMAGE: &str = "vulhunter/hermes-agent:latest";
 const HERMES_WORKER_DOCKERFILE: &str = "docker/hermes-agent-base.Dockerfile";
+const HERMES_WORKER_CONTRACT_LABEL: &str = r#"org.vulhunter.hermes.contract="worker-text-only""#;
+const UPSTREAM_HERMES_DOCKERFILE: &str = "third_party/hermes-agent/Dockerfile";
 const HERMES_WORKER_SERVICES: [&str; 4] = [
     "hermes-report",
     "hermes-analysis",
@@ -73,6 +76,14 @@ fn hermes_worker_image_excludes_playwright_and_web_build_surfaces() {
 }
 
 #[test]
+fn hermes_worker_image_declares_text_only_contract_label() {
+    assert!(
+        HERMES_DOCKERFILE.contains(HERMES_WORKER_CONTRACT_LABEL),
+        "Hermes worker image must expose an inspectable text-only contract label"
+    );
+}
+
+#[test]
 fn hermes_worker_image_uses_configurable_pull_sources() {
     for required in [
         "ARG DOCKERHUB_LIBRARY_MIRROR=",
@@ -140,6 +151,15 @@ fn hermes_compose_files_define_all_worker_services_from_base_dockerfile() {
             assert!(
                 service_block.contains(&format!("dockerfile: {HERMES_WORKER_DOCKERFILE}")),
                 "{compose_name} service {service:?} must build from {HERMES_WORKER_DOCKERFILE}"
+            );
+            assert!(
+                service_block.contains(&format!("image: {HERMES_WORKER_IMAGE}")),
+                "{compose_name} service {service:?} must publish the final worker image tag {HERMES_WORKER_IMAGE}"
+            );
+            assert!(
+                !service_block.contains(UPSTREAM_HERMES_DOCKERFILE)
+                    && !service_block.to_lowercase().contains("nousresearch/hermes-agent"),
+                "{compose_name} service {service:?} must not bypass the repo-owned worker Dockerfile"
             );
         }
     }

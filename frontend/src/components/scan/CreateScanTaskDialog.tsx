@@ -56,7 +56,10 @@ import {
 	stripScanArchiveSuffix,
 } from "./create-scan-task/utils";
 
-import { validateZipFile } from "@/features/projects/services/repoZipScan";
+import {
+	SUPPORTED_ARCHIVE_INPUT_ACCEPT,
+	validateZipFile,
+} from "@/features/projects/services/repoZipScan";
 import { isZipProject } from "@/shared/utils/projectUtils";
 import { INTELLIGENT_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
@@ -634,10 +637,10 @@ export default function CreateScanTaskDialog({
 				</div>
 				<div className="rounded-lg border border-dashed border-sky-500/30 bg-sky-500/8 p-3">
 					<p className="text-xs font-mono font-bold uppercase text-sky-100 mb-1">
-						自动生成简介
+						静态分析生成简介
 					</p>
 					<p className="text-xs leading-5 text-sky-50/85">
-						上传完成后，系统会基于项目结构自动生成 1-2 句项目使用场景简介。
+						上传完成后，系统会通过静态分析项目结构自动生成 1-2 句项目使用场景简介。
 					</p>
 				</div>
 				<div className="space-y-2">
@@ -647,7 +650,7 @@ export default function CreateScanTaskDialog({
 									<input
 										ref={newProjectFileInputRef}
 										type="file"
-						accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+						accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
 						onChange={handleNewProjectFileSelect}
 						className="hidden"
 						disabled={creating}

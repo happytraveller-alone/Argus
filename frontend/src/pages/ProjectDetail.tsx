@@ -191,8 +191,8 @@ export function ProjectDescriptionSection({
 						</p>
 						<p className="text-xs leading-5 text-muted-foreground">
 							{unsupported
-								? "当前项目暂不支持自动生成简介。"
-								: "系统会根据项目结构自动生成简要介绍。"}
+								? "当前项目暂不支持静态分析生成简介。"
+								: "系统会通过静态分析项目结构自动生成简要介绍。"}
 						</p>
 					</div>
 				) : null}

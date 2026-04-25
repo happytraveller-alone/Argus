@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { Project } from "@/shared/types";
 import type { PreflightMissingField } from "@/shared/api/agentPreflight";
+import { SUPPORTED_ARCHIVE_INPUT_ACCEPT } from "@/features/projects/services/repoZipScan";
 import {
   getCreateProjectScanProviderLabel,
   type LLMProviderItem,
@@ -420,7 +421,7 @@ export default function CreateProjectScanDialogContent({
                 <label className="inline-flex">
                   <input
                     type="file"
-                    accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+                    accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
                     className="hidden"
                     onChange={handleNewProjectFileSelect}
                     disabled={creating}

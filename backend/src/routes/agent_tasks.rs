@@ -1253,12 +1253,10 @@ async fn try_hermes_dispatch(record: &mut task_state::AgentTaskRecord) -> Hermes
     let base_path = std::path::Path::new(&agents_base_path);
     let manifests = match discovery::discover_agents(base_path) {
         Ok(m) if !m.is_empty() => m,
-        Ok(_) => {
-            return HermesDispatchOutcome::Unavailable
-        }
+        Ok(_) => return HermesDispatchOutcome::Unavailable,
         Err(e) => {
             let _ = e;
-            return HermesDispatchOutcome::Unavailable
+            return HermesDispatchOutcome::Unavailable;
         }
     };
 

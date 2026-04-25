@@ -64,7 +64,10 @@ async fn run_docker_exec(manifest: &AgentManifest, payload_json: &str) -> Result
         .await?;
 
     if !output.status.success() {
-        bail!("docker exec failed: {}", format_docker_exec_failure(&output));
+        bail!(
+            "docker exec failed: {}",
+            format_docker_exec_failure(&output)
+        );
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())

@@ -4,6 +4,7 @@ use axum::{
 };
 use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
 use serde_json::{json, Value};
+use std::io::Write;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
@@ -276,11 +277,11 @@ async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
 }
 
 #[tokio::test]
-async fn create_with_zip_and_description_preview_are_available() {
-    let state = AppState::from_config(isolated_test_config("projects-create-with-zip"))
+async fn create_with_tar_xz_and_zst_archives_and_description_preview_use_static_analysis() {
+    let state = AppState::from_config(isolated_test_config("projects-create-with-archive"))
         .await
         .expect("state should build");
-    let app = build_router(state);
+    let app = build_router(state.clone());
 
     let preview_response = app
         .clone()
@@ -289,25 +290,143 @@ async fn create_with_zip_and_description_preview_are_available() {
                 .method(Method::POST)
                 .uri("/api/v1/projects/description/generate")
                 .header("content-type", "multipart/form-data; boundary=x-boundary")
-                .body(Body::from(test_zip_preview_body()))
+                .body(Body::from(test_tar_xz_preview_body()))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(preview_response.status(), StatusCode::OK);
+    let preview_json: Value = serde_json::from_slice(
+        &to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(preview_json["source"], "static");
 
     let create_with_zip_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/api/v1/projects/create-with-zip")
                 .header("content-type", "multipart/form-data; boundary=x-boundary")
-                .body(Body::from(test_create_with_zip_body()))
+                .body(Body::from(test_create_with_tar_xz_body()))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(create_with_zip_response.status(), StatusCode::OK);
+    let create_with_zip_json: Value = serde_json::from_slice(
+        &to_bytes(create_with_zip_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let created_project_id = create_with_zip_json["id"]
+        .as_str()
+        .expect("created project id should exist");
+    assert!(create_with_zip_json["description"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("Detected languages: Rust"));
+
+    let created_file_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/projects/{created_project_id}/files/src/main.rs"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_file_response.status(), StatusCode::OK);
+
+    let preview_upload_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/projects/{created_project_id}/upload/preview"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview_upload_response.status(), StatusCode::OK);
+    let preview_upload_json: Value = serde_json::from_slice(
+        &to_bytes(preview_upload_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let supported_formats = preview_upload_json["supported_formats"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(supported_formats
+        .iter()
+        .any(|item| item.as_str() == Some(".tar.xz")));
+    assert!(supported_formats
+        .iter()
+        .any(|item| item.as_str() == Some(".zst")));
+
+    let create_payload = json!({
+        "name": "zst-project",
+        "source_type": "zip",
+        "default_branch": "main",
+        "programming_languages": []
+    });
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects")
+                .header("content-type", "application/json")
+                .body(Body::from(create_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let zst_project_id = create_json["id"]
+        .as_str()
+        .expect("zst project id should exist");
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{zst_project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_zst_multipart_body()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let zst_file_response = app
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/projects/{zst_project_id}/files/src/main.rs"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(zst_file_response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -810,28 +929,37 @@ fn test_zip_multipart_body() -> Vec<u8> {
     )])
 }
 
-fn test_zip_preview_body() -> Vec<u8> {
+fn test_tar_xz_preview_body() -> Vec<u8> {
     test_zip_multipart_bytes(vec![
         ("project_name", None, None, b"demo-preview".to_vec()),
         (
             "file",
-            Some("demo.zip"),
-            Some("application/zip"),
-            test_zip_bytes(),
+            Some("demo.tar.xz"),
+            Some("application/x-xz"),
+            test_tar_xz_bytes(),
         ),
     ])
 }
 
-fn test_create_with_zip_body() -> Vec<u8> {
+fn test_create_with_tar_xz_body() -> Vec<u8> {
     test_zip_multipart_bytes(vec![
-        ("name", None, None, b"demo-create-with-zip".to_vec()),
+        ("name", None, None, b"demo-create-with-archive".to_vec()),
         (
             "file",
-            Some("demo.zip"),
-            Some("application/zip"),
-            test_zip_bytes(),
+            Some("demo.tar.xz"),
+            Some("application/x-xz"),
+            test_tar_xz_bytes(),
         ),
     ])
+}
+
+fn test_zst_multipart_body() -> Vec<u8> {
+    test_zip_multipart_bytes(vec![(
+        "file",
+        Some("demo.zst"),
+        Some("application/zstd"),
+        test_tar_zst_bytes(),
+    )])
 }
 
 fn test_bundle_multipart_body(bundle_bytes: Vec<u8>) -> Vec<u8> {
@@ -867,8 +995,6 @@ fn test_zip_multipart_bytes(fields: Vec<(&str, Option<&str>, Option<&str>, Vec<u
 }
 
 fn test_zip_bytes() -> Vec<u8> {
-    use std::io::Write;
-
     let mut bytes = Vec::new();
     {
         let cursor = std::io::Cursor::new(&mut bytes);
@@ -879,6 +1005,35 @@ fn test_zip_bytes() -> Vec<u8> {
         writer.finish().unwrap();
     }
     bytes
+}
+
+fn test_tar_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let mut builder = tar::Builder::new(&mut bytes);
+        let content = b"fn main() {}\n";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "src/main.rs", &content[..])
+            .unwrap();
+        builder.finish().unwrap();
+    }
+    bytes
+}
+
+fn test_tar_xz_bytes() -> Vec<u8> {
+    let tar_bytes = test_tar_bytes();
+    let mut encoded = xz2::write::XzEncoder::new(Vec::new(), 6);
+    encoded.write_all(&tar_bytes).unwrap();
+    encoded.finish().unwrap()
+}
+
+fn test_tar_zst_bytes() -> Vec<u8> {
+    let tar_bytes = test_tar_bytes();
+    zstd::stream::encode_all(std::io::Cursor::new(tar_bytes), 1).unwrap()
 }
 
 fn isolated_test_config(scope: &str) -> AppConfig {

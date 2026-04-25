@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read as IoRead};
 use std::path::PathBuf;
 
 use axum::{
@@ -11,9 +10,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
-use zip::ZipArchive;
 
 use crate::{
+    archive::{
+        collect_relative_paths_from_directory, extract_archive_path_to_directory,
+        read_file_lines_from_archive_path,
+    },
     db::{projects, task_state},
     error::ApiError,
     llm_rule,
@@ -647,14 +649,18 @@ async fn get_opengrep_finding_context(
     let range_start = start_line.saturating_sub(context_before).max(1);
     let range_end = end_line + context_after;
 
-    let zip_path = state
-        .config
-        .zip_storage_path
-        .join(format!("{}.zip", task.project_id));
+    let (archive_path, archive_name) =
+        resolve_project_archive_input(&state, &task.project_id).await?;
 
     let file_path_owned = file_path.to_string();
     let lines_result = tokio::task::spawn_blocking(move || {
-        read_file_lines_from_zip(&zip_path, &file_path_owned, range_start, range_end)
+        read_file_lines_from_archive_path(
+            &archive_path,
+            &archive_name,
+            &file_path_owned,
+            range_start,
+            range_end,
+        )
     })
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -716,6 +722,35 @@ async fn clear_all_cache() -> Json<Value> {
     }))
 }
 
+async fn resolve_project_archive_input(
+    state: &AppState,
+    project_id: &str,
+) -> Result<(PathBuf, String), ApiError> {
+    if let Some(project) = projects::get_project(state, project_id)
+        .await
+        .map_err(|error| ApiError::Internal(error.to_string()))?
+    {
+        if let Some(archive) = project.archive {
+            let storage_path = PathBuf::from(&archive.storage_path);
+            if storage_path.exists() {
+                return Ok((storage_path, archive.original_filename));
+            }
+        }
+    }
+
+    let legacy_zip_path = state
+        .config
+        .zip_storage_path
+        .join(format!("{project_id}.zip"));
+    if legacy_zip_path.exists() {
+        return Ok((legacy_zip_path, format!("{project_id}.zip")));
+    }
+
+    Err(ApiError::NotFound(format!(
+        "project archive not found for {project_id}"
+    )))
+}
+
 async fn run_opengrep_scan(
     state: AppState,
     task_id: String,
@@ -740,13 +775,7 @@ async fn run_opengrep_scan_inner(
 
     update_scan_progress(state, task_id, 5.0, "preparing", "locating project archive").await;
 
-    let zip_path = state
-        .config
-        .zip_storage_path
-        .join(format!("{project_id}.zip"));
-    if !zip_path.exists() {
-        return Err(format!("project archive not found: {}", zip_path.display()).into());
-    }
+    let (archive_path, archive_name) = resolve_project_archive_input(state, project_id).await?;
 
     let workspace_root = scan_workspace_root();
     let workspace_dir = workspace_root
@@ -766,29 +795,17 @@ async fn run_opengrep_scan_inner(
     )
     .await;
 
-    let zip_bytes = tokio::fs::read(&zip_path).await?;
     let source_dir_clone = source_dir.clone();
+    let archive_path_clone = archive_path.clone();
+    let archive_name_clone = archive_name.clone();
     let files_extracted = tokio::task::spawn_blocking(
         move || -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-            let reader = Cursor::new(zip_bytes);
-            let mut archive = ZipArchive::new(reader)?;
-            let mut count = 0usize;
-            for i in 0..archive.len() {
-                let mut entry = archive.by_index(i)?;
-                if entry.is_dir() {
-                    continue;
-                }
-                let name = entry.name().to_string();
-                let target = source_dir_clone.join(&name);
-                if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                let mut buf = Vec::new();
-                entry.read_to_end(&mut buf)?;
-                std::fs::write(&target, &buf)?;
-                count += 1;
-            }
-            Ok(count)
+            extract_archive_path_to_directory(
+                &archive_path_clone,
+                &archive_name_clone,
+                &source_dir_clone,
+            )
+            .map_err(|error| error.into())
         },
     )
     .await??;
@@ -821,7 +838,7 @@ async fn run_opengrep_scan_inner(
     let scanner_image = state.config.scanner_opengrep_image.clone();
     let container_source_dir = "/scan/source";
 
-    let known_paths = crate::scan::path_utils::collect_zip_relative_paths(&zip_path).ok();
+    let known_paths = collect_relative_paths_from_directory(&source_dir).ok();
     let config_container_path = rule_inputs
         .workspace_rules_dir
         .as_ref()
@@ -1868,67 +1885,6 @@ fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
-}
-
-fn read_file_lines_from_zip(
-    zip_path: &std::path::Path,
-    file_path: &str,
-    range_start: usize,
-    range_end: usize,
-) -> (Vec<(usize, String)>, usize) {
-    let Ok(reader) = std::fs::File::open(zip_path) else {
-        return (Vec::new(), 0);
-    };
-    let Ok(mut archive) = ZipArchive::new(reader) else {
-        return (Vec::new(), 0);
-    };
-
-    let normalized_target = file_path.trim_start_matches('/').replace('\\', "/");
-    let entry_name = (0..archive.len())
-        .filter_map(|i| {
-            let entry = archive.by_index(i).ok()?;
-            if entry.is_dir() {
-                return None;
-            }
-            let name = entry.name().to_string();
-            let normalized = name.trim_start_matches('/').replace('\\', "/");
-            if normalized == normalized_target
-                || normalized.ends_with(&format!("/{normalized_target}"))
-            {
-                Some(name)
-            } else {
-                None
-            }
-        })
-        .next();
-
-    let Some(entry_name) = entry_name else {
-        return (Vec::new(), 0);
-    };
-
-    let Ok(mut entry) = archive.by_name(&entry_name) else {
-        return (Vec::new(), 0);
-    };
-
-    let mut content = String::new();
-    if entry.read_to_string(&mut content).is_err() {
-        return (Vec::new(), 0);
-    }
-
-    let all_lines: Vec<&str> = content.lines().collect();
-    let total_lines = all_lines.len();
-    let clamped_end = range_end.min(total_lines);
-    let lines: Vec<(usize, String)> = all_lines
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| {
-            let line_number = i + 1;
-            line_number >= range_start && line_number <= clamped_end
-        })
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-
-    (lines, total_lines)
 }
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {

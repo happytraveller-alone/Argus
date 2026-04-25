@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { validateZipFile } from "@/features/projects/services";
+import {
+    SUPPORTED_ARCHIVE_INPUT_ACCEPT,
+    validateZipFile,
+} from "@/features/projects/services";
 import type { CreateProjectForm, Project } from "@/shared/types";
 import {
     HTTPS_ONLY_REPOSITORY_ERROR,
@@ -160,7 +163,7 @@ export default function EditProjectDialog({
                         <input
                             ref={zipInputRef}
                             type="file"
-                            accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+                            accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
                             className="hidden"
                             onChange={(event) => {
                                 const file = event.target.files?.[0];

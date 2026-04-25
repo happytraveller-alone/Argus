@@ -2,7 +2,10 @@ import { Loader2, Package, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { validateZipFile } from "@/features/projects/services/repoZipScan";
+import {
+  SUPPORTED_ARCHIVE_INPUT_ACCEPT,
+  validateZipFile,
+} from "@/features/projects/services/repoZipScan";
 import { formatFileSize, useZipFile } from "../hooks/useZipFile";
 
 export default function ZipUploadCard({
@@ -49,7 +52,7 @@ export default function ZipUploadCard({
           <div className="flex gap-2 items-center">
             <Input
               type="file"
-              accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+              accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -97,7 +100,7 @@ export default function ZipUploadCard({
           <div className="flex gap-2 items-center mt-2">
             <Input
               type="file"
-              accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+              accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {

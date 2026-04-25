@@ -28,7 +28,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { validateZipFile } from "@/features/projects/services";
+import {
+    SUPPORTED_ARCHIVE_INPUT_ACCEPT,
+    validateZipFile,
+} from "@/features/projects/services";
 import type { CreateProjectForm } from "@/shared/types";
 import { formatFileSize } from "@/shared/utils/zipStorage";
 import { toast } from "sonner";
@@ -154,9 +157,9 @@ export default function CreateProjectDialog({
             previous.map((item) =>
                 item.id === itemId
                     ? {
-                          ...item,
-                          editableName: nextName,
-                      }
+                        ...item,
+                        editableName: nextName,
+                    }
                     : item,
             ),
         );
@@ -220,16 +223,16 @@ export default function CreateProjectDialog({
                         previous.map((item) =>
                             item.id === targetId
                                 ? {
-                                      ...item,
-                                      status:
-                                          event.status === "creating"
-                                              ? "creating"
-                                              : event.status,
-                                      errorMessage:
-                                          event.status === "failed"
-                                              ? event.message
-                                              : undefined,
-                                  }
+                                    ...item,
+                                    status:
+                                        event.status === "creating"
+                                            ? "creating"
+                                            : event.status,
+                                    errorMessage:
+                                        event.status === "failed"
+                                            ? event.message
+                                            : undefined,
+                                }
                                 : item,
                         ),
                     );
@@ -238,9 +241,9 @@ export default function CreateProjectDialog({
                             event.status === "creating"
                                 ? event.index
                                 : Math.min(
-                                      event.index + 1,
-                                      submittedItems.length,
-                                  ),
+                                    event.index + 1,
+                                    submittedItems.length,
+                                ),
                         total: submittedItems.length,
                         currentProjectName: event.projectName,
                     });
@@ -316,7 +319,7 @@ export default function CreateProjectDialog({
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+                                accept={SUPPORTED_ARCHIVE_INPUT_ACCEPT}
                                 onChange={handleFileSelect}
                                 className="hidden"
                                 disabled={uploading || isUploadComplete}
@@ -325,11 +328,10 @@ export default function CreateProjectDialog({
 
                             {batchItems.length === 0 ? (
                                 <div
-                                    className={`border rounded-lg border-dashed p-8 text-center transition-colors ${
-                                        dragActive
-                                            ? "border-primary bg-primary/5"
-                                            : "border-border bg-muted/40 hover:bg-muted/70"
-                                    } ${uploading ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
+                                    className={`border rounded-lg border-dashed p-8 text-center transition-colors ${dragActive
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border bg-muted/40 hover:bg-muted/70"
+                                        } ${uploading ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
                                     onClick={() => {
                                         if (uploading || isUploadComplete)
                                             return;
@@ -346,12 +348,8 @@ export default function CreateProjectDialog({
                                 >
                                     <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                                     <h3 className="text-base font-bold text-foreground uppercase mb-1">
-                                        拖拽多个压缩包到这里
+                                        选择压缩包
                                     </h3>
-                                    <p className="text-xs font-mono text-muted-foreground mb-4">
-                                        最大: 500MB / 支持: .zip .tar .tar.gz
-                                        .tar.bz2 .7z .rar
-                                    </p>
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -362,8 +360,8 @@ export default function CreateProjectDialog({
                                             fileInputRef.current?.click();
                                         }}
                                     >
-                                        <FileText className="w-3 h-3 mr-2" />
-                                        选择压缩包
+                                        {/* <FileText className="w-3 h-3 mr-2" />
+                                        选择压缩包 */}
                                     </Button>
                                 </div>
                             ) : (
@@ -376,8 +374,8 @@ export default function CreateProjectDialog({
                                             {uploading
                                                 ? `处理中: ${uploadProgress.currentProjectName || "准备中"}`
                                                 : isUploadComplete
-                                                  ? `完成: 成功 ${uploadSummary?.successCount || 0} / 失败 ${uploadSummary?.failureCount || 0}`
-                                                  : "提交前可逐项修改项目名"}
+                                                    ? `完成: 成功 ${uploadSummary?.successCount || 0} / 失败 ${uploadSummary?.failureCount || 0}`
+                                                    : "提交前可逐项修改项目名"}
                                         </span>
                                     </div>
                                     <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
@@ -389,11 +387,10 @@ export default function CreateProjectDialog({
                                             return (
                                                 <div
                                                     key={item.id}
-                                                    className={`rounded-lg border p-4 bg-muted/30 ${
-                                                        isInvalid
-                                                            ? "border-rose-500/70"
-                                                            : "border-border"
-                                                    }`}
+                                                    className={`rounded-lg border p-4 bg-muted/30 ${isInvalid
+                                                        ? "border-rose-500/70"
+                                                        : "border-border"
+                                                        }`}
                                                 >
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0 flex-1 space-y-3">
@@ -410,13 +407,13 @@ export default function CreateProjectDialog({
                                                                     className="text-[10px]"
                                                                 >
                                                                     {item.status ===
-                                                                    "creating" ? (
+                                                                        "creating" ? (
                                                                         <Loader2 className="w-3 h-3 animate-spin" />
                                                                     ) : item.status ===
-                                                                      "success" ? (
+                                                                        "success" ? (
                                                                         <CheckCircle2 className="w-3 h-3" />
                                                                     ) : item.status ===
-                                                                      "failed" ? (
+                                                                        "failed" ? (
                                                                         <AlertTriangle className="w-3 h-3" />
                                                                     ) : (
                                                                         <Package className="w-3 h-3" />
@@ -457,11 +454,10 @@ export default function CreateProjectDialog({
                                                                         uploading ||
                                                                         isUploadComplete
                                                                     }
-                                                                    className={`h-10 font-mono ${
-                                                                        isInvalid
-                                                                            ? "border-rose-500 focus-visible:ring-rose-500/40"
-                                                                            : "focus-visible:ring-primary/30"
-                                                                    }`}
+                                                                    className={`h-10 font-mono ${isInvalid
+                                                                        ? "border-rose-500 focus-visible:ring-rose-500/40"
+                                                                        : "focus-visible:ring-primary/30"
+                                                                        }`}
                                                                 />
                                                                 {isInvalid ? (
                                                                     <p className="text-xs font-mono text-rose-400">
@@ -503,7 +499,7 @@ export default function CreateProjectDialog({
                             )}
 
                             {(uploading || isUploadComplete) &&
-                            uploadProgress.total > 0 ? (
+                                uploadProgress.total > 0 ? (
                                 <div className="space-y-1.5">
                                     <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
                                         <span>
@@ -598,8 +594,8 @@ export default function CreateProjectDialog({
                                 {uploading
                                     ? "创建中..."
                                     : uploadSummary
-                                      ? "完成"
-                                      : "执行创建"}
+                                        ? "完成"
+                                        : "执行创建"}
                             </Button>
                         </div>
                     </div>

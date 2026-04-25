@@ -1,4 +1,5 @@
 import type { OpengrepRule } from "@/shared/api/opengrep";
+import { stripSupportedArchiveSuffix } from "@/features/projects/services/repoZipScan";
 import {
 	LLM_PROVIDER_API_KEY_FIELD_MAP,
 	normalizeLlmProviderId,
@@ -37,8 +38,5 @@ export function buildCreateProjectStaticTaskRoute(result: {
 }
 
 export function stripCreateProjectScanArchiveSuffix(fileName: string) {
-	return fileName.replace(
-		/\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|zip|tar|7z|rar)$/i,
-		"",
-	);
+	return stripSupportedArchiveSuffix(fileName);
 }

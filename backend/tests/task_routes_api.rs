@@ -68,6 +68,62 @@ fn test_zip_bytes() -> Vec<u8> {
     bytes
 }
 
+fn test_tar_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let mut builder = tar::Builder::new(&mut bytes);
+        let content = b"print('hello')\n";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "src/main.py", &content[..])
+            .unwrap();
+        builder.finish().unwrap();
+    }
+    bytes
+}
+
+fn test_tar_xz_bytes() -> Vec<u8> {
+    let tar_bytes = test_tar_bytes();
+    let mut encoded = xz2::write::XzEncoder::new(Vec::new(), 6);
+    encoded.write_all(&tar_bytes).unwrap();
+    encoded.finish().unwrap()
+}
+
+fn test_multipart_body(fields: Vec<(&str, Option<&str>, Option<&str>, Vec<u8>)>) -> Vec<u8> {
+    let mut body = Vec::new();
+    for (name, filename, content_type, bytes) in fields {
+        body.extend_from_slice(b"--x-boundary\r\n");
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"{name}\"").as_bytes(),
+        );
+        if let Some(filename) = filename {
+            let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
+            body.extend_from_slice(format!("; filename=\"{escaped}\"").as_bytes());
+        }
+        body.extend_from_slice(b"\r\n");
+        if let Some(content_type) = content_type {
+            body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
+        }
+        body.extend_from_slice(b"\r\n");
+        body.extend_from_slice(&bytes);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(b"--x-boundary--\r\n");
+    body
+}
+
+fn test_tar_xz_multipart_body() -> Vec<u8> {
+    test_multipart_body(vec![(
+        "file",
+        Some("demo.tar.xz"),
+        Some("application/x-xz"),
+        test_tar_xz_bytes(),
+    )])
+}
+
 struct EnvVarGuard {
     key: String,
     original: Option<String>,
@@ -1966,8 +2022,7 @@ async fn static_task_findings_route_honors_skip_and_limit() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body: Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     let items = body.as_array().expect("array response");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], "finding-2");
@@ -2074,6 +2129,96 @@ async fn opengrep_task_completes_without_missing_results_when_summary_is_complet
     assert!(logged.contains("start|task-container-xyz"), "{logged}");
     assert!(logged.contains("wait|task-container-xyz"), "{logged}");
     assert!(!logged.contains("stop|-t 2 task-container-xyz"), "{logged}");
+}
+
+#[tokio::test]
+async fn opengrep_task_supports_tar_xz_project_archives() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_opengrep_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    let preserved_results = temp_dir.path().join("preserved-results.json");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _results_copy = EnvVarGuard::set(
+        "FAKE_TASK_RESULTS_COPY_PATH",
+        preserved_results.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _results_json = EnvVarGuard::set(
+        "FAKE_TASK_RESULTS_JSON",
+        r#"{"results":[{"check_id":"demo.rule","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo finding","severity":"ERROR","metadata":{"confidence":"HIGH"},"lines":"print('hello')"}}]}"#,
+    );
+
+    let state = AppState::from_config(isolated_test_config("opengrep-tar-xz-route"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project(&app).await;
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_tar_xz_multipart_body()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "opengrep tar.xz task",
+                        "rule_ids": [],
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert!(!final_status.findings.is_empty(), "{final_status:?}");
 }
 
 #[tokio::test]

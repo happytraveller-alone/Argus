@@ -14,7 +14,7 @@ test("project description api posts to stored-project generate endpoint", async 
 			data: {
 				description: "Auto generated summary",
 				language_info: '{"total": 1, "total_files": 1, "languages": {}}',
-				source: "llm",
+				source: "static",
 			},
 		};
 	}) as typeof apiClient.post;
@@ -22,7 +22,7 @@ test("project description api posts to stored-project generate endpoint", async 
 	try {
 		const result = await api.generateStoredProjectDescription("project-1");
 		assert.equal(result.description, "Auto generated summary");
-		assert.equal(result.source, "llm");
+		assert.equal(result.source, "static");
 	} finally {
 		apiClient.post = originalPost;
 	}

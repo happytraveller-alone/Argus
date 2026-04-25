@@ -21,6 +21,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.source="https://github.com/NousResearch/hermes-agent" \
       org.vulhunter.hermes.upstream_sha="${HERMES_UPSTREAM_SHA}" \
       org.vulhunter.hermes.submodules="${HERMES_SUBMODULE_STATUS}" \
+      org.vulhunter.hermes.contract="worker-text-only" \
       org.opencontainers.image.digest="${HERMES_SOURCE_DIGEST}"
 
 ENV PYTHONUNBUFFERED=1

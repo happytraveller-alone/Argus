@@ -21,6 +21,10 @@ use uuid::Uuid;
 use zip::ZipArchive;
 
 use crate::{
+    archive::{
+        archive_content_type, list_archive_files_from_bytes, list_archive_files_from_path,
+        read_archive_file_from_path, supported_archive_suffixes,
+    },
     db::projects,
     error::ApiError,
     project_file_cache::ProjectFileCacheEntry,
@@ -464,7 +468,7 @@ pub async fn download_project_archive(
     *response.status_mut() = StatusCode::OK;
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static("application/zip"),
+        HeaderValue::from_static(archive_content_type(&archive.original_filename)),
     );
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
@@ -527,6 +531,7 @@ pub async fn get_project_files(
     let archive = require_archive(&project)?;
     let files = list_archive_files(
         &archive.storage_path,
+        &archive.original_filename,
         parse_exclude_patterns(query.exclude_patterns),
     )?;
     Ok(Json(files))
@@ -541,6 +546,7 @@ pub async fn get_project_files_tree(
     let archive = require_archive(&project)?;
     let files = list_archive_files(
         &archive.storage_path,
+        &archive.original_filename,
         parse_exclude_patterns(query.exclude_patterns),
     )?;
     Ok(Json(FileTreeResponse {
@@ -565,8 +571,12 @@ pub async fn get_project_file_content(
             return Ok(Json(build_file_content_payload(&file_path, &cached, true)));
         }
     }
-    let (content, size, encoding, is_text) =
-        read_archive_file(&archive.storage_path, &file_path, query.encoding.as_deref())?;
+    let (content, size, encoding, is_text) = read_archive_file(
+        &archive.storage_path,
+        &archive.original_filename,
+        &file_path,
+        query.encoding.as_deref(),
+    )?;
     if use_cache {
         let mut cache = state.project_file_cache.lock().await;
         let _ = cache.set(
@@ -595,7 +605,11 @@ pub async fn preview_upload_file(
 ) -> Result<Json<Value>, ApiError> {
     let project = require_project(&state, &project_id).await?;
     let archive = require_archive(&project)?;
-    let files = list_archive_files(&archive.storage_path, Vec::new())?;
+    let files = list_archive_files(
+        &archive.storage_path,
+        &archive.original_filename,
+        Vec::new(),
+    )?;
     let sample_files: Vec<Value> = files
         .iter()
         .take(50)
@@ -604,7 +618,7 @@ pub async fn preview_upload_file(
     Ok(Json(json!({
         "file_count": files.len(),
         "files": sample_files,
-        "supported_formats": [".zip"],
+        "supported_formats": supported_archive_suffixes(),
     })))
 }
 
@@ -1016,7 +1030,7 @@ async fn persist_archive(
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
 
-    let storage_path = storage_root.join(format!("{project_id}.zip"));
+    let storage_path = storage_root.join(format!("{project_id}.archive"));
     fs::write(&storage_path, file_bytes)
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
@@ -1045,28 +1059,15 @@ async fn persist_archive(
 }
 
 fn analyze_archive(file_name: &str, file_bytes: &[u8]) -> Result<ParsedArchiveAnalysis, ApiError> {
-    if !file_name.to_lowercase().ends_with(".zip") {
-        return Err(ApiError::BadRequest(
-            "only zip archives are supported in the rust gateway".to_string(),
-        ));
-    }
-
-    let reader = Cursor::new(file_bytes);
-    let mut archive = ZipArchive::new(reader)
-        .map_err(|error| ApiError::BadRequest(format!("invalid zip archive: {error}")))?;
     let mut languages = BTreeSet::new();
     let mut language_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut total_files = 0usize;
 
-    for index in 0..archive.len() {
-        let entry = archive.by_index(index).map_err(|error| {
-            ApiError::BadRequest(format!("failed to inspect zip archive: {error}"))
-        })?;
-        if entry.is_dir() {
-            continue;
-        }
+    for entry in list_archive_files_from_bytes(file_name, file_bytes)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?
+    {
         total_files += 1;
-        if let Some(language) = detect_language(entry.name()) {
+        if let Some(language) = detect_language(&entry.path) {
             languages.insert(language.to_string());
             *language_counts.entry(language.to_string()).or_insert(0) += 1;
         }
@@ -1242,29 +1243,18 @@ fn parse_exclude_patterns(raw: Option<String>) -> Vec<String> {
 
 fn list_archive_files(
     storage_path: &str,
+    original_filename: &str,
     exclude_patterns: Vec<String>,
 ) -> Result<Vec<ProjectFileEntry>, ApiError> {
-    let bytes = std::fs::read(storage_path)
-        .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
-    let reader = Cursor::new(bytes);
-    let mut archive =
-        ZipArchive::new(reader).map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let mut files = Vec::new();
-    for index in 0..archive.len() {
-        let entry = archive
-            .by_index(index)
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-        if entry.is_dir() {
-            continue;
-        }
-        if should_exclude(entry.name(), &exclude_patterns) {
-            continue;
-        }
-        files.push(ProjectFileEntry {
-            path: entry.name().to_string(),
-            size: entry.size(),
-        });
-    }
+    let files = list_archive_files_from_path(storage_path, original_filename)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?
+        .into_iter()
+        .filter(|entry| !should_exclude(&entry.path, &exclude_patterns))
+        .map(|entry| ProjectFileEntry {
+            path: entry.path,
+            size: entry.size,
+        })
+        .collect::<Vec<_>>();
     Ok(files)
 }
 
@@ -1283,29 +1273,18 @@ fn build_file_tree(files: &[ProjectFileEntry]) -> FileTreeNode {
 
 fn read_archive_file(
     storage_path: &str,
+    original_filename: &str,
     file_path: &str,
     _requested_encoding: Option<&str>,
 ) -> Result<(String, u64, String, bool), ApiError> {
-    let bytes = std::fs::read(storage_path)
-        .map_err(|error| ApiError::NotFound(format!("archive not found: {error}")))?;
-    let reader = Cursor::new(bytes);
-    let mut archive =
-        ZipArchive::new(reader).map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let mut entry = archive
-        .by_name(file_path)
-        .map_err(|_| ApiError::NotFound("file not found".to_string()))?;
-    let size = entry.size();
-    let mut file_bytes = Vec::new();
-    std::io::Read::read_to_end(&mut entry, &mut file_bytes)
-        .map_err(|error| ApiError::Internal(error.to_string()))?;
-    let is_text = is_probably_text(file_path, &file_bytes);
-    let encoding = "utf-8".to_string();
-    let content = if is_text {
-        String::from_utf8_lossy(&file_bytes).to_string()
-    } else {
-        String::new()
-    };
-    Ok((content, size, encoding, is_text))
+    read_archive_file_from_path(storage_path, original_filename, file_path).map_err(|error| {
+        let message = error.to_string();
+        if message.contains("file not found") || message.contains("failed to read archive") {
+            ApiError::NotFound("file not found".to_string())
+        } else {
+            ApiError::BadRequest(message)
+        }
+    })
 }
 
 fn should_exclude(path: &str, patterns: &[String]) -> bool {
@@ -1327,13 +1306,6 @@ fn should_exclude(path: &str, patterns: &[String]) -> bool {
         }
         path.contains(trimmed)
     })
-}
-
-fn is_probably_text(path: &str, bytes: &[u8]) -> bool {
-    if bytes.contains(&0) {
-        return false;
-    }
-    detect_language(path).is_some() || path.ends_with(".md") || path.ends_with(".txt")
 }
 
 async fn build_export_bundle(
@@ -1364,6 +1336,10 @@ async fn build_export_bundle(
                 "language_info": project.language_info,
                 "info_status": project.info_status,
                 "archive_filename": project.archive.as_ref().map(|_| format!("archives/{}.zip", project.id)),
+                "archive_original_filename": project
+                    .archive
+                    .as_ref()
+                    .map(|archive| archive.original_filename.clone()),
             })
         })
         .collect();
@@ -1492,7 +1468,10 @@ async fn import_bundle_bytes(state: &AppState, bundle_bytes: &[u8]) -> Result<Va
 
         if let Some(archive_name) = item["archive_filename"].as_str() {
             let archive_bytes = read_zip_entry_bytes(&mut archive, archive_name)?;
-            let original_filename = format!("{project_id}.zip");
+            let original_filename = item["archive_original_filename"]
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{project_id}.zip"));
             let stored_archive =
                 persist_archive(state, &project_id, &original_filename, &archive_bytes).await?;
             project.archive = Some(stored_archive);
@@ -1697,10 +1676,10 @@ fn detect_language(path: &str) -> Option<&'static str> {
 
 fn build_description(project_name: &str, languages: &[String]) -> String {
     if languages.is_empty() {
-        return format!("{project_name} imported via Rust gateway ZIP flow.");
+        return format!("{project_name} imported via Rust gateway archive flow.");
     }
     format!(
-        "{project_name} imported via Rust gateway ZIP flow. Detected languages: {}.",
+        "{project_name} imported via Rust gateway archive flow. Detected languages: {}.",
         languages.join(", ")
     )
 }

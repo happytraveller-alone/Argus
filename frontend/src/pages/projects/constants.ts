@@ -1,5 +1,6 @@
 import type { CreateProjectForm } from "@/shared/types";
 import { SUPPORTED_LANGUAGES } from "@/shared/constants";
+import { stripSupportedArchiveSuffix } from "@/features/projects/services/repoZipScan";
 
 export const PROJECT_PAGE_SIZE = 10;
 export const PROJECTS_TABLE_HEADER_HEIGHT = 48;
@@ -22,23 +23,8 @@ export const PROJECT_ACTION_BTN =
 export const PROJECT_ACTION_BTN_SUBTLE =
 	"border border-sky-500/30 bg-sky-500/12 text-sky-100 hover:bg-sky-500/22 hover:border-sky-400/55";
 
-const ARCHIVE_SUFFIXES = [
-	".tar.gz",
-	".tar.bz2",
-	".tar.xz",
-	".tgz",
-	".tbz2",
-	".zip",
-	".tar",
-	".7z",
-	".rar",
-];
-
 export function stripArchiveSuffix(filename: string) {
-	const lower = filename.toLowerCase();
-	const matched = ARCHIVE_SUFFIXES.find((suffix) => lower.endsWith(suffix));
-	if (!matched) return filename;
-	return filename.slice(0, filename.length - matched.length);
+	return stripSupportedArchiveSuffix(filename);
 }
 
 export function formatProjectLanguageName(lang: string): string {
