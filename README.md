@@ -1,4 +1,4 @@
-# VulHunter Slim Release
+# Argus Slim Release
 
 <p align="center">
   <strong>简体中文</strong> | <a href="README_EN.md">English</a>

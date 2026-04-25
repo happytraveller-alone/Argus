@@ -4,8 +4,8 @@ export const LOGO_VARIANTS = ["bp1", "bp2", "bp3", "bp4"] as const;
 export type LogoVariant = (typeof LOGO_VARIANTS)[number];
 
 const DEFAULT_LOGO_VARIANT: LogoVariant = "bp1";
-const LOGO_STORAGE_KEY = "vulhunter_logo_variant";
-const LOGO_CHANGE_EVENT = "vulhunter-logo-variant-change";
+const LOGO_STORAGE_KEY = "Argus_logo_variant";
+const LOGO_CHANGE_EVENT = "Argus-logo-variant-change";
 
 function isLogoVariant(value: string | null | undefined): value is LogoVariant {
     return Boolean(value && LOGO_VARIANTS.includes(value as LogoVariant));
@@ -20,7 +20,7 @@ function resolveStoredVariant(): LogoVariant {
 }
 
 export function getLogoSrc(variant: LogoVariant): string {
-    return `/logo_vulhunter_${variant}.png`;
+    return `/logo_Argus_${variant}.png`;
 }
 
 export function setLogoVariant(variant: LogoVariant): LogoVariant {

@@ -1,9 +1,9 @@
 const HERMES_DOCKERFILE: &str = include_str!("../../docker/hermes-agent-base.Dockerfile");
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const STANDALONE_COMPOSE: &str = include_str!("../../docker/docker-compose.hermes-agents.yml");
-const HERMES_WORKER_IMAGE: &str = "vulhunter/hermes-agent:latest";
+const HERMES_WORKER_IMAGE: &str = "Argus/hermes-agent:latest";
 const HERMES_WORKER_DOCKERFILE: &str = "docker/hermes-agent-base.Dockerfile";
-const HERMES_WORKER_CONTRACT_LABEL: &str = r#"org.vulhunter.hermes.contract="worker-text-only""#;
+const HERMES_WORKER_CONTRACT_LABEL: &str = r#"org.Argus.hermes.contract="worker-text-only""#;
 const UPSTREAM_HERMES_DOCKERFILE: &str = "third_party/hermes-agent/Dockerfile";
 const HERMES_WORKER_SERVICES: [&str; 4] = [
     "hermes-report",

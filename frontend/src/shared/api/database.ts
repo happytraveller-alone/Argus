@@ -578,7 +578,7 @@ export const api = {
     const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     const basicMatch = disposition.match(/filename="?([^";]+)"?/i);
     const decodedUtf8 = utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : null;
-    const filename = decodedUtf8 || basicMatch?.[1] || "deepaudit-project-export.zip";
+    const filename = decodedUtf8 || basicMatch?.[1] || "Argus-project-export.zip";
 
     return {
       blob: res.data,

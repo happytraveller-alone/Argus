@@ -1,4 +1,4 @@
-# VulHunter User Guide
+# Argus User Guide
 
 This release branch is intended for end users. You only need to configure the app and start the services.
 

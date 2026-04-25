@@ -162,7 +162,7 @@ fn scan_workspace_root() -> PathBuf {
         .ok()
         .map(|value| PathBuf::from(value.trim()))
         .filter(|value| !value.as_os_str().is_empty())
-        .unwrap_or_else(|| PathBuf::from("/tmp/vulhunter/scans"))
+        .unwrap_or_else(|| PathBuf::from("/tmp/Argus/scans"))
 }
 
 fn flow_parser_runner_image() -> String {
@@ -170,7 +170,7 @@ fn flow_parser_runner_image() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "vulhunter/flow-parser-runner:latest".to_string())
+        .unwrap_or_else(|| "Argus/flow-parser-runner:latest".to_string())
 }
 
 fn prepare_workspace_dir() -> Result<(PathBuf, Option<String>), String> {
@@ -383,13 +383,13 @@ esac
     #[test]
     fn requested_runner_fields_override_environment_defaults() {
         let payload = json!({
-            "image": "vulhunter/flow-parser-runner-custom:latest",
+            "image": "Argus/flow-parser-runner-custom:latest",
             "timeout_seconds": 77
         });
 
         assert_eq!(
             super::requested_image(&payload).as_deref(),
-            Some("vulhunter/flow-parser-runner-custom:latest")
+            Some("Argus/flow-parser-runner-custom:latest")
         );
         assert_eq!(super::requested_timeout_seconds(&payload), Some(77));
     }
@@ -414,13 +414,13 @@ esac
             FlowParserOperation::DefinitionsBatch,
             json!({
                 "items": [{"file_path": "demo.py", "content": "print(1)"}],
-                "image": "vulhunter/flow-parser-runner-custom:latest",
+                "image": "Argus/flow-parser-runner-custom:latest",
                 "timeout_seconds": 1
             }),
         );
 
         let create_args = fs::read_to_string(&args_file).expect("create args");
-        assert!(create_args.contains("vulhunter/flow-parser-runner-custom:latest"));
+        assert!(create_args.contains("Argus/flow-parser-runner-custom:latest"));
         assert_eq!(result["ok"], false);
         assert!(result["error"]
             .as_str()

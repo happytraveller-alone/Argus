@@ -114,11 +114,11 @@ impl AppConfig {
             llm_concurrency: parse_i64_env("LLM_CONCURRENCY", 1),
             llm_gap_ms: parse_i64_env("LLM_GAP_MS", 3_000),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/opengrep-runner:latest".to_string()),
+                .unwrap_or_else(|_| "Argus/opengrep-runner:latest".to_string()),
             flow_parser_runner_image: env::var("FLOW_PARSER_RUNNER_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/flow-parser-runner:latest".to_string()),
+                .unwrap_or_else(|_| "Argus/flow-parser-runner:latest".to_string()),
             sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
-                .unwrap_or_else(|_| "vulhunter/sandbox-runner:latest".to_string()),
+                .unwrap_or_else(|_| "Argus/sandbox-runner:latest".to_string()),
             opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 0),
             opengrep_scan_jobs: parse_usize_env("OPENGREP_SCAN_JOBS", 4),
             opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 1536),
@@ -176,9 +176,9 @@ impl AppConfig {
             max_analyze_files: 0,
             llm_concurrency: 1,
             llm_gap_ms: 3_000,
-            scanner_opengrep_image: "vulhunter/opengrep-runner:test".to_string(),
-            flow_parser_runner_image: "vulhunter/flow-parser-runner:test".to_string(),
-            sandbox_runner_image: "vulhunter/sandbox-runner:test".to_string(),
+            scanner_opengrep_image: "Argus/opengrep-runner:test".to_string(),
+            flow_parser_runner_image: "Argus/flow-parser-runner:test".to_string(),
+            sandbox_runner_image: "Argus/sandbox-runner:test".to_string(),
             opengrep_scan_timeout_seconds: 0,
             opengrep_scan_jobs: 4,
             opengrep_scan_max_memory_mb: 1536,

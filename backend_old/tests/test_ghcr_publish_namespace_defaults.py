@@ -10,9 +10,9 @@ def test_reusable_publish_workflow_defaults_to_repo_owner_with_optional_override
 
     assert "image_namespace:" in workflow_text
     assert "package_visibility:" in workflow_text
-    assert "VULHUNTER_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}" in workflow_text
+    assert "Argus_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}" in workflow_text
     assert "GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}" in workflow_text
-    assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in workflow_text
+    assert "Publishing to ghcr.io/${Argus_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in workflow_text
     assert "if: env.GHCR_PACKAGE_VISIBILITY == 'public'" in workflow_text
     assert 'echo "visibility=unknown" >> "$GITHUB_OUTPUT"' in workflow_text
     assert "steps.package-visibility.outputs.visibility == 'public'" in workflow_text
@@ -24,7 +24,7 @@ def test_active_compose_files_default_to_current_repo_owner_namespace() -> None:
         REPO_ROOT / "scripts" / "release-templates" / "docker-compose.release-slim.yml",
     ]
 
-    expected_namespace = f"VULHUNTER_IMAGE_NAMESPACE: ${{VULHUNTER_IMAGE_NAMESPACE:-{DEFAULT_NAMESPACE}}}"
+    expected_namespace = f"Argus_IMAGE_NAMESPACE: ${{Argus_IMAGE_NAMESPACE:-{DEFAULT_NAMESPACE}}}"
 
     for compose_path in compose_paths:
         compose_text = compose_path.read_text(encoding="utf-8")
@@ -37,7 +37,7 @@ def test_docs_and_env_example_explain_ghcr_owner_rules() -> None:
     readme_text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     readme_en_text = (REPO_ROOT / "README_EN.md").read_text(encoding="utf-8")
 
-    assert f"SANDBOX_IMAGE=ghcr.io/{DEFAULT_NAMESPACE}/vulhunter-sandbox-runner:latest" in backend_env_text
+    assert f"SANDBOX_IMAGE=ghcr.io/{DEFAULT_NAMESPACE}/Argus-sandbox-runner:latest" in backend_env_text
     assert "ghcr.io/<GitHub用户或组织>/<image>:<tag>" in readme_text
     assert "`image_namespace`" in readme_text
     assert "`package_visibility`" in readme_text

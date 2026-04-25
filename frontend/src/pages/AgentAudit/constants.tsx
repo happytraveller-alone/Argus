@@ -320,7 +320,7 @@ export const COLORS = {
 
 // ============ ASCII Art ============
 
-export const VULHUNTER_ASCII = `
+export const Argus_ASCII = `
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
 ║     ____  _____ _____ ____   _   _   _ ____ ___ _____         ║

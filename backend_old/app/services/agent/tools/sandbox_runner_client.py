@@ -320,8 +320,8 @@ class SandboxRunnerClient:
 
         # 3. 最终 fallback (本地镜像)
         candidates.extend([
-            "ghcr.io/audittool/vulhunter-sandbox-runner:latest",
-            "vulhunter/sandbox-runner:latest",
+            "ghcr.io/audittool/Argus-sandbox-runner:latest",
+            "Argus/sandbox-runner:latest",
         ])
 
         # 去重并保持顺序
@@ -347,7 +347,7 @@ class SandboxRunnerClient:
             return candidates[0]
 
         # 最终 fallback
-        return "ghcr.io/audittool/vulhunter-sandbox-runner:latest"
+        return "ghcr.io/audittool/Argus-sandbox-runner:latest"
 
     def _create_workspace(self, run_id: Optional[str] = None) -> Path:
         """

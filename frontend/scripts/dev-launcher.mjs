@@ -26,7 +26,7 @@ export function determineInstallState({
   appDir = process.cwd(),
   installMode = process.env.FRONTEND_DEV_INSTALL_MODE || "auto",
   lockFilePath = path.join(appDir, "pnpm-lock.yaml"),
-  stampFilePath = path.join(DEFAULT_STORE_DIR, ".VulHunter_frontend_lock.sha256"),
+  stampFilePath = path.join(DEFAULT_STORE_DIR, ".Argus_frontend_lock.sha256"),
   modulesManifestPath = path.join(appDir, "node_modules", ".modules.yaml"),
   viteBinPath = path.join(appDir, "node_modules", ".bin", "vite"),
   tscBinPath = path.join(appDir, "node_modules", ".bin", "tsc"),

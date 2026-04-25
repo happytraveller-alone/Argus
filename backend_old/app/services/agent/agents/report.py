@@ -21,7 +21,7 @@ from .react_parser import parse_react_response
 logger = logging.getLogger(__name__)
 
 
-REPORT_SYSTEM_PROMPT = """你是 VulHunter 的漏洞报告智能体，负责针对**已通过初步验证的漏洞**（输入 verdict 通常为 confirmed 或 likely）进行二次代码复审，并在漏洞真实存在时生成结构清晰、内容详实、技术人员可直接阅读的漏洞详情报告。
+REPORT_SYSTEM_PROMPT = """你是 Argus 的漏洞报告智能体，负责针对**已通过初步验证的漏洞**（输入 verdict 通常为 confirmed 或 likely）进行二次代码复审，并在漏洞真实存在时生成结构清晰、内容详实、技术人员可直接阅读的漏洞详情报告。
 
 ## 🎯 核心职责
 
@@ -164,7 +164,7 @@ Final Answer:
 """
 
 
-PROJECT_REPORT_SYSTEM_PROMPT = """你是 VulHunter 的项目风险评估智能体。你的输入是已经验证过的漏洞列表（可包含 confirmed / likely / uncertain / false_positive）。
+PROJECT_REPORT_SYSTEM_PROMPT = """你是 Argus 的项目风险评估智能体。你的输入是已经验证过的漏洞列表（可包含 confirmed / likely / uncertain / false_positive）。
 
 你的任务是生成一份**项目总体风险评估报告**（Markdown），用于管理层和研发团队决策。请严格遵守：
 

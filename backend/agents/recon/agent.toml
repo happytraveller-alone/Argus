@@ -1,6 +1,6 @@
 id = "recon"
 role = "recon"
-image = "vulhunter/hermes-agent:latest"
+image = "Argus/hermes-agent:latest"
 container_name = "hermes-recon"
 enabled = true
 dispatch_timeout_seconds = 300

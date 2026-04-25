@@ -11,7 +11,7 @@ FROM ${HERMES_GOSU_IMAGE} AS gosu_source
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:13.4
 
 # Worker-only runtime image: upstream Hermes may still carry dashboard/web code,
-# but VulHunter workers intentionally exclude web, Playwright, and Node surfaces.
+# but Argus workers intentionally exclude web, Playwright, and Node surfaces.
 ARG VCS_REF=unknown
 ARG HERMES_UPSTREAM_SHA=bf196a3fc0fd1f79353369e8732051db275c6276
 ARG HERMES_SUBMODULE_STATUS=third_party/hermes-agent=bf196a3fc0fd1f79353369e8732051db275c6276;third_party/hermes-agent/tinker-atropos=65f084ee8054a5d02aeac76e24ed60388511c82b
@@ -19,9 +19,9 @@ ARG HERMES_SOURCE_DIGEST=sha256:e0c66b8305e844fcf469412d99f0016f35382d3bc1f04159
 
 LABEL org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.source="https://github.com/NousResearch/hermes-agent" \
-      org.vulhunter.hermes.upstream_sha="${HERMES_UPSTREAM_SHA}" \
-      org.vulhunter.hermes.submodules="${HERMES_SUBMODULE_STATUS}" \
-      org.vulhunter.hermes.contract="worker-text-only" \
+      org.Argus.hermes.upstream_sha="${HERMES_UPSTREAM_SHA}" \
+      org.Argus.hermes.submodules="${HERMES_SUBMODULE_STATUS}" \
+      org.Argus.hermes.contract="worker-text-only" \
       org.opencontainers.image.digest="${HERMES_SOURCE_DIGEST}"
 
 ENV PYTHONUNBUFFERED=1
@@ -31,8 +31,8 @@ ARG HERMES_APT_SECURITY_PRIMARY
 ARG HERMES_APT_MIRROR_FALLBACK
 ARG HERMES_APT_SECURITY_FALLBACK
 
-RUN --mount=type=cache,id=vulhunter-hermes-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-hermes-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-hermes-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-hermes-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \

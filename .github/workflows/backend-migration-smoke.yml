@@ -26,11 +26,11 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: vulhunter
+          POSTGRES_DB: Argus
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d vulhunter"
+          --health-cmd "pg_isready -U postgres -d Argus"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -52,8 +52,8 @@ jobs:
       - name: Run Rust backend migration smoke
         working-directory: backend
         env:
-          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/vulhunter
-          ZIP_STORAGE_PATH: /tmp/vulhunter-zip-storage
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/Argus
+          ZIP_STORAGE_PATH: /tmp/Argus-zip-storage
         run: |
           mkdir -p "$ZIP_STORAGE_PATH"
           cargo test -j 2 -- --test-threads=1 --nocapture

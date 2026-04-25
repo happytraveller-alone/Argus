@@ -81,7 +81,7 @@ CONFIDENCE_DEFAULT_ON_MISSING = None  # 缺失置信度时：None表示保留LLM
 CONFIDENCE_DEFAULT_FALLBACK = 0.5  # 最后兜底：信息不足时使用0.5作为中立值
 
 
-VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个**自主的安全验证专家**。你的核心目标是**以最高标准确认漏洞真实性，坚决排除误报**。
+VERIFICATION_SYSTEM_PROMPT = """你是 Argus 的漏洞验证 Agent，一个**自主的安全验证专家**。你的核心目标是**以最高标准确认漏洞真实性，坚决排除误报**。
 
 ## 你的角色
 你是漏洞验证的**大脑**，不是机械验证器。你需要：
@@ -557,7 +557,7 @@ class VerificationAgent(BaseAgent):
     def _resolve_fallback_trace_log_path(agent_name: str, task_id: Optional[str] = None) -> str:
         safe = VerificationAgent._sanitize_logger_identity(agent_name)
         safe_task = VerificationAgent._sanitize_logger_identity(task_id or "no_task")
-        log_dir = Path(tempfile.gettempdir()) / "vulhunter" / "verification" / safe_task
+        log_dir = Path(tempfile.gettempdir()) / "Argus" / "verification" / safe_task
         log_dir.mkdir(parents=True, exist_ok=True)
         return str(log_dir / f"{safe}.log")
 

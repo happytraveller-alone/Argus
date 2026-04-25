@@ -18,7 +18,7 @@ def run_tests():
     os.chdir(project_root)
     
     print("=" * 60)
-    print("VulHunter Agent 测试套件")
+    print("Argus Agent 测试套件")
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     print()

@@ -15,7 +15,7 @@ def test_backend_migration_smoke_workflow_runs_rust_bootstrap_only() -> None:
     assert "working-directory: backend" in workflow_text
     assert "cargo test -j 2 -- --test-threads=1 --nocapture" in workflow_text
     assert "cargo test -- --nocapture" not in workflow_text
-    assert "DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/vulhunter" in workflow_text
+    assert "DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/Argus" in workflow_text
     assert "pip install -r backend/requirements.txt" not in workflow_text
     assert "uv sync --frozen --no-dev" not in workflow_text
     assert "uv run alembic upgrade head" not in workflow_text

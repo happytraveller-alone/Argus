@@ -39,9 +39,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
-  VULHUNTER_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}
+  Argus_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}
   GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}
-  VULHUNTER_IMAGE_TAG: latest
+  Argus_IMAGE_TAG: latest
 
 jobs:
   build-and-publish:
@@ -70,8 +70,8 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
           set -euo pipefail
-          if [ "${VULHUNTER_IMAGE_NAMESPACE}" != "${GITHUB_REPOSITORY_OWNER}" ] && { [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; }; then
-            echo "::error::Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets."
+          if [ "${Argus_IMAGE_NAMESPACE}" != "${GITHUB_REPOSITORY_OWNER}" ] && { [ -z "${GHCR_USERNAME}" ] || [ -z "${GHCR_TOKEN}" ]; }; then
+            echo "::error::Publishing to ghcr.io/${Argus_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets."
             exit 1
           fi
 
@@ -107,7 +107,7 @@ jobs:
           file: ${{ inputs.file }}
           push: true
           platforms: ${{ inputs.platforms }}
-          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}
           cache-from: type=gha,scope=${{ inputs.image_name }}-latest
           cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-latest
           build-args: ${{ inputs.build_args }}
@@ -115,8 +115,8 @@ jobs:
       - name: 签名并附加 SBOM
         env:
           DIGEST: ${{ steps.build-image.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}
-          TAG: ${{ env.VULHUNTER_IMAGE_TAG }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}
+          TAG: ${{ env.Argus_IMAGE_TAG }}
           SBOM_PATH: /tmp/${{ inputs.image_name }}.spdx.json
         run: |
           cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
@@ -131,7 +131,7 @@ jobs:
         if: env.GHCR_PACKAGE_VISIBILITY == 'public'
         env:
           GH_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
-          PACKAGE_OWNER: ${{ env.VULHUNTER_IMAGE_NAMESPACE }}
+          PACKAGE_OWNER: ${{ env.Argus_IMAGE_NAMESPACE }}
           PACKAGE_NAME: ${{ inputs.image_name }}
         run: |
           set -euo pipefail
@@ -175,7 +175,7 @@ jobs:
       - name: 验证 GHCR 匿名拉取
         if: env.GHCR_PACKAGE_VISIBILITY == 'public' && steps.package-visibility.outputs.visibility == 'public'
         env:
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}
         run: |
           set -euo pipefail
           docker logout ghcr.io || true
@@ -204,5 +204,5 @@ jobs:
         run: |
           echo "## 镜像已推送到 GHCR" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.VULHUNTER_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- package visibility: \`${{ env.GHCR_PACKAGE_VISIBILITY }}\`" >> "$GITHUB_STEP_SUMMARY"

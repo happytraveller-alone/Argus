@@ -1,6 +1,6 @@
 id = "analysis"
 role = "analysis"
-image = "vulhunter/hermes-agent:latest"
+image = "Argus/hermes-agent:latest"
 container_name = "hermes-analysis"
 enabled = true
 dispatch_timeout_seconds = 300

@@ -1,4 +1,4 @@
-# AuditTool / VulHunter 开发者架构指南
+# AuditTool / Argus 开发者架构指南
 
 > 2026-04-18 更新：当前产品扫描模式已收口为静态审计与智能审计。历史兼容字段与迁移背景请以 `plan/rust_full_takeover/` 下的文档为准。
 
@@ -7,7 +7,7 @@
 ## 阅读定位
 
 - **文档类型**：以 Explanation 为主，兼顾入门阶段最常用的 Reference 索引。
-- **目标读者**：第一次接手 AuditTool / VulHunter 的前端、后端或全栈开发者。
+- **目标读者**：第一次接手 AuditTool / Argus 的前端、后端或全栈开发者。
 - **阅读目标**：快速建立系统主线，理解两类扫描模式的边界，并知道该从哪些代码入口开始定位问题。
 - **建议搭配**：如果你接下来主要改智能审计，再继续阅读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
 - **术语入口**：如果你对 `Project`、`AgentTask`、bootstrap、finding 这些词还不熟，先看 [glossary.md](./glossary.md)。
@@ -25,7 +25,7 @@
 
 ### 这个系统是什么
 
-AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `AuditTool`，代码和历史文档里仍大量保留 `VulHunter` 这个名字，两者指向的是同一个系统。
+AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `AuditTool`，代码和历史文档里仍大量保留 `Argus` 这个名字，两者指向的是同一个系统。
 
 从实现上看，它是一个标准的前后端分离应用：
 

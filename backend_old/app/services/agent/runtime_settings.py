@@ -92,8 +92,8 @@ def _default_tag(env_name: str, fallback: str = "latest") -> str:
 def _default_image(name: str) -> str:
     return (
         f"{_default_ghcr_registry()}/"
-        f"{_default_namespace('VULHUNTER_IMAGE_NAMESPACE', 'unbengable12')}/"
-        f"{name}:{_default_tag('VULHUNTER_IMAGE_TAG')}"
+        f"{_default_namespace('Argus_IMAGE_NAMESPACE', 'unbengable12')}/"
+        f"{name}:{_default_tag('Argus_IMAGE_TAG')}"
     )
 
 
@@ -147,7 +147,7 @@ class RuntimeSettings:
         )
         self.FLOW_PARSER_RUNNER_IMAGE = _env_text(
             "FLOW_PARSER_RUNNER_IMAGE",
-            _default_image("vulhunter-flow-parser-runner"),
+            _default_image("Argus-flow-parser-runner"),
         )
         self.FLOW_PARSER_RUNNER_ENABLED = _env_bool(
             "FLOW_PARSER_RUNNER_ENABLED",
@@ -159,7 +159,7 @@ class RuntimeSettings:
         )
         self.SCAN_WORKSPACE_ROOT = _env_text(
             "SCAN_WORKSPACE_ROOT",
-            "/tmp/vulhunter/scans",
+            "/tmp/Argus/scans",
         )
         self.FUNCTION_LOCATOR_LANGUAGES = _env_language_list(
             "FUNCTION_LOCATOR_LANGUAGES",
@@ -167,11 +167,11 @@ class RuntimeSettings:
         )
         self.SANDBOX_RUNNER_IMAGE = _env_text(
             "SANDBOX_RUNNER_IMAGE",
-            _default_image("vulhunter-sandbox-runner"),
+            _default_image("Argus-sandbox-runner"),
         )
         self.SANDBOX_IMAGE = _env_text(
             "SANDBOX_IMAGE",
-            _default_image("vulhunter-sandbox-runner"),
+            _default_image("Argus-sandbox-runner"),
         )
         self.SANDBOX_RUNNER_ENABLED = _env_bool("SANDBOX_RUNNER_ENABLED", True)
         self.SANDBOX_TIMEOUT = _env_int("SANDBOX_TIMEOUT", 60)
@@ -194,7 +194,7 @@ class RuntimeSettings:
         )
         self.SCANNER_OPENGREP_IMAGE = _env_text(
             "SCANNER_OPENGREP_IMAGE",
-            _default_image("vulhunter-opengrep-runner"),
+            _default_image("Argus-opengrep-runner"),
         )
 
 

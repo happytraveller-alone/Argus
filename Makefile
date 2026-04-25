@@ -1,5 +1,5 @@
 # =====================================================
-# VulHunter Makefile
+# Argus Makefile
 # =====================================================
 # 只保留 compose 状态/日志辅助命令。
 # 启动统一使用以下命令：
@@ -33,7 +33,7 @@ endef
 .PHONY: help
 help:
 	@echo ""
-	@echo "VulHunter Make 目标"
+	@echo "Argus Make 目标"
 	@echo "──────────────────────────────────────────────────────────"
 	@echo "  make down        停止并删除容器"
 	@echo "  make logs        跟踪所有服务日志"

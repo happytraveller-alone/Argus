@@ -4347,7 +4347,7 @@ wheels = [
 ]
 
 [[package]]
-name = "vulhunter-backend"
+name = "Argus-backend"
 version = "3.0.4"
 source = { editable = "." }
 dependencies = [

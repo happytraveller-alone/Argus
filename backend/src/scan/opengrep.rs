@@ -620,12 +620,12 @@ mod tests {
 
     #[test]
     fn parses_container_absolute_paths_as_project_relative_for_frontend_rows() {
-        let json = r#"{"version":"1.15.1","results":[{"check_id":"path-rule","path":"/tmp/vulhunter/scans/opengrep-runtime/abc/source/src/main.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"path test","severity":"ERROR","metadata":{},"lines":"dangerous_call()"}}],"errors":[]}"#;
+        let json = r#"{"version":"1.15.1","results":[{"check_id":"path-rule","path":"/tmp/Argus/scans/opengrep-runtime/abc/source/src/main.py","start":{"line":5,"col":1,"offset":0},"end":{"line":5,"col":20,"offset":19},"extra":{"message":"path test","severity":"ERROR","metadata":{},"lines":"dangerous_call()"}}],"errors":[]}"#;
         let known_paths = std::collections::BTreeSet::from(["src/main.py".to_string()]);
         let findings = super::parse_scan_output(
             json,
             "task-3",
-            Some("/tmp/vulhunter/scans/opengrep-runtime/abc/source"),
+            Some("/tmp/Argus/scans/opengrep-runtime/abc/source"),
             Some(&known_paths),
         );
 
@@ -633,7 +633,7 @@ mod tests {
         assert_eq!(findings[0].payload["file_path"], "src/main.py");
         assert_eq!(
             findings[0].payload["raw_file_path"],
-            "/tmp/vulhunter/scans/opengrep-runtime/abc/source/src/main.py"
+            "/tmp/Argus/scans/opengrep-runtime/abc/source/src/main.py"
         );
         assert_eq!(findings[0].payload["resolved_file_path"], "src/main.py");
     }

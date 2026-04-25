@@ -1,6 +1,6 @@
 # Hermes Agent Services — 四个角色容器（Standalone 备选）
 # 主 compose (docker-compose.yml) 已包含这些服务。
-# 此文件仅用于独立启动 hermes agents（需先启动主 compose 创建 vulhunter-network）。
+# 此文件仅用于独立启动 hermes agents（需先启动主 compose 创建 Argus-network）。
 # docker compose -f docker/docker-compose.hermes-agents.yml up
 # Worker-only Hermes containers built from docker/hermes-agent-base.Dockerfile;
 # they do not expose upstream dashboard/web, Playwright, or Node runtime surfaces.
@@ -24,7 +24,7 @@ services:
       context: ..
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-recon
     restart: unless-stopped
     mem_limit: 2g
@@ -40,14 +40,14 @@ services:
       start_period: 60s
       retries: 5
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-analysis:
     build:
       context: ..
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-analysis
     restart: unless-stopped
     mem_limit: 2g
@@ -63,14 +63,14 @@ services:
       start_period: 60s
       retries: 5
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-verification:
     build:
       context: ..
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-verification
     restart: unless-stopped
     mem_limit: 2g
@@ -87,14 +87,14 @@ services:
       start_period: 60s
       retries: 5
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-report:
     build:
       context: ..
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-report
     restart: unless-stopped
     mem_limit: 2g
@@ -111,8 +111,8 @@ services:
       start_period: 60s
       retries: 5
     networks:
-      - vulhunter-network
+      - Argus-network
 
 networks:
-  vulhunter-network:
+  Argus-network:
     external: true

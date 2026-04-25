@@ -16,7 +16,7 @@ const DEFAULT_VENV_PATH: &str = "/opt/backend-venv";
 const DEFAULT_APP_ROOT: &str = "/app";
 const DEFAULT_BACKEND_SERVER_BIN: &str = "/usr/local/bin/backend";
 const DEFAULT_BACKEND_DOCKER_ENV_DIR: &str = "/docker/env/backend";
-const LOCK_STAMP_FILENAME: &str = ".vulhunter-dev-lock.sha256";
+const LOCK_STAMP_FILENAME: &str = ".Argus-dev-lock.sha256";
 const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
     "https://mirrors.aliyun.com/pypi/simple/,",
     "https://pypi.tuna.tsinghua.edu.cn/simple,",
@@ -543,10 +543,10 @@ pub fn run(mode: &str) -> Result<()> {
     ensure_backend_env_files(&app_root)?;
 
     if mode == "dev" {
-        println!("Starting VulHunter backend dev container...");
+        println!("Starting Argus backend dev container...");
         sync_backend_env_if_needed(&app_root)?;
     } else {
-        println!("VulHunter 后端启动中...");
+        println!("Argus 后端启动中...");
     }
 
     wait_for_db(WAIT_DB_MAX_RETRIES, WAIT_DB_SLEEP_SECONDS)?;

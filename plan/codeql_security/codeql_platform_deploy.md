@@ -38,7 +38,7 @@
 
 1. 后端 API 创建扫描任务。
 2. 后端通过 `ScannerRunSpec + run_scanner_container` 启动一次性 runner 容器。
-3. 运行目录统一挂载到共享扫描卷（`SCAN_WORKSPACE_ROOT`，默认 `/tmp/vulhunter/scans`）。
+3. 运行目录统一挂载到共享扫描卷（`SCAN_WORKSPACE_ROOT`，默认 `/tmp/Argus/scans`）。
 4. 解析产物并写入 `*_scan_tasks` 与 `*_findings` 表。
 
 ### 2.2 已有关键契约
@@ -97,7 +97,7 @@
 
 新增文件：`docker/codeql-runner.Dockerfile`
 
-建议镜像名：`vulhunter/codeql-runner:latest`
+建议镜像名：`Argus/codeql-runner:latest`
 
 ### 4.2 基础镜像与兼容约束
 
@@ -171,9 +171,9 @@ CMD ["codeql", "version"]
 ### 4.4 安装验证
 
 ```bash
-docker build -f docker/codeql-runner.Dockerfile -t vulhunter/codeql-runner-local:latest .
-docker run --rm vulhunter/codeql-runner-local:latest codeql version
-docker run --rm vulhunter/codeql-runner-local:latest codeql resolve languages
+docker build -f docker/codeql-runner.Dockerfile -t Argus/codeql-runner-local:latest .
+docker run --rm Argus/codeql-runner-local:latest codeql version
+docker run --rm Argus/codeql-runner-local:latest codeql resolve languages
 ```
 
 预期结果：输出中包含 `python`、`javascript`、`cpp`。
@@ -193,7 +193,7 @@ docker run --rm vulhunter/codeql-runner-local:latest codeql resolve languages
 在 `backend/app/core/config.py` 新增配置键：
 
 ```python
-SCANNER_CODEQL_IMAGE: str = "vulhunter/codeql-runner:latest"
+SCANNER_CODEQL_IMAGE: str = "Argus/codeql-runner:latest"
 CODEQL_DEFAULT_LANGUAGES: str = "python,javascript-typescript,cpp"
 CODEQL_DEFAULT_QUERY_SUITE: str = "security-extended"
 CODEQL_BUNDLE_VERSION: str = "2.20.5"
@@ -205,7 +205,7 @@ CODEQL_RAM_MB: int = 8192
 在 `docker-compose.yml` 与 `docker-compose.full.yml` 的 backend 环境变量中新增：
 
 ```yaml
-SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-vulhunter/codeql-runner-local:latest}
+SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-Argus/codeql-runner-local:latest}
 CODEQL_DEFAULT_LANGUAGES: ${CODEQL_DEFAULT_LANGUAGES:-python,javascript-typescript,cpp}
 CODEQL_DEFAULT_QUERY_SUITE: ${CODEQL_DEFAULT_QUERY_SUITE:-security-extended}
 CODEQL_BUNDLE_VERSION: ${CODEQL_BUNDLE_VERSION:-2.20.5}
@@ -506,7 +506,7 @@ codeql database analyze /scan/output/db/cpp \
 
 - input：`build_codeql_runner`（bool）
 - step：构建并推送 `docker/codeql-runner.Dockerfile`
-- tag：`ghcr.io/${{ github.repository_owner }}/vulhunter-codeql-runner:${{ github.event.inputs.tag }}`
+- tag：`ghcr.io/${{ github.repository_owner }}/Argus-codeql-runner:${{ github.event.inputs.tag }}`
 
 ---
 
@@ -637,7 +637,7 @@ codeql database analyze /scan/output/db/cpp \
 
 ```bash
 # 1) 构建 codeql runner
-docker build -f docker/codeql-runner.Dockerfile -t vulhunter/codeql-runner-local:latest .
+docker build -f docker/codeql-runner.Dockerfile -t Argus/codeql-runner-local:latest .
 
 # 2) 启动平台
 docker compose up -d --build

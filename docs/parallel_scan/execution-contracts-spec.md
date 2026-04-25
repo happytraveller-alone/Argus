@@ -38,7 +38,7 @@
 
 | 当前代码锚点 | 当前事实 | Phase 1 映射目标 |
 | --- | --- | --- |
-| `backend/app/core/config.py` | `SCAN_WORKSPACE_ROOT` 默认 `/tmp/vulhunter/scans` | `WorkspaceResolver` 的本地根目录来源 |
+| `backend/app/core/config.py` | `SCAN_WORKSPACE_ROOT` 默认 `/tmp/Argus/scans` | `WorkspaceResolver` 的本地根目录来源 |
 | `backend/app/api/v1/endpoints/static_tasks_shared.py` | 当前工作区路径规则为 `<SCAN_WORKSPACE_ROOT>/<scan_type>/<task_id>/{project,output,logs,meta}` | `WorkspaceRef` / `SnapshotRef` / `ArtifactRef` 的本地解析规则 |
 | `backend/app/services/scanner_runner.py` | scanner 把整个 workspace 挂载到 `/scan` | `WorkspaceResolver` 必须保证 ref 能解析到可挂载目录 |
 | `backend/app/services/agent/tools/verification_result_tools.py` | verification/report 通过私有 `_save_callback` / `_update_callback` 持久化 | `FindingStorePort` |

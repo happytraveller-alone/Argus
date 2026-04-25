@@ -25,7 +25,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "执行完检查后按预期退出" not in compose_text
     assert "\n  opengrep-runner:\n" in compose_text
     assert 'condition: service_completed_successfully' in compose_text
-    assert 'image: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}' in compose_text
+    assert 'image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}' in compose_text
     assert 'pull_policy: never' in compose_text
     assert "dockerfile: docker/opengrep-runner.Dockerfile" in compose_text
     assert 'command:' in compose_text
@@ -34,8 +34,8 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'restart: "no"' in compose_text
     for runner_service in RETIRED_RUNNER_SERVICE_NAMES:
         assert f"\n  {runner_service}:" not in compose_text
-    assert "vulhunter/backend-dev:latest" not in compose_text
-    assert "vulhunter/frontend-dev:latest" not in compose_text
+    assert "Argus/backend-dev:latest" not in compose_text
+    assert "Argus/frontend-dev:latest" not in compose_text
     assert "\n  backend:\n" in compose_text
     assert "\n  frontend:\n" in compose_text
     assert "\n  nexus-web:\n" not in compose_text
@@ -48,7 +48,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "target: runtime-plain" in compose_text
     assert "target: dev" in compose_text
     assert "./frontend:/app" in compose_text
-    assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
+    assert "${Argus_FRONTEND_PORT:-3000}:5173" in compose_text
     assert "VITE_API_TARGET: ${VITE_API_TARGET:-http://backend:8000}" in compose_text
     assert "BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
@@ -56,21 +56,21 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "YASA_VERSION:" not in compose_text
     assert "BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/" in compose_text
     assert "YASA_ENABLED" not in compose_text
-    assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
-    assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
+    assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}" in compose_text
+    assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}" in compose_text
     assert 'OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"' in compose_text
-    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in compose_text
+    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}" in compose_text
     assert "SCANNER_BANDIT_IMAGE" not in compose_text
     assert "SCANNER_GITLEAKS_IMAGE" not in compose_text
     assert "SCANNER_PHPSTAN_IMAGE" not in compose_text
     assert "SCANNER_PMD_IMAGE" not in compose_text
     assert "SCANNER_YASA_IMAGE" not in compose_text
-    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in compose_text
+    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-Argus/flow-parser-runner-local:latest}" in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
     assert "YASA_TIMEOUT_SECONDS" not in compose_text
-    assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" not in compose_text
-    assert "scan_workspace:/tmp/vulhunter/scans" in compose_text
+    assert "/tmp/Argus/scans:/tmp/Argus/scans" not in compose_text
+    assert "scan_workspace:/tmp/Argus/scans" in compose_text
     assert "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock" in compose_text
     assert 'RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"' in compose_text
     assert "mem_limit: 4g" in compose_text
@@ -79,7 +79,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "pids_limit: 256" in compose_text
     assert "mem_limit: 1g" in compose_text
     assert "MCP_REQUIRE_ALL_READY_ON_STARTUP" not in compose_text
-    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}" in compose_text
+    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-Argus/sandbox-runner-local:latest}" in compose_text
     assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
@@ -331,7 +331,7 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}" in reusable_workflow_text
     assert "GHCR_USERNAME" in reusable_workflow_text
     assert "GHCR_TOKEN" in reusable_workflow_text
-    assert "Publishing to ghcr.io/${VULHUNTER_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
+    assert "Publishing to ghcr.io/${Argus_IMAGE_NAMESPACE} from repository owner ${GITHUB_REPOSITORY_OWNER} requires GHCR_USERNAME and GHCR_TOKEN secrets." in reusable_workflow_text
     assert "if: env.GHCR_PACKAGE_VISIBILITY == 'public'" in reusable_workflow_text
     assert "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
     assert "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" in reusable_workflow_text
@@ -357,11 +357,11 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert '"published_images": published' in orchestrator_workflow_text
     assert 'selected_count={len(selected)}' in orchestrator_workflow_text
     assert "uses: ./.github/workflows/docker-publish.yml" in orchestrator_workflow_text
-    assert "vulhunter-backend" in orchestrator_workflow_text
-    assert "vulhunter-frontend" in orchestrator_workflow_text
-    assert "vulhunter-opengrep-runner" in orchestrator_workflow_text
-    assert "vulhunter-flow-parser-runner" in orchestrator_workflow_text
-    assert "vulhunter-sandbox-runner" in orchestrator_workflow_text
+    assert "Argus-backend" in orchestrator_workflow_text
+    assert "Argus-frontend" in orchestrator_workflow_text
+    assert "Argus-opengrep-runner" in orchestrator_workflow_text
+    assert "Argus-flow-parser-runner" in orchestrator_workflow_text
+    assert "Argus-sandbox-runner" in orchestrator_workflow_text
     assert "./docker/opengrep-runner.Dockerfile" in orchestrator_workflow_text
     assert "./docker/flow-parser-runner.Dockerfile" in orchestrator_workflow_text
     assert "./docker/sandbox-runner.Dockerfile" in orchestrator_workflow_text
@@ -426,7 +426,7 @@ def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
     assert "build_backend: true" in backend_workflow_text
     assert "build_frontend: false" in backend_workflow_text
 
-    assert "VULHUNTER_IMAGE_TAG: latest" in reusable_workflow_text
+    assert "Argus_IMAGE_TAG: latest" in reusable_workflow_text
     assert 'default: "linux/amd64,linux/arm64"' in reusable_workflow_text
     assert "workflow_dispatch:" in manual_entrypoint_workflow_text
     assert "uses: ./.github/workflows/publish-runtime-images.yml" in manual_entrypoint_workflow_text

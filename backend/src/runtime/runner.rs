@@ -12,8 +12,8 @@ use std::{
 
 pub const SCANNER_MOUNT_PATH: &str = "/scan";
 const MAX_RETAINED_LOG_CHARS: usize = 12_000;
-const DEFAULT_SCAN_WORKSPACE_ROOT: &str = "/tmp/vulhunter/scans";
-const DEFAULT_SCAN_WORKSPACE_VOLUME: &str = "vulhunter_scan_workspace";
+const DEFAULT_SCAN_WORKSPACE_ROOT: &str = "/tmp/Argus/scans";
+const DEFAULT_SCAN_WORKSPACE_VOLUME: &str = "Argus_scan_workspace";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunnerSpec {
@@ -89,9 +89,9 @@ fn docker_bin_with_priority(keys: &[&str]) -> String {
 
 fn docker_bin(scanner_type: Option<&str>) -> String {
     let preferred_keys: &[&str] = if matches!(scanner_type, Some("flow_parser")) {
-        &["BACKEND_DOCKER_BIN", "VULHUNTER_DOCKER_BIN"]
+        &["BACKEND_DOCKER_BIN", "Argus_DOCKER_BIN"]
     } else {
-        &["VULHUNTER_DOCKER_BIN", "BACKEND_DOCKER_BIN"]
+        &["Argus_DOCKER_BIN", "BACKEND_DOCKER_BIN"]
     };
 
     docker_bin_with_priority(preferred_keys)
@@ -383,7 +383,7 @@ fn request_container_stop(binary: &str, container_id: &str) -> Result<()> {
 }
 
 fn summary_gate_exit_timeout() -> Duration {
-    env::var("VULHUNTER_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS")
+    env::var("Argus_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS")
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -392,7 +392,7 @@ fn summary_gate_exit_timeout() -> Duration {
 }
 
 fn summary_gate_post_exit_grace() -> Duration {
-    env::var("VULHUNTER_SUMMARY_GATE_POST_EXIT_GRACE_MS")
+    env::var("Argus_SUMMARY_GATE_POST_EXIT_GRACE_MS")
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -927,16 +927,16 @@ esac
         let workspace_dir = workspace_root.join("yasa/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
             scanner_type: "yasa".to_string(),
-            image: "vulhunter/yasa-runner:latest".to_string(),
+            image: "Argus/yasa-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "/opt/yasa/bin/yasa".to_string(),
@@ -972,7 +972,7 @@ esac
         let logged = fs::read_to_string(&fake_log).unwrap();
         assert!(logged.contains("create|"));
         assert!(logged.contains(&format!(
-            "-v vulhunter_scan_workspace:{}:rw",
+            "-v Argus_scan_workspace:{}:rw",
             workspace_root.display()
         )));
         assert!(logged.contains(&format!(
@@ -999,18 +999,18 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let long_stderr = "fatal stderr line ".repeat(1_200);
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "2");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", &long_stderr);
 
         let result = execute(RunnerSpec {
             scanner_type: "phpstan".to_string(),
-            image: "vulhunter/phpstan-runner:latest".to_string(),
+            image: "Argus/phpstan-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "phpstan".to_string(),
@@ -1053,19 +1053,19 @@ esac
         let workspace_dir = workspace_root.join("phpstan/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "1");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "runner stdout");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", "runner stderr");
 
         let result = execute(RunnerSpec {
             scanner_type: "phpstan".to_string(),
-            image: "vulhunter/phpstan-runner:latest".to_string(),
+            image: "Argus/phpstan-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "phpstan".to_string(),
@@ -1111,14 +1111,14 @@ esac
         let workspace_root = temp_dir.path().join("scan-root");
         fs::create_dir_all(&workspace_root).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
 
         let result = execute(RunnerSpec {
             scanner_type: "phpstan".to_string(),
-            image: "vulhunter/phpstan-runner:latest".to_string(),
+            image: "Argus/phpstan-runner:latest".to_string(),
             workspace_dir: temp_dir
                 .path()
                 .join("elsewhere/task-1")
@@ -1160,17 +1160,17 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _start_sleep = EnvVarGuard::set("FAKE_START_SLEEP", "2");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
             timeout_seconds: 0,
@@ -1201,16 +1201,16 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-resource-limits");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
                 "opengrep".to_string(),
@@ -1253,12 +1253,12 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-attached-output");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _start_stdout = EnvVarGuard::set("FAKE_START_STDOUT", "attached stdout");
         let _start_stderr = EnvVarGuard::set("FAKE_START_STDERR", "attached stderr");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "docker logs stdout");
@@ -1266,7 +1266,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep".to_string(), "scan".to_string()],
             timeout_seconds: 0,
@@ -1309,12 +1309,12 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
@@ -1323,7 +1323,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1366,7 +1366,7 @@ esac
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
-        let _post_exit_grace = EnvVarGuard::set("VULHUNTER_SUMMARY_GATE_POST_EXIT_GRACE_MS", "200");
+        let _post_exit_grace = EnvVarGuard::set("Argus_SUMMARY_GATE_POST_EXIT_GRACE_MS", "200");
 
         let summary_path_for_writer = summary_path.clone();
         let writer = thread::spawn(move || {
@@ -1403,12 +1403,12 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
@@ -1418,7 +1418,7 @@ esac
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1471,22 +1471,22 @@ esac
         fs::create_dir_all(&workspace_dir).unwrap();
         let summary_path = workspace_dir.join("output/scan-summary.json");
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
         );
         let _wait_sleep = EnvVarGuard::set("FAKE_WAIT_SLEEP", "2");
-        let _wait_timeout = EnvVarGuard::set("VULHUNTER_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS", "1");
+        let _wait_timeout = EnvVarGuard::set("Argus_SUMMARY_GATE_EXIT_TIMEOUT_SECONDS", "1");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
@@ -1528,17 +1528,17 @@ esac
         let workspace_dir = workspace_root.join("opengrep/task-missing-summary");
         fs::create_dir_all(&workspace_dir).unwrap();
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
         let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "detached stdout without summary");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
-            image: "vulhunter/opengrep-runner-local:latest".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
@@ -1582,7 +1582,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
 
-        let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _inspect_missing = EnvVarGuard::set("FAKE_INSPECT_MISSING", "1");
 

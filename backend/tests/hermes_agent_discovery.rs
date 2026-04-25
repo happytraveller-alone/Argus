@@ -5,7 +5,7 @@ fn write_agent_toml(dir: &std::path::Path, role: &str) {
     let content = format!(
         r#"id = "{role}"
 role = "{role}"
-image = "vulhunter/hermes-agent:latest"
+image = "Argus/hermes-agent:latest"
 container_name = "hermes-{role}"
 enabled = true
 dispatch_timeout_seconds = 300
@@ -48,7 +48,7 @@ fn only_known_roles_accepted() {
 
     let bad_content = r#"id = "unknown"
 role = "unknown_role"
-image = "vulhunter/hermes-agent:latest"
+image = "Argus/hermes-agent:latest"
 container_name = "hermes-unknown"
 enabled = true
 dispatch_timeout_seconds = 300

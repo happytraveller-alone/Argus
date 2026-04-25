@@ -18,14 +18,14 @@ services:
         - SANDBOX_RUNNER_APT_SECURITY_FALLBACK=${SANDBOX_RUNNER_APT_SECURITY_FALLBACK:-security.debian.org}
         - SANDBOX_RUNNER_PYPI_INDEX_PRIMARY=${SANDBOX_RUNNER_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
         - SANDBOX_RUNNER_NPM_REGISTRY=${SANDBOX_RUNNER_NPM_REGISTRY:-https://registry.npmmirror.com}
-    image: vulhunter/sandbox-runner:latest
+    image: Argus/sandbox-runner:latest
     profiles: ["build", "sandbox-runner"]
     restart: "no"
     command: ["python3", "-c", "import requests; import httpx; import jwt; print('✅ Sandbox Runner OK')"]
 
   # 预热服务 (可选) - 在 backend 启动前拉取镜像
   sandbox-runner-warmup:
-    image: vulhunter/sandbox-runner:latest
+    image: Argus/sandbox-runner:latest
     profiles: ["warmup"]
     command: ["true"]
     restart: "no"
@@ -33,5 +33,5 @@ services:
 # 环境变量配置示例
 # 在 .env 或 docker/env/backend/.env 中添加:
 # SANDBOX_RUNNER_ENABLED=true
-# SANDBOX_RUNNER_IMAGE=vulhunter/sandbox-runner:latest
+# SANDBOX_RUNNER_IMAGE=Argus/sandbox-runner:latest
 # SANDBOX_RUNNER_TIMEOUT=60

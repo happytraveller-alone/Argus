@@ -13,7 +13,7 @@ interface SplashScreenProps {
 
 // Enhanced boot sequence messages with icons
 const BOOT_SEQUENCE = [
-  { text: "[INIT] Loading VulHunter Core...", delay: 0, type: 'init' },
+  { text: "[INIT] Loading Argus Core...", delay: 0, type: 'init' },
   { text: "[SCAN] Neural Analysis Engine v3.0", delay: 200, type: 'scan' },
   { text: "[LOAD] Vulnerability Pattern Database", delay: 400, type: 'load' },
   { text: "[SYNC] Agent Orchestration Module", delay: 600, type: 'sync' },
@@ -282,7 +282,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
               <div className="flex-1 flex items-center justify-center gap-2">
                 <span className="text-primary/60 text-xs">▶</span>
                 <span className="text-xs text-gray-500 dark:text-gray-400 font-mono tracking-[0.15em] uppercase">
-                  root@vulhunter:~#
+                  root@Argus:~#
                 </span>
                 <span className="w-2 h-4 bg-primary/80 animate-pulse" />
               </div>

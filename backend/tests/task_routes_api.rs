@@ -30,7 +30,7 @@ fn write_agent_toml(dir: &std::path::Path, role: &str, container_name: &str) {
     let content = format!(
         r#"id = "{role}"
 role = "{role}"
-image = "vulhunter/hermes-agent:latest"
+image = "Argus/hermes-agent:latest"
 container_name = "{container_name}"
 enabled = true
 dispatch_timeout_seconds = 1
@@ -2040,7 +2040,7 @@ async fn opengrep_task_completes_without_missing_results_when_summary_is_complet
     fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
     fs::create_dir_all(&scan_root).expect("mkdir scan root");
 
-    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
     let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
     let _docker_state = EnvVarGuard::set(
         "FAKE_TASK_DOCKER_STATE_DIR",
@@ -2051,7 +2051,7 @@ async fn opengrep_task_completes_without_missing_results_when_summary_is_complet
         preserved_results.to_str().unwrap(),
     );
     let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
-    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
     let _results_json = EnvVarGuard::set(
         "FAKE_TASK_RESULTS_JSON",
         r#"{"results":[{"check_id":"demo.rule","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo finding","severity":"ERROR","metadata":{"confidence":"HIGH"},"lines":"print('hello')"}}]}"#,
@@ -2143,7 +2143,7 @@ async fn opengrep_task_supports_tar_xz_project_archives() {
     fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
     fs::create_dir_all(&scan_root).expect("mkdir scan root");
 
-    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
     let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
     let _docker_state = EnvVarGuard::set(
         "FAKE_TASK_DOCKER_STATE_DIR",
@@ -2154,7 +2154,7 @@ async fn opengrep_task_supports_tar_xz_project_archives() {
         preserved_results.to_str().unwrap(),
     );
     let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
-    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
     let _results_json = EnvVarGuard::set(
         "FAKE_TASK_RESULTS_JSON",
         r#"{"results":[{"check_id":"demo.rule","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo finding","severity":"ERROR","metadata":{"confidence":"HIGH"},"lines":"print('hello')"}}]}"#,
@@ -2232,14 +2232,14 @@ async fn opengrep_task_uses_single_container_and_captures_terminal_output() {
     fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
     fs::create_dir_all(&scan_root).expect("mkdir scan root");
 
-    let _docker_bin = EnvVarGuard::set("VULHUNTER_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
     let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
     let _docker_state = EnvVarGuard::set(
         "FAKE_TASK_DOCKER_STATE_DIR",
         fake_state_dir.to_str().unwrap(),
     );
     let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
-    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace");
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
     let _stdout = EnvVarGuard::set("FAKE_TASK_STDOUT", "opengrep stdout from container");
     let _stderr = EnvVarGuard::set("FAKE_TASK_STDERR", "opengrep stderr from container");
     let _results_json = EnvVarGuard::set(

@@ -1,5 +1,5 @@
 # =============================================
-# VulHunter Frontend Docker 构建（BuildKit 缓存优化）
+# Argus Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================
 
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
@@ -27,8 +27,8 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:${PATH}
 
 # 使用 corepack 管理 pnpm，镜像优先且支持官方回退
-RUN --mount=type=cache,id=vulhunter-frontend-npm,target=/root/.npm \
-    --mount=type=cache,id=vulhunter-frontend-corepack,target=/root/.cache/node/corepack \
+RUN --mount=type=cache,id=Argus-frontend-npm,target=/root/.npm \
+    --mount=type=cache,id=Argus-frontend-corepack,target=/root/.cache/node/corepack \
     set -eux; \
     corepack enable; \
     prepare_pnpm() { \
@@ -80,8 +80,8 @@ FROM pnpm-base AS builder
 COPY package.json pnpm-lock.yaml ./
 
 # 利用 BuildKit 缓存 mount 复用 pnpm store，减少重复下载
-RUN --mount=type=cache,id=vulhunter-frontend-pnpm,target=/pnpm/store \
-    --mount=type=cache,id=vulhunter-frontend-npm,target=/root/.npm \
+RUN --mount=type=cache,id=Argus-frontend-pnpm,target=/pnpm/store \
+    --mount=type=cache,id=Argus-frontend-npm,target=/root/.npm \
     set -eux; \
     FALLBACK_REGISTRY="${FRONTEND_NPM_REGISTRY_FALLBACK}"; \
     step_timeout=300; \
@@ -137,7 +137,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 # 构建生产版本
 # - VITE_CACHE_DIR 指向 BuildKit cache mount，跨构建复用 vite 转换缓存
 # - NODE_OPTIONS 防止大型 bundle 触发 OOM
-RUN --mount=type=cache,id=vulhunter-frontend-vite-build,target=/tmp/vite-build-cache \
+RUN --mount=type=cache,id=Argus-frontend-vite-build,target=/tmp/vite-build-cache \
     VITE_CACHE_DIR=/tmp/vite-build-cache \
     NODE_OPTIONS="--max-old-space-size=3072" \
     pnpm build

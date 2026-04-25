@@ -1,6 +1,6 @@
 export const I18N_MESSAGES = {
 	zh: {
-		"app.name": "VulHunter",
+		"app.name": "Argus",
 		"app.securityAgent": "安全智能体",
 		"route.home": "首页",
 		"route.dashboard": "仪表盘",

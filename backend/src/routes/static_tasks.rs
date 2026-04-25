@@ -1250,7 +1250,7 @@ fn scan_workspace_root() -> PathBuf {
         .ok()
         .map(|v| PathBuf::from(v.trim()))
         .filter(|v| !v.as_os_str().is_empty())
-        .unwrap_or_else(|| PathBuf::from("/tmp/vulhunter/scans"))
+        .unwrap_or_else(|| PathBuf::from("/tmp/Argus/scans"))
 }
 
 async fn list_static_tasks(

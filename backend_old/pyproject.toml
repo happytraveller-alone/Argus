@@ -1,12 +1,12 @@
 [project]
-name = "VulHunter-backend"
+name = "Argus-backend"
 version = "3.0.4"
-description = "VulHunter Backend API - AI-Powered Code Security Audit Platform"
+description = "Argus Backend API - AI-Powered Code Security Audit Platform"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "VulHunter Team" }
+    { name = "Argus Team" }
 ]
 keywords = ["security", "audit", "code-review", "vulnerability", "ai", "llm"]
 
@@ -77,11 +77,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lintsinghua/VulHunter"
-Documentation = "https://github.com/lintsinghua/VulHunter/tree/main/docs"
-Repository = "https://github.com/lintsinghua/VulHunter"
-Issues = "https://github.com/lintsinghua/VulHunter/issues"
-Changelog = "https://github.com/lintsinghua/VulHunter/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/lintsinghua/Argus"
+Documentation = "https://github.com/lintsinghua/Argus/tree/main/docs"
+Repository = "https://github.com/lintsinghua/Argus"
+Issues = "https://github.com/lintsinghua/Argus/issues"
+Changelog = "https://github.com/lintsinghua/Argus/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]

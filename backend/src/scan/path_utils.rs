@@ -420,10 +420,10 @@ mod tests {
     fn build_legacy_scan_path_candidates_strips_temp_prefix_and_archive_root() {
         assert_eq!(
             build_legacy_scan_path_candidates(
-                "/tmp/VulHunter_proj_123/archive-root/./src/app/main.py"
+                "/tmp/Argus_proj_123/archive-root/./src/app/main.py"
             ),
             vec![
-                "tmp/VulHunter_proj_123/archive-root/src/app/main.py",
+                "tmp/Argus_proj_123/archive-root/src/app/main.py",
                 "archive-root/src/app/main.py",
                 "src/app/main.py",
                 "main.py",
@@ -472,7 +472,7 @@ mod tests {
     fn resolve_legacy_scan_path_uses_first_known_zip_match() {
         assert_eq!(
             resolve_legacy_scan_path(
-                "/tmp/VulHunter_proj_123/archive-root/./src/app/main.py",
+                "/tmp/Argus_proj_123/archive-root/./src/app/main.py",
                 ["archive-root/src/app/main.py", "src/app/main.py"],
             ),
             Some("archive-root/src/app/main.py".to_string())
@@ -483,7 +483,7 @@ mod tests {
     fn resolve_legacy_scan_path_returns_none_when_zip_has_no_match() {
         assert_eq!(
             resolve_legacy_scan_path(
-                "/tmp/VulHunter_proj_123/archive-root/./src/app/missing.py",
+                "/tmp/Argus_proj_123/archive-root/./src/app/missing.py",
                 ["src/app/main.py"],
             ),
             None
@@ -499,7 +499,7 @@ mod tests {
 
         assert_eq!(
             resolve_scan_finding_location(
-                Some("/tmp/VulHunter_proj_123/archive-root/./src/app/main.py"),
+                Some("/tmp/Argus_proj_123/archive-root/./src/app/main.py"),
                 Some(&Value::from("14")),
                 Some("/tmp/project-root"),
                 Some(&known),
@@ -527,7 +527,7 @@ mod tests {
     fn resolve_scan_finding_location_skips_tmp_candidates_without_known_paths() {
         assert_eq!(
             resolve_scan_finding_location(
-                Some("/tmp/VulHunter_proj_123/archive-root/src/app/main.py"),
+                Some("/tmp/Argus_proj_123/archive-root/src/app/main.py"),
                 Some(&Value::Null),
                 None,
                 None,

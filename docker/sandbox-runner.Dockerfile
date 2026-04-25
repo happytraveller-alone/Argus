@@ -1,4 +1,4 @@
-# VulHunter Sandbox Runner - 按需加载代码执行镜像
+# Argus Sandbox Runner - 按需加载代码执行镜像
 # 参考 flow-parser-runner 设计,专注于安全隔离的代码执行能力
 # 不包含重量级扫描工具,保持镜像精简
 
@@ -23,8 +23,8 @@ ARG SANDBOX_RUNNER_APT_SECURITY_FALLBACK
 ARG SANDBOX_RUNNER_PYPI_INDEX_PRIMARY
 
 # 安装构建依赖
-RUN --mount=type=cache,id=vulhunter-sandbox-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-sandbox-runner-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-sandbox-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-sandbox-runner-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
@@ -68,7 +68,7 @@ ENV PATH=/opt/sandbox-runner-venv/bin:${PATH}
 RUN python3 -m venv /opt/sandbox-runner-venv
 
 # 安装运行时 Python 库 (只安装代码执行所需的最小依赖)
-RUN --mount=type=cache,id=vulhunter-sandbox-runner-pip,target=/root/.cache/pip \
+RUN --mount=type=cache,id=Argus-sandbox-runner-pip,target=/root/.cache/pip \
     set -eux; \
     pip_install_with_index() { \
       idx="$1"; \
@@ -93,12 +93,12 @@ ARG SANDBOX_RUNNER_APT_MIRROR_FALLBACK
 ARG SANDBOX_RUNNER_APT_SECURITY_FALLBACK
 ARG SANDBOX_RUNNER_NPM_REGISTRY
 
-LABEL maintainer="VulHunter Team"
+LABEL maintainer="Argus Team"
 LABEL description="Lightweight sandbox runner for on-demand code execution"
 
 # 只安装运行时必需的包 (移除构建工具)
-RUN --mount=type=cache,id=vulhunter-sandbox-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-sandbox-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-sandbox-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-sandbox-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \

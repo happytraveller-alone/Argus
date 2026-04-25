@@ -14,8 +14,8 @@ ARG BACKEND_APT_SECURITY_FALLBACK
 
 WORKDIR /app
 
-RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-backend-builder-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-backend-builder-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-backend-builder-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
@@ -70,9 +70,9 @@ COPY backend/src ./src
 COPY backend/migrations ./migrations
 COPY backend/tests ./tests
 
-RUN --mount=type=cache,id=vulhunter-backend-cargo-registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=vulhunter-backend-cargo-git,target=/usr/local/cargo/git \
-    --mount=type=cache,id=vulhunter-backend-cargo-target,target=/app/target \
+RUN --mount=type=cache,id=Argus-backend-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=Argus-backend-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=Argus-backend-cargo-target,target=/app/target \
     cargo build --release --bin backend-rust \
     && cp /app/target/release/backend-rust /usr/local/bin/backend-rust \
     && strip /usr/local/bin/backend-rust
@@ -100,8 +100,8 @@ ARG BACKEND_APT_SECURITY_PRIMARY
 ARG BACKEND_APT_MIRROR_FALLBACK
 ARG BACKEND_APT_SECURITY_FALLBACK
 
-RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \

@@ -98,26 +98,26 @@ class StubSandboxManager:
 class TestSandboxManagerImageResolution:
     def test_image_candidates_prefer_explicit_then_local_then_remote(self, monkeypatch):
         monkeypatch.setenv("GHCR_REGISTRY", "docker.m.daocloud.io")
-        monkeypatch.setenv("VULHUNTER_IMAGE_TAG", "latest")
+        monkeypatch.setenv("Argus_IMAGE_TAG", "latest")
         manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
 
         candidates = manager._image_candidates()
 
         assert candidates == [
             "custom/sandbox:latest",
-            "vulhunter/sandbox-runner:latest",
-            "VulHunter/sandbox-runner:latest",
-            "VulHunter-sandbox-runner:latest",
-            "docker.m.daocloud.io/audittool/vulhunter-sandbox-runner:latest",
+            "Argus/sandbox-runner:latest",
+            "Argus/sandbox-runner:latest",
+            "Argus-sandbox-runner:latest",
+            "docker.m.daocloud.io/audittool/Argus-sandbox-runner:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
-        manager = SandboxManager(SandboxConfig(image="ghcr.io/audittool/vulhunter-sandbox-runner:latest"))
-        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox-runner:latest": object()}[image]))
+        manager = SandboxManager(SandboxConfig(image="ghcr.io/audittool/Argus-sandbox-runner:latest"))
+        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"Argus/sandbox-runner:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())
 
-        assert selected == "VulHunter/sandbox-runner:latest"
+        assert selected == "Argus/sandbox-runner:latest"
 
     def test_format_image_resolution_error_uses_root_sandbox_dockerfile_hint(self):
         manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
@@ -127,7 +127,7 @@ class TestSandboxManagerImageResolution:
             ["custom/sandbox:latest: not found"],
         )
 
-        assert "docker build -f docker/sandbox-runner.Dockerfile -t vulhunter/sandbox-runner:latest ." in message
+        assert "docker build -f docker/sandbox-runner.Dockerfile -t Argus/sandbox-runner:latest ." in message
         assert "cd docker/sandbox" not in message
 
 
@@ -364,8 +364,8 @@ class TestRunCodeToolExecution:
                 "exit_code": 0,
                 "stdout": "payload detected\\nproof line",
                 "stderr": "",
-                "image": "vulhunter/sandbox-runner:latest",
-                "image_candidates": ["vulhunter/sandbox-runner:latest"],
+                "image": "Argus/sandbox-runner:latest",
+                "image_candidates": ["Argus/sandbox-runner:latest"],
             }
         )
         tool = RunCodeTool(sandbox_manager=sandbox_manager, project_root="/test")
@@ -388,7 +388,7 @@ class TestRunCodeToolExecution:
         assert entry["description"] == "验证命令注入 harness"
         assert "python3 -c" in entry["execution_command"]
         assert entry["stdout_preview"].startswith("payload detected")
-        assert entry["runtime_image"] == "vulhunter/sandbox-runner:latest"
+        assert entry["runtime_image"] == "Argus/sandbox-runner:latest"
         assert entry["code"]["language"] == "python"
         assert entry["code"]["lines"][0]["line_number"] == 1
 
@@ -739,8 +739,8 @@ async def test_sandbox_exec_returns_execution_result_metadata():
             "exit_code": 7,
             "stdout": "partial output",
             "stderr": "permission denied",
-            "image": "vulhunter/sandbox-runner:latest",
-            "image_candidates": ["vulhunter/sandbox-runner:latest", "VulHunter/sandbox-runner:latest"],
+            "image": "Argus/sandbox-runner:latest",
+            "image_candidates": ["Argus/sandbox-runner:latest", "Argus/sandbox-runner:latest"],
         }
     )
     tool = SandboxTool(sandbox_manager=sandbox_manager)

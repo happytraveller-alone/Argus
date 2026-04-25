@@ -269,7 +269,7 @@ test("ScanConfigExternalToolDetailContent 对 structured_tool 渲染结构化参
       resolved_file_path: "src/xplist.c",
       resolved_line_start: 42,
       resolved_line_end: 58,
-      runner_image: "vulhunter/flow-parser-runner-local:latest",
+      runner_image: "Argus/flow-parser-runner-local:latest",
       input_payload: structuredDetail.tool_test_preset,
     },
   });

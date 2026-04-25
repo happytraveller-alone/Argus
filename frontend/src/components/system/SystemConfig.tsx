@@ -383,7 +383,7 @@ function AdvancedConfigDialog(props: {
 					<Textarea
 						value={cfg.llmCustomHeaders}
 						onChange={(e) => update("llmCustomHeaders", e.target.value)}
-						placeholder='{"HTTP-Referer":"https://app.example.com","X-Title":"VulHunter"}'
+						placeholder='{"HTTP-Referer":"https://app.example.com","X-Title":"Argus"}'
 						className="min-h-32 cyber-input font-mono"
 					/>
 				),

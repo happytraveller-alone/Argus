@@ -1,6 +1,6 @@
 declare global {
   interface Window {
-    __deepAuditTranslatorDomCompatInstalled__?: boolean;
+    __ArgusTranslatorDomCompatInstalled__?: boolean;
   }
 }
 
@@ -11,12 +11,12 @@ function isDomNotFoundError(error: unknown): error is DOMException {
 export function installTranslatorDomCompatPatch() {
   if (
     typeof window === "undefined" ||
-    window.__deepAuditTranslatorDomCompatInstalled__
+    window.__ArgusTranslatorDomCompatInstalled__
   ) {
     return;
   }
 
-  window.__deepAuditTranslatorDomCompatInstalled__ = true;
+  window.__ArgusTranslatorDomCompatInstalled__ = true;
 
   const nativeRemoveChild = Node.prototype.removeChild;
   const nativeInsertBefore = Node.prototype.insertBefore;

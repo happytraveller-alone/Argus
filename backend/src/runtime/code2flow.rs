@@ -401,7 +401,7 @@ fn flow_parser_runner_image() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "vulhunter/flow-parser-runner:latest".to_string())
+        .unwrap_or_else(|| "Argus/flow-parser-runner:latest".to_string())
 }
 
 fn scan_workspace_root() -> PathBuf {
@@ -409,7 +409,7 @@ fn scan_workspace_root() -> PathBuf {
         .ok()
         .map(|value| PathBuf::from(value.trim()))
         .filter(|value| !value.as_os_str().is_empty())
-        .unwrap_or_else(|| PathBuf::from("/tmp/vulhunter/scans"))
+        .unwrap_or_else(|| PathBuf::from("/tmp/Argus/scans"))
 }
 
 fn normalize_rel_path(raw_path: &str) -> String {
@@ -554,7 +554,7 @@ mod tests {
             target_files: vec!["src/demo.py".to_string()],
             timeout_seconds: 5,
             max_files: 5,
-            image: Some("vulhunter/flow-parser-runner:test".to_string()),
+            image: Some("Argus/flow-parser-runner:test".to_string()),
         });
 
         assert!(!response.ok);

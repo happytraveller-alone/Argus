@@ -46,7 +46,7 @@ jobs:
     if: ${{ inputs.build_backend }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      image_name: vulhunter-backend
+      image_name: Argus-backend
       context: .
       file: ./docker/backend.Dockerfile
       build_args: |
@@ -58,7 +58,7 @@ jobs:
     if: ${{ inputs.build_frontend }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      image_name: vulhunter-frontend
+      image_name: Argus-frontend
       context: ./frontend
       file: ./docker/frontend.Dockerfile
       platforms: linux/amd64,linux/arm64
@@ -68,7 +68,7 @@ jobs:
     if: ${{ inputs.build_opengrep_runner }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      image_name: vulhunter-opengrep-runner
+      image_name: Argus-opengrep-runner
       context: .
       file: ./docker/opengrep-runner.Dockerfile
       platforms: linux/amd64,linux/arm64
@@ -78,7 +78,7 @@ jobs:
     if: ${{ inputs.build_flow_parser_runner }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      image_name: vulhunter-flow-parser-runner
+      image_name: Argus-flow-parser-runner
       context: .
       file: ./docker/flow-parser-runner.Dockerfile
       platforms: linux/amd64,linux/arm64
@@ -88,7 +88,7 @@ jobs:
     if: ${{ inputs.build_sandbox_runner }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      image_name: vulhunter-sandbox-runner
+      image_name: Argus-sandbox-runner
       context: .
       file: ./docker/sandbox-runner.Dockerfile
       platforms: linux/amd64,linux/arm64
@@ -124,11 +124,11 @@ jobs:
           import os
 
           catalog = [
-              ("BUILD_BACKEND", "vulhunter-backend"),
-              ("BUILD_FRONTEND", "vulhunter-frontend"),
-              ("BUILD_OPENGREP_RUNNER", "vulhunter-opengrep-runner"),
-              ("BUILD_FLOW_PARSER_RUNNER", "vulhunter-flow-parser-runner"),
-              ("BUILD_SANDBOX_RUNNER", "vulhunter-sandbox-runner"),
+              ("BUILD_BACKEND", "Argus-backend"),
+              ("BUILD_FRONTEND", "Argus-frontend"),
+              ("BUILD_OPENGREP_RUNNER", "Argus-opengrep-runner"),
+              ("BUILD_FLOW_PARSER_RUNNER", "Argus-flow-parser-runner"),
+              ("BUILD_SANDBOX_RUNNER", "Argus-sandbox-runner"),
           ]
 
           selected = [

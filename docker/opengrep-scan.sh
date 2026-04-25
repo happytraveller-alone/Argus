@@ -114,6 +114,22 @@ raise SystemExit(1)
 PY
 }
 
+recover_results_json_from() {
+  local source_path="$1"
+  local source_label="$2"
+  local recovered_path="${output_path}.recovered"
+
+  rm -f "$recovered_path"
+  if recover_json_document "$source_path" "$recovered_path"; then
+    mv "$recovered_path" "$output_path"
+    printf 'recovered opengrep JSON results from %s\n' "$source_label" >> "$log_path"
+    return 0
+  fi
+
+  rm -f "$recovered_path"
+  return 1
+}
+
 json_summary() {
   local status="$1"
   local output_path="$2"
@@ -262,15 +278,23 @@ cmd=(opengrep scan --disable-version-check --jobs "$jobs" --max-memory "$max_mem
 for config_path in "${config_paths[@]}"; do
   cmd+=(--config "$config_path")
 done
-cmd+=(--json --json-output "$output_path" "$target_dir")
+cmd+=(--json --output "$output_path" "$target_dir")
 
 set +e
 "${cmd[@]}" > "$stdout_capture" 2>> "$log_path"
 status=$?
 set -e
 
-if ! results_json_ready "$output_path" && recover_json_document "$stdout_capture" "$output_path"; then
-  printf 'recovered opengrep JSON results from stdout\n' >> "$log_path"
+if ! results_json_ready "$output_path"; then
+  recover_results_json_from "$output_path" "output file" || true
+fi
+
+if ! results_json_ready "$output_path"; then
+  recover_results_json_from "$stdout_capture" "stdout" || true
+fi
+
+if ! results_json_ready "$output_path"; then
+  recover_results_json_from "$log_path" "log" || true
 fi
 
 if ! results_json_ready "$output_path" && [ -s "$stdout_capture" ]; then

@@ -246,7 +246,7 @@ async def test_temp_dir_operations(manager: SandboxManager):
     command = """
     TMPDIR=$(mktemp -d) && \
     echo "创建的临时目录: $TMPDIR" && \
-    echo "project_name: VulHunter" > "$TMPDIR/config.yaml" && \
+    echo "project_name: Argus" > "$TMPDIR/config.yaml" && \
     echo "version: 1.0" >> "$TMPDIR/config.yaml" && \
     echo "# Source Code" > "$TMPDIR/main.py" && \
     echo "def main():" >> "$TMPDIR/main.py" && \

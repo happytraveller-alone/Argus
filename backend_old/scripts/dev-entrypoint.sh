@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 
-echo "Starting VulHunter backend dev container..."
+echo "Starting Argus backend dev container..."
 
 APP_ROOT="/app"
 VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"
-STAMP_FILE="${VENV_DIR}/.vulhunter-dev-lock.sha256"
+STAMP_FILE="${VENV_DIR}/.Argus-dev-lock.sha256"
 DEFAULT_PYPI_INDEX_CANDIDATES="https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple"
 
 read_venv_version() {

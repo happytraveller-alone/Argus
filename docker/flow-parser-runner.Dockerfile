@@ -22,8 +22,8 @@ ENV PATH=/opt/flow-parser-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
-RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-flow-parser-runner-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-flow-parser-runner-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     . /etc/os-release; \
     CODENAME="${VERSION_CODENAME:-bookworm}"; \
@@ -53,7 +53,7 @@ RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib
 COPY docker/flow-parser-runner.requirements.txt /tmp/flow-parser-runner.requirements.txt
 
 # Runtime deps pinned in requirements: tree-sitter, tree-sitter-language-pack, code2flow
-RUN --mount=type=cache,id=vulhunter-flow-parser-runner-pip,target=/root/.cache/pip \
+RUN --mount=type=cache,id=Argus-flow-parser-runner-pip,target=/root/.cache/pip \
     set -eux; \
     order_pypi_indexes() { \
       raw_candidates="${PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \

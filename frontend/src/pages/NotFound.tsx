@@ -77,7 +77,7 @@ export default function NotFound() {
 
         {/* Footer */}
         <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground font-mono uppercase">
-          &copy; {new Date().getFullYear()} VulHunter
+          &copy; {new Date().getFullYear()} Argus
         </p>
       </div>
     </>

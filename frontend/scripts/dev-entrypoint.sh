@@ -12,7 +12,7 @@ pnpm config set network-timeout 300000 >/dev/null 2>&1 || true
 pnpm config set fetch-retries 5 >/dev/null 2>&1 || true
 
 LOCK_FILE="/app/pnpm-lock.yaml"
-STAMP_FILE="/pnpm/store/.VulHunter_frontend_lock.sha256"
+STAMP_FILE="/pnpm/store/.Argus_frontend_lock.sha256"
 INSTALL_MODE="${FRONTEND_DEV_INSTALL_MODE:-auto}"
 NEED_INSTALL="0"
 

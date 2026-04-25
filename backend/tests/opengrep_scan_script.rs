@@ -153,6 +153,119 @@ fn opengrep_scan_recovers_results_from_mixed_stdout_when_output_file_is_missing(
         .contains("recovered opengrep JSON results from stdout"));
 }
 
+#[test]
+fn opengrep_scan_recovers_results_from_log_when_output_file_is_missing() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_SKIP_OUTPUT", "1")
+        .env("FAKE_OPENGREP_LOG_JSON_ONLY", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should recover valid JSON embedded in the log\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    assert!(fs::read_to_string(&fixture.output_path)
+        .expect("recovered results")
+        .contains("\"results\""));
+    assert!(fs::read_to_string(&fixture.log_path)
+        .expect("log")
+        .contains("recovered opengrep JSON results from log"));
+}
+
+#[test]
+fn opengrep_scan_recovers_results_from_mixed_output_file() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_MIXED_OUTPUT_FILE", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should normalize valid JSON embedded in the output file\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    let recovered_results = fs::read_to_string(&fixture.output_path).expect("recovered results");
+    assert!(recovered_results.starts_with('{'));
+    assert!(recovered_results.contains("\"results\""));
+    assert!(fs::read_to_string(&fixture.log_path)
+        .expect("log")
+        .contains("recovered opengrep JSON results from output file"));
+}
+
+#[test]
+fn opengrep_scan_uses_primary_output_file_contract() {
+    let fixture = ScriptFixture::new();
+    let args_path = fixture._temp_dir.path().join("args.txt");
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_ARGS_PATH", &args_path)
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should complete successfully\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let args = fs::read_to_string(args_path).expect("args");
+    assert!(
+        args.contains(" --output "),
+        "wrapper should ask opengrep to write the primary result file with --output\nargs={args}"
+    );
+    assert!(
+        !args.contains(" --json-output "),
+        "wrapper should avoid duplicate JSON stdout/file contracts\nargs={args}"
+    );
+}
+
 struct ScriptFixture {
     _temp_dir: TempDir,
     path_env: String,
@@ -175,7 +288,8 @@ impl ScriptFixture {
         let rules_root = temp_dir.path().join("rules");
         fs::create_dir_all(&fake_bin).expect("mkdir bin");
         fs::create_dir_all(&target_dir).expect("mkdir target");
-        fs::create_dir_all(&rules_root).expect("mkdir rules");
+        fs::create_dir_all(rules_root.join("rules_opengrep")).expect("mkdir builtin rules");
+        fs::create_dir_all(rules_root.join("rules_from_patches")).expect("mkdir patch rules");
 
         let fake_opengrep = fake_bin.join("opengrep");
         fs::write(
@@ -185,6 +299,9 @@ set -euo pipefail
 if [ "${1:-}" = "--version" ]; then
   printf 'opengrep fake\n'
   exit 0
+fi
+if [ -n "${FAKE_OPENGREP_ARGS_PATH:-}" ]; then
+  printf ' %s ' "$*" > "$FAKE_OPENGREP_ARGS_PATH"
 fi
 output_path=""
 while [ "$#" -gt 0 ]; do
@@ -204,6 +321,10 @@ elif [ "${FAKE_OPENGREP_MIXED_STDOUT_JSON:-0}" = "1" ]; then
   printf '%s\n' 'scan banner before json'
   printf '%s\n' '{"results":[]}'
   printf '%s\n' 'scan summary after json'
+elif [ "${FAKE_OPENGREP_LOG_JSON_ONLY:-0}" = "1" ]; then
+  printf '%s\n' 'scan banner before json' >&2
+  printf '%s\n' '{"results":[]}' >&2
+  printf '%s\n' 'scan summary after json' >&2
 else
   for i in $(seq 1 5000); do
     printf 'scanner line %s\n' "$i"
@@ -211,7 +332,13 @@ else
 fi
 if [ "${FAKE_OPENGREP_SKIP_OUTPUT:-0}" != "1" ]; then
   mkdir -p "$(dirname "$output_path")"
-  printf '%s\n' '{"results":[]}' > "$output_path"
+  if [ "${FAKE_OPENGREP_MIXED_OUTPUT_FILE:-0}" = "1" ]; then
+    printf '%s\n' 'scan banner before json' > "$output_path"
+    printf '%s\n' '{"results":[]}' >> "$output_path"
+    printf '%s\n' 'scan summary after json' >> "$output_path"
+  else
+    printf '%s\n' '{"results":[]}' > "$output_path"
+  fi
 fi
 exit "${FAKE_OPENGREP_EXIT:-0}"
 "#,

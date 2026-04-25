@@ -51,13 +51,13 @@ export function HomeScanCards() {
             >
               <img
                 src={logoSrc}
-                alt="VulHunter"
+                alt="Argus"
                 className="w-16 h-16 object-contain"
               />
             </button>
 
             <h1 className="text-6xl font-bold tracking-wider font-mono">
-              VulHunter
+              Argus
             </h1>
           </div>
 

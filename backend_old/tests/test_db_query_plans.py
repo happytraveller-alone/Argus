@@ -9,7 +9,7 @@ def _db_dsn() -> str:
         os.getenv("PERF_TEST_DSN")
         or os.getenv("POSTGRES_DSN")
         or os.getenv("DATABASE_DSN")
-        or "postgresql://postgres:postgres@localhost:5432/vulhunter"
+        or "postgresql://postgres:postgres@localhost:5432/Argus"
     )
 
 

@@ -1,5 +1,5 @@
 # =============================================
-# VulHunter Docker Compose — 全量本地构建
+# Argus Docker Compose — 全量本地构建
 # =============================================
 # 启动: docker compose up --build
 # backend 会在启动期通过 Docker SDK 执行 runner preflight。
@@ -22,7 +22,7 @@ x-hermes-build-args: &hermes-build-args
 
 services:
   opengrep-runner:
-    image: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
+    image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
     pull_policy: never
     build:
       context: .
@@ -44,7 +44,7 @@ services:
       OPENGREP_SCAN_JOBS: ${OPENGREP_SCAN_JOBS:-4}
       OPENGREP_SCAN_MAX_MEMORY_MB: ${OPENGREP_SCAN_MAX_MEMORY_MB:-1536}
     networks:
-      - vulhunter-network
+      - Argus-network
 
   db:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
@@ -56,7 +56,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ${POSTGRES_DB:-vulhunter}
+      POSTGRES_DB: ${POSTGRES_DB:-Argus}
     ports:
       - "5432:5432"
     healthcheck:
@@ -66,7 +66,7 @@ services:
       start_period: 30s
       retries: 12
     networks:
-      - vulhunter-network
+      - Argus-network
 
   backend:
     build:
@@ -90,27 +90,27 @@ services:
       - ./backend/agents:/app/backend/agents:ro
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
-      - scan_workspace:/tmp/vulhunter/scans
+      - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
-      - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
+      - "${Argus_BACKEND_PORT:-8000}:8000"
     env_file:
       - path: ./docker/env/backend/.env
         required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
-      ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
+      ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
       REDIS_URL: redis://redis:6379/0
       GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}
-      VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-happytraveller-alone}
-      VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}
+      Argus_IMAGE_NAMESPACE: ${Argus_IMAGE_NAMESPACE:-happytraveller-alone}
+      Argus_IMAGE_TAG: ${Argus_IMAGE_TAG:-latest}
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-runner-local:latest}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-Argus/sandbox-runner-local:latest}
       OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"
-      SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
-      SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
+      SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}
+      SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
       RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"
       RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
@@ -125,9 +125,9 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
-      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}
-      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
+      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-Argus/flow-parser-runner-local:latest}
+      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-Argus/sandbox-runner-local:latest}
       SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
@@ -172,7 +172,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   frontend:
     build:
@@ -188,7 +188,7 @@ services:
     mem_limit: 512m
     pids_limit: 256
     ports:
-      - "${VULHUNTER_FRONTEND_PORT:-3000}:5173"
+      - "${Argus_FRONTEND_PORT:-3000}:5173"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
@@ -207,7 +207,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   redis:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23
@@ -224,7 +224,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - vulhunter-network
+      - Argus-network
 
   adminer:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
@@ -236,7 +236,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   # ----- Hermes Functional Agents -----
   # Worker-only Hermes containers built from docker/hermes-agent-base.Dockerfile;
@@ -247,7 +247,7 @@ services:
       context: .
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-recon
     restart: unless-stopped
     mem_limit: 2g
@@ -270,14 +270,14 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-analysis:
     build:
       context: .
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-analysis
     restart: unless-stopped
     mem_limit: 2g
@@ -300,14 +300,14 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-verification:
     build:
       context: .
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-verification
     restart: unless-stopped
     mem_limit: 2g
@@ -331,14 +331,14 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
   hermes-report:
     build:
       context: .
       dockerfile: docker/hermes-agent-base.Dockerfile
       args: *hermes-build-args
-    image: vulhunter/hermes-agent:latest
+    image: Argus/hermes-agent:latest
     container_name: hermes-report
     restart: unless-stopped
     mem_limit: 2g
@@ -362,10 +362,10 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - vulhunter-network
+      - Argus-network
 
 networks:
-  vulhunter-network:
+  Argus-network:
     driver: bridge
 
 volumes:
@@ -373,7 +373,7 @@ volumes:
   backend_uploads:
   backend_runtime_data:
   scan_workspace:
-    name: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
+    name: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
   redis_data:
   frontend_node_modules:
   frontend_pnpm_store:

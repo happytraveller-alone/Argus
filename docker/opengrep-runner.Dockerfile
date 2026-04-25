@@ -18,9 +18,9 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONUTF8=1
 
-RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=vulhunter-opengrep-runner-tool-archive,target=/var/cache/vulhunter-tools \
+RUN --mount=type=cache,id=Argus-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=Argus-opengrep-runner-tool-archive,target=/var/cache/Argus-tools \
     set -eux; \
     . /etc/os-release; \
     CODENAME="${VERSION_CODENAME:-trixie}"; \
@@ -47,7 +47,7 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
       install_packages; \
     fi; \
     rm -rf /var/lib/apt/lists/*; \
-    mkdir -p /var/cache/vulhunter-tools /opt/opengrep /scan; \
+    mkdir -p /var/cache/Argus-tools /opt/opengrep /scan; \
     ARCH="${TARGETARCH:-}"; \
     if [ -z "${ARCH}" ]; then \
       ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"; \
@@ -69,7 +69,7 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
       done; \
       return 1; \
     }; \
-    OG_CACHE="/var/cache/vulhunter-tools/opengrep-${OPENGREP_VERSION}-${OG_DIST}"; \
+    OG_CACHE="/var/cache/Argus-tools/opengrep-${OPENGREP_VERSION}-${OG_DIST}"; \
     if [ ! -s "${OG_CACHE}" ]; then \
       download_with_fallback \
         "${OG_CACHE}" \
@@ -110,8 +110,8 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONUTF8=1
 
-RUN --mount=type=cache,id=vulhunter-opengrep-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=vulhunter-opengrep-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=Argus-opengrep-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=Argus-opengrep-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     . /etc/os-release; \
     CODENAME="${VERSION_CODENAME:-trixie}"; \

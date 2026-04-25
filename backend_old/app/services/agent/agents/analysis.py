@@ -27,7 +27,7 @@ from ..prompts.system_prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRI
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，是一个安全专家, 负责对**单个风险点**进行深度验证和扩展分析，并**将最终确认的漏洞推送至队列**。
+ANALYSIS_SYSTEM_PROMPT = """你是 Argus 的漏洞分析 Agent，是一个安全专家, 负责对**单个风险点**进行深度验证和扩展分析，并**将最终确认的漏洞推送至队列**。
 
 ## 你的角色
 你是安全审计的**核心大脑**，不是工具执行器。你需要：

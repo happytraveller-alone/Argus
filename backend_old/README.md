@@ -1,6 +1,6 @@
-# VulHunter Backend
+# Argus Backend
 
-VulHunter backend is a FastAPI service that powers repository-scale auditing, including:
+Argus backend is a FastAPI service that powers repository-scale auditing, including:
 
 - HTTP APIs under `/api/v1/*`
 - Server-Sent Events (SSE) streaming for Agent Audit events
@@ -23,7 +23,7 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 Frontend is exposed at `http://localhost:3000`, backend at `http://localhost:8000`.
 On Windows, use Docker Desktop with Linux containers.
 Before the first startup, copy `docker/env/backend/env.example` to `docker/env/backend/.env`.
-If either host port is already in use, start Compose with `VULHUNTER_FRONTEND_PORT` / `VULHUNTER_BACKEND_PORT`, for example `VULHUNTER_BACKEND_PORT=18000 docker compose up --build`.
+If either host port is already in use, start Compose with `Argus_FRONTEND_PORT` / `Argus_BACKEND_PORT`, for example `Argus_BACKEND_PORT=18000 docker compose up --build`.
 The default compose startup now only brings up the long-lived services.
 Instead, backend runs the configured runner preflight during startup to verify the images and commands behind `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`.
 Those compose services are not the runtime scan workers. During actual scans, backend uses the Docker SDK and `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` to start temporary runner containers on demand.

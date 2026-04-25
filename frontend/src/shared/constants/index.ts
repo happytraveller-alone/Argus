@@ -95,9 +95,9 @@ export const API_ENDPOINTS = {
 
 // 本地存储键名
 export const STORAGE_KEYS = {
-  THEME: 'vulhunter-theme',
-  USER_PREFERENCES: 'vulhunter-preferences',
-  RECENT_PROJECTS: 'vulhunter-recent-projects',
+  THEME: 'Argus-theme',
+  USER_PREFERENCES: 'Argus-preferences',
+  RECENT_PROJECTS: 'Argus-recent-projects',
 } as const;
 
 // 导出项目类型相关常量

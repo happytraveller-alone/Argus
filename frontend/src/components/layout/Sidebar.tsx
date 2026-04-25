@@ -286,7 +286,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 								>
 									<img
 										src={logoSrc}
-										alt="VulHunter"
+										alt="Argus"
 										className="w-6 h-6 object-contain transition-transform duration-300 group-hover:scale-110"
 									/>
 								</div>

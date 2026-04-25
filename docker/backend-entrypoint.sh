@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-scan_root="${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}"
+scan_root="${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}"
 assets_root="/app/assets"
 assets_archive="$assets_root/scan_rule_assets.tar.gz"
 assets_dir="$assets_root/scan_rule_assets"

@@ -1,10 +1,10 @@
-# VulHunter Slim Release
+# Argus Slim Release
 
 <p align="center">
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
-This release branch keeps only the slim-source files required to run VulHunter:
+This release branch keeps only the slim-source files required to run Argus:
 
 ```bash
 docker compose up --build

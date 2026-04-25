@@ -3541,17 +3541,17 @@ function AgentAuditPageContent() {
             >
               <img
                 src={logoSrc}
-                alt="VulHunter"
+                alt="Argus"
                 className="w-32 h-32 object-contain"
               />
             </button>
 
             <h1 className="text-6xl md:text-7xl font-mono font-bold tracking-wider text-foreground">
-              VulHunter
+              Argus
             </h1>
 
             <p className="mt-[2vh] text-lg md:text-xl text-muted-foreground leading-relaxed">
-              VulHunter 让你以静态或智能方式快速发起代码安全扫描。
+              Argus 让你以静态或智能方式快速发起代码安全扫描。
             </p>
           </div>
 

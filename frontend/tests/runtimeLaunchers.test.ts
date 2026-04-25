@@ -44,7 +44,7 @@ test("determineInstallState requests reinstall when the lockfile hash changes", 
   await withTempDir((dir) => {
     const nodeModulesBinDir = path.join(dir, "node_modules", ".bin");
     const lockFilePath = path.join(dir, "pnpm-lock.yaml");
-    const stampFilePath = path.join(dir, ".pnpm-store", ".VulHunter_frontend_lock.sha256");
+    const stampFilePath = path.join(dir, ".pnpm-store", ".Argus_frontend_lock.sha256");
 
     fs.mkdirSync(nodeModulesBinDir, { recursive: true });
     fs.mkdirSync(path.dirname(stampFilePath), { recursive: true });
@@ -72,7 +72,7 @@ test("determineInstallState skips reinstall when tools exist and the lockfile ha
   await withTempDir((dir) => {
     const nodeModulesBinDir = path.join(dir, "node_modules", ".bin");
     const lockFilePath = path.join(dir, "pnpm-lock.yaml");
-    const stampFilePath = path.join(dir, ".pnpm-store", ".VulHunter_frontend_lock.sha256");
+    const stampFilePath = path.join(dir, ".pnpm-store", ".Argus_frontend_lock.sha256");
 
     fs.mkdirSync(nodeModulesBinDir, { recursive: true });
     fs.mkdirSync(path.dirname(stampFilePath), { recursive: true });
