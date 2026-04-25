@@ -559,19 +559,9 @@ export function getStaticAnalysisOpengrepRuleName(
 
 export function buildUnifiedFindingRows(input: {
   opengrepFindings: MinimalOpengrepFinding[];
-  gitleaksFindings: MinimalGitleaksFinding[];
-  banditFindings: MinimalBanditFinding[];
-  phpstanFindings: MinimalPhpstanFinding[];
-  pmdFindings?: MinimalPmdFinding[];
   opengrepTaskId: string;
-  gitleaksTaskId: string;
-  banditTaskId: string;
-  phpstanTaskId: string;
-  pmdTaskId?: string;
 }): UnifiedFindingRow[] {
-  const pmdFindings = input.pmdFindings || [];
-  const pmdTaskId = input.pmdTaskId || "";
-  const opengrepRows = input.opengrepFindings.map((finding) => {
+  return input.opengrepFindings.map((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
     return {
@@ -589,95 +579,6 @@ export function buildUnifiedFindingRows(input: {
       status: String(finding.status || "open").trim().toLowerCase(),
     };
   });
-
-  const gitleaksRows = input.gitleaksFindings.map((finding) => ({
-    key: `gitleaks:${finding.id}`,
-    id: finding.id,
-    taskId: finding.scan_task_id || input.gitleaksTaskId,
-    engine: "gitleaks" as const,
-    rule: String(finding.rule_id || "").trim() || "-",
-    filePath: normalizeStaticAnalysisPath(finding.file_path),
-    line: toStaticAnalysisPositiveLine(finding.start_line),
-    severity: "LOW" as const,
-    severityScore: SEVERITY_SCORE.LOW,
-    confidence: "MEDIUM" as const,
-    confidenceScore: CONFIDENCE_SCORE.MEDIUM,
-    status: String(finding.status || "open").trim().toLowerCase(),
-  }));
-
-  const banditRows = input.banditFindings.map((finding) => {
-    const severity = normalizeStaticAnalysisSeverity(finding.issue_severity);
-    const confidence = normalizeStaticAnalysisConfidence(finding.issue_confidence);
-    const testId = String(finding.test_id || "").trim();
-    const testName = String(finding.test_name || "").trim();
-    const rule = [testId, testName].filter(Boolean).join(" · ");
-    return {
-      key: `bandit:${finding.id}`,
-      id: finding.id,
-      taskId: finding.scan_task_id || input.banditTaskId,
-      engine: "bandit" as const,
-      rule: rule || "-",
-      filePath: normalizeStaticAnalysisPath(finding.file_path),
-      line: toStaticAnalysisPositiveLine(finding.line_number),
-      severity,
-      severityScore: SEVERITY_SCORE[severity],
-      confidence,
-      confidenceScore: CONFIDENCE_SCORE[confidence],
-      status: String(finding.status || "open").trim().toLowerCase(),
-    };
-  });
-  // PHPStan integration: normalize phpstan rows into unified static finding table.
-  const phpstanRows = input.phpstanFindings.map((finding) => {
-    const identifier = String(finding.identifier || "").trim();
-    const message = String(finding.message || "").trim();
-    const rule = identifier || message || "-";
-    return {
-      key: `phpstan:${finding.id}`,
-      id: finding.id,
-      taskId: finding.scan_task_id || input.phpstanTaskId,
-      engine: "phpstan" as const,
-      rule,
-      filePath: normalizeStaticAnalysisPath(finding.file_path),
-      line: toStaticAnalysisPositiveLine(finding.line),
-      severity: "LOW" as const,
-      severityScore: SEVERITY_SCORE.LOW,
-      confidence: "MEDIUM" as const,
-      confidenceScore: CONFIDENCE_SCORE.MEDIUM,
-      status: String(finding.status || "open").trim().toLowerCase(),
-    };
-  });
-
-  const pmdRows = pmdFindings.map((finding) => {
-    const priority = Number(finding.priority);
-    const severity =
-      Number.isFinite(priority) && priority > 0 && priority <= 2
-        ? ("HIGH" as const)
-        : Number.isFinite(priority) && priority === 3
-          ? ("MEDIUM" as const)
-          : ("LOW" as const);
-    const rule = [
-      String(finding.rule || "").trim(),
-      String(finding.ruleset || "").trim(),
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    return {
-      key: `pmd:${finding.id}`,
-      id: finding.id,
-      taskId: finding.scan_task_id || pmdTaskId,
-      engine: "pmd" as const,
-      rule: rule || String(finding.message || "").trim() || "-",
-      filePath: normalizeStaticAnalysisPath(finding.file_path),
-      line: toStaticAnalysisPositiveLine(finding.begin_line),
-      severity,
-      severityScore: SEVERITY_SCORE[severity],
-      confidence: "MEDIUM" as const,
-      confidenceScore: CONFIDENCE_SCORE.MEDIUM,
-      status: String(finding.status || "open").trim().toLowerCase(),
-    };
-  });
-
-  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows, ...pmdRows];
 }
 
 export function buildStaticAnalysisListState(input: {

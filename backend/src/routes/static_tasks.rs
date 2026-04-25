@@ -609,8 +609,9 @@ async fn get_opengrep_progress(
 async fn list_opengrep_findings(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Value>>, ApiError> {
-    list_static_findings(&state, "opengrep", &task_id).await
+    list_static_findings(&state, "opengrep", &task_id, &query).await
 }
 
 async fn get_opengrep_finding(
@@ -1329,15 +1330,32 @@ async fn list_static_findings(
     state: &AppState,
     engine: &str,
     task_id: &str,
+    query: &ListQuery,
 ) -> Result<Json<Vec<Value>>, ApiError> {
-    let record = find_static_task(state, engine, task_id).await?;
-    Ok(Json(
-        record
-            .findings
-            .into_iter()
-            .map(|finding| finding.payload)
-            .collect(),
-    ))
+    let snapshot = load_task_snapshot(state).await?;
+    let record = snapshot
+        .static_tasks
+        .get(task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("{engine} task not found: {task_id}")))?;
+    if record.engine != engine {
+        return Err(ApiError::NotFound(format!(
+            "{engine} task not found: {task_id}"
+        )));
+    }
+
+    let items = record
+        .findings
+        .iter()
+        .filter(|finding| match query.status.as_deref() {
+            Some(status) => finding.status.eq_ignore_ascii_case(status),
+            None => true,
+        })
+        .skip(query.skip.unwrap_or(0))
+        .take(query.limit.unwrap_or(1_000))
+        .map(|finding| finding.payload.clone())
+        .collect();
+
+    Ok(Json(items))
 }
 
 async fn get_static_finding(
@@ -1356,12 +1374,22 @@ async fn get_static_finding_value(
     task_id: &str,
     finding_id: &str,
 ) -> Result<Value, ApiError> {
-    let record = find_static_task(state, engine, task_id).await?;
+    let snapshot = load_task_snapshot(state).await?;
+    let record = snapshot
+        .static_tasks
+        .get(task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("{engine} task not found: {task_id}")))?;
+    if record.engine != engine {
+        return Err(ApiError::NotFound(format!(
+            "{engine} task not found: {task_id}"
+        )));
+    }
+
     record
         .findings
-        .into_iter()
+        .iter()
         .find(|finding| finding.id == finding_id)
-        .map(|finding| finding.payload)
+        .map(|finding| finding.payload.clone())
         .ok_or_else(|| ApiError::NotFound(format!("{engine} finding not found: {finding_id}")))
 }
 

@@ -1781,6 +1781,75 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
 }
 
 #[tokio::test]
+async fn static_task_findings_route_honors_skip_and_limit() {
+    let state = AppState::from_config(isolated_test_config("static-task-findings-pagination"))
+        .await
+        .expect("state should build");
+
+    let mut snapshot = task_state::TaskStateSnapshot::default();
+    snapshot.static_tasks.insert(
+        "task-1".to_string(),
+        task_state::StaticTaskRecord {
+            id: "task-1".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: "project-1".to_string(),
+            name: "static task".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            total_findings: 3,
+            scan_duration_ms: 1,
+            files_scanned: 1,
+            error_message: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            extra: json!({}),
+            progress: task_state::StaticTaskProgressRecord::default(),
+            findings: vec![
+                task_state::StaticFindingRecord {
+                    id: "finding-1".to_string(),
+                    scan_task_id: "task-1".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id":"finding-1","status":"open","file_path":"a.py"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "finding-2".to_string(),
+                    scan_task_id: "task-1".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"id":"finding-2","status":"verified","file_path":"b.py"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "finding-3".to_string(),
+                    scan_task_id: "task-1".to_string(),
+                    status: "false_positive".to_string(),
+                    payload: json!({"id":"finding-3","status":"false_positive","file_path":"c.py"}),
+                },
+            ],
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("save snapshot");
+
+    let app = build_router(state);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/tasks/task-1/findings?skip=1&limit=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let items = body.as_array().expect("array response");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], "finding-2");
+}
+
+#[tokio::test]
 async fn opengrep_task_completes_without_missing_results_when_summary_is_completion_safe() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = tempfile::tempdir().expect("temp dir");

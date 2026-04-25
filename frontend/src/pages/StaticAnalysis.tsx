@@ -50,7 +50,6 @@ export default function StaticAnalysis() {
     () => decodeStaticAnalysisPathParam(rawTaskId),
     [rawTaskId],
   );
-  const toolParam = searchParams.get("tool");
   const returnToParam = searchParams.get("returnTo") || "";
   const returnTo =
     returnToParam.startsWith("/") && !returnToParam.startsWith("//")
@@ -61,63 +60,15 @@ export default function StaticAnalysis() {
 
   const opengrepTaskId = useMemo(() => {
     const explicit = searchParams.get("opengrepTaskId");
-    const hasOtherExplicitEngineTaskId = Boolean(
-      searchParams.get("gitleaksTaskId") ||
-        searchParams.get("banditTaskId") ||
-        searchParams.get("phpstanTaskId") ||
-        searchParams.get("pmdTaskId"),
-    );
     if (explicit) return explicit;
-    if (hasOtherExplicitEngineTaskId) return "";
-    if (toolParam === "gitleaks" || toolParam === "bandit" || toolParam === "phpstan" || toolParam === "pmd") {
-      return "";
-    }
     return taskId;
-  }, [searchParams, taskId, toolParam]);
-
-  const usesPathTaskIdFallback = useMemo(() => {
-    const hasExplicitEngineTaskId = Boolean(
-      searchParams.get("opengrepTaskId") ||
-        searchParams.get("gitleaksTaskId") ||
-        searchParams.get("banditTaskId") ||
-        searchParams.get("phpstanTaskId") ||
-        searchParams.get("pmdTaskId"),
-    );
-    return !hasExplicitEngineTaskId && Boolean(taskId);
   }, [searchParams, taskId]);
 
-  const gitleaksTaskId = useMemo(() => {
-    const explicit = searchParams.get("gitleaksTaskId");
-    if (explicit) return explicit;
-    if (toolParam === "gitleaks") return taskId;
-    return "";
-  }, [searchParams, taskId, toolParam]);
+  const usesPathTaskIdFallback = useMemo(() => {
+    return !searchParams.get("opengrepTaskId") && Boolean(taskId);
+  }, [searchParams, taskId]);
 
-  const banditTaskId = useMemo(() => {
-    const explicit = searchParams.get("banditTaskId");
-    if (explicit) return explicit;
-    if (toolParam === "bandit") return taskId;
-    return "";
-  }, [searchParams, taskId, toolParam]);
-
-  // PHPStan integration: parse phpstan task id and compatible tool fallback.
-  const phpstanTaskId = useMemo(() => {
-    const explicit = searchParams.get("phpstanTaskId");
-    if (explicit) return explicit;
-    if (toolParam === "phpstan") return taskId;
-    return "";
-  }, [searchParams, taskId, toolParam]);
-
-  const pmdTaskId = useMemo(() => {
-    const explicit = searchParams.get("pmdTaskId");
-    if (explicit) return explicit;
-    if (toolParam === "pmd") return taskId;
-    return "";
-  }, [searchParams, taskId, toolParam]);
-
-  const hasEnabledEngine = Boolean(
-    opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId || pmdTaskId,
-  );
+  const hasEnabledEngine = Boolean(opengrepTaskId);
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
   );
@@ -128,15 +79,7 @@ export default function StaticAnalysis() {
 
   const {
     opengrepTask,
-    gitleaksTask,
-    banditTask,
-    phpstanTask,
-    pmdTask,
     opengrepFindings,
-    gitleaksFindings,
-    banditFindings,
-    phpstanFindings,
-    pmdFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -148,56 +91,28 @@ export default function StaticAnalysis() {
     handleInterrupt,
     handleToggleStatus,
     canInterruptOpengrep,
-    canInterruptGitleaks,
-    canInterruptBandit,
-    canInterruptPhpstan,
-    canInterruptPmd,
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
-    gitleaksTaskId,
-    banditTaskId,
-    phpstanTaskId,
-    pmdTaskId,
   });
 
   const unifiedRows = useMemo(
     () =>
       buildUnifiedFindingRows({
         opengrepFindings,
-        gitleaksFindings,
-        banditFindings,
-        phpstanFindings,
-        pmdFindings,
         opengrepTaskId,
-        gitleaksTaskId,
-        banditTaskId,
-        phpstanTaskId,
-        pmdTaskId,
       }),
     [
-      banditFindings,
-      banditTaskId,
-      gitleaksFindings,
-      gitleaksTaskId,
       opengrepFindings,
       opengrepTaskId,
-      pmdFindings,
-      pmdTaskId,
-      phpstanFindings,
-      phpstanTaskId,
     ],
   );
 
   const enabledEngines = useMemo(() => {
     const engines: Engine[] = [];
     if (opengrepTaskId) engines.push("opengrep");
-    if (gitleaksTaskId) engines.push("gitleaks");
-    if (banditTaskId) engines.push("bandit");
-    if (phpstanTaskId) engines.push("phpstan");
-    if (pmdTaskId) engines.push("pmd");
     return engines;
-  }, [banditTaskId, gitleaksTaskId, opengrepTaskId, phpstanTaskId, pmdTaskId]);
+  }, [opengrepTaskId]);
 
   useEffect(() => {
     syncStateToUrl(tableState);
@@ -213,9 +128,9 @@ export default function StaticAnalysis() {
     if (!usesPathTaskIdFallback) return;
     console.info(
       "[StaticAnalysis] Using path taskId fallback. Prefer explicit engine task ids in query params for stable detail resolution.",
-      { pathTaskId: taskId, toolParam },
+      { pathTaskId: taskId, toolParam: "opengrep" },
     );
-  }, [taskId, toolParam, usesPathTaskIdFallback]);
+  }, [taskId, usesPathTaskIdFallback]);
 
   const handleBack = () => {
     if (returnTo) {
@@ -261,46 +176,6 @@ export default function StaticAnalysis() {
               中止 Opengrep
             </Button>
           ) : null}
-          {canInterruptGitleaks ? (
-            <Button
-              variant="outline"
-              className="cyber-btn-outline h-8"
-              onClick={() => setInterruptTarget("gitleaks")}
-            >
-              <Ban className="w-3.5 h-3.5 mr-1.5" />
-              中止 Gitleaks
-            </Button>
-          ) : null}
-          {canInterruptBandit ? (
-            <Button
-              variant="outline"
-              className="cyber-btn-outline h-8"
-              onClick={() => setInterruptTarget("bandit")}
-            >
-              <Ban className="w-3.5 h-3.5 mr-1.5" />
-              中止 Bandit
-            </Button>
-          ) : null}
-          {canInterruptPhpstan ? (
-            <Button
-              variant="outline"
-              className="cyber-btn-outline h-8"
-              onClick={() => setInterruptTarget("phpstan")}
-            >
-              <Ban className="w-3.5 h-3.5 mr-1.5" />
-              中止 PHPStan
-            </Button>
-          ) : null}
-          {canInterruptPmd ? (
-            <Button
-              variant="outline"
-              className="cyber-btn-outline h-8"
-              onClick={() => setInterruptTarget("pmd")}
-            >
-              <Ban className="w-3.5 h-3.5 mr-1.5" />
-              中止 PMD
-            </Button>
-          ) : null}
           <Button
             variant="outline"
             className="cyber-btn-outline h-8"
@@ -321,10 +196,10 @@ export default function StaticAnalysis() {
 
       <StaticAnalysisSummaryCards
         opengrepTask={opengrepTask}
-        gitleaksTask={gitleaksTask}
-        banditTask={banditTask}
-        phpstanTask={phpstanTask}
-        pmdTask={pmdTask}
+        gitleaksTask={null}
+        banditTask={null}
+        phpstanTask={null}
+        pmdTask={null}
         enabledEngines={enabledEngines}
         loadingInitial={loadingInitial}
       />
@@ -349,17 +224,7 @@ export default function StaticAnalysis() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认中止任务？</AlertDialogTitle>
             <AlertDialogDescription>
-              即将中止
-              {interruptTarget === "opengrep"
-                ? " Opengrep "
-                : interruptTarget === "gitleaks"
-                  ? " Gitleaks "
-                  : interruptTarget === "bandit"
-                    ? " Bandit "
-                    : interruptTarget === "phpstan"
-                      ? " PHPStan "
-                      : " PMD "}
-              扫描任务。中止后任务状态将更新为已中断。
+              即将中止 Opengrep 扫描任务。中止后任务状态将更新为已中断。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

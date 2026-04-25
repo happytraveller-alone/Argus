@@ -1,38 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  getBanditFindings,
-  getBanditScanTask,
-  interruptBanditScanTask,
-  updateBanditFindingStatus,
-  type BanditFinding,
-  type BanditScanTask,
-} from "@/shared/api/bandit";
-import {
-  getPhpstanFindings,
-  getPhpstanScanTask,
-  interruptPhpstanScanTask,
-  updatePhpstanFindingStatus,
-  type PhpstanFinding,
-  type PhpstanScanTask,
-} from "@/shared/api/phpstan";
-import {
-  getPmdFindings,
-  getPmdScanTask,
-  interruptPmdScanTask,
-  updatePmdFindingStatus,
-  type PmdFinding,
-  type PmdScanTask,
-} from "@/shared/api/pmd";
-import {
-  getGitleaksFindings,
-  getGitleaksScanTask,
-  interruptGitleaksScanTask,
-  updateGitleaksFindingStatus,
-  type GitleaksFinding,
-  type GitleaksScanTask,
-} from "@/shared/api/gitleaks";
-import {
   getOpengrepScanFindings,
   getOpengrepScanTask,
   interruptOpengrepScanTask,
@@ -49,103 +17,52 @@ import {
 const FINDING_BATCH_SIZE = 200;
 const MAX_FINDING_BATCH_PAGES = 500;
 
-async function fetchAllOpengrepFindings(taskId: string): Promise<OpengrepFinding[]> {
-  const allFindings: OpengrepFinding[] = [];
+async function fetchFindingBatches<T>(
+  fetchPage: (params: { skip: number; limit: number }) => Promise<T[]>,
+  expectedTotal?: number | null,
+): Promise<T[]> {
+  const allFindings: T[] = [];
+  const total = Math.max(Number(expectedTotal ?? 0), 0);
+  const plannedPages =
+    total > 0 ? Math.min(Math.ceil(total / FINDING_BATCH_SIZE), MAX_FINDING_BATCH_PAGES) : null;
+
   for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getOpengrepScanFindings({
-      taskId,
+    if (plannedPages !== null && page >= plannedPages) break;
+    const batch = await fetchPage({
       skip: page * FINDING_BATCH_SIZE,
       limit: FINDING_BATCH_SIZE,
     });
     allFindings.push(...batch);
     if (batch.length < FINDING_BATCH_SIZE) break;
   }
+
   return allFindings;
 }
 
-async function fetchAllGitleaksFindings(taskId: string): Promise<GitleaksFinding[]> {
-  const allFindings: GitleaksFinding[] = [];
-  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getGitleaksFindings({
-      taskId,
-      skip: page * FINDING_BATCH_SIZE,
-      limit: FINDING_BATCH_SIZE,
-    });
-    allFindings.push(...batch);
-    if (batch.length < FINDING_BATCH_SIZE) break;
-  }
-  return allFindings;
+async function fetchAllOpengrepFindings(
+  taskId: string,
+  expectedTotal?: number | null,
+): Promise<OpengrepFinding[]> {
+  return fetchFindingBatches(
+    ({ skip, limit }) =>
+      getOpengrepScanFindings({
+        taskId,
+        skip,
+        limit,
+      }),
+    expectedTotal,
+  );
 }
-
-async function fetchAllBanditFindings(taskId: string): Promise<BanditFinding[]> {
-  const allFindings: BanditFinding[] = [];
-  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getBanditFindings({
-      taskId,
-      skip: page * FINDING_BATCH_SIZE,
-      limit: FINDING_BATCH_SIZE,
-    });
-    allFindings.push(...batch);
-    if (batch.length < FINDING_BATCH_SIZE) break;
-  }
-  return allFindings;
-}
-
-async function fetchAllPhpstanFindings(taskId: string): Promise<PhpstanFinding[]> {
-  const allFindings: PhpstanFinding[] = [];
-  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getPhpstanFindings({
-      taskId,
-      skip: page * FINDING_BATCH_SIZE,
-      limit: FINDING_BATCH_SIZE,
-    });
-    allFindings.push(...batch);
-    if (batch.length < FINDING_BATCH_SIZE) break;
-  }
-  return allFindings;
-}
-
-async function fetchAllPmdFindings(taskId: string): Promise<PmdFinding[]> {
-  const allFindings: PmdFinding[] = [];
-  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
-    const batch = await getPmdFindings({
-      taskId,
-      skip: page * FINDING_BATCH_SIZE,
-      limit: FINDING_BATCH_SIZE,
-    });
-    allFindings.push(...batch);
-    if (batch.length < FINDING_BATCH_SIZE) break;
-  }
-  return allFindings;
-}
-
 
 export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
-  gitleaksTaskId,
-  banditTaskId,
-  phpstanTaskId,
-  pmdTaskId,
 }: {
   hasEnabledEngine: boolean;
   opengrepTaskId: string;
-  gitleaksTaskId: string;
-  banditTaskId: string;
-  phpstanTaskId: string;
-  pmdTaskId: string;
 }) {
-  // PHPStan integration: keep task/findings lifecycle aligned with existing engines.
   const [opengrepTask, setOpengrepTask] = useState<OpengrepScanTask | null>(null);
-  const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
-  const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
-  const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
-  const [pmdTask, setPmdTask] = useState<PmdScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
-  const [gitleaksFindings, setGitleaksFindings] = useState<GitleaksFinding[]>([]);
-  const [banditFindings, setBanditFindings] = useState<BanditFinding[]>([]);
-  const [phpstanFindings, setPhpstanFindings] = useState<PhpstanFinding[]>([]);
-  const [pmdFindings, setPmdFindings] = useState<PmdFinding[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
@@ -154,114 +71,36 @@ export function useStaticAnalysisData({
   const [interrupting, setInterrupting] = useState(false);
 
   const opengrepSilentRefreshRef = useRef(false);
-  const gitleaksSilentRefreshRef = useRef(false);
-  const banditSilentRefreshRef = useRef(false);
-  const phpstanSilentRefreshRef = useRef(false);
-  const pmdSilentRefreshRef = useRef(false);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
       setOpengrepTask(null);
-      return;
+      return null;
     }
     try {
       if (!silent) setLoadingTask(true);
       const task = await getOpengrepScanTask(opengrepTaskId);
       setOpengrepTask(task);
+      return task;
     } catch {
       setOpengrepTask(null);
       if (!silent) {
         toast.error("加载 Opengrep 任务失败");
       }
+      return null;
     } finally {
       if (!silent) setLoadingTask(false);
     }
   }, [opengrepTaskId]);
 
-  const loadGitleaksTask = useCallback(async (silent = false) => {
-    if (!gitleaksTaskId) {
-      setGitleaksTask(null);
-      return;
-    }
-    try {
-      if (!silent) setLoadingTask(true);
-      const task = await getGitleaksScanTask(gitleaksTaskId);
-      setGitleaksTask(task);
-    } catch {
-      setGitleaksTask(null);
-      if (!silent) {
-        toast.error("加载 Gitleaks 任务失败");
-      }
-    } finally {
-      if (!silent) setLoadingTask(false);
-    }
-  }, [gitleaksTaskId]);
-
-  const loadBanditTask = useCallback(async (silent = false) => {
-    if (!banditTaskId) {
-      setBanditTask(null);
-      return;
-    }
-    try {
-      if (!silent) setLoadingTask(true);
-      const task = await getBanditScanTask(banditTaskId);
-      setBanditTask(task);
-    } catch {
-      setBanditTask(null);
-      if (!silent) {
-        toast.error("加载 Bandit 任务失败");
-      }
-    } finally {
-      if (!silent) setLoadingTask(false);
-    }
-  }, [banditTaskId]);
-
-  const loadPhpstanTask = useCallback(async (silent = false) => {
-    if (!phpstanTaskId) {
-      setPhpstanTask(null);
-      return;
-    }
-    try {
-      if (!silent) setLoadingTask(true);
-      const task = await getPhpstanScanTask(phpstanTaskId);
-      setPhpstanTask(task);
-    } catch {
-      setPhpstanTask(null);
-      if (!silent) {
-        toast.error("加载 PHPStan 任务失败");
-      }
-    } finally {
-      if (!silent) setLoadingTask(false);
-    }
-  }, [phpstanTaskId]);
-
-  const loadPmdTask = useCallback(async (silent = false) => {
-    if (!pmdTaskId) {
-      setPmdTask(null);
-      return;
-    }
-    try {
-      if (!silent) setLoadingTask(true);
-      const task = await getPmdScanTask(pmdTaskId);
-      setPmdTask(task);
-    } catch {
-      setPmdTask(null);
-      if (!silent) {
-        toast.error("加载 PMD 任务失败");
-      }
-    } finally {
-      if (!silent) setLoadingTask(false);
-    }
-  }, [pmdTaskId]);
-
-  const loadOpengrepFindings = useCallback(async (silent = false) => {
+  const loadOpengrepFindings = useCallback(async (silent = false, expectedTotal?: number | null) => {
     if (!opengrepTaskId) {
       setOpengrepFindings([]);
       return;
     }
     try {
       if (!silent) setLoadingFindings(true);
-      setOpengrepFindings(await fetchAllOpengrepFindings(opengrepTaskId));
+      setOpengrepFindings(await fetchAllOpengrepFindings(opengrepTaskId, expectedTotal));
     } catch {
       setOpengrepFindings([]);
       if (!silent) {
@@ -272,78 +111,6 @@ export function useStaticAnalysisData({
     }
   }, [opengrepTaskId]);
 
-  const loadGitleaksFindings = useCallback(async (silent = false) => {
-    if (!gitleaksTaskId) {
-      setGitleaksFindings([]);
-      return;
-    }
-    try {
-      if (!silent) setLoadingFindings(true);
-      setGitleaksFindings(await fetchAllGitleaksFindings(gitleaksTaskId));
-    } catch {
-      setGitleaksFindings([]);
-      if (!silent) {
-        toast.error("加载 Gitleaks 漏洞失败");
-      }
-    } finally {
-      if (!silent) setLoadingFindings(false);
-    }
-  }, [gitleaksTaskId]);
-
-  const loadBanditFindings = useCallback(async (silent = false) => {
-    if (!banditTaskId) {
-      setBanditFindings([]);
-      return;
-    }
-    try {
-      if (!silent) setLoadingFindings(true);
-      setBanditFindings(await fetchAllBanditFindings(banditTaskId));
-    } catch {
-      setBanditFindings([]);
-      if (!silent) {
-        toast.error("加载 Bandit 漏洞失败");
-      }
-    } finally {
-      if (!silent) setLoadingFindings(false);
-    }
-  }, [banditTaskId]);
-
-  const loadPhpstanFindings = useCallback(async (silent = false) => {
-    if (!phpstanTaskId) {
-      setPhpstanFindings([]);
-      return;
-    }
-    try {
-      if (!silent) setLoadingFindings(true);
-      setPhpstanFindings(await fetchAllPhpstanFindings(phpstanTaskId));
-    } catch {
-      setPhpstanFindings([]);
-      if (!silent) {
-        toast.error("加载 PHPStan 漏洞失败");
-      }
-    } finally {
-      if (!silent) setLoadingFindings(false);
-    }
-  }, [phpstanTaskId]);
-
-  const loadPmdFindings = useCallback(async (silent = false) => {
-    if (!pmdTaskId) {
-      setPmdFindings([]);
-      return;
-    }
-    try {
-      if (!silent) setLoadingFindings(true);
-      setPmdFindings(await fetchAllPmdFindings(pmdTaskId));
-    } catch {
-      setPmdFindings([]);
-      if (!silent) {
-        toast.error("加载 PMD 漏洞失败");
-      }
-    } finally {
-      if (!silent) setLoadingFindings(false);
-    }
-  }, [pmdTaskId]);
-
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -351,31 +118,15 @@ export function useStaticAnalysisData({
     }
     if (!silent) setLoadingInitial(true);
     try {
+      const nextOpengrepTask = await loadOpengrepTask(silent);
       await Promise.all([
-        loadOpengrepTask(silent),
-        loadGitleaksTask(silent),
-        loadBanditTask(silent),
-        loadPhpstanTask(silent),
-        loadPmdTask(silent),
-        loadOpengrepFindings(silent),
-        loadGitleaksFindings(silent),
-        loadBanditFindings(silent),
-        loadPhpstanFindings(silent),
-        loadPmdFindings(silent),
+        loadOpengrepFindings(silent, nextOpengrepTask?.total_findings),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
     }
   }, [
     hasEnabledEngine,
-    loadGitleaksFindings,
-    loadGitleaksTask,
-    loadBanditFindings,
-    loadBanditTask,
-    loadPmdFindings,
-    loadPmdTask,
-    loadPhpstanFindings,
-    loadPhpstanTask,
     loadOpengrepFindings,
     loadOpengrepTask,
   ]);
@@ -390,46 +141,6 @@ export function useStaticAnalysisData({
     }
   }, [loadOpengrepTask, opengrepTaskId]);
 
-  const refreshGitleaksSilently = useCallback(async () => {
-    if (!gitleaksTaskId || gitleaksSilentRefreshRef.current) return;
-    gitleaksSilentRefreshRef.current = true;
-    try {
-      await loadGitleaksTask(true);
-    } finally {
-      gitleaksSilentRefreshRef.current = false;
-    }
-  }, [gitleaksTaskId, loadGitleaksTask]);
-
-  const refreshBanditSilently = useCallback(async () => {
-    if (!banditTaskId || banditSilentRefreshRef.current) return;
-    banditSilentRefreshRef.current = true;
-    try {
-      await loadBanditTask(true);
-    } finally {
-      banditSilentRefreshRef.current = false;
-    }
-  }, [banditTaskId, loadBanditTask]);
-
-  const refreshPhpstanSilently = useCallback(async () => {
-    if (!phpstanTaskId || phpstanSilentRefreshRef.current) return;
-    phpstanSilentRefreshRef.current = true;
-    try {
-      await loadPhpstanTask(true);
-    } finally {
-      phpstanSilentRefreshRef.current = false;
-    }
-  }, [loadPhpstanTask, phpstanTaskId]);
-
-  const refreshPmdSilently = useCallback(async () => {
-    if (!pmdTaskId || pmdSilentRefreshRef.current) return;
-    pmdSilentRefreshRef.current = true;
-    try {
-      await loadPmdTask(true);
-    } finally {
-      pmdSilentRefreshRef.current = false;
-    }
-  }, [loadPmdTask, pmdTaskId]);
-
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;
     setInterrupting(true);
@@ -437,22 +148,6 @@ export function useStaticAnalysisData({
       if (interruptTarget === "opengrep" && opengrepTaskId) {
         await interruptOpengrepScanTask(opengrepTaskId);
         toast.success("Opengrep 任务已中止");
-      }
-      if (interruptTarget === "gitleaks" && gitleaksTaskId) {
-        await interruptGitleaksScanTask(gitleaksTaskId);
-        toast.success("Gitleaks 任务已中止");
-      }
-      if (interruptTarget === "bandit" && banditTaskId) {
-        await interruptBanditScanTask(banditTaskId);
-        toast.success("Bandit 任务已中止");
-      }
-      if (interruptTarget === "phpstan" && phpstanTaskId) {
-        await interruptPhpstanScanTask(phpstanTaskId);
-        toast.success("PHPStan 任务已中止");
-      }
-      if (interruptTarget === "pmd" && pmdTaskId) {
-        await interruptPmdScanTask(pmdTaskId);
-        toast.success("PMD 任务已中止");
       }
       await refreshAll(true);
     } catch {
@@ -462,12 +157,8 @@ export function useStaticAnalysisData({
       setInterruptTarget(null);
     }
   }, [
-    banditTaskId,
-    gitleaksTaskId,
     interruptTarget,
     opengrepTaskId,
-    phpstanTaskId,
-    pmdTaskId,
     refreshAll,
   ]);
 
@@ -486,43 +177,6 @@ export function useStaticAnalysisData({
           status: nextStatus,
         });
         setOpengrepFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
-          ),
-        );
-      } else if (row.engine === "gitleaks") {
-        await updateGitleaksFindingStatus({
-          findingId: row.id,
-          status: nextStatus,
-        });
-        setGitleaksFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
-          ),
-        );
-      } else if (row.engine === "bandit") {
-        await updateBanditFindingStatus({
-          findingId: row.id,
-          status: nextStatus,
-        });
-        setBanditFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
-          ),
-        );
-      } else if (row.engine === "phpstan") {
-        await updatePhpstanFindingStatus({
-          findingId: row.id,
-          status: nextStatus,
-        });
-        setPhpstanFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
-          ),
-        );
-      } else if (row.engine === "pmd") {
-        await updatePmdFindingStatus(row.id, nextStatus);
-        setPmdFindings((prev) =>
           prev.map((finding) =>
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
@@ -549,57 +203,17 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [opengrepTask?.status, opengrepTaskId, refreshOpengrepSilently]);
 
-  useEffect(() => {
-    if (!gitleaksTaskId || !isStaticAnalysisPollableStatus(gitleaksTask?.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void refreshGitleaksSilently();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [gitleaksTask?.status, gitleaksTaskId, refreshGitleaksSilently]);
-
-  useEffect(() => {
-    if (!banditTaskId || !isStaticAnalysisPollableStatus(banditTask?.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void refreshBanditSilently();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [banditTask?.status, banditTaskId, refreshBanditSilently]);
-
-  useEffect(() => {
-    if (!phpstanTaskId || !isStaticAnalysisPollableStatus(phpstanTask?.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void refreshPhpstanSilently();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [phpstanTask?.status, phpstanTaskId, refreshPhpstanSilently]);
-
-  useEffect(() => {
-    if (!pmdTaskId || !isStaticAnalysisPollableStatus(pmdTask?.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void refreshPmdSilently();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [pmdTask?.status, pmdTaskId, refreshPmdSilently]);
-
   return {
     opengrepTask,
-    gitleaksTask,
-    banditTask,
-    phpstanTask,
-    pmdTask,
+    gitleaksTask: null,
+    banditTask: null,
+    phpstanTask: null,
+    pmdTask: null,
     opengrepFindings,
-    gitleaksFindings,
-    banditFindings,
-    phpstanFindings,
-    pmdFindings,
+    gitleaksFindings: [],
+    banditFindings: [],
+    phpstanFindings: [],
+    pmdFindings: [],
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -613,17 +227,9 @@ export function useStaticAnalysisData({
     canInterruptOpengrep: Boolean(
       opengrepTaskId && isStaticAnalysisInterruptibleStatus(opengrepTask?.status),
     ),
-    canInterruptGitleaks: Boolean(
-      gitleaksTaskId && isStaticAnalysisInterruptibleStatus(gitleaksTask?.status),
-    ),
-    canInterruptBandit: Boolean(
-      banditTaskId && isStaticAnalysisInterruptibleStatus(banditTask?.status),
-    ),
-    canInterruptPhpstan: Boolean(
-      phpstanTaskId && isStaticAnalysisInterruptibleStatus(phpstanTask?.status),
-    ),
-    canInterruptPmd: Boolean(
-      pmdTaskId && isStaticAnalysisInterruptibleStatus(pmdTask?.status),
-    ),
+    canInterruptGitleaks: false,
+    canInterruptBandit: false,
+    canInterruptPhpstan: false,
+    canInterruptPmd: false,
   };
 }
