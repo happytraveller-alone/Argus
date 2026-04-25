@@ -482,32 +482,22 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-24 10:11pm GMT+8
+# [audittool_personal] recent context, 2026-04-25 12:07pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (23,006t read) | 1,633,291t work | 99% savings
+Stats: 50 obs (22,554t read) | 1,499,412t work | 98% savings
 
 ### Apr 23, 2026
-S491 Hermes Containerized Functional Agents — /plan from PRD + test spec, then full Slice 2-5 implementation and compose integration (Apr 23, 8:29 PM)
 S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
 S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
 ### Apr 24, 2026
 S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
 S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
-1827 10:02a 🟣 Opengrep Language-Aware Rule Filtering Implemented
-1828 " 🟣 discover_rule_assets OnceLock Process-Level Cache Added
-1829 10:28a 🔵 Opengrep Container High CPU/Memory — Root Cause Confirmed as Rule Volume, Not Backend Re-reads
-1830 10:43a 🔵 Frontend Scan Rules Page — Component and Route Entrypoints Located
-1831 10:44a 🔵 Frontend Scan Rules Page — Full Component Map for OpengrepRules
-1833 3:39p ⚖️ Architect Review — Opengrep Runner / Summary-Gated Shutdown
-1837 6:13p 🔵 Static Audit Failure — Opengrep SIGPIPE / UnixExit(-141) on Scan Completion
-1838 7:33p 🔵 OpenGrep Static Scan Fix — Design Review Requested
-1839 7:34p 🔵 OpenGrep Scan Design Review — APPROVED with Minor Caveats
-1840 " 🔵 Test Name Mismatch — builds_opengrep_runner_spec_with_materialized_config_directory_and_artifact_captures Not Found
+1840 7:34p 🔵 Test Name Mismatch — builds_opengrep_runner_spec_with_materialized_config_directory_and_artifact_captures Not Found
 1841 7:35p 🔵 Static Audit SIGPIPE Failures — Opengrep Scanner Exits with UnixExit(-141)
 1842 7:36p 🔵 OpenGrep Static Scan Fix Design Review — APPROVED
 1844 7:38p 🔴 Opengrep Static Audit — Root Cause Investigation and Multi-Layer Fix
@@ -552,6 +542,16 @@ S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecod
 1937 10:06p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix
 1943 10:07p 🔵 Opengrep Scan — WARNING/INFO Findings Preserved for User Custom Rules, Filtered at Asset Source for Builtins
 1944 10:08p 🔵 Opengrep Severity Architecture — Full Stack Code Path Confirmed
+1945 10:09p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern
+S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 10:09 PM)
+1946 10:11p 🔵 Opengrep Scan Architecture — Rule Selection and Severity Filtering Code Paths
+1947 " 🔴 Regression Test Added — parse_scan_output Retains All Severity Levels
+1949 10:15p 🔵 Stop-Gate Review — ALLOW for Opengrep Fix Verification Summary
+1952 10:18p 🔵 OMX Stop-Gate State Audit — Current Session Has No Active Ralph or Skill Blocks
+1955 10:20p 🔵 OMX Ralph Stop-Gate Logic — Session-Scoped State Isolation Confirmed
+1957 10:22p 🔵 OMX Ralph/Ralplan Stop-Gate State — Current Session Has No Active Modes
+1959 10:23p 🔵 Frontend Rule Selection Architecture — CreateProjectScanDialog vs CreateScanTaskDialog
+1962 10:25p 🔴 Opengrep Scan — Severity Filter Removed from Result Processing, All Findings Now Persisted
 
-Access 1633k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1499k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

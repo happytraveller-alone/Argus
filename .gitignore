@@ -273,3 +273,5 @@ backend/agents/verification/scratch/**
 !backend/agents/verification/scratch/.gitkeep
 backend/agents/report/output/**
 !backend/agents/report/output/.gitkeep
+
+backend/agents/shared/config.json

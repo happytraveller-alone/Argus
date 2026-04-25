@@ -103,8 +103,10 @@ RUN uv venv && \
 
 USER root
 RUN mkdir -p /opt/bin
-COPY --chmod=0755 backend/agents/shared/bin/healthcheck.sh /opt/bin/healthcheck.sh
-COPY --chmod=0755 backend/agents/shared/bin/role-init.sh /opt/bin/role-init.sh
+COPY --chmod=0755 \
+    backend/agents/shared/bin/healthcheck.sh \
+    backend/agents/shared/bin/role-init.sh \
+    /opt/bin/
 
 ENV HERMES_HOME=/opt/data
 ENV PATH="/opt/hermes/.venv/bin:/opt/data/.local/bin:${PATH}"

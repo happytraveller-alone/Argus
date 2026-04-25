@@ -72,3 +72,36 @@ fn hermes_compose_files_pass_image_pull_optimization_args() {
         }
     }
 }
+
+#[test]
+fn hermes_worker_image_copies_shared_config_helper_only() {
+    assert!(
+        !HERMES_DOCKERFILE.contains("backend/agents/shared/bin/apply-shared-config.py"),
+        "Hermes worker image must not depend on apply-shared-config.py"
+    );
+    assert!(
+        HERMES_DOCKERFILE.contains("/opt/bin/"),
+        "Hermes worker image should copy shared helper scripts into /opt/bin/"
+    );
+    assert!(
+        !HERMES_DOCKERFILE.contains("backend/agents/shared/config.json"),
+        "Hermes worker image must not bake backend/agents/shared/config.json into the image"
+    );
+}
+
+#[test]
+fn hermes_compose_files_mount_shared_config_json() {
+    for compose in [ROOT_COMPOSE, STANDALONE_COMPOSE] {
+        assert!(
+            compose.contains("backend/agents/shared/config.json:/opt/shared/config.json:ro"),
+            "Hermes compose must mount the shared JSON config into /opt/shared/config.json"
+        );
+        assert!(
+            !compose.contains("backend/agents/recon/container.env")
+                && !compose.contains("backend/agents/analysis/container.env")
+                && !compose.contains("backend/agents/verification/container.env")
+                && !compose.contains("backend/agents/report/container.env"),
+            "Hermes compose should not depend on per-role container.env file paths"
+        );
+    }
+}
