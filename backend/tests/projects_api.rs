@@ -430,6 +430,43 @@ async fn create_with_tar_xz_and_zst_archives_and_description_preview_use_static_
 }
 
 #[tokio::test]
+async fn create_with_zip_accepts_multi_megabyte_archives() {
+    let state = AppState::from_config(isolated_test_config("projects-create-large-zip"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let body = test_create_with_large_zip_body();
+    assert!(
+        body.len() > 2 * 1024 * 1024,
+        "test payload must exceed axum's default multipart body limit"
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects/create-with-zip")
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(
+        json["management_metrics"]["archive_size_bytes"]
+            .as_i64()
+            .unwrap_or_default()
+            > 2 * 1024 * 1024,
+        "stored archive size should preserve the uploaded multi-megabyte zip"
+    );
+}
+
+#[tokio::test]
 async fn download_project_archive_supports_utf8_filenames() {
     let config = isolated_test_config("projects-utf8-archive-name");
     let state = AppState::from_config(config)
@@ -953,6 +990,18 @@ fn test_create_with_tar_xz_body() -> Vec<u8> {
     ])
 }
 
+fn test_create_with_large_zip_body() -> Vec<u8> {
+    test_zip_multipart_bytes(vec![
+        ("name", None, None, b"demo-create-with-large-zip".to_vec()),
+        (
+            "file",
+            Some("large-demo.zip"),
+            Some("application/zip"),
+            test_large_zip_bytes(),
+        ),
+    ])
+}
+
 fn test_zst_multipart_body() -> Vec<u8> {
     test_zip_multipart_bytes(vec![(
         "file",
@@ -1002,6 +1051,20 @@ fn test_zip_bytes() -> Vec<u8> {
         let options = zip::write::SimpleFileOptions::default();
         writer.start_file("src/main.rs", options).unwrap();
         writer.write_all(b"fn main() {}\n").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
+fn test_large_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("src/main.rs", options).unwrap();
+        writer.write_all(&vec![b'x'; 3 * 1024 * 1024]).unwrap();
         writer.finish().unwrap();
     }
     bytes

@@ -6,7 +6,7 @@ use std::{
 
 use axum::{
     body::Body,
-    extract::{Multipart, Path as AxumPath, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path as AxumPath, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::Response,
     routing::{get, post},
@@ -30,6 +30,8 @@ use crate::{
     project_file_cache::ProjectFileCacheEntry,
     state::{AppState, StoredProject, StoredProjectArchive},
 };
+
+const PROJECT_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES: usize = 512 * 1024 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProjectListQuery {
@@ -214,6 +216,9 @@ pub fn router() -> Router<AppState> {
             "/{id}/description/generate",
             post(generate_project_description_for_project),
         )
+        .layer(DefaultBodyLimit::max(
+            PROJECT_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES,
+        ))
 }
 
 pub async fn create_project(
