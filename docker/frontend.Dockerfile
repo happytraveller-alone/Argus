@@ -3,7 +3,6 @@
 # =============================================
 
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-ARG FRONTEND_APK_MIRROR=mirrors.aliyun.com
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-slim AS pnpm-base
 
 WORKDIR /app
@@ -130,16 +129,7 @@ RUN --mount=type=cache,id=vulhunter-frontend-vite-build,target=/tmp/vite-build-c
     NODE_OPTIONS="--max-old-space-size=3072" \
     pnpm build
 
-# =============================================
-# 生产镜像 - 使用 Nginx (支持 SSE 反向代理)
-# =============================================
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine
-
-# 切换 Alpine APK 为国内镜像（阿里云直连，需在 FROM 后重新声明全局 ARG）
-ARG FRONTEND_APK_MIRROR=mirrors.aliyun.com
-RUN if [ -n "${FRONTEND_APK_MIRROR}" ]; then \
-      sed -i "s/dl-cdn.alpinelinux.org/${FRONTEND_APK_MIRROR}/g" /etc/apk/repositories; \
-    fi
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine-slim
 
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html

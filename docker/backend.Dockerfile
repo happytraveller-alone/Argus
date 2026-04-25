@@ -48,6 +48,7 @@ RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/ap
     install_build_packages() { \
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        binutils \
         pkg-config \
         libssl-dev; \
     }; \
@@ -73,9 +74,16 @@ RUN --mount=type=cache,id=vulhunter-backend-cargo-registry,target=/usr/local/car
     --mount=type=cache,id=vulhunter-backend-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=vulhunter-backend-cargo-target,target=/app/target \
     cargo build --release --bin backend-rust \
-    && cp /app/target/release/backend-rust /usr/local/bin/backend-rust
+    && cp /app/target/release/backend-rust /usr/local/bin/backend-rust \
+    && strip /usr/local/bin/backend-rust
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
+
+FROM builder AS stripped-runtime-artifacts
+
+COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
+
+RUN strip /usr/local/bin/docker
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS runtime-base
 
@@ -136,17 +144,15 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
+  && mkdir -p /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config \
+  && chown -R appuser:appgroup /app/uploads /app/data
 
 WORKDIR /app
 
 COPY backend/assets ./assets
-COPY docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
+COPY --chmod=755 docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
-COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
-
-RUN chmod +x /usr/local/bin/backend-entrypoint.sh \
-  && chown -R appuser:appgroup /app
+COPY --from=stripped-runtime-artifacts /usr/local/bin/docker /usr/local/bin/docker
 
 ENV BIND_ADDR=0.0.0.0:8000
 ENV ZIP_STORAGE_PATH=/app/uploads/zip_files
