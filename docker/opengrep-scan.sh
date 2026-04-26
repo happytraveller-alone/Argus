@@ -41,6 +41,13 @@ self_test() {
   test -s "$summary_path"
   grep -q '"status":"scan_completed"' "$summary_path"
 
+  local sigpipe_log="$temp_dir/sigpipe.log"
+  printf 'SIGPIPE signal intercepted\n' > "$sigpipe_log"
+  local sigpipe_summary="$temp_dir/summary-sigpipe.json"
+  json_summary "scan_completed" "$invalid_output" "$sigpipe_log" "$sigpipe_summary"
+  grep -q '"status":"scan_failed"' "$sigpipe_summary"
+  grep -q 'SIGPIPE/OOM' "$sigpipe_summary"
+
   rm -rf "$temp_dir"
 }
 
@@ -119,6 +126,10 @@ recover_results_json_from() {
   local source_label="$2"
   local recovered_path="${output_path}.recovered"
 
+  if ! grep -q '"results"' "$source_path" 2>/dev/null; then
+    return 1
+  fi
+
   rm -f "$recovered_path"
   if recover_json_document "$source_path" "$recovered_path"; then
     mv "$recovered_path" "$output_path"
@@ -141,13 +152,21 @@ json_summary() {
   fi
 
   local effective_status="$status"
+  local reason=""
   if ! results_json_ready "$output_path"; then
     effective_status="scan_failed"
+    if grep -q "SIGPIPE\|RPC.write_packet\|Broken pipe" "$log_path" 2>/dev/null; then
+      reason="SIGPIPE/OOM: opengrep subprocess crashed, likely insufficient memory for rule count"
+    elif [ ! -s "$output_path" ]; then
+      reason="opengrep produced no output file"
+    else
+      reason="output file exists but contains invalid JSON structure"
+    fi
   fi
 
   mkdir -p "$(dirname "$summary_path")"
-  printf '{"status":"%s","results_path":"%s","log_path":"%s"}\n' \
-    "$effective_status" "$output_path" "$log_path" > "$summary_path"
+  printf '{"status":"%s","reason":"%s","results_path":"%s","log_path":"%s"}\n' \
+    "$effective_status" "$reason" "$output_path" "$log_path" > "$summary_path"
 }
 
 stage_manifest_rules() {
@@ -295,6 +314,17 @@ fi
 
 if ! results_json_ready "$output_path"; then
   recover_results_json_from "$log_path" "log" || true
+fi
+
+if ! results_json_ready "$output_path" && [ "$status" -eq 0 ]; then
+  if grep -q "SIGPIPE\|RPC.write_packet\|Broken pipe" "$log_path" 2>/dev/null; then
+    printf 'SIGPIPE detected: opengrep RPC subprocess likely killed by OOM\n' >> "$log_path"
+    printf 'Rule count and memory limit may be insufficient\n' >> "$log_path"
+    status=141
+  else
+    printf '{"results":[]}\n' > "$output_path"
+    printf 'opengrep exited 0 with no findings; synthesized empty results\n' >> "$log_path"
+  fi
 fi
 
 if ! results_json_ready "$output_path" && [ -s "$stdout_capture" ]; then

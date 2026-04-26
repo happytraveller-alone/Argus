@@ -120,10 +120,10 @@ impl AppConfig {
             sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
                 .unwrap_or_else(|_| "Argus/sandbox-runner:latest".to_string()),
             opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 0),
-            opengrep_scan_jobs: parse_usize_env("OPENGREP_SCAN_JOBS", 4),
-            opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 1536),
-            opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 2048),
-            opengrep_runner_cpu_limit: parse_f64_env("OPENGREP_RUNNER_CPU_LIMIT", 4.0),
+            opengrep_scan_jobs: parse_usize_env("OPENGREP_SCAN_JOBS", 8),
+            opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 2048),
+            opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 4096),
+            opengrep_runner_cpu_limit: parse_f64_env("OPENGREP_RUNNER_CPU_LIMIT", 8.0),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
         })
     }
@@ -180,10 +180,10 @@ impl AppConfig {
             flow_parser_runner_image: "Argus/flow-parser-runner:test".to_string(),
             sandbox_runner_image: "Argus/sandbox-runner:test".to_string(),
             opengrep_scan_timeout_seconds: 0,
-            opengrep_scan_jobs: 4,
-            opengrep_scan_max_memory_mb: 1536,
-            opengrep_runner_memory_limit_mb: 2048,
-            opengrep_runner_cpu_limit: 4.0,
+            opengrep_scan_jobs: 8,
+            opengrep_scan_max_memory_mb: 2048,
+            opengrep_runner_memory_limit_mb: 4096,
+            opengrep_runner_cpu_limit: 8.0,
             opengrep_runner_pids_limit: 512,
         }
     }

@@ -880,11 +880,17 @@ async fn run_opengrep_scan_inner(
     let summary_path = workspace_dir.join(&summary_rel_path);
     if let Ok(summary_text) = tokio::fs::read_to_string(&summary_path).await {
         if summary_text.contains("\"status\":\"scan_failed\"") {
+            let reason = serde_json::from_str::<serde_json::Value>(&summary_text)
+                .ok()
+                .and_then(|v| v.get("reason")?.as_str().map(String::from))
+                .filter(|r| !r.is_empty());
             let log_excerpt = read_text_excerpt(Some(&workspace_dir.join(&log_rel_path))).await;
             let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-            let detail = log_excerpt.unwrap_or_else(|| "no log available".to_string());
+            let detail = reason
+                .or(log_excerpt)
+                .unwrap_or_else(|| "no log available".to_string());
             return Err(format!(
-                "opengrep scan failed: scanner produced no valid results; log={detail}"
+                "opengrep scan failed: {detail}"
             )
             .into());
         }
@@ -1965,9 +1971,9 @@ rules:
             spec.completion_summary_path.as_deref(),
             Some("output/summary-001.json")
         );
-        assert_eq!(spec.memory_limit_mb, Some(2048));
-        assert_eq!(spec.memory_swap_limit_mb, Some(2048));
-        assert_eq!(spec.cpu_limit, Some(4.0));
+        assert_eq!(spec.memory_limit_mb, Some(4096));
+        assert_eq!(spec.memory_swap_limit_mb, Some(4096));
+        assert_eq!(spec.cpu_limit, Some(8.0));
         assert_eq!(spec.pids_limit, Some(512));
         assert_eq!(spec.timeout_seconds, 0);
         assert_eq!(
@@ -1979,8 +1985,8 @@ rules:
                 output_path: "/scan/output/results-001.json",
                 summary_path: "/scan/output/summary-001.json",
                 log_path: "/scan/output/log-001.txt",
-                jobs: 4,
-                max_memory_mb: 1536,
+                jobs: 8,
+                max_memory_mb: 2048,
             })
         );
     }

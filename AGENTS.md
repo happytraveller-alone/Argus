@@ -482,38 +482,17 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-25 4:29pm GMT+8
+# [audittool_personal] recent context, 2026-04-26 9:11am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,554t read) | 1,499,412t work | 98% savings
+Stats: 50 obs (21,787t read) | 1,478,450t work | 99% savings
 
-### Apr 23, 2026
-S497 Plan two PRD and test spec documents for Hermes containerized functional agents (Apr 23, 8:51 PM)
-S590 Opengrep Scan Strategy — Language-Aware Rule Filtering Planned (Apr 23, 9:20 PM)
 ### Apr 24, 2026
-S598 Optimize opengrep scan strategy — detect project languages first, then filter rules to only matching languages (Apr 24, 8:35 AM)
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
 S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
-1840 7:34p 🔵 Test Name Mismatch — builds_opengrep_runner_spec_with_materialized_config_directory_and_artifact_captures Not Found
-1841 7:35p 🔵 Static Audit SIGPIPE Failures — Opengrep Scanner Exits with UnixExit(-141)
-1842 7:36p 🔵 OpenGrep Static Scan Fix Design Review — APPROVED
-1844 7:38p 🔴 Opengrep Static Audit — Root Cause Investigation and Multi-Layer Fix
-1843 7:39p 🔵 OpenGrep Scan Fix — Code Review APPROVED with All Blockers Resolved
-1845 8:01p 🔵 Opengrep Container Scan Confirmed Working — Log Shows 254 Rules on 2 Files
-1851 8:03p 🔵 Opengrep Runner Fails with --manifest Flag, Succeeds with --config Flag
-1853 8:12p 🔵 build_scan_command Supports Both --manifest and --config But Caller Determines Which Is Used
-1855 8:14p 🔵 Opengrep Scan Failure — Workspace Retained for Diagnosis, Root Cause Identified
-1860 8:19p 🔵 Opengrep --json-output Writes Empty File When Results Exist — Root Cause Identified
-1861 8:23p 🔵 Opengrep Scan Succeeds with Small Rule Set (10 Rules)
-1865 " 🔵 Opengrep Scan Failure Root Cause — Memory Exhaustion Causes SIGPIPE
-1866 " 🔴 Opengrep Container Memory Limits Raised — 500MB→2048MB, 384MB→1024MB
-1867 " 🔴 Debug Workspace Retention Removed — Scan Failure Path Now Cleans Up
-1868 8:38p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Root Cause Investigation
-1875 8:39p 🔴 opengrep-scan.sh Self-Test — Invalid Output Now Asserts scan_failed Summary Written
-1879 8:41p 🔴 Opengrep Runner Memory Limit Raised to 2048 MB — Test Config Stale Value Fixed
 1882 8:45p 🔵 Opengrep Scan Failure — "Scanner Completion Summary Not Observed" Error
 1884 8:51p 🔴 Opengrep Scan Failure Fixed — Memory Limits Increased and Summary Gate Hardened
 1886 8:52p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
@@ -531,6 +510,7 @@ S649 Save opengrep expertise skill + post-fix verification of scan task findings
 1902 9:30p ✅ Opengrep SIGPIPE/OOM Skill Promoted to User-Level Directory
 1908 9:31p 🔵 OMC Skill Discovery — Flat-File vs Directory Layout for omc-learned
 1910 9:33p 🔵 Static Tasks API — Finding Schema and Severity Filtering Architecture
+S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 9:33 PM)
 S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
 1916 9:53p 🔵 Stop-Gate Review — Previous Turn Was Verification-Only, ALLOW Confirmed
 1919 9:54p 🔴 Opengrep Scan — Severity Filtering and Language-Aware Rule Loading for Batch Path
@@ -543,7 +523,7 @@ S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecod
 1943 10:07p 🔵 Opengrep Scan — WARNING/INFO Findings Preserved for User Custom Rules, Filtered at Asset Source for Builtins
 1944 10:08p 🔵 Opengrep Severity Architecture — Full Stack Code Path Confirmed
 1945 10:09p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern
-S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 10:09 PM)
+S708 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 24, 10:09 PM)
 1946 10:11p 🔵 Opengrep Scan Architecture — Rule Selection and Severity Filtering Code Paths
 1947 " 🔴 Regression Test Added — parse_scan_output Retains All Severity Levels
 1949 10:15p 🔵 Stop-Gate Review — ALLOW for Opengrep Fix Verification Summary
@@ -552,6 +532,27 @@ S671 Opengrep Scan Failure — "scanner completion summary was not observed" Err
 1957 10:22p 🔵 OMX Ralph/Ralplan Stop-Gate State — Current Session Has No Active Modes
 1959 10:23p 🔵 Frontend Rule Selection Architecture — CreateProjectScanDialog vs CreateScanTaskDialog
 1962 10:25p 🔴 Opengrep Scan — Severity Filter Removed from Result Processing, All Findings Now Persisted
+### Apr 25, 2026
+1966 4:32p 🟣 Hermes Agent Dockerfile Patch — Strip Playwright, Web Frontend, FFmpeg, and Multimodal Dependencies
+### Apr 26, 2026
+1975 8:02a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
+1973 8:04a ⚖️ Frontend Top Navigation Plan — Architectural Re-Review After Critic Rejection
+1979 8:06a ⚖️ Frontend Top Navigation Plan — Architectural Re-Review After Critic Rejection
+1978 8:07a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
+1980 8:08a 🔵 Frontend Top Navigation Dropdowns Plan — Architecture Re-Review Result
+1983 8:10a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
+1981 8:11a ⚖️ RALPLAN-DR Quality Review — APPROVE/ITERATE/REJECT Verdict for Frontend Top Navigation Dropdowns Plan
+1982 8:12a 🔵 Frontend Navigation Architecture — Current State Confirmed for Top-Nav Migration Plan
+1985 8:15a 🔴 Opengrep Scan Silent Failure — SIGPIPE Detection, Recovery Optimization, and Structured Error Reason
+1988 8:16a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation
+S711 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 26, 8:16 AM)
+1990 8:18a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation
+1994 8:22a 🔵 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh
+S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh (Apr 26, 8:22 AM)
+2026 9:07a ✅ Stop-Gate Review — ALLOW for Opengrep Resource Config Increase
+2028 " 🔵 Stop-Gate Diff Verification — Four Files Modified Across Multiple Turns
+2031 9:08a ✅ Opengrep Resource Limits Scaled Up in backend/src/config.rs
+2033 9:10a ✅ Opengrep Error Reporting Improved — reason Field Surfaced in Failure Message
 
-Access 1499k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1478k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
