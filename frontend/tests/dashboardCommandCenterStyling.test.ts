@@ -22,7 +22,7 @@ test("DashboardCommandCenter uses shared card tokens and avoids gradient dashboa
 	);
 	assert.match(
 		source,
-		/className="px-1 py-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden"/,
+		/className="px-1 pb-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden"/,
 	);
 	assert.doesNotMatch(source, /bg-\[radial-gradient/);
 	assert.doesNotMatch(source, /bg-\[linear-gradient/);
@@ -41,15 +41,46 @@ test("DashboardCommandCenter summary card descriptions use enlarged label text",
 
 	assert.match(
 		source,
-		/const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-xs uppercase tracking-\[0\.12em\] text-muted-foreground"/,
+		/const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-sm uppercase tracking-\[0\.12em\] text-muted-foreground"/,
 	);
-	assert.match(source, /<div className=\{DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME\}>/);
+	assert.match(
+		source,
+		/<div className=\{DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME\}>/,
+	);
+	assert.match(
+		source,
+		/className=\{`\$\{DASHBOARD_PANEL_CLASSNAME\} flex items-center justify-between gap-3 px-3 py-3`\}/,
+	);
+	assert.match(
+		source,
+		/className="text-right text-xl font-semibold tabular-nums text-foreground"/,
+	);
+});
+
+test("DashboardCommandCenter places task status between summary cards and charts", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+	const previewIndex = source.indexOf("<PreviewHeader snapshot={snapshot} />");
+	const statusIndex = source.indexOf("<TaskStatusPanel snapshot={snapshot} />");
+	const gridIndex = source.indexOf(
+		"<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>",
+	);
+
+	assert.ok(previewIndex >= 0);
+	assert.ok(statusIndex > previewIndex);
+	assert.ok(gridIndex > statusIndex);
+	assert.doesNotMatch(
+		source,
+		/lg:col-start-2[\s\S]*<TaskStatusPanel snapshot=\{snapshot\} \/>/,
+	);
 });
 
 test("DashboardCommandCenter recent task titles match progress text styling instead of bold headings", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
-	assert.match(source, /<p className="truncate text-xs text-muted-foreground">/);
+	assert.match(
+		source,
+		/<p className="truncate text-xs text-muted-foreground">/,
+	);
 	assert.match(
 		source,
 		/<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">/,

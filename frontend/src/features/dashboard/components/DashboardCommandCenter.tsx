@@ -198,7 +198,7 @@ const DASHBOARD_PANEL_DESCRIPTION_CLASSNAME =
 const DASHBOARD_META_LABEL_CLASSNAME =
 	"text-left text-xs uppercase tracking-[0.18em] text-muted-foreground";
 const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
-	"text-xs uppercase tracking-[0.12em] text-muted-foreground";
+	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
 const DASHBOARD_TOOLTIP_STYLE = {
 	backgroundColor: "hsl(var(--card))",
 	borderColor: "hsl(var(--border))",
@@ -357,7 +357,9 @@ function toShare(value: number, total: number) {
 	return value / total;
 }
 
-export function buildTrendRows(items: DashboardDailyActivityItem[]): TrendRow[] {
+export function buildTrendRows(
+	items: DashboardDailyActivityItem[],
+): TrendRow[] {
 	return items.map((item) => {
 		const totalNewFindings = Math.max(Number(item.total_new_findings || 0), 0);
 		const staticFindings = Math.max(Number(item.static_findings || 0), 0);
@@ -388,7 +390,11 @@ function renderTrendTooltip(payload: {
 	label?: string;
 	payload?: Array<{ payload?: TrendRow }>;
 }) {
-	if (!payload.active || !Array.isArray(payload.payload) || payload.payload.length === 0) {
+	if (
+		!payload.active ||
+		!Array.isArray(payload.payload) ||
+		payload.payload.length === 0
+	) {
 		return null;
 	}
 	const row = payload.payload[0]?.payload;
@@ -403,7 +409,9 @@ function renderTrendTooltip(payload: {
 			<div className="mt-2 space-y-1 text-muted-foreground">
 				{/* <p>当日累计新增漏洞发现：{formatNumber(row.totalNewFindings)}</p> */}
 				<p>当日静态审计漏洞发现：{formatNumber(row.staticFindings)}</p>
-				<p>当日智能审计漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}</p>
+				<p>
+					当日智能审计漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}
+				</p>
 			</div>
 		</div>
 	);
@@ -577,7 +585,9 @@ function TaskStatusTooltipContent({ row }: { row: TaskStatusRow }) {
 	);
 }
 
-export function getRecentTaskProjectTitle(task: DashboardRecentTaskItem): string {
+export function getRecentTaskProjectTitle(
+	task: DashboardRecentTaskItem,
+): string {
 	const title = String(task.title || "").trim();
 	if (!title) {
 		return "-";
@@ -591,7 +601,9 @@ export function getRecentTaskProjectTitle(task: DashboardRecentTaskItem): string
 	return segments[segments.length - 1]?.trim() || title;
 }
 
-function normalizeRecentTaskTypeLabel(taskType: string | null | undefined): string {
+function normalizeRecentTaskTypeLabel(
+	taskType: string | null | undefined,
+): string {
 	const normalized = String(taskType || "").trim();
 	if (normalized.includes("混合")) {
 		return "智能审计";
@@ -652,11 +664,14 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	return (
 		<div className={TOP_STATS_GRID_CLASSNAME}>
 			{cards.map((item) => (
-				<div key={item.label} className={`${DASHBOARD_PANEL_CLASSNAME} px-3 py-3`}>
+				<div
+					key={item.label}
+					className={`${DASHBOARD_PANEL_CLASSNAME} flex items-center justify-between gap-3 px-3 py-3`}
+				>
 					<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
 						{item.label}
 					</div>
-					<div className="mt-2 text-xl font-semibold tabular-nums text-foreground">
+					<div className="text-right text-xl font-semibold tabular-nums text-foreground">
 						{item.value}
 					</div>
 				</div>
@@ -686,16 +701,18 @@ function ViewSidebar({
 							type="button"
 							aria-pressed={active}
 							onClick={() => onChange(view.id)}
-							className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${active
-								? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
-								: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
-								}`}
+							className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${
+								active
+									? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
+									: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
+							}`}
 						>
 							<div
-								className={`mt-0.5 rounded-sm p-2 ${active
-									? "bg-primary/10 text-primary"
-									: "bg-muted/70 text-muted-foreground"
-									}`}
+								className={`mt-0.5 rounded-sm p-2 ${
+									active
+										? "bg-primary/10 text-primary"
+										: "bg-muted/70 text-muted-foreground"
+								}`}
 							>
 								{view.id === "trend" ? (
 									<Activity className="h-4 w-4" />
@@ -715,10 +732,11 @@ function ViewSidebar({
 										{view.label}
 									</span>
 									<ChevronRight
-										className={`h-4 w-4 transition ${active
-											? "translate-x-0 text-primary"
-											: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
-											}`}
+										className={`h-4 w-4 transition ${
+											active
+												? "translate-x-0 text-primary"
+												: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
+										}`}
 									/>
 								</div>
 								<p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -902,9 +920,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 				</a>
 			</div>
 			<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-				<span>
-					{normalizeRecentTaskTypeLabel(task.task_type)}
-				</span>
+				<span>{normalizeRecentTaskTypeLabel(task.task_type)}</span>
 				<span>{progress}%</span>
 			</div>
 			<div className="mt-2 h-2 rounded-full bg-muted/70">
@@ -1028,7 +1044,11 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 								fillOpacity={0.28}
 								barSize={18}
 							>
-								<LabelList dataKey="staticLabel" position="insideTop" formatter={renderTrendLabel} />
+								<LabelList
+									dataKey="staticLabel"
+									position="insideTop"
+									formatter={renderTrendLabel}
+								/>
 							</Bar>
 							<Bar
 								dataKey="intelligentShare"
@@ -1105,11 +1125,11 @@ function HorizontalStatsChart({
 	const primaryTone = rows[0]?.tone ?? "low";
 	const legendItems = stacked
 		? [
-			{ label: "严重", tone: "critical" as Tone },
-			{ label: "高危", tone: "high" as Tone },
-			{ label: "中危", tone: "medium" as Tone },
-			{ label: "低危", tone: "low" as Tone },
-		]
+				{ label: "严重", tone: "critical" as Tone },
+				{ label: "高危", tone: "high" as Tone },
+				{ label: "中危", tone: "medium" as Tone },
+				{ label: "低危", tone: "low" as Tone },
+			]
 		: [{ label: "总数", tone: primaryTone }];
 
 	return (
@@ -1266,9 +1286,10 @@ export default function DashboardCommandCenter({
 	);
 
 	return (
-		<div className="px-1 py-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
+		<div className="px-1 pb-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
 			<div className="space-y-6 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:space-y-4">
 				<PreviewHeader snapshot={snapshot} />
+				<TaskStatusPanel snapshot={snapshot} />
 				<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>
 					<ViewSidebar activeView={activeView} onChange={setActiveView} />
 					<section className={`${DASHBOARD_PANEL_CLASSNAME} p-5 xl:min-h-0`}>
@@ -1285,9 +1306,6 @@ export default function DashboardCommandCenter({
 							/>
 						)}
 					</section>
-					<div className="lg:col-start-2">
-						<TaskStatusPanel snapshot={snapshot} />
-					</div>
 				</div>
 			</div>
 		</div>

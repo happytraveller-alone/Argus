@@ -2,23 +2,30 @@ import { useMemo } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import OpengrepRules from "@/pages/OpengrepRules";
 import {
-  DEFAULT_SCAN_ENGINE_TAB,
-  isScanEngineTab,
+	DEFAULT_SCAN_ENGINE_TAB,
+	isScanEngineTab,
 } from "@/shared/constants/scanEngines";
 
-const DATA_TABLE_URL_STATE_KEYS = ["q", "sort", "order", "page", "pageSize", "filters"];
+const DATA_TABLE_URL_STATE_KEYS = [
+	"q",
+	"sort",
+	"order",
+	"page",
+	"pageSize",
+	"filters",
+];
 
 export function buildScanConfigEngineSearchParams(
-  currentParams: URLSearchParams,
-  value: string,
+	currentParams: URLSearchParams,
+	value: string,
 ) {
-  const next = value === "opengrep" ? value : DEFAULT_SCAN_ENGINE_TAB;
-  const nextParams = new URLSearchParams(currentParams);
-  for (const key of DATA_TABLE_URL_STATE_KEYS) {
-    nextParams.delete(key);
-  }
-  nextParams.set("tab", next);
-  return nextParams;
+	const next = value === "opengrep" ? value : DEFAULT_SCAN_ENGINE_TAB;
+	const nextParams = new URLSearchParams(currentParams);
+	for (const key of DATA_TABLE_URL_STATE_KEYS) {
+		nextParams.delete(key);
+	}
+	nextParams.set("tab", next);
+	return nextParams;
 }
 
 export default function ScanConfigEngines() {
@@ -35,22 +42,19 @@ export default function ScanConfigEngines() {
 	}, [rawTab]);
 
 	const handleEngineChange = (value: string) => {
-		setSearchParams(buildScanConfigEngineSearchParams(searchParams, value), { replace: true });
+		setSearchParams(buildScanConfigEngineSearchParams(searchParams, value), {
+			replace: true,
+		});
 	};
 
 	return (
-		<div className="space-y-6 p-6 bg-background min-h-screen relative">
-			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-			<div className="relative z-10">
-				<div className="cyber-card p-0">
-					<OpengrepRules
-						embedded
-						showEngineSelector
-						engineValue={currentTab}
-						onEngineChange={handleEngineChange}
-					/>
-				</div>
-			</div>
+		<div className="min-h-screen bg-background p-6">
+			<OpengrepRules
+				embedded
+				showEngineSelector
+				engineValue={currentTab}
+				onEngineChange={handleEngineChange}
+			/>
 		</div>
 	);
 }
