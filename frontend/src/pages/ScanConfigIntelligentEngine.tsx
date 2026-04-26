@@ -1,4 +1,4 @@
-import { Brain, KeyRound, Settings, Zap } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import type {
 	LlmModelStatsSource,
@@ -19,6 +19,15 @@ type LlmSummaryState = {
 	modelStatsSource: LlmModelStatsSource;
 	shouldPreferOnlineStats: boolean;
 };
+
+const ENGINE_SUMMARY_GRID_CLASSNAME =
+	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
+const ENGINE_SUMMARY_CARD_CLASSNAME =
+	"rounded-sm border border-border bg-card text-card-foreground shadow-sm flex min-w-0 items-center justify-between gap-3 px-3 py-3";
+const ENGINE_SUMMARY_CARD_LABEL_CLASSNAME =
+	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
+const ENGINE_SUMMARY_CARD_VALUE_CLASSNAME =
+	"min-w-0 break-all text-right text-xl font-semibold tabular-nums text-foreground";
 
 export default function ScanConfigIntelligentEngine() {
 	const sharedDraftState = useSystemConfigDraftState();
@@ -45,58 +54,35 @@ export default function ScanConfigIntelligentEngine() {
 			: summary.modelStatsStatus === "empty"
 				? "--"
 				: `${summary.availableModelCount}`;
+	const summaryCards = [
+		{
+			label: "模型提供商",
+			value: summary.providerLabel,
+		},
+		{
+			label: "当前采用模型",
+			value: summary.currentModelName || "--",
+		},
+		{
+			label: "支持模型数量",
+			value: modelStatsValue,
+		},
+	];
 
 	return (
 		<div className="min-h-screen bg-background p-6">
 			<div className="space-y-5 max-w-[1680px] mx-auto">
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-					<div className="rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm">
-						<div className="flex items-center justify-between">
-							<div>
-								<p className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-									模型提供商
-								</p>
-								<p className="mt-2 break-all text-2xl font-semibold text-foreground">
-									{summary.providerLabel}
-								</p>
+				<div className={ENGINE_SUMMARY_GRID_CLASSNAME}>
+					{summaryCards.map((item) => (
+						<div key={item.label} className={ENGINE_SUMMARY_CARD_CLASSNAME}>
+							<div className={ENGINE_SUMMARY_CARD_LABEL_CLASSNAME}>
+								{item.label}
 							</div>
-							<div className="flex h-14 w-14 items-center justify-center rounded-sm border border-border bg-muted/40 text-primary">
-								<Settings className="w-6 h-6" />
+							<div className={ENGINE_SUMMARY_CARD_VALUE_CLASSNAME}>
+								{item.value}
 							</div>
 						</div>
-					</div>
-
-					<div className="rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm">
-						<div className="flex items-center justify-between">
-							<div>
-								<p className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-									当前采用模型
-								</p>
-								<p className="mt-2 break-all text-2xl font-semibold text-foreground">
-									{summary.currentModelName || "--"}
-								</p>
-							</div>
-							<div className="flex h-14 w-14 items-center justify-center rounded-sm border border-border bg-muted/40 text-sky-500">
-								<Brain className="w-6 h-6" />
-							</div>
-						</div>
-					</div>
-
-					<div className="rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm">
-						<div className="flex items-center justify-between">
-							<div>
-								<p className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-									支持模型数量
-								</p>
-								<p className="mt-2 break-all text-2xl font-semibold text-foreground">
-									{modelStatsValue}
-								</p>
-							</div>
-							<div className="flex h-14 w-14 items-center justify-center rounded-sm border border-border bg-muted/40 text-emerald-500">
-								<Zap className="w-6 h-6" />
-							</div>
-						</div>
-					</div>
+					))}
 				</div>
 
 				<div className="space-y-4">

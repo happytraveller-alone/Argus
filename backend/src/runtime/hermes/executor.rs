@@ -77,7 +77,7 @@ fn format_docker_exec_failure(output: &std::process::Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     match (stderr.is_empty(), stdout.is_empty()) {
-        (false, false) => format!("stderr:\n{}\nstdout:\n{}", stderr, stdout),
+        (false, false) => format!("stderr:\n{stderr}\nstdout:\n{stdout}"),
         (false, true) => stderr,
         (true, false) => stdout,
         (true, true) => "docker exec exited non-zero with no output".to_string(),

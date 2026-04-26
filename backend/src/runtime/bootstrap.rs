@@ -39,7 +39,7 @@ struct ProbeResult {
 
 fn is_true(value: Option<&String>) -> bool {
     matches!(
-        value.as_deref().map(|val| val.trim()).filter(|v| !v.is_empty()),
+        value.map(|val| val.trim()).filter(|v| !v.is_empty()),
         Some(val) if matches!(
             val.to_lowercase().as_str(),
             "1" | "true" | "yes" | "on"
@@ -69,7 +69,7 @@ fn venv_bin<S: AsRef<str>>(name: S) -> PathBuf {
 
 fn python_version() -> Result<String> {
     let output = Command::new("python3")
-        .args(&[
+        .args([
             "-c",
             "import sys; print('.'.join(str(part) for part in sys.version_info[:3]))",
         ])
@@ -108,7 +108,7 @@ fn venv_can_run_backend(venv_dir: &Path) -> Result<bool> {
     }
 
     let status = Command::new(python_bin)
-        .args(&["-c", "import sqlalchemy, uvicorn"])
+        .args(["-c", "import sqlalchemy, uvicorn"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -145,7 +145,7 @@ fn ensure_backend_venv() -> Result<()> {
     }
 
     Command::new("uv")
-        .args(&[
+        .args([
             "venv",
             "--clear",
             venv_dir.to_str().context("venv path invalid")?,
@@ -396,15 +396,15 @@ pub fn sync_backend_env_if_needed(app_root: &Path) -> Result<()> {
     fs::create_dir_all("/root/.cache/uv").context("create uv cache dir")?;
 
     let candidates = get_ordered_pypi_candidates()?;
-    println!("PyPI index candidates: {:?}", candidates);
+    println!("PyPI index candidates: {candidates:?}");
 
     for index_url in &candidates {
-        println!("uv sync via {} ...", index_url);
+        println!("uv sync via {index_url} ...");
         let status = Command::new("uv")
-            .args(&["sync", "--active", "--frozen", "--no-dev"])
+            .args(["sync", "--active", "--frozen", "--no-dev"])
             .current_dir(app_root)
-            .env("UV_INDEX_URL", &index_url)
-            .env("PIP_INDEX_URL", &index_url)
+            .env("UV_INDEX_URL", index_url)
+            .env("PIP_INDEX_URL", index_url)
             .status()
             .context("running uv sync")?;
 
@@ -412,7 +412,7 @@ pub fn sync_backend_env_if_needed(app_root: &Path) -> Result<()> {
             env::set_var("UV_INDEX_URL", index_url);
             env::set_var("PIP_INDEX_URL", index_url);
             if !current_hash.is_empty() {
-                fs::write(&stamp_file, format!("{}\n", current_hash))
+                fs::write(&stamp_file, format!("{current_hash}\n"))
                     .context("write uv stamp file")?;
             }
             return Ok(());
@@ -487,7 +487,7 @@ raise SystemExit(0 if asyncio.run(check_db()) else 1)\n";
     let python_bin = venv_bin("python");
     for retry in 0..max_retries {
         let status = Command::new(&python_bin)
-            .args(&["-c", script])
+            .args(["-c", script])
             .env("PYTHON_DATABASE_URL", &database_url)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -533,7 +533,7 @@ pub fn exec_backend_server() -> Result<()> {
 pub fn run(mode: &str) -> Result<()> {
     let mode = mode.trim();
     if mode != "dev" && mode != "prod" {
-        bail!("unexpected mode `{}`; expected `dev` or `prod`", mode);
+        bail!("unexpected mode `{mode}`; expected `dev` or `prod`");
     }
 
     let app_root =

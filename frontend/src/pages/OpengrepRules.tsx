@@ -42,7 +42,6 @@ import {
 	Code,
 	AlertTriangle,
 	ArrowLeft,
-	Database,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -113,6 +112,15 @@ const EMPTY_RULE_STATS: RuleStats = {
 	languageCount: null,
 	vulnerabilityTypeCount: null,
 };
+
+const RULE_STATS_GRID_CLASSNAME =
+	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 relative z-10";
+const RULE_STATS_CARD_CLASSNAME =
+	"rounded-sm border border-border bg-card text-card-foreground shadow-sm flex min-w-0 items-center justify-between gap-3 px-3 py-3";
+const RULE_STATS_CARD_LABEL_CLASSNAME =
+	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
+const RULE_STATS_CARD_VALUE_CLASSNAME =
+	"text-right text-xl font-semibold tabular-nums text-foreground";
 
 function formatRuleStatValue(value: number | null) {
 	return value === null ? "\u00a0" : value.toLocaleString();
@@ -1452,6 +1460,20 @@ export default function OpengrepRules({
 		],
 		[availableLanguages, confidenceOptions, highlightRuleKeyword],
 	);
+	const ruleStatsCards = [
+		{
+			label: "规则数量",
+			value: formatRuleStatValue(ruleStats.total),
+		},
+		{
+			label: "覆盖语言",
+			value: formatRuleStatValue(ruleStats.languageCount),
+		},
+		{
+			label: "覆盖漏洞类型",
+			value: formatRuleStatValue(ruleStats.vulnerabilityTypeCount),
+		},
+	];
 
 	return (
 		<div
@@ -1487,50 +1509,17 @@ export default function OpengrepRules({
 					)}
 
 					{/* Stats Cards */}
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
-						<div className="cyber-card p-4">
-							<div className="flex items-center justify-between">
-								<div>
-									<p className="stat-label">规则数量</p>
-									<div className="flex items-end gap-3">
-										<p className="stat-value min-h-[2.5rem]">
-											{formatRuleStatValue(ruleStats.total)}
-										</p>
-									</div>
+					<div className={RULE_STATS_GRID_CLASSNAME}>
+						{ruleStatsCards.map((item) => (
+							<div key={item.label} className={RULE_STATS_CARD_CLASSNAME}>
+								<div className={RULE_STATS_CARD_LABEL_CLASSNAME}>
+									{item.label}
 								</div>
-								<div className="stat-icon text-primary">
-									<Database className="w-6 h-6" />
+								<div className={RULE_STATS_CARD_VALUE_CLASSNAME}>
+									{item.value}
 								</div>
 							</div>
-						</div>
-
-						<div className="cyber-card p-4">
-							<div className="flex items-center justify-between">
-								<div>
-									<p className="stat-label">覆盖语言</p>
-									<p className="stat-value min-h-[2.5rem]">
-										{formatRuleStatValue(ruleStats.languageCount)}
-									</p>
-								</div>
-								<div className="stat-icon text-indigo-400">
-									<Code className="w-6 h-6" />
-								</div>
-							</div>
-						</div>
-
-						<div className="cyber-card p-4">
-							<div className="flex items-center justify-between">
-								<div>
-									<p className="stat-label">覆盖漏洞类型</p>
-									<p className="stat-value min-h-[2.5rem]">
-										{formatRuleStatValue(ruleStats.vulnerabilityTypeCount)}
-									</p>
-								</div>
-								<div className="stat-icon text-amber-400">
-									<AlertTriangle className="w-6 h-6" />
-								</div>
-							</div>
-						</div>
+						))}
 					</div>
 
 					<div className="cyber-card relative z-10 overflow-hidden">

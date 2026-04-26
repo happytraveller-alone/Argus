@@ -49,9 +49,11 @@ pub struct AppConfig {
     pub sandbox_runner_image: String,
     pub opengrep_scan_timeout_seconds: u64,
     pub opengrep_scan_jobs: usize,
+    pub opengrep_scan_jobs_explicit: bool,
     pub opengrep_scan_max_memory_mb: u64,
     pub opengrep_runner_memory_limit_mb: u64,
     pub opengrep_runner_cpu_limit: f64,
+    pub opengrep_runner_cpu_limit_explicit: bool,
     pub opengrep_runner_pids_limit: u64,
 }
 
@@ -65,6 +67,9 @@ impl AppConfig {
         let rust_database_url = optional_env("RUST_DATABASE_URL").or_else(|| database_env.clone());
         let python_database_url =
             optional_env("PYTHON_DATABASE_URL").or_else(|| database_env.clone());
+
+        let opengrep_scan_jobs_env = optional_env("OPENGREP_SCAN_JOBS");
+        let opengrep_runner_cpu_limit_env = optional_env("OPENGREP_RUNNER_CPU_LIMIT");
 
         Ok(Self {
             bind_addr,
@@ -120,10 +125,18 @@ impl AppConfig {
             sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
                 .unwrap_or_else(|_| "Argus/sandbox-runner:latest".to_string()),
             opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 0),
-            opengrep_scan_jobs: parse_usize_env("OPENGREP_SCAN_JOBS", 8),
+            opengrep_scan_jobs: opengrep_scan_jobs_env
+                .as_deref()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(0),
+            opengrep_scan_jobs_explicit: opengrep_scan_jobs_env.is_some(),
             opengrep_scan_max_memory_mb: parse_u64_env("OPENGREP_SCAN_MAX_MEMORY_MB", 2048),
             opengrep_runner_memory_limit_mb: parse_u64_env("OPENGREP_RUNNER_MEMORY_LIMIT_MB", 2048),
-            opengrep_runner_cpu_limit: parse_f64_env("OPENGREP_RUNNER_CPU_LIMIT", 8.0),
+            opengrep_runner_cpu_limit: opengrep_runner_cpu_limit_env
+                .as_deref()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(0.0),
+            opengrep_runner_cpu_limit_explicit: opengrep_runner_cpu_limit_env.is_some(),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
         })
     }
@@ -181,9 +194,11 @@ impl AppConfig {
             sandbox_runner_image: "Argus/sandbox-runner:test".to_string(),
             opengrep_scan_timeout_seconds: 0,
             opengrep_scan_jobs: 8,
+            opengrep_scan_jobs_explicit: true,
             opengrep_scan_max_memory_mb: 2048,
             opengrep_runner_memory_limit_mb: 2048,
             opengrep_runner_cpu_limit: 8.0,
+            opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
         }
     }

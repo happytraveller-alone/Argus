@@ -233,7 +233,7 @@ fn sse_response(kind: &str, payload: Value) -> Response<Body> {
 
     let body = events
         .into_iter()
-        .map(|event| format!("data: {}\n\n", event))
+        .map(|event| format!("data: {event}\n\n"))
         .collect::<String>();
 
     let mut response = Response::new(Body::from(body));

@@ -116,7 +116,7 @@ pub fn read_archive_file_from_path(
     })?;
     with_extracted_archive_bytes(original_filename, &bytes, |root| {
         let target = resolve_extracted_file_path(root, file_path)
-            .ok_or_else(|| anyhow!("file not found in extracted archive: {}", file_path))?;
+            .ok_or_else(|| anyhow!("file not found in extracted archive: {file_path}"))?;
         let file_bytes =
             fs::read(&target).with_context(|| format!("failed to read {}", target.display()))?;
         let size = file_bytes.len() as u64;

@@ -20,7 +20,7 @@ impl CanonicalRegistry {
         for manifest in manifests {
             let key = manifest.role.to_string();
             if map.contains_key(&key) {
-                bail!("duplicate role in discovered manifests: {}", key);
+                bail!("duplicate role in discovered manifests: {key}");
             }
             map.insert(key, manifest);
         }

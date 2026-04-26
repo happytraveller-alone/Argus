@@ -70,7 +70,7 @@ fn format_naive_iso(primitive: PrimitiveDateTime) -> String {
     let micros = primitive.nanosecond() / 1_000;
     if micros > 0 {
         iso.push('.');
-        iso.push_str(&format!("{:06}", micros));
+        iso.push_str(&format!("{micros:06}"));
     }
     iso
 }
@@ -88,7 +88,7 @@ fn format_offset_iso(offset_dt: OffsetDateTime) -> String {
     let micros = offset_dt.nanosecond() / 1_000;
     if micros > 0 {
         iso.push('.');
-        iso.push_str(&format!("{:06}", micros));
+        iso.push_str(&format!("{micros:06}"));
     }
 
     let offset = offset_dt.offset();
@@ -102,17 +102,14 @@ fn format_offset(offset: UtcOffset) -> String {
     let abs_seconds = total_seconds.abs();
     let hours = abs_seconds / 3_600;
     let minutes = (abs_seconds % 3_600) / 60;
-    format!("{}{:02}:{:02}", sign, hours, minutes)
+    format!("{sign}{hours:02}:{minutes:02}")
 }
 
 /// Formats a `DateTimeInput` as `YYYY年MM月DD日 HH:MM:SS`.
 pub fn format_chinese(dt: DateTimeInput) -> String {
     let (year, month, day, hour, minute, second) = dt.components();
 
-    format!(
-        "{:04}年{:02}月{:02}日 {:02}:{:02}:{:02}",
-        year, month, day, hour, minute, second
-    )
+    format!("{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}")
 }
 
 /// Returns a Chinese relative time string like "3分钟前".

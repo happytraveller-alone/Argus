@@ -31,7 +31,7 @@ async fn skills_catalog_and_prompt_skill_crud_are_rust_owned() {
             .unwrap(),
     )
     .unwrap();
-    assert!(catalog_json["items"].as_array().unwrap().len() >= 1);
+    assert!(!catalog_json["items"].as_array().unwrap().is_empty());
 
     let prompt_list_response = app
         .clone()
@@ -49,7 +49,10 @@ async fn skills_catalog_and_prompt_skill_crud_are_rust_owned() {
             .unwrap(),
     )
     .unwrap();
-    assert!(prompt_list_json["builtin_items"].as_array().unwrap().len() >= 1);
+    assert!(!prompt_list_json["builtin_items"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 
     let create_response = app
         .clone()
@@ -219,7 +222,7 @@ async fn default_skills_catalog_exposes_prompt_effective_entries() {
             .as_str()
             .unwrap()
             .contains("围绕单风险点做证据闭环"));
-        assert!(item["reason"].as_str().unwrap().len() > 0);
+        assert!(!item["reason"].as_str().unwrap().is_empty());
     }
 
     assert!(items

@@ -92,7 +92,9 @@ fn test_tar_xz_bytes() -> Vec<u8> {
     encoded.finish().unwrap()
 }
 
-fn test_multipart_body(fields: Vec<(&str, Option<&str>, Option<&str>, Vec<u8>)>) -> Vec<u8> {
+type MultipartField<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Vec<u8>);
+
+fn test_multipart_body(fields: Vec<MultipartField<'_>>) -> Vec<u8> {
     let mut body = Vec::new();
     for (name, filename, content_type, bytes) in fields {
         body.extend_from_slice(b"--x-boundary\r\n");

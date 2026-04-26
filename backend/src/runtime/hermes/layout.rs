@@ -31,7 +31,7 @@ pub fn validate_isolation(roles: &[AgentRole]) -> Result<()> {
         let data_root = runtime_data_root(role);
         let key = data_root.to_string_lossy().to_string();
         if !seen.insert(key.clone()) {
-            bail!("isolation violation: two roles share data root {}", key);
+            bail!("isolation violation: two roles share data root {key}");
         }
     }
     Ok(())

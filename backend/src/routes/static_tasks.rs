@@ -1,5 +1,10 @@
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::{
+    collections::BTreeMap,
+    env,
+    num::NonZeroUsize,
+    path::PathBuf,
+    sync::{Arc, Condvar, LazyLock, Mutex},
+};
 
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
@@ -23,6 +28,9 @@ use crate::{
     scan::opengrep,
     state::AppState,
 };
+
+static OPENGREP_RESOURCE_SCHEDULER: LazyLock<OpengrepResourceScheduler> =
+    LazyLock::new(OpengrepResourceScheduler::from_environment);
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -76,6 +84,159 @@ pub fn router() -> Router<AppState> {
         .route("/cache/repo-stats", get(get_repo_cache_stats))
         .route("/cache/cleanup-unused", post(cleanup_unused_cache))
         .route("/cache/clear-all", post(clear_all_cache))
+}
+
+#[derive(Clone, Debug)]
+struct OpengrepResourceScheduler {
+    inner: Arc<OpengrepResourceSchedulerInner>,
+}
+
+#[derive(Debug)]
+struct OpengrepResourceSchedulerInner {
+    state: Mutex<OpengrepResourceState>,
+    available: Condvar,
+}
+
+#[derive(Debug)]
+struct OpengrepResourceState {
+    total_cores: usize,
+    used_cores: usize,
+}
+
+#[derive(Debug)]
+struct OpengrepResourcePermit {
+    scheduler: OpengrepResourceScheduler,
+    allocated_cores: usize,
+    total_cores: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct OpengrepRunnerResources {
+    jobs: usize,
+    cpu_limit: f64,
+    allocated_cores: usize,
+    total_cores: usize,
+}
+
+impl OpengrepResourceScheduler {
+    fn from_environment() -> Self {
+        Self::new(detect_opengrep_available_cores())
+    }
+
+    fn new(total_cores: usize) -> Self {
+        Self {
+            inner: Arc::new(OpengrepResourceSchedulerInner {
+                state: Mutex::new(OpengrepResourceState {
+                    total_cores: total_cores.max(1),
+                    used_cores: 0,
+                }),
+                available: Condvar::new(),
+            }),
+        }
+    }
+
+    fn acquire(&self, requested_cores: Option<usize>) -> OpengrepResourcePermit {
+        let mut state = self.inner.state.lock().expect("opengrep resource lock");
+        loop {
+            if let Some(allocated_cores) = next_opengrep_allocation(&state, requested_cores) {
+                state.used_cores += allocated_cores;
+                return OpengrepResourcePermit {
+                    scheduler: self.clone(),
+                    allocated_cores,
+                    total_cores: state.total_cores,
+                };
+            }
+            state = self
+                .inner
+                .available
+                .wait(state)
+                .expect("opengrep resource wait");
+        }
+    }
+}
+
+impl Drop for OpengrepResourcePermit {
+    fn drop(&mut self) {
+        let mut state = self
+            .scheduler
+            .inner
+            .state
+            .lock()
+            .expect("opengrep resource lock");
+        state.used_cores = state.used_cores.saturating_sub(self.allocated_cores);
+        self.scheduler.inner.available.notify_all();
+    }
+}
+
+fn detect_opengrep_available_cores() -> usize {
+    env::var("OPENGREP_AVAILABLE_CORES")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .or_else(|| {
+            std::thread::available_parallelism()
+                .ok()
+                .map(NonZeroUsize::get)
+        })
+        .unwrap_or(1)
+}
+
+fn next_opengrep_allocation(
+    state: &OpengrepResourceState,
+    requested_cores: Option<usize>,
+) -> Option<usize> {
+    let remaining_cores = state.total_cores.saturating_sub(state.used_cores);
+    if remaining_cores == 0 {
+        return None;
+    }
+
+    let allocated_cores = requested_cores
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| (remaining_cores / 2).max(1))
+        .min(state.total_cores);
+
+    if allocated_cores > remaining_cores {
+        return None;
+    }
+
+    let post_launch_remaining = remaining_cores.saturating_sub(allocated_cores);
+    if state.used_cores > 0 && post_launch_remaining < 2 {
+        return None;
+    }
+
+    Some(allocated_cores)
+}
+
+fn requested_opengrep_cpu_cores(config: &crate::config::AppConfig) -> Option<usize> {
+    if config.opengrep_runner_cpu_limit_explicit && config.opengrep_runner_cpu_limit > 0.0 {
+        Some(config.opengrep_runner_cpu_limit.ceil() as usize)
+    } else {
+        None
+    }
+}
+
+fn resolve_opengrep_runner_resources(
+    config: &crate::config::AppConfig,
+    permit: &OpengrepResourcePermit,
+) -> OpengrepRunnerResources {
+    let jobs = if config.opengrep_scan_jobs_explicit && config.opengrep_scan_jobs > 0 {
+        config.opengrep_scan_jobs
+    } else {
+        permit.allocated_cores.max(1)
+    };
+    let cpu_limit =
+        if config.opengrep_runner_cpu_limit_explicit && config.opengrep_runner_cpu_limit > 0.0 {
+            config.opengrep_runner_cpu_limit
+        } else {
+            permit.allocated_cores.max(1) as f64
+        };
+
+    OpengrepRunnerResources {
+        jobs,
+        cpu_limit,
+        allocated_cores: permit.allocated_cores,
+        total_cores: permit.total_cores,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -833,7 +994,33 @@ async fn run_opengrep_scan_inner(
         return Err("no opengrep rules available for scan".into());
     };
 
-    update_scan_progress(state, task_id, 40.0, "scanning", "running opengrep scanner").await;
+    update_scan_progress(
+        state,
+        task_id,
+        40.0,
+        "queued",
+        "waiting for opengrep CPU resources",
+    )
+    .await;
+
+    let requested_cores = requested_opengrep_cpu_cores(&state.config);
+    let scheduler = OPENGREP_RESOURCE_SCHEDULER.clone();
+    let resource_permit = tokio::task::spawn_blocking(move || scheduler.acquire(requested_cores))
+        .await
+        .map_err(|error| format!("opengrep resource scheduler failed: {error}"))?;
+    let runner_resources = resolve_opengrep_runner_resources(&state.config, &resource_permit);
+
+    update_scan_progress(
+        state,
+        task_id,
+        40.0,
+        "scanning",
+        &format!(
+            "running opengrep scanner with {} jobs on {} CPU cores ({} cores available)",
+            runner_resources.jobs, runner_resources.allocated_cores, runner_resources.total_cores
+        ),
+    )
+    .await;
 
     let scanner_image = state.config.scanner_opengrep_image.clone();
     let container_source_dir = "/scan/source";
@@ -856,6 +1043,7 @@ async fn run_opengrep_scan_inner(
         &state.config,
         scanner_image,
         &workspace_dir,
+        runner_resources,
         OpengrepRunnerPaths {
             container_source_dir,
             config_container_path: config_container_path.as_deref(),
@@ -869,6 +1057,7 @@ async fn run_opengrep_scan_inner(
     );
 
     let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+    drop(resource_permit);
     if !runner_result.success {
         let error_msg =
             format_opengrep_runner_error(&runner_result, Some(&workspace_dir.join(&log_rel_path)))
@@ -1020,6 +1209,7 @@ fn build_opengrep_runner_spec(
     config: &crate::config::AppConfig,
     image: String,
     workspace_dir: &std::path::Path,
+    resources: OpengrepRunnerResources,
     paths: OpengrepRunnerPaths<'_>,
 ) -> RunnerSpec {
     RunnerSpec {
@@ -1033,7 +1223,7 @@ fn build_opengrep_runner_spec(
             output_path: paths.output_container_path,
             summary_path: paths.summary_container_path,
             log_path: paths.log_container_path,
-            jobs: config.opengrep_scan_jobs,
+            jobs: resources.jobs,
             max_memory_mb: config.opengrep_scan_max_memory_mb,
         }),
         timeout_seconds: config.opengrep_scan_timeout_seconds,
@@ -1046,7 +1236,7 @@ fn build_opengrep_runner_spec(
         workspace_root_override: None,
         memory_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
         memory_swap_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
-        cpu_limit: Some(config.opengrep_runner_cpu_limit),
+        cpu_limit: Some(resources.cpu_limit),
         pids_limit: Some(config.opengrep_runner_pids_limit),
     }
 }
@@ -1900,8 +2090,10 @@ mod tests {
 
     use super::{
         build_opengrep_runner_spec, extract_highest_rule_severity, format_opengrep_runner_error,
-        read_opengrep_results_text, OpengrepRunnerPaths,
+        read_opengrep_results_text, OpengrepResourceScheduler, OpengrepRunnerPaths,
+        OpengrepRunnerResources,
     };
+    use std::{sync::mpsc, time::Duration};
 
     #[test]
     fn extract_highest_rule_severity_prefers_error_over_warning_and_info() {
@@ -1943,6 +2135,12 @@ rules:
             &config,
             config.scanner_opengrep_image.clone(),
             std::path::Path::new("/tmp/opengrep-runtime"),
+            OpengrepRunnerResources {
+                jobs: 8,
+                cpu_limit: 8.0,
+                allocated_cores: 8,
+                total_cores: 8,
+            },
             OpengrepRunnerPaths {
                 container_source_dir: "/scan/source",
                 config_container_path: Some("/scan/opengrep-rules"),
@@ -1986,6 +2184,95 @@ rules:
                 max_memory_mb: 2048,
             })
         );
+    }
+
+    #[test]
+    fn opengrep_resource_scheduler_allocates_half_of_remaining_cores() {
+        let scheduler = OpengrepResourceScheduler::new(8);
+
+        let first = scheduler.acquire(None);
+        assert_eq!(first.allocated_cores, 4);
+        assert_eq!(first.total_cores, 8);
+
+        let second = scheduler.acquire(None);
+        assert_eq!(second.allocated_cores, 2);
+        assert_eq!(second.total_cores, 8);
+    }
+
+    #[test]
+    fn opengrep_resource_scheduler_queues_when_less_than_two_cores_would_remain() {
+        let scheduler = OpengrepResourceScheduler::new(8);
+        let first = scheduler.acquire(None);
+        let second = scheduler.acquire(None);
+
+        let (sender, receiver) = mpsc::channel();
+        let queued_scheduler = scheduler.clone();
+        let queued = std::thread::spawn(move || {
+            let permit = queued_scheduler.acquire(None);
+            sender
+                .send(permit.allocated_cores)
+                .expect("send queued allocation");
+            permit
+        });
+
+        assert!(
+            receiver.recv_timeout(Duration::from_millis(100)).is_err(),
+            "third launch should queue while only 2 cores remain"
+        );
+
+        drop(second);
+        assert_eq!(
+            receiver
+                .recv_timeout(Duration::from_secs(1))
+                .expect("queued launch should start after resources are released"),
+            2
+        );
+
+        drop(first);
+        drop(queued.join().expect("queued scheduler thread"));
+    }
+
+    #[test]
+    fn opengrep_resource_scheduler_allows_first_scan_on_small_hosts() {
+        let scheduler = OpengrepResourceScheduler::new(2);
+        let permit = scheduler.acquire(None);
+
+        assert_eq!(permit.allocated_cores, 1);
+        assert_eq!(permit.total_cores, 2);
+    }
+
+    #[test]
+    fn opengrep_runner_resources_default_to_dynamic_allocation() {
+        let mut config = AppConfig::for_tests();
+        config.opengrep_scan_jobs = 0;
+        config.opengrep_scan_jobs_explicit = false;
+        config.opengrep_runner_cpu_limit = 0.0;
+        config.opengrep_runner_cpu_limit_explicit = false;
+
+        let scheduler = OpengrepResourceScheduler::new(8);
+        let permit = scheduler.acquire(super::requested_opengrep_cpu_cores(&config));
+        let resources = super::resolve_opengrep_runner_resources(&config, &permit);
+
+        assert_eq!(resources.jobs, 4);
+        assert_eq!(resources.cpu_limit, 4.0);
+        assert_eq!(resources.allocated_cores, 4);
+    }
+
+    #[test]
+    fn opengrep_runner_resources_preserve_explicit_overrides() {
+        let mut config = AppConfig::for_tests();
+        config.opengrep_scan_jobs = 6;
+        config.opengrep_scan_jobs_explicit = true;
+        config.opengrep_runner_cpu_limit = 3.5;
+        config.opengrep_runner_cpu_limit_explicit = true;
+
+        let scheduler = OpengrepResourceScheduler::new(8);
+        let permit = scheduler.acquire(super::requested_opengrep_cpu_cores(&config));
+        let resources = super::resolve_opengrep_runner_resources(&config, &permit);
+
+        assert_eq!(resources.jobs, 6);
+        assert_eq!(resources.cpu_limit, 3.5);
+        assert_eq!(resources.allocated_cores, 4);
     }
 
     #[tokio::test]

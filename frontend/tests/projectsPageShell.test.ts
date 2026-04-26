@@ -15,8 +15,13 @@ const projectsPagePath = path.join(
 
 test("ProjectsPage 的项目浏览外层容器不再渲染 cyber-card 外框", () => {
 	const source = readFileSync(projectsPagePath, "utf8");
+	const projectBrowserMatch = source.match(
+		/id="project-browser"[\s\S]*?className="([^"]+)"/,
+	);
 
 	assert.match(source, /id="project-browser"/);
+	assert.ok(projectBrowserMatch);
+	assert.doesNotMatch(projectBrowserMatch[1], /\bp-4\b/);
 	assert.doesNotMatch(
 		source,
 		/id="project-browser"[\s\S]*className="cyber-card p-4 relative z-10 flex flex-col flex-1 min-h-\[65vh\]"/,

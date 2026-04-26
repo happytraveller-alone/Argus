@@ -352,7 +352,7 @@ export default function ProjectsPage({
 
 			<div
 				id="project-browser"
-				className="p-4 relative z-10 flex flex-col flex-1 min-h-[65vh]"
+				className="relative z-10 flex flex-col flex-1 min-h-[65vh]"
 			>
 				<ProjectsToolbar
 					searchTerm={viewModel.toolbar.searchTerm}

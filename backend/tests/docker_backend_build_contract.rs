@@ -6,13 +6,15 @@ const RELEASE_BACKEND_DOCKERFILE: &str =
 #[test]
 fn compose_passes_backend_cargo_network_build_args() {
     assert!(
-        ROOT_COMPOSE
-            .contains("BACKEND_CARGO_REGISTRY: ${BACKEND_CARGO_REGISTRY:-sparse+https://rsproxy.cn/index/}"),
+        ROOT_COMPOSE.contains(
+            "BACKEND_CARGO_REGISTRY: ${BACKEND_CARGO_REGISTRY:-sparse+https://rsproxy.cn/index/}"
+        ),
         "root compose must pass the configurable Cargo sparse mirror into the backend build"
     );
     assert!(
-        ROOT_COMPOSE
-            .contains("BACKEND_CARGO_HTTP_TIMEOUT_SECONDS: ${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS:-30}"),
+        ROOT_COMPOSE.contains(
+            "BACKEND_CARGO_HTTP_TIMEOUT_SECONDS: ${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS:-30}"
+        ),
         "root compose must bound Cargo HTTP waits during backend builds"
     );
     assert!(

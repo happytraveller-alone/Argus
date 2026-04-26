@@ -75,6 +75,16 @@ pub struct ProjectFileCacheStats {
     pub memory_limit_mb: f64,
 }
 
+pub struct ProjectFileCacheSet<'a> {
+    pub project_id: &'a str,
+    pub file_path: &'a str,
+    pub zip_hash: &'a str,
+    pub content: &'a str,
+    pub size: u64,
+    pub encoding: &'a str,
+    pub is_text: bool,
+}
+
 #[derive(Debug)]
 pub struct ProjectFileCache {
     ttl_seconds: i64,
@@ -137,27 +147,24 @@ impl ProjectFileCache {
         Some(entry.clone())
     }
 
-    pub fn set(
-        &mut self,
-        project_id: &str,
-        file_path: &str,
-        zip_hash: &str,
-        content: &str,
-        size: u64,
-        encoding: &str,
-        is_text: bool,
-    ) -> bool {
-        if size > MAX_CACHED_FILE_SIZE_BYTES {
+    pub fn set(&mut self, input: ProjectFileCacheSet<'_>) -> bool {
+        if input.size > MAX_CACHED_FILE_SIZE_BYTES {
             return false;
         }
 
         self.prune_expired();
 
-        let key = cache_key(project_id, file_path, zip_hash);
+        let key = cache_key(input.project_id, input.file_path, input.zip_hash);
         self.remove_entry(&key);
 
         let entry = ProjectFileCacheEntry::new(
-            project_id, file_path, zip_hash, content, size, encoding, is_text,
+            input.project_id,
+            input.file_path,
+            input.zip_hash,
+            input.content,
+            input.size,
+            input.encoding,
+            input.is_text,
         );
         let entry_size = entry.memory_size();
 
@@ -291,20 +298,20 @@ fn cache_key(project_id: &str, file_path: &str, zip_hash: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::ProjectFileCache;
+    use super::{ProjectFileCache, ProjectFileCacheSet};
 
     #[test]
     fn prune_expired_removes_stale_entries_and_updates_stats() {
         let mut cache = ProjectFileCache::with_limits(60, 1024 * 1024);
-        assert!(cache.set(
-            "project-1",
-            "src/app.py",
-            "zip-hash",
-            "print('ok')\n",
-            12,
-            "utf-8",
-            true,
-        ));
+        assert!(cache.set(ProjectFileCacheSet {
+            project_id: "project-1",
+            file_path: "src/app.py",
+            zip_hash: "zip-hash",
+            content: "print('ok')\n",
+            size: 12,
+            encoding: "utf-8",
+            is_text: true,
+        }));
 
         cache.age_entry("project-1", "src/app.py", "zip-hash", 120);
 
@@ -319,15 +326,15 @@ mod tests {
     #[test]
     fn get_drops_expired_entry_and_syncs_total_memory() {
         let mut cache = ProjectFileCache::with_limits(60, 1024 * 1024);
-        assert!(cache.set(
-            "project-1",
-            "src/app.py",
-            "zip-hash",
-            "print('ok')\n",
-            12,
-            "utf-8",
-            true,
-        ));
+        assert!(cache.set(ProjectFileCacheSet {
+            project_id: "project-1",
+            file_path: "src/app.py",
+            zip_hash: "zip-hash",
+            content: "print('ok')\n",
+            size: 12,
+            encoding: "utf-8",
+            is_text: true,
+        }));
 
         cache.age_entry("project-1", "src/app.py", "zip-hash", 120);
 

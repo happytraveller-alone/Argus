@@ -75,21 +75,11 @@ impl DatabaseBootstrapStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct StartupInitPolicy {
     pub allowed_at_startup: Vec<String>,
     pub forbidden_at_startup: Vec<String>,
     pub deferred_until_rust_owned: Vec<String>,
-}
-
-impl Default for StartupInitPolicy {
-    fn default() -> Self {
-        Self {
-            allowed_at_startup: Vec::new(),
-            forbidden_at_startup: Vec::new(),
-            deferred_until_rust_owned: Vec::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -184,6 +174,12 @@ impl BootstrapReport {
             recovery: StartupRecoveryStatus::default(),
             preflight: RunnerPreflightStatus::default(),
         }
+    }
+}
+
+impl Default for BootstrapReport {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

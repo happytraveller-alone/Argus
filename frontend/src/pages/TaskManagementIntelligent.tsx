@@ -7,6 +7,7 @@ import DeferredSection from "@/components/performance/DeferredSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesListTable";
+import TaskManagementSummaryCards from "@/features/tasks/components/TaskManagementSummaryCards";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import { filterIntelligentActivities } from "@/features/tasks/services/taskActivities";
@@ -88,80 +89,44 @@ export default function TaskManagementIntelligent() {
 		<div className="relative flex h-screen flex-col gap-6 overflow-hidden bg-background p-6 font-mono">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
-			<div className="relative z-10 grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3">
-				<div className="cyber-card p-4">
-					<div className="flex items-center justify-between gap-4">
-						<p
-							className="flex-1 text-left font-mono font-bold leading-none tracking-tight text-muted-foreground"
-							style={{ fontSize: "1.5rem" }}
-						>
-							智能审计任务
-						</p>
-						<p className="stat-value shrink-0 text-right text-[clamp(1.25rem,2.6vw,2rem)] leading-none">
-							{stats.total}
-						</p>
+			<TaskManagementSummaryCards
+				taskLabel="智能审计任务"
+				total={stats.total}
+				completed={stats.completed}
+				running={stats.running}
+			/>
+
+			<div className="flex flex-nowrap items-center justify-between gap-3">
+				<div className="flex min-w-0 flex-1 items-center gap-3">
+					<div className="relative w-full max-w-sm">
+						<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							value={keyword}
+							onChange={(e) => setKeyword(e.target.value)}
+							placeholder="搜索项目名"
+							className="h-9 pl-9 font-mono"
+						/>
 					</div>
 				</div>
-				<div className="cyber-card p-4">
-					<div className="flex items-center justify-between gap-4">
-						<p
-							className="flex-1 text-left font-mono font-bold leading-none tracking-tight text-muted-foreground"
-							style={{ fontSize: "1.5rem" }}
-						>
-							已完成
-						</p>
-						<p className="stat-value shrink-0 text-right text-[clamp(1.25rem,2.6vw,2rem)] leading-none text-emerald-400">
-							{stats.completed}
-						</p>
-					</div>
-				</div>
-				<div className="cyber-card p-4">
-					<div className="flex items-center justify-between gap-4">
-						<p
-							className="flex-1 text-left font-mono font-bold leading-none tracking-tight text-muted-foreground"
-							style={{ fontSize: "1.5rem" }}
-						>
-							进行中
-						</p>
-						<p className="stat-value shrink-0 text-right text-[clamp(1.25rem,2.6vw,2rem)] leading-none text-sky-400">
-							{stats.running}
-						</p>
-					</div>
+				<div className="flex shrink-0 items-center gap-3">
+					<Button
+						size="sm"
+						className="cyber-btn-primary h-8 px-3"
+						onClick={() => setShowCreateIntelligentDialog(true)}
+					>
+						<Plus className="w-3.5 h-3.5 mr-1.5" />
+						新建扫描任务
+					</Button>
 				</div>
 			</div>
-
-				<div className="flex flex-nowrap items-center justify-between gap-3">
-					<div className="flex min-w-0 flex-1 items-center gap-3">
-						<div className="relative w-full max-w-sm">
-							<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								value={keyword}
-								onChange={(e) => setKeyword(e.target.value)}
-								placeholder="搜索项目名"
-								className="h-9 pl-9 font-mono"
-							/>
-						</div>
-					</div>
-					<div className="flex shrink-0 items-center gap-3">
-						<Button
-							size="sm"
-							className="cyber-btn-primary h-8 px-3"
-							onClick={() => setShowCreateIntelligentDialog(true)}
-						>
-							<Plus className="w-3.5 h-3.5 mr-1.5" />
-							新建扫描任务
-						</Button>
-					</div>
-				</div>
-				<DeferredSection className="-mt-4 min-h-0 flex-1" minHeight={0} priority>
-					<TaskActivitiesListTable
-						activities={filteredActivities}
-						loading={loading}
-						nowMs={nowMs}
-						emptyText="暂无智能审计任务"
-					/>
-				</DeferredSection>
-			
+			<DeferredSection className="-mt-4 min-h-0 flex-1" minHeight={0} priority>
+				<TaskActivitiesListTable
+					activities={filteredActivities}
+					loading={loading}
+					nowMs={nowMs}
+					emptyText="暂无智能审计任务"
+				/>
+			</DeferredSection>
 
 			{showCreateIntelligentDialog ? (
 				<Suspense fallback={null}>

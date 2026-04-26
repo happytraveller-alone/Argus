@@ -88,6 +88,46 @@ test("TopNavigation desktop dropdowns do not repeat parent group labels", () => 
 	assert.doesNotMatch(desktopDropdownMatch[0], /\{group\.label\}/);
 });
 
+test("TopNavigation desktop dropdown width follows its top-level trigger", () => {
+	const topNavigationSource = fs.readFileSync(
+		path.resolve(process.cwd(), "src/components/layout/TopNavigation.tsx"),
+		"utf8",
+	);
+	const desktopDropdownMatch = topNavigationSource.match(
+		/<DropdownMenuContent\s+align="start"[\s\S]*?<\/DropdownMenuContent>/,
+	);
+
+	assert.ok(desktopDropdownMatch);
+	assert.match(
+		desktopDropdownMatch[0],
+		/w-\[var\(--radix-dropdown-menu-trigger-width\)\]/,
+	);
+	assert.doesNotMatch(desktopDropdownMatch[0], /min-w-48/);
+});
+
+test("TopNavigation desktop dropdown close is delayed and scoped to the hovered group", () => {
+	const topNavigationSource = fs.readFileSync(
+		path.resolve(process.cwd(), "src/components/layout/TopNavigation.tsx"),
+		"utf8",
+	);
+
+	assert.match(
+		topNavigationSource,
+		/const DESKTOP_GROUP_CLOSE_DELAY_MS = 240;/,
+	);
+	assert.match(topNavigationSource, /function TopNavigation/);
+	assert.match(topNavigationSource, /openGroupMenu\(group\.group\.id\)/);
+	assert.match(topNavigationSource, /scheduleGroupClose\(group\.group\.id\)/);
+	assert.match(
+		topNavigationSource,
+		/currentGroupId === groupId \? null : currentGroupId/,
+	);
+	assert.doesNotMatch(
+		topNavigationSource,
+		/setOpenGroupId\(open \? group\.group\.id : null\)/,
+	);
+});
+
 test("TopNavigation keeps desktop and mobile menu affordances without a left drawer", async () => {
 	const markup = await renderTopNavigation();
 	const topNavigationSource = fs.readFileSync(

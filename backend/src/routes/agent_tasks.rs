@@ -199,8 +199,7 @@ pub async fn create_agent_task(
         target_files,
         error_message: None,
         report: Some(format!(
-            "# Agent Task Report\n\nTask `{}` is now owned by the rust backend.\n",
-            task_id
+            "# Agent Task Report\n\nTask `{task_id}` is now owned by the rust backend.\n"
         )),
         events: Vec::new(),
         findings: Vec::new(),
@@ -405,7 +404,7 @@ async fn stream_agent_events(
         .iter()
         .filter(|event| event.sequence > after_sequence)
         .map(agent_event_value)
-        .map(|event| format!("data: {}\n\n", event))
+        .map(|event| format!("data: {event}\n\n"))
         .collect::<String>();
     Ok(event_stream_response(payload))
 }
@@ -1183,33 +1182,37 @@ fn finalize_agent_task_mock_completed(record: &mut task_state::AgentTaskRecord, 
     seed_agent_task_tree(record);
     append_agent_checkpoint(
         record,
-        &format!("analysis-{}", record.id),
-        "HermesAnalysisAgent",
-        "analysis",
-        Some(&format!("root-{}", record.id)),
-        "auto",
-        Some("analysis-complete"),
-        "completed",
-        record.total_iterations.max(1).saturating_sub(1),
-        record.findings_count,
-        record.tokens_used.saturating_sub(96),
-        record.tool_calls_count.saturating_sub(2),
-        json!({"phase": "analysis", "status": "completed"}),
+        AgentCheckpointDraft {
+            agent_id: format!("analysis-{}", record.id),
+            agent_name: "HermesAnalysisAgent".to_string(),
+            agent_type: "analysis".to_string(),
+            parent_agent_id: Some(format!("root-{}", record.id)),
+            checkpoint_type: "auto".to_string(),
+            checkpoint_name: Some("analysis-complete".to_string()),
+            status: "completed".to_string(),
+            iteration: record.total_iterations.max(1).saturating_sub(1),
+            findings_count: record.findings_count,
+            total_tokens: record.tokens_used.saturating_sub(96),
+            tool_calls: record.tool_calls_count.saturating_sub(2),
+            state_data: json!({"phase": "analysis", "status": "completed"}),
+        },
     );
     append_agent_checkpoint(
         record,
-        &format!("verification-{}", record.id),
-        "HermesVerificationAgent",
-        "verification",
-        Some(&format!("root-{}", record.id)),
-        "auto",
-        Some("verification-complete"),
-        "completed",
-        record.total_iterations.max(1),
-        record.findings_count,
-        96,
-        2,
-        json!({"phase": "verification", "status": "completed"}),
+        AgentCheckpointDraft {
+            agent_id: format!("verification-{}", record.id),
+            agent_name: "HermesVerificationAgent".to_string(),
+            agent_type: "verification".to_string(),
+            parent_agent_id: Some(format!("root-{}", record.id)),
+            checkpoint_type: "auto".to_string(),
+            checkpoint_name: Some("verification-complete".to_string()),
+            status: "completed".to_string(),
+            iteration: record.total_iterations.max(1),
+            findings_count: record.findings_count,
+            total_tokens: 96,
+            tool_calls: 2,
+            state_data: json!({"phase": "verification", "status": "completed"}),
+        },
     );
     finalize_agent_task_completed(record, now);
 }
@@ -1670,7 +1673,7 @@ fn build_agent_finding_report_markdown(
             }
         }
         if let Some(confidence) = finding.confidence.or(finding.ai_confidence) {
-            lines.push(format!("- 置信度：`{:.2}`", confidence));
+            lines.push(format!("- 置信度：`{confidence:.2}`"));
         }
         lines.push(String::new());
     }
@@ -2034,37 +2037,38 @@ fn checkpoint_detail_value(record: &task_state::AgentCheckpointRecord) -> Value 
     serde_json::to_value(record).unwrap_or_else(|_| json!({}))
 }
 
-fn append_agent_checkpoint(
-    record: &mut task_state::AgentTaskRecord,
-    agent_id: &str,
-    agent_name: &str,
-    agent_type: &str,
-    parent_agent_id: Option<&str>,
-    checkpoint_type: &str,
-    checkpoint_name: Option<&str>,
-    status: &str,
+struct AgentCheckpointDraft {
+    agent_id: String,
+    agent_name: String,
+    agent_type: String,
+    parent_agent_id: Option<String>,
+    checkpoint_type: String,
+    checkpoint_name: Option<String>,
+    status: String,
     iteration: i64,
     findings_count: i64,
     total_tokens: i64,
     tool_calls: i64,
     state_data: Value,
-) {
+}
+
+fn append_agent_checkpoint(record: &mut task_state::AgentTaskRecord, draft: AgentCheckpointDraft) {
     record.checkpoints.push(task_state::AgentCheckpointRecord {
         id: Uuid::new_v4().to_string(),
         task_id: record.id.clone(),
-        agent_id: agent_id.to_string(),
-        agent_name: agent_name.to_string(),
-        agent_type: agent_type.to_string(),
-        parent_agent_id: parent_agent_id.map(ToString::to_string),
-        iteration,
-        status: status.to_string(),
-        total_tokens,
-        tool_calls,
-        findings_count,
-        checkpoint_type: checkpoint_type.to_string(),
-        checkpoint_name: checkpoint_name.map(ToString::to_string),
+        agent_id: draft.agent_id,
+        agent_name: draft.agent_name,
+        agent_type: draft.agent_type,
+        parent_agent_id: draft.parent_agent_id,
+        iteration: draft.iteration,
+        status: draft.status,
+        total_tokens: draft.total_tokens,
+        tool_calls: draft.tool_calls,
+        findings_count: draft.findings_count,
+        checkpoint_type: draft.checkpoint_type,
+        checkpoint_name: draft.checkpoint_name,
         created_at: Some(now_rfc3339()),
-        state_data,
+        state_data: draft.state_data,
         metadata: Some(json!({"source": "rust-backend"})),
     });
 }
@@ -2121,6 +2125,76 @@ fn push_checkpoint(
         }),
         metadata: Some(json!({"source": "rust-backend"})),
     });
+}
+
+fn required_string(payload: &Value, key: &str) -> Result<String, ApiError> {
+    payload
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| ApiError::BadRequest(format!("missing required field: {key}")))
+}
+
+fn optional_string(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn string_array(value: &Value) -> Option<Vec<String>> {
+    value.as_array().map(|items| {
+        items
+            .iter()
+            .filter_map(|item| item.as_str().map(ToString::to_string))
+            .collect::<Vec<_>>()
+    })
+}
+
+fn event_stream_response(body: String) -> Response<Body> {
+    let mut response = Response::new(Body::from(body));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream"),
+    );
+    response
+}
+
+fn duration_seconds(started_at: Option<&str>, completed_at: Option<&str>) -> Option<f64> {
+    let start = started_at.and_then(parse_timestamp);
+    let end = completed_at.and_then(parse_timestamp);
+    match (start, end) {
+        (Some(start), Some(end)) => Some((end - start).as_seconds_f64()),
+        _ => None,
+    }
+}
+
+fn parse_timestamp(value: &str) -> Option<OffsetDateTime> {
+    OffsetDateTime::parse(value, &Rfc3339).ok()
+}
+
+fn now_rfc3339() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+fn minimal_pdf_bytes(message: &str) -> Vec<u8> {
+    format!(
+        "%PDF-1.4\n1 0 obj<<>>endobj\n2 0 obj<< /Length {} >>stream\n{}\nendstream\nendobj\ntrailer<<>>\n%%EOF\n",
+        message.len(),
+        message
+    )
+    .into_bytes()
+}
+
+fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
+    ApiError::Internal(error.to_string())
 }
 
 #[cfg(test)]
@@ -2204,74 +2278,4 @@ mod tests {
             .iter()
             .any(|event| event.event_type == "task_error"));
     }
-}
-
-fn required_string(payload: &Value, key: &str) -> Result<String, ApiError> {
-    payload
-        .get(key)
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .ok_or_else(|| ApiError::BadRequest(format!("missing required field: {key}")))
-}
-
-fn optional_string(payload: &Value, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn string_array(value: &Value) -> Option<Vec<String>> {
-    value.as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(|item| item.as_str().map(ToString::to_string))
-            .collect::<Vec<_>>()
-    })
-}
-
-fn event_stream_response(body: String) -> Response<Body> {
-    let mut response = Response::new(Body::from(body));
-    *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("text/event-stream"),
-    );
-    response
-}
-
-fn duration_seconds(started_at: Option<&str>, completed_at: Option<&str>) -> Option<f64> {
-    let start = started_at.and_then(parse_timestamp);
-    let end = completed_at.and_then(parse_timestamp);
-    match (start, end) {
-        (Some(start), Some(end)) => Some((end - start).as_seconds_f64()),
-        _ => None,
-    }
-}
-
-fn parse_timestamp(value: &str) -> Option<OffsetDateTime> {
-    OffsetDateTime::parse(value, &Rfc3339).ok()
-}
-
-fn now_rfc3339() -> String {
-    OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
-}
-
-fn minimal_pdf_bytes(message: &str) -> Vec<u8> {
-    format!(
-        "%PDF-1.4\n1 0 obj<<>>endobj\n2 0 obj<< /Length {} >>stream\n{}\nendstream\nendobj\ntrailer<<>>\n%%EOF\n",
-        message.len(),
-        message
-    )
-    .into_bytes()
-}
-
-fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
-    ApiError::Internal(error.to_string())
 }

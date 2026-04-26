@@ -33,7 +33,7 @@ impl FromStr for AgentRole {
             "analysis" => Ok(AgentRole::Analysis),
             "verification" => Ok(AgentRole::Verification),
             "report" => Ok(AgentRole::Report),
-            _ => bail!("unknown agent role: {}", s),
+            _ => bail!("unknown agent role: {s}"),
         }
     }
 }

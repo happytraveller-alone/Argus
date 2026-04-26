@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -55,6 +55,8 @@ const routeIcons: Record<string, ReactNode> = {
 		<DatabaseBackup className="h-[1.125rem] w-[1.125rem]" />
 	),
 };
+
+const DESKTOP_GROUP_CLOSE_DELAY_MS = 240;
 
 function RouteIcon({ path }: { path: string }) {
 	return routeIcons[path] || <LayoutDashboard className="h-[1.125rem] w-[1.125rem]" />;
@@ -160,14 +162,29 @@ export default function TopNavigation() {
 		}
 	}, []);
 
-	const scheduleClose = useCallback(() => {
-		if (typeof window === "undefined") return;
-		clearCloseTimer();
-		closeTimerRef.current = window.setTimeout(() => {
-			setOpenGroupId(null);
-			closeTimerRef.current = null;
-		}, 180);
-	}, [clearCloseTimer]);
+	const openGroupMenu = useCallback(
+		(groupId: SidebarNavGroupId) => {
+			clearCloseTimer();
+			setOpenGroupId(groupId);
+		},
+		[clearCloseTimer],
+	);
+
+	const scheduleGroupClose = useCallback(
+		(groupId: SidebarNavGroupId) => {
+			if (typeof window === "undefined") return;
+			clearCloseTimer();
+			closeTimerRef.current = window.setTimeout(() => {
+				setOpenGroupId((currentGroupId) =>
+					currentGroupId === groupId ? null : currentGroupId,
+				);
+				closeTimerRef.current = null;
+			}, DESKTOP_GROUP_CLOSE_DELAY_MS);
+		},
+		[clearCloseTimer],
+	);
+
+	useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
 	const prefetchTaskGroupAssets = useCallback(() => {
 		if (hasPrefetchedTaskGroupRef.current) return;
@@ -249,18 +266,22 @@ export default function TopNavigation() {
 						return (
 							<DropdownMenu
 								key={group.group.id}
+								modal={false}
 								open={openGroupId === group.group.id}
-								onOpenChange={(open) =>
-									setOpenGroupId(open ? group.group.id : null)
-								}
+								onOpenChange={(open) => {
+									if (open) {
+										openGroupMenu(group.group.id);
+										return;
+									}
+									scheduleGroupClose(group.group.id);
+								}}
 							>
 								<div
 									onMouseEnter={() => {
-										clearCloseTimer();
-										setOpenGroupId(group.group.id);
+										openGroupMenu(group.group.id);
 										group.prefetch?.();
 									}}
-									onMouseLeave={scheduleClose}
+									onMouseLeave={() => scheduleGroupClose(group.group.id)}
 								>
 									<DropdownMenuTrigger asChild>
 										<button
@@ -273,7 +294,10 @@ export default function TopNavigation() {
 													? "border-primary/40 bg-primary/15 text-primary"
 													: "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
 											)}
-											onFocus={() => group.prefetch?.()}
+											onFocus={() => {
+												openGroupMenu(group.group.id);
+												group.prefetch?.();
+											}}
 										>
 											<span
 												className={cn(
@@ -290,9 +314,9 @@ export default function TopNavigation() {
 								</div>
 								<DropdownMenuContent
 									align="start"
-									className="min-w-48"
-									onMouseEnter={clearCloseTimer}
-									onMouseLeave={scheduleClose}
+									className="w-[var(--radix-dropdown-menu-trigger-width)]"
+									onMouseEnter={() => openGroupMenu(group.group.id)}
+									onMouseLeave={() => scheduleGroupClose(group.group.id)}
 								>
 									{group.routes.map((item) => (
 										<DropdownMenuItem key={item.route.path} asChild>

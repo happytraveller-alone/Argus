@@ -327,9 +327,7 @@ fn parse_rule_line(
     languages_indent: &mut Option<usize>,
     summary: &mut RuleSummary,
 ) -> Option<usize> {
-    let Some((key, raw_value)) = line.split_once(':') else {
-        return None;
-    };
+    let (key, raw_value) = line.split_once(':')?;
 
     let key = key.trim();
     let value = strip_inline_comment(raw_value.trim());

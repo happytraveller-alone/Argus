@@ -27,7 +27,7 @@ use crate::{
     },
     db::projects,
     error::ApiError,
-    project_file_cache::ProjectFileCacheEntry,
+    project_file_cache::{ProjectFileCacheEntry, ProjectFileCacheSet},
     state::{AppState, StoredProject, StoredProjectArchive},
 };
 
@@ -584,15 +584,15 @@ pub async fn get_project_file_content(
     )?;
     if use_cache {
         let mut cache = state.project_file_cache.lock().await;
-        let _ = cache.set(
-            &project_id,
-            &file_path,
-            &archive.sha256,
-            &content,
+        let _ = cache.set(ProjectFileCacheSet {
+            project_id: &project_id,
+            file_path: &file_path,
+            zip_hash: &archive.sha256,
+            content: &content,
             size,
-            &encoding,
+            encoding: &encoding,
             is_text,
-        );
+        });
     }
     Ok(Json(json!({
         "file_path": file_path,
@@ -1142,10 +1142,7 @@ fn build_file_content_payload(
 fn build_content_disposition(original_filename: &str) -> String {
     let fallback = ascii_fallback_filename(original_filename);
     let encoded = percent_encode_utf8(original_filename);
-    format!(
-        "attachment; filename=\"{}\"; filename*=UTF-8''{}",
-        fallback, encoded
-    )
+    format!("attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}")
 }
 
 fn ascii_fallback_filename(original_filename: &str) -> String {
@@ -1154,8 +1151,6 @@ fn ascii_fallback_filename(original_filename: &str) -> String {
         let safe = ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_');
         if safe {
             sanitized.push(ch);
-        } else if ch.is_ascii_whitespace() && !sanitized.ends_with('_') {
-            sanitized.push('_');
         } else if ch.is_ascii() && !sanitized.ends_with('_') {
             sanitized.push('_');
         }
@@ -1177,7 +1172,7 @@ fn percent_encode_utf8(value: &str) -> String {
         if unreserved {
             encoded.push(ch);
         } else {
-            encoded.push_str(&format!("%{:02X}", byte));
+            encoded.push_str(&format!("%{byte:02X}"));
         }
     }
     encoded

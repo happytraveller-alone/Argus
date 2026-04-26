@@ -697,7 +697,7 @@ async fn run_structured_tool_test(
 fn sse_response(payloads: Vec<Value>) -> Response {
     let body = payloads
         .into_iter()
-        .map(|payload| format!("data: {}\n\n", payload))
+        .map(|payload| format!("data: {payload}\n\n"))
         .collect::<String>();
     let mut response = Response::new(Body::from(body));
     *response.status_mut() = StatusCode::OK;
@@ -1610,10 +1610,7 @@ fn normalize_scope(
 }
 
 fn ensure_valid_agent_key(agent_key: &str) -> Result<(), ApiError> {
-    if PROMPT_SKILL_AGENT_KEYS
-        .iter()
-        .any(|value| *value == agent_key)
-    {
+    if PROMPT_SKILL_AGENT_KEYS.contains(&agent_key) {
         return Ok(());
     }
     Err(ApiError::BadRequest("invalid agent key".to_string()))

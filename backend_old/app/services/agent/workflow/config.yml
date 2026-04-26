@@ -1,8 +1,0 @@
-# Workflow agent pool sizes.
-# `analysis.count` is the shared total pool for both analysis and business_logic_analysis.
-# Set count to 1 to force serial execution for that phase/pool.
-agents:
-  analysis:
-    count: 5
-  verification:
-    count: 3
