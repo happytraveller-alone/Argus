@@ -205,7 +205,7 @@ where
     F: FnOnce(&Path) -> Result<T>,
 {
     let extraction_root =
-        std::env::temp_dir().join(format!("audittool-archive-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("argus-archive-{}", Uuid::new_v4()));
     fs::create_dir_all(&extraction_root)
         .with_context(|| format!("failed to create {}", extraction_root.display()))?;
 

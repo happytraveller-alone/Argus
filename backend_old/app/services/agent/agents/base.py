@@ -539,7 +539,7 @@ class BaseAgent(ABC):
                 try:
                     file_handler = logging.FileHandler(target_file, encoding="utf-8")
                 except PermissionError:
-                    fallback_dir = Path(tempfile.gettempdir()) / "audittool-agent-runs" / safe_task
+                    fallback_dir = Path(tempfile.gettempdir()) / "argus-agent-runs" / safe_task
                     fallback_dir.mkdir(parents=True, exist_ok=True)
                     target_file = str(fallback_dir / f"{safe_identity}.log")
                     file_handler = logging.FileHandler(target_file, encoding="utf-8")

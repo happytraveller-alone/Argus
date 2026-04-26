@@ -826,7 +826,7 @@ pub async fn export_project_bundle(
     );
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_static("attachment; filename=\"audittool-project-export.zip\""),
+        HeaderValue::from_static("attachment; filename=\"argus-project-export.zip\""),
     );
     Ok(response)
 }

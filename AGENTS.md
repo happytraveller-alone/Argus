@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-26 9:40am GMT+8
+# [audittool_personal] recent context, 2026-04-26 10:06am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,005t read) | 1,508,621t work | 99% savings
+Stats: 50 obs (21,411t read) | 1,685,516t work | 99% savings
 
 ### Apr 24, 2026
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
@@ -498,20 +498,7 @@ S636 Learner skill — codify Opengrep SIGPIPE/OOM silent failure expertise into
 S649 Save opengrep expertise skill + post-fix verification of scan task findings via API (Apr 24, 9:22 PM)
 S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 9:33 PM)
 S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
-1943 10:07p 🔵 Opengrep Scan — WARNING/INFO Findings Preserved for User Custom Rules, Filtered at Asset Source for Builtins
-1944 10:08p 🔵 Opengrep Severity Architecture — Full Stack Code Path Confirmed
-1945 10:09p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern
 S708 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 24, 10:09 PM)
-1946 10:11p 🔵 Opengrep Scan Architecture — Rule Selection and Severity Filtering Code Paths
-1947 " 🔴 Regression Test Added — parse_scan_output Retains All Severity Levels
-1949 10:15p 🔵 Stop-Gate Review — ALLOW for Opengrep Fix Verification Summary
-1952 10:18p 🔵 OMX Stop-Gate State Audit — Current Session Has No Active Ralph or Skill Blocks
-1955 10:20p 🔵 OMX Ralph Stop-Gate Logic — Session-Scoped State Isolation Confirmed
-1957 10:22p 🔵 OMX Ralph/Ralplan Stop-Gate State — Current Session Has No Active Modes
-1959 10:23p 🔵 Frontend Rule Selection Architecture — CreateProjectScanDialog vs CreateScanTaskDialog
-1962 10:25p 🔴 Opengrep Scan — Severity Filter Removed from Result Processing, All Findings Now Persisted
-### Apr 25, 2026
-1966 4:32p 🟣 Hermes Agent Dockerfile Patch — Strip Playwright, Web Frontend, FFmpeg, and Multimodal Dependencies
 ### Apr 26, 2026
 1975 8:02a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
 1973 8:04a ⚖️ Frontend Top Navigation Plan — Architectural Re-Review After Critic Rejection
@@ -552,7 +539,19 @@ S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh 
 2058 " 🔵 Mobile Navigation Confirmed — Hamburger Menu Opens Full Route Tree at 390px
 2059 " 🟣 Sidebar-to-TopNavigation Migration Complete — Full Implementation Summary
 2062 9:27a ⚖️ Frontend Top Navigation Dropdowns — Final Architecture Verification APPROVE
+2077 9:30a 🔴 TopNavigation Code Review REJECT — Three Blockers Fixed
+2078 " 🟣 Home Page Redesigned — Left/Right Split with Glass Audit Cards
+2079 " ✅ TopNavigation Logo Simplified — Bare Image, No Frame
+2080 " 🔵 Mobile TopNavigation — Dropdown Menu, No Left Drawer
 2071 9:36a ⚖️ Opengrep Exit-0 Silent Failure — Stop-Gate Review ALLOW
+2075 9:38a ⚖️ Opengrep Exit-0 Silent Failure — Stop-Gate Review ALLOW
+2081 9:41a ⚖️ Frontend Top-Navigation Migration — Ralph Final Architecture APPROVE
+2076 " 🔵 Opengrep Exit-0 Three-Tier Detection Logic — Current State in docker/opengrep-scan.sh
+2083 9:42a 🔴 Opengrep Zero-Finding Exit Code Handling Fixed
+2084 9:44a ✅ Home Page Logo Layout Simplified — Equal-Width Grid, No Drop Shadow
+2085 " ⚖️ Architect APPROVE — Frontend Navigation Refactor Complete
+2088 9:47a 🔵 Stale Ralph State Files — Multiple Sessions Left Active After Completion
+2099 9:51a ⚖️ AgentAudit Home Hero Logo — Drop-Shadow and Blue Glow Removed, Equal Split Layout Approved
 
-Access 1509k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1686k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

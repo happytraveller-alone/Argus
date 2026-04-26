@@ -24,7 +24,7 @@ const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
     "https://pypi.org/simple"
 );
 const DEFAULT_PYPI_PROBE_TIMEOUT_SECONDS: f64 = 2.0;
-const PACKAGE_SELECTOR_USER_AGENT: &str = "AuditTool-package-source-selector/1.0";
+const PACKAGE_SELECTOR_USER_AGENT: &str = "argus-package-source-selector/1.0";
 const DEFAULT_PYPI_PROBE_PATHS: [&str; 2] = ["/simple/pip/", "/simple/"];
 const WAIT_DB_MAX_RETRIES: u32 = 30;
 const WAIT_DB_SLEEP_SECONDS: u64 = 2;

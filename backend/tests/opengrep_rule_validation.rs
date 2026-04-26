@@ -10,7 +10,7 @@ use uuid::Uuid;
 fn isolated_test_config(scope: &str) -> AppConfig {
     let mut config = AppConfig::for_tests();
     config.zip_storage_path =
-        std::env::temp_dir().join(format!("audittool-rust-{scope}-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("argus-rust-{scope}-{}", Uuid::new_v4()));
     config
 }
 

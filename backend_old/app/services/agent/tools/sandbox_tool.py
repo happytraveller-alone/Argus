@@ -120,7 +120,7 @@ class SandboxManager:
         explicit_image = str(self.config.image or settings.SANDBOX_IMAGE or "").strip()
         ghcr_registry = str(os.environ.get("GHCR_REGISTRY") or "docker.m.daocloud.io").strip() or "docker.m.daocloud.io"
         image_tag = str(os.environ.get("Argus_IMAGE_TAG") or "latest").strip() or "latest"
-        remote_image = f"{ghcr_registry}/audittool/Argus-sandbox-runner:{image_tag}"
+        remote_image = f"{ghcr_registry}/argus/Argus-sandbox-runner:{image_tag}"
         ordered_candidates = [
             explicit_image,
             "Argus/sandbox-runner:latest",

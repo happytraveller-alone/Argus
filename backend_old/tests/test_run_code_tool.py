@@ -108,11 +108,11 @@ class TestSandboxManagerImageResolution:
             "Argus/sandbox-runner:latest",
             "Argus/sandbox-runner:latest",
             "Argus-sandbox-runner:latest",
-            "docker.m.daocloud.io/audittool/Argus-sandbox-runner:latest",
+            "docker.m.daocloud.io/argus/Argus-sandbox-runner:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
-        manager = SandboxManager(SandboxConfig(image="ghcr.io/audittool/Argus-sandbox-runner:latest"))
+        manager = SandboxManager(SandboxConfig(image="ghcr.io/argus/Argus-sandbox-runner:latest"))
         manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"Argus/sandbox-runner:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())
