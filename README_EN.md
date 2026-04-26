@@ -23,6 +23,10 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 3. Make sure Docker Compose is installed and the Docker daemon is reachable.
 
+By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
+
+The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.
+
 ## GHCR Image Naming
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
@@ -44,6 +48,6 @@ Use this to build and start all services locally.
 
 ## Endpoints
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
+- Frontend: `http://localhost:13000`
+- Backend: `http://localhost:18000`
+- OpenAPI: `http://localhost:18000/docs`

@@ -25,6 +25,10 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 3. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
 
+默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
+
+后端会把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。
+
 ## Repo-local Codex
 
 - 本仓库的 repo-local Codex 配置位于 `.codex/config.toml`，按 `codex-cli 0.118.0` 的仓库级配置约定收敛为最小必需字段。
@@ -53,6 +57,6 @@ docker compose up --build
 
 ## 访问地址
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
+- Frontend: `http://localhost:13000`
+- Backend: `http://localhost:18000`
+- OpenAPI: `http://localhost:18000/docs`

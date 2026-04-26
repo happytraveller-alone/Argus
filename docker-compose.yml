@@ -20,6 +20,9 @@ services:
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
         BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        BACKEND_CARGO_REGISTRY: ${BACKEND_CARGO_REGISTRY:-sparse+https://rsproxy.cn/index/}
+        BACKEND_CARGO_HTTP_TIMEOUT_SECONDS: ${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS:-30}
+        BACKEND_CARGO_NET_RETRY: ${BACKEND_CARGO_NET_RETRY:-10}
     restart: "no"
     mem_limit: 2g
     cpus: 8.0
@@ -80,7 +83,7 @@ services:
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
-      - "${Argus_BACKEND_PORT:-8000}:8000"
+      - "${Argus_BACKEND_PORT:-18000}:8000"
     env_file:
       - path: ./docker/env/backend/.env
         required: false
@@ -133,7 +136,7 @@ services:
       XDG_DATA_HOME: /app/data/runtime/xdg-data
       XDG_CACHE_HOME: /app/data/runtime/xdg-cache
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
-      DOCKER_HOST: ${DOCKER_HOST:-}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
       CONTAINER_CLI: ${CONTAINER_CLI:-docker}
       HERMES_RECON_CONTAINER: hermes-recon
       HERMES_ANALYSIS_CONTAINER: hermes-analysis
@@ -179,7 +182,7 @@ services:
     mem_limit: 1g
     pids_limit: 256
     ports:
-      - "${Argus_FRONTEND_PORT:-3000}:5173"
+      - "${Argus_FRONTEND_PORT:-13000}:5173"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
@@ -190,10 +193,12 @@ services:
       http_proxy: ""
       https_proxy: ""
       NO_PROXY: "*"
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:13000}
       VITE_API_BASE_URL: /api/v1
       VITE_API_TARGET: ${VITE_API_TARGET:-http://backend:8000}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:18000}
       VITE_HMR_HOST: ${VITE_HMR_HOST:-localhost}
-      VITE_HMR_PORT: ${VITE_HMR_PORT:-3000}
+      VITE_HMR_PORT: ${VITE_HMR_PORT:-13000}
     depends_on:
       backend:
         condition: service_healthy

@@ -204,8 +204,7 @@ fn with_extracted_archive_bytes<T, F>(file_name: &str, file_bytes: &[u8], f: F) 
 where
     F: FnOnce(&Path) -> Result<T>,
 {
-    let extraction_root =
-        std::env::temp_dir().join(format!("argus-archive-{}", Uuid::new_v4()));
+    let extraction_root = std::env::temp_dir().join(format!("argus-archive-{}", Uuid::new_v4()));
     fs::create_dir_all(&extraction_root)
         .with_context(|| format!("failed to create {}", extraction_root.display()))?;
 

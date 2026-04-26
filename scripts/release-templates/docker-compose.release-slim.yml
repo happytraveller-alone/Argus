@@ -30,7 +30,7 @@ services:
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
-      - "${Argus_BACKEND_PORT:-8000}:8000"
+      - "${Argus_BACKEND_PORT:-18000}:8000"
     env_file:
       - path: ./docker/env/backend/.env
         required: false
@@ -76,7 +76,7 @@ services:
       XDG_DATA_HOME: /app/data/runtime/xdg-data
       XDG_CACHE_HOME: /app/data/runtime/xdg-cache
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
-      DOCKER_HOST: ${DOCKER_HOST:-}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
       CONTAINER_CLI: ${CONTAINER_CLI:-docker}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
@@ -105,7 +105,7 @@ services:
     image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/Argus-frontend:${Argus_IMAGE_TAG:-latest}}
     restart: unless-stopped
     ports:
-      - "${Argus_FRONTEND_PORT:-3000}:80"
+      - "${Argus_FRONTEND_PORT:-13000}:80"
     environment:
       HTTP_PROXY: ""
       HTTPS_PROXY: ""

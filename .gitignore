@@ -275,3 +275,5 @@ backend/agents/report/output/**
 !backend/agents/report/output/.gitkeep
 
 backend/agents/shared/config.json
+
+.codex

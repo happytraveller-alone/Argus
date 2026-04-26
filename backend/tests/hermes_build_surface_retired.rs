@@ -1,9 +1,10 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
-const GITMODULES: &str = include_str!("../../.gitmodules");
 const RELEASE_WORKFLOW: &str = include_str!("../../.github/workflows/release.yml");
 const DOCKER_PUBLISH_WORKFLOW: &str = include_str!("../../.github/workflows/docker-publish.yml");
+const DOCKER_PUBLISH_RUNNERS_WORKFLOW: &str =
+    include_str!("../../.github/workflows/docker-publish-runners.yml");
 const BACKEND_MIGRATION_SMOKE_WORKFLOW: &str =
     include_str!("../../.github/workflows/backend-migration-smoke.yml");
 
@@ -78,27 +79,27 @@ fn root_compose_no_longer_defines_hermes_build_surface() {
 }
 
 #[test]
-fn hermes_upstream_source_submodule_contract_is_preserved() {
+fn hermes_upstream_source_submodule_contract_is_retired() {
+    let root = repo_root();
+    let gitmodules_path = root.join(".gitmodules");
+    let gitmodules = fs::read_to_string(&gitmodules_path).unwrap_or_default();
+
     assert!(
-        GITMODULES.contains(r#"[submodule "third_party/hermes-agent"]"#),
-        ".gitmodules must keep the Hermes upstream source submodule entry"
+        !gitmodules_path.exists() || !gitmodules.contains("third_party/hermes-agent"),
+        ".gitmodules must not contain the retired Hermes upstream source submodule"
     );
     assert!(
-        GITMODULES.contains("path = third_party/hermes-agent"),
-        ".gitmodules must keep the Hermes submodule path"
+        !root.join("third_party/hermes-agent").exists(),
+        "Hermes upstream source submodule directory must remain absent"
     );
     assert!(
-        GITMODULES.contains("url = https://github.com/NousResearch/hermes-agent.git"),
-        ".gitmodules must keep the Hermes upstream source URL"
-    );
-    assert!(
-        repo_root().join("third_party/hermes-agent").is_dir(),
-        "Hermes upstream source submodule directory must remain present"
+        !root.join("docker/hermes-agent-submodule-check.sh").exists(),
+        "obsolete Hermes submodule snapshot helper must remain absent"
     );
 }
 
 #[test]
-fn key_workflows_still_checkout_recursive_submodules() {
+fn key_workflows_no_longer_checkout_recursive_submodules() {
     for (workflow_name, workflow) in [
         (".github/workflows/release.yml", RELEASE_WORKFLOW),
         (
@@ -106,13 +107,17 @@ fn key_workflows_still_checkout_recursive_submodules() {
             DOCKER_PUBLISH_WORKFLOW,
         ),
         (
+            ".github/workflows/docker-publish-runners.yml",
+            DOCKER_PUBLISH_RUNNERS_WORKFLOW,
+        ),
+        (
             ".github/workflows/backend-migration-smoke.yml",
             BACKEND_MIGRATION_SMOKE_WORKFLOW,
         ),
     ] {
         assert!(
-            workflow.contains("submodules: recursive"),
-            "{workflow_name} must preserve recursive submodule checkout"
+            !workflow.contains("submodules: recursive"),
+            "{workflow_name} must not checkout the retired Hermes submodule recursively"
         );
     }
 }

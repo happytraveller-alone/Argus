@@ -39,6 +39,8 @@ SECRET_KEY=change-this-to-a-random-string
 - `LLM_MODEL`：模型名称
 - `SECRET_KEY`：建议替换成你自己的随机字符串
 
+默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
+
 ## 3. 启动服务
 
 推荐直接使用默认命令：
@@ -71,9 +73,9 @@ docker compose up -d --build
 
 启动成功后可通过以下地址访问：
 
-- Web 界面：`http://localhost:3000`
-- 后端接口：`http://localhost:8000`
-- OpenAPI 文档：`http://localhost:8000/docs`
+- Web 界面：`http://localhost:13000`
+- 后端接口：`http://localhost:18000`
+- OpenAPI 文档：`http://localhost:18000/docs`
 
 ## 5. 常用命令
 

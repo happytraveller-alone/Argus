@@ -419,9 +419,7 @@ mod tests {
     #[test]
     fn build_legacy_scan_path_candidates_strips_temp_prefix_and_archive_root() {
         assert_eq!(
-            build_legacy_scan_path_candidates(
-                "/tmp/Argus_proj_123/archive-root/./src/app/main.py"
-            ),
+            build_legacy_scan_path_candidates("/tmp/Argus_proj_123/archive-root/./src/app/main.py"),
             vec![
                 "tmp/Argus_proj_123/archive-root/src/app/main.py",
                 "archive-root/src/app/main.py",

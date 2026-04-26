@@ -39,6 +39,8 @@ What these values mean:
 - `LLM_MODEL`: the model name
 - `SECRET_KEY`: replace this with your own random secret
 
+By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
+
 ## 3. Start the App
 
 For normal use, run:
@@ -71,9 +73,9 @@ docker compose up -d --build
 
 After startup, open:
 
-- Web UI: `http://localhost:3000`
-- Backend API: `http://localhost:8000`
-- OpenAPI docs: `http://localhost:8000/docs`
+- Web UI: `http://localhost:13000`
+- Backend API: `http://localhost:18000`
+- OpenAPI docs: `http://localhost:18000/docs`
 
 ## 5. Common Commands
 

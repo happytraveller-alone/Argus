@@ -889,10 +889,7 @@ async fn run_opengrep_scan_inner(
             let detail = reason
                 .or(log_excerpt)
                 .unwrap_or_else(|| "no log available".to_string());
-            return Err(format!(
-                "opengrep scan failed: {detail}"
-            )
-            .into());
+            return Err(format!("opengrep scan failed: {detail}").into());
         }
     }
 

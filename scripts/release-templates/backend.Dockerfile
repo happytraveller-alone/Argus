@@ -1,18 +1,41 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
 ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
+ARG BACKEND_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
+ARG BACKEND_CARGO_HTTP_TIMEOUT_SECONDS=30
+ARG BACKEND_CARGO_NET_RETRY=10
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim-bookworm AS builder
+ARG BACKEND_CARGO_REGISTRY
+ARG BACKEND_CARGO_HTTP_TIMEOUT_SECONDS
+ARG BACKEND_CARGO_NET_RETRY
 WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends pkg-config libssl-dev \
   && rm -rf /var/lib/apt/lists/*
 
+RUN set -eux; \
+  mkdir -p /usr/local/cargo; \
+  if [ -n "${BACKEND_CARGO_REGISTRY}" ]; then \
+    { \
+      echo '[source.crates-io]'; \
+      echo 'replace-with = "argus-cargo-mirror"'; \
+      echo; \
+      echo '[source.argus-cargo-mirror]'; \
+      printf 'registry = "%s"\n' "${BACKEND_CARGO_REGISTRY}"; \
+      echo; \
+      echo '[net]'; \
+      echo 'git-fetch-with-cli = true'; \
+    } > /usr/local/cargo/config.toml; \
+  fi
+
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 COPY backend/migrations ./migrations
 
-RUN cargo build --release --bin backend-rust
+RUN CARGO_HTTP_TIMEOUT="${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS}" \
+  CARGO_NET_RETRY="${BACKEND_CARGO_NET_RETRY}" \
+  cargo build --locked --release --bin backend-rust
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 

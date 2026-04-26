@@ -931,8 +931,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
             scanner_type: "yasa".to_string(),
@@ -1003,8 +1002,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "2");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", &long_stderr);
 
@@ -1057,8 +1055,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "1");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "runner stdout");
         let _stderr = EnvVarGuard::set("FAKE_STDERR", "runner stderr");
@@ -1164,8 +1161,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _start_sleep = EnvVarGuard::set("FAKE_START_SLEEP", "2");
 
         let result = execute(RunnerSpec {
@@ -1205,8 +1201,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
             scanner_type: "opengrep".to_string(),
@@ -1257,8 +1252,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _start_stdout = EnvVarGuard::set("FAKE_START_STDOUT", "attached stdout");
         let _start_stderr = EnvVarGuard::set("FAKE_START_STDERR", "attached stderr");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "docker logs stdout");
@@ -1313,8 +1307,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
@@ -1407,8 +1400,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
@@ -1475,8 +1467,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _summary_path = EnvVarGuard::set(
             "FAKE_COMPLETION_SUMMARY_PATH",
             summary_path.to_str().unwrap(),
@@ -1532,8 +1523,7 @@ esac
         let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
         let _workspace_root =
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
-        let _workspace_volume =
-            EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
         let _stdout = EnvVarGuard::set("FAKE_STDOUT", "detached stdout without summary");
 
         let result = execute(RunnerSpec {
