@@ -482,13 +482,13 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-26 10:06am GMT+8
+# [audittool_personal] recent context, 2026-04-26 10:55am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,411t read) | 1,685,516t work | 99% savings
+Stats: 50 obs (22,759t read) | 1,560,054t work | 99% savings
 
 ### Apr 24, 2026
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
@@ -500,41 +500,11 @@ S671 Opengrep Scan Failure — "scanner completion summary was not observed" Err
 S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
 S708 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 24, 10:09 PM)
 ### Apr 26, 2026
-1975 8:02a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
-1973 8:04a ⚖️ Frontend Top Navigation Plan — Architectural Re-Review After Critic Rejection
-1979 8:06a ⚖️ Frontend Top Navigation Plan — Architectural Re-Review After Critic Rejection
-1978 8:07a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
-1980 8:08a 🔵 Frontend Top Navigation Dropdowns Plan — Architecture Re-Review Result
-1983 8:10a 🔵 Opengrep Scan Silent Failure — No Valid Results Despite Exit Code 0
-1981 8:11a ⚖️ RALPLAN-DR Quality Review — APPROVE/ITERATE/REJECT Verdict for Frontend Top Navigation Dropdowns Plan
-1982 8:12a 🔵 Frontend Navigation Architecture — Current State Confirmed for Top-Nav Migration Plan
-1985 8:15a 🔴 Opengrep Scan Silent Failure — SIGPIPE Detection, Recovery Optimization, and Structured Error Reason
-1988 8:16a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation
 S711 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 26, 8:16 AM)
-1990 8:18a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation
-1994 8:22a 🔵 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh
 S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh (Apr 26, 8:22 AM)
-2026 9:07a ✅ Stop-Gate Review — ALLOW for Opengrep Resource Config Increase
-2028 " 🔵 Stop-Gate Diff Verification — Four Files Modified Across Multiple Turns
-2031 9:08a ✅ Opengrep Resource Limits Scaled Up in backend/src/config.rs
-2033 9:10a ✅ Opengrep Error Reporting Improved — reason Field Surfaced in Failure Message
-2035 " 🔴 Opengrep Zero-Finding Scan — False Failure Fixed in docker/opengrep-scan.sh
-2039 9:11a ⚖️ Ralph Execution Plan Invoked
-2038 9:13a 🔵 Stop-Gate Review — Zero-Finding Fix Has No Dedicated Shell Script Test for the New Synthesis Branch
-2042 9:14a 🔴 Opengrep Silent Failure — Three-Tier Exit-0 Detection Logic in opengrep-scan.sh
-2067 9:16a 🔴 Opengrep Exit-0 Silent Failure — Three-Tier Detection Logic in docker/opengrep-scan.sh
-2047 9:18a ⚖️ Ralph Execution Plan Invoked
-2046 9:19a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation Initiated
-2056 9:20a 🔴 Opengrep Empty-Result Synthesis Condition Tightened — Regex Flaw Discovered
-2060 " 🔵 Stop-Gate Review Confirmed ALLOW — Regex Singular/Plural Edge Case Remains Unresolved
-2049 9:22a 🔵 Frontend Build Passes — TypeScript, Lint, and Vite All Green
-2050 " 🔵 TopNavigation Dropdown — React forwardRef Bug Discovered in DropdownRouteLink
-2051 " 🔵 Top Navigation Dropdown Structure Confirmed via Playwright Snapshot
-2061 " 🔵 Opengrep "scanner produced no valid results" — Fix Investigation Initiated for docker/opengrep-scan.sh
 2052 9:24a 🔴 DropdownRouteLink forwardRef Fix Applied in TopNavigation.tsx
 2053 " 🔵 All 12 Navigation Tests Pass — Sidebar Removal and Top Nav Verified
 2054 " 🔵 Top Navigation Layout Geometry Confirmed — No Sidebar, Full-Width Main
-2055 " 🔵 扫描配置 Dropdown Navigation Works — Active State and Route Navigation Confirmed
 2057 9:26a 🔵 Active State Verification — scanConfig data-top-nav-active Confirmed on Detail Route
 2058 " 🔵 Mobile Navigation Confirmed — Hamburger Menu Opens Full Route Tree at 390px
 2059 " 🟣 Sidebar-to-TopNavigation Migration Complete — Full Implementation Summary
@@ -552,6 +522,36 @@ S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh 
 2085 " ⚖️ Architect APPROVE — Frontend Navigation Refactor Complete
 2088 9:47a 🔵 Stale Ralph State Files — Multiple Sessions Left Active After Completion
 2099 9:51a ⚖️ AgentAudit Home Hero Logo — Drop-Shadow and Blue Glow Removed, Equal Split Layout Approved
+2104 10:07a 🔵 Stale Ralph State Persists Across Sessions — `omx state clear --all_sessions` Required
+2105 " 🔵 Hermes Worker Contract — Current Live State of Image, Compose, and Rust Dispatch
+2106 10:09a 🔵 New Task Initiated — Remove Hermes Container Build, Keep Submodule
+2115 10:13a ✅ Top Navigation Sidebar — Redundant Section Titles Removed from Submenu Items
+2117 " 🔵 Hermes Image Slimming PRD — Option A/B/C Ladder with Numeric Gates
+2118 " 🔵 Hermes Image Slimming Test Spec — Four Contract-Hardening Gates
+2119 " 🔵 Hermes Dispatch — try_hermes_dispatch Iterates Four Roles Sequentially in Rust
+2120 " ⚖️ Planner Interrupted — User Forced Immediate RALPLAN-DR Output Without Further File Reads
+2116 10:14a 🔵 Top Navigation Dropdown Structure — Redundant DropdownMenuLabel Identified in TopNavigation.tsx
+2121 10:15a 🔵 Blue Focus Glow Audit — Full Surface Map of --shadow-focus and focus:ring Across Frontend
+2124 10:16a ⚖️ RALPLAN-DR Draft — Remove Blue Focus Glow/Halo Across All Frontend Pages
+2127 10:18a ⚖️ Ralplan Approved — Remove Blue Focus Glow via Shared Primitive + Theme Layer First
+2131 10:19a ⚖️ Architect APPROVED — Remove Hermes Container Build, Preserve Submodule
+2126 " ⚖️ RALPLAN-DR Plan Saved — Remove Blue Focus Glow Across All Frontend Pages
+2128 10:21a ⚖️ RALPLAN-DR Completed — Hermes Image Contract Hardening Plan Approved
+2129 " ⚖️ New Ralph Task Spawned — Remove Hermes Container Build, Keep Submodule
+2134 10:26a ⚖️ Architect APPROVED — Remove Hermes Container Build, Keep Submodule (Option A)
+2135 " ✅ PRD and Test Spec Created — Remove Hermes Container Build Keep Submodule
+2136 10:27a ✅ Ralplan Completed — Remove Hermes Container Build State Written as Finished
+2137 10:28a ⚖️ Ralplan Critic Review: APPROVE with Conditions for Blue Focus Glow Removal Plan
+2138 10:29a 🔵 Complete Focus Glow Source Map for audittool_personal Frontend
+2140 10:31a ✅ Hermes Container Build Removal — Ralph Task Initiated
+2141 10:33a ✅ Hermes Container Build Surface Removed — Submodule and Rust Dispatch Preserved
+2142 10:34a ✅ Ralph Task Initiated — Remove Hermes Container Build, Keep Submodule
+2143 10:36a 🔵 Identity Clarification — Kiro Is Not a Claude Agent
+2144 10:38a ✅ Hermes Container Build Surface Removal — PRD and Test Spec Plans Executed via Ralph
+2145 10:39a 🔵 oh-my-codex (OMX) Package Structure and Team Worker Launch Architecture
+2146 " ⚖️ Architect Agent APPROVED — Hermes Container Build Surface Removal
+2148 10:41a ✅ Hermes Container Build Surface Removal — Execute PRD and Test Spec Plans via Ralph
+2149 " 🔵 OMX Team Worker CLI Resolution and Claude Worker Launch Contract
 
-Access 1686k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1560k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

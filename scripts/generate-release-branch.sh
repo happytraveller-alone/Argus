@@ -52,9 +52,34 @@ copy_directory_filtered() {
       --exclude '.pytest_cache/' \
       --exclude '.mypy_cache/' \
       --exclude '__pycache__/' \
+      --exclude 'agents/*/data/' \
+      --exclude 'agents/*/output/' \
+      --exclude 'agents/*/scratch/' \
       --exclude 'target/' \
       --exclude 'node_modules/' \
       "$src_dir"/ "$dest_dir"/
+    return
+  fi
+
+  if command -v tar >/dev/null 2>&1; then
+    (
+      cd "$src_dir"
+      tar \
+        --exclude './.venv' \
+        --exclude './.venv-*' \
+        --exclude './.pytest_cache' \
+        --exclude './.mypy_cache' \
+        --exclude './__pycache__' \
+        --exclude './agents/*/data' \
+        --exclude './agents/*/output' \
+        --exclude './agents/*/scratch' \
+        --exclude './target' \
+        --exclude './node_modules' \
+        -cf - .
+    ) | (
+      cd "$dest_dir"
+      tar -xf -
+    )
     return
   fi
 
@@ -142,11 +167,6 @@ validate_release_tree() {
     [[ ! -e "$OUTPUT_DIR/$rel_path" ]] || die "forbidden path present in release tree: $rel_path"
   done
 
-  if [[ -e "$OUTPUT_DIR/docker/hermes-agent-base.Dockerfile" ]]; then
-    "$SOURCE_DIR/docker/hermes-agent-submodule-check.sh" --source-root "$OUTPUT_DIR" || \
-      die "Hermes source snapshot missing: initialize submodules recursively or include Hermes source in the release tree"
-  fi
-
   if find "$OUTPUT_DIR" \
     \( -name '.github' -o -name 'tests' -o -name '__pycache__' -o -name '.pytest_cache' -o -name 'node_modules' \) \
     -print -quit | grep -q .; then
@@ -187,6 +207,12 @@ prune_release_tree() {
     "$OUTPUT_DIR/backend/uploads" \
     "$OUTPUT_DIR/backend/log" \
     "$OUTPUT_DIR/backend/data" \
+    "$OUTPUT_DIR/backend/agents/recon/data" \
+    "$OUTPUT_DIR/backend/agents/analysis/data" \
+    "$OUTPUT_DIR/backend/agents/verification/data" \
+    "$OUTPUT_DIR/backend/agents/verification/scratch" \
+    "$OUTPUT_DIR/backend/agents/report/data" \
+    "$OUTPUT_DIR/backend/agents/report/output" \
     "$OUTPUT_DIR/frontend/tests" \
     "$OUTPUT_DIR/frontend/docs" \
     "$OUTPUT_DIR/frontend/dist" \
