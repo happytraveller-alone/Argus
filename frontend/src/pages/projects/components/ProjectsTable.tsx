@@ -72,7 +72,7 @@ const SECTION_DIVIDER_CLASSNAME = "border-l-2 border-border/95";
 const METRIC_GROUP_CLASSNAME =
   "flex items-center justify-center";
 const METRIC_TRIGGER_CLASSNAME =
-  "inline-flex items-center justify-center rounded-full bg-transparent p-0 text-center transition-transform duration-150 hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:opacity-100";
+  "inline-flex items-center justify-center rounded-full border border-transparent bg-transparent p-0 text-center transition-transform duration-150 hover:scale-[1.03] focus-visible:border-primary/60 focus-visible:bg-muted/20 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-100";
 const METRIC_POPOVER_CLASSNAME =
   "absolute left-1/2 top-[calc(100%+0.75rem)] z-30 w-[19rem] -translate-x-1/2 rounded-2xl border border-border/80 bg-background/95 p-4 text-left shadow-[0_24px_80px_rgba(15,23,42,0.42)] backdrop-blur-sm transition-all duration-150";
 const METRIC_POPOVER_HIDDEN_CLASSNAME =

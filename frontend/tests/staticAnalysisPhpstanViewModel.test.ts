@@ -1,39 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import {
-  buildStaticAnalysisListState,
-  buildUnifiedFindingRows,
-} from "../src/pages/static-analysis/viewModel.ts";
+import { buildStaticAnalysisListState } from "../src/pages/static-analysis/viewModel.ts";
 
-test("phpstan findings are mapped into unified rows with LOW/MEDIUM defaults", () => {
-  const rows = buildUnifiedFindingRows({
-    opengrepFindings: [],
-    gitleaksFindings: [],
-    banditFindings: [],
-    phpstanFindings: [
-      {
-        id: "ps-1",
-        scan_task_id: "task-ps",
-        file_path: "/tmp/workdir/repo/src/Service.php",
-        line: 17,
-        identifier: "phpstan.return.type",
-        message: "Method should return string",
-        status: "open",
-      },
-    ],
-    opengrepTaskId: "",
-    gitleaksTaskId: "",
-    banditTaskId: "",
-    phpstanTaskId: "task-ps",
-  });
+const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.engine, "phpstan");
-  assert.equal(rows[0]?.severity, "LOW");
-  assert.equal(rows[0]?.confidence, "MEDIUM");
-  assert.equal(rows[0]?.rule, "phpstan.return.type");
-  assert.equal(rows[0]?.filePath, "repo/src/Service.php");
+test("phpstan finding row mapping stays retired from the unified static-analysis view model", () => {
+  const source = fs.readFileSync(
+    path.join(frontendDir, "src/pages/static-analysis/viewModel.ts"),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /MinimalPhpstanFinding/);
+  assert.doesNotMatch(source, /phpstanFindings:/);
 });
 
 test("phpstan rows participate in engine filtering", () => {

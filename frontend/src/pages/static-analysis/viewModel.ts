@@ -94,50 +94,6 @@ type MinimalOpengrepFinding = {
   rule?: Record<string, unknown> | null;
 };
 
-type MinimalGitleaksFinding = {
-  id: string;
-  scan_task_id?: string | null;
-  rule_id?: string | null;
-  file_path?: string | null;
-  start_line?: unknown;
-  status?: string | null;
-};
-
-type MinimalBanditFinding = {
-  id: string;
-  scan_task_id?: string | null;
-  test_id?: string | null;
-  test_name?: string | null;
-  issue_severity?: string | null;
-  issue_confidence?: string | null;
-  file_path?: string | null;
-  line_number?: unknown;
-  status?: string | null;
-};
-
-type MinimalPhpstanFinding = {
-  id: string;
-  scan_task_id?: string | null;
-  file_path?: string | null;
-  line?: unknown;
-  message?: string | null;
-  identifier?: string | null;
-  status?: string | null;
-};
-
-type MinimalPmdFinding = {
-  id: string;
-  scan_task_id?: string | null;
-  file_path?: string | null;
-  begin_line?: unknown;
-  end_line?: unknown;
-  rule?: string | null;
-  ruleset?: string | null;
-  priority?: unknown;
-  message?: string | null;
-  status?: string | null;
-};
-
 const SEVERITY_SCORE: Record<NormalizedSeverity, number> = {
   CRITICAL: 4,
   HIGH: 3,

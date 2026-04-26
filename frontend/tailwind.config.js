@@ -107,7 +107,6 @@ export default {
         'sm': 'var(--shadow-sm)',
         'md': 'var(--shadow-md)',
         'lg': '0 4px 6px rgba(0, 0, 0, 0.12)',
-        'focus': 'var(--shadow-focus)',
         // Minimal retro effect for special cases
         'terminal': '1px 1px 0px rgba(0, 0, 0, 0.15)',
         'terminal-md': '2px 2px 0px rgba(0, 0, 0, 0.15)',

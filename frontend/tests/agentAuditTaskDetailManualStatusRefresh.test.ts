@@ -1,9 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const taskDetailPagePath =
-  "/home/xyf/argus/frontend/src/pages/AgentAudit/TaskDetailPage.tsx";
+const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const taskDetailPagePath = path.join(
+  frontendDir,
+  "src/pages/AgentAudit/TaskDetailPage.tsx",
+);
 
 test("TaskDetailPage 手工更新漏洞状态后会同步 task counters 并后台回补任务快照", () => {
   const source = readFileSync(taskDetailPagePath, "utf8");

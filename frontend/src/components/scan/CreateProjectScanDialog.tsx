@@ -832,7 +832,7 @@ export default function CreateProjectScanDialog({
 
 	const missingFieldClass = (field: PreflightMissingField) =>
 			llmGateStatus.missingFields.includes(field)
-				? "border-rose-500/60 focus-visible:ring-rose-500"
+				? "border-rose-500/60 focus-visible:border-rose-500/70"
 				: "";
 	const handleNavigateToEngineConfig = (engine: StaticTool) => {
 		onOpenChange(false);

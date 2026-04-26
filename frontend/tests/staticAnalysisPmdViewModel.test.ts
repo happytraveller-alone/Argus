@@ -1,39 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { buildUnifiedFindingRows } from "../src/pages/static-analysis/viewModel.ts";
+const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("buildUnifiedFindingRows normalizes pmd rows", () => {
-  const rows = buildUnifiedFindingRows({
-    opengrepFindings: [],
-    gitleaksFindings: [],
-    banditFindings: [],
-    phpstanFindings: [],
-    pmdFindings: [
-      {
-        id: "pmd-1",
-        scan_task_id: "task-pmd",
-        file_path: "/scan/project/src/main/java/App.java",
-        begin_line: 15,
-        end_line: 15,
-        rule: "HardCodedCryptoKey",
-        ruleset: "Security",
-        priority: 2,
-        message: "Hard coded key detected.",
-        status: "open",
-      },
-    ],
-    opengrepTaskId: "",
-    gitleaksTaskId: "",
-    banditTaskId: "",
-    phpstanTaskId: "",
-    pmdTaskId: "task-pmd",
-  });
+test("pmd finding row mapping stays retired from the unified static-analysis view model", () => {
+  const source = fs.readFileSync(
+    path.join(frontendDir, "src/pages/static-analysis/viewModel.ts"),
+    "utf8",
+  );
 
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.engine, "pmd");
-  assert.equal(rows[0]?.filePath, "src/main/java/App.java");
-  assert.equal(rows[0]?.severity, "HIGH");
-  assert.equal(rows[0]?.confidence, "MEDIUM");
-  assert.equal(rows[0]?.rule, "HardCodedCryptoKey · Security");
+  assert.doesNotMatch(source, /MinimalPmdFinding/);
+  assert.doesNotMatch(source, /pmdFindings:/);
 });

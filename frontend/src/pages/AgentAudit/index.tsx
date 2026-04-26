@@ -60,7 +60,8 @@ export function HomeScanCards() {
                   backdrop-blur-xl transition duration-300
                   hover:-translate-y-1 hover:border-primary/55 hover:bg-white/[0.11]
                   hover:shadow-[0_22px_70px_rgba(14,165,233,0.18)]
-                  focus-visible:outline-none focus-visible:shadow-focus
+                  focus-visible:border-white/35 focus-visible:bg-white/[0.12]
+                  focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/55 focus-visible:outline-offset-2
                 "
               >
                 <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-80" />

@@ -147,9 +147,9 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.match(markup, /border-b-2/);
 	assert.match(markup, /border-r-2 border-border\/90/);
 	assert.match(markup, /border-l-2 border-border\/95/);
-	assert.match(markup, /text-\[15px\] font-semibold uppercase/);
-	assert.match(markup, /mx-auto block max-w-\[180px\] truncate text-center text-\[18px\] font-semibold/);
-	assert.match(markup, /text-center text-\[17px\] text-muted-foreground/);
+	assert.match(markup, /text-\[14px\] font-semibold uppercase/);
+	assert.match(markup, /mx-auto block max-w-\[180px\] truncate text-center text-\[16px\] font-semibold/);
+	assert.match(markup, /text-center text-\[16px\] text-muted-foreground/);
 	assert.match(markup, /justify-center gap-2 text-\[16px\]/);
 	assert.ok(markup.indexOf("查看详情") < markup.indexOf("代码浏览"));
 	assert.ok(markup.indexOf("代码浏览") < markup.indexOf("创建扫描"));

@@ -172,7 +172,7 @@ services:
         PNPM_VERSION: ${PNPM_VERSION:-10.11.0}
         WEAK_NETWORK: ${WEAK_NETWORK:-false}
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1g
     pids_limit: 256
     ports:
       - "${Argus_FRONTEND_PORT:-3000}:5173"

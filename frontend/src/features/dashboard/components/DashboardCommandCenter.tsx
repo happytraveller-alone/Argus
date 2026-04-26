@@ -856,7 +856,7 @@ function TaskStatusPanel({
 											<button
 												type="button"
 												aria-label={buildTaskStatusTooltipAriaLabel(item)}
-												className="inline-flex items-center rounded-sm border border-border/70 bg-muted/20 px-2.5 py-1 text-left text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+												className="inline-flex items-center rounded-sm border border-border/70 bg-muted/20 px-2.5 py-1 text-left text-foreground transition hover:bg-muted/40 focus-visible:border-foreground/50 focus-visible:bg-muted/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2"
 											>
 												{item.label}
 											</button>
@@ -875,7 +875,7 @@ function TaskStatusPanel({
 											<button
 												type="button"
 												aria-label={buildTaskStatusTooltipAriaLabel(item)}
-												className={`rounded-sm px-2 py-1 font-medium transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${tone.text}`}
+												className={`rounded-sm border border-transparent px-2 py-1 font-medium transition hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2 ${tone.text}`}
 											>
 												{formatNumber(item.value)}
 											</button>

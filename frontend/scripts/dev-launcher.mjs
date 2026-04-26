@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { createHash } from "node:crypto";
@@ -79,6 +80,32 @@ export function resolveChokidarUsePolling({
   return platform === "darwin" || platform === "win32" ? "true" : "false";
 }
 
+export function processExitCode(result) {
+  if (typeof result.status === "number") {
+    return result.status;
+  }
+  if (result.signal && typeof os.constants.signals[result.signal] === "number") {
+    return 128 + os.constants.signals[result.signal];
+  }
+  return 1;
+}
+
+export function assertRequiredDevToolsAvailable({
+  appDir = process.cwd(),
+  existsSync = fs.existsSync,
+} = {}) {
+  const requiredTools = ["vite", "tsc"];
+  const missingTools = requiredTools.filter(
+    (tool) => !existsSync(path.join(appDir, "node_modules", ".bin", tool)),
+  );
+
+  if (missingTools.length > 0) {
+    throw new Error(
+      `[frontend-dev] pnpm install completed but required executables are missing: ${missingTools.join(", ")}`,
+    );
+  }
+}
+
 function runBestEffort(command, args, options = {}) {
   try {
     spawnSync(command, args, {
@@ -121,12 +148,17 @@ function installDependencies(appDir, state) {
     env: process.env,
   });
 
-  if (typeof result.status === "number" && result.status !== 0) {
-    process.exit(result.status);
-  }
   if (result.error) {
     throw result.error;
   }
+  const exitCode = processExitCode(result);
+  if (exitCode !== 0) {
+    if (result.signal) {
+      console.error(`[frontend-dev] dependency install terminated by ${result.signal}`);
+    }
+    process.exit(exitCode);
+  }
+  assertRequiredDevToolsAvailable({ appDir });
 
   let currentHash = state.currentHash;
   const lockFilePath = path.join(appDir, "pnpm-lock.yaml");

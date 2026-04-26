@@ -369,7 +369,7 @@ function StructuredToolTestBench({
             onChange={(event) =>
               onToolTestPresetChange(updateToolPresetField(preset, "file_path", event.target.value))
             }
-            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
           />
         </label>
         <label className="space-y-1">
@@ -379,7 +379,7 @@ function StructuredToolTestBench({
             onChange={(event) =>
               onToolTestPresetChange(updateToolPresetField(preset, "function_name", event.target.value))
             }
-            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
           />
         </label>
         <label className="space-y-1">
@@ -389,7 +389,7 @@ function StructuredToolTestBench({
             onChange={(event) =>
               onToolTestPresetChange(updateToolPresetField(preset, "line_start", event.target.value))
             }
-            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
           />
         </label>
         <label className="space-y-1">
@@ -399,7 +399,7 @@ function StructuredToolTestBench({
             onChange={(event) =>
               onToolTestPresetChange(updateToolPresetField(preset, "line_end", event.target.value))
             }
-            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+            className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
           />
         </label>
       </div>
@@ -419,7 +419,7 @@ function StructuredToolTestBench({
                   },
                 })
               }
-              className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+              className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
             />
           </label>
           <label className="space-y-1">
@@ -478,7 +478,7 @@ function StructuredToolTestBench({
                   },
                 })
               }
-              className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+              className="cyber-input h-9 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
             />
           </label>
         </div>

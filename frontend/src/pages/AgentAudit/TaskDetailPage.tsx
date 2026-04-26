@@ -3556,7 +3556,7 @@ function AgentAuditPageContent() {
               onClick={() =>
                 navigate("/tasks/intelligent?openCreate=1&source=home-primary")
               }
-              className="group relative px-10 md:px-14 py-4 md:py-5 text-lg md:text-xl font-bold text-white bg-gradient-to-r from-primary via-primary to-primary/90 rounded-2xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/60 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 overflow-hidden"
+              className="group relative px-10 md:px-14 py-4 md:py-5 text-lg md:text-xl font-bold text-white bg-gradient-to-r from-primary via-primary to-primary/90 rounded-2xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/60 hover:scale-105 focus-visible:border-white/60 focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/70 focus-visible:outline-offset-2 overflow-hidden"
             >
               {/* 背景动画效果 */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -3579,7 +3579,7 @@ function AgentAuditPageContent() {
                   type="button"
                   onClick={() => navigate(card.targetRoute)}
                   aria-label={`${card.title}，点击快速开启扫描`}
-                  className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/70 p-6 md:p-7 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_22px_48px_-28px_rgba(56,189,248,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                  className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/70 p-6 md:p-7 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_22px_48px_-28px_rgba(56,189,248,0.65)] focus-visible:border-foreground/55 focus-visible:bg-muted/20 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2"
                 >
                   <div
                     className={`pointer-events-none absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100 ${card.accentClassName}`}

@@ -39,7 +39,7 @@ export function FindingDetailHeaderActions({
               "border-sky-500/50 text-sky-100 hover:text-white",
               "hover:border-sky-400/80 hover:bg-sky-500/10",
               "shadow-[0_0_12px_rgba(14,165,233,0.35)] transition duration-200",
-              "focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2",
+              "focus-visible:border-sky-200/70 focus-visible:bg-sky-500/15",
             )}
             >
               <Link

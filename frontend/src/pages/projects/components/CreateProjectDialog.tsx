@@ -9,7 +9,6 @@ import {
 import {
     AlertTriangle,
     CheckCircle2,
-    FileText,
     Loader2,
     Package,
     Plus,
@@ -455,8 +454,8 @@ export default function CreateProjectDialog({
                                                                         isUploadComplete
                                                                     }
                                                                     className={`h-10 font-mono ${isInvalid
-                                                                        ? "border-rose-500 focus-visible:ring-rose-500/40"
-                                                                        : "focus-visible:ring-primary/30"
+                                                                        ? "border-rose-500 focus-visible:border-rose-500/70"
+                                                                        : "focus-visible:border-primary/60"
                                                                         }`}
                                                                 />
                                                                 {isInvalid ? (

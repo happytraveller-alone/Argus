@@ -198,7 +198,7 @@ export default function DataManagementPage() {
                   value={projectFilter}
                   onChange={(event) => setProjectFilter(event.target.value)}
                   placeholder="按项目名称或描述过滤"
-                  className="cyber-input h-9 w-full min-w-0 rounded-sm border border-input bg-background px-4 py-2 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
+                  className="cyber-input h-9 w-full min-w-0 rounded-sm border border-input bg-background px-4 py-2 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
                 />
                 <Label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Checkbox

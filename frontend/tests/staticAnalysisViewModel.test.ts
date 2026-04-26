@@ -10,7 +10,7 @@ import {
   formatStaticAnalysisDuration,
 } from "../src/pages/static-analysis/viewModel.ts";
 
-test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
+test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
   const rows = buildUnifiedFindingRows({
     opengrepFindings: [
       {
@@ -24,50 +24,14 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
         rule_name: "auth-rule",
       },
     ],
-    gitleaksFindings: [
-      {
-        id: "gl-1",
-        scan_task_id: "task-gl",
-        rule_id: "gitleaks-rule",
-        file_path: "secret.env",
-        start_line: 7,
-        status: "open",
-      },
-    ],
-    banditFindings: [
-      {
-        id: "ba-1",
-        scan_task_id: "task-ba",
-        test_id: "B602",
-        test_name: "subprocess_shell_true",
-        issue_severity: "MEDIUM",
-        issue_confidence: "HIGH",
-        file_path: "app/main.py",
-        line_number: 42,
-        status: "open",
-      },
-    ],
     opengrepTaskId: "task-og",
-    gitleaksTaskId: "task-gl",
-    banditTaskId: "task-ba",
-    phpstanFindings: [],
-    phpstanTaskId: "",
   });
 
+  assert.equal(rows.length, 1);
   assert.equal(rows[0]?.engine, "opengrep");
   assert.equal(rows[0]?.filePath, "repo/src/auth.ts");
   assert.equal(rows[0]?.severity, "HIGH");
   assert.equal(rows[0]?.confidence, "LOW");
-
-  assert.equal(rows[1]?.engine, "gitleaks");
-  assert.equal(rows[1]?.severity, "LOW");
-  assert.equal(rows[1]?.confidence, "MEDIUM");
-
-  assert.equal(rows[2]?.engine, "bandit");
-  assert.equal(rows[2]?.severity, "MEDIUM");
-  assert.equal(rows[2]?.confidence, "HIGH");
-  assert.equal(rows[2]?.rule, "B602 · subprocess_shell_true");
-
 });
 
 test("static analysis finding status helpers expose tri-state labels and tones", () => {

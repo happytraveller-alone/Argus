@@ -65,7 +65,7 @@ export default function ZipUploadCard({
                   zipState.handleFileSelect(file, e.target);
                 }
               }}
-              className="h-9 flex-1 border border-border rounded bg-background px-3 py-1.5 text-sm font-mono file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-primary/20 file:text-primary hover:file:bg-primary/30 focus:outline-none focus:ring-1 focus:ring-primary/50"
+              className="h-9 flex-1 border border-border rounded bg-background px-3 py-1.5 text-sm font-mono file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-primary/20 file:text-primary hover:file:bg-primary/30 focus:border-primary/70 focus:bg-muted/20 focus:outline-none"
             />
             {zipState.zipFile && (
               <Button
@@ -113,7 +113,7 @@ export default function ZipUploadCard({
                   zipState.handleFileSelect(file, e.target);
                 }
               }}
-              className="h-9 flex-1 border border-border rounded bg-background px-3 py-1.5 text-sm font-mono file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-primary/20 file:text-primary hover:file:bg-primary/30 focus:outline-none focus:ring-1 focus:ring-primary/50"
+              className="h-9 flex-1 border border-border rounded bg-background px-3 py-1.5 text-sm font-mono file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-primary/20 file:text-primary hover:file:bg-primary/30 focus:border-primary/70 focus:bg-muted/20 focus:outline-none"
             />
             {zipState.zipFile && (
               <Button
