@@ -28,8 +28,8 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.match(markup, /项目风险统计图/);
 	assert.match(markup, /语言风险统计图/);
 	assert.match(markup, /漏洞类型统计图/);
-	assert.match(markup, /扫描引擎统计图/);
-	assert.match(markup, /扫描规则统计图/);
+	assert.doesNotMatch(markup, /扫描引擎统计图/);
+	assert.doesNotMatch(markup, /扫描规则统计图/);
 	assert.match(markup, /项目语言统计图/);
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /项目总数/);
@@ -58,7 +58,7 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.doesNotMatch(markup, /VULNERABILITY_TYPE_ROWS/);
 });
 
-test("dashboard mock preview model exposes seven switchable views with sorted chart data", async () => {
+test("dashboard mock preview model exposes five switchable views with sorted chart data", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/dashboardMockPreviewModel.ts",
 	);
@@ -71,8 +71,6 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 			"project-risk",
 			"language-risk",
 			"vulnerability-types",
-			"scan-engines",
-			"static-engine-rules",
 			"language-lines",
 		],
 	);
@@ -98,23 +96,6 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 	assert.match(vulnerabilityRows[0].meta, /SQL 注入/);
 	assert.equal(vulnerabilityRows.length, 10);
 	assert.equal(vulnerabilityRows[9].total <= vulnerabilityRows[8].total, true);
-
-	const engineRows = module.getPreviewLeaderboardRows("scan-engines");
-	assert.equal(engineRows[0].label, "llm");
-	assert.equal(engineRows[0].total >= engineRows[1].total, true);
-	assert.match(engineRows[0].meta, /智能审计/);
-	assert.equal(engineRows.every((row: { segments: unknown[] }) => row.segments.length === 1), true);
-	assert.equal(engineRows.length, 5);
-	assert.equal(engineRows[4].total <= engineRows[3].total, true);
-
-	const staticRuleRows = module.getPreviewLeaderboardRows("static-engine-rules");
-	assert.equal(staticRuleRows[0].label, "opengrep");
-	assert.equal(staticRuleRows[0].total >= staticRuleRows[1].total, true);
-	assert.match(staticRuleRows[0].meta, /规则/);
-	assert.equal(staticRuleRows.every((row: { segments: unknown[] }) => row.segments.length === 1), true);
-	assert.equal(staticRuleRows.length, 4);
-	assert.equal(staticRuleRows[3].label, "phpstan");
-	assert.equal(staticRuleRows[3].total <= staticRuleRows[2].total, true);
 
 	const languageLineRows = module.getPreviewLeaderboardRows("language-lines");
 	assert.equal(languageLineRows[0].label, "TypeScript");
@@ -145,24 +126,27 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 	});
 });
 
-test("dashboard mock preview chart sizing uses enlarged axes and narrower bars", async () => {
+test("dashboard mock preview chart sizing uses compact rows", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardMockPreviewCanvas.tsx",
 	);
 
-	assert.equal(module.HORIZONTAL_STATS_AXIS_FONT_SIZE, 16);
-	assert.equal(module.HORIZONTAL_STATS_LABEL_FONT_SIZE, 16);
-	assert.equal(module.HORIZONTAL_STATS_Y_AXIS_WIDTH, 128);
-	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 14);
-	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 46);
-	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 4);
+	assert.equal(module.HORIZONTAL_STATS_AXIS_FONT_SIZE, 13);
+	assert.equal(module.HORIZONTAL_STATS_LABEL_FONT_SIZE, 12);
+	assert.equal(module.HORIZONTAL_STATS_Y_AXIS_WIDTH, 96);
+	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 9);
+	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 34);
+	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 2);
 	assert.equal(
 		module.HORIZONTAL_STATS_META_ROW_CLASSNAME,
-		"mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+		"mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between",
 	);
 	assert.equal(
 		module.HORIZONTAL_STATS_META_LEGEND_CLASSNAME,
 		"flex flex-wrap justify-start gap-2 sm:justify-end",
 	);
-	assert.equal(module.TOP_STATS_GRID_CLASSNAME, "grid grid-cols-2 gap-3 xl:grid-cols-5");
+	assert.equal(
+		module.TOP_STATS_GRID_CLASSNAME,
+		"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5",
+	);
 });

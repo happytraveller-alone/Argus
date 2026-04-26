@@ -294,8 +294,6 @@ export default function TopNavigation() {
 									onMouseEnter={clearCloseTimer}
 									onMouseLeave={scheduleClose}
 								>
-									<DropdownMenuLabel>{group.label}</DropdownMenuLabel>
-									<DropdownMenuSeparator />
 									{group.routes.map((item) => (
 										<DropdownMenuItem key={item.route.path} asChild>
 											<DropdownRouteLink item={item} />

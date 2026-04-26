@@ -3,8 +3,6 @@ export type DashboardPreviewViewId =
 	| "project-risk"
 	| "language-risk"
 	| "vulnerability-types"
-	| "scan-engines"
-	| "static-engine-rules"
 	| "language-lines";
 
 export interface DashboardPreviewView {
@@ -70,16 +68,6 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 		id: "vulnerability-types",
 		label: "漏洞类型统计图",
 		description: "查看不同类型的漏洞分布情况",
-	},
-	{
-		id: "scan-engines",
-		label: "扫描引擎统计图",
-		description: "查看各扫描引擎发现的漏洞数量分布情况",
-	},
-	{
-		id: "static-engine-rules",
-		label: "扫描规则统计图",
-		description: "查看各静态审计引擎规则数量分布情况",
 	},
 	{
 		id: "language-lines",
@@ -394,66 +382,6 @@ const VULNERABILITY_TYPE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	},
 ];
 
-const SCAN_ENGINE_ROWS: DashboardPreviewLeaderboardRow[] = [
-	{
-		label: "llm",
-		meta: "智能审计",
-		segments: [{ label: "总数", value: 28, tone: "critical" }],
-		total: 28,
-	},
-	{
-		label: "opengrep",
-		meta: "静态审计",
-		segments: [{ label: "总数", value: 21, tone: "high" }],
-		total: 21,
-	},
-	{
-		label: "gitleaks",
-		meta: "静态审计",
-		segments: [{ label: "总数", value: 17, tone: "medium" }],
-		total: 17,
-	},
-	{
-		label: "bandit",
-		meta: "静态审计",
-		segments: [{ label: "总数", value: 14, tone: "low" }],
-		total: 14,
-	},
-	{
-		label: "phpstan",
-		meta: "静态审计",
-		segments: [{ label: "总数", value: 11, tone: "medium" }],
-		total: 11,
-	},
-];
-
-const STATIC_ENGINE_RULE_ROWS: DashboardPreviewLeaderboardRow[] = [
-	{
-		label: "opengrep",
-		meta: "规则总数 368",
-		segments: [{ label: "规则数", value: 368, tone: "critical" }],
-		total: 368,
-	},
-	{
-		label: "gitleaks",
-		meta: "规则总数 214",
-		segments: [{ label: "规则数", value: 214, tone: "high" }],
-		total: 214,
-	},
-	{
-		label: "bandit",
-		meta: "规则总数 172",
-		segments: [{ label: "规则数", value: 172, tone: "medium" }],
-		total: 172,
-	},
-	{
-		label: "phpstan",
-		meta: "规则总数 129",
-		segments: [{ label: "规则数", value: 129, tone: "low" }],
-		total: 129,
-	},
-];
-
 const LANGUAGE_LINE_ROWS: DashboardPreviewLeaderboardRow[] = [
 	{
 		label: "TypeScript",
@@ -594,10 +522,6 @@ export function getPreviewLeaderboardRows(
 	if (viewId === "language-risk") return LANGUAGE_RISK_ROWS.slice(0, PREVIEW_TOP_N);
 	if (viewId === "vulnerability-types") {
 		return VULNERABILITY_TYPE_ROWS.slice(0, PREVIEW_TOP_N);
-	}
-	if (viewId === "scan-engines") return SCAN_ENGINE_ROWS.slice(0, PREVIEW_TOP_N);
-	if (viewId === "static-engine-rules") {
-		return STATIC_ENGINE_RULE_ROWS.slice(0, PREVIEW_TOP_N);
 	}
 	if (viewId === "language-lines") {
 		return LANGUAGE_LINE_ROWS.slice(0, PREVIEW_TOP_N);

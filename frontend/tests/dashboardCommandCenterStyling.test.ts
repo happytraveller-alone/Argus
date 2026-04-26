@@ -41,7 +41,7 @@ test("DashboardCommandCenter summary card descriptions use enlarged label text",
 
 	assert.match(
 		source,
-		/const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-base uppercase tracking-\[0\.18em\] text-muted-foreground"/,
+		/const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-xs uppercase tracking-\[0\.12em\] text-muted-foreground"/,
 	);
 	assert.match(source, /<div className=\{DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME\}>/);
 });

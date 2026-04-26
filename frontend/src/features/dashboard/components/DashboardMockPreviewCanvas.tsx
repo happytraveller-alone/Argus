@@ -5,7 +5,6 @@ import {
 	Boxes,
 	Bug,
 	ChevronRight,
-	Cpu,
 	ListOrdered,
 } from "lucide-react";
 import {
@@ -62,17 +61,17 @@ const TONE_STYLES: Record<
 	},
 };
 
-export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 16;
-export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 16;
-export const HORIZONTAL_STATS_Y_AXIS_WIDTH = 128;
-export const HORIZONTAL_STATS_BAR_SIZE = 14;
-export const HORIZONTAL_STATS_ROW_HEIGHT = 46;
-export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 4;
+export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 13;
+export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 12;
+export const HORIZONTAL_STATS_Y_AXIS_WIDTH = 96;
+export const HORIZONTAL_STATS_BAR_SIZE = 9;
+export const HORIZONTAL_STATS_ROW_HEIGHT = 34;
+export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 2;
 export const HORIZONTAL_STATS_META_ROW_CLASSNAME =
-	"mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
+	"mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between";
 export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 	"flex flex-wrap justify-start gap-2 sm:justify-end";
-export const TOP_STATS_GRID_CLASSNAME = "grid grid-cols-2 gap-3 xl:grid-cols-5";
+export const TOP_STATS_GRID_CLASSNAME = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 
 function formatNumber(value: number) {
 	return Math.max(Number(value || 0), 0).toLocaleString("zh-CN");
@@ -143,10 +142,7 @@ function ViewSidebar({
 									<ListOrdered className="h-4 w-4" />
 								) : view.id === "language-risk" ? (
 									<Boxes className="h-4 w-4" />
-								) : view.id === "scan-engines" ? (
-									<Cpu className="h-4 w-4" />
-								) : view.id === "static-engine-rules" ||
-									view.id === "language-lines" ? (
+								) : view.id === "language-lines" ? (
 									<BarChart3 className="h-4 w-4" />
 								) : (
 									<Bug className="h-4 w-4" />
@@ -425,7 +421,7 @@ function HorizontalStatsChart({
 		() => getHorizontalLegendItems(rows, stacked),
 		[rows, stacked],
 	);
-	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 220);
+	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 180);
 
 	return (
 		<div className="space-y-5">
@@ -529,7 +525,7 @@ export default function DashboardMockPreviewCanvas() {
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#020817_52%,#030712_100%)] px-4 py-6 text-slate-100 md:px-6 xl:px-8">
 			<div className="mx-auto max-w-[1600px] space-y-6">
 				<PreviewHeader />
-				<div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+				<div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
 					<ViewSidebar activeView={activeView} onChange={setActiveView} />
 					<section className="rounded-[28px] border border-slate-800/90 bg-slate-950/88 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.45)]">
 
@@ -548,16 +544,15 @@ export default function DashboardMockPreviewCanvas() {
 											? "语言类型"
 											: activeView === "vulnerability-types"
 												? "漏洞类型标号"
-												: activeView === "scan-engines" ||
-													activeView === "static-engine-rules"
-													? "引擎名称"
-													: "类别名称"
+												: "类别名称"
 								}
 								stacked={activeView === "project-risk"}
 							/>
 						)}
 					</section>
-					<TaskStatusPanel />
+					<div className="lg:col-start-2">
+						<TaskStatusPanel />
+					</div>
 				</div>
 			</div>
 		</div>

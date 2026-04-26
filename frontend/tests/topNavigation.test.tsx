@@ -74,6 +74,20 @@ test("TopNavigation group triggers keep default entries internal, not parent lin
 	);
 });
 
+test("TopNavigation desktop dropdowns do not repeat parent group labels", () => {
+	const topNavigationSource = fs.readFileSync(
+		path.resolve(process.cwd(), "src/components/layout/TopNavigation.tsx"),
+		"utf8",
+	);
+	const desktopDropdownMatch = topNavigationSource.match(
+		/<DropdownMenuContent\s+align="start"[\s\S]*?<\/DropdownMenuContent>/,
+	);
+
+	assert.ok(desktopDropdownMatch);
+	assert.doesNotMatch(desktopDropdownMatch[0], /DropdownMenuLabel/);
+	assert.doesNotMatch(desktopDropdownMatch[0], /\{group\.label\}/);
+});
+
 test("TopNavigation keeps desktop and mobile menu affordances without a left drawer", async () => {
 	const markup = await renderTopNavigation();
 	const topNavigationSource = fs.readFileSync(

@@ -6,7 +6,6 @@ import {
 	Bug,
 	ChevronLeft,
 	ChevronRight,
-	Cpu,
 	Eye,
 	ListOrdered,
 } from "lucide-react";
@@ -31,14 +30,12 @@ import {
 import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
 import type {
 	DashboardDailyActivityItem,
-	DashboardEngineBreakdownItem,
 	DashboardLanguageLocItem,
 	DashboardLanguageRiskItem,
 	DashboardProjectRiskDistributionItem,
 	DashboardRecentTaskItem,
 	DashboardSnapshotResponse,
 	DashboardTaskStatusScanTypeBreakdown,
-	DashboardStaticEngineRuleTotalItem,
 	DashboardVerifiedVulnerabilityTypeItem,
 } from "@/shared/types";
 
@@ -49,8 +46,6 @@ type DashboardViewId =
 	| "project-risk"
 	| "language-risk"
 	| "vulnerability-types"
-	| "scan-engines"
-	| "static-engine-rules"
 	| "language-lines";
 
 type Tone = "critical" | "high" | "medium" | "low" | "neutral";
@@ -129,18 +124,6 @@ const VIEW_ITEMS: DashboardViewMeta[] = [
 		yAxisLabel: "漏洞类型标号",
 	},
 	{
-		id: "scan-engines",
-		label: "扫描引擎统计图",
-		description: "展示各扫描引擎发现漏洞数量，覆盖静态审计与智能审计。",
-		yAxisLabel: "引擎名称",
-	},
-	{
-		id: "static-engine-rules",
-		label: "扫描规则统计图",
-		description: "展示各静态审计引擎当前规则数量。",
-		yAxisLabel: "引擎名称",
-	},
-	{
 		id: "language-lines",
 		label: "项目语言统计图",
 		description: "展示当前项目涉及语言代码行数 Top10。",
@@ -184,28 +167,27 @@ const TONE_STYLES: Record<
 	},
 };
 
-export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 16;
-export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 16;
-export const HORIZONTAL_STATS_Y_AXIS_MIN_WIDTH = 84;
-export const HORIZONTAL_STATS_Y_AXIS_MAX_WIDTH = 120;
-export const HORIZONTAL_STATS_BAR_SIZE = 12;
-export const HORIZONTAL_STATS_ROW_HEIGHT = 46;
-export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 4;
+export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 13;
+export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 12;
+export const HORIZONTAL_STATS_Y_AXIS_MIN_WIDTH = 68;
+export const HORIZONTAL_STATS_Y_AXIS_MAX_WIDTH = 96;
+export const HORIZONTAL_STATS_BAR_SIZE = 9;
+export const HORIZONTAL_STATS_ROW_HEIGHT = 34;
+export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 2;
 export const HORIZONTAL_STATS_CHART_MARGIN = {
-	top: 8,
-	right: 24,
-	left: 12,
-	bottom: 8,
+	top: 4,
+	right: 16,
+	left: 4,
+	bottom: 4,
 } as const;
 export const HORIZONTAL_STATS_META_ROW_CLASSNAME =
-	"mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
+	"mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between";
 export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 	"flex flex-wrap justify-start gap-2 sm:justify-end";
-export const TOP_STATS_GRID_CLASSNAME = "grid grid-cols-2 gap-3 xl:grid-cols-5 xl:gap-4";
-export const DASHBOARD_DESKTOP_LEFT_RAIL_WIDTH = "calc((100%-4rem)/5)";
-export const DASHBOARD_DESKTOP_RIGHT_RAIL_WIDTH = "calc((100%-4rem)/5)";
+export const TOP_STATS_GRID_CLASSNAME =
+	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
-	"grid gap-6 xl:min-h-0 xl:flex-1 xl:gap-4 xl:grid-cols-[calc((100%-4rem)/5)_minmax(0,1fr)_calc((100%-4rem)/5)]";
+	"grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:min-h-0 xl:flex-1";
 export const DASHBOARD_RECENT_TASKS_PAGE_SIZE = 4;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";
@@ -216,7 +198,7 @@ const DASHBOARD_PANEL_DESCRIPTION_CLASSNAME =
 const DASHBOARD_META_LABEL_CLASSNAME =
 	"text-left text-xs uppercase tracking-[0.18em] text-muted-foreground";
 const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
-	"text-base uppercase tracking-[0.18em] text-muted-foreground";
+	"text-xs uppercase tracking-[0.12em] text-muted-foreground";
 const DASHBOARD_TOOLTIP_STYLE = {
 	backgroundColor: "hsl(var(--card))",
 	borderColor: "hsl(var(--border))",
@@ -472,56 +454,6 @@ function buildVulnerabilityTypeRows(
 	}));
 }
 
-function buildEngineRows(
-	items: DashboardEngineBreakdownItem[],
-): HorizontalRow[] {
-	const labelMap: Record<string, string> = {
-		llm: "llm",
-		opengrep: "opengrep",
-		gitleaks: "gitleaks",
-		bandit: "bandit",
-		phpstan: "phpstan",
-	};
-	const metaMap: Record<string, string> = {
-		llm: "智能审计",
-		opengrep: "静态审计",
-		gitleaks: "静态审计",
-		bandit: "静态审计",
-		phpstan: "静态审计",
-	};
-	return items
-		.slice()
-		.sort((a, b) => b.effective_findings - a.effective_findings)
-		.map((item) => ({
-			label: labelMap[item.engine] ?? item.engine,
-			meta: metaMap[item.engine] ?? "扫描引擎",
-			total: item.effective_findings,
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			tone: normalizeViewTone(item.effective_findings),
-		}));
-}
-
-function buildStaticRuleRows(
-	items: DashboardStaticEngineRuleTotalItem[],
-): HorizontalRow[] {
-	return items
-		.slice()
-		.sort((a, b) => b.total_rules - a.total_rules)
-		.map((item) => ({
-			label: item.engine,
-			meta: `规则总数 ${formatNumber(item.total_rules)}`,
-			total: item.total_rules,
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			tone: normalizeViewTone(item.total_rules),
-		}));
-}
-
 function buildLanguageLineRows(
 	items: DashboardLanguageLocItem[],
 ): HorizontalRow[] {
@@ -549,12 +481,6 @@ function buildRowsForView(
 	}
 	if (view === "vulnerability-types") {
 		return buildVulnerabilityTypeRows(snapshot.verified_vulnerability_types);
-	}
-	if (view === "scan-engines") {
-		return buildEngineRows(snapshot.engine_breakdown);
-	}
-	if (view === "static-engine-rules") {
-		return buildStaticRuleRows(snapshot.static_engine_rule_totals);
 	}
 	if (view === "language-lines") {
 		return buildLanguageLineRows(snapshot.language_loc_distribution);
@@ -726,14 +652,11 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	return (
 		<div className={TOP_STATS_GRID_CLASSNAME}>
 			{cards.map((item) => (
-				<div
-					key={item.label}
-					className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}
-				>
+				<div key={item.label} className={`${DASHBOARD_PANEL_CLASSNAME} px-3 py-3`}>
 					<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
 						{item.label}
 					</div>
-					<div className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+					<div className="mt-2 text-xl font-semibold tabular-nums text-foreground">
 						{item.value}
 					</div>
 				</div>
@@ -780,10 +703,7 @@ function ViewSidebar({
 									<ListOrdered className="h-4 w-4" />
 								) : view.id === "language-risk" ? (
 									<Boxes className="h-4 w-4" />
-								) : view.id === "scan-engines" ? (
-									<Cpu className="h-4 w-4" />
-								) : view.id === "static-engine-rules" ||
-									view.id === "language-lines" ? (
+								) : view.id === "language-lines" ? (
 									<BarChart3 className="h-4 w-4" />
 								) : (
 									<Bug className="h-4 w-4" />
@@ -1179,7 +1099,7 @@ function HorizontalStatsChart({
 		);
 	}
 
-	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 220);
+	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 180);
 	const yAxisWidth = estimateHorizontalStatsYAxisWidth(rows);
 	const xAxisProps = getHorizontalStatsXAxisProps(viewId, rows);
 	const primaryTone = rows[0]?.tone ?? "low";
@@ -1198,7 +1118,7 @@ function HorizontalStatsChart({
 				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>{title}</h3>
 				<p className={DASHBOARD_PANEL_DESCRIPTION_CLASSNAME}>{description}</p>
 			</div>
-			<div className="rounded-sm border border-border bg-background/70 p-4">
+			<div className="rounded-sm border border-border bg-background/70 p-3">
 				<div className={HORIZONTAL_STATS_META_ROW_CLASSNAME}>
 					<div className={DASHBOARD_META_LABEL_CLASSNAME}>
 						横坐标：数量
@@ -1365,7 +1285,9 @@ export default function DashboardCommandCenter({
 							/>
 						)}
 					</section>
-					<TaskStatusPanel snapshot={snapshot} />
+					<div className="lg:col-start-2">
+						<TaskStatusPanel snapshot={snapshot} />
+					</div>
 				</div>
 			</div>
 		</div>
