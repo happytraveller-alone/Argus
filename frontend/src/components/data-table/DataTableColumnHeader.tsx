@@ -39,6 +39,7 @@ export function DataTableColumnHeader<TData, TValue>({
   defaultFilterValue?: DataTableFilterValue;
 }) {
   const meta = column.columnDef.meta;
+  const headerContentClassName = meta?.headerContentClassName;
   const filterPlacement = resolveDataTableFilterPlacement(meta);
   const filterVariant = meta?.filterVariant;
   const filterOptions = meta?.filterOptions || [];
@@ -57,10 +58,14 @@ export function DataTableColumnHeader<TData, TValue>({
   const showWeakHighlight = filterActive || defaultFilterValue !== undefined;
 
   if (!column.getCanSort() && !canFilterInHeader) {
-    return <span className={cn("inline-flex items-center", className)}>{title}</span>;
+    return (
+      <span
+        className={cn("inline-flex items-center", headerContentClassName, className)}
+      >
+        {title}
+      </span>
+    );
   }
-
-  const headerContentClassName = meta?.headerContentClassName;
 
   return (
     <div className={cn("inline-flex items-center gap-1", className)}>

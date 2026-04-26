@@ -316,6 +316,7 @@ export default function ProjectTaskFindingsDialog({
 			pageSize: DIALOG_PAGE_SIZE,
 		},
 		columnVisibility: {},
+		columnSizing: {},
 		rowSelection: {},
 		density: "comfortable",
 	});
@@ -349,6 +350,7 @@ export default function ProjectTaskFindingsDialog({
 				pageSize: DIALOG_PAGE_SIZE,
 			},
 			columnVisibility: {},
+			columnSizing: {},
 			rowSelection: {},
 			density: "comfortable",
 		});

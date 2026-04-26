@@ -170,6 +170,11 @@ export default function TopNavigation() {
 		[clearCloseTimer],
 	);
 
+	const closeDesktopGroupMenus = useCallback(() => {
+		clearCloseTimer();
+		setOpenGroupId(null);
+	}, [clearCloseTimer]);
+
 	const scheduleGroupClose = useCallback(
 		(groupId: SidebarNavGroupId) => {
 			if (typeof window === "undefined") return;
@@ -185,6 +190,10 @@ export default function TopNavigation() {
 	);
 
 	useEffect(() => clearCloseTimer, [clearCloseTimer]);
+
+	useEffect(() => {
+		closeDesktopGroupMenus();
+	}, [closeDesktopGroupMenus, location.pathname]);
 
 	const prefetchTaskGroupAssets = useCallback(() => {
 		if (hasPrefetchedTaskGroupRef.current) return;
@@ -320,7 +329,10 @@ export default function TopNavigation() {
 								>
 									{group.routes.map((item) => (
 										<DropdownMenuItem key={item.route.path} asChild>
-											<DropdownRouteLink item={item} />
+											<DropdownRouteLink
+												item={item}
+												onClick={closeDesktopGroupMenus}
+											/>
 										</DropdownMenuItem>
 									))}
 								</DropdownMenuContent>

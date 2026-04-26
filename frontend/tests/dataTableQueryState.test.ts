@@ -26,6 +26,7 @@ test("createDefaultDataTableState returns normalized defaults", async () => {
   assert.deepEqual(state.columnFilters, []);
   assert.deepEqual(state.sorting, []);
   assert.deepEqual(state.columnVisibility, {});
+  assert.deepEqual(state.columnSizing, {});
   assert.deepEqual(state.rowSelection, {});
   assert.equal(state.pagination.pageIndex, 0);
   assert.equal(state.pagination.pageSize, 10);

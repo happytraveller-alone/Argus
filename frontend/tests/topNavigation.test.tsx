@@ -128,6 +128,23 @@ test("TopNavigation desktop dropdown close is delayed and scoped to the hovered 
 	);
 });
 
+test("TopNavigation closes desktop dropdowns after secondary navigation", () => {
+	const topNavigationSource = fs.readFileSync(
+		path.resolve(process.cwd(), "src/components/layout/TopNavigation.tsx"),
+		"utf8",
+	);
+
+	assert.match(topNavigationSource, /const closeDesktopGroupMenus = useCallback/);
+	assert.match(
+		topNavigationSource,
+		/useEffect\(\(\) => \{\s*closeDesktopGroupMenus\(\);\s*\}, \[closeDesktopGroupMenus, location\.pathname\]\);/,
+	);
+	assert.match(
+		topNavigationSource,
+		/<DropdownRouteLink\s+item=\{item\}\s+onClick=\{closeDesktopGroupMenus\}\s+\/>/,
+	);
+});
+
 test("TopNavigation keeps desktop and mobile menu affordances without a left drawer", async () => {
 	const markup = await renderTopNavigation();
 	const topNavigationSource = fs.readFileSync(

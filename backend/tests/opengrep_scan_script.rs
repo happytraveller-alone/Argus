@@ -314,6 +314,45 @@ fn opengrep_scan_splits_rule_batches_after_missing_output_failure() {
 }
 
 #[test]
+fn opengrep_scan_rule_batch_staging_does_not_depend_on_shutil() {
+    let fixture = ScriptFixture::new();
+    let script = fs::read_to_string(&fixture.script_path).expect("script");
+
+    assert!(
+        !script.contains("import shutil"),
+        "rule batch staging must not depend on Python shutil in the minimal runner image"
+    );
+    assert!(
+        script.contains("stage_rule_range \"$stage_list\" 1 2"),
+        "self-test should exercise non-zero-start rule batch staging"
+    );
+    assert!(
+        script.contains("cp -p -- \"$source\" \"$target\""),
+        "rule batch staging should copy paths safely even if a source starts with '-'"
+    );
+}
+
+#[test]
+fn opengrep_scan_self_test_exercises_rule_batch_staging() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--self-test")
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .output()
+        .expect("run opengrep-scan self-test");
+
+    assert!(
+        output.status.success(),
+        "self-test should pass and exercise rule staging\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn opengrep_scan_uses_primary_output_file_contract() {
     let fixture = ScriptFixture::new();
     let args_path = fixture._temp_dir.path().join("args.txt");

@@ -48,6 +48,22 @@ self_test() {
   grep -q '"status":"scan_failed"' "$sigpipe_summary"
   grep -q 'SIGPIPE/OOM' "$sigpipe_summary"
 
+  local stage_rules_dir="$temp_dir/stage-rules"
+  local stage_selected_dir="$temp_dir/stage-selected"
+  local stage_list="$temp_dir/stage-rules.txt"
+  mkdir -p "$stage_rules_dir"
+  printf 'one\n' > "$stage_rules_dir/one.yml"
+  printf 'two\n' > "$stage_rules_dir/two.yml"
+  printf 'three\n' > "$stage_rules_dir/three.yml"
+  printf '%s\n' \
+    "$stage_rules_dir/one.yml" \
+    "$stage_rules_dir/two.yml" \
+    "$stage_rules_dir/three.yml" > "$stage_list"
+  stage_rule_range "$stage_list" 1 2 "$stage_selected_dir"
+  test ! -e "$stage_selected_dir/rule-000000.yaml"
+  grep -q '^two$' "$stage_selected_dir/rule-000001.yaml"
+  grep -q '^three$' "$stage_selected_dir/rule-000002.yaml"
+
   rm -rf "$temp_dir"
 }
 
@@ -221,21 +237,18 @@ stage_rule_range() {
   local start="$2"
   local count="$3"
   local selected_dir="$4"
+  local end=$((start + count))
+  local offset=0
+  local source
+  local target
 
   mkdir -p "$selected_dir"
-  python3 - "$list_path" "$start" "$count" "$selected_dir" <<'PY'
-import os
-import shutil
-import sys
-
-list_path, start, count, selected_dir = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-with open(list_path, "r", encoding="utf-8") as handle:
-    paths = [line.strip() for line in handle if line.strip()]
-
-for offset, source in enumerate(paths[start:start + count]):
-    target = os.path.join(selected_dir, f"rule-{start + offset:06d}.yaml")
-    shutil.copy2(source, target)
-PY
+  while IFS= read -r source; do
+    [ -n "$source" ] || continue
+    target="$(printf '%s/rule-%06d.yaml' "$selected_dir" "$((start + offset))")"
+    cp -p -- "$source" "$target"
+    offset=$((offset + 1))
+  done < <(awk -v start="$start" -v end="$end" 'NR > start && NR <= end { print }' "$list_path")
 }
 
 merge_batch_results() {

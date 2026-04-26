@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     env,
     num::NonZeroUsize,
     path::PathBuf,
@@ -101,6 +101,7 @@ struct OpengrepResourceSchedulerInner {
 struct OpengrepResourceState {
     total_cores: usize,
     used_cores: usize,
+    active_project_ids: HashSet<String>,
 }
 
 #[derive(Debug)]
@@ -108,6 +109,7 @@ struct OpengrepResourcePermit {
     scheduler: OpengrepResourceScheduler,
     allocated_cores: usize,
     total_cores: usize,
+    project_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -129,21 +131,40 @@ impl OpengrepResourceScheduler {
                 state: Mutex::new(OpengrepResourceState {
                     total_cores: total_cores.max(1),
                     used_cores: 0,
+                    active_project_ids: HashSet::new(),
                 }),
                 available: Condvar::new(),
             }),
         }
     }
 
-    fn acquire(&self, requested_cores: Option<usize>) -> OpengrepResourcePermit {
+    fn acquire_for_project(
+        &self,
+        project_id: &str,
+        requested_cores: Option<usize>,
+    ) -> OpengrepResourcePermit {
+        self.acquire_inner(requested_cores, Some(project_id.to_string()))
+    }
+
+    fn acquire_inner(
+        &self,
+        requested_cores: Option<usize>,
+        project_id: Option<String>,
+    ) -> OpengrepResourcePermit {
         let mut state = self.inner.state.lock().expect("opengrep resource lock");
         loop {
-            if let Some(allocated_cores) = next_opengrep_allocation(&state, requested_cores) {
+            if let Some(allocated_cores) =
+                next_opengrep_allocation(&state, requested_cores, project_id.as_deref())
+            {
                 state.used_cores += allocated_cores;
+                if let Some(project_id) = &project_id {
+                    state.active_project_ids.insert(project_id.clone());
+                }
                 return OpengrepResourcePermit {
                     scheduler: self.clone(),
                     allocated_cores,
                     total_cores: state.total_cores,
+                    project_id,
                 };
             }
             state = self
@@ -164,6 +185,9 @@ impl Drop for OpengrepResourcePermit {
             .lock()
             .expect("opengrep resource lock");
         state.used_cores = state.used_cores.saturating_sub(self.allocated_cores);
+        if let Some(project_id) = &self.project_id {
+            state.active_project_ids.remove(project_id);
+        }
         self.scheduler.inner.available.notify_all();
     }
 }
@@ -184,7 +208,12 @@ fn detect_opengrep_available_cores() -> usize {
 fn next_opengrep_allocation(
     state: &OpengrepResourceState,
     requested_cores: Option<usize>,
+    project_id: Option<&str>,
 ) -> Option<usize> {
+    if project_id.is_some_and(|id| state.active_project_ids.contains(id)) {
+        return None;
+    }
+
     let remaining_cores = state.total_cores.saturating_sub(state.used_cores);
     if remaining_cores == 0 {
         return None;
@@ -1005,9 +1034,12 @@ async fn run_opengrep_scan_inner(
 
     let requested_cores = requested_opengrep_cpu_cores(&state.config);
     let scheduler = OPENGREP_RESOURCE_SCHEDULER.clone();
-    let resource_permit = tokio::task::spawn_blocking(move || scheduler.acquire(requested_cores))
-        .await
-        .map_err(|error| format!("opengrep resource scheduler failed: {error}"))?;
+    let project_slot_id = project_id.to_string();
+    let resource_permit = tokio::task::spawn_blocking(move || {
+        scheduler.acquire_for_project(&project_slot_id, requested_cores)
+    })
+    .await
+    .map_err(|error| format!("opengrep resource scheduler failed: {error}"))?;
     let runner_resources = resolve_opengrep_runner_resources(&state.config, &resource_permit);
 
     update_scan_progress(
@@ -2190,11 +2222,11 @@ rules:
     fn opengrep_resource_scheduler_allocates_half_of_remaining_cores() {
         let scheduler = OpengrepResourceScheduler::new(8);
 
-        let first = scheduler.acquire(None);
+        let first = scheduler.acquire_for_project("project-a", None);
         assert_eq!(first.allocated_cores, 4);
         assert_eq!(first.total_cores, 8);
 
-        let second = scheduler.acquire(None);
+        let second = scheduler.acquire_for_project("project-b", None);
         assert_eq!(second.allocated_cores, 2);
         assert_eq!(second.total_cores, 8);
     }
@@ -2202,13 +2234,13 @@ rules:
     #[test]
     fn opengrep_resource_scheduler_queues_when_less_than_two_cores_would_remain() {
         let scheduler = OpengrepResourceScheduler::new(8);
-        let first = scheduler.acquire(None);
-        let second = scheduler.acquire(None);
+        let first = scheduler.acquire_for_project("project-a", None);
+        let second = scheduler.acquire_for_project("project-b", None);
 
         let (sender, receiver) = mpsc::channel();
         let queued_scheduler = scheduler.clone();
         let queued = std::thread::spawn(move || {
-            let permit = queued_scheduler.acquire(None);
+            let permit = queued_scheduler.acquire_for_project("project-c", None);
             sender
                 .send(permit.allocated_cores)
                 .expect("send queued allocation");
@@ -2233,9 +2265,50 @@ rules:
     }
 
     #[test]
+    fn opengrep_resource_scheduler_queues_same_project_scans() {
+        let scheduler = OpengrepResourceScheduler::new(8);
+        let first = scheduler.acquire_for_project("project-a", None);
+
+        let (sender, receiver) = mpsc::channel();
+        let queued_scheduler = scheduler.clone();
+        let queued = std::thread::spawn(move || {
+            let permit = queued_scheduler.acquire_for_project("project-a", None);
+            sender
+                .send(permit.allocated_cores)
+                .expect("send queued allocation");
+            permit
+        });
+
+        assert!(
+            receiver.recv_timeout(Duration::from_millis(100)).is_err(),
+            "same-project opengrep scan should wait for the active project container"
+        );
+
+        drop(first);
+        assert_eq!(
+            receiver
+                .recv_timeout(Duration::from_secs(1))
+                .expect("same-project launch should start after project slot is released"),
+            4
+        );
+
+        drop(queued.join().expect("queued scheduler thread"));
+    }
+
+    #[test]
+    fn opengrep_resource_scheduler_allows_different_project_scans() {
+        let scheduler = OpengrepResourceScheduler::new(8);
+        let first = scheduler.acquire_for_project("project-a", None);
+        let second = scheduler.acquire_for_project("project-b", None);
+
+        assert_eq!(first.allocated_cores, 4);
+        assert_eq!(second.allocated_cores, 2);
+    }
+
+    #[test]
     fn opengrep_resource_scheduler_allows_first_scan_on_small_hosts() {
         let scheduler = OpengrepResourceScheduler::new(2);
-        let permit = scheduler.acquire(None);
+        let permit = scheduler.acquire_for_project("project-a", None);
 
         assert_eq!(permit.allocated_cores, 1);
         assert_eq!(permit.total_cores, 2);
@@ -2250,7 +2323,8 @@ rules:
         config.opengrep_runner_cpu_limit_explicit = false;
 
         let scheduler = OpengrepResourceScheduler::new(8);
-        let permit = scheduler.acquire(super::requested_opengrep_cpu_cores(&config));
+        let permit = scheduler
+            .acquire_for_project("project-a", super::requested_opengrep_cpu_cores(&config));
         let resources = super::resolve_opengrep_runner_resources(&config, &permit);
 
         assert_eq!(resources.jobs, 4);
@@ -2267,7 +2341,8 @@ rules:
         config.opengrep_runner_cpu_limit_explicit = true;
 
         let scheduler = OpengrepResourceScheduler::new(8);
-        let permit = scheduler.acquire(super::requested_opengrep_cpu_cores(&config));
+        let permit = scheduler
+            .acquire_for_project("project-a", super::requested_opengrep_cpu_cores(&config));
         let resources = super::resolve_opengrep_runner_resources(&config, &permit);
 
         assert_eq!(resources.jobs, 6);

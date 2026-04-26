@@ -47,6 +47,13 @@ import type {
   DataTableQueryState,
 } from "./types";
 
+type AppColumnWithChildren<TData extends RowData> = AppColumnDef<
+  TData,
+  unknown
+> & {
+  columns?: AppColumnDef<TData, unknown>[];
+};
+
 function resolveFilterFn(column: ColumnDef<any>) {
   const variant = column.meta?.filterVariant;
   if (variant === "select" || variant === "multi-select" || variant === "boolean") {
@@ -61,14 +68,35 @@ function resolveFilterFn(column: ColumnDef<any>) {
   return column.filterFn;
 }
 
+function resolvePixelSize(value?: string | number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function buildColumnWithDefaults<TData extends RowData>(
+  column: AppColumnDef<TData, unknown>,
+): ColumnDef<TData, unknown> {
+  const childColumns = (column as AppColumnWithChildren<TData>).columns;
+  return {
+    ...column,
+    ...(childColumns
+      ? {
+          columns: childColumns.map((childColumn) =>
+            buildColumnWithDefaults(childColumn),
+          ),
+        }
+      : {}),
+    filterFn: resolveFilterFn(column),
+    size: resolvePixelSize(column.meta?.width) ?? column.size,
+    minSize: resolvePixelSize(column.meta?.minWidth) ?? column.minSize,
+    enableResizing: column.meta?.enableResizing ?? column.enableResizing,
+  } as ColumnDef<TData, unknown>;
+}
+
 function buildColumnsWithDefaults<TData extends RowData>(
   columns: AppColumnDef<TData, unknown>[],
   enableRowSelection: boolean,
 ): ColumnDef<TData, unknown>[] {
-  const withDefaults = columns.map((column) => ({
-    ...column,
-    filterFn: resolveFilterFn(column),
-  }));
+  const withDefaults = columns.map((column) => buildColumnWithDefaults(column));
 
   if (!enableRowSelection) {
     return withDefaults;
@@ -138,6 +166,7 @@ export function DataTable<TData extends RowData>({
   tableClassName,
   containerClassName,
   tableContainerClassName,
+  enableColumnResizing = false,
   getRowId,
 }: DataTableProps<TData>) {
   const initialState = React.useMemo(
@@ -190,13 +219,16 @@ export function DataTable<TData extends RowData>({
       sorting: resolvedState.sorting,
       pagination: resolvedState.pagination,
       columnVisibility: resolvedState.columnVisibility,
+      columnSizing: resolvedState.columnSizing,
       rowSelection: resolvedState.rowSelection,
     },
+    columnResizeMode: "onChange",
     manualPagination: isManualPagination,
     manualFiltering: isManualPagination,
     manualSorting: isManualPagination,
     rowCount: remoteTotalCount ?? undefined,
     enableRowSelection: selection?.enableRowSelection,
+    enableColumnResizing,
     getRowId,
     onGlobalFilterChange: (updater) =>
       updateState((old) => ({
@@ -226,6 +258,11 @@ export function DataTable<TData extends RowData>({
       updateState((old) => ({
         ...old,
         columnVisibility: functionalUpdate(updater, old.columnVisibility),
+      })),
+    onColumnSizingChange: (updater) =>
+      updateState((old) => ({
+        ...old,
+        columnSizing: functionalUpdate(updater, old.columnSizing),
       })),
     onRowSelectionChange: (updater) =>
       updateState((old) => ({
@@ -275,7 +312,11 @@ export function DataTable<TData extends RowData>({
         filteredCount={filteredCount}
       />
       <DataTableScrollContainer className={containerClassName}>
-        <Table className={tableClassName} containerClassName={tableContainerClassName}>
+        <Table
+          className={cn(enableColumnResizing && "table-fixed", tableClassName)}
+          containerClassName={tableContainerClassName}
+          style={enableColumnResizing ? { width: table.getTotalSize() } : undefined}
+        >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -294,6 +335,13 @@ export function DataTable<TData extends RowData>({
                   const shouldRenderPlainSortableHeader =
                     shouldRenderPlainHeader &&
                     header.column.getCanSort();
+                  const columnWidth = enableColumnResizing
+                    ? header.getSize()
+                    : meta?.width;
+                  const canResizeColumn =
+                    enableColumnResizing &&
+                    header.subHeaders.length === 0 &&
+                    header.column.getCanResize();
                   return (
                     <TableHead
                       key={header.id}
@@ -309,6 +357,7 @@ export function DataTable<TData extends RowData>({
                           : undefined
                       }
                       className={cn(
+                        "relative",
                         "bg-muted/40",
                         shouldRenderPlainSortableHeader &&
                           "cursor-pointer select-none",
@@ -317,7 +366,7 @@ export function DataTable<TData extends RowData>({
                         meta?.headerClassName,
                       )}
                       style={{
-                        width: meta?.width,
+                        width: columnWidth,
                         minWidth: meta?.minWidth,
                       }}
                     >
@@ -340,6 +389,35 @@ export function DataTable<TData extends RowData>({
                                 />
                               )
                           : flexRender(header.column.columnDef.header, header.getContext())}
+                      {canResizeColumn ? (
+                        <button
+                          type="button"
+                          aria-label={`调整${fallbackLabel}列宽`}
+                          data-data-table-column-resizer="true"
+                          data-resizing={
+                            header.column.getIsResizing() ? "true" : undefined
+                          }
+                          className={cn(
+                            "absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none border-r border-transparent transition-colors",
+                            "hover:border-primary/50 hover:bg-primary/20",
+                            header.column.getIsResizing() &&
+                              "border-primary/70 bg-primary/30",
+                          )}
+                          onClick={(event) => event.stopPropagation()}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            header.column.resetSize();
+                          }}
+                          onMouseDown={(event) => {
+                            event.stopPropagation();
+                            header.getResizeHandler()(event);
+                          }}
+                          onTouchStart={(event) => {
+                            event.stopPropagation();
+                            header.getResizeHandler()(event);
+                          }}
+                        />
+                      ) : null}
                     </TableHead>
                   );
                 })}
@@ -373,6 +451,9 @@ export function DataTable<TData extends RowData>({
                 <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta;
+                    const columnWidth = enableColumnResizing
+                      ? cell.column.getSize()
+                      : meta?.width;
                     return (
                       <TableCell
                         key={cell.id}
@@ -385,7 +466,7 @@ export function DataTable<TData extends RowData>({
                           meta?.cellClassName,
                         )}
                         style={{
-                          width: meta?.width,
+                          width: columnWidth,
                           minWidth: meta?.minWidth,
                         }}
                       >

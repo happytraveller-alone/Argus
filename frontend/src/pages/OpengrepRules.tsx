@@ -121,6 +121,18 @@ const RULE_STATS_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
 const RULE_STATS_CARD_VALUE_CLASSNAME =
 	"text-right text-xl font-semibold tabular-nums text-foreground";
+const OPENGREP_RULE_TABLE_HEADER_CLASSNAME = "text-sm tracking-[0.12em]";
+const OPENGREP_RULE_TABLE_CELL_CLASSNAME = "text-sm";
+
+function createRuleTableMeta(
+	meta: AppColumnDef<OpengrepRule, unknown>["meta"],
+) {
+	return {
+		headerContentClassName: OPENGREP_RULE_TABLE_HEADER_CLASSNAME,
+		cellClassName: OPENGREP_RULE_TABLE_CELL_CLASSNAME,
+		...meta,
+	};
+}
 
 function formatRuleStatValue(value: number | null) {
 	return value === null ? "\u00a0" : value.toLocaleString();
@@ -1242,7 +1254,11 @@ export default function OpengrepRules({
 				header: "序号",
 				enableSorting: false,
 				enableHiding: false,
-				meta: { label: "序号", align: "center", width: 72 },
+				meta: createRuleTableMeta({
+					label: "序号",
+					align: "center",
+					width: 72,
+				}),
 				cell: ({ row, table }) => {
 					const pageRowIndex = table
 						.getRowModel()
@@ -1260,11 +1276,12 @@ export default function OpengrepRules({
 				accessorFn: (row) => [row.name, row.id].filter(Boolean).join(" "),
 				header: "规则名称",
 				enableSorting: false,
-				meta: {
+				meta: createRuleTableMeta({
 					label: "规则名称",
-					minWidth: 240,
+					width: 220,
+					minWidth: 180,
 					filterVariant: "text",
-				},
+				}),
 				cell: ({ row }) => (
 					<div
 						className={
@@ -1288,12 +1305,12 @@ export default function OpengrepRules({
 				header: "语言",
 				enableSorting: false,
 				enableHiding: false,
-				meta: {
+				meta: createRuleTableMeta({
 					label: "语言",
 					width: 120,
 					filterVariant: "select",
 					filterOptions: languageOptions,
-				},
+				}),
 				cell: ({ row }) => (
 					<span className="font-mono text-sm text-muted-foreground">
 						{row.original.language}
@@ -1306,12 +1323,12 @@ export default function OpengrepRules({
 				header: "规则来源",
 				enableSorting: false,
 				enableHiding: false,
-				meta: {
+				meta: createRuleTableMeta({
 					label: "规则来源",
 					width: 120,
 					filterVariant: "select",
 					filterOptions: sourceOptions,
-				},
+				}),
 				cell: ({ row }) => (
 					<Badge
 						className={`cyber-badge ${
@@ -1330,12 +1347,12 @@ export default function OpengrepRules({
 				header: "置信度",
 				enableSorting: false,
 				enableHiding: false,
-				meta: {
+				meta: createRuleTableMeta({
 					label: "置信度",
 					width: 120,
 					filterVariant: "select",
 					filterOptions: confidenceOptions,
-				},
+				}),
 				cell: ({ row }) =>
 					row.original.confidence ? (
 						<Badge
@@ -1353,14 +1370,14 @@ export default function OpengrepRules({
 				header: "启用状态",
 				enableSorting: false,
 				enableHiding: false,
-				meta: {
+				meta: createRuleTableMeta({
 					label: "启用状态",
 					width: 136,
 					filterVariant: "select",
 					filterOptions: ACTIVE_STATUS.filter(
 						(status) => status.value === "true" || status.value === "false",
 					),
-				},
+				}),
 				cell: ({ row }) => (
 					<Badge
 						className={
@@ -1406,7 +1423,11 @@ export default function OpengrepRules({
 				header: "操作",
 				enableSorting: false,
 				enableHiding: false,
-				meta: { label: "操作", minWidth: 320 },
+				meta: createRuleTableMeta({
+					label: "操作",
+					width: 240,
+					minWidth: 220,
+				}),
 				cell: ({ row }) => (
 					<div className="flex flex-wrap items-center gap-2">
 						<Button
@@ -1707,7 +1728,8 @@ export default function OpengrepRules({
 								totalCount: pageTotal,
 								pageSizeOptions: [10, 20, 50, 100],
 							}}
-							tableClassName="min-w-[1380px]"
+							enableColumnResizing
+							tableClassName="min-w-[1120px]"
 							getRowId={(row) => row.id}
 						/>
 					</div>

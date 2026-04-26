@@ -1,6 +1,7 @@
 import type {
   ColumnDef,
   ColumnFiltersState,
+  ColumnSizingState,
   PaginationState,
   RowData,
   RowSelectionState,
@@ -46,6 +47,7 @@ export interface DataTableColumnMeta<TData = unknown, TValue = unknown> {
   align?: DataTableAlign;
   minWidth?: string | number;
   width?: string | number;
+  enableResizing?: boolean;
   sticky?: DataTableSticky;
   hideable?: boolean;
   sortable?: boolean;
@@ -78,6 +80,7 @@ export interface DataTableQueryState {
   sorting: SortingState;
   pagination: PaginationState;
   columnVisibility: Record<string, boolean>;
+  columnSizing: ColumnSizingState;
   rowSelection: RowSelectionState;
   density: DataTableDensity;
 }
@@ -156,5 +159,6 @@ export interface DataTableProps<TData> {
   tableClassName?: string;
   containerClassName?: string;
   tableContainerClassName?: string;
+  enableColumnResizing?: boolean;
   getRowId?: (originalRow: TData, index: number) => string;
 }

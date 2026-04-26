@@ -277,3 +277,4 @@ backend/agents/report/output/**
 backend/agents/shared/config.json
 
 .codex
+AGENTS.md

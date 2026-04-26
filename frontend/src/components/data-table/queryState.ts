@@ -27,6 +27,7 @@ export function createDefaultDataTableState(
       pageSize: normalizePageSize(overrides.pagination?.pageSize),
     },
     columnVisibility: overrides.columnVisibility ?? {},
+    columnSizing: overrides.columnSizing ?? {},
     rowSelection: overrides.rowSelection ?? {},
     density: overrides.density ?? DEFAULT_DATA_TABLE_DENSITY,
   };

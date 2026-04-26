@@ -100,3 +100,33 @@ test("DataTable remote pagination uses server total instead of current page row 
 
   assert.match(markup, /共 37 条，第 2 \/ 4 页/);
 });
+
+test("DataTable renders draggable resize handles when column resizing is enabled", async () => {
+  const dataTableModule = await importOrFail<any>(
+    "../src/components/data-table/index.ts",
+  );
+
+  const markup = renderToStaticMarkup(
+    createElement(dataTableModule.DataTable, {
+      data: [{ id: "p1", name: "Project One" }],
+      columns: [
+        {
+          accessorKey: "name",
+          header: "项目名称",
+          meta: {
+            label: "项目名称",
+            width: 180,
+            minWidth: 120,
+          },
+        },
+      ],
+      enableColumnResizing: true,
+      pagination: false,
+    }),
+  );
+
+  assert.match(markup, /data-data-table-column-resizer="true"/);
+  assert.match(markup, /aria-label="调整项目名称列宽"/);
+  assert.match(markup, /style="width:180px;min-width:120px"/);
+  assert.match(markup, /class="[^"]*table-fixed/);
+});

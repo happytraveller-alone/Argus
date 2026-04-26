@@ -239,6 +239,7 @@ export default function ProjectDetail() {
 				pageSize: 10,
 			},
 			columnVisibility: {},
+			columnSizing: {},
 			rowSelection: {},
 			density: "comfortable",
 		});
