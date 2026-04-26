@@ -482,44 +482,22 @@ Run `omx setup` to install all components. Run `omx doctor` to verify installati
 <claude-mem-context>
 # Memory Context
 
-# [audittool_personal] recent context, 2026-04-26 9:11am GMT+8
+# [audittool_personal] recent context, 2026-04-26 9:40am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (21,787t read) | 1,478,450t work | 99% savings
+Stats: 50 obs (21,005t read) | 1,508,621t work | 99% savings
 
 ### Apr 24, 2026
 S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
 S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
-1882 8:45p 🔵 Opengrep Scan Failure — "Scanner Completion Summary Not Observed" Error
-1884 8:51p 🔴 Opengrep Scan Failure Fixed — Memory Limits Increased and Summary Gate Hardened
-1886 8:52p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
-1888 8:55p 🔴 Stop-Gate Review — ALLOW: Opengrep Memory Fix
-1890 8:59p 🔴 Stop-Gate Review — ALLOW for Opengrep Memory Fix
-1892 " 🔴 Stop-Gate BLOCK — scan_failed Summary Status Not Consumed by Runner
-1893 " 🔵 Opengrep Runner — scan_failed Summary Contract Gap Between Shell Script and Rust Consumer
-1894 " 🔴 Opengrep Scan — Full Fix Including stdout Recovery and Manifest-to-Config-Dir Migration
 S640 audittool_personal .gitignore Blocks .omc/skills/ via ".*/" Pattern (Apr 24, 9:16 PM)
 S636 Learner skill — codify Opengrep SIGPIPE/OOM silent failure expertise into a reusable skill file (Apr 24, 9:16 PM)
-1896 9:17p 🟣 Opengrep SIGPIPE/OOM Skill Saved to .omc/skills
-1897 9:19p 🔵 Stop-Gate Review — .omc/skills Write Counts as Edit-Producing Turn
-1900 9:22p 🔵 audittool_personal .gitignore Blocks .omc/skills/ via ".*/" Pattern
 S649 Save opengrep expertise skill + post-fix verification of scan task findings via API (Apr 24, 9:22 PM)
-1902 9:30p ✅ Opengrep SIGPIPE/OOM Skill Promoted to User-Level Directory
-1908 9:31p 🔵 OMC Skill Discovery — Flat-File vs Directory Layout for omc-learned
-1910 9:33p 🔵 Static Tasks API — Finding Schema and Severity Filtering Architecture
 S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 9:33 PM)
 S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
-1916 9:53p 🔵 Stop-Gate Review — Previous Turn Was Verification-Only, ALLOW Confirmed
-1919 9:54p 🔴 Opengrep Scan — Severity Filtering and Language-Aware Rule Loading for Batch Path
-1926 9:56p 🔵 Stop-Gate Code Review — Severity Filtering Architecture Verified Across Full Stack
-1932 10:02p 🔵 Stop-Gate Review — Opengrep WARNING Severity in Test vs ERROR-Only Backend Policy
-1933 10:03p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix (Compilation Confirmed)
-1935 10:05p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix
-1936 " 🔵 Frontend Scan Dialogs Enforce ERROR-Only Rule Loading at UI Layer
-1937 10:06p 🔵 Stop-Gate Review — ALLOW for Opengrep Batch Scan Fix
 1943 10:07p 🔵 Opengrep Scan — WARNING/INFO Findings Preserved for User Custom Rules, Filtered at Asset Source for Builtins
 1944 10:08p 🔵 Opengrep Severity Architecture — Full Stack Code Path Confirmed
 1945 10:09p 🔵 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern
@@ -553,6 +531,28 @@ S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh 
 2028 " 🔵 Stop-Gate Diff Verification — Four Files Modified Across Multiple Turns
 2031 9:08a ✅ Opengrep Resource Limits Scaled Up in backend/src/config.rs
 2033 9:10a ✅ Opengrep Error Reporting Improved — reason Field Surfaced in Failure Message
+2035 " 🔴 Opengrep Zero-Finding Scan — False Failure Fixed in docker/opengrep-scan.sh
+2039 9:11a ⚖️ Ralph Execution Plan Invoked
+2038 9:13a 🔵 Stop-Gate Review — Zero-Finding Fix Has No Dedicated Shell Script Test for the New Synthesis Branch
+2042 9:14a 🔴 Opengrep Silent Failure — Three-Tier Exit-0 Detection Logic in opengrep-scan.sh
+2067 9:16a 🔴 Opengrep Exit-0 Silent Failure — Three-Tier Detection Logic in docker/opengrep-scan.sh
+2047 9:18a ⚖️ Ralph Execution Plan Invoked
+2046 9:19a 🔵 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation Initiated
+2056 9:20a 🔴 Opengrep Empty-Result Synthesis Condition Tightened — Regex Flaw Discovered
+2060 " 🔵 Stop-Gate Review Confirmed ALLOW — Regex Singular/Plural Edge Case Remains Unresolved
+2049 9:22a 🔵 Frontend Build Passes — TypeScript, Lint, and Vite All Green
+2050 " 🔵 TopNavigation Dropdown — React forwardRef Bug Discovered in DropdownRouteLink
+2051 " 🔵 Top Navigation Dropdown Structure Confirmed via Playwright Snapshot
+2061 " 🔵 Opengrep "scanner produced no valid results" — Fix Investigation Initiated for docker/opengrep-scan.sh
+2052 9:24a 🔴 DropdownRouteLink forwardRef Fix Applied in TopNavigation.tsx
+2053 " 🔵 All 12 Navigation Tests Pass — Sidebar Removal and Top Nav Verified
+2054 " 🔵 Top Navigation Layout Geometry Confirmed — No Sidebar, Full-Width Main
+2055 " 🔵 扫描配置 Dropdown Navigation Works — Active State and Route Navigation Confirmed
+2057 9:26a 🔵 Active State Verification — scanConfig data-top-nav-active Confirmed on Detail Route
+2058 " 🔵 Mobile Navigation Confirmed — Hamburger Menu Opens Full Route Tree at 390px
+2059 " 🟣 Sidebar-to-TopNavigation Migration Complete — Full Implementation Summary
+2062 9:27a ⚖️ Frontend Top Navigation Dropdowns — Final Architecture Verification APPROVE
+2071 9:36a ⚖️ Opengrep Exit-0 Silent Failure — Stop-Gate Review ALLOW
 
-Access 1478k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1509k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

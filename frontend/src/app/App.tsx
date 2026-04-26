@@ -1,22 +1,16 @@
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
-import Sidebar from "@/components/layout/Sidebar";
+import TopNavigation from "@/components/layout/TopNavigation";
 import routes from "./routes";
 import NotFound from "@/pages/NotFound";
 import TaskRouteFallback from "@/components/performance/TaskRouteFallback";
 
 function AppLayout() {
-    const [collapsed, setCollapsed] = useState(false);
-
     return (
-        <div className="min-h-screen gradient-bg">
-            <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-            <main
-                className={`transition-all duration-300 min-h-screen ${
-                    collapsed ? "md:ml-20" : "md:ml-64"
-                }`}
-            >
+        <div className="flex min-h-screen flex-col gradient-bg">
+            <TopNavigation />
+            <main className="flex-1">
                 <Outlet />
             </main>
         </div>

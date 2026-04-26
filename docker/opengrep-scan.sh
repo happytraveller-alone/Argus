@@ -321,9 +321,12 @@ if ! results_json_ready "$output_path" && [ "$status" -eq 0 ]; then
     printf 'SIGPIPE detected: opengrep RPC subprocess likely killed by OOM\n' >> "$log_path"
     printf 'Rule count and memory limit may be insufficient\n' >> "$log_path"
     status=141
-  else
+  elif grep -qE "Ran .* rules? on .* files?: 0 finding" "$stdout_capture" 2>/dev/null; then
     printf '{"results":[]}\n' > "$output_path"
-    printf 'opengrep exited 0 with no findings; synthesized empty results\n' >> "$log_path"
+    printf 'opengrep exited 0 with 0 findings; synthesized empty results\n' >> "$log_path"
+  else
+    printf 'opengrep exited 0 but produced no valid output\n' >> "$log_path"
+    status=1
   fi
 fi
 

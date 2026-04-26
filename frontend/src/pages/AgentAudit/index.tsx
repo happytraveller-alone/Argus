@@ -1,4 +1,4 @@
-import { Zap, Bot, ArrowRight } from "lucide-react";
+import { ArrowRight, Bot, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
 
@@ -6,7 +6,8 @@ type HomeScanCard = {
   key: "static" | "agent";
   title: string;
   intro: string;
-  icon: typeof Zap;
+  detail: string;
+  icon: typeof ShieldCheck;
   targetRoute: string;
 };
 
@@ -15,15 +16,17 @@ const homeScanCards: HomeScanCard[] = [
     key: "static",
     title: "静态审计",
     intro: "规则驱动漏洞检测",
-    icon: Zap,
-    targetRoute: "/tasks/static?openCreate=1&source=home-card",
+    detail: "适合快速扫描代码仓库，按规则定位高风险缺陷与配置问题。",
+    icon: ShieldCheck,
+    targetRoute: "/tasks/static?openCreate=1&source=home-static",
   },
   {
     key: "agent",
     title: "智能审计",
     intro: "AI Agent 代码推理",
+    detail: "适合复杂业务链路分析，让审计智能体追踪上下文并输出可复核证据。",
     icon: Bot,
-    targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
+    targetRoute: "/tasks/intelligent?openCreate=1&source=home-agent",
   },
 ];
 
@@ -32,54 +35,17 @@ export function HomeScanCards() {
   const { logoSrc } = useLogoVariant();
 
   return (
-    <div className="min-h-[100dvh] relative overflow-hidden">
-      <div className="absolute inset-0 z-10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.22),_transparent_55%),linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.98))]" />
-
-      <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none min-h-[100dvh] flex flex-col">
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="mb-12 flex items-center justify-center gap-5">
-            <div
-              className="
-                w-20 h-20 rounded-3xl
-                border border-primary/40 bg-primary/10
-                flex items-center justify-center
-                shadow-[0_0_50px_rgba(59,130,246,0.5)]
-              "
-            >
-              <img
-                src={logoSrc}
-                alt="Argus"
-                className="w-16 h-16 object-contain"
-              />
-            </div>
-
-            <h1 className="text-6xl font-bold tracking-wider font-mono">
-              Argus
-            </h1>
-          </div>
-
-          <div className="mb-14">
-            <button
-              onClick={() =>
-                navigate("/tasks/intelligent?openCreate=1&source=home-primary")
-              }
-              className="
-                pointer-events-auto
-                group relative px-14 py-5 text-xl font-bold text-white rounded-2xl
-                bg-gradient-to-r from-blue-500 to-indigo-600
-                shadow-[0_0_35px_rgba(59,130,246,0.7)]
-                transition hover:scale-105 hover:shadow-[0_0_60px_rgba(59,130,246,0.9)]
-              "
-            >
-              <span className="flex items-center gap-3 justify-center">
-                一键开始安全审计
-                <ArrowRight className="w-6 h-6 transition group-hover:translate-x-1" />
-              </span>
-            </button>
-          </div>
+    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(8,18,36,0.96)_48%,rgba(0,0,0,0.98))]">
+      <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-[1180px] grid-cols-1 items-center gap-10 px-6 py-14 md:grid-cols-2 lg:px-10">
+        <div className="flex items-center justify-center">
+          <img
+            src={logoSrc}
+            alt="Argus"
+            className="w-full max-w-[26rem] object-contain sm:max-w-[30rem] lg:max-w-none"
+          />
         </div>
 
-        <div className="pb-20 grid md:grid-cols-2 gap-6 max-w-3xl mx-auto w-full">
+        <div className="grid gap-5">
           {homeScanCards.map((card) => {
             const Icon = card.icon;
 
@@ -89,23 +55,37 @@ export function HomeScanCards() {
                 onClick={() => navigate(card.targetRoute)}
                 className="
                   pointer-events-auto
-                  group relative backdrop-blur-sm
-                  border bg-card/60 border-border hover:bg-card
-                  rounded-xl p-6 text-left transition
-                  hover:border-primary/50 hover:bg-white/10 hover:-translate-y-1
+                  group relative overflow-hidden rounded-md border border-white/15
+                  bg-white/[0.07] p-6 text-left shadow-[0_18px_54px_rgba(0,0,0,0.34)]
+                  backdrop-blur-xl transition duration-300
+                  hover:-translate-y-1 hover:border-primary/55 hover:bg-white/[0.11]
+                  hover:shadow-[0_22px_70px_rgba(14,165,233,0.18)]
+                  focus-visible:outline-none focus-visible:shadow-focus
                 "
               >
-                <ArrowRight className="absolute right-4 top-4 w-4 h-4 opacity-0 transition group-hover:opacity-100 group-hover:translate-x-1 text-primary" />
+                <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-80" />
+                <span className="pointer-events-none absolute -right-16 -top-16 h-36 w-36 rounded-full bg-primary/10 blur-3xl transition group-hover:bg-primary/20" />
 
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-md bg-primary/10 text-primary">
-                    <Icon className="w-5 h-5" />
+                <div className="relative flex items-start justify-between gap-5">
+                  <div className="flex min-w-0 gap-4">
+                    <span className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/15 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-2xl font-semibold leading-tight text-foreground">
+                        {card.title}
+                      </span>
+                      <span className="mt-1 block font-mono text-sm text-primary">
+                        {card.intro}
+                      </span>
+                    </span>
                   </div>
-
-                  <h3 className="font-semibold text-lg">{card.title}</h3>
+                  <ArrowRight className="mt-2 h-6 w-6 shrink-0 text-primary transition duration-300 group-hover:translate-x-1" />
                 </div>
 
-                <p className="text-sm text-foreground/70">{card.intro}</p>
+                <p className="relative mt-5 max-w-xl text-base leading-7 text-foreground/70">
+                  {card.detail}
+                </p>
               </button>
             );
           })}
