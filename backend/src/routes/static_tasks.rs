@@ -1971,8 +1971,8 @@ rules:
             spec.completion_summary_path.as_deref(),
             Some("output/summary-001.json")
         );
-        assert_eq!(spec.memory_limit_mb, Some(4096));
-        assert_eq!(spec.memory_swap_limit_mb, Some(4096));
+        assert_eq!(spec.memory_limit_mb, Some(2048));
+        assert_eq!(spec.memory_swap_limit_mb, Some(2048));
         assert_eq!(spec.cpu_limit, Some(8.0));
         assert_eq!(spec.pids_limit, Some(512));
         assert_eq!(spec.timeout_seconds, 0);

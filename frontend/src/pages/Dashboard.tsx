@@ -291,7 +291,7 @@ export default function Dashboard() {
 	});
 
 	return (
-		<div className="min-h-screen space-y-6 bg-background p-6 font-mono relative xl:flex xl:h-[100dvh] xl:min-h-0 xl:flex-col xl:overflow-hidden">
+		<div className="min-h-screen bg-background px-6 pb-6 pt-0 font-mono relative xl:flex xl:h-[100dvh] xl:min-h-0 xl:flex-col xl:overflow-hidden">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
 			<DeferredSection className="xl:min-h-0 xl:flex-1" minHeight={960} priority>

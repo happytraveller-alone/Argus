@@ -229,6 +229,91 @@ fn opengrep_scan_recovers_results_from_mixed_output_file() {
 }
 
 #[test]
+fn opengrep_scan_synthesizes_empty_results_from_zero_finding_log() {
+    let fixture = ScriptFixture::new();
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("FAKE_OPENGREP_SKIP_OUTPUT", "1")
+        .env("FAKE_OPENGREP_ZERO_FINDINGS_STDERR", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should treat a completed zero-finding scan as success\nstdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    assert_eq!(
+        fs::read_to_string(&fixture.output_path).expect("empty results"),
+        "{\"results\":[]}\n"
+    );
+}
+
+#[test]
+fn opengrep_scan_splits_rule_batches_after_missing_output_failure() {
+    let fixture = ScriptFixture::new();
+    fixture.write_rule("rules_opengrep/one.yml");
+    fixture.write_rule("rules_opengrep/two.yml");
+    fixture.write_rule("rules_opengrep/three.yml");
+
+    let output = Command::new("bash")
+        .arg(&fixture.script_path)
+        .arg("--target")
+        .arg(&fixture.target_dir)
+        .arg("--output")
+        .arg(&fixture.output_path)
+        .arg("--summary")
+        .arg(&fixture.summary_path)
+        .arg("--log")
+        .arg(&fixture.log_path)
+        .env("PATH", &fixture.path_env)
+        .env("OPENGREP_RULES_ROOT", &fixture.rules_root)
+        .env("OPENGREP_SCAN_BATCH_SIZE", "2")
+        .env("FAKE_OPENGREP_BATCH_FAIL_ON_MULTI", "1")
+        .output()
+        .expect("run opengrep-scan");
+
+    assert!(
+        output.status.success(),
+        "script should recover by splitting failed rule batches\nstatus={:?}\nsummary={}\nlog={}\nstdout={}\nstderr={}",
+        output.status.code(),
+        fs::read_to_string(&fixture.summary_path).unwrap_or_default(),
+        fs::read_to_string(&fixture.log_path).unwrap_or_default(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(fs::read_to_string(&fixture.summary_path)
+        .expect("summary")
+        .contains("\"status\":\"scan_completed\""));
+    let results = fs::read_to_string(&fixture.output_path).expect("merged results");
+    assert_eq!(results.matches("\"check_id\"").count(), 3, "{results}");
+    let log = fs::read_to_string(&fixture.log_path).expect("log");
+    assert!(
+        log.contains("retrying opengrep scan in rule batches"),
+        "{log}"
+    );
+    assert!(
+        log.contains("merged opengrep JSON results from 3 rule batches"),
+        "{log}"
+    );
+}
+
+#[test]
 fn opengrep_scan_uses_primary_output_file_contract() {
     let fixture = ScriptFixture::new();
     let args_path = fixture._temp_dir.path().join("args.txt");
@@ -304,17 +389,39 @@ if [ -n "${FAKE_OPENGREP_ARGS_PATH:-}" ]; then
   printf ' %s ' "$*" > "$FAKE_OPENGREP_ARGS_PATH"
 fi
 output_path=""
+config_paths=()
+prev=""
 while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --output|--json-output)
-      output_path="${2:?missing output}"
-      shift 2
+  case "$prev" in
+    output)
+      output_path="$1"
+      prev=""
       ;;
-    *)
-      shift
+    config)
+      config_paths+=("$1")
+      prev=""
       ;;
   esac
+  case "$1" in
+    --output|--json-output) prev="output" ;;
+    --config) prev="config" ;;
+  esac
+  shift
 done
+rule_file_count=0
+for config_path in "${config_paths[@]}"; do
+  if [ -d "$config_path" ]; then
+    while IFS= read -r _rule_file; do
+      rule_file_count=$((rule_file_count + 1))
+    done < <(find "$config_path" -type f \( -name '*.yml' -o -name '*.yaml' \))
+  elif [ -f "$config_path" ]; then
+    rule_file_count=$((rule_file_count + 1))
+  fi
+done
+if [ "${FAKE_OPENGREP_BATCH_FAIL_ON_MULTI:-0}" = "1" ] && [ "$rule_file_count" -gt 1 ]; then
+  printf '%s\n' 'opengrep-core exited with -9!' >&2
+  exit 2
+fi
 if [ "${FAKE_OPENGREP_STDOUT_JSON_ONLY:-0}" = "1" ]; then
   printf '%s\n' '{"results":[]}'
 elif [ "${FAKE_OPENGREP_MIXED_STDOUT_JSON:-0}" = "1" ]; then
@@ -325,6 +432,8 @@ elif [ "${FAKE_OPENGREP_LOG_JSON_ONLY:-0}" = "1" ]; then
   printf '%s\n' 'scan banner before json' >&2
   printf '%s\n' '{"results":[]}' >&2
   printf '%s\n' 'scan summary after json' >&2
+elif [ "${FAKE_OPENGREP_ZERO_FINDINGS_STDERR:-0}" = "1" ]; then
+  printf '%s\n' 'Ran 1 rule on 1 file: 0 findings.' >&2
 else
   for i in $(seq 1 5000); do
     printf 'scanner line %s\n' "$i"
@@ -336,6 +445,9 @@ if [ "${FAKE_OPENGREP_SKIP_OUTPUT:-0}" != "1" ]; then
     printf '%s\n' 'scan banner before json' > "$output_path"
     printf '%s\n' '{"results":[]}' >> "$output_path"
     printf '%s\n' 'scan summary after json' >> "$output_path"
+  elif [ "${FAKE_OPENGREP_BATCH_FAIL_ON_MULTI:-0}" = "1" ]; then
+    mkdir -p "$(dirname "$output_path")"
+    printf '{"results":[{"check_id":"fake-rule-%s","path":"src/main.py","start":{"line":1},"end":{"line":1},"extra":{"message":"demo","severity":"WARNING"}}]}\n' "$rule_file_count" > "$output_path"
   else
     printf '%s\n' '{"results":[]}' > "$output_path"
   fi
@@ -370,6 +482,18 @@ exit "${FAKE_OPENGREP_EXIT:-0}"
 
     fn stdout_capture_path(&self) -> std::path::PathBuf {
         std::path::PathBuf::from(format!("{}.stdout", self.output_path.display()))
+    }
+
+    fn write_rule(&self, relative_path: &str) {
+        let path = self.rules_root.join(relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("mkdir rule parent");
+        }
+        fs::write(
+            path,
+            "rules:\n  - id: fake\n    languages: [python]\n    message: fake\n    severity: WARNING\n    pattern: dangerous_call($X)\n",
+        )
+        .expect("write rule");
     }
 }
 

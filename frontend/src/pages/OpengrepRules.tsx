@@ -1491,7 +1491,7 @@ export default function OpengrepRules({
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">有效规则总数</p>
+									<p className="stat-label">规则数量</p>
 									<div className="flex items-end gap-3">
 										<p className="stat-value min-h-[2.5rem]">
 											{formatRuleStatValue(ruleStats.total)}
@@ -1507,7 +1507,7 @@ export default function OpengrepRules({
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">支持编程语言个数</p>
+									<p className="stat-label">覆盖语言</p>
 									<p className="stat-value min-h-[2.5rem]">
 										{formatRuleStatValue(ruleStats.languageCount)}
 									</p>
@@ -1521,7 +1521,7 @@ export default function OpengrepRules({
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">支持漏洞类型数量</p>
+									<p className="stat-label">覆盖漏洞类型</p>
 									<p className="stat-value min-h-[2.5rem]">
 										{formatRuleStatValue(ruleStats.vulnerabilityTypeCount)}
 									</p>
