@@ -1,10 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
+
+const frontendDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const taskActivitiesListTablePath = path.join(
+  frontendDir,
+  "src/features/tasks/components/TaskActivitiesListTable.tsx",
+);
+
+test("TaskActivitiesListTable disables the empty DataTable toolbar above headers", () => {
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+
+  assert.match(source, /toolbar=\{false\}/);
+  assert.doesNotMatch(source, /showGlobalSearch:\s*false[\s\S]{0,220}filters:\s*\[\]/);
+});
+
+test("TaskActivitiesListTable aligns all header font sizes with the row-number header", () => {
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+
+  assert.match(
+    source,
+    /const TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME = "text-sm"/,
+  );
+  assert.equal(
+    source.match(/meta: createTaskActivitiesTableMeta/g)?.length,
+    7,
+  );
+});
 
 test("TaskActivitiesListTable renders severity summaries for agent tasks and keeps static summaries", async () => {
   const tableModule = await import(

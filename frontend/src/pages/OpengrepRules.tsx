@@ -1543,7 +1543,7 @@ export default function OpengrepRules({
 						))}
 					</div>
 
-					<div className="cyber-card relative z-10 overflow-hidden">
+					<div className="cyber-card cyber-card-flat relative z-10 overflow-hidden">
 						{generatingRules.size > 0 && (
 							<div className="border-b border-cyan-500/30 bg-background/70">
 								<div className="space-y-4 p-4">

@@ -36,6 +36,7 @@ test("scan engine rule stats use dashboard compact summary card tokens", () => {
 	assert.doesNotMatch(statsSection, /cyber-card p-4/);
 	assert.doesNotMatch(statsSection, /stat-icon/);
 	assert.doesNotMatch(statsSection, /stat-value/);
+	assert.match(source, /cyber-card cyber-card-flat relative z-10 overflow-hidden/);
 });
 
 test("intelligent engine summary cards mirror dashboard card typography", () => {
@@ -56,4 +57,5 @@ test("intelligent engine summary cards mirror dashboard card typography", () => 
 	assert.doesNotMatch(source, /text-2xl/);
 	assert.doesNotMatch(source, /h-14 w-14/);
 	assert.doesNotMatch(source, /from "lucide-react";[\s\S]*Brain/);
+	assert.match(source, /cardClassName="cyber-card-flat"/);
 });

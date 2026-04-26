@@ -27,6 +27,17 @@ interface TaskActivitiesListTableProps {
 	pageSize?: number;
 }
 
+const TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME = "text-sm";
+
+function createTaskActivitiesTableMeta(
+	meta: AppColumnDef<TaskActivityItem, unknown>["meta"],
+) {
+	return {
+		headerContentClassName: TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME,
+		...meta,
+	};
+}
+
 function getDefectSummaryLabel(activity: TaskActivityItem): string {
 	if (activity.agentFindingStats) {
 		const { critical, high, medium, low } = activity.agentFindingStats;
@@ -48,11 +59,11 @@ function getColumns(
 			id: "rowNumber",
 			header: "序号",
 			enableSorting: false,
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "序号",
 				align: "center",
 				width: 80,
-			},
+			}),
 			cell: ({ row, table }) => {
 				const pageRowIndex = table
 					.getRowModel()
@@ -68,11 +79,11 @@ function getColumns(
 		{
 			accessorKey: "projectName",
 			header: "项目",
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "项目",
 				minWidth: 160,
 				filterVariant: "text",
-			},
+			}),
 			cell: ({ row }) => (
 				<span className="font-medium text-foreground">
 					{row.original.projectName}
@@ -84,10 +95,10 @@ function getColumns(
 			accessorFn: (row) => row.createdAt,
 			header: "创建时间",
 			sortingFn: "datetime",
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "创建时间",
 				minWidth: 180,
-			},
+			}),
 			cell: ({ row }) => (
 				<div className="text-base text-muted-foreground">
 					<div>
@@ -101,10 +112,10 @@ function getColumns(
 			id: "duration",
 			accessorFn: (row) => getActivityDurationLabel(row, nowMs),
 			header: "用时",
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "用时",
 				width: 120,
-			},
+			}),
 			cell: ({ row }) => {
 				const rawDuration = getActivityDurationLabel(row.original, nowMs);
 				const durationText = rawDuration
@@ -118,7 +129,7 @@ function getColumns(
 		{
 			accessorKey: "status",
 			header: "状态",
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "状态",
 				minWidth: 170,
 				filterVariant: "select",
@@ -128,7 +139,7 @@ function getColumns(
 					{ label: "已完成", value: "completed" },
 					{ label: "失败", value: "failed" },
 				],
-			},
+			}),
 			cell: ({ row }) => {
 				const status = String(row.original.status || "")
 					.trim()
@@ -157,10 +168,10 @@ function getColumns(
 			id: "defects",
 			accessorFn: (row) => getDefectSummaryLabel(row),
 			header: "缺陷摘要",
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "缺陷摘要",
 				minWidth: 200,
-			},
+			}),
 			cell: ({ row }) => {
 				const summary = getDefectSummaryLabel(row.original);
 				if (summary === "-") return "-";
@@ -175,10 +186,10 @@ function getColumns(
 			id: "actions",
 			header: "操作",
 			enableSorting: false,
-			meta: {
+			meta: createTaskActivitiesTableMeta({
 				label: "操作",
 				width: 120,
-			},
+			}),
 			cell: ({ row }) => (
 				<Button
 					asChild
@@ -231,13 +242,7 @@ export default function TaskActivitiesListTable({
 					emptyState={{
 						title: emptyText,
 					}}
-					toolbar={{
-						showGlobalSearch: false,
-						showColumnVisibility: false,
-						showDensityToggle: false,
-						showReset: false,
-						filters: [],
-					}}
+					toolbar={false}
 					pagination={{
 						enabled: true,
 						pageSizeOptions: [10, 20, 50],

@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	Activity,
 	BarChart3,
 	Boxes,
 	Bug,
-	ChevronLeft,
 	ChevronRight,
-	Eye,
 	ListOrdered,
 } from "lucide-react";
 import {
@@ -21,13 +19,12 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
-import { Button } from "@/components/ui/button";
 import {
 	Tooltip as UiTooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
+import { Badge } from "@/components/ui/badge";
 import type {
 	DashboardDailyActivityItem,
 	DashboardLanguageLocItem,
@@ -75,7 +72,7 @@ interface DashboardViewMeta {
 }
 
 interface TaskStatusRow {
-	key: "completed" | "running" | "failed" | "interrupted" | "cancelled";
+	key: "completed" | "running" | "failed" | "interrupted";
 	label: string;
 	value: number;
 	tone: Tone;
@@ -188,7 +185,7 @@ export const TOP_STATS_GRID_CLASSNAME =
 	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
 	"grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:min-h-0 xl:flex-1";
-export const DASHBOARD_RECENT_TASKS_PAGE_SIZE = 4;
+export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";
 const DASHBOARD_PANEL_TITLE_CLASSNAME =
@@ -199,6 +196,14 @@ const DASHBOARD_META_LABEL_CLASSNAME =
 	"text-left text-xs uppercase tracking-[0.18em] text-muted-foreground";
 const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
+const TASK_STATUS_CARD_GRID_CLASSNAME =
+	"mt-3 grid grid-cols-4 gap-3 overflow-x-auto";
+const TASK_STATUS_CARD_CLASSNAME =
+	"min-w-[8.5rem] rounded-sm border border-border/70 bg-background/70 px-4 py-3 text-left transition hover:border-border hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
+const RECENT_TASK_CARD_GRID_CLASSNAME =
+	"mt-4 grid grid-cols-3 gap-3 overflow-x-auto";
+const RECENT_TASK_CARD_CLASSNAME =
+	"min-w-[16rem] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition hover:border-border/80 hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
 const DASHBOARD_TOOLTIP_STYLE = {
 	backgroundColor: "hsl(var(--card))",
 	borderColor: "hsl(var(--border))",
@@ -496,44 +501,59 @@ function buildRowsForView(
 	return [];
 }
 
-function buildTaskStatusRows(snapshot: DashboardSnapshotResponse) {
+function combineScanTypeBreakdowns(
+	...items: DashboardTaskStatusScanTypeBreakdown[]
+): DashboardTaskStatusScanTypeBreakdown {
+	return items.reduce(
+		(total, item) => ({
+			static: total.static + Math.max(Number(item.static || 0), 0),
+			intelligent:
+				total.intelligent + Math.max(Number(item.intelligent || 0), 0),
+		}),
+		{ static: 0, intelligent: 0 },
+	);
+}
+
+export function buildTaskStatusCards(snapshot: DashboardSnapshotResponse) {
+	const breakdown = snapshot.task_status_breakdown;
+	const scanTypeBreakdown = snapshot.task_status_by_scan_type;
+
 	return [
 		{
 			key: "completed" as const,
-			label: "已完成",
-			value: snapshot.task_status_breakdown.completed,
+			label: "已完成任务",
+			value: breakdown.completed,
 			tone: "low" as Tone,
-			scanTypeBreakdown: snapshot.task_status_by_scan_type.completed,
+			scanTypeBreakdown: scanTypeBreakdown.completed,
 		},
 		{
 			key: "running" as const,
-			label: "运行中",
-			value: snapshot.task_status_breakdown.running,
+			label: "进行中任务",
+			value: breakdown.running + breakdown.pending,
 			tone: "neutral" as Tone,
-			scanTypeBreakdown: snapshot.task_status_by_scan_type.running,
+			scanTypeBreakdown: combineScanTypeBreakdowns(
+				scanTypeBreakdown.running,
+				scanTypeBreakdown.pending,
+			),
 		},
 		{
 			key: "failed" as const,
-			label: "失败",
-			value: snapshot.task_status_breakdown.failed,
+			label: "报错任务",
+			value: breakdown.failed,
 			tone: "critical" as Tone,
-			scanTypeBreakdown: snapshot.task_status_by_scan_type.failed,
+			scanTypeBreakdown: scanTypeBreakdown.failed,
 		},
 		{
 			key: "interrupted" as const,
-			label: "已中断",
-			value: snapshot.task_status_breakdown.interrupted,
+			label: "中断任务",
+			value: breakdown.interrupted + breakdown.cancelled,
 			tone: "high" as Tone,
-			scanTypeBreakdown: snapshot.task_status_by_scan_type.interrupted,
+			scanTypeBreakdown: combineScanTypeBreakdowns(
+				scanTypeBreakdown.interrupted,
+				scanTypeBreakdown.cancelled,
+			),
 		},
-		{
-			key: "cancelled" as const,
-			label: "已取消",
-			value: snapshot.task_status_breakdown.cancelled,
-			tone: "medium" as Tone,
-			scanTypeBreakdown: snapshot.task_status_by_scan_type.cancelled,
-		},
-	].filter((item): item is TaskStatusRow => item.value > 0);
+	] satisfies TaskStatusRow[];
 }
 
 function buildTaskStatusTooltipAriaLabel(row: TaskStatusRow) {
@@ -601,7 +621,7 @@ export function getRecentTaskProjectTitle(
 	return segments[segments.length - 1]?.trim() || title;
 }
 
-function normalizeRecentTaskTypeLabel(
+export function normalizeRecentTaskTypeLabel(
 	taskType: string | null | undefined,
 ): string {
 	const normalized = String(taskType || "").trim();
@@ -611,34 +631,52 @@ function normalizeRecentTaskTypeLabel(
 	return normalized || "静态审计";
 }
 
-export function paginateRecentTasks(
-	tasks: DashboardRecentTaskItem[],
-	requestedPage: number,
-) {
-	const totalCount = tasks.length;
-	const totalPages = Math.max(
-		1,
-		Math.ceil(totalCount / DASHBOARD_RECENT_TASKS_PAGE_SIZE),
-	);
-	const currentPage = Math.min(
-		Math.max(Math.floor(Number(requestedPage) || 1), 1),
-		totalPages,
-	);
-	const startIndex = (currentPage - 1) * DASHBOARD_RECENT_TASKS_PAGE_SIZE;
+export function normalizeRecentTaskStatusLabel(
+	status: string | null | undefined,
+): "完成" | "进行" | "中断" | "异常" {
+	const normalized = String(status || "").trim().toLowerCase();
+	if (normalized === "completed" || normalized === "success") {
+		return "完成";
+	}
+	if (
+		normalized === "running" ||
+		normalized === "pending" ||
+		normalized === "queued" ||
+		normalized === "created"
+	) {
+		return "进行";
+	}
+	if (normalized === "interrupted" || normalized === "cancelled") {
+		return "中断";
+	}
+	return "异常";
+}
 
-	return {
-		items: tasks.slice(
-			startIndex,
-			startIndex + DASHBOARD_RECENT_TASKS_PAGE_SIZE,
-		),
-		currentPage,
-		totalPages,
-		totalCount,
-	};
+export function getRecentTaskTypeBadgeClassName(
+	taskType: string | null | undefined,
+): string {
+	return normalizeRecentTaskTypeLabel(taskType) === "智能审计"
+		? "cyber-badge-primary"
+		: "cyber-badge-info";
+}
+
+export function getRecentTaskProgressBadgeClassName(
+	status: string | null | undefined,
+): string {
+	const progress = normalizeRecentTaskStatusLabel(status);
+	if (progress === "完成") return "cyber-badge-success";
+	if (progress === "进行") return "cyber-badge-info";
+	if (progress === "中断") return "cyber-badge-warning";
+	return "cyber-badge-danger";
+}
+
+export function getRecentTaskCards(tasks: DashboardRecentTaskItem[]) {
+	return tasks.slice(0, DASHBOARD_RECENT_TASKS_LIMIT);
 }
 
 function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	const totalTasks =
+		snapshot.task_status_breakdown.pending +
 		snapshot.task_status_breakdown.completed +
 		snapshot.task_status_breakdown.running +
 		snapshot.task_status_breakdown.failed +
@@ -756,17 +794,8 @@ function TaskStatusPanel({
 }: {
 	snapshot: DashboardSnapshotResponse;
 }) {
-	const statusRows = buildTaskStatusRows(snapshot);
-	const total = statusRows.reduce((sum, item) => sum + item.value, 0);
-	const [recentTasksPage, setRecentTasksPage] = useState(1);
-	const recentTasksPagination = useMemo(
-		() => paginateRecentTasks(snapshot.recent_tasks, recentTasksPage),
-		[snapshot.recent_tasks, recentTasksPage],
-	);
-
-	useEffect(() => {
-		setRecentTasksPage(1);
-	}, [snapshot.recent_tasks]);
+	const statusCards = buildTaskStatusCards(snapshot);
+	const recentTasks = getRecentTaskCards(snapshot.recent_tasks);
 
 	return (
 		<section
@@ -778,158 +807,99 @@ function TaskStatusPanel({
 					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>任务状态</h2>
 				</div>
 			</div>
-			<div className="mt-3 space-y-3">
-				{statusRows.length === 0 ? (
-					<p className="text-sm text-muted-foreground">暂无任务状态数据</p>
-				) : (
-					statusRows.map((item) => {
-						const tone = TONE_STYLES[item.tone];
-						const width =
-							total > 0 ? Math.max((item.value / total) * 100, 8) : 0;
-						return (
-							<div key={item.label} className="space-y-2">
-								<div className="flex items-center justify-between gap-3 text-sm">
-									<UiTooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												aria-label={buildTaskStatusTooltipAriaLabel(item)}
-												className="inline-flex items-center rounded-sm border border-border/70 bg-muted/20 px-2.5 py-1 text-left text-foreground transition hover:bg-muted/40 focus-visible:border-foreground/50 focus-visible:bg-muted/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2"
-											>
-												{item.label}
-											</button>
-										</TooltipTrigger>
-										<TooltipContent
-											side="top"
-											align="start"
-											sideOffset={6}
-											className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
+			<div className={TASK_STATUS_CARD_GRID_CLASSNAME}>
+				{statusCards.map((item) => {
+					const tone = TONE_STYLES[item.tone];
+					return (
+						<UiTooltip key={item.key}>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									aria-label={buildTaskStatusTooltipAriaLabel(item)}
+									className={TASK_STATUS_CARD_CLASSNAME}
+								>
+									<div className="flex items-start justify-between gap-3">
+										<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
+											{item.label}
+										</div>
+										<div
+											className={`text-right text-xl font-semibold tabular-nums ${tone.text}`}
 										>
-											<TaskStatusTooltipContent row={item} />
-										</TooltipContent>
-									</UiTooltip>
-									<UiTooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												aria-label={buildTaskStatusTooltipAriaLabel(item)}
-												className={`rounded-sm border border-transparent px-2 py-1 font-medium transition hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2 ${tone.text}`}
-											>
-												{formatNumber(item.value)}
-											</button>
-										</TooltipTrigger>
-										<TooltipContent
-											side="top"
-											align="end"
-											sideOffset={6}
-											className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
-										>
-											<TaskStatusTooltipContent row={item} />
-										</TooltipContent>
-									</UiTooltip>
-								</div>
-								<div className="h-3 rounded-full bg-muted/70">
-									<div
-										className={`h-3 rounded-full ${tone.bar}`}
-										style={{ width: `${width}%` }}
-									/>
-								</div>
-							</div>
-						);
-					})
-				)}
+											{formatNumber(item.value)}
+										</div>
+									</div>
+									<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+										<span>
+											静态 {formatNumber(item.scanTypeBreakdown.static)}
+										</span>
+										<span>
+											智能 {formatNumber(item.scanTypeBreakdown.intelligent)}
+										</span>
+									</div>
+								</button>
+							</TooltipTrigger>
+							<TooltipContent
+								side="top"
+								align="start"
+								sideOffset={6}
+								className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
+							>
+								<TaskStatusTooltipContent row={item} />
+							</TooltipContent>
+						</UiTooltip>
+					);
+				})}
 			</div>
 			<div className="mt-8 flex items-start justify-between gap-6">
 				<div>
 					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>最近任务</h2>
 				</div>
 			</div>
-			<div className="mt-1 border-t border-border/70 pt-5 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
-				<div className="space-y-3">
-					{recentTasksPagination.items.length === 0 ? (
-						<p className="rounded-sm border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
-							暂无最近任务
-						</p>
-					) : (
-						recentTasksPagination.items.map((task) => (
+			<div className="mt-1 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+				{recentTasks.length === 0 ? (
+					<p className="rounded-sm border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+						暂无最近任务
+					</p>
+				) : (
+					<div className={RECENT_TASK_CARD_GRID_CLASSNAME}>
+						{recentTasks.map((task) => (
 							<RecentTaskCard key={task.task_id} task={task} />
-						))
-					)}
-				</div>
-				{recentTasksPagination.totalPages > 1 ? (
-					<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="cyber-btn-outline h-8 px-3"
-							onClick={() =>
-								setRecentTasksPage((page) => Math.max(page - 1, 1))
-							}
-							disabled={recentTasksPagination.currentPage <= 1}
-						>
-							<ChevronLeft className="h-4 w-4" />
-							上一页
-						</Button>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="cyber-btn-outline h-8 px-3"
-							onClick={() =>
-								setRecentTasksPage((page) =>
-									Math.min(page + 1, recentTasksPagination.totalPages),
-								)
-							}
-							disabled={
-								recentTasksPagination.currentPage >=
-								recentTasksPagination.totalPages
-							}
-						>
-							下一页
-							<ChevronRight className="h-4 w-4" />
-						</Button>
+						))}
 					</div>
-				) : null}
+				)}
 			</div>
 		</section>
 	);
 }
 
 function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
-	const progress = getEstimatedTaskProgressPercent({
-		status: task.status,
-		createdAt: task.created_at,
-	});
 	const projectTitle = getRecentTaskProjectTitle(task);
+	const statusLabel = normalizeRecentTaskStatusLabel(task.status);
+	const typeLabel = normalizeRecentTaskTypeLabel(task.task_type);
+	const typeBadgeClassName = getRecentTaskTypeBadgeClassName(task.task_type);
+	const progressBadgeClassName = getRecentTaskProgressBadgeClassName(task.status);
 	return (
-		<div className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}>
-			<div className="flex items-start justify-between gap-1">
-				<div className="min-w-0">
-					<p className="truncate text-xs text-muted-foreground">
+		<a
+			href={task.detail_path || "/tasks/static"}
+			aria-label={`查看 ${projectTitle} 详情`}
+			title={`查看 ${projectTitle} 详情`}
+			className={RECENT_TASK_CARD_CLASSNAME}
+		>
+			<div className="flex items-center justify-between gap-3">
+				<div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+					<Badge className="cyber-badge cyber-badge-muted min-w-0 max-w-full flex-1 truncate normal-case tracking-normal">
 						{projectTitle}
-					</p>
+					</Badge>
+					<Badge className={`cyber-badge shrink-0 ${typeBadgeClassName}`}>
+						{typeLabel}
+					</Badge>
+					<Badge className={`cyber-badge shrink-0 ${progressBadgeClassName}`}>
+						{statusLabel}
+					</Badge>
 				</div>
-				<a
-					href={task.detail_path || "/tasks/static"}
-					aria-label={`查看 ${projectTitle} 详情`}
-					title={`查看 ${projectTitle} 详情`}
-					className="cyber-btn-outline inline-flex h-4 w-8 shrink-0 items-center justify-center px-0 text-xs"
-				>
-					<Eye className="h-3 w-4" />
-				</a>
+				<ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
 			</div>
-			<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-				<span>{normalizeRecentTaskTypeLabel(task.task_type)}</span>
-				<span>{progress}%</span>
-			</div>
-			<div className="mt-2 h-2 rounded-full bg-muted/70">
-				<div
-					className="h-2 rounded-full bg-primary/80"
-					style={{ width: `${progress}%` }}
-				/>
-			</div>
-		</div>
+		</a>
 	);
 }
 

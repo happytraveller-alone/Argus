@@ -25,7 +25,7 @@ use crate::{
         archive_content_type, list_archive_files_from_bytes, list_archive_files_from_path,
         read_archive_file_from_path, supported_archive_suffixes,
     },
-    db::projects,
+    db::{projects, task_state},
     error::ApiError,
     project_file_cache::{ProjectFileCacheEntry, ProjectFileCacheSet},
     state::{AppState, StoredProject, StoredProjectArchive},
@@ -38,6 +38,11 @@ pub struct ProjectListQuery {
     pub skip: Option<usize>,
     pub limit: Option<usize>,
     pub include_metrics: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DashboardSnapshotQuery {
+    pub top_n: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -725,11 +730,25 @@ pub async fn get_project_stats(State(state): State<AppState>) -> Result<Json<Val
 
 pub async fn get_dashboard_snapshot(
     State(state): State<AppState>,
+    Query(query): Query<DashboardSnapshotQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let items = projects::list_projects(&state)
         .await
         .map_err(internal_error)?;
     let total_projects = items.len() as i64;
+    let project_names = items
+        .iter()
+        .map(|project| (project.id.clone(), project.name.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let task_snapshot = task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    let task_status = build_dashboard_task_status(&task_snapshot);
+    let recent_tasks = build_dashboard_recent_tasks(
+        &task_snapshot,
+        &project_names,
+        query.top_n.unwrap_or(10).clamp(1, 50),
+    );
     Ok(Json(json!({
         "generated_at": now_rfc3339(),
         "total_scan_duration_ms": 0,
@@ -761,30 +780,169 @@ pub async fn get_dashboard_snapshot(
             "false_positive_count": 0
         },
         "task_status_breakdown": {
-            "pending": 0,
-            "running": 0,
-            "completed": 0,
-            "failed": 0,
-            "interrupted": 0,
-            "cancelled": 0
+            "pending": task_status.total.pending,
+            "running": task_status.total.running,
+            "completed": task_status.total.completed,
+            "failed": task_status.total.failed,
+            "interrupted": task_status.total.interrupted,
+            "cancelled": task_status.total.cancelled
         },
         "task_status_by_scan_type": {
-            "pending": {"static": 0, "intelligent": 0},
-            "running": {"static": 0, "intelligent": 0},
-            "completed": {"static": 0, "intelligent": 0},
-            "failed": {"static": 0, "intelligent": 0},
-            "interrupted": {"static": 0, "intelligent": 0},
-            "cancelled": {"static": 0, "intelligent": 0}
+            "pending": {"static": task_status.static_tasks.pending, "intelligent": task_status.intelligent.pending},
+            "running": {"static": task_status.static_tasks.running, "intelligent": task_status.intelligent.running},
+            "completed": {"static": task_status.static_tasks.completed, "intelligent": task_status.intelligent.completed},
+            "failed": {"static": task_status.static_tasks.failed, "intelligent": task_status.intelligent.failed},
+            "interrupted": {"static": task_status.static_tasks.interrupted, "intelligent": task_status.intelligent.interrupted},
+            "cancelled": {"static": task_status.static_tasks.cancelled, "intelligent": task_status.intelligent.cancelled}
         },
         "engine_breakdown": [],
         "project_hotspots": [],
         "language_risk": [],
-        "recent_tasks": [],
+        "recent_tasks": recent_tasks,
         "project_risk_distribution": [],
         "verified_vulnerability_types": [],
         "static_engine_rule_totals": [],
         "language_loc_distribution": []
     })))
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct DashboardStatusCounts {
+    pending: i64,
+    running: i64,
+    completed: i64,
+    failed: i64,
+    interrupted: i64,
+    cancelled: i64,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct DashboardTaskStatus {
+    total: DashboardStatusCounts,
+    static_tasks: DashboardStatusCounts,
+    intelligent: DashboardStatusCounts,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DashboardRecentTask {
+    task_id: String,
+    task_type: String,
+    title: String,
+    engine: String,
+    status: String,
+    created_at: String,
+    detail_path: String,
+}
+
+impl DashboardStatusCounts {
+    fn add(&mut self, status: DashboardTaskStatusBucket) {
+        match status {
+            DashboardTaskStatusBucket::Pending => self.pending += 1,
+            DashboardTaskStatusBucket::Running => self.running += 1,
+            DashboardTaskStatusBucket::Completed => self.completed += 1,
+            DashboardTaskStatusBucket::Failed => self.failed += 1,
+            DashboardTaskStatusBucket::Interrupted => self.interrupted += 1,
+            DashboardTaskStatusBucket::Cancelled => self.cancelled += 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DashboardTaskStatusBucket {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Interrupted,
+    Cancelled,
+}
+
+fn dashboard_task_status_bucket(status: &str) -> DashboardTaskStatusBucket {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "created" | "pending" | "queued" => DashboardTaskStatusBucket::Pending,
+        "running" | "in_progress" | "processing" => DashboardTaskStatusBucket::Running,
+        "completed" | "success" | "succeeded" => DashboardTaskStatusBucket::Completed,
+        "interrupted" => DashboardTaskStatusBucket::Interrupted,
+        "cancelled" | "canceled" => DashboardTaskStatusBucket::Cancelled,
+        _ => DashboardTaskStatusBucket::Failed,
+    }
+}
+
+fn build_dashboard_task_status(snapshot: &task_state::TaskStateSnapshot) -> DashboardTaskStatus {
+    let mut status = DashboardTaskStatus::default();
+
+    for record in snapshot.agent_tasks.values() {
+        let bucket = dashboard_task_status_bucket(&record.status);
+        status.total.add(bucket);
+        status.intelligent.add(bucket);
+    }
+    for record in snapshot.static_tasks.values() {
+        let bucket = dashboard_task_status_bucket(&record.status);
+        status.total.add(bucket);
+        status.static_tasks.add(bucket);
+    }
+
+    status
+}
+
+fn build_dashboard_recent_tasks(
+    snapshot: &task_state::TaskStateSnapshot,
+    project_names: &BTreeMap<String, String>,
+    limit: usize,
+) -> Vec<DashboardRecentTask> {
+    let mut tasks = Vec::new();
+
+    for record in snapshot.agent_tasks.values() {
+        let project_name = dashboard_project_name(project_names, &record.project_id);
+        tasks.push(DashboardRecentTask {
+            task_id: record.id.clone(),
+            task_type: "智能审计".to_string(),
+            title: format!("智能审计 · {project_name}"),
+            engine: "llm".to_string(),
+            status: record.status.clone(),
+            created_at: record.created_at.clone(),
+            detail_path: format!("/agent-audit/{}", record.id),
+        });
+    }
+
+    for record in snapshot.static_tasks.values() {
+        if record.engine != "opengrep" {
+            continue;
+        }
+        let project_name = dashboard_project_name(project_names, &record.project_id);
+        tasks.push(DashboardRecentTask {
+            task_id: record.id.clone(),
+            task_type: "静态审计".to_string(),
+            title: format!("静态审计 · {project_name}"),
+            engine: record.engine.clone(),
+            status: record.status.clone(),
+            created_at: record.created_at.clone(),
+            detail_path: dashboard_static_task_detail_path(record),
+        });
+    }
+
+    tasks.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| right.task_id.cmp(&left.task_id))
+    });
+
+    tasks.into_iter().take(limit).collect()
+}
+
+fn dashboard_project_name(project_names: &BTreeMap<String, String>, project_id: &str) -> String {
+    project_names
+        .get(project_id)
+        .cloned()
+        .unwrap_or_else(|| project_id.to_string())
+}
+
+fn dashboard_static_task_detail_path(record: &task_state::StaticTaskRecord) -> String {
+    format!(
+        "/static-analysis/{}?opengrepTaskId={}",
+        record.id, record.id
+    )
 }
 
 pub async fn get_static_scan_overview(

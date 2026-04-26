@@ -8,6 +8,36 @@ use std::io::Write;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
+async fn create_project_named(app: &axum::Router, name: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/projects")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": name,
+                        "source_type": "zip",
+                        "default_branch": "main",
+                        "programming_languages": []
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    payload["id"]
+        .as_str()
+        .expect("project id should exist")
+        .to_string()
+}
+
 #[tokio::test]
 async fn project_crud_and_zip_routes_work_end_to_end() {
     let config = isolated_test_config("projects-crud");
@@ -274,6 +304,139 @@ async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
     assert!(!snapshot.static_tasks.contains_key("static-target"));
     assert!(snapshot.agent_tasks.contains_key("agent-other"));
     assert!(snapshot.static_tasks.contains_key("static-other"));
+}
+
+#[tokio::test]
+async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
+    let config = isolated_test_config("projects-dashboard-task-state");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+
+    let alpha_project_id = create_project_named(&app, "Alpha Gateway").await;
+    let beta_project_id = create_project_named(&app, "Beta API").await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.agent_tasks.insert(
+        "agent-old".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-old".to_string(),
+            project_id: alpha_project_id.clone(),
+            task_type: "agent_audit".to_string(),
+            status: "running".to_string(),
+            created_at: "2026-04-24T10:00:00Z".to_string(),
+            ..Default::default()
+        },
+    );
+    snapshot.agent_tasks.insert(
+        "agent-cancelled".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-cancelled".to_string(),
+            project_id: beta_project_id.clone(),
+            task_type: "agent_audit".to_string(),
+            status: "cancelled".to_string(),
+            created_at: "2026-04-24T09:00:00Z".to_string(),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
+        "gitleaks-retired".to_string(),
+        task_state::StaticTaskRecord {
+            id: "gitleaks-retired".to_string(),
+            engine: "gitleaks".to_string(),
+            project_id: beta_project_id.clone(),
+            name: "retired gitleaks".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T13:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
+        "static-new".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-new".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: beta_project_id.clone(),
+            name: "static new".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T12:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    snapshot.static_tasks.insert(
+        "static-failed".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-failed".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: alpha_project_id.clone(),
+            name: "static failed".to_string(),
+            status: "failed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T11:00:00Z".to_string(),
+            extra: json!({}),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/projects/dashboard-snapshot?top_n=3")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    assert_eq!(payload["summary"]["total_projects"], 2);
+    assert_eq!(payload["task_status_breakdown"]["running"], 1);
+    assert_eq!(payload["task_status_breakdown"]["completed"], 2);
+    assert_eq!(payload["task_status_breakdown"]["failed"], 1);
+    assert_eq!(payload["task_status_breakdown"]["cancelled"], 1);
+    assert_eq!(
+        payload["task_status_by_scan_type"]["completed"]["static"],
+        2
+    );
+    assert_eq!(
+        payload["task_status_by_scan_type"]["running"]["intelligent"],
+        1
+    );
+    assert_eq!(payload["task_status_by_scan_type"]["failed"]["static"], 1);
+    assert_eq!(
+        payload["task_status_by_scan_type"]["cancelled"]["intelligent"],
+        1
+    );
+
+    let recent_tasks = payload["recent_tasks"].as_array().unwrap();
+    assert_eq!(recent_tasks.len(), 3);
+    assert!(recent_tasks
+        .iter()
+        .all(|task| task["task_id"] != "gitleaks-retired"));
+    assert_eq!(recent_tasks[0]["task_id"], "static-new");
+    assert_eq!(recent_tasks[0]["task_type"], "静态审计");
+    assert_eq!(recent_tasks[0]["title"], "静态审计 · Beta API");
+    assert_eq!(
+        recent_tasks[0]["detail_path"],
+        "/static-analysis/static-new?opengrepTaskId=static-new"
+    );
+    assert_eq!(recent_tasks[1]["task_id"], "static-failed");
+    assert_eq!(recent_tasks[1]["status"], "failed");
+    assert_eq!(recent_tasks[2]["task_id"], "agent-old");
+    assert_eq!(recent_tasks[2]["task_type"], "智能审计");
+    assert_eq!(recent_tasks[2]["title"], "智能审计 · Alpha Gateway");
+    assert_eq!(recent_tasks[2]["detail_path"], "/agent-audit/agent-old");
 }
 
 #[tokio::test]

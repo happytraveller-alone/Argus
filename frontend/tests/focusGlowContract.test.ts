@@ -62,3 +62,18 @@ test("cyber primary buttons keep selected state flat without blue outer glow", (
 		/\.cyber-btn-primary[\s\S]{0,260}0\s+0\s+\d+px\s+rgba\(0,\s*122,\s*204,/,
 	);
 });
+
+test("flat cyber cards remove decorative corner protrusions and hover glow", () => {
+	const globalsCss = readFileSync(globalsCssPath, "utf8");
+	const flatHoverBlock =
+		globalsCss.match(
+			/\.cyber-card\.cyber-card-flat:hover\s*\{(?<body>[\s\S]*?)\}/,
+		)?.groups?.body ?? "";
+
+	assert.match(
+		globalsCss,
+		/\.cyber-card\.cyber-card-flat::before,\s*\.cyber-card\.cyber-card-flat::after\s*\{[\s\S]*?display:\s*none;/,
+	);
+	assert.match(flatHoverBlock, /box-shadow:\s*var\(--shadow-md\);/);
+	assert.doesNotMatch(flatHoverBlock, /--glow/);
+});

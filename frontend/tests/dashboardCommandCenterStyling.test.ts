@@ -74,21 +74,54 @@ test("DashboardCommandCenter places task status between summary cards and charts
 	);
 });
 
-test("DashboardCommandCenter recent task titles match progress text styling instead of bold headings", () => {
+test("DashboardCommandCenter task status uses four compact statistic cards", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
 	assert.match(
 		source,
-		/<p className="truncate text-xs text-muted-foreground">/,
+		/const TASK_STATUS_CARD_GRID_CLASSNAME =\s*"mt-3 grid grid-cols-4 gap-3 overflow-x-auto"/,
 	);
 	assert.match(
 		source,
-		/<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">/,
+		/const TASK_STATUS_CARD_CLASSNAME =\s*"min-w-\[8\.5rem\] rounded-sm border border-border\/70 bg-background\/70 px-4 py-3 text-left transition/,
 	);
+	assert.match(source, /label: "已完成任务"/);
+	assert.match(source, /label: "进行中任务"/);
+	assert.match(source, /label: "报错任务"/);
+	assert.match(source, /label: "中断任务"/);
+	assert.match(source, /buildTaskStatusCards\(snapshot\)/);
 	assert.doesNotMatch(
 		source,
-		/<p className="truncate text-sm font-semibold text-foreground">/,
+		/className="h-3 rounded-full bg-muted\/70"/,
 	);
+	assert.doesNotMatch(source, /暂无任务状态数据/);
+});
+
+test("DashboardCommandCenter recent tasks render three full-card links in one row", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(
+		source,
+		/const RECENT_TASK_CARD_GRID_CLASSNAME =\s*"mt-4 grid grid-cols-3 gap-3 overflow-x-auto"/,
+	);
+	assert.match(
+		source,
+		/const RECENT_TASK_CARD_CLASSNAME =\s*"min-w-\[16rem\] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition/,
+	);
+	assert.match(source, /const recentTasks = getRecentTaskCards\(snapshot\.recent_tasks\);/);
+	assert.match(source, /<a[\s\S]*className=\{RECENT_TASK_CARD_CLASSNAME\}/);
+	assert.match(source, /<Badge className="cyber-badge cyber-badge-muted min-w-0 max-w-full flex-1 truncate normal-case tracking-normal">/);
+	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{typeBadgeClassName\}`\}>/);
+	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{progressBadgeClassName\}`\}>/);
+	assert.match(source, /getRecentTaskTypeBadgeClassName\(task\.task_type\)/);
+	assert.match(source, /getRecentTaskProgressBadgeClassName\(task\.status\)/);
+	assert.match(source, /<ChevronRight className="mt-0\.5 h-4 w-4 shrink-0 text-muted-foreground" \/>/);
+	assert.doesNotMatch(
+		source,
+		/href=\{task\.detail_path \|\| "\/tasks\/static"\}[\s\S]*<Eye/,
+	);
+	assert.doesNotMatch(source, /getEstimatedTaskProgressPercent/);
+	assert.doesNotMatch(source, /h-2 rounded-full bg-muted\/70/);
 });
 
 test("DashboardCommandCenter recent tasks section adds top spacing away from task status", () => {
@@ -100,15 +133,18 @@ test("DashboardCommandCenter recent tasks section adds top spacing away from tas
 	);
 });
 
-test("DashboardCommandCenter recent task pagination places previous and next buttons on opposite sides", () => {
+test("DashboardCommandCenter recent tasks remove divider and pagination controls", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
-	assert.match(
+	assert.doesNotMatch(
 		source,
-		/<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border\/70 pt-4">[\s\S]*上一页[\s\S]*下一页[\s\S]*<\/div>/,
+		/<div className="mt-1 border-t border-border\/70 pt-5/,
 	);
 	assert.doesNotMatch(
 		source,
-		/<div className="flex items-center gap-2">[\s\S]*上一页[\s\S]*下一页[\s\S]*<\/div>/,
+		/<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border\/70 pt-4">/,
 	);
+	assert.doesNotMatch(source, /上一页/);
+	assert.doesNotMatch(source, /下一页/);
+	assert.doesNotMatch(source, /paginateRecentTasks/);
 });

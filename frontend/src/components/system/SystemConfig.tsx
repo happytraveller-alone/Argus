@@ -177,6 +177,7 @@ interface SystemConfigProps {
 	llmSummaryOnly?: boolean;
 	showFloatingSaveButton?: boolean;
 	compactLayout?: boolean;
+	cardClassName?: string;
 	sharedDraftState?: SystemConfigSharedDraftState;
 	onLlmSummaryChange?: (summary: {
 		providerId: string;
@@ -666,6 +667,7 @@ export function SystemConfig({
 	llmSummaryOnly = false,
 	showFloatingSaveButton = true,
 	compactLayout = false,
+	cardClassName,
 	sharedDraftState,
 	onLlmSummaryChange,
 }: SystemConfigProps = {}) {
@@ -1501,6 +1503,7 @@ export function SystemConfig({
 								className={cn(
 									"cyber-card !overflow-visible",
 									compactLayout ? "p-4 space-y-4" : "p-6 space-y-6",
+									cardClassName,
 								)}
 							>
 							{showLlmSummaryCards ? (

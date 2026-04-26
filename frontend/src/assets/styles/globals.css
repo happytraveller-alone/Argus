@@ -298,6 +298,15 @@
 		box-shadow: var(--shadow-lg), var(--glow-primary);
 	}
 
+	.cyber-card.cyber-card-flat::before,
+	.cyber-card.cyber-card-flat::after {
+		display: none;
+	}
+
+	.cyber-card.cyber-card-flat:hover {
+		box-shadow: var(--shadow-md);
+	}
+
 	.cyber-card-header {
 		display: flex;
 		align-items: center;

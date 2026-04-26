@@ -298,8 +298,8 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /Alpha Gateway/);
 	assert.match(markup, /Beta API/);
 	assert.match(markup, /Gamma Portal/);
-	assert.match(markup, /Delta PHP/);
-	assert.match(markup, /查看已完成状态下的扫描类型细分/);
+	assert.doesNotMatch(markup, /Delta PHP/);
+	assert.match(markup, /查看已完成任务状态下的扫描类型细分/);
 	assert.doesNotMatch(markup, /静态审计 · Echo Console/);
 	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
 	assert.doesNotMatch(markup, /共 \d+ 条/);
@@ -366,6 +366,109 @@ test("task status tooltip items preserve subtype counts, including zero values",
 	);
 });
 
+test("DashboardCommandCenter builds four task status statistic cards", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.task_status_breakdown = {
+		pending: 3,
+		running: 2,
+		completed: 12,
+		failed: 1,
+		interrupted: 1,
+		cancelled: 2,
+	};
+	snapshot.task_status_by_scan_type.pending = {
+		static: 1,
+		intelligent: 2,
+	};
+	snapshot.task_status_by_scan_type.running = {
+		static: 1,
+		intelligent: 1,
+	};
+	snapshot.task_status_by_scan_type.interrupted = {
+		static: 1,
+		intelligent: 0,
+	};
+	snapshot.task_status_by_scan_type.cancelled = {
+		static: 0,
+		intelligent: 2,
+	};
+
+	assert.deepEqual(module.buildTaskStatusCards(snapshot), [
+		{
+			key: "completed",
+			label: "已完成任务",
+			value: 12,
+			tone: "low",
+			scanTypeBreakdown: { static: 10, intelligent: 2 },
+		},
+		{
+			key: "running",
+			label: "进行中任务",
+			value: 5,
+			tone: "neutral",
+			scanTypeBreakdown: { static: 2, intelligent: 3 },
+		},
+		{
+			key: "failed",
+			label: "报错任务",
+			value: 1,
+			tone: "critical",
+			scanTypeBreakdown: { static: 1, intelligent: 0 },
+		},
+		{
+			key: "interrupted",
+			label: "中断任务",
+			value: 3,
+			tone: "high",
+			scanTypeBreakdown: { static: 1, intelligent: 2 },
+		},
+	]);
+});
+
+test("DashboardCommandCenter renders all task status statistic cards", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.task_status_breakdown = {
+		pending: 0,
+		running: 0,
+		completed: 0,
+		failed: 0,
+		interrupted: 0,
+		cancelled: 0,
+	};
+	snapshot.task_status_by_scan_type = {
+		pending: { static: 0, intelligent: 0 },
+		running: { static: 0, intelligent: 0 },
+		completed: { static: 0, intelligent: 0 },
+		failed: { static: 0, intelligent: 0 },
+		interrupted: { static: 0, intelligent: 0 },
+		cancelled: { static: 0, intelligent: 0 },
+	};
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot,
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+
+	assert.match(markup, /已完成任务/);
+	assert.match(markup, /进行中任务/);
+	assert.match(markup, /报错任务/);
+	assert.match(markup, /中断任务/);
+	assert.match(markup, /查看已完成任务状态下的扫描类型细分/);
+	assert.match(markup, /查看进行中任务状态下的扫描类型细分/);
+	assert.match(markup, /静态 0/);
+	assert.match(markup, /智能 0/);
+	assert.doesNotMatch(markup, /暂无任务状态数据/);
+});
+
 test("DashboardCommandCenter recent static task uses the provided aggregated detail path", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
@@ -397,7 +500,86 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 		/href="\/static-analysis\/gl-batch\?gitleaksTaskId=gl-batch&amp;banditTaskId=ba-batch"/,
 	);
 	assert.match(markup, /aria-label="查看 Gamma Portal 详情"/);
+	assert.match(markup, /完成/);
+	assert.match(markup, /静态审计/);
 	assert.doesNotMatch(markup, /href="\/tasks\/static"/);
+});
+
+test("DashboardCommandCenter recent task cards show the latest three tasks in one row", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.recent_tasks = [
+		...snapshot.recent_tasks,
+		{
+			task_id: "cancelled-1",
+			task_type: "智能审计",
+			title: "智能审计 · Echo Console",
+			engine: "llm",
+			status: "cancelled",
+			created_at: "2026-03-22T22:30:00.000Z",
+			detail_path: "/agent-audit/cancelled-1",
+		},
+	];
+
+	assert.deepEqual(
+		module.getRecentTaskCards(snapshot.recent_tasks).map(
+			(task: { task_id: string }) => task.task_id,
+		),
+		["at-1", "at-2", "og-1"],
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot,
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+
+	assert.match(markup, /href="\/agent-audit\/at-1"/);
+	assert.match(markup, /href="\/agent-audit\/at-2"/);
+	assert.match(markup, /href="\/tasks\/static"/);
+	assert.match(markup, /Alpha Gateway/);
+	assert.match(markup, /Beta API/);
+	assert.match(markup, /Gamma Portal/);
+	assert.match(markup, /Alpha Gateway[\s\S]*智能审计[\s\S]*进行/);
+	assert.match(markup, /Beta API[\s\S]*智能审计[\s\S]*完成/);
+	assert.match(markup, /Gamma Portal[\s\S]*静态审计[\s\S]*异常/);
+	assert.match(markup, /cyber-badge cyber-badge-muted/);
+	assert.match(markup, /cyber-badge shrink-0 cyber-badge-primary/);
+	assert.match(markup, /cyber-badge shrink-0 cyber-badge-info/);
+	assert.match(markup, /cyber-badge shrink-0 cyber-badge-danger/);
+	assert.doesNotMatch(markup, /Delta PHP/);
+	assert.doesNotMatch(markup, /Echo Console/);
+	assert.doesNotMatch(markup, /h-2 rounded-full bg-muted\/70/);
+});
+
+test("DashboardCommandCenter maps recent task statuses to dashboard labels", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	assert.equal(module.normalizeRecentTaskStatusLabel("completed"), "完成");
+	assert.equal(module.normalizeRecentTaskStatusLabel("running"), "进行");
+	assert.equal(module.normalizeRecentTaskStatusLabel("pending"), "进行");
+	assert.equal(module.normalizeRecentTaskStatusLabel("interrupted"), "中断");
+	assert.equal(module.normalizeRecentTaskStatusLabel("cancelled"), "中断");
+	assert.equal(module.normalizeRecentTaskStatusLabel("failed"), "异常");
+});
+
+test("DashboardCommandCenter maps recent task badge classes to cyber badge tones", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	assert.equal(module.getRecentTaskTypeBadgeClassName("智能审计"), "cyber-badge-primary");
+	assert.equal(module.getRecentTaskTypeBadgeClassName("静态审计"), "cyber-badge-info");
+	assert.equal(module.getRecentTaskProgressBadgeClassName("completed"), "cyber-badge-success");
+	assert.equal(module.getRecentTaskProgressBadgeClassName("running"), "cyber-badge-info");
+	assert.equal(module.getRecentTaskProgressBadgeClassName("cancelled"), "cyber-badge-warning");
+	assert.equal(module.getRecentTaskProgressBadgeClassName("failed"), "cyber-badge-danger");
 });
 
 test("DashboardCommandCenter shows an empty state when no recent tasks are available", async () => {
@@ -447,7 +629,7 @@ test("DashboardCommandCenter keeps task status tooltip counts visible even when 
 		}),
 	);
 
-	assert.match(markup, /查看运行中状态下的扫描类型细分/);
+	assert.match(markup, /查看进行中任务状态下的扫描类型细分/);
 });
 
 test("DashboardCommandCenter uses compact chart spacing constants", async () => {
@@ -646,7 +828,7 @@ test("recent task title formatter strips the scan type prefix and preserves bare
 	);
 });
 
-test("DashboardCommandCenter renders icon-only recent task links with explicit assistive labels", async () => {
+test("DashboardCommandCenter renders full-card recent task links with explicit assistive labels", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
@@ -664,54 +846,14 @@ test("DashboardCommandCenter renders icon-only recent task links with explicit a
 	assert.match(markup, /aria-label="查看 Gamma Portal 详情"/);
 });
 
-test("recent task pagination uses four items per page and clamps invalid pages", async () => {
+test("recent task cards use a fixed three-item limit", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
 	const tasks = createSnapshotFixture().recent_tasks;
 
-	assert.equal(module.DASHBOARD_RECENT_TASKS_PAGE_SIZE, 4);
-
-	assert.deepEqual(module.paginateRecentTasks([], 1), {
-		items: [],
-		currentPage: 1,
-		totalPages: 1,
-		totalCount: 0,
-	});
-	assert.deepEqual(
-		module.paginateRecentTasks(tasks.slice(0, 1), 99),
-		{
-			items: tasks.slice(0, 1),
-			currentPage: 1,
-			totalPages: 1,
-			totalCount: 1,
-		},
-	);
-	assert.deepEqual(
-		module.paginateRecentTasks(tasks.slice(0, 4), 0),
-		{
-			items: tasks.slice(0, 4),
-			currentPage: 1,
-			totalPages: 1,
-			totalCount: 4,
-		},
-	);
-	assert.deepEqual(
-		module.paginateRecentTasks(tasks.slice(0, 5), 2),
-		{
-			items: tasks.slice(0, 4),
-			currentPage: 1,
-			totalPages: 1,
-			totalCount: 4,
-		},
-	);
-	assert.deepEqual(
-		module.paginateRecentTasks(tasks, 999),
-		{
-			items: tasks.slice(0, 4),
-			currentPage: 1,
-			totalPages: 1,
-			totalCount: 4,
-		},
-	);
+	assert.equal(module.DASHBOARD_RECENT_TASKS_LIMIT, 3);
+	assert.deepEqual(module.getRecentTaskCards([]), []);
+	assert.deepEqual(module.getRecentTaskCards(tasks.slice(0, 1)), tasks.slice(0, 1));
+	assert.deepEqual(module.getRecentTaskCards(tasks), tasks.slice(0, 3));
 });

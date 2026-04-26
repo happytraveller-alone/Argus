@@ -96,6 +96,7 @@ export default function ScanConfigIntelligentEngine() {
 						visibleSections={["llm"]}
 						defaultSection="llm"
 						mergedView={false}
+						cardClassName="cyber-card-flat"
 						showLlmSummaryCards={false}
 						showFloatingSaveButton={false}
 						compactLayout

@@ -172,7 +172,7 @@ export default function DataManagementPage() {
           <h1 className="text-lg font-bold tracking-tight">数据管理</h1>
         </div>
 
-        <div className="cyber-card flex flex-1 flex-col p-4">
+        <div className="cyber-card cyber-card-flat flex flex-1 flex-col p-4">
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
             <section className="rounded border border-border/40 bg-background/70 p-4">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

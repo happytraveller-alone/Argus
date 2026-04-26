@@ -2,7 +2,6 @@ import { memo, useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import { getTaskDisplayStatusSummary } from "@/features/tasks/services/taskDisplay";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
@@ -13,11 +12,9 @@ import type { PmdScanTask } from "@/shared/api/pmd";
 
 import type { Engine } from "./viewModel";
 import {
-  buildStaticAnalysisProgressSummary,
   buildStaticAnalysisTaskStatusSummary,
   formatStaticAnalysisDuration,
   getStaticAnalysisTotalDisplayDurationMs,
-  getStaticAnalysisProgressAccentClassName,
   getStaticAnalysisStatusBadgeClassName,
   isStaticAnalysisPollableStatus,
   toStaticAnalysisSafeMetric,
@@ -33,13 +30,11 @@ interface StaticAnalysisSummaryCardsProps {
   loadingInitial?: boolean;
 }
 
-function getEngineDisplayLabel(engine: Engine): string {
-  if (engine === "opengrep") return "Opengrep";
-  if (engine === "gitleaks") return "Gitleaks";
-  if (engine === "bandit") return "Bandit";
-  if (engine === "phpstan") return "PHPStan";
-  return "PMD";
-}
+const SUMMARY_CARD_CLASSNAME = "cyber-card p-4";
+const SUMMARY_CARD_CONTENT_CLASSNAME = "flex min-w-0 items-center justify-between gap-3";
+const SUMMARY_LABEL_BADGE_CLASSNAME = "cyber-badge cyber-badge-muted shrink-0 text-[12px]";
+const SUMMARY_VALUE_BADGE_CLASSNAME =
+  "cyber-badge cyber-badge-info min-w-0 max-w-full truncate normal-case tracking-normal";
 
 export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCards({
   opengrepTask,
@@ -83,24 +78,6 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
-  const progressPercent = useMemo(
-    () => {
-      if (isBootstrapping) {
-        return 0;
-      }
-
-      return buildStaticAnalysisProgressSummary({
-        opengrepTask,
-        gitleaksTask,
-        banditTask,
-        phpstanTask,
-        pmdTask,
-        nowMs,
-      }).progressPercent;
-    },
-    [banditTask, gitleaksTask, isBootstrapping, nowMs, opengrepTask, phpstanTask, pmdTask],
-  );
-
   const statusSummary = useMemo(
     () => {
       if (isBootstrapping) {
@@ -109,12 +86,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
           aggregateStatus: "pending" as const,
           aggregateLabel: pendingSummary.statusLabel,
           progressHint: pendingSummary.progressHint,
-          engineStatuses: enabledEngines.map((engine) => ({
-            engine,
-            engineLabel: getEngineDisplayLabel(engine),
-            status: "pending",
-            statusLabel: pendingSummary.statusLabel,
-          })),
+          engineStatuses: [],
           failureReasons: [],
         };
       }
@@ -127,7 +99,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
         pmdTask,
       });
     },
-    [banditTask, enabledEngines, gitleaksTask, isBootstrapping, opengrepTask, phpstanTask, pmdTask],
+    [banditTask, gitleaksTask, isBootstrapping, opengrepTask, phpstanTask, pmdTask],
   );
 
   const totalScanDurationMs = useMemo(
@@ -154,17 +126,6 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
     [banditTask?.total_findings, gitleaksTask?.total_findings, opengrepTask?.total_findings, phpstanTask?.total_findings, pmdTask?.total_findings],
   );
 
-  const totalFilesScanned = useMemo(
-    () =>
-      toStaticAnalysisSafeMetric(opengrepTask?.files_scanned) +
-      toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
-      toStaticAnalysisSafeMetric(banditTask?.files_scanned) +
-      toStaticAnalysisSafeMetric(phpstanTask?.files_scanned) +
-      toStaticAnalysisSafeMetric(pmdTask?.files_scanned) +
-      0,
-    [banditTask?.files_scanned, gitleaksTask?.files_scanned, opengrepTask?.files_scanned, phpstanTask?.files_scanned, pmdTask?.files_scanned],
-  );
-
   const timeoutOnlyFailure = useMemo(
     () =>
       statusSummary.aggregateStatus === "failed" &&
@@ -175,76 +136,38 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <div className="cyber-card p-4 space-y-2">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            进度比例
-          </p>
-          <p className="text-xl font-bold text-foreground">{progressPercent}%</p>
-          <Progress
-            value={progressPercent}
-            className={`h-1.5 bg-muted ${getStaticAnalysisProgressAccentClassName(statusSummary.aggregateStatus)}`}
-          />
-          {/* <p className="text-xs leading-5 text-muted-foreground">
-            {statusSummary.progressHint}
-          </p> */}
-          <Badge className={getStaticAnalysisStatusBadgeClassName(statusSummary.aggregateStatus)}>
-            {statusSummary.aggregateLabel}
-          </Badge>
-        </div>
-        <div className="cyber-card p-4 space-y-3">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            任务状态
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {statusSummary.engineStatuses.map((engineStatus) => (
-              <Badge
-                key={engineStatus.engine}
-                variant="outline"
-                className="border-border/70 text-[11px] text-muted-foreground"
-              >
-                {engineStatus.engineLabel} · {engineStatus.statusLabel}
-              </Badge>
-            ))}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className={SUMMARY_CARD_CLASSNAME}>
+          <div className={SUMMARY_CARD_CONTENT_CLASSNAME}>
+            <Badge className={SUMMARY_LABEL_BADGE_CLASSNAME}>
+              进度比例
+            </Badge>
+            <Badge
+              className={`cyber-badge ${getStaticAnalysisStatusBadgeClassName(statusSummary.aggregateStatus)} min-w-0 max-w-full truncate normal-case tracking-normal`}
+            >
+              {statusSummary.aggregateLabel}
+            </Badge>
           </div>
         </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            扫描时间
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {formatStaticAnalysisDuration(totalScanDurationMs)}
-          </p>
+        <div className={SUMMARY_CARD_CLASSNAME}>
+          <div className={SUMMARY_CARD_CONTENT_CLASSNAME}>
+            <Badge className={SUMMARY_LABEL_BADGE_CLASSNAME}>
+              时间
+            </Badge>
+            <Badge className={SUMMARY_VALUE_BADGE_CLASSNAME}>
+              {formatStaticAnalysisDuration(totalScanDurationMs)}
+            </Badge>
+          </div>
         </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            扫描漏洞数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFindings.toLocaleString()}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            使用引擎数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {enabledEngines.length.toLocaleString()}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {enabledEngines
-              .map((engine) => getEngineDisplayLabel(engine))
-              .join(" / ") || "-"}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-base font-semibold uppercase text-muted-foreground">
-            涉及文件
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFilesScanned.toLocaleString()}
-          </p>
+        <div className={SUMMARY_CARD_CLASSNAME}>
+          <div className={SUMMARY_CARD_CONTENT_CLASSNAME}>
+            <Badge className={SUMMARY_LABEL_BADGE_CLASSNAME}>
+              发现漏洞
+            </Badge>
+            <Badge className={`${SUMMARY_VALUE_BADGE_CLASSNAME} tabular-nums`}>
+              {totalFindings.toLocaleString()}
+            </Badge>
+          </div>
         </div>
       </div>
 

@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 globalThis.React = React;
 
-test("StaticAnalysisSummaryCards keeps the initial zero-progress state pending while tasks are still loading", async () => {
+test("StaticAnalysisSummaryCards keeps the initial progress label pending while tasks are still loading", async () => {
   const summaryCardsModule = await import(
     "../src/pages/static-analysis/StaticAnalysisSummaryCards.tsx"
   );
@@ -22,8 +23,14 @@ test("StaticAnalysisSummaryCards keeps the initial zero-progress state pending w
     }),
   );
 
-  assert.match(markup, /0%/);
+  assert.match(markup, /进度比例/);
+  assert.match(markup, /时间/);
+  assert.match(markup, /发现漏洞/);
   assert.match(markup, /任务待处理/);
+  assert.doesNotMatch(markup, /0%/);
+  assert.doesNotMatch(markup, /任务状态/);
+  assert.doesNotMatch(markup, /使用引擎数量/);
+  assert.doesNotMatch(markup, /涉及文件/);
   assert.doesNotMatch(markup, /任务失败/);
   assert.doesNotMatch(markup, /存在失败引擎/);
 });
@@ -59,9 +66,29 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
     }),
   );
 
-  assert.match(markup, /0%/);
+  assert.match(markup, /进度比例/);
   assert.match(markup, /任务待处理/);
-  assert.match(markup, /Opengrep · 任务待处理/);
-  assert.match(markup, /Gitleaks · 任务待处理/);
+  assert.doesNotMatch(markup, /0%/);
+  assert.doesNotMatch(markup, /Opengrep · 任务待处理/);
+  assert.doesNotMatch(markup, /Gitleaks · 任务待处理/);
   assert.doesNotMatch(markup, /Opengrep · 任务完成/);
+});
+
+test("StaticAnalysisSummaryCards source keeps summary cards trimmed and tag-only", async () => {
+  const source = await readFile(
+    new URL("../src/pages/static-analysis/StaticAnalysisSummaryCards.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /md:grid-cols-3/);
+  assert.match(source, /SUMMARY_LABEL_BADGE_CLASSNAME/);
+  assert.match(source, /SUMMARY_VALUE_BADGE_CLASSNAME/);
+  assert.doesNotMatch(source, /<Progress\b/);
+  assert.doesNotMatch(source, /progressPercent/);
+  assert.doesNotMatch(source, /任务状态/);
+  assert.doesNotMatch(source, /扫描时间/);
+  assert.doesNotMatch(source, /扫描漏洞数量/);
+  assert.doesNotMatch(source, /使用引擎数量/);
+  assert.doesNotMatch(source, /涉及文件/);
+  assert.doesNotMatch(source, /totalFilesScanned/);
 });
