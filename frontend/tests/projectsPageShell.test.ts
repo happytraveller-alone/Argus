@@ -50,6 +50,7 @@ test("ProjectsTable 为项目页传入专用表格容器样式以移除内层滑
 
 	assert.match(source, /containerClassName="overflow-visible"/);
 	assert.match(source, /tableContainerClassName="overflow-visible border-0 rounded-none"/);
+	assert.match(source, /fillContainerWidth/);
 	assert.doesNotMatch(source, /tableClassName="min-w-\[1360px\]"/);
 });
 

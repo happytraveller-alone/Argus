@@ -68,19 +68,19 @@ export function DataTableColumnHeader<TData, TValue>({
   }
 
   return (
-    <div className={cn("inline-flex items-center gap-1", className)}>
+    <div className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)}>
       {column.getCanSort() ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className={cn(
-            "h-8 -ml-2 px-2 font-mono text-xs uppercase tracking-[0.16em] text-foreground/80 hover:bg-muted/70",
+            "h-8 -ml-2 gap-1 px-2 font-mono text-xs uppercase tracking-[0.16em] text-foreground/80 !whitespace-nowrap hover:bg-muted/70",
             headerContentClassName,
           )}
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          <span>{title}</span>
+          <span className="whitespace-nowrap">{title}</span>
           <SortIcon state={column.getIsSorted()} />
         </Button>
       ) : (
@@ -103,7 +103,7 @@ export function DataTableColumnHeader<TData, TValue>({
               aria-label={`筛选${title}`}
               data-filter-active={filterActive ? "true" : undefined}
               className={cn(
-                "h-8 w-8 px-0 text-foreground/60 hover:bg-muted/70 hover:text-foreground",
+                "h-8 w-8 shrink-0 px-0 !whitespace-nowrap text-foreground/60 hover:bg-muted/70 hover:text-foreground",
                 showWeakHighlight &&
                   "border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/15 hover:text-sky-200",
               )}

@@ -143,6 +143,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.doesNotMatch(markup, /group relative inline-flex min-w-\[4\.5rem\] items-center justify-center rounded-full border border-border\/60 bg-background\/40 p-1/);
 	assert.doesNotMatch(markup, /暂未发现漏洞/);
 	assert.doesNotMatch(markup, /min-w-\[1360px\]/);
+	assert.match(markup, /style="width:100%;min-width:\d+px"/);
 	assert.doesNotMatch(markup, /whitespace-nowrap text-\[16px\]/);
 	assert.match(markup, /border-b-2/);
 	assert.match(markup, /border-r-2 border-border\/90/);

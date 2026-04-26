@@ -75,7 +75,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "text-foreground/70 h-12 px-4 text-left align-middle font-mono font-bold text-sm uppercase tracking-wider whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "text-foreground/70 h-12 px-3 text-left align-middle font-mono font-bold text-sm uppercase tracking-wider whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         "data-[sticky=left]:sticky data-[sticky=left]:left-0 data-[sticky=left]:z-20 data-[sticky=left]:bg-background",
         "data-[sticky=right]:sticky data-[sticky=right]:right-0 data-[sticky=right]:z-20 data-[sticky=right]:bg-background",
         className
@@ -90,7 +90,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-4 py-4 align-middle text-foreground text-base [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "px-3 py-4 align-middle text-foreground text-base [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         "data-[sticky=left]:sticky data-[sticky=left]:left-0 data-[sticky=left]:z-10 data-[sticky=left]:bg-background",
         "data-[sticky=right]:sticky data-[sticky=right]:right-0 data-[sticky=right]:z-10 data-[sticky=right]:bg-background",
         className

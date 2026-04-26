@@ -62,7 +62,7 @@ function getColumns(
 			meta: createTaskActivitiesTableMeta({
 				label: "序号",
 				align: "center",
-				width: 80,
+				width: 64,
 			}),
 			cell: ({ row, table }) => {
 				const pageRowIndex = table
@@ -81,7 +81,7 @@ function getColumns(
 			header: "项目",
 			meta: createTaskActivitiesTableMeta({
 				label: "项目",
-				minWidth: 160,
+				minWidth: 132,
 				filterVariant: "text",
 			}),
 			cell: ({ row }) => (
@@ -97,7 +97,7 @@ function getColumns(
 			sortingFn: "datetime",
 			meta: createTaskActivitiesTableMeta({
 				label: "创建时间",
-				minWidth: 180,
+				minWidth: 152,
 			}),
 			cell: ({ row }) => (
 				<div className="text-base text-muted-foreground">
@@ -114,7 +114,7 @@ function getColumns(
 			header: "用时",
 			meta: createTaskActivitiesTableMeta({
 				label: "用时",
-				width: 120,
+				width: 88,
 			}),
 			cell: ({ row }) => {
 				const rawDuration = getActivityDurationLabel(row.original, nowMs);
@@ -131,7 +131,7 @@ function getColumns(
 			header: "状态",
 			meta: createTaskActivitiesTableMeta({
 				label: "状态",
-				minWidth: 170,
+				minWidth: 132,
 				filterVariant: "select",
 				filterOptions: [
 					{ label: "等待中", value: "pending" },
@@ -170,13 +170,17 @@ function getColumns(
 			header: "缺陷摘要",
 			meta: createTaskActivitiesTableMeta({
 				label: "缺陷摘要",
-				minWidth: 200,
+				minWidth: 128,
+				maxWidth: 156,
 			}),
 			cell: ({ row }) => {
 				const summary = getDefectSummaryLabel(row.original);
 				if (summary === "-") return "-";
 				return (
-					<span className="whitespace-nowrap text-base text-muted-foreground">
+					<span
+						className="block truncate text-base text-muted-foreground"
+						title={summary}
+					>
 						{summary}
 					</span>
 				);
@@ -188,7 +192,7 @@ function getColumns(
 			enableSorting: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "操作",
-				width: 120,
+				width: 132,
 			}),
 			cell: ({ row }) => (
 				<Button
@@ -248,7 +252,8 @@ export default function TaskActivitiesListTable({
 						pageSizeOptions: [10, 20, 50],
 						infoLabel: () => `共 ${activities.length} 条`,
 					}}
-					tableClassName="min-w-[880px]"
+					tableClassName="min-w-[760px]"
+					fillContainerWidth
 				/>
 			</div>
 		</div>

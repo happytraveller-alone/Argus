@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { RowData } from "@tanstack/react-table";
 import {
+  type Cell,
   type ColumnDef,
   flexRender,
   functionalUpdate,
@@ -8,6 +9,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  type Header,
   useReactTable,
 } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,6 +55,11 @@ type AppColumnWithChildren<TData extends RowData> = AppColumnDef<
 > & {
   columns?: AppColumnDef<TData, unknown>[];
 };
+
+const AUTO_COLUMN_MIN_WIDTH_PX = 64;
+const AUTO_COLUMN_MAX_WIDTH_PX = 520;
+const AUTO_COLUMN_CHARACTER_WIDTH_PX = 8;
+const AUTO_COLUMN_HORIZONTAL_PADDING_PX = 24;
 
 function resolveFilterFn(column: ColumnDef<any>) {
   const variant = column.meta?.filterVariant;
@@ -147,6 +154,118 @@ function renderSummary<TData extends RowData>(
   return summary;
 }
 
+function isWideCharacter(character: string) {
+  return /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u.test(
+    character,
+  );
+}
+
+function countTextUnits(text: string) {
+  return Array.from(text).reduce(
+    (total, character) => total + (isWideCharacter(character) ? 2 : 1),
+    0,
+  );
+}
+
+function countRenderableTextUnits(value: unknown): number {
+  if (value === null || value === undefined || value === false) {
+    return 0;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  ) {
+    return countTextUnits(String(value));
+  }
+
+  if (Array.isArray(value)) {
+    return value.reduce(
+      (total, child) => total + countRenderableTextUnits(child),
+      0,
+    );
+  }
+
+  if (React.isValidElement(value)) {
+    return countRenderableTextUnits(
+      (value as React.ReactElement<{ children?: React.ReactNode }>).props
+        .children,
+    );
+  }
+
+  return 0;
+}
+
+function clampAutoColumnWidth(width: number) {
+  return Math.min(
+    Math.max(Math.ceil(width), AUTO_COLUMN_MIN_WIDTH_PX),
+    AUTO_COLUMN_MAX_WIDTH_PX,
+  );
+}
+
+function resolveAutoColumnWidth(
+  textUnits: number,
+  minWidth?: string | number,
+  preferredWidth?: string | number,
+  maxWidth?: string | number,
+) {
+  const calculatedWidth = clampAutoColumnWidth(
+    textUnits * AUTO_COLUMN_CHARACTER_WIDTH_PX +
+      AUTO_COLUMN_HORIZONTAL_PADDING_PX,
+  );
+  const numericMinWidth = resolvePixelSize(minWidth);
+  const numericPreferredWidth = resolvePixelSize(preferredWidth);
+  const numericMaxWidth = resolvePixelSize(maxWidth);
+  const lowerBoundedWidth = Math.max(
+    calculatedWidth,
+    numericMinWidth ?? 0,
+    numericPreferredWidth ?? 0,
+  );
+  return numericMaxWidth
+    ? Math.min(lowerBoundedWidth, numericMaxWidth)
+    : lowerBoundedWidth;
+}
+
+function getColumnHeaderTextUnits<TData extends RowData>(
+  header: Header<TData, unknown>,
+) {
+  const headerContent = header.column.columnDef.header;
+  if (typeof headerContent === "string") {
+    return countTextUnits(headerContent);
+  }
+  return countTextUnits(String(header.column.columnDef.meta?.label || header.column.id));
+}
+
+function getCellTextUnits<TData extends RowData>(cell: Cell<TData, unknown>) {
+  const renderedCell = flexRender(cell.column.columnDef.cell, cell.getContext());
+  const renderedTextUnits = countRenderableTextUnits(renderedCell);
+  return renderedTextUnits || countRenderableTextUnits(cell.getValue());
+}
+
+function getHeaderAutoWidth<TData extends RowData>(
+  header: Header<TData, unknown>,
+  autoColumnWidths: Record<string, number>,
+): number | undefined {
+  if (header.subHeaders.length > 0) {
+    return header.subHeaders.reduce(
+      (total, subHeader) =>
+        total + (getHeaderAutoWidth(subHeader, autoColumnWidths) ?? 0),
+      0,
+    );
+  }
+
+  return autoColumnWidths[header.column.id];
+}
+
+function getCellAutoWidth<TData extends RowData>(
+  cell: Cell<TData, unknown>,
+  autoColumnWidths: Record<string, number>,
+): number | undefined {
+  return autoColumnWidths[cell.column.id];
+}
+
 export function DataTable<TData extends RowData>({
   data,
   columns,
@@ -166,6 +285,7 @@ export function DataTable<TData extends RowData>({
   tableClassName,
   containerClassName,
   tableContainerClassName,
+  fillContainerWidth = false,
   enableColumnResizing = false,
   getRowId,
 }: DataTableProps<TData>) {
@@ -282,6 +402,55 @@ export function DataTable<TData extends RowData>({
     pagination === false || pagination?.enabled === false
       ? table.getPrePaginationRowModel().rows
       : table.getRowModel().rows;
+  const autoColumnWidths = React.useMemo(() => {
+    if (enableColumnResizing) {
+      return {};
+    }
+
+    const maxTextUnitsByColumn: Record<string, number> = {};
+
+    table.getHeaderGroups().forEach((headerGroup) => {
+      headerGroup.headers.forEach((header) => {
+        if (header.isPlaceholder || header.subHeaders.length > 0) {
+          return;
+        }
+        maxTextUnitsByColumn[header.column.id] = Math.max(
+          maxTextUnitsByColumn[header.column.id] ?? 0,
+          getColumnHeaderTextUnits(header),
+        );
+      });
+    });
+
+    visibleRows.forEach((row) => {
+      row.getVisibleCells().forEach((cell) => {
+        maxTextUnitsByColumn[cell.column.id] = Math.max(
+          maxTextUnitsByColumn[cell.column.id] ?? 0,
+          getCellTextUnits(cell),
+        );
+      });
+    });
+
+    return table.getVisibleLeafColumns().reduce<Record<string, number>>(
+      (widths, column) => {
+        widths[column.id] = resolveAutoColumnWidth(
+          maxTextUnitsByColumn[column.id] ?? 0,
+          column.columnDef.meta?.minWidth,
+          column.columnDef.meta?.width,
+          column.columnDef.meta?.maxWidth,
+        );
+        return widths;
+      },
+      {},
+    );
+  }, [enableColumnResizing, table, visibleRows]);
+  const autoTableWidth = enableColumnResizing
+    ? undefined
+    : table
+        .getVisibleLeafColumns()
+        .reduce(
+          (total, column) => total + (autoColumnWidths[column.id] ?? 0),
+          0,
+        );
   const summaryContext = {
     table,
     rows: visibleRows.map((row) => row.original),
@@ -315,7 +484,17 @@ export function DataTable<TData extends RowData>({
         <Table
           className={cn(enableColumnResizing && "table-fixed", tableClassName)}
           containerClassName={tableContainerClassName}
-          style={enableColumnResizing ? { width: table.getTotalSize() } : undefined}
+          style={{
+            width: enableColumnResizing
+              ? table.getTotalSize()
+              : fillContainerWidth
+                ? "100%"
+                : autoTableWidth,
+            minWidth:
+              !enableColumnResizing && fillContainerWidth
+                ? autoTableWidth
+                : undefined,
+          }}
         >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -337,7 +516,7 @@ export function DataTable<TData extends RowData>({
                     header.column.getCanSort();
                   const columnWidth = enableColumnResizing
                     ? header.getSize()
-                    : meta?.width;
+                    : getHeaderAutoWidth(header, autoColumnWidths);
                   const canResizeColumn =
                     enableColumnResizing &&
                     header.subHeaders.length === 0 &&
@@ -367,7 +546,9 @@ export function DataTable<TData extends RowData>({
                       )}
                       style={{
                         width: columnWidth,
-                        minWidth: meta?.minWidth,
+                        minWidth: enableColumnResizing
+                          ? meta?.minWidth
+                          : columnWidth ?? meta?.minWidth,
                       }}
                     >
                       {header.isPlaceholder
@@ -453,7 +634,7 @@ export function DataTable<TData extends RowData>({
                     const meta = cell.column.columnDef.meta;
                     const columnWidth = enableColumnResizing
                       ? cell.column.getSize()
-                      : meta?.width;
+                      : getCellAutoWidth(cell, autoColumnWidths);
                     return (
                       <TableCell
                         key={cell.id}
@@ -467,7 +648,9 @@ export function DataTable<TData extends RowData>({
                         )}
                         style={{
                           width: columnWidth,
-                          minWidth: meta?.minWidth,
+                          minWidth: enableColumnResizing
+                            ? meta?.minWidth
+                            : columnWidth ?? meta?.minWidth,
                         }}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

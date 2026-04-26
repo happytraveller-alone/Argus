@@ -128,20 +128,36 @@ test("TopNavigation desktop dropdown close is delayed and scoped to the hovered 
 	);
 });
 
-test("TopNavigation closes desktop dropdowns after secondary navigation", () => {
+test("TopNavigation closes dropdowns after secondary navigation and route changes", () => {
 	const topNavigationSource = fs.readFileSync(
 		path.resolve(process.cwd(), "src/components/layout/TopNavigation.tsx"),
 		"utf8",
 	);
 
-	assert.match(topNavigationSource, /const closeDesktopGroupMenus = useCallback/);
+	assert.match(topNavigationSource, /const closeNavigationMenus = useCallback/);
+	assert.match(topNavigationSource, /const \[mobileMenuOpen, setMobileMenuOpen\]/);
 	assert.match(
 		topNavigationSource,
-		/useEffect\(\(\) => \{\s*closeDesktopGroupMenus\(\);\s*\}, \[closeDesktopGroupMenus, location\.pathname\]\);/,
+		/const routeLocationKey = `\$\{location\.pathname\}\$\{location\.search\}\$\{location\.hash\}`;/,
+	);
+	assert.match(topNavigationSource, /setOpenGroupId\(null\);/);
+	assert.match(topNavigationSource, /setMobileMenuOpen\(false\);/);
+	assert.match(
+		topNavigationSource,
+		/const closeNavigationMenus = useCallback\(\(\) => \{\s*suppressRouteFocusOpenUntilNextTick\(\);/,
 	);
 	assert.match(
 		topNavigationSource,
-		/<DropdownRouteLink\s+item=\{item\}\s+onClick=\{closeDesktopGroupMenus\}\s+\/>/,
+		/previousRouteLocationKeyRef\.current = routeLocationKey;/,
+	);
+	assert.match(topNavigationSource, /suppressRouteFocusOpenRef\.current = true;/);
+	assert.match(
+		topNavigationSource,
+		/<DropdownMenuItem\s+key=\{item\.route\.path\}\s+asChild\s+onSelect=\{closeNavigationMenus\}/,
+	);
+	assert.match(
+		topNavigationSource,
+		/<DropdownRouteLink\s+item=\{item\}\s+onClick=\{closeNavigationMenus\}\s+\/>/,
 	);
 });
 

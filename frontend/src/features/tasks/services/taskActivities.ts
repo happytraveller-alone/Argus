@@ -125,8 +125,8 @@ export function buildOpengrepSeverityCounts(
 	return {
 		critical: 0,
 		high: 0,
-		medium: error + warning,
-		low: Math.max(total - error - warning, 0),
+		medium: 0,
+		low: Math.min(error + warning, total || error + warning),
 	};
 }
 

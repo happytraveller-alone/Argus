@@ -465,6 +465,7 @@ export default function ProjectsTable({
       className="overflow-visible"
       containerClassName="overflow-visible"
       tableContainerClassName="overflow-visible border-0 rounded-none"
+      fillContainerWidth
       emptyState={{
         title: "暂无项目",
       }}

@@ -1,14 +1,15 @@
-import { AlertTriangle, Bug } from "lucide-react";
-import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, Bug, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-	DataTable,
 	type AppColumnDef,
+	DataTable,
 	type DataTableQueryState,
 } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ProjectDetailPotentialListItem } from "@/pages/project-detail/potentialVulnerabilities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
@@ -93,7 +94,44 @@ export function ProjectPotentialVulnerabilitiesSection({
 	currentRoute,
 	pageSize = DEFAULT_PAGE_SIZE,
 }: ProjectPotentialVulnerabilitiesSectionProps) {
-	const statusMessage = useMemo(() => getStatusMessage(status), [status]);
+	const statusMessage = getStatusMessage(status);
+	const [tableState, setTableState] = useState<DataTableQueryState>(() => ({
+		globalFilter: "",
+		columnFilters: [],
+		sorting: [],
+		pagination: {
+			pageIndex: 0,
+			pageSize: Math.max(1, pageSize),
+		},
+		columnVisibility: {},
+		columnSizing: {},
+		rowSelection: {},
+		density: "comfortable",
+	}));
+	const handleSearchChange = useCallback((value: string) => {
+		setTableState((previous) => ({
+			...previous,
+			globalFilter: value,
+			pagination: {
+				...previous.pagination,
+				pageIndex: 0,
+			},
+		}));
+	}, []);
+	useEffect(() => {
+		const nextPageSize = Math.max(1, pageSize);
+		setTableState((previous) => {
+			if (previous.pagination.pageSize === nextPageSize) return previous;
+			return {
+				...previous,
+				pagination: {
+					...previous.pagination,
+					pageIndex: 0,
+					pageSize: nextPageSize,
+				},
+			};
+		});
+	}, [pageSize]);
 	const columns = useMemo<ColumnDef<ProjectDetailPotentialListItem>[]>(
 		() =>
 			[
@@ -113,30 +151,19 @@ export function ProjectPotentialVulnerabilitiesSection({
 							.getRowModel()
 							.rows.findIndex((candidateRow) => candidateRow.id === row.id);
 						const pagination = table.getState().pagination;
-						return pagination.pageIndex * pagination.pageSize + pageRowIndex + 1;
+						return (
+							pagination.pageIndex * pagination.pageSize + pageRowIndex + 1
+						);
 					},
-				},
-				{
-					id: "findingId",
-					accessorFn: (row) => row.id,
-					header: "漏洞ID",
-					meta: {
-						label: "漏洞ID",
-						plainHeader: true,
-						headerClassName: "w-[22%] border-r border-border/50 text-center",
-						cellClassName:
-							"border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap",
-					},
-					cell: ({ row }) => `#${row.original.id}`,
 				},
 				{
 					id: "findingTitle",
-					accessorFn: (row) => row.cweLabel,
+					accessorFn: (row) => `${row.id} ${row.title} ${row.cweLabel}`,
 					header: "漏洞",
 					meta: {
 						label: "漏洞",
 						plainHeader: true,
-						headerClassName: "w-[26%] border-r border-border/50 text-center",
+						headerClassName: "w-[48%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-left",
 					},
 					cell: ({ row }) => (
@@ -152,7 +179,8 @@ export function ProjectPotentialVulnerabilitiesSection({
 				},
 				{
 					id: "taskCategory",
-					accessorFn: (row) => row.taskCategory,
+					accessorFn: (row) =>
+						`${row.taskCategory} ${row.taskLabel} ${row.taskId} ${row.taskName}`,
 					header: "任务",
 					meta: {
 						label: "任务",
@@ -162,7 +190,11 @@ export function ProjectPotentialVulnerabilitiesSection({
 					},
 					cell: ({ row }) => (
 						<div className="flex flex-col items-center gap-2">
-							<Badge className={getTaskCategoryBadgeClassName(row.original.taskCategory)}>
+							<Badge
+								className={getTaskCategoryBadgeClassName(
+									row.original.taskCategory,
+								)}
+							>
 								{row.original.taskLabel}
 							</Badge>
 						</div>
@@ -195,7 +227,9 @@ export function ProjectPotentialVulnerabilitiesSection({
 						cellClassName: "border-r border-border/30 text-center",
 					},
 					cell: ({ row }) => (
-						<Badge className={getConfidenceBadgeClassName(row.original.confidence)}>
+						<Badge
+							className={getConfidenceBadgeClassName(row.original.confidence)}
+						>
 							{getConfidenceText(row.original.confidence)}
 						</Badge>
 					),
@@ -210,7 +244,7 @@ export function ProjectPotentialVulnerabilitiesSection({
 						headerClassName: "w-[12%] text-center",
 						cellClassName: "text-center",
 					},
-					cell: ({ row }) => (
+					cell: ({ row }) =>
 						row.original.route ? (
 							<Button
 								asChild
@@ -218,7 +252,9 @@ export function ProjectPotentialVulnerabilitiesSection({
 								variant="outline"
 								className="cyber-btn-ghost h-7 px-3"
 							>
-								<Link to={appendReturnTo(row.original.route, currentRoute)}>详情</Link>
+								<Link to={appendReturnTo(row.original.route, currentRoute)}>
+									详情
+								</Link>
 							</Button>
 						) : (
 							<Button
@@ -230,25 +266,14 @@ export function ProjectPotentialVulnerabilitiesSection({
 							>
 								详情
 							</Button>
-						)
-					),
+						),
 				},
 			] satisfies AppColumnDef<ProjectDetailPotentialListItem, unknown>[],
 		[currentRoute],
 	);
-	const defaultState = useMemo<Partial<DataTableQueryState>>(
-		() => ({
-			pagination: {
-				pageIndex: 0,
-				pageSize: Math.max(1, pageSize),
-			},
-		}),
-		[pageSize],
-	);
-
 	return (
 		<section className="space-y-3">
-			<div className="flex flex-wrap items-start justify-between gap-3">
+			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div className="space-y-2">
 					<div className="flex items-center gap-2">
 						<Bug className="h-4 w-4 text-amber-400" />
@@ -258,6 +283,16 @@ export function ProjectPotentialVulnerabilitiesSection({
 						<Badge className="cyber-badge-muted">{totalFindings}</Badge>
 					</div>
 				</div>
+				{statusMessage ? null : (
+					<Input
+						value={tableState.globalFilter}
+						onChange={(event) => handleSearchChange(event.target.value)}
+						placeholder="搜索漏洞 ID、类型或任务"
+						startIcon={<Search className="h-4 w-4" />}
+						className="h-9 border-border/60 bg-muted/40 focus:bg-muted/40"
+						wrapperClassName="w-full max-w-xs sm:w-80"
+					/>
+				)}
 			</div>
 
 			{statusMessage ? (
@@ -272,19 +307,14 @@ export function ProjectPotentialVulnerabilitiesSection({
 			) : (
 				<div className="space-y-3">
 					<DataTable
-						key={`${status}:${findings.length}:${pageSize}`}
 						data={findings}
 						columns={columns}
-						defaultState={defaultState}
+						state={tableState}
+						onStateChange={setTableState}
 						emptyState={{
 							title: "暂无潜在漏洞",
 						}}
-						toolbar={{
-							searchPlaceholder: "搜索漏洞 ID、类型或任务",
-							showColumnVisibility: false,
-							showDensityToggle: false,
-							showReset: false,
-						}}
+						toolbar={false}
 						pagination={{
 							enabled: true,
 							pageSizeOptions: [10, 20, 50],

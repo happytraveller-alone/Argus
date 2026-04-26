@@ -1,5 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import type { Project } from "../src/shared/types";
+
+type ProjectsPageSelectorsModule =
+	typeof import("../src/pages/projects/lib/projectsPageSelectors.ts");
+type BuildProjectsPageViewModelModule =
+	typeof import("../src/pages/projects/lib/buildProjectsPageViewModel.ts");
 
 async function importOrFail<TModule = Record<string, unknown>>(
 	relativePath: string,
@@ -14,7 +20,7 @@ async function importOrFail<TModule = Record<string, unknown>>(
 }
 
 test("projects selectors filter by name and description only", async () => {
-	const selectors = await importOrFail<any>(
+	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
 
@@ -34,34 +40,49 @@ test("projects selectors filter by name and description only", async () => {
 	];
 
 	assert.deepEqual(
-		selectors.filterProjects(projects, "payment").map((project: any) => project.id),
+		selectors.filterProjects(projects, "payment").map((project) => project.id),
 		["2"],
 	);
 	assert.deepEqual(
-		selectors.filterProjects(projects, "alpha.git").map((project: any) => project.id),
+		selectors
+			.filterProjects(projects, "alpha.git")
+			.map((project) => project.id),
 		[],
 	);
 	assert.equal(selectors.filterProjects(projects, "").length, 2);
 });
 
 test("projects selectors build adaptive pagination items with ellipsis", async () => {
-	const selectors = await importOrFail<any>(
+	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
 
 	assert.deepEqual(selectors.buildPaginationItems(3, 5), [1, 2, 3, 4, 5]);
-	assert.deepEqual(
-		selectors.buildPaginationItems(5, 10),
-		[1, "ellipsis", 3, 4, 5, 6, 7, "ellipsis", 10],
-	);
-	assert.deepEqual(
-		selectors.buildPaginationItems(9, 12),
-		[1, "ellipsis", 7, 8, 9, 10, 11, 12],
-	);
+	assert.deepEqual(selectors.buildPaginationItems(5, 10), [
+		1,
+		"ellipsis",
+		3,
+		4,
+		5,
+		6,
+		7,
+		"ellipsis",
+		10,
+	]);
+	assert.deepEqual(selectors.buildPaginationItems(9, 12), [
+		1,
+		"ellipsis",
+		7,
+		8,
+		9,
+		10,
+		11,
+		12,
+	]);
 });
 
 test("projects selectors calculate responsive project page size from container metrics", async () => {
-	const selectors = await importOrFail<any>(
+	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
 
@@ -95,7 +116,7 @@ test("projects selectors calculate responsive project page size from container m
 });
 
 test("projects selectors keep the current visible anchor after page size changes", async () => {
-	const selectors = await importOrFail<any>(
+	const selectors = await importOrFail<ProjectsPageSelectorsModule>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
 
@@ -125,31 +146,41 @@ test("projects selectors keep the current visible anchor after page size changes
 });
 
 test("projects view model renders archive size and zero stats when metrics pending", async () => {
-	const builder = await importOrFail<any>(
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
 	);
 
-	const projects = [
+	const projects: Project[] = [
 		{
 			id: "p1",
 			name: "Pending Metrics",
-			detailPath: "",
 			description: "",
 			source_type: "zip",
 			repository_url: undefined,
 			repository_type: "other",
 			default_branch: "main",
 			programming_languages: "ts",
-			owner_id: "u1",
 			is_active: true,
 			created_at: "2024-01-01T00:00:00Z",
-				updated_at: "2024-01-01T00:00:00Z",
-				management_metrics: {
-					status: "pending",
-					archive_size_bytes: 4096,
-				},
+			updated_at: "2024-01-01T00:00:00Z",
+			management_metrics: {
+				status: "pending",
+				archive_size_bytes: 4096,
+				completed_tasks: 0,
+				running_tasks: 0,
+				total_tasks: 0,
+				agent_tasks: 0,
+				opengrep_tasks: 0,
+				gitleaks_tasks: 0,
+				bandit_tasks: 0,
+				phpstan_tasks: 0,
+				critical: 0,
+				high: 0,
+				medium: 0,
+				low: 0,
 			},
-		];
+		},
+	];
 
 	const viewModel = builder.buildProjectsPageViewModel({
 		loading: false,
@@ -173,11 +204,11 @@ test("projects view model renders archive size and zero stats when metrics pendi
 });
 
 test("projects view model exposes metrics when ready", async () => {
-	const builder = await importOrFail<any>(
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
 	);
 
-	const projects = [
+	const projects: Project[] = [
 		{
 			id: "p-ready",
 			name: "Ready Project",
@@ -187,7 +218,6 @@ test("projects view model exposes metrics when ready", async () => {
 			repository_type: "other",
 			default_branch: "main",
 			programming_languages: "ts",
-			owner_id: "u1",
 			is_active: true,
 			created_at: "2024-01-01T00:00:00Z",
 			updated_at: "2024-01-01T00:00:00Z",
@@ -236,11 +266,11 @@ test("projects view model exposes metrics when ready", async () => {
 });
 
 test("projects view model exposes vulnerability stats and browse guards", async () => {
-	const builder = await importOrFail<any>(
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
 	);
 
-	const projects = [
+	const projects: Project[] = [
 		{
 			id: "p-guards",
 			name: "Guarded Project",
@@ -250,7 +280,6 @@ test("projects view model exposes vulnerability stats and browse guards", async 
 			repository_type: "other",
 			default_branch: "main",
 			programming_languages: "ts",
-			owner_id: "u1",
 			is_active: true,
 			created_at: "2024-01-01T00:00:00Z",
 			updated_at: "2024-01-01T00:00:00Z",
@@ -304,12 +333,83 @@ test("projects view model exposes vulnerability stats and browse guards", async 
 	);
 });
 
-test("projects view model falls back missing AI verified severities to zero", async () => {
-	const builder = await importOrFail<any>(
+test("projects view model syncs source breakdown into found potential vulnerability totals", async () => {
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
 	);
 
-	const projects = [
+	const projects: Project[] = [
+		{
+			id: "p-static-sync",
+			name: "Static Sync Project",
+			description: "",
+			source_type: "zip",
+			repository_url: undefined,
+			repository_type: "other",
+			default_branch: "main",
+			programming_languages: "ts",
+			is_active: true,
+			created_at: "2024-01-01T00:00:00Z",
+			updated_at: "2024-01-01T00:00:00Z",
+			management_metrics: {
+				status: "ready",
+				archive_size_bytes: 1_024,
+				completed_tasks: 2,
+				running_tasks: 0,
+				total_tasks: 2,
+				agent_tasks: 1,
+				opengrep_tasks: 1,
+				gitleaks_tasks: 0,
+				bandit_tasks: 0,
+				phpstan_tasks: 0,
+				critical: 0,
+				high: 0,
+				medium: 0,
+				low: 0,
+				static_critical: 0,
+				static_high: 0,
+				static_medium: 3,
+				static_low: 2,
+				intelligent_critical: 0,
+				intelligent_high: 1,
+				intelligent_medium: 0,
+				intelligent_low: 0,
+				verified_critical: 0,
+				verified_high: 1,
+				verified_medium: 0,
+				verified_low: 0,
+				created_at: "2024-01-01T00:00:00Z",
+				updated_at: "2024-01-01T00:00:00Z",
+			},
+		},
+	];
+
+	const viewModel = builder.buildProjectsPageViewModel({
+		loading: false,
+		filteredProjects: projects,
+		pagedProjects: projects,
+		projectPage: 1,
+		totalProjectPages: 1,
+		projectDetailFrom: "/projects",
+		searchTerm: "",
+		searchPlaceholder: "Search",
+	});
+
+	const row = viewModel.rows[0];
+	assert.equal(row.vulnerabilityStats.high, 1);
+	assert.equal(row.vulnerabilityStats.medium, 3);
+	assert.equal(row.vulnerabilityStats.low, 2);
+	assert.equal(row.vulnerabilityStats.total, 6);
+	assert.equal(row.aiVerifiedStats.high, 1);
+	assert.equal(row.aiVerifiedStats.total, 1);
+});
+
+test("projects view model falls back missing AI verified severities to zero", async () => {
+	const builder = await importOrFail<BuildProjectsPageViewModelModule>(
+		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
+	);
+
+	const projects: Project[] = [
 		{
 			id: "p-legacy-ai",
 			name: "Legacy Metrics Project",
@@ -319,7 +419,6 @@ test("projects view model falls back missing AI verified severities to zero", as
 			repository_type: "other",
 			default_branch: "main",
 			programming_languages: "ts",
-			owner_id: "u1",
 			is_active: true,
 			created_at: "2024-01-01T00:00:00Z",
 			updated_at: "2024-01-01T00:00:00Z",

@@ -47,15 +47,15 @@ test("fetchTaskActivities aggregates opengrep static task severities by detail-p
 		assert.deepEqual(activities[0]?.staticFindingStats, {
 			critical: 0,
 			high: 0,
-			medium: 3,
-			low: 2,
+			medium: 0,
+			low: 3,
 		});
 	} finally {
 		apiClient.get = originalGet;
 	}
 });
 
-test("fetchTaskActivities clamps opengrep low severity count at zero", async () => {
+test("fetchTaskActivities clamps downgraded opengrep low count to total findings", async () => {
 	const originalGet = apiClient.get;
 	const batchId = "static-batch-2";
 
@@ -97,8 +97,8 @@ test("fetchTaskActivities clamps opengrep low severity count at zero", async () 
 		assert.deepEqual(activities[0]?.staticFindingStats, {
 			critical: 0,
 			high: 0,
-			medium: 4,
-			low: 0,
+			medium: 0,
+			low: 2,
 		});
 	} finally {
 		apiClient.get = originalGet;
@@ -150,8 +150,8 @@ test("fetchTaskActivities does not request removed static engine task endpoints"
 		assert.deepEqual(activities[0]?.staticFindingStats, {
 			critical: 0,
 			high: 0,
-			medium: 1,
-			low: 0,
+			medium: 0,
+			low: 1,
 		});
 		assert.deepEqual(calls, [
 			"/agent-tasks/",

@@ -84,6 +84,14 @@ pub struct ProjectManagementMetricsResponse {
     pub high: i64,
     pub medium: i64,
     pub low: i64,
+    pub static_critical: i64,
+    pub static_high: i64,
+    pub static_medium: i64,
+    pub static_low: i64,
+    pub intelligent_critical: i64,
+    pub intelligent_high: i64,
+    pub intelligent_medium: i64,
+    pub intelligent_low: i64,
     pub verified_critical: i64,
     pub verified_high: i64,
     pub verified_medium: i64,
@@ -259,7 +267,7 @@ pub async fn create_project(
         .await
         .map_err(internal_error)?;
     sync_python_project_mirror(&state, &project).await?;
-    Ok(Json(to_project_response(&project, true)))
+    Ok(Json(to_project_response(&project, true, None)))
 }
 
 pub async fn list_projects(
@@ -274,12 +282,17 @@ pub async fn list_projects(
     let skip = query.skip.unwrap_or(0);
     let limit = query.limit.unwrap_or(items.len());
     let include_metrics = query.include_metrics.unwrap_or(false);
+    let task_snapshot = if include_metrics {
+        load_project_metrics_snapshot(&state).await
+    } else {
+        None
+    };
 
     let response = items
         .into_iter()
         .skip(skip)
         .take(limit)
-        .map(|project| to_project_response(&project, include_metrics))
+        .map(|project| to_project_response(&project, include_metrics, task_snapshot.as_ref()))
         .collect();
     Ok(Json(response))
 }
@@ -289,7 +302,12 @@ pub async fn get_project(
     AxumPath(project_id): AxumPath<String>,
 ) -> Result<Json<ProjectResponse>, ApiError> {
     let project = require_project(&state, &project_id).await?;
-    Ok(Json(to_project_response(&project, true)))
+    let task_snapshot = load_project_metrics_snapshot(&state).await;
+    Ok(Json(to_project_response(
+        &project,
+        true,
+        task_snapshot.as_ref(),
+    )))
 }
 
 pub async fn update_project(
@@ -325,7 +343,12 @@ pub async fn update_project(
         .await
         .map_err(internal_error)?;
     sync_python_project_mirror(&state, &project).await?;
-    Ok(Json(to_project_response(&project, true)))
+    let task_snapshot = load_project_metrics_snapshot(&state).await;
+    Ok(Json(to_project_response(
+        &project,
+        true,
+        task_snapshot.as_ref(),
+    )))
 }
 
 pub async fn delete_project(
@@ -389,7 +412,7 @@ pub async fn create_project_with_zip(
         .await
         .map_err(internal_error)?;
     sync_python_project_mirror(&state, &project).await?;
-    Ok(Json(to_project_response(&project, true)))
+    Ok(Json(to_project_response(&project, true, None)))
 }
 
 pub async fn get_project_zip_info(
@@ -705,7 +728,8 @@ pub async fn recalc_project_metrics(
     AxumPath(project_id): AxumPath<String>,
 ) -> Result<Json<ProjectManagementMetricsResponse>, ApiError> {
     let project = require_project(&state, &project_id).await?;
-    Ok(Json(build_metrics(&project)))
+    let task_snapshot = load_project_metrics_snapshot(&state).await;
+    Ok(Json(build_metrics(&project, task_snapshot.as_ref())))
 }
 
 pub async fn get_project_stats(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
@@ -1336,7 +1360,28 @@ fn percent_encode_utf8(value: &str) -> String {
     encoded
 }
 
-fn to_project_response(project: &StoredProject, include_metrics: bool) -> ProjectResponse {
+#[derive(Clone, Copy, Debug, Default)]
+struct SeverityMetricCounts {
+    critical: i64,
+    high: i64,
+    medium: i64,
+    low: i64,
+}
+
+impl SeverityMetricCounts {
+    fn add(&mut self, other: SeverityMetricCounts) {
+        self.critical += other.critical;
+        self.high += other.high;
+        self.medium += other.medium;
+        self.low += other.low;
+    }
+}
+
+fn to_project_response(
+    project: &StoredProject,
+    include_metrics: bool,
+    task_snapshot: Option<&task_state::TaskStateSnapshot>,
+) -> ProjectResponse {
     ProjectResponse {
         id: project.id.clone(),
         name: project.name.clone(),
@@ -1348,33 +1393,117 @@ fn to_project_response(project: &StoredProject, include_metrics: bool) -> Projec
         is_active: project.is_active,
         created_at: project.created_at.clone(),
         updated_at: project.updated_at.clone(),
-        management_metrics: include_metrics.then(|| build_metrics(project)),
+        management_metrics: include_metrics.then(|| build_metrics(project, task_snapshot)),
     }
 }
 
-fn build_metrics(project: &StoredProject) -> ProjectManagementMetricsResponse {
+async fn load_project_metrics_snapshot(state: &AppState) -> Option<task_state::TaskStateSnapshot> {
+    task_state::load_snapshot(state).await.ok()
+}
+
+fn build_metrics(
+    project: &StoredProject,
+    task_snapshot: Option<&task_state::TaskStateSnapshot>,
+) -> ProjectManagementMetricsResponse {
     let archive = project.archive.as_ref();
+    let mut total_tasks = 0;
+    let mut completed_tasks = 0;
+    let mut running_tasks = 0;
+    let mut agent_tasks = 0;
+    let mut opengrep_tasks = 0;
+    let mut gitleaks_tasks = 0;
+    let mut bandit_tasks = 0;
+    let mut phpstan_tasks = 0;
+    let mut static_counts = SeverityMetricCounts::default();
+    let mut intelligent_counts = SeverityMetricCounts::default();
+    let mut verified_counts = SeverityMetricCounts::default();
+    let mut last_completed_task_at: Option<String> = None;
+
+    if let Some(snapshot) = task_snapshot {
+        for record in snapshot.agent_tasks.values() {
+            if record.project_id != project.id {
+                continue;
+            }
+            total_tasks += 1;
+            agent_tasks += 1;
+            add_task_status_counts(&record.status, &mut completed_tasks, &mut running_tasks);
+            if is_completed_task_status(&record.status) {
+                update_latest_timestamp(
+                    &mut last_completed_task_at,
+                    record.completed_at.as_deref().unwrap_or(&record.created_at),
+                );
+            }
+            intelligent_counts.add(SeverityMetricCounts {
+                critical: non_negative_i64(record.critical_count),
+                high: non_negative_i64(record.high_count),
+                medium: non_negative_i64(record.medium_count),
+                low: non_negative_i64(record.low_count),
+            });
+            verified_counts.add(SeverityMetricCounts {
+                critical: non_negative_i64(record.verified_critical_count),
+                high: non_negative_i64(record.verified_high_count),
+                medium: non_negative_i64(record.verified_medium_count),
+                low: non_negative_i64(record.verified_low_count),
+            });
+        }
+
+        for record in snapshot.static_tasks.values() {
+            if record.project_id != project.id {
+                continue;
+            }
+            total_tasks += 1;
+            match record.engine.as_str() {
+                "opengrep" => opengrep_tasks += 1,
+                "gitleaks" => gitleaks_tasks += 1,
+                "bandit" => bandit_tasks += 1,
+                "phpstan" => phpstan_tasks += 1,
+                _ => {}
+            }
+            add_task_status_counts(&record.status, &mut completed_tasks, &mut running_tasks);
+            if is_completed_task_status(&record.status) {
+                update_latest_timestamp(
+                    &mut last_completed_task_at,
+                    record.updated_at.as_deref().unwrap_or(&record.created_at),
+                );
+            }
+            if record.engine == "opengrep" {
+                static_counts.add(static_task_severity_counts(record));
+            }
+        }
+    }
+
+    let mut aggregate_counts = static_counts;
+    aggregate_counts.add(intelligent_counts);
+
     ProjectManagementMetricsResponse {
         archive_size_bytes: archive.map(|item| item.file_size),
         archive_original_filename: archive.map(|item| item.original_filename.clone()),
         archive_uploaded_at: archive.map(|item| item.uploaded_at.clone()),
-        total_tasks: 0,
-        completed_tasks: 0,
-        running_tasks: 0,
-        agent_tasks: 0,
-        opengrep_tasks: 0,
-        gitleaks_tasks: 0,
-        bandit_tasks: 0,
-        phpstan_tasks: 0,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        verified_critical: 0,
-        verified_high: 0,
-        verified_medium: 0,
-        verified_low: 0,
-        last_completed_task_at: None,
+        total_tasks,
+        completed_tasks,
+        running_tasks,
+        agent_tasks,
+        opengrep_tasks,
+        gitleaks_tasks,
+        bandit_tasks,
+        phpstan_tasks,
+        critical: aggregate_counts.critical,
+        high: aggregate_counts.high,
+        medium: aggregate_counts.medium,
+        low: aggregate_counts.low,
+        static_critical: static_counts.critical,
+        static_high: static_counts.high,
+        static_medium: static_counts.medium,
+        static_low: static_counts.low,
+        intelligent_critical: intelligent_counts.critical,
+        intelligent_high: intelligent_counts.high,
+        intelligent_medium: intelligent_counts.medium,
+        intelligent_low: intelligent_counts.low,
+        verified_critical: verified_counts.critical,
+        verified_high: verified_counts.high,
+        verified_medium: verified_counts.medium,
+        verified_low: verified_counts.low,
+        last_completed_task_at,
         status: if archive.is_some() {
             "ready"
         } else {
@@ -1384,6 +1513,96 @@ fn build_metrics(project: &StoredProject) -> ProjectManagementMetricsResponse {
         error_message: None,
         created_at: project.created_at.clone(),
         updated_at: project.updated_at.clone(),
+    }
+}
+
+fn add_task_status_counts(status: &str, completed_tasks: &mut i64, running_tasks: &mut i64) {
+    match dashboard_task_status_bucket(status) {
+        DashboardTaskStatusBucket::Completed => *completed_tasks += 1,
+        DashboardTaskStatusBucket::Running | DashboardTaskStatusBucket::Pending => {
+            *running_tasks += 1
+        }
+        _ => {}
+    }
+}
+
+fn is_completed_task_status(status: &str) -> bool {
+    matches!(
+        dashboard_task_status_bucket(status),
+        DashboardTaskStatusBucket::Completed
+    )
+}
+
+fn update_latest_timestamp(current: &mut Option<String>, candidate: &str) {
+    if candidate.is_empty() {
+        return;
+    }
+    if current.as_deref().is_none_or(|value| candidate > value) {
+        *current = Some(candidate.to_string());
+    }
+}
+
+fn non_negative_i64(value: i64) -> i64 {
+    value.max(0)
+}
+
+fn json_non_negative_i64(value: &Value, key: &str) -> i64 {
+    value
+        .get(key)
+        .and_then(Value::as_i64)
+        .unwrap_or_default()
+        .max(0)
+}
+
+fn static_task_severity_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {
+    if record.findings.is_empty() {
+        return static_task_summary_counts(record);
+    }
+
+    let mut counts = SeverityMetricCounts::default();
+    for finding in &record.findings {
+        let Some(bucket) = static_finding_severity_bucket(&finding.payload) else {
+            continue;
+        };
+        match bucket {
+            StaticFindingSeverityBucket::High => counts.high += 1,
+            StaticFindingSeverityBucket::Medium => counts.medium += 1,
+            StaticFindingSeverityBucket::Low => counts.low += 1,
+        }
+    }
+    counts
+}
+
+fn static_task_summary_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {
+    let low = json_non_negative_i64(&record.extra, "error_count")
+        + json_non_negative_i64(&record.extra, "warning_count");
+    SeverityMetricCounts {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low,
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum StaticFindingSeverityBucket {
+    High,
+    Medium,
+    Low,
+}
+
+fn static_finding_severity_bucket(payload: &Value) -> Option<StaticFindingSeverityBucket> {
+    let severity = payload
+        .get("severity")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_uppercase();
+    match severity.as_str() {
+        "CRITICAL" => Some(StaticFindingSeverityBucket::High),
+        "HIGH" => Some(StaticFindingSeverityBucket::Medium),
+        "ERROR" | "WARNING" | "MEDIUM" => Some(StaticFindingSeverityBucket::Low),
+        _ => None,
     }
 }
 

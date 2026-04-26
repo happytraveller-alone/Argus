@@ -101,6 +101,54 @@ test("DataTable remote pagination uses server total instead of current page row 
   assert.match(markup, /共 37 条，第 2 \/ 4 页/);
 });
 
+test("DataTable sizes columns from the current page header and cell content", async () => {
+  const dataTableModule = await importOrFail<any>(
+    "../src/components/data-table/index.ts",
+  );
+
+  const markup = renderToStaticMarkup(
+    createElement(dataTableModule.DataTable, {
+      data: [
+        {
+          id: "p1",
+          name: "短",
+          status: "visible-current-page",
+        },
+        {
+          id: "p2",
+          name: "off-page-value-that-must-not-size-the-column",
+          status: "closed",
+        },
+      ],
+      columns: [
+        {
+          accessorKey: "name",
+          header: "长表头",
+        },
+        {
+          accessorKey: "status",
+          header: "状态",
+        },
+      ],
+      defaultState: {
+        pagination: {
+          pageIndex: 0,
+          pageSize: 1,
+        },
+      },
+      pagination: {
+        enabled: true,
+      },
+    }),
+  );
+
+  assert.match(markup, /style="width:256px"/);
+  assert.match(markup, /style="width:72px;min-width:72px"/);
+  assert.match(markup, /style="width:184px;min-width:184px"/);
+  assert.doesNotMatch(markup, /off-page-value-that-must-not-size-the-column/);
+  assert.doesNotMatch(markup, /style="width:520px;min-width:520px"/);
+});
+
 test("DataTable renders draggable resize handles when column resizing is enabled", async () => {
   const dataTableModule = await importOrFail<any>(
     "../src/components/data-table/index.ts",

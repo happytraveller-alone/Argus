@@ -1592,9 +1592,16 @@ async fn list_static_findings(
             Some(status) => finding.status.eq_ignore_ascii_case(status),
             None => true,
         })
+        .filter_map(static_finding_visible_payload)
+        .filter(|payload| match query.severity.as_deref() {
+            Some(severity) => payload
+                .get("severity")
+                .and_then(Value::as_str)
+                .is_some_and(|value| value.eq_ignore_ascii_case(severity)),
+            None => true,
+        })
         .skip(query.skip.unwrap_or(0))
         .take(query.limit.unwrap_or(1_000))
-        .map(|finding| finding.payload.clone())
         .collect();
 
     Ok(Json(items))
@@ -1631,8 +1638,56 @@ async fn get_static_finding_value(
         .findings
         .iter()
         .find(|finding| finding.id == finding_id)
-        .map(|finding| finding.payload.clone())
+        .and_then(static_finding_visible_payload)
         .ok_or_else(|| ApiError::NotFound(format!("{engine} finding not found: {finding_id}")))
+}
+
+fn visible_static_finding_count(record: &task_state::StaticTaskRecord) -> i64 {
+    if record.findings.is_empty() {
+        return json_non_negative_i64(&record.extra, "error_count")
+            + json_non_negative_i64(&record.extra, "warning_count");
+    }
+    record
+        .findings
+        .iter()
+        .filter(|finding| static_finding_display_severity(&finding.payload).is_some())
+        .count() as i64
+}
+
+fn static_finding_visible_payload(finding: &task_state::StaticFindingRecord) -> Option<Value> {
+    let display_severity = static_finding_display_severity(&finding.payload)?;
+    let mut payload = finding.payload.clone();
+    if let Some(object) = payload.as_object_mut() {
+        if !object.contains_key("raw_severity") {
+            let raw_severity = object.get("severity").cloned().unwrap_or(Value::Null);
+            object.insert("raw_severity".to_string(), raw_severity);
+        }
+        object.insert("severity".to_string(), json!(display_severity));
+    }
+    Some(payload)
+}
+
+fn static_finding_display_severity(payload: &Value) -> Option<&'static str> {
+    let normalized = payload
+        .get("severity")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_uppercase();
+    match normalized.as_str() {
+        "CRITICAL" => Some("HIGH"),
+        "HIGH" => Some("MEDIUM"),
+        "ERROR" | "WARNING" | "MEDIUM" => Some("LOW"),
+        _ => None,
+    }
+}
+
+fn json_non_negative_i64(value: &Value, key: &str) -> i64 {
+    value
+        .get(key)
+        .and_then(Value::as_i64)
+        .unwrap_or_default()
+        .max(0)
 }
 
 async fn update_static_finding_status(
@@ -1854,7 +1909,7 @@ fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
         "name": record.name,
         "status": record.status,
         "target_path": record.target_path,
-        "total_findings": record.total_findings,
+        "total_findings": visible_static_finding_count(record),
         "scan_duration_ms": record.scan_duration_ms,
         "files_scanned": record.files_scanned,
         "error_message": record.error_message,

@@ -23,6 +23,16 @@ test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
         status: "verified",
         rule_name: "auth-rule",
       },
+      {
+        id: "og-hidden",
+        scan_task_id: "task-og",
+        severity: "LOW",
+        confidence: "HIGH",
+        file_path: "src/ignored.ts",
+        start_line: 4,
+        status: "open",
+        rule_name: "ignored-rule",
+      },
     ],
     opengrepTaskId: "task-og",
   });
@@ -30,7 +40,7 @@ test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.engine, "opengrep");
   assert.equal(rows[0]?.filePath, "repo/src/auth.ts");
-  assert.equal(rows[0]?.severity, "HIGH");
+  assert.equal(rows[0]?.severity, "MEDIUM");
   assert.equal(rows[0]?.confidence, "LOW");
 });
 

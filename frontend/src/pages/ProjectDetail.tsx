@@ -3,29 +3,35 @@
  * Cyberpunk Terminal Aesthetic
  */
 
+import type { ColumnDef } from "@tanstack/react-table";
 import {
 	Activity,
 	AlertTriangle,
 	ArrowLeft,
 	FileText,
 	Loader2,
+	Search,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ColumnDef } from "@tanstack/react-table";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import CreateScanTaskDialog from "@/components/scan/CreateScanTaskDialog";
 import {
-	DataTable,
 	type AppColumnDef,
+	DataTable,
 	type DataTableQueryState,
 } from "@/components/data-table";
+import SilentLoadingState from "@/components/performance/SilentLoadingState";
+import CreateScanTaskDialog from "@/components/scan/CreateScanTaskDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import SilentLoadingState from "@/components/performance/SilentLoadingState";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import ProjectTaskFindingsDialog from "@/pages/project-detail/components/ProjectTaskFindingsDialog";
+import {
+	getProjectCardRecentTasks,
+	type ProjectCardTaskFindingCategory,
+} from "@/features/projects/services/projectCardPreview";
 import ProjectPotentialVulnerabilitiesSection from "@/pages/project-detail/components/ProjectPotentialVulnerabilitiesSection";
+import ProjectTaskFindingsDialog from "@/pages/project-detail/components/ProjectTaskFindingsDialog";
 import {
 	buildProjectDetailPotentialTree,
 	flattenProjectDetailPotentialFindings,
@@ -33,22 +39,18 @@ import {
 	type ProjectDetailPotentialListItem,
 } from "@/pages/project-detail/potentialVulnerabilities";
 import {
-	getProjectCardRecentTasks,
-	type ProjectCardTaskFindingCategory,
-} from "@/features/projects/services/projectCardPreview";
-import {
 	type AgentFinding,
 	type AgentTask,
 	getAgentFindings,
 	getAgentTasks,
 } from "@/shared/api/agentTasks";
+import { api } from "@/shared/api/database";
 import {
 	getOpengrepScanFindings,
 	getOpengrepScanTasks,
 	type OpengrepFinding,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
-import { api } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
@@ -60,7 +62,35 @@ type PotentialStatus = "loading" | "ready" | "empty" | "failed";
 type ProjectDescriptionStatus = "idle" | "generating" | "ready" | "failed";
 type ProjectDescriptionSource = "llm" | "static" | null;
 
-async function getAllOpengrepTaskFindings(taskId: string): Promise<OpengrepFinding[]> {
+function formatRecentTaskMetricValue(value: number | null) {
+	if (value === null || !Number.isFinite(value)) return "--";
+	return value.toLocaleString();
+}
+
+function getRecentTaskStatusBadge(status: string) {
+	switch (status) {
+		case "completed":
+			return <Badge className="cyber-badge-success font-normal">完成</Badge>;
+		case "running":
+			return <Badge className="cyber-badge-info font-normal">运行中</Badge>;
+		case "failed":
+			return <Badge className="cyber-badge-danger font-normal">失败</Badge>;
+		case "interrupted":
+			return (
+				<Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30 font-normal">
+					中断
+				</Badge>
+			);
+		case "cancelled":
+			return <Badge className="cyber-badge-muted font-normal">已取消</Badge>;
+		default:
+			return <Badge className="cyber-badge-muted font-normal">等待中</Badge>;
+	}
+}
+
+async function getAllOpengrepTaskFindings(
+	taskId: string,
+): Promise<OpengrepFinding[]> {
 	const findings: OpengrepFinding[] = [];
 	let skip = 0;
 
@@ -223,7 +253,8 @@ export default function ProjectDetail() {
 	const [lastDescriptionRequestProjectId, setLastDescriptionRequestProjectId] =
 		useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [showCreateScanTaskDialog, setShowCreateScanTaskDialog] = useState(false);
+	const [showCreateScanTaskDialog, setShowCreateScanTaskDialog] =
+		useState(false);
 	const [selectedTaskFindings, setSelectedTaskFindings] = useState<{
 		taskId: string;
 		taskCategory: ProjectCardTaskFindingCategory;
@@ -308,7 +339,9 @@ export default function ProjectDetail() {
 				}
 
 				const staticFindingsResult = await Promise.allSettled(
-					sourceOpengrepTasks.map((task) => getAllOpengrepTaskFindings(task.id)),
+					sourceOpengrepTasks.map((task) =>
+						getAllOpengrepTaskFindings(task.id),
+					),
 				);
 
 				const staticFindings: OpengrepFinding[] = staticFindingsResult.flatMap(
@@ -348,9 +381,8 @@ export default function ProjectDetail() {
 					opengrepFindings: staticFindings,
 				});
 
-				const flattenedFindings = flattenProjectDetailPotentialFindings(
-					nextTree,
-				);
+				const flattenedFindings =
+					flattenProjectDetailPotentialFindings(nextTree);
 				setPotentialFindings(flattenedFindings);
 				setPotentialTotalFindings(flattenedFindings.length);
 				setPotentialStatus(flattenedFindings.length > 0 ? "ready" : "empty");
@@ -371,15 +403,12 @@ export default function ProjectDetail() {
 			setPotentialFindings([]);
 			setPotentialTotalFindings(0);
 
-			const [
-				projectRes,
-				agentTasksRes,
-				staticTasksRes,
-			] = await Promise.allSettled([
-				api.getProjectById(id),
-				getAgentTasks({ project_id: id }),
-				getOpengrepScanTasks({ projectId: id }),
-			]);
+			const [projectRes, agentTasksRes, staticTasksRes] =
+				await Promise.allSettled([
+					api.getProjectById(id),
+					getAgentTasks({ project_id: id }),
+					getOpengrepScanTasks({ projectId: id }),
+				]);
 
 			const nextAgentTasks =
 				agentTasksRes.status === "fulfilled" &&
@@ -435,6 +464,7 @@ export default function ProjectDetail() {
 		void loadProjectData();
 	}, [id, loadProjectData]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset description request state when the route project id changes.
 	useEffect(() => {
 		setProjectDescriptionStatus("idle");
 		setProjectDescriptionSource(null);
@@ -465,7 +495,7 @@ export default function ProjectDetail() {
 					? {
 							...previous,
 							description: result.description,
-					  }
+						}
 					: previous,
 			);
 			setProjectDescriptionSource(result.source);
@@ -475,8 +505,8 @@ export default function ProjectDetail() {
 				typeof error === "object" &&
 				error !== null &&
 				"response" in error &&
-				typeof (error as { response?: { status?: number } }).response?.status ===
-					"number"
+				typeof (error as { response?: { status?: number } }).response
+					?.status === "number"
 					? (error as { response?: { status?: number } }).response?.status
 					: null;
 
@@ -535,27 +565,6 @@ export default function ProjectDetail() {
 		void loadProjectData();
 	};
 
-	const getStatusBadge = (status: string) => {
-		switch (status) {
-			case "completed":
-				return <Badge className="cyber-badge-success font-normal">完成</Badge>;
-			case "running":
-				return <Badge className="cyber-badge-info font-normal">运行中</Badge>;
-			case "failed":
-				return <Badge className="cyber-badge-danger font-normal">失败</Badge>;
-			case "interrupted":
-				return (
-					<Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30 font-normal">
-						中断
-					</Badge>
-				);
-			case "cancelled":
-				return <Badge className="cyber-badge-muted font-normal">已取消</Badge>;
-			default:
-				return <Badge className="cyber-badge-muted font-normal">等待中</Badge>;
-		}
-	};
-
 	const openTaskFindingsDialog = useCallback(
 		(
 			taskId: string,
@@ -581,10 +590,16 @@ export default function ProjectDetail() {
 		});
 	}, []);
 
-	const formatRecentTaskMetricValue = (value: number | null) => {
-		if (value === null || !Number.isFinite(value)) return "--";
-		return value.toLocaleString();
-	};
+	const handleRecentTasksSearchChange = useCallback((value: string) => {
+		setRecentTasksTableState((previous) => ({
+			...previous,
+			globalFilter: value,
+			pagination: {
+				...previous.pagination,
+				pageIndex: 0,
+			},
+		}));
+	}, []);
 	const recentTaskColumns = useMemo<ColumnDef<(typeof recentTasks)[number]>[]>(
 		() =>
 			[
@@ -605,7 +620,9 @@ export default function ProjectDetail() {
 							.getRowModel()
 							.rows.findIndex((candidateRow) => candidateRow.id === row.id);
 						const pagination = table.getState().pagination;
-						return pagination.pageIndex * pagination.pageSize + pageRowIndex + 1;
+						return (
+							pagination.pageIndex * pagination.pageSize + pageRowIndex + 1
+						);
 					},
 				},
 				{
@@ -631,7 +648,8 @@ export default function ProjectDetail() {
 						plainHeader: true,
 						width: "14%",
 						headerClassName: "w-[14%] border-r border-border/50 text-center",
-						cellClassName: "border-r border-border/30 text-center text-sm text-foreground",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-foreground",
 					},
 				},
 				{
@@ -659,7 +677,11 @@ export default function ProjectDetail() {
 						headerClassName: "w-[10%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-center",
 					},
-					cell: ({ row }) => <div className="flex justify-center">{getStatusBadge(row.original.status)}</div>,
+					cell: ({ row }) => (
+						<div className="flex justify-center">
+							{getRecentTaskStatusBadge(row.original.status)}
+						</div>
+					),
 				},
 				{
 					id: "vulnerabilities",
@@ -693,11 +715,14 @@ export default function ProjectDetail() {
 								variant="outline"
 								className="cyber-btn-ghost h-7 px-3"
 							>
-								<Link to={withStaticReturnTo(row.original.route, row.original.kind)}>
+								<Link
+									to={withStaticReturnTo(row.original.route, row.original.kind)}
+								>
 									任务详情
 								</Link>
 							</Button>
-							{row.original.supportsFindingsDetail && row.original.taskCategory ? (
+							{row.original.supportsFindingsDetail &&
+							row.original.taskCategory ? (
 								<Button
 									type="button"
 									size="sm"
@@ -716,7 +741,9 @@ export default function ProjectDetail() {
 									漏洞详情
 								</Button>
 							) : (
-								<span title={row.original.findingsButtonDisabledReason || undefined}>
+								<span
+									title={row.original.findingsButtonDisabledReason || undefined}
+								>
 									<Button
 										type="button"
 										size="sm"
@@ -732,13 +759,7 @@ export default function ProjectDetail() {
 					),
 				},
 			] satisfies AppColumnDef<(typeof recentTasks)[number], unknown>[],
-		[
-			formatDate,
-			getStatusBadge,
-			openTaskFindingsDialog,
-			withStaticReturnTo,
-			recentTasks,
-		],
+		[formatDate, openTaskFindingsDialog, withStaticReturnTo],
 	);
 	if (loading) {
 		return <SilentLoadingState className="min-h-[60vh]" />;
@@ -803,39 +824,44 @@ export default function ProjectDetail() {
 					}}
 				/>
 
-					<div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-						<div className="flex items-center gap-2">
-							<Activity className="w-4 h-4 text-sky-400" />
-							<h3 className="text-sm font-semibold uppercase tracking-wider">
-								最近任务
-							</h3>
-						</div>
+				<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+					<div className="flex items-center gap-2">
+						<Activity className="w-4 h-4 text-sky-400" />
+						<h3 className="text-sm font-semibold uppercase tracking-wider">
+							最近任务
+						</h3>
 					</div>
-
-					<DataTable
-						data={recentTasks}
-						columns={recentTaskColumns}
-						state={recentTasksTableState}
-						onStateChange={setRecentTasksTableState}
-						emptyState={{
-							title: "暂无任务",
-						}}
-						toolbar={{
-							searchPlaceholder: "搜索任务 ID、类型或创建时间",
-							showColumnVisibility: false,
-							showDensityToggle: false,
-							showReset: false,
-						}}
-						pagination={{
-							enabled: true,
-							pageSizeOptions: [10, 20, 50],
-							infoLabel: ({ table, filteredCount }) =>
-								`共 ${filteredCount.toLocaleString()} 条，第 ${
-									table.getState().pagination.pageIndex + 1
-								} / ${Math.max(1, table.getPageCount())} 页`,
-						}}
-						tableClassName="table-fixed"
+					<Input
+						value={recentTasksTableState.globalFilter}
+						onChange={(event) =>
+							handleRecentTasksSearchChange(event.target.value)
+						}
+						placeholder="搜索任务 ID、类型或创建时间"
+						startIcon={<Search className="h-4 w-4" />}
+						className="h-9 border-border/60 bg-muted/40 focus:bg-muted/40"
+						wrapperClassName="w-full max-w-xs sm:w-80"
 					/>
+				</div>
+
+				<DataTable
+					data={recentTasks}
+					columns={recentTaskColumns}
+					state={recentTasksTableState}
+					onStateChange={setRecentTasksTableState}
+					emptyState={{
+						title: "暂无任务",
+					}}
+					toolbar={false}
+					pagination={{
+						enabled: true,
+						pageSizeOptions: [10, 20, 50],
+						infoLabel: ({ table, filteredCount }) =>
+							`共 ${filteredCount.toLocaleString()} 条，第 ${
+								table.getState().pagination.pageIndex + 1
+							} / ${Math.max(1, table.getPageCount())} 页`,
+					}}
+					tableClassName="table-fixed"
+				/>
 
 				<ProjectPotentialVulnerabilitiesSection
 					status={potentialStatus}

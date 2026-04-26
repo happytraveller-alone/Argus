@@ -1,7 +1,4 @@
-import type {
-	Project,
-	ProjectManagementMetrics,
-} from "@/shared/types";
+import type { Project, ProjectManagementMetrics } from "@/shared/types";
 import type { ProjectsPageViewModel } from "../types";
 import { buildPaginationItems } from "./projectsPageSelectors";
 
@@ -19,7 +16,7 @@ function formatArchiveSize(bytes?: number | null) {
 }
 
 function buildExecutionStats(metrics?: ProjectManagementMetrics | null) {
-	if (!metrics || metrics.status !== "ready") {
+	if (!isMetricsReady(metrics)) {
 		return {
 			completed: 0,
 			running: 0,
@@ -31,52 +28,80 @@ function buildExecutionStats(metrics?: ProjectManagementMetrics | null) {
 	};
 }
 
-function buildVulnerabilityStats(metrics?: ProjectManagementMetrics | null) {
-	if (!metrics || metrics.status !== "ready") {
-		return {
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			total: 0,
-		};
-	}
-	const total =
-		(metrics.critical ?? 0) +
-		(metrics.high ?? 0) +
-		(metrics.medium ?? 0) +
-		(metrics.low ?? 0);
+type SeverityStats = {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+	total: number;
+};
+
+type SeverityValues = Omit<SeverityStats, "total">;
+
+const EMPTY_SEVERITY_VALUES: SeverityValues = {
+	critical: 0,
+	high: 0,
+	medium: 0,
+	low: 0,
+};
+
+function isMetricsReady(
+	metrics?: ProjectManagementMetrics | null,
+): metrics is ProjectManagementMetrics {
+	return metrics?.status === "ready";
+}
+
+function buildSeverityStats(values: SeverityValues): SeverityStats {
 	return {
-		critical: metrics.critical,
-		high: metrics.high,
-		medium: metrics.medium,
-		low: metrics.low,
-		total,
+		...values,
+		total: values.critical + values.high + values.medium + values.low,
 	};
 }
 
-function buildAiVerifiedStats(metrics?: ProjectManagementMetrics | null) {
-	if (!metrics || metrics.status !== "ready") {
-		return {
-			critical: 0,
-			high: 0,
-			medium: 0,
-			low: 0,
-			total: 0,
-		};
+function hasSourceSeverityBreakdown(metrics: ProjectManagementMetrics) {
+	return (
+		metrics.static_critical !== undefined ||
+		metrics.static_high !== undefined ||
+		metrics.static_medium !== undefined ||
+		metrics.static_low !== undefined ||
+		metrics.intelligent_critical !== undefined ||
+		metrics.intelligent_high !== undefined ||
+		metrics.intelligent_medium !== undefined ||
+		metrics.intelligent_low !== undefined
+	);
+}
+
+function buildVulnerabilityStats(metrics?: ProjectManagementMetrics | null) {
+	if (!isMetricsReady(metrics)) {
+		return buildSeverityStats(EMPTY_SEVERITY_VALUES);
 	}
-	const total =
-		(metrics.verified_critical ?? 0) +
-		(metrics.verified_high ?? 0) +
-		(metrics.verified_medium ?? 0) +
-		(metrics.verified_low ?? 0);
-	return {
+	if (!hasSourceSeverityBreakdown(metrics)) {
+		return buildSeverityStats({
+			critical: metrics.critical ?? 0,
+			high: metrics.high ?? 0,
+			medium: metrics.medium ?? 0,
+			low: metrics.low ?? 0,
+		});
+	}
+	return buildSeverityStats({
+		critical:
+			(metrics.static_critical ?? 0) + (metrics.intelligent_critical ?? 0),
+		high: (metrics.static_high ?? 0) + (metrics.intelligent_high ?? 0),
+		medium: (metrics.static_medium ?? 0) + (metrics.intelligent_medium ?? 0),
+		low: (metrics.static_low ?? 0) + (metrics.intelligent_low ?? 0),
+	});
+}
+
+function buildAiVerifiedStats(metrics?: ProjectManagementMetrics | null) {
+	if (!isMetricsReady(metrics)) {
+		return buildSeverityStats(EMPTY_SEVERITY_VALUES);
+	}
+	return buildSeverityStats({
 		critical: metrics.verified_critical ?? 0,
 		high: metrics.verified_high ?? 0,
 		medium: metrics.verified_medium ?? 0,
 		low: metrics.verified_low ?? 0,
-		total,
-	};
+	});
 }
 
 function getMetricsStatusMessage(metrics?: ProjectManagementMetrics | null) {
@@ -123,7 +148,9 @@ export function buildProjectsPageViewModel(
 			return {
 				id: project.id,
 				serialNumber:
-					filteredProjects.findIndex((candidate) => candidate.id === project.id) + 1,
+					filteredProjects.findIndex(
+						(candidate) => candidate.id === project.id,
+					) + 1,
 				name: project.name,
 				detailPath: `/projects/${project.id}`,
 				detailState: { from: projectDetailFrom },

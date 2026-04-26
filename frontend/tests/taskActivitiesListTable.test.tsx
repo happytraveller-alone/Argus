@@ -38,6 +38,18 @@ test("TaskActivitiesListTable aligns all header font sizes with the row-number h
   );
 });
 
+test("TaskActivitiesListTable uses compact table width and column minimums", () => {
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+
+  assert.match(source, /tableClassName="min-w-\[760px\]"/);
+  assert.match(source, /fillContainerWidth/);
+  assert.match(source, /width: 64/);
+  assert.match(source, /minWidth: 132/);
+  assert.match(source, /maxWidth: 156/);
+  assert.match(source, /width: 132/);
+  assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
+});
+
 test("TaskActivitiesListTable renders severity summaries for agent tasks and keeps static summaries", async () => {
   const tableModule = await import(
     "../src/features/tasks/components/TaskActivitiesListTable.tsx"
@@ -104,6 +116,10 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 
   assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
   assert.match(markup, /严重 0 \/ 高危 2 \/ 中危 3 \/ 低危 5/);
+  assert.match(markup, /style="width:100%;min-width:\d+px"/);
+  assert.match(markup, /style="width:156px;min-width:156px"/);
+  assert.match(markup, /style="width:132px;min-width:132px"/);
+  assert.match(markup, /class="block truncate text-base text-muted-foreground"/);
   assert.match(markup, /Demo Agent[\s\S]*?">-<\/td>/);
 });
 
@@ -148,7 +164,7 @@ test("TaskActivitiesListTable merges running progress into the status column", a
   );
 
   assert.doesNotMatch(markup, /<span>进度<\/span>/);
-  assert.match(markup, /<span>状态<\/span>/);
+  assert.match(markup, /<span class="whitespace-nowrap">状态<\/span>/);
   assert.match(
     markup,
     /Demo Running[\s\S]*?<span data-slot="badge"[\s\S]*?<span>任务运行中<\/span>[\s\S]*?<span class="rounded-\[2px\][\s\S]*?>51%<\/span>/,

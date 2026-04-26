@@ -15,7 +15,7 @@ test("Dashboard page uses a desktop single-screen shell and no longer reserves 1
 
 	assert.match(
 		source,
-		/className="min-h-screen space-y-6 bg-background p-6 font-mono relative xl:flex xl:h-\[100dvh\] xl:min-h-0 xl:flex-col xl:overflow-hidden"/,
+		/className="min-h-screen bg-background px-6 pb-6 pt-0 font-mono relative xl:flex xl:h-\[100dvh\] xl:min-h-0 xl:flex-col xl:overflow-hidden"/,
 	);
 	assert.match(source, /className="xl:min-h-0 xl:flex-1"/);
 	assert.doesNotMatch(source, /minHeight=\{1600\}/);

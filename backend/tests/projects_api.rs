@@ -440,6 +440,210 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
 }
 
 #[tokio::test]
+async fn project_management_metrics_include_cumulative_opengrep_findings() {
+    let state = AppState::from_config(isolated_test_config("projects-static-metrics"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_named(&app, "Static Metrics").await;
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_zip_multipart_body()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.static_tasks.insert(
+        "opengrep-cumulative".to_string(),
+        task_state::StaticTaskRecord {
+            id: "opengrep-cumulative".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: project_id.clone(),
+            name: "static cumulative".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            total_findings: 5,
+            scan_duration_ms: 1234,
+            files_scanned: 8,
+            created_at: "2026-04-26T10:00:00Z".to_string(),
+            updated_at: Some("2026-04-26T10:01:00Z".to_string()),
+            extra: json!({
+                "error_count": 2,
+                "warning_count": 1,
+                "high_confidence_count": 4,
+            }),
+            ..Default::default()
+        },
+    );
+    snapshot.agent_tasks.insert(
+        "agent-verified".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-verified".to_string(),
+            project_id: project_id.clone(),
+            task_type: "agent_audit".to_string(),
+            status: "completed".to_string(),
+            high_count: 1,
+            verified_high_count: 1,
+            created_at: "2026-04-26T09:00:00Z".to_string(),
+            completed_at: Some("2026-04-26T09:05:00Z".to_string()),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/projects?include_metrics=true")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let project = payload
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == project_id)
+        .expect("project should be listed");
+    let metrics = &project["management_metrics"];
+
+    assert_eq!(metrics["status"], "ready");
+    assert_eq!(metrics["total_tasks"], 2);
+    assert_eq!(metrics["completed_tasks"], 2);
+    assert_eq!(metrics["opengrep_tasks"], 1);
+    assert_eq!(metrics["agent_tasks"], 1);
+    assert_eq!(metrics["static_medium"], 0);
+    assert_eq!(metrics["static_low"], 3);
+    assert_eq!(metrics["intelligent_high"], 1);
+    assert_eq!(metrics["high"], 1);
+    assert_eq!(metrics["medium"], 0);
+    assert_eq!(metrics["low"], 3);
+    assert_eq!(metrics["verified_high"], 1);
+    assert_eq!(metrics["last_completed_task_at"], "2026-04-26T10:01:00Z");
+
+    let metrics_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/metrics/recalculate"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(metrics_response.status(), StatusCode::OK);
+    let recalculated: Value = serde_json::from_slice(
+        &to_bytes(metrics_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(recalculated["static_medium"], 0);
+    assert_eq!(recalculated["low"], 3);
+}
+
+#[tokio::test]
+async fn project_metrics_degrade_when_task_state_snapshot_is_malformed() {
+    let config = isolated_test_config("projects-malformed-task-state");
+    let state = AppState::from_config(config.clone())
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project_named(&app, "Malformed Snapshot").await;
+    let snapshot_path = config.zip_storage_path.join("rust-task-state.json");
+    tokio::fs::create_dir_all(&config.zip_storage_path)
+        .await
+        .expect("storage dir should exist");
+    tokio::fs::write(&snapshot_path, b"{not-json")
+        .await
+        .expect("malformed snapshot should be written");
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail: Value = serde_json::from_slice(
+        &to_bytes(detail_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(detail["management_metrics"]["total_tasks"], 0);
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/projects?include_metrics=true")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/projects/{project_id}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "Malformed Snapshot Updated"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+
+    let metrics_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/metrics/recalculate"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(metrics_response.status(), StatusCode::OK);
+    let metrics: Value = serde_json::from_slice(
+        &to_bytes(metrics_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(metrics["total_tasks"], 0);
+}
+
+#[tokio::test]
 async fn create_with_tar_xz_and_zst_archives_and_description_preview_use_static_analysis() {
     let state = AppState::from_config(isolated_test_config("projects-create-with-archive"))
         .await

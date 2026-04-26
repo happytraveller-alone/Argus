@@ -517,8 +517,9 @@ export function buildUnifiedFindingRows(input: {
   opengrepFindings: MinimalOpengrepFinding[];
   opengrepTaskId: string;
 }): UnifiedFindingRow[] {
-  return input.opengrepFindings.map((finding) => {
+  return input.opengrepFindings.flatMap((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
+    if (!severity) return [];
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
     return {
       key: `opengrep:${finding.id}`,

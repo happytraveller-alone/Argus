@@ -1991,19 +1991,19 @@ async fn static_task_findings_route_honors_skip_and_limit() {
                     id: "finding-1".to_string(),
                     scan_task_id: "task-1".to_string(),
                     status: "open".to_string(),
-                    payload: json!({"id":"finding-1","status":"open","file_path":"a.py"}),
+                    payload: json!({"id":"finding-1","status":"open","file_path":"a.py","severity":"HIGH"}),
                 },
                 task_state::StaticFindingRecord {
                     id: "finding-2".to_string(),
                     scan_task_id: "task-1".to_string(),
                     status: "verified".to_string(),
-                    payload: json!({"id":"finding-2","status":"verified","file_path":"b.py"}),
+                    payload: json!({"id":"finding-2","status":"verified","file_path":"b.py","severity":"ERROR"}),
                 },
                 task_state::StaticFindingRecord {
                     id: "finding-3".to_string(),
                     scan_task_id: "task-1".to_string(),
                     status: "false_positive".to_string(),
-                    payload: json!({"id":"finding-3","status":"false_positive","file_path":"c.py"}),
+                    payload: json!({"id":"finding-3","status":"false_positive","file_path":"c.py","severity":"WARNING"}),
                 },
             ],
         },
@@ -2028,6 +2028,114 @@ async fn static_task_findings_route_honors_skip_and_limit() {
     let items = body.as_array().expect("array response");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], "finding-2");
+    assert_eq!(items[0]["raw_severity"], "ERROR");
+    assert_eq!(items[0]["severity"], "LOW");
+}
+
+#[tokio::test]
+async fn static_task_findings_route_downgrades_and_hides_invalid_severity() {
+    let state = AppState::from_config(isolated_test_config("static-task-severity-downgrade"))
+        .await
+        .expect("state should build");
+
+    let mut snapshot = task_state::TaskStateSnapshot::default();
+    snapshot.static_tasks.insert(
+        "task-severity".to_string(),
+        task_state::StaticTaskRecord {
+            id: "task-severity".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: "project-1".to_string(),
+            name: "static task".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            total_findings: 4,
+            scan_duration_ms: 1,
+            files_scanned: 1,
+            error_message: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            extra: json!({}),
+            progress: task_state::StaticTaskProgressRecord::default(),
+            findings: vec![
+                task_state::StaticFindingRecord {
+                    id: "finding-critical".to_string(),
+                    scan_task_id: "task-severity".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id":"finding-critical","status":"open","severity":"CRITICAL"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "finding-high".to_string(),
+                    scan_task_id: "task-severity".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id":"finding-high","status":"open","severity":"HIGH"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "finding-medium".to_string(),
+                    scan_task_id: "task-severity".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id":"finding-medium","status":"open","severity":"MEDIUM"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "finding-low".to_string(),
+                    scan_task_id: "task-severity".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id":"finding-low","status":"open","severity":"LOW"}),
+                },
+            ],
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("save snapshot");
+
+    let app = build_router(state);
+    let task_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/tasks/task-severity")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(task_response.status(), StatusCode::OK);
+    let task_body: Value = serde_json::from_slice(
+        &to_bytes(task_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(task_body["total_findings"], 3);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/tasks/task-severity/findings?limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let items = body.as_array().expect("array response");
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["id"], "finding-critical");
+    assert_eq!(items[0]["raw_severity"], "CRITICAL");
+    assert_eq!(items[0]["severity"], "HIGH");
+    assert_eq!(items[1]["severity"], "MEDIUM");
+    assert_eq!(items[2]["severity"], "LOW");
+
+    let hidden_detail = app
+        .oneshot(
+            Request::get("/api/v1/static-tasks/tasks/task-severity/findings/finding-low")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hidden_detail.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

@@ -43,6 +43,14 @@ export interface ProjectManagementMetrics {
   high: number;
   medium: number;
   low: number;
+  static_critical?: number;
+  static_high?: number;
+  static_medium?: number;
+  static_low?: number;
+  intelligent_critical?: number;
+  intelligent_high?: number;
+  intelligent_medium?: number;
+  intelligent_low?: number;
   verified_critical?: number;
   verified_high?: number;
   verified_medium?: number;

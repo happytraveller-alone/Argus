@@ -150,7 +150,12 @@ export default function TopNavigation() {
 	const { t } = useI18n();
 	const { logoSrc } = useLogoVariant();
 	const [openGroupId, setOpenGroupId] = useState<SidebarNavGroupId | null>(null);
+	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 	const closeTimerRef = useRef<number | null>(null);
+	const suppressRouteFocusOpenRef = useRef(false);
+	const suppressRouteFocusOpenTimerRef = useRef<number | null>(null);
+	const routeLocationKey = `${location.pathname}${location.search}${location.hash}`;
+	const previousRouteLocationKeyRef = useRef(routeLocationKey);
 	const hasPrefetchedTaskGroupRef = useRef(false);
 	const hasPrefetchedDashboardRef = useRef(false);
 	const hasPrefetchedProjectsRef = useRef(false);
@@ -162,18 +167,46 @@ export default function TopNavigation() {
 		}
 	}, []);
 
+	const clearRouteFocusOpenSuppressionTimer = useCallback(() => {
+		if (
+			suppressRouteFocusOpenTimerRef.current !== null &&
+			typeof window !== "undefined"
+		) {
+			window.clearTimeout(suppressRouteFocusOpenTimerRef.current);
+			suppressRouteFocusOpenTimerRef.current = null;
+		}
+	}, []);
+
+	const releaseRouteFocusOpenSuppression = useCallback(() => {
+		clearRouteFocusOpenSuppressionTimer();
+		suppressRouteFocusOpenRef.current = false;
+	}, [clearRouteFocusOpenSuppressionTimer]);
+
+	const suppressRouteFocusOpenUntilNextTick = useCallback(() => {
+		suppressRouteFocusOpenRef.current = true;
+		if (typeof window === "undefined") return;
+		clearRouteFocusOpenSuppressionTimer();
+		suppressRouteFocusOpenTimerRef.current = window.setTimeout(() => {
+			suppressRouteFocusOpenRef.current = false;
+			suppressRouteFocusOpenTimerRef.current = null;
+		}, 0);
+	}, [clearRouteFocusOpenSuppressionTimer]);
+
+	const closeNavigationMenus = useCallback(() => {
+		suppressRouteFocusOpenUntilNextTick();
+		clearCloseTimer();
+		setOpenGroupId(null);
+		setMobileMenuOpen(false);
+	}, [clearCloseTimer, suppressRouteFocusOpenUntilNextTick]);
+
 	const openGroupMenu = useCallback(
 		(groupId: SidebarNavGroupId) => {
+			releaseRouteFocusOpenSuppression();
 			clearCloseTimer();
 			setOpenGroupId(groupId);
 		},
-		[clearCloseTimer],
+		[clearCloseTimer, releaseRouteFocusOpenSuppression],
 	);
-
-	const closeDesktopGroupMenus = useCallback(() => {
-		clearCloseTimer();
-		setOpenGroupId(null);
-	}, [clearCloseTimer]);
 
 	const scheduleGroupClose = useCallback(
 		(groupId: SidebarNavGroupId) => {
@@ -189,11 +222,22 @@ export default function TopNavigation() {
 		[clearCloseTimer],
 	);
 
-	useEffect(() => clearCloseTimer, [clearCloseTimer]);
+	useEffect(
+		() => () => {
+			clearCloseTimer();
+			clearRouteFocusOpenSuppressionTimer();
+		},
+		[clearCloseTimer, clearRouteFocusOpenSuppressionTimer],
+	);
 
 	useEffect(() => {
-		closeDesktopGroupMenus();
-	}, [closeDesktopGroupMenus, location.pathname]);
+		if (previousRouteLocationKeyRef.current === routeLocationKey) {
+			return undefined;
+		}
+		previousRouteLocationKeyRef.current = routeLocationKey;
+		closeNavigationMenus();
+		return undefined;
+	}, [closeNavigationMenus, routeLocationKey]);
 
 	const prefetchTaskGroupAssets = useCallback(() => {
 		if (hasPrefetchedTaskGroupRef.current) return;
@@ -254,6 +298,7 @@ export default function TopNavigation() {
 					to="/"
 					className="group flex flex-shrink-0 items-center"
 					aria-label="Argus"
+					onClick={closeNavigationMenus}
 				>
 					<img
 						src={logoSrc}
@@ -264,7 +309,11 @@ export default function TopNavigation() {
 
 				<nav className="hidden min-w-0 flex-1 items-center gap-1 md:flex">
 					{model.mainRoutes.map((item) => (
-						<TopNavigationLink key={item.route.path} item={item} />
+						<TopNavigationLink
+							key={item.route.path}
+							item={item}
+							onNavigate={closeNavigationMenus}
+						/>
 					))}
 
 					{model.groups.map((group) => {
@@ -304,8 +353,9 @@ export default function TopNavigation() {
 													: "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground",
 											)}
 											onFocus={() => {
-												openGroupMenu(group.group.id);
 												group.prefetch?.();
+												if (suppressRouteFocusOpenRef.current) return;
+												openGroupMenu(group.group.id);
 											}}
 										>
 											<span
@@ -328,10 +378,14 @@ export default function TopNavigation() {
 									onMouseLeave={() => scheduleGroupClose(group.group.id)}
 								>
 									{group.routes.map((item) => (
-										<DropdownMenuItem key={item.route.path} asChild>
+										<DropdownMenuItem
+											key={item.route.path}
+											asChild
+											onSelect={closeNavigationMenus}
+										>
 											<DropdownRouteLink
 												item={item}
-												onClick={closeDesktopGroupMenus}
+												onClick={closeNavigationMenus}
 											/>
 										</DropdownMenuItem>
 									))}
@@ -343,7 +397,10 @@ export default function TopNavigation() {
 
 				<div className="ml-auto flex items-center gap-2">
 					<ThemeToggleCompact />
-					<DropdownMenu>
+					<DropdownMenu
+						open={mobileMenuOpen}
+						onOpenChange={setMobileMenuOpen}
+					>
 						<DropdownMenuTrigger asChild>
 							<Button
 								type="button"
@@ -357,8 +414,15 @@ export default function TopNavigation() {
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="max-h-[75vh] min-w-64">
 							{model.mainRoutes.map((item) => (
-								<DropdownMenuItem key={item.route.path} asChild>
-									<DropdownRouteLink item={item} />
+								<DropdownMenuItem
+									key={item.route.path}
+									asChild
+									onSelect={closeNavigationMenus}
+								>
+									<DropdownRouteLink
+										item={item}
+										onClick={closeNavigationMenus}
+									/>
 								</DropdownMenuItem>
 							))}
 
@@ -374,8 +438,15 @@ export default function TopNavigation() {
 											{group.label}
 										</DropdownMenuLabel>
 										{group.routes.map((item) => (
-											<DropdownMenuItem key={item.route.path} asChild>
-												<DropdownRouteLink item={item} />
+											<DropdownMenuItem
+												key={item.route.path}
+												asChild
+												onSelect={closeNavigationMenus}
+											>
+												<DropdownRouteLink
+													item={item}
+													onClick={closeNavigationMenus}
+												/>
 											</DropdownMenuItem>
 										))}
 									</div>

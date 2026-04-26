@@ -47,6 +47,7 @@ export interface DataTableColumnMeta<TData = unknown, TValue = unknown> {
   align?: DataTableAlign;
   minWidth?: string | number;
   width?: string | number;
+  maxWidth?: string | number;
   enableResizing?: boolean;
   sticky?: DataTableSticky;
   hideable?: boolean;
@@ -159,6 +160,7 @@ export interface DataTableProps<TData> {
   tableClassName?: string;
   containerClassName?: string;
   tableContainerClassName?: string;
+  fillContainerWidth?: boolean;
   enableColumnResizing?: boolean;
   getRowId?: (originalRow: TData, index: number) => string;
 }
