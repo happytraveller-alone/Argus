@@ -1,13 +1,14 @@
 rules:
 - id: vuln-electron-6dc9d062
-  pattern: |
-    if ($WEB_CONTENTS.listenerCount('select-bluetooth-device') === 0) {
-      ...
-    }
-  pattern-not: |
-    if ($WEB_CONTENTS.listenerCount('select-bluetooth-device') === 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($WEB_CONTENTS.listenerCount('select-bluetooth-device') === 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($WEB_CONTENTS.listenerCount('select-bluetooth-device') === 1) {
+        ...
+      }
   languages:
   - typescript
   message: |
@@ -23,14 +24,11 @@ rules:
     technology:
     - typescript
 - id: vuln-electron-aa9da78e
-  pattern: |
-    nativeImage.createThumbnailFromPath = async ($PATH, $SIZE) => {
-      return $DESERIALIZE(await $IPC.invoke($IPC_MESSAGES.NATIVE_IMAGE_CREATE_THUMBNAIL_FROM_PATH, $PATH, $SIZE));
-    };
-  pattern-not: |
-    nativeImage.createThumbnailFromPath = async ($PATH, $SIZE) => {
-      return $DESERIALIZE(await $IPC.invoke($IPC_MESSAGES.NATIVE_IMAGE_CREATE_THUMBNAIL_FROM_PATH, $PATH, $SIZE));
-    };
+  patterns:
+  - pattern: |
+      nativeImage.createThumbnailFromPath = async ($PATH, $SIZE) => {
+        return $DESERIALIZE(await $IPC.invoke($IPC_MESSAGES.NATIVE_IMAGE_CREATE_THUMBNAIL_FROM_PATH, $PATH, $SIZE));
+      };
   languages:
   - typescript
   message: |

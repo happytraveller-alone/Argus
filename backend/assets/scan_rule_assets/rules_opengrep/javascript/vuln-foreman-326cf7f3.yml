@@ -1,9 +1,10 @@
 rules:
 - id: vuln-foreman-326cf7f3
-  pattern: |
-    $.cookie($NAME, $VALUE)
-  pattern-not: |
-    $.cookie($NAME, $VALUE, { secure: location.protocol === 'https:' })
+  patterns:
+  - pattern: |
+      $.cookie($NAME, $VALUE)
+  - pattern-not: |
+      $.cookie($NAME, $VALUE, { secure: location.protocol === 'https:' })
   languages:
   - javascript
   message: |

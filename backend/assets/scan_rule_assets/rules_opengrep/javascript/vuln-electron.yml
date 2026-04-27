@@ -1,9 +1,10 @@
 rules:
 - id: vuln-electron-05b6d91b
-  pattern: |
-    nodeIntegration = 'true'
-  pattern-not: |
-    nodeIntegration = 'false'
+  patterns:
+  - pattern: |
+      nodeIntegration = 'true'
+  - pattern-not: |
+      nodeIntegration = 'false'
   languages:
   - javascript
   message: 'Insecure configuration detected: nodeIntegration is set to ''true''. This can expose the application to remote code execution vulnerabilities. Set nodeIntegration to ''false'' to mitigate this risk.'
@@ -20,10 +21,11 @@ rules:
     technology:
     - javascript
 - id: vuln-electron-519a02d8
-  pattern: |
-    if ($KEY in $CHILD) continue
-  pattern-not: |
-    if ($KEY in $CHILD && $KEY !== 'webPreferences') continue
+  patterns:
+  - pattern: |
+      if ($KEY in $CHILD) continue
+  - pattern-not: |
+      if ($KEY in $CHILD && $KEY !== 'webPreferences') continue
   languages:
   - javascript
   message: |

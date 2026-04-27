@@ -1,9 +1,10 @@
 rules:
 - id: vuln-zitadel-3c7d1283
-  pattern: |
-    $VIEW.UserByID($USERID, $INSTANCEID)
-  pattern-not: |
-    $VIEW.UserByID($CTX, $USERID, $INSTANCEID)
+  patterns:
+  - pattern: |
+      $VIEW.UserByID($USERID, $INSTANCEID)
+  - pattern-not: |
+      $VIEW.UserByID($CTX, $USERID, $INSTANCEID)
   languages:
   - go
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - go
 - id: vuln-zitadel-4a262e42
-  pattern: |
-    $VAR.BrowserInfo.ToUserAgent()
-  pattern-not: |
-    $VAR.ToUserAgent()
+  patterns:
+  - pattern: |
+      $VAR.BrowserInfo.ToUserAgent()
+  - pattern-not: |
+      $VAR.ToUserAgent()
   languages:
   - go
   message: |
@@ -41,16 +43,17 @@ rules:
     technology:
     - go
 - id: vuln-zitadel-4c26665b
-  pattern: |
-    func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant) error {
-      preConditions := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID)
-      ...
-    }
-  pattern-not: |
-    func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant, resourceOwner string) error {
-      preConditions := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID, resourceOwner)
-      ...
-    }
+  patterns:
+  - pattern: |
+      func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant) error {
+        preConditions := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID)
+        ...
+      }
+  - pattern-not: |
+      func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant, resourceOwner string) error {
+        preConditions := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID, resourceOwner)
+        ...
+      }
   languages:
   - go
   message: |
@@ -63,14 +66,15 @@ rules:
     owasp: A01:2021 - Broken Access Control
     technology: go
 - id: vuln-zitadel-b918603b
-  pattern: |
-    func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER string, $IGNORED ...string) $RETURN_TYPE {
-      ...
-    }
-  pattern-not: |
-    func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER, $EXTERNAL_DOMAIN string, $IGNORED ...string) $RETURN_TYPE {
-      ...
-    }
+  patterns:
+  - pattern: |
+      func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER string, $IGNORED ...string) $RETURN_TYPE {
+        ...
+      }
+  - pattern-not: |
+      func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER, $EXTERNAL_DOMAIN string, $IGNORED ...string) $RETURN_TYPE {
+        ...
+      }
   languages:
   - go
   message: |
@@ -85,10 +89,11 @@ rules:
     owasp: 'A2: Broken Authentication'
     technology: go
 - id: vuln-zitadel-d656b3f3
-  pattern: |
-    return nil, status.Error(codes.PermissionDenied, $ERR.Error())
-  pattern-not: |
-    return nil, status.Error(codes.NotFound, $ERR.Error())
+  patterns:
+  - pattern: |
+      return nil, status.Error(codes.PermissionDenied, $ERR.Error())
+  - pattern-not: |
+      return nil, status.Error(codes.NotFound, $ERR.Error())
   languages:
   - go
   message: |

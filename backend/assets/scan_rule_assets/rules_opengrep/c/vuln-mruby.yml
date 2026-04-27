@@ -1,9 +1,10 @@
 rules:
 - id: vuln-mruby-2742ded3
-  pattern: |
-    mrb_bool $VAR = $COND ? FALSE : TRUE;
-  pattern-not: |
-    mrb_bool $VAR = ($COND) ? TRUE : FALSE;
+  patterns:
+  - pattern: |
+      mrb_bool $VAR = $COND ? FALSE : TRUE;
+  - pattern-not: |
+      mrb_bool $VAR = ($COND) ? TRUE : FALSE;
   languages:
   - c
   message: |
@@ -20,19 +21,20 @@ rules:
     technology:
     - c
 - id: vuln-mruby-38b164ac
-  pattern: |
-    if ($IS_SPLAT || $N > $LIMIT || $CURSP() >= $SLIMIT) {
-      ...
-    }
-  pattern-not: |
-    if ($IS_SPLAT || $CURSP() >= $SLIMIT) {
-      ...
-    }
-    else if ($N > $LIMIT) {
-      pop_n($N);
-      genop_2($S, $OP_ARRAY, $CURSP(), $N);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      if ($IS_SPLAT || $N > $LIMIT || $CURSP() >= $SLIMIT) {
+        ...
+      }
+  - pattern-not: |
+      if ($IS_SPLAT || $CURSP() >= $SLIMIT) {
+        ...
+      }
+      else if ($N > $LIMIT) {
+        pop_n($N);
+        genop_2($S, $OP_ARRAY, $CURSP(), $N);
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -47,10 +49,11 @@ rules:
     technology:
     - c
 - id: vuln-mruby-55edae02
-  pattern: |
-    $VAR->flags = $EXPR;
-  pattern-not: |
-    $VAR->flags |= $EXPR & MRB_FLAG_IS_FROZEN;
+  patterns:
+  - pattern: |
+      $VAR->flags = $EXPR;
+  - pattern-not: |
+      $VAR->flags |= $EXPR & MRB_FLAG_IS_FROZEN;
   languages:
   - c
   message: |
@@ -66,20 +69,21 @@ rules:
     technology:
     - c
 - id: vuln-mruby-5c114c91
-  pattern: |
-    if (mrb_basic_ptr($VAR)->tt == MRB_TT_FREE) {
-      $ARRAY[$INDEX] = mrb_nil_value();
-    }
-    else {
+  patterns:
+  - pattern: |
+      if (mrb_basic_ptr($VAR)->tt == MRB_TT_FREE) {
+        $ARRAY[$INDEX] = mrb_nil_value();
+      }
+      else {
+        mrb_gc_mark($MRB, mrb_basic_ptr($VAR));
+      }
+  - pattern-not: |
       mrb_gc_mark($MRB, mrb_basic_ptr($VAR));
-    }
-  pattern-not: |
-    mrb_gc_mark($MRB, mrb_basic_ptr($VAR));
-    $E = $C->stend - $C->stbase;
-    $NIL = mrb_nil_value();
-    for (; $I<$E; $I++) {
-      $C->stbase[$I] = $NIL;
-    }
+      $E = $C->stend - $C->stbase;
+      $NIL = mrb_nil_value();
+      for (; $I<$E; $I++) {
+        $C->stbase[$I] = $NIL;
+      }
   languages:
   - c
   message: |
@@ -99,10 +103,11 @@ rules:
     technology:
     - c
 - id: vuln-mruby-70e57468
-  pattern: |
-    mrb_bool $VAR = $COND ? TRUE : FALSE;
-  pattern-not: |
-    mrb_bool $VAR = $COND ? FALSE : TRUE;
+  patterns:
+  - pattern: |
+      mrb_bool $VAR = $COND ? TRUE : FALSE;
+  - pattern-not: |
+      mrb_bool $VAR = $COND ? FALSE : TRUE;
   languages:
   - c
   message: |
@@ -118,10 +123,11 @@ rules:
     technology:
     - c
 - id: vuln-mruby-adb1eae9
-  pattern: |
-    mrb_raisef($MRB, $ERROR, "negative (or overflowed) string size");
-  pattern-not: |
-    mrb_raise($MRB, $ERROR, "negative (or overflowed) string size");
+  patterns:
+  - pattern: |
+      mrb_raisef($MRB, $ERROR, "negative (or overflowed) string size");
+  - pattern-not: |
+      mrb_raise($MRB, $ERROR, "negative (or overflowed) string size");
   languages:
   - c
   message: |
@@ -141,13 +147,14 @@ rules:
     technology:
     - c
 - id: vuln-mruby-b1d0296a
-  pattern: |
-    if ($H && mt_del($MRB, $H, $MID)) return;
-  pattern-not: |
-    if ($H && mt_del($MRB, $H, $MID)) {
-      mrb_mc_clear_by_class($MRB, $C);
-      return;
-    }
+  patterns:
+  - pattern: |
+      if ($H && mt_del($MRB, $H, $MID)) return;
+  - pattern-not: |
+      if ($H && mt_del($MRB, $H, $MID)) {
+        mrb_mc_clear_by_class($MRB, $C);
+        return;
+      }
   languages:
   - c
   message: |
@@ -163,14 +170,15 @@ rules:
     technology:
     - c
 - id: vuln-mruby-c8c083cb
-  pattern: |
-    if ($N == 14) {
-      ...
-    }
-  pattern-not: |
-    if ($N == 13 || $N == 14) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($N == 14) {
+        ...
+      }
+  - pattern-not: |
+      if ($N == 13 || $N == 14) {
+        ...
+      }
   languages:
   - c
   message: |

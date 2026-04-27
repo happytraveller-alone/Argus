@@ -1,15 +1,16 @@
 rules:
 - id: vuln-rdoc-a7d6b41d
-  pattern: |
-    $("a[name=" + $VAR + "]").each(function() {
-      ...
-    })
-  pattern-not: |
-    $("a[name]").each(function() {
-      if ($(this).attr("name") == $VAR) {
+  patterns:
+  - pattern: |
+      $("a[name=" + $VAR + "]").each(function() {
         ...
-      }
-    })
+      })
+  - pattern-not: |
+      $("a[name]").each(function() {
+        if ($(this).attr("name") == $VAR) {
+          ...
+        }
+      })
   languages:
   - javascript
   message: Potential DOM XSS vulnerability due to unsafe attribute selection. The selector 'a[name=' + variable + ']' can be manipulated by an attacker. Use attribute comparison inside the loop to ensure safe selection.

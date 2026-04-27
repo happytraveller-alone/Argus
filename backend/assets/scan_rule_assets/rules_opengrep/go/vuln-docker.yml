@@ -1,13 +1,14 @@
 rules:
 - id: vuln-docker-73db8c77
-  pattern: |
-    for _, $M := range []string{"password", "secret", "jointoken", "unlockkey", "signingcakey"} {
-      ...
-    }
-  pattern-not: |
-    for _, $M := range $SCRUB {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for _, $M := range []string{"password", "secret", "jointoken", "unlockkey", "signingcakey"} {
+        ...
+      }
+  - pattern-not: |
+      for _, $M := range $SCRUB {
+        ...
+      }
   languages:
   - go
   message: |
@@ -26,22 +27,23 @@ rules:
     technology:
     - go
 - id: vuln-docker-c9379eb3
-  pattern: |
-    func parseSecurityOpt($CONTAINER *Container, $CONFIG *runconfig.Config) error {
-      ...
-      $LABEL_OPTS = append($LABEL_OPTS, $CON[1])
-      ...
-      $CONTAINER.ProcessLabel, $CONTAINER.MountLabel, $ERR = label.InitLabels($LABEL_OPTS)
-      ...
-    }
-  pattern-not: |
-    func parseSecurityOpt($CONTAINER *Container, $CONFIG *runconfig.HostConfig) error {
-      ...
-      $LABELOPTS = append($LABELOPTS, $CON[1])
-      ...
-      $CONTAINER.ProcessLabel, $CONTAINER.MountLabel, $ERR = label.InitLabels($LABELOPTS)
-      ...
-    }
+  patterns:
+  - pattern: |
+      func parseSecurityOpt($CONTAINER *Container, $CONFIG *runconfig.Config) error {
+        ...
+        $LABEL_OPTS = append($LABEL_OPTS, $CON[1])
+        ...
+        $CONTAINER.ProcessLabel, $CONTAINER.MountLabel, $ERR = label.InitLabels($LABEL_OPTS)
+        ...
+      }
+  - pattern-not: |
+      func parseSecurityOpt($CONTAINER *Container, $CONFIG *runconfig.HostConfig) error {
+        ...
+        $LABELOPTS = append($LABELOPTS, $CON[1])
+        ...
+        $CONTAINER.ProcessLabel, $CONTAINER.MountLabel, $ERR = label.InitLabels($LABELOPTS)
+        ...
+      }
   languages:
   - go
   message: |

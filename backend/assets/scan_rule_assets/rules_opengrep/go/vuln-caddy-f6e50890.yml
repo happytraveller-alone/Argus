@@ -1,13 +1,14 @@
 rules:
 - id: vuln-caddy-f6e50890
-  pattern: |
-    if $CERT, $MATCHED, $DEFAULTED := $CFG.getCertificate(""); $MATCHED || !$DEFAULTED {
-        $ERRORF("Expected matched=false, defaulted=true; but got matched=%v, defaulted=%v (cert: %v)", $MATCHED, $DEFAULTED, $CERT)
-    }
-  pattern-not: |
-    if $CERT, $MATCHED, $DEFAULTED := $CFG.getCertificate("nomatch"); $MATCHED || $DEFAULTED {
-        $ERRORF("Expected matched=false, defaulted=false; but got matched=%v, defaulted=%v (cert: %v)", $MATCHED, $DEFAULTED, $CERT)
-    }
+  patterns:
+  - pattern: |
+      if $CERT, $MATCHED, $DEFAULTED := $CFG.getCertificate(""); $MATCHED || !$DEFAULTED {
+          $ERRORF("Expected matched=false, defaulted=true; but got matched=%v, defaulted=%v (cert: %v)", $MATCHED, $DEFAULTED, $CERT)
+      }
+  - pattern-not: |
+      if $CERT, $MATCHED, $DEFAULTED := $CFG.getCertificate("nomatch"); $MATCHED || $DEFAULTED {
+          $ERRORF("Expected matched=false, defaulted=false; but got matched=%v, defaulted=%v (cert: %v)", $MATCHED, $DEFAULTED, $CERT)
+      }
   languages:
   - go
   message: |

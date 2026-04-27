@@ -1,9 +1,10 @@
 rules:
 - id: vuln-electron-9e7fbc70
-  pattern: |
-    node::AllowWasmCodeGenerationCallback($CONTEXT, v8::String::Empty($ISOLATE))
-  pattern-not: |
-    node::AllowWasmCodeGenerationCallback($CONTEXT, $SOURCE)
+  patterns:
+  - pattern: |
+      node::AllowWasmCodeGenerationCallback($CONTEXT, v8::String::Empty($ISOLATE))
+  - pattern-not: |
+      node::AllowWasmCodeGenerationCallback($CONTEXT, $SOURCE)
   languages:
   - cpp
   message: |

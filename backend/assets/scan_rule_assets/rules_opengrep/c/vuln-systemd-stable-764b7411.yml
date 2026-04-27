@@ -1,19 +1,14 @@
 rules:
 - id: vuln-systemd-stable-764b7411
-  pattern: |
-    char *p, *s;
-    ...
-    p = strdupa($F);
-    ...
-    p = skip_leading_chars(p, "/");
-    ...
-    s = unit_name_escape(p);
-  pattern-not: |
-    _cleanup_free_ char *p = NULL;
-    ...
-    p = strdup($F);
-    ...
-    s = unit_name_escape(skip_leading_chars(p, "/"));
+  patterns:
+  - pattern: |
+      char *p, *s;
+      ...
+      p = strdupa($F);
+      ...
+      p = skip_leading_chars(p, "/");
+      ...
+      s = unit_name_escape(p);
   languages:
   - c
   message: |

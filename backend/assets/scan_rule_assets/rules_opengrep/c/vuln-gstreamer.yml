@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gstreamer-14d306da
-  pattern: |
-    $Z.avail_out += 4096;
-  pattern-not: |
-    $Z.avail_out += $LENGTH - $Z.total_out;
+  patterns:
+  - pattern: |
+      $Z.avail_out += 4096;
+  - pattern-not: |
+      $Z.avail_out += $LENGTH - $Z.total_out;
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-45dcd0b9
-  pattern: |
-    gst_object_unref($VAR);
-  pattern-not: |
-    gst_object_unref(flxdec);
+  patterns:
+  - pattern: |
+      gst_object_unref($VAR);
+  - pattern-not: |
+      gst_object_unref(flxdec);
   languages:
   - c
   message: |
@@ -40,10 +42,11 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-4cb1bcf1
-  pattern: |
-    $DEC->imagedata = g_malloc($WIDTH * $HEIGHT);
-  pattern-not: |
-    $DEC->imagedata = g_malloc0($WIDTH * $HEIGHT);
+  patterns:
+  - pattern: |
+      $DEC->imagedata = g_malloc($WIDTH * $HEIGHT);
+  - pattern-not: |
+      $DEC->imagedata = g_malloc0($WIDTH * $HEIGHT);
   languages:
   - c
   message: |
@@ -61,19 +64,20 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-7b12593c
-  pattern: |
-    guint16 $I = 0, $NB_PROGRAMS;
-    ...
-    while ($DATA < $END - 4) {
+  patterns:
+  - pattern: |
+      guint16 $I = 0, $NB_PROGRAMS;
       ...
-      $I++;
-    }
-  pattern-not: |
-    guint16 $I, $NB_PROGRAMS;
-    ...
-    for ($I = 0; $I < $NB_PROGRAMS; $I++) {
+      while ($DATA < $END - 4) {
+        ...
+        $I++;
+      }
+  - pattern-not: |
+      guint16 $I, $NB_PROGRAMS;
       ...
-    }
+      for ($I = 0; $I < $NB_PROGRAMS; $I++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -89,20 +93,21 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-91811915
-  pattern: |
-    gsize $SIZE;
-    ...
-    if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
-      break;
-    }
-  pattern-not: |
-    gsize $SIZE;
-    ...
-    if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
-      GST_ERROR_OBJECT($ELEMENT, "Too small wavpack buffer");
-      gst_buffer_unmap($BUF, $MAP);
-      return GST_FLOW_ERROR;
-    }
+  patterns:
+  - pattern: |
+      gsize $SIZE;
+      ...
+      if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
+        break;
+      }
+  - pattern-not: |
+      gsize $SIZE;
+      ...
+      if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
+        GST_ERROR_OBJECT($ELEMENT, "Too small wavpack buffer");
+        gst_buffer_unmap($BUF, $MAP);
+        return GST_FLOW_ERROR;
+      }
   languages:
   - c
   message: |
@@ -120,19 +125,20 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-ad601215
-  pattern: |
-    $SIZE = *$SIZE_OUT;
-    ...
-    $NEW_SIZE = $SIZE;
-    ...
-    $STREAM.avail_out += 4096;
-  pattern-not: |
-    $SIZE = *$SIZE_OUT;
-    ...
-    $NEW_SIZE = $SIZE;
-    ...
-    g_assert($NEW_SIZE - $STREAM.total_out <= G_MAXUINT);
-    $STREAM.avail_out = $NEW_SIZE - $STREAM.total_out;
+  patterns:
+  - pattern: |
+      $SIZE = *$SIZE_OUT;
+      ...
+      $NEW_SIZE = $SIZE;
+      ...
+      $STREAM.avail_out += 4096;
+  - pattern-not: |
+      $SIZE = *$SIZE_OUT;
+      ...
+      $NEW_SIZE = $SIZE;
+      ...
+      g_assert($NEW_SIZE - $STREAM.total_out <= G_MAXUINT);
+      $STREAM.avail_out = $NEW_SIZE - $STREAM.total_out;
   languages:
   - c
   message: |
@@ -148,13 +154,14 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-d21017b5
-  pattern: |
-    $TYPE $VAR = GST_READ_UINT32_LE($VALUE);
-  pattern-not: |
-    $TYPE $VAR;
-    if ($VALUE_LEN < 4)
-      break;
-    $VAR = GST_READ_UINT32_LE($VALUE);
+  patterns:
+  - pattern: |
+      $TYPE $VAR = GST_READ_UINT32_LE($VALUE);
+  - pattern-not: |
+      $TYPE $VAR;
+      if ($VALUE_LEN < 4)
+        break;
+      $VAR = GST_READ_UINT32_LE($VALUE);
   languages:
   - c
   message: |
@@ -172,21 +179,22 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-d58f668e
-  pattern: |
-    guint16 $SECTION_LENGTH;
-    ...
-    if (G_UNLIKELY ($DATA_SIZE < $MIN_SIZE)) {
+  patterns:
+  - pattern: |
+      guint16 $SECTION_LENGTH;
       ...
-    }
-  pattern-not: |
-    guint16 $SECTION_LENGTH = 0;
-    ...
-    if (G_UNLIKELY ($DATA_SIZE < 3)) {
+      if (G_UNLIKELY ($DATA_SIZE < $MIN_SIZE)) {
+        ...
+      }
+  - pattern-not: |
+      guint16 $SECTION_LENGTH = 0;
       ...
-    }
-    if (G_UNLIKELY ($DATA_SIZE < 11)) {
-      ...
-    }
+      if (G_UNLIKELY ($DATA_SIZE < 3)) {
+        ...
+      }
+      if (G_UNLIKELY ($DATA_SIZE < 11)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -205,14 +213,15 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-f6722775
-  pattern: |
-    for ($I = 0; $SESSION_ID[$I] != '\0'; $I++) {
-      ...
-    }
-  pattern-not: |
-    for ($I = 0; $I < $MAXLEN && $SESSION_ID[$I] != '\0'; $I++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = 0; $SESSION_ID[$I] != '\0'; $I++) {
+        ...
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $MAXLEN && $SESSION_ID[$I] != '\0'; $I++) {
+        ...
+      }
   languages:
   - c
   message: |

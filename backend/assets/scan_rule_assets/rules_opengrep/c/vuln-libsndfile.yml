@@ -1,11 +1,12 @@
 rules:
 - id: vuln-libsndfile-2ccb23fe
-  pattern: |
-    sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE);
-  pattern-not: |
-    if (sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE) != 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE);
+  - pattern-not: |
+      if (sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE) != 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,17 +24,18 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-60b23430
-  pattern: |
-    if (FLAC__stream_decoder_get_state($FSD) >= FLAC__STREAM_DECODER_END_OF_STREAM)
-    {
-        ...
-    }
-  pattern-not: |
-    $STATE = FLAC__stream_decoder_get_state($FSD);
-    if ($STATE >= FLAC__STREAM_DECODER_END_OF_STREAM)
-    {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (FLAC__stream_decoder_get_state($FSD) >= FLAC__STREAM_DECODER_END_OF_STREAM)
+      {
+          ...
+      }
+  - pattern-not: |
+      $STATE = FLAC__stream_decoder_get_state($FSD);
+      if ($STATE >= FLAC__STREAM_DECODER_END_OF_STREAM)
+      {
+          ...
+      }
   languages:
   - c
   message: |
@@ -49,15 +51,16 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-6be89067
-  pattern: |
-    byte_count += $FUNC($PSF, $PTR, $SIZE);
-  pattern-not: |
-    $READ_BYTES = $FUNC($PSF, $PTR, $SIZE);
-    if ($READ_BYTES > 0 && byte_count > (INT_MAX - $READ_BYTES)) {
-      ...
-    } else {
-      byte_count += $READ_BYTES;
-    }
+  patterns:
+  - pattern: |
+      byte_count += $FUNC($PSF, $PTR, $SIZE);
+  - pattern-not: |
+      $READ_BYTES = $FUNC($PSF, $PTR, $SIZE);
+      if ($READ_BYTES > 0 && byte_count > (INT_MAX - $READ_BYTES)) {
+        ...
+      } else {
+        byte_count += $READ_BYTES;
+      }
   languages:
   - c
   message: |
@@ -73,11 +76,12 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-6d7ce94c
-  pattern: |
-    $VAR->instrument->loop_count &= $MASK;
-  pattern-not: |
-    if ($VAR->instrument->loop_count > ARRAY_LEN ($VAR->instrument->loops))
-      $VAR->instrument->loop_count = ARRAY_LEN ($VAR->instrument->loops);
+  patterns:
+  - pattern: |
+      $VAR->instrument->loop_count &= $MASK;
+  - pattern-not: |
+      if ($VAR->instrument->loop_count > ARRAY_LEN ($VAR->instrument->loops))
+        $VAR->instrument->loop_count = ARRAY_LEN ($VAR->instrument->loops);
   languages:
   - c
   message: |
@@ -94,16 +98,17 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-708e996c
-  pattern: |
-    if ($PSF->headindex < SIGNED_SIZEOF($PSF->header) - $SIZE) {
-      $PSF->header[$PSF->headindex++] = $X;
-      ...
-    }
-  pattern-not: |
-    if ($PSF->header.indx + $SIZE > $PSF->header.len && psf_bump_header_allocation($PSF, $SIZE)) {
-      return $RESULT;
-    }
-    $PSF->header.ptr[$PSF->header.indx++] = $X;
+  patterns:
+  - pattern: |
+      if ($PSF->headindex < SIGNED_SIZEOF($PSF->header) - $SIZE) {
+        $PSF->header[$PSF->headindex++] = $X;
+        ...
+      }
+  - pattern-not: |
+      if ($PSF->header.indx + $SIZE > $PSF->header.len && psf_bump_header_allocation($PSF, $SIZE)) {
+        return $RESULT;
+      }
+      $PSF->header.ptr[$PSF->header.indx++] = $X;
   languages:
   - c
   message: |
@@ -121,16 +126,17 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-71565532
-  pattern: |
-    int $VAR;
-    ...
-    $VAR = $EXPR1 * $EXPR2;
-    ...
-  pattern-not: |
-    int_fast32_t $VAR;
-    ...
-    $VAR = (int_fast32_t) $EXPR1 * $EXPR2;
-    ...
+  patterns:
+  - pattern: |
+      int $VAR;
+      ...
+      $VAR = $EXPR1 * $EXPR2;
+      ...
+  - pattern-not: |
+      int_fast32_t $VAR;
+      ...
+      $VAR = (int_fast32_t) $EXPR1 * $EXPR2;
+      ...
   languages:
   - c
   message: |
@@ -146,14 +152,15 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-9e0e55f8
-  pattern: |
-    #define $CONSTANT 666
-    ...
-    return $CONSTANT ;
-  pattern-not: |
-    #define $CONSTANT $VALUE
-    ...
-    return $CONSTANT ;
+  patterns:
+  - pattern: |
+      #define $CONSTANT 666
+      ...
+      return $CONSTANT ;
+  - pattern-not: |
+      #define $CONSTANT $VALUE
+      ...
+      return $CONSTANT ;
   languages:
   - c
   message: |
@@ -171,10 +178,11 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-cb3c87aa
-  pattern: |
-    $STRUCT->sf.frames = $STRUCT->datalength / $STRUCT->blockwidth;
-  pattern-not: |
-    $STRUCT->sf.frames = $STRUCT->blockwidth > 0 ? $STRUCT->datalength / $STRUCT->blockwidth : $VALUE;
+  patterns:
+  - pattern: |
+      $STRUCT->sf.frames = $STRUCT->datalength / $STRUCT->blockwidth;
+  - pattern-not: |
+      $STRUCT->sf.frames = $STRUCT->blockwidth > 0 ? $STRUCT->datalength / $STRUCT->blockwidth : $VALUE;
   languages:
   - c
   message: |
@@ -190,16 +198,17 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-deb669ee
-  pattern: |
-    if ($BLOCKALIGN < 7 * $CHANNELS) {
-        psf_log_printf($PSF, "*** Error blockalign (%d) should be > %d.\n", $BLOCKALIGN, 7 * $CHANNELS);
-        ...
-    }
-  pattern-not: |
-    if (2 * $BLOCKALIGN < $SAMPLESPERBLOCK * $CHANNELS) {
-        psf_log_printf($PSF, "*** Error blockalign (%d) should be >= %d.\n", $BLOCKALIGN, $SAMPLESPERBLOCK * $CHANNELS / 2);
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($BLOCKALIGN < 7 * $CHANNELS) {
+          psf_log_printf($PSF, "*** Error blockalign (%d) should be > %d.\n", $BLOCKALIGN, 7 * $CHANNELS);
+          ...
+      }
+  - pattern-not: |
+      if (2 * $BLOCKALIGN < $SAMPLESPERBLOCK * $CHANNELS) {
+          psf_log_printf($PSF, "*** Error blockalign (%d) should be >= %d.\n", $BLOCKALIGN, $SAMPLESPERBLOCK * $CHANNELS / 2);
+          ...
+      }
   languages:
   - c
   message: |
@@ -221,14 +230,15 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-e4cc9d35
-  pattern: |
-    if ($VAR->blocksize == 0) {
-        ...
-    }
-  pattern-not: |
-    if ($VAR->blocksize <= 0) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR->blocksize == 0) {
+          ...
+      }
+  - pattern-not: |
+      if ($VAR->blocksize <= 0) {
+          ...
+      }
   languages:
   - c
   message: |

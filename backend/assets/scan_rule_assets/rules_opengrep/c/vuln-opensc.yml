@@ -1,17 +1,18 @@
 rules:
 - id: vuln-opensc-03628449
-  pattern: |
-    if ($LPATH.len >= 2 && $LPATH.value[0] == 0x3F && $LPATH.value[1] == 0x00) {
-      memmove(&$LPATH.value[0], &$LPATH.value[2], $LPATH.len - 2);
-      $LPATH.len -= 2;
-    }
-  pattern-not: |
-    if ($PATH->type != SC_PATH_TYPE_DF_NAME
-        && $LPATH.len >= 2
-        && $LPATH.value[0] == 0x3F && $LPATH.value[1] == 0x00) {
-      memmove(&$LPATH.value[0], &$LPATH.value[2], $LPATH.len - 2);
-      $LPATH.len -= 2;
-    }
+  patterns:
+  - pattern: |
+      if ($LPATH.len >= 2 && $LPATH.value[0] == 0x3F && $LPATH.value[1] == 0x00) {
+        memmove(&$LPATH.value[0], &$LPATH.value[2], $LPATH.len - 2);
+        $LPATH.len -= 2;
+      }
+  - pattern-not: |
+      if ($PATH->type != SC_PATH_TYPE_DF_NAME
+          && $LPATH.len >= 2
+          && $LPATH.value[0] == 0x3F && $LPATH.value[1] == 0x00) {
+        memmove(&$LPATH.value[0], &$LPATH.value[2], $LPATH.len - 2);
+        $LPATH.len -= 2;
+      }
   languages:
   - c
   message: |
@@ -27,22 +28,23 @@ rules:
     technology:
     - c
 - id: vuln-opensc-1db88374
-  pattern: |
-    $RV = sc_pkcs15_get_objects($P15CARD, $TYPE, $OBJS, $SIZE);
-    if ($RV != SC_SUCCESS) {
-      ...
-    }
-    for ($II = 0; $II < $RV; $II++) {
-      ...
-    }
-  pattern-not: |
-    $NOBJS = sc_pkcs15_get_objects($P15CARD, $TYPE, $OBJS, $SIZE);
-    if ($NOBJS < 1) {
-      ...
-    }
-    for ($II = 0; $II < $NOBJS; $II++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      $RV = sc_pkcs15_get_objects($P15CARD, $TYPE, $OBJS, $SIZE);
+      if ($RV != SC_SUCCESS) {
+        ...
+      }
+      for ($II = 0; $II < $RV; $II++) {
+        ...
+      }
+  - pattern-not: |
+      $NOBJS = sc_pkcs15_get_objects($P15CARD, $TYPE, $OBJS, $SIZE);
+      if ($NOBJS < 1) {
+        ...
+      }
+      for ($II = 0; $II < $NOBJS; $II++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -58,19 +60,20 @@ rules:
     technology:
     - c
 - id: vuln-opensc-40c50a3a
-  pattern: |
-    unsigned char *$BLOB;
-    ...
-    if ($COND) {
+  patterns:
+  - pattern: |
+      unsigned char *$BLOB;
       ...
-    }
-  pattern-not: |
-    unsigned char *$BLOB = NULL;
-    ...
-    if ($COND) {
-      free($BLOB);
+      if ($COND) {
+        ...
+      }
+  - pattern-not: |
+      unsigned char *$BLOB = NULL;
       ...
-    }
+      if ($COND) {
+        free($BLOB);
+        ...
+      }
   languages:
   - c
   message: |
@@ -86,14 +89,15 @@ rules:
     technology:
     - c
 - id: vuln-opensc-6903aebf
-  pattern: |
-    int $REC;
-    int $OFFS = 0;
-    int $REC_LEN = $FILE->record_length;
-  pattern-not: |
-    size_t $REC;
-    size_t $OFFS = 0;
-    size_t $REC_LEN = $FILE->record_length;
+  patterns:
+  - pattern: |
+      int $REC;
+      int $OFFS = 0;
+      int $REC_LEN = $FILE->record_length;
+  - pattern-not: |
+      size_t $REC;
+      size_t $OFFS = 0;
+      size_t $REC_LEN = $FILE->record_length;
   languages:
   - c
   message: |
@@ -111,12 +115,13 @@ rules:
     technology:
     - c
 - id: vuln-opensc-6ce61522
-  pattern: |
-    if ($VAR1->flags & SC_ASN1_PRESENT && $VAR1[0].flags & SC_ASN1_PRESENT) {
-      free($VAR1[0].parm);
-    }
-  pattern-not: |
-    free(info.subject.value);
+  patterns:
+  - pattern: |
+      if ($VAR1->flags & SC_ASN1_PRESENT && $VAR1[0].flags & SC_ASN1_PRESENT) {
+        free($VAR1[0].parm);
+      }
+  - pattern-not: |
+      free(info.subject.value);
   languages:
   - c
   message: |
@@ -134,10 +139,11 @@ rules:
     technology:
     - c
 - id: vuln-opensc-7114fb71
-  pattern: |
-    $VAR.value.value = NULL;
-  pattern-not: |
-    memset(&$VAR, 0, sizeof($VAR));
+  patterns:
+  - pattern: |
+      $VAR.value.value = NULL;
+  - pattern-not: |
+      memset(&$VAR, 0, sizeof($VAR));
   languages:
   - c
   message: |
@@ -153,17 +159,18 @@ rules:
     technology:
     - c
 - id: vuln-opensc-868f76fb
-  pattern: |
-    if ($PINLEN == 0) {
-        $R = sc_pkcs15_get_pin_info($P15CARD, $PIN_OBJ);
-        if ($R == SC_SUCCESS && $AUTH_INFO->logged_in == SC_PIN_STATE_LOGGED_IN) {
-            LOG_FUNC_RETURN($CTX, $R);
-        }
-    }
-  pattern-not: |
-    if ($PINLEN == 0) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($PINLEN == 0) {
+          $R = sc_pkcs15_get_pin_info($P15CARD, $PIN_OBJ);
+          if ($R == SC_SUCCESS && $AUTH_INFO->logged_in == SC_PIN_STATE_LOGGED_IN) {
+              LOG_FUNC_RETURN($CTX, $R);
+          }
+      }
+  - pattern-not: |
+      if ($PINLEN == 0) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -179,10 +186,11 @@ rules:
     technology:
     - c
 - id: vuln-opensc-c3f23b83
-  pattern: |
-    $VAR = $EXPR - 1;
-  pattern-not: |
-    $VAR = $EXPR > 0 ? $EXPR - 1 : 0;
+  patterns:
+  - pattern: |
+      $VAR = $EXPR - 1;
+  - pattern-not: |
+      $VAR = $EXPR > 0 ? $EXPR - 1 : 0;
   languages:
   - c
   message: |
@@ -198,14 +206,15 @@ rules:
     technology:
     - c
 - id: vuln-opensc-ed55fcd2
-  pattern: |
-    for ($I = 7; $I < 16; $I++) {
-      ...
-    }
-  pattern-not: |
-    for ($I = 0x7; $I <= 0xF; $I++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = 7; $I < 16; $I++) {
+        ...
+      }
+  - pattern-not: |
+      for ($I = 0x7; $I <= 0xF; $I++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -225,31 +234,32 @@ rules:
     technology:
     - c
 - id: vuln-opensc-f015746d
-  pattern: |
-    *$TNAME = malloc($SIZE);
-    if (*$TNAME == NULL) {
+  patterns:
+  - pattern: |
+      *$TNAME = malloc($SIZE);
+      if (*$TNAME == NULL) {
+        ...
+      }
+      $FUNC($CARD, $OFFSET, (unsigned char *)*$TNAME, $SIZE, $FLAGS);
       ...
-    }
-    $FUNC($CARD, $OFFSET, (unsigned char *)*$TNAME, $SIZE, $FLAGS);
-    ...
-    free(*$TNAME);
-    ...
-    if ((*$TNAME)[$R-1] != '\0') {
-      (*$TNAME)[$R-1] = '\0';
-    }
-  pattern-not: |
-    $NAME = malloc($SIZE);
-    if ($NAME == NULL) {
+      free(*$TNAME);
       ...
-    }
-    $FUNC($CARD, $OFFSET, (unsigned char *)$NAME, $SIZE, $FLAGS);
-    ...
-    free($NAME);
-    ...
-    if ($NAME[$R-1] != '\0') {
-      $NAME[$R-1] = '\0';
-    }
-    *$TNAME = $NAME;
+      if ((*$TNAME)[$R-1] != '\0') {
+        (*$TNAME)[$R-1] = '\0';
+      }
+  - pattern-not: |
+      $NAME = malloc($SIZE);
+      if ($NAME == NULL) {
+        ...
+      }
+      $FUNC($CARD, $OFFSET, (unsigned char *)$NAME, $SIZE, $FLAGS);
+      ...
+      free($NAME);
+      ...
+      if ($NAME[$R-1] != '\0') {
+        $NAME[$R-1] = '\0';
+      }
+      *$TNAME = $NAME;
   languages:
   - c
   message: |

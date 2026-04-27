@@ -1,9 +1,10 @@
 rules:
 - id: vuln-openvpn-42639294
-  pattern: |
-    return "ERROR: embedded null value";
-  pattern-not: |
-    return string_alloc("ERROR: embedded null value", $GC);
+  patterns:
+  - pattern: |
+      return "ERROR: embedded null value";
+  - pattern-not: |
+      return string_alloc("ERROR: embedded null value", $GC);
   languages:
   - c
   message: |
@@ -21,18 +22,19 @@ rules:
     technology:
     - c
 - id: vuln-openvpn-7718c898
-  pattern: |
-    char $BUF[128];
-    ...
-    char *$PTR = $BUF + $BUF[$INDEX];
-  pattern-not: |
-    unsigned char $BUF[128];
-    ...
-    int $POS = $BUF[$INDEX];
-    if ($POS + $LEN > sizeof($BUF)) {
-      return $NULL;
-    }
-    char *$PTR = $BUF + $POS;
+  patterns:
+  - pattern: |
+      char $BUF[128];
+      ...
+      char *$PTR = $BUF + $BUF[$INDEX];
+  - pattern-not: |
+      unsigned char $BUF[128];
+      ...
+      int $POS = $BUF[$INDEX];
+      if ($POS + $LEN > sizeof($BUF)) {
+        return $NULL;
+      }
+      char *$PTR = $BUF + $POS;
   languages:
   - c
   message: |
@@ -56,17 +58,18 @@ rules:
     technology:
     - c
 - id: vuln-openvpn-c3f47077
-  pattern: |
-    if (buf_advance(&$BUF, 40))
-    {
-      ...
-    }
-  pattern-not: |
-    if (buf_advance(&$BUF, 40)
-        && BLEN(&$BUF) >= (int) sizeof(struct openvpn_tcphdr))
-    {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (buf_advance(&$BUF, 40))
+      {
+        ...
+      }
+  - pattern-not: |
+      if (buf_advance(&$BUF, 40)
+          && BLEN(&$BUF) >= (int) sizeof(struct openvpn_tcphdr))
+      {
+        ...
+      }
   languages:
   - c
   message: |

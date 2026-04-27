@@ -1,10 +1,11 @@
 rules:
 - id: vuln-argo-cd-17f7f4f4
-  pattern: |
-    $VAR = rand.RandString($LEN)
-  pattern-not: |
-    $VAR, $ERR = rand.String($LEN)
-    errors.CheckError($ERR)
+  patterns:
+  - pattern: |
+      $VAR = rand.RandString($LEN)
+  - pattern-not: |
+      $VAR, $ERR = rand.String($LEN)
+      errors.CheckError($ERR)
   languages:
   - go
   message: |
@@ -23,14 +24,15 @@ rules:
     technology:
     - go
 - id: vuln-argo-cd-5bbb51ab
-  pattern: |
-    func $FUNC($W http.ResponseWriter, $R *http.Request, $H http.Header, $M util_session.SessionManager) (*terminalSession, error) {
-        ...
-    }
-  pattern-not: |
-    func $FUNC($W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager) (*terminalSession, error) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      func $FUNC($W http.ResponseWriter, $R *http.Request, $H http.Header, $M util_session.SessionManager) (*terminalSession, error) {
+          ...
+      }
+  - pattern-not: |
+      func $FUNC($W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager) (*terminalSession, error) {
+          ...
+      }
   languages:
   - go
   message: |
@@ -50,10 +52,11 @@ rules:
     technology:
     - go
 - id: vuln-argo-cd-701ce053
-  pattern: |
-    jwt.NewValidationHelper(jwt.WithoutClaimsValidation())
-  pattern-not: |
-    jwt.NewValidationHelper(jwt.WithoutClaimsValidation(), jwt.WithoutAudienceValidation())
+  patterns:
+  - pattern: |
+      jwt.NewValidationHelper(jwt.WithoutClaimsValidation())
+  - pattern-not: |
+      jwt.NewValidationHelper(jwt.WithoutClaimsValidation(), jwt.WithoutAudienceValidation())
   languages:
   - go
   message: |
@@ -71,14 +74,15 @@ rules:
     technology:
     - go
 - id: vuln-argo-cd-c2647055
-  pattern: |
-    $CLUSTER, $ERR := $SERVER.getClusterWith403IfNotExist($CTX, $QUERY)
-    ...
-    if $ENFORCE_ERR := $SERVER.enf.EnforceErr($CTX.Value("claims"), $RESOURCE, $ACTION, $OBJECT); $ENFORCE_ERR != nil {
-        return nil, $ENFORCE_ERR
-    }
-  pattern-not: |
-    $CLUSTER, $ERR := $SERVER.getClusterAndVerifyAccess($CTX, $QUERY, $ACTION)
+  patterns:
+  - pattern: |
+      $CLUSTER, $ERR := $SERVER.getClusterWith403IfNotExist($CTX, $QUERY)
+      ...
+      if $ENFORCE_ERR := $SERVER.enf.EnforceErr($CTX.Value("claims"), $RESOURCE, $ACTION, $OBJECT); $ENFORCE_ERR != nil {
+          return nil, $ENFORCE_ERR
+      }
+  - pattern-not: |
+      $CLUSTER, $ERR := $SERVER.getClusterAndVerifyAccess($CTX, $QUERY, $ACTION)
   languages:
   - go
   message: |
@@ -94,10 +98,11 @@ rules:
     technology:
     - go
 - id: vuln-argo-cd-e2df7315
-  pattern: |
-    NewIgnoreNormalizer($IGNORES, $OVERRIDES)
-  pattern-not: |
-    NewIgnoreNormalizer($IGNORES, $OVERRIDES, $OPTS)
+  patterns:
+  - pattern: |
+      NewIgnoreNormalizer($IGNORES, $OVERRIDES)
+  - pattern-not: |
+      NewIgnoreNormalizer($IGNORES, $OVERRIDES, $OPTS)
   languages:
   - go
   message: |
@@ -115,14 +120,15 @@ rules:
     technology:
     - go
 - id: vuln-argo-cd-ef535230
-  pattern: |
-    func newTerminalSession($W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager) (*terminalSession, error) {
-      ...
-    }
-  pattern-not: |
-    func newTerminalSession($CTX context.Context, $W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager, $APP string, $ENF *rbac.Enforcer) (*terminalSession, error) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      func newTerminalSession($W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager) (*terminalSession, error) {
+        ...
+      }
+  - pattern-not: |
+      func newTerminalSession($CTX context.Context, $W http.ResponseWriter, $R *http.Request, $H http.Header, $M *util_session.SessionManager, $APP string, $ENF *rbac.Enforcer) (*terminalSession, error) {
+        ...
+      }
   languages:
   - go
   message: |

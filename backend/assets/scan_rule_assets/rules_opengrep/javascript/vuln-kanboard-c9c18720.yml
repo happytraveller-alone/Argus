@@ -1,20 +1,21 @@
 rules:
 - id: vuln-kanboard-c9c18720
-  pattern: |
-    function onPaste($EVENT) {
-        ...
-        if ($EVENT.clipboardData && $EVENT.clipboardData.items) {
-            ...
-        } else {
-            setTimeout($FUNC, 100);
-        }
-    }
-  pattern-not: |
-    function onPaste($EVENT) {
-        if ($EVENT.clipboardData && $EVENT.clipboardData.items) {
-            ...
-        }
-    }
+  patterns:
+  - pattern: |
+      function onPaste($EVENT) {
+          ...
+          if ($EVENT.clipboardData && $EVENT.clipboardData.items) {
+              ...
+          } else {
+              setTimeout($FUNC, 100);
+          }
+      }
+  - pattern-not: |
+      function onPaste($EVENT) {
+          if ($EVENT.clipboardData && $EVENT.clipboardData.items) {
+              ...
+          }
+      }
   languages:
   - javascript
   message: |

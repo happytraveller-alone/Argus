@@ -1,9 +1,10 @@
 rules:
 - id: vuln-clickhouse-fc6a25fa
-  pattern: |
-    return 1 + $TAIL_SIZE1 + $TAIL_SIZE2;
-  pattern-not: |
-    return $EXPECTED_SIZE;
+  patterns:
+  - pattern: |
+      return 1 + $TAIL_SIZE1 + $TAIL_SIZE2;
+  - pattern-not: |
+      return $EXPECTED_SIZE;
   languages:
   - cpp
   message: |

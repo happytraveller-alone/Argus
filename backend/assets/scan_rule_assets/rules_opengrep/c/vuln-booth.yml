@@ -1,13 +1,14 @@
 rules:
 - id: vuln-booth-35bf0b7b
-  pattern: |
-    if (is_auth_req()) {
-      ...
-    }
-  pattern-not: |
-    if ($BOOTH_CONF->authfile[0] != '\0') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (is_auth_req()) {
+        ...
+      }
+  - pattern-not: |
+      if ($BOOTH_CONF->authfile[0] != '\0') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,10 +24,11 @@ rules:
     technology:
     - c
 - id: vuln-booth-43eaf0e8
-  pattern: |
-    $TPT->recv($SITE, $MSG + $LEN, $LEN - sizeof(*$HEADER))
-  pattern-not: |
-    $TPT->recv($SITE, $MSG + sizeof(*$HEADER), $LEN - sizeof(*$HEADER))
+  patterns:
+  - pattern: |
+      $TPT->recv($SITE, $MSG + $LEN, $LEN - sizeof(*$HEADER))
+  - pattern-not: |
+      $TPT->recv($SITE, $MSG + sizeof(*$HEADER), $LEN - sizeof(*$HEADER))
   languages:
   - c
   message: |
@@ -44,11 +46,9 @@ rules:
     technology:
     - c
 - id: vuln-booth-98b4284d
-  pattern: |
-    $FUNC(gcry_md_get_algo_dlen($HID))
-  pattern-not: |
-    $HLEN = gcry_md_get_algo_dlen($HID);
-    $FUNC($HLEN)
+  patterns:
+  - pattern: |
+      $FUNC(gcry_md_get_algo_dlen($HID))
   languages:
   - c
   message: |

@@ -1,11 +1,12 @@
 rules:
 - id: vuln-portofino-94653cb3
-  pattern: |
-    File $TEMP_DIR = File.createTempFile($PREFIX, $SUFFIX);
-    $TEMP_DIR.delete();
-    $TEMP_DIR.mkdir();
-  pattern-not: |
-    File $TEMP_DIR = Files.createTempDirectory($PREFIX + $SUFFIX).toFile();
+  patterns:
+  - pattern: |
+      File $TEMP_DIR = File.createTempFile($PREFIX, $SUFFIX);
+      $TEMP_DIR.delete();
+      $TEMP_DIR.mkdir();
+  - pattern-not: |
+      File $TEMP_DIR = Files.createTempDirectory($PREFIX + $SUFFIX).toFile();
   languages:
   - java
   message: |

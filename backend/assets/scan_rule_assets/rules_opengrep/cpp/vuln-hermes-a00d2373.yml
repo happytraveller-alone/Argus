@@ -1,9 +1,10 @@
 rules:
 - id: vuln-hermes-a00d2373
-  pattern: |
-    JSProxy::getOwnPropertyKeys($FROM, $RUNTIME, $DESC)
-  pattern-not: |
-    JSObject::getOwnPropertyKeys($FROM, $RUNTIME, $DESC)
+  patterns:
+  - pattern: |
+      JSProxy::getOwnPropertyKeys($FROM, $RUNTIME, $DESC)
+  - pattern-not: |
+      JSObject::getOwnPropertyKeys($FROM, $RUNTIME, $DESC)
   languages:
   - cpp
   message: |

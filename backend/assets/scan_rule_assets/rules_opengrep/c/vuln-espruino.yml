@@ -1,9 +1,10 @@
 rules:
 - id: vuln-espruino-013cb1be
-  pattern: |
-    char $FILENAME[6] = ".bootX";
-  pattern-not: |
-    char $FILENAME[7] = ".bootX";
+  patterns:
+  - pattern: |
+      char $FILENAME[6] = ".bootX";
+  - pattern-not: |
+      char $FILENAME[7] = ".bootX";
   languages:
   - c
   message: |
@@ -21,12 +22,13 @@ rules:
     technology:
     - c
 - id: vuln-espruino-0a761987
-  pattern: |
-    strncpy($STR, $VAL, $LEN);
-    itostr($TOKEN, &$STR[2], 10);
-    strncat($STR, "]", $LEN);
-  pattern-not: |
-    espruino_snprintf($STR, $LEN, "?[%d]", $TOKEN);
+  patterns:
+  - pattern: |
+      strncpy($STR, $VAL, $LEN);
+      itostr($TOKEN, &$STR[2], 10);
+      strncat($STR, "]", $LEN);
+  - pattern-not: |
+      espruino_snprintf($STR, $LEN, "?[%d]", $TOKEN);
   languages:
   - c
   message: |
@@ -45,30 +47,31 @@ rules:
     technology:
     - c
 - id: vuln-espruino-0a9f07a0
-  pattern: |
-    int timeout = 1000;
-    while (timeout-- && !(spiFlashStatus()&2)) {
-      $BUF[0] = 6; // write enable
-      spiFlashWriteCS($BUF,1);
-    }
-    $BUF[0] = 1; // write status register
-    $BUF[1] = 0;
-    spiFlashWriteCS($BUF,2);
-  pattern-not: |
-    int tries = 3;
-    do {
+  patterns:
+  - pattern: |
       int timeout = 1000;
       while (timeout-- && !(spiFlashStatus()&2)) {
         $BUF[0] = 6; // write enable
         spiFlashWriteCS($BUF,1);
-        jshDelayMicroseconds(10);
       }
-      jshDelayMicroseconds(10);
-      $BUF[0] = 1; // write status register, disable BP0/1/2
+      $BUF[0] = 1; // write status register
       $BUF[1] = 0;
       spiFlashWriteCS($BUF,2);
-      jshDelayMicroseconds(10);
-    } while (tries-- && (spiFlashStatus()&28));
+  - pattern-not: |
+      int tries = 3;
+      do {
+        int timeout = 1000;
+        while (timeout-- && !(spiFlashStatus()&2)) {
+          $BUF[0] = 6; // write enable
+          spiFlashWriteCS($BUF,1);
+          jshDelayMicroseconds(10);
+        }
+        jshDelayMicroseconds(10);
+        $BUF[0] = 1; // write status register, disable BP0/1/2
+        $BUF[1] = 0;
+        spiFlashWriteCS($BUF,2);
+        jshDelayMicroseconds(10);
+      } while (tries-- && (spiFlashStatus()&28));
   languages:
   - c
   message: |
@@ -82,10 +85,11 @@ rules:
     technology:
     - c
 - id: vuln-espruino-b6d362f6
-  pattern: |
-    jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR));
-  pattern-not: |
-    jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR)?jswGetBasicObjectName($VAR):"unknown ArrayBuffer");
+  patterns:
+  - pattern: |
+      jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR));
+  - pattern-not: |
+      jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR)?jswGetBasicObjectName($VAR):"unknown ArrayBuffer");
   languages:
   - c
   message: |
@@ -103,10 +107,11 @@ rules:
     technology:
     - c
 - id: vuln-espruino-bed844f1
-  pattern: |
-    strncpy($STR, $SRC, $LEN);
-  pattern-not: |
-    strcpy($STR, $SRC);
+  patterns:
+  - pattern: |
+      strncpy($STR, $SRC, $LEN);
+  - pattern-not: |
+      strcpy($STR, $SRC);
   languages:
   - c
   message: |
@@ -122,10 +127,11 @@ rules:
     technology:
     - c
 - id: vuln-espruino-c1043117
-  pattern: |
-    jsvGetString($VAR, $BUF, sizeof($TYPE) + 1)
-  pattern-not: |
-    jsvGetStringChars($VAR, 0, $BUF, sizeof($TYPE))
+  patterns:
+  - pattern: |
+      jsvGetString($VAR, $BUF, sizeof($TYPE) + 1)
+  - pattern-not: |
+      jsvGetStringChars($VAR, 0, $BUF, sizeof($TYPE))
   languages:
   - c
   message: |
@@ -145,14 +151,15 @@ rules:
     technology:
     - c
 - id: vuln-espruino-ce192419
-  pattern: |
-    while (*$S && $L<$LEN) {
-      ...
-    }
-  pattern-not: |
-    while ($S[$L] && $L<$LEN) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while (*$S && $L<$LEN) {
+        ...
+      }
+  - pattern-not: |
+      while ($S[$L] && $L<$LEN) {
+        ...
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-core-77cc7e15
-  pattern: |
-    <input name="email" ... value="$!forgotPasswordForm.email">
-  pattern-not: |
-    <input name="email" ... value="$xsstool.escapeHTMLAttrib($!forgotPasswordForm.email)">
+  patterns:
+  - pattern: |
+      <input name="email" ... value="$!forgotPasswordForm.email">
+  - pattern-not: |
+      <input name="email" ... value="$xsstool.escapeHTMLAttrib($!forgotPasswordForm.email)">
   languages:
   - html
   message: |

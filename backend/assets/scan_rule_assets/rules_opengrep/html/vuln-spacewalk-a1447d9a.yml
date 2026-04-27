@@ -1,9 +1,10 @@
 rules:
 - id: vuln-spacewalk-a1447d9a
-  pattern: |
-    <form name="form1" action="/rhn/Search.do" method="get">
-  pattern-not: |
-    <form name="form1" action="/rhn/Search.do" method="post">
+  patterns:
+  - pattern: |
+      <form name="form1" action="/rhn/Search.do" method="get">
+  - pattern-not: |
+      <form name="form1" action="/rhn/Search.do" method="post">
   languages:
   - html
   message: |

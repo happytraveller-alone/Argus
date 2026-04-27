@@ -1,13 +1,14 @@
 rules:
 - id: vuln-libarchive-05a875fd
-  pattern: |
-    if (wstrcmp($START, $FLAG_WNAME) == 0) {
-      ...
-    }
-  pattern-not: |
-    if (wcscmp($START, $FLAG_WNAME) == 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (wstrcmp($START, $FLAG_WNAME) == 0) {
+        ...
+      }
+  - pattern-not: |
+      if (wcscmp($START, $FLAG_WNAME) == 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -24,10 +25,11 @@ rules:
     technology:
     - c
 - id: vuln-libarchive-65a23f5d
-  pattern: |
-    *$BUFF = __archive_read_ahead($A, 1, &$BYTES_AVAIL);
-  pattern-not: |
-    *$BUFF = __archive_read_ahead($A, $MINIMUM, &$BYTES_AVAIL);
+  patterns:
+  - pattern: |
+      *$BUFF = __archive_read_ahead($A, 1, &$BYTES_AVAIL);
+  - pattern-not: |
+      *$BUFF = __archive_read_ahead($A, $MINIMUM, &$BYTES_AVAIL);
   languages:
   - c
   message: |
@@ -45,16 +47,17 @@ rules:
     technology:
     - c
 - id: vuln-libarchive-a550daee
-  pattern: |
-    $NUMBERS[$ARGC++] = $EXPR;
-    if ($ARGC > $MAX_PACK_ARGS) {
-      ...
-    }
-  pattern-not: |
-    if ($ARGC >= $MAX_PACK_ARGS) {
+  patterns:
+  - pattern: |
       $NUMBERS[$ARGC++] = $EXPR;
-      ...
-    }
+      if ($ARGC > $MAX_PACK_ARGS) {
+        ...
+      }
+  - pattern-not: |
+      if ($ARGC >= $MAX_PACK_ARGS) {
+        $NUMBERS[$ARGC++] = $EXPR;
+        ...
+      }
   languages:
   - c
   message: |
@@ -70,24 +73,25 @@ rules:
     technology:
     - c
 - id: vuln-libarchive-b31744df
-  pattern: |
-    static time_t $T;
-    time_t $A;
-    if ($T == 0) {
-      $A = 1;
-      while ($A > $T) {
-        $T = $A;
-        $A = $A * 2 + 1;
+  patterns:
+  - pattern: |
+      static time_t $T;
+      time_t $A;
+      if ($T == 0) {
+        $A = 1;
+        while ($A > $T) {
+          $T = $A;
+          $A = $A * 2 + 1;
+        }
       }
-    }
-  pattern-not: |
-    if (((time_t)0) < ((time_t)-1)) {
-      return (~(time_t)0);
-    } else {
-      const uintmax_t $MAX_UNSIGNED_TIME_T = (uintmax_t)(~(time_t)0);
-      const uintmax_t $MAX_SIGNED_TIME_T = $MAX_UNSIGNED_TIME_T >> 1;
-      return (time_t)$MAX_SIGNED_TIME_T;
-    }
+  - pattern-not: |
+      if (((time_t)0) < ((time_t)-1)) {
+        return (~(time_t)0);
+      } else {
+        const uintmax_t $MAX_UNSIGNED_TIME_T = (uintmax_t)(~(time_t)0);
+        const uintmax_t $MAX_SIGNED_TIME_T = $MAX_UNSIGNED_TIME_T >> 1;
+        return (time_t)$MAX_SIGNED_TIME_T;
+      }
   languages:
   - c
   message: |
@@ -109,24 +113,25 @@ rules:
     technology:
     - c
 - id: vuln-libarchive-d24e79e8
-  pattern: |
-    static int $FUNC(struct archive_read *$A) {
-      int $RET = ARCHIVE_OK;
-      $RET = archive_write_free($A->extract->ad);
-      free($A->extract);
-      $A->extract = NULL;
-      return ($RET);
-    }
-  pattern-not: |
-    static int $FUNC(struct archive_read *$A) {
-      int $RET = ARCHIVE_OK;
-      if ($A->extract->ad != NULL) {
+  patterns:
+  - pattern: |
+      static int $FUNC(struct archive_read *$A) {
+        int $RET = ARCHIVE_OK;
         $RET = archive_write_free($A->extract->ad);
+        free($A->extract);
+        $A->extract = NULL;
+        return ($RET);
       }
-      free($A->extract);
-      $A->extract = NULL;
-      return ($RET);
-    }
+  - pattern-not: |
+      static int $FUNC(struct archive_read *$A) {
+        int $RET = ARCHIVE_OK;
+        if ($A->extract->ad != NULL) {
+          $RET = archive_write_free($A->extract->ad);
+        }
+        free($A->extract);
+        $A->extract = NULL;
+        return ($RET);
+      }
   languages:
   - c
   message: |

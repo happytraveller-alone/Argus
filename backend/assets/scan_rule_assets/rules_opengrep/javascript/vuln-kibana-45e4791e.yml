@@ -1,9 +1,10 @@
 rules:
 - id: vuln-kibana-45e4791e
-  pattern: |
-    if (!$FIELD) return $CONVERTER($SOURCE, $FIELD, $HIT);
-  pattern-not: |
-    if (!$FIELD) return _.escape($CONVERTER($SOURCE));
+  patterns:
+  - pattern: |
+      if (!$FIELD) return $CONVERTER($SOURCE, $FIELD, $HIT);
+  - pattern-not: |
+      if (!$FIELD) return _.escape($CONVERTER($SOURCE));
   languages:
   - javascript
   message: |

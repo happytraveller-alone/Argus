@@ -1,23 +1,24 @@
 rules:
 - id: vuln-authentik-422eb089
-  pattern: |
-    def validate_code($CODE, $REQUEST):
-        ...
-        $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
-        if not $TOKEN:
-            return None
-        $APP = get_application($TOKEN.provider)
-        if not $APP:
-            return None
-        ...
-  pattern-not: |
-    def validate_code($CODE, $REQUEST):
-        ...
-        $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
-        if not $TOKEN:
-            raise Application.DoesNotExist
-        $APP = $TOKEN.provider.application
-        ...
+  patterns:
+  - pattern: |
+      def validate_code($CODE, $REQUEST):
+          ...
+          $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
+          if not $TOKEN:
+              return None
+          $APP = get_application($TOKEN.provider)
+          if not $APP:
+              return None
+          ...
+  - pattern-not: |
+      def validate_code($CODE, $REQUEST):
+          ...
+          $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
+          if not $TOKEN:
+              raise Application.DoesNotExist
+          $APP = $TOKEN.provider.application
+          ...
   languages:
   - python
   message: 'Potential security issue detected: Missing proper exception handling and application validation in OAuth2 device code validation. This could lead to improper access control. Use the PolicyAccessView approach for consistent policy enforcement.'

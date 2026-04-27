@@ -1,9 +1,10 @@
 rules:
 - id: vuln-vlc-09572892
-  pattern: |
-    $BOX->data.p_rdrf->psz_ref = malloc($LEN + 1);
-  pattern-not: |
-    $BOX->data.p_rdrf->psz_ref = malloc($LEN);
+  patterns:
+  - pattern: |
+      $BOX->data.p_rdrf->psz_ref = malloc($LEN + 1);
+  - pattern-not: |
+      $BOX->data.p_rdrf->psz_ref = malloc($LEN);
   languages:
   - c
   message: |
@@ -20,13 +21,14 @@ rules:
     technology:
     - c
 - id: vuln-vlc-20429146
-  pattern: |
-    char $VAR[len + 1];
-  pattern-not: |
-    char *$VAR = malloc(len + 1);
-    if(!$VAR)
-        return $ERR;
-    free($VAR);
+  patterns:
+  - pattern: |
+      char $VAR[len + 1];
+  - pattern-not: |
+      char *$VAR = malloc(len + 1);
+      if(!$VAR)
+          return $ERR;
+      free($VAR);
   languages:
   - c
   message: |
@@ -43,18 +45,19 @@ rules:
     technology:
     - c
 - id: vuln-vlc-3a628275
-  pattern: |
-    $BOX->data.p_padb->i_reserved1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_pad2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_reserved2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_pad1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
-  pattern-not: |
-    $COUNT = $BOX->data.p_padb->i_sample_count;
-    $COUNT = ($COUNT + 1) / 2;
-    $BOX->data.p_padb->i_reserved1 = calloc( $COUNT, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_pad2 = calloc( $COUNT, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_reserved2 = calloc( $COUNT, sizeof(uint16_t) );
-    $BOX->data.p_padb->i_pad1 = calloc( $COUNT, sizeof(uint16_t) );
+  patterns:
+  - pattern: |
+      $BOX->data.p_padb->i_reserved1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_pad2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_reserved2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_pad1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+  - pattern-not: |
+      $COUNT = $BOX->data.p_padb->i_sample_count;
+      $COUNT = ($COUNT + 1) / 2;
+      $BOX->data.p_padb->i_reserved1 = calloc( $COUNT, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_pad2 = calloc( $COUNT, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_reserved2 = calloc( $COUNT, sizeof(uint16_t) );
+      $BOX->data.p_padb->i_pad1 = calloc( $COUNT, sizeof(uint16_t) );
   languages:
   - c
   message: |

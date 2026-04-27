@@ -1,15 +1,16 @@
 rules:
 - id: vuln-openssl-0042fb5f
-  pattern: |
-    if (($VAR == NULL) || ($VAR->data == NULL)) {
-        $BUF[0]='\0';
-        return(0);
-    }
-  pattern-not: |
-    if ($BUF && $BUF_LEN > 0)
-        $BUF[0] = '\0';
-    if (($VAR == NULL) || ($VAR->data == NULL))
-        return(0);
+  patterns:
+  - pattern: |
+      if (($VAR == NULL) || ($VAR->data == NULL)) {
+          $BUF[0]='\0';
+          return(0);
+      }
+  - pattern-not: |
+      if ($BUF && $BUF_LEN > 0)
+          $BUF[0] = '\0';
+      if (($VAR == NULL) || ($VAR->data == NULL))
+          return(0);
   languages:
   - c
   message: |
@@ -25,14 +26,15 @@ rules:
     technology:
     - c
 - id: vuln-openssl-006cd708
-  pattern: |
-    if ($S->session == NULL) {
-      ...
-    }
-  pattern-not: |
-    if ($S->session == NULL || $S->session->master_key_length == 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($S->session == NULL) {
+        ...
+      }
+  - pattern-not: |
+      if ($S->session == NULL || $S->session->master_key_length == 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -50,19 +52,20 @@ rules:
     technology:
     - c
 - id: vuln-openssl-00e2f5ee
-  pattern: |
-    if ($INL == 0) {
-        *$OUTL = 0;
-        return $RETVAL;
-    }
-  pattern-not: |
-    if ($OUT != NULL) {
-        if ($INL == 0) {
-            if ($OUTL != NULL)
-                *$OUTL = 0;
-            return $RETVAL;
-        }
-    }
+  patterns:
+  - pattern: |
+      if ($INL == 0) {
+          *$OUTL = 0;
+          return $RETVAL;
+      }
+  - pattern-not: |
+      if ($OUT != NULL) {
+          if ($INL == 0) {
+              if ($OUTL != NULL)
+                  *$OUTL = 0;
+              return $RETVAL;
+          }
+      }
   languages:
   - c
   message: |
@@ -79,30 +82,31 @@ rules:
     technology:
     - c
 - id: vuln-openssl-06d1dc3f
-  pattern: |
-    if ((gen->type == GEN_OTHERNAME) && (check_type == GEN_EMAIL)) {
-        if (OBJ_obj2nid(gen->d.otherName->type_id) == NID_id_on_SmtpUTF8Mailbox) {
-            san_present = 1;
-            if (gen->d.otherName->value->type == V_ASN1_UTF8STRING) {
-                $CSTR = gen->d.otherName->value->value.utf8string;
-                if ((rv = do_check_string($CSTR, 0, equal, flags, chk, chklen, peername)) != 0)
-                    break;
-            }
-        }
-    }
-  pattern-not: |
-    switch (gen->type) {
-    case GEN_OTHERNAME:
-        switch (OBJ_obj2nid(gen->d.otherName->type_id)) {
-        case NID_id_on_SmtpUTF8Mailbox:
-            if (check_type != GEN_EMAIL
-                || gen->d.otherName->value->type != V_ASN1_UTF8STRING)
-                continue;
-            $CSTR = gen->d.otherName->value->value.utf8string;
-            break;
-        }
-        break;
-    }
+  patterns:
+  - pattern: |
+      if ((gen->type == GEN_OTHERNAME) && (check_type == GEN_EMAIL)) {
+          if (OBJ_obj2nid(gen->d.otherName->type_id) == NID_id_on_SmtpUTF8Mailbox) {
+              san_present = 1;
+              if (gen->d.otherName->value->type == V_ASN1_UTF8STRING) {
+                  $CSTR = gen->d.otherName->value->value.utf8string;
+                  if ((rv = do_check_string($CSTR, 0, equal, flags, chk, chklen, peername)) != 0)
+                      break;
+              }
+          }
+      }
+  - pattern-not: |
+      switch (gen->type) {
+      case GEN_OTHERNAME:
+          switch (OBJ_obj2nid(gen->d.otherName->type_id)) {
+          case NID_id_on_SmtpUTF8Mailbox:
+              if (check_type != GEN_EMAIL
+                  || gen->d.otherName->value->type != V_ASN1_UTF8STRING)
+                  continue;
+              $CSTR = gen->d.otherName->value->value.utf8string;
+              break;
+          }
+          break;
+      }
   languages:
   - c
   message: |
@@ -125,13 +129,14 @@ rules:
     technology:
     - c
 - id: vuln-openssl-0ed26acc
-  pattern: |
-    int $LEN = OBJ_obj2txt($BUF, sizeof($BUF), $OBJ, 0);
-    BIO_write($BIO, $BUF, $LEN);
-    BIO_write($BIO, "\n", 1);
-  pattern-not: |
-    OBJ_obj2txt($BUF, sizeof($BUF), $OBJ, 0);
-    BIO_printf($BIO, "%s\n", $BUF);
+  patterns:
+  - pattern: |
+      int $LEN = OBJ_obj2txt($BUF, sizeof($BUF), $OBJ, 0);
+      BIO_write($BIO, $BUF, $LEN);
+      BIO_write($BIO, "\n", 1);
+  - pattern-not: |
+      OBJ_obj2txt($BUF, sizeof($BUF), $OBJ, 0);
+      BIO_printf($BIO, "%s\n", $BUF);
   languages:
   - c
   message: |
@@ -148,10 +153,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-1f365708
-  pattern: |
-    !TEST_str_eq($STR1, (char *)$STR2->data)
-  pattern-not: |
-    !TEST_mem_eq($STR1, strlen($STR1), (char *)$STR2->data, $STR2->length)
+  patterns:
+  - pattern: |
+      !TEST_str_eq($STR1, (char *)$STR2->data)
+  - pattern-not: |
+      !TEST_mem_eq($STR1, strlen($STR1), (char *)$STR2->data, $STR2->length)
   languages:
   - c
   message: |
@@ -167,10 +173,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-2ac4c6f7
-  pattern: |
-    asn1_item_embed_d2i($VAR1, $VAR2, $VAR3, $VAR4, $VAR5, $VAR6, $VAR7, $VAR8)
-  pattern-not: |
-    asn1_item_embed_d2i($VAR1, $VAR2, $VAR3, $VAR4, $VAR5, $VAR6, $VAR7, $VAR8, $VAR9)
+  patterns:
+  - pattern: |
+      asn1_item_embed_d2i($VAR1, $VAR2, $VAR3, $VAR4, $VAR5, $VAR6, $VAR7, $VAR8)
+  - pattern-not: |
+      asn1_item_embed_d2i($VAR1, $VAR2, $VAR3, $VAR4, $VAR5, $VAR6, $VAR7, $VAR8, $VAR9)
   languages:
   - c
   message: |
@@ -191,10 +198,11 @@ rules:
     references:
     - https://www.openssl.org/news/secadv/20180327.txt
 - id: vuln-openssl-43e6a58d
-  pattern: |
-    q_bits = BN_num_bits($DSAPARAM->q);
-  pattern-not: |
-    q_bits = BN_num_bits($DSAPARAM->q) + sizeof($DSAPARAM->q->d[0]) * 16;
+  patterns:
+  - pattern: |
+      q_bits = BN_num_bits($DSAPARAM->q);
+  - pattern-not: |
+      q_bits = BN_num_bits($DSAPARAM->q) + sizeof($DSAPARAM->q->d[0]) * 16;
   languages:
   - c
   message: |
@@ -210,16 +218,17 @@ rules:
     technology:
     - c
 - id: vuln-openssl-4924b37e
-  pattern: |
-    if ($UBITS <= BN_BITS2 && $UDP[0] == 1)
-        break;
-  pattern-not: |
-    if ($UBITS <= BN_BITS2) {
-        if ($UDP[0] == 0)
-            goto err;
-        if ($UDP[0] == 1)
-            break;
-    }
+  patterns:
+  - pattern: |
+      if ($UBITS <= BN_BITS2 && $UDP[0] == 1)
+          break;
+  - pattern-not: |
+      if ($UBITS <= BN_BITS2) {
+          if ($UDP[0] == 0)
+              goto err;
+          if ($UDP[0] == 1)
+              break;
+      }
   languages:
   - c
   message: |
@@ -240,10 +249,11 @@ rules:
     technology:
     - crypto
 - id: vuln-openssl-4b22cce3
-  pattern: |
-    if ($FUNC($CTX, $NULL, $SIGALG, $PKEY)) ...
-  pattern-not: |
-    if ($FUNC($CTX, $NULL, $SIGALG, $PKEY) > 0) { }
+  patterns:
+  - pattern: |
+      if ($FUNC($CTX, $NULL, $SIGALG, $PKEY)) ...
+  - pattern-not: |
+      if ($FUNC($CTX, $NULL, $SIGALG, $PKEY) > 0) { }
   languages:
   - c
   message: |
@@ -263,16 +273,17 @@ rules:
     technology:
     - c
 - id: vuln-openssl-4b390b6c
-  pattern: |
-    if ($L && !BUF_MEM_grow_clean($S->init_buf, (int)$L)) {
-        SSLerr(SSL_F_TLS_GET_MESSAGE_HEADER, ERR_R_BUF_LIB);
-        ...
-    }
-  pattern-not: |
-    if ($L && !BUF_MEM_grow_clean($S->init_buf, (int)$L + SSL3_HM_HEADER_LENGTH)) {
-        SSLerr(SSL_F_TLS_GET_MESSAGE_HEADER, ERR_R_BUF_LIB);
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($L && !BUF_MEM_grow_clean($S->init_buf, (int)$L)) {
+          SSLerr(SSL_F_TLS_GET_MESSAGE_HEADER, ERR_R_BUF_LIB);
+          ...
+      }
+  - pattern-not: |
+      if ($L && !BUF_MEM_grow_clean($S->init_buf, (int)$L + SSL3_HM_HEADER_LENGTH)) {
+          SSLerr(SSL_F_TLS_GET_MESSAGE_HEADER, ERR_R_BUF_LIB);
+          ...
+      }
   languages:
   - c
   message: |
@@ -290,14 +301,15 @@ rules:
     technology:
     - c
 - id: vuln-openssl-59302b60
-  pattern: |
-    if (PKCS7_is_detached($P7) || ($IN_BIO != NULL)) {
-      ...
-    }
-  pattern-not: |
-    if ($IN_BIO != NULL) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (PKCS7_is_detached($P7) || ($IN_BIO != NULL)) {
+        ...
+      }
+  - pattern-not: |
+      if ($IN_BIO != NULL) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -315,10 +327,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-59f5e75f
-  pattern: |
-    sm2_plaintext_size($KEY, $DIGEST, $MSGLEN, $PTSIZE)
-  pattern-not: |
-    sm2_plaintext_size($CT, $CT_SIZE, $PTSIZE)
+  patterns:
+  - pattern: |
+      sm2_plaintext_size($KEY, $DIGEST, $MSGLEN, $PTSIZE)
+  - pattern-not: |
+      sm2_plaintext_size($CT, $CT_SIZE, $PTSIZE)
   languages:
   - c
   message: |
@@ -337,14 +350,15 @@ rules:
     technology:
     - c
 - id: vuln-openssl-75875496
-  pattern: |
-    if ($S->verify_mode != $SSL_VERIFY_NONE && $I <= 0) {
-        ...
-    }
-  pattern-not: |
-    if ($S->verify_mode != $SSL_VERIFY_NONE && $I == 0) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($S->verify_mode != $SSL_VERIFY_NONE && $I <= 0) {
+          ...
+      }
+  - pattern-not: |
+      if ($S->verify_mode != $SSL_VERIFY_NONE && $I == 0) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -360,19 +374,20 @@ rules:
     technology:
     - c
 - id: vuln-openssl-7725e7bf
-  pattern: |
-    if ($RET == -1 && CRYPTO_THREAD_write_lock($LOCK)) {
-        $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
-        CRYPTO_THREAD_unlock($LOCK);
-    }
-  pattern-not: |
-    if ($RET == -1 && CRYPTO_THREAD_write_lock($LOCK)) {
-        $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
-        CRYPTO_THREAD_unlock($LOCK);
-    }
-    else {
-        $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
-    }
+  patterns:
+  - pattern: |
+      if ($RET == -1 && CRYPTO_THREAD_write_lock($LOCK)) {
+          $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
+          CRYPTO_THREAD_unlock($LOCK);
+      }
+  - pattern-not: |
+      if ($RET == -1 && CRYPTO_THREAD_write_lock($LOCK)) {
+          $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
+          CRYPTO_THREAD_unlock($LOCK);
+      }
+      else {
+          $EX_FLAGS |= $EXFLAG_INVALID_POLICY;
+      }
   languages:
   - c
   message: |
@@ -390,10 +405,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-7c038a6b
-  pattern: |
-    BIO_printf($OUT, "  Challenge String: %s\n", $CHAL->data);
-  pattern-not: |
-    BIO_printf($OUT, "  Challenge String: %.*s\n", $CHAL->length, $CHAL->data);
+  patterns:
+  - pattern: |
+      BIO_printf($OUT, "  Challenge String: %s\n", $CHAL->data);
+  - pattern-not: |
+      BIO_printf($OUT, "  Challenge String: %.*s\n", $CHAL->length, $CHAL->data);
   languages:
   - c
   message: |
@@ -411,10 +427,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-901f1ef7
-  pattern: |
-    good &= constant_time_ge($VAR, 8);
-  pattern-not: |
-    good &= constant_time_lt($VAR, 8);
+  patterns:
+  - pattern: |
+      good &= constant_time_ge($VAR, 8);
+  - pattern-not: |
+      good &= constant_time_lt($VAR, 8);
   languages:
   - c
   message: |
@@ -432,20 +449,21 @@ rules:
     technology:
     - c
 - id: vuln-openssl-91ddeba0
-  pattern: |
-    if ($DH->q) {
-      ...
-    }
-  pattern-not: |
-    if ($DH->q != NULL) {
-      if (BN_ucmp($DH->p, $DH->q) > 0)
-        $Q_GOOD = 1;
-      else
-        *$RET |= $DH_CHECK_INVALID_Q_VALUE;
-    }
-    if ($Q_GOOD) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DH->q) {
+        ...
+      }
+  - pattern-not: |
+      if ($DH->q != NULL) {
+        if (BN_ucmp($DH->p, $DH->q) > 0)
+          $Q_GOOD = 1;
+        else
+          *$RET |= $DH_CHECK_INVALID_Q_VALUE;
+      }
+      if ($Q_GOOD) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -463,10 +481,11 @@ rules:
     technology:
     - c
 - id: vuln-openssl-95f8c1e1
-  pattern: |
-    ossl_cmp_sk_ASN1_UTF8STRING_push_str($VAR, $TEXT)
-  pattern-not: |
-    ossl_cmp_sk_ASN1_UTF8STRING_push_str($VAR, $TEXT, $LEN)
+  patterns:
+  - pattern: |
+      ossl_cmp_sk_ASN1_UTF8STRING_push_str($VAR, $TEXT)
+  - pattern-not: |
+      ossl_cmp_sk_ASN1_UTF8STRING_push_str($VAR, $TEXT, $LEN)
   languages:
   - c
   message: |
@@ -485,20 +504,21 @@ rules:
     technology:
     - c
 - id: vuln-openssl-b013765a
-  pattern: |
-    int $I;
-    for ($I = 1; $I < $FUNC($CTX->chain); $I++) {
-        ...
-    }
-  pattern-not: |
-    int $I, $CBCALLED = 0;
-    for ($I = 0; $I < $FUNC($CTX->chain); $I++) {
-        $CBCALLED = 1;
-        ...
-    }
-    if (!$CBCALLED) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      int $I;
+      for ($I = 1; $I < $FUNC($CTX->chain); $I++) {
+          ...
+      }
+  - pattern-not: |
+      int $I, $CBCALLED = 0;
+      for ($I = 0; $I < $FUNC($CTX->chain); $I++) {
+          $CBCALLED = 1;
+          ...
+      }
+      if (!$CBCALLED) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -516,23 +536,24 @@ rules:
     technology:
     - c
 - id: vuln-openssl-b96bebac
-  pattern: |
-    if (!BN_copy(&$KQ, &$K))
-        goto err;
-    BN_set_flags(&$KQ, BN_FLG_CONSTTIME);
-    ...
-    if (!BN_add(&$KQ, &$KQ, $DSAREF->q))
-        goto err;
-    if (BN_num_bits(&$KQ) <= BN_num_bits($DSAREF->q)) {
-        if (!BN_add(&$KQ, &$KQ, $DSAREF->q))
-            goto err;
-    }
-  pattern-not: |
-    if (!BN_add(&$L, &$K, $DSAREF->q)
-        || !BN_add(&$M, &$L, $DSAREF->q)
-        || !BN_copy(&$KQ, BN_num_bits(&$L) > $QBITS ? &$L : &$M))
-        goto err;
-    BN_set_flags(&$KQ, BN_FLG_CONSTTIME);
+  patterns:
+  - pattern: |
+      if (!BN_copy(&$KQ, &$K))
+          goto err;
+      BN_set_flags(&$KQ, BN_FLG_CONSTTIME);
+      ...
+      if (!BN_add(&$KQ, &$KQ, $DSAREF->q))
+          goto err;
+      if (BN_num_bits(&$KQ) <= BN_num_bits($DSAREF->q)) {
+          if (!BN_add(&$KQ, &$KQ, $DSAREF->q))
+              goto err;
+      }
+  - pattern-not: |
+      if (!BN_add(&$L, &$K, $DSAREF->q)
+          || !BN_add(&$M, &$L, $DSAREF->q)
+          || !BN_copy(&$KQ, BN_num_bits(&$L) > $QBITS ? &$L : &$M))
+          goto err;
+      BN_set_flags(&$KQ, BN_FLG_CONSTTIME);
   languages:
   - c
   message: |
@@ -554,25 +575,26 @@ rules:
     technology:
     - c
 - id: vuln-openssl-cd30f03a
-  pattern: |
-    static int cms_copy_content(BIO *out, BIO *in, unsigned int flags)
-    {
-      unsigned char buf[4096];
-      int r = 0, i;
-      BIO *tmpout = NULL;
-      ...
-      tmpout = out;
-      ...
-    }
-  pattern-not: |
-    static int cms_copy_content(BIO *out, BIO *in, unsigned int flags)
-    {
-      unsigned char buf[4096];
-      int r = 0, i;
-      BIO *tmpout;
-      tmpout = cms_get_text_bio(out, flags);
-      ...
-    }
+  patterns:
+  - pattern: |
+      static int cms_copy_content(BIO *out, BIO *in, unsigned int flags)
+      {
+        unsigned char buf[4096];
+        int r = 0, i;
+        BIO *tmpout = NULL;
+        ...
+        tmpout = out;
+        ...
+      }
+  - pattern-not: |
+      static int cms_copy_content(BIO *out, BIO *in, unsigned int flags)
+      {
+        unsigned char buf[4096];
+        int r = 0, i;
+        BIO *tmpout;
+        tmpout = cms_get_text_bio(out, flags);
+        ...
+      }
   languages:
   - c
   message: |
@@ -593,14 +615,15 @@ rules:
     technology:
     - c
 - id: vuln-openssl-e1b568dd
-  pattern: |
-    if ($COND) {
-        ssl_fill_hello_random($S, $FLAGS, $P, sizeof($S->s3->client_random));
-    }
-  pattern-not: |
-    if ($COND && ssl_fill_hello_random($S, $FLAGS, $P, sizeof($S->s3->client_random)) <= 0) {
-        goto err;
-    }
+  patterns:
+  - pattern: |
+      if ($COND) {
+          ssl_fill_hello_random($S, $FLAGS, $P, sizeof($S->s3->client_random));
+      }
+  - pattern-not: |
+      if ($COND && ssl_fill_hello_random($S, $FLAGS, $P, sizeof($S->s3->client_random)) <= 0) {
+          goto err;
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-glpi-69e0dee8
-  pattern: |
-    $TEXT.replace('>', `&gt;`).replace('<', `&lt;`)
-  pattern-not: |
-    $TEXT = escapeMarkupText($TEXT)
+  patterns:
+  - pattern: |
+      $TEXT.replace('>', `&gt;`).replace('<', `&lt;`)
+  - pattern-not: |
+      $TEXT = escapeMarkupText($TEXT)
   languages:
   - javascript
   message: Incomplete HTML escaping detected. Using replace() for escaping is insufficient and can lead to XSS vulnerabilities. Use a dedicated escaping function like escapeMarkupText().

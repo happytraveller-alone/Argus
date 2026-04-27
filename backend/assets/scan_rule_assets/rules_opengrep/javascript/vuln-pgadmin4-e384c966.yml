@@ -1,9 +1,10 @@
 rules:
 - id: vuln-pgadmin4-e384c966
-  pattern: |
-    return !!($FUNC(arguments));
-  pattern-not: |
-    return !!($FUNC(...arguments));
+  patterns:
+  - pattern: |
+      return !!($FUNC(arguments));
+  - pattern-not: |
+      return !!($FUNC(...arguments));
   languages:
   - javascript
   message: Potential function call with incorrect argument handling. Using 'arguments' directly without spread operator can lead to unexpected behavior. Use spread operator (...) to properly pass arguments.

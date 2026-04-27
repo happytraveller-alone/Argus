@@ -1,9 +1,10 @@
 rules:
 - id: vuln-horde-578ff073
-  pattern: |
-    $ELT = '<span class="' + $C + '" title="' + $L.escapeHTML() + '" style="background:' + (($B) ? $B.escapeHTML() : '') + ';color:' + $F.escapeHTML() + '">' + $L.truncate(10).escapeHTML() + '</span>';
-  pattern-not: |
-    $ELT = '<span class="' + $C + '" title="' + $L.escapeHTML().gsub('"', '&quot;') + '" style="background:' + (($B) ? $B.escapeHTML().gsub('"', '&quot;') : '') + ';color:' + $F.escapeHTML().gsub('"', '&quot;') + '">' + $L.truncate(10).escapeHTML() + '</span>';
+  patterns:
+  - pattern: |
+      $ELT = '<span class="' + $C + '" title="' + $L.escapeHTML() + '" style="background:' + (($B) ? $B.escapeHTML() : '') + ';color:' + $F.escapeHTML() + '">' + $L.truncate(10).escapeHTML() + '</span>';
+  - pattern-not: |
+      $ELT = '<span class="' + $C + '" title="' + $L.escapeHTML().gsub('"', '&quot;') + '" style="background:' + (($B) ? $B.escapeHTML().gsub('"', '&quot;') : '') + ';color:' + $F.escapeHTML().gsub('"', '&quot;') + '">' + $L.truncate(10).escapeHTML() + '</span>';
   languages:
   - javascript
   message: |
@@ -21,32 +22,33 @@ rules:
     - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
     technology: javascript
 - id: vuln-horde-7ce7ed91
-  pattern: |
-    this.auto_save_interval = new PeriodicalExecuter(function() {
-        if ($('compose').visible()) {
-            var curr_hash = MD5.hash($('to', 'cc', 'bcc', 'subject').invoke('getValue').join('\0') + (IMP_Compose_Base.editor_on ? this.rte.getData() : $F('composeMessage')));
-            if (this.last_msg && curr_hash != this.last_msg) {
-                this.uniqueSubmit('autoSaveDraft');
-            }
-            this.last_msg = curr_hash;
-        }
-    }.bind(this), DIMP.conf_compose.auto_save_interval_val * 60);
-  pattern-not: |
-    this.auto_save_interval = new PeriodicalExecuter(function() {
-        if ($('compose').visible()) {
-            var hdrs = MD5.hash($('to', 'cc', 'bcc', 'subject').invoke('getValue').join('\0')), msg;
-            if (this.md5_hdrs) {
-                msg = this.msgHash();
-                if (this.md5_hdrs != hdrs || this.md5_msg != msg) {
-                    this.uniqueSubmit('autoSaveDraft');
-                }
-            } else {
-                msg = this.md5_msgOrig;
-            }
-            this.md5_hdrs = hdrs;
-            this.md5_msg = msg;
-        }
-    }.bind(this), DIMP.conf_compose.auto_save_interval_val * 60);
+  patterns:
+  - pattern: |
+      this.auto_save_interval = new PeriodicalExecuter(function() {
+          if ($('compose').visible()) {
+              var curr_hash = MD5.hash($('to', 'cc', 'bcc', 'subject').invoke('getValue').join('\0') + (IMP_Compose_Base.editor_on ? this.rte.getData() : $F('composeMessage')));
+              if (this.last_msg && curr_hash != this.last_msg) {
+                  this.uniqueSubmit('autoSaveDraft');
+              }
+              this.last_msg = curr_hash;
+          }
+      }.bind(this), DIMP.conf_compose.auto_save_interval_val * 60);
+  - pattern-not: |
+      this.auto_save_interval = new PeriodicalExecuter(function() {
+          if ($('compose').visible()) {
+              var hdrs = MD5.hash($('to', 'cc', 'bcc', 'subject').invoke('getValue').join('\0')), msg;
+              if (this.md5_hdrs) {
+                  msg = this.msgHash();
+                  if (this.md5_hdrs != hdrs || this.md5_msg != msg) {
+                      this.uniqueSubmit('autoSaveDraft');
+                  }
+              } else {
+                  msg = this.md5_msgOrig;
+              }
+              this.md5_hdrs = hdrs;
+              this.md5_msg = msg;
+          }
+      }.bind(this), DIMP.conf_compose.auto_save_interval_val * 60);
   languages:
   - javascript
   message: Insecure message hash comparison detected. The original patch separates header and message hashes to ensure accurate change detection. Use separate hashes for headers and message content to prevent false positives in auto-save drafts.

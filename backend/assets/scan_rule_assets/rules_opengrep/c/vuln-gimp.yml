@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gimp-03df8c6a
-  pattern: |
-    gimp_export_image($IMAGE, $DRAWABLE, NULL, ...)
-  pattern-not: |
-    gimp_export_image($IMAGE, $DRAWABLE, $FORMAT, ...)
+  patterns:
+  - pattern: |
+      gimp_export_image($IMAGE, $DRAWABLE, NULL, ...)
+  - pattern-not: |
+      gimp_export_image($IMAGE, $DRAWABLE, $FORMAT, ...)
   languages:
   - c
   message: |
@@ -20,24 +21,25 @@ rules:
     technology:
     - c
 - id: vuln-gimp-0474376d
-  pattern: |
-    {
-      $FDAT = fits_decode_card(fits_search_card($HDR, "XTENSION"), $TYP_FSTRING);
-      strcpy($HDULIST->xtension, $FDAT->fstring);
-    }
-  pattern-not: |
-    {
-      $FDAT = fits_decode_card(fits_search_card($HDR, "XTENSION"), $TYP_FSTRING);
-      if ($FDAT != NULL)
-        {
-          strcpy($HDULIST->xtension, $FDAT->fstring);
-        }
-      else
-        {
-          strcpy($ERRMSG, "No valid XTENSION header found.");
-          goto err_return;
-        }
-    }
+  patterns:
+  - pattern: |
+      {
+        $FDAT = fits_decode_card(fits_search_card($HDR, "XTENSION"), $TYP_FSTRING);
+        strcpy($HDULIST->xtension, $FDAT->fstring);
+      }
+  - pattern-not: |
+      {
+        $FDAT = fits_decode_card(fits_search_card($HDR, "XTENSION"), $TYP_FSTRING);
+        if ($FDAT != NULL)
+          {
+            strcpy($HDULIST->xtension, $FDAT->fstring);
+          }
+        else
+          {
+            strcpy($ERRMSG, "No valid XTENSION header found.");
+            goto err_return;
+          }
+      }
   languages:
   - c
   message: |
@@ -53,16 +55,17 @@ rules:
     technology:
     - c
 - id: vuln-gimp-687ec479
-  pattern: |
-    $VAR->top = GUINT32_FROM_BE($VAR->top);
-    $VAR->left = GUINT32_FROM_BE($VAR->left);
-    $VAR->bottom = GUINT32_FROM_BE($VAR->bottom);
-    $VAR->right = GUINT32_FROM_BE($VAR->right);
-  pattern-not: |
-    $VAR->top = GINT32_FROM_BE($VAR->top);
-    $VAR->left = GINT32_FROM_BE($VAR->left);
-    $VAR->bottom = GINT32_FROM_BE($VAR->bottom);
-    $VAR->right = GINT32_FROM_BE($VAR->right);
+  patterns:
+  - pattern: |
+      $VAR->top = GUINT32_FROM_BE($VAR->top);
+      $VAR->left = GUINT32_FROM_BE($VAR->left);
+      $VAR->bottom = GUINT32_FROM_BE($VAR->bottom);
+      $VAR->right = GUINT32_FROM_BE($VAR->right);
+  - pattern-not: |
+      $VAR->top = GINT32_FROM_BE($VAR->top);
+      $VAR->left = GINT32_FROM_BE($VAR->left);
+      $VAR->bottom = GINT32_FROM_BE($VAR->bottom);
+      $VAR->right = GINT32_FROM_BE($VAR->right);
   languages:
   - c
   message: |

@@ -1,12 +1,13 @@
 rules:
 - id: vuln-go-ethereum-7ec60d5f
-  pattern: |
-    go SendItems($RW, pongMsg)
-  pattern-not: |
-    select {
-    case $P.pingRecv <- struct{}{}:
-    case <-$P.closed:
-    }
+  patterns:
+  - pattern: |
+      go SendItems($RW, pongMsg)
+  - pattern-not: |
+      select {
+      case $P.pingRecv <- struct{}{}:
+      case <-$P.closed:
+      }
   languages:
   - go
   message: |
@@ -24,32 +25,33 @@ rules:
     technology:
     - go
 - id: vuln-go-ethereum-a5237a27
-  pattern: |
-    if $HEADER := $BLOCKCHAIN.GetHeaderByNumber($ORIGIN.Number.Uint64() + $QUERY.Skip + 1); $HEADER != nil {
-      if $BLOCKCHAIN.GetBlockHashesFromHash($HEADER.Hash(), $QUERY.Skip+1)[$QUERY.Skip] == $QUERY.Origin.Hash {
-        $QUERY.Origin.Hash = $HEADER.Hash()
-      }
-    } else {
-      $UNKNOWN = true
-    }
-  pattern-not: |
-    var (
-      $CURRENT = $ORIGIN.Number.Uint64()
-      $NEXT = $CURRENT + $QUERY.Skip + 1
-    )
-    if $NEXT <= $CURRENT {
-      $INFOS, _ := json.MarshalIndent($PEER.Info(), "", "  ")
-      $LOG().Warn("GetBlockHeaders skip overflow attack", "current", $CURRENT, "skip", $QUERY.Skip, "next", $NEXT, "attacker", $INFOS)
-      $UNKNOWN = true
-    } else {
-      if $HEADER := $BLOCKCHAIN.GetHeaderByNumber($NEXT); $HEADER != nil {
+  patterns:
+  - pattern: |
+      if $HEADER := $BLOCKCHAIN.GetHeaderByNumber($ORIGIN.Number.Uint64() + $QUERY.Skip + 1); $HEADER != nil {
         if $BLOCKCHAIN.GetBlockHashesFromHash($HEADER.Hash(), $QUERY.Skip+1)[$QUERY.Skip] == $QUERY.Origin.Hash {
           $QUERY.Origin.Hash = $HEADER.Hash()
-        } else {
-          $UNKNOWN = true
+        }
+      } else {
+        $UNKNOWN = true
+      }
+  - pattern-not: |
+      var (
+        $CURRENT = $ORIGIN.Number.Uint64()
+        $NEXT = $CURRENT + $QUERY.Skip + 1
+      )
+      if $NEXT <= $CURRENT {
+        $INFOS, _ := json.MarshalIndent($PEER.Info(), "", "  ")
+        $LOG().Warn("GetBlockHeaders skip overflow attack", "current", $CURRENT, "skip", $QUERY.Skip, "next", $NEXT, "attacker", $INFOS)
+        $UNKNOWN = true
+      } else {
+        if $HEADER := $BLOCKCHAIN.GetHeaderByNumber($NEXT); $HEADER != nil {
+          if $BLOCKCHAIN.GetBlockHashesFromHash($HEADER.Hash(), $QUERY.Skip+1)[$QUERY.Skip] == $QUERY.Origin.Hash {
+            $QUERY.Origin.Hash = $HEADER.Hash()
+          } else {
+            $UNKNOWN = true
+          }
         }
       }
-    }
   languages:
   - go
   message: |

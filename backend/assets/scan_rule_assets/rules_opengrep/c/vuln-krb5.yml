@@ -1,14 +1,15 @@
 rules:
 - id: vuln-krb5-102bb6eb
-  pattern: |
-    if (strcmp($VAR1, $VAR2)) {
-      ...
-    }
-  pattern-not: |
-    $VAR3 = make_data((char *)$VAR2, strlen($VAR2) + 1);
-    if (!data_eq($VAR1, $VAR3)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (strcmp($VAR1, $VAR2)) {
+        ...
+      }
+  - pattern-not: |
+      $VAR3 = make_data((char *)$VAR2, strlen($VAR2) + 1);
+      if (!data_eq($VAR1, $VAR3)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -26,15 +27,16 @@ rules:
     technology:
     - c
 - id: vuln-krb5-4fa89fc7
-  pattern: |
-    if ($RETURN_TOKEN != $NO_TOKEN_SEND && $RETURN_TOKEN != $CHECK_MIC) {
-      ...
-    }
-  pattern-not: |
-    if ($RETURN_TOKEN == $INIT_TOKEN_SEND ||
-        $RETURN_TOKEN == $CONT_TOKEN_SEND) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($RETURN_TOKEN != $NO_TOKEN_SEND && $RETURN_TOKEN != $CHECK_MIC) {
+        ...
+      }
+  - pattern-not: |
+      if ($RETURN_TOKEN == $INIT_TOKEN_SEND ||
+          $RETURN_TOKEN == $CONT_TOKEN_SEND) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -52,10 +54,11 @@ rules:
     technology:
     - c
 - id: vuln-krb5-57415dda
-  pattern: |
-    get_tag($DER, $LEN, $TAG_OUT, $CONTENTS, $CLEN, $REMAINDER, $RLEN)
-  pattern-not: |
-    get_tag($DER, $LEN, $TAG_OUT, $CONTENTS, $CLEN, $REMAINDER, $RLEN, $RECURSION)
+  patterns:
+  - pattern: |
+      get_tag($DER, $LEN, $TAG_OUT, $CONTENTS, $CLEN, $REMAINDER, $RLEN)
+  - pattern-not: |
+      get_tag($DER, $LEN, $TAG_OUT, $CONTENTS, $CLEN, $REMAINDER, $RLEN, $RECURSION)
   languages:
   - c
   message: |
@@ -70,14 +73,15 @@ rules:
     technology:
     - c
 - id: vuln-krb5-5e6d1796
-  pattern: |
-    if ($CODE == 0 || $CODE == KRB5_PREAUTH_FAILED) {
-        ...
-    }
-  pattern-not: |
-    if (!$CODE || $CODE == KRB5_PREAUTH_FAILED || $CODE == KRB5KDC_ERR_KEY_EXP) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($CODE == 0 || $CODE == KRB5_PREAUTH_FAILED) {
+          ...
+      }
+  - pattern-not: |
+      if (!$CODE || $CODE == KRB5_PREAUTH_FAILED || $CODE == KRB5KDC_ERR_KEY_EXP) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -95,17 +99,18 @@ rules:
     technology:
     - c
 - id: vuln-krb5-6609658d
-  pattern: |
-    if (strncmp($HANDLE->params.realm, $REALM->data, $REALM->length) == 0
-        && strncmp("kadmin", $C1->data, $C1->length) == 0) {
-        if (strncmp("history", $C2->data, $C2->length) == 0)
-            goto $FAIL;
-        else
-            $SUCCESS = 1;
-    }
-  pattern-not: |
-    $SUCCESS = data_eq_string(*$REALM, $HANDLE->params.realm) &&
-        data_eq_string(*$C1, "kadmin") && !data_eq_string(*$C2, "history");
+  patterns:
+  - pattern: |
+      if (strncmp($HANDLE->params.realm, $REALM->data, $REALM->length) == 0
+          && strncmp("kadmin", $C1->data, $C1->length) == 0) {
+          if (strncmp("history", $C2->data, $C2->length) == 0)
+              goto $FAIL;
+          else
+              $SUCCESS = 1;
+      }
+  - pattern-not: |
+      $SUCCESS = data_eq_string(*$REALM, $HANDLE->params.realm) &&
+          data_eq_string(*$C1, "kadmin") && !data_eq_string(*$C2, "history");
   languages:
   - c
   message: |
@@ -123,24 +128,25 @@ rules:
     technology:
     - c
 - id: vuln-krb5-8096a4aa
-  pattern: |
-    if ($RETURN_TOKEN != NO_TOKEN_SEND && $RETURN_TOKEN != CHECK_MIC) {
-        ...
-        if ($SEND_TOKEN_INIT) {
-            $TMPRET = make_spnego_tokenInit_msg($SC, 1, $MIC_OUT, 0, GSS_C_NO_BUFFER, $RETURN_TOKEN, $OUTPUT_TOKEN);
-        } else {
-            $TMPRET = make_spnego_tokenTarg_msg($NEG_STATE, $SC ? $SC->internal_mech : GSS_C_NO_OID, $MECHTOK_OUT, $MIC_OUT, $RETURN_TOKEN, $OUTPUT_TOKEN);
-        }
-        ...
-    }
-  pattern-not: |
-    if ($RETURN_TOKEN == INIT_TOKEN_SEND && $SEND_TOKEN_INIT) {
-        $TMPRET = make_spnego_tokenInit_msg($SC, 1, $MIC_OUT, 0, GSS_C_NO_BUFFER, $RETURN_TOKEN, $OUTPUT_TOKEN);
-        if ($TMPRET < 0)
-            $RET = GSS_S_FAILURE;
-    } else if ($RETURN_TOKEN != NO_TOKEN_SEND && $RETURN_TOKEN != CHECK_MIC) {
-        $TMPRET = make_spnego_tokenTarg_msg($NEG_STATE, $SC ? $SC->internal_mech : GSS_C_NO_OID, $MECHTOK_OUT, $MIC_OUT, $RETURN_TOKEN, $OUTPUT_TOKEN);
-    }
+  patterns:
+  - pattern: |
+      if ($RETURN_TOKEN != NO_TOKEN_SEND && $RETURN_TOKEN != CHECK_MIC) {
+          ...
+          if ($SEND_TOKEN_INIT) {
+              $TMPRET = make_spnego_tokenInit_msg($SC, 1, $MIC_OUT, 0, GSS_C_NO_BUFFER, $RETURN_TOKEN, $OUTPUT_TOKEN);
+          } else {
+              $TMPRET = make_spnego_tokenTarg_msg($NEG_STATE, $SC ? $SC->internal_mech : GSS_C_NO_OID, $MECHTOK_OUT, $MIC_OUT, $RETURN_TOKEN, $OUTPUT_TOKEN);
+          }
+          ...
+      }
+  - pattern-not: |
+      if ($RETURN_TOKEN == INIT_TOKEN_SEND && $SEND_TOKEN_INIT) {
+          $TMPRET = make_spnego_tokenInit_msg($SC, 1, $MIC_OUT, 0, GSS_C_NO_BUFFER, $RETURN_TOKEN, $OUTPUT_TOKEN);
+          if ($TMPRET < 0)
+              $RET = GSS_S_FAILURE;
+      } else if ($RETURN_TOKEN != NO_TOKEN_SEND && $RETURN_TOKEN != CHECK_MIC) {
+          $TMPRET = make_spnego_tokenTarg_msg($NEG_STATE, $SC ? $SC->internal_mech : GSS_C_NO_OID, $MECHTOK_OUT, $MIC_OUT, $RETURN_TOKEN, $OUTPUT_TOKEN);
+      }
   languages:
   - c
   message: |
@@ -156,11 +162,12 @@ rules:
     technology:
     - c
 - id: vuln-krb5-83ed75fe
-  pattern: |
-    gss_buffer_desc $CLIENT_NAME, $SERVICE_NAME;
-  pattern-not: |
-    gss_buffer_desc $CLIENT_NAME = GSS_C_EMPTY_BUFFER;
-    gss_buffer_desc $SERVICE_NAME = GSS_C_EMPTY_BUFFER;
+  patterns:
+  - pattern: |
+      gss_buffer_desc $CLIENT_NAME, $SERVICE_NAME;
+  - pattern-not: |
+      gss_buffer_desc $CLIENT_NAME = GSS_C_EMPTY_BUFFER;
+      gss_buffer_desc $SERVICE_NAME = GSS_C_EMPTY_BUFFER;
   languages:
   - c
   message: |
@@ -178,10 +185,11 @@ rules:
     technology:
     - c
 - id: vuln-krb5-88a1701b
-  pattern: |
-    $REPLY = *$TKT->header_tkt;
-  pattern-not: |
-    $REPLY.server = $TKT->header_tkt->server;
+  patterns:
+  - pattern: |
+      $REPLY = *$TKT->header_tkt;
+  - pattern-not: |
+      $REPLY.server = $TKT->header_tkt->server;
   languages:
   - c
   message: |
@@ -197,11 +205,12 @@ rules:
     technology:
     - c
 - id: vuln-krb5-8ee70ec6
-  pattern: |
-    strlcpy($DST, $SRC->data, $SRC->length + 1);
-  pattern-not: |
-    if ($SRC->data != NULL)
-        memcpy($DST, $SRC->data, $SRC->length);
+  patterns:
+  - pattern: |
+      strlcpy($DST, $SRC->data, $SRC->length + 1);
+  - pattern-not: |
+      if ($SRC->data != NULL)
+          memcpy($DST, $SRC->data, $SRC->length);
   languages:
   - c
   message: |
@@ -224,14 +233,15 @@ rules:
     technology:
     - c
 - id: vuln-krb5-93b4a630
-  pattern: |
-    if (check_anon($REALM, $CLIENT->client, $SERVER) != 0) {
-      ...
-    }
-  pattern-not: |
-    if (check_anon($REALM, $CLIENT.princ, $SERVER) != 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (check_anon($REALM, $CLIENT->client, $SERVER) != 0) {
+        ...
+      }
+  - pattern-not: |
+      if (check_anon($REALM, $CLIENT.princ, $SERVER) != 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -247,10 +257,11 @@ rules:
     technology:
     - c
 - id: vuln-krb5-a197e923
-  pattern: |
-    xdr_free($FUNC, $PTR);
-  pattern-not: |
-    xdr_free(xdr_func, xdr_ptr);
+  patterns:
+  - pattern: |
+      xdr_free($FUNC, $PTR);
+  - pattern-not: |
+      xdr_free(xdr_func, xdr_ptr);
   languages:
   - c
   message: |
@@ -268,12 +279,13 @@ rules:
     technology:
     - c
 - id: vuln-krb5-b863de7f
-  pattern: |
-    if(entry == (kadm5_principal_ent_t) NULL)
-        return EINVAL;
-  pattern-not: |
-    if(entry == NULL)
-        return EINVAL;
+  patterns:
+  - pattern: |
+      if(entry == (kadm5_principal_ent_t) NULL)
+          return EINVAL;
+  - pattern-not: |
+      if(entry == NULL)
+          return EINVAL;
   languages:
   - c
   message: |
@@ -291,17 +303,18 @@ rules:
     technology:
     - c
 - id: vuln-krb5-d1f70702
-  pattern: |
-    if ($ENT != NULL) {
-      if (($ST = $FUNC($CONTEXT, $LD, $ENT, $POL_NAME, $POLICY)) != 0)
+  patterns:
+  - pattern: |
+      if ($ENT != NULL) {
+        if (($ST = $FUNC($CONTEXT, $LD, $ENT, $POL_NAME, $POLICY)) != 0)
+          goto $CLEANUP;
+      }
+  - pattern-not: |
+      if ($ENT == NULL) {
+        $ST = $ERROR_CODE;
         goto $CLEANUP;
-    }
-  pattern-not: |
-    if ($ENT == NULL) {
-      $ST = $ERROR_CODE;
-      goto $CLEANUP;
-    }
-    $ST = $FUNC($CONTEXT, $LD, $ENT, $POL_NAME, $POLICY);
+      }
+      $ST = $FUNC($CONTEXT, $LD, $ENT, $POL_NAME, $POLICY);
   languages:
   - c
   message: |
@@ -316,11 +329,12 @@ rules:
     technology:
     - c
 - id: vuln-krb5-d68398e1
-  pattern: |
-    if ($SUBBUF->bound > $BUF->bound)
-      return $ASN1_OVERRUN;
-  pattern-not: |
-    if ($BUF->next > $BUF->bound + 1) return $ASN1_OVERRUN;
+  patterns:
+  - pattern: |
+      if ($SUBBUF->bound > $BUF->bound)
+        return $ASN1_OVERRUN;
+  - pattern-not: |
+      if ($BUF->next > $BUF->bound + 1) return $ASN1_OVERRUN;
   languages:
   - c
   message: |
@@ -339,38 +353,39 @@ rules:
     technology:
     - c
 - id: vuln-krb5-e1caf6fb
-  pattern: |
-    char **values = NULL;
-    ...
-    if ((values = ldap_get_values($LDAP, $ENTRY, "krbprincipalname")) != NULL) {
-        $KRB_IDENTITY_EXISTS = TRUE;
-        ldap_value_free(values);
-    }
-    ...
-    if ($XARGS_DN != NULL && $KRB_IDENTITY_EXISTS == TRUE) {
-        $ST = EINVAL;
-        snprintf($ERRBUF, sizeof($ERRBUF), _("ldap object is already kerberized"));
-        k5_setmsg($CONTEXT, $ST, "%s", $ERRBUF);
-        goto $CLEANUP;
-    }
-  pattern-not: |
-    static krb5_error_code
-    check_dn_exists(krb5_context context,
-                    krb5_ldap_server_handle *ldap_server_handle,
-                    const char *dn, krb5_boolean nonkrb_only)
-    {
-        ...
-        values = ldap_get_values(ld, ent, "krbprincipalname");
-        if (values != NULL) {
-            ldap_value_free(values);
-            if (nonkrb_only) {
-                st = EINVAL;
-                k5_setmsg(context, st, _("ldap object is already kerberized"));
-                goto cleanup;
-            }
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      char **values = NULL;
+      ...
+      if ((values = ldap_get_values($LDAP, $ENTRY, "krbprincipalname")) != NULL) {
+          $KRB_IDENTITY_EXISTS = TRUE;
+          ldap_value_free(values);
+      }
+      ...
+      if ($XARGS_DN != NULL && $KRB_IDENTITY_EXISTS == TRUE) {
+          $ST = EINVAL;
+          snprintf($ERRBUF, sizeof($ERRBUF), _("ldap object is already kerberized"));
+          k5_setmsg($CONTEXT, $ST, "%s", $ERRBUF);
+          goto $CLEANUP;
+      }
+  - pattern-not: |
+      static krb5_error_code
+      check_dn_exists(krb5_context context,
+                      krb5_ldap_server_handle *ldap_server_handle,
+                      const char *dn, krb5_boolean nonkrb_only)
+      {
+          ...
+          values = ldap_get_values(ld, ent, "krbprincipalname");
+          if (values != NULL) {
+              ldap_value_free(values);
+              if (nonkrb_only) {
+                  st = EINVAL;
+                  k5_setmsg(context, st, _("ldap object is already kerberized"));
+                  goto cleanup;
+              }
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -388,10 +403,11 @@ rules:
     technology:
     - c
 - id: vuln-krb5-e3b5a5e5
-  pattern: |
-    $FUNC($ARG, 0, $NULL, $NULL, $NULL);
-  pattern-not: |
-    $FUNC($ARG, EINVAL, $NULL, $NULL, $NULL);
+  patterns:
+  - pattern: |
+      $FUNC($ARG, 0, $NULL, $NULL, $NULL);
+  - pattern-not: |
+      $FUNC($ARG, EINVAL, $NULL, $NULL, $NULL);
   languages:
   - c
   message: |
@@ -409,14 +425,15 @@ rules:
     technology:
     - c
 - id: vuln-krb5-e6ae703a
-  pattern: |
-    if ($HEADER->buffer.length < $TOKEN_WRAPPER_LEN + 14) {
-      ...
-    }
-  pattern-not: |
-    if ($HEADER->buffer.length < $TOKEN_WRAPPER_LEN + 22) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($HEADER->buffer.length < $TOKEN_WRAPPER_LEN + 14) {
+        ...
+      }
+  - pattern-not: |
+      if ($HEADER->buffer.length < $TOKEN_WRAPPER_LEN + 22) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -434,8 +451,9 @@ rules:
     technology:
     - c
 - id: vuln-krb5-ea92d2f0
-  pattern: "if ($BUFFER->Offset < $HEADER_LEN || \n    $BUFFER->Offset + $BUFFER->cbBufferSize > $LEN) {\n  ...\n}\n"
-  pattern-not: "if ($BUFFER->Offset < $HEADER_LEN || \n    $BUFFER->Offset > $LEN ||\n    $BUFFER->cbBufferSize > $LEN - $BUFFER->Offset) {\n  ...\n}\n"
+  patterns:
+  - pattern: "if ($BUFFER->Offset < $HEADER_LEN || \n    $BUFFER->Offset + $BUFFER->cbBufferSize > $LEN) {\n  ...\n}\n"
+  - pattern-not: "if ($BUFFER->Offset < $HEADER_LEN || \n    $BUFFER->Offset > $LEN ||\n    $BUFFER->cbBufferSize > $LEN - $BUFFER->Offset) {\n  ...\n}\n"
   languages:
   - c
   message: |
@@ -456,16 +474,17 @@ rules:
     technology:
     - c
 - id: vuln-krb5-ef08b09c
-  pattern: |
-    if (!xdr_array($XDRS, (caddr_t *) &$OBJP->key_data, &$N, ~0, sizeof(krb5_key_data), $XDR_FUNC)) {
-      ...
-    }
-  pattern-not: |
-    $R = xdr_array($XDRS, (caddr_t *) &$OBJP->key_data, &$N, $OBJP->n_key_data, sizeof(krb5_key_data), $XDR_FUNC);
-    $OBJP->n_key_data = $N;
-    if (!$R) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!xdr_array($XDRS, (caddr_t *) &$OBJP->key_data, &$N, ~0, sizeof(krb5_key_data), $XDR_FUNC)) {
+        ...
+      }
+  - pattern-not: |
+      $R = xdr_array($XDRS, (caddr_t *) &$OBJP->key_data, &$N, $OBJP->n_key_data, sizeof(krb5_key_data), $XDR_FUNC);
+      $OBJP->n_key_data = $N;
+      if (!$R) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -482,14 +501,15 @@ rules:
     technology:
     - c
 - id: vuln-krb5-f0c094a1
-  pattern: |
-    if (!$RETVAL) {
-        $R = strdup($REALM);
-        if (!$R) { $RETVAL = ENOMEM; }
-    }
-  pattern-not: |
-    if (!$RETVAL)
-        $R = k5memdup0($REALM, $RLEN, &$RETVAL);
+  patterns:
+  - pattern: |
+      if (!$RETVAL) {
+          $R = strdup($REALM);
+          if (!$R) { $RETVAL = ENOMEM; }
+      }
+  - pattern-not: |
+      if (!$RETVAL)
+          $R = k5memdup0($REALM, $RLEN, &$RETVAL);
   languages:
   - c
   message: |
@@ -507,10 +527,11 @@ rules:
     technology:
     - c
 - id: vuln-krb5-f18ddf5d
-  pattern: |
-    generic_gss_release_oid(&$VAR, &$SC->internal_mech);
-  pattern-not: |
-    generic_gss_release_oid(&$TMPMIN, &$SC->internal_mech);
+  patterns:
+  - pattern: |
+      generic_gss_release_oid(&$VAR, &$SC->internal_mech);
+  - pattern-not: |
+      generic_gss_release_oid(&$TMPMIN, &$SC->internal_mech);
   languages:
   - c
   message: |

@@ -1,11 +1,12 @@
 rules:
 - id: vuln-less-a78e1351
-  pattern: |
-    if ($VAR->prev_esc && $CH == '\\')
-      return $ANSI_END;
-  pattern-not: |
-    if ($VAR->prev_esc)
-      return ($CH == '\\') ? $ANSI_END : $ANSI_ERR;
+  patterns:
+  - pattern: |
+      if ($VAR->prev_esc && $CH == '\\')
+        return $ANSI_END;
+  - pattern-not: |
+      if ($VAR->prev_esc)
+        return ($CH == '\\') ? $ANSI_END : $ANSI_ERR;
   languages:
   - c
   message: |

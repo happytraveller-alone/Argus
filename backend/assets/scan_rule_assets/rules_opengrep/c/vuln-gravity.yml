@@ -1,15 +1,16 @@
 rules:
 - id: vuln-gravity-00e53c36
-  pattern: |
-    char $VAR[new_size+1];
-    ...
-    strcpy($VAR, $STR);
-    ...
-    strcat($VAR, $STR);
-  pattern-not: |
-    char *$VAR = mem_alloc($SIZE);
-    ...
-    memcpy($VAR+$SEEK, $STR, $LEN);
+  patterns:
+  - pattern: |
+      char $VAR[new_size+1];
+      ...
+      strcpy($VAR, $STR);
+      ...
+      strcat($VAR, $STR);
+  - pattern-not: |
+      char *$VAR = mem_alloc($SIZE);
+      ...
+      memcpy($VAR+$SEEK, $STR, $LEN);
   languages:
   - c
   message: |
@@ -29,10 +30,11 @@ rules:
     technology:
     - c
 - id: vuln-gravity-0e0ac575
-  pattern: |
-    $X = mem_alloc($SIZE);
-  pattern-not: |
-    $X = mem_alloc(NULL, $SIZE);
+  patterns:
+  - pattern: |
+      $X = mem_alloc($SIZE);
+  - pattern-not: |
+      $X = mem_alloc(NULL, $SIZE);
   languages:
   - c
   message: |
@@ -48,18 +50,19 @@ rules:
     technology:
     - c
 - id: vuln-gravity-5b73d291
-  pattern: |
-    if (!$VAR) goto $LABEL;
-    if (!$VAR2) $VAR2 = $FUNC();
-    if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
-    $FUNC4($VAR2, $VAR);
-  pattern-not: |
-    if ($VAR) {
-        if (!$VAR2) $VAR2 = $FUNC();
-        if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
-        $FUNC4($VAR2, $VAR);
-    }
-    if (!$VAR) goto $LABEL;
+  patterns:
+  - pattern: |
+      if (!$VAR) goto $LABEL;
+      if (!$VAR2) $VAR2 = $FUNC();
+      if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
+      $FUNC4($VAR2, $VAR);
+  - pattern-not: |
+      if ($VAR) {
+          if (!$VAR2) $VAR2 = $FUNC();
+          if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
+          $FUNC4($VAR2, $VAR);
+      }
+      if (!$VAR) goto $LABEL;
   languages:
   - c
   message: |
@@ -80,29 +83,30 @@ rules:
     technology:
     - c
 - id: vuln-gravity-8cf63796
-  pattern: |
-    char *$BUFFER = mem_alloc($ALLOC);
-    ...
-    if ($FREE < $REQ + $SEPLEN) {
-        $BUFFER = mem_realloc($BUFFER, $ALLOC * 2 + $REQ + $SEPLEN);
-        $ALLOC += $ALLOC + $REQ + $SEPLEN;
-    }
-  pattern-not: |
-    char *$_BUFFER = mem_alloc($ALLOC);
-    ...
-    if ($FREE_MEM < $REQ + $SEPLEN) {
-        uint64_t $TO_ALLOC = $ALLOC + ($REQ + $SEPLEN) * 2 + 4096;
-        if ($TO_ALLOC > $MAX_MEMORY_BLOCK) {
-            mem_free($_BUFFER);
-            RETURN_ERROR("Maximum memory block size reached (max %d, requested %lld).", $MAX_MEMORY_BLOCK, $TO_ALLOC);
-        }
-        $_BUFFER = mem_realloc($_BUFFER, (uint32_t)$TO_ALLOC);
-        if (!$_BUFFER) {
-            mem_free($_BUFFER);
-            RETURN_ERROR("Not enought memory to re-allocate a buffer for the join operation.");
-        }
-        $ALLOC = (uint32_t)$TO_ALLOC;
-    }
+  patterns:
+  - pattern: |
+      char *$BUFFER = mem_alloc($ALLOC);
+      ...
+      if ($FREE < $REQ + $SEPLEN) {
+          $BUFFER = mem_realloc($BUFFER, $ALLOC * 2 + $REQ + $SEPLEN);
+          $ALLOC += $ALLOC + $REQ + $SEPLEN;
+      }
+  - pattern-not: |
+      char *$_BUFFER = mem_alloc($ALLOC);
+      ...
+      if ($FREE_MEM < $REQ + $SEPLEN) {
+          uint64_t $TO_ALLOC = $ALLOC + ($REQ + $SEPLEN) * 2 + 4096;
+          if ($TO_ALLOC > $MAX_MEMORY_BLOCK) {
+              mem_free($_BUFFER);
+              RETURN_ERROR("Maximum memory block size reached (max %d, requested %lld).", $MAX_MEMORY_BLOCK, $TO_ALLOC);
+          }
+          $_BUFFER = mem_realloc($_BUFFER, (uint32_t)$TO_ALLOC);
+          if (!$_BUFFER) {
+              mem_free($_BUFFER);
+              RETURN_ERROR("Not enought memory to re-allocate a buffer for the join operation.");
+          }
+          $ALLOC = (uint32_t)$TO_ALLOC;
+      }
   languages:
   - c
   message: |
@@ -118,10 +122,11 @@ rules:
     technology:
     - c
 - id: vuln-gravity-c67888e6
-  pattern: |
-    gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT);
-  pattern-not: |
-    if (!gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT)) return false;
+  patterns:
+  - pattern: |
+      gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT);
+  - pattern-not: |
+      if (!gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT)) return false;
   languages:
   - c
   message: |
@@ -137,11 +142,12 @@ rules:
     technology:
     - c
 - id: vuln-gravity-d4935246
-  pattern: |
-    if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC))) return $RETURN_VALUE;
-  pattern-not: |
-    if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC)) ||
-        gravity_vm_getclosure($VM) == $CLOSURE) return $RETURN_VALUE;
+  patterns:
+  - pattern: |
+      if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC))) return $RETURN_VALUE;
+  - pattern-not: |
+      if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC)) ||
+          gravity_vm_getclosure($VM) == $CLOSURE) return $RETURN_VALUE;
   languages:
   - c
   message: |
@@ -157,16 +163,17 @@ rules:
     technology:
     - c
 - id: vuln-gravity-f00c04df
-  pattern: |
-    if (VALUE_ISA_INSTANCE(GET_VALUE(0))) {
-        $OBJECT = VALUE_AS_OBJECT(GET_VALUE(0));
-    } else if (VALUE_ISA_CLASS(GET_VALUE(0))) {
-        ...
-    }
-  pattern-not: |
-    if (VALUE_ISA_INSTANCE(GET_VALUE(0)) || VALUE_ISA_CLASS(GET_VALUE(0))) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (VALUE_ISA_INSTANCE(GET_VALUE(0))) {
+          $OBJECT = VALUE_AS_OBJECT(GET_VALUE(0));
+      } else if (VALUE_ISA_CLASS(GET_VALUE(0))) {
+          ...
+      }
+  - pattern-not: |
+      if (VALUE_ISA_INSTANCE(GET_VALUE(0)) || VALUE_ISA_CLASS(GET_VALUE(0))) {
+          ...
+      }
   languages:
   - c
   message: |

@@ -1,26 +1,27 @@
 rules:
 - id: vuln-vim-249e1b90
-  pattern: |
-    $ACTUAL = get_vim_var_str($VV);
-    $EXPECTED = tv_get_string_buf_chk($TV, $BUF);
-    if (!pattern_match($EXPECTED, $ACTUAL, $FALSE))
-    {
-        $ERROR_FOUND = TRUE;
-        $EXPECTED_STR = $EXPECTED;
-    }
-  pattern-not: |
-    $TOFREE = $ACTUAL = vim_strsave(get_vim_var_str($VV));
-    if ($ACTUAL != NULL)
-    {
-        $TV = &$LIST->lv_u.mat.lv_last->li_tv;
-        $EXPECTED = tv_get_string_buf_chk($TV, $BUF);
-        if (!pattern_match($EXPECTED, $ACTUAL, $FALSE))
-        {
-            $ERROR_FOUND = TRUE;
-            $EXPECTED_STR = $EXPECTED;
-        }
-    }
-    vim_free($TOFREE);
+  patterns:
+  - pattern: |
+      $ACTUAL = get_vim_var_str($VV);
+      $EXPECTED = tv_get_string_buf_chk($TV, $BUF);
+      if (!pattern_match($EXPECTED, $ACTUAL, $FALSE))
+      {
+          $ERROR_FOUND = TRUE;
+          $EXPECTED_STR = $EXPECTED;
+      }
+  - pattern-not: |
+      $TOFREE = $ACTUAL = vim_strsave(get_vim_var_str($VV));
+      if ($ACTUAL != NULL)
+      {
+          $TV = &$LIST->lv_u.mat.lv_last->li_tv;
+          $EXPECTED = tv_get_string_buf_chk($TV, $BUF);
+          if (!pattern_match($EXPECTED, $ACTUAL, $FALSE))
+          {
+              $ERROR_FOUND = TRUE;
+              $EXPECTED_STR = $EXPECTED;
+          }
+      }
+      vim_free($TOFREE);
   languages:
   - c
   message: |
@@ -35,15 +36,16 @@ rules:
     technology:
     - c
 - id: vuln-vim-2a585c85
-  pattern: |
-    curbuf->b_op_end.col = $COL - 1
-        - mb_head_off($Y_ARRAY[$Y_SIZE - 1], $LEN);
-  pattern-not: |
-    {
-        curbuf->b_op_end.col = $COL - 1;
-        if ($LEN > 0)
-            curbuf->b_op_end.col -= mb_head_off($Y_ARRAY[$Y_SIZE - 1], $LEN);
-    }
+  patterns:
+  - pattern: |
+      curbuf->b_op_end.col = $COL - 1
+          - mb_head_off($Y_ARRAY[$Y_SIZE - 1], $LEN);
+  - pattern-not: |
+      {
+          curbuf->b_op_end.col = $COL - 1;
+          if ($LEN > 0)
+              curbuf->b_op_end.col -= mb_head_off($Y_ARRAY[$Y_SIZE - 1], $LEN);
+      }
   languages:
   - c
   message: |
@@ -62,18 +64,19 @@ rules:
     technology:
     - c
 - id: vuln-vim-32acf1f1
-  pattern: |
-    $FUNC($ARG);
-    ...
-    if ($VAR != $SOURCE) {
-        $REG_PREV_SUB = $VAR;
-    } else {
-        $REG_PREV_SUB = vim_strsave($VAR);
-    }
-  pattern-not: |
-    $FUNC($ARG);
-    ...
-    $REG_PREV_SUB = vim_strsave($VAR);
+  patterns:
+  - pattern: |
+      $FUNC($ARG);
+      ...
+      if ($VAR != $SOURCE) {
+          $REG_PREV_SUB = $VAR;
+      } else {
+          $REG_PREV_SUB = vim_strsave($VAR);
+      }
+  - pattern-not: |
+      $FUNC($ARG);
+      ...
+      $REG_PREV_SUB = vim_strsave($VAR);
   languages:
   - c
   message: |
@@ -88,10 +91,11 @@ rules:
     technology:
     - c
 - id: vuln-vim-65b60566
-  pattern: |
-    len2 += MB_CHAR2LEN($VAR);
-  pattern-not: |
-    len2 += enc_utf8 ? utf_ptr2len(rex.line + col + len2) : MB_CHAR2LEN($VAR);
+  patterns:
+  - pattern: |
+      len2 += MB_CHAR2LEN($VAR);
+  - pattern-not: |
+      len2 += enc_utf8 ? utf_ptr2len(rex.line + col + len2) : MB_CHAR2LEN($VAR);
   languages:
   - c
   message: |
@@ -107,10 +111,11 @@ rules:
     technology:
     - c
 - id: vuln-vim-69082916
-  pattern: |
-    *getnext = TRUE;
-  pattern-not: |
-    *getnext = *p != NL;
+  patterns:
+  - pattern: |
+      *getnext = TRUE;
+  - pattern-not: |
+      *getnext = *p != NL;
   languages:
   - c
   message: |
@@ -126,20 +131,21 @@ rules:
     technology:
     - c
 - id: vuln-vim-8ecfa2c5
-  pattern: |
-    if (buflist_findnr($JMP->fmark.fnum) == NULL)
-    ...
-    if (buflist_getfile($JMP->fmark.fnum, $JMP->fmark.mark.lnum, 0, FALSE) == FAIL)
-    ...
-    $CURWIN->w_cursor = $JMP->fmark.mark;
-  pattern-not: |
-    fmark_T $FMARK = $JMP->fmark;
-    ...
-    if (buflist_findnr($FMARK.fnum) == NULL)
-    ...
-    if (buflist_getfile($FMARK.fnum, $FMARK.mark.lnum, 0, FALSE) == FAIL)
-    ...
-    $CURWIN->w_cursor = $FMARK.mark;
+  patterns:
+  - pattern: |
+      if (buflist_findnr($JMP->fmark.fnum) == NULL)
+      ...
+      if (buflist_getfile($JMP->fmark.fnum, $JMP->fmark.mark.lnum, 0, FALSE) == FAIL)
+      ...
+      $CURWIN->w_cursor = $JMP->fmark.mark;
+  - pattern-not: |
+      fmark_T $FMARK = $JMP->fmark;
+      ...
+      if (buflist_findnr($FMARK.fnum) == NULL)
+      ...
+      if (buflist_getfile($FMARK.fnum, $FMARK.mark.lnum, 0, FALSE) == FAIL)
+      ...
+      $CURWIN->w_cursor = $FMARK.mark;
   languages:
   - c
   message: |
@@ -155,13 +161,14 @@ rules:
     technology:
     - c
 - id: vuln-vim-91c7cbfe
-  pattern: |
-    if ($EVALARG != NULL && $EVALARG->eval_tofree == NULL)
-      $EVALARG->eval_tofree = $TOFREE;
-    else
-      vim_free($TOFREE);
-  pattern-not: |
-    free_eval_tofree_later($EVALARG);
+  patterns:
+  - pattern: |
+      if ($EVALARG != NULL && $EVALARG->eval_tofree == NULL)
+        $EVALARG->eval_tofree = $TOFREE;
+      else
+        vim_free($TOFREE);
+  - pattern-not: |
+      free_eval_tofree_later($EVALARG);
   languages:
   - c
   message: |
@@ -176,20 +183,21 @@ rules:
     technology:
     - c
 - id: vuln-vim-94f3192b
-  pattern: |
-    if (*$PTR == NUL)
-    {
-        $POS->col = 0;
-    }
-  pattern-not: |
-    for ($I = 0; $I < $POS->col; ++$I)
-    {
-        if ($PTR[$I] == NUL)
-        {
-            $POS->col = $I;
-            break;
-        }
-    }
+  patterns:
+  - pattern: |
+      if (*$PTR == NUL)
+      {
+          $POS->col = 0;
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $POS->col; ++$I)
+      {
+          if ($PTR[$I] == NUL)
+          {
+              $POS->col = $I;
+              break;
+          }
+      }
   languages:
   - c
   message: |
@@ -208,10 +216,11 @@ rules:
     technology:
     - c
 - id: vuln-vim-9c23f9bb
-  pattern: |
-    define_function($EAP, $NAME_ARG)
-  pattern-not: |
-    define_function($EAP, $NAME_ARG, $LINE_TO_FREE)
+  patterns:
+  - pattern: |
+      define_function($EAP, $NAME_ARG)
+  - pattern-not: |
+      define_function($EAP, $NAME_ARG, $LINE_TO_FREE)
   languages:
   - c
   message: |
@@ -227,13 +236,14 @@ rules:
     technology:
     - c
 - id: vuln-vim-a4bc2dd7
-  pattern: |
-    int $LEN = (int)STRLEN($BUF->bh_curr->b_str);
-  pattern-not: |
-    int $LEN;
-    if ($BUF->bh_curr == NULL || $BUF->bh_curr->b_str == NULL)
-        return;
-    $LEN = (int)STRLEN($BUF->bh_curr->b_str);
+  patterns:
+  - pattern: |
+      int $LEN = (int)STRLEN($BUF->bh_curr->b_str);
+  - pattern-not: |
+      int $LEN;
+      if ($BUF->bh_curr == NULL || $BUF->bh_curr->b_str == NULL)
+          return;
+      $LEN = (int)STRLEN($BUF->bh_curr->b_str);
   languages:
   - c
   message: |
@@ -249,13 +259,14 @@ rules:
     technology:
     - c
 - id: vuln-vim-b29f4abc
-  pattern: |
-    VIM_CLEAR($VAR1);
-    VIM_CLEAR($VAR2);
-  pattern-not: |
-    if ($VAR1 != $VAR2)
-        VIM_CLEAR($VAR1);
-    $VAR2 = NULL;
+  patterns:
+  - pattern: |
+      VIM_CLEAR($VAR1);
+      VIM_CLEAR($VAR2);
+  - pattern-not: |
+      if ($VAR1 != $VAR2)
+          VIM_CLEAR($VAR1);
+      $VAR2 = NULL;
   languages:
   - c
   message: |
@@ -273,11 +284,12 @@ rules:
     technology:
     - c
 - id: vuln-vim-bd228fd0
-  pattern: |
-    STRCPY($DEST, "/\\\\");
-    STRCPY($DEST + 3, $SRC + 1);
-  pattern-not: |
-    vim_snprintf((char *)$DEST, $IOSIZE, "/\\\\%s", $SRC + 1);
+  patterns:
+  - pattern: |
+      STRCPY($DEST, "/\\\\");
+      STRCPY($DEST + 3, $SRC + 1);
+  - pattern-not: |
+      vim_snprintf((char *)$DEST, $IOSIZE, "/\\\\%s", $SRC + 1);
   languages:
   - c
   message: |
@@ -296,14 +308,15 @@ rules:
     technology:
     - c
 - id: vuln-vim-c3d27ada
-  pattern: |
-    if (!bufref_valid(&bufref)) {
-      ...
-    }
-  pattern-not: |
-    if (!bufref_valid(&bufref) || !win_valid_any_tab($WP)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!bufref_valid(&bufref)) {
+        ...
+      }
+  - pattern-not: |
+      if (!bufref_valid(&bufref) || !win_valid_any_tab($WP)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -324,14 +337,15 @@ rules:
     technology:
     - c
 - id: vuln-vim-d1ae8366
-  pattern: |
-    if ($REG->y_size == 0) {
-      ...
-    }
-  pattern-not: |
-    if ($REG->y_size == 0 || $YCURRENT->y_array == NULL) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($REG->y_size == 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($REG->y_size == 0 || $YCURRENT->y_array == NULL) {
+        ...
+      }
   languages:
   - c
   message: |

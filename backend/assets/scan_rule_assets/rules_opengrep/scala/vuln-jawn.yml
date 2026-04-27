@@ -1,9 +1,10 @@
 rules:
 - id: vuln-jawn-0707e256
-  pattern: |
-    private[this] val $VAR = mutable.Map.empty[$TYPE1, $TYPE2]
-  pattern-not: |
-    private[this] val $VAR = (new HashMap[$TYPE1, $TYPE2]).asScala
+  patterns:
+  - pattern: |
+      private[this] val $VAR = mutable.Map.empty[$TYPE1, $TYPE2]
+  - pattern-not: |
+      private[this] val $VAR = (new HashMap[$TYPE1, $TYPE2]).asScala
   languages:
   - scala
   message: |
@@ -23,10 +24,11 @@ rules:
     technology:
     - scala
 - id: vuln-jawn-e5ddb114
-  pattern: |
-    private[this] var $VAR = Map.empty[String, $TYPE]
-  pattern-not: |
-    private[this] var $VAR = TreeMap.empty[String, $TYPE]
+  patterns:
+  - pattern: |
+      private[this] var $VAR = Map.empty[String, $TYPE]
+  - pattern-not: |
+      private[this] var $VAR = TreeMap.empty[String, $TYPE]
   languages:
   - scala
   message: |

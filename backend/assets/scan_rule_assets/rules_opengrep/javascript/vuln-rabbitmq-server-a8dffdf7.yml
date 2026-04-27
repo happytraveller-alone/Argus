@@ -1,7 +1,8 @@
 rules:
 - id: vuln-rabbitmq-server-a8dffdf7
-  pattern: $VAR = $RES.req_params.username
-  pattern-not: $VAR = fmt_escape_html($RES.req_params.username)
+  patterns:
+  - pattern: $VAR = $RES.req_params.username
+  - pattern-not: $VAR = fmt_escape_html($RES.req_params.username)
   languages:
   - javascript
   message: Potential XSS vulnerability due to unescaped username parameter. Always escape user input before using it in HTML context to prevent XSS attacks.

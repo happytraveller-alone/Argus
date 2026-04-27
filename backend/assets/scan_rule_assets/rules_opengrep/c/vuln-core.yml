@@ -1,13 +1,14 @@
 rules:
 - id: vuln-core-000030fe
-  pattern: |
-    $RET = var_expand($PATH, $KEY->key->key, $TABLE, &$ERROR);
-    if ($RET <= 0) {
-      auth_request_log_error($AUTH, $SUBSYS, "Failed to expand key %s: %s", $KEY->key->key, $ERROR);
-      return -1;
-    }
-  pattern-not: |
-    str_append($PATH, $KEY->key->key);
+  patterns:
+  - pattern: |
+      $RET = var_expand($PATH, $KEY->key->key, $TABLE, &$ERROR);
+      if ($RET <= 0) {
+        auth_request_log_error($AUTH, $SUBSYS, "Failed to expand key %s: %s", $KEY->key->key, $ERROR);
+        return -1;
+      }
+  - pattern-not: |
+      str_append($PATH, $KEY->key->key);
   languages:
   - c
   message: |
@@ -24,15 +25,16 @@ rules:
     technology:
     - c
 - id: vuln-core-00df2308
-  pattern: |
-    if ($VAR != NULL) {
-      str_printfa($CMD, "\ttag=%s", $VAR);
-    }
-  pattern-not: |
-    if ($VAR != NULL) {
-      str_append($CMD, "\ttag=");
-      str_append_tabescaped($CMD, $VAR);
-    }
+  patterns:
+  - pattern: |
+      if ($VAR != NULL) {
+        str_printfa($CMD, "\ttag=%s", $VAR);
+      }
+  - pattern-not: |
+      if ($VAR != NULL) {
+        str_append($CMD, "\ttag=");
+        str_append_tabescaped($CMD, $VAR);
+      }
   languages:
   - c
   message: |
@@ -52,11 +54,12 @@ rules:
     technology:
     - c
 - id: vuln-core-2c3f3767
-  pattern: |
-    tab[$IDX].value = $FUNC(auth_request->user, $ARGS);
-  pattern-not: |
-    $USERNAME = auth_request->user != NULL ? auth_request->user : "";
-    tab[$IDX].value = $FUNC($USERNAME, $ARGS);
+  patterns:
+  - pattern: |
+      tab[$IDX].value = $FUNC(auth_request->user, $ARGS);
+  - pattern-not: |
+      $USERNAME = auth_request->user != NULL ? auth_request->user : "";
+      tab[$IDX].value = $FUNC($USERNAME, $ARGS);
   languages:
   - c
   message: |
@@ -74,14 +77,15 @@ rules:
     technology:
     - c
 - id: vuln-core-321c3397
-  pattern: |
-    while (!$CONN->closing && $RET != 0) {
-      ...
-    }
-  pattern-not: |
-    while (!$CONN->closing && !$CONN->input_locked && $RET != 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while (!$CONN->closing && $RET != 0) {
+        ...
+      }
+  - pattern-not: |
+      while (!$CONN->closing && !$CONN->input_locked && $RET != 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -99,18 +103,19 @@ rules:
     technology:
     - c
 - id: vuln-core-973769d7
-  pattern: |
-    i_assert($BYTES > 0 && uni_is_valid_ucs4($CHR));
-    json_append_escaped_ucs4($DEST, $CHR);
-    $I += $BYTES;
-  pattern-not: |
-    if ($BYTES > 0 && uni_is_valid_ucs4($CHR)) {
+  patterns:
+  - pattern: |
+      i_assert($BYTES > 0 && uni_is_valid_ucs4($CHR));
       json_append_escaped_ucs4($DEST, $CHR);
       $I += $BYTES;
-    } else {
-      str_append_data($DEST, UNICODE_REPLACEMENT_CHAR_UTF8, UTF8_REPLACEMENT_CHAR_LEN);
-      $I++;
-    }
+  - pattern-not: |
+      if ($BYTES > 0 && uni_is_valid_ucs4($CHR)) {
+        json_append_escaped_ucs4($DEST, $CHR);
+        $I += $BYTES;
+      } else {
+        str_append_data($DEST, UNICODE_REPLACEMENT_CHAR_UTF8, UTF8_REPLACEMENT_CHAR_LEN);
+        $I++;
+      }
   languages:
   - c
   message: |
@@ -126,10 +131,11 @@ rules:
     technology:
     - c
 - id: vuln-core-f904cbdf
-  pattern: |
-    (void)str_unescape($STR + $VAR - 1);
-  pattern-not: |
-    (void)str_unescape($STR);
+  patterns:
+  - pattern: |
+      (void)str_unescape($STR + $VAR - 1);
+  - pattern-not: |
+      (void)str_unescape($STR);
   languages:
   - c
   message: |
@@ -146,14 +152,15 @@ rules:
     technology:
     - c
 - id: vuln-core-fb97a1cd
-  pattern: |
-    if ($CONDITION && !parse_too_many_nested_mime_parts($CTX)) {
-      ...
-    }
-  pattern-not: |
-    if ($CONDITION && !parse_too_many_nested_mime_parts($CTX) && $CTX->total_parts_count < $CTX->max_total_mime_parts) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($CONDITION && !parse_too_many_nested_mime_parts($CTX)) {
+        ...
+      }
+  - pattern-not: |
+      if ($CONDITION && !parse_too_many_nested_mime_parts($CTX) && $CTX->total_parts_count < $CTX->max_total_mime_parts) {
+        ...
+      }
   languages:
   - c
   message: |

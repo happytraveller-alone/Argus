@@ -1,9 +1,10 @@
 rules:
 - id: vuln-pillow-3bce1459
-  pattern: |
-    newline = whitespace_optional + newline_only + whitespace_optional
-  pattern-not: |
-    newline = whitespace_optional_no_nl + newline_only + whitespace_optional_no_nl
+  patterns:
+  - pattern: |
+      newline = whitespace_optional + newline_only + whitespace_optional
+  - pattern-not: |
+      newline = whitespace_optional_no_nl + newline_only + whitespace_optional_no_nl
   languages:
   - python
   message: Detected insecure handling of newline characters in PDF parsing. This can lead to improper parsing of PDF content and potential security vulnerabilities. Use 'whitespace_optional_no_nl' instead of 'whitespace_optional' to exclude newline characters.
@@ -18,15 +19,16 @@ rules:
     technology:
     - python
 - id: vuln-pillow-774e53bb
-  pattern: |
-    for $I in range(i32($S, 4)):
-        ...
-  pattern-not: |
-    $BANDS = i32($S, 4)
-    if $BANDS > 4:
-        raise IOError("Invalid number of bands")
-    for $I in range($BANDS):
-        ...
+  patterns:
+  - pattern: |
+      for $I in range(i32($S, 4)):
+          ...
+  - pattern-not: |
+      $BANDS = i32($S, 4)
+      if $BANDS > 4:
+          raise IOError("Invalid number of bands")
+      for $I in range($BANDS):
+          ...
   languages:
   - python
   message: |
@@ -44,19 +46,20 @@ rules:
     technology:
     - python
 - id: vuln-pillow-a301d061
-  pattern: |
-    $QUANT_PROC = Popen($ARGS, stdout=PIPE)
-    check_call($TOGIF_ARGS, stdin=$QUANT_PROC.stdout, stdout=$FILE)
-  pattern-not: |
-    $QUANT_PROC = Popen($ARGS, stdout=PIPE)
-    $TOGIF_PROC = Popen($TOGIF_ARGS, stdin=$QUANT_PROC.stdout, stdout=$FILE)
-    $QUANT_PROC.stdout.close()
-    $RETCODE = $QUANT_PROC.wait()
-    if $RETCODE:
-        raise CalledProcessError($RETCODE, $ARGS)
-    $RETCODE = $TOGIF_PROC.wait()
-    if $RETCODE:
-        raise CalledProcessError($RETCODE, $TOGIF_ARGS)
+  patterns:
+  - pattern: |
+      $QUANT_PROC = Popen($ARGS, stdout=PIPE)
+      check_call($TOGIF_ARGS, stdin=$QUANT_PROC.stdout, stdout=$FILE)
+  - pattern-not: |
+      $QUANT_PROC = Popen($ARGS, stdout=PIPE)
+      $TOGIF_PROC = Popen($TOGIF_ARGS, stdin=$QUANT_PROC.stdout, stdout=$FILE)
+      $QUANT_PROC.stdout.close()
+      $RETCODE = $QUANT_PROC.wait()
+      if $RETCODE:
+          raise CalledProcessError($RETCODE, $ARGS)
+      $RETCODE = $TOGIF_PROC.wait()
+      if $RETCODE:
+          raise CalledProcessError($RETCODE, $TOGIF_ARGS)
   languages:
   - python
   message: |
@@ -72,28 +75,29 @@ rules:
     technology:
     - python
 - id: vuln-pillow-a90dc491
-  pattern: |
-    layout = i8($S[3]), i16($S[4:]), i16($S[10:])
-    ...
-    if layout == (1, 2, 1) or layout == (1, 1, 1):
-        ...
-    elif layout == (1, 3, 3):
-        ...
-    elif layout == (1, 3, 4):
-        ...
-  pattern-not: |
-    depth = i8($S[3]) * 8
-    dimension = i16($S[4:])
-    xsize = i16($S[6:])
-    ysize = i16($S[8:])
-    zsize = i16($S[10:])
-    layout = depth, dimension, zsize
-    if layout == (8, 2, 1) or layout == (8, 1, 1):
-        ...
-    elif layout == (8, 3, 3):
-        ...
-    elif layout == (8, 3, 4):
-        ...
+  patterns:
+  - pattern: |
+      layout = i8($S[3]), i16($S[4:]), i16($S[10:])
+      ...
+      if layout == (1, 2, 1) or layout == (1, 1, 1):
+          ...
+      elif layout == (1, 3, 3):
+          ...
+      elif layout == (1, 3, 4):
+          ...
+  - pattern-not: |
+      depth = i8($S[3]) * 8
+      dimension = i16($S[4:])
+      xsize = i16($S[6:])
+      ysize = i16($S[8:])
+      zsize = i16($S[10:])
+      layout = depth, dimension, zsize
+      if layout == (8, 2, 1) or layout == (8, 1, 1):
+          ...
+      elif layout == (8, 3, 3):
+          ...
+      elif layout == (8, 3, 4):
+          ...
   languages:
   - python
   message: Detected unsafe handling of SGI image layout. The old code uses incorrect bit depth values (1) instead of the correct (8), which can lead to incorrect image processing or security vulnerabilities. Update the layout calculation to use the correct bit depth (8).

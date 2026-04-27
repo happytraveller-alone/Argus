@@ -1,19 +1,20 @@
 rules:
 - id: vuln-imageworsener-62bfbfb1
-  pattern: |
-    if(!ret) return FALSE;
-    ...
-    if(bytesread<1) return FALSE;
-  pattern-not: |
-    if((!ret) || (bytesread<1)) {
-      iw_set_error(rctx->ctx, "Unexpected end of file");
-      rctx->buffer[0] = 0xffU;
-      rctx->buffer[1] = 0xd9U;
-      rctx->pub.bytes_in_buffer = 2;
-    }
-    else {
-      rctx->pub.bytes_in_buffer = bytesread;
-    }
+  patterns:
+  - pattern: |
+      if(!ret) return FALSE;
+      ...
+      if(bytesread<1) return FALSE;
+  - pattern-not: |
+      if((!ret) || (bytesread<1)) {
+        iw_set_error(rctx->ctx, "Unexpected end of file");
+        rctx->buffer[0] = 0xffU;
+        rctx->buffer[1] = 0xd9U;
+        rctx->pub.bytes_in_buffer = 2;
+      }
+      else {
+        rctx->pub.bytes_in_buffer = bytesread;
+      }
   languages:
   - c
   message: |
@@ -33,10 +34,11 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-a75fd487
-  pattern: |
-    lzw_add_to_dict($D, $OLDCODE, $VAL)
-  pattern-not: |
-    lzw_add_to_dict($RCTX, $D, $OLDCODE, $VAL)
+  patterns:
+  - pattern: |
+      lzw_add_to_dict($D, $OLDCODE, $VAL)
+  - pattern-not: |
+      lzw_add_to_dict($RCTX, $D, $OLDCODE, $VAL)
   languages:
   - c
   message: |
@@ -54,12 +56,13 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-bb321cff
-  pattern: |
-    if(!read_next_pam_token($CTX, $LINEBUF, $TOKENBUF, sizeof($TOKENBUF), $CURPOS)) goto $LABEL;
-  pattern-not: |
-    if(!read_next_pam_token($CTX, $LINEBUF, (int)sizeof($LINEBUF), $TOKENBUF, (int)sizeof($TOKENBUF), $CURPOS)) {
-      goto $LABEL;
-    }
+  patterns:
+  - pattern: |
+      if(!read_next_pam_token($CTX, $LINEBUF, $TOKENBUF, sizeof($TOKENBUF), $CURPOS)) goto $LABEL;
+  - pattern-not: |
+      if(!read_next_pam_token($CTX, $LINEBUF, (int)sizeof($LINEBUF), $TOKENBUF, (int)sizeof($TOKENBUF), $CURPOS)) {
+        goto $LABEL;
+      }
   languages:
   - c
   message: |
@@ -77,26 +80,27 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-dc49c807
-  pattern: |
-    *$PCODE = $CTX->img1.density_code;
-    if($CTX->img1.density_code != $IW_DENSITY_UNKNOWN) {
+  patterns:
+  - pattern: |
+      *$PCODE = $CTX->img1.density_code;
+      if($CTX->img1.density_code != $IW_DENSITY_UNKNOWN) {
+        *$PX = $CTX->img1.density_x;
+        *$PY = $CTX->img1.density_y;
+        return 1;
+      }
+      return 0;
+  - pattern-not: |
+      *$PCODE = $IW_DENSITY_UNKNOWN;
+      if($CTX->img1.density_code == $IW_DENSITY_UNKNOWN) {
+        return 0;
+      }
+      if(!iw_is_valid_density($CTX->img1.density_x, $CTX->img1.density_y, $CTX->img1.density_code)) {
+        return 0;
+      }
       *$PX = $CTX->img1.density_x;
       *$PY = $CTX->img1.density_y;
+      *$PCODE = $CTX->img1.density_code;
       return 1;
-    }
-    return 0;
-  pattern-not: |
-    *$PCODE = $IW_DENSITY_UNKNOWN;
-    if($CTX->img1.density_code == $IW_DENSITY_UNKNOWN) {
-      return 0;
-    }
-    if(!iw_is_valid_density($CTX->img1.density_x, $CTX->img1.density_y, $CTX->img1.density_code)) {
-      return 0;
-    }
-    *$PX = $CTX->img1.density_x;
-    *$PY = $CTX->img1.density_y;
-    *$PCODE = $CTX->img1.density_code;
-    return 1;
   languages:
   - c
   message: |

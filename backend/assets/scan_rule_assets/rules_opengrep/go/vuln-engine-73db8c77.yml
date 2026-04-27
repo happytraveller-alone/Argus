@@ -1,13 +1,14 @@
 rules:
 - id: vuln-engine-73db8c77
-  pattern: |
-    for _, $M := range []string{"password", "secret", "jointoken", "unlockkey", "signingcakey"} {
-      ...
-    }
-  pattern-not: |
-    for _, $M := range $SCRUB {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for _, $M := range []string{"password", "secret", "jointoken", "unlockkey", "signingcakey"} {
+        ...
+      }
+  - pattern-not: |
+      for _, $M := range $SCRUB {
+        ...
+      }
   languages:
   - go
   message: |

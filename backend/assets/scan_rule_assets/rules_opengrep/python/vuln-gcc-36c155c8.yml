@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gcc-36c155c8
-  pattern: |
-    $VAR.decode()
-  pattern-not: |
-    $VAR
+  patterns:
+  - pattern: |
+      $VAR.decode()
+  - pattern-not: |
+      $VAR
   languages:
   - python
   message: |

@@ -1,22 +1,23 @@
 rules:
 - id: vuln-cups-ff1f8a62
-  pattern: |
-    unlink($ADDR->un.sun_path);
-    ...
-    bind($FD, (struct sockaddr *)$ADDR, (socklen_t)$LENGTH);
-  pattern-not: |
-    if ((status = unlink($ADDR->un.sun_path)) < 0)
-    {
-      if (errno == ENOENT)
-        status = 0;
-    }
-    if (!status)
-    {
-      if ((status = bind($FD, (struct sockaddr *)$ADDR, (socklen_t)$LENGTH)) < 0)
+  patterns:
+  - pattern: |
+      unlink($ADDR->un.sun_path);
+      ...
+      bind($FD, (struct sockaddr *)$ADDR, (socklen_t)$LENGTH);
+  - pattern-not: |
+      if ((status = unlink($ADDR->un.sun_path)) < 0)
       {
-        DEBUG_printf(...);
+        if (errno == ENOENT)
+          status = 0;
       }
-    }
+      if (!status)
+      {
+        if ((status = bind($FD, (struct sockaddr *)$ADDR, (socklen_t)$LENGTH)) < 0)
+        {
+          DEBUG_printf(...);
+        }
+      }
   languages:
   - c
   message: |

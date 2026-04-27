@@ -1,15 +1,16 @@
 rules:
 - id: vuln-src-13053edc
-  pattern: |
-    if (!$CLASS && $PWD && $PWD->pw_class && $PWD->pw_class[0] != '\0')
-      $CLASS = strdup($PWD->pw_class);
-    if (($LC = login_getclass($CLASS)) == NULL)
-      $LOGIN_DEFCLASS;
-  pattern-not: |
-    if ($PW_CLASS == NULL && $PWD != NULL)
-      $PW_CLASS = $PWD->pw_class;
-    if (($LC = login_getclass($PW_CLASS)) == NULL)
-      $LOGIN_DEFCLASS;
+  patterns:
+  - pattern: |
+      if (!$CLASS && $PWD && $PWD->pw_class && $PWD->pw_class[0] != '\0')
+        $CLASS = strdup($PWD->pw_class);
+      if (($LC = login_getclass($CLASS)) == NULL)
+        $LOGIN_DEFCLASS;
+  - pattern-not: |
+      if ($PW_CLASS == NULL && $PWD != NULL)
+        $PW_CLASS = $PWD->pw_class;
+      if (($LC = login_getclass($PW_CLASS)) == NULL)
+        $LOGIN_DEFCLASS;
   languages:
   - c
   message: |
@@ -27,10 +28,11 @@ rules:
     technology:
     - c
 - id: vuln-src-2dfc98f4
-  pattern: |
-    auth_call($AS, $SCRIPT, $SHELL, $FFLAG ? "-f" : $USERNAME, $FFLAG ? $USERNAME : 0, (char *)0);
-  pattern-not: |
-    auth_call($AS, $SCRIPT, $SHELL, "--", $USERNAME, (char *)NULL);
+  patterns:
+  - pattern: |
+      auth_call($AS, $SCRIPT, $SHELL, $FFLAG ? "-f" : $USERNAME, $FFLAG ? $USERNAME : 0, (char *)0);
+  - pattern-not: |
+      auth_call($AS, $SCRIPT, $SHELL, "--", $USERNAME, (char *)NULL);
   languages:
   - c
   message: |
@@ -48,14 +50,15 @@ rules:
     technology:
     - c
 - id: vuln-src-7afb2d41
-  pattern: |
-    if ($PEERKEY && !EVP_PKEY_cmp($PEERKEY, $LOCALKEY)) {
-      ...
-    }
-  pattern-not: |
-    if ($PEERKEY && EVP_PKEY_cmp($PEERKEY, $LOCALKEY) != 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PEERKEY && !EVP_PKEY_cmp($PEERKEY, $LOCALKEY)) {
+        ...
+      }
+  - pattern-not: |
+      if ($PEERKEY && EVP_PKEY_cmp($PEERKEY, $LOCALKEY) != 1) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -71,24 +74,25 @@ rules:
     technology:
     - c
 - id: vuln-src-9dcfda04
-  pattern: |
-    if (!valid_localpart($MADDR->user) ||
-        !valid_domainpart($MADDR->domain)) {
-        ...
-        if ($MAILFROM && $MADDR->user[0] == '\0' && $MADDR->domain[0] == '\0')
-            return (1);
-        ...
-    }
-  pattern-not: |
-    if ($MAILFROM && $MADDR->user[0] == '\0' && $MADDR->domain[0] == '\0')
-        return (1);
-    if ($MADDR->user[0] == '\0' || !valid_localpart($MADDR->user))
-        return (0);
-    if ($MADDR->domain[0] == '\0') {
-        (void)strlcpy($MADDR->domain, $DOMAIN, sizeof($MADDR->domain));
-    }
-    if (!valid_domainpart($MADDR->domain))
-        return (0);
+  patterns:
+  - pattern: |
+      if (!valid_localpart($MADDR->user) ||
+          !valid_domainpart($MADDR->domain)) {
+          ...
+          if ($MAILFROM && $MADDR->user[0] == '\0' && $MADDR->domain[0] == '\0')
+              return (1);
+          ...
+      }
+  - pattern-not: |
+      if ($MAILFROM && $MADDR->user[0] == '\0' && $MADDR->domain[0] == '\0')
+          return (1);
+      if ($MADDR->user[0] == '\0' || !valid_localpart($MADDR->user))
+          return (0);
+      if ($MADDR->domain[0] == '\0') {
+          (void)strlcpy($MADDR->domain, $DOMAIN, sizeof($MADDR->domain));
+      }
+      if (!valid_domainpart($MADDR->domain))
+          return (0);
   languages:
   - c
   message: |

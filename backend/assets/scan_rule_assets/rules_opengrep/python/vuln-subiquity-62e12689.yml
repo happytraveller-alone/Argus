@@ -1,9 +1,10 @@
 rules:
 - id: vuln-subiquity-62e12689
-  pattern: |
-    write_file($PATH, $CONFIG)
-  pattern-not: |
-    write_file($PATH, $CONFIG, mode=$MODE, group=$GROUP)
+  patterns:
+  - pattern: |
+      write_file($PATH, $CONFIG)
+  - pattern-not: |
+      write_file($PATH, $CONFIG, mode=$MODE, group=$GROUP)
   languages:
   - python
   message: |

@@ -1,20 +1,21 @@
 rules:
 - id: vuln-jinja-71679534
-  pattern: |
-    " ".join(
-        f'{escape($KEY)}="{escape($VALUE)}"'
-        for $KEY, $VALUE in $DICT.items()
-        if $VALUE is not None and not isinstance($VALUE, $UNDEFINED)
-    )
-  pattern-not: |
-    $ITEMS = []
-    for $KEY, $VALUE in $DICT.items():
-        if $VALUE is None or isinstance($VALUE, $UNDEFINED):
-            continue
-        if $SPACE_RE.search($KEY) is not None:
-            raise ValueError(f"Spaces are not allowed in attributes: '{$KEY}'")
-        $ITEMS.append(f'{escape($KEY)}="{escape($VALUE)}"')
-    " ".join($ITEMS)
+  patterns:
+  - pattern: |
+      " ".join(
+          f'{escape($KEY)}="{escape($VALUE)}"'
+          for $KEY, $VALUE in $DICT.items()
+          if $VALUE is not None and not isinstance($VALUE, $UNDEFINED)
+      )
+  - pattern-not: |
+      $ITEMS = []
+      for $KEY, $VALUE in $DICT.items():
+          if $VALUE is None or isinstance($VALUE, $UNDEFINED):
+              continue
+          if $SPACE_RE.search($KEY) is not None:
+              raise ValueError(f"Spaces are not allowed in attributes: '{$KEY}'")
+          $ITEMS.append(f'{escape($KEY)}="{escape($VALUE)}"')
+      " ".join($ITEMS)
   languages:
   - python
   message: |
@@ -29,10 +30,11 @@ rules:
     owasp: A7:2017-Cross-Site Scripting (XSS)
     technology: python
 - id: vuln-jinja-acb672b6
-  pattern: |
-    directory = tempfile.gettempdir()
-  pattern-not: |
-    directory = $OBJ._get_default_cache_dir()
+  patterns:
+  - pattern: |
+      directory = tempfile.gettempdir()
+  - pattern-not: |
+      directory = $OBJ._get_default_cache_dir()
   languages:
   - python
   message: |

@@ -1,16 +1,17 @@
 rules:
 - id: vuln-cinder-ba785eef
-  pattern: |
-    {
-        'serverPassword': $PASSWORD,
-        'serverToken': $TOKEN,
-        ...
-    }
-  pattern-not: |
-    {
-        'config_group': $CONFIG_GROUP,
-        ...
-    }
+  patterns:
+  - pattern: |
+      {
+          'serverPassword': $PASSWORD,
+          'serverToken': $TOKEN,
+          ...
+      }
+  - pattern-not: |
+      {
+          'config_group': $CONFIG_GROUP,
+          ...
+      }
   languages:
   - python
   message: Detected insecure storage of server credentials in a dictionary. This can lead to exposure of sensitive information. Use a secure configuration group instead.

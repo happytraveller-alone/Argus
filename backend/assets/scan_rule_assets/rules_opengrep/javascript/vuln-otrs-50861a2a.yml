@@ -1,13 +1,14 @@
 rules:
 - id: vuln-otrs-50861a2a
-  pattern: |
-    $($IFRAME).load($SOURCE, $OPTIONS, function() {
-        $BODY
-    })
-  pattern-not: |
-    $($IFRAME).on('load', function() {
-        $BODY
-    })
+  patterns:
+  - pattern: |
+      $($IFRAME).load($SOURCE, $OPTIONS, function() {
+          $BODY
+      })
+  - pattern-not: |
+      $($IFRAME).on('load', function() {
+          $BODY
+      })
   languages:
   - javascript
   message: |

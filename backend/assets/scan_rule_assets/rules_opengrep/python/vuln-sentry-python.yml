@@ -1,9 +1,10 @@
 rules:
 - id: vuln-sentry-python-763e40aa
-  pattern: |
-    lambda $X: dict($X or $ENV)
-  pattern-not: |
-    lambda $X: dict($X if $X is not None else $ENV)
+  patterns:
+  - pattern: |
+      lambda $X: dict($X or $ENV)
+  - pattern-not: |
+      lambda $X: dict($X if $X is not None else $ENV)
   languages:
   - python
   message: |
@@ -19,16 +20,17 @@ rules:
     technology:
     - python
 - id: vuln-sentry-python-cd2f51b8
-  pattern: |
-    {
-      "event_id": uuid.uuid4().hex,
-      ...
-    }
-  pattern-not: |
-    {
-      "event_id": self.event_id,
-      ...
-    }
+  patterns:
+  - pattern: |
+      {
+        "event_id": uuid.uuid4().hex,
+        ...
+      }
+  - pattern-not: |
+      {
+        "event_id": self.event_id,
+        ...
+      }
   languages:
   - python
   message: Detected direct generation of event_id within a context dictionary. This can lead to inconsistencies between profiles and transactions. Use a shared event_id stored in the instance instead.

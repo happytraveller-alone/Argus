@@ -1,30 +1,31 @@
 rules:
 - id: vuln-cyrus-imapd-1ebd8ae4
-  pattern: |
-    unsigned $RET_VAL = 0;
-    int $I;
-    while (*$STRING) {
-      $I = (int) *$STRING;
-      $RET_VAL ^= $I;
-      $RET_VAL <<= 1;
-      $STRING++;
-    }
-    return $RET_VAL;
-  pattern-not: |
-    const unsigned char *$USTR = (const unsigned char *) $STRING;
-    unsigned $HASH = 5381;
-    int $C;
-    if ($SEED) {
-      unsigned $I;
-      for ($I = 0; $I < sizeof $SEED; $I++) {
-        $C = $SEED & 0xff;
-        $HASH = (($HASH << 5) + $HASH) ^ $C;
-        $SEED >>= 8;
+  patterns:
+  - pattern: |
+      unsigned $RET_VAL = 0;
+      int $I;
+      while (*$STRING) {
+        $I = (int) *$STRING;
+        $RET_VAL ^= $I;
+        $RET_VAL <<= 1;
+        $STRING++;
       }
-    }
-    while (($C = *$USTR++))
-      $HASH = (($HASH << 5) + $HASH) ^ $C;
-    return $HASH;
+      return $RET_VAL;
+  - pattern-not: |
+      const unsigned char *$USTR = (const unsigned char *) $STRING;
+      unsigned $HASH = 5381;
+      int $C;
+      if ($SEED) {
+        unsigned $I;
+        for ($I = 0; $I < sizeof $SEED; $I++) {
+          $C = $SEED & 0xff;
+          $HASH = (($HASH << 5) + $HASH) ^ $C;
+          $SEED >>= 8;
+        }
+      }
+      while (($C = *$USTR++))
+        $HASH = (($HASH << 5) + $HASH) ^ $C;
+      return $HASH;
   languages:
   - c
   message: |
@@ -40,15 +41,16 @@ rules:
     technology:
     - c
 - id: vuln-cyrus-imapd-5edadcfb
-  pattern: |
-    const char *$BASE;
-    if (strchr($PART, '/')) {
-        $BASE = $PART;
-    } else {
-        $BASE = $ISARCHIVE ? config_archivepartitiondir($PART) : config_partitiondir($PART);
-    }
-  pattern-not: |
-    const char *$BASE = $ISARCHIVE ? config_archivepartitiondir($PART) : config_partitiondir($PART);
+  patterns:
+  - pattern: |
+      const char *$BASE;
+      if (strchr($PART, '/')) {
+          $BASE = $PART;
+      } else {
+          $BASE = $ISARCHIVE ? config_archivepartitiondir($PART) : config_partitiondir($PART);
+      }
+  - pattern-not: |
+      const char *$BASE = $ISARCHIVE ? config_archivepartitiondir($PART) : config_partitiondir($PART);
   languages:
   - c
   message: |
@@ -66,10 +68,11 @@ rules:
     technology:
     - c
 - id: vuln-cyrus-imapd-f6369560
-  pattern: |
-    unsigned $VAL = strhash($KEY) % $SIZE;
-  pattern-not: |
-    unsigned $VAL = strhash_seeded($SEED, $KEY) % $SIZE;
+  patterns:
+  - pattern: |
+      unsigned $VAL = strhash($KEY) % $SIZE;
+  - pattern-not: |
+      unsigned $VAL = strhash_seeded($SEED, $KEY) % $SIZE;
   languages:
   - c
   message: |

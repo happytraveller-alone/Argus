@@ -1,26 +1,27 @@
 rules:
 - id: vuln-openfga-c8db1ee3
-  pattern: |
-    func isUsersetRewriteValid(allRelations map[string]struct{}, relationsOnType map[string]struct{}, objectType, relation string, rewrite *openfgapb.Userset) error {
-        ...
-        if _, ok := relationsOnType[tupleset]; !ok {
-            ...
-        }
-        ...
-    }
-  pattern-not: |
-    func isUsersetRewriteValid(allRelations map[string]*openfgapb.Relation, relationsOnType map[string]*openfgapb.Relation, objectType, relation string, rewrite *openfgapb.Userset) error {
-        ...
-        tuplesetRelation, ok := relationsOnType[tupleset]
-        if !ok {
-            ...
-        }
-        tuplesetRewrite := tuplesetRelation.GetRewrite()
-        if reflect.TypeOf(tuplesetRewrite.GetUserset()) != reflect.TypeOf(&openfgapb.Userset_This{}) {
-            return errors.Errorf("the '%s#%s' relation is referenced in at least one tupleset and thus must be a direct relation", objectType, tupleset)
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      func isUsersetRewriteValid(allRelations map[string]struct{}, relationsOnType map[string]struct{}, objectType, relation string, rewrite *openfgapb.Userset) error {
+          ...
+          if _, ok := relationsOnType[tupleset]; !ok {
+              ...
+          }
+          ...
+      }
+  - pattern-not: |
+      func isUsersetRewriteValid(allRelations map[string]*openfgapb.Relation, relationsOnType map[string]*openfgapb.Relation, objectType, relation string, rewrite *openfgapb.Userset) error {
+          ...
+          tuplesetRelation, ok := relationsOnType[tupleset]
+          if !ok {
+              ...
+          }
+          tuplesetRewrite := tuplesetRelation.GetRewrite()
+          if reflect.TypeOf(tuplesetRewrite.GetUserset()) != reflect.TypeOf(&openfgapb.Userset_This{}) {
+              return errors.Errorf("the '%s#%s' relation is referenced in at least one tupleset and thus must be a direct relation", objectType, tupleset)
+          }
+          ...
+      }
   languages:
   - go
   message: |

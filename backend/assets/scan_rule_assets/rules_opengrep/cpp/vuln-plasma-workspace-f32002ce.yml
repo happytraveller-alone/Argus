@@ -1,9 +1,10 @@
 rules:
 - id: vuln-plasma-workspace-f32002ce
-  pattern: |
-    $MX.expandMacros($EXEC)
-  pattern-not: |
-    $MX.expandMacrosShellQuote($EXEC)
+  patterns:
+  - pattern: |
+      $MX.expandMacros($EXEC)
+  - pattern-not: |
+      $MX.expandMacrosShellQuote($EXEC)
   languages:
   - cpp
   message: |

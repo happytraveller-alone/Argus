@@ -1,9 +1,10 @@
 rules:
 - id: vuln-node-78b0e309
-  pattern: |
-    WriteUtf16Slow($STREAM, $DATA, $LENGTH)
-  pattern-not: |
-    WriteUtf16Slow($STREAM, $STREAM_LENGTH, $DATA, $LENGTH)
+  patterns:
+  - pattern: |
+      WriteUtf16Slow($STREAM, $DATA, $LENGTH)
+  - pattern-not: |
+      WriteUtf16Slow($STREAM, $STREAM_LENGTH, $DATA, $LENGTH)
   languages:
   - cpp
   message: |

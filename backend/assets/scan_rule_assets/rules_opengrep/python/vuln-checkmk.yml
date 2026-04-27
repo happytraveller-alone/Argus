@@ -1,25 +1,26 @@
 rules:
 - id: vuln-checkmk-2961f096
-  pattern: |
-    return "%s: %s;%s;%s;%s;%s" % (
-        $WHAT,
-        $CONTACT,
-        $SPEC,
-        $STATE,
-        $PLUGIN,
-        $OUTPUT[:$MAX_LENGTH].replace(";", $REPLACE)
-    )
-  pattern-not: |
-    return SanitizedLivestatusLogStr(
-        "{}: {};{};{};{};{}".format(
-            $WHAT,
-            livestatus.lqencode($CONTACT),
-            livestatus.lqencode($SPEC),
-            livestatus.lqencode($STATE),
-            livestatus.lqencode($PLUGIN),
-            livestatus.lqencode($OUTPUT[:$MAX_LENGTH].replace(";", $REPLACE))
-        )
-    )
+  patterns:
+  - pattern: |
+      return "%s: %s;%s;%s;%s;%s" % (
+          $WHAT,
+          $CONTACT,
+          $SPEC,
+          $STATE,
+          $PLUGIN,
+          $OUTPUT[:$MAX_LENGTH].replace(";", $REPLACE)
+      )
+  - pattern-not: |
+      return SanitizedLivestatusLogStr(
+          "{}: {};{};{};{};{}".format(
+              $WHAT,
+              livestatus.lqencode($CONTACT),
+              livestatus.lqencode($SPEC),
+              livestatus.lqencode($STATE),
+              livestatus.lqencode($PLUGIN),
+              livestatus.lqencode($OUTPUT[:$MAX_LENGTH].replace(";", $REPLACE))
+          )
+      )
   languages:
   - python
   message: |
@@ -33,10 +34,11 @@ rules:
     technology:
     - python
 - id: vuln-checkmk-6fc4f3b3
-  pattern: |
-    html.render_pre(HTML($VALUE), class_="ve_textarea")
-  pattern-not: |
-    html.render_pre($VALUE, class_="ve_textarea")
+  patterns:
+  - pattern: |
+      html.render_pre(HTML($VALUE), class_="ve_textarea")
+  - pattern-not: |
+      html.render_pre($VALUE, class_="ve_textarea")
   languages:
   - python
   message: |

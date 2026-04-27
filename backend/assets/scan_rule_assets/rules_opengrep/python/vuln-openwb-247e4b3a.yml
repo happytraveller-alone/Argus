@@ -1,12 +1,13 @@
 rules:
 - id: vuln-openwb-247e4b3a
-  pattern: |
-    $FD = open($FILE, $MODE)
-    ...
-    $FD.close()
-  pattern-not: |
-    with open($FILE, $MODE) as $FD:
+  patterns:
+  - pattern: |
+      $FD = open($FILE, $MODE)
       ...
+      $FD.close()
+  - pattern-not: |
+      with open($FILE, $MODE) as $FD:
+        ...
   languages:
   - python
   message: Detected unsafe file handling using open() without a context manager. This can lead to resource leaks or file corruption if an exception occurs. Use 'with open() as' instead to ensure proper file handling.

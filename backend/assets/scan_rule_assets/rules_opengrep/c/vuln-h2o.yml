@@ -1,26 +1,27 @@
 rules:
 - id: vuln-h2o-1b2b6d7b
-  pattern: |
-    struct st_delegate_request_deferred_t {
-        h2o_timeout_entry_t _timeout;
-        h2o_req_t *req;
-    };
-    ...
-    struct st_delegate_request_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
-    *args = (struct st_delegate_request_deferred_t){req, current_handler};
-    args->_timeout.cb = on_delegate_request_cb;
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
-  pattern-not: |
-    struct st_deferred_request_action_t {
-        h2o_timeout_entry_t timeout;
-    };
-    struct st_delegate_request_deferred_t {
-        struct st_deferred_request_action_t super;
-    };
-    ...
-    struct st_delegate_request_deferred_t *args =
-        (struct st_delegate_request_deferred_t *)create_deferred_action(req, sizeof(*args), on_delegate_request_cb);
-    args->current_handler = current_handler;
+  patterns:
+  - pattern: |
+      struct st_delegate_request_deferred_t {
+          h2o_timeout_entry_t _timeout;
+          h2o_req_t *req;
+      };
+      ...
+      struct st_delegate_request_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
+      *args = (struct st_delegate_request_deferred_t){req, current_handler};
+      args->_timeout.cb = on_delegate_request_cb;
+      h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
+  - pattern-not: |
+      struct st_deferred_request_action_t {
+          h2o_timeout_entry_t timeout;
+      };
+      struct st_delegate_request_deferred_t {
+          struct st_deferred_request_action_t super;
+      };
+      ...
+      struct st_delegate_request_deferred_t *args =
+          (struct st_delegate_request_deferred_t *)create_deferred_action(req, sizeof(*args), on_delegate_request_cb);
+      args->current_handler = current_handler;
   languages:
   - c
   message: |
@@ -38,19 +39,20 @@ rules:
     technology:
     - c
 - id: vuln-h2o-1c0808d5
-  pattern: |
-    void $FUNC(h2o_http2_conn_t *$CONN) {
-        ...
-        close_connection($CONN);
-        return;
-        ...
-    }
-  pattern-not: |
-    int $FUNC(h2o_http2_conn_t *$CONN) {
-        ...
-        return close_connection($CONN);
-        ...
-    }
+  patterns:
+  - pattern: |
+      void $FUNC(h2o_http2_conn_t *$CONN) {
+          ...
+          close_connection($CONN);
+          return;
+          ...
+      }
+  - pattern-not: |
+      int $FUNC(h2o_http2_conn_t *$CONN) {
+          ...
+          return close_connection($CONN);
+          ...
+      }
   languages:
   - c
   message: |
@@ -66,37 +68,38 @@ rules:
     technology:
     - c
 - id: vuln-h2o-d67e81d0
-  pattern: |
-    struct st_quicly_pending_path_challenge_t {
-        struct st_quicly_pending_path_challenge_t *next;
-        uint8_t is_response;
-        uint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];
-    };
-    ...
-    struct st_quicly_pending_path_challenge_t *pending;
-    ...
-    if ((pending = malloc(sizeof(struct st_quicly_pending_path_challenge_t))) == NULL)
-        return PTLS_ERROR_NO_MEMORY;
-    ...
-    *conn->egress.path_challenge.tail_ref = pending;
-    conn->egress.path_challenge.tail_ref = &pending->next;
-    ...
-    while (conn->egress.path_challenge.head != NULL) {
-        struct st_quicly_pending_path_challenge_t *pending = conn->egress.path_challenge.head;
-        conn->egress.path_challenge.head = pending->next;
-        free(pending);
-    }
-  pattern-not: |
-    uint8_t send_;
-    uint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];
-    ...
-    if ((ret = do_allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY, ALLOCATE_FRAME_TYPE_ACK_ELICITING_NO_CC)) != 0)
-        return ret;
-    ...
-    s->dst = quicly_encode_path_challenge_frame(s->dst, is_response, data);
-    ...
-    memcpy(conn->egress.path_response.data, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN);
-    conn->egress.path_response.send_ = 1;
+  patterns:
+  - pattern: |
+      struct st_quicly_pending_path_challenge_t {
+          struct st_quicly_pending_path_challenge_t *next;
+          uint8_t is_response;
+          uint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];
+      };
+      ...
+      struct st_quicly_pending_path_challenge_t *pending;
+      ...
+      if ((pending = malloc(sizeof(struct st_quicly_pending_path_challenge_t))) == NULL)
+          return PTLS_ERROR_NO_MEMORY;
+      ...
+      *conn->egress.path_challenge.tail_ref = pending;
+      conn->egress.path_challenge.tail_ref = &pending->next;
+      ...
+      while (conn->egress.path_challenge.head != NULL) {
+          struct st_quicly_pending_path_challenge_t *pending = conn->egress.path_challenge.head;
+          conn->egress.path_challenge.head = pending->next;
+          free(pending);
+      }
+  - pattern-not: |
+      uint8_t send_;
+      uint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];
+      ...
+      if ((ret = do_allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY, ALLOCATE_FRAME_TYPE_ACK_ELICITING_NO_CC)) != 0)
+          return ret;
+      ...
+      s->dst = quicly_encode_path_challenge_frame(s->dst, is_response, data);
+      ...
+      memcpy(conn->egress.path_response.data, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN);
+      conn->egress.path_response.send_ = 1;
   languages:
   - c
   message: |

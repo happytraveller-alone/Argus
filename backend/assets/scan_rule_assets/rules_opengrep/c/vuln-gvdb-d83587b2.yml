@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gvdb-d83587b2
-  pattern: |
-    g_file_replace_contents_async($FILE, $STR->str, $STR->len, ...)
-  pattern-not: |
-    g_file_replace_contents_async($FILE, g_bytes_get_data($BYTES, NULL), g_bytes_get_size($BYTES), ...)
+  patterns:
+  - pattern: |
+      g_file_replace_contents_async($FILE, $STR->str, $STR->len, ...)
+  - pattern-not: |
+      g_file_replace_contents_async($FILE, g_bytes_get_data($BYTES, NULL), g_bytes_get_size($BYTES), ...)
   languages:
   - c
   message: |

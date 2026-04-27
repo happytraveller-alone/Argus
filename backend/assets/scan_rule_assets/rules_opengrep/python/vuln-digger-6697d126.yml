@@ -1,9 +1,10 @@
 rules:
 - id: vuln-digger-6697d126
-  pattern: |
-    $PARSE(..., encoding='utf-8')
-  pattern-not: |
-    $PARSE(..., encoding='utf-8', resolve_entities=False)
+  patterns:
+  - pattern: |
+      $PARSE(..., encoding='utf-8')
+  - pattern-not: |
+      $PARSE(..., encoding='utf-8', resolve_entities=False)
   languages:
   - python
   message: |

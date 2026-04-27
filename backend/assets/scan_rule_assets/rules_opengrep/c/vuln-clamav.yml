@@ -1,9 +1,10 @@
 rules:
 - id: vuln-clamav-26b19809
-  pattern: |
-    unsigned int max_jmp_loop = 100000;
-  pattern-not: |
-    unsigned int max_jmp_loop = 100000000;
+  patterns:
+  - pattern: |
+      unsigned int max_jmp_loop = 100000;
+  - pattern-not: |
+      unsigned int max_jmp_loop = 100000000;
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-clamav-4842733e
-  pattern: |
-    $VAR = $SZH->items;
-  pattern-not: |
-    $VAR = $SZH->items - 1;
+  patterns:
+  - pattern: |
+      $VAR = $SZH->items;
+  - pattern-not: |
+      $VAR = $SZH->items - 1;
   languages:
   - c
   message: |
@@ -38,15 +40,16 @@ rules:
     technology:
     - c
 - id: vuln-clamav-495fce91
-  pattern: |
-    if (!$STR) {
-        $CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;
-    }
-    else {
-        $CHECKLEN = cli_strnlen($P1, $CHECKLEN) + 1;
-    }
-  pattern-not: |
-    $CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;
+  patterns:
+  - pattern: |
+      if (!$STR) {
+          $CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;
+      }
+      else {
+          $CHECKLEN = cli_strnlen($P1, $CHECKLEN) + 1;
+      }
+  - pattern-not: |
+      $CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;
   languages:
   - c
   message: |
@@ -64,11 +67,12 @@ rules:
     technology:
     - c
 - id: vuln-clamav-96ff19a1
-  pattern: |
-    int $BACKBYTES, $OLDBACK, $BACKSIZE, $ADDSIZE;
-  pattern-not: |
-    int $BACKBYTES, $OLDBACK, $ADDSIZE;
-    unsigned int $BACKSIZE;
+  patterns:
+  - pattern: |
+      int $BACKBYTES, $OLDBACK, $BACKSIZE, $ADDSIZE;
+  - pattern-not: |
+      int $BACKBYTES, $OLDBACK, $ADDSIZE;
+      unsigned int $BACKSIZE;
   languages:
   - c
   message: |
@@ -86,10 +90,11 @@ rules:
     technology:
     - c
 - id: vuln-clamav-9a6bb57f
-  pattern: |
-    if (!$CT && !$PN) $CONTINUE;
-  pattern-not: |
-    if (!$CT || !$PN) $CONTINUE;
+  patterns:
+  - pattern: |
+      if (!$CT && !$PN) $CONTINUE;
+  - pattern-not: |
+      if (!$CT || !$PN) $CONTINUE;
   languages:
   - c
   message: |
@@ -107,26 +112,27 @@ rules:
     technology:
     - c
 - id: vuln-clamav-d96a6b8b
-  pattern: |
-    static int $FUNC(xmlTextReaderPtr $READER, long * $VALUE) {
-      ...
-      *$VALUE = atol((const char *)$NUMSTR);
-      if (*$VALUE < 0) {
+  patterns:
+  - pattern: |
+      static int $FUNC(xmlTextReaderPtr $READER, long * $VALUE) {
+        ...
+        *$VALUE = atol((const char *)$NUMSTR);
+        if (*$VALUE < 0) {
+          ...
+        }
         ...
       }
-      ...
-    }
-  pattern-not: |
-    static int $FUNC(xmlTextReaderPtr $READER, size_t * $VALUE) {
-      ssize_t $NUMVAL;
-      ...
-      $NUMVAL = atol((const char *)$NUMSTR);
-      if ($NUMVAL < 0) {
-        *$VALUE = $NUMVAL;
+  - pattern-not: |
+      static int $FUNC(xmlTextReaderPtr $READER, size_t * $VALUE) {
+        ssize_t $NUMVAL;
+        ...
+        $NUMVAL = atol((const char *)$NUMSTR);
+        if ($NUMVAL < 0) {
+          *$VALUE = $NUMVAL;
+          ...
+        }
         ...
       }
-      ...
-    }
   languages:
   - c
   message: |
@@ -145,14 +151,15 @@ rules:
     technology:
     - c
 - id: vuln-clamav-e8e37462
-  pattern: |
-    if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX)) {
-      ...
-    }
-  pattern-not: |
-    if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX, $MAX_EMU)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX)) {
+        ...
+      }
+  - pattern-not: |
+      if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX, $MAX_EMU)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -169,25 +176,26 @@ rules:
     technology:
     - c
 - id: vuln-clamav-fc3794a5
-  pattern: |
-    if ($EXE_SECTION.raw >= $FSIZE) {
-      ...
-      free($SECTION_HDR);
-      free($EXE_SECTIONS);
-      ...
-      return $CLEAN_RETURN;
-    }
-  pattern-not: |
-    if (!CLI_ISCONTAINED(0, $FSIZE, $EXE_SECTION.uraw, $EXE_SECTION.ursz) || $EXE_SECTION.raw >= $FSIZE) {
-      ...
-      if ($NSECTIONS == 1) {
+  patterns:
+  - pattern: |
+      if ($EXE_SECTION.raw >= $FSIZE) {
+        ...
         free($SECTION_HDR);
         free($EXE_SECTIONS);
         ...
         return $CLEAN_RETURN;
       }
-      ...
-    }
+  - pattern-not: |
+      if (!CLI_ISCONTAINED(0, $FSIZE, $EXE_SECTION.uraw, $EXE_SECTION.ursz) || $EXE_SECTION.raw >= $FSIZE) {
+        ...
+        if ($NSECTIONS == 1) {
+          free($SECTION_HDR);
+          free($EXE_SECTIONS);
+          ...
+          return $CLEAN_RETURN;
+        }
+        ...
+      }
   languages:
   - c
   message: |

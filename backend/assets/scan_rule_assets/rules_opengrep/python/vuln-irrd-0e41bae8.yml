@@ -1,11 +1,12 @@
 rules:
 - id: vuln-irrd-0e41bae8
-  pattern: |
-    if not any([$HASH in $INPUT for $HASH in $PASSWORD_HASHERS_ALL.keys()]):
-      ...
-  pattern-not: |
-    if not any([$HASH.lower() in $INPUT_LOWER for $HASH in $PASSWORD_HASHERS_ALL.keys()]):
-      ...
+  patterns:
+  - pattern: |
+      if not any([$HASH in $INPUT for $HASH in $PASSWORD_HASHERS_ALL.keys()]):
+        ...
+  - pattern-not: |
+      if not any([$HASH.lower() in $INPUT_LOWER for $HASH in $PASSWORD_HASHERS_ALL.keys()]):
+        ...
   languages:
   - python
   message: |

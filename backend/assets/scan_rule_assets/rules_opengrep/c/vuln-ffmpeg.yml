@@ -1,13 +1,14 @@
 rules:
 - id: vuln-ffmpeg-02f909dc
-  pattern: |
-    if ((ret = av_image_check_size($WIDTH, $HEIGHT, 0, $AVCTX)) < 0) {
-      ...
-    }
-  pattern-not: |
-    if ((ret = ff_set_dimensions($AVCTX, $WIDTH, $HEIGHT)) < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ((ret = av_image_check_size($WIDTH, $HEIGHT, 0, $AVCTX)) < 0) {
+        ...
+      }
+  - pattern-not: |
+      if ((ret = ff_set_dimensions($AVCTX, $WIDTH, $HEIGHT)) < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -21,20 +22,21 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-0b3bd001
-  pattern: |
-    int $FUNC(Layer *$LAYER, AVIOContext *$CTX, int $SIZE)
-    {
-      ...
-    }
-  pattern-not: |
-    int $FUNC(Layer *$LAYER, AVIOContext *$CTX, int $SIZE, int $OPERANDS_NUM)
-    {
-      ...
-      if ($LAYER->input_operand_indexes[0] >= $OPERANDS_NUM || $LAYER->output_operand_index >= $OPERANDS_NUM) {
-        return 0;
+  patterns:
+  - pattern: |
+      int $FUNC(Layer *$LAYER, AVIOContext *$CTX, int $SIZE)
+      {
+        ...
       }
-      ...
-    }
+  - pattern-not: |
+      int $FUNC(Layer *$LAYER, AVIOContext *$CTX, int $SIZE, int $OPERANDS_NUM)
+      {
+        ...
+        if ($LAYER->input_operand_indexes[0] >= $OPERANDS_NUM || $LAYER->output_operand_index >= $OPERANDS_NUM) {
+          return 0;
+        }
+        ...
+      }
   languages:
   - c
   message: |
@@ -53,10 +55,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-23ccf3ca
-  pattern: |
-    sscanf($IN, "%127[^<>]>%n", $BUFFER, $LENP)
-  pattern-not: |
-    scantag($IN, $BUFFER, $LENP)
+  patterns:
+  - pattern: |
+      sscanf($IN, "%127[^<>]>%n", $BUFFER, $LENP)
+  - pattern-not: |
+      scantag($IN, $BUFFER, $LENP)
   languages:
   - c
   message: |
@@ -74,11 +77,12 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-273f2755
-  pattern: |
-    $LEN = 0;
-    $AN += sscanf($IN, "{\\an%*1u}%n", &$LEN) >= 0 && $LEN > 0;
-  pattern-not: |
-    $AN += scanbraces($IN);
+  patterns:
+  - pattern: |
+      $LEN = 0;
+      $AN += sscanf($IN, "{\\an%*1u}%n", &$LEN) >= 0 && $LEN > 0;
+  - pattern-not: |
+      $AN += scanbraces($IN);
   languages:
   - c
   message: |
@@ -96,18 +100,19 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-27a99e2c
-  pattern: |
-    int $XD_SIZE = 0;
-    ...
-    $XD_SIZE += $LEN;
-    ...
-    ff_alloc_extradata($ST->codecpar, $CONST + $XD_SIZE + $XD_SIZE / 255);
-  pattern-not: |
-    int $XD_SIZE = 1;
-    ...
-    $XD_SIZE += $LEN + 1 + $LEN / 255;
-    ...
-    ff_alloc_extradata($ST->codecpar, $XD_SIZE);
+  patterns:
+  - pattern: |
+      int $XD_SIZE = 0;
+      ...
+      $XD_SIZE += $LEN;
+      ...
+      ff_alloc_extradata($ST->codecpar, $CONST + $XD_SIZE + $XD_SIZE / 255);
+  - pattern-not: |
+      int $XD_SIZE = 1;
+      ...
+      $XD_SIZE += $LEN + 1 + $LEN / 255;
+      ...
+      ff_alloc_extradata($ST->codecpar, $XD_SIZE);
   languages:
   - c
   message: |
@@ -124,10 +129,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-27f8d386
-  pattern: |
-    int $VAR = (unsigned) $IX >= $WIDTH - $W || (unsigned) $IY >= $HEIGHT - $H;
-  pattern-not: |
-    int $VAR = (unsigned) $IX >= $WIDTH - $W || $WIDTH < $W || (unsigned) $IY >= $HEIGHT - $H || $HEIGHT < $H;
+  patterns:
+  - pattern: |
+      int $VAR = (unsigned) $IX >= $WIDTH - $W || (unsigned) $IY >= $HEIGHT - $H;
+  - pattern-not: |
+      int $VAR = (unsigned) $IX >= $WIDTH - $W || $WIDTH < $W || (unsigned) $IY >= $HEIGHT - $H || $HEIGHT < $H;
   languages:
   - c
   message: |
@@ -143,11 +149,12 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-35eeff30
-  pattern: |
-    strcpy($DST, $SRC);
-  pattern-not: |
-    if (av_strlcpy($DST, $SRC, sizeof($DST)) >= sizeof($DST))
-        return $ERROR;
+  patterns:
+  - pattern: |
+      strcpy($DST, $SRC);
+  - pattern-not: |
+      if (av_strlcpy($DST, $SRC, sizeof($DST)) >= sizeof($DST))
+          return $ERROR;
   languages:
   - c
   message: |
@@ -167,14 +174,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-3e2b7450
-  pattern: |
-    if ($S->bit_depth == 1) {
-      ...
-    }
-  pattern-not: |
-    if ($S->bit_depth == 1 && $S->bits_per_pixel == 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($S->bit_depth == 1) {
+        ...
+      }
+  - pattern-not: |
+      if ($S->bit_depth == 1 && $S->bits_per_pixel == 1) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -192,14 +200,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-3e5959b3
-  pattern: |
-    for ($Y = 0; $Y < $STRUCT->ymin; $Y++) {
-      ...
-    }
-  pattern-not: |
-    for ($Y = 0; $Y < FFMIN($STRUCT->ymin, $STRUCT->h); $Y++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($Y = 0; $Y < $STRUCT->ymin; $Y++) {
+        ...
+      }
+  - pattern-not: |
+      for ($Y = 0; $Y < FFMIN($STRUCT->ymin, $STRUCT->h); $Y++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -218,12 +227,13 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-43492ff3
-  pattern: |
-    $VAR->coord[$INDEX][0] = FFMAX($EXPR1, $EXPR2);
-    $VAR->coord[$INDEX][1] = FFMIN($EXPR3, $EXPR4);
-  pattern-not: |
-    $VAR->coord[$INDEX][0] = av_clip($EXPR1, $EXPR2, $EXPR3);
-    $VAR->coord[$INDEX][1] = av_clip($EXPR4, $EXPR5, $EXPR6);
+  patterns:
+  - pattern: |
+      $VAR->coord[$INDEX][0] = FFMAX($EXPR1, $EXPR2);
+      $VAR->coord[$INDEX][1] = FFMIN($EXPR3, $EXPR4);
+  - pattern-not: |
+      $VAR->coord[$INDEX][0] = av_clip($EXPR1, $EXPR2, $EXPR3);
+      $VAR->coord[$INDEX][1] = av_clip($EXPR4, $EXPR5, $EXPR6);
   languages:
   - c
   message: |
@@ -243,18 +253,19 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-47b7c68a
-  pattern: |
-    if ($AVCTX->extradata_size >= 16) {
-      ...
-    } else if ($AVCTX->extradata_size == 8) {
-      ...
-    }
-  pattern-not: |
-    if (!$C->pro && $AVCTX->extradata_size >= 16) {
-      ...
-    } else if ($C->pro && $AVCTX->extradata_size == 8) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($AVCTX->extradata_size >= 16) {
+        ...
+      } else if ($AVCTX->extradata_size == 8) {
+        ...
+      }
+  - pattern-not: |
+      if (!$C->pro && $AVCTX->extradata_size >= 16) {
+        ...
+      } else if ($C->pro && $AVCTX->extradata_size == 8) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -268,10 +279,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-4cd1dad9
-  pattern: |
-    channels = av_get_channel_layout_nb_channels($FRAME->channel_layout);
-  pattern-not: |
-    channels = $FRAME->channels;
+  patterns:
+  - pattern: |
+      channels = av_get_channel_layout_nb_channels($FRAME->channel_layout);
+  - pattern-not: |
+      channels = $FRAME->channels;
   languages:
   - c
   message: |
@@ -289,16 +301,17 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-54655623
-  pattern: |
-    if ($S->ref) {
-        av_log($S->avctx, AV_LOG_ERROR, "Two slices reporting being the first in the same frame.\n");
-        goto fail;
-    }
-  pattern-not: |
-    if ($S->ref && $SH->first_slice_in_pic_flag) {
-        av_log($S->avctx, AV_LOG_ERROR, "Two slices reporting being the first in the same frame.\n");
-        return 1;
-    }
+  patterns:
+  - pattern: |
+      if ($S->ref) {
+          av_log($S->avctx, AV_LOG_ERROR, "Two slices reporting being the first in the same frame.\n");
+          goto fail;
+      }
+  - pattern-not: |
+      if ($S->ref && $SH->first_slice_in_pic_flag) {
+          av_log($S->avctx, AV_LOG_ERROR, "Two slices reporting being the first in the same frame.\n");
+          return 1;
+      }
   languages:
   - c
   message: |
@@ -316,21 +329,22 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-611b3562
-  pattern: |
-    $STRUCT->remaining = $FUNC1($CID);
-    if ($STRUCT->remaining <= 0) {
-        $STRUCT->remaining = $FUNC2($CID, $W, $H);
-        if ($STRUCT->remaining <= 0)
-            return $STRUCT->remaining;
-    }
-  pattern-not: |
-    $VAR = $FUNC1($CID);
-    if ($VAR <= 0) {
-        $VAR = $FUNC2($CID, $W, $H);
-        if ($VAR <= 0)
-            continue;
-    }
-    $STRUCT->remaining = $VAR;
+  patterns:
+  - pattern: |
+      $STRUCT->remaining = $FUNC1($CID);
+      if ($STRUCT->remaining <= 0) {
+          $STRUCT->remaining = $FUNC2($CID, $W, $H);
+          if ($STRUCT->remaining <= 0)
+              return $STRUCT->remaining;
+      }
+  - pattern-not: |
+      $VAR = $FUNC1($CID);
+      if ($VAR <= 0) {
+          $VAR = $FUNC2($CID, $W, $H);
+          if ($VAR <= 0)
+              continue;
+      }
+      $STRUCT->remaining = $VAR;
   languages:
   - c
   message: |
@@ -347,10 +361,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-73472053
-  pattern: |
-    *data_size = (uint8_t*)out - (uint8_t*)data;
-  pattern-not: |
-    *data_size = out_size;
+  patterns:
+  - pattern: |
+      *data_size = (uint8_t*)out - (uint8_t*)data;
+  - pattern-not: |
+      *data_size = out_size;
   languages:
   - c
   message: |
@@ -368,14 +383,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-737ede40
-  pattern: |
-    if ($LINK->w < $MIN_WIDTH || $LINK->h < $MIN_HEIGHT) {
-      ...
-    }
-  pattern-not: |
-    if (AV_CEIL_RSHIFT($LINK->w, $CSP->log2_chroma_w) < $MIN_WIDTH || AV_CEIL_RSHIFT($LINK->h, $CSP->log2_chroma_h) < $MIN_HEIGHT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($LINK->w < $MIN_WIDTH || $LINK->h < $MIN_HEIGHT) {
+        ...
+      }
+  - pattern-not: |
+      if (AV_CEIL_RSHIFT($LINK->w, $CSP->log2_chroma_w) < $MIN_WIDTH || AV_CEIL_RSHIFT($LINK->h, $CSP->log2_chroma_h) < $MIN_HEIGHT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -389,14 +405,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-8001e9f7
-  pattern: |
-    if ($VAR == AV_PIX_FMT_NONE) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR == possible_fmts_nb) {
-      return AVERROR_PATCHWELCOME;
-    }
+  patterns:
+  - pattern: |
+      if ($VAR == AV_PIX_FMT_NONE) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR == possible_fmts_nb) {
+        return AVERROR_PATCHWELCOME;
+      }
   languages:
   - c
   message: |
@@ -414,14 +431,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-944f5b27
-  pattern: |
-    if (*$VAR == 0) {
-      ...
-    }
-  pattern-not: |
-    if (*$VAR < 128 >> $DIV) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (*$VAR == 0) {
+        ...
+      }
+  - pattern-not: |
+      if (*$VAR < 128 >> $DIV) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -435,10 +453,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-a31ccacb
-  pattern: |
-    float $BUFFER[1024];
-  pattern-not: |
-    float $BUFFER[$SIZE * 2];
+  patterns:
+  - pattern: |
+      float $BUFFER[1024];
+  - pattern-not: |
+      float $BUFFER[$SIZE * 2];
   languages:
   - c
   message: |
@@ -454,10 +473,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-a5d44d5c
-  pattern: |
-    FF_ALLOC_OR_GOTO($C, $C->$BUF, $SIZE * $MULT * sizeof($TYPE *), $FAIL);
-  pattern-not: |
-    FF_ALLOCZ_OR_GOTO($C, $C->$BUF, $SIZE * $MULT * sizeof($TYPE *), $FAIL);
+  patterns:
+  - pattern: |
+      FF_ALLOC_OR_GOTO($C, $C->$BUF, $SIZE * $MULT * sizeof($TYPE *), $FAIL);
+  - pattern-not: |
+      FF_ALLOCZ_OR_GOTO($C, $C->$BUF, $SIZE * $MULT * sizeof($TYPE *), $FAIL);
   languages:
   - c
   message: |
@@ -473,13 +493,14 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-a6cba062
-  pattern: |
-    $VAR += ff_subtitles_next_line($VAR);
-  pattern-not: |
-    $INC = ff_subtitles_next_line($VAR);
-    if (!$INC)
-        break;
-    $VAR += $INC;
+  patterns:
+  - pattern: |
+      $VAR += ff_subtitles_next_line($VAR);
+  - pattern-not: |
+      $INC = ff_subtitles_next_line($VAR);
+      if (!$INC)
+          break;
+      $VAR += $INC;
   languages:
   - c
   message: |
@@ -497,14 +518,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-ab0fdaed
-  pattern: |
-    while ($NB_FRAME <= $NB_FRAMES) {
-      ...
-    }
-  pattern-not: |
-    while ($NB_FRAME < $NB_FRAMES) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while ($NB_FRAME <= $NB_FRAMES) {
+        ...
+      }
+  - pattern-not: |
+      while ($NB_FRAME < $NB_FRAMES) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -520,10 +542,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-cca95285
-  pattern: |
-    $FRAME->nb_samples = MPA_FRAME_SIZE;
-  pattern-not: |
-    $FRAME->nb_samples = $FRAMES * MPA_FRAME_SIZE;
+  patterns:
+  - pattern: |
+      $FRAME->nb_samples = MPA_FRAME_SIZE;
+  - pattern-not: |
+      $FRAME->nb_samples = $FRAMES * MPA_FRAME_SIZE;
   languages:
   - c
   message: |
@@ -539,11 +562,12 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-e01d306c
-  pattern: |
-    return get_audio_frame_duration($CTX->codec_id, $CTX->sample_rate, ...);
-  pattern-not: |
-    int $DURATION = get_audio_frame_duration($CTX->codec_id, $CTX->sample_rate, ...);
-    return FFMAX(0, $DURATION);
+  patterns:
+  - pattern: |
+      return get_audio_frame_duration($CTX->codec_id, $CTX->sample_rate, ...);
+  - pattern-not: |
+      int $DURATION = get_audio_frame_duration($CTX->codec_id, $CTX->sample_rate, ...);
+      return FFMAX(0, $DURATION);
   languages:
   - c
   message: |
@@ -560,12 +584,13 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-e07ac727
-  pattern: |
-    $STRIDE = FFALIGN($WIDTH * 3, 16);
-    $ALIGNED_HEIGHT = FFALIGN($HEIGHT, 16);
-  pattern-not: |
-    $STRIDE = FFALIGN($WIDTH + 15, 16) * 3;
-    $ALIGNED_HEIGHT = $HEIGHT + 15;
+  patterns:
+  - pattern: |
+      $STRIDE = FFALIGN($WIDTH * 3, 16);
+      $ALIGNED_HEIGHT = FFALIGN($HEIGHT, 16);
+  - pattern-not: |
+      $STRIDE = FFALIGN($WIDTH + 15, 16) * 3;
+      $ALIGNED_HEIGHT = $HEIGHT + 15;
   languages:
   - c
   message: |
@@ -583,14 +608,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-e1219cda
-  pattern: |
-    $LEN = $X + strlen($SEP);
-    $AP = av_malloc($LEN * $COUNT);
-  pattern-not: |
-    $LEN = $X + strlen($SEP);
-    if ($COUNT >= (INT_MAX - 1)/$LEN)
-        return NULL;
-    $AP = av_malloc($LEN * $COUNT + 1);
+  patterns:
+  - pattern: |
+      $LEN = $X + strlen($SEP);
+      $AP = av_malloc($LEN * $COUNT);
+  - pattern-not: |
+      $LEN = $X + strlen($SEP);
+      if ($COUNT >= (INT_MAX - 1)/$LEN)
+          return NULL;
+      $AP = av_malloc($LEN * $COUNT + 1);
   languages:
   - c
   message: |
@@ -612,19 +638,20 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-e1c0cfaa
-  pattern: |
-    $STRUCT->bppcount = $COUNT;
-    if ($COUNT > 4) {
-        ...
-    }
-  pattern-not: |
-    if ($COUNT > 4U) {
-        ...
-    }
-    $STRUCT->bppcount = $COUNT;
-    if ($STRUCT->bpp > 64U) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      $STRUCT->bppcount = $COUNT;
+      if ($COUNT > 4) {
+          ...
+      }
+  - pattern-not: |
+      if ($COUNT > 4U) {
+          ...
+      }
+      $STRUCT->bppcount = $COUNT;
+      if ($STRUCT->bpp > 64U) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -640,10 +667,11 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-e6d3fd94
-  pattern: |
-    avpriv_request_sample($TRACK->par, "Multiple independent substreams")
-  pattern-not: |
-    avpriv_request_sample($MOV->fc, "Multiple independent substreams")
+  patterns:
+  - pattern: |
+      avpriv_request_sample($TRACK->par, "Multiple independent substreams")
+  - pattern-not: |
+      avpriv_request_sample($MOV->fc, "Multiple independent substreams")
   languages:
   - c
   message: |
@@ -662,14 +690,15 @@ rules:
     technology:
     - c
 - id: vuln-ffmpeg-fa19fbcf
-  pattern: |
-    if ($TRACK->timescale > UINT16_MAX) {
-        ...
-    }
-  pattern-not: |
-    if ($TRACK->timescale > UINT16_MAX || !$TRACK->par->channels) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($TRACK->timescale > UINT16_MAX) {
+          ...
+      }
+  - pattern-not: |
+      if ($TRACK->timescale > UINT16_MAX || !$TRACK->par->channels) {
+          ...
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-udev-662c3110
-  pattern: |
-    char $VAR[(len * 3) + 1];
-  pattern-not: |
-    char $VAR[(len * 4) + 1];
+  patterns:
+  - pattern: |
+      char $VAR[(len * 3) + 1];
+  - pattern-not: |
+      char $VAR[(len * 4) + 1];
   languages:
   - c
   message: |
@@ -19,24 +20,18 @@ rules:
     technology:
     - c
 - id: vuln-udev-e2b362d9
-  pattern: |
-    if ($MONITOR->snl.nl_family != 0) {
-      $ERR = bind($MONITOR->sock, (struct sockaddr *)&$MONITOR->snl, sizeof(struct sockaddr_nl));
-      if ($ERR < 0) {
-        err($MONITOR->udev, "bind failed: %m\n");
-        return $ERR;
+  patterns:
+  - pattern: |
+      if ($MONITOR->snl.nl_family != 0) {
+        $ERR = bind($MONITOR->sock, (struct sockaddr *)&$MONITOR->snl, sizeof(struct sockaddr_nl));
+        if ($ERR < 0) {
+          err($MONITOR->udev, "bind failed: %m\n");
+          return $ERR;
+        }
+        dbg($MONITOR->udev, "monitor %p listening on netlink\n", $MONITOR);
+      } else if ($MONITOR->sun.sun_family != 0) {
+        ...
       }
-      dbg($MONITOR->udev, "monitor %p listening on netlink\n", $MONITOR);
-    } else if ($MONITOR->sun.sun_family != 0) {
-      ...
-    }
-  pattern-not: |
-    if ($MONITOR->sun.sun_family != 0)
-    else if ($MONITOR->snl.nl_family != 0)
-      $ERR = bind($MONITOR->sock, (struct sockaddr *)&$MONITOR->snl, sizeof(struct sockaddr_nl));
-    else
-      return -EINVAL;
-    ...
   languages:
   - c
   message: |

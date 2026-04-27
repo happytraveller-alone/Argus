@@ -1,14 +1,15 @@
 rules:
 - id: vuln-libgcrypt-6199cd96
-  pattern: |
-    memcpy($DST, $SRC, $LEN);
-    ...
-    memcpy($DST + $OFFSET, $SRC + $OFFSET, $LEN2);
-  pattern-not: |
-    memcpy($DST, $SRC, $LEN);
-    ...
-    if ($SRC + $BLOCKLEN < $PEND)
-      memcpy($DST, $SRC, $BLOCKLEN);
+  patterns:
+  - pattern: |
+      memcpy($DST, $SRC, $LEN);
+      ...
+      memcpy($DST + $OFFSET, $SRC + $OFFSET, $LEN2);
+  - pattern-not: |
+      memcpy($DST, $SRC, $LEN);
+      ...
+      if ($SRC + $BLOCKLEN < $PEND)
+        memcpy($DST, $SRC, $BLOCKLEN);
   languages:
   - c
   message: |
@@ -26,10 +27,11 @@ rules:
     technology:
     - c
 - id: vuln-libgcrypt-707c3c5c
-  pattern: |
-    gen_k($P, 1)
-  pattern-not: |
-    gen_k($P)
+  patterns:
+  - pattern: |
+      gen_k($P, 1)
+  - pattern-not: |
+      gen_k($P)
   languages:
   - c
   message: |
@@ -45,12 +47,13 @@ rules:
     technology:
     - c
 - id: vuln-libgcrypt-db4e9976
-  pattern: |
-    mpi_add($K, $K, $Q);
-    if (!mpi_test_bit($K, $QBITS))
+  patterns:
+  - pattern: |
       mpi_add($K, $K, $Q);
-  pattern-not: |
-    _gcry_dsa_modify_k($K, $Q, $QBITS);
+      if (!mpi_test_bit($K, $QBITS))
+        mpi_add($K, $K, $Q);
+  - pattern-not: |
+      _gcry_dsa_modify_k($K, $Q, $QBITS);
   languages:
   - c
   message: |

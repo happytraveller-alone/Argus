@@ -1,14 +1,15 @@
 rules:
 - id: vuln-libexpat-cb8a4c75
-  pattern: |
-    $STRUCT.scaffold[$INDEX].name = $EL->name;
-    $STRUCT.contentStringLen += $NXT - $S + 1;
-  pattern-not: |
-    $NAME = $EL->name;
-    $STRUCT.scaffold[$INDEX].name = $NAME;
-    $NAMELEN = 0;
-    for (; $NAME[$NAMELEN++]; );
-    $STRUCT.contentStringLen += $NAMELEN;
+  patterns:
+  - pattern: |
+      $STRUCT.scaffold[$INDEX].name = $EL->name;
+      $STRUCT.contentStringLen += $NXT - $S + 1;
+  - pattern-not: |
+      $NAME = $EL->name;
+      $STRUCT.scaffold[$INDEX].name = $NAME;
+      $NAMELEN = 0;
+      for (; $NAME[$NAMELEN++]; );
+      $STRUCT.contentStringLen += $NAMELEN;
   languages:
   - c
   message: |

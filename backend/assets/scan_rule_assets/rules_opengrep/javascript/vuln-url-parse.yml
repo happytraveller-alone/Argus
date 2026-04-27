@@ -1,9 +1,10 @@
 rules:
 - id: vuln-url-parse-0e3fb542
-  pattern: |
-    /^[ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
-  pattern-not: |
-    /^[\x00-\x20\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
+  patterns:
+  - pattern: |
+      /^[ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
+  - pattern-not: |
+      /^[\x00-\x20\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
   languages:
   - javascript
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - javascript
 - id: vuln-url-parse-53b1794e
-  pattern: |
-    if (!extracted.slashes) instructions[2] = [/(.*)/, 'pathname'];
-  pattern-not: |
-    if (!extracted.slashes) instructions[3] = [/(.*)/, 'pathname'];
+  patterns:
+  - pattern: |
+      if (!extracted.slashes) instructions[2] = [/(.*)/, 'pathname'];
+  - pattern-not: |
+      if (!extracted.slashes) instructions[3] = [/(.*)/, 'pathname'];
   languages:
   - javascript
   message: |

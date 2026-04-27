@@ -1,9 +1,10 @@
 rules:
 - id: vuln-keystone-bdb88c66
-  pattern: |
-    self.assertNotEqual($V1, $V2)
-  pattern-not: |
-    self.assertEqual($V1, $V2)
+  patterns:
+  - pattern: |
+      self.assertNotEqual($V1, $V2)
+  - pattern-not: |
+      self.assertEqual($V1, $V2)
   languages:
   - python
   message: Incorrect assertion detected. Using assertNotEqual instead of assertEqual can lead to false positives in test cases. Replace with assertEqual to ensure correct validation.
@@ -18,14 +19,15 @@ rules:
     technology:
     - python
 - id: vuln-keystone-ce6cedb3
-  pattern: |
-    return $AUTH['identity']['methods'] or []
-  pattern-not: |
-    $METHOD_NAMES = []
-    for $METHOD in $AUTH['identity']['methods']:
-        if $METHOD not in $METHOD_NAMES:
-            $METHOD_NAMES.append($METHOD)
-    return $METHOD_NAMES
+  patterns:
+  - pattern: |
+      return $AUTH['identity']['methods'] or []
+  - pattern-not: |
+      $METHOD_NAMES = []
+      for $METHOD in $AUTH['identity']['methods']:
+          if $METHOD not in $METHOD_NAMES:
+              $METHOD_NAMES.append($METHOD)
+      return $METHOD_NAMES
   languages:
   - python
   message: |
@@ -41,22 +43,23 @@ rules:
     technology:
     - python
 - id: vuln-keystone-d9600434
-  pattern: |
-    $USER_REF = self.update_user($CONTEXT, $USER_ID, $USER)
-    try:
-        for $TOKEN_ID in self.token_api.list_tokens($CONTEXT, $USER_ID):
-            self.token_api.delete_token($CONTEXT, $TOKEN_ID)
-    except exception.NotImplemented:
-        LOG.warning('Password changed for %s, but existing tokens remain valid' % $USER_ID)
-    return $USER_REF
-  pattern-not: |
-    if $USER.get('password') or $USER.get('enabled', True) == False:
-        try:
-            for $TOKEN_ID in self.token_api.list_tokens($CONTEXT, $USER_ID):
-                self.token_api.delete_token($CONTEXT, $TOKEN_ID)
-        except exception.NotImplemented:
-            LOG.warning('User %s status has changed, but existing tokens remain valid' % $USER_ID)
-    return self.update_user($CONTEXT, $USER_ID, $USER)
+  patterns:
+  - pattern: |
+      $USER_REF = self.update_user($CONTEXT, $USER_ID, $USER)
+      try:
+          for $TOKEN_ID in self.token_api.list_tokens($CONTEXT, $USER_ID):
+              self.token_api.delete_token($CONTEXT, $TOKEN_ID)
+      except exception.NotImplemented:
+          LOG.warning('Password changed for %s, but existing tokens remain valid' % $USER_ID)
+      return $USER_REF
+  - pattern-not: |
+      if $USER.get('password') or $USER.get('enabled', True) == False:
+          try:
+              for $TOKEN_ID in self.token_api.list_tokens($CONTEXT, $USER_ID):
+                  self.token_api.delete_token($CONTEXT, $TOKEN_ID)
+          except exception.NotImplemented:
+              LOG.warning('User %s status has changed, but existing tokens remain valid' % $USER_ID)
+      return self.update_user($CONTEXT, $USER_ID, $USER)
   languages:
   - python
   message: Detected a security issue where user tokens are not invalidated when a user is disabled or their password is changed. This can allow continued access with revoked credentials. Ensure tokens are cleared when user status changes.

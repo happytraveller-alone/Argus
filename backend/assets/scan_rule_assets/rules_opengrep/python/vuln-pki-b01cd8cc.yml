@@ -1,9 +1,10 @@
 rules:
 - id: vuln-pki-b01cd8cc
-  pattern: |
-    logging.FileHandler($FILENAME, 'w')
-  pattern-not: |
-    logging.FileHandler($FILENAME)
+  patterns:
+  - pattern: |
+      logging.FileHandler($FILENAME, 'w')
+  - pattern-not: |
+      logging.FileHandler($FILENAME)
   languages:
   - python
   message: |

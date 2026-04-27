@@ -1,13 +1,14 @@
 rules:
 - id: vuln-link-preview-js-a3b2b52c
-  pattern: |
-    if ($ADDRESS === "localhost" || $ADDRESS === "127.0.0.1") {
-      ...
-    }
-  pattern-not: |
-    if (CONSTANTS.REGEX_LOOPBACK.test($ADDRESS)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($ADDRESS === "localhost" || $ADDRESS === "127.0.0.1") {
+        ...
+      }
+  - pattern-not: |
+      if (CONSTANTS.REGEX_LOOPBACK.test($ADDRESS)) {
+        ...
+      }
   languages:
   - typescript
   message: |

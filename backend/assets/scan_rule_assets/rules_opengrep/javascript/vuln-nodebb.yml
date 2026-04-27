@@ -1,14 +1,15 @@
 rules:
 - id: vuln-nodebb-1783f918
-  pattern: |
-    if (!$SOCKET.uid || !$DATA || !$DATA.chunk || !$DATA.params || !$DATA.params.method || !$METHODTOFUNC[$DATA.params.method]) {
-      ...
-    }
-  pattern-not: |
-    if (!$SOCKET.uid || !$DATA || !$DATA.chunk ||
-      !$DATA.params || !$DATA.params.method || !$METHODTOFUNC.hasOwnProperty($DATA.params.method)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$SOCKET.uid || !$DATA || !$DATA.chunk || !$DATA.params || !$DATA.params.method || !$METHODTOFUNC[$DATA.params.method]) {
+        ...
+      }
+  - pattern-not: |
+      if (!$SOCKET.uid || !$DATA || !$DATA.chunk ||
+        !$DATA.params || !$DATA.params.method || !$METHODTOFUNC.hasOwnProperty($DATA.params.method)) {
+        ...
+      }
   languages:
   - javascript
   message: Insecure property access in method validation. Using direct property access can lead to prototype pollution or unexpected behavior. Use `hasOwnProperty` to safely check for method existence.
@@ -21,10 +22,11 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-2f9d8c35
-  pattern: |
-    uri: `${nconf.get('url')}/register/abort`
-  pattern-not: |
-    uri: `${nconf.get('url')}/register/abort?_csrf=${$CSRF}`
+  patterns:
+  - pattern: |
+      uri: `${nconf.get('url')}/register/abort`
+  - pattern-not: |
+      uri: `${nconf.get('url')}/register/abort?_csrf=${$CSRF}`
   languages:
   - javascript
   message: Missing CSRF token in the URI for the /register/abort endpoint. This can lead to CSRF attacks where an attacker can force a user to perform unintended actions. Always include a CSRF token in sensitive requests to prevent such attacks.
@@ -39,14 +41,15 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-37b48b82
-  pattern: |
-    const $PARTS = $EVENTNAME.toString().split('.');
-  pattern-not: |
-    if (typeof $EVENTNAME !== 'string') {
-      const $ESCAPEDNAME = validator.escape(String($EVENTNAME));
-      return $CALLBACK({ message: `[[error:invalid-event, ${$ESCAPEDNAME}]]` });
-    }
-    const $PARTS = $EVENTNAME.split('.');
+  patterns:
+  - pattern: |
+      const $PARTS = $EVENTNAME.toString().split('.');
+  - pattern-not: |
+      if (typeof $EVENTNAME !== 'string') {
+        const $ESCAPEDNAME = validator.escape(String($EVENTNAME));
+        return $CALLBACK({ message: `[[error:invalid-event, ${$ESCAPEDNAME}]]` });
+      }
+      const $PARTS = $EVENTNAME.split('.');
   languages:
   - javascript
   message: |
@@ -62,10 +65,11 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-51096ad2
-  pattern: |
-    helpers.connectSocketIO($RES, $CALLBACK)
-  pattern-not: |
-    helpers.connectSocketIO($RES, $CSRF_TOKEN, $CALLBACK)
+  patterns:
+  - pattern: |
+      helpers.connectSocketIO($RES, $CALLBACK)
+  - pattern-not: |
+      helpers.connectSocketIO($RES, $CSRF_TOKEN, $CALLBACK)
   languages:
   - javascript
   message: Missing CSRF token in Socket.IO connection. This can lead to CSRF attacks. Always include a CSRF token in the query parameters.
@@ -78,17 +82,18 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-81e3c1ba
-  pattern: |
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : ((r & 0x3) | 0x8);
-      return v.toString(16);
-    });
-  pattern-not: |
-    const temp_url = URL.createObjectURL(new Blob());
-    const uuid = temp_url.toString();
-    URL.revokeObjectURL(temp_url);
-    return uuid.split(/[:\/]/g).pop().toLowerCase();
+  patterns:
+  - pattern: |
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+        return v.toString(16);
+      });
+  - pattern-not: |
+      const temp_url = URL.createObjectURL(new Blob());
+      const uuid = temp_url.toString();
+      URL.revokeObjectURL(temp_url);
+      return uuid.split(/[:\/]/g).pop().toLowerCase();
   languages:
   - javascript
   message: Insecure UUID generation using Math.random(). This can lead to predictable UUIDs. Use crypto.randomBytes() or URL.createObjectURL() for secure UUID generation.
@@ -105,27 +110,28 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-830f142b
-  pattern: |
-    const Loader = {
-        timesStarted: 0,
-    };
-    ...
-    if ($CODE !== 0) {
-        if (Loader.timesStarted < $NUM_PROCS * 3) {
-            Loader.timesStarted += 1;
-            if (Loader.crashTimer) {
-                clearTimeout(Loader.crashTimer);
-            }
-            Loader.crashTimer = setTimeout(() => {
-                Loader.timesStarted = 0;
-            }, 10000);
-        } else {
-            console.log(`${$NUM_PROCS * 3} restarts in 10 seconds, most likely an error on startup. Halting.`);
-            process.exit();
-        }
-    }
-  pattern-not: |
-    const Loader = {};
+  patterns:
+  - pattern: |
+      const Loader = {
+          timesStarted: 0,
+      };
+      ...
+      if ($CODE !== 0) {
+          if (Loader.timesStarted < $NUM_PROCS * 3) {
+              Loader.timesStarted += 1;
+              if (Loader.crashTimer) {
+                  clearTimeout(Loader.crashTimer);
+              }
+              Loader.crashTimer = setTimeout(() => {
+                  Loader.timesStarted = 0;
+              }, 10000);
+          } else {
+              console.log(`${$NUM_PROCS * 3} restarts in 10 seconds, most likely an error on startup. Halting.`);
+              process.exit();
+          }
+      }
+  - pattern-not: |
+      const Loader = {};
   languages:
   - javascript
   message: Potential infinite restart loop vulnerability. The code allows multiple restarts without proper handling, which could lead to a denial of service. Remove the restart counter and handle errors more gracefully.
@@ -140,14 +146,15 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-a2400f6b
-  pattern: |
-    if ($STRATEGY.checkState) {
-        ...
-    }
-  pattern-not: |
-    if ($STRATEGY.checkState !== false) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($STRATEGY.checkState) {
+          ...
+      }
+  - pattern-not: |
+      if ($STRATEGY.checkState !== false) {
+          ...
+      }
   languages:
   - javascript
   message: Insecure state checking detected. The condition 'if (strategy.checkState)' can be bypassed if checkState is undefined or null. Use 'if (strategy.checkState !== false)' to ensure proper state validation.
@@ -162,14 +169,15 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-c8b2fc46
-  pattern: |
-    const $DATA = await fs.promises.readFile(path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`), 'utf8');
-  pattern-not: |
-    const $PATH_TO_FILE = path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`);
-    if (!$PATH_TO_FILE.startsWith($PATH)) {
-      throw new Error('[[error:invalid-path]]');
-    }
-    const $DATA = await fs.promises.readFile($PATH_TO_FILE, 'utf8');
+  patterns:
+  - pattern: |
+      const $DATA = await fs.promises.readFile(path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`), 'utf8');
+  - pattern-not: |
+      const $PATH_TO_FILE = path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`);
+      if (!$PATH_TO_FILE.startsWith($PATH)) {
+        throw new Error('[[error:invalid-path]]');
+      }
+      const $DATA = await fs.promises.readFile($PATH_TO_FILE, 'utf8');
   languages:
   - javascript
   message: |

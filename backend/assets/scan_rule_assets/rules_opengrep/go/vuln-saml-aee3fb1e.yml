@@ -1,28 +1,29 @@
 rules:
 - id: vuln-saml-aee3fb1e
-  pattern: |
-    func (sp *ServiceProvider) validateSigned($RESPONSE *etree.Element) error {
-      ...
-      if $SIG != nil {
-        if err = sp.validateSignature($RESPONSE); err != nil {
-          return fmt.Errorf("cannot validate signature on Response: %v", err)
+  patterns:
+  - pattern: |
+      func (sp *ServiceProvider) validateSigned($RESPONSE *etree.Element) error {
+        ...
+        if $SIG != nil {
+          if err = sp.validateSignature($RESPONSE); err != nil {
+            return fmt.Errorf("cannot validate signature on Response: %v", err)
+          }
+          $HAVE_SIG = true
         }
-        $HAVE_SIG = true
+        ...
+        if !$HAVE_SIG {
+          return errors.New("either the Response or Assertion must be signed")
+        }
+        return nil
       }
-      ...
-      if !$HAVE_SIG {
-        return errors.New("either the Response or Assertion must be signed")
+  - pattern-not: |
+      func (sp *ServiceProvider) validateSignature($EL *etree.Element) error {
+        $SIG, err := findChild($EL, "http://www.w3.org/2000/09/xmldsig#", "Signature")
+        if $SIG == nil {
+          return errSignatureElementNotPresent
+        }
+        return fmt.Errorf("cannot validate signature on %s: %v", $EL.Tag, err)
       }
-      return nil
-    }
-  pattern-not: |
-    func (sp *ServiceProvider) validateSignature($EL *etree.Element) error {
-      $SIG, err := findChild($EL, "http://www.w3.org/2000/09/xmldsig#", "Signature")
-      if $SIG == nil {
-        return errSignatureElementNotPresent
-      }
-      return fmt.Errorf("cannot validate signature on %s: %v", $EL.Tag, err)
-    }
   languages:
   - go
   message: |

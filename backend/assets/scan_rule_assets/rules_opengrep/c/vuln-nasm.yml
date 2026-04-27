@@ -1,10 +1,11 @@
 rules:
 - id: vuln-nasm-2d4e6952
-  pattern: |
-    while ($NBS--)
-      *$Q++ = '\\';
-  pattern-not: |
-    $Q = mempset($Q, '\\', $NBS);
+  patterns:
+  - pattern: |
+      while ($NBS--)
+        *$Q++ = '\\';
+  - pattern-not: |
+      $Q = mempset($Q, '\\', $NBS);
   languages:
   - c
   message: |
@@ -22,13 +23,14 @@ rules:
     technology:
     - c
 - id: vuln-nasm-3079f796
-  pattern: |
-    $VAR = readnum($TEXT, &$ERR);
-    if ($ERR) {
-      nasm_error(ERR_NONFATAL, "unable to parse parameter count `%s'", $TEXT);
-    }
-  pattern-not: |
-    $VAR = read_param_count($TEXT);
+  patterns:
+  - pattern: |
+      $VAR = readnum($TEXT, &$ERR);
+      if ($ERR) {
+        nasm_error(ERR_NONFATAL, "unable to parse parameter count `%s'", $TEXT);
+      }
+  - pattern-not: |
+      $VAR = read_param_count($TEXT);
   languages:
   - c
   message: |
@@ -43,12 +45,13 @@ rules:
     technology:
     - c
 - id: vuln-nasm-3144e84a
-  pattern: |
-    $P = nasm_skip_string($P - 1) + 1;
-  pattern-not: |
-    $P = nasm_skip_string($P - 1);
-    if (*$P)
-        $P++;
+  patterns:
+  - pattern: |
+      $P = nasm_skip_string($P - 1) + 1;
+  - pattern-not: |
+      $P = nasm_skip_string($P - 1);
+      if (*$P)
+          $P++;
   languages:
   - c
   message: |
@@ -64,17 +67,18 @@ rules:
     technology:
     - c
 - id: vuln-nasm-6ac6ac57
-  pattern: |
-    $EOP->val = $SUBEXPR->val;
-    $EOP->type = $SUBEXPR->type;
-    $EOP->dup *= $SUBEXPR->dup;
-    nasm_free($SUBEXPR);
-  pattern-not: |
-    if (!$SUBEXPR->elem)
-        $SUBEXPR->elem = $EOP->elem;
-    $SUBEXPR->dup *= $EOP->dup;
-    nasm_free($EOP);
-    $EOP = $SUBEXPR;
+  patterns:
+  - pattern: |
+      $EOP->val = $SUBEXPR->val;
+      $EOP->type = $SUBEXPR->type;
+      $EOP->dup *= $SUBEXPR->dup;
+      nasm_free($SUBEXPR);
+  - pattern-not: |
+      if (!$SUBEXPR->elem)
+          $SUBEXPR->elem = $EOP->elem;
+      $SUBEXPR->dup *= $EOP->dup;
+      nasm_free($EOP);
+      $EOP = $SUBEXPR;
   languages:
   - c
   message: |
@@ -91,18 +95,19 @@ rules:
     technology:
     - c
 - id: vuln-nasm-7c88289e
-  pattern: |
-    char *$P;
-    ...
-    $P = nasm_malloc($LEN + 1);
-    ...
-    set_text_free($T, $P, $LEN);
-  pattern-not: |
-    char *$P, *$FROM;
-    ...
-    $FROM = $P = nasm_malloc($LEN + 1);
-    ...
-    set_text_free($T, $FROM, $LEN);
+  patterns:
+  - pattern: |
+      char *$P;
+      ...
+      $P = nasm_malloc($LEN + 1);
+      ...
+      set_text_free($T, $P, $LEN);
+  - pattern-not: |
+      char *$P, *$FROM;
+      ...
+      $FROM = $P = nasm_malloc($LEN + 1);
+      ...
+      set_text_free($T, $FROM, $LEN);
   languages:
   - c
   message: |
@@ -120,10 +125,11 @@ rules:
     technology:
     - c
 - id: vuln-nasm-98578071
-  pattern: |
-    define_label($LABEL, $SEGMENT, $OFFSET, $SPECIAL, false, false);
-  pattern-not: |
-    backend_label($LABEL, $SEGMENT, $OFFSET);
+  patterns:
+  - pattern: |
+      define_label($LABEL, $SEGMENT, $OFFSET, $SPECIAL, false, false);
+  - pattern-not: |
+      backend_label($LABEL, $SEGMENT, $OFFSET);
   languages:
   - c
   message: |
@@ -139,15 +145,16 @@ rules:
     technology:
     - c
 - id: vuln-nasm-9b7ee09a
-  pattern: |
-    if ($TYPE == TOK_PREPROC_ID && $TEXT[1] == '!') {
-      ...
-    }
-  pattern-not: |
-    if ($TYPE == TOK_PREPROC_ID && $TEXT &&
-        $TEXT[0] && $TEXT[1] == '!') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($TYPE == TOK_PREPROC_ID && $TEXT[1] == '!') {
+        ...
+      }
+  - pattern-not: |
+      if ($TYPE == TOK_PREPROC_ID && $TEXT &&
+          $TEXT[0] && $TEXT[1] == '!') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -167,10 +174,11 @@ rules:
     technology:
     - c
 - id: vuln-nasm-c713b5f9
-  pattern: |
-    return sizes[bsii($STR, $NAMES, $SIZE)+1];
-  pattern-not: |
-    return $STR ? sizes[bsii($STR, $NAMES, $SIZE)+1] : 0;
+  patterns:
+  - pattern: |
+      return sizes[bsii($STR, $NAMES, $SIZE)+1];
+  - pattern-not: |
+      return $STR ? sizes[bsii($STR, $NAMES, $SIZE)+1] : 0;
   languages:
   - c
   message: |
@@ -188,14 +196,15 @@ rules:
     technology:
     - c
 - id: vuln-nasm-ceec0d81
-  pattern: |
-    if ($J != '*' && !is_unknown($F) && reloc_value($F) == 0) {
-      ...
-    }
-  pattern-not: |
-    if ($J != '*' && !is_just_unknown($F) && reloc_value($F) == 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($J != '*' && !is_unknown($F) && reloc_value($F) == 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($J != '*' && !is_just_unknown($F) && reloc_value($F) == 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -211,19 +220,20 @@ rules:
     technology:
     - c
 - id: vuln-nasm-e996d28c
-  pattern: |
-    if (!$VAR) {
-      nasm_error($ERR, $MSG);
-    }
-    if ($COND1 && $COND2 && $COND3) {
-      ...
-    }
-  pattern-not: |
-    if (!$VAR) {
-      nasm_error($ERR, $MSG);
-    } else if ($COND1 && $COND2 && $COND3) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$VAR) {
+        nasm_error($ERR, $MSG);
+      }
+      if ($COND1 && $COND2 && $COND3) {
+        ...
+      }
+  - pattern-not: |
+      if (!$VAR) {
+        nasm_error($ERR, $MSG);
+      } else if ($COND1 && $COND2 && $COND3) {
+        ...
+      }
   languages:
   - c
   message: |

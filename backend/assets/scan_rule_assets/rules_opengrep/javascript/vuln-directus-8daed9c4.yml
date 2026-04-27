@@ -1,28 +1,29 @@
 rules:
 - id: vuln-directus-8daed9c4
-  pattern: |
-    {
-      title: 'Guides',
-      children: [
-        {
-          type: 'page',
-          path: '/configuration/sso',
-          title: 'Single Sign-On (SSO)',
-        },
-      ],
-    }
-  pattern-not: |
-    {
-      title: 'Guides',
-      children: [
-        {
-          type: 'page',
-          path: '/configuration/sso',
-          title: 'Single Sign-On (SSO)',
-          secure: true,
-        },
-      ],
-    }
+  patterns:
+  - pattern: |
+      {
+        title: 'Guides',
+        children: [
+          {
+            type: 'page',
+            path: '/configuration/sso',
+            title: 'Single Sign-On (SSO)',
+          },
+        ],
+      }
+  - pattern-not: |
+      {
+        title: 'Guides',
+        children: [
+          {
+            type: 'page',
+            path: '/configuration/sso',
+            title: 'Single Sign-On (SSO)',
+            secure: true,
+          },
+        ],
+      }
   languages:
   - javascript
   message: |

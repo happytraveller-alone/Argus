@@ -1,15 +1,16 @@
 rules:
 - id: vuln-opensips-7cab422e
-  pattern: |
-    $NUMBER = $NUMBER * 10 + ($EXPR) - '0';
-    if ($NUMBER < 0) {
-      ...
-    }
-  pattern-not: |
-    if ($NUMBER > 214748363) {
-      ...
-    }
-    $NUMBER = $NUMBER * 10 + ($EXPR) - '0';
+  patterns:
+  - pattern: |
+      $NUMBER = $NUMBER * 10 + ($EXPR) - '0';
+      if ($NUMBER < 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($NUMBER > 214748363) {
+        ...
+      }
+      $NUMBER = $NUMBER * 10 + ($EXPR) - '0';
   languages:
   - c
   message: |
@@ -25,10 +26,11 @@ rules:
     technology:
     - c
 - id: vuln-opensips-8f87c7c0
-  pattern: |
-    delete_sdp_line($MSG, $S)
-  pattern-not: |
-    delete_sdp_line($MSG, $S, $STREAM)
+  patterns:
+  - pattern: |
+      delete_sdp_line($MSG, $S)
+  - pattern-not: |
+      delete_sdp_line($MSG, $S, $STREAM)
   languages:
   - c
   message: |
@@ -44,11 +46,12 @@ rules:
     technology:
     - c
 - id: vuln-opensips-b2dffe4b
-  pattern: |
-    uri->host.s="";
-    uri->host.len=0;
-  pattern-not: |
-    /* keep the service name as host part */
+  patterns:
+  - pattern: |
+      uri->host.s="";
+      uri->host.len=0;
+  - pattern-not: |
+      /* keep the service name as host part */
   languages:
   - c
   message: |
@@ -64,14 +67,15 @@ rules:
     technology:
     - c
 - id: vuln-opensips-dd051f8e
-  pattern: |
-    while (*(--$TMP) == ' ') {
-      ...
-    }
-  pattern-not: |
-    while ($TMP > $LMP->u.value && *(--$TMP) == ' ') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while (*(--$TMP) == ' ') {
+        ...
+      }
+  - pattern-not: |
+      while ($TMP > $LMP->u.value && *(--$TMP) == ' ') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -91,10 +95,11 @@ rules:
     technology:
     - c
 - id: vuln-opensips-e2f13d37
-  pattern: |
-    LM_ERR("IP val is not IP <%.*s>\n", $VAL.rs.len, $VAL.rs.s);
-  pattern-not: |
-    LM_ERR("IP val is not IP <%.*s>\n", $_IP->len, $_IP->s);
+  patterns:
+  - pattern: |
+      LM_ERR("IP val is not IP <%.*s>\n", $VAL.rs.len, $VAL.rs.s);
+  - pattern-not: |
+      LM_ERR("IP val is not IP <%.*s>\n", $_IP->len, $_IP->s);
   languages:
   - c
   message: |

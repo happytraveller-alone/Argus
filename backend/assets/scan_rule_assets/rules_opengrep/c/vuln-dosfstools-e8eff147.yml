@@ -1,9 +1,10 @@
 rules:
 - id: vuln-dosfstools-e8eff147
-  pattern: |
-    printf("%10d bytes per FAT (= %u sectors)\n", $FS->fat_size, $FS->fat_size / $LSS);
-  pattern-not: |
-    printf("%10lld bytes per FAT (= %llu sectors)\n", (long long)$FS->fat_size, (long long)$FS->fat_size / $LSS);
+  patterns:
+  - pattern: |
+      printf("%10d bytes per FAT (= %u sectors)\n", $FS->fat_size, $FS->fat_size / $LSS);
+  - pattern-not: |
+      printf("%10lld bytes per FAT (= %llu sectors)\n", (long long)$FS->fat_size, (long long)$FS->fat_size / $LSS);
   languages:
   - c
   message: |

@@ -1,12 +1,13 @@
 rules:
 - id: vuln-tensorflow-7c8cc4ec
-  pattern: |
-    $RET = (TfLiteIntArray*)malloc(TfLiteIntArrayGetSizeInBytes($SIZE));
-  pattern-not: |
-    int $ALLOC_SIZE = TfLiteIntArrayGetSizeInBytes($SIZE);
-    if ($ALLOC_SIZE <= 0) return NULL;
-    $RET = (TfLiteIntArray*)malloc($ALLOC_SIZE);
-    if (!$RET) return $RET;
+  patterns:
+  - pattern: |
+      $RET = (TfLiteIntArray*)malloc(TfLiteIntArrayGetSizeInBytes($SIZE));
+  - pattern-not: |
+      int $ALLOC_SIZE = TfLiteIntArrayGetSizeInBytes($SIZE);
+      if ($ALLOC_SIZE <= 0) return NULL;
+      $RET = (TfLiteIntArray*)malloc($ALLOC_SIZE);
+      if (!$RET) return $RET;
   languages:
   - c
   message: |
@@ -24,10 +25,11 @@ rules:
     technology:
     - c
 - id: vuln-tensorflow-a1e1511d
-  pattern: |
-    int $VAR = TfLiteIntArrayGetSizeInBytes($SIZE);
-  pattern-not: |
-    size_t $VAR = TfLiteIntArrayGetSizeInBytes($SIZE);
+  patterns:
+  - pattern: |
+      int $VAR = TfLiteIntArrayGetSizeInBytes($SIZE);
+  - pattern-not: |
+      size_t $VAR = TfLiteIntArrayGetSizeInBytes($SIZE);
   languages:
   - c
   message: |

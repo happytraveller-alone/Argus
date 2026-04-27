@@ -1,9 +1,10 @@
 rules:
 - id: vuln-yara-0a3ede01
-  pattern: |
-    _yr_arena_page_for_address($ARENA, $ADDRESS)
-  pattern-not: |
-    yr_arena_page_for_address($ARENA, $ADDRESS)
+  patterns:
+  - pattern: |
+      _yr_arena_page_for_address($ARENA, $ADDRESS)
+  - pattern-not: |
+      yr_arena_page_for_address($ARENA, $ADDRESS)
   languages:
   - c
   message: |
@@ -17,10 +18,11 @@ rules:
     technology:
     - c
 - id: vuln-yara-1ecb0e66
-  pattern: |
-    (int) get_integer($OBJECT, $PATTERN, $INDEX)
-  pattern-not: |
-    dex_get_integer($OBJECT, $PATTERN, $INDEX)
+  patterns:
+  - pattern: |
+      (int) get_integer($OBJECT, $PATTERN, $INDEX)
+  - pattern-not: |
+      dex_get_integer($OBJECT, $PATTERN, $INDEX)
   languages:
   - c
   message: |
@@ -36,12 +38,13 @@ rules:
     technology:
     - c
 - id: vuln-yara-4a342f01
-  pattern: |
-    count = yr_max(64, ($INDEX + 1) * 2);
-  pattern-not: |
-    count = 64;
-    while (count <= $INDEX)
-      count *= 2;
+  patterns:
+  - pattern: |
+      count = yr_max(64, ($INDEX + 1) * 2);
+  - pattern-not: |
+      count = 64;
+      while (count <= $INDEX)
+        count *= 2;
   message: |
     The original code uses `yr_max(64, (index + 1) * 2)` to calculate the array size, which can lead to insufficient allocation if `index` is large. This can cause buffer overflow or out-of-bounds access. The fix uses a while loop to ensure the allocated size is sufficient by doubling the count until it exceeds the index. Always ensure dynamic array sizes are calculated safely to prevent memory corruption.
   languages:

@@ -1,13 +1,14 @@
 rules:
 - id: vuln-framework-7aa35ff9
-  pattern: |
-    if ($U.host !== 'localhost') {
-      throw new Error('Payload URL cannot contain host: ' + $URL);
-    }
-  pattern-not: |
-    if (hasProtocol($URL, true)) {
-      throw new Error('Payload URL must not include hostname: ' + $URL);
-    }
+  patterns:
+  - pattern: |
+      if ($U.host !== 'localhost') {
+        throw new Error('Payload URL cannot contain host: ' + $URL);
+      }
+  - pattern-not: |
+      if (hasProtocol($URL, true)) {
+        throw new Error('Payload URL must not include hostname: ' + $URL);
+      }
   languages:
   - typescript
   message: |

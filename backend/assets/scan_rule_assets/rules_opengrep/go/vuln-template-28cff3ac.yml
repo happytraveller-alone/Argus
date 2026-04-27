@@ -1,9 +1,10 @@
 rules:
 - id: vuln-template-28cff3ac
-  pattern: |
-    pongo2.SetAutoescape(false)
-  pattern-not: |
-    pongo2.SetAutoescape(true)
+  patterns:
+  - pattern: |
+      pongo2.SetAutoescape(false)
+  - pattern-not: |
+      pongo2.SetAutoescape(true)
   languages:
   - go
   message: |

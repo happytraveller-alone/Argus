@@ -1,9 +1,10 @@
 rules:
 - id: vuln-bubblewrap-1f7e2ad9
-  pattern: |
-    drop_privs($KEEP_CAPS);
-  pattern-not: |
-    drop_privs($KEEP_CAPS, $CHANGED_UID);
+  patterns:
+  - pattern: |
+      drop_privs($KEEP_CAPS);
+  - pattern-not: |
+      drop_privs($KEEP_CAPS, $CHANGED_UID);
   languages:
   - c
   message: |

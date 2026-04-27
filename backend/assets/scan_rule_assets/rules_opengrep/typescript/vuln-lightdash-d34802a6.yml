@@ -1,14 +1,15 @@
 rules:
 - id: vuln-lightdash-d34802a6
-  pattern: |
-    await page.setExtraHTTPHeaders({ cookie });
-  pattern-not: |
-    await page.setCookie({
-        name: 'connect.sid',
-        value: $COOKIE_VALUE,
-        domain: $DOMAIN,
-        sameSite: 'Strict',
-    });
+  patterns:
+  - pattern: |
+      await page.setExtraHTTPHeaders({ cookie });
+  - pattern-not: |
+      await page.setCookie({
+          name: 'connect.sid',
+          value: $COOKIE_VALUE,
+          domain: $DOMAIN,
+          sameSite: 'Strict',
+      });
   languages:
   - typescript
   message: |

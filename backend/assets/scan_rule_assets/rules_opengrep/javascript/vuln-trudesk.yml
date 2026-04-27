@@ -1,15 +1,16 @@
 rules:
 - id: vuln-trudesk-d107f12e
-  pattern: |
-    const $MIMETYPE = $INFO.mimeType;
-    if ($MIMETYPE.indexOf('image/') === -1) {
-      ...
-    }
-  pattern-not: |
-    const $ALLOWED_EXTS = [...];
-    if (!$ALLOWED_EXTS.includes($EXT)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      const $MIMETYPE = $INFO.mimeType;
+      if ($MIMETYPE.indexOf('image/') === -1) {
+        ...
+      }
+  - pattern-not: |
+      const $ALLOWED_EXTS = [...];
+      if (!$ALLOWED_EXTS.includes($EXT)) {
+        ...
+      }
   languages:
   - javascript
   message: |
@@ -26,15 +27,16 @@ rules:
     technology:
     - javascript
 - id: vuln-trudesk-fb2ef82b
-  pattern: |
-    router.post('/tickets/uploadattachment', $MIDDLEWARE, $CONTROLLER)
-  pattern-not: |
-    router.post(
-      '/tickets/uploadattachment',
-      middleware.redirectToLogin,
-      middleware.csrfCheck,
-      controllers.tickets.uploadAttachment
-    )
+  patterns:
+  - pattern: |
+      router.post('/tickets/uploadattachment', $MIDDLEWARE, $CONTROLLER)
+  - pattern-not: |
+      router.post(
+        '/tickets/uploadattachment',
+        middleware.redirectToLogin,
+        middleware.csrfCheck,
+        controllers.tickets.uploadAttachment
+      )
   languages:
   - javascript
   message: Missing CSRF protection in file upload endpoint. This can lead to CSRF attacks where an attacker can upload malicious files. Add CSRF middleware to protect the endpoint.

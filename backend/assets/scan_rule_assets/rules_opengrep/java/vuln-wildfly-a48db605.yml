@@ -1,9 +1,10 @@
 rules:
 - id: vuln-wildfly-a48db605
-  pattern: |
-    return new ModelNode(ModelType.UNDEFINED);
-  pattern-not: |
-    return UNDEFINED;
+  patterns:
+  - pattern: |
+      return new ModelNode(ModelType.UNDEFINED);
+  - pattern-not: |
+      return UNDEFINED;
   languages:
   - java
   message: |

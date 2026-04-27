@@ -1,10 +1,11 @@
 rules:
 - id: vuln-sleuthkit-0c7d5e73
-  pattern: |
-    if (tsk_getu16($FS->endian, $MFT->upd_off) + sizeof(ntfs_upd) > $NTFS->mft_rsize_b) {
-      ...
-    }
-  pattern-not: "if (tsk_getu16($FS->endian, $MFT->upd_off) + \n        sizeof(ntfs_upd) + \n        2*(tsk_getu16($FS->endian, $MFT->upd_cnt) - 1) > $NTFS->mft_rsize_b) {\n  ...\n}\n"
+  patterns:
+  - pattern: |
+      if (tsk_getu16($FS->endian, $MFT->upd_off) + sizeof(ntfs_upd) > $NTFS->mft_rsize_b) {
+        ...
+      }
+  - pattern-not: "if (tsk_getu16($FS->endian, $MFT->upd_off) + \n        sizeof(ntfs_upd) + \n        2*(tsk_getu16($FS->endian, $MFT->upd_cnt) - 1) > $NTFS->mft_rsize_b) {\n  ...\n}\n"
   languages:
   - c
   message: |
@@ -22,10 +23,11 @@ rules:
     technology:
     - c
 - id: vuln-sleuthkit-8e646f96
-  pattern: |
-    $EXPR > (uintptr_t)($VAR + $LEN)
-  pattern-not: |
-    $EXPR > (uintptr_t)$VAR + $LEN
+  patterns:
+  - pattern: |
+      $EXPR > (uintptr_t)($VAR + $LEN)
+  - pattern-not: |
+      $EXPR > (uintptr_t)$VAR + $LEN
   languages:
   - c
   message: |

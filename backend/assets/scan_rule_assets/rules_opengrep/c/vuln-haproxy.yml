@@ -1,13 +1,14 @@
 rules:
 - id: vuln-haproxy-146f53ae
-  pattern: |
-    for ($I = 0; $I < $LIST[$IDX].$N.$LEN; $I++)
-      if ((uint8_t)($LIST[$IDX].$N.$PTR[$I] - 'A') < 'Z' - 'A')
-        goto fail;
-  pattern-not: |
-    for ($I = !!$PHDR; $I < $LIST[$IDX].$N.$LEN; $I++)
-      if ((uint8_t)($LIST[$IDX].$N.$PTR[$I] - 'A') < 'Z' - 'A' || !HTTP_IS_TOKEN($LIST[$IDX].$N.$PTR[$I]))
-        goto fail;
+  patterns:
+  - pattern: |
+      for ($I = 0; $I < $LIST[$IDX].$N.$LEN; $I++)
+        if ((uint8_t)($LIST[$IDX].$N.$PTR[$I] - 'A') < 'Z' - 'A')
+          goto fail;
+  - pattern-not: |
+      for ($I = !!$PHDR; $I < $LIST[$IDX].$N.$LEN; $I++)
+        if ((uint8_t)($LIST[$IDX].$N.$PTR[$I] - 'A') < 'Z' - 'A' || !HTTP_IS_TOKEN($LIST[$IDX].$N.$PTR[$I]))
+          goto fail;
   languages:
   - c
   message: |
@@ -28,14 +29,15 @@ rules:
     technology:
     - c
 - id: vuln-haproxy-3f0e1ec7
-  pattern: |
-    if ((int)$HDR.len < 0 || (int)$HDR.len > $H2C->mfs) {
-      ...
-    }
-  pattern-not: |
-    if ((int)$HDR.len < 0 || (int)$HDR.len > global.tune.bufsize) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ((int)$HDR.len < 0 || (int)$HDR.len > $H2C->mfs) {
+        ...
+      }
+  - pattern-not: |
+      if ((int)$HDR.len < 0 || (int)$HDR.len > global.tune.bufsize) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -55,10 +57,11 @@ rules:
     technology:
     - c
 - id: vuln-haproxy-58df5aea
-  pattern: |
-    dns_read_name($RESP, $BUFEND, $READER, $NAME, $MAX_SIZE, $OFFSET)
-  pattern-not: |
-    dns_read_name($RESP, $BUFEND, $READER, $NAME, $MAX_SIZE, $OFFSET, $DEPTH)
+  patterns:
+  - pattern: |
+      dns_read_name($RESP, $BUFEND, $READER, $NAME, $MAX_SIZE, $OFFSET)
+  - pattern-not: |
+      dns_read_name($RESP, $BUFEND, $READER, $NAME, $MAX_SIZE, $OFFSET, $DEPTH)
   languages:
   - c
   message: |
@@ -76,14 +79,15 @@ rules:
     technology:
     - c
 - id: vuln-haproxy-bfb15ab3
-  pattern: |
-    if (!http_find_header($HTX, ist("Set-Cookie"), &$CTX, 1)) {
-      ...
-    }
-  pattern-not: |
-    if (is_cookie2 || !http_find_header($HTX, ist("Set-Cookie"), &$CTX, 1)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!http_find_header($HTX, ist("Set-Cookie"), &$CTX, 1)) {
+        ...
+      }
+  - pattern-not: |
+      if (is_cookie2 || !http_find_header($HTX, ist("Set-Cookie"), &$CTX, 1)) {
+        ...
+      }
   languages:
   - c
   message: |

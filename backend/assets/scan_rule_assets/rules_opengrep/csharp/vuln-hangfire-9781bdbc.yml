@@ -1,9 +1,10 @@
 rules:
 - id: vuln-hangfire-9781bdbc
-  pattern: |
-    AsyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
-  pattern-not: |
-    _asyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
+  patterns:
+  - pattern: |
+      AsyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
+  - pattern-not: |
+      _asyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
   languages:
   - csharp
   message: |

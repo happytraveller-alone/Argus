@@ -1,9 +1,10 @@
 rules:
 - id: vuln-redis-01173bc8
-  pattern: |
-    getnum($FMT, $DF)
-  pattern-not: |
-    getnum($L, $FMT, $DF)
+  patterns:
+  - pattern: |
+      getnum($FMT, $DF)
+  - pattern-not: |
+      getnum($L, $FMT, $DF)
   languages:
   - c
   message: |
@@ -21,18 +22,19 @@ rules:
     technology:
     - c
 - id: vuln-redis-0bf90d94
-  pattern: |
-    static void *getMcontextEip(ucontext_t *uc) {
-      ...
-      return (void*) $EXPRESSION;
-      ...
-    }
-  pattern-not: |
-    static void* getAndSetMcontextEip(ucontext_t *uc, void *eip) {
-      ...
-      GET_SET_RETURN($EXPRESSION, eip);
-      ...
-    }
+  patterns:
+  - pattern: |
+      static void *getMcontextEip(ucontext_t *uc) {
+        ...
+        return (void*) $EXPRESSION;
+        ...
+      }
+  - pattern-not: |
+      static void* getAndSetMcontextEip(ucontext_t *uc, void *eip) {
+        ...
+        GET_SET_RETURN($EXPRESSION, eip);
+        ...
+      }
   languages:
   - c
   message: |
@@ -54,10 +56,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-12b5ff10
-  pattern: |
-    int $VAR[HLL_Q+2] = {0};
-  pattern-not: |
-    int $VAR[64] = {0};
+  patterns:
+  - pattern: |
+      int $VAR[HLL_Q+2] = {0};
+  - pattern-not: |
+      int $VAR[64] = {0};
   languages:
   - c
   message: |
@@ -73,10 +76,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-15c078df
-  pattern: |
-    asyncCloseClientOnOutputBufferLimitReached($C);
-  pattern-not: |
-    closeClientOnOutputBufferLimitReached($C, $ASYNC);
+  patterns:
+  - pattern: |
+      asyncCloseClientOnOutputBufferLimitReached($C);
+  - pattern-not: |
+      closeClientOnOutputBufferLimitReached($C, $ASYNC);
   languages:
   - c
   message: |
@@ -94,10 +98,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-1dc89e2d
-  pattern: |
-    addReply($CLIENT, $HDR[$LL])
-  pattern-not: |
-    addReplyProto($CLIENT, $HDR[$LL]->ptr, $HDR_LEN)
+  patterns:
+  - pattern: |
+      addReply($CLIENT, $HDR[$LL])
+  - pattern-not: |
+      addReplyProto($CLIENT, $HDR[$LL]->ptr, $HDR_LEN)
   languages:
   - c
   message: |
@@ -115,18 +120,19 @@ rules:
     technology:
     - c
 - id: vuln-redis-1ddecf19
-  pattern: |
-    uint32_t *$LCS = zmalloc((size_t)($ALEN+1)*($BLEN+1)*sizeof(uint32_t));
-  pattern-not: |
-    unsigned long long $LCS_SIZE = (unsigned long long)($ALEN+1)*($BLEN+1);
-    unsigned long long $LCS_ALLOC = $LCS_SIZE * sizeof(uint32_t);
-    uint32_t *$LCS = NULL;
-    if ($LCS_ALLOC < SIZE_MAX && $LCS_ALLOC / $LCS_SIZE == sizeof(uint32_t))
-      $LCS = ztrymalloc($LCS_ALLOC);
-    if (!$LCS) {
-      addReplyError($C, "Insufficient memory");
-      goto cleanup;
-    }
+  patterns:
+  - pattern: |
+      uint32_t *$LCS = zmalloc((size_t)($ALEN+1)*($BLEN+1)*sizeof(uint32_t));
+  - pattern-not: |
+      unsigned long long $LCS_SIZE = (unsigned long long)($ALEN+1)*($BLEN+1);
+      unsigned long long $LCS_ALLOC = $LCS_SIZE * sizeof(uint32_t);
+      uint32_t *$LCS = NULL;
+      if ($LCS_ALLOC < SIZE_MAX && $LCS_ALLOC / $LCS_SIZE == sizeof(uint32_t))
+        $LCS = ztrymalloc($LCS_ALLOC);
+      if (!$LCS) {
+        addReplyError($C, "Insufficient memory");
+        goto cleanup;
+      }
   languages:
   - c
   message: |
@@ -147,10 +153,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-39feee8e
-  pattern: |
-    robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], shared.null[$C->resp]);
-  pattern-not: |
-    robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], $HASCOUNT ? shared.nullarray[$C->resp] : shared.null[$C->resp]);
+  patterns:
+  - pattern: |
+      robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], shared.null[$C->resp]);
+  - pattern-not: |
+      robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], $HASCOUNT ? shared.nullarray[$C->resp] : shared.null[$C->resp]);
   languages:
   - c
   message: |
@@ -166,17 +173,18 @@ rules:
     technology:
     - c
 - id: vuln-redis-5674b005
-  pattern: |
-    int $AUTH_REQUIRED = (!(DefaultUser->flags & USER_FLAG_NOPASS) ||
-                          (DefaultUser->flags & USER_FLAG_DISABLED)) &&
-                        !$C->authenticated;
-    if ($AUTH_REQUIRED) {
-        ...
-    }
-  pattern-not: |
-    if (authRequired($C)) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      int $AUTH_REQUIRED = (!(DefaultUser->flags & USER_FLAG_NOPASS) ||
+                            (DefaultUser->flags & USER_FLAG_DISABLED)) &&
+                          !$C->authenticated;
+      if ($AUTH_REQUIRED) {
+          ...
+      }
+  - pattern-not: |
+      if (authRequired($C)) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -194,16 +202,17 @@ rules:
     technology:
     - c
 - id: vuln-redis-599e59eb
-  pattern: |
-    ASSERT_NO_SIZE_OVERFLOW($SIZE);
-  pattern-not: |
-    if ($SIZE >= SIZE_MAX/2) return NULL;
-    if ($SIZE >= SIZE_MAX/2) zmalloc_oom_handler($SIZE);
-    if ($SIZE >= SIZE_MAX/2) {
-        zfree($PTR);
-        if ($USABLE) *$USABLE = 0;
-        return NULL;
-    }
+  patterns:
+  - pattern: |
+      ASSERT_NO_SIZE_OVERFLOW($SIZE);
+  - pattern-not: |
+      if ($SIZE >= SIZE_MAX/2) return NULL;
+      if ($SIZE >= SIZE_MAX/2) zmalloc_oom_handler($SIZE);
+      if ($SIZE >= SIZE_MAX/2) {
+          zfree($PTR);
+          if ($USABLE) *$USABLE = 0;
+          return NULL;
+      }
   languages:
   - c
   message: |
@@ -221,10 +230,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-697af434
-  pattern: |
-    server.vm_enabled
-  pattern-not: |
-    server.ds_enabled
+  patterns:
+  - pattern: |
+      server.vm_enabled
+  - pattern-not: |
+      server.ds_enabled
   languages:
   - c
   message: |
@@ -242,20 +252,21 @@ rules:
     technology:
     - c
 - id: vuln-redis-6ac3c0b7
-  pattern: |
-    sds *$FUNC(int *$ARGC) {
-        ...
-        $P = strstr($P,"\r\n");
-        if (!$P) goto $LABEL;
-        ...
-    }
-  pattern-not: |
-    sds *$FUNC(int *$ARGC, char** $ERR) {
-        ...
-        $P = strstr($P,"\r\n");
-        if (!$P) goto $LABEL;
-        ...
-    }
+  patterns:
+  - pattern: |
+      sds *$FUNC(int *$ARGC) {
+          ...
+          $P = strstr($P,"\r\n");
+          if (!$P) goto $LABEL;
+          ...
+      }
+  - pattern-not: |
+      sds *$FUNC(int *$ARGC, char** $ERR) {
+          ...
+          $P = strstr($P,"\r\n");
+          if (!$P) goto $LABEL;
+          ...
+      }
   languages:
   - c
   message: |
@@ -274,14 +285,15 @@ rules:
     technology:
     - c
 - id: vuln-redis-6d9f8e24
-  pattern: |
-    if (getClientTypeByName($VAR) == -1) {
-      ...
-    }
-  pattern-not: |
-    if (getClientTypeByName($VAR) == -1 || getClientTypeByName($VAR) == CLIENT_TYPE_MASTER) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (getClientTypeByName($VAR) == -1) {
+        ...
+      }
+  - pattern-not: |
+      if (getClientTypeByName($VAR) == -1 || getClientTypeByName($VAR) == CLIENT_TYPE_MASTER) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -299,14 +311,15 @@ rules:
     technology:
     - c
 - id: vuln-redis-71536684
-  pattern: |
-    FILE *$FP = fopen($FILENAME, "w");
-  pattern-not: |
-    mode_t $OLD_UMASK = umask($MODE);
-    FILE *$FP;
-    $FP = fopen($FILENAME, "w");
-    umask($OLD_UMASK);
-    chmod($FILENAME, $PERMISSIONS);
+  patterns:
+  - pattern: |
+      FILE *$FP = fopen($FILENAME, "w");
+  - pattern-not: |
+      mode_t $OLD_UMASK = umask($MODE);
+      FILE *$FP;
+      $FP = fopen($FILENAME, "w");
+      umask($OLD_UMASK);
+      chmod($FILENAME, $PERMISSIONS);
   languages:
   - c
   message: |
@@ -325,10 +338,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-79f089bd
-  pattern: |
-    createSentinelAddr($HOSTNAME, $PORT)
-  pattern-not: |
-    createSentinelAddr($HOSTNAME, $PORT, $IS_ACCEPT_UNRESOLVED)
+  patterns:
+  - pattern: |
+      createSentinelAddr($HOSTNAME, $PORT)
+  - pattern-not: |
+      createSentinelAddr($HOSTNAME, $PORT, $IS_ACCEPT_UNRESOLVED)
   languages:
   - c
   message: |
@@ -346,10 +360,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-874804da
-  pattern: |
-    if ($C->flags & CLIENT_CLOSE_AFTER_REPLY) break;
-  pattern-not: |
-    if ($C->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
+  patterns:
+  - pattern: |
+      if ($C->flags & CLIENT_CLOSE_AFTER_REPLY) break;
+  - pattern-not: |
+      if ($C->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
   languages:
   - c
   message: |
@@ -367,10 +382,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-875a1f07
-  pattern: |
-    preventCommandLogging($C);
-  pattern-not: |
-    redactClientCommandArgument($C, $ARG);
+  patterns:
+  - pattern: |
+      preventCommandLogging($C);
+  - pattern-not: |
+      redactClientCommandArgument($C, $ARG);
   languages:
   - c
   message: |
@@ -386,10 +402,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-9f63e75a
-  pattern: |
-    getnum($FMT, $DF)
-  pattern-not: |
-    getnum($L, $FMT, $DF)
+  patterns:
+  - pattern: |
+      getnum($FMT, $DF)
+  - pattern-not: |
+      getnum($L, $FMT, $DF)
   languages:
   - c
   message: |
@@ -407,10 +424,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-a4b90be9
-  pattern: |
-    int reghisto[$X+2] = {0};
-  pattern-not: |
-    int reghisto[64] = {0};
+  patterns:
+  - pattern: |
+      int reghisto[$X+2] = {0};
+  - pattern-not: |
+      int reghisto[64] = {0};
   languages:
   - c
   message: |
@@ -432,12 +450,13 @@ rules:
     technology:
     - c
 - id: vuln-redis-aa856b39
-  pattern: |
-    lua_pushstring($LUA, $ERR);
-    lua_error($LUA);
-  pattern-not: |
-    luaPushError($LUA, $ERR);
-    luaError($LUA);
+  patterns:
+  - pattern: |
+      lua_pushstring($LUA, $ERR);
+      lua_error($LUA);
+  - pattern-not: |
+      luaPushError($LUA, $ERR);
+      luaError($LUA);
   languages:
   - c
   message: |
@@ -456,10 +475,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-b099889a
-  pattern: |
-    $VAR = callReplyCreate($PROTO, $CTX);
-  pattern-not: |
-    $VAR = callReplyCreate($PROTO, $ERROR_LIST, $CTX);
+  patterns:
+  - pattern: |
+      $VAR = callReplyCreate($PROTO, $CTX);
+  - pattern-not: |
+      $VAR = callReplyCreate($PROTO, $ERROR_LIST, $CTX);
   languages:
   - c
   message: |
@@ -475,10 +495,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-c9928576
-  pattern: |
-    createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LLONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
-  pattern-not: |
-    createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
+  patterns:
+  - pattern: |
+      createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LLONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
+  - pattern-not: |
+      createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
   languages:
   - c
   message: |
@@ -493,13 +514,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-e216ceaf
-  pattern: |
-    if (($RUNLEN + $IDX) > HLL_REGISTERS) {
-        ...
-        return C_ERR;
-    }
-  pattern-not: |
-    if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
+  patterns:
+  - pattern: |
+      if (($RUNLEN + $IDX) > HLL_REGISTERS) {
+          ...
+          return C_ERR;
+      }
+  - pattern-not: |
+      if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
   languages:
   - c
   message: |
@@ -523,16 +545,17 @@ rules:
     technology:
     - c
 - id: vuln-redis-e89086e0
-  pattern: |
-    size_t $POS = luaL_optinteger($L, $ARG, 1) - 1;
-    ...
-    luaL_argcheck($L, $POS + $SIZE <= $LD, $ARG2, "data string too short");
-  pattern-not: |
-    size_t $POS = luaL_optinteger($L, $ARG, 1);
-    luaL_argcheck($L, $POS > 0, $ARG, "offset must be 1 or greater");
-    $POS--;
-    ...
-    luaL_argcheck($L, $SIZE <= $LD && $POS <= $LD - $SIZE, $ARG2, "data string too short");
+  patterns:
+  - pattern: |
+      size_t $POS = luaL_optinteger($L, $ARG, 1) - 1;
+      ...
+      luaL_argcheck($L, $POS + $SIZE <= $LD, $ARG2, "data string too short");
+  - pattern-not: |
+      size_t $POS = luaL_optinteger($L, $ARG, 1);
+      luaL_argcheck($L, $POS > 0, $ARG, "offset must be 1 or greater");
+      $POS--;
+      ...
+      luaL_argcheck($L, $SIZE <= $LD && $POS <= $LD - $SIZE, $ARG2, "data string too short");
   languages:
   - c
   message: |
@@ -553,13 +576,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-ef1833b3
-  pattern: |
-    if (($RUNLEN + $IDX) > HLL_REGISTERS) {
-        $ACTION;
-        return C_ERR;
-    }
-  pattern-not: |
-    if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
+  patterns:
+  - pattern: |
+      if (($RUNLEN + $IDX) > HLL_REGISTERS) {
+          $ACTION;
+          return C_ERR;
+      }
+  - pattern-not: |
+      if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
   languages:
   - c
   message: |
@@ -577,10 +601,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-f613873d
-  pattern: |
-    ($D->ht[1].size / $D->ht[0].size < $RATIO)
-  pattern-not: |
-    (($S1 > $S0 && $S1 / $S0 < $RATIO) || ($S1 < $S0 && $S0 / $S1 < $RATIO))
+  patterns:
+  - pattern: |
+      ($D->ht[1].size / $D->ht[0].size < $RATIO)
+  - pattern-not: |
+      (($S1 > $S0 && $S1 / $S0 < $RATIO) || ($S1 < $S0 && $S0 / $S1 < $RATIO))
   languages:
   - c
   message: |
@@ -596,14 +621,15 @@ rules:
     technology:
     - c
 - id: vuln-redis-f6a40570
-  pattern: |
-    size_t $MAXELELEN = 0;
-    ...
-    zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN);
-  pattern-not: |
-    size_t $MAXELELEN = 0, $TOTELELEN = 0;
-    ...
-    zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN, $TOTELELEN);
+  patterns:
+  - pattern: |
+      size_t $MAXELELEN = 0;
+      ...
+      zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN);
+  - pattern-not: |
+      size_t $MAXELELEN = 0, $TOTELELEN = 0;
+      ...
+      zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN, $TOTELELEN);
   languages:
   - c
   message: |
@@ -618,10 +644,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-fa6815e1
-  pattern: |
-    getRangeLongFromObjectOrReply($C, $ARG, 1, LONG_MAX, $COUNT, "COUNT must be > 0")
-  pattern-not: |
-    getRangeLongFromObjectOrReply($C, $ARG, 1, $MAX_COUNT, $COUNT, "COUNT must be > 0")
+  patterns:
+  - pattern: |
+      getRangeLongFromObjectOrReply($C, $ARG, 1, LONG_MAX, $COUNT, "COUNT must be > 0")
+  - pattern-not: |
+      getRangeLongFromObjectOrReply($C, $ARG, 1, $MAX_COUNT, $COUNT, "COUNT must be > 0")
   languages:
   - c
   message: |
@@ -636,10 +663,11 @@ rules:
     technology:
     - c
 - id: vuln-redis-fad0b0d2
-  pattern: |
-    updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US);
-  pattern-not: |
-    updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US, $HAD_ERRORS);
+  patterns:
+  - pattern: |
+      updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US);
+  - pattern-not: |
+      updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US, $HAD_ERRORS);
   languages:
   - c
   message: |

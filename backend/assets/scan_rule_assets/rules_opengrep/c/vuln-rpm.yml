@@ -1,9 +1,10 @@
 rules:
 - id: vuln-rpm-404ef011
-  pattern: |
-    Fopen($DEST, "w.ufdio")
-  pattern-not: |
-    Fopen($DEST, "wx.ufdio")
+  patterns:
+  - pattern: |
+      Fopen($DEST, "w.ufdio")
+  - pattern-not: |
+      Fopen($DEST, "wx.ufdio")
   languages:
   - c
   message: |
@@ -19,22 +20,23 @@ rules:
     technology:
     - c
 - id: vuln-rpm-4d172a19
-  pattern: |
-    if (lstat($PATH, &$STB) == 0) {
-      if (S_ISREG($STB.st_mode) && ($STB.st_mode & 06000) != 0) {
-        ...
-      }
-    }
-  pattern-not: |
-    if (lstat($PATH, &$STB) == 0 && S_ISREG($STB.st_mode)) {
-      if (($STB.st_mode & 06000) != 0) {
-        #if WITH_CAP
-        if ($STB.st_mode & (S_IXUSR|S_IXGRP|S_IXOTH)) {
-          (void) cap_set_file($PATH, NULL);
+  patterns:
+  - pattern: |
+      if (lstat($PATH, &$STB) == 0) {
+        if (S_ISREG($STB.st_mode) && ($STB.st_mode & 06000) != 0) {
+          ...
         }
-        #endif
       }
-    }
+  - pattern-not: |
+      if (lstat($PATH, &$STB) == 0 && S_ISREG($STB.st_mode)) {
+        if (($STB.st_mode & 06000) != 0) {
+          #if WITH_CAP
+          if ($STB.st_mode & (S_IXUSR|S_IXGRP|S_IXOTH)) {
+            (void) cap_set_file($PATH, NULL);
+          }
+          #endif
+        }
+      }
   languages:
   - c
   message: |
@@ -49,10 +51,11 @@ rules:
     technology:
     - c
 - id: vuln-rpm-96ec957e
-  pattern: |
-    mkdir($PATH, $MODE)
-  pattern-not: |
-    mkdirat($DIRFD, $PATH, $MODE)
+  patterns:
+  - pattern: |
+      mkdir($PATH, $MODE)
+  - pattern-not: |
+      mkdirat($DIRFD, $PATH, $MODE)
   languages:
   - c
   message: |
@@ -71,17 +74,18 @@ rules:
     technology:
     - c
 - id: vuln-rpm-c815822c
-  pattern: |
-    if (S_ISDIR($FMODE) && S_ISLNK($SB.st_mode) && stat($FN, &$SB) != 0) {
-        ...
-    }
-  pattern-not: |
-    if (S_ISDIR($FMODE) && S_ISLNK($SB.st_mode)) {
-        struct stat $DSB;
-        if (stat($FN, &$DSB) == 0 && S_ISDIR($DSB.st_mode)) {
-            ...
-        }
-    }
+  patterns:
+  - pattern: |
+      if (S_ISDIR($FMODE) && S_ISLNK($SB.st_mode) && stat($FN, &$SB) != 0) {
+          ...
+      }
+  - pattern-not: |
+      if (S_ISDIR($FMODE) && S_ISLNK($SB.st_mode)) {
+          struct stat $DSB;
+          if (stat($FN, &$DSB) == 0 && S_ISDIR($DSB.st_mode)) {
+              ...
+          }
+      }
   languages:
   - c
   message: |
@@ -101,15 +105,16 @@ rules:
     technology:
     - c
 - id: vuln-rpm-ca2d6b2b
-  pattern: |
-    if ($FLAGS & $CPIO_SBIT_CHECK) {
-        struct stat $STB;
-        if (lstat($PATH, &$STB) == 0 && S_ISREG($STB.st_mode) && ($STB.st_mode & 06000) != 0)
-            chmod($PATH, $STB.st_mode & 0777);
-    }
-  pattern-not: |
-    if ($FLAGS & $CPIO_SBIT_CHECK)
-        removeSBITS($PATH);
+  patterns:
+  - pattern: |
+      if ($FLAGS & $CPIO_SBIT_CHECK) {
+          struct stat $STB;
+          if (lstat($PATH, &$STB) == 0 && S_ISREG($STB.st_mode) && ($STB.st_mode & 06000) != 0)
+              chmod($PATH, $STB.st_mode & 0777);
+      }
+  - pattern-not: |
+      if ($FLAGS & $CPIO_SBIT_CHECK)
+          removeSBITS($PATH);
   languages:
   - c
   message: |
@@ -125,32 +130,18 @@ rules:
     technology:
     - c
 - id: vuln-rpm-d6a86b5e
-  pattern: |
-    void headerMergeLegacySigs(Header $H, Header $SIGH) {
-      ...
-      switch ($TD.tag) {
-        case $RPMSIGTAG:
-          $TD.tag = $RPMTAG;
-          break;
+  patterns:
+  - pattern: |
+      void headerMergeLegacySigs(Header $H, Header $SIGH) {
         ...
-      }
-      ...
-    }
-  pattern-not: |
-    rpmTagVal headerMergeLegacySigs(Header $H, Header $SIGH, char **$MSG) {
-      ...
-      for ($XL = $xlateTags; $XL->stag; $XL++) {
-        ...
-        if (headerGet($SIGH, $XL->stag, &$TD, $HEADERGET_RAW|$HEADERGET_MINMEM)) {
-          ...
-          if ($XL->stag != $XL->xtag)
-            $TD.tag = $XL->xtag;
+        switch ($TD.tag) {
+          case $RPMSIGTAG:
+            $TD.tag = $RPMTAG;
+            break;
           ...
         }
         ...
       }
-      ...
-    }
   languages:
   - c
   message: |

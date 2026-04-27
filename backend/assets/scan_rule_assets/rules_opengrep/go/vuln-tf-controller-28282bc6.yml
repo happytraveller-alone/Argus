@@ -1,9 +1,10 @@
 rules:
 - id: vuln-tf-controller-28282bc6
-  pattern: |
-    $OUTPUTS, $ERR := $TF.Output($CTX)
-  pattern-not: |
-    $OUTPUTS, $ERR := $TF.tfOutput($CTX)
+  patterns:
+  - pattern: |
+      $OUTPUTS, $ERR := $TF.Output($CTX)
+  - pattern-not: |
+      $OUTPUTS, $ERR := $TF.tfOutput($CTX)
   languages:
   - go
   message: |

@@ -1,12 +1,13 @@
 rules:
 - id: vim-double-free-b29f4abc
-  pattern: |
-    VIM_CLEAR($VAR1);
-    VIM_CLEAR($VAR2);
-  pattern-not: |
-    if ($VAR1 != $VAR2)
-        VIM_CLEAR($VAR2);
-    $VAR1 = NULL;
+  patterns:
+  - pattern: |
+      VIM_CLEAR($VAR1);
+      VIM_CLEAR($VAR2);
+  - pattern-not: |
+      if ($VAR1 != $VAR2)
+          VIM_CLEAR($VAR2);
+      $VAR1 = NULL;
   languages:
   - c
   message: |

@@ -1,10 +1,11 @@
 rules:
 - id: vuln-uftpd-5c3b2015
-  pattern: |
-    DBG("chrooted:%d, ctrl->cwd: %s, home:%s, dir:%s, len:%zd, dirlen:%zd",
-        $CHROOTED, $CTRL_CWD, $HOME, $DIR, strlen($HOME), strlen($DIR));
-  pattern-not: |
-    INFO("%s: CWD: invalid path to %s: %m", $CLIENTADDR, $PATH);
+  patterns:
+  - pattern: |
+      DBG("chrooted:%d, ctrl->cwd: %s, home:%s, dir:%s, len:%zd, dirlen:%zd",
+          $CHROOTED, $CTRL_CWD, $HOME, $DIR, strlen($HOME), strlen($DIR));
+  - pattern-not: |
+      INFO("%s: CWD: invalid path to %s: %m", $CLIENTADDR, $PATH);
   languages:
   - c
   message: |

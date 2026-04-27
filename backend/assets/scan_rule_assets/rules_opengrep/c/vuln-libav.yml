@@ -1,12 +1,13 @@
 rules:
 - id: vuln-libav-76f7e70a
-  pattern: |
-    init_get_bits(&$GB, $DATA + $OFFSET, ($SIZE - $OFFSET) * 8);
-  pattern-not: |
-    $RET = init_get_bits8(&$GB, $DATA + $OFFSET, $SIZE - $OFFSET);
-    if ($RET < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      init_get_bits(&$GB, $DATA + $OFFSET, ($SIZE - $OFFSET) * 8);
+  - pattern-not: |
+      $RET = init_get_bits8(&$GB, $DATA + $OFFSET, $SIZE - $OFFSET);
+      if ($RET < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -22,24 +23,25 @@ rules:
     technology:
     - c
 - id: vuln-libav-83b2b34d
-  pattern: |
-    while ($LENGTH >= 4) {
-      ...
-      if ($EXTRACT_LENGTH > $LENGTH) {
+  patterns:
+  - pattern: |
+      while ($LENGTH >= 4) {
         ...
-      }
-      ...
-      $LENGTH -= $CONSUMED;
-    }
-  pattern-not: |
-    while (bytestream2_get_bytes_left(&$BC) >= 4) {
-      ...
-      if ($EXTRACT_LENGTH > bytestream2_get_bytes_left(&$BC)) {
+        if ($EXTRACT_LENGTH > $LENGTH) {
+          ...
+        }
         ...
+        $LENGTH -= $CONSUMED;
       }
-      ...
-      bytestream2_skip(&$BC, $CONSUMED);
-    }
+  - pattern-not: |
+      while (bytestream2_get_bytes_left(&$BC) >= 4) {
+        ...
+        if ($EXTRACT_LENGTH > bytestream2_get_bytes_left(&$BC)) {
+          ...
+        }
+        ...
+        bytestream2_skip(&$BC, $CONSUMED);
+      }
   languages:
   - c
   message: |
@@ -55,10 +57,11 @@ rules:
     technology:
     - c
 - id: vuln-libav-8c802589
-  pattern: |
-    $DEST = $BASE + ($EXPR << $SHIFT)
-  pattern-not: |
-    $DEST = $BASE + $EXPR * (1 << $SHIFT)
+  patterns:
+  - pattern: |
+      $DEST = $BASE + ($EXPR << $SHIFT)
+  - pattern-not: |
+      $DEST = $BASE + $EXPR * (1 << $SHIFT)
   languages:
   - c
   message: |
@@ -76,15 +79,16 @@ rules:
     technology:
     - c
 - id: vuln-libav-9f0193c7
-  pattern: |
-    $X->bit_rate += ($Y << $Z) * $W;
-  pattern-not: |
-    $Y <<= $Z;
-    if ($Y < INT_MAX / $W &&
-        $Y * $W < INT_MAX - $X->bit_rate) {
-        $X->bit_rate += $Y * $W;
-    } else
-        $X->bit_rate = 0;
+  patterns:
+  - pattern: |
+      $X->bit_rate += ($Y << $Z) * $W;
+  - pattern-not: |
+      $Y <<= $Z;
+      if ($Y < INT_MAX / $W &&
+          $Y * $W < INT_MAX - $X->bit_rate) {
+          $X->bit_rate += $Y * $W;
+      } else
+          $X->bit_rate = 0;
   languages:
   - c
   message: |
@@ -101,10 +105,11 @@ rules:
     technology:
     - c
 - id: vuln-libav-fb147308
-  pattern: |
-    uint8_t $VAR[8];
-  pattern-not: |
-    uint8_t $VAR[8 + FF_INPUT_BUFFER_PADDING_SIZE];
+  patterns:
+  - pattern: |
+      uint8_t $VAR[8];
+  - pattern-not: |
+      uint8_t $VAR[8 + FF_INPUT_BUFFER_PADDING_SIZE];
   languages:
   - c
   message: |
@@ -122,11 +127,12 @@ rules:
     technology:
     - c
 - id: vuln-libav-fe6eea99
-  pattern: |
-    av_get_packet($PB, $PKT, $SIZE);
-  pattern-not: |
-    if ((ret = av_get_packet($PB, $PKT, $SIZE)) < 0)
-        return ret;
+  patterns:
+  - pattern: |
+      av_get_packet($PB, $PKT, $SIZE);
+  - pattern-not: |
+      if ((ret = av_get_packet($PB, $PKT, $SIZE)) < 0)
+          return ret;
   languages:
   - c
   message: |

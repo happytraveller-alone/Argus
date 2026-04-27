@@ -1,13 +1,14 @@
 rules:
 - id: vuln-paste-markdown-32b7ea3f
-  pattern: |
-    const $EL = document.createElement('div');
-    $EL.innerHTML = $HTML;
-    let $TABLE = $EL.querySelector('table');
-  pattern-not: |
-    const $PARSER = new DOMParser();
-    const $PARSED_DOCUMENT = $PARSER.parseFromString($HTML, 'text/html');
-    let $TABLE = $PARSED_DOCUMENT.querySelector('table');
+  patterns:
+  - pattern: |
+      const $EL = document.createElement('div');
+      $EL.innerHTML = $HTML;
+      let $TABLE = $EL.querySelector('table');
+  - pattern-not: |
+      const $PARSER = new DOMParser();
+      const $PARSED_DOCUMENT = $PARSER.parseFromString($HTML, 'text/html');
+      let $TABLE = $PARSED_DOCUMENT.querySelector('table');
   languages:
   - typescript
   message: |

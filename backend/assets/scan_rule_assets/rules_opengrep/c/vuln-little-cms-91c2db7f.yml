@@ -1,9 +1,10 @@
 rules:
 - id: vuln-little-cms-91c2db7f
-  pattern: |
-    strncpy($DEST, $SRC, sizeof($DEST));
-  pattern-not: |
-    strncpy($DEST, $SRC, sizeof($DEST)-1);
+  patterns:
+  - pattern: |
+      strncpy($DEST, $SRC, sizeof($DEST));
+  - pattern-not: |
+      strncpy($DEST, $SRC, sizeof($DEST)-1);
   languages:
   - c
   message: |

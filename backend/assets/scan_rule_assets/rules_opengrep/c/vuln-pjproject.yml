@@ -1,26 +1,27 @@
 rules:
 - id: vuln-pjproject-077b465c
-  pattern: |
-    int $CHR = *$SCANNER->curptr;
-    if (!$CHR) {
-      ...
-    }
-    ++$SCANNER->curptr;
-    if (PJ_SCAN_IS_PROBABLY_SPACE(*$SCANNER->curptr) && $SCANNER->skip_ws) {
-      ...
-    }
-  pattern-not: |
-    register char *$S = $SCANNER->curptr;
-    int $CHR;
-    if ($S >= $SCANNER->end || !*$S) {
-      ...
-    }
-    $CHR = *$S;
-    ++$S;
-    $SCANNER->curptr = $S;
-    if (PJ_SCAN_CHECK_EOF($S) && PJ_SCAN_IS_PROBABLY_SPACE(*$S) && $SCANNER->skip_ws) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      int $CHR = *$SCANNER->curptr;
+      if (!$CHR) {
+        ...
+      }
+      ++$SCANNER->curptr;
+      if (PJ_SCAN_IS_PROBABLY_SPACE(*$SCANNER->curptr) && $SCANNER->skip_ws) {
+        ...
+      }
+  - pattern-not: |
+      register char *$S = $SCANNER->curptr;
+      int $CHR;
+      if ($S >= $SCANNER->end || !*$S) {
+        ...
+      }
+      $CHR = *$S;
+      ++$S;
+      $SCANNER->curptr = $S;
+      if (PJ_SCAN_CHECK_EOF($S) && PJ_SCAN_IS_PROBABLY_SPACE(*$S) && $SCANNER->skip_ws) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -38,14 +39,15 @@ rules:
     technology:
     - c
 - id: vuln-pjproject-450baca9
-  pattern: |
-    while ($MSG_LEN > 0) {
-      ...
-    }
-  pattern-not: |
-    while ($MSG_LEN > 0 && $MSG->attr_count < $ATTR_MAX_CNT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while ($MSG_LEN > 0) {
+        ...
+      }
+  - pattern-not: |
+      while ($MSG_LEN > 0 && $MSG->attr_count < $ATTR_MAX_CNT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -64,10 +66,11 @@ rules:
     technology:
     - c
 - id: vuln-pjproject-db323595
-  pattern: |
-    pj_hash_set_lower($NULL, $TABLE, $DLG->local.info->tag.ptr, (unsigned)$DLG->local.info->tag.slen, ...)
-  pattern-not: |
-    pj_hash_set_lower($NULL, $TABLE, $DLG_SET->ht_key.ptr, (unsigned)$DLG_SET->ht_key.slen, ...)
+  patterns:
+  - pattern: |
+      pj_hash_set_lower($NULL, $TABLE, $DLG->local.info->tag.ptr, (unsigned)$DLG->local.info->tag.slen, ...)
+  - pattern-not: |
+      pj_hash_set_lower($NULL, $TABLE, $DLG_SET->ht_key.ptr, (unsigned)$DLG_SET->ht_key.slen, ...)
   languages:
   - c
   message: |

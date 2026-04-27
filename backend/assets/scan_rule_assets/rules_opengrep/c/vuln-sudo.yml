@@ -1,20 +1,21 @@
 rules:
 - id: vuln-sudo-0274a4f3
-  pattern: |
-    const char *$ENV_EDITOR;
-    ...
-    if ($CONDITION) {
-        $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
-    }
-  pattern-not: |
-    const char *$ENV_EDITOR = NULL;
-    ...
-    if ($CONDITION) {
-        if (errno == ENOENT) {
-            $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
-        }
-        exit(EXIT_FAILURE);
-    }
+  patterns:
+  - pattern: |
+      const char *$ENV_EDITOR;
+      ...
+      if ($CONDITION) {
+          $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
+      }
+  - pattern-not: |
+      const char *$ENV_EDITOR = NULL;
+      ...
+      if ($CONDITION) {
+          if (errno == ENOENT) {
+              $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
+          }
+          exit(EXIT_FAILURE);
+      }
   languages:
   - c
   message: |
@@ -34,14 +35,15 @@ rules:
     technology:
     - c
 - id: vuln-sudo-1f863857
-  pattern: |
-    if ($MODE & ($FLAG1|$FLAG2)) {
-      ...
-    }
-  pattern-not: |
-    if (ISSET($MODE, $FLAG1|$FLAG2)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($MODE & ($FLAG1|$FLAG2)) {
+        ...
+      }
+  - pattern-not: |
+      if (ISSET($MODE, $FLAG1|$FLAG2)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -61,15 +63,16 @@ rules:
     technology:
     - c
 - id: vuln-sudo-7873f833
-  pattern: |
-    $RET = !strcmp($STR1, $STR2);
-    debug_return_int($RET ? $SUCCESS : $FAILURE);
-  pattern-not: |
-    if (strcmp($STR1, $STR2) == 0)
-      $RET = $SUCCESS;
-    else
-      $RET = $FAILURE;
-    debug_return_int($RET);
+  patterns:
+  - pattern: |
+      $RET = !strcmp($STR1, $STR2);
+      debug_return_int($RET ? $SUCCESS : $FAILURE);
+  - pattern-not: |
+      if (strcmp($STR1, $STR2) == 0)
+        $RET = $SUCCESS;
+      else
+        $RET = $FAILURE;
+      debug_return_int($RET);
   languages:
   - c
   message: |
@@ -85,10 +88,11 @@ rules:
     technology:
     - c
 - id: vuln-sudo-817fd283
-  pattern: |
-    sudo_ttyname_scan($DIR, $RDEV, true, $NAME, $NAMELEN)
-  pattern-not: |
-    sudo_ttyname_scan($DIR, $RDEV, $NAME, $NAMELEN)
+  patterns:
+  - pattern: |
+      sudo_ttyname_scan($DIR, $RDEV, true, $NAME, $NAMELEN)
+  - pattern-not: |
+      sudo_ttyname_scan($DIR, $RDEV, $NAME, $NAMELEN)
   languages:
   - c
   message: |
@@ -112,10 +116,11 @@ rules:
     technology:
     - c
 - id: vuln-sudo-ab2cba0f
-  pattern: |
-    getln($FD, $BUF, $BUFSIZ, $FEEDBACK)
-  pattern-not: |
-    getln($FD, $BUF, $BUFSIZ, $FEEDBACK, $ERRVAL)
+  patterns:
+  - pattern: |
+      getln($FD, $BUF, $BUFSIZ, $FEEDBACK)
+  - pattern-not: |
+      getln($FD, $BUF, $BUFSIZ, $FEEDBACK, $ERRVAL)
   languages:
   - c
   message: |
@@ -131,19 +136,20 @@ rules:
     technology:
     - c
 - id: vuln-sudo-bd209b9f
-  pattern: |
-    char $VAR;
-    ...
-    $SAV = $PASS[8];
-    ...
-    $PASS[8] = '\0';
-    ...
-    $PASS[8] = $SAV;
-  pattern-not: |
-    char $DES_PASS[9];
-    ...
-    strlcpy($DES_PASS, $PASS, sizeof($DES_PASS));
-    $PASS = $DES_PASS;
+  patterns:
+  - pattern: |
+      char $VAR;
+      ...
+      $SAV = $PASS[8];
+      ...
+      $PASS[8] = '\0';
+      ...
+      $PASS[8] = $SAV;
+  - pattern-not: |
+      char $DES_PASS[9];
+      ...
+      strlcpy($DES_PASS, $PASS, sizeof($DES_PASS));
+      $PASS = $DES_PASS;
   languages:
   - c
   message: |
@@ -159,8 +165,9 @@ rules:
     technology:
     - c
 - id: vuln-sudo-e99082e0
-  pattern: init_parse_tree($TREE)
-  pattern-not: init_parse_tree($TREE, $LHOST, $SHOST)
+  patterns:
+  - pattern: init_parse_tree($TREE)
+  - pattern-not: init_parse_tree($TREE, $LHOST, $SHOST)
   languages:
   - c
   message: |

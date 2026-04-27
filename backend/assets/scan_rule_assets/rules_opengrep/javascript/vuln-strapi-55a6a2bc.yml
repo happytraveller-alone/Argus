@@ -1,9 +1,10 @@
 rules:
 - id: vuln-strapi-55a6a2bc
-  pattern: |
-    ..._.omit($USER, ['password', 'resetPasswordToken', 'roles'])
-  pattern-not: |
-    ..._.omit($USER, ['password', 'resetPasswordToken', 'registrationToken', 'roles'])
+  patterns:
+  - pattern: |
+      ..._.omit($USER, ['password', 'resetPasswordToken', 'roles'])
+  - pattern-not: |
+      ..._.omit($USER, ['password', 'resetPasswordToken', 'registrationToken', 'roles'])
   languages:
   - javascript
   message: |

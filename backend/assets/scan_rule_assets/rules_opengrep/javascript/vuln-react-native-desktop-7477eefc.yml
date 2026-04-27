@@ -1,24 +1,25 @@
 rules:
 - id: vuln-react-native-desktop-7477eefc
-  pattern: |
-    child_process.exec($BUILD_COMMAND, {cwd: $CWD}, (error, stdout, stderr) => {
-      if (error)
-        $REJECT(error);
-      else {
-        console.log(stdout);
-        $RESOLVE();
-      }
-    });
-  pattern-not: |
-    child_process.spawn($BUILD_COMMAND, $BUILD_ARGUMENTS, {cwd: $CWD});
-    ...
-    child.on('close', function (code) {
-      if (code != 0) {
-        $REJECT();
-      } else {
-        $RESOLVE();
-      }
-    });
+  patterns:
+  - pattern: |
+      child_process.exec($BUILD_COMMAND, {cwd: $CWD}, (error, stdout, stderr) => {
+        if (error)
+          $REJECT(error);
+        else {
+          console.log(stdout);
+          $RESOLVE();
+        }
+      });
+  - pattern-not: |
+      child_process.spawn($BUILD_COMMAND, $BUILD_ARGUMENTS, {cwd: $CWD});
+      ...
+      child.on('close', function (code) {
+        if (code != 0) {
+          $REJECT();
+        } else {
+          $RESOLVE();
+        }
+      });
   languages:
   - javascript
   message: |

@@ -1,12 +1,13 @@
 rules:
 - id: vuln-mysql-server-044e3b1d
-  pattern: |
-    parse_option($ARG1, $ARG2, $ARG3);
-  pattern-not: |
-    if(parse_option($ARG1, $ARG2, $ARG3) == -1) {
-      ...
-      return ...;
-    }
+  patterns:
+  - pattern: |
+      parse_option($ARG1, $ARG2, $ARG3);
+  - pattern-not: |
+      if(parse_option($ARG1, $ARG2, $ARG3) == -1) {
+        ...
+        return ...;
+      }
   languages:
   - c
   message: |
@@ -22,12 +23,13 @@ rules:
     technology:
     - c
 - id: vuln-mysql-server-3d8134d2
-  pattern: |
-    if (($RC = stmt_command($MYSQL, $COM_STMT_CLOSE, $BUFF, $SIZE, $STMT))) {
-      set_stmt_errmsg($STMT, &$MYSQL->net);
-    }
-  pattern-not: |
-    $RC = stmt_command($MYSQL, $COM_STMT_CLOSE, $BUFF, $SIZE, $STMT);
+  patterns:
+  - pattern: |
+      if (($RC = stmt_command($MYSQL, $COM_STMT_CLOSE, $BUFF, $SIZE, $STMT))) {
+        set_stmt_errmsg($STMT, &$MYSQL->net);
+      }
+  - pattern-not: |
+      $RC = stmt_command($MYSQL, $COM_STMT_CLOSE, $BUFF, $SIZE, $STMT);
   languages:
   - c
   message: |
@@ -43,22 +45,23 @@ rules:
     technology:
     - c
 - id: vuln-mysql-server-4797ea0b
-  pattern: |
-    LIST *element = $MYSQL->stmts;
-    LIST *pruned_list = $INIT;
-    for (; element; element = element->next) {
-      MYSQL_STMT *stmt = (MYSQL_STMT *) element->data;
-      ...
-    }
-  pattern-not: |
-    LIST *pruned_list = NULL;
-    while ($MYSQL->stmts) {
+  patterns:
+  - pattern: |
       LIST *element = $MYSQL->stmts;
-      MYSQL_STMT *stmt;
-      $MYSQL->stmts = list_delete(element, element);
-      stmt = (MYSQL_STMT *) element->data;
-      ...
-    }
+      LIST *pruned_list = $INIT;
+      for (; element; element = element->next) {
+        MYSQL_STMT *stmt = (MYSQL_STMT *) element->data;
+        ...
+      }
+  - pattern-not: |
+      LIST *pruned_list = NULL;
+      while ($MYSQL->stmts) {
+        LIST *element = $MYSQL->stmts;
+        MYSQL_STMT *stmt;
+        $MYSQL->stmts = list_delete(element, element);
+        stmt = (MYSQL_STMT *) element->data;
+        ...
+      }
   languages:
   - c
   message: |
@@ -76,10 +79,11 @@ rules:
     technology:
     - c
 - id: vuln-mysql-server-d982e717
-  pattern: |
-    fix_identifier_with_newline($VAR)
-  pattern-not: |
-    fix_identifier_with_newline($VAR, &$FREEMEM)
+  patterns:
+  - pattern: |
+      fix_identifier_with_newline($VAR)
+  - pattern-not: |
+      fix_identifier_with_newline($VAR, &$FREEMEM)
   languages:
   - c
   message: |

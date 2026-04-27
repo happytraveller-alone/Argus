@@ -1,9 +1,10 @@
 rules:
 - id: vuln-open5gs-2f8ae91b
-  pattern: |
-    const char *$VAR[argc];
-  pattern-not: |
-    const char *$VAR[argc+1];
+  patterns:
+  - pattern: |
+      const char *$VAR[argc];
+  - pattern-not: |
+      const char *$VAR[argc+1];
   languages:
   - c
   message: |
@@ -21,14 +22,15 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-71a1516b
-  pattern: |
-    if ($VAR->version > $OGS_PFCP_VERSION) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR->version != $OGS_PFCP_VERSION) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR->version > $OGS_PFCP_VERSION) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR->version != $OGS_PFCP_VERSION) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -44,11 +46,9 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-9b762158
-  pattern: |
-    $MESSAGE->param.discovery_option.$FIELD
-  pattern-not: |
-    $DISCOVERY_OPTION = $MESSAGE->param.discovery_option;
-    $DISCOVERY_OPTION->$FIELD
+  patterns:
+  - pattern: |
+      $MESSAGE->param.discovery_option.$FIELD
   languages:
   - c
   message: |
@@ -66,10 +66,11 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-a5010a61
-  pattern: |
-    ogs_pool_init(&pool, ogs_app()->pool.gtp_node);
-  pattern-not: |
-    ogs_pool_init(&pool, ogs_app()->pool.nf);
+  patterns:
+  - pattern: |
+      ogs_pool_init(&pool, ogs_app()->pool.gtp_node);
+  - pattern-not: |
+      ogs_pool_init(&pool, ogs_app()->pool.nf);
   languages:
   - c
   message: |
@@ -88,14 +89,15 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-c2f6a020
-  pattern: |
-    ogs_assert($LENGTH == ($POS - $BLK));
-  pattern-not: |
-    if ($LENGTH != ($POS - $BLK)) {
-        ogs_fatal(...);
-        ogs_log_hexdump(...);
-        ogs_assert_if_reached();
-    }
+  patterns:
+  - pattern: |
+      ogs_assert($LENGTH == ($POS - $BLK));
+  - pattern-not: |
+      if ($LENGTH != ($POS - $BLK)) {
+          ogs_fatal(...);
+          ogs_log_hexdump(...);
+          ogs_assert_if_reached();
+      }
   languages:
   - c
   message: |

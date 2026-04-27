@@ -1,9 +1,10 @@
 rules:
 - id: vuln-openapi-generator-00c7ebab
-  pattern: |
-    val $FILE = File.createTempFile($PREFIX, $SUFFIX)
-  pattern-not: |
-    val $FILE = Files.createTempFile($PREFIX, $SUFFIX).toFile
+  patterns:
+  - pattern: |
+      val $FILE = File.createTempFile($PREFIX, $SUFFIX)
+  - pattern-not: |
+      val $FILE = Files.createTempFile($PREFIX, $SUFFIX).toFile
   languages:
   - scala
   message: |

@@ -1,17 +1,18 @@
 rules:
 - id: vuln-open-forms-222c09c3
-  pattern: |
-    {
-      ...,
-      "version": "2.2.8",
-      ...
-    }
-  pattern-not: |
-    {
-      ...,
-      "version": "2.2.9",
-      ...
-    }
+  patterns:
+  - pattern: |
+      {
+        ...,
+        "version": "2.2.8",
+        ...
+      }
+  - pattern-not: |
+      {
+        ...,
+        "version": "2.2.9",
+        ...
+      }
   languages:
   - json
   message: |

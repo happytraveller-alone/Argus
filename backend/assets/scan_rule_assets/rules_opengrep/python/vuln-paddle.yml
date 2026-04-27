@@ -15,16 +15,17 @@ rules:
     - 'CWE-78: OS Command Injection'
     - 'CWE-20: Improper Input Validation'
 - id: vuln-paddle-bdf6234f
-  pattern: |
-    subprocess.$METHOD(
-        $COMMAND_STRING + ...,
-        shell=True
-    )
-  pattern-not: |
-    subprocess.$METHOD(
-        [$ARG1, $ARG2, ..., $ARGN],
-        ...
-    )
+  patterns:
+  - pattern: |
+      subprocess.$METHOD(
+          $COMMAND_STRING + ...,
+          shell=True
+      )
+  - pattern-not: |
+      subprocess.$METHOD(
+          [$ARG1, $ARG2, ..., $ARGN],
+          ...
+      )
   languages:
   - python
   message: Potential shell injection vulnerability from unsafe subprocess call with shell=True. Use list arguments instead of string concatenation.

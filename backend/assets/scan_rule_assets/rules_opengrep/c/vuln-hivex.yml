@@ -1,9 +1,10 @@
 rules:
 - id: vuln-hivex-77172821
-  pattern: |
-    _get_children($H, $OFFSET, $CHILDREN, $BLOCKS, $FLAGS)
-  pattern-not: |
-    _get_children($H, $OFFSET, $CHILDREN, $BLOCKS, $FLAGS, $DEPTH)
+  patterns:
+  - pattern: |
+      _get_children($H, $OFFSET, $CHILDREN, $BLOCKS, $FLAGS)
+  - pattern-not: |
+      _get_children($H, $OFFSET, $CHILDREN, $BLOCKS, $FLAGS, $DEPTH)
   languages:
   - c
   message: |
@@ -19,14 +20,15 @@ rules:
     technology:
     - c
 - id: vuln-hivex-8f193573
-  pattern: |
-    SET_ERRNO($ERRNO,
-              "%s, the block at 0x%zx has invalid size %" PRIu32 ", bad registry",
-              $FILENAME, $BLKOFF, $SEG_LEN);
-  pattern-not: |
-    SET_ERRNO($ERRNO,
-              "%s, the block at 0x%zx size %" PRIu32 " extends beyond the current page, bad registry",
-              $FILENAME, $BLKOFF, $SEG_LEN);
+  patterns:
+  - pattern: |
+      SET_ERRNO($ERRNO,
+                "%s, the block at 0x%zx has invalid size %" PRIu32 ", bad registry",
+                $FILENAME, $BLKOFF, $SEG_LEN);
+  - pattern-not: |
+      SET_ERRNO($ERRNO,
+                "%s, the block at 0x%zx size %" PRIu32 " extends beyond the current page, bad registry",
+                $FILENAME, $BLKOFF, $SEG_LEN);
   languages:
   - c
   message: |

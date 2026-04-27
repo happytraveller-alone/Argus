@@ -1,9 +1,10 @@
 rules:
 - id: vuln-evmos-478b7a62
-  pattern: |
-    $PRE, err := ics20.NewPrecompile($TRANSFER_KEEPER, $CHANNEL_KEEPER, $AUTHZ_KEEPER)
-  pattern-not: |
-    $PRE, err := ics20.NewPrecompile($STAKING_KEEPER, $TRANSFER_KEEPER, $CHANNEL_KEEPER, $AUTHZ_KEEPER)
+  patterns:
+  - pattern: |
+      $PRE, err := ics20.NewPrecompile($TRANSFER_KEEPER, $CHANNEL_KEEPER, $AUTHZ_KEEPER)
+  - pattern-not: |
+      $PRE, err := ics20.NewPrecompile($STAKING_KEEPER, $TRANSFER_KEEPER, $CHANNEL_KEEPER, $AUTHZ_KEEPER)
   languages:
   - go
   message: |

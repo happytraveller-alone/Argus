@@ -1,17 +1,18 @@
 rules:
 - id: vuln-git-12294990
-  pattern: |
-    if (!$NORMCOND)
-      return 0;
-    ...
-    $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);
-  pattern-not: |
-    if ($NORMCOND)
+  patterns:
+  - pattern: |
+      if (!$NORMCOND)
+        return 0;
+      ...
       $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);
-    else if ($COLLECT->fallback_match_fn)
-      $RETVAL = $COLLECT->fallback_match_fn($CONFIGURL, $COLLECT->cb);
-    else
-      $RETVAL = 0;
+  - pattern-not: |
+      if ($NORMCOND)
+        $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);
+      else if ($COLLECT->fallback_match_fn)
+        $RETVAL = $COLLECT->fallback_match_fn($CONFIGURL, $COLLECT->cb);
+      else
+        $RETVAL = 0;
   languages:
   - c
   message: |
@@ -30,12 +31,13 @@ rules:
     technology:
     - c
 - id: vuln-git-75e00e1d
-  pattern: |
-    credential_from_url(&$C, $URL);
-  pattern-not: |
-    if (credential_from_potentially_partial_url(&$C, $URL) < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      credential_from_url(&$C, $URL);
+  - pattern-not: |
+      if (credential_from_potentially_partial_url(&$C, $URL) < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -52,19 +54,20 @@ rules:
     technology:
     - c
 - id: vuln-git-bffc762f
-  pattern: |
-    if (stat($PATH, $STAT) < 0) {
-      ...
-    }
-  pattern-not: |
-    if ($FLAGS & DIR_ITERATOR_FOLLOW_SYMLINKS)
-      $ERR = stat($PATH, $STAT);
-    else
-      $ERR = lstat($PATH, $STAT);
+  patterns:
+  - pattern: |
+      if (stat($PATH, $STAT) < 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($FLAGS & DIR_ITERATOR_FOLLOW_SYMLINKS)
+        $ERR = stat($PATH, $STAT);
+      else
+        $ERR = lstat($PATH, $STAT);
 
-    if ($ERR < 0) {
-      ...
-    }
+      if ($ERR < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -84,18 +87,19 @@ rules:
     technology:
     - c
 - id: vuln-git-c716fe4b
-  pattern: |
-    void credential_from_url(struct credential *$C, const char *$URL) {
-      ...
-      $CREDENTIAL_ACCESS($C->$FIELD);
-      ...
-    }
-  pattern-not: |
-    void credential_from_url(struct credential *$C, const char *$URL) {
-      if (credential_from_url_gently($C, $URL, 0) < 0) {
+  patterns:
+  - pattern: |
+      void credential_from_url(struct credential *$C, const char *$URL) {
+        ...
+        $CREDENTIAL_ACCESS($C->$FIELD);
         ...
       }
-    }
+  - pattern-not: |
+      void credential_from_url(struct credential *$C, const char *$URL) {
+        if (credential_from_url_gently($C, $URL, 0) < 0) {
+          ...
+        }
+      }
   languages:
   - c
   message: |
@@ -116,12 +120,13 @@ rules:
     technology:
     - c
 - id: vuln-git-cf8f6ce0
-  pattern: |
-    transport = transport_get($REMOTE, $REMOTE->url[0]);
-    ...
-  pattern-not: |
-    transport = transport_get($REMOTE, $PATH ? $PATH : $REMOTE->url[0]);
-    ...
+  patterns:
+  - pattern: |
+      transport = transport_get($REMOTE, $REMOTE->url[0]);
+      ...
+  - pattern-not: |
+      transport = transport_get($REMOTE, $PATH ? $PATH : $REMOTE->url[0]);
+      ...
   languages:
   - c
   message: |

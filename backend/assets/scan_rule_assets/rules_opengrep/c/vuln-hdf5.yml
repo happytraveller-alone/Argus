@@ -1,13 +1,14 @@
 rules:
 - id: vuln-hdf5-1750b4b0
-  pattern: |
-    if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) || (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size) == $ADDR) {
-      ...
-    }
-  pattern-not: |
-    if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) && (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size) == $ADDR) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) || (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size) == $ADDR) {
+        ...
+      }
+  - pattern-not: |
+      if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) && (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size) == $ADDR) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,10 +24,11 @@ rules:
     technology:
     - c
 - id: vuln-hdf5-302053f9
-  pattern: |
-    H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF)
-  pattern-not: |
-    H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF_SIZE, $BUF)
+  patterns:
+  - pattern: |
+      H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF)
+  - pattern-not: |
+      H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF_SIZE, $BUF)
   languages:
   - c
   message: |

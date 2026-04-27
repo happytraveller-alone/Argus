@@ -1,9 +1,10 @@
 rules:
 - id: vuln-phpmyadmin-019c4f25
-  pattern: |
-    "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, PMA_commonParams.get('table')) + "</h3>"
-  pattern-not: |
-    "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, escapeHtml(PMA_commonParams.get('table'))) + "</h3>"
+  patterns:
+  - pattern: |
+      "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, PMA_commonParams.get('table')) + "</h3>"
+  - pattern-not: |
+      "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, escapeHtml(PMA_commonParams.get('table'))) + "</h3>"
   languages:
   - javascript
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-0cd293f5
-  pattern: |
-    'DROP VIEW ' + PMA_commonParams.get('table')
-  pattern-not: |
-    'DROP VIEW ' + escapeHtml(PMA_commonParams.get('table'))
+  patterns:
+  - pattern: |
+      'DROP VIEW ' + PMA_commonParams.get('table')
+  - pattern-not: |
+      'DROP VIEW ' + escapeHtml(PMA_commonParams.get('table'))
   languages:
   - javascript
   message: |
@@ -43,10 +45,11 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-1490533d
-  pattern: |
-    var $VAR = $STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB;
-  pattern-not: |
-    var $VAR = escapeHtml($STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB);
+  patterns:
+  - pattern: |
+      var $VAR = $STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB;
+  - pattern-not: |
+      var $VAR = escapeHtml($STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB);
   languages:
   - javascript
   message: Potential XSS vulnerability due to unescaped user input in string concatenation. Use escapeHtml or similar sanitization functions to prevent XSS attacks.
@@ -63,21 +66,22 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-24d0eb55
-  pattern: |
-    try {
-        if (top != self) {
-            top.location.href = self.location.href;
-        }
-    } catch($E) {
-        alert("Redirecting... (error: " + $E);
-        top.location.href = self.location.href;
-    }
-  pattern-not: |
-    if(self == top) {
-        document.documentElement.style.display = 'block';
-    } else {
-        top.location = self.location;
-    }
+  patterns:
+  - pattern: |
+      try {
+          if (top != self) {
+              top.location.href = self.location.href;
+          }
+      } catch($E) {
+          alert("Redirecting... (error: " + $E);
+          top.location.href = self.location.href;
+      }
+  - pattern-not: |
+      if(self == top) {
+          document.documentElement.style.display = 'block';
+      } else {
+          top.location = self.location;
+      }
   languages:
   - javascript
   message: |
@@ -95,8 +99,9 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-4d21b5c0
-  pattern: columnNames.push($(this).text())
-  pattern-not: columnNames.push(escapeHtml($(this).text()))
+  patterns:
+  - pattern: columnNames.push($(this).text())
+  - pattern-not: columnNames.push(escapeHtml($(this).text()))
   languages:
   - javascript
   message: Potential XSS vulnerability due to missing HTML escaping when pushing text to columnNames. Use escapeHtml() to sanitize the input.
@@ -113,10 +118,11 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-50edafc0
-  pattern: |
-    $.getScript('http://www.phpmyadmin.net/home_page/version.js', $FUNC)
-  pattern-not: |
-    $.getJSON('http://www.phpmyadmin.net/home_page/version.json', {}, $FUNC)
+  patterns:
+  - pattern: |
+      $.getScript('http://www.phpmyadmin.net/home_page/version.js', $FUNC)
+  - pattern-not: |
+      $.getJSON('http://www.phpmyadmin.net/home_page/version.json', {}, $FUNC)
   languages:
   - javascript
   message: |
@@ -132,10 +138,11 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-647c9d12
-  pattern: |
-    var $VAR = $.sprintf($MSG, $(this).closest('td').find('div').text());
-  pattern-not: |
-    var $VAR = $.sprintf($MSG, escapeHtml($(this).closest('td').find('div').text()));
+  patterns:
+  - pattern: |
+      var $VAR = $.sprintf($MSG, $(this).closest('td').find('div').text());
+  - pattern-not: |
+      var $VAR = $.sprintf($MSG, escapeHtml($(this).closest('td').find('div').text()));
   languages:
   - javascript
   message: |
@@ -151,10 +158,11 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-6ea8fad3
-  pattern: |
-    var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').html());
-  pattern-not: |
-    var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').text());
+  patterns:
+  - pattern: |
+      var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').html());
+  - pattern-not: |
+      var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').text());
   languages:
   - javascript
   message: |

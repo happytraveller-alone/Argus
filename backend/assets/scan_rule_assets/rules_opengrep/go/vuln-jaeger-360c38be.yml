@@ -1,13 +1,14 @@
 rules:
 - id: vuln-jaeger-360c38be
-  pattern: |
-    type $STRUCT struct {
-        Password string `mapstructure:"password"`
-    }
-  pattern-not: |
-    type $STRUCT struct {
-        Password string `mapstructure:"password" json:"-"`
-    }
+  patterns:
+  - pattern: |
+      type $STRUCT struct {
+          Password string `mapstructure:"password"`
+      }
+  - pattern-not: |
+      type $STRUCT struct {
+          Password string `mapstructure:"password" json:"-"`
+      }
   languages:
   - go
   message: |

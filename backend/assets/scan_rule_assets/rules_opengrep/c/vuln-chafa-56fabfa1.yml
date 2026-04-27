@@ -1,13 +1,14 @@
 rules:
 - id: vuln-chafa-56fabfa1
-  pattern: |
-    $TYPE *$P = (const $TYPE *) &$IN;
-    ...
-    $H->$FIELD = g_ntohl (*(p++));
-  pattern-not: |
-    $TYPE *$P = &$IN;
-    ...
-    UNPACK_FIELD_U32 ($H, $P, $FIELD);
+  patterns:
+  - pattern: |
+      $TYPE *$P = (const $TYPE *) &$IN;
+      ...
+      $H->$FIELD = g_ntohl (*(p++));
+  - pattern-not: |
+      $TYPE *$P = &$IN;
+      ...
+      UNPACK_FIELD_U32 ($H, $P, $FIELD);
   languages:
   - c
   message: |

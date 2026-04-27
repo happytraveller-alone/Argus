@@ -1,9 +1,10 @@
 rules:
 - id: vuln-libdwarf-code-0b28b923
-  pattern: |
-    Dwarf_Sword $SHIFT = 0;
-  pattern-not: |
-    unsigned $SHIFT = 0;
+  patterns:
+  - pattern: |
+      Dwarf_Sword $SHIFT = 0;
+  - pattern-not: |
+      unsigned $SHIFT = 0;
   languages:
   - c
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-268c1f18
-  pattern: |
-    DECODE_LEB128_UWORD($LINE_PTR, $UTMP2);
-  pattern-not: |
-    DECODE_LEB128_UWORD_CK($LINE_PTR, $UTMP2, $DBG, $ERROR, $LINE_PTR_END);
+  patterns:
+  - pattern: |
+      DECODE_LEB128_UWORD($LINE_PTR, $UTMP2);
+  - pattern-not: |
+      DECODE_LEB128_UWORD_CK($LINE_PTR, $UTMP2, $DBG, $ERROR, $LINE_PTR_END);
   languages:
   - c
   message: |
@@ -43,10 +45,11 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-2d14a779
-  pattern: |
-    _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERROR)
-  pattern-not: |
-    _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERRCODE, $ERROR)
+  patterns:
+  - pattern: |
+      _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERROR)
+  - pattern-not: |
+      _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERRCODE, $ERROR)
   languages:
   - c
   message: |
@@ -61,25 +64,26 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-3767305d
-  pattern: |
-    $RE = calloc(sizeof(struct ranges_entry), 1);
-    ...
-    if ($RANGEPTR >= $SECTION_END) {
-        free($RE);
-        return $DW_DLV_NO_ENTRY;
-    }
-  pattern-not: |
-    $RE = calloc(sizeof(struct ranges_entry), 1);
-    ...
-    if ($RANGEPTR == $SECTION_END) {
-        break;
-    }
-    if ($RANGEPTR > $SECTION_END) {
-        free_allocated_ranges($BASE);
-        _dwarf_error($DBG, $ERROR, $DW_DLE_DEBUG_RANGES_OFFSET_BAD);
-        return $DW_DLV_ERROR;
-        break;
-    }
+  patterns:
+  - pattern: |
+      $RE = calloc(sizeof(struct ranges_entry), 1);
+      ...
+      if ($RANGEPTR >= $SECTION_END) {
+          free($RE);
+          return $DW_DLV_NO_ENTRY;
+      }
+  - pattern-not: |
+      $RE = calloc(sizeof(struct ranges_entry), 1);
+      ...
+      if ($RANGEPTR == $SECTION_END) {
+          break;
+      }
+      if ($RANGEPTR > $SECTION_END) {
+          free_allocated_ranges($BASE);
+          _dwarf_error($DBG, $ERROR, $DW_DLE_DEBUG_RANGES_OFFSET_BAD);
+          return $DW_DLV_ERROR;
+          break;
+      }
   languages:
   - c
   message: |
@@ -97,19 +101,20 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-4f19e105
-  pattern: |
-    if (($SHIFT < sizeof(Dwarf_Signed) * BITSINBYTE) && $SIGN) {
-        $NUMBER |= -(Dwarf_Signed)((Dwarf_Unsigned) 1 << $SHIFT);
-    }
-  pattern-not: |
-    if ($SIGN) {
-        unsigned shiftlim = sizeof(Dwarf_Signed) * BITSINBYTE -1;
-        if ($SHIFT < shiftlim) {
-            $NUMBER |= -(Dwarf_Signed)(((Dwarf_Unsigned)1) << $SHIFT);
-        } else if ($SHIFT == shiftlim) {
-            $NUMBER |= (((Dwarf_Unsigned)1) << $SHIFT);
-        }
-    }
+  patterns:
+  - pattern: |
+      if (($SHIFT < sizeof(Dwarf_Signed) * BITSINBYTE) && $SIGN) {
+          $NUMBER |= -(Dwarf_Signed)((Dwarf_Unsigned) 1 << $SHIFT);
+      }
+  - pattern-not: |
+      if ($SIGN) {
+          unsigned shiftlim = sizeof(Dwarf_Signed) * BITSINBYTE -1;
+          if ($SHIFT < shiftlim) {
+              $NUMBER |= -(Dwarf_Signed)(((Dwarf_Unsigned)1) << $SHIFT);
+          } else if ($SHIFT == shiftlim) {
+              $NUMBER |= (((Dwarf_Unsigned)1) << $SHIFT);
+          }
+      }
   languages:
   - c
   message: |
@@ -125,11 +130,12 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-8151575a
-  pattern: |
-    pubnames_like_ptr = pubnames_like_ptr + strlen((char *) pubnames_like_ptr) + 1;
-  pattern-not: |
-    $NSTRLEN = strlen((char *)pubnames_like_ptr);
-    pubnames_like_ptr += $NSTRLEN + 1;
+  patterns:
+  - pattern: |
+      pubnames_like_ptr = pubnames_like_ptr + strlen((char *) pubnames_like_ptr) + 1;
+  - pattern-not: |
+      $NSTRLEN = strlen((char *)pubnames_like_ptr);
+      pubnames_like_ptr += $NSTRLEN + 1;
   languages:
   - c
   message: |
@@ -144,19 +150,20 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-9565964f
-  pattern: |
-    if(!$VAR) {
-      return;
-    }
-    $LEN = strlen($VAR);
-    $FUNC($DATA, $VAR, $LEN);
-  pattern-not: |
-    if($VAR) {
-      $LEN = strlen($VAR);
-      if ($LEN) {
-        $FUNC($DATA, $VAR, $LEN);
+  patterns:
+  - pattern: |
+      if(!$VAR) {
+        return;
       }
-    }
+      $LEN = strlen($VAR);
+      $FUNC($DATA, $VAR, $LEN);
+  - pattern-not: |
+      if($VAR) {
+        $LEN = strlen($VAR);
+        if ($LEN) {
+          $FUNC($DATA, $VAR, $LEN);
+        }
+      }
   languages:
   - c
   message: |
@@ -172,34 +179,35 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-98a3da1e
-  pattern: |
-    void
-    print_error(Dwarf_Debug dbg,
-        const char * msg,
-        int dwarf_code,
-        Dwarf_Error lerr)
-    {
-        print_error_and_continue(dbg,msg,dwarf_code,lerr);
-        if (dbg) {
-            Dwarf_Error ignored_err = 0;
-            dwarf_finish(dbg, &ignored_err);
-        }
-        exit(FAILED);
-    }
-  pattern-not: |
-    void
-    print_error(Dwarf_Debug dbg,
-        const char * msg,
-        int dwarf_code,
-        Dwarf_Error lerr)
-    {
-        print_error_maybe_continue(dbg,msg,dwarf_code,lerr,FALSE);
-        if (dbg) {
-            Dwarf_Error ignored_err = 0;
-            dwarf_finish(dbg, &ignored_err);
-        }
-        exit(FAILED);
-    }
+  patterns:
+  - pattern: |
+      void
+      print_error(Dwarf_Debug dbg,
+          const char * msg,
+          int dwarf_code,
+          Dwarf_Error lerr)
+      {
+          print_error_and_continue(dbg,msg,dwarf_code,lerr);
+          if (dbg) {
+              Dwarf_Error ignored_err = 0;
+              dwarf_finish(dbg, &ignored_err);
+          }
+          exit(FAILED);
+      }
+  - pattern-not: |
+      void
+      print_error(Dwarf_Debug dbg,
+          const char * msg,
+          int dwarf_code,
+          Dwarf_Error lerr)
+      {
+          print_error_maybe_continue(dbg,msg,dwarf_code,lerr,FALSE);
+          if (dbg) {
+              Dwarf_Error ignored_err = 0;
+              dwarf_finish(dbg, &ignored_err);
+          }
+          exit(FAILED);
+      }
   languages:
   - c
   message: |
@@ -216,16 +224,17 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-da724a0b
-  pattern: |
-    $LIST = _dwarf_get_abbrev_for_code($CONTEXT, $CODE);
-    if ($LIST == NULL) {
-      ...
-    }
-  pattern-not: |
-    $RES = _dwarf_get_abbrev_for_code($CONTEXT, $CODE, &$LIST, $ERROR);
-    if ($RES == DW_DLV_ERROR) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      $LIST = _dwarf_get_abbrev_for_code($CONTEXT, $CODE);
+      if ($LIST == NULL) {
+        ...
+      }
+  - pattern-not: |
+      $RES = _dwarf_get_abbrev_for_code($CONTEXT, $CODE, &$LIST, $ERROR);
+      if ($RES == DW_DLV_ERROR) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -241,10 +250,11 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-faf99408
-  pattern: |
-    dwarfstring_append_printf_s($VAR, $FORMAT, (char *) $VAR2->fi_file_name);
-  pattern-not: |
-    dwarfstring_append_printf_s($VAR, $FORMAT, $VAR2->fi_file_name ? (char *) $VAR2->fi_file_name : "<no file name>");
+  patterns:
+  - pattern: |
+      dwarfstring_append_printf_s($VAR, $FORMAT, (char *) $VAR2->fi_file_name);
+  - pattern-not: |
+      dwarfstring_append_printf_s($VAR, $FORMAT, $VAR2->fi_file_name ? (char *) $VAR2->fi_file_name : "<no file name>");
   languages:
   - c
   message: |

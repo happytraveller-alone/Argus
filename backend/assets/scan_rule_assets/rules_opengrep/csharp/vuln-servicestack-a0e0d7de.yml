@@ -1,9 +1,10 @@
 rules:
 - id: vuln-servicestack-a0e0d7de
-  pattern: |
-    $VAR = $VAR.Replace("<", "&lt;").Replace(">", "&gt;")
-  pattern-not: |
-    $VAR = $VAR.HtmlEncode()
+  patterns:
+  - pattern: |
+      $VAR = $VAR.Replace("<", "&lt;").Replace(">", "&gt;")
+  - pattern-not: |
+      $VAR = $VAR.HtmlEncode()
   languages:
   - csharp
   message: |

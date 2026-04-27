@@ -1,26 +1,27 @@
 rules:
 - id: vuln-runc-0d62b950
-  pattern: |
-    utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {
-      if err := mount($SOURCE, $DEST, $PROCFD, "cgroup2", $FLAGS, $DATA); err != nil {
-        if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EBUSY) {
-          $SRC = $UNIFIEDMOUNTPOINT
-          if $CGROUPNS && $CGROUP2PATH != "" {
-            $SRC = $CGROUP2PATH
+  patterns:
+  - pattern: |
+      utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {
+        if err := mount($SOURCE, $DEST, $PROCFD, "cgroup2", $FLAGS, $DATA); err != nil {
+          if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EBUSY) {
+            $SRC = $UNIFIEDMOUNTPOINT
+            if $CGROUPNS && $CGROUP2PATH != "" {
+              $SRC = $CGROUP2PATH
+            }
+            err = mount($SRC, $DEST, $PROCFD, "", $FLAGS|unix.MS_BIND, "")
+            if $ROOTLESSCGROUPS && errors.Is(err, unix.ENOENT) {
+              err = nil
+            }
           }
-          err = mount($SRC, $DEST, $PROCFD, "", $FLAGS|unix.MS_BIND, "")
-          if $ROOTLESSCGROUPS && errors.Is(err, unix.ENOENT) {
-            err = nil
-          }
+          return err
         }
-        return err
-      }
-      return nil
-    })
-  pattern-not: |
-    utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {
-      return mount($SOURCE, $DEST, $PROCFD, "cgroup2", $FLAGS, $DATA)
-    })
+        return nil
+      })
+  - pattern-not: |
+      utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {
+        return mount($SOURCE, $DEST, $PROCFD, "cgroup2", $FLAGS, $DATA)
+      })
   languages:
   - go
   message: |
@@ -37,13 +38,14 @@ rules:
     technology:
     - go
 - id: vuln-runc-2b221a6a
-  pattern: |
-    if err := setRecAttr($M, $ROOTFS); err != nil {
-      return err
-    }
-    return nil
-  pattern-not: |
-    return setRecAttr($M, $ROOTFS)
+  patterns:
+  - pattern: |
+      if err := setRecAttr($M, $ROOTFS); err != nil {
+        return err
+      }
+      return nil
+  - pattern-not: |
+      return setRecAttr($M, $ROOTFS)
   languages:
   - go
   message: |
@@ -59,14 +61,15 @@ rules:
     technology:
     - go
 - id: vuln-runc-331692ba
-  pattern: |
-    if err := checkMountDestination($ROOTFS, $DEST); err != nil {
-        ...
-    }
-  pattern-not: |
-    if err := checkProcMount($ROOTFS, $DEST, $SOURCE); err != nil {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if err := checkMountDestination($ROOTFS, $DEST); err != nil {
+          ...
+      }
+  - pattern-not: |
+      if err := checkProcMount($ROOTFS, $DEST, $SOURCE); err != nil {
+          ...
+      }
   languages:
   - go
   message: |
@@ -86,19 +89,20 @@ rules:
     technology:
     - go
 - id: vuln-runc-87819939
-  pattern: |
-    dest, err := securejoin.SecureJoin($ROOTFS, $DESTINATION)
-    if err != nil {
-        return err
-    }
-    if err := os.MkdirAll(dest, 0o755); err != nil {
-        return err
-    }
-  pattern-not: |
-    dest, err := createMountpoint($ROOTFS, $MOUNT, $MOUNTFD, $SOURCE)
-    if err != nil {
-        return fmt.Errorf("create mount destination for %s mount: %w", $DESTINATION, err)
-    }
+  patterns:
+  - pattern: |
+      dest, err := securejoin.SecureJoin($ROOTFS, $DESTINATION)
+      if err != nil {
+          return err
+      }
+      if err := os.MkdirAll(dest, 0o755); err != nil {
+          return err
+      }
+  - pattern-not: |
+      dest, err := createMountpoint($ROOTFS, $MOUNT, $MOUNTFD, $SOURCE)
+      if err != nil {
+          return fmt.Errorf("create mount destination for %s mount: %w", $DESTINATION, err)
+      }
   languages:
   - go
   message: |
@@ -116,10 +120,11 @@ rules:
     technology:
     - go
 - id: vuln-runc-9aef5044
-  pattern: |
-    fmt.Errorf("Bad label option %q, valid options 'disable, user, role, level, type'", $CON)
-  pattern-not: |
-    fmt.Errorf("Bad label option %q, valid options 'disable, user, role, level, type, filetype'", $CON)
+  patterns:
+  - pattern: |
+      fmt.Errorf("Bad label option %q, valid options 'disable, user, role, level, type'", $CON)
+  - pattern-not: |
+      fmt.Errorf("Bad label option %q, valid options 'disable, user, role, level, type, filetype'", $CON)
   languages:
   - go
   message: |
@@ -135,20 +140,21 @@ rules:
     technology:
     - go
 - id: vuln-runc-9c444070
-  pattern: |
-    func prepareBindMount($M *configs.Mount, $ROOTFS string) error {
-      $STAT, $ERR := os.Stat($M.Source)
-      ...
-    }
-  pattern-not: |
-    func prepareBindMount($M *configs.Mount, $ROOTFS string, $MOUNTFD *int) error {
-      $SOURCE := $M.Source
-      if $MOUNTFD != nil {
-        $SOURCE = "/proc/self/fd/" + strconv.Itoa(*$MOUNTFD)
+  patterns:
+  - pattern: |
+      func prepareBindMount($M *configs.Mount, $ROOTFS string) error {
+        $STAT, $ERR := os.Stat($M.Source)
+        ...
       }
-      $STAT, $ERR := os.Stat($SOURCE)
-      ...
-    }
+  - pattern-not: |
+      func prepareBindMount($M *configs.Mount, $ROOTFS string, $MOUNTFD *int) error {
+        $SOURCE := $M.Source
+        if $MOUNTFD != nil {
+          $SOURCE = "/proc/self/fd/" + strconv.Itoa(*$MOUNTFD)
+        }
+        $STAT, $ERR := os.Stat($SOURCE)
+        ...
+      }
   languages:
   - go
   message: |
@@ -167,10 +173,9 @@ rules:
     technology:
     - go
 - id: vuln-runc-d04de3a9
-  pattern: |
-    $CAPABILITIES.Inheritable = append($CAPABILITIES.Inheritable, $CAP)
-  pattern-not: |
-    $CAPABILITIES.Inheritable = []
+  patterns:
+  - pattern: |
+      $CAPABILITIES.Inheritable = append($CAPABILITIES.Inheritable, $CAP)
   languages:
   - go
   message: |

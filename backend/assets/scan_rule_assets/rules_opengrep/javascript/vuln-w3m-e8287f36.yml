@@ -1,9 +1,10 @@
 rules:
 - id: vuln-w3m-e8287f36
-  pattern: |
-    "$NAME": { "codepoints": $CP, "characters": "\u00AD" }
-  pattern-not: |
-    "$NAME": { "codepoints": $CP, "characters": "" }
+  patterns:
+  - pattern: |
+      "$NAME": { "codepoints": $CP, "characters": "\u00AD" }
+  - pattern-not: |
+      "$NAME": { "codepoints": $CP, "characters": "" }
   languages:
   - javascript
   message: Potentially dangerous use of soft hyphen character (u00AD) in entity mapping. This can lead to unexpected rendering or security issues. Replace with an empty string to mitigate the risk.

@@ -1,13 +1,14 @@
 rules:
 - id: vuln-framework-887b0fa9
-  pattern: |
-    if ((/__proto__|constructor|prototype|eval/).test($VAR)) {
-      ...
-    }
-  pattern-not: |
-    if ((/__proto__|constructor|prototype|eval|function|\*|\+|;|\s|\(|\)|!/).test($VAR)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ((/__proto__|constructor|prototype|eval/).test($VAR)) {
+        ...
+      }
+  - pattern-not: |
+      if ((/__proto__|constructor|prototype|eval|function|\*|\+|;|\s|\(|\)|!/).test($VAR)) {
+        ...
+      }
   languages:
   - javascript
   message: |
@@ -21,12 +22,13 @@ rules:
     technology:
     - javascript
 - id: vuln-framework-c812bbca
-  pattern: |
-    if ((/__proto__|constructor|prototype/).test($VAR))
-      throw new Error('Prototype pollution');
-  pattern-not: |
-    if ((/__proto__|constructor|prototype|eval/).test($VAR))
-      throw new Error('Potential vulnerability');
+  patterns:
+  - pattern: |
+      if ((/__proto__|constructor|prototype/).test($VAR))
+        throw new Error('Prototype pollution');
+  - pattern-not: |
+      if ((/__proto__|constructor|prototype|eval/).test($VAR))
+        throw new Error('Potential vulnerability');
   languages:
   - javascript
   message: Incomplete protection against prototype pollution. The regular expression check should include 'eval' to prevent potential vulnerabilities.
@@ -39,20 +41,21 @@ rules:
     technology:
     - javascript
 - id: vuln-framework-de16238d
-  pattern: |
-    if ($REQ.uri.pathname.indexOf('./') !== -1) {
-      $REQ.$total_status(404);
-      return;
-    }
-  pattern-not: |
-    for (var $I = 0; $I < $REQ.uri.pathname.length; $I++) {
-      var $C = $REQ.uri.pathname[$I];
-      var $N = $REQ.uri.pathname[$I + 1];
-      if (($C === '.' && $N === '/') || ($C === '%' && $N === '2' && $REQ.uri.pathname[$I + 2] === 'e')) {
+  patterns:
+  - pattern: |
+      if ($REQ.uri.pathname.indexOf('./') !== -1) {
         $REQ.$total_status(404);
         return;
       }
-    }
+  - pattern-not: |
+      for (var $I = 0; $I < $REQ.uri.pathname.length; $I++) {
+        var $C = $REQ.uri.pathname[$I];
+        var $N = $REQ.uri.pathname[$I + 1];
+        if (($C === '.' && $N === '/') || ($C === '%' && $N === '2' && $REQ.uri.pathname[$I + 2] === 'e')) {
+          $REQ.$total_status(404);
+          return;
+        }
+      }
   languages:
   - javascript
   message: Insecure path validation detected. The previous check for './' in pathnames was insufficient and could be bypassed. Use a more robust validation that checks for both './' and URL-encoded variations to prevent path traversal attacks.

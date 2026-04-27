@@ -1,9 +1,10 @@
 rules:
 - id: vuln-steeltoe-c5d4a94e
-  pattern: |
-    $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedUri())
-  pattern-not: |
-    $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedString())
+  patterns:
+  - pattern: |
+      $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedUri())
+  - pattern-not: |
+      $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedString())
   languages:
   - csharp
   message: |

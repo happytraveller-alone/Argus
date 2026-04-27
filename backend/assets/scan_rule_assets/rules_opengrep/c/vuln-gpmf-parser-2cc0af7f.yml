@@ -1,8 +1,9 @@
 rules:
 - id: vuln-gpmf-parser-2cc0af7f
-  pattern: |
-    if ($MP4->filesize < 64) return 0;
-  pattern-not: "if ($MP4->filesize < 64) \n{\n    free($MP4);\n    return 0;\n}\n"
+  patterns:
+  - pattern: |
+      if ($MP4->filesize < 64) return 0;
+  - pattern-not: "if ($MP4->filesize < 64) \n{\n    free($MP4);\n    return 0;\n}\n"
   languages:
   - c
   message: |

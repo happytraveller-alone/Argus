@@ -1,9 +1,10 @@
 rules:
 - id: vuln-joplin-9c20d594
-  pattern: |
-    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta'];
-  pattern-not: |
-    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
+  patterns:
+  - pattern: |
+      const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta'];
+  - pattern-not: |
+      const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
   languages:
   - typescript
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - typescript
 - id: vuln-joplin-feaecf76
-  pattern: |
-    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
-  pattern-not: |
-    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript', 'button', 'form', 'input', 'select', 'textarea', 'option', 'optgroup'];
+  patterns:
+  - pattern: |
+      const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
+  - pattern-not: |
+      const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript', 'button', 'form', 'input', 'select', 'textarea', 'option', 'optgroup'];
   languages:
   - typescript
   message: |

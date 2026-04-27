@@ -1,9 +1,10 @@
 rules:
 - id: vuln-libsndfile-5d531930
-  pattern: |
-    int blockwidth;
-  pattern-not: |
-    sf_count_t blockwidth;
+  patterns:
+  - pattern: |
+      int blockwidth;
+  - pattern-not: |
+      sf_count_t blockwidth;
   languages:
   - cpp
   message: |

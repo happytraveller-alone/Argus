@@ -1,17 +1,18 @@
 rules:
 - id: vuln-go-0bf7ee99
-  pattern: |
-    $VAR, $ERR := io.ReadAll($R)
-    ...
-    if $ERR != nil {
+  patterns:
+  - pattern: |
+      $VAR, $ERR := io.ReadAll($R)
       ...
-    }
-  pattern-not: |
-    $VAR, $ERR := readSpecialFile($R)
-    ...
-    if $ERR != nil {
+      if $ERR != nil {
+        ...
+      }
+  - pattern-not: |
+      $VAR, $ERR := readSpecialFile($R)
       ...
-    }
+      if $ERR != nil {
+        ...
+      }
   languages:
   - go
   message: |
@@ -30,17 +31,18 @@ rules:
     technology:
     - go
 - id: vuln-go-0d1615b2
-  pattern: |
-    if _, ok := $E.(bailout); !ok {
-      ...
-    }
-  pattern-not: |
-    $BAIL, $OK := $E.(bailout)
-    if !$OK {
-      ...
-    } else if $BAIL.$MSG != "" {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if _, ok := $E.(bailout); !ok {
+        ...
+      }
+  - pattern-not: |
+      $BAIL, $OK := $E.(bailout)
+      if !$OK {
+        ...
+      } else if $BAIL.$MSG != "" {
+        ...
+      }
   languages:
   - go
   message: |
@@ -61,17 +63,18 @@ rules:
     technology:
     - go
 - id: vuln-go-0d347544
-  pattern: |
-    {
-        "_html_template_attrescaper": true,
-        "_html_template_nospaceescaper": true,
-        "_html_template_htmlescaper": true,
-    }
-  pattern-not: |
-    {
-        "_html_template_attrescaper": true,
-        "_html_template_htmlescaper": true,
-    }
+  patterns:
+  - pattern: |
+      {
+          "_html_template_attrescaper": true,
+          "_html_template_nospaceescaper": true,
+          "_html_template_htmlescaper": true,
+      }
+  - pattern-not: |
+      {
+          "_html_template_attrescaper": true,
+          "_html_template_htmlescaper": true,
+      }
   languages:
   - go
   message: |
@@ -87,10 +90,11 @@ rules:
     technology:
     - go
 - id: vuln-go-1008486a
-  pattern: |
-    fmt.Fprintf($F, "_CGO_%s=%s\n", $ARG)
-  pattern-not: |
-    fmt.Fprintf($F, "_CGO_%s=%s\n", $K, $ARG)
+  patterns:
+  - pattern: |
+      fmt.Fprintf($F, "_CGO_%s=%s\n", $ARG)
+  - pattern-not: |
+      fmt.Fprintf($F, "_CGO_%s=%s\n", $K, $ARG)
   languages:
   - go
   message: |
@@ -110,26 +114,27 @@ rules:
     technology:
     - go
 - id: vuln-go-1102616c
-  pattern: |
-    func validateRepoRootScheme($REPO_ROOT string) error {
-        $END := strings.Index($REPO_ROOT, "://")
-        if $END <= 0 {
-            return errors.New("no scheme")
-        }
-        ...
-        return nil
-    }
-  pattern-not: |
-    func validateRepoRoot($REPO_ROOT string) error {
-        $URL, $ERR := url.Parse($REPO_ROOT)
-        if $ERR != nil {
-            return $ERR
-        }
-        if $URL.Scheme == "" {
-            return errors.New("no scheme")
-        }
-        return nil
-    }
+  patterns:
+  - pattern: |
+      func validateRepoRootScheme($REPO_ROOT string) error {
+          $END := strings.Index($REPO_ROOT, "://")
+          if $END <= 0 {
+              return errors.New("no scheme")
+          }
+          ...
+          return nil
+      }
+  - pattern-not: |
+      func validateRepoRoot($REPO_ROOT string) error {
+          $URL, $ERR := url.Parse($REPO_ROOT)
+          if $ERR != nil {
+              return $ERR
+          }
+          if $URL.Scheme == "" {
+              return errors.New("no scheme")
+          }
+          return nil
+      }
   languages:
   - go
   message: |
@@ -144,16 +149,17 @@ rules:
     technology:
     - go
 - id: vuln-go-179821c9
-  pattern: |
-    if $COND {
-      return errors.New("http: invalid Host header")
-    }
-  pattern-not: |
-    if $COND {
-      $HOST = ""
-    } else {
-      return errors.New("http: invalid Host header")
-    }
+  patterns:
+  - pattern: |
+      if $COND {
+        return errors.New("http: invalid Host header")
+      }
+  - pattern-not: |
+      if $COND {
+        $HOST = ""
+      } else {
+        return errors.New("http: invalid Host header")
+      }
   languages:
   - go
   message: |
@@ -171,14 +177,15 @@ rules:
     technology:
     - go
 - id: vuln-go-1dd24caf
-  pattern: |
-    if ($SIZE - $DIR_SIZE)/$DIV >= $RECORDS {
-      ...
-    }
-  pattern-not: |
-    if $DIR_SIZE < $SIZE && ($SIZE - $DIR_SIZE)/$DIV >= $RECORDS {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($SIZE - $DIR_SIZE)/$DIV >= $RECORDS {
+        ...
+      }
+  - pattern-not: |
+      if $DIR_SIZE < $SIZE && ($SIZE - $DIR_SIZE)/$DIV >= $RECORDS {
+        ...
+      }
   languages:
   - go
   message: |
@@ -196,14 +203,15 @@ rules:
     technology:
     - go
 - id: vuln-go-222ee24a
-  pattern: |
-    if !ascii.EqualFold(textproto.TrimString($VAR), "chunked") {
-      ...
-    }
-  pattern-not: |
-    if !ascii.EqualFold($VAR, "chunked") {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if !ascii.EqualFold(textproto.TrimString($VAR), "chunked") {
+        ...
+      }
+  - pattern-not: |
+      if !ascii.EqualFold($VAR, "chunked") {
+        ...
+      }
   languages:
   - go
   message: |
@@ -222,29 +230,30 @@ rules:
     technology:
     - go
 - id: vuln-go-23c943e5
-  pattern: |
-    scheme := $VCS.Scheme[0]
-    if $VCS.PingCmd != "" {
-      ...
-      if $VCS.Ping($S, $REPO) == nil {
-        scheme = $S
-        break
+  patterns:
+  - pattern: |
+      scheme := $VCS.Scheme[0]
+      if $VCS.PingCmd != "" {
+        ...
+        if $VCS.Ping($S, $REPO) == nil {
+          scheme = $S
+          break
+        }
       }
-    }
-  pattern-not: |
-    scheme, err := func() (string, error) {
-      ...
-      if $VCS.PingCmd == "" {
-        return $S, nil
+  - pattern-not: |
+      scheme, err := func() (string, error) {
+        ...
+        if $VCS.PingCmd == "" {
+          return $S, nil
+        }
+        if err := $VCS.Ping($S, $REPO); err == nil {
+          return $S, nil
+        }
+        return "", fmt.Errorf("no %sprotocol found for repository", $SECURITYFRAG)
+      }()
+      if err != nil {
+        return nil, err
       }
-      if err := $VCS.Ping($S, $REPO); err == nil {
-        return $S, nil
-      }
-      return "", fmt.Errorf("no %sprotocol found for repository", $SECURITYFRAG)
-    }()
-    if err != nil {
-      return nil, err
-    }
   languages:
   - go
   message: |
@@ -266,14 +275,15 @@ rules:
     technology:
     - go
 - id: vuln-go-2a7adf4c
-  pattern: |
-    func dedupEnv($ENV []string) []string {
-        ...
-    }
-  pattern-not: |
-    func dedupEnv($ENV []string) ([]string, error) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      func dedupEnv($ENV []string) []string {
+          ...
+      }
+  - pattern-not: |
+      func dedupEnv($ENV []string) ([]string, error) {
+          ...
+      }
   languages:
   - go
   message: |
@@ -292,11 +302,12 @@ rules:
     technology:
     - go
 - id: vuln-go-312920c0
-  pattern: |
-    $HOST := cleanHost($HOST_VAR)
-  pattern-not: |
-    $HOST := $HOST_VAR
-    $HOST, $ERR := httpguts.PunycodeHostPort($HOST)
+  patterns:
+  - pattern: |
+      $HOST := cleanHost($HOST_VAR)
+  - pattern-not: |
+      $HOST := $HOST_VAR
+      $HOST, $ERR := httpguts.PunycodeHostPort($HOST)
   languages:
   - go
   message: |
@@ -316,17 +327,18 @@ rules:
     technology:
     - go
 - id: vuln-go-3226f2d4
-  pattern: |
-    func portOnly(hostport string) string {
-      ...
-      return $RET
-    }
-  pattern-not: |
-    func portOnly(hostport string) string {
-      ...
-      _, port := splitHostPort(hostport)
-      return port
-    }
+  patterns:
+  - pattern: |
+      func portOnly(hostport string) string {
+        ...
+        return $RET
+      }
+  - pattern-not: |
+      func portOnly(hostport string) string {
+        ...
+        _, port := splitHostPort(hostport)
+        return port
+      }
   languages:
   - go
   message: |
@@ -344,15 +356,16 @@ rules:
     technology:
     - go
 - id: vuln-go-33d725e5
-  pattern: |
-    if $N + $DIRLEN + $I <= len($B) {
+  patterns:
+  - pattern: |
+      if $N + $DIRLEN + $I <= len($B) {
+        return $I
+      }
+  - pattern-not: |
+      if $N + $DIRLEN + $I > len($B) {
+        return -1
+      }
       return $I
-    }
-  pattern-not: |
-    if $N + $DIRLEN + $I > len($B) {
-      return -1
-    }
-    return $I
   languages:
   - go
   message: |
@@ -371,14 +384,15 @@ rules:
     technology:
     - go
 - id: vuln-go-43063521
-  pattern: |
-    $Z[$N-1] = $C1 + $C2
-    if $Z[$N-1] < $C1 { ... }
-  pattern-not: |
-    $CX := $C1 + $C2
-    $CY := $CX + $C3
-    $Z[$N-1] = $CY
-    if $CX < $C2 || $CY < $C3 { ... }
+  patterns:
+  - pattern: |
+      $Z[$N-1] = $C1 + $C2
+      if $Z[$N-1] < $C1 { ... }
+  - pattern-not: |
+      $CX := $C1 + $C2
+      $CY := $CX + $C3
+      $Z[$N-1] = $CY
+      if $CX < $C2 || $CY < $C3 { ... }
   languages:
   - go
   message: |
@@ -394,10 +408,11 @@ rules:
     technology:
     - go
 - id: vuln-go-51fd3d43
-  pattern: |
-    b.runOut($DIR, $IMPORT_PATH, nil, b.PkgconfigCmd(), $FLAG, "--", $PKGS)
-  pattern-not: |
-    b.runOut($DIR, $IMPORT_PATH, nil, b.PkgconfigCmd(), $FLAG, $PFLAGS, "--", $PKGS)
+  patterns:
+  - pattern: |
+      b.runOut($DIR, $IMPORT_PATH, nil, b.PkgconfigCmd(), $FLAG, "--", $PKGS)
+  - pattern-not: |
+      b.runOut($DIR, $IMPORT_PATH, nil, b.PkgconfigCmd(), $FLAG, $PFLAGS, "--", $PKGS)
   languages:
   - go
   message: |
@@ -414,19 +429,20 @@ rules:
     technology:
     - go
 - id: vuln-go-618120c1
-  pattern: |
-    const $MAX_CACHED_HEADERS = $N
-    ...
-    if len($SC.canonHeader) < $MAX_CACHED_HEADERS {
-        ...
-    }
-  pattern-not: |
-    const $MAX_CACHED_HEADERS_SIZE = $SIZE
-    ...
-    if $SC.canonHeaderKeysSize + $SIZE <= $MAX_CACHED_HEADERS_SIZE {
-        $SC.canonHeaderKeysSize += $SIZE
-        ...
-    }
+  patterns:
+  - pattern: |
+      const $MAX_CACHED_HEADERS = $N
+      ...
+      if len($SC.canonHeader) < $MAX_CACHED_HEADERS {
+          ...
+      }
+  - pattern-not: |
+      const $MAX_CACHED_HEADERS_SIZE = $SIZE
+      ...
+      if $SC.canonHeaderKeysSize + $SIZE <= $MAX_CACHED_HEADERS_SIZE {
+          $SC.canonHeaderKeysSize += $SIZE
+          ...
+      }
   languages:
   - go
   message: |
@@ -445,10 +461,11 @@ rules:
     technology:
     - go
 - id: vuln-go-73e862ec
-  pattern: |
-    strings.ReplaceAll($S, "{"+$K+"}", $V)
-  pattern-not: |
-    strings.NewReplacer($OLDNEW...).Replace($S)
+  patterns:
+  - pattern: |
+      strings.ReplaceAll($S, "{"+$K+"}", $V)
+  - pattern-not: |
+      strings.NewReplacer($OLDNEW...).Replace($S)
   languages:
   - go
   message: |
@@ -466,12 +483,13 @@ rules:
     technology:
     - go
 - id: vuln-go-7478ea5d
-  pattern: |
-    defer $FILE.Close()
-  pattern-not: |
-    if $CERR := $FILE.Close(); $ERR == nil {
-      $ERR = $CERR
-    }
+  patterns:
+  - pattern: |
+      defer $FILE.Close()
+  - pattern-not: |
+      if $CERR := $FILE.Close(); $ERR == nil {
+        $ERR = $CERR
+      }
   languages:
   - go
   message: |
@@ -489,23 +507,24 @@ rules:
     technology:
     - go
 - id: vuln-go-77013065
-  pattern: |
-    func ($C *Certificate) buildChains($CACHE map[int][][]*Certificate, $CURRENT_CHAIN []*Certificate, $OPTS *VerifyOptions) ([][]*Certificate, error) {
-      $ROOTS, $FAILED_ROOT, $ROOT_ERR := $OPTS.Roots.findVerifiedParents($C)
-      ...
-      $INTERMEDIATES, $FAILED_INTERMEDIATE, $INTERMEDIATE_ERR := $OPTS.Intermediates.findVerifiedParents($C)
-      ...
-    }
-  pattern-not: |
-    func ($C *Certificate) buildChains($CACHE map[*Certificate][][]*Certificate, $CURRENT_CHAIN []*Certificate, $SIG_CHECKS *int, $OPTS *VerifyOptions) ([][]*Certificate, error) {
-      ...
-      for _, $ROOT_NUM := range $OPTS.Roots.findPotentialParents($C) {
+  patterns:
+  - pattern: |
+      func ($C *Certificate) buildChains($CACHE map[int][][]*Certificate, $CURRENT_CHAIN []*Certificate, $OPTS *VerifyOptions) ([][]*Certificate, error) {
+        $ROOTS, $FAILED_ROOT, $ROOT_ERR := $OPTS.Roots.findVerifiedParents($C)
+        ...
+        $INTERMEDIATES, $FAILED_INTERMEDIATE, $INTERMEDIATE_ERR := $OPTS.Intermediates.findVerifiedParents($C)
         ...
       }
-      for _, $INTERMEDIATE_NUM := range $OPTS.Intermediates.findPotentialParents($C) {
+  - pattern-not: |
+      func ($C *Certificate) buildChains($CACHE map[*Certificate][][]*Certificate, $CURRENT_CHAIN []*Certificate, $SIG_CHECKS *int, $OPTS *VerifyOptions) ([][]*Certificate, error) {
         ...
+        for _, $ROOT_NUM := range $OPTS.Roots.findPotentialParents($C) {
+          ...
+        }
+        for _, $INTERMEDIATE_NUM := range $OPTS.Intermediates.findPotentialParents($C) {
+          ...
+        }
       }
-    }
   languages:
   - go
   message: |
@@ -523,14 +542,15 @@ rules:
     technology:
     - go
 - id: vuln-go-7917b5f3
-  pattern: |
-    func readMIMEHeader($R *textproto.Reader, $LIM int64) (textproto.MIMEHeader, error) {
-      ...
-    }
-  pattern-not: |
-    func readMIMEHeader($R *textproto.Reader, $MAXMEMORY, $MAXHEADERS int64) (textproto.MIMEHeader, error) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      func readMIMEHeader($R *textproto.Reader, $LIM int64) (textproto.MIMEHeader, error) {
+        ...
+      }
+  - pattern-not: |
+      func readMIMEHeader($R *textproto.Reader, $MAXMEMORY, $MAXHEADERS int64) (textproto.MIMEHeader, error) {
+        ...
+      }
   languages:
   - go
   message: |
@@ -548,10 +568,11 @@ rules:
     technology:
     - go
 - id: vuln-go-8ac275bb
-  pattern: |
-    $VAR = os.TempDir() + $PATH
-  pattern-not: |
-    $VAR = filepath.Join($DIR, $PATH)
+  patterns:
+  - pattern: |
+      $VAR = os.TempDir() + $PATH
+  - pattern-not: |
+      $VAR = filepath.Join($DIR, $PATH)
   languages:
   - go
   message: |
@@ -570,14 +591,15 @@ rules:
     technology:
     - go
 - id: vuln-go-8fcee8ab
-  pattern: |
-    if $HEADER.Get("Content-Type") == "" {
-      $HEADER.Set("Content-Type", "text/html; charset=utf-8")
-    }
-  pattern-not: |
-    if _, hasType := $HEADER["Content-Type"]; $CODE != http.StatusNotModified && !hasType {
-      $HEADER.Set("Content-Type", http.DetectContentType($P))
-    }
+  patterns:
+  - pattern: |
+      if $HEADER.Get("Content-Type") == "" {
+        $HEADER.Set("Content-Type", "text/html; charset=utf-8")
+      }
+  - pattern-not: |
+      if _, hasType := $HEADER["Content-Type"]; $CODE != http.StatusNotModified && !hasType {
+        $HEADER.Set("Content-Type", http.DetectContentType($P))
+      }
   languages:
   - go
   message: |
@@ -593,10 +615,11 @@ rules:
     technology:
     - go
 - id: vuln-go-9b6e9f0c
-  pattern: |
-    $HANDLE, $ERR = loadsystemlibrary($FILENAME)
-  pattern-not: |
-    $HANDLE, $ERR = loadsystemlibrary($FILENAME, $ABSOLUTEPATH)
+  patterns:
+  - pattern: |
+      $HANDLE, $ERR = loadsystemlibrary($FILENAME)
+  - pattern-not: |
+      $HANDLE, $ERR = loadsystemlibrary($FILENAME, $ABSOLUTEPATH)
   languages:
   - go
   message: |
@@ -614,14 +637,15 @@ rules:
     technology:
     - go
 - id: vuln-go-c77980bc
-  pattern: |
-    rsa.EncryptPKCS1v15($CONFIG.rand(), $CERT.PublicKey.(*rsa.PublicKey), $PREMASTERSECRET)
-  pattern-not: |
-    $RSAKEY, $OK := $CERT.PublicKey.(*rsa.PublicKey)
-    if !$OK {
-        return $_, $_, errors.New($MSG)
-    }
-    rsa.EncryptPKCS1v15($CONFIG.rand(), $RSAKEY, $PREMASTERSECRET)
+  patterns:
+  - pattern: |
+      rsa.EncryptPKCS1v15($CONFIG.rand(), $CERT.PublicKey.(*rsa.PublicKey), $PREMASTERSECRET)
+  - pattern-not: |
+      $RSAKEY, $OK := $CERT.PublicKey.(*rsa.PublicKey)
+      if !$OK {
+          return $_, $_, errors.New($MSG)
+      }
+      rsa.EncryptPKCS1v15($CONFIG.rand(), $RSAKEY, $PREMASTERSECRET)
   languages:
   - go
   message: |
@@ -640,14 +664,15 @@ rules:
     technology:
     - go
 - id: vuln-go-c941e27e
-  pattern: |
-    if !strings.Contains($REPO_ROOT, "://") {
-        return nil, fmt.Errorf($ERROR_MSG, $URL_STR, $REPO_ROOT)
-    }
-  pattern-not: |
-    if err := validateRepoRootScheme($REPO_ROOT); err != nil {
-        return nil, fmt.Errorf($ERROR_MSG, $URL_STR, $REPO_ROOT, err)
-    }
+  patterns:
+  - pattern: |
+      if !strings.Contains($REPO_ROOT, "://") {
+          return nil, fmt.Errorf($ERROR_MSG, $URL_STR, $REPO_ROOT)
+      }
+  - pattern-not: |
+      if err := validateRepoRootScheme($REPO_ROOT); err != nil {
+          return nil, fmt.Errorf($ERROR_MSG, $URL_STR, $REPO_ROOT, err)
+      }
   languages:
   - go
   message: |
@@ -664,14 +689,15 @@ rules:
     technology:
     - go
 - id: vuln-go-c9b9a010
-  pattern: |
-    if $N.Cmp($PARAMS.N) >= 0 {
-      ...
-    }
-  pattern-not: |
-    if $N.Cmp($PARAMS.N) >= 0 || len($IN) > len($OUT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if $N.Cmp($PARAMS.N) >= 0 {
+        ...
+      }
+  - pattern-not: |
+      if $N.Cmp($PARAMS.N) >= 0 || len($IN) > len($OUT) {
+        ...
+      }
   languages:
   - go
   message: |
@@ -693,18 +719,19 @@ rules:
     technology:
     - go
 - id: vuln-go-cbd1ca84
-  pattern: |
-    $HV := $OUTREQ.Header.Get($H)
-    if $HV == "" {
-        ...
-    }
-    if $H == "Te" && $HV == "trailers" {
-        ...
-    }
-  pattern-not: |
-    if httpguts.HeaderValuesContainsToken($REQ.Header["Te"], "trailers") {
-        $OUTREQ.Header.Set("Te", "trailers")
-    }
+  patterns:
+  - pattern: |
+      $HV := $OUTREQ.Header.Get($H)
+      if $HV == "" {
+          ...
+      }
+      if $H == "Te" && $HV == "trailers" {
+          ...
+      }
+  - pattern-not: |
+      if httpguts.HeaderValuesContainsToken($REQ.Header["Te"], "trailers") {
+          $OUTREQ.Header.Set("Te", "trailers")
+      }
   languages:
   - go
   message: |
@@ -720,21 +747,22 @@ rules:
     technology:
     - go
 - id: vuln-go-cdcd0284
-  pattern: |
-    func (r *Resolver) LookupCNAME(ctx context.Context, host string) (string, error) {
-      return r.lookupCNAME(ctx, host)
-    }
-  pattern-not: |
-    func (r *Resolver) LookupCNAME(ctx context.Context, host string) (string, error) {
-      cname, err := r.lookupCNAME(ctx, host)
-      if err != nil {
-        return "", err
+  patterns:
+  - pattern: |
+      func (r *Resolver) LookupCNAME(ctx context.Context, host string) (string, error) {
+        return r.lookupCNAME(ctx, host)
       }
-      if !isDomainName(cname) {
-        return "", &DNSError{Err: "CNAME target is invalid", Name: host}
+  - pattern-not: |
+      func (r *Resolver) LookupCNAME(ctx context.Context, host string) (string, error) {
+        cname, err := r.lookupCNAME(ctx, host)
+        if err != nil {
+          return "", err
+        }
+        if !isDomainName(cname) {
+          return "", &DNSError{Err: "CNAME target is invalid", Name: host}
+        }
+        return cname, nil
       }
-      return cname, nil
-    }
   languages:
   - go
   message: |
@@ -750,10 +778,11 @@ rules:
     technology:
     - go
 - id: vuln-go-ce7bd333
-  pattern: |
-    bytes.TrimRight($VAR, "\t\n\f\r \u2028\u2029")
-  pattern-not: |
-    bytes.TrimRight($VAR, jsWhitespace)
+  patterns:
+  - pattern: |
+      bytes.TrimRight($VAR, "\t\n\f\r \u2028\u2029")
+  - pattern-not: |
+      bytes.TrimRight($VAR, jsWhitespace)
   languages:
   - go
   message: |
@@ -771,16 +800,17 @@ rules:
     technology:
     - go
 - id: vuln-go-d39cd4d6
-  pattern: |
-    func pathOK($R rune) bool {
-      ...
-      return false
-    }
-  pattern-not: |
-    func pathOK($R rune) bool {
-      ...
-      return unicode.IsLetter($R)
-    }
+  patterns:
+  - pattern: |
+      func pathOK($R rune) bool {
+        ...
+        return false
+      }
+  - pattern-not: |
+      func pathOK($R rune) bool {
+        ...
+        return unicode.IsLetter($R)
+      }
   languages:
   - go
   message: |
@@ -800,25 +830,26 @@ rules:
     technology:
     - go
 - id: vuln-go-e46abcb8
-  pattern: |
-    $P[0] = -1
-    $P[1] = -1
-    ...
-    goto error
-    ...
-    error:
-    if $P[0] >= 0 {
-        Close($P[0])
-        Close($P[1])
-    }
-  pattern-not: |
-    $P[0] = -1
-    $P[1] = -1
-    ...
-    Close($P[0])
-    Close($P[1])
-    ForkLock.Unlock()
-    return 0, $ERR
+  patterns:
+  - pattern: |
+      $P[0] = -1
+      $P[1] = -1
+      ...
+      goto error
+      ...
+      error:
+      if $P[0] >= 0 {
+          Close($P[0])
+          Close($P[1])
+      }
+  - pattern-not: |
+      $P[0] = -1
+      $P[1] = -1
+      ...
+      Close($P[0])
+      Close($P[1])
+      ForkLock.Unlock()
+      return 0, $ERR
   languages:
   - go
   message: |
@@ -833,10 +864,11 @@ rules:
     technology:
     - go
 - id: vuln-go-e4ba4003
-  pattern: |
-    $X.abs, $_, $_, $ERR = $X.abs.scan($R, 10, true)
-  pattern-not: |
-    $X.abs, $_, $_, $ERR = $X.abs.scan($R, 0, true)
+  patterns:
+  - pattern: |
+      $X.abs, $_, $_, $ERR = $X.abs.scan($R, 10, true)
+  - pattern-not: |
+      $X.abs, $_, $_, $ERR = $X.abs.scan($R, 0, true)
   languages:
   - go
   message: |
@@ -852,14 +884,15 @@ rules:
     technology:
     - go
 - id: vuln-go-e8e7facf
-  pattern: |
-    $ENV := $B.cCompilerEnv()
-    ...
-    $RUN := $B.run(..., $ENV, ...)
-  pattern-not: |
-    $ENV := $B.cgoEnv()
-    ...
-    $RUN := $B.run(..., $ENV, ...)
+  patterns:
+  - pattern: |
+      $ENV := $B.cCompilerEnv()
+      ...
+      $RUN := $B.run(..., $ENV, ...)
+  - pattern-not: |
+      $ENV := $B.cgoEnv()
+      ...
+      $RUN := $B.run(..., $ENV, ...)
   languages:
   - go
   message: |
@@ -875,18 +908,19 @@ rules:
     technology:
     - go
 - id: vuln-go-fa2d41d0
-  pattern: |
-    func Glob(fsys FS, pattern string) (matches []string, err error) {
-      ...
-      m, err = Glob(fsys, $DIR)
-      ...
-    }
-  pattern-not: |
-    func globWithLimit(fsys FS, pattern string, depth int) (matches []string, err error) {
-      ...
-      m, err = globWithLimit(fsys, $DIR, $DEPTH+1)
-      ...
-    }
+  patterns:
+  - pattern: |
+      func Glob(fsys FS, pattern string) (matches []string, err error) {
+        ...
+        m, err = Glob(fsys, $DIR)
+        ...
+      }
+  - pattern-not: |
+      func globWithLimit(fsys FS, pattern string, depth int) (matches []string, err error) {
+        ...
+        m, err = globWithLimit(fsys, $DIR, $DEPTH+1)
+        ...
+      }
   languages:
   - go
   message: |
@@ -907,12 +941,13 @@ rules:
     technology:
     - go
 - id: vuln-go-fa60c381
-  pattern: |
-    fmt.Fprintf($FFLG, "_CGO_%s=%s\n", $K, strings.Join($V, " "))
-  pattern-not: |
-    for _, $ARG := range $V {
-      fmt.Fprintf($FFLG, "_CGO_%s=%s\n", $ARG)
-    }
+  patterns:
+  - pattern: |
+      fmt.Fprintf($FFLG, "_CGO_%s=%s\n", $K, strings.Join($V, " "))
+  - pattern-not: |
+      for _, $ARG := range $V {
+        fmt.Fprintf($FFLG, "_CGO_%s=%s\n", $ARG)
+      }
   languages:
   - go
   message: |
@@ -928,21 +963,22 @@ rules:
     technology:
     - go
 - id: vuln-go-fb979a50
-  pattern: |
-    func ($DEC *Decoder) decIgnoreOpFor($WIREID typeId, $INPROGRESS map[typeId]*decOp) *decOp {
-        ...
-        $ELEMOP := $DEC.decIgnoreOpFor($ELEMID, $INPROGRESS)
-        ...
-    }
-  pattern-not: |
-    func ($DEC *Decoder) decIgnoreOpFor($WIREID typeId, $INPROGRESS map[typeId]*decOp, $DEPTH int) *decOp {
-        ...
-        if $DEPTH > maxIgnoreNestingDepth {
-            error_(errors.New("invalid nesting depth"))
-        }
-        $ELEMOP := $DEC.decIgnoreOpFor($ELEMID, $INPROGRESS, $DEPTH+1)
-        ...
-    }
+  patterns:
+  - pattern: |
+      func ($DEC *Decoder) decIgnoreOpFor($WIREID typeId, $INPROGRESS map[typeId]*decOp) *decOp {
+          ...
+          $ELEMOP := $DEC.decIgnoreOpFor($ELEMID, $INPROGRESS)
+          ...
+      }
+  - pattern-not: |
+      func ($DEC *Decoder) decIgnoreOpFor($WIREID typeId, $INPROGRESS map[typeId]*decOp, $DEPTH int) *decOp {
+          ...
+          if $DEPTH > maxIgnoreNestingDepth {
+              error_(errors.New("invalid nesting depth"))
+          }
+          $ELEMOP := $DEC.decIgnoreOpFor($ELEMID, $INPROGRESS, $DEPTH+1)
+          ...
+      }
   languages:
   - go
   message: |

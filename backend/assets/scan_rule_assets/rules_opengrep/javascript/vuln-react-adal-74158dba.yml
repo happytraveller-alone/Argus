@@ -1,13 +1,14 @@
 rules:
 - id: vuln-react-adal-74158dba
-  pattern: |
-    if ($A[$B] === $C.$D.$E) {
-      ...
-    }
-  pattern-not: |
-    if ($A[$B] && $A[$B] === $C.$D.$E) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($A[$B] === $C.$D.$E) {
+        ...
+      }
+  - pattern-not: |
+      if ($A[$B] && $A[$B] === $C.$D.$E) {
+        ...
+      }
   languages:
   - javascript
   message: Potential null/undefined reference vulnerability. Always check array elements before comparison to avoid runtime errors.

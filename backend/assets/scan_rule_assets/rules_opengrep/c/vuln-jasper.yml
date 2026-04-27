@@ -1,14 +1,15 @@
 rules:
 - id: vuln-jasper-03db7c81
-  pattern: |
-    if (jas_image_cmpttype($IMAGE, 0) == $TYPE) {
-        ...
-    }
-  pattern-not: |
-    if (jas_image_numcmpts($IMAGE) >= $NUM &&
-        jas_image_cmpttype($IMAGE, 0) == $TYPE) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (jas_image_cmpttype($IMAGE, 0) == $TYPE) {
+          ...
+      }
+  - pattern-not: |
+      if (jas_image_numcmpts($IMAGE) >= $NUM &&
+          jas_image_cmpttype($IMAGE, 0) == $TYPE) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -28,16 +29,17 @@ rules:
     technology:
     - c
 - id: vuln-jasper-0d224608
-  pattern: |
-    if (!($VAR = jas_alloc2($NUMCOMPS, sizeof(uint_fast16_t)))) {
-      ...
-      return -1;
-    }
-  pattern-not: |
-    if (!($VAR = jas_alloc2($NUMCOMPS, sizeof(jpc_crgcomp_t)))) {
-      ...
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      if (!($VAR = jas_alloc2($NUMCOMPS, sizeof(uint_fast16_t)))) {
+        ...
+        return -1;
+      }
+  - pattern-not: |
+      if (!($VAR = jas_alloc2($NUMCOMPS, sizeof(jpc_crgcomp_t)))) {
+        ...
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -52,14 +54,15 @@ rules:
     technology:
     - c
 - id: vuln-jasper-0d64bde2
-  pattern: |
-    #if !defined(HAVE_VLA)
-    #else
-    jpc_fix_t $VAR[bufsize * $VAR2];
-    #endif
-  pattern-not: |
-    #if !defined(HAVE_VLA)
-    #endif
+  patterns:
+  - pattern: |
+      #if !defined(HAVE_VLA)
+      #else
+      jpc_fix_t $VAR[bufsize * $VAR2];
+      #endif
+  - pattern-not: |
+      #if !defined(HAVE_VLA)
+      #endif
   languages:
   - c
   message: |
@@ -80,10 +83,11 @@ rules:
     technology:
     - c
 - id: vuln-jasper-1abc2e5a
-  pattern: |
-    jpc_tsfb_band_t $BANDS[64];
-  pattern-not: |
-    jpc_tsfb_band_t $BANDS[JPC_MAXBANDS];
+  patterns:
+  - pattern: |
+      jpc_tsfb_band_t $BANDS[64];
+  - pattern-not: |
+      jpc_tsfb_band_t $BANDS[JPC_MAXBANDS];
   languages:
   - c
   message: |
@@ -99,12 +103,13 @@ rules:
     technology:
     - c
 - id: vuln-jasper-1e84674d
-  pattern: |
-    assert($N >= 0 && $N < 32);
-  pattern-not: |
-    if ($N < 0 || $N >= 32) {
-      return ...;
-    }
+  patterns:
+  - pattern: |
+      assert($N >= 0 && $N < 32);
+  - pattern-not: |
+      if ($N < 0 || $N >= 32) {
+        return ...;
+      }
   languages:
   - c
   message: |
@@ -122,10 +127,11 @@ rules:
     technology:
     - c
 - id: vuln-jasper-1f0dfe5a
-  pattern: |
-    $VAR = $EXPR1 * (1 << ($EXPR2 + $EXPR3 - $EXPR4));
-  pattern-not: |
-    $VAR = $EXPR1 * (JAS_CAST(uint_fast32_t, 1) << ($EXPR2 + $EXPR3 - $EXPR4));
+  patterns:
+  - pattern: |
+      $VAR = $EXPR1 * (1 << ($EXPR2 + $EXPR3 - $EXPR4));
+  - pattern-not: |
+      $VAR = $EXPR1 * (JAS_CAST(uint_fast32_t, 1) << ($EXPR2 + $EXPR3 - $EXPR4));
   languages:
   - c
   message: |
@@ -143,13 +149,14 @@ rules:
     technology:
     - c
 - id: vuln-jasper-33cc2cfa
-  pattern: |
-    assert($DEC->numcomps >= 3);
-  pattern-not: |
-    if ($DEC->numcomps < 3) {
-      jas_eprintf($MSG);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      assert($DEC->numcomps >= 3);
+  - pattern-not: |
+      if ($DEC->numcomps < 3) {
+        jas_eprintf($MSG);
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -165,15 +172,16 @@ rules:
     technology:
     - c
 - id: vuln-jasper-3afacc17
-  pattern: |
-    static jas_image_cmpt_t *jas_image_cmpt_create(uint_fast32_t tlx, uint_fast32_t tly,
-      uint_fast32_t hstep, uint_fast32_t vstep, uint_fast32_t width, uint_fast32_t
-      height, uint_fast16_t depth, bool sgnd, uint_fast32_t inmem);
-  pattern-not: |
-    static jas_image_cmpt_t *jas_image_cmpt_create(int_fast32_t tlx,
-      int_fast32_t tly, int_fast32_t hstep, int_fast32_t vstep,
-      int_fast32_t width, int_fast32_t height, uint_fast16_t depth, bool sgnd,
-      uint_fast32_t inmem);
+  patterns:
+  - pattern: |
+      static jas_image_cmpt_t *jas_image_cmpt_create(uint_fast32_t tlx, uint_fast32_t tly,
+        uint_fast32_t hstep, uint_fast32_t vstep, uint_fast32_t width, uint_fast32_t
+        height, uint_fast16_t depth, bool sgnd, uint_fast32_t inmem);
+  - pattern-not: |
+      static jas_image_cmpt_t *jas_image_cmpt_create(int_fast32_t tlx,
+        int_fast32_t tly, int_fast32_t hstep, int_fast32_t vstep,
+        int_fast32_t width, int_fast32_t height, uint_fast16_t depth, bool sgnd,
+        uint_fast32_t inmem);
   languages:
   - c
   message: |
@@ -189,10 +197,11 @@ rules:
     technology:
     - c
 - id: vuln-jasper-3c55b399
-  pattern: |
-    jas_malloc($SIZE * sizeof($TYPE))
-  pattern-not: |
-    jas_alloc2($NUM_ELEMENTS, sizeof($TYPE))
+  patterns:
+  - pattern: |
+      jas_malloc($SIZE * sizeof($TYPE))
+  - pattern-not: |
+      jas_alloc2($NUM_ELEMENTS, sizeof($TYPE))
   languages:
   - c
   message: |
@@ -208,13 +217,14 @@ rules:
     technology:
     - c
 - id: vuln-jasper-411a4068
-  pattern: |
-    $VAR = jas_matrix_create(...);
-    assert($VAR);
-  pattern-not: |
-    if (!($VAR = jas_matrix_create(...))) {
-      goto error;
-    }
+  patterns:
+  - pattern: |
+      $VAR = jas_matrix_create(...);
+      assert($VAR);
+  - pattern-not: |
+      if (!($VAR = jas_matrix_create(...))) {
+        goto error;
+      }
   languages:
   - c
   message: |
@@ -232,15 +242,16 @@ rules:
     technology:
     - c
 - id: vuln-jasper-44a524e3
-  pattern: |
-    if (!(buf = jas_realloc2($VAR, $BUFSIZE, sizeof(unsigned char)))) {
-      ...
-    }
-  pattern-not: |
-    if (!(buf = jas_realloc2($VAR, $BUFSIZE, sizeof(unsigned char))) &&
-      $BUFSIZE) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!(buf = jas_realloc2($VAR, $BUFSIZE, sizeof(unsigned char)))) {
+        ...
+      }
+  - pattern-not: |
+      if (!(buf = jas_realloc2($VAR, $BUFSIZE, sizeof(unsigned char))) &&
+        $BUFSIZE) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -256,10 +267,11 @@ rules:
     technology:
     - c
 - id: vuln-jasper-5185cb13
-  pattern: |
-    $OPTS->max_samples = $VALUE * JAS_MEBI;
-  pattern-not: |
-    $OPTS->max_samples = JAS_DEC_DEFAULT_MAX_SAMPLES;
+  patterns:
+  - pattern: |
+      $OPTS->max_samples = $VALUE * JAS_MEBI;
+  - pattern-not: |
+      $OPTS->max_samples = JAS_DEC_DEFAULT_MAX_SAMPLES;
   languages:
   - c
   message: |
@@ -278,14 +290,15 @@ rules:
     technology:
     - c
 - id: vuln-jasper-5dbe57e4
-  pattern: |
-    if (JAS_CAST(int, $VAR->compno) > $DEC->numcomps) {
-      ...
-    }
-  pattern-not: |
-    if (JAS_CAST(int, $VAR->compno) >= $DEC->numcomps) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (JAS_CAST(int, $VAR->compno) > $DEC->numcomps) {
+        ...
+      }
+  - pattern-not: |
+      if (JAS_CAST(int, $VAR->compno) >= $DEC->numcomps) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -303,13 +316,14 @@ rules:
     technology:
     - c
 - id: vuln-jasper-84d00fb2
-  pattern: |
-    stepsizes[$BANDNO] = JPC_QCX_MANT($MANT) | JPC_QCX_EXPN($EXPN + ($BANDNO + 2) / 3);
-  pattern-not: |
-    uint_fast16_t $E = $EXPN + ($BANDNO + 2) / 3;
-    if ($E >= 0x20)
-      return -1;
-    stepsizes[$BANDNO] = JPC_QCX_MANT($MANT) | JPC_QCX_EXPN($E);
+  patterns:
+  - pattern: |
+      stepsizes[$BANDNO] = JPC_QCX_MANT($MANT) | JPC_QCX_EXPN($EXPN + ($BANDNO + 2) / 3);
+  - pattern-not: |
+      uint_fast16_t $E = $EXPN + ($BANDNO + 2) / 3;
+      if ($E >= 0x20)
+        return -1;
+      stepsizes[$BANDNO] = JPC_QCX_MANT($MANT) | JPC_QCX_EXPN($E);
   languages:
   - c
   message: |
@@ -325,11 +339,12 @@ rules:
     technology:
     - c
 - id: vuln-jasper-93a94803
-  pattern: |
-    jas_stream_fileobj_t *$VAR = JAS_CAST(jas_stream_fileobj_t *, $OBJ);
-  pattern-not: |
-    jas_stream_fileobj_t *$VAR;
-    $VAR = JAS_CAST(jas_stream_fileobj_t *, $OBJ);
+  patterns:
+  - pattern: |
+      jas_stream_fileobj_t *$VAR = JAS_CAST(jas_stream_fileobj_t *, $OBJ);
+  - pattern-not: |
+      jas_stream_fileobj_t *$VAR;
+      $VAR = JAS_CAST(jas_stream_fileobj_t *, $OBJ);
   languages:
   - c
   message: |
@@ -347,13 +362,14 @@ rules:
     technology:
     - c
 - id: vuln-jasper-988f8365
-  pattern: |
-    $MATRIX->datasize_ = $NUMROWS * $NUMCOLS;
-  pattern-not: |
-    if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE)) {
-      goto error;
-    }
-    $MATRIX->datasize_ = $SIZE;
+  patterns:
+  - pattern: |
+      $MATRIX->datasize_ = $NUMROWS * $NUMCOLS;
+  - pattern-not: |
+      if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE)) {
+        goto error;
+      }
+      $MATRIX->datasize_ = $SIZE;
   languages:
   - c
   message: |
@@ -373,14 +389,15 @@ rules:
     technology:
     - c
 - id: vuln-jasper-a4dc77cc
-  pattern: |
-    if ($PREC > 38) {
-      ...
-    }
-  pattern-not: |
-    if ($PREC < 1U + $SGND || $PREC > 38) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PREC > 38) {
+        ...
+      }
+  - pattern-not: |
+      if ($PREC < 1U + $SGND || $PREC > 38) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -398,15 +415,16 @@ rules:
     technology:
     - c
 - id: vuln-jasper-a712a204
-  pattern: |
-    if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE)) {
-      ...
-    }
-  pattern-not: |
-    if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE) ||
-      $SIZE > INT_MAX) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE)) {
+        ...
+      }
+  - pattern-not: |
+      if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE) ||
+        $SIZE > INT_MAX) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -426,14 +444,15 @@ rules:
     technology:
     - c
 - id: vuln-jasper-c4144a6f
-  pattern: |
-    jas_image_setcmpttype($IMAGE, $DEC->chantocmptlut[$DEC->cdef->data.cdef.ents[$I].channo], ...);
-  pattern-not: |
-    unsigned $COMPNO = $DEC->chantocmptlut[$CHANNO];
-    if ($COMPNO >= jas_image_numcmpts($IMAGE)) {
-      ...
-    }
-    jas_image_setcmpttype($IMAGE, $COMPNO, ...);
+  patterns:
+  - pattern: |
+      jas_image_setcmpttype($IMAGE, $DEC->chantocmptlut[$DEC->cdef->data.cdef.ents[$I].channo], ...);
+  - pattern-not: |
+      unsigned $COMPNO = $DEC->chantocmptlut[$CHANNO];
+      if ($COMPNO >= jas_image_numcmpts($IMAGE)) {
+        ...
+      }
+      jas_image_setcmpttype($IMAGE, $COMPNO, ...);
   languages:
   - c
   message: |
@@ -452,24 +471,25 @@ rules:
     technology:
     - c
 - id: vuln-jasper-c7634141
-  pattern: |
-    if ($COND) {
-      ...
-      bmp_info_destroy($INFO);
+  patterns:
+  - pattern: |
+      if ($COND) {
+        ...
+        bmp_info_destroy($INFO);
+        return 0;
+        ...
+      }
+  - pattern-not: |
+      if ($COND) {
+        ...
+        goto error;
+        ...
+      }
+      error:
+      if ($INFO) {
+        bmp_info_destroy($INFO);
+      }
       return 0;
-      ...
-    }
-  pattern-not: |
-    if ($COND) {
-      ...
-      goto error;
-      ...
-    }
-    error:
-    if ($INFO) {
-      bmp_info_destroy($INFO);
-    }
-    return 0;
   languages:
   - c
   message: |
@@ -487,14 +507,15 @@ rules:
     technology:
     - c
 - id: vuln-jasper-d42b2388
-  pattern: |
-    if (!(image = jas_image_decode($INSTREAM, $FMTID, 0))) {
-      ...
-    }
-  pattern-not: |
-    if (!(image = jas_image_decode($INSTREAM, $FMTID, $OPTSTR))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!(image = jas_image_decode($INSTREAM, $FMTID, 0))) {
+        ...
+      }
+  - pattern-not: |
+      if (!(image = jas_image_decode($INSTREAM, $FMTID, $OPTSTR))) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -511,13 +532,14 @@ rules:
     technology:
     - c
 - id: vuln-jasper-d91198ab
-  pattern: |
-    $DEC->numtiles = $DEC->numhtiles * $DEC->numvtiles;
-  pattern-not: |
-    if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE)) {
-      return -1;
-    }
-    $DEC->numtiles = $SIZE;
+  patterns:
+  - pattern: |
+      $DEC->numtiles = $DEC->numhtiles * $DEC->numvtiles;
+  - pattern-not: |
+      if (!jas_safe_size_mul($DEC->numhtiles, $DEC->numvtiles, &$SIZE)) {
+        return -1;
+      }
+      $DEC->numtiles = $SIZE;
   languages:
   - c
   message: |
@@ -533,12 +555,13 @@ rules:
     technology:
     - c
 - id: vuln-jasper-e2f2e5f4
-  pattern: |
-    jas_seq2d_bindsub($MATRIX1, $MATRIX2, $XSTART, $YSTART, $XEND, $YEND);
-  pattern-not: |
-    if (jas_seq2d_bindsub($MATRIX1, $MATRIX2, $XSTART, $YSTART, $XEND, $YEND)) {
-      $HANDLE_ERROR;
-    }
+  patterns:
+  - pattern: |
+      jas_seq2d_bindsub($MATRIX1, $MATRIX2, $XSTART, $YSTART, $XEND, $YEND);
+  - pattern-not: |
+      if (jas_seq2d_bindsub($MATRIX1, $MATRIX2, $XSTART, $YSTART, $XEND, $YEND)) {
+        $HANDLE_ERROR;
+      }
   languages:
   - c
   message: |
@@ -557,10 +580,11 @@ rules:
     technology:
     - c
 - id: vuln-jasper-e6c8d5a8
-  pattern: |
-    jpc_firstone($X)
-  pattern-not: |
-    jpc_fix_firstone($X)
+  patterns:
+  - pattern: |
+      jpc_firstone($X)
+  - pattern-not: |
+      jpc_fix_firstone($X)
   languages:
   - c
   message: |
@@ -576,15 +600,16 @@ rules:
     technology:
     - c
 - id: vuln-jasper-e88a8ecb
-  pattern: |
-    if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE)) {
-      ...
-    }
-  pattern-not: |
-    if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE) ||
-        $SIZE > UINT_FAST32_MAX) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE)) {
+        ...
+      }
+  - pattern-not: |
+      if (!jas_safe_size_mul($NUMROWS, $NUMCOLS, &$SIZE) ||
+          $SIZE > UINT_FAST32_MAX) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -602,26 +627,27 @@ rules:
     technology:
     - c
 - id: vuln-jasper-e96fc4fd
-  pattern: |
-    jp2_box_t *jp2_box_create(int type)
-    {
-      jp2_box_t *box;
-      jp2_boxinfo_t *boxinfo;
-      if (!(box = jas_malloc(sizeof(jp2_box_t)))) {
-        return 0;
+  patterns:
+  - pattern: |
+      jp2_box_t *jp2_box_create(int type)
+      {
+        jp2_box_t *box;
+        jp2_boxinfo_t *boxinfo;
+        if (!(box = jas_malloc(sizeof(jp2_box_t)))) {
+          return 0;
+        }
+        ...
       }
-      ...
-    }
-  pattern-not: |
-    jp2_box_t *jp2_box_create(int type)
-    {
-      jp2_box_t *box;
-      jp2_boxinfo_t *boxinfo;
-      if (!(box = jp2_box_create0())) {
-        return 0;
+  - pattern-not: |
+      jp2_box_t *jp2_box_create(int type)
+      {
+        jp2_box_t *box;
+        jp2_boxinfo_t *boxinfo;
+        if (!(box = jp2_box_create0())) {
+          return 0;
+        }
+        ...
       }
-      ...
-    }
   languages:
   - c
   message: |
@@ -637,23 +663,24 @@ rules:
     technology:
     - c
 - id: vuln-jasper-f7038068
-  pattern: |
-    if (!$SIZ->width || !$SIZ->height || !$SIZ->tilewidth || !$SIZ->tileheight || !$SIZ->numcomps || $SIZ->numcomps > 16384) {
-      return -1;
-    }
-  pattern-not: |
-    if (!$SIZ->width || !$SIZ->height) {
-      jas_eprintf("reference grid cannot have zero area\n");
-      goto error;
-    }
-    if (!$SIZ->tilewidth || !$SIZ->tileheight) {
-      jas_eprintf("tile cannot have zero area\n");
-      goto error;
-    }
-    if (!$SIZ->numcomps || $SIZ->numcomps > 16384) {
-      jas_eprintf("number of components not in permissible range\n");
-      goto error;
-    }
+  patterns:
+  - pattern: |
+      if (!$SIZ->width || !$SIZ->height || !$SIZ->tilewidth || !$SIZ->tileheight || !$SIZ->numcomps || $SIZ->numcomps > 16384) {
+        return -1;
+      }
+  - pattern-not: |
+      if (!$SIZ->width || !$SIZ->height) {
+        jas_eprintf("reference grid cannot have zero area\n");
+        goto error;
+      }
+      if (!$SIZ->tilewidth || !$SIZ->tileheight) {
+        jas_eprintf("tile cannot have zero area\n");
+        goto error;
+      }
+      if (!$SIZ->numcomps || $SIZ->numcomps > 16384) {
+        jas_eprintf("number of components not in permissible range\n");
+        goto error;
+      }
   languages:
   - c
   message: |
@@ -671,14 +698,9 @@ rules:
     technology:
     - c
 - id: vuln-jasper-f94e7499
-  pattern: |
-    jas_image_setcmpttype($IMAGE, dec->chantocmptlut[$I], ...)
-  pattern-not: |
-    unsigned $COMPNO = dec->chantocmptlut[$I];
-    if ($COMPNO >= jas_image_numcmpts($IMAGE)) {
-      ...
-    }
-    jas_image_setcmpttype($IMAGE, $COMPNO, ...)
+  patterns:
+  - pattern: |
+      jas_image_setcmpttype($IMAGE, dec->chantocmptlut[$I], ...)
   languages:
   - c
   message: |
@@ -699,12 +721,13 @@ rules:
     technology:
     - c
 - id: vuln-jasper-fc03b573
-  pattern: |
-    if ($PASSNO < $NUMPASSES) {
+  patterns:
+  - pattern: |
+      if ($PASSNO < $NUMPASSES) {
+        $RET = JAS_MIN($RET, $NUMPASSES - $PASSNO);
+      }
+  - pattern-not: |
       $RET = JAS_MIN($RET, $NUMPASSES - $PASSNO);
-    }
-  pattern-not: |
-    $RET = JAS_MIN($RET, $NUMPASSES - $PASSNO);
   languages:
   - c
   message: |

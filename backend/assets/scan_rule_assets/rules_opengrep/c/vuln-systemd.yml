@@ -1,13 +1,10 @@
 rules:
 - id: vuln-systemd-1dfa7e79
-  pattern: |
-    void *$P;
-    ...
-    free($P);
-  pattern-not: |
-    _cleanup_free_ void *$P = NULL;
-    ...
-    free($P);
+  patterns:
+  - pattern: |
+      void *$P;
+      ...
+      free($P);
   languages:
   - c
   message: |
@@ -25,10 +22,11 @@ rules:
     technology:
     - c
 - id: vuln-systemd-5de6cce5
-  pattern: |
-    $FUNC = open($PATH, $FLAGS1|$FLAGS2|$FLAGS3|$FLAGS4|$FLAGS5|$FLAGS6);
-  pattern-not: |
-    $FUNC = open($PATH, $FLAGS1|$FLAGS2|$FLAGS3|$FLAGS4|$FLAGS5);
+  patterns:
+  - pattern: |
+      $FUNC = open($PATH, $FLAGS1|$FLAGS2|$FLAGS3|$FLAGS4|$FLAGS5|$FLAGS6);
+  - pattern-not: |
+      $FUNC = open($PATH, $FLAGS1|$FLAGS2|$FLAGS3|$FLAGS4|$FLAGS5);
   languages:
   - c
   message: |
@@ -48,14 +46,15 @@ rules:
     technology:
     - c
 - id: vuln-systemd-63748626
-  pattern: |
-    if ($R < 0) {
-        $R = sd_bus_reply_method_errno($REQUEST, $R, NULL);
-        goto $FINISH;
-    }
-  pattern-not: |
-    if ($R < 0)
-        goto $FAIL;
+  patterns:
+  - pattern: |
+      if ($R < 0) {
+          $R = sd_bus_reply_method_errno($REQUEST, $R, NULL);
+          goto $FINISH;
+      }
+  - pattern-not: |
+      if ($R < 0)
+          goto $FAIL;
   languages:
   - c
   message: |
@@ -71,10 +70,11 @@ rules:
     technology:
     - c
 - id: vuln-systemd-fc3c1c6e
-  pattern: |
-    strappend($PATH, "/X11/display")
-  pattern-not: |
-    strappend($PATH, "/X11-display")
+  patterns:
+  - pattern: |
+      strappend($PATH, "/X11/display")
+  - pattern-not: |
+      strappend($PATH, "/X11-display")
   languages:
   - c
   message: |

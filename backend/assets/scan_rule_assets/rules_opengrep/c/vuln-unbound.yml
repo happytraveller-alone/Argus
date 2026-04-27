@@ -1,9 +1,10 @@
 rules:
 - id: vuln-unbound-ba0f382e
-  pattern: |
-    delegpt_add_rrset_A($DP, $REGION, $RR, $LAME)
-  pattern-not: |
-    delegpt_add_rrset_A($DP, $REGION, $RR, $LAME, $ADDITIONS)
+  patterns:
+  - pattern: |
+      delegpt_add_rrset_A($DP, $REGION, $RR, $LAME)
+  - pattern-not: |
+      delegpt_add_rrset_A($DP, $REGION, $RR, $LAME, $ADDITIONS)
   languages:
   - c
   message: |
@@ -17,10 +18,11 @@ rules:
     technology:
     - c
 - id: vuln-unbound-c3206f45
-  pattern: |
-    infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW);
-  pattern-not: |
-    infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW, $MESH_WAIT);
+  patterns:
+  - pattern: |
+      infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW);
+  - pattern-not: |
+      infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW, $MESH_WAIT);
   languages:
   - c
   message: |
@@ -35,10 +37,11 @@ rules:
     technology:
     - c
 - id: vuln-unbound-f6753a0f
-  pattern: |
-    dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS)
-  pattern-not: |
-    dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS, $QSTARTTIME)
+  patterns:
+  - pattern: |
+      dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS)
+  - pattern-not: |
+      dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS, $QSTARTTIME)
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-moddable-6c88625e
-  pattern: |
-    the->stack->value.string = (txString)fxNewChunk(the, $L + 1);
-  pattern-not: |
-    the->stack->value.string = (txString)fxNewChunk(the, fxAddChunkSizes(the, $L, 1));
+  patterns:
+  - pattern: |
+      the->stack->value.string = (txString)fxNewChunk(the, $L + 1);
+  - pattern-not: |
+      the->stack->value.string = (txString)fxNewChunk(the, fxAddChunkSizes(the, $L, 1));
   languages:
   - c
   message: |
@@ -23,13 +24,14 @@ rules:
     technology:
     - c
 - id: vuln-moddable-723816ab
-  pattern: |
-    if ($TOKEN_FLAGS[$TOKEN] & $TOKEN_BEGIN_EXPRESSION)
-        $EXPRESSION_FUNC($PARSER);
-    else
-        $REPORT_ERROR($PARSER, $ERROR_MSG);
-  pattern-not: |
-    $EXPRESSION_FUNC($PARSER);
+  patterns:
+  - pattern: |
+      if ($TOKEN_FLAGS[$TOKEN] & $TOKEN_BEGIN_EXPRESSION)
+          $EXPRESSION_FUNC($PARSER);
+      else
+          $REPORT_ERROR($PARSER, $ERROR_MSG);
+  - pattern-not: |
+      $EXPRESSION_FUNC($PARSER);
   languages:
   - c
   message: |
@@ -45,10 +47,11 @@ rules:
     technology:
     - c
 - id: vuln-moddable-736e508e
-  pattern: |
-    $VAR = fxToInteger($THE, $STACK);
-  pattern-not: |
-    $VAR = (txInteger)fxToLength($THE, $STACK);
+  patterns:
+  - pattern: |
+      $VAR = fxToInteger($THE, $STACK);
+  - pattern-not: |
+      $VAR = (txInteger)fxToLength($THE, $STACK);
   languages:
   - c
   message: |
@@ -67,10 +70,11 @@ rules:
     technology:
     - c
 - id: vuln-moddable-83dadd3d
-  pattern: |
-    return (char*)$VAR + (32 * 1024);
-  pattern-not: |
-    return (char*)$VAR + (16 * 1024) + mxASANStackMargin;
+  patterns:
+  - pattern: |
+      return (char*)$VAR + (32 * 1024);
+  - pattern-not: |
+      return (char*)$VAR + (16 * 1024) + mxASANStackMargin;
   languages:
   - c
   message: |
@@ -88,10 +92,11 @@ rules:
     technology:
     - c
 - id: vuln-moddable-8e94a366
-  pattern: |
-    (txSize)c_floor(c_log($INTEGER) / c_log($RADIX))
-  pattern-not: |
-    (txSize)c_floor(c_log1p($INTEGER) / c_log($RADIX))
+  patterns:
+  - pattern: |
+      (txSize)c_floor(c_log($INTEGER) / c_log($RADIX))
+  - pattern-not: |
+      (txSize)c_floor(c_log1p($INTEGER) / c_log($RADIX))
   languages:
   - c
   message: |
@@ -109,12 +114,13 @@ rules:
     technology:
     - c
 - id: vuln-moddable-c31b8fd1
-  pattern: |
-    while (COMPARE($I) < 0) $I++;
-    while (COMPARE($J) > 0) $J--;
-  pattern-not: |
-    while ((COMPARE($I) < 0) && ($I <= $J)) $I++;
-    while ((COMPARE($J) > 0) && ($I <= $J)) $J--;
+  patterns:
+  - pattern: |
+      while (COMPARE($I) < 0) $I++;
+      while (COMPARE($J) > 0) $J--;
+  - pattern-not: |
+      while ((COMPARE($I) < 0) && ($I <= $J)) $I++;
+      while ((COMPARE($J) > 0) && ($I <= $J)) $J--;
   languages:
   - c
   message: |
@@ -134,10 +140,11 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ce937b4e
-  pattern: |
-    $VAR = fxCombinePath($PARSER, $BASE, $NAME);
-  pattern-not: |
-    $VAR = fxRealFilePath($PARSER, fxCombinePath($PARSER, $BASE, $NAME));
+  patterns:
+  - pattern: |
+      $VAR = fxCombinePath($PARSER, $BASE, $NAME);
+  - pattern-not: |
+      $VAR = fxRealFilePath($PARSER, fxCombinePath($PARSER, $BASE, $NAME));
   languages:
   - c
   message: |
@@ -152,17 +159,18 @@ rules:
     technology:
     - c
 - id: vuln-moddable-dbd3a5f4
-  pattern: |
-    if ($PARSER->errorCount == 0)
-      $FUNC($PARSER->root, $CODER);
-  pattern-not: |
-    if ($PARSER->errorCount == 0) {
-      mxTryParser($PARSER) {
+  patterns:
+  - pattern: |
+      if ($PARSER->errorCount == 0)
         $FUNC($PARSER->root, $CODER);
+  - pattern-not: |
+      if ($PARSER->errorCount == 0) {
+        mxTryParser($PARSER) {
+          $FUNC($PARSER->root, $CODER);
+        }
+        mxCatchParser($PARSER) {
+        }
       }
-      mxCatchParser($PARSER) {
-      }
-    }
   languages:
   - c
   message: |
@@ -177,14 +185,15 @@ rules:
     technology:
     - c
 - id: vuln-moddable-df143cb6
-  pattern: |
-    if ($VAR->root->description->token == $TOKEN) {
-        ...
-    }
-  pattern-not: |
-    if ($VAR->root->description && ($VAR->root->description->token == $TOKEN)) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR->root->description->token == $TOKEN) {
+          ...
+      }
+  - pattern-not: |
+      if ($VAR->root->description && ($VAR->root->description->token == $TOKEN)) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -200,19 +209,20 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ebb1acf2
-  pattern: |
-    $PROXY = instance->next;
-    $FUNCTION = fxCheckProxyFunction($THE, $PROXY, $_ID);
-    ...
-    mxPushReference($PROXY->value.proxy.target);
-    ...
-    mxBehaviorCall($THE, $PROXY->value.proxy.target, $_THIS, $ARGUMENTS);
-  pattern-not: |
-    mxProxyDeclarations($_ID);
-    ...
-    mxPushSlot($TARGET);
-    ...
-    mxBehaviorCall($THE, $TARGET->value.reference, $_THIS, $ARGUMENTS);
+  patterns:
+  - pattern: |
+      $PROXY = instance->next;
+      $FUNCTION = fxCheckProxyFunction($THE, $PROXY, $_ID);
+      ...
+      mxPushReference($PROXY->value.proxy.target);
+      ...
+      mxBehaviorCall($THE, $PROXY->value.proxy.target, $_THIS, $ARGUMENTS);
+  - pattern-not: |
+      mxProxyDeclarations($_ID);
+      ...
+      mxPushSlot($TARGET);
+      ...
+      mxBehaviorCall($THE, $TARGET->value.reference, $_THIS, $ARGUMENTS);
   languages:
   - c
   message: |
@@ -230,18 +240,19 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ef5216cc
-  pattern: |
-    if (!$VAR && ($BYTE != $CONST))
-      $FUNC($ERROR, $MSG, $ID);
-  pattern-not: |
-    if ($VAR) {
-      if ($VAR->$FIELD < 0)
+  patterns:
+  - pattern: |
+      if (!$VAR && ($BYTE != $CONST))
         $FUNC($ERROR, $MSG, $ID);
-    }
-    else {
-      if ($BYTE != $CONST)
-        $FUNC($ERROR, $MSG, $ID);
-    }
+  - pattern-not: |
+      if ($VAR) {
+        if ($VAR->$FIELD < 0)
+          $FUNC($ERROR, $MSG, $ID);
+      }
+      else {
+        if ($BYTE != $CONST)
+          $FUNC($ERROR, $MSG, $ID);
+      }
   languages:
   - c
   message: |

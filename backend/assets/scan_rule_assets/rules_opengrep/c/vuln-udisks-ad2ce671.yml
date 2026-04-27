@@ -1,9 +1,10 @@
 rules:
 - id: vuln-udisks-ad2ce671
-  pattern: |
-    udisks_error($MSG, ...)
-  pattern-not: |
-    udisks_critical($MSG, ...)
+  patterns:
+  - pattern: |
+      udisks_error($MSG, ...)
+  - pattern-not: |
+      udisks_critical($MSG, ...)
   languages:
   - c
   message: |

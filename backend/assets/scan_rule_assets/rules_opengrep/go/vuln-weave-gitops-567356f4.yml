@@ -1,9 +1,10 @@
 rules:
 - id: vuln-weave-gitops-567356f4
-  pattern: |
-    $LOG.Error($ERR, "failed to create clients for", "clusters", $CLUSTERS.Get())
-  pattern-not: |
-    $LOG.Error($ERR, "failed to create client")
+  patterns:
+  - pattern: |
+      $LOG.Error($ERR, "failed to create clients for", "clusters", $CLUSTERS.Get())
+  - pattern-not: |
+      $LOG.Error($ERR, "failed to create client")
   languages:
   - go
   message: |

@@ -1,21 +1,22 @@
 rules:
 - id: vuln-jwx-d01027d7
-  pattern: |
-    func uncompress($PLAINTEXT []byte) ([]byte, error) {
-      return ioutil.ReadAll(flate.NewReader(bytes.NewReader($PLAINTEXT)))
-    }
-  pattern-not: |
-    func uncompress($SRC []byte, $MAXBUFFERSIZE int64) ([]byte, error) {
-      ...
-      for {
-        $N, $READERR := $R.Read($BUF[:])
-        $SOFAR += int64($N)
-        if $SOFAR > $MAXBUFFERSIZE {
-          return nil, errors.New(`compressed payload exceeds maximum allowed size`)
-        }
-        ...
+  patterns:
+  - pattern: |
+      func uncompress($PLAINTEXT []byte) ([]byte, error) {
+        return ioutil.ReadAll(flate.NewReader(bytes.NewReader($PLAINTEXT)))
       }
-    }
+  - pattern-not: |
+      func uncompress($SRC []byte, $MAXBUFFERSIZE int64) ([]byte, error) {
+        ...
+        for {
+          $N, $READERR := $R.Read($BUF[:])
+          $SOFAR += int64($N)
+          if $SOFAR > $MAXBUFFERSIZE {
+            return nil, errors.New(`compressed payload exceeds maximum allowed size`)
+          }
+          ...
+        }
+      }
   languages:
   - go
   message: |

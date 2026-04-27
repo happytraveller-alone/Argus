@@ -1,13 +1,14 @@
 rules:
 - id: vuln-dpdk-e7debf60
-  pattern: |
-    if ($DEV->inflight_info->fd > 0) {
-      ...
-    }
-  pattern-not: |
-    if ($DEV->inflight_info->fd >= 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DEV->inflight_info->fd > 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($DEV->inflight_info->fd >= 0) {
+        ...
+      }
   languages:
   - c
   message: |

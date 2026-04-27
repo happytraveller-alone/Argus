@@ -1,9 +1,10 @@
 rules:
 - id: vuln-moodle-4a2acd8c
-  pattern: |
-    <input type="hidden" name="id" value="<?php echo $form->id ?>" />
-  pattern-not: |
-    <input type="hidden" name="id" value="<?php echo $id ?>" />
+  patterns:
+  - pattern: |
+      <input type="hidden" name="id" value="<?php echo $form->id ?>" />
+  - pattern-not: |
+      <input type="hidden" name="id" value="<?php echo $id ?>" />
   languages:
   - html
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-bumsys-1b426f58
-  pattern: |
-    $THISTD.html(`<iledit data-val='` + $(that).val() + `'>` + $("option:selected", that).text() + `</iledit>`)
-  pattern-not: |
-    $THISTD.html(`<iledit data-val='` + $(that).val() + `'>` + $("option:selected", that).html() + `</iledit>`)
+  patterns:
+  - pattern: |
+      $THISTD.html(`<iledit data-val='` + $(that).val() + `'>` + $("option:selected", that).text() + `</iledit>`)
+  - pattern-not: |
+      $THISTD.html(`<iledit data-val='` + $(that).val() + `'>` + $("option:selected", that).html() + `</iledit>`)
   languages:
   - javascript
   message: Potential XSS vulnerability due to unsafe use of .text() instead of .html() when inserting user-controlled data into the DOM. Use .html() to properly escape HTML characters and prevent XSS attacks.

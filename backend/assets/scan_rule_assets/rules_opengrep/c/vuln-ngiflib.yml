@@ -1,10 +1,11 @@
 rules:
 - id: vuln-ngiflib-19913ae4
-  pattern: |
-    $GIF->input.bytes = $BUFFER;
-  pattern-not: |
-    $GIF->input.buffer.bytes = $BUFFER;
-    $GIF->input.buffer.count = (unsigned long)$FILESIZE;
+  patterns:
+  - pattern: |
+      $GIF->input.bytes = $BUFFER;
+  - pattern-not: |
+      $GIF->input.buffer.bytes = $BUFFER;
+      $GIF->input.buffer.count = (unsigned long)$FILESIZE;
   languages:
   - c
   message: |
@@ -22,14 +23,15 @@ rules:
     technology:
     - c
 - id: vuln-ngiflib-84a75033
-  pattern: |
-    putc($IMG.palette[$I].b, $FTGA);
-    putc($IMG.palette[$I].g, $FTGA);
-    putc($IMG.palette[$I].r, $FTGA);
-  pattern-not: |
-    putc($CURRENT_PALETTE[$I].b, $FTGA);
-    putc($CURRENT_PALETTE[$I].g, $FTGA);
-    putc($CURRENT_PALETTE[$I].r, $FTGA);
+  patterns:
+  - pattern: |
+      putc($IMG.palette[$I].b, $FTGA);
+      putc($IMG.palette[$I].g, $FTGA);
+      putc($IMG.palette[$I].r, $FTGA);
+  - pattern-not: |
+      putc($CURRENT_PALETTE[$I].b, $FTGA);
+      putc($CURRENT_PALETTE[$I].g, $FTGA);
+      putc($CURRENT_PALETTE[$I].r, $FTGA);
   languages:
   - c
   message: |

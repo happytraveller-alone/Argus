@@ -1,15 +1,16 @@
 rules:
 - id: vuln-exiv2-ab58026c
-  pattern: |
-    int $VAR = sscanf($BUF, "$FORMAT", ...);
-    if ($VAR != 3) {
-      ...
-    }
-  pattern-not: |
-    int $VAR = sscanf($BUF, "$FORMAT", ...);
-    if ($VAR != 3 || $DATE.year < 0 || $DATE.month < 1 || $DATE.month > 12 || $DATE.day < 1 || $DATE.day > 31) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      int $VAR = sscanf($BUF, "$FORMAT", ...);
+      if ($VAR != 3) {
+        ...
+      }
+  - pattern-not: |
+      int $VAR = sscanf($BUF, "$FORMAT", ...);
+      if ($VAR != 3 || $DATE.year < 0 || $DATE.month < 1 || $DATE.month > 12 || $DATE.day < 1 || $DATE.day > 31) {
+        ...
+      }
   languages:
   - cpp
   message: |

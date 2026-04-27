@@ -1,9 +1,10 @@
 rules:
 - id: vuln-openexr-85fd638a
-  pattern: |
-    checkArraySize(uiMult(maxScanLineSize, numScanLines), ...)
-  pattern-not: |
-    checkArraySize(uiMult(maxScanLineSize / sizeof(unsigned short), numScanLines), ...)
+  patterns:
+  - pattern: |
+      checkArraySize(uiMult(maxScanLineSize, numScanLines), ...)
+  - pattern-not: |
+      checkArraySize(uiMult(maxScanLineSize / sizeof(unsigned short), numScanLines), ...)
   languages:
   - cpp
   message: |

@@ -26,11 +26,12 @@ rules:
     technology:
     - c
 - id: vuln-ettercap-e3abe7d7
-  pattern: |
-    strncpy((char*)$PASSWORD, (char*)$SRC, $LENGTH);
-    $PASSWORD[$LENGTH] = 0;
-  pattern-not: |
-    snprintf((char*)$PASSWORD, $LENGTH+1, "%s", (char*)$SRC);
+  patterns:
+  - pattern: |
+      strncpy((char*)$PASSWORD, (char*)$SRC, $LENGTH);
+      $PASSWORD[$LENGTH] = 0;
+  - pattern-not: |
+      snprintf((char*)$PASSWORD, $LENGTH+1, "%s", (char*)$SRC);
   languages:
   - c
   message: |

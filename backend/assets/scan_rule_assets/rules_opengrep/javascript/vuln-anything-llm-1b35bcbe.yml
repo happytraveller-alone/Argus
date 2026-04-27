@@ -1,9 +1,10 @@
 rules:
 - id: vuln-anything-llm-1b35bcbe
-  pattern: |
-    const { success } = await User.update($USERID, $UPDATES);
-  pattern-not: |
-    const { user: success } = await User._update($USERID, $UPDATES);
+  patterns:
+  - pattern: |
+      const { success } = await User.update($USERID, $UPDATES);
+  - pattern-not: |
+      const { user: success } = await User._update($USERID, $UPDATES);
   languages:
   - javascript
   message: |

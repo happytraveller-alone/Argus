@@ -1,15 +1,16 @@
 rules:
 - id: vuln-php-src-0426b916
-  pattern: |
-    zval_ptr_dtor(&var_hash->data[$I]);
-  pattern-not: |
-    if (HAS_WAKEUP_FLAG($ZV)) {
-      $ZV = WITHOUT_WAKEUP_FLAG($ZV);
-      ...
-      zval_ptr_dtor(&$ZV);
-    } else {
-      zval_ptr_dtor(&$ZV);
-    }
+  patterns:
+  - pattern: |
+      zval_ptr_dtor(&var_hash->data[$I]);
+  - pattern-not: |
+      if (HAS_WAKEUP_FLAG($ZV)) {
+        $ZV = WITHOUT_WAKEUP_FLAG($ZV);
+        ...
+        zval_ptr_dtor(&$ZV);
+      } else {
+        zval_ptr_dtor(&$ZV);
+      }
   languages:
   - c
   message: |
@@ -32,10 +33,11 @@ rules:
     - https://www.php.net/manual/en/language.oop5.magic.php#object.wakeup
     - https://www.php.net/manual/en/function.unserialize.php
 - id: vuln-php-src-07c7df68
-  pattern: |
-    !zend_hash_exists($MANIFEST, $LINKNAME, strlen($LINKNAME))
-  pattern-not: |
-    !zend_hash_exists($MANIFEST, $LINKNAME, strnlen($LINKNAME, $MAXLEN))
+  patterns:
+  - pattern: |
+      !zend_hash_exists($MANIFEST, $LINKNAME, strlen($LINKNAME))
+  - pattern-not: |
+      !zend_hash_exists($MANIFEST, $LINKNAME, strnlen($LINKNAME, $MAXLEN))
   languages:
   - c
   message: |
@@ -52,15 +54,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-089f7c0b
-  pattern: |
-    $FUNC($IM, $OUT, ...);
-    $RV = gdDPExtractData($OUT, $SIZE);
-  pattern-not: |
-    if (!$FUNC($IM, $OUT, ...)) {
+  patterns:
+  - pattern: |
+      $FUNC($IM, $OUT, ...);
       $RV = gdDPExtractData($OUT, $SIZE);
-    } else {
-      $RV = NULL;
-    }
+  - pattern-not: |
+      if (!$FUNC($IM, $OUT, ...)) {
+        $RV = gdDPExtractData($OUT, $SIZE);
+      } else {
+        $RV = NULL;
+      }
   languages:
   - c
   message: |
@@ -79,17 +82,18 @@ rules:
     technology:
     - c
 - id: vuln-php-src-093c08af
-  pattern: |
-    if (strncmp($VAR, "__Host-", sizeof("__Host-")-1) == 0 && strncmp($VAR_NAME, "__Host-", sizeof("__Host-")-1) != 0) {
-        ...
-    }
-    if (strncmp($VAR, "__Secure-", sizeof("__Secure-")-1) == 0 && strncmp($VAR_NAME, "__Secure-", sizeof("__Secure-")-1) != 0) {
-        ...
-    }
-  pattern-not: |
-    if (php_is_forbidden_variable_name($VAR, $VAR_LEN, $VAR_NAME)) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (strncmp($VAR, "__Host-", sizeof("__Host-")-1) == 0 && strncmp($VAR_NAME, "__Host-", sizeof("__Host-")-1) != 0) {
+          ...
+      }
+      if (strncmp($VAR, "__Secure-", sizeof("__Secure-")-1) == 0 && strncmp($VAR_NAME, "__Secure-", sizeof("__Secure-")-1) != 0) {
+          ...
+      }
+  - pattern-not: |
+      if (php_is_forbidden_variable_name($VAR, $VAR_LEN, $VAR_NAME)) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -107,14 +111,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-0bfb970f
-  pattern: |
-    if (read != entry.uncompressed_filesize) {
-      ...
-    }
-  pattern-not: |
-    if (read != entry.uncompressed_filesize || read <= 8) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (read != entry.uncompressed_filesize) {
+        ...
+      }
+  - pattern-not: |
+      if (read != entry.uncompressed_filesize || read <= 8) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -135,10 +140,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-0e6c0654
-  pattern: |
-    zend_parse_parameters(ZEND_NUM_ARGS(), "ss", $FROM, $FROM_LEN, $TO, $TO_LEN) == FAILURE
-  pattern-not: |
-    zend_parse_parameters(ZEND_NUM_ARGS(), "pp", $FROM, $FROM_LEN, $TO, $TO_LEN) == FAILURE
+  patterns:
+  - pattern: |
+      zend_parse_parameters(ZEND_NUM_ARGS(), "ss", $FROM, $FROM_LEN, $TO, $TO_LEN) == FAILURE
+  - pattern-not: |
+      zend_parse_parameters(ZEND_NUM_ARGS(), "pp", $FROM, $FROM_LEN, $TO, $TO_LEN) == FAILURE
   languages:
   - c
   message: |
@@ -156,10 +162,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-0f8cf3b8
-  pattern: |
-    memchr($VAR->ptr, '&', $VAR->end - $VAR->ptr)
-  pattern-not: |
-    memchr($VAR->ptr + $VAR->already_scanned, '&', $VAR->end - ($VAR->ptr + $VAR->already_scanned))
+  patterns:
+  - pattern: |
+      memchr($VAR->ptr, '&', $VAR->end - $VAR->ptr)
+  - pattern-not: |
+      memchr($VAR->ptr + $VAR->already_scanned, '&', $VAR->end - ($VAR->ptr + $VAR->already_scanned))
   languages:
   - c
   message: |
@@ -175,15 +182,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-16b3003f
-  pattern: |
-    return object_common2(UNSERIALIZE_PASSTHRU,
-            object_common1(UNSERIALIZE_PASSTHRU, ZEND_STANDARD_CLASS_DEF_PTR));
-  pattern-not: |
-    $ELEMENTS = object_common1(UNSERIALIZE_PASSTHRU, ZEND_STANDARD_CLASS_DEF_PTR);
-    if ($ELEMENTS < 0) {
-        return 0;
-    }
-    return object_common2(UNSERIALIZE_PASSTHRU, $ELEMENTS);
+  patterns:
+  - pattern: |
+      return object_common2(UNSERIALIZE_PASSTHRU,
+              object_common1(UNSERIALIZE_PASSTHRU, ZEND_STANDARD_CLASS_DEF_PTR));
+  - pattern-not: |
+      $ELEMENTS = object_common1(UNSERIALIZE_PASSTHRU, ZEND_STANDARD_CLASS_DEF_PTR);
+      if ($ELEMENTS < 0) {
+          return 0;
+      }
+      return object_common2(UNSERIALIZE_PASSTHRU, $ELEMENTS);
   languages:
   - c
   message: |
@@ -202,10 +210,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-188c196d
-  pattern: |
-    $CTXT->options -= $XML_PARSE_DTDLOAD
-  pattern-not: |
-    $CTXT->options &= ~$XML_PARSE_DTDLOAD
+  patterns:
+  - pattern: |
+      $CTXT->options -= $XML_PARSE_DTDLOAD
+  - pattern-not: |
+      $CTXT->options &= ~$XML_PARSE_DTDLOAD
   languages:
   - c
   message: |
@@ -223,18 +232,19 @@ rules:
     technology:
     - c
 - id: vuln-php-src-1a23ebc1
-  pattern: |
-    if (UNEXPECTED(Z_ISUNDEF_P(data))) {
-      if (Z_TYPE(key) == IS_LONG) {
-        zend_hash_index_del(ht, Z_LVAL(key));
+  patterns:
+  - pattern: |
+      if (UNEXPECTED(Z_ISUNDEF_P(data))) {
+        if (Z_TYPE(key) == IS_LONG) {
+          zend_hash_index_del(ht, Z_LVAL(key));
+        } else {
+          zend_hash_del_ind(ht, Z_STR(key));
+        }
       } else {
-        zend_hash_del_ind(ht, Z_STR(key));
+        var_push_dtor(var_hash, data);
       }
-    } else {
+  - pattern-not: |
       var_push_dtor(var_hash, data);
-    }
-  pattern-not: |
-    var_push_dtor(var_hash, data);
   languages:
   - c
   message: |
@@ -256,14 +266,15 @@ rules:
     - https://cwe.mitre.org/data/definitions/416.html
     - https://owasp.org/www-project-top-ten/2017/A9_2017-Using_Components_with_Known_Vulnerabilities.html
 - id: vuln-php-src-1e9b1752
-  pattern: |
-    if (zend_parse_parameters(ZEND_NUM_ARGS(), "s", $VAR1, $VAR2) == FAILURE) {
-      ...
-    }
-  pattern-not: |
-    if (zend_parse_parameters(ZEND_NUM_ARGS(), "p", $VAR1, $VAR2) == FAILURE) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (zend_parse_parameters(ZEND_NUM_ARGS(), "s", $VAR1, $VAR2) == FAILURE) {
+        ...
+      }
+  - pattern-not: |
+      if (zend_parse_parameters(ZEND_NUM_ARGS(), "p", $VAR1, $VAR2) == FAILURE) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -281,11 +292,12 @@ rules:
     technology:
     - c
 - id: vuln-php-src-20ce2fe8
-  pattern: |
-    if ($VAR != ':') goto $LABEL;
-  pattern-not: |
-    if ($VAR <= '/') goto $LABEL;
-    if ($VAR >= ';') goto $LABEL;
+  patterns:
+  - pattern: |
+      if ($VAR != ':') goto $LABEL;
+  - pattern-not: |
+      if ($VAR <= '/') goto $LABEL;
+      if ($VAR >= ';') goto $LABEL;
   languages:
   - c
   message: |
@@ -304,14 +316,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-2baeb167
-  pattern: |
-    if ($BGCOLOR < 0 || $BGCOLOR >= gdMaxColors) {
-      ...
-    }
-  pattern-not: |
-    if ($BGCOLOR < 0 || (!$SRC->trueColor && $BGCOLOR >= gdMaxColors)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($BGCOLOR < 0 || $BGCOLOR >= gdMaxColors) {
+        ...
+      }
+  - pattern-not: |
+      if ($BGCOLOR < 0 || (!$SRC->trueColor && $BGCOLOR >= gdMaxColors)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -331,18 +344,19 @@ rules:
     technology:
     - c
 - id: vuln-php-src-2bcbc95f
-  pattern: |
-    if ($W <= 0 &&
-        ((($C1 >= 0xfa && $C1 <= 0xfe) || ($C1 >= 0x8e && $C1 <= 0xa0) ||
-          ($C1 >= 0x81 && $C1 <= 0x8d) || ($C1 >= 0xc7 && $C1 <= 0xc8))
-         && (($C > 0x39 && $C < 0x7f) || ($C > 0xa0 && $C < 0xff))) ||
-        (($C1 == 0xc6) && ($C > 0xa0 && $C < 0xff))) {
-      ...
-    }
-  pattern-not: |
-    if ($W <= 0 && is_in_cp950_pua($C1, $C)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($W <= 0 &&
+          ((($C1 >= 0xfa && $C1 <= 0xfe) || ($C1 >= 0x8e && $C1 <= 0xa0) ||
+            ($C1 >= 0x81 && $C1 <= 0x8d) || ($C1 >= 0xc7 && $C1 <= 0xc8))
+           && (($C > 0x39 && $C < 0x7f) || ($C > 0xa0 && $C < 0xff))) ||
+          (($C1 == 0xc6) && ($C > 0xa0 && $C < 0xff))) {
+        ...
+      }
+  - pattern-not: |
+      if ($W <= 0 && is_in_cp950_pua($C1, $C)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -358,14 +372,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-32c7c433
-  pattern: |
-    convert_to_null(Z_CLIENT_HTTPURL_P($VAR));
-    convert_to_null(Z_CLIENT_HTTPSOCKET_P($VAR));
-    convert_to_null(Z_CLIENT_USE_PROXY_P($VAR));
-  pattern-not: |
-    zend_hash_str_del(Z_OBJPROP_P($VAR), "httpurl", sizeof("httpurl")-1);
-    zend_hash_str_del(Z_OBJPROP_P($VAR), "httpsocket", sizeof("httpsocket")-1);
-    zend_hash_str_del(Z_OBJPROP_P($VAR), "_use_proxy", sizeof("_use_proxy")-1);
+  patterns:
+  - pattern: |
+      convert_to_null(Z_CLIENT_HTTPURL_P($VAR));
+      convert_to_null(Z_CLIENT_HTTPSOCKET_P($VAR));
+      convert_to_null(Z_CLIENT_USE_PROXY_P($VAR));
+  - pattern-not: |
+      zend_hash_str_del(Z_OBJPROP_P($VAR), "httpurl", sizeof("httpurl")-1);
+      zend_hash_str_del(Z_OBJPROP_P($VAR), "httpsocket", sizeof("httpsocket")-1);
+      zend_hash_str_del(Z_OBJPROP_P($VAR), "_use_proxy", sizeof("_use_proxy")-1);
   languages:
   - c
   message: |
@@ -383,10 +398,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-35ceea92
-  pattern: |
-    $VAR->socket_mode = 0666
-  pattern-not: |
-    $VAR->socket_mode = 0660
+  patterns:
+  - pattern: |
+      $VAR->socket_mode = 0666
+  - pattern-not: |
+      $VAR->socket_mode = 0660
   languages:
   - c
   message: |
@@ -404,14 +420,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-3804c0d0
-  pattern: |
-    if (zend_hash_find(&EG(symbol_table), $VAR, sizeof($VAR), (void **) &$DATA) != FAILURE) {
-      ...
-    }
-  pattern-not: |
-    if (zend_hash_find(&EG(symbol_table), $VAR, sizeof($VAR), (void **) &$DATA) != FAILURE && Z_TYPE_PP($DATA) == IS_STRING) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (zend_hash_find(&EG(symbol_table), $VAR, sizeof($VAR), (void **) &$DATA) != FAILURE) {
+        ...
+      }
+  - pattern-not: |
+      if (zend_hash_find(&EG(symbol_table), $VAR, sizeof($VAR), (void **) &$DATA) != FAILURE && Z_TYPE_PP($DATA) == IS_STRING) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -430,10 +447,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-3b8d4de3
-  pattern: |
-    $BUFFER = zend_string_alloc($LEN, 0);
-  pattern-not: |
-    $BUFFER = zend_string_safe_alloc(1, $LEN, 0, 0);
+  patterns:
+  - pattern: |
+      $BUFFER = zend_string_alloc($LEN, 0);
+  - pattern-not: |
+      $BUFFER = zend_string_safe_alloc(1, $LEN, 0, 0);
   languages:
   - c
   message: |
@@ -449,10 +467,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-3c8c200d
-  pattern: |
-    safe_emalloc(1, 3 * $LENGTH + 3 * (((3 * $LENGTH)/PHP_QPRINT_MAXL) + 1), 0)
-  pattern-not: |
-    safe_emalloc(3, $LENGTH + (((3 * $LENGTH)/(PHP_QPRINT_MAXL-9)) + 1), 1)
+  patterns:
+  - pattern: |
+      safe_emalloc(1, 3 * $LENGTH + 3 * (((3 * $LENGTH)/PHP_QPRINT_MAXL) + 1), 0)
+  - pattern-not: |
+      safe_emalloc(3, $LENGTH + (((3 * $LENGTH)/(PHP_QPRINT_MAXL-9)) + 1), 1)
   languages:
   - c
   message: |
@@ -470,17 +489,18 @@ rules:
     technology:
     - c
 - id: vuln-php-src-426aeb28
-  pattern: |
-    $TMP = emalloc($LEN + 1);
-    memcpy($TMP, $S, $LEN);
-    ...
-    efree($TMP);
-  pattern-not: |
-    $TMP = safe_emalloc($STR_LEN, 1, $LEN + 1);
-    memcpy($TMP, $STR_VAL, $STR_LEN);
-    memcpy($TMP + $STR_LEN, $S, $LEN);
-    ...
-    efree($TMP);
+  patterns:
+  - pattern: |
+      $TMP = emalloc($LEN + 1);
+      memcpy($TMP, $S, $LEN);
+      ...
+      efree($TMP);
+  - pattern-not: |
+      $TMP = safe_emalloc($STR_LEN, 1, $LEN + 1);
+      memcpy($TMP, $STR_VAL, $STR_LEN);
+      memcpy($TMP + $STR_LEN, $S, $LEN);
+      ...
+      efree($TMP);
   languages:
   - c
   message: |
@@ -498,23 +518,24 @@ rules:
     technology:
     - c
 - id: vuln-php-src-4b15f5d4
-  pattern: |
-    static bool is_executed_by_cmd(const char *prog_name) {
-        ...
-        if (_stricmp("cmd.exe", prog_name) == 0 || _stricmp("cmd", prog_name) == 0
-                || stricmp_end("\\cmd.exe", prog_name) == 0 || stricmp_end("\\cmd", prog_name) == 0) {
-            return true;
-        }
-        ...
-    }
-  pattern-not: |
-    static bool is_executed_by_cmd(const char *prog_name, size_t prog_name_length) {
-        ...
-        if (_wcsicmp(file_part, L"cmd.exe") == 0 || _wcsicmp(file_part, L"cmd") == 0) {
-            uses_cmd = true;
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      static bool is_executed_by_cmd(const char *prog_name) {
+          ...
+          if (_stricmp("cmd.exe", prog_name) == 0 || _stricmp("cmd", prog_name) == 0
+                  || stricmp_end("\\cmd.exe", prog_name) == 0 || stricmp_end("\\cmd", prog_name) == 0) {
+              return true;
+          }
+          ...
+      }
+  - pattern-not: |
+      static bool is_executed_by_cmd(const char *prog_name, size_t prog_name_length) {
+          ...
+          if (_wcsicmp(file_part, L"cmd.exe") == 0 || _wcsicmp(file_part, L"cmd") == 0) {
+              uses_cmd = true;
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -535,14 +556,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-523f230c
-  pattern: |
-    if ($VAR[($VAR_LEN - 1)] == $CHAR) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR_LEN >= 1 && $VAR[($VAR_LEN - 1)] == $CHAR) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR[($VAR_LEN - 1)] == $CHAR) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR_LEN >= 1 && $VAR[($VAR_LEN - 1)] == $CHAR) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -561,14 +583,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-56754a7f
-  pattern: |
-    if ($DATALEN < 0 || ($P) + $DATALEN >= $MAX) {
-      ...
-    }
-  pattern-not: |
-    if ($DATALEN < 0 || ($MAX - ($P)) <= $DATALEN) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DATALEN < 0 || ($P) + $DATALEN >= $MAX) {
+        ...
+      }
+  - pattern-not: |
+      if ($DATALEN < 0 || ($MAX - ($P)) <= $DATALEN) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -583,30 +606,30 @@ rules:
     - 'A1: Injection'
     technology:
     - c
-- rules:
-  - id: vuln-php-src-5c0455bf
-  pattern: |
-    if (yych <= '/') goto yy1287;
-    if (yych <= '9') goto yy1286;
-    goto yy1287;
-  pattern-not: |
-    if (yych <= '@') {
-        if (yych <= 0x1F) {
-            if (yych == '\t') goto yy1287;
-        } else {
-            if (yych <= ' ') goto yy1287;
-            if (yych <= '/') goto yy1284;
-            if (yych <= '9') goto yy1286;
-        }
-    } else {
-        if (yych <= '`') {
-            if (yych <= 'A') goto yy1289;
-            if (yych == 'P') goto yy1289;
-        } else {
-            if (yych <= 'a') goto yy1289;
-            if (yych == 'p') goto yy1289;
-        }
-    }
+- id: vuln-php-src-5c0455bf
+  patterns:
+  - pattern: |
+      if (yych <= '/') goto yy1287;
+      if (yych <= '9') goto yy1286;
+      goto yy1287;
+  - pattern-not: |
+      if (yych <= '@') {
+          if (yych <= 0x1F) {
+              if (yych == '\t') goto yy1287;
+          } else {
+              if (yych <= ' ') goto yy1287;
+              if (yych <= '/') goto yy1284;
+              if (yych <= '9') goto yy1286;
+          }
+      } else {
+          if (yych <= '`') {
+              if (yych <= 'A') goto yy1289;
+              if (yych == 'P') goto yy1289;
+          } else {
+              if (yych <= 'a') goto yy1289;
+              if (yych == 'p') goto yy1289;
+          }
+      }
   languages:
   - c
   message: |
@@ -625,12 +648,12 @@ rules:
     - https://owasp.org/www-project-top-ten/
     technology:
     - c
-  id: vuln-php-src-5c0455bf
 - id: vuln-php-src-6e259665
-  pattern: |
-    zend_throw_exception_ex($EXCEPTION, $TYPE, $ERRSTR);
-  pattern-not: |
-    zend_throw_exception_ex($EXCEPTION, $TYPE, "%s", $ERRSTR);
+  patterns:
+  - pattern: |
+      zend_throw_exception_ex($EXCEPTION, $TYPE, $ERRSTR);
+  - pattern-not: |
+      zend_throw_exception_ex($EXCEPTION, $TYPE, "%s", $ERRSTR);
   languages:
   - c
   message: |
@@ -678,11 +701,12 @@ rules:
     technology:
     - c
 - id: vuln-php-src-80316123
-  pattern: |
-    memcpy(((php_stream_dirent *) $BUF)->d_name, $VAL, $TO_READ);
-    ((php_stream_dirent *) $BUF)->d_name[$TO_READ + 1] = '\0';
-  pattern-not: |
-    PHP_STRLCPY($DIRENT->d_name, $VAL, sizeof($DIRENT->d_name), $LEN);
+  patterns:
+  - pattern: |
+      memcpy(((php_stream_dirent *) $BUF)->d_name, $VAL, $TO_READ);
+      ((php_stream_dirent *) $BUF)->d_name[$TO_READ + 1] = '\0';
+  - pattern-not: |
+      PHP_STRLCPY($DIRENT->d_name, $VAL, sizeof($DIRENT->d_name), $LEN);
   languages:
   - c
   message: |
@@ -697,23 +721,24 @@ rules:
     technology:
     - c
 - id: vuln-php-src-8d2539fa
-  pattern: |
-    object_init_ex(&$OBJ, $PCE);
-    zend_hash_merge(Z_OBJPROP($OBJ), Z_ARRVAL($ENT->data), zval_add_ref, 0);
-    ...
-    zval_ptr_dtor(&$ENT->data);
-    ZVAL_COPY_VALUE(&$ENT->data, &$OBJ);
-  pattern-not: |
-    if (object_init_ex(&$OBJ, $PCE) != SUCCESS || EG(exception)) {
-      zval_ptr_dtor(&$ENT->data);
-      ZVAL_UNDEF(&$ENT->data);
-      php_error_docref(NULL, E_WARNING, "Class %s can not be instantiated", Z_STRVAL($ENT->data));
-    } else {
+  patterns:
+  - pattern: |
+      object_init_ex(&$OBJ, $PCE);
       zend_hash_merge(Z_OBJPROP($OBJ), Z_ARRVAL($ENT->data), zval_add_ref, 0);
       ...
       zval_ptr_dtor(&$ENT->data);
       ZVAL_COPY_VALUE(&$ENT->data, &$OBJ);
-    }
+  - pattern-not: |
+      if (object_init_ex(&$OBJ, $PCE) != SUCCESS || EG(exception)) {
+        zval_ptr_dtor(&$ENT->data);
+        ZVAL_UNDEF(&$ENT->data);
+        php_error_docref(NULL, E_WARNING, "Class %s can not be instantiated", Z_STRVAL($ENT->data));
+      } else {
+        zend_hash_merge(Z_OBJPROP($OBJ), Z_ARRVAL($ENT->data), zval_add_ref, 0);
+        ...
+        zval_ptr_dtor(&$ENT->data);
+        ZVAL_COPY_VALUE(&$ENT->data, &$OBJ);
+      }
   languages:
   - c
   message: |
@@ -729,11 +754,12 @@ rules:
     technology:
     - c
 - id: vuln-php-src-8e76d040
-  pattern: |
-    $CTXT->options &= ~XML_PARSE_DTDLOAD;
-  pattern-not: |
-    $OLD = php_libxml_disable_entity_loader(1);
-    php_libxml_disable_entity_loader($OLD);
+  patterns:
+  - pattern: |
+      $CTXT->options &= ~XML_PARSE_DTDLOAD;
+  - pattern-not: |
+      $OLD = php_libxml_disable_entity_loader(1);
+      php_libxml_disable_entity_loader($OLD);
   languages:
   - c
   message: |
@@ -749,14 +775,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-8f4a5373
-  pattern: |
-    if ($SRC->sx < ($CROP->x + $CROP->width - 1)) {
-      $CROP->width = $SRC->sx - $CROP->x + 1;
-    }
-  pattern-not: |
-    if (($SRC->sx - $CROP->width) < $CROP->x) {
-      $CROP->width = $SRC->sx - $CROP->x;
-    }
+  patterns:
+  - pattern: |
+      if ($SRC->sx < ($CROP->x + $CROP->width - 1)) {
+        $CROP->width = $SRC->sx - $CROP->x + 1;
+      }
+  - pattern-not: |
+      if (($SRC->sx - $CROP->width) < $CROP->x) {
+        $CROP->width = $SRC->sx - $CROP->x;
+      }
   languages:
   - c
   message: |
@@ -773,21 +800,22 @@ rules:
     technology:
     - c
 - id: vuln-php-src-907dae8b
-  pattern: |
-    zval_dtor($VAR);
-    Z_TYPE_P($VAR) = IS_STRING;
-    Z_STRVAL_P($VAR) = estrdup($FUNC($RESPONSE));
-    Z_STRLEN_P($VAR) = strlen(Z_STRVAL_P($VAR));
-  pattern-not: |
-    $NAME = $FUNC($RESPONSE);
-    if ($NAME) {
+  patterns:
+  - pattern: |
       zval_dtor($VAR);
       Z_TYPE_P($VAR) = IS_STRING;
-      Z_STRVAL_P($VAR) = estrdup($NAME);
+      Z_STRVAL_P($VAR) = estrdup($FUNC($RESPONSE));
       Z_STRLEN_P($VAR) = strlen(Z_STRVAL_P($VAR));
-    } else {
-      $RETVAL = NULL;
-    }
+  - pattern-not: |
+      $NAME = $FUNC($RESPONSE);
+      if ($NAME) {
+        zval_dtor($VAR);
+        Z_TYPE_P($VAR) = IS_STRING;
+        Z_STRVAL_P($VAR) = estrdup($NAME);
+        Z_STRLEN_P($VAR) = strlen(Z_STRVAL_P($VAR));
+      } else {
+        $RETVAL = NULL;
+      }
   languages:
   - c
   message: |
@@ -804,10 +832,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-95433e8e
-  pattern: |
-    register int $X, $Y;
-  pattern-not: |
-    register size_t $X, $Y;
+  patterns:
+  - pattern: |
+      register int $X, $Y;
+  - pattern-not: |
+      register size_t $X, $Y;
   languages:
   - c
   message: |
@@ -825,14 +854,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-9649ca16
-  pattern: |
-    if ($VAR == UINT_MAX) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR == UINT_MAX || $VAR == 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR == UINT_MAX) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR == UINT_MAX || $VAR == 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -850,10 +880,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-9737e9ee
-  pattern: |
-    int $VAR = $PTLEN + $ENV_PATH_INFO ? strlen($ENV_PATH_INFO) : 0;
-  pattern-not: |
-    int $VAR = $PTLEN + ($ENV_PATH_INFO ? strlen($ENV_PATH_INFO) : 0);
+  patterns:
+  - pattern: |
+      int $VAR = $PTLEN + $ENV_PATH_INFO ? strlen($ENV_PATH_INFO) : 0;
+  - pattern-not: |
+      int $VAR = $PTLEN + ($ENV_PATH_INFO ? strlen($ENV_PATH_INFO) : 0);
   languages:
   - c
   message: |
@@ -869,11 +900,12 @@ rules:
     technology:
     - c
 - id: vuln-php-src-996faf96
-  pattern: "int $VAR = \n  ($EXPR1 != ' ' && $EXPR1 != '\\t')\n  && (\n    $EXPR2 == '\\n'\n    || ($EXPR2 == '\\r' && $EXPR1 != '\\n'));\nif ($VAR) {\n  ...\n}\n"
-  pattern-not: |
-    if ($EXPR == '\n' || $EXPR == '\r') {
-      ...
-    }
+  patterns:
+  - pattern: "int $VAR = \n  ($EXPR1 != ' ' && $EXPR1 != '\\t')\n  && (\n    $EXPR2 == '\\n'\n    || ($EXPR2 == '\\r' && $EXPR1 != '\\n'));\nif ($VAR) {\n  ...\n}\n"
+  - pattern-not: |
+      if ($EXPR == '\n' || $EXPR == '\r') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -893,10 +925,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-9d388b95
-  pattern: |
-    memchr($POS + 1, '.', $LEN - ($POS - $FILENAME) + 1)
-  pattern-not: |
-    memchr($POS + 1, '.', $LEN - ($POS - $FILENAME) - 1)
+  patterns:
+  - pattern: |
+      memchr($POS + 1, '.', $LEN - ($POS - $FILENAME) + 1)
+  - pattern-not: |
+      memchr($POS + 1, '.', $LEN - ($POS - $FILENAME) - 1)
   languages:
   - c
   message: |
@@ -918,14 +951,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-a6fdc5bb
-  pattern: |
-    if (!memcmp($P + 1, "K\5\6", 3)) {
-      ...
-    }
-  pattern-not: |
-    if (($P - $BUF) + sizeof($LOCATOR) <= $SIZE && !memcmp($P + 1, "K\5\6", 3)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!memcmp($P + 1, "K\5\6", 3)) {
+        ...
+      }
+  - pattern-not: |
+      if (($P - $BUF) + sizeof($LOCATOR) <= $SIZE && !memcmp($P + 1, "K\5\6", 3)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -943,14 +977,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-aa8d3a8c
-  pattern: |
-    if ($BGCOLOR < 0 || (!$SRC->trueColor && $BGCOLOR >= gdMaxColors)) {
-      ...
-    }
-  pattern-not: |
-    if ($BGCOLOR < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($BGCOLOR < 0 || (!$SRC->trueColor && $BGCOLOR >= gdMaxColors)) {
+        ...
+      }
+  - pattern-not: |
+      if ($BGCOLOR < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -973,10 +1008,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-b158091e
-  pattern: |
-    BF_set_key($KEY, $EXPANDED, $INITIAL)
-  pattern-not: |
-    BF_set_key($KEY, $EXPANDED, $INITIAL, $SIGN_EXTENSION_BUG)
+  patterns:
+  - pattern: |
+      BF_set_key($KEY, $EXPANDED, $INITIAL)
+  - pattern-not: |
+      BF_set_key($KEY, $EXPANDED, $INITIAL, $SIGN_EXTENSION_BUG)
   languages:
   - c
   message: |
@@ -994,15 +1030,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-b88393f0
-  pattern: |
-    if (((st_entry *)$STACK->elements[$I])->data) {
-      ...
-    }
-  pattern-not: |
-    if (((st_entry *)$STACK->elements[$I])->data
-        && ((st_entry *)$STACK->elements[$I])->type != ST_FIELD) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (((st_entry *)$STACK->elements[$I])->data) {
+        ...
+      }
+  - pattern-not: |
+      if (((st_entry *)$STACK->elements[$I])->data
+          && ((st_entry *)$STACK->elements[$I])->type != ST_FIELD) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1021,15 +1058,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-c283c3ab
-  pattern: |
-    xmlSubstituteEntitiesDefault(1);
-    ...
-    xmlSubstituteEntitiesDefault($PREV);
-    xmlLoadExtDtdDefaultValue = $PREV2;
-  pattern-not: |
-    PHP_LIBXML_SANITIZE_GLOBALS($X);
-    ...
-    PHP_LIBXML_RESTORE_GLOBALS($X);
+  patterns:
+  - pattern: |
+      xmlSubstituteEntitiesDefault(1);
+      ...
+      xmlSubstituteEntitiesDefault($PREV);
+      xmlLoadExtDtdDefaultValue = $PREV2;
+  - pattern-not: |
+      PHP_LIBXML_SANITIZE_GLOBALS($X);
+      ...
+      PHP_LIBXML_RESTORE_GLOBALS($X);
   languages:
   - c
   message: |
@@ -1051,14 +1089,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-c4cca4c2
-  pattern: |
-    if (!strcmp($ATTS[$I], $EL) && $ATTS[++$I] && $ATTS[$I][0]) {
-      ...
-    }
-  pattern-not: |
-    if (!strcmp($ATTS[$I], $EL) && $ATTS[$I+1] && $ATTS[$I+1][0]) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!strcmp($ATTS[$I], $EL) && $ATTS[++$I] && $ATTS[$I][0]) {
+        ...
+      }
+  - pattern-not: |
+      if (!strcmp($ATTS[$I], $EL) && $ATTS[$I+1] && $ATTS[$I+1][0]) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1074,10 +1113,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-c50cef1d
-  pattern: |
-    #define JEWISH_SDN_MAX $MAX
-  pattern-not: |
-    #define JEWISH_SDN_MAX 324542846L
+  patterns:
+  - pattern: |
+      #define JEWISH_SDN_MAX $MAX
+  - pattern-not: |
+      #define JEWISH_SDN_MAX 324542846L
   languages:
   - c
   message: |
@@ -1095,22 +1135,23 @@ rules:
     technology:
     - c
 - id: vuln-php-src-c818d0d0
-  pattern: |
-    char $BUF[18];
-    ...
-    if(strlen($TEXT) < 17) {
-      return -1;
-    }
-    ...
-    *$VALUE = mktime($TM);
-  pattern-not: |
-    char $BUF[30];
-    ...
-    if ($P2 - $BUF >= sizeof($BUF)) {
-      return -1;
-    }
-    ...
-    *$VALUE = mkgmtime($TM);
+  patterns:
+  - pattern: |
+      char $BUF[18];
+      ...
+      if(strlen($TEXT) < 17) {
+        return -1;
+      }
+      ...
+      *$VALUE = mktime($TM);
+  - pattern-not: |
+      char $BUF[30];
+      ...
+      if ($P2 - $BUF >= sizeof($BUF)) {
+        return -1;
+      }
+      ...
+      *$VALUE = mkgmtime($TM);
   languages:
   - c
   message: |
@@ -1127,10 +1168,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-d74907b8
-  pattern: |
-    zend_parse_parameters(ZEND_NUM_ARGS(), "s|l", $PATH, $LEN, $FLAGS);
-  pattern-not: |
-    zend_parse_parameters(ZEND_NUM_ARGS(), "p|l", $PATH, $LEN, $FLAGS);
+  patterns:
+  - pattern: |
+      zend_parse_parameters(ZEND_NUM_ARGS(), "s|l", $PATH, $LEN, $FLAGS);
+  - pattern-not: |
+      zend_parse_parameters(ZEND_NUM_ARGS(), "p|l", $PATH, $LEN, $FLAGS);
   languages:
   - c
   message: |
@@ -1148,10 +1190,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-da3886de
-  pattern: |
-    REGISTER_LONG_CONSTANT("FILTER_SANITIZE_FULL_SPECIAL_CHARS", FILTER_SANITIZE_SPECIAL_CHARS, CONST_CS | CONST_PERSISTENT);
-  pattern-not: |
-    REGISTER_LONG_CONSTANT("FILTER_SANITIZE_FULL_SPECIAL_CHARS", FILTER_SANITIZE_FULL_SPECIAL_CHARS, CONST_CS | CONST_PERSISTENT);
+  patterns:
+  - pattern: |
+      REGISTER_LONG_CONSTANT("FILTER_SANITIZE_FULL_SPECIAL_CHARS", FILTER_SANITIZE_SPECIAL_CHARS, CONST_CS | CONST_PERSISTENT);
+  - pattern-not: |
+      REGISTER_LONG_CONSTANT("FILTER_SANITIZE_FULL_SPECIAL_CHARS", FILTER_SANITIZE_FULL_SPECIAL_CHARS, CONST_CS | CONST_PERSISTENT);
   languages:
   - c
   message: |
@@ -1167,22 +1210,23 @@ rules:
     technology:
     - c
 - id: vuln-php-src-dda81f05
-  pattern: |
-    len = spprintf(&fullpath, 0, "%s/%s", dest, entry->filename);
-    ...
-    slash = zend_memrchr(entry->filename, '/', entry->filename_len);
-    ...
-    fullpath[dest_len + (slash - entry->filename) + 1] = '\0';
-    ...
-    fullpath[dest_len + (slash - entry->filename) + 1] = '/';
-  pattern-not: |
-    len = spprintf(&fullpath, 0, "%s/%s", dest, filename);
-    ...
-    slash = zend_memrchr(filename, '/', filename_len);
-    ...
-    fullpath[dest_len + (slash - filename) + 1] = '\0';
-    ...
-    fullpath[dest_len + (slash - filename) + 1] = '/';
+  patterns:
+  - pattern: |
+      len = spprintf(&fullpath, 0, "%s/%s", dest, entry->filename);
+      ...
+      slash = zend_memrchr(entry->filename, '/', entry->filename_len);
+      ...
+      fullpath[dest_len + (slash - entry->filename) + 1] = '\0';
+      ...
+      fullpath[dest_len + (slash - entry->filename) + 1] = '/';
+  - pattern-not: |
+      len = spprintf(&fullpath, 0, "%s/%s", dest, filename);
+      ...
+      slash = zend_memrchr(filename, '/', filename_len);
+      ...
+      fullpath[dest_len + (slash - filename) + 1] = '\0';
+      ...
+      fullpath[dest_len + (slash - filename) + 1] = '/';
   languages:
   - c
   message: |
@@ -1200,11 +1244,12 @@ rules:
     technology:
     - c
 - id: vuln-php-src-df4bf28f
-  pattern: |
-    zval_dtor($VAR);
-    FREE_ZVAL($VAR);
-  pattern-not: |
-    var_push_dtor_no_addref($VARHASH, &$VAR);
+  patterns:
+  - pattern: |
+      zval_dtor($VAR);
+      FREE_ZVAL($VAR);
+  - pattern-not: |
+      var_push_dtor_no_addref($VARHASH, &$VAR);
   languages:
   - c
   message: |
@@ -1219,12 +1264,13 @@ rules:
     technology:
     - c
 - id: vuln-php-src-e0f5d62b
-  pattern: |
-    strncpy($DEST, $SRC, strlen($SRC));
-  pattern-not: |
-    if (strlcpy($DEST, $SRC, sizeof($DEST)) >= sizeof($DEST)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      strncpy($DEST, $SRC, strlen($SRC));
+  - pattern-not: |
+      if (strlcpy($DEST, $SRC, sizeof($DEST)) >= sizeof($DEST)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1243,10 +1289,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-e1ba58f0
-  pattern: |
-    strchr($S, '#')
-  pattern-not: |
-    memchr($S, '#', ($UE - $S))
+  patterns:
+  - pattern: |
+      strchr($S, '#')
+  - pattern-not: |
+      memchr($S, '#', ($UE - $S))
   languages:
   - c
   message: |
@@ -1266,10 +1313,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-e3c784f2
-  pattern: |
-    append_win_escaped_arg($STR, $ARG);
-  pattern-not: |
-    append_win_escaped_arg($STR, $ARG, $IS_CMD_ARG);
+  patterns:
+  - pattern: |
+      append_win_escaped_arg($STR, $ARG);
+  - pattern-not: |
+      append_win_escaped_arg($STR, $ARG, $IS_CMD_ARG);
   languages:
   - c
   message: |
@@ -1288,31 +1336,32 @@ rules:
     technology:
     - c
 - id: vuln-php-src-e6c48213
-  pattern: |
-    void simplestring_addn(simplestring* $TARGET, const char* $SOURCE, int $ADD_LEN) {
-      ...
-      int $NEWSIZE = $TARGET->len + $ADD_LEN + 1;
-      int $INCR = $TARGET->size * 2;
-      $NEWSIZE = $NEWSIZE - ($NEWSIZE % $INCR) + $INCR;
-      ...
-    }
-  pattern-not: |
-    void simplestring_addn(simplestring* $TARGET, const char* $SOURCE, size_t $ADD_LEN) {
-      ...
-      size_t $NEWSIZE = $TARGET->size, $INCR = 0;
-      if((SIZE_MAX - $ADD_LEN) < $TARGET->len || (SIZE_MAX - $ADD_LEN - 1) < $TARGET->len) {
-        return;
-      }
-      $NEWSIZE = $TARGET->len + $ADD_LEN + 1;
-      $INCR = $TARGET->size * 2;
-      if ($INCR) {
+  patterns:
+  - pattern: |
+      void simplestring_addn(simplestring* $TARGET, const char* $SOURCE, int $ADD_LEN) {
+        ...
+        int $NEWSIZE = $TARGET->len + $ADD_LEN + 1;
+        int $INCR = $TARGET->size * 2;
         $NEWSIZE = $NEWSIZE - ($NEWSIZE % $INCR) + $INCR;
+        ...
       }
-      if($NEWSIZE < ($TARGET->len + $ADD_LEN + 1)) {
-        return;
+  - pattern-not: |
+      void simplestring_addn(simplestring* $TARGET, const char* $SOURCE, size_t $ADD_LEN) {
+        ...
+        size_t $NEWSIZE = $TARGET->size, $INCR = 0;
+        if((SIZE_MAX - $ADD_LEN) < $TARGET->len || (SIZE_MAX - $ADD_LEN - 1) < $TARGET->len) {
+          return;
+        }
+        $NEWSIZE = $TARGET->len + $ADD_LEN + 1;
+        $INCR = $TARGET->size * 2;
+        if ($INCR) {
+          $NEWSIZE = $NEWSIZE - ($NEWSIZE % $INCR) + $INCR;
+        }
+        if($NEWSIZE < ($TARGET->len + $ADD_LEN + 1)) {
+          return;
+        }
+        ...
       }
-      ...
-    }
   languages:
   - c
   message: |
@@ -1331,14 +1380,15 @@ rules:
     technology:
     - c
 - id: vuln-php-src-e77659a8
-  pattern: |
-    if ($LEN >= sizeof($STRUCT->$FIELD)) {
-      $LEN = sizeof($STRUCT->$FIELD) - 1;
-    }
-  pattern-not: |
-    if ($LEN >= sizeof($STRUCT->$FIELD)) {
-      $LEN = sizeof($STRUCT->$FIELD) - $SZ;
-    }
+  patterns:
+  - pattern: |
+      if ($LEN >= sizeof($STRUCT->$FIELD)) {
+        $LEN = sizeof($STRUCT->$FIELD) - 1;
+      }
+  - pattern-not: |
+      if ($LEN >= sizeof($STRUCT->$FIELD)) {
+        $LEN = sizeof($STRUCT->$FIELD) - $SZ;
+      }
   languages:
   - c
   message: |
@@ -1357,15 +1407,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-ed52bcb3
-  pattern: |
-    if ($VAR->n_scale > $SCALE) {
-      $VAR->n_scale = $SCALE;
-    }
-  pattern-not: |
-    if ($VAR->n_scale > $SCALE) {
-      $VAR = split_bc_num($VAR);
-      $VAR->n_scale = $SCALE;
-    }
+  patterns:
+  - pattern: |
+      if ($VAR->n_scale > $SCALE) {
+        $VAR->n_scale = $SCALE;
+      }
+  - pattern-not: |
+      if ($VAR->n_scale > $SCALE) {
+        $VAR = split_bc_num($VAR);
+        $VAR->n_scale = $SCALE;
+      }
   languages:
   - c
   message: |
@@ -1382,15 +1433,16 @@ rules:
     technology:
     - c
 - id: vuln-php-src-ede59c8f
-  pattern: |
-    if (len >= sizeof($VAR.s)) {
-        len = sizeof($VAR.s) - sz;
-    }
-  pattern-not: |
-    $SZ = sizeof($VAR.s) - sz;
-    if (len >= $SZ) {
-        len = $SZ;
-    }
+  patterns:
+  - pattern: |
+      if (len >= sizeof($VAR.s)) {
+          len = sizeof($VAR.s) - sz;
+      }
+  - pattern-not: |
+      $SZ = sizeof($VAR.s) - sz;
+      if (len >= $SZ) {
+          len = $SZ;
+      }
   languages:
   - c
   message: |
@@ -1412,10 +1464,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-fadb1f8c
-  pattern: |
-    fpm_scoreboard_proc_get($CHILD->wp->scoreboard, $CHILD->scoreboard_i)
-  pattern-not: |
-    fpm_scoreboard_proc_get_from_child($CHILD)
+  patterns:
+  - pattern: |
+      fpm_scoreboard_proc_get($CHILD->wp->scoreboard, $CHILD->scoreboard_i)
+  - pattern-not: |
+      fpm_scoreboard_proc_get_from_child($CHILD)
   languages:
   - c
   message: |
@@ -1431,14 +1484,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-fcd4b533
-  pattern: |
-    $OLD = php_libxml_disable_entity_loader(1);
-    ...
-    php_libxml_disable_entity_loader($OLD);
-  pattern-not: |
-    $OLD = php_libxml_disable_entity_loader(1 TSRMLS_CC);
-    ...
-    php_libxml_disable_entity_loader($OLD TSRMLS_CC);
+  patterns:
+  - pattern: |
+      $OLD = php_libxml_disable_entity_loader(1);
+      ...
+      php_libxml_disable_entity_loader($OLD);
   languages:
   - c
   message: |
@@ -1455,10 +1505,11 @@ rules:
     technology:
     - c
 - id: vuln-php-src-fe13566c
-  pattern: |
-    len = (ms->c.len += 20) * sizeof(*ms->c.li);
-  pattern-not: |
-    len = (ms->c.len += 20 + $LEVEL) * sizeof(*ms->c.li);
+  patterns:
+  - pattern: |
+      len = (ms->c.len += 20) * sizeof(*ms->c.li);
+  - pattern-not: |
+      len = (ms->c.len += 20 + $LEVEL) * sizeof(*ms->c.li);
   languages:
   - c
   message: |

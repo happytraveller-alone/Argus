@@ -1,14 +1,15 @@
 rules:
 - id: vuln-slurm-351669e7
-  pattern: |
-    if (memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
-      ...
-    }
-  pattern-not: |
-    if ($MSG->io_key_len != $SIG_LEN ||
-        memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
+        ...
+      }
+  - pattern-not: |
+      if ($MSG->io_key_len != $SIG_LEN ||
+          memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -26,10 +27,11 @@ rules:
     technology:
     - c
 - id: vuln-slurm-5ac031b2
-  pattern: |
-    info("Warning: Unable to assume uid=%u", $UID);
-  pattern-not: |
-    fatal("Unable to assume uid=%u", $UID);
+  patterns:
+  - pattern: |
+      info("Warning: Unable to assume uid=%u", $UID);
+  - pattern-not: |
+      fatal("Unable to assume uid=%u", $UID);
   languages:
   - c
   message: |
@@ -45,16 +47,17 @@ rules:
     technology:
     - c
 - id: vuln-slurm-750cc23e
-  pattern: |
-    void *slurm_xmalloc(size_t $SIZE, bool $CLEAR, ...) {
-      ...
-    }
-  pattern-not: |
-    void *slurm_xmalloc(uint64_t $SIZE, bool $CLEAR, ...) {
-      if ($SIZE > 0xffffffff)
-        fatal("attempt at overflow");
-      ...
-    }
+  patterns:
+  - pattern: |
+      void *slurm_xmalloc(size_t $SIZE, bool $CLEAR, ...) {
+        ...
+      }
+  - pattern-not: |
+      void *slurm_xmalloc(uint64_t $SIZE, bool $CLEAR, ...) {
+        if ($SIZE > 0xffffffff)
+          fatal("attempt at overflow");
+        ...
+      }
   languages:
   - c
   message: |
@@ -70,12 +73,13 @@ rules:
     technology:
     - c
 - id: vuln-slurm-7e4e8a77
-  pattern: |
-    uint32_t $VAR;
-    unpackstr_xmalloc((char **) $OBJ, &$VAR, $BUF);
-  pattern-not: |
-    safe_unpackstr((char **) $OBJ, $BUF);
-    return $SUCCESS;
+  patterns:
+  - pattern: |
+      uint32_t $VAR;
+      unpackstr_xmalloc((char **) $OBJ, &$VAR, $BUF);
+  - pattern-not: |
+      safe_unpackstr((char **) $OBJ, $BUF);
+      return $SUCCESS;
   languages:
   - c
   message: |
@@ -90,13 +94,14 @@ rules:
     technology:
     - c
 - id: vuln-slurm-b30e9e9e
-  pattern: |
-    if ($JOB_ENV->spank_job_env_size) {
-      env_array_merge_spank(&$ENV, (const char **) $JOB_ENV->spank_job_env);
-    }
-  pattern-not: |
-    if ($JOB_ENV->spank_job_env_size)
-      env_array_merge(&$ENV, (const char **) $JOB_ENV->spank_job_env);
+  patterns:
+  - pattern: |
+      if ($JOB_ENV->spank_job_env_size) {
+        env_array_merge_spank(&$ENV, (const char **) $JOB_ENV->spank_job_env);
+      }
+  - pattern-not: |
+      if ($JOB_ENV->spank_job_env_size)
+        env_array_merge(&$ENV, (const char **) $JOB_ENV->spank_job_env);
   languages:
   - c
   message: |
@@ -111,16 +116,17 @@ rules:
     technology:
     - c
 - id: vuln-slurm-bfda1aa8
-  pattern: |
-    if (!is_admin && (slurm_conf.private_data & PRIVATE_DATA_JOBS)) {
-      ...
-    }
-  pattern-not: |
-    if (!is_admin && ((slurm_conf.private_data & PRIVATE_DATA_JOBS) ||
-                      (job_cond->flags & JOBCOND_FLAG_SCRIPT) ||
-                      (job_cond->flags & JOBCOND_FLAG_ENV))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!is_admin && (slurm_conf.private_data & PRIVATE_DATA_JOBS)) {
+        ...
+      }
+  - pattern-not: |
+      if (!is_admin && ((slurm_conf.private_data & PRIVATE_DATA_JOBS) ||
+                        (job_cond->flags & JOBCOND_FLAG_SCRIPT) ||
+                        (job_cond->flags & JOBCOND_FLAG_ENV))) {
+        ...
+      }
   languages:
   - c
   message: |

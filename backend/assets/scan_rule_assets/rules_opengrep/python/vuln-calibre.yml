@@ -1,9 +1,10 @@
 rules:
 - id: vuln-calibre-235b7e38
-  pattern: |
-    $VAR = $MATCH.group(1)
-  pattern-not: |
-    $VAR = $MATCH.group(1).strip()
+  patterns:
+  - pattern: |
+      $VAR = $MATCH.group(1)
+  - pattern-not: |
+      $VAR = $MATCH.group(1).strip()
   languages:
   - python
   message: Detected missing .strip() on regex group extraction. This can lead to unexpected behavior or security issues due to leading/trailing whitespace. Always use .strip() to remove unwanted whitespace.
@@ -18,10 +19,11 @@ rules:
     technology:
     - python
 - id: vuln-calibre-863abac2
-  pattern: |
-    $REDIRECT = $CTX.url_for(None) + '#book_id=' + $REST[5:] + "&amp;panel=book_details"
-  pattern-not: |
-    $REDIRECT = $CTX.url_for(None) + '#book_id=' + int($REST[5:]) + "&amp;panel=book_details"
+  patterns:
+  - pattern: |
+      $REDIRECT = $CTX.url_for(None) + '#book_id=' + $REST[5:] + "&amp;panel=book_details"
+  - pattern-not: |
+      $REDIRECT = $CTX.url_for(None) + '#book_id=' + int($REST[5:]) + "&amp;panel=book_details"
   languages:
   - python
   message: |
@@ -37,13 +39,14 @@ rules:
     technology:
     - python
 - id: vuln-calibre-bcd0ab12
-  pattern: |
-    $SRC_PATH = make_long_path_useable(os.path.join($FULL_BOOK_PATH, $RELPATH))
-  pattern-not: |
-    $EXTRA_FILE_PATH = os.path.abspath(os.path.join($FULL_BOOK_PATH, $RELPATH))
-    if not $EXTRA_FILE_PATH.startswith($FULL_BOOK_PATH):
-        raise FileNotFoundError($ERROR_MSG)
-    $SRC_PATH = make_long_path_useable($EXTRA_FILE_PATH)
+  patterns:
+  - pattern: |
+      $SRC_PATH = make_long_path_useable(os.path.join($FULL_BOOK_PATH, $RELPATH))
+  - pattern-not: |
+      $EXTRA_FILE_PATH = os.path.abspath(os.path.join($FULL_BOOK_PATH, $RELPATH))
+      if not $EXTRA_FILE_PATH.startswith($FULL_BOOK_PATH):
+          raise FileNotFoundError($ERROR_MSG)
+      $SRC_PATH = make_long_path_useable($EXTRA_FILE_PATH)
   languages:
   - python
   message: |

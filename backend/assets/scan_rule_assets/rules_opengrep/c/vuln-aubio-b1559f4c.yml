@@ -1,10 +1,11 @@
 rules:
 - id: vuln-aubio-b1559f4c
-  pattern: |
-    strcpy($VAR, $STRING);
-  pattern-not: |
-    strncpy($VAR, $STRING, $SIZE);
-    $VAR[$SIZE - 1] = '\0';
+  patterns:
+  - pattern: |
+      strcpy($VAR, $STRING);
+  - pattern-not: |
+      strncpy($VAR, $STRING, $SIZE);
+      $VAR[$SIZE - 1] = '\0';
   languages:
   - c
   message: |

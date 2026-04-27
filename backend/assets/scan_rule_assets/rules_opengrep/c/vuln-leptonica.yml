@@ -1,9 +1,10 @@
 rules:
 - id: vuln-leptonica-25ef6f68
-  pattern: |
-    stringCheckForChars($ROOTNAME, "`;&|><\"?*", $BADCHAR)
-  pattern-not: |
-    stringCheckForChars($ROOTNAME, "`;&|><\"?*$()", $BADCHAR)
+  patterns:
+  - pattern: |
+      stringCheckForChars($ROOTNAME, "`;&|><\"?*", $BADCHAR)
+  - pattern-not: |
+      stringCheckForChars($ROOTNAME, "`;&|><\"?*$()", $BADCHAR)
   languages:
   - c
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - c
 - id: vuln-leptonica-b88c821f
-  pattern: |
-    pixGetWordBoxesInTextlines($PIX, 1, $X, $Y, $W, $H, $BOXA, $NAI)
-  pattern-not: |
-    pixGetWordBoxesInTextlines($PIX, $X, $Y, $W, $H, $BOXA, $NAI)
+  patterns:
+  - pattern: |
+      pixGetWordBoxesInTextlines($PIX, 1, $X, $Y, $W, $H, $BOXA, $NAI)
+  - pattern-not: |
+      pixGetWordBoxesInTextlines($PIX, $X, $Y, $W, $H, $BOXA, $NAI)
   languages:
   - c
   message: |

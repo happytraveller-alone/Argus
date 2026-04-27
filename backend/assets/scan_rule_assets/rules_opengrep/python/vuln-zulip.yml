@@ -1,14 +1,15 @@
 rules:
 - id: vuln-zulip-2d453085
-  pattern: |
-    if $LINK.startswith($PREFIX):
-      ...
-  pattern-not: |
-    if (
-      $LINK.startswith($PREFIX)
-      and urllib.parse.urljoin($PREFIX, $LINK[len($PREFIX):])
-      == $LINK
-    ):
+  patterns:
+  - pattern: |
+      if $LINK.startswith($PREFIX):
+        ...
+  - pattern-not: |
+      if (
+        $LINK.startswith($PREFIX)
+        and urllib.parse.urljoin($PREFIX, $LINK[len($PREFIX):])
+        == $LINK
+      ):
   languages:
   - python
   message: |
@@ -24,10 +25,11 @@ rules:
     technology:
     - python
 - id: vuln-zulip-3ba8348c
-  pattern: |
-    get_stream_by_id($STREAM_ID)
-  pattern-not: |
-    access_stream_by_id($USER_PROFILE, $STREAM_ID, require_active=True)
+  patterns:
+  - pattern: |
+      get_stream_by_id($STREAM_ID)
+  - pattern-not: |
+      access_stream_by_id($USER_PROFILE, $STREAM_ID, require_active=True)
   languages:
   - python
   message: Detected insecure stream access. Use access_stream_by_id with user_profile and require_active=True to ensure proper authorization checks.
@@ -42,14 +44,15 @@ rules:
     technology:
     - python
 - id: vuln-zulip-4235be75
-  pattern: |
-    if $SENDER.bot_type != $SENDER.OUTGOING_WEBHOOK_BOT:
-        ...
-  pattern-not: |
-    if not $SKIP_STREAM_ACCESS_CHECK:
-        ...
-    else:
-        assert $SENDER.bot_type == $SENDER.OUTGOING_WEBHOOK_BOT
+  patterns:
+  - pattern: |
+      if $SENDER.bot_type != $SENDER.OUTGOING_WEBHOOK_BOT:
+          ...
+  - pattern-not: |
+      if not $SKIP_STREAM_ACCESS_CHECK:
+          ...
+      else:
+          assert $SENDER.bot_type == $SENDER.OUTGOING_WEBHOOK_BOT
   languages:
   - python
   message: |
@@ -65,10 +68,11 @@ rules:
     technology:
     - python
 - id: vuln-zulip-47913fb0
-  pattern: |
-    ($TYPE, $LABEL, $CHECKER, eval, $NAME)
-  pattern-not: |
-    ($TYPE, $LABEL, $CHECKER, ast.literal_eval, $NAME)
+  patterns:
+  - pattern: |
+      ($TYPE, $LABEL, $CHECKER, eval, $NAME)
+  - pattern-not: |
+      ($TYPE, $LABEL, $CHECKER, ast.literal_eval, $NAME)
   languages:
   - python
   message: |
@@ -86,16 +90,17 @@ rules:
     technology:
     - python
 - id: vuln-zulip-6336322d
-  pattern: |
-    $OLD_CAN_ACCESS_STREAM_USER_IDS = (
-        set($STREAM_SUBSCRIBER_USER_IDS)
-        | set($PREVIOUSLY_SUBSCRIBED_USER_IDS)
-        | { $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots() }
-    )
-  pattern-not: |
-    $OLD_CAN_ACCESS_STREAM_USER_IDS = set($STREAM_SUBSCRIBER_USER_IDS) | {
-        $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots()
-    }
+  patterns:
+  - pattern: |
+      $OLD_CAN_ACCESS_STREAM_USER_IDS = (
+          set($STREAM_SUBSCRIBER_USER_IDS)
+          | set($PREVIOUSLY_SUBSCRIBED_USER_IDS)
+          | { $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots() }
+      )
+  - pattern-not: |
+      $OLD_CAN_ACCESS_STREAM_USER_IDS = set($STREAM_SUBSCRIBER_USER_IDS) | {
+          $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots()
+      }
   languages:
   - python
   message: Potential security issue detected where previously subscribed users are included in the access list for a stream. This could lead to unauthorized access to stream metadata. Ensure that only current subscribers and realm admins have access.
@@ -110,20 +115,21 @@ rules:
     technology:
     - python
 - id: vuln-zulip-6e117546
-  pattern: |
-    if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE.can_forge_sender:
-        ...
-        return
-  pattern-not: |
-    if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE != $SENDER:
-        if (
-            $FORWARDER_USER_PROFILE.can_forge_sender
-            and $FORWARDER_USER_PROFILE.realm_id == $SENDER.realm_id
-            and $SENDER.realm_id == $STREAM.realm_id
-        ):
-            return
-        else:
-            raise JsonableError(_("User not authorized for this query"))
+  patterns:
+  - pattern: |
+      if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE.can_forge_sender:
+          ...
+          return
+  - pattern-not: |
+      if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE != $SENDER:
+          if (
+              $FORWARDER_USER_PROFILE.can_forge_sender
+              and $FORWARDER_USER_PROFILE.realm_id == $SENDER.realm_id
+              and $SENDER.realm_id == $STREAM.realm_id
+          ):
+              return
+          else:
+              raise JsonableError(_("User not authorized for this query"))
   languages:
   - python
   message: |

@@ -1,15 +1,16 @@
 rules:
 - id: vuln-nagioscore-8deeca7c
-  pattern: |
-    <div class="form-group">
-      <label>URL for JSON CGIs</label>
-      <input type="text" class="form-control" ng-model="params.cgiurl" placeholder="..." ui-event="{ blur : 'onBlurCgiurl($event)' }">
-    </div>
-  pattern-not: |
-    <div class="form-group" id="cgiurlDiv">
-      <label>URL for JSON CGIs</label>
-      <input type="text" class="form-control" ng-model="params.cgiurl" placeholder="..." ui-event="{ blur : 'onBlurCgiurl($event)' }">
-    </div>
+  patterns:
+  - pattern: |
+      <div class="form-group">
+        <label>URL for JSON CGIs</label>
+        <input type="text" class="form-control" ng-model="params.cgiurl" placeholder="..." ui-event="{ blur : 'onBlurCgiurl($event)' }">
+      </div>
+  - pattern-not: |
+      <div class="form-group" id="cgiurlDiv">
+        <label>URL for JSON CGIs</label>
+        <input type="text" class="form-control" ng-model="params.cgiurl" placeholder="..." ui-event="{ blur : 'onBlurCgiurl($event)' }">
+      </div>
   languages:
   - html
   message: |

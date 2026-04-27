@@ -1,9 +1,10 @@
 rules:
 - id: vuln-node-opencv-81a4b862
-  pattern: |
-    throw new Error("ERROR: failed to run: pkg-config", $ARG1, $ARG2)
-  pattern-not: |
-    throw new Error("ERROR: failed to run: pkg-config" + $ARG1 + " " + $ARG2 + " - Is OpenCV installed?")
+  patterns:
+  - pattern: |
+      throw new Error("ERROR: failed to run: pkg-config", $ARG1, $ARG2)
+  - pattern-not: |
+      throw new Error("ERROR: failed to run: pkg-config" + $ARG1 + " " + $ARG2 + " - Is OpenCV installed?")
   languages:
   - javascript
   message: |

@@ -1,18 +1,19 @@
 rules:
 - id: vuln-cryptography-58494b41
-  pattern: |
-    def _handle_rsa_enc_dec_error($BACKEND, $KEY):
-        $ERRORS = $BACKEND._consume_errors_with_text()
-        if isinstance($KEY, $RSAPUBLICKEY):
-            raise ValueError(
-                "Data too long for key size. Encrypt less data or use a larger key size.",
-                $ERRORS,
-            )
-        else:
-            raise ValueError("Decryption failed.", $ERRORS)
-  pattern-not: |
-    def _handle_rsa_enc_dec_error($BACKEND, $KEY):
-        raise ValueError("Encryption/decryption failed.")
+  patterns:
+  - pattern: |
+      def _handle_rsa_enc_dec_error($BACKEND, $KEY):
+          $ERRORS = $BACKEND._consume_errors_with_text()
+          if isinstance($KEY, $RSAPUBLICKEY):
+              raise ValueError(
+                  "Data too long for key size. Encrypt less data or use a larger key size.",
+                  $ERRORS,
+              )
+          else:
+              raise ValueError("Decryption failed.", $ERRORS)
+  - pattern-not: |
+      def _handle_rsa_enc_dec_error($BACKEND, $KEY):
+          raise ValueError("Encryption/decryption failed.")
   languages:
   - python
   message: |

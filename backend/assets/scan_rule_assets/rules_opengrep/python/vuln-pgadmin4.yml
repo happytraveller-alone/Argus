@@ -1,9 +1,10 @@
 rules:
 - id: vuln-pgadmin4-46a8c1ad
-  pattern: |
-    from eventlet.green import subprocess
-  pattern-not: |
-    import subprocess
+  patterns:
+  - pattern: |
+      from eventlet.green import subprocess
+  - pattern-not: |
+      import subprocess
   languages:
   - python
   message: Detected use of eventlet.green.subprocess instead of the standard subprocess module. Using eventlet's subprocess can lead to unexpected behavior and security issues. Use the standard subprocess module instead.
@@ -18,10 +19,11 @@ rules:
     technology:
     - python
 - id: vuln-pgadmin4-a1c7265c
-  pattern: |
-    type($VAR) == $TYPE
-  pattern-not: |
-    isinstance($VAR, $TYPE)
+  patterns:
+  - pattern: |
+      type($VAR) == $TYPE
+  - pattern-not: |
+      isinstance($VAR, $TYPE)
   languages:
   - python
   message: Using 'type() ==' for type checking is unsafe. Use 'isinstance()' instead as it handles inheritance and is more robust.
@@ -36,14 +38,15 @@ rules:
     technology:
     - python
 - id: vuln-pgadmin4-fbbbfe22
-  pattern: |
-    if 'utility_path' in $DATA and $DATA['utility_path'] is not None:
-        ...
-  pattern-not: |
-    if 'utility_path' in $DATA and $DATA['utility_path'] is not None and \
-        Path($CONFIG.STORAGE_DIR) != Path($DATA['utility_path']) and \
-            Path($CONFIG.STORAGE_DIR) not in Path($DATA['utility_path']).parents:
-        ...
+  patterns:
+  - pattern: |
+      if 'utility_path' in $DATA and $DATA['utility_path'] is not None:
+          ...
+  - pattern-not: |
+      if 'utility_path' in $DATA and $DATA['utility_path'] is not None and \
+          Path($CONFIG.STORAGE_DIR) != Path($DATA['utility_path']) and \
+              Path($CONFIG.STORAGE_DIR) not in Path($DATA['utility_path']).parents:
+          ...
   languages:
   - python
   message: Detected unsafe utility path validation. The utility path should not be within the storage directory to prevent security vulnerabilities.

@@ -1,11 +1,12 @@
 rules:
 - id: vuln-cri-o-e0d3814d
-  pattern: |
-    if err := $SPECGEN.AddProcessCapabilityAmbient($CAP); err != nil {
-      return $ERR
-    }
-  pattern-not: |
-    specgen.Spec().Process.Capabilities.Ambient = []string{}
+  patterns:
+  - pattern: |
+      if err := $SPECGEN.AddProcessCapabilityAmbient($CAP); err != nil {
+        return $ERR
+      }
+  - pattern-not: |
+      specgen.Spec().Process.Capabilities.Ambient = []string{}
   languages:
   - go
   message: |

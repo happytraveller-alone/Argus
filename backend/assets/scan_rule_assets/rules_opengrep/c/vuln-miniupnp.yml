@@ -1,11 +1,12 @@
 rules:
 - id: vuln-miniupnp-7aeb624b
-  pattern: |
-    $DATA->l_head = NULL;
-    $DATA->portListing = NULL;
-    $DATA->portListingLength = 0;
-  pattern-not: |
-    memset($DATA, 0, sizeof(struct NameValueParserData));
+  patterns:
+  - pattern: |
+      $DATA->l_head = NULL;
+      $DATA->portListing = NULL;
+      $DATA->portListingLength = 0;
+  - pattern-not: |
+      memset($DATA, 0, sizeof(struct NameValueParserData));
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-miniupnp-f0f1f4b2
-  pattern: |
-    if($VAR >= (int)($EXPR1 + $EXPR2)) { ... }
-  pattern-not: |
-    if($VAR >= 0 && (unsigned int)$VAR >= ($EXPR1 + $EXPR2)) { ... }
+  patterns:
+  - pattern: |
+      if($VAR >= (int)($EXPR1 + $EXPR2)) { ... }
+  - pattern-not: |
+      if($VAR >= 0 && (unsigned int)$VAR >= ($EXPR1 + $EXPR2)) { ... }
   languages:
   - c
   message: |

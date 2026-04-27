@@ -1,13 +1,14 @@
 rules:
 - id: vuln-bluez-0388794d
-  pattern: |
-    if (sizeof(*$CAP) + $CAP->length >= $SIZE) {
-      ...
-    }
-  pattern-not: |
-    if (sizeof(*$CAP) + $CAP->length > $SIZE) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (sizeof(*$CAP) + $CAP->length >= $SIZE) {
+        ...
+      }
+  - pattern-not: |
+      if (sizeof(*$CAP) + $CAP->length > $SIZE) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -29,17 +30,18 @@ rules:
     technology:
     - c
 - id: vuln-bluez-35d8d895
-  pattern: |
-    if (!device_is_bonded($DEVICE, btd_device_get_bdaddr_type($DEVICE)))
-      return -ECONNREFUSED;
-  pattern-not: |
-    if (!device_is_bonded($DEVICE, btd_device_get_bdaddr_type($DEVICE))) {
-      struct bt_gatt_client *$CLIENT;
-      $CLIENT = btd_device_get_gatt_client($DEVICE);
-      if (!bt_gatt_client_set_security($CLIENT, BT_ATT_SECURITY_MEDIUM)) {
+  patterns:
+  - pattern: |
+      if (!device_is_bonded($DEVICE, btd_device_get_bdaddr_type($DEVICE)))
         return -ECONNREFUSED;
+  - pattern-not: |
+      if (!device_is_bonded($DEVICE, btd_device_get_bdaddr_type($DEVICE))) {
+        struct bt_gatt_client *$CLIENT;
+        $CLIENT = btd_device_get_gatt_client($DEVICE);
+        if (!bt_gatt_client_set_security($CLIENT, BT_ATT_SECURITY_MEDIUM)) {
+          return -ECONNREFUSED;
+        }
       }
-    }
   languages:
   - c
   message: |
@@ -55,14 +57,15 @@ rules:
     technology:
     - c
 - id: vuln-bluez-3cccdbab
-  pattern: |
-    if ($REQ->subclass & 0x40) {
-      ...
-    }
-  pattern-not: |
-    if ($CLASSIC_BONDED_ONLY || $REQ->subclass & 0x40) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($REQ->subclass & 0x40) {
+        ...
+      }
+  - pattern-not: |
+      if ($CLASSIC_BONDED_ONLY || $REQ->subclass & 0x40) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -80,14 +83,15 @@ rules:
     technology:
     - c
 - id: vuln-bluez-5ab53525
-  pattern: |
-    if (memcmp($STRUCT->$FIELD, $DATA, $LEN)) {
-      ...
-    }
-  pattern-not: |
-    if ($LEN == sizeof($STRUCT->$FIELD) && memcmp($STRUCT->$FIELD, $DATA, $LEN)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (memcmp($STRUCT->$FIELD, $DATA, $LEN)) {
+        ...
+      }
+  - pattern-not: |
+      if ($LEN == sizeof($STRUCT->$FIELD) && memcmp($STRUCT->$FIELD, $DATA, $LEN)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -105,38 +109,39 @@ rules:
     technology:
     - c
 - id: vuln-bluez-7a80d209
-  pattern: |
-    static GSList *caps_to_list(uint8_t *data, int size, ...) {
-      ...
-      for ($PROCESSED = 0, $CAPS = NULL; $PROCESSED + 2 <= $SIZE;) {
+  patterns:
+  - pattern: |
+      static GSList *caps_to_list(uint8_t *data, int size, ...) {
         ...
-        if ($PROCESSED + 2 + $LENGTH > $SIZE) {
+        for ($PROCESSED = 0, $CAPS = NULL; $PROCESSED + 2 <= $SIZE;) {
+          ...
+          if ($PROCESSED + 2 + $LENGTH > $SIZE) {
+            ...
+          }
+          ...
+          $PROCESSED += 2 + $LENGTH;
+          $DATA += 2 + $LENGTH;
           ...
         }
         ...
-        $PROCESSED += 2 + $LENGTH;
-        $DATA += 2 + $LENGTH;
-        ...
       }
-      ...
-    }
-  pattern-not: |
-    static GSList *caps_to_list(uint8_t *data, size_t size, ...) {
-      ...
-      if ($SIZE < sizeof(*$CAP)) return NULL;
-      ...
-      for ($CAPS = NULL; $SIZE >= sizeof(*$CAP);) {
+  - pattern-not: |
+      static GSList *caps_to_list(uint8_t *data, size_t size, ...) {
         ...
-        if (sizeof(*$CAP) + $CAP->length >= $SIZE) {
+        if ($SIZE < sizeof(*$CAP)) return NULL;
+        ...
+        for ($CAPS = NULL; $SIZE >= sizeof(*$CAP);) {
+          ...
+          if (sizeof(*$CAP) + $CAP->length >= $SIZE) {
+            ...
+          }
+          ...
+          $SIZE -= sizeof(*$CAP) + $CAP->length;
+          $DATA += sizeof(*$CAP) + $CAP->length;
           ...
         }
         ...
-        $SIZE -= sizeof(*$CAP) + $CAP->length;
-        $DATA += sizeof(*$CAP) + $CAP->length;
-        ...
       }
-      ...
-    }
   languages:
   - c
   message: |
@@ -159,18 +164,19 @@ rules:
     technology:
     - c
 - id: vuln-bluez-838c0dc7
-  pattern: |
-    static struct pending_op *$FUNC(struct btd_device *$DEVICE, ...) {
-      ...
-      $OP->device = $DEVICE;
-      ...
-    }
-  pattern-not: |
-    static struct pending_op *$FUNC(struct bt_att *$ATT, ...) {
-      ...
-      $OP->att = bt_att_ref($ATT);
-      ...
-    }
+  patterns:
+  - pattern: |
+      static struct pending_op *$FUNC(struct btd_device *$DEVICE, ...) {
+        ...
+        $OP->device = $DEVICE;
+        ...
+      }
+  - pattern-not: |
+      static struct pending_op *$FUNC(struct bt_att *$ATT, ...) {
+        ...
+        $OP->att = bt_att_ref($ATT);
+        ...
+      }
   languages:
   - c
   message: |
@@ -186,20 +192,21 @@ rules:
     technology:
     - c
 - id: vuln-bluez-93b64d9c
-  pattern: |
-    static bool parse_value_arg(DBusMessage *$MSG, uint8_t **$VALUE, size_t *$VALUE_LEN) {
-      ...
-      if ($LEN < 0)
-        return false;
-      ...
-    }
-  pattern-not: |
-    static int parse_value_arg(DBusMessageIter *$ITER, uint8_t **$VALUE, int *$LEN) {
-      ...
-      if (dbus_message_iter_get_arg_type($ITER) != DBUS_TYPE_ARRAY)
-        return -EINVAL;
-      ...
-    }
+  patterns:
+  - pattern: |
+      static bool parse_value_arg(DBusMessage *$MSG, uint8_t **$VALUE, size_t *$VALUE_LEN) {
+        ...
+        if ($LEN < 0)
+          return false;
+        ...
+      }
+  - pattern-not: |
+      static int parse_value_arg(DBusMessageIter *$ITER, uint8_t **$VALUE, int *$LEN) {
+        ...
+        if (dbus_message_iter_get_arg_type($ITER) != DBUS_TYPE_ARRAY)
+          return -EINVAL;
+        ...
+      }
   languages:
   - c
   message: |
@@ -215,14 +222,15 @@ rules:
     technology:
     - c
 - id: vuln-bluez-b497b594
-  pattern: |
-    if ($ADAPTER->discovery_discoverable)
-      set_discovery_discoverable($ADAPTER, false);
-  pattern-not: |
-    if (!($ADAPTER->current_settings & MGMT_OP_SET_DISCOVERABLE)) {
-      ...
-      set_discovery_discoverable($ADAPTER, false);
-    }
+  patterns:
+  - pattern: |
+      if ($ADAPTER->discovery_discoverable)
+        set_discovery_discoverable($ADAPTER, false);
+  - pattern-not: |
+      if (!($ADAPTER->current_settings & MGMT_OP_SET_DISCOVERABLE)) {
+        ...
+        set_discovery_discoverable($ADAPTER, false);
+      }
   languages:
   - c
   message: |
@@ -238,35 +246,36 @@ rules:
     technology:
     - c
 - id: vuln-bluez-e79417ed
-  pattern: |
-    static sdp_cstate_list_t *cstates;
-    ...
-    static sdp_buf_t *sdp_get_cached_rsp(sdp_cont_state_t *cstate) {
-      sdp_cstate_list_t *p;
-      for (p = cstates; p; p = p->next) {
-        if (p->timestamp != cstate->timestamp)
-          continue;
-        if (cstate->cStateValue.maxBytesSent < p->buf.data_size)
-          return &p->buf;
+  patterns:
+  - pattern: |
+      static sdp_cstate_list_t *cstates;
+      ...
+      static sdp_buf_t *sdp_get_cached_rsp(sdp_cont_state_t *cstate) {
+        sdp_cstate_list_t *p;
+        for (p = cstates; p; p = p->next) {
+          if (p->timestamp != cstate->timestamp)
+            continue;
+          if (cstate->cStateValue.maxBytesSent < p->buf.data_size)
+            return &p->buf;
+        }
+        return 0;
       }
-      return 0;
-    }
-  pattern-not: |
-    static sdp_list_t *cstates;
-    ...
-    static sdp_cont_info_t *sdp_get_cont_info(sdp_req_t *req, sdp_cont_state_t *cstate) {
-      sdp_list_t *list;
-      list = sdp_list_find(cstates, cstate, cstate_match);
-      if (list) {
-        sdp_cont_info_t *cinfo = list->data;
-        if (cinfo->opcode == req->opcode)
-          return cinfo;
-        sdp_cont_info_free(cinfo);
+  - pattern-not: |
+      static sdp_list_t *cstates;
+      ...
+      static sdp_cont_info_t *sdp_get_cont_info(sdp_req_t *req, sdp_cont_state_t *cstate) {
+        sdp_list_t *list;
+        list = sdp_list_find(cstates, cstate, cstate_match);
+        if (list) {
+          sdp_cont_info_t *cinfo = list->data;
+          if (cinfo->opcode == req->opcode)
+            return cinfo;
+          sdp_cont_info_free(cinfo);
+          return NULL;
+        }
+        sdp_cstate_cleanup(req->sock);
         return NULL;
       }
-      sdp_cstate_cleanup(req->sock);
-      return NULL;
-    }
   languages:
   - c
   message: |

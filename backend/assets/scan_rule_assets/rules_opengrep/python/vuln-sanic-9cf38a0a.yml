@@ -1,7 +1,8 @@
 rules:
 - id: vuln-sanic-9cf38a0a
-  pattern: __version__ = "22.6.0"
-  pattern-not: __version__ = "22.6.1"
+  patterns:
+  - pattern: __version__ = "22.6.0"
+  - pattern-not: __version__ = "22.6.1"
   languages:
   - python
   message: Detected outdated Sanic version 22.6.0 which may contain security vulnerabilities. Upgrade to version 22.6.1 or later to ensure security fixes are applied.

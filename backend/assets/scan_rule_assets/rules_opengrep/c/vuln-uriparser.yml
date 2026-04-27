@@ -1,19 +1,20 @@
 rules:
 - id: vuln-uriparser-987b046e
-  pattern: |
-    if ((uri->hostData.ip4 == NULL) && (uri->hostData.ip6 == NULL)) {
+  patterns:
+  - pattern: |
+      if ((uri->hostData.ip4 == NULL) && (uri->hostData.ip6 == NULL)) {
+        if (uri->hostData.ipFuture.first != NULL) {
+          ...
+        } else if (uri->hostText.first != NULL) {
+          ...
+        }
+      }
+  - pattern-not: |
       if (uri->hostData.ipFuture.first != NULL) {
         ...
       } else if (uri->hostText.first != NULL) {
         ...
       }
-    }
-  pattern-not: |
-    if (uri->hostData.ipFuture.first != NULL) {
-      ...
-    } else if (uri->hostText.first != NULL) {
-      ...
-    }
   languages:
   - c
   message: |
@@ -31,16 +32,17 @@ rules:
     technology:
     - c
 - id: vuln-uriparser-b1a34743
-  pattern: |
-    if ((uri->hostText.first != NULL)
-            && (uri->hostData.ip4 == NULL)
-            && (uri->hostData.ip6 == NULL)) {
-        ...
-    }
-  pattern-not: |
-    if (uri->hostText.first != NULL) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ((uri->hostText.first != NULL)
+              && (uri->hostData.ip4 == NULL)
+              && (uri->hostData.ip6 == NULL)) {
+          ...
+      }
+  - pattern-not: |
+      if (uri->hostText.first != NULL) {
+          ...
+      }
   languages:
   - c
   message: |

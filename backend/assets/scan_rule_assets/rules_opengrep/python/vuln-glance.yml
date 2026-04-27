@@ -1,9 +1,10 @@
 rules:
 - id: vuln-glance-108f0e04
-  pattern: |
-    LOG.warn(_('Get image %(id)s data from %(loc)s failed: %(err)s.') % {'id': $ID, 'loc': $LOC, 'err': $ERR})
-  pattern-not: |
-    LOG.warn(_('Get image %(id)s data failed: %(err)s.') % {'id': $ID, 'err': $ERR})
+  patterns:
+  - pattern: |
+      LOG.warn(_('Get image %(id)s data from %(loc)s failed: %(err)s.') % {'id': $ID, 'loc': $LOC, 'err': $ERR})
+  - pattern-not: |
+      LOG.warn(_('Get image %(id)s data failed: %(err)s.') % {'id': $ID, 'err': $ERR})
   languages:
   - python
   message: |
@@ -19,24 +20,25 @@ rules:
     technology:
     - python
 - id: vuln-glance-fc0ee762
-  pattern: |
-    status = 'deleted'
-    if $IMAGE['location']:
-        if $CONF.delayed_delete:
-            status = 'pending_delete'
-            $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
-        else:
-            $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
-  pattern-not: |
-    if $IMAGE['location'] and $CONF.delayed_delete:
-        status = 'pending_delete'
-    else:
-        status = 'deleted'
-        if $IMAGE['location']:
-            if $CONF.delayed_delete:
-                $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
-            else:
-                $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
+  patterns:
+  - pattern: |
+      status = 'deleted'
+      if $IMAGE['location']:
+          if $CONF.delayed_delete:
+              status = 'pending_delete'
+              $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
+          else:
+              $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
+  - pattern-not: |
+      if $IMAGE['location'] and $CONF.delayed_delete:
+          status = 'pending_delete'
+      else:
+          status = 'deleted'
+          if $IMAGE['location']:
+              if $CONF.delayed_delete:
+                  $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
+              else:
+                  $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
   languages:
   - python
   message: |

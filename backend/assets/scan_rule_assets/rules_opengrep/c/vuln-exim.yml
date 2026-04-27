@@ -1,10 +1,11 @@
 rules:
 - id: vuln-exim-12fb3842
-  pattern: |
-    return string_copyn_taint($X, $Y, $Z);
-  pattern-not: |
-    uschar *$RECORD = string_copyn_taint($X, $Y, $Z);
-    return $RECORD;
+  patterns:
+  - pattern: |
+      return string_copyn_taint($X, $Y, $Z);
+  - pattern-not: |
+      uschar *$RECORD = string_copyn_taint($X, $Y, $Z);
+      return $RECORD;
   languages:
   - c
   message: |
@@ -22,14 +23,15 @@ rules:
     technology:
     - c
 - id: vuln-exim-1670ef10
-  pattern: |
-    (void)setgid($GID);
-    (void)setuid($UID);
-  pattern-not: |
-    $RV = setgid($GID);
-    if ($RV) {...}
-    $RV = setuid($UID);
-    if ($RV) {...}
+  patterns:
+  - pattern: |
+      (void)setgid($GID);
+      (void)setuid($UID);
+  - pattern-not: |
+      $RV = setgid($GID);
+      if ($RV) {...}
+      $RV = setuid($UID);
+      if ($RV) {...}
   languages:
   - c
   message: |
@@ -48,10 +50,11 @@ rules:
     technology:
     - c
 - id: vuln-exim-337e3505
-  pattern: |
-    log_write(0, LOG_MAIN, (char *)$LOGMSG);
-  pattern-not: |
-    log_write(0, LOG_MAIN, "DKIM: %s", $LOGMSG);
+  patterns:
+  - pattern: |
+      log_write(0, LOG_MAIN, (char *)$LOGMSG);
+  - pattern-not: |
+      log_write(0, LOG_MAIN, "DKIM: %s", $LOGMSG);
   languages:
   - c
   message: |
@@ -69,10 +72,11 @@ rules:
     technology:
     - c
 - id: vuln-exim-3c90bbcd
-  pattern: |
-    parse_fix_phrase($PHRASE, $LEN, $BUFFER, $BUFFER_SIZE)
-  pattern-not: |
-    parse_fix_phrase($PHRASE, $LEN)
+  patterns:
+  - pattern: |
+      parse_fix_phrase($PHRASE, $LEN, $BUFFER, $BUFFER_SIZE)
+  - pattern-not: |
+      parse_fix_phrase($PHRASE, $LEN)
   languages:
   - c
   message: |
@@ -90,10 +94,11 @@ rules:
     technology:
     - c
 - id: vuln-exim-478effbf
-  pattern: |
-    gstring_grow($G, $G->ptr, $WIDTH - ($LIM - $G->ptr))
-  pattern-not: |
-    gstring_grow($G, $G->ptr, $WIDTH)
+  patterns:
+  - pattern: |
+      gstring_grow($G, $G->ptr, $WIDTH - ($LIM - $G->ptr))
+  - pattern-not: |
+      gstring_grow($G, $G->ptr, $WIDTH)
   languages:
   - c
   message: |
@@ -111,15 +116,16 @@ rules:
     technology:
     - c
 - id: vuln-exim-cf3cd306
-  pattern: |
-    uschar *$RESULT = store_get(3*(Ustrlen($CODE)/4) + 1);
-    *$PTR = $RESULT;
-  pattern-not: |
-    uschar *$RESULT;
-    {
-      int $L = Ustrlen($CODE);
-      *$PTR = $RESULT = store_get(1 + $L/4 * 3 + $L%4);
-    }
+  patterns:
+  - pattern: |
+      uschar *$RESULT = store_get(3*(Ustrlen($CODE)/4) + 1);
+      *$PTR = $RESULT;
+  - pattern-not: |
+      uschar *$RESULT;
+      {
+        int $L = Ustrlen($CODE);
+        *$PTR = $RESULT = store_get(1 + $L/4 * 3 + $L%4);
+      }
   languages:
   - c
   message: |
@@ -135,10 +141,11 @@ rules:
     technology:
     - c
 - id: vuln-exim-dd90c199
-  pattern: |
-    clearenv();
-  pattern-not: |
-    if (environ) *environ = NULL;
+  patterns:
+  - pattern: |
+      clearenv();
+  - pattern-not: |
+      if (environ) *environ = NULL;
   languages:
   - c
   message: |

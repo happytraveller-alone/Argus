@@ -1,9 +1,10 @@
 rules:
 - id: vuln-memos-64e5c343
-  pattern: |
-    marked(escape($VAR), ...)
-  pattern-not: |
-    marked($VAR, ...)
+  patterns:
+  - pattern: |
+      marked(escape($VAR), ...)
+  - pattern-not: |
+      marked($VAR, ...)
   languages:
   - typescript
   message: |

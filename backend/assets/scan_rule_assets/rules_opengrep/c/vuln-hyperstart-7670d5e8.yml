@@ -1,18 +1,19 @@
 rules:
 - id: vuln-hyperstart-7670d5e8
-  pattern: |
-    $TYPE $UID = ($TYPE)id_or_max($NAME);
-    FILE *$FILE = fopen("/etc/passwd", "r");
-    ...
-    if (!strcmp($PWD->pw_name, $NAME) || $PWD->pw_uid == $UID) { ... }
-  pattern-not: |
-    $TYPE $UID;
-    FILE *$FILE;
-    struct passwd *$PWD;
-    $UID = ($TYPE)id_or_max($NAME);
-    $FILE = fopen("/etc/passwd", "r");
-    ...
-    if ($PWD->pw_uid == $UID || (!strcmp($PWD->pw_name, $NAME) && ($TYPE)INVALID_UGID == $UID)) { ... }
+  patterns:
+  - pattern: |
+      $TYPE $UID = ($TYPE)id_or_max($NAME);
+      FILE *$FILE = fopen("/etc/passwd", "r");
+      ...
+      if (!strcmp($PWD->pw_name, $NAME) || $PWD->pw_uid == $UID) { ... }
+  - pattern-not: |
+      $TYPE $UID;
+      FILE *$FILE;
+      struct passwd *$PWD;
+      $UID = ($TYPE)id_or_max($NAME);
+      $FILE = fopen("/etc/passwd", "r");
+      ...
+      if ($PWD->pw_uid == $UID || (!strcmp($PWD->pw_name, $NAME) && ($TYPE)INVALID_UGID == $UID)) { ... }
   languages:
   - c
   message: |

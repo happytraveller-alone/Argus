@@ -1,21 +1,22 @@
 rules:
 - id: vuln-libguestfs-44c5ee11
-  pattern: |
-    if (!$READ_ONLY)
-      $R = guestfs_add_drive($G, $FILENAME);
-    else
-      $R = guestfs_add_drive_ro($G, $FILENAME);
-  pattern-not: |
-    $AD_OPTARGS.bitmask = 0;
-    if ($READ_ONLY) {
-      $AD_OPTARGS.bitmask |= $GUESTFS_ADD_DRIVE_OPTS_READONLY_BITMASK;
-      $AD_OPTARGS.readonly = 1;
-    }
-    if ($DRV->format) {
-      $AD_OPTARGS.bitmask |= $GUESTFS_ADD_DRIVE_OPTS_FORMAT_BITMASK;
-      $AD_OPTARGS.format = $DRV->format;
-    }
-    $R = guestfs_add_drive_opts_argv($G, $FILENAME, &$AD_OPTARGS);
+  patterns:
+  - pattern: |
+      if (!$READ_ONLY)
+        $R = guestfs_add_drive($G, $FILENAME);
+      else
+        $R = guestfs_add_drive_ro($G, $FILENAME);
+  - pattern-not: |
+      $AD_OPTARGS.bitmask = 0;
+      if ($READ_ONLY) {
+        $AD_OPTARGS.bitmask |= $GUESTFS_ADD_DRIVE_OPTS_READONLY_BITMASK;
+        $AD_OPTARGS.readonly = 1;
+      }
+      if ($DRV->format) {
+        $AD_OPTARGS.bitmask |= $GUESTFS_ADD_DRIVE_OPTS_FORMAT_BITMASK;
+        $AD_OPTARGS.format = $DRV->format;
+      }
+      $R = guestfs_add_drive_opts_argv($G, $FILENAME, &$AD_OPTARGS);
   languages:
   - c
   message: |

@@ -1,13 +1,14 @@
 rules:
 - id: vuln-node-1780bbc3
-  pattern: |
-    if ($OPTIONS.rejectUnauthorized) {
-      ...
-    }
-  pattern-not: |
-    if ($OPTIONS.rejectUnauthorized !== false) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($OPTIONS.rejectUnauthorized) {
+        ...
+      }
+  - pattern-not: |
+      if ($OPTIONS.rejectUnauthorized !== false) {
+        ...
+      }
   languages:
   - javascript
   message: |
@@ -23,20 +24,21 @@ rules:
     technology:
     - javascript
 - id: vuln-node-9aeda47d
-  pattern: |
-    if ($SLASHES && !($PROTO && $HOSTLESS_PROTOCOL.has($LOWER_PROTO))) {
-      $REST = $REST.slice(2);
-      $THIS.slashes = true;
-    }
-  pattern-not: |
-    if (!($PROTO && $HOSTLESS_PROTOCOL.has($LOWER_PROTO))) {
-      if ($SLASHES) {
+  patterns:
+  - pattern: |
+      if ($SLASHES && !($PROTO && $HOSTLESS_PROTOCOL.has($LOWER_PROTO))) {
         $REST = $REST.slice(2);
         $THIS.slashes = true;
-      } else if ($AT) {
-        $REST = $REST.slice(1);
       }
-    }
+  - pattern-not: |
+      if (!($PROTO && $HOSTLESS_PROTOCOL.has($LOWER_PROTO))) {
+        if ($SLASHES) {
+          $REST = $REST.slice(2);
+          $THIS.slashes = true;
+        } else if ($AT) {
+          $REST = $REST.slice(1);
+        }
+      }
   languages:
   - javascript
   message: |
@@ -54,39 +56,40 @@ rules:
     technology:
     - javascript
 - id: vuln-node-bf00665a
-  pattern: |
-    const $RESULT = win32SplitPath($PATH);
-    const $ROOT = $RESULT[0];
-    var $DIR = $RESULT[1];
-    if (!$ROOT && !$DIR) {
-      ...
-    }
-    if ($DIR) {
-      $DIR = $DIR.substr(0, $DIR.length - 1);
-    }
-    return $ROOT + $DIR;
-  pattern-not: |
-    const $LEN = $PATH.length;
-    if ($LEN === 0)
-    ...
-    for (var $I = $LEN - 1; $I >= $OFFSET; --$I) {
-      $CODE = $PATH.charCodeAt($I);
-      if ($CODE === 47 || $CODE === 92) {
-        if (!$MATCHEDSLASH) {
-          $END = $I;
-          break;
-        }
-      } else {
-        $MATCHEDSLASH = false;
+  patterns:
+  - pattern: |
+      const $RESULT = win32SplitPath($PATH);
+      const $ROOT = $RESULT[0];
+      var $DIR = $RESULT[1];
+      if (!$ROOT && !$DIR) {
+        ...
       }
-    }
-    if ($END === -1) {
-      if ($ROOTEND === -1)
-        return ".";
-      else
-        $END = $ROOTEND;
-    }
-    return $PATH.slice(0, $END);
+      if ($DIR) {
+        $DIR = $DIR.substr(0, $DIR.length - 1);
+      }
+      return $ROOT + $DIR;
+  - pattern-not: |
+      const $LEN = $PATH.length;
+      if ($LEN === 0)
+      ...
+      for (var $I = $LEN - 1; $I >= $OFFSET; --$I) {
+        $CODE = $PATH.charCodeAt($I);
+        if ($CODE === 47 || $CODE === 92) {
+          if (!$MATCHEDSLASH) {
+            $END = $I;
+            break;
+          }
+        } else {
+          $MATCHEDSLASH = false;
+        }
+      }
+      if ($END === -1) {
+        if ($ROOTEND === -1)
+          return ".";
+        else
+          $END = $ROOTEND;
+      }
+      return $PATH.slice(0, $END);
   languages:
   - javascript
   message: |

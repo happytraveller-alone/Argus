@@ -1,9 +1,10 @@
 rules:
 - id: vuln-ok-file-formats-7a9fe754
-  pattern: |
-    malloc(8 * $VAR)
-  pattern-not: |
-    malloc($BYTES_PER_STRING)
+  patterns:
+  - pattern: |
+      malloc(8 * $VAR)
+  - pattern-not: |
+      malloc($BYTES_PER_STRING)
   languages:
   - c
   message: |
@@ -21,29 +22,30 @@ rules:
     technology:
     - c
 - id: vuln-ok-file-formats-a9cc1711
-  pattern: |
-    static void ok_jpg_generate_huffman_table(ok_jpg_huffman_table *$HUFF, const uint8_t *$BITS) {
-        ...
-        for (int $J = 1; $J <= $BITS[$I]; $J++) {
-            $HUFF->size[$K++] = $I;
-        }
-        ...
-    }
-  pattern-not: |
-    static bool ok_jpg_generate_huffman_table(ok_jpg_huffman_table *$HUFF, const uint8_t *$BITS) {
-        ...
-        uint8_t $LEN = $BITS[$I];
-        if ($LEN == 0) {
-            continue;
-        } else if ((unsigned)$K + $LEN >= sizeof($HUFF->size)) {
-            return false;
-        } else {
-            memset($HUFF->size + $K, $I, $LEN);
-            $K += $LEN;
-        }
-        ...
-        return true;
-    }
+  patterns:
+  - pattern: |
+      static void ok_jpg_generate_huffman_table(ok_jpg_huffman_table *$HUFF, const uint8_t *$BITS) {
+          ...
+          for (int $J = 1; $J <= $BITS[$I]; $J++) {
+              $HUFF->size[$K++] = $I;
+          }
+          ...
+      }
+  - pattern-not: |
+      static bool ok_jpg_generate_huffman_table(ok_jpg_huffman_table *$HUFF, const uint8_t *$BITS) {
+          ...
+          uint8_t $LEN = $BITS[$I];
+          if ($LEN == 0) {
+              continue;
+          } else if ((unsigned)$K + $LEN >= sizeof($HUFF->size)) {
+              return false;
+          } else {
+              memset($HUFF->size + $K, $I, $LEN);
+              $K += $LEN;
+          }
+          ...
+          return true;
+      }
   languages:
   - c
   message: |
@@ -63,10 +65,11 @@ rules:
     technology:
     - c
 - id: vuln-ok-file-formats-ce43dd0a
-  pattern: |
-    size_t $SIZE = $NUM_BLOCKS * 64 * sizeof(*$BLOCKS) + $EXTRA_SPACE;
-  pattern-not: |
-    size_t $SIZE = ($NUM_BLOCKS * 64 + $EXTRA_SPACE) * sizeof(*$BLOCKS);
+  patterns:
+  - pattern: |
+      size_t $SIZE = $NUM_BLOCKS * 64 * sizeof(*$BLOCKS) + $EXTRA_SPACE;
+  - pattern-not: |
+      size_t $SIZE = ($NUM_BLOCKS * 64 + $EXTRA_SPACE) * sizeof(*$BLOCKS);
   languages:
   - c
   message: |

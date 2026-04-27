@@ -1,15 +1,16 @@
 rules:
 - id: vuln-katex-085e21b5
-  pattern: |
-    let $STR = $U_SUBS_AND_SUPS[$LEX.text];
-    ...
-    $STR += $U_SUBS_AND_SUPS[$TOKEN];
-    const $BODY = (new Parser($STR, $SETTINGS)).parse();
-  pattern-not: |
-    const $SUBSUP_TOKENS = [];
-    $SUBSUP_TOKENS.push(new Token($U_SUBS_AND_SUPS[$LEX.text]));
-    $SUBSUP_TOKENS.unshift(new Token($U_SUBS_AND_SUPS[$TOKEN]));
-    const $BODY = $THIS.subparse($SUBSUP_TOKENS);
+  patterns:
+  - pattern: |
+      let $STR = $U_SUBS_AND_SUPS[$LEX.text];
+      ...
+      $STR += $U_SUBS_AND_SUPS[$TOKEN];
+      const $BODY = (new Parser($STR, $SETTINGS)).parse();
+  - pattern-not: |
+      const $SUBSUP_TOKENS = [];
+      $SUBSUP_TOKENS.push(new Token($U_SUBS_AND_SUPS[$LEX.text]));
+      $SUBSUP_TOKENS.unshift(new Token($U_SUBS_AND_SUPS[$TOKEN]));
+      const $BODY = $THIS.subparse($SUBSUP_TOKENS);
   languages:
   - javascript
   message: |

@@ -1,17 +1,12 @@
 rules:
 - id: vuln-lxc-5c3fcae7
-  pattern: |
-    if (($OPTIONS->namespaces & $CLONE_NEWNS) && ($OPTIONS->attach_flags & $LXC_ATTACH_LSM)) {
-      ...
-      $RET = lsm_process_label_set($INIT_CTX->lsm_label, $INIT_CTX->container->lxc_conf, 0, $ON_EXEC);
-      ...
-    }
-  pattern-not: |
-    if (($OPTIONS->namespaces & $CLONE_NEWNS) && ($OPTIONS->attach_flags & $LXC_ATTACH_LSM) && $INIT_CTX->lsm_label) {
-      ...
-      if (lsm_set_label_at($PROCFD, $ON_EXEC, $INIT_CTX->lsm_label) < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (($OPTIONS->namespaces & $CLONE_NEWNS) && ($OPTIONS->attach_flags & $LXC_ATTACH_LSM)) {
+        ...
+        $RET = lsm_process_label_set($INIT_CTX->lsm_label, $INIT_CTX->container->lxc_conf, 0, $ON_EXEC);
+        ...
+      }
   languages:
   - c
   message: |
@@ -29,10 +24,11 @@ rules:
     technology:
     - c
 - id: vuln-lxc-72cf81f6
-  pattern: |
-    snprintf($DEST, $LEN, "%s/lock/lxc/%s", $RUNDIR, $P)
-  pattern-not: |
-    snprintf($DEST, $LEN, "%s/lxc/lock/%s", $RUNDIR, $P)
+  patterns:
+  - pattern: |
+      snprintf($DEST, $LEN, "%s/lock/lxc/%s", $RUNDIR, $P)
+  - pattern-not: |
+      snprintf($DEST, $LEN, "%s/lxc/lock/%s", $RUNDIR, $P)
   languages:
   - c
   message: |

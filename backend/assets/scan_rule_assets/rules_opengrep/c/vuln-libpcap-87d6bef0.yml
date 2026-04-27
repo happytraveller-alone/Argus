@@ -1,14 +1,15 @@
 rules:
 - id: vuln-libpcap-87d6bef0
-  pattern: |
-    if ($TOTAL_LENGTH < sizeof($BHDRP) + sizeof($SHBP) + sizeof(struct block_trailer)) {
-      ...
-    }
-  pattern-not: |
-    if ($TOTAL_LENGTH < sizeof($BHDRP) + sizeof($SHBP) + sizeof(struct block_trailer) ||
-        ($TOTAL_LENGTH > $BT_SHB_INSANE_MAX)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($TOTAL_LENGTH < sizeof($BHDRP) + sizeof($SHBP) + sizeof(struct block_trailer)) {
+        ...
+      }
+  - pattern-not: |
+      if ($TOTAL_LENGTH < sizeof($BHDRP) + sizeof($SHBP) + sizeof(struct block_trailer) ||
+          ($TOTAL_LENGTH > $BT_SHB_INSANE_MAX)) {
+        ...
+      }
   languages:
   - c
   message: |

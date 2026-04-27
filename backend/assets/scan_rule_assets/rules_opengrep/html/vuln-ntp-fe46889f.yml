@@ -1,11 +1,12 @@
 rules:
 - id: vuln-ntp-fe46889f
-  pattern: |
-    <dt id="enable"><tt>enable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats]</tt><br>
-      <tt>disable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats]</tt></dt>
-  pattern-not: |
-    <dt id="enable"><tt>enable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats | unpeer_crypto_early | unpeer_crypto_nak_early | unpeer_digest_early]</tt></dt>
-    <dt><tt>disable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats | unpeer_crypto_early | unpeer_crypto_nak_early | unpeer_digest_early]</tt></dt>
+  patterns:
+  - pattern: |
+      <dt id="enable"><tt>enable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats]</tt><br>
+        <tt>disable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats]</tt></dt>
+  - pattern-not: |
+      <dt id="enable"><tt>enable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats | unpeer_crypto_early | unpeer_crypto_nak_early | unpeer_digest_early]</tt></dt>
+      <dt><tt>disable [auth | bclient | calibrate | kernel | mode7 | monitor | ntp | stats | unpeer_crypto_early | unpeer_crypto_nak_early | unpeer_digest_early]</tt></dt>
   languages:
   - html
   message: |

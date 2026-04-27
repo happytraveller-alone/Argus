@@ -1,13 +1,14 @@
 rules:
 - id: vuln-mattermost-3d6d8a7c
-  pattern: |
-    if $IS_SCHEME_USER && $IS_SCHEME_GUEST {
-      return nil, model.NewAppError("UpdateTeamMemberSchemeRoles", "api.team.update_team_member_roles.guest_and_user.app_error", nil, "", http.StatusBadRequest)
-    }
-  pattern-not: |
-    if isSchemeGuest {
-      return nil, model.NewAppError("UpdateTeamMemberSchemeRoles", "api.team.update_team_member_roles.user_and_guest.app_error", nil, "", http.StatusBadRequest)
-    }
+  patterns:
+  - pattern: |
+      if $IS_SCHEME_USER && $IS_SCHEME_GUEST {
+        return nil, model.NewAppError("UpdateTeamMemberSchemeRoles", "api.team.update_team_member_roles.guest_and_user.app_error", nil, "", http.StatusBadRequest)
+      }
+  - pattern-not: |
+      if isSchemeGuest {
+        return nil, model.NewAppError("UpdateTeamMemberSchemeRoles", "api.team.update_team_member_roles.user_and_guest.app_error", nil, "", http.StatusBadRequest)
+      }
   languages:
   - go
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-nopcommerce-26b0927a
-  pattern: |
-    private static readonly Regex $REGEX = new(@"\[url\=([^\]]+)\]([^\]]+)\[/url\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-  pattern-not: |
-    private static readonly Regex $REGEX = new(@"\[url\=(https?:.+?)\]([^\]]+)\[/url\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+  patterns:
+  - pattern: |
+      private static readonly Regex $REGEX = new(@"\[url\=([^\]]+)\]([^\]]+)\[/url\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+  - pattern-not: |
+      private static readonly Regex $REGEX = new(@"\[url\=(https?:.+?)\]([^\]]+)\[/url\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
   languages:
   - csharp
   message: |
@@ -21,16 +22,17 @@ rules:
     technology:
     - csharp
 - id: vuln-nopcommerce-510b2d49
-  pattern: |
-    var $VAR = $UPLOADEDFILE.ContentType;
-    ...
-    await $PICTURESERVICE.InsertPictureAsync($BINARY, $VAR, null);
-  pattern-not: |
-    var $VAR = $UPLOADEDFILE.ContentType.ToLowerInvariant();
-    if (!($VAR.Equals("image/jpeg") || $VAR.Equals("image/gif") || $VAR.StartsWith("image/"))) {
-        ...
-    }
-    await $PICTURESERVICE.InsertPictureAsync($BINARY, $VAR, null);
+  patterns:
+  - pattern: |
+      var $VAR = $UPLOADEDFILE.ContentType;
+      ...
+      await $PICTURESERVICE.InsertPictureAsync($BINARY, $VAR, null);
+  - pattern-not: |
+      var $VAR = $UPLOADEDFILE.ContentType.ToLowerInvariant();
+      if (!($VAR.Equals("image/jpeg") || $VAR.Equals("image/gif") || $VAR.StartsWith("image/"))) {
+          ...
+      }
+      await $PICTURESERVICE.InsertPictureAsync($BINARY, $VAR, null);
   languages:
   - csharp
   message: |
@@ -46,12 +48,13 @@ rules:
     technology:
     - csharp
 - id: vuln-nopcommerce-9f6002d7
-  pattern: |
-    _webHelper.RestartAppDomain();
-    return RedirectToAction(...);
-  pattern-not: |
-    _webHelper.RestartAppDomain();
-    return View("RestartApplication", ...);
+  patterns:
+  - pattern: |
+      _webHelper.RestartAppDomain();
+      return RedirectToAction(...);
+  - pattern-not: |
+      _webHelper.RestartAppDomain();
+      return View("RestartApplication", ...);
   languages:
   - csharp
   message: |

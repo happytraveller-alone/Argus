@@ -1,9 +1,10 @@
 rules:
 - id: vuln-tomcat-339b40bc
-  pattern: |
-    super(null);
-  pattern-not: |
-    super(SocketBufferHandler.EMPTY);
+  patterns:
+  - pattern: |
+      super(null);
+  - pattern-not: |
+      super(SocketBufferHandler.EMPTY);
   languages:
   - java
   message: |
@@ -17,10 +18,11 @@ rules:
     owasp: A9:2017-Using Components with Known Vulnerabilities
     technology: java
 - id: vuln-tomcat-7046644b
-  pattern: |
-    $POOL.write($FROM, getSocket(), $SELECTOR, $WRITE_TIMEOUT);
-  pattern-not: |
-    $POOL.write($FROM, $SOCKET, $SELECTOR, $WRITE_TIMEOUT);
+  patterns:
+  - pattern: |
+      $POOL.write($FROM, getSocket(), $SELECTOR, $WRITE_TIMEOUT);
+  - pattern-not: |
+      $POOL.write($FROM, $SOCKET, $SELECTOR, $WRITE_TIMEOUT);
   languages:
   - java
   message: Potential vulnerability due to unchecked socket state. Always check if the socket is closed before performing operations. Use the socket instance directly after validation.

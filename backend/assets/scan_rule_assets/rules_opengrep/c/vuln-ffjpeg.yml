@@ -32,14 +32,15 @@ rules:
     technology:
     - c
 - id: vuln-ffjpeg-31649ad6
-  pattern: |
-    $BUF[0] = calloc(1, $JW * $JH / 1 * sizeof(int));
-    $BUF[1] = calloc(1, $JW * $JH / 4 * sizeof(int));
-    $BUF[2] = calloc(1, $JW * $JH / 4 * sizeof(int));
-  pattern-not: |
-    $BUF[0] = calloc(1, sizeof(int) * $JW * $JH / 1);
-    $BUF[1] = calloc(1, sizeof(int) * $JW * $JH / 4);
-    $BUF[2] = calloc(1, sizeof(int) * $JW * $JH / 4);
+  patterns:
+  - pattern: |
+      $BUF[0] = calloc(1, $JW * $JH / 1 * sizeof(int));
+      $BUF[1] = calloc(1, $JW * $JH / 4 * sizeof(int));
+      $BUF[2] = calloc(1, $JW * $JH / 4 * sizeof(int));
+  - pattern-not: |
+      $BUF[0] = calloc(1, sizeof(int) * $JW * $JH / 1);
+      $BUF[1] = calloc(1, sizeof(int) * $JW * $JH / 4);
+      $BUF[2] = calloc(1, sizeof(int) * $JW * $JH / 4);
   languages:
   - c
   message: |
@@ -57,10 +58,11 @@ rules:
     technology:
     - c
 - id: vuln-ffjpeg-82166f2b
-  pattern: |
-    jfif->comp_num = $BUF[0];
-  pattern-not: |
-    jfif->comp_num = $BUF[0] < 4 ? $BUF[0] : 4;
+  patterns:
+  - pattern: |
+      jfif->comp_num = $BUF[0];
+  - pattern-not: |
+      jfif->comp_num = $BUF[0] < 4 ? $BUF[0] : 4;
   languages:
   - c
   message: |
@@ -77,13 +79,14 @@ rules:
     technology:
     - c
 - id: vuln-ffjpeg-caade60a
-  pattern: |
-    bmp_load(&$BMP, $ARG);
-  pattern-not: |
-    if (bmp_load(&$BMP, $ARG) == -1) {
-        ...
-        return -1;
-    }
+  patterns:
+  - pattern: |
+      bmp_load(&$BMP, $ARG);
+  - pattern-not: |
+      if (bmp_load(&$BMP, $ARG) == -1) {
+          ...
+          return -1;
+      }
   languages:
   - c
   message: |
@@ -99,16 +102,17 @@ rules:
     technology:
     - c
 - id: vuln-ffjpeg-e63a75fd
-  pattern: |
-    $VAR->width = $WIDTH;
-    $VAR->height = $HEIGHT;
-    $VAR->stride = ALIGN($WIDTH * 3, 4);
-    $VAR->pdata = malloc($VAR->stride * $HEIGHT);
-  pattern-not: |
-    $VAR->width = (int)$WIDTH > 0 ? (int)$WIDTH : 0;
-    $VAR->height = (int)$HEIGHT > 0 ? (int)$HEIGHT : 0;
-    $VAR->stride = ALIGN($VAR->width * 3, 4);
-    $VAR->pdata = malloc((size_t)$VAR->stride * $HEIGHT);
+  patterns:
+  - pattern: |
+      $VAR->width = $WIDTH;
+      $VAR->height = $HEIGHT;
+      $VAR->stride = ALIGN($WIDTH * 3, 4);
+      $VAR->pdata = malloc($VAR->stride * $HEIGHT);
+  - pattern-not: |
+      $VAR->width = (int)$WIDTH > 0 ? (int)$WIDTH : 0;
+      $VAR->height = (int)$HEIGHT > 0 ? (int)$HEIGHT : 0;
+      $VAR->stride = ALIGN($VAR->width * 3, 4);
+      $VAR->pdata = malloc((size_t)$VAR->stride * $HEIGHT);
   languages:
   - c
   message: |

@@ -1,8 +1,31 @@
 rules:
 - id: vuln-wireshark-11f40896
-  pattern: |
-    if ($GVCP_TELEGRAM_TREE != NULL)
-    {
+  patterns:
+  - pattern: |
+      if ($GVCP_TELEGRAM_TREE != NULL)
+      {
+        if ($EXTENDEDBLOCKIDS)
+        {
+          proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_EXTID_LENGTH, $TVB, $OFFSET, 2, $ENC_BIG_ENDIAN);
+          $DATA_LENGTH = tvb_get_ntohs($TVB, $OFFSET);
+        }
+        offset += 2;
+        ...
+        if ($EXTENDEDBLOCKIDS)
+        {
+          if ($DATA_LENGTH > 24)
+          {
+            proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_DATA, $TVB, $OFFSET, $DATA_LENGTH - 24, $ENC_NA);
+            $OFFSET += $DATA_LENGTH - 24;
+          }
+        }
+        else
+        {
+          proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_DATA, $TVB, $OFFSET, -1, $ENC_NA);
+          return;
+        }
+      }
+  - pattern-not: |
       if ($EXTENDEDBLOCKIDS)
       {
         proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_EXTID_LENGTH, $TVB, $OFFSET, 2, $ENC_BIG_ENDIAN);
@@ -23,28 +46,6 @@ rules:
         proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_DATA, $TVB, $OFFSET, -1, $ENC_NA);
         return;
       }
-    }
-  pattern-not: |
-    if ($EXTENDEDBLOCKIDS)
-    {
-      proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_EXTID_LENGTH, $TVB, $OFFSET, 2, $ENC_BIG_ENDIAN);
-      $DATA_LENGTH = tvb_get_ntohs($TVB, $OFFSET);
-    }
-    offset += 2;
-    ...
-    if ($EXTENDEDBLOCKIDS)
-    {
-      if ($DATA_LENGTH > 24)
-      {
-        proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_DATA, $TVB, $OFFSET, $DATA_LENGTH - 24, $ENC_NA);
-        $OFFSET += $DATA_LENGTH - 24;
-      }
-    }
-    else
-    {
-      proto_tree_add_item($GVCP_TELEGRAM_TREE, $HF_GVCP_EVENTCMD_DATA, $TVB, $OFFSET, -1, $ENC_NA);
-      return;
-    }
   languages:
   - c
   message: |
@@ -59,20 +60,21 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-16a52bff
-  pattern: |
-    while ($TP && $TP->lastseq >= $SEQ && $TP->lastseq >= $SAVE_SEQ) {
-      ...
-      $SAVE_SEQ = $TP->lastseq + 1;
-      $TP = ($TYPE *)wmem_tree_lookup32_le($RCONV->packets[$CDIR], $TP->lastseq - 1);
-    }
-  pattern-not: |
-    while ($TP && $TP->lastseq >= $SEQ) {
-      ...
-      if ($TP->seq == 0) {
-        break;
+  patterns:
+  - pattern: |
+      while ($TP && $TP->lastseq >= $SEQ && $TP->lastseq >= $SAVE_SEQ) {
+        ...
+        $SAVE_SEQ = $TP->lastseq + 1;
+        $TP = ($TYPE *)wmem_tree_lookup32_le($RCONV->packets[$CDIR], $TP->lastseq - 1);
       }
-      $TP = ($TYPE *)wmem_tree_lookup32_le($RCONV->packets[$CDIR], $TP->seq - 1);
-    }
+  - pattern-not: |
+      while ($TP && $TP->lastseq >= $SEQ) {
+        ...
+        if ($TP->seq == 0) {
+          break;
+        }
+        $TP = ($TYPE *)wmem_tree_lookup32_le($RCONV->packets[$CDIR], $TP->seq - 1);
+      }
   languages:
   - c
   message: |
@@ -87,10 +89,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-177962a5
-  pattern: |
-    copy_address_shallow(&$VAR1, &$VAR2);
-  pattern-not: |
-    copy_address_wmem(wmem_file_scope(), &$VAR1, &$VAR2);
+  patterns:
+  - pattern: |
+      copy_address_shallow(&$VAR1, &$VAR2);
+  - pattern-not: |
+      copy_address_wmem(wmem_file_scope(), &$VAR1, &$VAR2);
   languages:
   - c
   message: |
@@ -109,11 +112,12 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-212b1882
-  pattern: |
-    g_snprintf($S, $ITEM_LABEL_LENGTH, "%d [Mired] (%d [K])", $VALUE, 1000000/$VALUE);
-  pattern-not: |
-    g_snprintf($S, $ITEM_LABEL_LENGTH, "%u [Mired]", $VALUE);
-    g_snprintf($S, $ITEM_LABEL_LENGTH, "%u [Mired] (%u [K])", $VALUE, 1000000/$VALUE);
+  patterns:
+  - pattern: |
+      g_snprintf($S, $ITEM_LABEL_LENGTH, "%d [Mired] (%d [K])", $VALUE, 1000000/$VALUE);
+  - pattern-not: |
+      g_snprintf($S, $ITEM_LABEL_LENGTH, "%u [Mired]", $VALUE);
+      g_snprintf($S, $ITEM_LABEL_LENGTH, "%u [Mired] (%u [K])", $VALUE, 1000000/$VALUE);
   languages:
   - c
   message: |
@@ -128,10 +132,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-30651ab1
-  pattern: |
-    tvb_memcpy($TVB, $BYTES, $OFFSET, ($OPTLEN - 4));
-  pattern-not: |
-    tvb_memcpy($TVB, $BYTES, $OFFSET, $ADDR_LEN);
+  patterns:
+  - pattern: |
+      tvb_memcpy($TVB, $BYTES, $OFFSET, ($OPTLEN - 4));
+  - pattern-not: |
+      tvb_memcpy($TVB, $BYTES, $OFFSET, $ADDR_LEN);
   languages:
   - c
   message: |
@@ -149,14 +154,15 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-4425716d
-  pattern: |
-    if ($TYPE == T_SRV) {
-      ...
-    }
-  pattern-not: |
-    if ($TYPE == T_SRV && $NAME[0]) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($TYPE == T_SRV) {
+        ...
+      }
+  - pattern-not: |
+      if ($TYPE == T_SRV && $NAME[0]) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -174,10 +180,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-4a2cd6c7
-  pattern: |
-    dissect_llrp_parameters($TVB, $PINFO, $PARAM_TREE, $SUBOFFSET, $PARAM_END)
-  pattern-not: |
-    dissect_llrp_parameters($TVB, $PINFO, $PARAM_TREE, $SUBOFFSET, $PARAM_END, $DEPTH)
+  patterns:
+  - pattern: |
+      dissect_llrp_parameters($TVB, $PINFO, $PARAM_TREE, $SUBOFFSET, $PARAM_END)
+  - pattern-not: |
+      dissect_llrp_parameters($TVB, $PINFO, $PARAM_TREE, $SUBOFFSET, $PARAM_END, $DEPTH)
   languages:
   - c
   message: |
@@ -195,10 +202,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-4fdfccd5
-  pattern: |
-    proto_tree_add_int($TREE, $HF, $TVB, $OFFSET, $LENGTH, $PINFO->pseudo_header->erf.subhdr.mc_hdr)
-  pattern-not: |
-    proto_tree_add_uint($TREE, $HF, $TVB, $OFFSET, $LENGTH, $PINFO->pseudo_header->erf.subhdr.mc_hdr)
+  patterns:
+  - pattern: |
+      proto_tree_add_int($TREE, $HF, $TVB, $OFFSET, $LENGTH, $PINFO->pseudo_header->erf.subhdr.mc_hdr)
+  - pattern-not: |
+      proto_tree_add_uint($TREE, $HF, $TVB, $OFFSET, $LENGTH, $PINFO->pseudo_header->erf.subhdr.mc_hdr)
   languages:
   - c
   message: |
@@ -215,10 +223,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-55d8c445
-  pattern: |
-    length = (gint)tvb_ensure_captured_length_remaining(tvb, offset);
-  pattern-not: |
-    length = tvb_captured_length_remaining(tvb, offset);
+  patterns:
+  - pattern: |
+      length = (gint)tvb_ensure_captured_length_remaining(tvb, offset);
+  - pattern-not: |
+      length = tvb_captured_length_remaining(tvb, offset);
   languages:
   - c
   message: |
@@ -237,10 +246,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-565b4266
-  pattern: |
-    tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb, (offset << 3) + bit, num_fields)
-  pattern-not: |
-    tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb_out, (offset << 3) + bit, num_fields)
+  patterns:
+  - pattern: |
+      tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb, (offset << 3) + bit, num_fields)
+  - pattern-not: |
+      tvb_get_ascii_7bits_string(wmem_packet_scope(), tvb_out, (offset << 3) + bit, num_fields)
   languages:
   - c
   message: |
@@ -256,17 +266,18 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-5a8020a1
-  pattern: |
-    static const char *$VAR;
-    ...
-    $VAR = $EXPR;
-  pattern-not: |
-    static const char *$VAR = NULL;
-    ...
-    if ($VAR) {
-      wmem_free(wmem_file_scope(), (void*)$VAR);
-    }
-    $VAR = (const char *)wmem_strdup(wmem_file_scope(), $EXPR);
+  patterns:
+  - pattern: |
+      static const char *$VAR;
+      ...
+      $VAR = $EXPR;
+  - pattern-not: |
+      static const char *$VAR = NULL;
+      ...
+      if ($VAR) {
+        wmem_free(wmem_file_scope(), (void*)$VAR);
+      }
+      $VAR = (const char *)wmem_strdup(wmem_file_scope(), $EXPR);
   languages:
   - c
   message: |
@@ -284,17 +295,18 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-66417b17
-  pattern: |
-    const int elsize = $VARSIZE ? (int)sizeof(struct data_blob) : $TYPE->size;
-    guint8 *data = (guint8*)wmem_alloc(wmem_packet_scope(), elsize * $NUM);
-  pattern-not: |
-    const guint elsize = $VARSIZE ? (guint)sizeof(struct data_blob) : (guint)$TYPE->size;
-    guint8 *data;
-    if ((guint64)elsize * (guint64)$NUM > G_MAXUINT) {
-      THROW(ReportedBoundsError);
-    }
-    tvb_ensure_bytes_exist($TVB, $OFFSET, elsize * $NUM);
-    data = (guint8*)wmem_alloc(wmem_packet_scope(), elsize * $NUM);
+  patterns:
+  - pattern: |
+      const int elsize = $VARSIZE ? (int)sizeof(struct data_blob) : $TYPE->size;
+      guint8 *data = (guint8*)wmem_alloc(wmem_packet_scope(), elsize * $NUM);
+  - pattern-not: |
+      const guint elsize = $VARSIZE ? (guint)sizeof(struct data_blob) : (guint)$TYPE->size;
+      guint8 *data;
+      if ((guint64)elsize * (guint64)$NUM > G_MAXUINT) {
+        THROW(ReportedBoundsError);
+      }
+      tvb_ensure_bytes_exist($TVB, $OFFSET, elsize * $NUM);
+      data = (guint8*)wmem_alloc(wmem_packet_scope(), elsize * $NUM);
   languages:
   - c
   message: |
@@ -315,13 +327,14 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-81216a17
-  pattern: |
-    guint $VAR = ipmi_get_hdr($PIN)->rs_sa == $VAL;
-  pattern-not: |
-    const ipmi_header_t *$HEADER = ipmi_get_hdr($PIN);
-    if ($HEADER == NULL)
-        return;
-    guint $VAR = $HEADER->rs_sa == $VAL;
+  patterns:
+  - pattern: |
+      guint $VAR = ipmi_get_hdr($PIN)->rs_sa == $VAL;
+  - pattern-not: |
+      const ipmi_header_t *$HEADER = ipmi_get_hdr($PIN);
+      if ($HEADER == NULL)
+          return;
+      guint $VAR = $HEADER->rs_sa == $VAL;
   languages:
   - c
   message: |
@@ -336,12 +349,13 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-81c4eee8
-  pattern: |
-    if ($VAR1->rtp_dyn_payload != $VAR2)
-        rtp_free_hash_dyn_payload($VAR1->rtp_dyn_payload);
-  pattern-not: |
-    /* if ($VAR1->rtp_dyn_payload != $VAR2) */
-    /*     rtp_free_hash_dyn_payload($VAR1->rtp_dyn_payload); */
+  patterns:
+  - pattern: |
+      if ($VAR1->rtp_dyn_payload != $VAR2)
+          rtp_free_hash_dyn_payload($VAR1->rtp_dyn_payload);
+  - pattern-not: |
+      /* if ($VAR1->rtp_dyn_payload != $VAR2) */
+      /*     rtp_free_hash_dyn_payload($VAR1->rtp_dyn_payload); */
   languages:
   - c
   message: |
@@ -359,15 +373,16 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-867a1827
-  pattern: |
-    *length = tvb_captured_length_remaining($TVB, $START);
-    if (*length < 0) {
-      ...
-      tvb_ensure_bytes_exist($TVB, $START, 0);
-    }
-    DISSECTOR_ASSERT(*length >= 0);
-  pattern-not: |
-    *length = tvb_ensure_captured_length_remaining($TVB, $START);
+  patterns:
+  - pattern: |
+      *length = tvb_captured_length_remaining($TVB, $START);
+      if (*length < 0) {
+        ...
+        tvb_ensure_bytes_exist($TVB, $START, 0);
+      }
+      DISSECTOR_ASSERT(*length >= 0);
+  - pattern-not: |
+      *length = tvb_ensure_captured_length_remaining($TVB, $START);
   languages:
   - c
   message: |
@@ -383,10 +398,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-8ed057f7
-  pattern: |
-    copy_address(&$VAR1, &$VAR2);
-  pattern-not: |
-    copy_address_wmem(wmem_file_scope(), &$VAR1, &$VAR2);
+  patterns:
+  - pattern: |
+      copy_address(&$VAR1, &$VAR2);
+  - pattern-not: |
+      copy_address_wmem(wmem_file_scope(), &$VAR1, &$VAR2);
   languages:
   - c
   message: |
@@ -404,10 +420,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-94d5b913
-  pattern: |
-    proto_tree_add_item($AVP_TREE, $HF_RADIUS_AVP_VENDOR_LEN, $TVB, $VENDOR_OFFSET, $VENDOR->length_octets, ENC_BIG_ENDIAN);
-  pattern-not: |
-    proto_tree_add_item_ret_uint($AVP_TREE, $HF_RADIUS_AVP_VENDOR_LEN, $TVB, $VENDOR_OFFSET, $VENDOR->length_octets, ENC_BIG_ENDIAN, &$VENDOR_ATTRIBUTE_LEN);
+  patterns:
+  - pattern: |
+      proto_tree_add_item($AVP_TREE, $HF_RADIUS_AVP_VENDOR_LEN, $TVB, $VENDOR_OFFSET, $VENDOR->length_octets, ENC_BIG_ENDIAN);
+  - pattern-not: |
+      proto_tree_add_item_ret_uint($AVP_TREE, $HF_RADIUS_AVP_VENDOR_LEN, $TVB, $VENDOR_OFFSET, $VENDOR->length_octets, ENC_BIG_ENDIAN, &$VENDOR_ATTRIBUTE_LEN);
   languages:
   - c
   message: |
@@ -426,14 +443,15 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-95571f17
-  pattern: |
-    if ($SPLIT[1] == NULL) {
-      ...
-    }
-  pattern-not: |
-    if ($SPLIT == NULL || $SPLIT[0] == NULL || $SPLIT[1] == NULL) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($SPLIT[1] == NULL) {
+        ...
+      }
+  - pattern-not: |
+      if ($SPLIT == NULL || $SPLIT[0] == NULL || $SPLIT[1] == NULL) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -449,10 +467,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-9b2c889a
-  pattern: |
-    col_set_str($PIN->cinfo, COL_INFO, $STR);
-  pattern-not: |
-    col_add_str($PIN->cinfo, COL_INFO, $STR);
+  patterns:
+  - pattern: |
+      col_set_str($PIN->cinfo, COL_INFO, $STR);
+  - pattern-not: |
+      col_add_str($PIN->cinfo, COL_INFO, $STR);
   languages:
   - c
   message: |
@@ -471,10 +490,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-a442a1c0
-  pattern: |
-    wmem_alloc($POOL, $SIZE * $MULTIPLIER)
-  pattern-not: |
-    wmem_alloc0($POOL, $SIZE * $MULTIPLIER)
+  patterns:
+  - pattern: |
+      wmem_alloc($POOL, $SIZE * $MULTIPLIER)
+  - pattern-not: |
+      wmem_alloc0($POOL, $SIZE * $MULTIPLIER)
   languages:
   - c
   message: |
@@ -490,10 +510,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-a559f2a0
-  pattern: |
-    set_dnet_address($ADDR1, $ADDR2);
-  pattern-not: |
-    set_dnet_address($PIN, $ADDR1, $ADDR2);
+  patterns:
+  - pattern: |
+      set_dnet_address($ADDR1, $ADDR2);
+  - pattern-not: |
+      set_dnet_address($PIN, $ADDR1, $ADDR2);
   languages:
   - c
   message: |
@@ -515,10 +536,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-a9fc769d
-  pattern: |
-    tvb_get_bits_array(NULL, $TVB, $BIT_OFFSET, $NO_OF_BITS, $BYTES_LENGTH)
-  pattern-not: |
-    tvb_get_bits_array(wmem_packet_scope(), $TVB, $BIT_OFFSET, $NO_OF_BITS, $BYTES_LENGTH)
+  patterns:
+  - pattern: |
+      tvb_get_bits_array(NULL, $TVB, $BIT_OFFSET, $NO_OF_BITS, $BYTES_LENGTH)
+  - pattern-not: |
+      tvb_get_bits_array(wmem_packet_scope(), $TVB, $BIT_OFFSET, $NO_OF_BITS, $BYTES_LENGTH)
   languages:
   - c
   message: |
@@ -536,47 +558,48 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-b20e5d8a
-  pattern: |
-    $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
-    if ($IS_VERIFIER)
-        $HANDLE = $OIDVALUE->wrap_handle;
-    else
-        $HANDLE = $OIDVALUE->handle;
-    $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
-    if ($LEN == 0)
-        $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
-    else
-        $RETURN_OFFSET = $START_OFFSET + $LEN;
-    goto $DONE;
-  pattern-not: |
-    if ($IS_VERIFIER) {
-        $HANDLE = $OIDVALUE->wrap_handle;
-        if ($HANDLE != NULL) {
-            $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
-            $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
-            if ($LEN == 0)
-                $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
-            else
-                $RETURN_OFFSET = $START_OFFSET + $LEN;
-        } else {
-            proto_tree_add_item($SUBTREE, $HF_GSSAPI_AUTH_VERIFIER, $GSS_TVB, $OFFSET, -1, $ENC_NA);
-            $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
-        }
-    } else {
-        $HANDLE = $OIDVALUE->handle;
-        if ($HANDLE != NULL) {
-            $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
-            $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
-            if ($LEN == 0)
-                $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
-            else
-                $RETURN_OFFSET = $START_OFFSET + $LEN;
-        } else {
-            proto_tree_add_item($SUBTREE, $HF_GSSAPI_AUTH_CREDENTIALS, $GSS_TVB, $OFFSET, -1, $ENC_NA);
-            $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
-        }
-    }
-    goto $DONE;
+  patterns:
+  - pattern: |
+      $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
+      if ($IS_VERIFIER)
+          $HANDLE = $OIDVALUE->wrap_handle;
+      else
+          $HANDLE = $OIDVALUE->handle;
+      $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
+      if ($LEN == 0)
+          $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
+      else
+          $RETURN_OFFSET = $START_OFFSET + $LEN;
+      goto $DONE;
+  - pattern-not: |
+      if ($IS_VERIFIER) {
+          $HANDLE = $OIDVALUE->wrap_handle;
+          if ($HANDLE != NULL) {
+              $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
+              $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
+              if ($LEN == 0)
+                  $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
+              else
+                  $RETURN_OFFSET = $START_OFFSET + $LEN;
+          } else {
+              proto_tree_add_item($SUBTREE, $HF_GSSAPI_AUTH_VERIFIER, $GSS_TVB, $OFFSET, -1, $ENC_NA);
+              $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
+          }
+      } else {
+          $HANDLE = $OIDVALUE->handle;
+          if ($HANDLE != NULL) {
+              $OID_TVB_LOCAL = tvb_new_subset_remaining($GSS_TVB, $START_OFFSET);
+              $LEN = call_dissector_with_data($HANDLE, $OID_TVB_LOCAL, $PINFO, $SUBTREE, $ENCRYPT_INFO);
+              if ($LEN == 0)
+                  $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
+              else
+                  $RETURN_OFFSET = $START_OFFSET + $LEN;
+          } else {
+              proto_tree_add_item($SUBTREE, $HF_GSSAPI_AUTH_CREDENTIALS, $GSS_TVB, $OFFSET, -1, $ENC_NA);
+              $RETURN_OFFSET = tvb_captured_length($GSS_TVB);
+          }
+      }
+      goto $DONE;
   languages:
   - c
   message: |
@@ -590,14 +613,15 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-c52a702a
-  pattern: |
-    if ($STATUS == PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET) {
-      ...
-    }
-  pattern-not: |
-    if ($STATUS == PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET || is_xerror($DATATYPE, $STATUS)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($STATUS == PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET) {
+        ...
+      }
+  - pattern-not: |
+      if ($STATUS == PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET || is_xerror($DATATYPE, $STATUS)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -614,26 +638,27 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-d443be44
-  pattern: |
-    static int $FUNC(tvbuff_t *tvb, int $OFFSET, proto_tree *$TREE, proto_tree *$PAD_TREE, ...)
-    {
-        ...
-        $VAR = vType_get_type($VTYPE);
-        DISSECTOR_ASSERT($VAR != NULL);
-        ...
-    }
-  pattern-not: |
-    static int $FUNC(tvbuff_t *tvb, packet_info *$PININFO, int $OFFSET, proto_tree *$TREE, proto_tree *$PAD_TREE, ...)
-    {
-        ...
-        $VAR = vType_get_type($VTYPE);
-        if ($VAR == NULL) {
-            expert_add_info($PININFO, $TI_TYPE, &ei_mswsp_invalid_variant_type);
-            THROW_MESSAGE(ReportedBoundsError, "Unknown type");
-            return $OFFSET;
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      static int $FUNC(tvbuff_t *tvb, int $OFFSET, proto_tree *$TREE, proto_tree *$PAD_TREE, ...)
+      {
+          ...
+          $VAR = vType_get_type($VTYPE);
+          DISSECTOR_ASSERT($VAR != NULL);
+          ...
+      }
+  - pattern-not: |
+      static int $FUNC(tvbuff_t *tvb, packet_info *$PININFO, int $OFFSET, proto_tree *$TREE, proto_tree *$PAD_TREE, ...)
+      {
+          ...
+          $VAR = vType_get_type($VTYPE);
+          if ($VAR == NULL) {
+              expert_add_info($PININFO, $TI_TYPE, &ei_mswsp_invalid_variant_type);
+              THROW_MESSAGE(ReportedBoundsError, "Unknown type");
+              return $OFFSET;
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -653,18 +678,19 @@ rules:
     - wireshark
     - packet-dissector
 - id: vuln-wireshark-d8a0cbc4
-  pattern: |
-    for ($I = 1; $I <= $COUNT; $I++) {
-      ...
-      proto_item_append_text($ITEM, " [%d]: (%s)", $I, $VAL);
-      ...
-    }
-  pattern-not: |
-    for ($I = 0; $I < $COUNT; $I++) {
-      ...
-      proto_item_append_text($ITEM, " [%d]: (%s)", $I+1, $VAL);
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = 1; $I <= $COUNT; $I++) {
+        ...
+        proto_item_append_text($ITEM, " [%d]: (%s)", $I, $VAL);
+        ...
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $COUNT; $I++) {
+        ...
+        proto_item_append_text($ITEM, " [%d]: (%s)", $I+1, $VAL);
+        ...
+      }
   languages:
   - c
   message: |
@@ -682,10 +708,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-e2745d74
-  pattern: |
-    add_tagged_field($PIN, $TREE, $TVB, $OFFSET, $FTYPE)
-  pattern-not: |
-    add_tagged_field($PIN, $TREE, $TVB, $OFFSET, $FTYPE, $IDS, $COUNT)
+  patterns:
+  - pattern: |
+      add_tagged_field($PIN, $TREE, $TVB, $OFFSET, $FTYPE)
+  - pattern-not: |
+      add_tagged_field($PIN, $TREE, $TVB, $OFFSET, $FTYPE, $IDS, $COUNT)
   languages:
   - c
   message: |
@@ -702,23 +729,24 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-e280c9b6
-  pattern: |
-    int $CHARS_PROCESSED = 0;
-    int $DATA_SIZE = tvb_reported_length_remaining($TVB, $DNS_DATA_OFFSET);
-    ...
-    $CHARS_PROCESSED++;
-    ...
-    if ($CHARS_PROCESSED >= $DATA_SIZE) {
+  patterns:
+  - pattern: |
+      int $CHARS_PROCESSED = 0;
+      int $DATA_SIZE = tvb_reported_length_remaining($TVB, $DNS_DATA_OFFSET);
       ...
-    }
-  pattern-not: |
-    int $POINTERS_COUNT = 0;
-    ...
-    $POINTERS_COUNT++;
-    ...
-    if ($INDIR_OFFSET == $OFFSET + 2 || $POINTERS_COUNT > $MAXDNAME/4) {
+      $CHARS_PROCESSED++;
       ...
-    }
+      if ($CHARS_PROCESSED >= $DATA_SIZE) {
+        ...
+      }
+  - pattern-not: |
+      int $POINTERS_COUNT = 0;
+      ...
+      $POINTERS_COUNT++;
+      ...
+      if ($INDIR_OFFSET == $OFFSET + 2 || $POINTERS_COUNT > $MAXDNAME/4) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -739,10 +767,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-eb0c034f
-  pattern: |
-    #define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               8
-  pattern-not: |
-    #define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               15
+  patterns:
+  - pattern: |
+      #define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               8
+  - pattern-not: |
+      #define ZBEE_ZCL_APPL_EVTALT_NUM_STRUCT_ETT               15
   languages:
   - c
   message: |
@@ -760,11 +789,12 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-ebff85fd
-  pattern: |
-    $VEC.ptr = tvb_get_ptr($TVB, $OFFSET, $LEN);
-    $VEC.len = $LEN;
-  pattern-not: |
-    SET_CKSUM_VEC_TVB($VEC, $TVB, $OFFSET, $LEN);
+  patterns:
+  - pattern: |
+      $VEC.ptr = tvb_get_ptr($TVB, $OFFSET, $LEN);
+      $VEC.len = $LEN;
+  - pattern-not: |
+      SET_CKSUM_VEC_TVB($VEC, $TVB, $OFFSET, $LEN);
   languages:
   - c
   message: |
@@ -784,10 +814,11 @@ rules:
     - c
     - network-protocols
 - id: vuln-wireshark-f177008b
-  pattern: |
-    $LINE = (guint8 *)tvb_memdup($WMEM_SCOPE, $TVB, $OFFSET, $LEN+1);
-  pattern-not: |
-    $LINE = tvb_get_string_enc($WMEM_SCOPE, $TVB, $OFFSET, $LEN, $ENC);
+  patterns:
+  - pattern: |
+      $LINE = (guint8 *)tvb_memdup($WMEM_SCOPE, $TVB, $OFFSET, $LEN+1);
+  - pattern-not: |
+      $LINE = tvb_get_string_enc($WMEM_SCOPE, $TVB, $OFFSET, $LEN, $ENC);
   languages:
   - c
   message: |
@@ -802,10 +833,11 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-f910cb50
-  pattern: |
-    guint tpdu_len = $LI + tvb_length_remaining(tvb, $LI);
-  pattern-not: |
-    guint tpdu_len = tvb_reported_length_remaining(tvb, $OFFSET);
+  patterns:
+  - pattern: |
+      guint tpdu_len = $LI + tvb_length_remaining(tvb, $LI);
+  - pattern-not: |
+      guint tpdu_len = tvb_reported_length_remaining(tvb, $OFFSET);
   languages:
   - c
   message: |
@@ -823,14 +855,15 @@ rules:
     technology:
     - c
 - id: vuln-wireshark-fe22586b
-  pattern: |
-    $WTH->phdr.presence_flags = 0;
-    $WTH->phdr.caplen = $PACKET_SIZE;
-    $WTH->phdr.len = $PACKET_SIZE;
-    $WTH->phdr.ts.secs = 0;
-    $WTH->phdr.ts.nsecs = 0;
-  pattern-not: |
-    ber_set_pkthdr($WTH->phdr, $PACKET_SIZE);
+  patterns:
+  - pattern: |
+      $WTH->phdr.presence_flags = 0;
+      $WTH->phdr.caplen = $PACKET_SIZE;
+      $WTH->phdr.len = $PACKET_SIZE;
+      $WTH->phdr.ts.secs = 0;
+      $WTH->phdr.ts.nsecs = 0;
+  - pattern-not: |
+      ber_set_pkthdr($WTH->phdr, $PACKET_SIZE);
   languages:
   - c
   message: |

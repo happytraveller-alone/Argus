@@ -1,9 +1,10 @@
 rules:
 - id: vuln-containerd-05f951a3
-  pattern: |
-    Version = "1.4.3+unknown"
-  pattern-not: |
-    Version = "1.4.4+unknown"
+  patterns:
+  - pattern: |
+      Version = "1.4.3+unknown"
+  - pattern-not: |
+      Version = "1.4.4+unknown"
   languages:
   - go
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - go
 - id: vuln-containerd-5b46e404
-  pattern: |
-    Version = "1.4.10+unknown"
-  pattern-not: |
-    Version = "1.4.11+unknown"
+  patterns:
+  - pattern: |
+      Version = "1.4.10+unknown"
+  - pattern-not: |
+      Version = "1.4.11+unknown"
   languages:
   - go
   message: |
@@ -42,10 +44,11 @@ rules:
     technology:
     - go
 - id: vuln-containerd-a05d1754
-  pattern: |
-    Version = "1.6.11+unknown"
-  pattern-not: |
-    Version = "1.6.12+unknown"
+  patterns:
+  - pattern: |
+      Version = "1.6.11+unknown"
+  - pattern-not: |
+      Version = "1.6.12+unknown"
   languages:
   - go
   message: |
@@ -63,10 +66,11 @@ rules:
     technology:
     - go
 - id: vuln-containerd-a7310392
-  pattern: |
-    specOpts = append(specOpts, customopts.WithMounts($OS, $CONFIG, $EXTRA_MOUNTS, $MOUNT_LABEL))
-  pattern-not: |
-    specOpts = append(specOpts, customopts.WithMounts($OS, $CONFIG, $EXTRA_MOUNTS, $MOUNT_LABEL), customopts.WithRelabeledContainerMounts($MOUNT_LABEL))
+  patterns:
+  - pattern: |
+      specOpts = append(specOpts, customopts.WithMounts($OS, $CONFIG, $EXTRA_MOUNTS, $MOUNT_LABEL))
+  - pattern-not: |
+      specOpts = append(specOpts, customopts.WithMounts($OS, $CONFIG, $EXTRA_MOUNTS, $MOUNT_LABEL), customopts.WithRelabeledContainerMounts($MOUNT_LABEL))
   languages:
   - go
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-react-admin-1226a15a
-  pattern: |
-    $INPUT ? $INPUT.replace(/<.+?>/gm, '') : '';
-  pattern-not: |
-    $INPUT ? $INPUT.replace(/<[^>]+>/gm, '') : '';
+  patterns:
+  - pattern: |
+      $INPUT ? $INPUT.replace(/<.+?>/gm, '') : '';
+  - pattern-not: |
+      $INPUT ? $INPUT.replace(/<[^>]+>/gm, '') : '';
   languages:
   - typescript
   message: |

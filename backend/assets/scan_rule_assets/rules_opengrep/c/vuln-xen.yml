@@ -1,17 +1,18 @@
 rules:
 - id: vuln-xen-08aa260d
-  pattern: |
-    (void)page_get_owner_and_reference($PAGE);
-  pattern-not: |
-    $TD = page_get_owner_and_reference($PAGE);
-    if ( $TD != $RD || $RD->is_dying )
-    {
-        if ( $TD )
-            put_page($PAGE);
-        $PAGE = NULL;
-        $RC = $ERROR_CODE;
-        goto $LABEL;
-    }
+  patterns:
+  - pattern: |
+      (void)page_get_owner_and_reference($PAGE);
+  - pattern-not: |
+      $TD = page_get_owner_and_reference($PAGE);
+      if ( $TD != $RD || $RD->is_dying )
+      {
+          if ( $TD )
+              put_page($PAGE);
+          $PAGE = NULL;
+          $RC = $ERROR_CODE;
+          goto $LABEL;
+      }
   languages:
   - c
   message: |
@@ -27,16 +28,17 @@ rules:
     technology:
     - c
 - id: vuln-xen-136ac884
-  pattern: |
-    $V->evtchn_fifo->control_block = $EXPR;
-    ...
-    $V->evtchn_fifo->queue[$I].head = &$V->evtchn_fifo->control_block->head[$I];
-  pattern-not: |
-    $CONTROL_BLOCK = $EXPR;
-    ...
-    $V->evtchn_fifo->queue[$I].head = &$CONTROL_BLOCK->head[$I];
-    smp_wmb();
-    $V->evtchn_fifo->control_block = $CONTROL_BLOCK;
+  patterns:
+  - pattern: |
+      $V->evtchn_fifo->control_block = $EXPR;
+      ...
+      $V->evtchn_fifo->queue[$I].head = &$V->evtchn_fifo->control_block->head[$I];
+  - pattern-not: |
+      $CONTROL_BLOCK = $EXPR;
+      ...
+      $V->evtchn_fifo->queue[$I].head = &$CONTROL_BLOCK->head[$I];
+      smp_wmb();
+      $V->evtchn_fifo->control_block = $CONTROL_BLOCK;
   languages:
   - c
   message: |
@@ -52,35 +54,36 @@ rules:
     technology:
     - c
 - id: vuln-xen-1cfbd256
-  pattern: |
-    static int rm_child_entry(struct node *node, size_t off, size_t len)
-    {
-        if (!recovery)
-            return off;
+  patterns:
+  - pattern: |
+      static int rm_child_entry(struct node *node, size_t off, size_t len)
+      {
+          if (!recovery)
+              return off;
 
-        if (remove_child_entry(NULL, node, off))
-            log("check_store: child entry could not be removed from '%s'",
-                node->name);
+          if (remove_child_entry(NULL, node, off))
+              log("check_store: child entry could not be removed from '%s'",
+                  node->name);
 
-        return off - len - 1;
-    }
-  pattern-not: |
-    static int check_store_step(const void *ctx, struct connection *conn,
-                                struct node *node, void *arg)
-    {
-        struct hashtable *reachable = arg;
+          return off - len - 1;
+      }
+  - pattern-not: |
+      static int check_store_step(const void *ctx, struct connection *conn,
+                                  struct node *node, void *arg)
+      {
+          struct hashtable *reachable = arg;
 
-        if (hashtable_search(reachable, (void *)node->name)) {
-            log("check_store: '%s' is duplicated!", node->name);
-            return recovery ? WALK_TREE_RM_CHILDENTRY
-                           : WALK_TREE_SKIP_CHILDREN;
-        }
+          if (hashtable_search(reachable, (void *)node->name)) {
+              log("check_store: '%s' is duplicated!", node->name);
+              return recovery ? WALK_TREE_RM_CHILDENTRY
+                             : WALK_TREE_SKIP_CHILDREN;
+          }
 
-        if (!remember_string(reachable, node->name))
-            return WALK_TREE_ERROR_STOP;
+          if (!remember_string(reachable, node->name))
+              return WALK_TREE_ERROR_STOP;
 
-        return WALK_TREE_OK;
-    }
+          return WALK_TREE_OK;
+      }
   languages:
   - c
   message: |
@@ -96,10 +99,11 @@ rules:
     technology:
     - c
 - id: vuln-xen-30a293fb
-  pattern: |
-    $RET = do_tdb_delete($CONN, $KEY, NULL);
-  pattern-not: |
-    $RET = ($VAR == NO_GENERATION) ? 0 : do_tdb_delete($CONN, $KEY, NULL);
+  patterns:
+  - pattern: |
+      $RET = do_tdb_delete($CONN, $KEY, NULL);
+  - pattern-not: |
+      $RET = ($VAR == NO_GENERATION) ? 0 : do_tdb_delete($CONN, $KEY, NULL);
   languages:
   - c
   message: |
@@ -118,12 +122,13 @@ rules:
     technology:
     - c
 - id: vuln-xen-3d963874
-  pattern: |
-    if (cpu_data[smp_processor_id()].pfr64.csv2)
-      return true;
-  pattern-not: |
-    if (cpu_data[smp_processor_id()].pfr64.csv2)
-      return 0;
+  patterns:
+  - pattern: |
+      if (cpu_data[smp_processor_id()].pfr64.csv2)
+        return true;
+  - pattern-not: |
+      if (cpu_data[smp_processor_id()].pfr64.csv2)
+        return 0;
   languages:
   - c
   message: |
@@ -141,25 +146,26 @@ rules:
     technology:
     - c
 - id: vuln-xen-62e7fb70
-  pattern: |
-    $TYPE $FUNC(...) {
-      ...
-      $PG = alloc_domheap_page(NULL, 0);
-      ...
-      page_suppress_refcounting($PG);
-      ...
-    }
-  pattern-not: |
-    $TYPE $FUNC(...) {
-      ...
-      $PG = alloc_domheap_page($D, MEMF_no_refcount);
-      ...
-      if ( !get_page_and_type($PG, $D, PGT_writable_page) ) {
-        domain_crash($D);
-        return -ENODATA;
+  patterns:
+  - pattern: |
+      $TYPE $FUNC(...) {
+        ...
+        $PG = alloc_domheap_page(NULL, 0);
+        ...
+        page_suppress_refcounting($PG);
+        ...
       }
-      ...
-    }
+  - pattern-not: |
+      $TYPE $FUNC(...) {
+        ...
+        $PG = alloc_domheap_page($D, MEMF_no_refcount);
+        ...
+        if ( !get_page_and_type($PG, $D, PGT_writable_page) ) {
+          domain_crash($D);
+          return -ENODATA;
+        }
+        ...
+      }
   languages:
   - c
   message: |
@@ -176,10 +182,11 @@ rules:
     technology:
     - c
 - id: vuln-xen-7615e248
-  pattern: |
-    $IOMU->domid_map[$DOMID] = 0;
-  pattern-not: |
-    $IOMU->domid_map[$DOMID] = DOMID_INVALID;
+  patterns:
+  - pattern: |
+      $IOMU->domid_map[$DOMID] = 0;
+  - pattern-not: |
+      $IOMU->domid_map[$DOMID] = DOMID_INVALID;
   languages:
   - c
   message: |
@@ -195,13 +202,14 @@ rules:
     technology:
     - c
 - id: vuln-xen-7b0d89d5
-  pattern: |
-    $RET = reassign_device_ownership($S, $D, $DEVFN, $PDEV);
-    if ( $RET || $D == $DOM_IO )
-        return $RET;
-  pattern-not: |
-    if ( $D == $DOM_IO )
-        return reassign_device_ownership($S, $D, $DEVFN, $PDEV);
+  patterns:
+  - pattern: |
+      $RET = reassign_device_ownership($S, $D, $DEVFN, $PDEV);
+      if ( $RET || $D == $DOM_IO )
+          return $RET;
+  - pattern-not: |
+      if ( $D == $DOM_IO )
+          return reassign_device_ownership($S, $D, $DEVFN, $PDEV);
   languages:
   - c
   message: |
@@ -215,42 +223,43 @@ rules:
     technology:
     - c
 - id: vuln-xen-8c8a5b39
-  pattern: |
-    static void delete_node_single(struct connection *conn, struct node *node)
-    {
-        TDB_DATA key;
+  patterns:
+  - pattern: |
+      static void delete_node_single(struct connection *conn, struct node *node)
+      {
+          TDB_DATA key;
 
-        if (access_node(conn, node, NODE_ACCESS_DELETE, &key))
-            return;
+          if (access_node(conn, node, NODE_ACCESS_DELETE, &key))
+              return;
 
-        if (do_tdb_delete(conn, &key, &node->acc) != 0) {
-            corrupt(conn, "Could not delete '%s'", node->name);
-            return;
-        }
+          if (do_tdb_delete(conn, &key, &node->acc) != 0) {
+              corrupt(conn, "Could not delete '%s'", node->name);
+              return;
+          }
 
-        domain_entry_dec(conn, node);
-    }
-  pattern-not: |
-    static int delnode_sub(const void *ctx, struct connection *conn,
-                          struct node *node, void *arg)
-    {
-        const char *root = arg;
-        bool watch_exact;
-        int ret;
-        TDB_DATA key;
+          domain_entry_dec(conn, node);
+      }
+  - pattern-not: |
+      static int delnode_sub(const void *ctx, struct connection *conn,
+                            struct node *node, void *arg)
+      {
+          const char *root = arg;
+          bool watch_exact;
+          int ret;
+          TDB_DATA key;
 
-        ret = access_node(conn, node, NODE_ACCESS_DELETE, &key);
-        if (ret > 0)
-            return WALK_TREE_SUCCESS_STOP;
+          ret = access_node(conn, node, NODE_ACCESS_DELETE, &key);
+          if (ret > 0)
+              return WALK_TREE_SUCCESS_STOP;
 
-        if (!ret && do_tdb_delete(conn, &key, &node->acc))
-            return WALK_TREE_SUCCESS_STOP;
+          if (!ret && do_tdb_delete(conn, &key, &node->acc))
+              return WALK_TREE_SUCCESS_STOP;
 
-        watch_exact = strcmp(root, node->name);
-        domain_entry_dec(conn, node);
+          watch_exact = strcmp(root, node->name);
+          domain_entry_dec(conn, node);
 
-        return WALK_TREE_RM_CHILDENTRY;
-    }
+          return WALK_TREE_RM_CHILDENTRY;
+      }
   languages:
   - c
   message: |
@@ -268,17 +277,18 @@ rules:
     technology:
     - c
 - id: vuln-xen-af4a5eca
-  pattern: |
-    if ( !paging_mode_log_dirty($D) )
-    {
-        $RC = paging_log_dirty_enable($D, $LOG_GLOBAL);
-        if ( $RC )
-            goto $LABEL;
-    }
-  pattern-not: |
-    domain_pause($D);
-    p2m_enable_hardware_log_dirty($D);
-    domain_unpause($D);
+  patterns:
+  - pattern: |
+      if ( !paging_mode_log_dirty($D) )
+      {
+          $RC = paging_log_dirty_enable($D, $LOG_GLOBAL);
+          if ( $RC )
+              goto $LABEL;
+      }
+  - pattern-not: |
+      domain_pause($D);
+      p2m_enable_hardware_log_dirty($D);
+      domain_unpause($D);
   languages:
   - c
   message: |
@@ -296,32 +306,33 @@ rules:
     technology:
     - c
 - id: vuln-xen-ba1cff4b
-  pattern: |
-    struct hashtable * $HT = create_hashtable($SIZE, $HASH_FN, $KEYS_EQUAL_FN);
-    ...
-    if (hashtable_search($HT, $CHILDNAME)) {
-      log("check_store: '%s' is duplicated!", $CHILDNAME);
-      $I = rm_child_entry($NODE, $I, $CHILDLEN);
-    } else {
-      if (!remember_string($HT, $CHILDNAME)) {
-        log("check_store: ENOMEM");
-        talloc_free($CHILDNODE);
-        talloc_free($CHILDNAME);
-        $RET = ENOMEM;
-        break;
+  patterns:
+  - pattern: |
+      struct hashtable * $HT = create_hashtable($SIZE, $HASH_FN, $KEYS_EQUAL_FN);
+      ...
+      if (hashtable_search($HT, $CHILDNAME)) {
+        log("check_store: '%s' is duplicated!", $CHILDNAME);
+        $I = rm_child_entry($NODE, $I, $CHILDLEN);
+      } else {
+        if (!remember_string($HT, $CHILDNAME)) {
+          log("check_store: ENOMEM");
+          talloc_free($CHILDNODE);
+          talloc_free($CHILDNAME);
+          $RET = ENOMEM;
+          break;
+        }
+        $RET = check_store_($CHILDNAME, $REACHABLE);
       }
+      ...
+      hashtable_destroy($HT, 0);
+  - pattern-not: |
+      if (hashtable_search($REACHABLE, $CHILDNAME)) {
+        log("check_store: '%s' is duplicated!", $CHILDNAME);
+        $I = rm_child_entry($NODE, $I, $CHILDLEN);
+        goto next;
+      }
+      ...
       $RET = check_store_($CHILDNAME, $REACHABLE);
-    }
-    ...
-    hashtable_destroy($HT, 0);
-  pattern-not: |
-    if (hashtable_search($REACHABLE, $CHILDNAME)) {
-      log("check_store: '%s' is duplicated!", $CHILDNAME);
-      $I = rm_child_entry($NODE, $I, $CHILDLEN);
-      goto next;
-    }
-    ...
-    $RET = check_store_($CHILDNAME, $REACHABLE);
   languages:
   - c
   message: |
@@ -337,15 +348,16 @@ rules:
     technology:
     - c
 - id: vuln-xen-c17d4913
-  pattern: |
-    if (!$WATCH->node || !$WATCH->token) {
-      ...
-    }
-  pattern-not: |
-    if (!$WATCH->node || !$WATCH->token ||
-        domain_memory_add_chk($CONN->id, strlen($VEC[0]) + strlen($VEC[1]))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$WATCH->node || !$WATCH->token) {
+        ...
+      }
+  - pattern-not: |
+      if (!$WATCH->node || !$WATCH->token ||
+          domain_memory_add_chk($CONN->id, strlen($VEC[0]) + strlen($VEC[1]))) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -363,21 +375,22 @@ rules:
     technology:
     - c
 - id: vuln-xen-c65ea16d
-  pattern: |
-    $VAR mfn_return;
-    ...
-    mfn_return = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, 0, NULL, NULL);
-    ...
-    ASSERT(!p2m_is_valid($T) || $MFN + $I == mfn_x(mfn_return));
-  pattern-not: |
-    for ( $I = 0; $I < (1UL << $ORDER); )
-    {
-        unsigned int $CUR_ORDER;
-        mfn_t mfn_return = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, 0, &$CUR_ORDER, NULL);
-        if ( p2m_is_valid($T) && (!mfn_valid(_mfn($MFN)) || $MFN + $I != mfn_x(mfn_return)) )
-            return -EILSEQ;
-        $I += (1UL << $CUR_ORDER) - (($GFN + $I) & ((1UL << $CUR_ORDER) - 1));
-    }
+  patterns:
+  - pattern: |
+      $VAR mfn_return;
+      ...
+      mfn_return = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, 0, NULL, NULL);
+      ...
+      ASSERT(!p2m_is_valid($T) || $MFN + $I == mfn_x(mfn_return));
+  - pattern-not: |
+      for ( $I = 0; $I < (1UL << $ORDER); )
+      {
+          unsigned int $CUR_ORDER;
+          mfn_t mfn_return = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, 0, &$CUR_ORDER, NULL);
+          if ( p2m_is_valid($T) && (!mfn_valid(_mfn($MFN)) || $MFN + $I != mfn_x(mfn_return)) )
+              return -EILSEQ;
+          $I += (1UL << $CUR_ORDER) - (($GFN + $I) & ((1UL << $CUR_ORDER) - 1));
+      }
   languages:
   - c
   message: |
@@ -391,17 +404,18 @@ rules:
     technology:
     - c
 - id: vuln-xen-cbc06ee4
-  pattern: |
-    static void $FUNC($TYPE $PARAM) {
-        ...
-        $TAIL($PARAM);
-        BUG();
-    }
-  pattern-not: |
-    static void $FUNC(void) {
-        ...
-        reset_stack_and_jump_ind($TAIL);
-    }
+  patterns:
+  - pattern: |
+      static void $FUNC($TYPE $PARAM) {
+          ...
+          $TAIL($PARAM);
+          BUG();
+      }
+  - pattern-not: |
+      static void $FUNC(void) {
+          ...
+          reset_stack_and_jump_ind($TAIL);
+      }
   languages:
   - c
   message: |
@@ -415,19 +429,20 @@ rules:
     technology:
     - c
 - id: vuln-xen-e2b7fa75
-  pattern: |
-    static void remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {
-      ...
-      if (write_node($CONN, $NODE, true))
-        corrupt($CONN, "Can't update parent node '%s'", $NODE->name);
-      ...
-    }
-  pattern-not: |
-    static int remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {
-      ...
-      return write_node($CONN, $NODE, true);
-      ...
-    }
+  patterns:
+  - pattern: |
+      static void remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {
+        ...
+        if (write_node($CONN, $NODE, true))
+          corrupt($CONN, "Can't update parent node '%s'", $NODE->name);
+        ...
+      }
+  - pattern-not: |
+      static int remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {
+        ...
+        return write_node($CONN, $NODE, true);
+        ...
+      }
   languages:
   - c
   message: |
@@ -443,15 +458,16 @@ rules:
     technology:
     - c
 - id: vuln-xen-fcba6c74
-  pattern: |
-    TDB_DATA $KEY;
-    ...
-    $KEY.dptr = (void *)$NODE->name;
-    $KEY.dsize = strlen($NODE->name);
-    ...
-    tdb_delete($TDB_CTX, $KEY);
-  pattern-not: |
-    tdb_delete($TDB_CTX, $NODE->key);
+  patterns:
+  - pattern: |
+      TDB_DATA $KEY;
+      ...
+      $KEY.dptr = (void *)$NODE->name;
+      $KEY.dsize = strlen($NODE->name);
+      ...
+      tdb_delete($TDB_CTX, $KEY);
+  - pattern-not: |
+      tdb_delete($TDB_CTX, $NODE->key);
   languages:
   - c
   message: |
@@ -471,11 +487,12 @@ rules:
     technology:
     - c
 - id: vuln-xen-fe1e4668
-  pattern: |
-    unsigned long $END_GFN = 1UL << (DEFAULT_DOMAIN_ADDRESS_WIDTH - PAGE_SHIFT);
-    unsigned int $LEVEL = amd_iommu_get_paging_mode($END_GFN);
-  pattern-not: |
-    unsigned int $LEVEL = hd->arch.amd.paging_mode;
+  patterns:
+  - pattern: |
+      unsigned long $END_GFN = 1UL << (DEFAULT_DOMAIN_ADDRESS_WIDTH - PAGE_SHIFT);
+      unsigned int $LEVEL = amd_iommu_get_paging_mode($END_GFN);
+  - pattern-not: |
+      unsigned int $LEVEL = hd->arch.amd.paging_mode;
   languages:
   - c
   message: |

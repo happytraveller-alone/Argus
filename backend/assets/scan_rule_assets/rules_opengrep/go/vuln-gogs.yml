@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gogs-012a1ba1
-  pattern: |
-    conf.App.Version = "0.12.8"
-  pattern-not: |
-    conf.App.Version = "0.12.9"
+  patterns:
+  - pattern: |
+      conf.App.Version = "0.12.8"
+  - pattern-not: |
+      conf.App.Version = "0.12.9"
   languages:
   - go
   message: |
@@ -23,14 +24,15 @@ rules:
     technology:
     - go
 - id: vuln-gogs-4677b469
-  pattern: |
-    if len($SID) > 0 && $PROVIDER.Exist($SID) {
-      return $READ($SID)
-    }
-  pattern-not: |
-    if len($SID) > 0 && $VALID($SID) && $PROVIDER.Exist($SID) {
-      return $PROVIDER.Read($SID)
-    }
+  patterns:
+  - pattern: |
+      if len($SID) > 0 && $PROVIDER.Exist($SID) {
+        return $READ($SID)
+      }
+  - pattern-not: |
+      if len($SID) > 0 && $VALID($SID) && $PROVIDER.Exist($SID) {
+        return $PROVIDER.Read($SID)
+      }
   languages:
   - go
   message: |
@@ -46,10 +48,11 @@ rules:
     technology:
     - go
 - id: vuln-gogs-7f8799c0
-  pattern: |
-    conf.App.Version = "0.12.7"
-  pattern-not: |
-    conf.App.Version = "0.12.8"
+  patterns:
+  - pattern: |
+      conf.App.Version = "0.12.7"
+  - pattern-not: |
+      conf.App.Version = "0.12.8"
   languages:
   - go
   message: |
@@ -67,10 +70,11 @@ rules:
     technology:
     - go
 - id: vuln-gogs-c9fba3cb
-  pattern: |
-    conf.App.Version = "0.12.10"
-  pattern-not: |
-    conf.App.Version = "0.12.11"
+  patterns:
+  - pattern: |
+      conf.App.Version = "0.12.10"
+  - pattern-not: |
+      conf.App.Version = "0.12.11"
   languages:
   - go
   message: |

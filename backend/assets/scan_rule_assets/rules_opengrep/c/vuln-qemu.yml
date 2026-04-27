@@ -1,11 +1,12 @@
 rules:
 - id: vuln-qemu-035e69b0
-  pattern: |
-    assert($VAR1 > $VAR2);
-  pattern-not: |
-    if ($VAR2 >= $VAR1) {
-        return false;
-    }
+  patterns:
+  - pattern: |
+      assert($VAR1 > $VAR2);
+  - pattern-not: |
+      if ($VAR2 >= $VAR1) {
+          return false;
+      }
   languages:
   - c
   message: |
@@ -25,14 +26,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-070c4b92
-  pattern: |
-    while (1) {
-      ...
-    }
-  pattern-not: |
-    while ($DESCNT++ < $FEC_MAX_DESC) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while (1) {
+        ...
+      }
+  - pattern-not: |
+      while ($DESCNT++ < $FEC_MAX_DESC) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -48,24 +50,25 @@ rules:
     technology:
     - c
 - id: vuln-qemu-0a794529
-  pattern: |
-    if ($VAR && !g_str_equal($VAR, "none")) {
-      if (g_str_equal($VAR, "passthrough")) {
-        if ($FUNC(&$BUF)) {
-          _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));
-          g_free($BUF);
+  patterns:
+  - pattern: |
+      if ($VAR && !g_str_equal($VAR, "none")) {
+        if (g_str_equal($VAR, "passthrough")) {
+          if ($FUNC(&$BUF)) {
+            _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));
+            g_free($BUF);
+          }
+        } else {
+          _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $VAR));
         }
-      } else {
-        _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $VAR));
       }
-    }
-  pattern-not: |
-    if ($VAR) {
-      _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $VAR));
-    } else if ($COND && $FUNC(&$BUF)) {
-      _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));
-      g_free($BUF);
-    }
+  - pattern-not: |
+      if ($VAR) {
+        _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $VAR));
+      } else if ($COND && $FUNC(&$BUF)) {
+        _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));
+        g_free($BUF);
+      }
   languages:
   - c
   message: |
@@ -86,24 +89,25 @@ rules:
     technology:
     - c
 - id: vuln-qemu-0db89536
-  pattern: |
-    if ($S->current_req) {
+  patterns:
+  - pattern: |
+      if ($S->current_req) {
+        ...
+        scsi_req_continue($S->current_req);
+        $S->data_in_ready = false;
+        ...
+      }
+  - pattern-not: |
+      if (!$S->current_req) {
+        return;
+      }
       ...
       scsi_req_continue($S->current_req);
       $S->data_in_ready = false;
       ...
-    }
-  pattern-not: |
-    if (!$S->current_req) {
-      return;
-    }
-    ...
-    scsi_req_continue($S->current_req);
-    $S->data_in_ready = false;
-    ...
-    if (!$S->current_req) {
-      return;
-    }
+      if (!$S->current_req) {
+        return;
+      }
   languages:
   - c
   message: |
@@ -118,16 +122,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-0e68373c
-  pattern: |
-    if (!num_sge) {
-        ...
-        complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_NO_SGE, ctx);
-    }
-  pattern-not: |
-    if (!num_sge || num_sge > MAX_SGE) {
-        ...
-        complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_INV_NUM_SGE, ctx);
-    }
+  patterns:
+  - pattern: |
+      if (!num_sge) {
+          ...
+          complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_NO_SGE, ctx);
+      }
+  - pattern-not: |
+      if (!num_sge || num_sge > MAX_SGE) {
+          ...
+          complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_INV_NUM_SGE, ctx);
+      }
   languages:
   - c
   message: |
@@ -143,18 +148,19 @@ rules:
     technology:
     - c
 - id: vuln-qemu-1328fe0c
-  pattern: |
-    $NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];
-    ...
-    $END_ADDR = $ISO_TD.be;
-  pattern-not: |
-    if ($RELATIVE_FRAME_NUMBER < $FRAME_COUNT) {
-        $NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];
-    } else {
-        $NEXT = $ISO_TD.be;
-    }
-    ...
-    $END_ADDR = $NEXT;
+  patterns:
+  - pattern: |
+      $NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];
+      ...
+      $END_ADDR = $ISO_TD.be;
+  - pattern-not: |
+      if ($RELATIVE_FRAME_NUMBER < $FRAME_COUNT) {
+          $NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];
+      } else {
+          $NEXT = $ISO_TD.be;
+      }
+      ...
+      $END_ADDR = $NEXT;
   languages:
   - c
   message: |
@@ -168,15 +174,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-156a2e4d
-  pattern: |
-    uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP;
-    ...
-    return 0;
-  pattern-not: |
-    uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP, $XFERS = 0;
-    ...
-    $XFERS++;
-    return $XFERS ? 0 : -1;
+  patterns:
+  - pattern: |
+      uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP;
+      ...
+      return 0;
+  - pattern-not: |
+      uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP, $XFERS = 0;
+      ...
+      $XFERS++;
+      return $XFERS ? 0 : -1;
   languages:
   - c
   message: |
@@ -194,14 +201,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-1ab95af0
-  pattern: |
-    return get_drv($FDCTRL, $FDCTRL->cur_drv);
-  pattern-not: |
-    $CUR_DRV = get_drv($FDCTRL, $FDCTRL->cur_drv);
-    if (!$CUR_DRV->blk) {
-      $CUR_DRV->blk = blk_create_empty_drive();
-    }
-    return $CUR_DRV;
+  patterns:
+  - pattern: |
+      return get_drv($FDCTRL, $FDCTRL->cur_drv);
+  - pattern-not: |
+      $CUR_DRV = get_drv($FDCTRL, $FDCTRL->cur_drv);
+      if (!$CUR_DRV->blk) {
+        $CUR_DRV->blk = blk_create_empty_drive();
+      }
+      return $CUR_DRV;
   languages:
   - c
   message: |
@@ -217,14 +225,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-2067d39e
-  pattern: |
-    if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {
-        return $RETURN;
-    }
-  pattern-not: |
-    if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {
-        return;
-    }
+  patterns:
+  - pattern: |
+      if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {
+          return $RETURN;
+      }
+  - pattern-not: |
+      if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {
+          return;
+      }
   languages:
   - c
   message: |
@@ -246,29 +255,30 @@ rules:
     technology:
     - c
 - id: vuln-qemu-23910d3f
-  pattern: |
-    struct gpe_regs {
-        uint16_t sts;
-        uint16_t en;
-    };
-    ...
-    struct gpe_regs gpe;
-    ...
-    register_ioport_write(GPE_BASE, 4, 1, gpe_writeb, s);
-    register_ioport_read(GPE_BASE, 4, 1, gpe_readb, s);
-  pattern-not: |
-    struct ACPIGPE {
-        uint8_t *sts;
-        uint8_t *en;
-        uint32_t blk;
-        uint8_t len;
-    };
-    ...
-    ACPIGPE gpe;
-    ...
-    acpi_gpe_init(&gpe, GPE_LEN);
-    register_ioport_write(GPE_BASE, GPE_LEN, 1, gpe_writeb, s);
-    register_ioport_read(GPE_BASE, GPE_LEN, 1, gpe_readb, s);
+  patterns:
+  - pattern: |
+      struct gpe_regs {
+          uint16_t sts;
+          uint16_t en;
+      };
+      ...
+      struct gpe_regs gpe;
+      ...
+      register_ioport_write(GPE_BASE, 4, 1, gpe_writeb, s);
+      register_ioport_read(GPE_BASE, 4, 1, gpe_readb, s);
+  - pattern-not: |
+      struct ACPIGPE {
+          uint8_t *sts;
+          uint8_t *en;
+          uint32_t blk;
+          uint8_t len;
+      };
+      ...
+      ACPIGPE gpe;
+      ...
+      acpi_gpe_init(&gpe, GPE_LEN);
+      register_ioport_write(GPE_BASE, GPE_LEN, 1, gpe_writeb, s);
+      register_ioport_read(GPE_BASE, GPE_LEN, 1, gpe_readb, s);
   languages:
   - c
   message: |
@@ -287,10 +297,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-26194a58
-  pattern: |
-    $NC->info->receive($NC, $BUF, $SIZE)
-  pattern-not: |
-    qemu_receive_packet($NC, $BUF, $SIZE)
+  patterns:
+  - pattern: |
+      $NC->info->receive($NC, $BUF, $SIZE)
+  - pattern-not: |
+      qemu_receive_packet($NC, $BUF, $SIZE)
   languages:
   - c
   message: |
@@ -306,36 +317,37 @@ rules:
     technology:
     - c
 - id: vuln-qemu-27461d69
-  pattern: |
-    if (kvmppc_get_host_model(&$VAR)) {
-        _FDT(fdt_setprop_string($FDT, 0, "host-model", $VAR));
-        g_free($VAR);
-    }
-    if (kvmppc_get_host_serial(&$VAR)) {
-        _FDT(fdt_setprop_string($FDT, 0, "host-serial", $VAR));
-        g_free($VAR);
-    }
-  pattern-not: |
-    if ($SPAPR->host_model && !g_str_equal($SPAPR->host_model, "none")) {
-        if (g_str_equal($SPAPR->host_model, "passthrough")) {
-            if (kvmppc_get_host_model(&$VAR)) {
-                _FDT(fdt_setprop_string($FDT, 0, "host-model", $VAR));
-                g_free($VAR);
-            }
-        } else {
-            _FDT(fdt_setprop_string($FDT, 0, "host-model", $SPAPR->host_model));
-        }
-    }
-    if ($SPAPR->host_serial && !g_str_equal($SPAPR->host_serial, "none")) {
-        if (g_str_equal($SPAPR->host_serial, "passthrough")) {
-            if (kvmppc_get_host_serial(&$VAR)) {
-                _FDT(fdt_setprop_string($FDT, 0, "host-serial", $VAR));
-                g_free($VAR);
-            }
-        } else {
-            _FDT(fdt_setprop_string($FDT, 0, "host-serial", $SPAPR->host_serial));
-        }
-    }
+  patterns:
+  - pattern: |
+      if (kvmppc_get_host_model(&$VAR)) {
+          _FDT(fdt_setprop_string($FDT, 0, "host-model", $VAR));
+          g_free($VAR);
+      }
+      if (kvmppc_get_host_serial(&$VAR)) {
+          _FDT(fdt_setprop_string($FDT, 0, "host-serial", $VAR));
+          g_free($VAR);
+      }
+  - pattern-not: |
+      if ($SPAPR->host_model && !g_str_equal($SPAPR->host_model, "none")) {
+          if (g_str_equal($SPAPR->host_model, "passthrough")) {
+              if (kvmppc_get_host_model(&$VAR)) {
+                  _FDT(fdt_setprop_string($FDT, 0, "host-model", $VAR));
+                  g_free($VAR);
+              }
+          } else {
+              _FDT(fdt_setprop_string($FDT, 0, "host-model", $SPAPR->host_model));
+          }
+      }
+      if ($SPAPR->host_serial && !g_str_equal($SPAPR->host_serial, "none")) {
+          if (g_str_equal($SPAPR->host_serial, "passthrough")) {
+              if (kvmppc_get_host_serial(&$VAR)) {
+                  _FDT(fdt_setprop_string($FDT, 0, "host-serial", $VAR));
+                  g_free($VAR);
+              }
+          } else {
+              _FDT(fdt_setprop_string($FDT, 0, "host-serial", $SPAPR->host_serial));
+          }
+      }
   languages:
   - c
   message: |
@@ -352,18 +364,19 @@ rules:
     technology:
     - c
 - id: vuln-qemu-2f5732e9
-  pattern: |
-    if ($CONFIG_LEN != $VDEV->config_len) {
-        $ERROR_REPORT(...);
-        return -1;
-    }
-    qemu_get_buffer($F, $VDEV->config, $VDEV->config_len);
-  pattern-not: |
-    qemu_get_buffer($F, $VDEV->config, MIN($CONFIG_LEN, $VDEV->config_len));
-    while ($CONFIG_LEN > $VDEV->config_len) {
-        qemu_get_byte($F);
-        $CONFIG_LEN--;
-    }
+  patterns:
+  - pattern: |
+      if ($CONFIG_LEN != $VDEV->config_len) {
+          $ERROR_REPORT(...);
+          return -1;
+      }
+      qemu_get_buffer($F, $VDEV->config, $VDEV->config_len);
+  - pattern-not: |
+      qemu_get_buffer($F, $VDEV->config, MIN($CONFIG_LEN, $VDEV->config_len));
+      while ($CONFIG_LEN > $VDEV->config_len) {
+          qemu_get_byte($F);
+          $CONFIG_LEN--;
+      }
   languages:
   - c
   message: |
@@ -379,13 +392,14 @@ rules:
     technology:
     - c
 - id: vuln-qemu-2fdb42d8
-  pattern: |
-    usb_packet_map($PACKET, $SGL);
-  pattern-not: |
-    if (usb_packet_map($PACKET, $SGL)) {
-      qemu_sglist_destroy($SGL);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      usb_packet_map($PACKET, $SGL);
+  - pattern-not: |
+      if (usb_packet_map($PACKET, $SGL)) {
+        qemu_sglist_destroy($SGL);
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -402,14 +416,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-2fe76055
-  pattern: |
-    for ($I = 0; $I < VIRTIO_GPU_MAX_SCANOUT; $I++) {
-      ...
-    }
-  pattern-not: |
-    for ($I = 0; $I < $G->conf.max_outputs; $I++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = 0; $I < VIRTIO_GPU_MAX_SCANOUT; $I++) {
+        ...
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $G->conf.max_outputs; $I++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -425,14 +440,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-3592fe0c
-  pattern: |
-    if ($S->divider == 0) {
-      ...
-    }
-  pattern-not: |
-    if ($S->divider == 0 || $S->divider > $S->baudbase) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($S->divider == 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($S->divider == 0 || $S->divider > $S->baudbase) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -446,14 +462,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-362786f1
-  pattern: |
-    if ($PLEN < $CSUM_OFFSET + 2) {
-        return;
-    }
-  pattern-not: |
-    if ($PLEN < $CSUM_OFFSET + 2 || 14 + $HLEN + $PLEN > $LENGTH) {
-        return;
-    }
+  patterns:
+  - pattern: |
+      if ($PLEN < $CSUM_OFFSET + 2) {
+          return;
+      }
+  - pattern-not: |
+      if ($PLEN < $CSUM_OFFSET + 2 || 14 + $HLEN + $PLEN > $LENGTH) {
+          return;
+      }
   languages:
   - c
   message: |
@@ -473,8 +490,9 @@ rules:
     technology:
     - c
 - id: vuln-qemu-36a894ae
-  pattern: const MemTxAttrs $ATTRS = MEMTXATTRS_UNSPECIFIED;
-  pattern-not: const MemTxAttrs $ATTRS = { .memory = true };
+  patterns:
+  - pattern: const MemTxAttrs $ATTRS = MEMTXATTRS_UNSPECIFIED;
+  - pattern-not: const MemTxAttrs $ATTRS = { .memory = true };
   languages:
   - c
   message: |
@@ -493,10 +511,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-37cee017
-  pattern: |
-    lan9118_receive(qemu_get_queue($NIC), $DATA, $LEN);
-  pattern-not: |
-    qemu_receive_packet(qemu_get_queue($NIC), $DATA, $LEN);
+  patterns:
+  - pattern: |
+      lan9118_receive(qemu_get_queue($NIC), $DATA, $LEN);
+  - pattern-not: |
+      qemu_receive_packet(qemu_get_queue($NIC), $DATA, $LEN);
   languages:
   - c
   message: |
@@ -514,21 +533,22 @@ rules:
     technology:
     - c
 - id: vuln-qemu-3a9163af
-  pattern: |
-    $VAR->state = $STATE;
-    $VAR->data_start = $ADDR;
-    $VAR->data_offset = 0;
-    if ($VAR->data_start + $VAR->blk_len > $VAR->size) {
-        $VAR->card_status |= $ERROR;
-    }
-  pattern-not: |
-    if ($ADDR + $VAR->blk_len > $VAR->size) {
-        $VAR->card_status |= $ERROR;
-        return $RET;
-    }
-    $VAR->state = $STATE;
-    $VAR->data_start = $ADDR;
-    $VAR->data_offset = 0;
+  patterns:
+  - pattern: |
+      $VAR->state = $STATE;
+      $VAR->data_start = $ADDR;
+      $VAR->data_offset = 0;
+      if ($VAR->data_start + $VAR->blk_len > $VAR->size) {
+          $VAR->card_status |= $ERROR;
+      }
+  - pattern-not: |
+      if ($ADDR + $VAR->blk_len > $VAR->size) {
+          $VAR->card_status |= $ERROR;
+          return $RET;
+      }
+      $VAR->state = $STATE;
+      $VAR->data_start = $ADDR;
+      $VAR->data_offset = 0;
   languages:
   - c
   message: |
@@ -546,16 +566,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-3b3b0628
-  pattern: |
-    if ($VAR >= $MAX_SIZE) {
-      error_report("Too many write descriptors in indirect table");
-      exit(1);
-    }
-  pattern-not: |
-    if ($VAR == $MAX_SIZE) {
-      error_report("virtio: too many write descriptors in indirect table");
-      exit(1);
-    }
+  patterns:
+  - pattern: |
+      if ($VAR >= $MAX_SIZE) {
+        error_report("Too many write descriptors in indirect table");
+        exit(1);
+      }
+  - pattern-not: |
+      if ($VAR == $MAX_SIZE) {
+        error_report("virtio: too many write descriptors in indirect table");
+        exit(1);
+      }
   languages:
   - c
   message: |
@@ -574,11 +595,12 @@ rules:
     technology:
     - c
 - id: vuln-qemu-4154c7e0
-  pattern: |
-    return $CORE->mac[$R->dh] == $CORE->mac[$R->dt];
-  pattern-not: |
-    return $CORE->mac[$R->dh] == $CORE->mac[$R->dt] ||
-              $CORE->mac[$R->dt] >= $CORE->mac[$R->dlen] / $E1000_RING_DESC_LEN;
+  patterns:
+  - pattern: |
+      return $CORE->mac[$R->dh] == $CORE->mac[$R->dt];
+  - pattern-not: |
+      return $CORE->mac[$R->dh] == $CORE->mac[$R->dt] ||
+                $CORE->mac[$R->dt] >= $CORE->mac[$R->dlen] / $E1000_RING_DESC_LEN;
   languages:
   - c
   message: |
@@ -593,14 +615,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-4299b90e
-  pattern: |
-    static void cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {
-      ...
-    }
-  pattern-not: |
-    static int cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      static void cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {
+        ...
+      }
+  - pattern-not: |
+      static int cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -616,10 +639,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-4367a20c
-  pattern: |
-    $REQ->req = NULL;
-  pattern-not: |
-    $REQ = NULL;
+  patterns:
+  - pattern: |
+      $REQ->req = NULL;
+  - pattern-not: |
+      $REQ = NULL;
   languages:
   - c
   message: |
@@ -637,15 +661,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-505597e4
-  pattern: |
-    if (PCI_SLOT($DEV->devfn) == $SLOT) {
-      ...
-    }
-  pattern-not: |
-    $INFO = container_of($QDEV->info, PCIDeviceInfo, qdev);
-    if (PCI_SLOT($DEV->devfn) == $SLOT && !$INFO->no_hotplug) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (PCI_SLOT($DEV->devfn) == $SLOT) {
+        ...
+      }
+  - pattern-not: |
+      $INFO = container_of($QDEV->info, PCIDeviceInfo, qdev);
+      if (PCI_SLOT($DEV->devfn) == $SLOT && !$INFO->no_hotplug) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -661,18 +686,19 @@ rules:
     technology:
     - c
 - id: vuln-qemu-50628d34
-  pattern: |
-    void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {
-        ...
-        $COPY_FUNC($CON, $SRC_X, $SRC_Y, $DST_X, $DST_Y, $W, $H);
-        ...
-    }
-  pattern-not: |
-    void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {
-        ...
-        dpy_gfx_update($CON, $DST_X, $DST_Y, $W, $H);
-        ...
-    }
+  patterns:
+  - pattern: |
+      void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {
+          ...
+          $COPY_FUNC($CON, $SRC_X, $SRC_Y, $DST_X, $DST_Y, $W, $H);
+          ...
+      }
+  - pattern-not: |
+      void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {
+          ...
+          dpy_gfx_update($CON, $DST_X, $DST_Y, $W, $H);
+          ...
+      }
   languages:
   - c
   message: |
@@ -689,14 +715,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-509f57c9
-  pattern: |
-    pvrdma_ring_free($RING);
-    rdma_pci_dma_unmap(PCI_DEVICE($DEV), --$RING->ring_state, TARGET_PAGE_SIZE);
-    g_free($RING);
-  pattern-not: |
-    pvrdma_ring_free($RING);
-    rdma_pci_dma_unmap($RING->dev, --$RING->ring_state, TARGET_PAGE_SIZE);
-    g_free($RING);
+  patterns:
+  - pattern: |
+      pvrdma_ring_free($RING);
+      rdma_pci_dma_unmap(PCI_DEVICE($DEV), --$RING->ring_state, TARGET_PAGE_SIZE);
+      g_free($RING);
+  - pattern-not: |
+      pvrdma_ring_free($RING);
+      rdma_pci_dma_unmap($RING->dev, --$RING->ring_state, TARGET_PAGE_SIZE);
+      g_free($RING);
   languages:
   - c
   message: |
@@ -711,10 +738,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5311fb80
-  pattern: |
-    rtl8139_do_receive(qemu_get_queue($NIC), $BUF, $SIZE, $DO_INTERRUPT);
-  pattern-not: |
-    qemu_receive_packet(qemu_get_queue($NIC), $BUF, $SIZE);
+  patterns:
+  - pattern: |
+      rtl8139_do_receive(qemu_get_queue($NIC), $BUF, $SIZE, $DO_INTERRUPT);
+  - pattern-not: |
+      qemu_receive_packet(qemu_get_queue($NIC), $BUF, $SIZE);
   languages:
   - c
   message: |
@@ -729,33 +757,34 @@ rules:
     technology:
     - c
 - id: vuln-qemu-56f101ec
-  pattern: |
-    err = v9fs_co_name_to_path(pdu, &dpath, wnames[name_idx].data, &path);
-    if (err < 0) {
-        goto out;
-    }
-    err = v9fs_co_lstat(pdu, &path, &stbuf);
-    if (err < 0) {
-        goto out;
-    }
-    stat_to_qid(&stbuf, &qids[name_idx]);
-    v9fs_path_copy(&dpath, &path);
-  pattern-not: |
-    if (not_same_qid(&pdu->s->root_qid, &qid) ||
-        strcmp("..", wnames[name_idx].data)) {
-        err = v9fs_co_name_to_path(pdu, &dpath, wnames[name_idx].data,
-                                 &path);
-        if (err < 0) {
-            goto out;
-        }
-        err = v9fs_co_lstat(pdu, &path, &stbuf);
-        if (err < 0) {
-            goto out;
-        }
-        stat_to_qid(&stbuf, &qid);
-        v9fs_path_copy(&dpath, &path);
-        memcpy(&qids[name_idx], &qid, sizeof(qid));
-    }
+  patterns:
+  - pattern: |
+      err = v9fs_co_name_to_path(pdu, &dpath, wnames[name_idx].data, &path);
+      if (err < 0) {
+          goto out;
+      }
+      err = v9fs_co_lstat(pdu, &path, &stbuf);
+      if (err < 0) {
+          goto out;
+      }
+      stat_to_qid(&stbuf, &qids[name_idx]);
+      v9fs_path_copy(&dpath, &path);
+  - pattern-not: |
+      if (not_same_qid(&pdu->s->root_qid, &qid) ||
+          strcmp("..", wnames[name_idx].data)) {
+          err = v9fs_co_name_to_path(pdu, &dpath, wnames[name_idx].data,
+                                   &path);
+          if (err < 0) {
+              goto out;
+          }
+          err = v9fs_co_lstat(pdu, &path, &stbuf);
+          if (err < 0) {
+              goto out;
+          }
+          stat_to_qid(&stbuf, &qid);
+          v9fs_path_copy(&dpath, &path);
+          memcpy(&qids[name_idx], &qid, sizeof(qid));
+      }
   languages:
   - c
   message: |
@@ -774,15 +803,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-584acf34
-  pattern: |
-    if ($DST_BITS >= $END ||
-        $DST_BITS + $S->regs.dst_x + ($S->regs.dst_y + $S->regs.dst_height) * $DST_STRIDE >= $END) {
-      ...
-    }
-  pattern-not: |
-    if ($DST_BITS >= $END || $DST_BITS + $DST_X + ($DST_Y + $S->regs.dst_height) * $DST_STRIDE >= $END) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DST_BITS >= $END ||
+          $DST_BITS + $S->regs.dst_x + ($S->regs.dst_y + $S->regs.dst_height) * $DST_STRIDE >= $END) {
+        ...
+      }
+  - pattern-not: |
+      if ($DST_BITS >= $END || $DST_BITS + $DST_X + ($DST_Y + $S->regs.dst_height) * $DST_STRIDE >= $END) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -802,13 +832,14 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5b66d7ae
-  pattern: |
-    int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH;
-    int32_t max = $ADDR + $BLT_WIDTH;
-    if (min < 0 || max > $VRAM_SIZE) { ... }
-  pattern-not: |
-    int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH - $BLT_WIDTH;
-    if (min < -1 || $ADDR >= $VRAM_SIZE) { ... }
+  patterns:
+  - pattern: |
+      int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH;
+      int32_t max = $ADDR + $BLT_WIDTH;
+      if (min < 0 || max > $VRAM_SIZE) { ... }
+  - pattern-not: |
+      int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH - $BLT_WIDTH;
+      if (min < -1 || $ADDR >= $VRAM_SIZE) { ... }
   languages:
   - c
   message: |
@@ -827,10 +858,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5c4fe018
-  pattern: |
-    assert($LEN < 4096);
-  pattern-not: |
-    assert($LEN < NBD_MAX_STRING_SIZE);
+  patterns:
+  - pattern: |
+      assert($LEN < 4096);
+  - pattern-not: |
+      assert($LEN < NBD_MAX_STRING_SIZE);
   languages:
   - c
   message: |
@@ -852,30 +884,31 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5d971f9e
-  pattern: |
-    if (!mr->ops->valid.accepts) {
-        return true;
-    }
-    ...
-    $ACCESS_SIZE_MIN = mr->ops->valid.min_access_size;
-    if (!mr->ops->valid.min_access_size) {
-        $ACCESS_SIZE_MIN = 1;
-    }
-    $ACCESS_SIZE_MAX = mr->ops->valid.max_access_size;
-    if (!mr->ops->valid.max_access_size) {
-        $ACCESS_SIZE_MAX = 4;
-    }
-    $ACCESS_SIZE = MAX(MIN(size, $ACCESS_SIZE_MAX), $ACCESS_SIZE_MIN);
-    for ($I = 0; $I < size; $I += $ACCESS_SIZE) {
-        if (!mr->ops->valid.accepts(mr->opaque, addr + $I, $ACCESS_SIZE, is_write, attrs)) {
-            return false;
-        }
-    }
-  pattern-not: |
-    if (size > mr->ops->valid.max_access_size
-        || size < mr->ops->valid.min_access_size) {
-        return false;
-    }
+  patterns:
+  - pattern: |
+      if (!mr->ops->valid.accepts) {
+          return true;
+      }
+      ...
+      $ACCESS_SIZE_MIN = mr->ops->valid.min_access_size;
+      if (!mr->ops->valid.min_access_size) {
+          $ACCESS_SIZE_MIN = 1;
+      }
+      $ACCESS_SIZE_MAX = mr->ops->valid.max_access_size;
+      if (!mr->ops->valid.max_access_size) {
+          $ACCESS_SIZE_MAX = 4;
+      }
+      $ACCESS_SIZE = MAX(MIN(size, $ACCESS_SIZE_MAX), $ACCESS_SIZE_MIN);
+      for ($I = 0; $I < size; $I += $ACCESS_SIZE) {
+          if (!mr->ops->valid.accepts(mr->opaque, addr + $I, $ACCESS_SIZE, is_write, attrs)) {
+              return false;
+          }
+      }
+  - pattern-not: |
+      if (size > mr->ops->valid.max_access_size
+          || size < mr->ops->valid.min_access_size) {
+          return false;
+      }
   languages:
   - c
   message: |
@@ -895,14 +928,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5f5a1318
-  pattern: |
-    if ($ADDR > ($CONFIG_LEN - sizeof($VAL))) {
-      ...
-    }
-  pattern-not: |
-    if ($ADDR + sizeof($VAL) > $CONFIG_LEN) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($ADDR > ($CONFIG_LEN - sizeof($VAL))) {
+        ...
+      }
+  - pattern-not: |
+      if ($ADDR + sizeof($VAL) > $CONFIG_LEN) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -919,18 +953,19 @@ rules:
     technology:
     - c
 - id: vuln-qemu-5fd7fc8d
-  pattern: |
-    $BUFSIZE = $SIZE;
-    $BUF = g_malloc($BUFSIZE);
-  pattern-not: |
-    $SURFACE_SIZE = (uint64_t) surface_width($DS) * surface_height($DS) * 4;
-    assert($SURFACE_SIZE > 0);
-    assert($SURFACE_SIZE < INT_MAX);
-    if ($BUFSIZE < $SURFACE_SIZE) {
-      $BUFSIZE = $SURFACE_SIZE;
-      g_free($BUF);
+  patterns:
+  - pattern: |
+      $BUFSIZE = $SIZE;
       $BUF = g_malloc($BUFSIZE);
-    }
+  - pattern-not: |
+      $SURFACE_SIZE = (uint64_t) surface_width($DS) * surface_height($DS) * 4;
+      assert($SURFACE_SIZE > 0);
+      assert($SURFACE_SIZE < INT_MAX);
+      if ($BUFSIZE < $SURFACE_SIZE) {
+        $BUFSIZE = $SURFACE_SIZE;
+        g_free($BUF);
+        $BUF = g_malloc($BUFSIZE);
+      }
   languages:
   - c
   message: |
@@ -947,10 +982,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-66ae37d8
-  pattern: |
-    $VAR = g_malloc($SIZE * sizeof(void *))
-  pattern-not: |
-    $VAR = g_malloc0($SIZE * sizeof(void *))
+  patterns:
+  - pattern: |
+      $VAR = g_malloc($SIZE * sizeof(void *))
+  - pattern-not: |
+      $VAR = g_malloc0($SIZE * sizeof(void *))
   languages:
   - c
   message: |
@@ -968,20 +1004,21 @@ rules:
     technology:
     - c
 - id: vuln-qemu-6c219fc8
-  pattern: |
-    $TYPE $PAGE_LEN;
-    ...
-    $PAGE_LEN = $BUF[3];
-    $BUF[$PAGE_LEN + 4] = $VALUE;
-    $BUF[3] = ++$PAGE_LEN;
-  pattern-not: |
-    for ($IDX = $EXPR; $IDX > $NUM && $BUF[$IDX - 1] >= $VALUE; $IDX--) {
-      if ($IDX < $BUFLEN) {
-        $BUF[$IDX] = $BUF[$IDX - 1];
+  patterns:
+  - pattern: |
+      $TYPE $PAGE_LEN;
+      ...
+      $PAGE_LEN = $BUF[3];
+      $BUF[$PAGE_LEN + 4] = $VALUE;
+      $BUF[3] = ++$PAGE_LEN;
+  - pattern-not: |
+      for ($IDX = $EXPR; $IDX > $NUM && $BUF[$IDX - 1] >= $VALUE; $IDX--) {
+        if ($IDX < $BUFLEN) {
+          $BUF[$IDX] = $BUF[$IDX - 1];
+        }
       }
-    }
-    $BUF[$IDX] = $VALUE;
-    stw_be_p($BUF + $NUM, lduw_be_p($BUF + $NUM) + 1);
+      $BUF[$IDX] = $VALUE;
+      stw_be_p($BUF + $NUM, lduw_be_p($BUF + $NUM) + 1);
   languages:
   - c
   message: |
@@ -1000,16 +1037,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-6e86d903
-  pattern: |
-    if (($VAR->trnmod & $MASK) &&
-        (!($VAR->trnmod & $BLK_CNT_EN) || $VAR->blkcnt == 0)) {
-        ...
-    }
-  pattern-not: |
-    if (!($VAR->trnmod & $BLK_CNT_EN) || !$VAR->blkcnt) {
-        qemu_log_mask(LOG_UNIMP, "infinite transfer is not supported\n");
-        return;
-    }
+  patterns:
+  - pattern: |
+      if (($VAR->trnmod & $MASK) &&
+          (!($VAR->trnmod & $BLK_CNT_EN) || $VAR->blkcnt == 0)) {
+          ...
+      }
+  - pattern-not: |
+      if (!($VAR->trnmod & $BLK_CNT_EN) || !$VAR->blkcnt) {
+          qemu_log_mask(LOG_UNIMP, "infinite transfer is not supported\n");
+          return;
+      }
   languages:
   - c
   message: |
@@ -1027,21 +1065,22 @@ rules:
     technology:
     - c
 - id: vuln-qemu-73d963c0
-  pattern: |
-    qemu_get_be32s($F, &$OPP->nb_cpus);
-    ...
-  pattern-not: |
-    qemu_get_be32s($F, &$NB_CPUS);
-    if ($OPP->nb_cpus != $NB_CPUS) {
-        return -EINVAL;
-    }
-    assert($NB_CPUS > 0 && $NB_CPUS <= $MAX_CPU);
-    if ($OPP->nb_cpus > $MAX_CPU) {
-        error_set($ERRP, $QERR_PROPERTY_VALUE_OUT_OF_RANGE,
-                  $TYPE_OPENPIC, "nb_cpus", (uint64_t)$OPP->nb_cpus,
-                  (uint64_t)0, (uint64_t)$MAX_CPU);
-        return;
-    }
+  patterns:
+  - pattern: |
+      qemu_get_be32s($F, &$OPP->nb_cpus);
+      ...
+  - pattern-not: |
+      qemu_get_be32s($F, &$NB_CPUS);
+      if ($OPP->nb_cpus != $NB_CPUS) {
+          return -EINVAL;
+      }
+      assert($NB_CPUS > 0 && $NB_CPUS <= $MAX_CPU);
+      if ($OPP->nb_cpus > $MAX_CPU) {
+          error_set($ERRP, $QERR_PROPERTY_VALUE_OUT_OF_RANGE,
+                    $TYPE_OPENPIC, "nb_cpus", (uint64_t)$OPP->nb_cpus,
+                    (uint64_t)0, (uint64_t)$MAX_CPU);
+          return;
+      }
   languages:
   - c
   message: |
@@ -1058,10 +1097,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-7564bf77
-  pattern: |
-    g_assert_not_reached();
-  pattern-not: |
-    qemu_log_mask(LOG_UNIMP, $MSG, $FUNC, $L3_PROTO);
+  patterns:
+  - pattern: |
+      g_assert_not_reached();
+  - pattern-not: |
+      qemu_log_mask(LOG_UNIMP, $MSG, $FUNC, $L3_PROTO);
   languages:
   - c
   message: |
@@ -1077,11 +1117,12 @@ rules:
     technology:
     - c
 - id: vuln-qemu-77668e4b
-  pattern: |
-    len = MIN(fifo8_num_used(&$S->fifo), $ESP_FIFO_SZ);
-  pattern-not: |
-    len = MIN($S->async_len, $ESP_FIFO_SZ);
-    len = MIN(len, fifo8_num_used(&$S->fifo));
+  patterns:
+  - pattern: |
+      len = MIN(fifo8_num_used(&$S->fifo), $ESP_FIFO_SZ);
+  - pattern-not: |
+      len = MIN($S->async_len, $ESP_FIFO_SZ);
+      len = MIN(len, fifo8_num_used(&$S->fifo));
   languages:
   - c
   message: |
@@ -1095,10 +1136,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-78820803
-  pattern: |
-    memcpy($VAR.in_sg[0].iov_base, $BUF, $LEN);
-  pattern-not: |
-    iov_from_buf($VAR.in_sg, $VAR.in_num, 0, $BUF, $LEN);
+  patterns:
+  - pattern: |
+      memcpy($VAR.in_sg[0].iov_base, $BUF, $LEN);
+  - pattern-not: |
+      iov_from_buf($VAR.in_sg, $VAR.in_num, 0, $BUF, $LEN);
   languages:
   - c
   message: |
@@ -1116,14 +1158,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-7a95434e
-  pattern: |
-    if (!strcmp($NAME, VIRTFS_META_DIR)) {
-      ...
-    }
-  pattern-not: |
-    if (local_is_mapped_file_metadata($CTX, $NAME)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!strcmp($NAME, VIRTFS_META_DIR)) {
+        ...
+      }
+  - pattern-not: |
+      if (local_is_mapped_file_metadata($CTX, $NAME)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1140,14 +1183,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-7cfcc79b
-  pattern: |
-    if ($BS && !($BS & ~0xff00) && $BS != $S->qdev.blocksize) {
-      ...
-    }
-  pattern-not: |
-    if ($BS && !($BS & ~0xfe00) && $BS != $S->qdev.blocksize) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($BS && !($BS & ~0xff00) && $BS != $S->qdev.blocksize) {
+        ...
+      }
+  - pattern-not: |
+      if ($BS && !($BS & ~0xfe00) && $BS != $S->qdev.blocksize) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1162,10 +1206,9 @@ rules:
     technology:
     - c
 - id: vuln-qemu-7ec54f9e
-  pattern: |
-    uint8_t buf[$SIZE];
-  pattern-not: |
-    g_autofree uint8_t *buf = g_malloc($SIZE);
+  patterns:
+  - pattern: |
+      uint8_t buf[$SIZE];
   languages:
   - c
   message: |
@@ -1183,25 +1226,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-7f61f469
-  pattern: |
-    static int
-    $FUNC(...) {
-        ...
-        if (($VAR1 > $MAX) || ($VAR2 > $MAX)) {
-            return -1;
-        }
-        ...
-    }
-  pattern-not: |
-    static void
-    $FUNC(...) {
-        ...
-        if (!$VAR1
-            || $VAR1 > $MAX
-            || !$VAR2
-            || $VAR2 > $MAX) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      static int
+      $FUNC(...) {
+          ...
+          if (($VAR1 > $MAX) || ($VAR2 > $MAX)) {
+              return -1;
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -1216,9 +1250,10 @@ rules:
     technology:
     - c
 - id: vuln-qemu-80eecda8
-  pattern: |
-    return $DEV->dev.config->bConfigurationValue == $VALUE;
-  pattern-not: "return $DEV->dev.config ? \n        $DEV->dev.config->bConfigurationValue == $VALUE : 0;\n"
+  patterns:
+  - pattern: |
+      return $DEV->dev.config->bConfigurationValue == $VALUE;
+  - pattern-not: "return $DEV->dev.config ? \n        $DEV->dev.config->bConfigurationValue == $VALUE : 0;\n"
   languages:
   - c
   message: |
@@ -1236,14 +1271,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-844505b1
-  pattern: |
-    if ($DRIVE_KIND == IDE_CD) {
-        goto abort_cmd;
-    }
-  pattern-not: |
-    if (!ide_cmd_permitted($S, $VAL)) {
-        goto abort_cmd;
-    }
+  patterns:
+  - pattern: |
+      if ($DRIVE_KIND == IDE_CD) {
+          goto abort_cmd;
+      }
+  - pattern-not: |
+      if (!ide_cmd_permitted($S, $VAL)) {
+          goto abort_cmd;
+      }
   languages:
   - c
   message: |
@@ -1262,26 +1298,27 @@ rules:
     technology:
     - c
 - id: vuln-qemu-87e459a8
-  pattern: |
-    SCSIRequest *$REQ;
-    ...
-    $REQ = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);
-    if (!$REQ) {
+  patterns:
+  - pattern: |
+      SCSIRequest *$REQ;
       ...
-    }
-    ...
-    len = scsi_req_enqueue($REQ);
-    ...
-    scsi_req_continue($REQ);
-  pattern-not: |
-    $CMD->req = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);
-    if (!$CMD->req) {
+      $REQ = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);
+      if (!$REQ) {
+        ...
+      }
       ...
-    }
-    ...
-    len = scsi_req_enqueue($CMD->req);
-    ...
-    scsi_req_continue($CMD->req);
+      len = scsi_req_enqueue($REQ);
+      ...
+      scsi_req_continue($REQ);
+  - pattern-not: |
+      $CMD->req = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);
+      if (!$CMD->req) {
+        ...
+      }
+      ...
+      len = scsi_req_enqueue($CMD->req);
+      ...
+      scsi_req_continue($CMD->req);
   languages:
   - c
   message: |
@@ -1300,10 +1337,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-8c552542
-  pattern: |
-    $NC->info->receive_iov($NC, $IOV, $IOV_CNT)
-  pattern-not: |
-    qemu_receive_packet_iov($NC, $IOV, $IOV_CNT)
+  patterns:
+  - pattern: |
+      $NC->info->receive_iov($NC, $IOV, $IOV_CNT)
+  - pattern-not: |
+      qemu_receive_packet_iov($NC, $IOV, $IOV_CNT)
   languages:
   - c
   message: |
@@ -1321,10 +1359,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-926cde5f
-  pattern: |
-    minlen = ($DMALEN < 32) ? $DMALEN : 32;
-  pattern-not: |
-    minlen = ($DMALEN < ESP_CMDBUF_SZ) ? $DMALEN : ESP_CMDBUF_SZ;
+  patterns:
+  - pattern: |
+      minlen = ($DMALEN < 32) ? $DMALEN : 32;
+  - pattern-not: |
+      minlen = ($DMALEN < ESP_CMDBUF_SZ) ? $DMALEN : ESP_CMDBUF_SZ;
   languages:
   - c
   message: |
@@ -1342,10 +1381,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-9569f5cb
-  pattern: |
-    sizeof(uint32_t) * $CURSOR->header.width * $CURSOR->header.height
-  pattern-not: |
-    sizeof(uint32_t) * $C->width * $C->height
+  patterns:
+  - pattern: |
+      sizeof(uint32_t) * $CURSOR->header.width * $CURSOR->header.height
+  - pattern-not: |
+      sizeof(uint32_t) * $C->width * $C->height
   languages:
   - c
   message: |
@@ -1363,14 +1403,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-961c74a8
-  pattern: |
-    $CMD->len = scsi_cdb_length($BUF);
-  pattern-not: |
-    $LEN = scsi_cdb_length($BUF);
-    if ($LEN < 0) {
-        return -1;
-    }
-    $CMD->len = $LEN;
+  patterns:
+  - pattern: |
+      $CMD->len = scsi_cdb_length($BUF);
+  - pattern-not: |
+      $LEN = scsi_cdb_length($BUF);
+      if ($LEN < 0) {
+          return -1;
+      }
+      $CMD->len = $LEN;
   languages:
   - c
   message: |
@@ -1390,15 +1431,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-965eb2fc
-  pattern: |
-    diff = int128_sub($SECTION->mr->size, int128_make64($ADDR));
-    *plen = int128_get64(int128_min(diff, int128_make64(*plen)));
-  pattern-not: |
-    $MR = $SECTION->mr;
-    if (memory_region_is_ram($MR)) {
-        diff = int128_sub($MR->size, int128_make64($ADDR));
-        *plen = int128_get64(int128_min(diff, int128_make64(*plen)));
-    }
+  patterns:
+  - pattern: |
+      diff = int128_sub($SECTION->mr->size, int128_make64($ADDR));
+      *plen = int128_get64(int128_min(diff, int128_make64(*plen)));
+  - pattern-not: |
+      $MR = $SECTION->mr;
+      if (memory_region_is_ram($MR)) {
+          diff = int128_sub($MR->size, int128_make64($ADDR));
+          *plen = int128_get64(int128_min(diff, int128_make64(*plen)));
+      }
   languages:
   - c
   message: |
@@ -1416,14 +1458,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-98f93ddd
-  pattern: |
-    $BUF = g_malloc0($SIZE);
-    qemu_get_buffer($F, $BUF, $SIZE * $MULTIPLIER);
-    g_free($BUF);
-  pattern-not: |
-    for ($I = 0; $I < (int64_t)$SIZE * $MULTIPLIER; ++$I) {
-      qemu_get_byte($F);
-    }
+  patterns:
+  - pattern: |
+      $BUF = g_malloc0($SIZE);
+      qemu_get_buffer($F, $BUF, $SIZE * $MULTIPLIER);
+      g_free($BUF);
+  - pattern-not: |
+      for ($I = 0; $I < (int64_t)$SIZE * $MULTIPLIER; ++$I) {
+        qemu_get_byte($F);
+      }
   languages:
   - c
   message: |
@@ -1441,23 +1484,24 @@ rules:
     technology:
     - c
 - id: vuln-qemu-a71c775b
-  pattern: |
-    if ($TYPE == TYPE_DISK && $CMD_BUF[2] == 0xb0) {
-      $MAX_TRANSFER = blk_get_max_transfer($BLK) / $BLOCKSIZE;
-      assert($MAX_TRANSFER);
-      stl_be_p(&$BUF[8], $MAX_TRANSFER);
-      stl_be_p(&$BUF[12], MIN_NON_ZERO($MAX_TRANSFER, ldl_be_p(&$BUF[12])));
-    }
-  pattern-not: |
-    if ($TYPE == TYPE_DISK && ($CMD_BUF[1] & 0x01)) {
-      $PAGE = $CMD_BUF[2];
-      if ($PAGE == 0xb0) {
+  patterns:
+  - pattern: |
+      if ($TYPE == TYPE_DISK && $CMD_BUF[2] == 0xb0) {
         $MAX_TRANSFER = blk_get_max_transfer($BLK) / $BLOCKSIZE;
         assert($MAX_TRANSFER);
         stl_be_p(&$BUF[8], $MAX_TRANSFER);
         stl_be_p(&$BUF[12], MIN_NON_ZERO($MAX_TRANSFER, ldl_be_p(&$BUF[12])));
       }
-    }
+  - pattern-not: |
+      if ($TYPE == TYPE_DISK && ($CMD_BUF[1] & 0x01)) {
+        $PAGE = $CMD_BUF[2];
+        if ($PAGE == 0xb0) {
+          $MAX_TRANSFER = blk_get_max_transfer($BLK) / $BLOCKSIZE;
+          assert($MAX_TRANSFER);
+          stl_be_p(&$BUF[8], $MAX_TRANSFER);
+          stl_be_p(&$BUF[12], MIN_NON_ZERO($MAX_TRANSFER, ldl_be_p(&$BUF[12])));
+        }
+      }
   languages:
   - c
   message: |
@@ -1472,14 +1516,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-a7b20a8e
-  pattern: |
-    if ($WS->wioc->rawoutput.offset < $MAX_BUFFER) {
-      ...
-    }
-  pattern-not: |
-    if ($WS->wioc->encoutput.offset < $MAX_BUFFER) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($WS->wioc->rawoutput.offset < $MAX_BUFFER) {
+        ...
+      }
+  - pattern-not: |
+      if ($WS->wioc->encoutput.offset < $MAX_BUFFER) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1498,15 +1543,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-a890a2f9
-  pattern: |
-    $DEV->config_len = qemu_get_be32($F);
-  pattern-not: |
-    $CONFIG_LEN = qemu_get_be32($F);
-    if ($CONFIG_LEN != $DEV->config_len) {
-        error_report("Unexpected config length 0x%x. Expected 0x%zx",
-                     $CONFIG_LEN, $DEV->config_len);
-        return -1;
-    }
+  patterns:
+  - pattern: |
+      $DEV->config_len = qemu_get_be32($F);
+  - pattern-not: |
+      $CONFIG_LEN = qemu_get_be32($F);
+      if ($CONFIG_LEN != $DEV->config_len) {
+          error_report("Unexpected config length 0x%x. Expected 0x%zx",
+                       $CONFIG_LEN, $DEV->config_len);
+          return -1;
+      }
   languages:
   - c
   message: |
@@ -1522,16 +1568,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-a968a380
-  pattern: |
-    V9fsFidState *$FIDP, $HEAD_FID;
-    $HEAD_FID.next = $S->fid_list;
-    ...
-    $FIDP = &$HEAD_FID;
-  pattern-not: |
-    V9fsFidState *$FIDP;
-    again:
-    ...
-    goto again;
+  patterns:
+  - pattern: |
+      V9fsFidState *$FIDP, $HEAD_FID;
+      $HEAD_FID.next = $S->fid_list;
+      ...
+      $FIDP = &$HEAD_FID;
+  - pattern-not: |
+      V9fsFidState *$FIDP;
+      again:
+      ...
+      goto again;
   languages:
   - c
   message: |
@@ -1546,16 +1593,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-ac2071c3
-  pattern: |
-    int $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?
-                  $REG_DST_X : $REG_DST_X + 1 - $REG_DST_WIDTH);
-    int $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?
-                  $REG_DST_Y : $REG_DST_Y + 1 - $REG_DST_HEIGHT);
-  pattern-not: |
-    unsigned $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?
-                       $REG_DST_X : $REG_DST_X + 1 - $REG_DST_WIDTH);
-    unsigned $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?
-                       $REG_DST_Y : $REG_DST_Y + 1 - $REG_DST_HEIGHT);
+  patterns:
+  - pattern: |
+      int $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?
+                    $REG_DST_X : $REG_DST_X + 1 - $REG_DST_WIDTH);
+      int $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?
+                    $REG_DST_Y : $REG_DST_Y + 1 - $REG_DST_HEIGHT);
+  - pattern-not: |
+      unsigned $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?
+                         $REG_DST_X : $REG_DST_X + 1 - $REG_DST_WIDTH);
+      unsigned $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?
+                         $REG_DST_Y : $REG_DST_Y + 1 - $REG_DST_HEIGHT);
   languages:
   - c
   message: |
@@ -1570,10 +1618,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-b05b2678
-  pattern: |
-    $VAR = $STRUCT->edid_blob[$STRUCT->reg];
-  pattern-not: |
-    $VAR = $STRUCT->edid_blob[$STRUCT->reg % sizeof($STRUCT->edid_blob)];
+  patterns:
+  - pattern: |
+      $VAR = $STRUCT->edid_blob[$STRUCT->reg];
+  - pattern-not: |
+      $VAR = $STRUCT->edid_blob[$STRUCT->reg % sizeof($STRUCT->edid_blob)];
   languages:
   - c
   message: |
@@ -1589,16 +1638,17 @@ rules:
     technology:
     - c
 - id: vuln-qemu-b15a22bb
-  pattern: |
-    int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
-    int $DST_Y = $EXPR2 & 0xFFFF;
-    int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
-    int $HEIGHT = $EXPR4 & 0xFFFF;
-  pattern-not: |
-    unsigned int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
-    unsigned int $DST_Y = $EXPR2 & 0xFFFF;
-    unsigned int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
-    unsigned int $HEIGHT = $EXPR4 & 0xFFFF;
+  patterns:
+  - pattern: |
+      int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
+      int $DST_Y = $EXPR2 & 0xFFFF;
+      int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
+      int $HEIGHT = $EXPR4 & 0xFFFF;
+  - pattern-not: |
+      unsigned int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
+      unsigned int $DST_Y = $EXPR2 & 0xFFFF;
+      unsigned int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
+      unsigned int $HEIGHT = $EXPR4 & 0xFFFF;
   languages:
   - c
   message: |
@@ -1614,14 +1664,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-b263d8f9
-  pattern: |
-    if ($S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {
-      ...
-    }
-  pattern-not: |
-    if (!$TIMEOUT && $S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {
+        ...
+      }
+  - pattern-not: |
+      if (!$TIMEOUT && $S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1639,11 +1690,12 @@ rules:
     technology:
     - c
 - id: vuln-qemu-b53dd449
-  pattern: |
-    memory_region_del_subregion($MEM, &$DEV->msix_table_mmio);
-    memory_region_del_subregion($MEM, &$DEV->msix_pba_mmio);
-  pattern-not: |
-    msix_uninit($DEV, $MEM, $MEM);
+  patterns:
+  - pattern: |
+      memory_region_del_subregion($MEM, &$DEV->msix_table_mmio);
+      memory_region_del_subregion($MEM, &$DEV->msix_pba_mmio);
+  - pattern-not: |
+      msix_uninit($DEV, $MEM, $MEM);
   languages:
   - c
   message: |
@@ -1661,10 +1713,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-b5eff355
-  pattern: |
-    bdrv_file_open($VAR, $FILENAME, $FLAGS | BDRV_O_AUTOGROW)
-  pattern-not: |
-    bdrv_file_open($VAR, $FILENAME, $FLAGS)
+  patterns:
+  - pattern: |
+      bdrv_file_open($VAR, $FILENAME, $FLAGS | BDRV_O_AUTOGROW)
+  - pattern-not: |
+      bdrv_file_open($VAR, $FILENAME, $FLAGS)
   languages:
   - c
   message: |
@@ -1682,30 +1735,31 @@ rules:
     technology:
     - c
 - id: vuln-qemu-bedd7e93
-  pattern: |
-    $TYPE $VAR = ...;
-    ...
-    if ($CONDITION) {
-        return $VALUE;
-    }
-    ...
-    virtqueue_fill($Q, $ELEM, $TOTAL, $I++);
-    g_free($ELEM);
-  pattern-not: |
-    $TYPE $VAR = ...;
-    ...
-    if ($CONDITION) {
-        $ERR = $VALUE;
-        goto err;
-    }
-    ...
-    $ELEMS[$I] = $ELEM;
-    $LENS[$I] = $TOTAL;
-    $I++;
-    for ($J = 0; $J < $I; $J++) {
-        virtqueue_fill($Q, $ELEMS[$J], $LENS[$J], $J);
-        g_free($ELEMS[$J]);
-    }
+  patterns:
+  - pattern: |
+      $TYPE $VAR = ...;
+      ...
+      if ($CONDITION) {
+          return $VALUE;
+      }
+      ...
+      virtqueue_fill($Q, $ELEM, $TOTAL, $I++);
+      g_free($ELEM);
+  - pattern-not: |
+      $TYPE $VAR = ...;
+      ...
+      if ($CONDITION) {
+          $ERR = $VALUE;
+          goto err;
+      }
+      ...
+      $ELEMS[$I] = $ELEM;
+      $LENS[$I] = $TOTAL;
+      $I++;
+      for ($J = 0; $J < $I; $J++) {
+          virtqueue_fill($Q, $ELEMS[$J], $LENS[$J], $J);
+          g_free($ELEMS[$J]);
+      }
   languages:
   - c
   message: |
@@ -1720,10 +1774,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-c689b4f1
-  pattern: |
-    fopen($PATH, $MODE)
-  pattern-not: |
-    safe_open_or_create($PATH, $MODE, $ERR)
+  patterns:
+  - pattern: |
+      fopen($PATH, $MODE)
+  - pattern-not: |
+      safe_open_or_create($PATH, $MODE, $ERR)
   languages:
   - c
   message: |
@@ -1741,15 +1796,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-d251157a
-  pattern: |
-    if ($READY_PTR != $MGR->consumed_ptr) {
-        ...
-    }
-  pattern-not: |
-    if ($READY_PTR != $MGR->consumed_ptr
-        && $READY_PTR - $MGR->consumed_ptr < $RING_SIZE) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($READY_PTR != $MGR->consumed_ptr) {
+          ...
+      }
+  - pattern-not: |
+      if ($READY_PTR != $MGR->consumed_ptr
+          && $READY_PTR - $MGR->consumed_ptr < $RING_SIZE) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -1766,14 +1822,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-de0b1bae
-  pattern: |
-    for ($B = 0; $B < 64; $B += 16) {
-      ...
-    }
-  pattern-not: |
-    for ($B = 0; $B < 64; $B += 4) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($B = 0; $B < 64; $B += 16) {
+        ...
+      }
+  - pattern-not: |
+      for ($B = 0; $B < 64; $B += 4) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1789,14 +1846,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-e49884a9
-  pattern: |
-    if (++$VAR > $MAX) {
-      ...
-    }
-  pattern-not: |
-    if (++$VAR > $MAX || $REENTRANCY_LEVEL > $LIMIT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (++$VAR > $MAX) {
+        ...
+      }
+  - pattern-not: |
+      if (++$VAR > $MAX || $REENTRANCY_LEVEL > $LIMIT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1815,10 +1873,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-e4a511f8
-  pattern: |
-    int128_sub(mr->size, int128_make64($ADDR))
-  pattern-not: |
-    int128_sub(section->size, int128_make64($ADDR))
+  patterns:
+  - pattern: |
+      int128_sub(mr->size, int128_make64($ADDR))
+  - pattern-not: |
+      int128_sub(section->size, int128_make64($ADDR))
   languages:
   - c
   message: |
@@ -1836,12 +1895,9 @@ rules:
     technology:
     - c
 - id: vuln-qemu-e9077462
-  pattern: |
-    $STRUCT->$ARRAY[$STRUCT->$INDEX - 1]
-  pattern-not: |
-    $POS = $STRUCT->$INDEX - 1;
-    $POS %= $LEN;
-    $STRUCT->$ARRAY[$POS]
+  patterns:
+  - pattern: |
+      $STRUCT->$ARRAY[$STRUCT->$INDEX - 1]
   languages:
   - c
   message: |
@@ -1860,14 +1916,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-ead315e4
-  pattern: |
-    do {
-        ...
-    } while (more_frags);
-  pattern-not: |
-    do {
-        ...
-    } while (fragment_len && more_frags);
+  patterns:
+  - pattern: |
+      do {
+          ...
+      } while (more_frags);
+  - pattern-not: |
+      do {
+          ...
+      } while (fragment_len && more_frags);
   languages:
   - c
   message: |
@@ -1885,10 +1942,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-edfe2eb4
-  pattern: |
-    $VAR = $VALUE & 0x3ff;
-  pattern-not: |
-    $VAR = $VALUE & 0xf;
+  patterns:
+  - pattern: |
+      $VAR = $VALUE & 0x3ff;
+  - pattern-not: |
+      $VAR = $VALUE & 0xf;
   languages:
   - c
   message: |
@@ -1907,15 +1965,16 @@ rules:
     technology:
     - c
 - id: vuln-qemu-f1e2e38e
-  pattern: |
-    if (!$FUNC($ARG1, $ARG2, $ARG3)) {
-      ...
-    }
-  pattern-not: |
-    $VAR = $FUNC($ARG1, $ARG2, $ARG3);
-    if ($VAR <= 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$FUNC($ARG1, $ARG2, $ARG3)) {
+        ...
+      }
+  - pattern-not: |
+      $VAR = $FUNC($ARG1, $ARG2, $ARG3);
+      if ($VAR <= 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -1932,10 +1991,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-f5aa69bd
-  pattern: |
-    qemu_ram_ptr_length($MR, $ADDR, $LEN)
-  pattern-not: |
-    qemu_ram_ptr_length($MR, $ADDR, $LEN, $LOCK)
+  patterns:
+  - pattern: |
+      qemu_ram_ptr_length($MR, $ADDR, $LEN)
+  - pattern-not: |
+      qemu_ram_ptr_length($MR, $ADDR, $LEN, $LOCK)
   languages:
   - c
   message: |
@@ -1983,14 +2043,15 @@ rules:
     technology:
     - c
 - id: vuln-qemu-fa365d7c
-  pattern: |
-    if ($BSEL < 0 || $BSEL > $MAX) {
-        ...
-    }
-  pattern-not: |
-    if ($BSEL < 0 || $BSEL >= $MAX) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($BSEL < 0 || $BSEL > $MAX) {
+          ...
+      }
+  - pattern-not: |
+      if ($BSEL < 0 || $BSEL >= $MAX) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -2008,10 +2069,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-fa7505c1
-  pattern: |
-    esp_fifo_pop_buf(&$S->cmdfifo, NULL, $S->cmdfifo_cdb_offset)
-  pattern-not: |
-    esp_fifo_pop_buf(&$S->cmdfifo, NULL, MIN($S->cmdfifo_cdb_offset, fifo8_num_used(&$S->cmdfifo)))
+  patterns:
+  - pattern: |
+      esp_fifo_pop_buf(&$S->cmdfifo, NULL, $S->cmdfifo_cdb_offset)
+  - pattern-not: |
+      esp_fifo_pop_buf(&$S->cmdfifo, NULL, MIN($S->cmdfifo_cdb_offset, fifo8_num_used(&$S->cmdfifo)))
   languages:
   - c
   message: |
@@ -2029,10 +2091,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-fa892e9a
-  pattern: |
-    int $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
-  pattern-not: |
-    size_t $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
+  patterns:
+  - pattern: |
+      int $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
+  - pattern-not: |
+      size_t $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
   languages:
   - c
   message: |
@@ -2052,10 +2115,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-fc3d8e11
-  pattern: |
-    $PR->cmd = $VAL & ~(PORT_CMD_LIST_ON | PORT_CMD_FIS_ON);
-  pattern-not: |
-    $PR->cmd = ($PR->cmd & PORT_CMD_RO_MASK) | ($VAL & ~PORT_CMD_RO_MASK);
+  patterns:
+  - pattern: |
+      $PR->cmd = $VAL & ~(PORT_CMD_LIST_ON | PORT_CMD_FIS_ON);
+  - pattern-not: |
+      $PR->cmd = ($PR->cmd & PORT_CMD_RO_MASK) | ($VAL & ~PORT_CMD_RO_MASK);
   languages:
   - c
   message: |
@@ -2116,10 +2180,11 @@ rules:
     references:
     - https://cwe.mitre.org/data/definitions/120.html
 - id: vuln-qemu-ff0507c2
-  pattern: |
-    $SS = ($VAR1->$VAR2 >= $VAR1->$VAR3) ? $VAR1->$VAR2 : $VAR1->$VAR3;
-  pattern-not: |
-    $SS = MIN($VAR1->$VAR2, $VAR1->$VAR3);
+  patterns:
+  - pattern: |
+      $SS = ($VAR1->$VAR2 >= $VAR1->$VAR3) ? $VAR1->$VAR2 : $VAR1->$VAR3;
+  - pattern-not: |
+      $SS = MIN($VAR1->$VAR2, $VAR1->$VAR3);
   languages:
   - c
   message: |
@@ -2135,23 +2200,24 @@ rules:
     technology:
     - c
 - id: vuln-qemu-ff589551
-  pattern: |
-    if ($S->ti_size > 0) {
-      ...
+  patterns:
+  - pattern: |
+      if ($S->ti_size > 0) {
+        ...
+        if (($S->rregs[$REG] & $MASK) == 0) {
+          ...
+          $S->rregs[$FIFO] = 0;
+        } else {
+          $S->rregs[$FIFO] = $S->ti_buf[$S->ti_rptr++];
+        }
+      }
+  - pattern-not: |
       if (($S->rregs[$REG] & $MASK) == 0) {
         ...
         $S->rregs[$FIFO] = 0;
-      } else {
+      } else if ($S->ti_rptr < $S->ti_wptr) {
         $S->rregs[$FIFO] = $S->ti_buf[$S->ti_rptr++];
       }
-    }
-  pattern-not: |
-    if (($S->rregs[$REG] & $MASK) == 0) {
-      ...
-      $S->rregs[$FIFO] = 0;
-    } else if ($S->ti_rptr < $S->ti_wptr) {
-      $S->rregs[$FIFO] = $S->ti_buf[$S->ti_rptr++];
-    }
   languages:
   - c
   message: |
@@ -2168,10 +2234,11 @@ rules:
     technology:
     - c
 - id: vuln-qemu-ff82911c
-  pattern: |
-    aio_set_fd_handler($CONTEXT, $FD, ..., nbd_reply_ready, ..., ..., ...)
-  pattern-not: |
-    aio_set_fd_handler($CONTEXT, $FD, ..., nbd_read_reply_entry, ..., ..., ...)
+  patterns:
+  - pattern: |
+      aio_set_fd_handler($CONTEXT, $FD, ..., nbd_reply_ready, ..., ..., ...)
+  - pattern-not: |
+      aio_set_fd_handler($CONTEXT, $FD, ..., nbd_read_reply_entry, ..., ..., ...)
   languages:
   - c
   message: |

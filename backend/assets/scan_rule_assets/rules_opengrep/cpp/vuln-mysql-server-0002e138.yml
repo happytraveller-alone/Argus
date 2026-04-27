@@ -1,20 +1,21 @@
 rules:
 - id: vuln-mysql-server-0002e138
-  pattern: |
-    MYSQL *$MYSQL = mysql_real_connect($MYSQL_ARG, $HOST, $USER, $PASSWD, $DB, $PORT, $UNIX_SOCKET, $CLIENT_FLAG);
-  pattern-not: |
-    MYSQL *$MYSQL;
-    #if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
-    enum mysql_ssl_mode $OPT_SSL_MODE = SSL_MODE_REQUIRED;
-    if ($SSL_REQUIRED && mysql_options($MYSQL_ARG, MYSQL_OPT_SSL_MODE, (char *) &$OPT_SSL_MODE)) {
-      NET *$NET = &$MYSQL_ARG->net;
-      $NET->last_errno = CR_SSL_CONNECTION_ERROR;
-      strmov($NET->last_error, "Client library doesn't support MYSQL_SSL_REQUIRED option");
-      strmov($NET->sqlstate, "HY000");
-      return NULL;
-    }
-    #endif
-    $MYSQL = mysql_real_connect($MYSQL_ARG, $HOST, $USER, $PASSWD, $DB, $PORT, $UNIX_SOCKET, $CLIENT_FLAG);
+  patterns:
+  - pattern: |
+      MYSQL *$MYSQL = mysql_real_connect($MYSQL_ARG, $HOST, $USER, $PASSWD, $DB, $PORT, $UNIX_SOCKET, $CLIENT_FLAG);
+  - pattern-not: |
+      MYSQL *$MYSQL;
+      #if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+      enum mysql_ssl_mode $OPT_SSL_MODE = SSL_MODE_REQUIRED;
+      if ($SSL_REQUIRED && mysql_options($MYSQL_ARG, MYSQL_OPT_SSL_MODE, (char *) &$OPT_SSL_MODE)) {
+        NET *$NET = &$MYSQL_ARG->net;
+        $NET->last_errno = CR_SSL_CONNECTION_ERROR;
+        strmov($NET->last_error, "Client library doesn't support MYSQL_SSL_REQUIRED option");
+        strmov($NET->sqlstate, "HY000");
+        return NULL;
+      }
+      #endif
+      $MYSQL = mysql_real_connect($MYSQL_ARG, $HOST, $USER, $PASSWD, $DB, $PORT, $UNIX_SOCKET, $CLIENT_FLAG);
   languages:
   - cpp
   message: |

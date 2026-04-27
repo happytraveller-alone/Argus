@@ -1,27 +1,28 @@
 rules:
 - id: vuln-cxf-1a4fe22f
-  pattern: |
-    if ($TOKEN.hasAttributeNS($NS, "Id")) {
-      return $TOKEN.getAttributeNS($NS, "Id");
-    } else if ($TOKEN.hasAttributeNS(null, "ID")) {
-      ...
-    } else if ($TOKEN.hasAttributeNS(null, "AssertionID")) {
-      ...
-    }
-  pattern-not: |
-    if ("Assertion".equals($TOKEN.getLocalName())
-        && $SAML2_NS.equals($TOKEN.getNamespaceURI())) {
-      ...
-    } else if ("Assertion".equals($TOKEN.getLocalName())
-        && $SAML_NS.equals($TOKEN.getNamespaceURI())) {
-      ...
-    } else if ($USERNAME_TOKEN_LN.equals($TOKEN.getLocalName())
-        && $WSSE_NS.equals($TOKEN.getNamespaceURI())) {
-      ...
-    } else if ($BINARY_TOKEN_LN.equals($TOKEN.getLocalName())
-        && $WSSE_NS.equals($TOKEN.getNamespaceURI())) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($TOKEN.hasAttributeNS($NS, "Id")) {
+        return $TOKEN.getAttributeNS($NS, "Id");
+      } else if ($TOKEN.hasAttributeNS(null, "ID")) {
+        ...
+      } else if ($TOKEN.hasAttributeNS(null, "AssertionID")) {
+        ...
+      }
+  - pattern-not: |
+      if ("Assertion".equals($TOKEN.getLocalName())
+          && $SAML2_NS.equals($TOKEN.getNamespaceURI())) {
+        ...
+      } else if ("Assertion".equals($TOKEN.getLocalName())
+          && $SAML_NS.equals($TOKEN.getNamespaceURI())) {
+        ...
+      } else if ($USERNAME_TOKEN_LN.equals($TOKEN.getLocalName())
+          && $WSSE_NS.equals($TOKEN.getNamespaceURI())) {
+        ...
+      } else if ($BINARY_TOKEN_LN.equals($TOKEN.getLocalName())
+          && $WSSE_NS.equals($TOKEN.getNamespaceURI())) {
+        ...
+      }
   languages:
   - java
   message: Insecure token ID retrieval detected. Use secure methods to generate unique IDs for different token types (SAML, UsernameToken, BinarySecurityToken).

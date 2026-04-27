@@ -1,9 +1,10 @@
 rules:
 - id: vuln-feh-23421a86
-  pattern: |
-    execlp("wget", "wget", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
-  pattern-not: |
-    execlp("wget", "wget", "--no-clobber", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
+  patterns:
+  - pattern: |
+      execlp("wget", "wget", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
+  - pattern-not: |
+      execlp("wget", "wget", "--no-clobber", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-feh-ae56ce24
-  pattern: |
-    execlp("wget", "wget", "-N", "-O", $TMPNAME, $URL, $QUIET, (char *) NULL);
-  pattern-not: |
-    execlp("wget", "wget", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
+  patterns:
+  - pattern: |
+      execlp("wget", "wget", "-N", "-O", $TMPNAME, $URL, $QUIET, (char *) NULL);
+  - pattern-not: |
+      execlp("wget", "wget", "--cache=off", "-O", $TMPNAME, $URL, $QUIET, NULL);
   languages:
   - c
   message: |
@@ -38,10 +40,11 @@ rules:
     technology:
     - c
 - id: vuln-feh-f7a547b7
-  pattern: |
-    static unsigned short $LEN = 0;
-  pattern-not: |
-    static size_t $LEN = 0;
+  patterns:
+  - pattern: |
+      static unsigned short $LEN = 0;
+  - pattern-not: |
+      static size_t $LEN = 0;
   languages:
   - c
   message: |

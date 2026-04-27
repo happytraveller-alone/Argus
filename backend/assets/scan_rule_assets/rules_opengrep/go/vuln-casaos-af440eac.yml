@@ -1,15 +1,16 @@
 rules:
 - id: vuln-casaos-af440eac
-  pattern: |
-    $VAR := command2.ExecResultStr("source " + $CONFIG + "/helper.sh ;MountCIFS " + $USERNAME + " " + $HOST + " " + $DIRECTORY + " " + $PORT + " " + $MOUNTPOINT + " " + $PASSWORD)
-  pattern-not: |
-    unix.Mount(
-      fmt.Sprintf("//%s/%s", $HOST, $DIRECTORY),
-      $MOUNTPOINT,
-      "cifs",
-      unix.MS_NOATIME|unix.MS_NODEV|unix.MS_NOSUID,
-      fmt.Sprintf("username=%s,password=%s", $USERNAME, $PASSWORD),
-    )
+  patterns:
+  - pattern: |
+      $VAR := command2.ExecResultStr("source " + $CONFIG + "/helper.sh ;MountCIFS " + $USERNAME + " " + $HOST + " " + $DIRECTORY + " " + $PORT + " " + $MOUNTPOINT + " " + $PASSWORD)
+  - pattern-not: |
+      unix.Mount(
+        fmt.Sprintf("//%s/%s", $HOST, $DIRECTORY),
+        $MOUNTPOINT,
+        "cifs",
+        unix.MS_NOATIME|unix.MS_NODEV|unix.MS_NOSUID,
+        fmt.Sprintf("username=%s,password=%s", $USERNAME, $PASSWORD),
+      )
   languages:
   - go
   message: |

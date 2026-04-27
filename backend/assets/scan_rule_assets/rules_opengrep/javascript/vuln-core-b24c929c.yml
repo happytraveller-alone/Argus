@@ -1,9 +1,10 @@
 rules:
 - id: vuln-core-b24c929c
-  pattern: |
-    $TAGLIST = $TAGLIST + '<a class="bookmark_tag" href="'+replaceQueryString(String(window.location), $TAG, encodeURIComponent($TAGS[$I])) + '">' + $TAGS[$I] + '</a> ';
-  pattern-not: |
-    $TAGLIST = $TAGLIST + '<a class="bookmark_tag" href="'+replaceQueryString(escapeHTML(String(window.location)), $TAG, encodeURIComponent($TAGS[$I])) + '">' + $TAGS[$I] + '</a> ';
+  patterns:
+  - pattern: |
+      $TAGLIST = $TAGLIST + '<a class="bookmark_tag" href="'+replaceQueryString(String(window.location), $TAG, encodeURIComponent($TAGS[$I])) + '">' + $TAGS[$I] + '</a> ';
+  - pattern-not: |
+      $TAGLIST = $TAGLIST + '<a class="bookmark_tag" href="'+replaceQueryString(escapeHTML(String(window.location)), $TAG, encodeURIComponent($TAGS[$I])) + '">' + $TAGS[$I] + '</a> ';
   languages:
   - javascript
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-subversion-df961c8f
-  pattern: |
-    $VAR = "$SVN_SSH ssh -q"
-  pattern-not: |
-    $VAR = "$SVN_SSH ssh -q --"
+  patterns:
+  - pattern: |
+      $VAR = "$SVN_SSH ssh -q"
+  - pattern-not: |
+      $VAR = "$SVN_SSH ssh -q --"
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-subversion-e4d42eb1
-  pattern: |
-    $FUNC($PROPNAME, $VALUE, $RESOURCE->pool);
-  pattern-not: |
-    $FUNC($PROPNAME, $VALUE, $SUBPOOL);
+  patterns:
+  - pattern: |
+      $FUNC($PROPNAME, $VALUE, $RESOURCE->pool);
+  - pattern-not: |
+      $FUNC($PROPNAME, $VALUE, $SUBPOOL);
   languages:
   - c
   message: |

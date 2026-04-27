@@ -1,13 +1,14 @@
 rules:
 - id: vuln-lldpd-73d42680
-  pattern: |
-    if (length < SONMP_SIZE) {
-      ...
-    }
-  pattern-not: |
-    if (length < SONMP_SIZE + 2*ETHER_ADDR_LEN + sizeof(u_int16_t)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (length < SONMP_SIZE) {
+        ...
+      }
+  - pattern-not: |
+      if (length < SONMP_SIZE + 2*ETHER_ADDR_LEN + sizeof(u_int16_t)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -27,24 +28,25 @@ rules:
     technology:
     - c
 - id: vuln-lldpd-a8d3c90f
-  pattern: |
-    if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR)
-      ...
-    else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME)
-      ...
-    else
-      $CHASSIS->$C_DESCR = $B;
-  pattern-not: |
-    if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR) {
-      free($PORT->$P_DESCR);
-      ...
-    } else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME) {
-      free($CHASSIS->$C_NAME);
-      ...
-    } else {
-      free($CHASSIS->$C_DESCR);
-      $CHASSIS->$C_DESCR = $B;
-    }
+  patterns:
+  - pattern: |
+      if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR)
+        ...
+      else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME)
+        ...
+      else
+        $CHASSIS->$C_DESCR = $B;
+  - pattern-not: |
+      if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR) {
+        free($PORT->$P_DESCR);
+        ...
+      } else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME) {
+        free($CHASSIS->$C_NAME);
+        ...
+      } else {
+        free($CHASSIS->$C_DESCR);
+        $CHASSIS->$C_DESCR = $B;
+      }
   languages:
   - c
   message: |
@@ -62,10 +64,11 @@ rules:
     technology:
     - c
 - id: vuln-lldpd-dd4f16e7
-  pattern: |
-    CHECK_TLV_SIZE(4, "Organisational")
-  pattern-not: |
-    CHECK_TLV_SIZE(1 + (int)sizeof($ORGID), "Organisational")
+  patterns:
+  - pattern: |
+      CHECK_TLV_SIZE(4, "Organisational")
+  - pattern-not: |
+      CHECK_TLV_SIZE(1 + (int)sizeof($ORGID), "Organisational")
   languages:
   - c
   message: |

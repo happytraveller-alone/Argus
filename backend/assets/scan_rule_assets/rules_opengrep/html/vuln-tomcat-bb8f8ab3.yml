@@ -1,9 +1,10 @@
 rules:
 - id: vuln-tomcat-bb8f8ab3
-  pattern: |
-    <h3><a href="$URL">$TEXT<font color="$COLOR"></a></font></h3>
-  pattern-not: |
-    <h3><a href="$URL">$TEXT<font color="$COLOR"></font></a></h3>
+  patterns:
+  - pattern: |
+      <h3><a href="$URL">$TEXT<font color="$COLOR"></a></font></h3>
+  - pattern-not: |
+      <h3><a href="$URL">$TEXT<font color="$COLOR"></font></a></h3>
   languages:
   - html
   message: |

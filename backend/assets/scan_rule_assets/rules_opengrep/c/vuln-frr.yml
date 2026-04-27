@@ -1,9 +1,10 @@
 rules:
 - id: vuln-frr-21418d64
-  pattern: |
-    bgp_attr_check($PEER, $ATTR)
-  pattern-not: |
-    bgp_attr_check($PEER, $ATTR, $LENGTH)
+  patterns:
+  - pattern: |
+      bgp_attr_check($PEER, $ATTR)
+  - pattern-not: |
+      bgp_attr_check($PEER, $ATTR, $LENGTH)
   languages:
   - c
   message: |
@@ -19,14 +20,15 @@ rules:
     technology:
     - c
 - id: vuln-frr-30b5c2a4
-  pattern: |
-    if ($CONDITION || $ATTR_PARSE_RET == BGP_ATTR_PARSE_EOR) {
-      ...
-    }
-  pattern-not: |
-    if ($CONDITION) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($CONDITION || $ATTR_PARSE_RET == BGP_ATTR_PARSE_EOR) {
+        ...
+      }
+  - pattern-not: |
+      if ($CONDITION) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -47,14 +49,15 @@ rules:
     - bgp
     - networking
 - id: vuln-frr-3515178d
-  pattern: |
-    if (*$PNT & $MASK) {
-      ...
-    }
-  pattern-not: |
-    if ($PNT < $P_END && *$PNT & $MASK) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (*$PNT & $MASK) {
+        ...
+      }
+  - pattern-not: |
+      if ($PNT < $P_END && *$PNT & $MASK) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -74,14 +77,15 @@ rules:
     technology:
     - c
 - id: vuln-frr-6814f2e0
-  pattern: |
-    if ($RET != BGP_ATTR_PARSE_ERROR) {
-        ...
-    }
-  pattern-not: |
-    if ($RET == BGP_ATTR_PARSE_PROCEED) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($RET != BGP_ATTR_PARSE_ERROR) {
+          ...
+      }
+  - pattern-not: |
+      if ($RET == BGP_ATTR_PARSE_PROCEED) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -104,10 +108,11 @@ rules:
     - bgp
     - networking
 - id: vuln-frr-ba6a8f1a
-  pattern: |
-    $ATTR->flag |= ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID);
-  pattern-not: |
-    SET_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID));
+  patterns:
+  - pattern: |
+      $ATTR->flag |= ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID);
+  - pattern-not: |
+      SET_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID));
   languages:
   - c
   message: |
@@ -123,20 +128,21 @@ rules:
     technology:
     - c
 - id: vuln-frr-babb23b7
-  pattern: |
-    if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
-        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
-        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
-        return BGP_ATTR_PARSE_WITHDRAW;
-    ...
-    return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
-  pattern-not: |
-    if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
-        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
-        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
-        return BGP_ATTR_PARSE_WITHDRAW;
-    ...
-    return BGP_ATTR_PARSE_WITHDRAW;
+  patterns:
+  - pattern: |
+      if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
+          CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
+          CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
+          return BGP_ATTR_PARSE_WITHDRAW;
+      ...
+      return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
+  - pattern-not: |
+      if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
+          CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
+          CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
+          return BGP_ATTR_PARSE_WITHDRAW;
+      ...
+      return BGP_ATTR_PARSE_WITHDRAW;
   languages:
   - c
   message: |
@@ -154,15 +160,16 @@ rules:
     technology:
     - c
 - id: vuln-frr-c37119df
-  pattern: |
-    if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
-        CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
-        return BGP_ATTR_PARSE_PROCEED;
-  pattern-not: |
-    if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
-        CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
-        return $TYPE ? BGP_ATTR_PARSE_MISSING_MANDATORY
-                    : BGP_ATTR_PARSE_PROCEED;
+  patterns:
+  - pattern: |
+      if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
+          CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
+          return BGP_ATTR_PARSE_PROCEED;
+  - pattern-not: |
+      if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
+          CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
+          return $TYPE ? BGP_ATTR_PARSE_MISSING_MANDATORY
+                      : BGP_ATTR_PARSE_PROCEED;
   languages:
   - c
   message: |
@@ -183,13 +190,14 @@ rules:
     technology:
     - c
 - id: vuln-frr-d28c9042
-  pattern: |
-    bgp_notify_send_with_data(
-      $PEER, BGP_NOTIFY_UPDATE_ERR,
-      BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $STARTP, $TOTAL
-    );
-  pattern-not: |
-    bgp_attr_malformed($ARGS, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $ARGS->total);
+  patterns:
+  - pattern: |
+      bgp_notify_send_with_data(
+        $PEER, BGP_NOTIFY_UPDATE_ERR,
+        BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $STARTP, $TOTAL
+      );
+  - pattern-not: |
+      bgp_attr_malformed($ARGS, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $ARGS->total);
   languages:
   - c
   message: |
@@ -205,14 +213,15 @@ rules:
     technology:
     - c
 - id: vuln-frr-e08495a4
-  pattern: |
-    if (PROTO_RM_MAP($ZV, $AFI, $RT)) {
-      ...
-    }
-  pattern-not: |
-    if (PROTO_RM_NAME($ZV, $AFI, $RT)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (PROTO_RM_MAP($ZV, $AFI, $RT)) {
+        ...
+      }
+  - pattern-not: |
+      if (PROTO_RM_NAME($ZV, $AFI, $RT)) {
+        ...
+      }
   languages:
   - c
   message: |

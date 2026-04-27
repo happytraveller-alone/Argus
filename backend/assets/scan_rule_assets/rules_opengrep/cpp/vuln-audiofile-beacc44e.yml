@@ -1,9 +1,10 @@
 rules:
 - id: vuln-audiofile-beacc44e
-  pattern: |
-    decodeSample($STATE, $CODE, $COEFFICIENT)
-  pattern-not: |
-    decodeSample($STATE, $CODE, $COEFFICIENT, &$OK)
+  patterns:
+  - pattern: |
+      decodeSample($STATE, $CODE, $COEFFICIENT)
+  - pattern-not: |
+      decodeSample($STATE, $CODE, $COEFFICIENT, &$OK)
   languages:
   - cpp
   message: |

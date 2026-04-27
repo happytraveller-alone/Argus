@@ -1,16 +1,17 @@
 rules:
 - id: vuln-cilium-a652c123
-  pattern: |
-    $INPUT := append($GLOBALKEY, $SRCNODEIP...)
-    $INPUT = append($INPUT, $SRCBOOTID...)
-    $INPUT = append($INPUT, $DSTBOOTID...)
-  pattern-not: |
-    $INPUTLEN := len($GLOBALKEY) + len($SRCNODEIP) + len($DSTNODEIP) + len($SRCBOOTID) + len($DSTBOOTID)
-    $INPUT := make([]byte, 0, $INPUTLEN)
-    $INPUT = append($INPUT, $GLOBALKEY...)
-    $INPUT = append($INPUT, $SRCNODEIP...)
-    $INPUT = append($INPUT, $SRCBOOTID[:36]...)
-    $INPUT = append($INPUT, $DSTBOOTID[:36]...)
+  patterns:
+  - pattern: |
+      $INPUT := append($GLOBALKEY, $SRCNODEIP...)
+      $INPUT = append($INPUT, $SRCBOOTID...)
+      $INPUT = append($INPUT, $DSTBOOTID...)
+  - pattern-not: |
+      $INPUTLEN := len($GLOBALKEY) + len($SRCNODEIP) + len($DSTNODEIP) + len($SRCBOOTID) + len($DSTBOOTID)
+      $INPUT := make([]byte, 0, $INPUTLEN)
+      $INPUT = append($INPUT, $GLOBALKEY...)
+      $INPUT = append($INPUT, $SRCNODEIP...)
+      $INPUT = append($INPUT, $SRCBOOTID[:36]...)
+      $INPUT = append($INPUT, $DSTBOOTID[:36]...)
   languages:
   - go
   message: |
@@ -28,16 +29,17 @@ rules:
     technology:
     - go
 - id: vuln-cilium-bf9a1ae1
-  pattern: |
-    func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string) error {
-      ...
-      return downloadToFile($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME))
-    }
-  pattern-not: |
-    func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string, $POSTPROCESS postProcessFunc) error {
-      ...
-      return downloadToFileWithPostProcess($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME), $POSTPROCESS)
-    }
+  patterns:
+  - pattern: |
+      func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string) error {
+        ...
+        return downloadToFile($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME))
+      }
+  - pattern-not: |
+      func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string, $POSTPROCESS postProcessFunc) error {
+        ...
+        return downloadToFileWithPostProcess($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME), $POSTPROCESS)
+      }
   languages:
   - go
   message: |
@@ -55,14 +57,15 @@ rules:
     technology:
     - go
 - id: vuln-cilium-d367fb38
-  pattern: |
-    if $ID.ID == $NEWID.ID {
-      ...
-    }
-  pattern-not: |
-    if $ID.ID == $NEWID.ID && $PREFIXINFO.Source() == $ID.Source {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if $ID.ID == $NEWID.ID {
+        ...
+      }
+  - pattern-not: |
+      if $ID.ID == $NEWID.ID && $PREFIXINFO.Source() == $ID.Source {
+        ...
+      }
   languages:
   - go
   message: |

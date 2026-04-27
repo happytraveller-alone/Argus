@@ -1,9 +1,10 @@
 rules:
 - id: vuln-eclair-5d662fc3
-  pattern: |
-    final case class PublishAsap(tx: Transaction)
-  pattern-not: |
-    final case class PublishAsap(tx: Transaction, strategy: PublishStrategy)
+  patterns:
+  - pattern: |
+      final case class PublishAsap(tx: Transaction)
+  - pattern-not: |
+      final case class PublishAsap(tx: Transaction, strategy: PublishStrategy)
   languages:
   - scala
   message: |
@@ -25,10 +26,11 @@ rules:
     - scala
     - bitcoin
 - id: vuln-eclair-ea8f9402
-  pattern: |
-    new NodeRelay($NODE_PARAMS, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
-  pattern-not: |
-    new NodeRelay($NODE_PARAMS, $PARENT, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
+  patterns:
+  - pattern: |
+      new NodeRelay($NODE_PARAMS, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
+  - pattern-not: |
+      new NodeRelay($NODE_PARAMS, $PARENT, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
   languages:
   - scala
   message: |

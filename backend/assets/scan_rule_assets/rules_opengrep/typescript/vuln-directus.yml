@@ -1,20 +1,21 @@
 rules:
 - id: vuln-directus-454cb534
-  pattern: |
-    if ($USER?.status !== 'active') {
-      ...
-      if ($USER?.status === 'suspended') {
+  patterns:
+  - pattern: |
+      if ($USER?.status !== 'active') {
         ...
-      } else {
+        if ($USER?.status === 'suspended') {
+          ...
+        } else {
+          ...
+        }
+      } else if ($USER.provider !== $PROVIDER) {
         ...
       }
-    } else if ($USER.provider !== $PROVIDER) {
-      ...
-    }
-  pattern-not: |
-    if ($USER?.status !== 'active' || $USER?.provider !== $PROVIDER) {
-      ...
-    }
+  - pattern-not: |
+      if ($USER?.status !== 'active' || $USER?.provider !== $PROVIDER) {
+        ...
+      }
   languages:
   - typescript
   message: |
@@ -32,20 +33,21 @@ rules:
     technology:
     - typescript
 - id: vuln-directus-826404bc
-  pattern: |
-    $CONFIG = {
-      ...,
-      CORS_ENABLED: true,
-      CORS_ORIGIN: true,
-      ...
-    }
-  pattern-not: |
-    $CONFIG = {
-      ...,
-      CORS_ENABLED: false,
-      CORS_ORIGIN: false,
-      ...
-    }
+  patterns:
+  - pattern: |
+      $CONFIG = {
+        ...,
+        CORS_ENABLED: true,
+        CORS_ORIGIN: true,
+        ...
+      }
+  - pattern-not: |
+      $CONFIG = {
+        ...,
+        CORS_ENABLED: false,
+        CORS_ORIGIN: false,
+        ...
+      }
   languages:
   - typescript
   message: |

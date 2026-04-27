@@ -1,9 +1,10 @@
 rules:
 - id: vuln-strapi-private-attributes
-  pattern: |
-    privateAttributes: []
-  pattern-not: |
-    $ATTRIBUTE.private === true
+  patterns:
+  - pattern: |
+      privateAttributes: []
+  - pattern-not: |
+      $ATTRIBUTE.private === true
   languages:
   - javascript
   message: |

@@ -1,13 +1,14 @@
 rules:
 - id: vuln-mediawiki-d0b7fb49
-  pattern: |
-    return mw.format.apply(null, [ $TEXT ].concat($PARAMS));
-  pattern-not: |
-    $TEXT = mw.format.apply(null, [ $TEXT ].concat($PARAMS));
-    if ($FORMAT === 'parse') {
-      $TEXT = mw.html.escape($TEXT);
-    }
-    return $TEXT;
+  patterns:
+  - pattern: |
+      return mw.format.apply(null, [ $TEXT ].concat($PARAMS));
+  - pattern-not: |
+      $TEXT = mw.format.apply(null, [ $TEXT ].concat($PARAMS));
+      if ($FORMAT === 'parse') {
+        $TEXT = mw.html.escape($TEXT);
+      }
+      return $TEXT;
   languages:
   - javascript
   message: |

@@ -1,14 +1,15 @@
 rules:
 - id: vuln-matrix-js-sdk-5f3e1155
-  pattern: |
-    const $PARENT_EVENT_ID = $EVENT.getAssociatedId()!;
-    const $PARENT_EVENT = $THIS.findEventById($PARENT_EVENT_ID) ?? $EVENTS?.find(($E) => $E.getId() === $PARENT_EVENT_ID);
-  pattern-not: |
-    const $PARENT_EVENT_ID = $EVENT.getAssociatedId();
-    let $PARENT_EVENT: $TYPE | undefined;
-    if ($PARENT_EVENT_ID) {
-        $PARENT_EVENT = $THIS.findEventById($PARENT_EVENT_ID) ?? $EVENTS?.find(($E) => $E.getId() === $PARENT_EVENT_ID);
-    }
+  patterns:
+  - pattern: |
+      const $PARENT_EVENT_ID = $EVENT.getAssociatedId()!;
+      const $PARENT_EVENT = $THIS.findEventById($PARENT_EVENT_ID) ?? $EVENTS?.find(($E) => $E.getId() === $PARENT_EVENT_ID);
+  - pattern-not: |
+      const $PARENT_EVENT_ID = $EVENT.getAssociatedId();
+      let $PARENT_EVENT: $TYPE | undefined;
+      if ($PARENT_EVENT_ID) {
+          $PARENT_EVENT = $THIS.findEventById($PARENT_EVENT_ID) ?? $EVENTS?.find(($E) => $E.getId() === $PARENT_EVENT_ID);
+      }
   languages:
   - typescript
   message: |
@@ -28,14 +29,15 @@ rules:
     technology:
     - typescript
 - id: vuln-matrix-js-sdk-b01f3541
-  pattern: |
-    if ($CONTENT["m.terminated"]) {
-      ...
-    }
-  pattern-not: |
-    if ($CONTENT["m.terminated"] || $CALL_EVENT.isRedacted()) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($CONTENT["m.terminated"]) {
+        ...
+      }
+  - pattern-not: |
+      if ($CONTENT["m.terminated"] || $CALL_EVENT.isRedacted()) {
+        ...
+      }
   languages:
   - typescript
   message: |

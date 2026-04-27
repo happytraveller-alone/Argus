@@ -1,13 +1,14 @@
 rules:
 - id: vuln-gnutls-3efb6c5f
-  pattern: |
-    if ($DATA_SIZE <= (ssize_t) ($RESPONDER_IDS * 2)) {
-      ...
-    }
-  pattern-not: |
-    if ($DATA_SIZE < (ssize_t)$RID_BYTES) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DATA_SIZE <= (ssize_t) ($RESPONDER_IDS * 2)) {
+        ...
+      }
+  - pattern-not: |
+      if ($DATA_SIZE < (ssize_t)$RID_BYTES) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -28,16 +29,17 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-42221486
-  pattern: |
-    if ($CIPHERTEXT.size == 0) {
-      ...
-      return $ERROR_CODE;
-    }
-  pattern-not: |
-    if ($CIPHERTEXT.size < $HASH_SIZE) {
-      ...
-      return $ERROR_CODE;
-    }
+  patterns:
+  - pattern: |
+      if ($CIPHERTEXT.size == 0) {
+        ...
+        return $ERROR_CODE;
+      }
+  - pattern-not: |
+      if ($CIPHERTEXT.size < $HASH_SIZE) {
+        ...
+        return $ERROR_CODE;
+      }
   languages:
   - c
   message: |
@@ -55,10 +57,11 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-60ee8a0e
-  pattern: |
-    gnutls_certificate_set_verify_flags($XCRED, GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT)
-  pattern-not: |
-    gnutls_certificate_set_verify_flags($XCRED, 0)
+  patterns:
+  - pattern: |
+      gnutls_certificate_set_verify_flags($XCRED, GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT)
+  - pattern-not: |
+      gnutls_certificate_set_verify_flags($XCRED, 0)
   languages:
   - c
   message: |
@@ -76,14 +79,15 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-688ea642
-  pattern: |
-    if (len < session_id_len) {
-      ...
-    }
-  pattern-not: |
-    if (len < session_id_len || session_id_len > TLS_MAX_SESSION_ID_SIZE) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (len < session_id_len) {
+        ...
+      }
+  - pattern-not: |
+      if (len < session_id_len || session_id_len > TLS_MAX_SESSION_ID_SIZE) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -99,10 +103,11 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-6be35136
-  pattern: |
-    _gnutls_x509_decode_string(NULL, $DATA, $SIZE, $OUTPUT)
-  pattern-not: |
-    _gnutls_x509_decode_string(ASN1_ETYPE_OCTET_STRING, $DATA, $SIZE, $OUTPUT)
+  patterns:
+  - pattern: |
+      _gnutls_x509_decode_string(NULL, $DATA, $SIZE, $OUTPUT)
+  - pattern-not: |
+      _gnutls_x509_decode_string(ASN1_ETYPE_OCTET_STRING, $DATA, $SIZE, $OUTPUT)
   languages:
   - c
   message: |
@@ -123,10 +128,11 @@ rules:
     references:
     - https://www.gnutls.org/manual/html_node/ASN1-decoding.html
 - id: vuln-gnutls-9bb4ca9e
-  pattern: |
-    socket_bye(&$HD, 1);
-  pattern-not: |
-    socket_bye(&$HD, 0);
+  patterns:
+  - pattern: |
+      socket_bye(&$HD, 1);
+  - pattern-not: |
+      socket_bye(&$HD, 0);
   languages:
   - c
   message: |
@@ -144,12 +150,13 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-9c62f4fe
-  pattern: |
-    gnutls_free($VAR.cert.data);
-    $VAR.cert.data = NULL;
-  pattern-not: |
-    _gnutls_free_datum(&$VAR.cert);
-    $VAR.pubkey = NULL;
+  patterns:
+  - pattern: |
+      gnutls_free($VAR.cert.data);
+      $VAR.cert.data = NULL;
+  - pattern-not: |
+      _gnutls_free_datum(&$VAR.cert);
+      $VAR.pubkey = NULL;
   languages:
   - c
   message: Detected insecure memory deall
@@ -164,24 +171,25 @@ rules:
     - 'CWE-401: Memory Leak'
     - 'CWE-416: Use After Free'
 - id: vuln-gnutls-c2646aee
-  pattern: |
-    if ($SESSION->key.totp.last_result == 0) {
-      $TYPE $VAR;
-      memcpy($SESSION->key.initial_stek, $KEY->data, $KEY->size);
-      $VAR = totp_next($SESSION);
-      if ($VAR < 0)
-        return $FUNC($VAR);
-      $SESSION->key.totp.last_result = $VAR;
-      $SESSION->key.totp.was_rotated = 0;
-      return $SUCCESS;
-    }
-    return $INVALID_REQUEST;
-  pattern-not: |
-    if (unlikely($SESSION->key.totp.last_result != 0))
+  patterns:
+  - pattern: |
+      if ($SESSION->key.totp.last_result == 0) {
+        $TYPE $VAR;
+        memcpy($SESSION->key.initial_stek, $KEY->data, $KEY->size);
+        $VAR = totp_next($SESSION);
+        if ($VAR < 0)
+          return $FUNC($VAR);
+        $SESSION->key.totp.last_result = $VAR;
+        $SESSION->key.totp.was_rotated = 0;
+        return $SUCCESS;
+      }
       return $INVALID_REQUEST;
-    memcpy($SESSION->key.initial_stek, $KEY->data, $KEY->size);
-    $SESSION->key.totp.was_rotated = 0;
-    return 0;
+  - pattern-not: |
+      if (unlikely($SESSION->key.totp.last_result != 0))
+        return $INVALID_REQUEST;
+      memcpy($SESSION->key.initial_stek, $KEY->data, $KEY->size);
+      $SESSION->key.totp.was_rotated = 0;
+      return 0;
   languages:
   - c
   message: |
@@ -199,10 +207,11 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-c2e094ac
-  pattern: |
-    dummy_wait($PARAMS, $PLAINTEXT, $PAD_FAILED, $PAD, $TOTAL);
-  pattern-not: |
-    dummy_wait($PARAMS, $PLAINTEXT, $MAC_DATA, $MAX_MAC_DATA);
+  patterns:
+  - pattern: |
+      dummy_wait($PARAMS, $PLAINTEXT, $PAD_FAILED, $PAD, $TOTAL);
+  - pattern-not: |
+      dummy_wait($PARAMS, $PLAINTEXT, $MAC_DATA, $MAX_MAC_DATA);
   languages:
   - c
   message: |
@@ -218,10 +227,11 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-c8dcbedd
-  pattern: |
-    $FLAGS ^= GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT;
-  pattern-not: |
-    $FLAGS &= ~(GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT);
+  patterns:
+  - pattern: |
+      $FLAGS ^= GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT;
+  - pattern-not: |
+      $FLAGS &= ~(GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT);
   languages:
   - c
   message: |
@@ -241,16 +251,17 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-d223040e
-  pattern: |
-    if ($CIPHERTEXT.size < (unsigned) $BLOCKSIZE + $HASH_SIZE) {
-      ...
-      return $ERROR;
-    }
-  pattern-not: |
-    if ($PAD > $CIPHERTEXT.size - $HASH_SIZE) {
-      ...
-      return $ERROR;
-    }
+  patterns:
+  - pattern: |
+      if ($CIPHERTEXT.size < (unsigned) $BLOCKSIZE + $HASH_SIZE) {
+        ...
+        return $ERROR;
+      }
+  - pattern-not: |
+      if ($PAD > $CIPHERTEXT.size - $HASH_SIZE) {
+        ...
+        return $ERROR;
+      }
   languages:
   - c
   message: |
@@ -266,20 +277,21 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-e14d85eb
-  pattern: |
-    if (($PAD + $TOTAL) % $LEN > $LEN - 9
-        && $TOTAL % $LEN <= $LEN - 9) {
-      ...
-    }
-  pattern-not: |
-    if ($PARAMS->mac && $PARAMS->mac->id == $GNUTLS_MAC_SHA384)
-        $V = 17;
-    else
-        $V = 9;
-    if (($PAD + $TOTAL) % $LEN > $LEN - $V
-        && $TOTAL % $LEN <= $LEN - $V) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (($PAD + $TOTAL) % $LEN > $LEN - 9
+          && $TOTAL % $LEN <= $LEN - 9) {
+        ...
+      }
+  - pattern-not: |
+      if ($PARAMS->mac && $PARAMS->mac->id == $GNUTLS_MAC_SHA384)
+          $V = 17;
+      else
+          $V = 9;
+      if (($PAD + $TOTAL) % $LEN > $LEN - $V
+          && $TOTAL % $LEN <= $LEN - $V) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -295,24 +307,25 @@ rules:
     technology:
     - c
 - id: vuln-gnutls-fb2a6bae
-  pattern: |
-    const char *$FILENAME;
-    ...
-    $FILENAME = getenv("GNUTLS_KEYLOGFILE");
-    ...
-    if ($FILENAME == NULL)
-      return;
-    ...
-    $FP = fopen($FILENAME, "w");
-  pattern-not: |
-    const char *_gnutls_keylogfile = NULL;
-    ...
-    _gnutls_keylogfile = getenv("GNUTLS_KEYLOGFILE");
-    ...
-    if (_gnutls_keylogfile == NULL)
-      _gnutls_keylogfile = getenv("SSLKEYLOGFILE");
-    ...
-    $FP = fopen(_gnutls_keylogfile, "a");
+  patterns:
+  - pattern: |
+      const char *$FILENAME;
+      ...
+      $FILENAME = getenv("GNUTLS_KEYLOGFILE");
+      ...
+      if ($FILENAME == NULL)
+        return;
+      ...
+      $FP = fopen($FILENAME, "w");
+  - pattern-not: |
+      const char *_gnutls_keylogfile = NULL;
+      ...
+      _gnutls_keylogfile = getenv("GNUTLS_KEYLOGFILE");
+      ...
+      if (_gnutls_keylogfile == NULL)
+        _gnutls_keylogfile = getenv("SSLKEYLOGFILE");
+      ...
+      $FP = fopen(_gnutls_keylogfile, "a");
   languages:
   - c
   message: |

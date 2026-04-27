@@ -1,12 +1,13 @@
 rules:
 - id: vuln-audiofile-7d65f89d
-  pattern: |
-    void *$BUFFER = malloc($SIZE * $FRAMESIZE);
-  pattern-not: |
-    int $BUFFERSIZE;
-    while (multiplyCheckOverflow($SIZE, $FRAMESIZE, &$BUFFERSIZE))
-      $SIZE /= 2;
-    void *$BUFFER = malloc($BUFFERSIZE);
+  patterns:
+  - pattern: |
+      void *$BUFFER = malloc($SIZE * $FRAMESIZE);
+  - pattern-not: |
+      int $BUFFERSIZE;
+      while (multiplyCheckOverflow($SIZE, $FRAMESIZE, &$BUFFERSIZE))
+        $SIZE /= 2;
+      void *$BUFFER = malloc($BUFFERSIZE);
   languages:
   - c
   message: |

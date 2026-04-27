@@ -1,19 +1,20 @@
 rules:
 - id: vuln-wiki-57b56d3a
-  pattern: |
-    if ($CONFIG.scanSVG && $OPTS.mimetype === 'image/svg+xml') {
-      ...
-    }
-  pattern-not: |
-    if (
-      $CONFIG.scanSVG &&
-      (
-        $OPTS.mimetype.toLowerCase().startsWith('image/svg') ||
-        $OPTS.ext.toLowerCase() === 'svg'
-      )
-    ) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($CONFIG.scanSVG && $OPTS.mimetype === 'image/svg+xml') {
+        ...
+      }
+  - pattern-not: |
+      if (
+        $CONFIG.scanSVG &&
+        (
+          $OPTS.mimetype.toLowerCase().startsWith('image/svg') ||
+          $OPTS.ext.toLowerCase() === 'svg'
+        )
+      ) {
+        ...
+      }
   languages:
   - javascript
   message: |
@@ -29,15 +30,16 @@ rules:
     technology:
     - javascript
 - id: vuln-wiki-9e08718e
-  pattern: |
-    if ($RAW_TEXT.indexOf('{{') >= 0 && $RAW_TEXT.indexOf('}}') > 1) {
-      ...
-    }
-  pattern-not: |
-    const $REGEX = /(\{|&#x7b;?){2}(.+?)(\}|&#x7d;?){2}/i;
-    if ($REGEX.test($RAW_TEXT)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($RAW_TEXT.indexOf('{{') >= 0 && $RAW_TEXT.indexOf('}}') > 1) {
+        ...
+      }
+  - pattern-not: |
+      const $REGEX = /(\{|&#x7b;?){2}(.+?)(\}|&#x7d;?){2}/i;
+      if ($REGEX.test($RAW_TEXT)) {
+        ...
+      }
   languages:
   - javascript
   message: Insecure detection of Mustache templates using string indexOf. This can lead to template injection vulnerabilities. Use a regular expression to properly validate Mustache templates.

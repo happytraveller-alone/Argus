@@ -1,13 +1,14 @@
 rules:
 - id: vuln-dnsmasq-03345ece
-  pattern: |
-    static int $FUNC(struct state *$STATE, void *$INBUFF, size_t $SZ, ...);
-    ...
-    int $MSG_TYPE = *((unsigned char *)$INBUFF);
-  pattern-not: |
-    static int $FUNC(struct state *$STATE, unsigned char *$INBUFF, size_t $SZ, ...);
-    ...
-    int $MSG_TYPE = *$INBUFF;
+  patterns:
+  - pattern: |
+      static int $FUNC(struct state *$STATE, void *$INBUFF, size_t $SZ, ...);
+      ...
+      int $MSG_TYPE = *((unsigned char *)$INBUFF);
+  - pattern-not: |
+      static int $FUNC(struct state *$STATE, unsigned char *$INBUFF, size_t $SZ, ...);
+      ...
+      int $MSG_TYPE = *$INBUFF;
   languages:
   - c
   message: |
@@ -23,91 +24,92 @@ rules:
     technology:
     - c
 - id: vuln-dnsmasq-4e96a4be
-  pattern: |
-    int $SWAP, $QUIT, $I, $J;
-    ...
-    unsigned char *$P1 = skip_name($RRSET[$I], $HEADER, $PLEN, 10);
-    unsigned char *$P2 = skip_name($RRSET[$I+1], $HEADER, $PLEN, 10);
-    $P1 += 8;
-    GETSHORT($RDLEN1, $P1);
-    $END1 = $P1 + $RDLEN1;
-    $P2 += 8;
-    GETSHORT($RDLEN2, $P2);
-    $END2 = $P2 + $RDLEN2;
-    $DP1 = $DP2 = $RR_DESC;
-    for ($QUIT = 0, $LEFT1 = 0, $LEFT2 = 0, $LEN1 = 0, $LEN2 = 0; !$QUIT;)
-    {
+  patterns:
+  - pattern: |
+      int $SWAP, $QUIT, $I, $J;
       ...
-      if ($LEFT1 != 0)
-        memmove($BUFF1, $BUFF1 + $LEN1 - $LEFT1, $LEFT1);
-      if (($LEN1 = get_rdata($HEADER, $PLEN, $END1, $BUFF1 + $LEFT1, (MAXDNAME * 2) - $LEFT1, &$P1, &$DP1)) == 0)
+      unsigned char *$P1 = skip_name($RRSET[$I], $HEADER, $PLEN, 10);
+      unsigned char *$P2 = skip_name($RRSET[$I+1], $HEADER, $PLEN, 10);
+      $P1 += 8;
+      GETSHORT($RDLEN1, $P1);
+      $END1 = $P1 + $RDLEN1;
+      $P2 += 8;
+      GETSHORT($RDLEN2, $P2);
+      $END2 = $P2 + $RDLEN2;
+      $DP1 = $DP2 = $RR_DESC;
+      for ($QUIT = 0, $LEFT1 = 0, $LEFT2 = 0, $LEN1 = 0, $LEN2 = 0; !$QUIT;)
       {
-        $QUIT = 1;
-        $LEN1 = $END1 - $P1;
-        memcpy($BUFF1 + $LEFT1, $P1, $LEN1);
+        ...
+        if ($LEFT1 != 0)
+          memmove($BUFF1, $BUFF1 + $LEN1 - $LEFT1, $LEFT1);
+        if (($LEN1 = get_rdata($HEADER, $PLEN, $END1, $BUFF1 + $LEFT1, (MAXDNAME * 2) - $LEFT1, &$P1, &$DP1)) == 0)
+        {
+          $QUIT = 1;
+          $LEN1 = $END1 - $P1;
+          memcpy($BUFF1 + $LEFT1, $P1, $LEN1);
+        }
+        $LEN1 += $LEFT1;
+        ...
+        if ($LEFT2 != 0)
+          memmove($BUFF2, $BUFF2 + $LEN2 - $LEFT2, $LEFT2);
+        if (($LEN2 = get_rdata($HEADER, $PLEN, $END2, $BUFF2 + $LEFT2, (MAXDNAME * 2) - $LEFT2, &$P2, &$DP2)) == 0)
+        {
+          $QUIT = 1;
+          $LEN2 = $END2 - $P2;
+          memcpy($BUFF2 + $LEFT2, $P2, $LEN2);
+        }
+        $LEN2 += $LEFT2;
+        ...
+        if ($LEN1 > $LEN2)
+          $LEFT1 = $LEN1 - $LEN2, $LEFT2 = 0, $LEN = $LEN2;
+        else
+          $LEFT2 = $LEN2 - $LEN1, $LEFT1 = 0, $LEN = $LEN1;
+        ...
+        if ($RC > 0 || ($RC == 0 && $QUIT && $LEN1 > $LEN2))
+        {
+          unsigned char *$TMP = $RRSET[$I+1];
+          $RRSET[$I+1] = $RRSET[$I];
+          $RRSET[$I] = $TMP;
+          $SWAP = $QUIT = 1;
+        }
+        ...
       }
-      $LEN1 += $LEFT1;
+  - pattern-not: |
+      struct rdata_state $STATE1, $STATE2;
       ...
-      if ($LEFT2 != 0)
-        memmove($BUFF2, $BUFF2 + $LEN2 - $LEFT2, $LEFT2);
-      if (($LEN2 = get_rdata($HEADER, $PLEN, $END2, $BUFF2 + $LEFT2, (MAXDNAME * 2) - $LEFT2, &$P2, &$DP2)) == 0)
+      $STATE1.ip = skip_name($RRSET[$I], $HEADER, $PLEN, 10);
+      $STATE2.ip = skip_name($RRSET[$I+1], $HEADER, $PLEN, 10);
+      $STATE1.op = $STATE2.op = NULL;
+      $STATE1.buff = $BUFF1;
+      $STATE2.buff = $BUFF2;
+      $STATE1.desc = $STATE2.desc = $RR_DESC;
+      $STATE1.ip += 8;
+      GETSHORT($RDLEN1, $STATE1.ip);
+      if (!CHECK_LEN($HEADER, $STATE1.ip, $PLEN, $RDLEN1))
+        return $RRSETIDX;
+      $STATE1.end = $STATE1.ip + $RDLEN1;
+      $STATE2.ip += 8;
+      GETSHORT($RDLEN2, $STATE2.ip);
+      if (!CHECK_LEN($HEADER, $STATE2.ip, $PLEN, $RDLEN2))
+        return $RRSETIDX;
+      $STATE2.end = $STATE2.ip + $RDLEN2;
+      while (1)
       {
-        $QUIT = 1;
-        $LEN2 = $END2 - $P2;
-        memcpy($BUFF2 + $LEFT2, $P2, $LEN2);
+        $OK1 = get_rdata($HEADER, $PLEN, &$STATE1);
+        $OK2 = get_rdata($HEADER, $PLEN, &$STATE2);
+        if (!$OK1 && !$OK2)
+          break;
+        else if ($OK1 && (!$OK2 || *$STATE1.op > *$STATE2.op))
+        {
+          unsigned char *$TMP = $RRSET[$I+1];
+          $RRSET[$I+1] = $RRSET[$I];
+          $RRSET[$I] = $TMP;
+          $SWAP = 1;
+          break;
+        }
+        else if ($OK2 && (!$OK1 || *$STATE2.op > *$STATE1.op))
+          break;
       }
-      $LEN2 += $LEFT2;
-      ...
-      if ($LEN1 > $LEN2)
-        $LEFT1 = $LEN1 - $LEN2, $LEFT2 = 0, $LEN = $LEN2;
-      else
-        $LEFT2 = $LEN2 - $LEN1, $LEFT1 = 0, $LEN = $LEN1;
-      ...
-      if ($RC > 0 || ($RC == 0 && $QUIT && $LEN1 > $LEN2))
-      {
-        unsigned char *$TMP = $RRSET[$I+1];
-        $RRSET[$I+1] = $RRSET[$I];
-        $RRSET[$I] = $TMP;
-        $SWAP = $QUIT = 1;
-      }
-      ...
-    }
-  pattern-not: |
-    struct rdata_state $STATE1, $STATE2;
-    ...
-    $STATE1.ip = skip_name($RRSET[$I], $HEADER, $PLEN, 10);
-    $STATE2.ip = skip_name($RRSET[$I+1], $HEADER, $PLEN, 10);
-    $STATE1.op = $STATE2.op = NULL;
-    $STATE1.buff = $BUFF1;
-    $STATE2.buff = $BUFF2;
-    $STATE1.desc = $STATE2.desc = $RR_DESC;
-    $STATE1.ip += 8;
-    GETSHORT($RDLEN1, $STATE1.ip);
-    if (!CHECK_LEN($HEADER, $STATE1.ip, $PLEN, $RDLEN1))
-      return $RRSETIDX;
-    $STATE1.end = $STATE1.ip + $RDLEN1;
-    $STATE2.ip += 8;
-    GETSHORT($RDLEN2, $STATE2.ip);
-    if (!CHECK_LEN($HEADER, $STATE2.ip, $PLEN, $RDLEN2))
-      return $RRSETIDX;
-    $STATE2.end = $STATE2.ip + $RDLEN2;
-    while (1)
-    {
-      $OK1 = get_rdata($HEADER, $PLEN, &$STATE1);
-      $OK2 = get_rdata($HEADER, $PLEN, &$STATE2);
-      if (!$OK1 && !$OK2)
-        break;
-      else if ($OK1 && (!$OK2 || *$STATE1.op > *$STATE2.op))
-      {
-        unsigned char *$TMP = $RRSET[$I+1];
-        $RRSET[$I+1] = $RRSET[$I];
-        $RRSET[$I] = $TMP;
-        $SWAP = 1;
-        break;
-      }
-      else if ($OK2 && (!$OK1 || *$STATE2.op > *$STATE1.op))
-        break;
-    }
   languages:
   - c
   message: |
@@ -123,10 +125,11 @@ rules:
     technology:
     - c
 - id: vuln-dnsmasq-63437ffb
-  pattern: |
-    memset($BUF + $OFFSET, 0, $SIZE - $OFFSET);
-  pattern-not: |
-    memset($BUF + $OFFSET, 0, $LIMIT - ((char *)$BUF) - $OFFSET);
+  patterns:
+  - pattern: |
+      memset($BUF + $OFFSET, 0, $SIZE - $OFFSET);
+  - pattern-not: |
+      memset($BUF + $OFFSET, 0, $LIMIT - ((char *)$BUF) - $OFFSET);
   languages:
   - c
   message: |
@@ -146,10 +149,11 @@ rules:
     technology:
     - c
 - id: vuln-dnsmasq-74d4fcd7
-  pattern: |
-    reply_query($FD, $FAMILY, $NOW);
-  pattern-not: |
-    reply_query($FD, $NOW);
+  patterns:
+  - pattern: |
+      reply_query($FD, $FAMILY, $NOW);
+  - pattern-not: |
+      reply_query($FD, $NOW);
   languages:
   - c
   message: |

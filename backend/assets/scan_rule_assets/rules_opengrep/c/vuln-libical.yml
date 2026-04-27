@@ -1,13 +1,14 @@
 rules:
 - id: vuln-libical-04d84749
-  pattern: |
-    if ($PREV_CHAR != '\\') {
-      ...
-    }
-  pattern-not: |
-    if ($PREV_CHAR && $PREV_CHAR != '\\') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PREV_CHAR != '\\') {
+        ...
+      }
+  - pattern-not: |
+      if ($PREV_CHAR && $PREV_CHAR != '\\') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -26,10 +27,11 @@ rules:
     technology:
     - c
 - id: vuln-libical-6b9438d7
-  pattern: |
-    $STRUCT.$FIELD = $EXPR + $OFFSET;
-  pattern-not: |
-    $STRUCT.$FIELD = icalmemory_tmp_copy($EXPR + $OFFSET);
+  patterns:
+  - pattern: |
+      $STRUCT.$FIELD = $EXPR + $OFFSET;
+  - pattern-not: |
+      $STRUCT.$FIELD = icalmemory_tmp_copy($EXPR + $OFFSET);
   languages:
   - c
   message: |
@@ -47,15 +49,16 @@ rules:
     technology:
     - c
 - id: vuln-libical-830d9530
-  pattern: |
-    if (comp_kind == ICAL_NO_COMPONENT) {
-        $C = icalcomponent_new(ICAL_XLICINVALID_COMPONENT);
-        insert_error($C, $STR, "Parse error in component name", ICAL_XLICERRORTYPE_COMPONENTPARSEERROR);
-    }
-  pattern-not: |
-    if (comp_kind == ICAL_NO_COMPONENT) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (comp_kind == ICAL_NO_COMPONENT) {
+          $C = icalcomponent_new(ICAL_XLICINVALID_COMPONENT);
+          insert_error($C, $STR, "Parse error in component name", ICAL_XLICERRORTYPE_COMPONENTPARSEERROR);
+      }
+  - pattern-not: |
+      if (comp_kind == ICAL_NO_COMPONENT) {
+          ...
+      }
   languages:
   - c
   message: |

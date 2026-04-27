@@ -1,9 +1,10 @@
 rules:
 - id: vuln-inflect-a9a0a8e9
-  pattern: |
-    util.string.gsub($SELF, /([A-Z]+)([A-Z][a-z])/, '$1_$2')
-  pattern-not: |
-    util.string.gsub($SELF, /([A-Z])([A-Z][a-z])/, '$1_$2')
+  patterns:
+  - pattern: |
+      util.string.gsub($SELF, /([A-Z]+)([A-Z][a-z])/, '$1_$2')
+  - pattern-not: |
+      util.string.gsub($SELF, /([A-Z])([A-Z][a-z])/, '$1_$2')
   languages:
   - javascript
   message: |

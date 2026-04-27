@@ -1,10 +1,11 @@
 rules:
 - id: vuln-jellyfin-83d2c695
-  pattern: |
-    $MEDIAENCODER.UpdateEncoderPath($PATH, $PATHTYPE)
-  pattern-not: |
-    // API ENDPOINT DISABLED (NOOP) FOR SECURITY PURPOSES
-    //$MEDIAENCODER.UpdateEncoderPath($PATH, $PATHTYPE)
+  patterns:
+  - pattern: |
+      $MEDIAENCODER.UpdateEncoderPath($PATH, $PATHTYPE)
+  - pattern-not: |
+      // API ENDPOINT DISABLED (NOOP) FOR SECURITY PURPOSES
+      //$MEDIAENCODER.UpdateEncoderPath($PATH, $PATHTYPE)
   languages:
   - csharp
   message: |

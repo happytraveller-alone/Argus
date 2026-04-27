@@ -1,9 +1,10 @@
 rules:
 - id: vuln-salt-63823f8c
-  pattern: |
-    return bool(clean_path($OPTS['pki_dir'], $ID))
-  pattern-not: |
-    return bool(clean_path($OPTS['pki_dir'], $ID)) and clean_id($ID)
+  patterns:
+  - pattern: |
+      return bool(clean_path($OPTS['pki_dir'], $ID))
+  - pattern-not: |
+      return bool(clean_path($OPTS['pki_dir'], $ID)) and clean_id($ID)
   languages:
   - python
   message: Detected missing validation of ID in clean_path function. This can lead to directory traversal attacks if the ID contains malicious path sequences. Ensure to validate the ID using clean_id function before processing.
@@ -18,10 +19,11 @@ rules:
     technology:
     - python
 - id: vuln-salt-7b3591d9
-  pattern: |
-    $RET = self._proc_function_local(self.opts['fun'], ...)
-  pattern-not: |
-    $RET = self._proc_function(self.opts['fun'], ...)
+  patterns:
+  - pattern: |
+      $RET = self._proc_function_local(self.opts['fun'], ...)
+  - pattern-not: |
+      $RET = self._proc_function(self.opts['fun'], ...)
   languages:
   - python
   message: Detected use of potentially insecure function _proc_function_local. This function may bypass necessary security checks. Use _proc_function instead.
@@ -38,18 +40,19 @@ rules:
     technology:
     - python
 - id: vuln-salt-80d90307
-  pattern: |
-    def clean_id($ID):
-        ...
-        if re.search(r'\.\.\{sep}'.format(sep=os.sep), $ID):
-            return False
-        return True
-  pattern-not: |
-    def clean_id($ID):
-        ...
-        if any($X in $ID for $X in ('/', '\\', '\0')):
-            return False
-        return True
+  patterns:
+  - pattern: |
+      def clean_id($ID):
+          ...
+          if re.search(r'\.\.\{sep}'.format(sep=os.sep), $ID):
+              return False
+          return True
+  - pattern-not: |
+      def clean_id($ID):
+          ...
+          if any($X in $ID for $X in ('/', '\\', '\0')):
+              return False
+          return True
   languages:
   - python
   message: Path traversal vulnerability detected. The clean_id function was not properly checking for path separators, which could allow directory traversal attacks. Update the function to explicitly check for '/', '\', and null bytes.
@@ -64,10 +67,11 @@ rules:
     technology:
     - python
 - id: vuln-salt-86e18b91
-  pattern: |
-    os.open($PATH, os.O_CREAT | os.O_WRONLY, $MODE)
-  pattern-not: |
-    os.open($PATH, os.O_CREAT | os.O_RDWR, $MODE)
+  patterns:
+  - pattern: |
+      os.open($PATH, os.O_CREAT | os.O_WRONLY, $MODE)
+  - pattern-not: |
+      os.open($PATH, os.O_CREAT | os.O_RDWR, $MODE)
   languages:
   - python
   message: |
@@ -83,13 +87,14 @@ rules:
     technology:
     - python
 - id: vuln-salt-905efea1
-  pattern: |
-    return self.low($FUN, $LOW, full_return=False)
-  pattern-not: |
-    try:
-      return self.cmd_sync($LOW)
-    except salt.exceptions.EauthAuthenticationError as $EXC:
-      log.error($EXC)
+  patterns:
+  - pattern: |
+      return self.low($FUN, $LOW, full_return=False)
+  - pattern-not: |
+      try:
+        return self.cmd_sync($LOW)
+      except salt.exceptions.EauthAuthenticationError as $EXC:
+        log.error($EXC)
   languages:
   - python
   message: |
@@ -104,18 +109,19 @@ rules:
     - https://cwe.mitre.org/data/definitions/755.html
     technology: python
 - id: vuln-salt-b49d0d4b
-  pattern: |
-    logfile = salt.utils.path_join(
-        os.environ['TMP'],
-        '{0}.log'.format($EXE_NAME)
-    )
-  pattern-not: |
-    logfile_tmp = tempfile.NamedTemporaryFile(dir=os.environ['TMP'],
-                                              prefix=$EXE_NAME,
-                                              suffix='.log',
-                                              delete=False)
-    logfile = logfile_tmp.name
-    logfile_tmp.close()
+  patterns:
+  - pattern: |
+      logfile = salt.utils.path_join(
+          os.environ['TMP'],
+          '{0}.log'.format($EXE_NAME)
+      )
+  - pattern-not: |
+      logfile_tmp = tempfile.NamedTemporaryFile(dir=os.environ['TMP'],
+                                                prefix=$EXE_NAME,
+                                                suffix='.log',
+                                                delete=False)
+      logfile = logfile_tmp.name
+      logfile_tmp.close()
   languages:
   - python
   message: |
@@ -129,13 +135,14 @@ rules:
     owasp: A9:2017-Insufficient Attack Protection
     technology: python
 - id: vuln-salt-bca115f3
-  pattern: |
-    if not ('token' in $LOW or 'eauth' in $LOW) and $LOW['client'] != 'ssh':
-      ...
-  pattern-not: |
-    if not ('token' in $LOW or 'eauth' in $LOW):
-      if $LOW.get('raw_shell') and not $SELF.opts.get('netapi_allow_raw_shell'):
-        raise salt.exceptions.EauthAuthenticationError('Raw shell option not allowed.')
+  patterns:
+  - pattern: |
+      if not ('token' in $LOW or 'eauth' in $LOW) and $LOW['client'] != 'ssh':
+        ...
+  - pattern-not: |
+      if not ('token' in $LOW or 'eauth' in $LOW):
+        if $LOW.get('raw_shell') and not $SELF.opts.get('netapi_allow_raw_shell'):
+          raise salt.exceptions.EauthAuthenticationError('Raw shell option not allowed.')
   languages:
   - python
   message: |
@@ -151,12 +158,13 @@ rules:
     technology:
     - python
 - id: vuln-salt-c0e5a117
-  pattern: |
-    def __init__(..., mopts=None):
-        ...
-  pattern-not: |
-    def __init__(..., mopts=None, disable_custom_roster=False):
-        self.opts['__disable_custom_roster'] = disable_custom_roster
+  patterns:
+  - pattern: |
+      def __init__(..., mopts=None):
+          ...
+  - pattern-not: |
+      def __init__(..., mopts=None, disable_custom_roster=False):
+          self.opts['__disable_custom_roster'] = disable_custom_roster
   languages:
   - python
   message: Salt API should never offer a custom roster. Missing the disable_custom_roster parameter can allow custom rosters, which is a security risk.
@@ -171,16 +179,12 @@ rules:
     technology:
     - python
 - id: vuln-salt-c80b20b9
-  pattern: |
-    def local_batch(self, *args, **kwargs):
-        ...
-        local = salt.client.get_local_client(mopts=self.opts)
-        return local.cmd_batch(*args, **kwargs)
-  pattern-not: |
-    def local_batch(self, *args, **kwargs):
-        ...
-        local = salt.client.get_local_client(mopts=self.opts)
-        return local.cmd_batch(*args, **kwargs)
+  patterns:
+  - pattern: |
+      def local_batch(self, *args, **kwargs):
+          ...
+          local = salt.client.get_local_client(mopts=self.opts)
+          return local.cmd_batch(*args, **kwargs)
   languages:
   - python
   message: Directly returning the result of `cmd_batch` without proper validation can lead to security vulnerabilities. Ensure that the batch size and other parameters are properly validated before execution.

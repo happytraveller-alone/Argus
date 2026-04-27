@@ -1,9 +1,10 @@
 rules:
 - id: vuln-mlflow-8174250f
-  pattern: |
-    return session.request($METHOD, $URL, **$KWARGS)
-  pattern-not: |
-    return session.request($METHOD, $URL, allow_redirects=$ALLOW_REDIRECTS, **$KWARGS)
+  patterns:
+  - pattern: |
+      return session.request($METHOD, $URL, **$KWARGS)
+  - pattern-not: |
+      return session.request($METHOD, $URL, allow_redirects=$ALLOW_REDIRECTS, **$KWARGS)
   languages:
   - python
   message: |

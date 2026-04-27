@@ -1,26 +1,27 @@
 rules:
 - id: vuln-epiphany-3e0f7dea
-  pattern: |
-    if ($URI && g_str_has_prefix($URI, "https")) {
-      $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_SECURE_HIGH;
-    } else {
-      $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
-    }
-  pattern-not: |
-    if ($URI && g_str_has_prefix($URI, "https")) {
-      $FRAME = webkit_web_view_get_main_frame($VIEW);
-      $SOURCE = webkit_web_frame_get_data_source($FRAME);
-      $REQUEST = webkit_web_data_source_get_request($SOURCE);
-      $MESSAGE = webkit_network_request_get_message($REQUEST);
-
-      if ($MESSAGE && (soup_message_get_flags($MESSAGE) & SOUP_MESSAGE_CERTIFICATE_TRUSTED)) {
+  patterns:
+  - pattern: |
+      if ($URI && g_str_has_prefix($URI, "https")) {
         $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_SECURE_HIGH;
       } else {
-        $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_BROKEN;
+        $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
       }
-    } else {
-      $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
-    }
+  - pattern-not: |
+      if ($URI && g_str_has_prefix($URI, "https")) {
+        $FRAME = webkit_web_view_get_main_frame($VIEW);
+        $SOURCE = webkit_web_frame_get_data_source($FRAME);
+        $REQUEST = webkit_web_data_source_get_request($SOURCE);
+        $MESSAGE = webkit_network_request_get_message($REQUEST);
+
+        if ($MESSAGE && (soup_message_get_flags($MESSAGE) & SOUP_MESSAGE_CERTIFICATE_TRUSTED)) {
+          $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_SECURE_HIGH;
+        } else {
+          $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_BROKEN;
+        }
+      } else {
+        $SECURITY_LEVEL = $EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
+      }
   languages:
   - c
   message: |

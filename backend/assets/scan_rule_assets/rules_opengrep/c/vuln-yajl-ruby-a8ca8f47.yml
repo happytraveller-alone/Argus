@@ -1,15 +1,16 @@
 rules:
 - id: vuln-yajl-ruby-a8ca8f47
-  pattern: |
-    end++;
-    if (str[$END] == '\\' && str[$END + 1] == 'u') {
-      ...
-    }
-  pattern-not: |
-    if ($END + 2 < $LEN && str[$END + 1] == '\\' && str[$END + 2] == 'u') {
+  patterns:
+  - pattern: |
       end++;
-      ...
-    }
+      if (str[$END] == '\\' && str[$END + 1] == 'u') {
+        ...
+      }
+  - pattern-not: |
+      if ($END + 2 < $LEN && str[$END + 1] == '\\' && str[$END + 2] == 'u') {
+        end++;
+        ...
+      }
   languages:
   - c
   message: |

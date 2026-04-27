@@ -1,15 +1,16 @@
 rules:
 - id: vuln-mupdf-093fc3b0
-  pattern: |
-    assert($NODE->left == $EMPTY || $TREE[$NODE->left].parent == $NUM);
-    assert($NODE->right == $EMPTY || $TREE[$NODE->right].parent == $NUM);
-  pattern-not: |
-    assert(!$NODE->many || $NODE->low == $NODE->high);
-    assert($NODE->low <= $NODE->high);
-    assert(($NODE->left == $EMPTY) || ($TREE[$NODE->left].parent == $NUM &&
-        $TREE[$NODE->left].high < $NODE->low));
-    assert($NODE->right == $EMPTY || ($TREE[$NODE->right].parent == $NUM &&
-        $NODE->high < $TREE[$NODE->right].low));
+  patterns:
+  - pattern: |
+      assert($NODE->left == $EMPTY || $TREE[$NODE->left].parent == $NUM);
+      assert($NODE->right == $EMPTY || $TREE[$NODE->right].parent == $NUM);
+  - pattern-not: |
+      assert(!$NODE->many || $NODE->low == $NODE->high);
+      assert($NODE->low <= $NODE->high);
+      assert(($NODE->left == $EMPTY) || ($TREE[$NODE->left].parent == $NUM &&
+          $TREE[$NODE->left].high < $NODE->low));
+      assert($NODE->right == $EMPTY || ($TREE[$NODE->right].parent == $NUM &&
+          $NODE->high < $TREE[$NODE->right].low));
   languages:
   - c
   message: |
@@ -29,26 +30,8 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-164ddc22
-  pattern: |
-    $PATH = fz_outline_glyph($CTX, $FONT, $GID, $IDENTITY);
-    if ($PATH)
-    {
-      $RECT = fz_bound_path($CTX, $PATH, $NULL, $IDENTITY);
-      $SHIFT.e = -$RECT.x0;
-      $SHIFT.f = -$RECT.y0;
-      fz_transform_path($CTX, $PATH, $SHIFT);
-      $OUT = start_def($CTX, $SDEV);
-      fz_write_printf($CTX, $OUT, "<symbol id=\"font_%x_%x\">\n", $FNT->id, $GID);
-      fz_write_printf($CTX, $OUT, "<path");
-      svg_dev_path($CTX, $SDEV, $PATH);
-      fz_write_printf($CTX, $OUT, "/>\n");
-      fz_drop_path($CTX, $PATH);
-    }
-  pattern-not: |
-    $OUT = start_def($CTX, $SDEV);
-    fz_write_printf($CTX, $OUT, "<symbol id=\"font_%x_%x\">\n", $FNT->id, $GID);
-    if (fz_font_ft_face($CTX, $FONT))
-    {
+  patterns:
+  - pattern: |
       $PATH = fz_outline_glyph($CTX, $FONT, $GID, $IDENTITY);
       if ($PATH)
       {
@@ -56,12 +39,31 @@ rules:
         $SHIFT.e = -$RECT.x0;
         $SHIFT.f = -$RECT.y0;
         fz_transform_path($CTX, $PATH, $SHIFT);
+        $OUT = start_def($CTX, $SDEV);
+        fz_write_printf($CTX, $OUT, "<symbol id=\"font_%x_%x\">\n", $FNT->id, $GID);
         fz_write_printf($CTX, $OUT, "<path");
         svg_dev_path($CTX, $SDEV, $PATH);
         fz_write_printf($CTX, $OUT, "/>\n");
         fz_drop_path($CTX, $PATH);
       }
-    }
+  - pattern-not: |
+      $OUT = start_def($CTX, $SDEV);
+      fz_write_printf($CTX, $OUT, "<symbol id=\"font_%x_%x\">\n", $FNT->id, $GID);
+      if (fz_font_ft_face($CTX, $FONT))
+      {
+        $PATH = fz_outline_glyph($CTX, $FONT, $GID, $IDENTITY);
+        if ($PATH)
+        {
+          $RECT = fz_bound_path($CTX, $PATH, $NULL, $IDENTITY);
+          $SHIFT.e = -$RECT.x0;
+          $SHIFT.f = -$RECT.y0;
+          fz_transform_path($CTX, $PATH, $SHIFT);
+          fz_write_printf($CTX, $OUT, "<path");
+          svg_dev_path($CTX, $SDEV, $PATH);
+          fz_write_printf($CTX, $OUT, "/>\n");
+          fz_drop_path($CTX, $PATH);
+        }
+      }
   languages:
   - c
   message: |
@@ -79,10 +81,11 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-2b16dbd8
-  pattern: |
-    strcmp($FUNC($ARG), $TAG)
-  pattern-not: |
-    fz_xml_is_tag($ARG, $TAG)
+  patterns:
+  - pattern: |
+      strcmp($FUNC($ARG), $TAG)
+  - pattern-not: |
+      fz_xml_is_tag($ARG, $TAG)
   languages:
   - c
   message: |
@@ -98,10 +101,11 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-4dcc6aff
-  pattern: |
-    $MASK_COLORSPACE = fz_device_gray($CTX);
-  pattern-not: |
-    $MASK_COLORSPACE = fz_keep_colorspace($CTX, fz_device_gray($CTX));
+  patterns:
+  - pattern: |
+      $MASK_COLORSPACE = fz_device_gray($CTX);
+  - pattern-not: |
+      $MASK_COLORSPACE = fz_keep_colorspace($CTX, fz_device_gray($CTX));
   languages:
   - c
   message: |
@@ -117,12 +121,13 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-5e411a99
-  pattern: |
-    if ($NUM < 0)
-      fz_throw($CTX, $ERROR, $MSG, $NUM);
-  pattern-not: |
-    if ($NUM < 0 || $NUM > $MAX)
-      fz_throw($CTX, $ERROR, $MSG, $NUM);
+  patterns:
+  - pattern: |
+      if ($NUM < 0)
+        fz_throw($CTX, $ERROR, $MSG, $NUM);
+  - pattern-not: |
+      if ($NUM < 0 || $NUM > $MAX)
+        fz_throw($CTX, $ERROR, $MSG, $NUM);
   languages:
   - c
   message: |
@@ -141,10 +146,11 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-60dabde1
-  pattern: |
-    float $SAMPLES[32];
-  pattern-not: |
-    float $SAMPLES[FZ_MAX_COLORS];
+  patterns:
+  - pattern: |
+      float $SAMPLES[32];
+  - pattern-not: |
+      float $SAMPLES[FZ_MAX_COLORS];
   languages:
   - c
   message: |
@@ -160,12 +166,13 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-8a3257b0
-  pattern: |
-    if (!$GROUP)
-      fz_throw($CTX, FZ_ERROR_SYNTAX, "cannot load softmask xobject (%d 0 R)", pdf_to_num($CTX, $OBJ));
-  pattern-not: |
-    if (!pdf_is_stream($CTX, $DICT))
-      fz_throw($CTX, FZ_ERROR_SYNTAX, "XObject must be a stream");
+  patterns:
+  - pattern: |
+      if (!$GROUP)
+        fz_throw($CTX, FZ_ERROR_SYNTAX, "cannot load softmask xobject (%d 0 R)", pdf_to_num($CTX, $OBJ));
+  - pattern-not: |
+      if (!pdf_is_stream($CTX, $DICT))
+        fz_throw($CTX, FZ_ERROR_SYNTAX, "XObject must be a stream");
   languages:
   - c
   message: |
@@ -183,12 +190,9 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-97096297
-  pattern: |
-    $FUNC($CTX, pdf_dict_get($CTX, $OBJ, PDF_NAME($NAME)))
-  pattern-not: |
-    $STR = pdf_dict_get($CTX, $OBJ, PDF_NAME($NAME));
-    if ($STR)
-      $FUNC($CTX, $STR)
+  patterns:
+  - pattern: |
+      $FUNC($CTX, pdf_dict_get($CTX, $OBJ, PDF_NAME($NAME)))
   languages:
   - c
   message: |
@@ -206,12 +210,13 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-af1e390a
-  pattern: |
-    if (pix->stride - 1 > INT_MAX / $N)
-      fz_throw($CTX, $ERROR, "overly wide image");
-  pattern-not: |
-    if (pix->stride > INT_MAX / pix->h)
-      fz_throw($CTX, $ERROR, "Overly large image");
+  patterns:
+  - pattern: |
+      if (pix->stride - 1 > INT_MAX / $N)
+        fz_throw($CTX, $ERROR, "overly wide image");
+  - pattern-not: |
+      if (pix->stride > INT_MAX / pix->h)
+        fz_throw($CTX, $ERROR, "Overly large image");
   languages:
   - c
   message: |
@@ -231,59 +236,18 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-b2e7d38e
-  pattern: |
-    if ($IMAGE->mask)
-    {
-      if ($GSTATE->blendmode)
-        fz_begin_group($CTX, $DEV, &$BBOX, NULL, 0, 0, $GSTATE->blendmode, 1);
-      fz_clip_image_mask($CTX, $DEV, $IMAGE->mask, &$IMAGE_CTM, &$BBOX);
-    }
-    else
-    {
-      $GSTATE = pdf_begin_group($CTX, $PR, &$BBOX, &$SOFTMASK);
-    }
-  pattern-not: |
-    if ($IMAGE->mask && $GSTATE->blendmode)
-    {
-      fz_begin_group($CTX, $DEV, &$BBOX, NULL, 0, 0, $GSTATE->blendmode, 1);
-      fz_try($CTX)
+  patterns:
+  - pattern: |
+      if ($IMAGE->mask)
+      {
+        if ($GSTATE->blendmode)
+          fz_begin_group($CTX, $DEV, &$BBOX, NULL, 0, 0, $GSTATE->blendmode, 1);
         fz_clip_image_mask($CTX, $DEV, $IMAGE->mask, &$IMAGE_CTM, &$BBOX);
-      fz_catch($CTX)
-      {
-        fz_end_group($CTX, $DEV);
-        fz_rethrow($CTX);
       }
-      fz_try($CTX)
-        pdf_show_image_imp($CTX, $PR, $IMAGE, &$IMAGE_CTM, &$BBOX);
-      fz_always($CTX)
+      else
       {
-        fz_pop_clip($CTX, $DEV);
-        fz_end_group($CTX, $DEV);
+        $GSTATE = pdf_begin_group($CTX, $PR, &$BBOX, &$SOFTMASK);
       }
-      fz_catch($CTX)
-        fz_rethrow($CTX);
-    }
-    else if ($IMAGE->mask)
-    {
-      fz_clip_image_mask($CTX, $DEV, $IMAGE->mask, &$IMAGE_CTM, &$BBOX);
-      fz_try($CTX)
-        pdf_show_image_imp($CTX, $PR, $IMAGE, &$IMAGE_CTM, &$BBOX);
-      fz_always($CTX)
-        fz_pop_clip($CTX, $DEV);
-      fz_catch($CTX)
-        fz_rethrow($CTX);
-    }
-    else
-    {
-      softmask_save softmask = { NULL };
-      $GSTATE = pdf_begin_group($CTX, $PR, &$BBOX, &softmask);
-      fz_try($CTX)
-        pdf_show_image_imp($CTX, $PR, $IMAGE, &$IMAGE_CTM, &$BBOX);
-      fz_always($CTX)
-        pdf_end_group($CTX, $PR, &softmask);
-      fz_catch($CTX)
-        fz_rethrow($CTX);
-    }
   languages:
   - c
   message: |
@@ -301,14 +265,15 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-de39f005
-  pattern: |
-    $FORM = pdf_load_xobject($CTX, $DOC, $FORMOBJ);
-    ...
-    pdf_update_xobject_contents($CTX, $DOC, $FORM, $FZBUF);
-  pattern-not: |
-    pdf_update_stream($CTX, $DOC, $FORMOBJ, $FZBUF, 0);
-    $FORM = pdf_load_xobject($CTX, $DOC, $FORMOBJ);
-    $FORM->iteration = 1;
+  patterns:
+  - pattern: |
+      $FORM = pdf_load_xobject($CTX, $DOC, $FORMOBJ);
+      ...
+      pdf_update_xobject_contents($CTX, $DOC, $FORM, $FZBUF);
+  - pattern-not: |
+      pdf_update_stream($CTX, $DOC, $FORMOBJ, $FZBUF, 0);
+      $FORM = pdf_load_xobject($CTX, $DOC, $FORMOBJ);
+      $FORM->iteration = 1;
   languages:
   - c
   message: |
@@ -327,10 +292,11 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-e089b2e2
-  pattern: |
-    fprintf(stderr, "Unmatched: %s\n", $VAR);
-  pattern-not: |
-    fprintf(stderr, "Ignoring line without script statement.\n");
+  patterns:
+  - pattern: |
+      fprintf(stderr, "Unmatched: %s\n", $VAR);
+  - pattern-not: |
+      fprintf(stderr, "Ignoring line without script statement.\n");
   languages:
   - c
   message: |
@@ -348,15 +314,16 @@ rules:
     technology:
     - c
 - id: vuln-mupdf-fa193640
-  pattern: |
-    if ($ENTRY->ofs <= 0 || $ENTRY->ofs >= $XREF_LEN || pdf_get_xref_entry($CTX, $DOC, $ENTRY->ofs)->type != 'n')
-      fz_throw($CTX, $ERROR, "invalid reference to an objstm that does not exist: %d (%d 0 R)", (int)$ENTRY->ofs, $I);
-  pattern-not: |
-    {
-      fz_off_t $OFS = $ENTRY->ofs;
-      if ($OFS <= 0 || $OFS >= $XREF_LEN || pdf_get_xref_entry($CTX, $DOC, $OFS)->type != 'n')
-        fz_throw($CTX, $ERROR, "invalid reference to an objstm that does not exist: %d (%d 0 R)", (int)$OFS, $I);
-    }
+  patterns:
+  - pattern: |
+      if ($ENTRY->ofs <= 0 || $ENTRY->ofs >= $XREF_LEN || pdf_get_xref_entry($CTX, $DOC, $ENTRY->ofs)->type != 'n')
+        fz_throw($CTX, $ERROR, "invalid reference to an objstm that does not exist: %d (%d 0 R)", (int)$ENTRY->ofs, $I);
+  - pattern-not: |
+      {
+        fz_off_t $OFS = $ENTRY->ofs;
+        if ($OFS <= 0 || $OFS >= $XREF_LEN || pdf_get_xref_entry($CTX, $DOC, $OFS)->type != 'n')
+          fz_throw($CTX, $ERROR, "invalid reference to an objstm that does not exist: %d (%d 0 R)", (int)$OFS, $I);
+      }
   languages:
   - c
   message: |

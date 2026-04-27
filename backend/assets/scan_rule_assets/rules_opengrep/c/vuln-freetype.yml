@@ -1,9 +1,10 @@
 rules:
 - id: vuln-freetype-010e0614
-  pattern: |
-    cf2_stack_init($MEMORY, $ERROR)
-  pattern-not: |
-    cf2_stack_init($MEMORY, $ERROR, $STACK_SIZE)
+  patterns:
+  - pattern: |
+      cf2_stack_init($MEMORY, $ERROR)
+  - pattern-not: |
+      cf2_stack_init($MEMORY, $ERROR, $STACK_SIZE)
   languages:
   - c
   message: |
@@ -19,18 +20,19 @@ rules:
     technology:
     - c
 - id: vuln-freetype-0545ec1c
-  pattern: |
-    $CHARSET->sids[$IDX] = FT_GET_USHORT();
-  pattern-not: |
-    {
-      FT_UShort $SID = FT_GET_USHORT();
-      if ( $SID < 65000 )
-        $CHARSET->sids[$IDX] = $SID;
-      else
+  patterns:
+  - pattern: |
+      $CHARSET->sids[$IDX] = FT_GET_USHORT();
+  - pattern-not: |
       {
-        $CHARSET->sids[$IDX] = 0;
+        FT_UShort $SID = FT_GET_USHORT();
+        if ( $SID < 65000 )
+          $CHARSET->sids[$IDX] = $SID;
+        else
+        {
+          $CHARSET->sids[$IDX] = 0;
+        }
       }
-    }
   languages:
   - c
   message: |
@@ -51,10 +53,11 @@ rules:
     technology:
     - c
 - id: vuln-freetype-45a3c76b
-  pattern: |
-    $STREAM->pos + $COUNT > $STREAM->size
-  pattern-not: |
-    $STREAM->size - $STREAM->pos < $COUNT
+  patterns:
+  - pattern: |
+      $STREAM->pos + $COUNT > $STREAM->size
+  - pattern-not: |
+      $STREAM->size - $STREAM->pos < $COUNT
   languages:
   - c
   message: |
@@ -73,13 +76,10 @@ rules:
     technology:
     - c
 - id: vuln-freetype-77930974
-  pattern: |
-    if ( !$FUNC( $FACE, $TTAG_CFF, $STREAM, 0 ) )
-      $NUM_INSTANCES = 0;
-  pattern-not: |
-    if ( $FUNC( $FACE, $TTAG_glyf, $STREAM, 0 ) &&
-         !$FUNC( $FACE, $TTAG_CFF, $STREAM, 0 ) )
-      $NUM_INSTANCES = 0;
+  patterns:
+  - pattern: |
+      if ( !$FUNC( $FACE, $TTAG_CFF, $STREAM, 0 ) )
+        $NUM_INSTANCES = 0;
   languages:
   - c
   message: |
@@ -97,13 +97,14 @@ rules:
     technology:
     - c
 - id: vuln-freetype-8b281f83
-  pattern: |
-    (void)$FUNC($PARSER, $NUM, $TEMP, $NUM2);
-  pattern-not: |
-    $RESULT = $FUNC($PARSER, $NUM, $TEMP, $NUM2);
-    if ($RESULT < $NUM) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      (void)$FUNC($PARSER, $NUM, $TEMP, $NUM2);
+  - pattern-not: |
+      $RESULT = $FUNC($PARSER, $NUM, $TEMP, $NUM2);
+      if ($RESULT < $NUM) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -119,12 +120,13 @@ rules:
     technology:
     - c
 - id: vuln-freetype-8d22746c
-  pattern: |
-    $VAR = $MASK->end_point;
-  pattern-not: |
-    $VAR = $MASK->end_point > $GLYPH->num_points
-              ? $GLYPH->num_points
-              : $MASK->end_point;
+  patterns:
+  - pattern: |
+      $VAR = $MASK->end_point;
+  - pattern-not: |
+      $VAR = $MASK->end_point > $GLYPH->num_points
+                ? $GLYPH->num_points
+                : $MASK->end_point;
   languages:
   - c
   message: |
@@ -142,10 +144,11 @@ rules:
     technology:
     - c
 - id: vuln-freetype-cee5d593
-  pattern: |
-    unsigned long $VAR = $OLDSIZE + ($OLDSIZE >> 1) + 4;
-  pattern-not: |
-    unsigned long $VAR = $OLDSIZE + ($OLDSIZE >> 1) + 5;
+  patterns:
+  - pattern: |
+      unsigned long $VAR = $OLDSIZE + ($OLDSIZE >> 1) + 4;
+  - pattern-not: |
+      unsigned long $VAR = $OLDSIZE + ($OLDSIZE >> 1) + 5;
   languages:
   - c
   message: |

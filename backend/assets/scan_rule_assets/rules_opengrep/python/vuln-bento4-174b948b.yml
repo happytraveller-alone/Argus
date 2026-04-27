@@ -1,7 +1,8 @@
 rules:
 - id: vuln-bento4-174b948b
-  pattern: SDK_REVISION = '636'
-  pattern-not: SDK_REVISION = '637'
+  patterns:
+  - pattern: SDK_REVISION = '636'
+  - pattern-not: SDK_REVISION = '637'
   languages:
   - python
   message: Outdated SDK revision detected. Using an outdated SDK version can expose the application to known vulnerabilities. Update to the latest SDK revision to ensure security patches are applied.

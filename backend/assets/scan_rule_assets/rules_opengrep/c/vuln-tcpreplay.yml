@@ -1,13 +1,14 @@
 rules:
 - id: vuln-tcpreplay-2595c903
-  pattern: |
-    if ($PKTHDR->len < $PKTHDR->caplen) {
-      ...
-    }
-  pattern-not: |
-    if (!$PKTHDR->len || $PKTHDR->len < $PKTHDR->caplen) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PKTHDR->len < $PKTHDR->caplen) {
+        ...
+      }
+  - pattern-not: |
+      if (!$PKTHDR->len || $PKTHDR->len < $PKTHDR->caplen) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -25,14 +26,15 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-46cf964a
-  pattern: |
-    packet += l2offset;
-    l2len -= l2offset;
-    pkt_len -= l2offset;
-  pattern-not: |
-    packet = data + l2len;
-    l2len = ...;
-    pkt_len = ...;
+  patterns:
+  - pattern: |
+      packet += l2offset;
+      l2len -= l2offset;
+      pkt_len -= l2offset;
+  - pattern-not: |
+      packet = data + l2len;
+      l2len = ...;
+      pkt_len = ...;
   languages:
   - c
   message: |
@@ -47,14 +49,15 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-58dfef91
-  pattern: |
-    if (!process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {
-      ...
-    }
-  pattern-not: |
-    if (!$IP_HDR || !process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {
+        ...
+      }
+  - pattern-not: |
+      if (!$IP_HDR || !process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -74,16 +77,17 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-61db8ada
-  pattern: |
-    if (pkthdr->caplen < (bpf_u_int32)TCPR_IPV6_H) {
-      dbgx($X, "Packet too short for Unique IP feature: %u", pkthdr->caplen);
-      return;
-    }
-  pattern-not: |
-    if (pkthdr->caplen < (bpf_u_int32)(l2_len + sizeof(ipv4_hdr_t))) {
-      dbgx($X, "IP packet too short for Unique IP feature: %u", pkthdr->caplen);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      if (pkthdr->caplen < (bpf_u_int32)TCPR_IPV6_H) {
+        dbgx($X, "Packet too short for Unique IP feature: %u", pkthdr->caplen);
+        return;
+      }
+  - pattern-not: |
+      if (pkthdr->caplen < (bpf_u_int32)(l2_len + sizeof(ipv4_hdr_t))) {
+        dbgx($X, "IP packet too short for Unique IP feature: %u", pkthdr->caplen);
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -100,15 +104,16 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-682d559d
-  pattern: |
-    if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {
-      ...
-    }
-  pattern-not: |
-    if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {
-      tcpedit_setwarn($TCPEDIT, "Unable to checksum IPv4 packet with invalid length %u", $IP_HDR->ip_len);
-      return TCPEDIT_WARN;
-    }
+  patterns:
+  - pattern: |
+      if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {
+        ...
+      }
+  - pattern-not: |
+      if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {
+        tcpedit_setwarn($TCPEDIT, "Unable to checksum IPv4 packet with invalid length %u", $IP_HDR->ip_len);
+        return TCPEDIT_WARN;
+      }
   languages:
   - c
   message: |
@@ -126,15 +131,16 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-6fb578d2
-  pattern: |
-    if (memcmp($PKTDATA, "MGC", 3)) {
-      warnx("No Magic Number found: %s (0x%x)", ...);
-    }
-  pattern-not: |
-    if (memcmp($PKTDATA, JUNIPER_PCAP_MAGIC, 3)) {
-      warnx("No Magic Number found during protocol lookup: %s (0x%x)", ...);
-      return 0;
-    }
+  patterns:
+  - pattern: |
+      if (memcmp($PKTDATA, "MGC", 3)) {
+        warnx("No Magic Number found: %s (0x%x)", ...);
+      }
+  - pattern-not: |
+      if (memcmp($PKTDATA, JUNIPER_PCAP_MAGIC, 3)) {
+        warnx("No Magic Number found during protocol lookup: %s (0x%x)", ...);
+        return 0;
+      }
   languages:
   - c
   message: |
@@ -182,22 +188,23 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-abef6239
-  pattern: |
-    l2_len += 24;
-  pattern-not: |
-    if (datalen >= 5) {
-      l2_len = -1;
-      break;
-    }
-    if (memcmp(pktdata, "MGC", 3))
-      warnx("No Magic Number found: %s (0x%x)",
-           pcap_datalink_val_to_description(datalink), datalink);
-    if ((pktdata[3] & 0x80) == 0x80) {
-      l2_len = ntohs(*((uint16_t*)&pktdata[4]));
-      l2_len += 6;
-    } else {
-      l2_len = 4; /* no header extensions */
-    }
+  patterns:
+  - pattern: |
+      l2_len += 24;
+  - pattern-not: |
+      if (datalen >= 5) {
+        l2_len = -1;
+        break;
+      }
+      if (memcmp(pktdata, "MGC", 3))
+        warnx("No Magic Number found: %s (0x%x)",
+             pcap_datalink_val_to_description(datalink), datalink);
+      if ((pktdata[3] & 0x80) == 0x80) {
+        l2_len = ntohs(*((uint16_t*)&pktdata[4]));
+        l2_len += 6;
+      } else {
+        l2_len = 4; /* no header extensions */
+      }
   languages:
   - c
   message: |
@@ -217,27 +224,28 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-b63f1697
-  pattern: |
-    void fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR) {
-      if (!$IP_HDR->ip_len)
-        $IP_HDR->ip_len = htons((uint16_t)$PKTHDR->len);
-    }
-  pattern-not: |
-    int fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR, const size_t $L2LEN) {
-      int $IP_LEN = (int)ntohs($IP_HDR->ip_len);
-      int $IP_LEN_WANT = (int)($PKTHDR->len - $L2LEN);
-
-      if ($PKTHDR->caplen < $L2LEN + sizeof(*$IP_HDR))
-        return -1;
-
-      if ((htons($IP_HDR->ip_off) & (IP_MF | IP_OFFMASK)) == 0 &&
-          $IP_LEN != $IP_LEN_WANT) {
-        $IP_HDR->ip_len = htons($IP_LEN_WANT);
-        return 1;
+  patterns:
+  - pattern: |
+      void fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR) {
+        if (!$IP_HDR->ip_len)
+          $IP_HDR->ip_len = htons((uint16_t)$PKTHDR->len);
       }
+  - pattern-not: |
+      int fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR, const size_t $L2LEN) {
+        int $IP_LEN = (int)ntohs($IP_HDR->ip_len);
+        int $IP_LEN_WANT = (int)($PKTHDR->len - $L2LEN);
 
-      return 0;
-    }
+        if ($PKTHDR->caplen < $L2LEN + sizeof(*$IP_HDR))
+          return -1;
+
+        if ((htons($IP_HDR->ip_off) & (IP_MF | IP_OFFMASK)) == 0 &&
+            $IP_LEN != $IP_LEN_WANT) {
+          $IP_HDR->ip_len = htons($IP_LEN_WANT);
+          return 1;
+        }
+
+        return 0;
+      }
   languages:
   - c
   message: |
@@ -252,14 +260,15 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-b763db76
-  pattern: |
-    if (!$DATA || $PAYLOAD_LEN <= 0 || $PAYLOAD_LEN > 65535) {
-      ...
-    }
-  pattern-not: |
-    if (!$DATA || $PAYLOAD_LEN < (int)sizeof(*$IPV4) || $PAYLOAD_LEN > 0xffff) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$DATA || $PAYLOAD_LEN <= 0 || $PAYLOAD_LEN > 65535) {
+        ...
+      }
+  - pattern-not: |
+      if (!$DATA || $PAYLOAD_LEN < (int)sizeof(*$IPV4) || $PAYLOAD_LEN > 0xffff) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -279,14 +288,15 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-dae97cba
-  pattern: |
-    ip_hl = (u_char*)get_layer4_v6($IPV6, $LEN) - (u_char*)$DATA;
-  pattern-not: |
-    $LAYER = (u_char*)get_layer4_v6($IPV6, $LEN);
-    if (!$LAYER) {
-      ...
-    }
-    ip_hl = $LAYER - (u_char*)$DATA;
+  patterns:
+  - pattern: |
+      ip_hl = (u_char*)get_layer4_v6($IPV6, $LEN) - (u_char*)$DATA;
+  - pattern-not: |
+      $LAYER = (u_char*)get_layer4_v6($IPV6, $LEN);
+      if (!$LAYER) {
+        ...
+      }
+      ip_hl = $LAYER - (u_char*)$DATA;
   languages:
   - c
   message: |
@@ -304,10 +314,11 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-e2ac765a
-  pattern: |
-    fix_ipv4_checksums($TC, $PKT, $IP)
-  pattern-not: |
-    fix_ipv4_checksums($TC, $PKT, $IP, $L2LEN)
+  patterns:
+  - pattern: |
+      fix_ipv4_checksums($TC, $PKT, $IP)
+  - pattern-not: |
+      fix_ipv4_checksums($TC, $PKT, $IP, $L2LEN)
   languages:
   - c
   message: |
@@ -322,15 +333,16 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-ff0ece88
-  pattern: |
-    if ((size_t)$LEN < sizeof($ETH_HDR)) {
-        errx(-1, "packet capture length %d too small to process", $LEN);
-        return NULL;
-    }
-  pattern-not: |
-    if ($LEN < (int)sizeof($ETH_HDR)) {
-        goto len_error;
-    }
+  patterns:
+  - pattern: |
+      if ((size_t)$LEN < sizeof($ETH_HDR)) {
+          errx(-1, "packet capture length %d too small to process", $LEN);
+          return NULL;
+      }
+  - pattern-not: |
+      if ($LEN < (int)sizeof($ETH_HDR)) {
+          goto len_error;
+      }
   languages:
   - c
   message: |

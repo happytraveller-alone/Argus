@@ -1,9 +1,10 @@
 rules:
 - id: vuln-imagemagick6-dc070da8
-  pattern: |
-    EXIFMultipleValues($SIZE, "%f", (double) *($TYPE *) $PTR)
-  pattern-not: |
-    EXIFMultipleValues($SIZE, "%.20g", (double) ReadPropertySignedLong($ENDIAN, $PTR))
+  patterns:
+  - pattern: |
+      EXIFMultipleValues($SIZE, "%f", (double) *($TYPE *) $PTR)
+  - pattern-not: |
+      EXIFMultipleValues($SIZE, "%.20g", (double) ReadPropertySignedLong($ENDIAN, $PTR))
   languages:
   - c
   message: |
@@ -17,10 +18,11 @@ rules:
     technology:
     - c
 - id: vuln-imagemagick6-f6ffc702
-  pattern: |
-    GetCacheViewVirtualPixels($VIEW, 0, $Y, $IMAGE->columns, 1, $EXCEPTION)
-  pattern-not: |
-    GetCacheViewVirtualPixels($VIEW, 0, $Y, MagickMax($IMAGE->columns, $OTHER_IMAGE->columns), 1, $EXCEPTION)
+  patterns:
+  - pattern: |
+      GetCacheViewVirtualPixels($VIEW, 0, $Y, $IMAGE->columns, 1, $EXCEPTION)
+  - pattern-not: |
+      GetCacheViewVirtualPixels($VIEW, 0, $Y, MagickMax($IMAGE->columns, $OTHER_IMAGE->columns), 1, $EXCEPTION)
   languages:
   - c
   message: |

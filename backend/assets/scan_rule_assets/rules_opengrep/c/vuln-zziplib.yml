@@ -1,9 +1,10 @@
 rules:
 - id: vuln-zziplib-2a84ae73
-  pattern: |
-    $TAIL - $END >= __sizeof($STRUCT) - 2
-  pattern-not: |
-    $TAIL - $END >= __sizeof($STRUCT)
+  patterns:
+  - pattern: |
+      $TAIL - $END >= __sizeof($STRUCT) - 2
+  - pattern-not: |
+      $TAIL - $END >= __sizeof($STRUCT)
   languages:
   - c
   message: |
@@ -20,15 +21,16 @@ rules:
     technology:
     - c
 - id: vuln-zziplib-d2e5d5c5
-  pattern: |
-    if ($COND) {
-        ...
-        if ($VAR != NULL)
-            free($VAR);
-        return $ERROR_CODE;
-    }
-  pattern-not: |
-    return ($COND) ? $ERROR_CODE : 0;
+  patterns:
+  - pattern: |
+      if ($COND) {
+          ...
+          if ($VAR != NULL)
+              free($VAR);
+          return $ERROR_CODE;
+      }
+  - pattern-not: |
+      return ($COND) ? $ERROR_CODE : 0;
   languages:
   - c
   message: |
@@ -48,17 +50,18 @@ rules:
     technology:
     - c
 - id: vuln-zziplib-f609ae89
-  pattern: |
-    return fopen($NAME, $MODE);
-  pattern-not: |
-    $NAME_STRIPPED = strdup($NAME);
-    remove_dotdotslash($NAME_STRIPPED);
-    $NAME = $NAME_STRIPPED;
-    $MUSTFREE = 1;
-    $FP = fopen($NAME, $MODE);
-    if ($MUSTFREE)
-        free($NAME_STRIPPED);
-    return $FP;
+  patterns:
+  - pattern: |
+      return fopen($NAME, $MODE);
+  - pattern-not: |
+      $NAME_STRIPPED = strdup($NAME);
+      remove_dotdotslash($NAME_STRIPPED);
+      $NAME = $NAME_STRIPPED;
+      $MUSTFREE = 1;
+      $FP = fopen($NAME, $MODE);
+      if ($MUSTFREE)
+          free($NAME_STRIPPED);
+      return $FP;
   languages:
   - c
   message: |

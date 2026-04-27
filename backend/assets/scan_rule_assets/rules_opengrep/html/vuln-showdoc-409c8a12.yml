@@ -1,9 +1,10 @@
 rules:
 - id: vuln-showdoc-409c8a12
-  pattern: |
-    <script type=text/javascript src=./static/js/app.8a9350efdba95123bddd.js></script>
-  pattern-not: |
-    <script type=text/javascript src=./static/js/app.f55134787766bd0dbf66.js></script>
+  patterns:
+  - pattern: |
+      <script type=text/javascript src=./static/js/app.8a9350efdba95123bddd.js></script>
+  - pattern-not: |
+      <script type=text/javascript src=./static/js/app.f55134787766bd0dbf66.js></script>
   languages:
   - html
   message: |

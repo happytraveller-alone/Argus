@@ -1,30 +1,31 @@
 rules:
 - id: vuln-mpop-31623567
-  pattern: |
-    if ($ACC->tls_nocertcheck && $ACC->tls_trust_file)
-    {
-        $ERRSTR = xasprintf(_("cannot use tls_trust_file with tls_certcheck turned off"));
-        return CONF_ESYNTAX;
-    }
-    if ($ACC->tls_nocertcheck
-            && ($ACC->tls_sha256_fingerprint
-                || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
-    {
-        $ERRSTR = xasprintf(_("cannot use tls_fingerprint with tls_certcheck turned off"));
-        return CONF_ESYNTAX;
-    }
-    if ($ACC->tls_trust_file
-            && ($ACC->tls_sha256_fingerprint
-                || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
-    {
-        $ERRSTR = xasprintf(_("cannot use both tls_trust_file and tls_fingerprint"));
-        return CONF_ESYNTAX;
-    }
-  pattern-not: |
-    if (!account->tls_trust_file && !(account->mask & ACC_TLS_TRUST_FILE))
-    {
-        account->tls_trust_file = xstrdup("system");
-    }
+  patterns:
+  - pattern: |
+      if ($ACC->tls_nocertcheck && $ACC->tls_trust_file)
+      {
+          $ERRSTR = xasprintf(_("cannot use tls_trust_file with tls_certcheck turned off"));
+          return CONF_ESYNTAX;
+      }
+      if ($ACC->tls_nocertcheck
+              && ($ACC->tls_sha256_fingerprint
+                  || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
+      {
+          $ERRSTR = xasprintf(_("cannot use tls_fingerprint with tls_certcheck turned off"));
+          return CONF_ESYNTAX;
+      }
+      if ($ACC->tls_trust_file
+              && ($ACC->tls_sha256_fingerprint
+                  || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
+      {
+          $ERRSTR = xasprintf(_("cannot use both tls_trust_file and tls_fingerprint"));
+          return CONF_ESYNTAX;
+      }
+  - pattern-not: |
+      if (!account->tls_trust_file && !(account->mask & ACC_TLS_TRUST_FILE))
+      {
+          account->tls_trust_file = xstrdup("system");
+      }
   languages:
   - c
   message: |

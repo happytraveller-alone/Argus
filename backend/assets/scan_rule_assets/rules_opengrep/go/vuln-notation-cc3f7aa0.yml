@@ -1,9 +1,10 @@
 rules:
 - id: vuln-notation-cc3f7aa0
-  pattern: |
-    Version = "v1.0.0-rc.5"
-  pattern-not: |
-    Version = "v1.0.0-rc.6"
+  patterns:
+  - pattern: |
+      Version = "v1.0.0-rc.5"
+  - pattern-not: |
+      Version = "v1.0.0-rc.6"
   languages:
   - go
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-react-pdf-208f28dd
-  pattern: |
-    const $VAR: Options = { ...$OPTIONS, isEvalSupported: true };
-  pattern-not: |
-    const $VAR: Options = { ...$OPTIONS, isEvalSupported: false };
+  patterns:
+  - pattern: |
+      const $VAR: Options = { ...$OPTIONS, isEvalSupported: true };
+  - pattern-not: |
+      const $VAR: Options = { ...$OPTIONS, isEvalSupported: false };
   languages:
   - typescript
   message: |

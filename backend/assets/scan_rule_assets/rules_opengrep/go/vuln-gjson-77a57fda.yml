@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gjson-77a57fda
-  pattern: |
-    match.Match($STR, $PATTERN)
-  pattern-not: |
-    matchLimit($STR, $PATTERN)
+  patterns:
+  - pattern: |
+      match.Match($STR, $PATTERN)
+  - pattern-not: |
+      matchLimit($STR, $PATTERN)
   languages:
   - go
   message: |

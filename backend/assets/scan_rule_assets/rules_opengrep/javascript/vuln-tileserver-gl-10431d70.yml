@@ -1,9 +1,10 @@
 rules:
 - id: vuln-tileserver-gl-10431d70
-  pattern: |
-    `key=${$QUERY.key}`
-  pattern-not: |
-    `key=${encodeURIComponent($QUERY.key)}`
+  patterns:
+  - pattern: |
+      `key=${$QUERY.key}`
+  - pattern-not: |
+      `key=${encodeURIComponent($QUERY.key)}`
   languages:
   - javascript
   message: |

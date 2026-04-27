@@ -1,11 +1,12 @@
 rules:
 - id: vuln-suricata-18841a58
-  pattern: |
-    if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL)
-        return htp_list_get($HTTP_STATE->conn->transactions, $TX_ID);
-  pattern-not: |
-    if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL && $TX_ID >= $HTTP_STATE->tx_freed)
-        return htp_list_get($HTTP_STATE->conn->transactions, $TX_ID - $HTTP_STATE->tx_freed);
+  patterns:
+  - pattern: |
+      if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL)
+          return htp_list_get($HTTP_STATE->conn->transactions, $TX_ID);
+  - pattern-not: |
+      if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL && $TX_ID >= $HTTP_STATE->tx_freed)
+          return htp_list_get($HTTP_STATE->conn->transactions, $TX_ID - $HTTP_STATE->tx_freed);
   languages:
   - c
   message: |
@@ -21,19 +22,20 @@ rules:
     technology:
     - c
 - id: vuln-suricata-2a2120ec
-  pattern: |
-    static SMTPTransaction *SMTPTransactionCreate(void)
-    {
-        ...
-    }
-  pattern-not: |
-    static SMTPTransaction *SMTPTransactionCreate(SMTPState *state)
-    {
-        if (state->tx_cnt > smtp_config.max_tx) {
-            return NULL;
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      static SMTPTransaction *SMTPTransactionCreate(void)
+      {
+          ...
+      }
+  - pattern-not: |
+      static SMTPTransaction *SMTPTransactionCreate(SMTPState *state)
+      {
+          if (state->tx_cnt > smtp_config.max_tx) {
+              return NULL;
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -50,14 +52,15 @@ rules:
     technology:
     - c
 - id: vuln-suricata-2f39ba75
-  pattern: |
-    if (!$F->more_frags) {
-        break;
-    }
-  pattern-not: |
-    if (!more_frags && $F->offset > prev_offset) {
-        break;
-    }
+  patterns:
+  - pattern: |
+      if (!$F->more_frags) {
+          break;
+      }
+  - pattern-not: |
+      if (!more_frags && $F->offset > prev_offset) {
+          break;
+      }
   languages:
   - c
   message: |
@@ -75,10 +78,11 @@ rules:
     technology:
     - c
 - id: vuln-suricata-4a04f814
-  pattern: |
-    BuildTestPacket($ID, $OFF, $MF, $CONTENT, $LEN)
-  pattern-not: |
-    BuildTestPacket($PROTO, $ID, $OFF, $MF, $CONTENT, $LEN)
+  patterns:
+  - pattern: |
+      BuildTestPacket($ID, $OFF, $MF, $CONTENT, $LEN)
+  - pattern-not: |
+      BuildTestPacket($PROTO, $ID, $OFF, $MF, $CONTENT, $LEN)
   languages:
   - c
   message: |
@@ -96,17 +100,18 @@ rules:
     technology:
     - c
 - id: vuln-suricata-51790d38
-  pattern: |
-    if ($LINE_LEN >= 4 && $FUNC("SSH-", $LINE_PTR, 4) != 0) {
-      ...
-    }
-  pattern-not: |
-    if ($LINE_LEN < 4) {
-      ...
-    }
-    if ($FUNC("SSH-", $LINE_PTR, 4) != 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($LINE_LEN >= 4 && $FUNC("SSH-", $LINE_PTR, 4) != 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($LINE_LEN < 4) {
+        ...
+      }
+      if ($FUNC("SSH-", $LINE_PTR, 4) != 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -122,64 +127,65 @@ rules:
     technology:
     - c
 - id: vuln-suricata-843d0b7a
-  pattern: |
-    switch ($SSN->state) {
-        case TCP_SYN_SENT:
-            if(StreamTcpPacketStateSynSent($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_SYN_RECV:
-            if(StreamTcpPacketStateSynRecv($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_ESTABLISHED:
-            if(StreamTcpPacketStateEstablished($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_FIN_WAIT1:
-            if(StreamTcpPacketStateFinWait1($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_FIN_WAIT2:
-            if(StreamTcpPacketStateFinWait2($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_CLOSING:
-            if(StreamTcpPacketStateClosing($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_CLOSE_WAIT:
-            if(StreamTcpPacketStateCloseWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_LAST_ACK:
-            if(StreamTcpPacketStateLastAck($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_TIME_WAIT:
-            if(StreamTcpPacketStateTimeWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
-                goto error;
-            }
-            break;
-        case TCP_CLOSED:
-            SCLogDebug("packet received on closed state");
-            break;
-        default:
-            SCLogDebug("packet received on default state");
-            break;
-    }
-  pattern-not: |
-    if (StreamTcpStateDispatch($TV, $P, $STT, $SSN, &$STT->pseudo_queue, $SSN->state) < 0)
-        goto error;
-    StreamTcpPacketCheckPostRst($SSN, $P);
+  patterns:
+  - pattern: |
+      switch ($SSN->state) {
+          case TCP_SYN_SENT:
+              if(StreamTcpPacketStateSynSent($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_SYN_RECV:
+              if(StreamTcpPacketStateSynRecv($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_ESTABLISHED:
+              if(StreamTcpPacketStateEstablished($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_FIN_WAIT1:
+              if(StreamTcpPacketStateFinWait1($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_FIN_WAIT2:
+              if(StreamTcpPacketStateFinWait2($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_CLOSING:
+              if(StreamTcpPacketStateClosing($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_CLOSE_WAIT:
+              if(StreamTcpPacketStateCloseWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_LAST_ACK:
+              if(StreamTcpPacketStateLastAck($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_TIME_WAIT:
+              if(StreamTcpPacketStateTimeWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {
+                  goto error;
+              }
+              break;
+          case TCP_CLOSED:
+              SCLogDebug("packet received on closed state");
+              break;
+          default:
+              SCLogDebug("packet received on default state");
+              break;
+      }
+  - pattern-not: |
+      if (StreamTcpStateDispatch($TV, $P, $STT, $SSN, &$STT->pseudo_queue, $SSN->state) < 0)
+          goto error;
+      StreamTcpPacketCheckPostRst($SSN, $P);
   languages:
   - c
   message: |
@@ -195,14 +201,15 @@ rules:
     technology:
     - c
 - id: vuln-suricata-9ba89a31
-  pattern: |
-    if (SCMemcmp("SSH-", $LINE_PTR, 4) != 0) {
-      ...
-    }
-  pattern-not: |
-    if ($LINE_LEN >= 4 && SCMemcmp("SSH-", $LINE_PTR, 4) != 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (SCMemcmp("SSH-", $LINE_PTR, 4) != 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($LINE_LEN >= 4 && SCMemcmp("SSH-", $LINE_PTR, 4) != 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -224,25 +231,26 @@ rules:
     technology:
     - c
 - id: vuln-suricata-b9579fbe
-  pattern: |
-    if (!($CD->flags & DETECT_CONTENT_RELATIVE_NEXT)) {
+  patterns:
+  - pattern: |
+      if (!($CD->flags & DETECT_CONTENT_RELATIVE_NEXT)) {
+        ...
+        goto match;
+      }
       ...
-      goto match;
-    }
-    ...
-    if ($DET_CTX->discontinue_matching)
-      goto no_match;
-  pattern-not: |
-    if (($CD->flags & (DETECT_CONTENT_DISTANCE|DETECT_CONTENT_WITHIN)) == 0) {
+      if ($DET_CTX->discontinue_matching)
+        goto no_match;
+  - pattern-not: |
+      if (($CD->flags & (DETECT_CONTENT_DISTANCE|DETECT_CONTENT_WITHIN)) == 0) {
+        ...
+        $DET_CTX->discontinue_matching = 1;
+      }
       ...
-      $DET_CTX->discontinue_matching = 1;
-    }
-    ...
-    if (($CD->flags & DETECT_CONTENT_RELATIVE_NEXT) == 0) {
-      ...
-      $DET_CTX->discontinue_matching = 1;
-      goto no_match;
-    }
+      if (($CD->flags & DETECT_CONTENT_RELATIVE_NEXT) == 0) {
+        ...
+        $DET_CTX->discontinue_matching = 1;
+        goto no_match;
+      }
   languages:
   - c
   message: |
@@ -260,10 +268,11 @@ rules:
     technology:
     - c
 - id: vuln-suricata-bb26e621
-  pattern: |
-    $MODULE.PktAcqBreakLoop = NULL;
-  pattern-not: |
-    $MODULE.PktAcqBreakLoop = $FUNC;
+  patterns:
+  - pattern: |
+      $MODULE.PktAcqBreakLoop = NULL;
+  - pattern-not: |
+      $MODULE.PktAcqBreakLoop = $FUNC;
   languages:
   - c
   message: |
@@ -280,10 +289,11 @@ rules:
     technology:
     - c
 - id: vuln-suricata-d13bd2ae
-  pattern: |
-    len += $F->data_len;
-  pattern-not: |
-    len = MAX(len, $F->offset + $F->data_len);
+  patterns:
+  - pattern: |
+      len += $F->data_len;
+  - pattern-not: |
+      len = MAX(len, $F->offset + $F->data_len);
   languages:
   - c
   message: |
@@ -301,15 +311,16 @@ rules:
     technology:
     - c
 - id: vuln-suricata-d8634daf
-  pattern: |
-    if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL) {
-      ...
-    }
-  pattern-not: |
-    if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL &&
-        ($FLAGS & PKT_STREAM_EST)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL) {
+        ...
+      }
+  - pattern-not: |
+      if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL &&
+          ($FLAGS & PKT_STREAM_EST)) {
+        ...
+      }
   languages:
   - c
   message: |

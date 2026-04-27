@@ -1,29 +1,30 @@
 rules:
 - id: vuln-asterisk-424be345
-  pattern: |
-    if (!live_dangerously && !strncasecmp($FILENAME, "/", 1) &&
-         strncasecmp($FILENAME, $CONFIG_DIR, strlen($CONFIG_DIR))) {
-      ...
-    }
-  pattern-not: |
-    if (live_dangerously) {
-      return 0;
-    }
-    $STRIPPED_FILENAME = ast_strip(ast_strdupa($FILENAME));
-    if ($STRIPPED_FILENAME[0] == '/') {
-      $REAL_PATH = realpath($STRIPPED_FILENAME, NULL);
-    } else {
-      if (ast_asprintf(&$PATH, "%s/%s", $CONFIG_DIR, $STRIPPED_FILENAME) == -1) {
+  patterns:
+  - pattern: |
+      if (!live_dangerously && !strncasecmp($FILENAME, "/", 1) &&
+           strncasecmp($FILENAME, $CONFIG_DIR, strlen($CONFIG_DIR))) {
+        ...
+      }
+  - pattern-not: |
+      if (live_dangerously) {
+        return 0;
+      }
+      $STRIPPED_FILENAME = ast_strip(ast_strdupa($FILENAME));
+      if ($STRIPPED_FILENAME[0] == '/') {
+        $REAL_PATH = realpath($STRIPPED_FILENAME, NULL);
+      } else {
+        if (ast_asprintf(&$PATH, "%s/%s", $CONFIG_DIR, $STRIPPED_FILENAME) == -1) {
+          return -1;
+        }
+        $REAL_PATH = realpath($PATH, NULL);
+      }
+      if (!$REAL_PATH) {
         return -1;
       }
-      $REAL_PATH = realpath($PATH, NULL);
-    }
-    if (!$REAL_PATH) {
-      return -1;
-    }
-    if (!ast_begins_with($REAL_PATH, $CONFIG_DIR)) {
-      ...
-    }
+      if (!ast_begins_with($REAL_PATH, $CONFIG_DIR)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -49,10 +50,11 @@ rules:
     technology:
     - c
 - id: vuln-asterisk-a1ca0268
-  pattern: |
-    pj_strcpy2(&((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
-  pattern-not: |
-    pj_strdup2($POOL, &((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
+  patterns:
+  - pattern: |
+      pj_strcpy2(&((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
+  - pattern-not: |
+      pj_strdup2($POOL, &((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
   languages:
   - c
   message: |
@@ -74,19 +76,20 @@ rules:
     technology:
     - c
 - id: vuln-asterisk-da2573a3
-  pattern: |
-    if ($OCTET_CNT > 0) {
-      ...
+  patterns:
+  - pattern: |
+      if ($OCTET_CNT > 0) {
+        ...
+        if (($LEN + $OCTET_CNT) > $LIMIT) {
+          return -1;
+        }
+        ...
+      }
+  - pattern-not: |
       if (($LEN + $OCTET_CNT) > $LIMIT) {
         return -1;
       }
       ...
-    }
-  pattern-not: |
-    if (($LEN + $OCTET_CNT) > $LIMIT) {
-      return -1;
-    }
-    ...
   languages:
   - c
   message: |
@@ -104,24 +107,25 @@ rules:
     technology:
     - c
 - id: vuln-asterisk-faddd99f
-  pattern: |
-    if (!($SESSION->writeperm & $PERMISSION)
-        && (
-            strcasestr($APP, "system") ||
-            strcasestr($APP, "exec") ||
-            strcasestr($APP, "agi") ||
-            strcasestr($APP, "mixmonitor") ||
-            strcasestr($APP, "externalivr") ||
-            strcasestr($APP, "originate") ||
-            (strstr($APPDATA, "SHELL") && ($BAD_APPDATA = 1)) ||
-            (strstr($APPDATA, "EVAL") && ($BAD_APPDATA = 1))
-        )) {
-        ...
-    }
-  pattern-not: |
-    if (!is_originate_app_permitted($APP, $APPDATA, $SESSION->writeperm)) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if (!($SESSION->writeperm & $PERMISSION)
+          && (
+              strcasestr($APP, "system") ||
+              strcasestr($APP, "exec") ||
+              strcasestr($APP, "agi") ||
+              strcasestr($APP, "mixmonitor") ||
+              strcasestr($APP, "externalivr") ||
+              strcasestr($APP, "originate") ||
+              (strstr($APPDATA, "SHELL") && ($BAD_APPDATA = 1)) ||
+              (strstr($APPDATA, "EVAL") && ($BAD_APPDATA = 1))
+          )) {
+          ...
+      }
+  - pattern-not: |
+      if (!is_originate_app_permitted($APP, $APPDATA, $SESSION->writeperm)) {
+          ...
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-openpgpjs-0be91133
-  pattern: |
-    s2k_iteration_count_byte: 96
-  pattern-not: |
-    s2k_iteration_count_byte: 224
+  patterns:
+  - pattern: |
+      s2k_iteration_count_byte: 96
+  - pattern-not: |
+      s2k_iteration_count_byte: 224
   languages:
   - javascript
   message: |
@@ -18,10 +19,11 @@ rules:
     technology:
     - javascript
 - id: vuln-openpgpjs-6b43e02a
-  pattern: |
-    $HEADER.match(/Hash: (.+)/)
-  pattern-not: |
-    $HEADER.match(/^Hash: (.+)$/)
+  patterns:
+  - pattern: |
+      $HEADER.match(/Hash: (.+)/)
+  - pattern-not: |
+      $HEADER.match(/^Hash: (.+)$/)
   languages:
   - javascript
   message: |
@@ -37,13 +39,14 @@ rules:
     technology:
     - javascript
 - id: vuln-openpgpjs-804e9114
-  pattern: |
-    $PACKET.preferredSymmetricAlgorithms = [];
-    $PACKET.preferredSymmetricAlgorithms.push($ALGO1);
-    $PACKET.preferredSymmetricAlgorithms.push($ALGO2);
-    $PACKET.preferredSymmetricAlgorithms.push($ALGO3);
-  pattern-not: |
-    $PACKET.preferredSymmetricAlgorithms = createdPreferredAlgos([$ALGO1, $ALGO2, $ALGO3], $CONFIG);
+  patterns:
+  - pattern: |
+      $PACKET.preferredSymmetricAlgorithms = [];
+      $PACKET.preferredSymmetricAlgorithms.push($ALGO1);
+      $PACKET.preferredSymmetricAlgorithms.push($ALGO2);
+      $PACKET.preferredSymmetricAlgorithms.push($ALGO3);
+  - pattern-not: |
+      $PACKET.preferredSymmetricAlgorithms = createdPreferredAlgos([$ALGO1, $ALGO2, $ALGO3], $CONFIG);
   languages:
   - javascript
   message: Insecure algorithm preference ordering detected. Use the `createdPreferredAlgos` function to ensure secure and configurable algorithm ordering.

@@ -1,15 +1,16 @@
 rules:
 - id: vuln-flatpak-52346bf1
-  pattern: |
-    $BUFFER = memmem($BUF, $POS, $AUTH_END_STRING, strlen($AUTH_END_STRING));
-    if ($BUFFER != NULL)
-      return $BUFFER - $BUF->data + strlen($AUTH_END_STRING);
-  pattern-not: |
-    $BUFFER = memmem($BUF, $POS, $AUTH_END_STRING, strlen($AUTH_END_STRING));
-    if ($BUFFER != NULL) {
-      if (auth_line_is_valid($BUFFER, $BUFFER + strlen($AUTH_END_STRING)))
+  patterns:
+  - pattern: |
+      $BUFFER = memmem($BUF, $POS, $AUTH_END_STRING, strlen($AUTH_END_STRING));
+      if ($BUFFER != NULL)
         return $BUFFER - $BUF->data + strlen($AUTH_END_STRING);
-    }
+  - pattern-not: |
+      $BUFFER = memmem($BUF, $POS, $AUTH_END_STRING, strlen($AUTH_END_STRING));
+      if ($BUFFER != NULL) {
+        if (auth_line_is_valid($BUFFER, $BUFFER + strlen($AUTH_END_STRING)))
+          return $BUFFER - $BUF->data + strlen($AUTH_END_STRING);
+      }
   languages:
   - c
   message: |
@@ -33,10 +34,11 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-7fe63f2e
-  pattern: |
-    flatpak_context_set_persistent($CONTEXT, $PATH)
-  pattern-not: |
-    flatpak_context_set_persistent($CONTEXT, $PATH, $ERROR)
+  patterns:
+  - pattern: |
+      flatpak_context_set_persistent($CONTEXT, $PATH)
+  - pattern-not: |
+      flatpak_context_set_persistent($CONTEXT, $PATH, $ERROR)
   languages:
   - c
   message: |
@@ -52,14 +54,15 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-a7401e63
-  pattern: |
-    g_print (_("Skipping invalid Exec argument %s\n"), $ARG);
-  pattern-not: |
-    {
-      flatpak_fail_error ($ERROR, FLATPAK_ERROR_EXPORT_FAILED,
-                         _("Invalid Exec argument %s"), $ARG);
-      goto out;
-    }
+  patterns:
+  - pattern: |
+      g_print (_("Skipping invalid Exec argument %s\n"), $ARG);
+  - pattern-not: |
+      {
+        flatpak_fail_error ($ERROR, FLATPAK_ERROR_EXPORT_FAILED,
+                           _("Invalid Exec argument %s"), $ARG);
+        goto out;
+      }
   languages:
   - c
   message: |
@@ -75,10 +78,11 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-ba818f50
-  pattern: |
-    g_bytes_new($METADATA, strlen($METADATA) + 1)
-  pattern-not: |
-    g_bytes_new($METADATA, strlen($METADATA))
+  patterns:
+  - pattern: |
+      g_bytes_new($METADATA, strlen($METADATA) + 1)
+  - pattern-not: |
+      g_bytes_new($METADATA, strlen($METADATA))
   languages:
   - c
   message: |
@@ -94,16 +98,17 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-cc140104
-  pattern: |
-    g_environ_setenv($ENV, $VAR, $VAL, TRUE)
-  pattern-not: |
-    g_environ_setenv($ENV, $VAR, $VAL, TRUE);
-    if ($VAR[0] == '\0') { ... }
-    if (strchr($VAR, '=') != NULL) { ... }
-    g_string_append($ENV_STRING, $VAR);
-    g_string_append_c($ENV_STRING, '=');
-    g_string_append($ENV_STRING, $VAL);
-    g_string_append_c($ENV_STRING, '\0');
+  patterns:
+  - pattern: |
+      g_environ_setenv($ENV, $VAR, $VAL, TRUE)
+  - pattern-not: |
+      g_environ_setenv($ENV, $VAR, $VAL, TRUE);
+      if ($VAR[0] == '\0') { ... }
+      if (strchr($VAR, '=') != NULL) { ... }
+      g_string_append($ENV_STRING, $VAR);
+      g_string_append_c($ENV_STRING, '=');
+      g_string_append($ENV_STRING, $VAL);
+      g_string_append_c($ENV_STRING, '\0');
   languages:
   - c
   message: |
@@ -121,22 +126,23 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-d9a8f9d8
-  pattern: |
-    if (g_key_file_load_from_bytes($METADATA, $BYTES, G_KEY_FILE_NONE, NULL))
-    {
+  patterns:
+  - pattern: |
+      if (g_key_file_load_from_bytes($METADATA, $BYTES, G_KEY_FILE_NONE, NULL))
+      {
+        $RESOLVED_METADATA = g_bytes_ref($BYTES);
+        $RESOLVED_METAKEY = g_steal_pointer(&$METAKEY);
+      }
+      else
+      {
+        g_message("Warning: Failed to parse metadata for %s\n", $REF);
+      }
+  - pattern-not: |
+      if (!g_key_file_load_from_bytes($METADATA, $BYTES, G_KEY_FILE_NONE, NULL))
+        return flatpak_fail_error($ERROR, FLATPAK_ERROR_INVALID_DATA, "Metadata for %s is invalid", $REF);
+
       $RESOLVED_METADATA = g_bytes_ref($BYTES);
       $RESOLVED_METAKEY = g_steal_pointer(&$METAKEY);
-    }
-    else
-    {
-      g_message("Warning: Failed to parse metadata for %s\n", $REF);
-    }
-  pattern-not: |
-    if (!g_key_file_load_from_bytes($METADATA, $BYTES, G_KEY_FILE_NONE, NULL))
-      return flatpak_fail_error($ERROR, FLATPAK_ERROR_INVALID_DATA, "Metadata for %s is invalid", $REF);
-
-    $RESOLVED_METADATA = g_bytes_ref($BYTES);
-    $RESOLVED_METAKEY = g_steal_pointer(&$METAKEY);
   languages:
   - c
   message: |
@@ -156,10 +162,11 @@ rules:
     technology:
     - c
 - id: vuln-flatpak-e26ac758
-  pattern: |
-    seccomp_rule_add($SECCOMP, SCMP_ACT_ERRNO(EPERM), $SCALL, $ARG_COUNT, $ARG)
-  pattern-not: |
-    seccomp_rule_add($SECCOMP, SCMP_ACT_ERRNO($ERRNUM), $SCALL, $ARG_COUNT, $ARG)
+  patterns:
+  - pattern: |
+      seccomp_rule_add($SECCOMP, SCMP_ACT_ERRNO(EPERM), $SCALL, $ARG_COUNT, $ARG)
+  - pattern-not: |
+      seccomp_rule_add($SECCOMP, SCMP_ACT_ERRNO($ERRNUM), $SCALL, $ARG_COUNT, $ARG)
   languages:
   - c
   message: |

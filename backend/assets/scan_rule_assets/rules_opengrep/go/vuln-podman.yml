@@ -1,9 +1,10 @@
 rules:
 - id: vuln-podman-0282f98b
-  pattern: |
-    cmd := []string{"dd", ...}
-  pattern-not: |
-    cmd := []string{"/bin/dd", ...}
+  patterns:
+  - pattern: |
+      cmd := []string{"dd", ...}
+  - pattern-not: |
+      cmd := []string{"/bin/dd", ...}
   languages:
   - go
   message: |
@@ -21,20 +22,21 @@ rules:
     technology:
     - go
 - id: vuln-podman-550cff9a
-  pattern: |
-    func readStatusUserNS($PID string) ([]string, error) {
-      $PATH := fmt.Sprintf("/proc/%s/status", $PID)
-      $ARGS := []string{"nsenter", "-U", "-t", $PID, "cat", $PATH}
-      $CMD := exec.Command($ARGS[0], $ARGS[1:]...)
-      $OUTPUT, $ERR := $CMD.CombinedOutput()
-      ...
-    }
-  pattern-not: |
-    func readStatus($PID string) ([]string, error) {
-      $PATH := fmt.Sprintf("/proc/%s/status", $PID)
-      $DATA, $ERR := ioutil.ReadFile($PATH)
-      ...
-    }
+  patterns:
+  - pattern: |
+      func readStatusUserNS($PID string) ([]string, error) {
+        $PATH := fmt.Sprintf("/proc/%s/status", $PID)
+        $ARGS := []string{"nsenter", "-U", "-t", $PID, "cat", $PATH}
+        $CMD := exec.Command($ARGS[0], $ARGS[1:]...)
+        $OUTPUT, $ERR := $CMD.CombinedOutput()
+        ...
+      }
+  - pattern-not: |
+      func readStatus($PID string) ([]string, error) {
+        $PATH := fmt.Sprintf("/proc/%s/status", $PID)
+        $DATA, $ERR := ioutil.ReadFile($PATH)
+        ...
+      }
   languages:
   - go
   message: |
@@ -57,14 +59,15 @@ rules:
     - https://man7.org/linux/man-pages/man1/nsenter.1.html
     - https://man7.org/linux/man-pages/man2/pid_namespaces.7.html
 - id: vuln-podman-5e65f0ba
-  pattern: |
-    func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping) error {
-      ...
-    }
-  pattern-not: |
-    func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping, $CHILDIP string) error {
-      ...
-    }
+  patterns:
+  - pattern: |
+      func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping) error {
+        ...
+      }
+  - pattern-not: |
+      func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping, $CHILDIP string) error {
+        ...
+      }
   languages:
   - go
   message: |
@@ -80,10 +83,11 @@ rules:
     technology:
     - go
 - id: vuln-podman-6ca857fe
-  pattern: |
-    $X, $ERR := archive.Tar($SOURCE, $COMPRESSION)
-  pattern-not: |
-    $X, $ERR := chrootarchive.Tar($SOURCE, $OPTIONS, $CHROOT)
+  patterns:
+  - pattern: |
+      $X, $ERR := archive.Tar($SOURCE, $COMPRESSION)
+  - pattern-not: |
+      $X, $ERR := chrootarchive.Tar($SOURCE, $OPTIONS, $CHROOT)
   languages:
   - go
   message: |
@@ -101,10 +105,11 @@ rules:
     technology:
     - go
 - id: vuln-podman-7ef3981a
-  pattern: |
-    $NET, $ERR = common.NetFlagsToNetOptions($CMD)
-  pattern-not: |
-    $NET, $ERR = common.NetFlagsToNetOptions($CMD, $NETNS_FROM_CONFIG)
+  patterns:
+  - pattern: |
+      $NET, $ERR = common.NetFlagsToNetOptions($CMD)
+  - pattern-not: |
+      $NET, $ERR = common.NetFlagsToNetOptions($CMD, $NETNS_FROM_CONFIG)
   languages:
   - go
   message: |
@@ -119,10 +124,11 @@ rules:
     owasp: 'OWASP Top 10 2021: A03:2021 - Injection'
     technology: go
 - id: vuln-podman-d102d02e
-  pattern: |
-    acquireCNILock(filepath.Join($CONFIG.Engine.TmpDir, $LOCKFILE))
-  pattern-not: |
-    acquireCNILock($CONFIG)
+  patterns:
+  - pattern: |
+      acquireCNILock(filepath.Join($CONFIG.Engine.TmpDir, $LOCKFILE))
+  - pattern-not: |
+      acquireCNILock($CONFIG)
   languages:
   - go
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-moby-f0ab919f
-  pattern: |
-    idtools.MkdirAllAndChown($PATH, 0701, idtools.CurrentIdentity())
-  pattern-not: |
-    idtools.MkdirAllAndChown($PATH, 0710, idtools.Identity{UID: idtools.CurrentIdentity().UID, GID: $GID})
+  patterns:
+  - pattern: |
+      idtools.MkdirAllAndChown($PATH, 0701, idtools.CurrentIdentity())
+  - pattern-not: |
+      idtools.MkdirAllAndChown($PATH, 0710, idtools.Identity{UID: idtools.CurrentIdentity().UID, GID: $GID})
   languages:
   - go
   message: |
@@ -19,24 +20,25 @@ rules:
     technology:
     - go
 - id: vuln-moby-fc274cd2
-  pattern: |
-    func sendBody($URL string, $HEADER http.Header) bool {
-      ...
-      if strings.HasSuffix($URL, "/auth") {
+  patterns:
+  - pattern: |
+      func sendBody($URL string, $HEADER http.Header) bool {
         ...
+        if strings.HasSuffix($URL, "/auth") {
+          ...
+        }
       }
-    }
-  pattern-not: |
-    func sendBody($INURL string, $HEADER http.Header) bool {
-      $U, $ERR := url.Parse($INURL)
-      if $ERR != nil {
-        return false
+  - pattern-not: |
+      func sendBody($INURL string, $HEADER http.Header) bool {
+        $U, $ERR := url.Parse($INURL)
+        if $ERR != nil {
+          return false
+        }
+        $ISAUTH, $ERR := isAuthEndpoint($U.Path)
+        if $ISAUTH || $ERR != nil {
+          ...
+        }
       }
-      $ISAUTH, $ERR := isAuthEndpoint($U.Path)
-      if $ISAUTH || $ERR != nil {
-        ...
-      }
-    }
   languages:
   - go
   message: |

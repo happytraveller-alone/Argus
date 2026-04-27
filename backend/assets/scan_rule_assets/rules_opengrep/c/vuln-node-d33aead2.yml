@@ -1,14 +1,15 @@
 rules:
 - id: vuln-node-d33aead2
-  pattern: |
-    #define $MACRO($ARG1, $ARG2, $ARG3) \
-      for (; (void) ($ARG2 <= $ARG3 && ($ARG1 = $FUNC($ARG2, $ARG3))), $ARG2 <= $ARG3;)
-  pattern-not: |
-    while ($ARG2 < $ARG3) {
-      $ARG1 = $FUNC($ARG2, $ARG3);
-      if ($ARG1 == -1u)
-        return $ERROR;
-    }
+  patterns:
+  - pattern: |
+      #define $MACRO($ARG1, $ARG2, $ARG3) \
+        for (; (void) ($ARG2 <= $ARG3 && ($ARG1 = $FUNC($ARG2, $ARG3))), $ARG2 <= $ARG3;)
+  - pattern-not: |
+      while ($ARG2 < $ARG3) {
+        $ARG1 = $FUNC($ARG2, $ARG3);
+        if ($ARG1 == -1u)
+          return $ERROR;
+      }
   languages:
   - c
   message: |

@@ -1,16 +1,17 @@
 rules:
 - id: vuln-premid-16bd93f5
-  pattern: |
-    {
-      cors: { origin: "*" }
-    }
-  pattern-not: |
-    {
-      allowRequest: (req, callback) => {
-        const noOriginHeader = req.headers.origin === undefined;
-        callback(null, noOriginHeader);
+  patterns:
+  - pattern: |
+      {
+        cors: { origin: "*" }
       }
-    }
+  - pattern-not: |
+      {
+        allowRequest: (req, callback) => {
+          const noOriginHeader = req.headers.origin === undefined;
+          callback(null, noOriginHeader);
+        }
+      }
   languages:
   - typescript
   message: |

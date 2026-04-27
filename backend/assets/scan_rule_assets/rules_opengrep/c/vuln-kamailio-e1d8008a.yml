@@ -1,7 +1,8 @@
 rules:
 - id: vuln-kamailio-e1d8008a
-  pattern: dsize += $VAR.len;
-  pattern-not: dsize += $VAR.len + 1;
+  patterns:
+  - pattern: dsize += $VAR.len;
+  - pattern-not: dsize += $VAR.len + 1;
   languages:
   - c
   message: |

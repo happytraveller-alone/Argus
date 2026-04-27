@@ -1,9 +1,10 @@
 rules:
 - id: vuln-curl-058f98dc
-  pattern: |
-    msnprintf($BUF, $LEN, "%ld%s", $PORT, $HOSTNAME);
-  pattern-not: |
-    msnprintf($BUF, $LEN, "%ld/%s", $PORT, $HOSTNAME);
+  patterns:
+  - pattern: |
+      msnprintf($BUF, $LEN, "%ld%s", $PORT, $HOSTNAME);
+  - pattern-not: |
+      msnprintf($BUF, $LEN, "%ld/%s", $PORT, $HOSTNAME);
   languages:
   - c
   message: |
@@ -22,10 +23,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-0761a51e
-  pattern: |
-    Curl_add_buffer($BUF, ":", 1)
-  pattern-not: |
-    Curl_add_buffer($BUF, ": ", 2)
+  patterns:
+  - pattern: |
+      Curl_add_buffer($BUF, ":", 1)
+  - pattern-not: |
+      Curl_add_buffer($BUF, ": ", 2)
   languages:
   - c
   message: |
@@ -46,14 +48,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-192c4f78
-  pattern: |
-    if(('%' == $IN) && ISXDIGIT($STRING[1]) && ISXDIGIT($STRING[2])) {
-      ...
-    }
-  pattern-not: |
-    if(('%' == $IN) && ($ALLOC > 2) && ISXDIGIT($STRING[1]) && ISXDIGIT($STRING[2])) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(('%' == $IN) && ISXDIGIT($STRING[1]) && ISXDIGIT($STRING[2])) {
+        ...
+      }
+  - pattern-not: |
+      if(('%' == $IN) && ($ALLOC > 2) && ISXDIGIT($STRING[1]) && ISXDIGIT($STRING[2])) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -69,10 +72,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-2766262a
-  pattern: |
-    result = ($LINE[3] == ' ') ? TRUE : FALSE;
-  pattern-not: |
-    result = ($LINE[3] == ' ' || $LEN == 5) ? TRUE : FALSE;
+  patterns:
+  - pattern: |
+      result = ($LINE[3] == ' ') ? TRUE : FALSE;
+  - pattern-not: |
+      result = ($LINE[3] == ' ' || $LEN == 5) ? TRUE : FALSE;
   languages:
   - c
   message: |
@@ -91,32 +95,33 @@ rules:
     technology:
     - c
 - id: vuln-curl-2b0994c2
-  pattern: |
-    const psl_ctx_t *$PSL = Curl_psl_use($DATA);
-    int $ACCEPTABLE;
-    if($PSL) {
-      $ACCEPTABLE = psl_is_cookie_domain_acceptable($PSL, $DOMAIN, $CO_DOMAIN);
-      Curl_psl_release($DATA);
-    }
-    else
-      $ACCEPTABLE = !bad_domain($DOMAIN, strlen($DOMAIN));
-  pattern-not: |
-    bool $ACCEPTABLE = FALSE;
-    char $LCASE[256];
-    char $LCOOKIE[256];
-    size_t $DLEN = strlen($DOMAIN);
-    size_t $CLEN = strlen($CO_DOMAIN);
-    if(($DLEN < sizeof($LCASE)) && ($CLEN < sizeof($LCOOKIE))) {
+  patterns:
+  - pattern: |
       const psl_ctx_t *$PSL = Curl_psl_use($DATA);
+      int $ACCEPTABLE;
       if($PSL) {
-        Curl_strntolower($LCASE, $DOMAIN, $DLEN + 1);
-        Curl_strntolower($LCOOKIE, $CO_DOMAIN, $CLEN + 1);
-        $ACCEPTABLE = psl_is_cookie_domain_acceptable($PSL, $LCASE, $LCOOKIE);
+        $ACCEPTABLE = psl_is_cookie_domain_acceptable($PSL, $DOMAIN, $CO_DOMAIN);
         Curl_psl_release($DATA);
       }
       else
         $ACCEPTABLE = !bad_domain($DOMAIN, strlen($DOMAIN));
-    }
+  - pattern-not: |
+      bool $ACCEPTABLE = FALSE;
+      char $LCASE[256];
+      char $LCOOKIE[256];
+      size_t $DLEN = strlen($DOMAIN);
+      size_t $CLEN = strlen($CO_DOMAIN);
+      if(($DLEN < sizeof($LCASE)) && ($CLEN < sizeof($LCOOKIE))) {
+        const psl_ctx_t *$PSL = Curl_psl_use($DATA);
+        if($PSL) {
+          Curl_strntolower($LCASE, $DOMAIN, $DLEN + 1);
+          Curl_strntolower($LCOOKIE, $CO_DOMAIN, $CLEN + 1);
+          $ACCEPTABLE = psl_is_cookie_domain_acceptable($PSL, $LCASE, $LCOOKIE);
+          Curl_psl_release($DATA);
+        }
+        else
+          $ACCEPTABLE = !bad_domain($DOMAIN, strlen($DOMAIN));
+      }
   languages:
   - c
   message: |
@@ -134,28 +139,29 @@ rules:
     technology:
     - c
 - id: vuln-curl-2eb8dcf2
-  pattern: |
-    static bool tailmatch(const char *$LITTLE, const char *$BIGONE) {
-      size_t $LITTLELEN = strlen($LITTLE);
-      size_t $BIGLEN = strlen($BIGONE);
-      if($LITTLELEN > $BIGLEN)
+  patterns:
+  - pattern: |
+      static bool tailmatch(const char *$LITTLE, const char *$BIGONE) {
+        size_t $LITTLELEN = strlen($LITTLE);
+        size_t $BIGLEN = strlen($BIGONE);
+        if($LITTLELEN > $BIGLEN)
+          return FALSE;
+        return Curl_raw_equal($LITTLE, $BIGONE+$BIGLEN-$LITTLELEN) ? TRUE : FALSE;
+      }
+  - pattern-not: |
+      static bool tailmatch(const char *$COOKIE_DOMAIN, const char *$HOSTNAME) {
+        size_t $COOKIE_DOMAIN_LEN = strlen($COOKIE_DOMAIN);
+        size_t $HOSTNAME_LEN = strlen($HOSTNAME);
+        if($HOSTNAME_LEN < $COOKIE_DOMAIN_LEN)
+          return FALSE;
+        if(!Curl_raw_equal($COOKIE_DOMAIN, $HOSTNAME+$HOSTNAME_LEN-$COOKIE_DOMAIN_LEN))
+          return FALSE;
+        if($HOSTNAME_LEN == $COOKIE_DOMAIN_LEN)
+          return TRUE;
+        if('.' == *($HOSTNAME + $HOSTNAME_LEN - $COOKIE_DOMAIN_LEN - 1))
+          return TRUE;
         return FALSE;
-      return Curl_raw_equal($LITTLE, $BIGONE+$BIGLEN-$LITTLELEN) ? TRUE : FALSE;
-    }
-  pattern-not: |
-    static bool tailmatch(const char *$COOKIE_DOMAIN, const char *$HOSTNAME) {
-      size_t $COOKIE_DOMAIN_LEN = strlen($COOKIE_DOMAIN);
-      size_t $HOSTNAME_LEN = strlen($HOSTNAME);
-      if($HOSTNAME_LEN < $COOKIE_DOMAIN_LEN)
-        return FALSE;
-      if(!Curl_raw_equal($COOKIE_DOMAIN, $HOSTNAME+$HOSTNAME_LEN-$COOKIE_DOMAIN_LEN))
-        return FALSE;
-      if($HOSTNAME_LEN == $COOKIE_DOMAIN_LEN)
-        return TRUE;
-      if('.' == *($HOSTNAME + $HOSTNAME_LEN - $COOKIE_DOMAIN_LEN - 1))
-        return TRUE;
-      return FALSE;
-    }
+      }
   languages:
   - c
   message: |
@@ -173,34 +179,35 @@ rules:
     technology:
     - c
 - id: vuln-curl-364f1747
-  pattern: |
-    if($CODE == $VALUE) {
-      if($DATA->set.use_ssl && !$CONN->ssl[$FIRSTSOCKET].use) {
-        if($TLS_SUPPORTED)
+  patterns:
+  - pattern: |
+      if($CODE == $VALUE) {
+        if($DATA->set.use_ssl && !$CONN->ssl[$FIRSTSOCKET].use) {
+          if($TLS_SUPPORTED)
+            $RESULT = $PERFORM_STARTTLS($DATA, $CONN);
+          else if($DATA->set.use_ssl == CURLUSESSL_TRY)
+            $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
+          else {
+            $FAILF($DATA, "STARTTLS not supported.");
+            $RESULT = CURLE_USE_SSL_FAILED;
+          }
+        }
+        else
+          $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
+      }
+  - pattern-not: |
+      if($CODE == $VALUE) {
+        if(!$DATA->set.use_ssl || $CONN->ssl[$FIRSTSOCKET].use)
+          $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
+        else if($CODE == $VALUE && $TLS_SUPPORTED)
           $RESULT = $PERFORM_STARTTLS($DATA, $CONN);
-        else if($DATA->set.use_ssl == CURLUSESSL_TRY)
+        else if($DATA->set.use_ssl <= CURLUSESSL_TRY)
           $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
         else {
           $FAILF($DATA, "STARTTLS not supported.");
           $RESULT = CURLE_USE_SSL_FAILED;
         }
       }
-      else
-        $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
-    }
-  pattern-not: |
-    if($CODE == $VALUE) {
-      if(!$DATA->set.use_ssl || $CONN->ssl[$FIRSTSOCKET].use)
-        $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
-      else if($CODE == $VALUE && $TLS_SUPPORTED)
-        $RESULT = $PERFORM_STARTTLS($DATA, $CONN);
-      else if($DATA->set.use_ssl <= CURLUSESSL_TRY)
-        $RESULT = $PERFORM_AUTHENTICATION($DATA, $CONN);
-      else {
-        $FAILF($DATA, "STARTTLS not supported.");
-        $RESULT = CURLE_USE_SSL_FAILED;
-      }
-    }
   languages:
   - c
   message: |
@@ -221,14 +228,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-39ce47f2
-  pattern: |
-    if(sscanf($DATA, "$FORMAT", $VAR1, $VAR2)) {
-      ...
-    }
-  pattern-not: |
-    if(sscanf($DATA, "$FORMAT", $VAR1, $VAR2) == $EXPECTED) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(sscanf($DATA, "$FORMAT", $VAR1, $VAR2)) {
+        ...
+      }
+  - pattern-not: |
+      if(sscanf($DATA, "$FORMAT", $VAR1, $VAR2) == $EXPECTED) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -246,10 +254,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-3bb273db
-  pattern: |
-    sscanf($URL, "%[^\n/?]%[^\n]", $HOST, $PATH);
-  pattern-not: |
-    sscanf($URL, "%[^\n/?#]%[^\n]", $HOST, $PATH);
+  patterns:
+  - pattern: |
+      sscanf($URL, "%[^\n/?]%[^\n]", $HOST, $PATH);
+  - pattern-not: |
+      sscanf($URL, "%[^\n/?#]%[^\n]", $HOST, $PATH);
   languages:
   - c
   message: |
@@ -267,14 +276,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-3ee79c16
-  pattern: |
-    $DATA->info.header_size += $DELTA;
-    $DATA->req.headerbytecount += $DELTA;
-  pattern-not: |
-    $RESULT = Curl_bump_headersize($DATA, $DELTA, $FLAG);
-    if($RESULT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      $DATA->info.header_size += $DELTA;
+      $DATA->req.headerbytecount += $DELTA;
+  - pattern-not: |
+      $RESULT = Curl_bump_headersize($DATA, $DELTA, $FLAG);
+      if($RESULT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -290,17 +300,18 @@ rules:
     technology:
     - c
 - id: vuln-curl-453e7a7a
-  pattern: |
-    if(errno || ($END == ':')) {
-      ...
-    }
-  pattern-not: |
-    if(errno)
-      /* overflow */
-      $END = NULL;
-    else if($END == ':') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(errno || ($END == ':')) {
+        ...
+      }
+  - pattern-not: |
+      if(errno)
+        /* overflow */
+        $END = NULL;
+      else if($END == ':') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -315,13 +326,14 @@ rules:
     technology:
     - c
 - id: vuln-curl-57d299a4
-  pattern: |
-    unsigned char *$PW = $LEN ? malloc($LEN * 2) : strdup("");
-  pattern-not: |
-    unsigned char *$PW;
-    if($LEN > SIZE_T_MAX/2)
-      return $ERROR;
-    $PW = $LEN ? malloc($LEN * 2) : strdup("");
+  patterns:
+  - pattern: |
+      unsigned char *$PW = $LEN ? malloc($LEN * 2) : strdup("");
+  - pattern-not: |
+      unsigned char *$PW;
+      if($LEN > SIZE_T_MAX/2)
+        return $ERROR;
+      $PW = $LEN ? malloc($LEN * 2) : strdup("");
   languages:
   - c
   message: |
@@ -339,10 +351,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-5ea31458
-  pattern: |
-    SSL_SET_OPTION(issuercert)
-  pattern-not: |
-    SSL_CONN_CONFIG(issuercert)
+  patterns:
+  - pattern: |
+      SSL_SET_OPTION(issuercert)
+  - pattern-not: |
+      SSL_CONN_CONFIG(issuercert)
   languages:
   - c
   message: |
@@ -381,13 +394,14 @@ rules:
     technology:
     - c
 - id: vuln-curl-6ecdf513
-  pattern: |
-    buf->size = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, $ARG5);
-  pattern-not: |
-    $NREAD = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, $ARG5);
-    if($NREAD < 0)
-      return $ERROR;
-    buf->size = (size_t)$NREAD;
+  patterns:
+  - pattern: |
+      buf->size = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, $ARG5);
+  - pattern-not: |
+      $NREAD = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, $ARG5);
+      if($NREAD < 0)
+        return $ERROR;
+      buf->size = (size_t)$NREAD;
   languages:
   - c
   message: |
@@ -403,10 +417,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-73980f9a
-  pattern: |
-    DEBUGASSERT($PREFIX[3] == L'\0');
-  pattern-not: |
-    DEBUGASSERT($PREFIX[2] == L'\0');
+  patterns:
+  - pattern: |
+      DEBUGASSERT($PREFIX[3] == L'\0');
+  - pattern-not: |
+      DEBUGASSERT($PREFIX[2] == L'\0');
   languages:
   - c
   message: |
@@ -424,17 +439,18 @@ rules:
     technology:
     - c
 - id: vuln-curl-73b65e94
-  pattern: |
-    unsigned char $RANDSUFFIX[9];
-    ...
-    $TEMPSTORE = aprintf("%s.%s.tmp", $FILENAME, $RANDSUFFIX);
-  pattern-not: |
-    unsigned char $RANDBUF[41];
-    char *$DIR;
-    $DIR = dirslash($FILENAME);
-    ...
-    $TEMPSTORE = aprintf("%s%s.tmp", $DIR, $RANDBUF);
-    free($DIR);
+  patterns:
+  - pattern: |
+      unsigned char $RANDSUFFIX[9];
+      ...
+      $TEMPSTORE = aprintf("%s.%s.tmp", $FILENAME, $RANDSUFFIX);
+  - pattern-not: |
+      unsigned char $RANDBUF[41];
+      char *$DIR;
+      $DIR = dirslash($FILENAME);
+      ...
+      $TEMPSTORE = aprintf("%s%s.tmp", $DIR, $RANDBUF);
+      free($DIR);
   languages:
   - c
   message: |
@@ -452,18 +468,19 @@ rules:
     technology:
     - c
 - id: vuln-curl-75ca568f
-  pattern: |
-    $TYPE *$FUNC(CURL *$HANDLE, const char *$STRING, int $LENGTH, int *$OLEN) {
-      ...
-      int $STRINDEX = 0;
-      ...
-    }
-  pattern-not: |
-    $TYPE *$FUNC(CURL *$HANDLE, const char *$STRING, size_t $LENGTH, int *$OLEN) {
-      ...
-      size_t $STRINDEX = 0;
-      ...
-    }
+  patterns:
+  - pattern: |
+      $TYPE *$FUNC(CURL *$HANDLE, const char *$STRING, int $LENGTH, int *$OLEN) {
+        ...
+        int $STRINDEX = 0;
+        ...
+      }
+  - pattern-not: |
+      $TYPE *$FUNC(CURL *$HANDLE, const char *$STRING, size_t $LENGTH, int *$OLEN) {
+        ...
+        size_t $STRINDEX = 0;
+        ...
+      }
   languages:
   - c
   message: |
@@ -479,17 +496,18 @@ rules:
     technology:
     - c
 - id: vuln-curl-7e92d12b
-  pattern: |
-    return !strchr($DOMAIN, '.') && !strcasecompare($DOMAIN, "localhost");
-  pattern-not: |
-    if(strcasecompare($DOMAIN, "localhost"))
-      return $FALSE;
-    else {
-      char *$DOT = strchr($DOMAIN, '.');
-      if($DOT)
-        return $DOT[1] ? $FALSE : $TRUE;
-    }
-    return $TRUE;
+  patterns:
+  - pattern: |
+      return !strchr($DOMAIN, '.') && !strcasecompare($DOMAIN, "localhost");
+  - pattern-not: |
+      if(strcasecompare($DOMAIN, "localhost"))
+        return $FALSE;
+      else {
+        char *$DOT = strchr($DOMAIN, '.');
+        if($DOT)
+          return $DOT[1] ? $FALSE : $TRUE;
+      }
+      return $TRUE;
   languages:
   - c
   message: |
@@ -507,16 +525,17 @@ rules:
     technology:
     - c
 - id: vuln-curl-7f2a1df6
-  pattern: |
-    size_t $IDENTITY_LEN = ($USERLEN + $DOMLEN) * 2;
-    unsigned char *$IDENTITY = malloc($IDENTITY_LEN);
-  pattern-not: |
-    if(($USERLEN > SIZE_T_MAX/2) ||
-       ($DOMLEN > SIZE_T_MAX/2) ||
-       (($USERLEN + $DOMLEN) > SIZE_T_MAX/2))
-      return $ERROR;
-    size_t $IDENTITY_LEN = ($USERLEN + $DOMLEN) * 2;
-    unsigned char *$IDENTITY = malloc($IDENTITY_LEN);
+  patterns:
+  - pattern: |
+      size_t $IDENTITY_LEN = ($USERLEN + $DOMLEN) * 2;
+      unsigned char *$IDENTITY = malloc($IDENTITY_LEN);
+  - pattern-not: |
+      if(($USERLEN > SIZE_T_MAX/2) ||
+         ($DOMLEN > SIZE_T_MAX/2) ||
+         (($USERLEN + $DOMLEN) > SIZE_T_MAX/2))
+        return $ERROR;
+      size_t $IDENTITY_LEN = ($USERLEN + $DOMLEN) * 2;
+      unsigned char *$IDENTITY = malloc($IDENTITY_LEN);
   languages:
   - c
   message: |
@@ -536,21 +555,22 @@ rules:
     technology:
     - c
 - id: vuln-curl-8236aba5
-  pattern: |
-    $RC = rename($OLD, $NEW);
-    if($RC != 0) {
-      warnf($GLOBAL, "Failed to rename %s -> %s: %s\n", $OLD, $NEW, strerror(errno));
-    }
-    if($ALLOC) {
-      Curl_safefree($OLD);
-    }
-    if($RC != 0) {
+  patterns:
+  - pattern: |
+      $RC = rename($OLD, $NEW);
+      if($RC != 0) {
+        warnf($GLOBAL, "Failed to rename %s -> %s: %s\n", $OLD, $NEW, strerror(errno));
+      }
+      if($ALLOC) {
+        Curl_safefree($OLD);
+      }
+      if($RC != 0) {
+        free($NEW);
+        return $FAILURE;
+      }
+  - pattern-not: |
       free($NEW);
       return $FAILURE;
-    }
-  pattern-not: |
-    free($NEW);
-    return $FAILURE;
   languages:
   - c
   message: |
@@ -566,26 +586,27 @@ rules:
     technology:
     - c
 - id: vuln-curl-894f6ec7
-  pattern: |
-    if(sscanf($DATA, "%127[^,],%127s", $VARNAME, $VARVAL) == 2) {
-      ...
-      msnprintf($BUFFER, $BUFFER_SIZE, "%c%s%c%s", $ENV_VAR, $VARNAME, $ENV_VALUE, $VARVAL);
-      ...
-    }
-  pattern-not: |
-    int $RV;
-    char $SEP[2] = "";
-    $VARVAL[0] = 0;
-    $RV = sscanf($DATA, "%127[^,]%1[,]%127s", $VARNAME, $SEP, $VARVAL);
-    if($RV == 1) {
-      ...
-      msnprintf($BUFFER, $BUFFER_SIZE, "%c%s", $ENV_VAR, $VARNAME);
-      ...
-    } else if($RV >= 2) {
-      ...
-      msnprintf($BUFFER, $BUFFER_SIZE, "%c%s%c%s", $ENV_VAR, $VARNAME, $ENV_VALUE, $VARVAL);
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(sscanf($DATA, "%127[^,],%127s", $VARNAME, $VARVAL) == 2) {
+        ...
+        msnprintf($BUFFER, $BUFFER_SIZE, "%c%s%c%s", $ENV_VAR, $VARNAME, $ENV_VALUE, $VARVAL);
+        ...
+      }
+  - pattern-not: |
+      int $RV;
+      char $SEP[2] = "";
+      $VARVAL[0] = 0;
+      $RV = sscanf($DATA, "%127[^,]%1[,]%127s", $VARNAME, $SEP, $VARVAL);
+      if($RV == 1) {
+        ...
+        msnprintf($BUFFER, $BUFFER_SIZE, "%c%s", $ENV_VAR, $VARNAME);
+        ...
+      } else if($RV >= 2) {
+        ...
+        msnprintf($BUFFER, $BUFFER_SIZE, "%c%s%c%s", $ENV_VAR, $VARNAME, $ENV_VALUE, $VARVAL);
+        ...
+      }
   languages:
   - c
   message: |
@@ -605,14 +626,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-89721ff0
-  pattern: |
-    if(strequal($NEEDLE->protostr, "FTP")) {
-      ...
-    }
-  pattern-not: |
-    if($NEEDLE->protocol & PROT_FTP) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(strequal($NEEDLE->protostr, "FTP")) {
+        ...
+      }
+  - pattern-not: |
+      if($NEEDLE->protocol & PROT_FTP) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -630,10 +652,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-8ae35102
-  pattern: |
-    bool $VAR = ($EXPR == $AUTH_TYPE) || ($EXPR == $AUTH_TYPE_WB) ? TRUE : FALSE;
-  pattern-not: |
-    bool $VAR = ($EXPR & $AUTH_TYPE) || ($EXPR & $AUTH_TYPE_WB) ? TRUE : FALSE;
+  patterns:
+  - pattern: |
+      bool $VAR = ($EXPR == $AUTH_TYPE) || ($EXPR == $AUTH_TYPE_WB) ? TRUE : FALSE;
+  - pattern-not: |
+      bool $VAR = ($EXPR & $AUTH_TYPE) || ($EXPR & $AUTH_TYPE_WB) ? TRUE : FALSE;
   languages:
   - c
   message: |
@@ -649,10 +672,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-af32cd38
-  pattern: |
-    $VAR->set.http_disable_hostname_check_before_authentication
-  pattern-not: |
-    $VAR->set.allow_auth_to_other_hosts
+  patterns:
+  - pattern: |
+      $VAR->set.http_disable_hostname_check_before_authentication
+  - pattern-not: |
+      $VAR->set.allow_auth_to_other_hosts
   languages:
   - c
   message: |
@@ -672,10 +696,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-b09c8ee1
-  pattern: |
-    Curl_ssl_getsessionid($DATA, $CONN, $SESSION, $NULL, $SOCKINDEX)
-  pattern-not: |
-    Curl_ssl_getsessionid($DATA, $CONN, SSL_IS_PROXY() ? TRUE : FALSE, $SESSION, $NULL, $SOCKINDEX)
+  patterns:
+  - pattern: |
+      Curl_ssl_getsessionid($DATA, $CONN, $SESSION, $NULL, $SOCKINDEX)
+  - pattern-not: |
+      Curl_ssl_getsessionid($DATA, $CONN, SSL_IS_PROXY() ? TRUE : FALSE, $SESSION, $NULL, $SOCKINDEX)
   languages:
   - c
   message: |
@@ -691,14 +716,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-b3ee26c5
-  pattern: |
-    if(!strequal($VAR1, $VAR2) || !strequal($VAR3, $VAR4)) {
-      ...
-    }
-  pattern-not: |
-    if(strcmp($VAR1, $VAR2) || strcmp($VAR3, $VAR4)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(!strequal($VAR1, $VAR2) || !strequal($VAR3, $VAR4)) {
+        ...
+      }
+  - pattern-not: |
+      if(strcmp($VAR1, $VAR2) || strcmp($VAR3, $VAR4)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -717,10 +743,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-ba1dbd78
-  pattern: |
-    $SCRATCH = malloc(2 * $DATA->set.buffer_size);
-  pattern-not: |
-    $SCRATCH = malloc(2 * UPLOAD_BUFSIZE);
+  patterns:
+  - pattern: |
+      $SCRATCH = malloc(2 * $DATA->set.buffer_size);
+  - pattern-not: |
+      $SCRATCH = malloc(2 * UPLOAD_BUFSIZE);
   languages:
   - c
   message: |
@@ -738,10 +765,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-bbb71507
-  pattern: |
-    set_ssl_ciphers($SCHANNEL_CRED, $CIPHERS)
-  pattern-not: |
-    set_ssl_ciphers($SCHANNEL_CRED, $CIPHERS, $ALGIDS)
+  patterns:
+  - pattern: |
+      set_ssl_ciphers($SCHANNEL_CRED, $CIPHERS)
+  - pattern-not: |
+      set_ssl_ciphers($SCHANNEL_CRED, $CIPHERS, $ALGIDS)
   languages:
   - c
   message: |
@@ -759,10 +787,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-be285cde
-  pattern: |
-    if ($SIZE >= 48)
-      memcpy($NTLM->nonce, &$BUFFER[24], 8);
-  pattern-not: "if (($SIZE < 32) || \n     (memcmp($BUFFER, \"NTLMSSP\", 8) != 0) || \n     (memcmp($BUFFER+8, $TYPE2_MARKER, sizeof($TYPE2_MARKER)) != 0)) {\n  /* This was not a good enough type-2 message */\n  free($BUFFER);\n  return $ERROR;\n}\n$NTLM->flags = readint_le(&$BUFFER[20]);\nmemcpy($NTLM->nonce, &$BUFFER[24], 8);\n"
+  patterns:
+  - pattern: |
+      if ($SIZE >= 48)
+        memcpy($NTLM->nonce, &$BUFFER[24], 8);
+  - pattern-not: "if (($SIZE < 32) || \n     (memcmp($BUFFER, \"NTLMSSP\", 8) != 0) || \n     (memcmp($BUFFER+8, $TYPE2_MARKER, sizeof($TYPE2_MARKER)) != 0)) {\n  /* This was not a good enough type-2 message */\n  free($BUFFER);\n  return $ERROR;\n}\n$NTLM->flags = readint_le(&$BUFFER[20]);\nmemcpy($NTLM->nonce, &$BUFFER[24], 8);\n"
   languages:
   - c
   message: |
@@ -780,14 +809,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-c97ec984
-  pattern: |
-    while(!done && fgets($BUFFER, $BUFFSIZE, $FILE)) {
-      ...
-    }
-  pattern-not: |
-    while(!done && Curl_get_line($BUFFER, $BUFFSIZE, $FILE)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while(!done && fgets($BUFFER, $BUFFSIZE, $FILE)) {
+        ...
+      }
+  - pattern-not: |
+      while(!done && Curl_get_line($BUFFER, $BUFFSIZE, $FILE)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -803,14 +833,15 @@ rules:
     technology:
     - c
 - id: vuln-curl-cff89bc0
-  pattern: |
-    while(fgets($LINE, $MAX_LEN, $FP)) {
-      ...
-    }
-  pattern-not: |
-    while(get_line($LINE, $MAX_LEN, $FP)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while(fgets($LINE, $MAX_LEN, $FP)) {
+        ...
+      }
+  - pattern-not: |
+      while(get_line($LINE, $MAX_LEN, $FP)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -828,10 +859,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-fa3dbb9a
-  pattern: |
-    uint32_t $N = (uint32_t)($NAMELEN + $VALUELEN + 3);
-  pattern-not: |
-    uint32_t $N = (uint32_t)($NAMELEN + $VALUELEN + 4);
+  patterns:
+  - pattern: |
+      uint32_t $N = (uint32_t)($NAMELEN + $VALUELEN + 3);
+  - pattern-not: |
+      uint32_t $N = (uint32_t)($NAMELEN + $VALUELEN + 4);
   languages:
   - c
   message: |
@@ -847,20 +879,21 @@ rules:
     technology:
     - c
 - id: vuln-curl-fae6fea2
-  pattern: |
-    $STS->host = strdup($HOSTNAME);
-    if(!$STS->host) {
-      ...
-    }
-  pattern-not: |
-    $DUPHOST = strdup($HOSTNAME);
-    if(!$DUPHOST) {
-      ...
-    }
-    $HLEN = strlen($DUPHOST);
-    if($DUPHOST[$HLEN - 1] == '.')
-      $DUPHOST[--$HLEN] = 0;
-    $STS->host = $DUPHOST;
+  patterns:
+  - pattern: |
+      $STS->host = strdup($HOSTNAME);
+      if(!$STS->host) {
+        ...
+      }
+  - pattern-not: |
+      $DUPHOST = strdup($HOSTNAME);
+      if(!$DUPHOST) {
+        ...
+      }
+      $HLEN = strlen($DUPHOST);
+      if($DUPHOST[$HLEN - 1] == '.')
+        $DUPHOST[--$HLEN] = 0;
+      $STS->host = $DUPHOST;
   languages:
   - c
   message: |
@@ -877,10 +910,11 @@ rules:
     technology:
     - c
 - id: vuln-curl-fb4415d8
-  pattern: |
-    socksreq[$LEN++] = (char) $HOSTNAME_LEN;
-  pattern-not: |
-    socksreq[$LEN++] = (unsigned char) $HOSTNAME_LEN;
+  patterns:
+  - pattern: |
+      socksreq[$LEN++] = (char) $HOSTNAME_LEN;
+  - pattern-not: |
+      socksreq[$LEN++] = (unsigned char) $HOSTNAME_LEN;
   languages:
   - c
   message: |

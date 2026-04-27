@@ -1,9 +1,8 @@
 rules:
 - id: vuln-pgbouncer-7ca3e527
-  pattern: |
-    $CLIENT->auth_user = $DB->auth_user;
-  pattern-not: |
-    $CLIENT->auth_user = $DB->auth_user;
+  patterns:
+  - pattern: |
+      $CLIENT->auth_user = $DB->auth_user;
   languages:
   - c
   message: |

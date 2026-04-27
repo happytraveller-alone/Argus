@@ -1,9 +1,8 @@
 rules:
 - id: vuln-bind9-15996f0c
-  pattern: |
-    INSIST($RC != dns_rcode_noerror && $RC != dns_rcode_nxdomain);
-  pattern-not: |
-    INSIST($RC != dns_rcode_noerror && $RC != dns_rcode_nxdomain);
+  patterns:
+  - pattern: |
+      INSIST($RC != dns_rcode_noerror && $RC != dns_rcode_nxdomain);
   languages:
   - c
   message: |
@@ -23,14 +22,15 @@ rules:
     technology:
     - c
 - id: vuln-bind9-2e9d79f1
-  pattern: |
-    if (!deletekey) {
-      ...
-    }
-  pattern-not: |
-    if (secure && !deletekey) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!deletekey) {
+        ...
+      }
+  - pattern-not: |
+      if (secure && !deletekey) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -48,10 +48,11 @@ rules:
     technology:
     - c
 - id: vuln-bind9-5b2282af
-  pattern: |
-    return (DST_R_VERIFYFAILURE);
-  pattern-not: |
-    DST_RET(DST_R_VERIFYFAILURE);
+  patterns:
+  - pattern: |
+      return (DST_R_VERIFYFAILURE);
+  - pattern-not: |
+      DST_RET(DST_R_VERIFYFAILURE);
   languages:
   - c
   message: |
@@ -67,10 +68,11 @@ rules:
     technology:
     - c
 - id: vuln-bind9-603a0e26
-  pattern: |
-    dns_resolver_createfetch2($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS, $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
-  pattern-not: |
-    dns_resolver_createfetch3($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS, $DEPTH, $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
+  patterns:
+  - pattern: |
+      dns_resolver_createfetch2($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS, $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
+  - pattern-not: |
+      dns_resolver_createfetch3($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS, $DEPTH, $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
   languages:
   - c
   message: |
@@ -88,13 +90,14 @@ rules:
     technology:
     - c
 - id: vuln-bind9-69c1ee1c
-  pattern: |
-    $RESULT = $FUNC(...);
-    if ($RESULT != ISC_R_SUCCESS) {
-      goto error;
-    }
-  pattern-not: |
-    CHECK($FUNC(...));
+  patterns:
+  - pattern: |
+      $RESULT = $FUNC(...);
+      if ($RESULT != ISC_R_SUCCESS) {
+        goto error;
+      }
+  - pattern-not: |
+      CHECK($FUNC(...));
   languages:
   - c
   message: |
@@ -110,14 +113,15 @@ rules:
     technology:
     - c
 - id: vuln-bind9-711e8339
-  pattern: |
-    if ($FCTX->totalqueries > DEFAULT_MAX_QUERIES) {
-      ...
-    }
-  pattern-not: |
-    if ($FCTX->totalqueries > $FCTX->res->maxqueries) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($FCTX->totalqueries > DEFAULT_MAX_QUERIES) {
+        ...
+      }
+  - pattern-not: |
+      if ($FCTX->totalqueries > $FCTX->res->maxqueries) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -133,18 +137,19 @@ rules:
     technology:
     - c
 - id: vuln-bind9-73df5c80
-  pattern: |
-    if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL) {
-      return ($RETURN_VALUE);
-    }
-    if (BN_cmp($PRIV_KEY1, $PRIV_KEY2) != 0) {
-      return ($RETURN_VALUE);
-    }
-  pattern-not: |
-    if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL ||
-        BN_cmp($PRIV_KEY1, $PRIV_KEY2) != 0) {
-      $DST_RET($RETURN_VALUE);
-    }
+  patterns:
+  - pattern: |
+      if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL) {
+        return ($RETURN_VALUE);
+      }
+      if (BN_cmp($PRIV_KEY1, $PRIV_KEY2) != 0) {
+        return ($RETURN_VALUE);
+      }
+  - pattern-not: |
+      if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL ||
+          BN_cmp($PRIV_KEY1, $PRIV_KEY2) != 0) {
+        $DST_RET($RETURN_VALUE);
+      }
   languages:
   - c
   message: |
@@ -167,12 +172,9 @@ rules:
     technology:
     - c
 - id: vuln-bind9-8bd0c12d
-  pattern: |
-    INSIST((valoptions & DNS_VALIDATOR_DEFER) != 0);
-  pattern-not: |
-    valoptions |= DNS_VALIDATOR_DEFER;
-    else
-    valoptions &= ~DNS_VALIDATOR_DEFER;
+  patterns:
+  - pattern: |
+      INSIST((valoptions & DNS_VALIDATOR_DEFER) != 0);
   languages:
   - c
   message: |
@@ -190,14 +192,15 @@ rules:
     technology:
     - c
 - id: vuln-bind9-8d807cc2
-  pattern: |
-    $KEY->key_size = pk11_numbits($DATA, $LEN);
-  pattern-not: |
-    $RET = pk11_numbits($DATA, $LEN, &$BITS);
-    if ($RET != ISC_R_SUCCESS) {
-      ...
-    }
-    $KEY->key_size = $BITS;
+  patterns:
+  - pattern: |
+      $KEY->key_size = pk11_numbits($DATA, $LEN);
+  - pattern-not: |
+      $RET = pk11_numbits($DATA, $LEN, &$BITS);
+      if ($RET != ISC_R_SUCCESS) {
+        ...
+      }
+      $KEY->key_size = $BITS;
   languages:
   - c
   message: |
@@ -216,15 +219,16 @@ rules:
     technology:
     - c
 - id: vuln-bind9-e4cccf96
-  pattern: |
-    if ($MTYPE == dns_ssumatchtype_subdomain) {
-      ...
-    }
-  pattern-not: |
-    if ($MTYPE == dns_ssumatchtype_subdomain &&
-        strcasecmp($STR, "zonesub") == 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($MTYPE == dns_ssumatchtype_subdomain) {
+        ...
+      }
+  - pattern-not: |
+      if ($MTYPE == dns_ssumatchtype_subdomain &&
+          strcasecmp($STR, "zonesub") == 0) {
+        ...
+      }
   languages:
   - c
   message: |

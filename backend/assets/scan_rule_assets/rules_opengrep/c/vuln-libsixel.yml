@@ -1,12 +1,13 @@
 rules:
 - id: vuln-libsixel-1377517a
-  pattern: |
-    $CONTEXT->param = $CONTEXT->param * 10 + $P - '0';
-  pattern-not: |
-    $STATUS = safe_addition_for_params($CONTEXT, $P);
-    if (SIXEL_FAILED($STATUS)) {
-        goto $END;
-    }
+  patterns:
+  - pattern: |
+      $CONTEXT->param = $CONTEXT->param * 10 + $P - '0';
+  - pattern-not: |
+      $STATUS = safe_addition_for_params($CONTEXT, $P);
+      if (SIXEL_FAILED($STATUS)) {
+          goto $END;
+      }
   languages:
   - c
   message: |
@@ -24,10 +25,11 @@ rules:
     technology:
     - c
 - id: vuln-libsixel-598c8c88
-  pattern: |
-    $G->out[$G->cur_x + $G->cur_y * $G->line_size] = $G->codes[$CODE].suffix;
-  pattern-not: |
-    $G->out[$G->cur_x + $G->cur_y * $G->max_x] = $G->codes[$CODE].suffix;
+  patterns:
+  - pattern: |
+      $G->out[$G->cur_x + $G->cur_y * $G->line_size] = $G->codes[$CODE].suffix;
+  - pattern-not: |
+      $G->out[$G->cur_x + $G->cur_y * $G->max_x] = $G->codes[$CODE].suffix;
   languages:
   - c
   message: |
@@ -45,10 +47,11 @@ rules:
     technology:
     - c
 - id: vuln-libsixel-7808a06b
-  pattern: |
-    gif_lzw $VAR[4096];
-  pattern-not: |
-    gif_lzw $VAR[1 << gif_lzw_max_code_size];
+  patterns:
+  - pattern: |
+      gif_lzw $VAR[4096];
+  - pattern-not: |
+      gif_lzw $VAR[1 << gif_lzw_max_code_size];
   languages:
   - c
   message: |
@@ -66,14 +69,15 @@ rules:
     technology:
     - c
 - id: vuln-libsixel-9d0a7ff4
-  pattern: |
-    if ($DIRTY && $MOD_Y == 5) {
-      ...
-    }
-  pattern-not: |
-    if ($DIRTY && ($MOD_Y == 5 || $Y >= $HEIGHT)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($DIRTY && $MOD_Y == 5) {
+        ...
+      }
+  - pattern-not: |
+      if ($DIRTY && ($MOD_Y == 5 || $Y >= $HEIGHT)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -91,14 +95,15 @@ rules:
     technology:
     - c
 - id: vuln-libsixel-b418f351
-  pattern: |
-    if ($P < $END && *$P == '\n') {
-      ...
-    }
-  pattern-not: |
-    if ($P < $END && *$P < ' ') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($P < $END && *$P == '\n') {
+        ...
+      }
+  - pattern-not: |
+      if ($P < $END && *$P < ' ') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -116,10 +121,11 @@ rules:
     technology:
     - c
 - id: vuln-libsixel-fb329124
-  pattern: |
-    error_diffuse($DATA, $POS + $WIDTH * $Y + $X, $DEPTH, $ERROR, $NUMERATOR, $DENOMINATOR)
-  pattern-not: |
-    error_diffuse($DATA, $POS + $WIDTH * $Y + $X, $DEPTH, $ERROR, $NUMERATOR, $DENOMINATOR, $AREA)
+  patterns:
+  - pattern: |
+      error_diffuse($DATA, $POS + $WIDTH * $Y + $X, $DEPTH, $ERROR, $NUMERATOR, $DENOMINATOR)
+  - pattern-not: |
+      error_diffuse($DATA, $POS + $WIDTH * $Y + $X, $DEPTH, $ERROR, $NUMERATOR, $DENOMINATOR, $AREA)
   languages:
   - c
   message: |

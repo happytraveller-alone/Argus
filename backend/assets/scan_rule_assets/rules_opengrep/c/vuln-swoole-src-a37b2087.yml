@@ -1,13 +1,14 @@
 rules:
 - id: vuln-swoole-src-a37b2087
-  pattern: |
-    uint32_t $VAR = $PARAMS ? $PARAMS - $URL : $REQUEST->url_length;
-  pattern-not: |
-    size_t $VAR = $PARAMS ? $PARAMS - $URL : $REQUEST->url_length;
-    if ($SERV->document_root_len + $VAR >= PATH_MAX)
-    {
-        return SW_FALSE;
-    }
+  patterns:
+  - pattern: |
+      uint32_t $VAR = $PARAMS ? $PARAMS - $URL : $REQUEST->url_length;
+  - pattern-not: |
+      size_t $VAR = $PARAMS ? $PARAMS - $URL : $REQUEST->url_length;
+      if ($SERV->document_root_len + $VAR >= PATH_MAX)
+      {
+          return SW_FALSE;
+      }
   languages:
   - c
   message: |

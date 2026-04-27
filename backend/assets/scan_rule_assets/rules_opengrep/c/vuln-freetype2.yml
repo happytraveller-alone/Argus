@@ -1,9 +1,10 @@
 rules:
 - id: vuln-freetype2-010e0614
-  pattern: |
-    $STACK = cf2_stack_init($MEMORY, $ERROR);
-  pattern-not: |
-    $STACK = cf2_stack_init($MEMORY, $ERROR, $STACK_SIZE);
+  patterns:
+  - pattern: |
+      $STACK = cf2_stack_init($MEMORY, $ERROR);
+  - pattern-not: |
+      $STACK = cf2_stack_init($MEMORY, $ERROR, $STACK_SIZE);
   languages:
   - c
   message: |
@@ -19,19 +20,20 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-0545ec1c
-  pattern: |
-    charset->sids[$J] = FT_GET_USHORT();
-  pattern-not: |
-    {
-      FT_UShort $SID = FT_GET_USHORT();
-      if ( $SID < 65000 )
-        charset->sids[$J] = $SID;
-      else
+  patterns:
+  - pattern: |
+      charset->sids[$J] = FT_GET_USHORT();
+  - pattern-not: |
       {
-        FT_ERROR(( "cff_charset_load: invalid SID value %d set to zero\n", $SID ));
-        charset->sids[$J] = 0;
+        FT_UShort $SID = FT_GET_USHORT();
+        if ( $SID < 65000 )
+          charset->sids[$J] = $SID;
+        else
+        {
+          FT_ERROR(( "cff_charset_load: invalid SID value %d set to zero\n", $SID ));
+          charset->sids[$J] = 0;
+        }
       }
-    }
   languages:
   - c
   message: |
@@ -49,10 +51,11 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-45a3c76b
-  pattern: |
-    $STREAM->pos + $COUNT > $STREAM->size
-  pattern-not: |
-    $STREAM->size - $STREAM->pos < $COUNT
+  patterns:
+  - pattern: |
+      $STREAM->pos + $COUNT > $STREAM->size
+  - pattern-not: |
+      $STREAM->size - $STREAM->pos < $COUNT
   languages:
   - c
   message: |
@@ -73,13 +76,10 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-77930974
-  pattern: |
-    if ( !$FACE->goto_table( $FACE, $TTAG_CFF, $STREAM, 0 ) )
-      $NUM_INSTANCES = 0;
-  pattern-not: |
-    if ( $FACE->goto_table( $FACE, $TTAG_glyf, $STREAM, 0 ) &&
-         !$FACE->goto_table( $FACE, $TTAG_CFF, $STREAM, 0 ) )
-      $NUM_INSTANCES = 0;
+  patterns:
+  - pattern: |
+      if ( !$FACE->goto_table( $FACE, $TTAG_CFF, $STREAM, 0 ) )
+        $NUM_INSTANCES = 0;
   languages:
   - c
   message: |
@@ -97,12 +97,13 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-8b281f83
-  pattern: |
-    (void)$FUNC($PARSER, $SIZE, $ARRAY, $COUNT);
-  pattern-not: |
-    $RESULT = $FUNC($PARSER, $SIZE, $ARRAY, $COUNT);
-    if ($RESULT < $SIZE)
-      return $ERROR;
+  patterns:
+  - pattern: |
+      (void)$FUNC($PARSER, $SIZE, $ARRAY, $COUNT);
+  - pattern-not: |
+      $RESULT = $FUNC($PARSER, $SIZE, $ARRAY, $COUNT);
+      if ($RESULT < $SIZE)
+        return $ERROR;
   languages:
   - c
   message: |
@@ -120,12 +121,13 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-8d22746c
-  pattern: |
-    $VAR = $MASK->end_point;
-  pattern-not: |
-    $VAR = $MASK->end_point > $GLYPH->num_points
-              ? $GLYPH->num_points
-              : $MASK->end_point;
+  patterns:
+  - pattern: |
+      $VAR = $MASK->end_point;
+  - pattern-not: |
+      $VAR = $MASK->end_point > $GLYPH->num_points
+                ? $GLYPH->num_points
+                : $MASK->end_point;
   languages:
   - c
   message: |
@@ -140,17 +142,18 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-c06da1ad
-  pattern: |
-    $PARSER->root.cursor += $STRING_SIZE + 1;
-    if ($PARSER->root.cursor >= $LIMIT) {
-      ...
-    }
-  pattern-not: |
-    if ($LIMIT - $PARSER->root.cursor < $STRING_SIZE) {
-      ...
-    } else {
+  patterns:
+  - pattern: |
       $PARSER->root.cursor += $STRING_SIZE + 1;
-    }
+      if ($PARSER->root.cursor >= $LIMIT) {
+        ...
+      }
+  - pattern-not: |
+      if ($LIMIT - $PARSER->root.cursor < $STRING_SIZE) {
+        ...
+      } else {
+        $PARSER->root.cursor += $STRING_SIZE + 1;
+      }
   languages:
   - c
   message: |
@@ -169,8 +172,9 @@ rules:
     technology:
     - c
 - id: vuln-freetype2-cee5d593
-  pattern: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 4;
-  pattern-not: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 5;
+  patterns:
+  - pattern: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 4;
+  - pattern-not: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 5;
   languages:
   - c
   message: |

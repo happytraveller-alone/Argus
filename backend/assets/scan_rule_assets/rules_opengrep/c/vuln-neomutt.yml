@@ -1,9 +1,10 @@
 rules:
 - id: vuln-neomutt-36a29280
-  pattern: |
-    mutt_error("%s", $S + 3);
-  pattern-not: |
-    mutt_error("%s", $S + 2);
+  patterns:
+  - pattern: |
+      mutt_error("%s", $S + 3);
+  - pattern-not: |
+      mutt_error("%s", $S + 2);
   languages:
   - c
   message: |
@@ -18,10 +19,11 @@ rules:
     technology:
     - c
 - id: vuln-neomutt-6f163e07
-  pattern: |
-    mutt_b64_decode($OUT, $IN)
-  pattern-not: |
-    mutt_b64_decode($OUT, $IN, $OLEN)
+  patterns:
+  - pattern: |
+      mutt_b64_decode($OUT, $IN)
+  - pattern-not: |
+      mutt_b64_decode($OUT, $IN, $OLEN)
   languages:
   - c
   message: |
@@ -37,10 +39,11 @@ rules:
     technology:
     - c
 - id: vuln-neomutt-9c36717a
-  pattern: |
-    goto err_close_conn;
-  pattern-not: |
-    goto bail;
+  patterns:
+  - pattern: |
+      goto err_close_conn;
+  - pattern-not: |
+      goto bail;
   languages:
   - c
   message: |
@@ -58,10 +61,11 @@ rules:
     technology:
     - c
 - id: vuln-neomutt-e5239374
-  pattern: |
-    imap_quote_string($DEST, $DLEN, $SRC)
-  pattern-not: |
-    imap_quote_string($DEST, $DLEN, $SRC, $QUOTE_BACKTICK)
+  patterns:
+  - pattern: |
+      imap_quote_string($DEST, $DLEN, $SRC)
+  - pattern-not: |
+      imap_quote_string($DEST, $DLEN, $SRC, $QUOTE_BACKTICK)
   languages:
   - c
   message: |

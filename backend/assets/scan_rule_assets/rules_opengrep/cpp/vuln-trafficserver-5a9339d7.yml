@@ -1,9 +1,10 @@
 rules:
 - id: vuln-trafficserver-5a9339d7
-  pattern: |
-    char $VAR[$LEN * 2];
-  pattern-not: |
-    char $VAR[$LEN * 3 + 1];
+  patterns:
+  - pattern: |
+      char $VAR[$LEN * 2];
+  - pattern-not: |
+      char $VAR[$LEN * 3 + 1];
   languages:
   - cpp
   message: |

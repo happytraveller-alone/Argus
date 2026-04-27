@@ -1,13 +1,14 @@
 rules:
 - id: vuln-helm-055dd41c
-  pattern: |
-    if err := yaml.Unmarshal($DATA, $VAR); $ERR {
-      ...
-    }
-  pattern-not: |
-    if err := yaml.UnmarshalStrict($DATA, $VAR); $ERR {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if err := yaml.Unmarshal($DATA, $VAR); $ERR {
+        ...
+      }
+  - pattern-not: |
+      if err := yaml.UnmarshalStrict($DATA, $VAR); $ERR {
+        ...
+      }
   languages:
   - go
   message: |
@@ -25,12 +26,13 @@ rules:
     technology:
     - go
 - id: vuln-helm-293b50c6
-  pattern: |
-    engine.Render($CHART, $VALUES)
-  pattern-not: |
-    $E := engine.New($CONFIG)
-    $E.EnableDNS = $DNS
-    $E.Render($CHART, $VALUES)
+  patterns:
+  - pattern: |
+      engine.Render($CHART, $VALUES)
+  - pattern-not: |
+      $E := engine.New($CONFIG)
+      $E.EnableDNS = $DNS
+      $E.Render($CHART, $VALUES)
   languages:
   - go
   message: |
@@ -50,24 +52,25 @@ rules:
     technology:
     - go
 - id: vuln-helm-a34f3115
-  pattern: |
-    if $DV, $OK := $DST[$KEY]; $OK && istable($DV) {
-      ...
-    } else if !$OK {
-      ...
-    }
-  pattern-not: |
-    if $DV, $OK := $DST[$KEY]; $OK && $DV == nil {
-      delete($DST, $KEY)
-    } else if !$OK {
-      $DST[$KEY] = $VAL
-    } else if istable($VAL) {
-      if istable($DV) {
-        CoalesceTables($DV.(map[string]interface{}), $VAL.(map[string]interface{}))
-      } else {
+  patterns:
+  - pattern: |
+      if $DV, $OK := $DST[$KEY]; $OK && istable($DV) {
+        ...
+      } else if !$OK {
         ...
       }
-    }
+  - pattern-not: |
+      if $DV, $OK := $DST[$KEY]; $OK && $DV == nil {
+        delete($DST, $KEY)
+      } else if !$OK {
+        $DST[$KEY] = $VAL
+      } else if istable($VAL) {
+        if istable($DV) {
+          CoalesceTables($DV.(map[string]interface{}), $VAL.(map[string]interface{}))
+        } else {
+          ...
+        }
+      }
   languages:
   - go
   message: |

@@ -1,20 +1,21 @@
 rules:
 - id: vuln-libgit2-3207ddb0
-  pattern: |
-    size_t $VARINT_LEN;
-    size_t $STRIP_LEN = git_decode_varint((const unsigned char *)$PATH_PTR, &$VARINT_LEN);
-    size_t $LAST_LEN = strlen($LAST);
-    size_t $PREFIX_LEN = $LAST_LEN - $STRIP_LEN;
-    size_t $SUFFIX_LEN = strlen($PATH_PTR + $VARINT_LEN);
-    size_t $PATH_LEN;
-  pattern-not: |
-    size_t $VARINT_LEN, $LAST_LEN, $PREFIX_LEN, $SUFFIX_LEN, $PATH_LEN;
-    uintmax_t $STRIP_LEN;
-    $STRIP_LEN = git_decode_varint((const unsigned unsigned char *)$PATH_PTR, &$VARINT_LEN);
-    $LAST_LEN = strlen($LAST);
-    if ($VARINT_LEN == 0 || $LAST_LEN < $STRIP_LEN)
-    $PREFIX_LEN = $LAST_LEN - $STRIP_LEN;
-    $SUFFIX_LEN = strlen($PATH_PTR + $VARINT_LEN);
+  patterns:
+  - pattern: |
+      size_t $VARINT_LEN;
+      size_t $STRIP_LEN = git_decode_varint((const unsigned char *)$PATH_PTR, &$VARINT_LEN);
+      size_t $LAST_LEN = strlen($LAST);
+      size_t $PREFIX_LEN = $LAST_LEN - $STRIP_LEN;
+      size_t $SUFFIX_LEN = strlen($PATH_PTR + $VARINT_LEN);
+      size_t $PATH_LEN;
+  - pattern-not: |
+      size_t $VARINT_LEN, $LAST_LEN, $PREFIX_LEN, $SUFFIX_LEN, $PATH_LEN;
+      uintmax_t $STRIP_LEN;
+      $STRIP_LEN = git_decode_varint((const unsigned char *)$PATH_PTR, &$VARINT_LEN);
+      $LAST_LEN = strlen($LAST);
+      if ($VARINT_LEN == 0 || $LAST_LEN < $STRIP_LEN)
+      $PREFIX_LEN = $LAST_LEN - $STRIP_LEN;
+      $SUFFIX_LEN = strlen($PATH_PTR + $VARINT_LEN);
   languages:
   - c
   message: |
@@ -34,10 +35,11 @@ rules:
     technology:
     - c
 - id: vuln-libgit2-64c612cc
-  pattern: |
-    unsigned int $FLAGS = GIT_PATH_REJECT_WORKDIR_DEFAULTS;
-  pattern-not: |
-    unsigned int $FLAGS = GIT_PATH_REJECT_WORKDIR_DEFAULTS | GIT_PATH_REJECT_DOT_GIT_NTFS;
+  patterns:
+  - pattern: |
+      unsigned int $FLAGS = GIT_PATH_REJECT_WORKDIR_DEFAULTS;
+  - pattern-not: |
+      unsigned int $FLAGS = GIT_PATH_REJECT_WORKDIR_DEFAULTS | GIT_PATH_REJECT_DOT_GIT_NTFS;
   languages:
   - c
   message: |
@@ -55,15 +57,16 @@ rules:
     technology:
     - c
 - id: vuln-libgit2-84d30d56
-  pattern: |
-    if ($PKT == NULL) {
-        continue;
-    }
-  pattern-not: |
-    if ($PKT == NULL) {
-        giterr_set_str(GITERR_NET, "Invalid empty packet");
-        return GIT_ERROR;
-    }
+  patterns:
+  - pattern: |
+      if ($PKT == NULL) {
+          continue;
+      }
+  - pattern-not: |
+      if ($PKT == NULL) {
+          giterr_set_str(GITERR_NET, "Invalid empty packet");
+          return GIT_ERROR;
+      }
   languages:
   - c
   message: |
@@ -81,18 +84,19 @@ rules:
     technology:
     - c
 - id: vuln-libgit2-9844d38b
-  pattern: |
-    if ($CMD & $MASK1) $VAR1 = *$DELTA++;
-    if ($CMD & $MASK2) $VAR1 |= *$DELTA++ << $SHIFT1;
-    if ($CMD & $MASK3) $VAR1 |= *$DELTA++ << $SHIFT2;
-    if ($CMD & $MASK4) $VAR1 |= ((unsigned) *$DELTA++ << $SHIFT3);
-  pattern-not: |
-    #define ADD_DELTA($O, $SHIFT) { if ($DELTA < $DELTA_END) ($O) |= ((unsigned) *$DELTA++ << $SHIFT); else goto fail; }
-    if ($CMD & $MASK1) ADD_DELTA($VAR1, $SHIFT1);
-    if ($CMD & $MASK2) ADD_DELTA($VAR1, $SHIFT2);
-    if ($CMD & $MASK3) ADD_DELTA($VAR1, $SHIFT3);
-    if ($CMD & $MASK4) ADD_DELTA($VAR1, $SHIFT4);
-    #undef ADD_DELTA
+  patterns:
+  - pattern: |
+      if ($CMD & $MASK1) $VAR1 = *$DELTA++;
+      if ($CMD & $MASK2) $VAR1 |= *$DELTA++ << $SHIFT1;
+      if ($CMD & $MASK3) $VAR1 |= *$DELTA++ << $SHIFT2;
+      if ($CMD & $MASK4) $VAR1 |= ((unsigned) *$DELTA++ << $SHIFT3);
+  - pattern-not: |
+      #define ADD_DELTA($O, $SHIFT) { if ($DELTA < $DELTA_END) ($O) |= ((unsigned) *$DELTA++ << $SHIFT); else goto fail; }
+      if ($CMD & $MASK1) ADD_DELTA($VAR1, $SHIFT1);
+      if ($CMD & $MASK2) ADD_DELTA($VAR1, $SHIFT2);
+      if ($CMD & $MASK3) ADD_DELTA($VAR1, $SHIFT3);
+      if ($CMD & $MASK4) ADD_DELTA($VAR1, $SHIFT4);
+      #undef ADD_DELTA
   languages:
   - c
   message: |
@@ -110,12 +114,13 @@ rules:
     technology:
     - c
 - id: vuln-libgit2-9a64e62f
-  pattern: |
-    int $VAR;
-    ...
-    $VAR = $ERROR != $GIT_ECERTIFICATE;
-  pattern-not: |
-    int $VAR = ($ERROR == $GIT_OK);
+  patterns:
+  - pattern: |
+      int $VAR;
+      ...
+      $VAR = $ERROR != $GIT_ECERTIFICATE;
+  - pattern-not: |
+      int $VAR = ($ERROR == $GIT_OK);
   languages:
   - c
   message: |

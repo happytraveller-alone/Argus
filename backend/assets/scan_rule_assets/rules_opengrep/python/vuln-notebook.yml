@@ -1,7 +1,8 @@
 rules:
 - id: vuln-notebook-05aa4b2c
-  pattern: version_info = (5, 7, 5)
-  pattern-not: version_info = (5, 7, 6)
+  patterns:
+  - pattern: version_info = (5, 7, 5)
+  - pattern-not: version_info = (5, 7, 6)
   languages:
   - python
   message: Outdated version of Jupyter Notebook detected. This version may contain security vulnerabilities. Update to the latest version to mitigate potential risks.
@@ -18,11 +19,12 @@ rules:
     technology:
     - python
 - id: vuln-notebook-35f32dd2
-  pattern: |
-    $JENV_OPT = $JINJA_ENV_OPTIONS if $JINJA_ENV_OPTIONS else {}
-  pattern-not: |
-    $JENV_OPT = {"autoescape": True}
-    $JENV_OPT.update($JINJA_ENV_OPTIONS if $JINJA_ENV_OPTIONS else {})
+  patterns:
+  - pattern: |
+      $JENV_OPT = $JINJA_ENV_OPTIONS if $JINJA_ENV_OPTIONS else {}
+  - pattern-not: |
+      $JENV_OPT = {"autoescape": True}
+      $JENV_OPT.update($JINJA_ENV_OPTIONS if $JINJA_ENV_OPTIONS else {})
   languages:
   - python
   message: |
@@ -40,12 +42,13 @@ rules:
     technology:
     - python
 - id: vuln-notebook-694ed72f
-  pattern: |
-    self.set_header('Content-Security-Policy', $POLICY)
-  pattern-not: |
-    @property
-    def content_security_policy(self):
-      return super($CLASS, self).content_security_policy + $EXTENSION
+  patterns:
+  - pattern: |
+      self.set_header('Content-Security-Policy', $POLICY)
+  - pattern-not: |
+      @property
+      def content_security_policy(self):
+        return super($CLASS, self).content_security_policy + $EXTENSION
   languages:
   - python
   message: |

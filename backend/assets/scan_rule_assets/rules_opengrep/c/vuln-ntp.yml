@@ -1,15 +1,16 @@
 rules:
 - id: vuln-ntp-1bb40157
-  pattern: |
-    if (NULL == $SK->secret) {
+  patterns:
+  - pattern: |
+      if (NULL == $SK->secret) {
+        $SK->secret = emalloc($LEN);
+      }
+  - pattern-not: |
+      if (NULL != $SK->secret) {
+        memset($SK->secret, 0, $SK->secretsize);
+        free($SK->secret);
+      }
       $SK->secret = emalloc($LEN);
-    }
-  pattern-not: |
-    if (NULL != $SK->secret) {
-      memset($SK->secret, 0, $SK->secretsize);
-      free($SK->secret);
-    }
-    $SK->secret = emalloc($LEN);
   languages:
   - c
   message: |
@@ -25,21 +26,22 @@ rules:
     technology:
     - c
 - id: vuln-ntp-8a0c765f
-  pattern: |
-    static void list_restrict4(restrict_u *res, struct info_restrict **ppir) {
-      ...
-      if (res->link != NULL)
-        list_restrict4(res->link, ppir);
-      ...
-    }
-  pattern-not: |
-    static void list_restrict4(const restrict_u *res, struct info_restrict **ppir) {
-      ...
-      for (rpad = NULL; res; res = res->link)
-        if (!pushRestriction(&rpad, res))
-          break;
-      ...
-    }
+  patterns:
+  - pattern: |
+      static void list_restrict4(restrict_u *res, struct info_restrict **ppir) {
+        ...
+        if (res->link != NULL)
+          list_restrict4(res->link, ppir);
+        ...
+      }
+  - pattern-not: |
+      static void list_restrict4(const restrict_u *res, struct info_restrict **ppir) {
+        ...
+        for (rpad = NULL; res; res = res->link)
+          if (!pushRestriction(&rpad, res))
+            break;
+        ...
+      }
   languages:
   - c
   message: |
@@ -58,10 +60,11 @@ rules:
     technology:
     - c
 - id: vuln-ntp-99e5c6cd
-  pattern: |
-    sprintf($STATSTR, $FORMAT, ...)
-  pattern-not: |
-    snprintf($STATSTR, $SIZE, $FORMAT, ...)
+  patterns:
+  - pattern: |
+      sprintf($STATSTR, $FORMAT, ...)
+  - pattern-not: |
+      snprintf($STATSTR, $SIZE, $FORMAT, ...)
   languages:
   - c
   message: |
@@ -79,12 +82,13 @@ rules:
     technology:
     - c
 - id: vuln-ntp-ba716a46
-  pattern: |
-    REQUIRE(strlen($VAR) < sizeof($NAME));
-  pattern-not: |
-    if (strlen($VAR) >= sizeof($NAME)) {
-      return 0;
-    }
+  patterns:
+  - pattern: |
+      REQUIRE(strlen($VAR) < sizeof($NAME));
+  - pattern-not: |
+      if (strlen($VAR) >= sizeof($NAME)) {
+        return 0;
+      }
   languages:
   - c
   message: |
@@ -102,17 +106,18 @@ rules:
     technology:
     - c
 - id: vuln-ntp-c4cd4aaf
-  pattern: |
-    $VALLEN = ntohl($EP->vallen);
-    ...
-    if ($VALLEN == 0 || $VALLEN > $MAXHOSTNAME || $LEN - $VALUE_LEN < $VALLEN) {
+  patterns:
+  - pattern: |
+      $VALLEN = ntohl($EP->vallen);
       ...
-    }
-  pattern-not: |
-    $LEN = exten_payload_size($EP);
-    if ($LEN == 0 || $LEN > $MAX_VALLEN) {
-      ...
-    }
+      if ($VALLEN == 0 || $VALLEN > $MAXHOSTNAME || $LEN - $VALUE_LEN < $VALLEN) {
+        ...
+      }
+  - pattern-not: |
+      $LEN = exten_payload_size($EP);
+      if ($LEN == 0 || $LEN > $MAX_VALLEN) {
+        ...
+      }
   languages:
   - c
   message: |

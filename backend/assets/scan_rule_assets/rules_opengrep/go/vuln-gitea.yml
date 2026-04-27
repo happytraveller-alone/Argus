@@ -1,18 +1,19 @@
 rules:
 - id: vuln-gitea-194a11eb
-  pattern: |
-    SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, $TOS)
-    ...
-    SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, getUserEmailsByNames($E, $TOS))
-  pattern-not: |
-    for _, $TO := range $TOS {
-        SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
-    }
-    ...
-    $EMAILS := getUserEmailsByNames($E, $TOS)
-    for _, $TO := range $EMAILS {
-        SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
-    }
+  patterns:
+  - pattern: |
+      SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, $TOS)
+      ...
+      SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, getUserEmailsByNames($E, $TOS))
+  - pattern-not: |
+      for _, $TO := range $TOS {
+          SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
+      }
+      ...
+      $EMAILS := getUserEmailsByNames($E, $TOS)
+      for _, $TO := range $EMAILS {
+          SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
+      }
   languages:
   - go
   message: |
@@ -30,16 +31,12 @@ rules:
     technology:
     - go
 - id: vuln-gitea-387a4b09
-  pattern: |
-    if !$VAR.IsTagExist($TAG) {
-      $CTX.Status(404)
-      return
-    }
-  pattern-not: |
-    if !$VAR.IsTagExist($TAG) {
-      $CTX.Status(404)
-      return
-    }
+  patterns:
+  - pattern: |
+      if !$VAR.IsTagExist($TAG) {
+        $CTX.Status(404)
+        return
+      }
   languages:
   - go
   message: |
@@ -57,14 +54,15 @@ rules:
     technology:
     - go
 - id: vuln-gitea-3ee3a4b5
-  pattern: |
-    $VAR = strings.Trim(path.Clean("/"+$TREEPATH), " /")
-  pattern-not: |
-    $VAR = cleanUploadFileName($TREEPATH)
-    if len($VAR) == 0 {
-        ctx.Error(500, "Upload file name is invalid")
-        return
-    }
+  patterns:
+  - pattern: |
+      $VAR = strings.Trim(path.Clean("/"+$TREEPATH), " /")
+  - pattern-not: |
+      $VAR = cleanUploadFileName($TREEPATH)
+      if len($VAR) == 0 {
+          ctx.Error(500, "Upload file name is invalid")
+          return
+      }
   languages:
   - go
   message: |
@@ -84,14 +82,15 @@ rules:
     technology:
     - go
 - id: vuln-gitea-4b87aa36
-  pattern: |
-    if err := $ISSUE.MailParticipants(); err != nil {
-      ...
-    }
-  pattern-not: |
-    if err := $ISSUE.MailParticipants($ACTION); err != nil {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if err := $ISSUE.MailParticipants(); err != nil {
+        ...
+      }
+  - pattern-not: |
+      if err := $ISSUE.MailParticipants($ACTION); err != nil {
+        ...
+      }
   languages:
   - go
   message: |
@@ -107,10 +106,11 @@ rules:
     technology:
     - go
 - id: vuln-gitea-6d318140
-  pattern: |
-    migrateRepository($DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
-  pattern-not: |
-    migrateRepository($DOER, $DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
+  patterns:
+  - pattern: |
+      migrateRepository($DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
+  - pattern-not: |
+      migrateRepository($DOER, $DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
   languages:
   - go
   message: |
@@ -128,10 +128,11 @@ rules:
     technology:
     - go
 - id: vuln-gitea-c7bbfd8f
-  pattern: |
-    template.HTML($DESC_PATTERN.ReplaceAllStringFunc(markup.Sanitize($DESCRIPTION), $SANITIZE_FUNC))
-  pattern-not: |
-    template.HTML(markup.Sanitize(string($DESC)))
+  patterns:
+  - pattern: |
+      template.HTML($DESC_PATTERN.ReplaceAllStringFunc(markup.Sanitize($DESCRIPTION), $SANITIZE_FUNC))
+  - pattern-not: |
+      template.HTML(markup.Sanitize(string($DESC)))
   languages:
   - go
   message: |
@@ -147,18 +148,19 @@ rules:
     technology:
     - go
 - id: vuln-gitea-da0460de
-  pattern: |
-    repo, err := models.GetRepositoryByOwnerAndName($OWNER_NAME, $REPO_NAME)
-    ...
-    if err != nil {
-        ...
-    }
-  pattern-not: |
-    repo, err := models.GetRepositoryByName($OWNER_ID, $REPO_NAME)
-    ...
-    if err != nil {
-        ...
-    }
+  patterns:
+  - pattern: |
+      repo, err := models.GetRepositoryByOwnerAndName($OWNER_NAME, $REPO_NAME)
+      ...
+      if err != nil {
+          ...
+      }
+  - pattern-not: |
+      repo, err := models.GetRepositoryByName($OWNER_ID, $REPO_NAME)
+      ...
+      if err != nil {
+          ...
+      }
   languages:
   - go
   message: |
@@ -178,10 +180,11 @@ rules:
     technology:
     - go
 - id: vuln-gitea-e00e8d8a
-  pattern: |
-    $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(false)
-  pattern-not: |
-    $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(true)
+  patterns:
+  - pattern: |
+      $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(false)
+  - pattern-not: |
+      $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(true)
   languages:
   - go
   message: |

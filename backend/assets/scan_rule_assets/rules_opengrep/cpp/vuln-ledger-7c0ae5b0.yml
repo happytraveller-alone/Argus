@@ -1,11 +1,12 @@
 rules:
 - id: vuln-ledger-7c0ae5b0
-  pattern: |
-    VERIFY(std::strlen($STR) < $LIMIT);
-  pattern-not: |
-    if (std::strlen($STR) > $LIMIT) {
-        throw_(...);
-    }
+  patterns:
+  - pattern: |
+      VERIFY(std::strlen($STR) < $LIMIT);
+  - pattern-not: |
+      if (std::strlen($STR) > $LIMIT) {
+          throw_(...);
+      }
   languages:
   - cpp
   message: |

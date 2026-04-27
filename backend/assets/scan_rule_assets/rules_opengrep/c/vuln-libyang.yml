@@ -1,9 +1,10 @@
 rules:
 - id: vuln-libyang-298b30ea
-  pattern: |
-    lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS)
-  pattern-not: |
-    lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS, $BT_COUNT)
+  patterns:
+  - pattern: |
+      lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS)
+  - pattern-not: |
+      lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS, $BT_COUNT)
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-libyang-32fb4993
-  pattern: |
-    lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $RET)
-  pattern-not: |
-    lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $OPTS, $RET)
+  patterns:
+  - pattern: |
+      lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $RET)
+  - pattern-not: |
+      lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $OPTS, $RET)
   languages:
   - c
   message: |
@@ -37,17 +39,18 @@ rules:
     technology:
     - c
 - id: vuln-libyang-59a0bff1
-  pattern: |
-    if (!strcmp($NAME, $EXT_PLUGINS[$U].name) &&
-        !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
-        (!$EXT_PLUGINS[$U].revision || !strcmp($REVISION, $EXT_PLUGINS[$U].revision))) {
-      ...
-    }
-  pattern-not: |
-    if (!strcmp($NAME, $EXT_PLUGINS[$U].name) && !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
-        ((!$REVISION && !$EXT_PLUGINS[$U].revision) || ($REVISION && !strcmp($REVISION, $EXT_PLUGINS[$U].revision)))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!strcmp($NAME, $EXT_PLUGINS[$U].name) &&
+          !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
+          (!$EXT_PLUGINS[$U].revision || !strcmp($REVISION, $EXT_PLUGINS[$U].revision))) {
+        ...
+      }
+  - pattern-not: |
+      if (!strcmp($NAME, $EXT_PLUGINS[$U].name) && !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
+          ((!$REVISION && !$EXT_PLUGINS[$U].revision) || ($REVISION && !strcmp($REVISION, $EXT_PLUGINS[$U].revision)))) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -64,10 +67,11 @@ rules:
     technology:
     - c
 - id: vuln-libyang-5ce30801
-  pattern: |
-    lys_node_free($NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
-  pattern-not: |
-    lys_node_free($CTX, $NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
+  patterns:
+  - pattern: |
+      lys_node_free($NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
+  - pattern-not: |
+      lys_node_free($CTX, $NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
   languages:
   - c
   message: |
@@ -83,14 +87,15 @@ rules:
     technology:
     - c
 - id: vuln-libyang-bdb596dd
-  pattern: |
-    if ($EXPR->expr) {
-        ...
-    }
-  pattern-not: |
-    if ($EXPR->expr && $EXPR->features[0]) {
-        ...
-    }
+  patterns:
+  - pattern: |
+      if ($EXPR->expr) {
+          ...
+      }
+  - pattern-not: |
+      if ($EXPR->expr && $EXPR->features[0]) {
+          ...
+      }
   languages:
   - c
   message: |
@@ -106,19 +111,20 @@ rules:
     technology:
     - c
 - id: vuln-libyang-dc668d29
-  pattern: |
-    if (!strcmp($MOD->name, "yang") && (strcmp($M->revision, $MOD->revision) > 0)) {
-        LOGVRB("Internal module \"%s@%s\" is already implemented in revision \"%s\", using it instead.",
-              $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
-    } else {
-        LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
-              $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
-        return $LY_EDENIED;
-    }
-  pattern-not: |
-    LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
-          $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
-    return $LY_EDENIED;
+  patterns:
+  - pattern: |
+      if (!strcmp($MOD->name, "yang") && (strcmp($M->revision, $MOD->revision) > 0)) {
+          LOGVRB("Internal module \"%s@%s\" is already implemented in revision \"%s\", using it instead.",
+                $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+      } else {
+          LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
+                $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+          return $LY_EDENIED;
+      }
+  - pattern-not: |
+      LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
+            $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+      return $LY_EDENIED;
   languages:
   - c
   message: |
@@ -136,13 +142,14 @@ rules:
     technology:
     - c
 - id: vuln-libyang-f6d684ad
-  pattern: |
-    make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2);
-  pattern-not: |
-    if (make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2) == -1) {
-      ...
-      goto error;
-    }
+  patterns:
+  - pattern: |
+      make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2);
+  - pattern-not: |
+      if (make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2) == -1) {
+        ...
+        goto error;
+      }
   languages:
   - c
   message: |

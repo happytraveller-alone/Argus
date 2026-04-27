@@ -1,13 +1,14 @@
 rules:
 - id: vuln-trafficserver-92f729f5
-  pattern: |
-    if (strstr($STR, $VALUE) != NULL) {
-      ...
-    }
-  pattern-not: |
-    if ($LEN >= $MIN_LEN && strstr($STR, $VALUE) != NULL) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (strstr($STR, $VALUE) != NULL) {
+        ...
+      }
+  - pattern-not: |
+      if ($LEN >= $MIN_LEN && strstr($STR, $VALUE) != NULL) {
+        ...
+      }
   languages:
   - c
   message: |

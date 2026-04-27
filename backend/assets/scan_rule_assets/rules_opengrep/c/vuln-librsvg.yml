@@ -1,9 +1,10 @@
 rules:
 - id: vuln-librsvg-34c95743
-  pattern: |
-    _rsvg_node_init($VAR)
-  pattern-not: |
-    _rsvg_node_init($VAR, $TYPE)
+  patterns:
+  - pattern: |
+      _rsvg_node_init($VAR)
+  - pattern-not: |
+      _rsvg_node_init($VAR, $TYPE)
   languages:
   - c
   message: |
@@ -19,14 +20,15 @@ rules:
     technology:
     - c
 - id: vuln-librsvg-40af93e6
-  pattern: |
-    g_string_append($D, g_ascii_dtostr($BUF, sizeof($BUF), pointlist[$I + 1]));
-  pattern-not: |
-    if ($I + 1 < pointlist_len)
-        $P = pointlist[$I + 1];
-    else
-        $P = pointlist[$I - 1];
-    g_string_append($D, g_ascii_dtostr($BUF, sizeof($BUF), $P));
+  patterns:
+  - pattern: |
+      g_string_append($D, g_ascii_dtostr($BUF, sizeof($BUF), pointlist[$I + 1]));
+  - pattern-not: |
+      if ($I + 1 < pointlist_len)
+          $P = pointlist[$I + 1];
+      else
+          $P = pointlist[$I - 1];
+      g_string_append($D, g_ascii_dtostr($BUF, sizeof($BUF), $P));
   languages:
   - c
   message: |
@@ -41,35 +43,36 @@ rules:
     technology:
     - c
 - id: vuln-librsvg-c6ddf2ed
-  pattern: |
-    static int
-    rsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $NAME)
-    {
-        RsvgHandle *$HANDLE;
-        gchar *$FILENAME, *$BASE_URI;
-        ...
-        $FILENAME = _rsvg_io_get_file_path ($NAME, rsvg_handle_get_base_uri ($DEFS->ctx));
-        data = _rsvg_handle_acquire_data ($DEFS->ctx, $NAME, NULL, &data_len, NULL);
-        ...
-        $BASE_URI = rsvg_get_base_uri_from_filename ($FILENAME);
-        rsvg_handle_set_base_uri ($HANDLE, $BASE_URI);
-        g_free ($BASE_URI);
-        ...
-        g_free ($FILENAME);
-        return 0;
-    }
-  pattern-not: |
-    static RsvgHandle *
-    rsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $URI)
-    {
-        RsvgHandle *$HANDLE = NULL;
-        ...
-        data = _rsvg_handle_acquire_data ($DEFS->ctx, $URI, NULL, &data_len, NULL);
-        ...
-        rsvg_handle_set_base_uri ($HANDLE, $URI);
-        ...
-        return $HANDLE;
-    }
+  patterns:
+  - pattern: |
+      static int
+      rsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $NAME)
+      {
+          RsvgHandle *$HANDLE;
+          gchar *$FILENAME, *$BASE_URI;
+          ...
+          $FILENAME = _rsvg_io_get_file_path ($NAME, rsvg_handle_get_base_uri ($DEFS->ctx));
+          data = _rsvg_handle_acquire_data ($DEFS->ctx, $NAME, NULL, &data_len, NULL);
+          ...
+          $BASE_URI = rsvg_get_base_uri_from_filename ($FILENAME);
+          rsvg_handle_set_base_uri ($HANDLE, $BASE_URI);
+          g_free ($BASE_URI);
+          ...
+          g_free ($FILENAME);
+          return 0;
+      }
+  - pattern-not: |
+      static RsvgHandle *
+      rsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $URI)
+      {
+          RsvgHandle *$HANDLE = NULL;
+          ...
+          data = _rsvg_handle_acquire_data ($DEFS->ctx, $URI, NULL, &data_len, NULL);
+          ...
+          rsvg_handle_set_base_uri ($HANDLE, $URI);
+          ...
+          return $HANDLE;
+      }
   languages:
   - c
   message: |
@@ -91,17 +94,18 @@ rules:
     technology:
     - c
 - id: vuln-librsvg-f01aded7
-  pattern: |
-    if ($URI) {
-        if ($HANDLE->priv->base_uri)
-            g_free ($HANDLE->priv->base_uri);
-        $HANDLE->priv->base_uri = $URI;
-    }
-  pattern-not: |
-    $FILE = g_file_new_for_uri ($URI ? $URI : "data:");
-    rsvg_handle_set_base_gfile ($HANDLE, $FILE);
-    g_object_unref ($FILE);
-    g_free ($URI);
+  patterns:
+  - pattern: |
+      if ($URI) {
+          if ($HANDLE->priv->base_uri)
+              g_free ($HANDLE->priv->base_uri);
+          $HANDLE->priv->base_uri = $URI;
+      }
+  - pattern-not: |
+      $FILE = g_file_new_for_uri ($URI ? $URI : "data:");
+      rsvg_handle_set_base_gfile ($HANDLE, $FILE);
+      g_object_unref ($FILE);
+      g_free ($URI);
   languages:
   - c
   message: |

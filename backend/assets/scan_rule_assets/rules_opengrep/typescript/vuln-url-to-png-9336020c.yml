@@ -1,24 +1,25 @@
 rules:
 - id: vuln-url-to-png-9336020c
-  pattern: |
-    const $VAR = z.string().url();
-  pattern-not: |
-    const $VAR = z
-      .string()
-      .url()
-      .refine(
-        $FUNC => {
-          try {
-            const $URL = new URL($FUNC);
-            return $URL.protocol === "http:" || $URL.protocol === "https:";
-          } catch ($ERR) {
-            return false;
-          }
-        },
-        {
-          message: "must start with http or https",
-        },
-      );
+  patterns:
+  - pattern: |
+      const $VAR = z.string().url();
+  - pattern-not: |
+      const $VAR = z
+        .string()
+        .url()
+        .refine(
+          $FUNC => {
+            try {
+              const $URL = new URL($FUNC);
+              return $URL.protocol === "http:" || $URL.protocol === "https:";
+            } catch ($ERR) {
+              return false;
+            }
+          },
+          {
+            message: "must start with http or https",
+          },
+        );
   languages:
   - typescript
   message: |

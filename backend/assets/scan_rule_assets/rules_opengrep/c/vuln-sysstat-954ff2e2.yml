@@ -1,15 +1,16 @@
 rules:
 - id: vuln-sysstat-954ff2e2
-  pattern: |
-    if ((unsigned long long) $VAL1 * (unsigned long long) $VAL2 * (unsigned long long) $VAL3 > UINT_MAX) {
-      ...
-    }
-  pattern-not: |
-    if (($VAL1 != 0) && ($VAL2 != 0) && ($VAL3 != 0) &&
-        (((unsigned long long)UINT_MAX / (unsigned long long)$VAL1 < (unsigned long long)$VAL2) ||
-        ((unsigned long long)UINT_MAX / ((unsigned long long)$VAL1 * (unsigned long long)$VAL2) < (unsigned long long)$VAL3))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ((unsigned long long) $VAL1 * (unsigned long long) $VAL2 * (unsigned long long) $VAL3 > UINT_MAX) {
+        ...
+      }
+  - pattern-not: |
+      if (($VAL1 != 0) && ($VAL2 != 0) && ($VAL3 != 0) &&
+          (((unsigned long long)UINT_MAX / (unsigned long long)$VAL1 < (unsigned long long)$VAL2) ||
+          ((unsigned long long)UINT_MAX / ((unsigned long long)$VAL1 * (unsigned long long)$VAL2) < (unsigned long long)$VAL3))) {
+        ...
+      }
   languages:
   - c
   message: |

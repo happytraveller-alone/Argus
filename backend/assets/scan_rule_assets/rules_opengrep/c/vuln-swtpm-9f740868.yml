@@ -1,9 +1,10 @@
 rules:
 - id: vuln-swtpm-9f740868
-  pattern: |
-    *$DATAOFFSET = ntohs($BH->hdrsize);
-  pattern-not: |
-    *$DATAOFFSET = $HDRSIZE;
+  patterns:
+  - pattern: |
+      *$DATAOFFSET = ntohs($BH->hdrsize);
+  - pattern-not: |
+      *$DATAOFFSET = $HDRSIZE;
   languages:
   - c
   message: |

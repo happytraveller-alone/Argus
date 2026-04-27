@@ -1,9 +1,10 @@
 rules:
 - id: vuln-linux-160fbcf3
-  pattern: |
-    $SKB->len = $LEN;
-  pattern-not: |
-    skb_put($SKB, $LEN);
+  patterns:
+  - pattern: |
+      $SKB->len = $LEN;
+  - pattern-not: |
+      skb_put($SKB, $LEN);
   languages:
   - c
   message: |
@@ -21,14 +22,15 @@ rules:
     technology:
     - c
 - id: vuln-linux-3c85cc43
-  pattern: |
-    if (!vma_is_shmem($VMA) && !is_file_hugepages($FILE)) {
-      ...
-    }
-  pattern-not: |
-    if ($VMA->vm_file && !is_file_hugepages($VMA->vm_file)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!vma_is_shmem($VMA) && !is_file_hugepages($FILE)) {
+        ...
+      }
+  - pattern-not: |
+      if ($VMA->vm_file && !is_file_hugepages($VMA->vm_file)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -44,17 +46,18 @@ rules:
     technology:
     - c
 - id: vuln-linux-6afc57ea
-  pattern: |
-    $AR = ath12k_mac_get_ar_by_pdev_id($AB, $PDEV_ID);
-    ...
-    return;
-  pattern-not: |
-    rcu_read_lock();
-    $AR = ath12k_mac_get_ar_by_pdev_id($AB, $PDEV_ID);
-    ...
-    goto exit;
-    exit:
-    rcu_read_unlock();
+  patterns:
+  - pattern: |
+      $AR = ath12k_mac_get_ar_by_pdev_id($AB, $PDEV_ID);
+      ...
+      return;
+  - pattern-not: |
+      rcu_read_lock();
+      $AR = ath12k_mac_get_ar_by_pdev_id($AB, $PDEV_ID);
+      ...
+      goto exit;
+      exit:
+      rcu_read_unlock();
   languages:
   - c
   message: |
@@ -73,11 +76,12 @@ rules:
     technology:
     - c
 - id: vuln-linux-9e7f3056
-  pattern: |
-    xe_exec_queue_put($JOB->q);
-  pattern-not: |
-    $Q = $JOB->q;
-    xe_exec_queue_put($Q);
+  patterns:
+  - pattern: |
+      xe_exec_queue_put($JOB->q);
+  - pattern-not: |
+      $Q = $JOB->q;
+      xe_exec_queue_put($Q);
   languages:
   - c
   message: |

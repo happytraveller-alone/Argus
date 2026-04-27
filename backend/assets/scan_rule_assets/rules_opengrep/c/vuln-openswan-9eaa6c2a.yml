@@ -1,16 +1,17 @@
 rules:
 - id: vuln-openswan-9eaa6c2a
-  pattern: |
-    $S += $PADLEN + 3;
-    (*$PSIG) = $S;
-  pattern-not: |
-    (*$PSIG) = $S + $PADLEN + 3;
-    ...
-    for ($P = $S+2; $P < $S+$PADLEN+2; $P++)
-      if (*$P == 0xFF)
-        $CNT_FFS ++;
-    if ($CNT_FFS != $PADLEN)
-      return "invalid Padding String";
+  patterns:
+  - pattern: |
+      $S += $PADLEN + 3;
+      (*$PSIG) = $S;
+  - pattern-not: |
+      (*$PSIG) = $S + $PADLEN + 3;
+      ...
+      for ($P = $S+2; $P < $S+$PADLEN+2; $P++)
+        if (*$P == 0xFF)
+          $CNT_FFS ++;
+      if ($CNT_FFS != $PADLEN)
+        return "invalid Padding String";
   languages:
   - c
   message: |

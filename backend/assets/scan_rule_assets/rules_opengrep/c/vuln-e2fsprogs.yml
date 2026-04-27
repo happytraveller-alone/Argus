@@ -1,17 +1,18 @@
 rules:
 - id: vuln-e2fsprogs-49d0fe2a
-  pattern: |
-    int $OLD_DESC_BLOCKS;
-    ...
-    if ($OLD_DESC_BLOCKS > $FS->super->s_first_meta_bg) {
+  patterns:
+  - pattern: |
+      int $OLD_DESC_BLOCKS;
       ...
-    }
-  pattern-not: |
-    blk64_t $OLD_DESC_BLOCKS;
-    ...
-    if ($OLD_DESC_BLOCKS > $FS->desc_blocks) {
+      if ($OLD_DESC_BLOCKS > $FS->super->s_first_meta_bg) {
+        ...
+      }
+  - pattern-not: |
+      blk64_t $OLD_DESC_BLOCKS;
       ...
-    }
+      if ($OLD_DESC_BLOCKS > $FS->desc_blocks) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -29,15 +30,16 @@ rules:
     technology:
     - c
 - id: vuln-e2fsprogs-8dbe7b47
-  pattern: |
-    if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
-      log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
-    }
-  pattern-not: |
-    if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
-      log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
+        log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
+      }
+  - pattern-not: |
+      if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
+        log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
+        return -1;
+      }
   languages:
   - c
   message: |

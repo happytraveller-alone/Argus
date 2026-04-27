@@ -1,12 +1,13 @@
 rules:
 - id: vuln-libredwg-3d7053eb
-  pattern: |
-    if (($OBJ = dwg_ref_object($DWG, $DWG->header_vars.$VAR)))
-      $FUNC($DAT, $OBJ);
-  pattern-not: |
-    if (($OBJ = dwg_ref_object($DWG, $DWG->header_vars.$VAR))
-        && $OBJ->type == $TYPE)
-      $FUNC($DAT, $OBJ);
+  patterns:
+  - pattern: |
+      if (($OBJ = dwg_ref_object($DWG, $DWG->header_vars.$VAR)))
+        $FUNC($DAT, $OBJ);
+  - pattern-not: |
+      if (($OBJ = dwg_ref_object($DWG, $DWG->header_vars.$VAR))
+          && $OBJ->type == $TYPE)
+        $FUNC($DAT, $OBJ);
   languages:
   - c
   message: |
@@ -24,15 +25,16 @@ rules:
     technology:
     - c
 - id: vuln-libredwg-66a3484b
-  pattern: |
-    LOG_WARN("obj_string_stream overflow");
-  pattern-not: |
-    LOG_ERROR("obj_string_stream overflow, bitsize " FORMAT_RL " => " FORMAT_RL,
-              $OBJ->bitsize, $OBJ->size * 8);
-    $STR->byte = $OLD_BYTE;
-    $STR->size = $OLD_SIZE;
-    $OBJ->has_strings = 0;
-    $OBJ->bitsize = $OBJ->size * 8;
+  patterns:
+  - pattern: |
+      LOG_WARN("obj_string_stream overflow");
+  - pattern-not: |
+      LOG_ERROR("obj_string_stream overflow, bitsize " FORMAT_RL " => " FORMAT_RL,
+                $OBJ->bitsize, $OBJ->size * 8);
+      $STR->byte = $OLD_BYTE;
+      $STR->size = $OLD_SIZE;
+      $OBJ->has_strings = 0;
+      $OBJ->bitsize = $OBJ->size * 8;
   languages:
   - c
   message: |
@@ -50,18 +52,19 @@ rules:
     technology:
     - c
 - id: vuln-libredwg-757b87f2
-  pattern: |
-    log_if_error("reference_get_object");
-    ...
-    if (!$HDR)
-    {
-      fprintf(stderr, "Found null ref->obj\n");
-      return;
-    }
-  pattern-not: |
-    if (!$HDR || $ERROR) log_error("dwg_ref_get_object");
-    ...
-    if (!_hdr) log_error("dwg_object_to_BLOCK_HEADER");
+  patterns:
+  - pattern: |
+      log_if_error("reference_get_object");
+      ...
+      if (!$HDR)
+      {
+        fprintf(stderr, "Found null ref->obj\n");
+        return;
+      }
+  - pattern-not: |
+      if (!$HDR || $ERROR) log_error("dwg_ref_get_object");
+      ...
+      if (!_hdr) log_error("dwg_object_to_BLOCK_HEADER");
   languages:
   - c
   message: |
@@ -79,18 +82,19 @@ rules:
     technology:
     - c
 - id: vuln-libredwg-bcec483e
-  pattern: |
-    for ($I = 0; $I < $INFO->num_sections; ++$I) {
-      ...
-      memcpy(&$DECOMP[$I * $INFO->size], ...);
-      ...
-    }
-  pattern-not: |
-    for ($I = $J = 0; $I < $INFO->num_sections; ++$I, ++$J) {
-      ...
-      memcpy(&$DECOMP[$J * $INFO->size], ...);
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = 0; $I < $INFO->num_sections; ++$I) {
+        ...
+        memcpy(&$DECOMP[$I * $INFO->size], ...);
+        ...
+      }
+  - pattern-not: |
+      for ($I = $J = 0; $I < $INFO->num_sections; ++$I, ++$J) {
+        ...
+        memcpy(&$DECOMP[$J * $INFO->size], ...);
+        ...
+      }
   languages:
   - c
   message: |

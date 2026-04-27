@@ -1,17 +1,18 @@
 rules:
 - id: vuln-css-what-4cdaacfd
-  pattern: |
-    const reAttr =
-        /^\s*(?:(\*|[-\w]*)\|)?((?:\\.|[\w\u00b0-\uFFFF-])+)\s*(?:(\S?)=\s*(?:(['"])((?:[^\\]|\\[^])*?)\4|(#?(?:\\.|[\w\u00b0-\uFFFF-])*)|)|)\s*([iIsS])?\s*\]/;
-  pattern-not: |
-    const actionTypes = new Map<string, AttributeAction>([
-        ["~", "element"],
-        ["^", "start"],
-        ["$", "end"],
-        ["*", "any"],
-        ["!", "not"],
-        ["|", "hyphen"],
-    ]);
+  patterns:
+  - pattern: |
+      const reAttr =
+          /^\s*(?:(\*|[-\w]*)\|)?((?:\\.|[\w\u00b0-\uFFFF-])+)\s*(?:(\S?)=\s*(?:(['"])((?:[^\\]|\\[^])*?)\4|(#?(?:\\.|[\w\u00b0-\uFFFF-])*)|)|)\s*([iIsS])?\s*\]/;
+  - pattern-not: |
+      const actionTypes = new Map<string, AttributeAction>([
+          ["~", "element"],
+          ["^", "start"],
+          ["$", "end"],
+          ["*", "any"],
+          ["!", "not"],
+          ["|", "hyphen"],
+      ]);
   languages:
   - typescript
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-nfdump-7b26ee97
-  pattern: |
-    lzo1x_decompress($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
-  pattern-not: |
-    lzo1x_decompress_safe($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
+  patterns:
+  - pattern: |
+      lzo1x_decompress($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
+  - pattern-not: |
+      lzo1x_decompress_safe($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
   languages:
   - c
   message: |
@@ -21,13 +22,14 @@ rules:
     technology:
     - c
 - id: vuln-nfdump-9f0fe956
-  pattern: |
-    ConvertCommonV0($RECORD, $BUFFER);
-  pattern-not: |
-    if ( !ConvertCommonV0($RECORD, $BUFFER) ) {
-      $ERROR_HANDLING;
-      exit(255);
-    }
+  patterns:
+  - pattern: |
+      ConvertCommonV0($RECORD, $BUFFER);
+  - pattern-not: |
+      if ( !ConvertCommonV0($RECORD, $BUFFER) ) {
+        $ERROR_HANDLING;
+        exit(255);
+      }
   languages:
   - c
   message: |
@@ -47,10 +49,11 @@ rules:
     technology:
     - c
 - id: vuln-nfdump-fd3d3dbb
-  pattern: |
-    defragmented = IPFrag_tree_Update($SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
-  pattern-not: |
-    defragmented = IPFrag_tree_Update($WHEN, $SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
+  patterns:
+  - pattern: |
+      defragmented = IPFrag_tree_Update($SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
+  - pattern-not: |
+      defragmented = IPFrag_tree_Update($WHEN, $SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
   languages:
   - c
   message: |

@@ -1,37 +1,38 @@
 rules:
 - id: vuln-reposilite-84817373
-  pattern: |
-    jarFile.entries().asSequence().forEach { file ->
-      if (file.isDirectory) {
-        return@forEach
-      }
-      val path = Paths.get($UNSAFE_PATH + "/" + file.name)
-      path.parent?.also { parent -> Files.createDirectories(parent) }
-      jarFile.getInputStream(file).copyToAndClose(path.outputStream())
-    }.asSuccess<Unit, ErrorResponse>()
-  pattern-not: |
-    jarFile
-      .entries()
-      .asSequence()
-      .forEach { file ->
+  patterns:
+  - pattern: |
+      jarFile.entries().asSequence().forEach { file ->
         if (file.isDirectory) {
           return@forEach
         }
-        val processedArchiveFileLocation = file.name.toLocation()
-        processedArchiveFileLocation
-          .toPath()
-          .map { javadocUnpackPath.resolve(it) }
-          .peek {
-            it.parent?.also { parent -> Files.createDirectories(parent) }
-            jarFile.getInputStream(file).copyToAndClose(it.outputStream())
-          }
-          .onError {
-            failureFacade.throwException(
-              "Malicious resource path detected: $processedArchiveFileLocation in $jarPath",
-              IllegalArgumentException("Malicious resource path detected: $it")
-            )
-          }
+        val path = Paths.get($UNSAFE_PATH + "/" + file.name)
+        path.parent?.also { parent -> Files.createDirectories(parent) }
+        jarFile.getInputStream(file).copyToAndClose(path.outputStream())
       }.asSuccess<Unit, ErrorResponse>()
+  - pattern-not: |
+      jarFile
+        .entries()
+        .asSequence()
+        .forEach { file ->
+          if (file.isDirectory) {
+            return@forEach
+          }
+          val processedArchiveFileLocation = file.name.toLocation()
+          processedArchiveFileLocation
+            .toPath()
+            .map { javadocUnpackPath.resolve(it) }
+            .peek {
+              it.parent?.also { parent -> Files.createDirectories(parent) }
+              jarFile.getInputStream(file).copyToAndClose(it.outputStream())
+            }
+            .onError {
+              failureFacade.throwException(
+                "Malicious resource path detected: $processedArchiveFileLocation in $jarPath",
+                IllegalArgumentException("Malicious resource path detected: $it")
+              )
+            }
+        }.asSuccess<Unit, ErrorResponse>()
   languages:
   - kotlin
   message: |

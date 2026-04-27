@@ -1,27 +1,28 @@
 rules:
 - id: vuln-gifsicle-06d53362
-  pattern: |
-    if ($FR->left >= 0)
-      $DESTI->left = $FR->left + ($FR->position_is_offset ? $DESTI->left : 0);
-    if ($FR->top >= 0)
-      $DESTI->top = $FR->top + ($FR->position_is_offset ? $DESTI->top : 0);
-  pattern-not: |
-    if ($FR->left >= 0) {
-      int $LEFT = $FR->left + ($FR->position_is_offset ? $DESTI->left : 0);
-      if ($LEFT + $DESTI->width > 65535) {
-        error(1, "left position %d out of range", $LEFT);
-        return 0;
+  patterns:
+  - pattern: |
+      if ($FR->left >= 0)
+        $DESTI->left = $FR->left + ($FR->position_is_offset ? $DESTI->left : 0);
+      if ($FR->top >= 0)
+        $DESTI->top = $FR->top + ($FR->position_is_offset ? $DESTI->top : 0);
+  - pattern-not: |
+      if ($FR->left >= 0) {
+        int $LEFT = $FR->left + ($FR->position_is_offset ? $DESTI->left : 0);
+        if ($LEFT + $DESTI->width > 65535) {
+          error(1, "left position %d out of range", $LEFT);
+          return 0;
+        }
+        $DESTI->left = $LEFT;
       }
-      $DESTI->left = $LEFT;
-    }
-    if ($FR->top >= 0) {
-      int $TOP = $FR->top + ($FR->position_is_offset ? $DESTI->top : 0);
-      if ($TOP + $DESTI->height > 65535) {
-        error(1, "top position %d out of range", $TOP);
-        return 0;
+      if ($FR->top >= 0) {
+        int $TOP = $FR->top + ($FR->position_is_offset ? $DESTI->top : 0);
+        if ($TOP + $DESTI->height > 65535) {
+          error(1, "top position %d out of range", $TOP);
+          return 0;
+        }
+        $DESTI->top = $TOP;
       }
-      $DESTI->top = $TOP;
-    }
   languages:
   - c
   message: |

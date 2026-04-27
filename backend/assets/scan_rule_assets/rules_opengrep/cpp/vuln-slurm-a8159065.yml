@@ -1,9 +1,10 @@
 rules:
 - id: vuln-slurm-a8159065
-  pattern: |
-    extern void *slurm_xmalloc(size_t, bool, const char *, int, const char *);
-  pattern-not: |
-    extern void *slurm_xmalloc(uint64_t, bool, const char *, int, const char *);
+  patterns:
+  - pattern: |
+      extern void *slurm_xmalloc(size_t, bool, const char *, int, const char *);
+  - pattern-not: |
+      extern void *slurm_xmalloc(uint64_t, bool, const char *, int, const char *);
   languages:
   - cpp
   message: |

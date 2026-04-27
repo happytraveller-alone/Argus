@@ -1,12 +1,13 @@
 rules:
 - id: vuln-flask-appbuilder-449afe47
-  pattern: |
-    api_spec.components._responses[$K] = $V
-  pattern-not: |
-    try:
-        api_spec.components.response($K, $V)
-    except DuplicateComponentNameError:
-        pass
+  patterns:
+  - pattern: |
+      api_spec.components._responses[$K] = $V
+  - pattern-not: |
+      try:
+          api_spec.components.response($K, $V)
+      except DuplicateComponentNameError:
+          pass
   languages:
   - python
   message: Direct assignment to _responses dictionary can lead to overwriting existing responses without proper error handling. Use the response() method with exception handling instead.

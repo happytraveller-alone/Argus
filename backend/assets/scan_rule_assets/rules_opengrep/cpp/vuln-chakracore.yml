@@ -1,9 +1,10 @@
 rules:
 - id: vuln-chakracore-1e5d3f5e
-  pattern: |
-    $VAR = $GLOBOPT->GenerateInductionVariableChangeForMemOp($LOOP, $UNROLL);
-  pattern-not: |
-    $VAR = $GLOBOPT->GenerateInductionVariableChangeForMemOp($LOOP, $UNROLL, $LOOP->memOpInfo->instr);
+  patterns:
+  - pattern: |
+      $VAR = $GLOBOPT->GenerateInductionVariableChangeForMemOp($LOOP, $UNROLL);
+  - pattern-not: |
+      $VAR = $GLOBOPT->GenerateInductionVariableChangeForMemOp($LOOP, $UNROLL, $LOOP->memOpInfo->instr);
   languages:
   - cpp
   message: |
@@ -18,10 +19,11 @@ rules:
     technology:
     - cpp
 - id: vuln-chakracore-6d0f5de1
-  pattern: |
-    $WALKER.GetJavascriptArgs()
-  pattern-not: |
-    $WALKER.GetJavascriptArgs(true)
+  patterns:
+  - pattern: |
+      $WALKER.GetJavascriptArgs()
+  - pattern-not: |
+      $WALKER.GetJavascriptArgs(true)
   languages:
   - cpp
   message: |

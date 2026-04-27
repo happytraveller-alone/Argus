@@ -1,11 +1,12 @@
 rules:
 - id: vuln-streampipes-cd5a7b46
-  pattern: |
-    $VAR!.clear()
-  pattern-not: |
-    if ($VAR) {
-        $VAR.clear();
-    }
+  patterns:
+  - pattern: |
+      $VAR!.clear()
+  - pattern-not: |
+      if ($VAR) {
+          $VAR.clear();
+      }
   languages:
   - typescript
   message: |

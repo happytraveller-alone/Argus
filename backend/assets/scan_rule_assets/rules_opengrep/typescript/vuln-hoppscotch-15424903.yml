@@ -1,9 +1,10 @@
 rules:
 - id: vuln-hoppscotch-15424903
-  pattern: |
-    console.log(`Database: ${process.env.DATABASE_URL}`)
-  pattern-not: |
-    console.log("Database: [REDACTED]")
+  patterns:
+  - pattern: |
+      console.log(`Database: ${process.env.DATABASE_URL}`)
+  - pattern-not: |
+      console.log("Database: [REDACTED]")
   languages:
   - typescript
   message: |

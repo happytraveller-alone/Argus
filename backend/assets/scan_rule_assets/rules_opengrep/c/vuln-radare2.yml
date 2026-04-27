@@ -1,17 +1,18 @@
 rules:
 - id: vuln-radare2-021ad4d5
-  pattern: |
-    if ($VAR) {
-      ...
-      free($TOKENS);
-      free($LBUF);
-      return $FUNC($ACODE);
-    }
-  pattern-not: |
-    if ($VAR) {
-      ...
-      goto fail;
-    }
+  patterns:
+  - pattern: |
+      if ($VAR) {
+        ...
+        free($TOKENS);
+        free($LBUF);
+        return $FUNC($ACODE);
+      }
+  - pattern-not: |
+      if ($VAR) {
+        ...
+        goto fail;
+      }
   languages:
   - c
   message: |
@@ -29,19 +30,20 @@ rules:
     technology:
     - c
 - id: vuln-radare2-0a557045
-  pattern: |
-    ut16 $VAR = *($TYPE *)($PTR + $OFF);
-    if ($SEGNUM > 0) {
-      ...
-    }
-  pattern-not: |
-    if ($OFF > $PTR->ne_header->EntryTableLength) {
-      break;
-    }
-    ut16 $VAR = r_read_le16($PTR + $OFF);
-    if ($SEGNUM > 0 && $SEGNUM < $PTR->ne_header->SegCount) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      ut16 $VAR = *($TYPE *)($PTR + $OFF);
+      if ($SEGNUM > 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($OFF > $PTR->ne_header->EntryTableLength) {
+        break;
+      }
+      ut16 $VAR = r_read_le16($PTR + $OFF);
+      if ($SEGNUM > 0 && $SEGNUM < $PTR->ne_header->SegCount) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -61,28 +63,29 @@ rules:
     technology:
     - c
 - id: vuln-radare2-153bcdc2
-  pattern: |
-    char *$NAME;
-    if ($COND) {
+  patterns:
+  - pattern: |
+      char *$NAME;
+      if ($COND) {
+        ...
+        $NAME = __read_nonnull_str_at($BUF, $OFFSET);
+      } else {
+        $NAME = r_str_newf($FORMAT, ...);
+      }
       ...
-      $NAME = __read_nonnull_str_at($BUF, $OFFSET);
-    } else {
-      $NAME = r_str_newf($FORMAT, ...);
-    }
-    ...
-    $IMP->name = r_str_newf("%s.%s", $NAME, __func_name_from_ord($NAME, $ORD));
-  pattern-not: |
-    char *$NAME = NULL;
-    if ($COND) {
+      $IMP->name = r_str_newf("%s.%s", $NAME, __func_name_from_ord($NAME, $ORD));
+  - pattern-not: |
+      char *$NAME = NULL;
+      if ($COND) {
+        ...
+        $NAME = __read_nonnull_str_at($BUF, $OFFSET);
+      } else if ($INDEX > 0) {
+        ...
+      }
       ...
-      $NAME = __read_nonnull_str_at($BUF, $OFFSET);
-    } else if ($INDEX > 0) {
-      ...
-    }
-    ...
-    char *$FNAME = __func_name_from_ord($NAME, $ORD);
-    $IMP->name = r_str_newf("%s.%s", $NAME, $FNAME);
-    free($FNAME);
+      char *$FNAME = __func_name_from_ord($NAME, $ORD);
+      $IMP->name = r_str_newf("%s.%s", $NAME, $FNAME);
+      free($FNAME);
   languages:
   - c
   message: |
@@ -101,14 +104,15 @@ rules:
     technology:
     - c
 - id: vuln-radare2-1f37c04f
-  pattern: |
-    for (i = 0; i < $SIZE; i += $STEP) {
-      ...
-    }
-  pattern-not: |
-    for (i = 0; (i + $OFFSET) < $SIZE; i += $STEP) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for (i = 0; i < $SIZE; i += $STEP) {
+        ...
+      }
+  - pattern-not: |
+      for (i = 0; (i + $OFFSET) < $SIZE; i += $STEP) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -127,17 +131,18 @@ rules:
     technology:
     - c
 - id: vuln-radare2-204b7317
-  pattern: |
-    $CTR++;
-    if ($CTR >= $TOKENS_SIZE) {
-        ...
-    }
-  pattern-not: |
-    if ($CTR + 1 >= $TOKENS_SIZE) {
-        $CTR++;
-    } else {
-        break;
-    }
+  patterns:
+  - pattern: |
+      $CTR++;
+      if ($CTR >= $TOKENS_SIZE) {
+          ...
+      }
+  - pattern-not: |
+      if ($CTR + 1 >= $TOKENS_SIZE) {
+          $CTR++;
+      } else {
+          break;
+      }
   languages:
   - c
   message: |
@@ -160,14 +165,15 @@ rules:
     technology:
     - c
 - id: vuln-radare2-27fe8031
-  pattern: |
-    for (i = 0; i < $LIST.number_of_entries; i++) {
-      ...
-    }
-  pattern-not: |
-    for (i = 0; i < $LIST.number_of_entries && $OFFSET < $OBJ->size; i++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for (i = 0; i < $LIST.number_of_entries; i++) {
+        ...
+      }
+  - pattern-not: |
+      for (i = 0; i < $LIST.number_of_entries && $OFFSET < $OBJ->size; i++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -183,10 +189,11 @@ rules:
     technology:
     - c
 - id: vuln-radare2-2d782cda
-  pattern: |
-    ut16 *$MODREF = malloc($BIN->ne_header->ModRefs * sizeof(ut16));
-  pattern-not: |
-    ut16 *$MODREF = calloc($BIN->ne_header->ModRefs, sizeof(ut16));
+  patterns:
+  - pattern: |
+      ut16 *$MODREF = malloc($BIN->ne_header->ModRefs * sizeof(ut16));
+  - pattern-not: |
+      ut16 *$MODREF = calloc($BIN->ne_header->ModRefs, sizeof(ut16));
   languages:
   - c
   message: |
@@ -202,23 +209,24 @@ rules:
     technology:
     - c
 - id: vuln-radare2-3fcf41ed
-  pattern: |
-    ut8 *$BUF = calloc($EXPR1 - $EXPR2, 1);
-    ...
-    r_buf_read_at($BF_BUF, $FROM, $BUF, $EXPR1 - $EXPR2);
-    ...
-    if (($EXPR1 - $NEEDLE) > $CONST) {
+  patterns:
+  - pattern: |
+      ut8 *$BUF = calloc($EXPR1 - $EXPR2, 1);
       ...
-    }
-  pattern-not: |
-    int $LEN = $EXPR1 - $EXPR2;
-    ut8 *$BUF = calloc($LEN, 1);
-    ...
-    r_buf_read_at($BF_BUF, $FROM, $BUF, $LEN);
-    ...
-    if (($EXPR1 - $NEEDLE) > $CONST + $RC) {
+      r_buf_read_at($BF_BUF, $FROM, $BUF, $EXPR1 - $EXPR2);
       ...
-    }
+      if (($EXPR1 - $NEEDLE) > $CONST) {
+        ...
+      }
+  - pattern-not: |
+      int $LEN = $EXPR1 - $EXPR2;
+      ut8 *$BUF = calloc($LEN, 1);
+      ...
+      r_buf_read_at($BF_BUF, $FROM, $BUF, $LEN);
+      ...
+      if (($EXPR1 - $NEEDLE) > $CONST + $RC) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -237,14 +245,15 @@ rules:
     technology:
     - c
 - id: vuln-radare2-40c9f50e
-  pattern: |
-    for ($J = 0; $J < $SECTION->size; $J += 8) {
-      ...
-    }
-  pattern-not: |
-    for ($J = 0; $J + 7 < $SECTION->size; $J += 8) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($J = 0; $J < $SECTION->size; $J += 8) {
+        ...
+      }
+  - pattern-not: |
+      for ($J = 0; $J + 7 < $SECTION->size; $J += 8) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -265,12 +274,13 @@ rules:
     technology:
     - c
 - id: vuln-radare2-4d381168
-  pattern: |
-    RAnalFunction *$FUNC = r_anal_get_fcn_in($ANAL, $OFFSET, -1);
-    ut32 $FUNC_SIZE = r_anal_function_size_from_entry($FUNC);
-  pattern-not: |
-    RAnalFunction *$FUNC = r_anal_get_fcn_in($ANAL, $OFFSET, R_ANAL_FCN_TYPE_ANY);
-    ut32 $FUNC_SIZE = r_anal_function_size_from_entry($FUNC);
+  patterns:
+  - pattern: |
+      RAnalFunction *$FUNC = r_anal_get_fcn_in($ANAL, $OFFSET, -1);
+      ut32 $FUNC_SIZE = r_anal_function_size_from_entry($FUNC);
+  - pattern-not: |
+      RAnalFunction *$FUNC = r_anal_get_fcn_in($ANAL, $OFFSET, R_ANAL_FCN_TYPE_ANY);
+      ut32 $FUNC_SIZE = r_anal_function_size_from_entry($FUNC);
   languages:
   - c
   message: |
@@ -287,15 +297,16 @@ rules:
     technology:
     - c
 - id: vuln-radare2-52b15264
-  pattern: |
-    for ($I = 0; $I < $COUNT && strlen($TXT) < $BUFSIZE; $I++) {
-      snprintf($TXT + strlen($TXT), $BUFSIZE, $FORMAT, $TABLE[$I]);
-    }
-  pattern-not: |
-    for ($I = 0; $I < $COUNT && strlen($TXT) + $OFFSET < $BUFSIZE; $I++) {
-      $OPTXTLEN = strlen($TXT);
-      snprintf($TXT + $OPTXTLEN, $BUFSIZE - $OPTXTLEN, $FORMAT, $TABLE[$I]);
-    }
+  patterns:
+  - pattern: |
+      for ($I = 0; $I < $COUNT && strlen($TXT) < $BUFSIZE; $I++) {
+        snprintf($TXT + strlen($TXT), $BUFSIZE, $FORMAT, $TABLE[$I]);
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $COUNT && strlen($TXT) + $OFFSET < $BUFSIZE; $I++) {
+        $OPTXTLEN = strlen($TXT);
+        snprintf($TXT + $OPTXTLEN, $BUFSIZE - $OPTXTLEN, $FORMAT, $TABLE[$I]);
+      }
   languages:
   - c
   message: |
@@ -315,15 +326,16 @@ rules:
     technology:
     - c
 - id: vuln-radare2-59a9dfb6
-  pattern: |
-    RRegItem *$VAR;
-    ...
-    r_reg_set_value($REG, $VAR, $EXPR);
-  pattern-not: |
-    RRegItem *$VAR = NULL;
-    ...
-    ut64 $N = r_num_math($NUM, $ARG);
-    r_reg_set_value($REG, $VAR, $N);
+  patterns:
+  - pattern: |
+      RRegItem *$VAR;
+      ...
+      r_reg_set_value($REG, $VAR, $EXPR);
+  - pattern-not: |
+      RRegItem *$VAR = NULL;
+      ...
+      ut64 $N = r_num_math($NUM, $ARG);
+      r_reg_set_value($REG, $VAR, $N);
   languages:
   - c
   message: |
@@ -339,15 +351,16 @@ rules:
     technology:
     - c
 - id: vuln-radare2-637f4bd1
-  pattern: |
-    const ut8 *$DUMP = &$BLOCK.data[++$I];
-    $OFFSET = r_sleb128(&$DUMP, &$BLOCK.data[$LOC->block.length]);
-  pattern-not: |
-    const ut8 *$DUMP = $BLOCK.data + $I;
-    if ($LOC->block.length > $BLOCK.length) {
-      return NULL;
-    }
-    $OFFSET = r_sleb128(&$DUMP, $BLOCK.data + $LOC->block.length);
+  patterns:
+  - pattern: |
+      const ut8 *$DUMP = &$BLOCK.data[++$I];
+      $OFFSET = r_sleb128(&$DUMP, &$BLOCK.data[$LOC->block.length]);
+  - pattern-not: |
+      const ut8 *$DUMP = $BLOCK.data + $I;
+      if ($LOC->block.length > $BLOCK.length) {
+        return NULL;
+      }
+      $OFFSET = r_sleb128(&$DUMP, $BLOCK.data + $LOC->block.length);
   languages:
   - c
   message: |
@@ -363,14 +376,15 @@ rules:
     technology:
     - c
 - id: vuln-radare2-66191f78
-  pattern: |
-    while ($BEGIN && isspace((ut8)$STR[*$BEGIN])) {
-      ...
-    }
-  pattern-not: |
-    while ($BEGIN && $STR[*$BEGIN] && isspace((ut8)$STR[*$BEGIN])) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while ($BEGIN && isspace((ut8)$STR[*$BEGIN])) {
+        ...
+      }
+  - pattern-not: |
+      while ($BEGIN && $STR[*$BEGIN] && isspace((ut8)$STR[*$BEGIN])) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -388,10 +402,11 @@ rules:
     technology:
     - c
 - id: vuln-radare2-72794dc3
-  pattern: |
-    struct reloc_struct_t *$GOT_TABLE = calloc(1, $N_GOT * sizeof(ut32));
-  pattern-not: |
-    struct reloc_struct_t *$GOT_TABLE = calloc(1, $N_GOT * sizeof(struct reloc_struct_t));
+  patterns:
+  - pattern: |
+      struct reloc_struct_t *$GOT_TABLE = calloc(1, $N_GOT * sizeof(ut32));
+  - pattern-not: |
+      struct reloc_struct_t *$GOT_TABLE = calloc(1, $N_GOT * sizeof(struct reloc_struct_t));
   languages:
   - c
   message: |
@@ -443,40 +458,41 @@ rules:
     technology:
     - c
 - id: vuln-radare2-77cba1df
-  pattern: |
-    if (strlen($MSG) == 1) {
-      int $I = 0;
-      ALIGN;
-      ds_comment($DS, true, "; \"");
-      for ($I = 0; $I < $LEN; $I+=2) {
-        if (!$MSG[$I]) {
-          break;
-        }
-        if (!$MSG[$I+1]) {
-          if (IS_PRINTABLE($MSG[$I]) && $MSG[$I] != '"' && $MSG[$I] != '\\') {
-            ds_comment($DS, false, "%c", $MSG[$I]);
-          } else {
-            char *$ESCCHAR = r_str_escape_all(&$MSG[$I]);
-            if ($ESCCHAR) {
-              ds_comment($DS, false, "%s", $ESCCHAR);
-              free($ESCCHAR);
-            }
-          }
-        } else {
-          ds_comment($DS, false, "\\u%02x%02x", $MSG[$I+1], $MSG[$I]);
-        }
-      }
-      ds_comment($DS, false, "\"%s", $NL);
-    } else {
-      char *$ESCSTR = r_str_escape_all($MSG);
-      if ($ESCSTR) {
+  patterns:
+  - pattern: |
+      if (strlen($MSG) == 1) {
+        int $I = 0;
         ALIGN;
-        ds_comment($DS, true, "; \"%s\"%s", $ESCSTR, $NL);
-        free($ESCSTR);
+        ds_comment($DS, true, "; \"");
+        for ($I = 0; $I < $LEN; $I+=2) {
+          if (!$MSG[$I]) {
+            break;
+          }
+          if (!$MSG[$I+1]) {
+            if (IS_PRINTABLE($MSG[$I]) && $MSG[$I] != '"' && $MSG[$I] != '\\') {
+              ds_comment($DS, false, "%c", $MSG[$I]);
+            } else {
+              char *$ESCCHAR = r_str_escape_all(&$MSG[$I]);
+              if ($ESCCHAR) {
+                ds_comment($DS, false, "%s", $ESCCHAR);
+                free($ESCCHAR);
+              }
+            }
+          } else {
+            ds_comment($DS, false, "\\u%02x%02x", $MSG[$I+1], $MSG[$I]);
+          }
+        }
+        ds_comment($DS, false, "\"%s", $NL);
+      } else {
+        char *$ESCSTR = r_str_escape_all($MSG);
+        if ($ESCSTR) {
+          ALIGN;
+          ds_comment($DS, true, "; \"%s\"%s", $ESCSTR, $NL);
+          free($ESCSTR);
+        }
       }
-    }
-  pattern-not: |
-    ds_print_str($DS, $MSG, $LEN, $STRING_FOUND);
+  - pattern-not: |
+      ds_print_str($DS, $MSG, $LEN, $STRING_FOUND);
   languages:
   - c
   message: |
@@ -496,16 +512,17 @@ rules:
     technology:
     - c
 - id: vuln-radare2-7ab66cca
-  pattern: |
-    if (!$OBJ || $OBJ->list.length != 2 || !$OBJ->list.objects[0] || $OBJ->list.objects[1]->list.length != 1) {
-      ...
-    }
-  pattern-not: |
-    if (!$OBJ || $OBJ->list.length != 2 || !$OBJ->list.objects ||
-        !$OBJ->list.objects[0] || !$OBJ->list.objects[1] ||
-        $OBJ->list.objects[1]->list.length != 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$OBJ || $OBJ->list.length != 2 || !$OBJ->list.objects[0] || $OBJ->list.objects[1]->list.length != 1) {
+        ...
+      }
+  - pattern-not: |
+      if (!$OBJ || $OBJ->list.length != 2 || !$OBJ->list.objects ||
+          !$OBJ->list.objects[0] || !$OBJ->list.objects[1] ||
+          $OBJ->list.objects[1]->list.length != 1) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -525,10 +542,11 @@ rules:
     technology:
     - c
 - id: vuln-radare2-8525ad0b
-  pattern: |
-    r_list_pop($REF);
-  pattern-not: |
-    // r_list_pop($REF);
+  patterns:
+  - pattern: |
+      r_list_pop($REF);
+  - pattern-not: |
+      // r_list_pop($REF);
   languages:
   - c
   message: |
@@ -547,11 +565,12 @@ rules:
     technology:
     - c
 - id: vuln-radare2-a0348bb1
-  pattern: |
-    r_hex_bin2str($BUF, R_MIN($ADDRBYTES * $OPLEN, (sizeof($BUF_HEX) - 1) / 2), $BUF_HEX);
-  pattern-not: |
-    int $LEN = R_MIN($ADDRBYTES * $OPLEN, (sizeof($BUF_HEX) - 1) / 2);
-    r_hex_bin2str($BUF, $LEN, $BUF_HEX);
+  patterns:
+  - pattern: |
+      r_hex_bin2str($BUF, R_MIN($ADDRBYTES * $OPLEN, (sizeof($BUF_HEX) - 1) / 2), $BUF_HEX);
+  - pattern-not: |
+      int $LEN = R_MIN($ADDRBYTES * $OPLEN, (sizeof($BUF_HEX) - 1) / 2);
+      r_hex_bin2str($BUF, $LEN, $BUF_HEX);
   languages:
   - c
   message: |
@@ -569,13 +588,14 @@ rules:
     technology:
     - c
 - id: vuln-radare2-a07dedb8
-  pattern: |
-    ut64 $PAGE_SIZE = $OBJ->chained_starts[$I]->page_size;
-  pattern-not: |
-    int $PAGE_SIZE = $OBJ->chained_starts[$I]->page_size;
-    if ($PAGE_SIZE < 1) {
-      $PAGE_SIZE = 4096;
-    }
+  patterns:
+  - pattern: |
+      ut64 $PAGE_SIZE = $OBJ->chained_starts[$I]->page_size;
+  - pattern-not: |
+      int $PAGE_SIZE = $OBJ->chained_starts[$I]->page_size;
+      if ($PAGE_SIZE < 1) {
+        $PAGE_SIZE = 4096;
+      }
   languages:
   - c
   message: |
@@ -594,18 +614,19 @@ rules:
     technology:
     - c
 - id: vuln-radare2-a8806994
-  pattern: |
-    memcpy($DST, $SRC, R_MIN($BUFSIZE - 1, $LEN));
-    ...
-    r_hex_bin2str($SRC, R_MIN($ADDRBYTES * $LEN, (sizeof($HEXBUF) - 1) / 2), $HEXBUF);
-  pattern-not: |
-    int $DSTLEN = R_MIN($BUFSIZE - 1, $LEN);
-    int $CPYLEN = R_MIN($DSTLEN, $LEN);
-    if ($CPYLEN > 0) {
-      memcpy($DST, $SRC, $CPYLEN);
+  patterns:
+  - pattern: |
+      memcpy($DST, $SRC, R_MIN($BUFSIZE - 1, $LEN));
       ...
       r_hex_bin2str($SRC, R_MIN($ADDRBYTES * $LEN, (sizeof($HEXBUF) - 1) / 2), $HEXBUF);
-    }
+  - pattern-not: |
+      int $DSTLEN = R_MIN($BUFSIZE - 1, $LEN);
+      int $CPYLEN = R_MIN($DSTLEN, $LEN);
+      if ($CPYLEN > 0) {
+        memcpy($DST, $SRC, $CPYLEN);
+        ...
+        r_hex_bin2str($SRC, R_MIN($ADDRBYTES * $LEN, (sizeof($HEXBUF) - 1) / 2), $HEXBUF);
+      }
   languages:
   - c
   message: |
@@ -626,18 +647,19 @@ rules:
     technology:
     - c
 - id: vuln-radare2-bd276ef2
-  pattern: |
-    for ($I = 0; $I < $COUNT && strlen($OP->txt) + $VAL < $BUFSIZE; $I++) {
-      $TXTLEN = strlen($OP->txt);
-      snprintf($OP->txt + $TXTLEN, $BUFSIZE - $TXTLEN, $FORMAT, $TABLE[$I]);
-    }
-  pattern-not: |
-    for ($I = 0; $I < $COUNT && $TXTLEN + $VAL < $BUFSIZE; $I++) {
-      snprintf($TXT, $TXTLEFT, $FORMAT, $TABLE[$I]);
-      $TXTLEN = strlen($TXT);
-      $TXT += $TXTLEN;
-      $TXTLEFT -= $TXTLEN;
-    }
+  patterns:
+  - pattern: |
+      for ($I = 0; $I < $COUNT && strlen($OP->txt) + $VAL < $BUFSIZE; $I++) {
+        $TXTLEN = strlen($OP->txt);
+        snprintf($OP->txt + $TXTLEN, $BUFSIZE - $TXTLEN, $FORMAT, $TABLE[$I]);
+      }
+  - pattern-not: |
+      for ($I = 0; $I < $COUNT && $TXTLEN + $VAL < $BUFSIZE; $I++) {
+        snprintf($TXT, $TXTLEFT, $FORMAT, $TABLE[$I]);
+        $TXTLEN = strlen($TXT);
+        $TXT += $TXTLEN;
+        $TXTLEFT -= $TXTLEN;
+      }
   languages:
   - c
   message: |
@@ -655,10 +677,11 @@ rules:
     technology:
     - c
 - id: vuln-radare2-c84b7232
-  pattern: |
-    ut64 offset = va2pa($VAR, hdr->mappingCount, $MAPS, $BUF, 0, NULL, NULL);
-  pattern-not: |
-    ut64 offset = va2pa($VAR, R_MIN(hdr->mappingCount, $N_MAPS), $MAPS, $BUF, 0, NULL, NULL);
+  patterns:
+  - pattern: |
+      ut64 offset = va2pa($VAR, hdr->mappingCount, $MAPS, $BUF, 0, NULL, NULL);
+  - pattern-not: |
+      ut64 offset = va2pa($VAR, R_MIN(hdr->mappingCount, $N_MAPS), $MAPS, $BUF, 0, NULL, NULL);
   languages:
   - c
   message: |
@@ -675,10 +698,11 @@ rules:
     technology:
     - c
 - id: vuln-radare2-d45faff8
-  pattern: |
-    $S = ($ADDR - $A) >> 4;
-  pattern-not: |
-    $S = ($ADDR - $A) >> $P->seggrn;
+  patterns:
+  - pattern: |
+      $S = ($ADDR - $A) >> 4;
+  - pattern-not: |
+      $S = ($ADDR - $A) >> $P->seggrn;
   languages:
   - c
   message: |
@@ -695,14 +719,15 @@ rules:
     technology:
     - c
 - id: vuln-radare2-e5c14c16
-  pattern: |
-    for ($I = $J = 0; $I < sizeof($BUF) - 1 && $STR[$I]; $I++, $J++) {
-      ...
-    }
-  pattern-not: |
-    for ($I = $J = 0; $I < sizeof($BUF) - 1 && $STR[$J]; $I++, $J++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($I = $J = 0; $I < sizeof($BUF) - 1 && $STR[$I]; $I++, $J++) {
+        ...
+      }
+  - pattern-not: |
+      for ($I = $J = 0; $I < sizeof($BUF) - 1 && $STR[$J]; $I++, $J++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -718,21 +743,22 @@ rules:
     technology:
     - c
 - id: vuln-radare2-e85dfc16
-  pattern: |
-    char *$VAR = r_str_newf(...);
-    r_anal_str_to_fcn($ANAL, $F, $VAR);
-  pattern-not: |
-    char *$VAR = r_str_newf(...), *$VAR_COPY = strdup($VAR);
-    char *$FCNNAME = strrchr(r_str_trim_tail(strtok($VAR_COPY, "(")), ' ');
-    if ($FCNNAME) {
-      $FCNNAME++;
-      if (strcmp($F->name, $FCNNAME)) {
-        setFunctionName($CORE, $ADDR, $FCNNAME, false);
-        $F = r_anal_get_fcn_in($ANAL, $ADDR, -1);
-      }
+  patterns:
+  - pattern: |
+      char *$VAR = r_str_newf(...);
       r_anal_str_to_fcn($ANAL, $F, $VAR);
-    }
-    free($VAR_COPY);
+  - pattern-not: |
+      char *$VAR = r_str_newf(...), *$VAR_COPY = strdup($VAR);
+      char *$FCNNAME = strrchr(r_str_trim_tail(strtok($VAR_COPY, "(")), ' ');
+      if ($FCNNAME) {
+        $FCNNAME++;
+        if (strcmp($F->name, $FCNNAME)) {
+          setFunctionName($CORE, $ADDR, $FCNNAME, false);
+          $F = r_anal_get_fcn_in($ANAL, $ADDR, -1);
+        }
+        r_anal_str_to_fcn($ANAL, $F, $VAR);
+      }
+      free($VAR_COPY);
   languages:
   - c
   message: |

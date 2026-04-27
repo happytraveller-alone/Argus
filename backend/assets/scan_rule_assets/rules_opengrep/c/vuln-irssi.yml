@@ -1,21 +1,22 @@
 rules:
 - id: vuln-irssi-38ba3ca2
-  pattern: |
-    if (!IS_IRC_SERVER($SERVER))
-      return;
+  patterns:
+  - pattern: |
+      if (!IS_IRC_SERVER($SERVER))
+        return;
 
-    if (!server_ischannel($SERVER, $TARGET))
-      return;
+      if (!server_ischannel($SERVER, $TARGET))
+        return;
 
-    $REC = IRC_SERVER($SERVER);
-    if ($REC->$FIELD != NULL)
-      $FUNC($REC, NULL);
-  pattern-not: |
-    for ($TMP = $LIST; $TMP != NULL; $TMP = $NEXT) {
-      $REC = $TMP->data;
-      if (IS_IRC_SERVER($REC) && $REC->$FIELD != NULL)
+      $REC = IRC_SERVER($SERVER);
+      if ($REC->$FIELD != NULL)
         $FUNC($REC, NULL);
-    }
+  - pattern-not: |
+      for ($TMP = $LIST; $TMP != NULL; $TMP = $NEXT) {
+        $REC = $TMP->data;
+        if (IS_IRC_SERVER($REC) && $REC->$FIELD != NULL)
+          $FUNC($REC, NULL);
+      }
   languages:
   - c
   message: |
@@ -35,10 +36,11 @@ rules:
     technology:
     - c
 - id: vuln-irssi-5a4e7ab6
-  pattern: |
-    g_hash_table_insert($SERVER->cap_supported, $KEY, $VAL);
-  pattern-not: |
-    g_hash_table_replace($SERVER->cap_supported, $KEY, $VAL);
+  patterns:
+  - pattern: |
+      g_hash_table_insert($SERVER->cap_supported, $KEY, $VAL);
+  - pattern-not: |
+      g_hash_table_replace($SERVER->cap_supported, $KEY, $VAL);
   languages:
   - c
   message: |
@@ -54,22 +56,23 @@ rules:
     technology:
     - c
 - id: vuln-irssi-5e263253
-  pattern: |
-    if ($LIST == $NICK || $LIST->next == NULL) {
-      g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
-      if ($LIST->next != NULL) {
-        g_hash_table_insert($CHANNEL->nicks, $NICK->next->nick, $NICK->next);
+  patterns:
+  - pattern: |
+      if ($LIST == $NICK || $LIST->next == NULL) {
+        g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
+        if ($LIST->next != NULL) {
+          g_hash_table_insert($CHANNEL->nicks, $NICK->next->nick, $NICK->next);
+        }
       }
-    }
-  pattern-not: |
-    if ($LIST == $NICK) {
-      $NEWLIST = $NICK->next;
-      $NEWLIST = $LIST;
-      g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
-      if ($NEWLIST != NULL) {
-        g_hash_table_insert($CHANNEL->nicks, $NEWLIST->nick, $NEWLIST);
+  - pattern-not: |
+      if ($LIST == $NICK) {
+        $NEWLIST = $NICK->next;
+        $NEWLIST = $LIST;
+        g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
+        if ($NEWLIST != NULL) {
+          g_hash_table_insert($CHANNEL->nicks, $NEWLIST->nick, $NEWLIST);
+        }
       }
-    }
   languages:
   - c
   message: |
@@ -87,10 +90,11 @@ rules:
     technology:
     - c
 - id: vuln-irssi-c03057f3
-  pattern: |
-    special_push_collector(NULL);
-  pattern-not: |
-    special_push_collector($VAR);
+  patterns:
+  - pattern: |
+      special_push_collector(NULL);
+  - pattern-not: |
+      special_push_collector($VAR);
   languages:
   - c
   message: |
@@ -108,14 +112,15 @@ rules:
     technology:
     - c
 - id: vuln-irssi-e32e9d63
-  pattern: |
-    if (*$VAR == '\\') {
-      ...
-    }
-  pattern-not: |
-    if (*$VAR == '\\' && $VAR[1] != '\0') {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (*$VAR == '\\') {
+        ...
+      }
+  - pattern-not: |
+      if (*$VAR == '\\' && $VAR[1] != '\0') {
+        ...
+      }
   languages:
   - c
   message: |
@@ -131,13 +136,14 @@ rules:
     technology:
     - c
 - id: vuln-irssi-fa850840
-  pattern: |
-    if (!(dest->level & MSGLEVEL_PUBLIC))
-      return;
-    ...
-    print_netjoins(rec, dest->target);
-  pattern-not: |
-    print_netjoins(rec, NULL);
+  patterns:
+  - pattern: |
+      if (!(dest->level & MSGLEVEL_PUBLIC))
+        return;
+      ...
+      print_netjoins(rec, dest->target);
+  - pattern-not: |
+      print_netjoins(rec, NULL);
   languages:
   - c
   message: |

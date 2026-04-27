@@ -1,13 +1,14 @@
 rules:
 - id: vuln-ceph-55ad9b69
-  pattern: |
-    if ($EC == http::error::partial_message || $EC == http::error::need_buffer) {
-      ...
-    }
-  pattern-not: |
-    if ($EC == http::error::need_buffer) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($EC == http::error::partial_message || $EC == http::error::need_buffer) {
+        ...
+      }
+  - pattern-not: |
+      if ($EC == http::error::need_buffer) {
+        ...
+      }
   languages:
   - cpp
   message: |

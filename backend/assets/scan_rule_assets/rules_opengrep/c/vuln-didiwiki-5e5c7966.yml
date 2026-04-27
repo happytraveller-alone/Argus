@@ -1,13 +1,14 @@
 rules:
 - id: vuln-didiwiki-5e5c7966
-  pattern: |
-    if ($PAGE && (access($PAGE, R_OK) == 0)) {
-      ...
-    }
-  pattern-not: |
-    if ($PAGE && page_name_is_good($PAGE) && (access($PAGE, R_OK) == 0)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($PAGE && (access($PAGE, R_OK) == 0)) {
+        ...
+      }
+  - pattern-not: |
+      if ($PAGE && page_name_is_good($PAGE) && (access($PAGE, R_OK) == 0)) {
+        ...
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-hue-0e8667ed
-  pattern: |
-    notebook.sessions()[0].type(self.type())
-  pattern-not: |
-    notebook.sessions()[0].type($DATA.handle.session_type || self.type())
+  patterns:
+  - pattern: |
+      notebook.sessions()[0].type(self.type())
+  - pattern-not: |
+      notebook.sessions()[0].type($DATA.handle.session_type || self.type())
   languages:
   - javascript
   message: |

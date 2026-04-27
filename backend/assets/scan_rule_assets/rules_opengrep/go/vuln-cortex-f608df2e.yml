@@ -1,9 +1,10 @@
 rules:
 - id: vuln-cortex-f608df2e
-  pattern: |
-    {ID: $ID, UploadedAt: $TIME}
-  pattern-not: |
-    &bucketindex.Block{ID: $ID, UploadedAt: $TIME}
+  patterns:
+  - pattern: |
+      {ID: $ID, UploadedAt: $TIME}
+  - pattern-not: |
+      &bucketindex.Block{ID: $ID, UploadedAt: $TIME}
   languages:
   - go
   message: |

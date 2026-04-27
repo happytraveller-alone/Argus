@@ -1,15 +1,16 @@
 rules:
 - id: vuln-gitpod-12956988
-  pattern: |
-    const verifyCSRF = ($ORIGIN) => {
-      let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME);
-      ...
-    }
-  pattern-not: |
-    const verifyOrigin = ($ORIGIN, $STRICT) => {
-      let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME, $STRICT);
-      ...
-    }
+  patterns:
+  - pattern: |
+      const verifyCSRF = ($ORIGIN) => {
+        let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME);
+        ...
+      }
+  - pattern-not: |
+      const verifyOrigin = ($ORIGIN, $STRICT) => {
+        let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME, $STRICT);
+        ...
+      }
   languages:
   - typescript
   message: |
@@ -34,10 +35,11 @@ rules:
     - typescript
     - websocket
 - id: vuln-gitpod-6771283c
-  pattern: |
-    redirect = $PROTOCOL !== "http:" && $PROTOCOL !== "https:"
-  pattern-not: |
-    redirect = $TRUSTED_PROTOCOLS.includes($PROTOCOL)
+  patterns:
+  - pattern: |
+      redirect = $PROTOCOL !== "http:" && $PROTOCOL !== "https:"
+  - pattern-not: |
+      redirect = $TRUSTED_PROTOCOLS.includes($PROTOCOL)
   languages:
   - typescript
   message: |

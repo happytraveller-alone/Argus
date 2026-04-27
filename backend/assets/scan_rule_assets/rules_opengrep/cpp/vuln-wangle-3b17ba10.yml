@@ -1,10 +1,11 @@
 rules:
 - id: vuln-wangle-3b17ba10
-  pattern: |
-    auto $SOCKET = std::dynamic_pointer_cast<folly::AsyncSocket>($EXPR);
-  pattern-not: |
-    auto $SOCKET = std::dynamic_pointer_cast<folly::AsyncTransportWrapper>($EXPR);
-    CHECK($SOCKET);
+  patterns:
+  - pattern: |
+      auto $SOCKET = std::dynamic_pointer_cast<folly::AsyncSocket>($EXPR);
+  - pattern-not: |
+      auto $SOCKET = std::dynamic_pointer_cast<folly::AsyncTransportWrapper>($EXPR);
+      CHECK($SOCKET);
   languages:
   - cpp
   message: |

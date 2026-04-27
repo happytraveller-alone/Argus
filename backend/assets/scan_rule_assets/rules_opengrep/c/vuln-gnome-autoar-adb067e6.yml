@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gnome-autoar-adb067e6
-  pattern: |
-    $VALID_FILENAME = g_file_equal($EXTRACTED_FILENAME, $DESTINATION_DIR) || g_file_has_prefix($EXTRACTED_FILENAME, $DESTINATION_DIR);
-  pattern-not: |
-    $VALID_FILENAME = is_valid_filename($EXTRACTED_FILENAME, $DESTINATION_DIR);
+  patterns:
+  - pattern: |
+      $VALID_FILENAME = g_file_equal($EXTRACTED_FILENAME, $DESTINATION_DIR) || g_file_has_prefix($EXTRACTED_FILENAME, $DESTINATION_DIR);
+  - pattern-not: |
+      $VALID_FILENAME = is_valid_filename($EXTRACTED_FILENAME, $DESTINATION_DIR);
   languages:
   - c
   message: |

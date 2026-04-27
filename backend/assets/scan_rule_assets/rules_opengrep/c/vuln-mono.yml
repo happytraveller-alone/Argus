@@ -1,16 +1,17 @@
 rules:
 - id: vuln-mono-035c8587
-  pattern: |
-    if (MONO_TYPE_IS_REFERENCE($TYPE) ||
-        ($TYPE->type == MONO_TYPE_VALUETYPE &&
-         (!mono_type_get_class($TYPE) ||
-          mono_type_get_class($TYPE)->has_references))) {
-      ...
-    }
-  pattern-not: |
-    if (MONO_TYPE_IS_REFERENCE($TYPE) || $TYPE->type == MONO_TYPE_VALUETYPE) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (MONO_TYPE_IS_REFERENCE($TYPE) ||
+          ($TYPE->type == MONO_TYPE_VALUETYPE &&
+           (!mono_type_get_class($TYPE) ||
+            mono_type_get_class($TYPE)->has_references))) {
+        ...
+      }
+  - pattern-not: |
+      if (MONO_TYPE_IS_REFERENCE($TYPE) || $TYPE->type == MONO_TYPE_VALUETYPE) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -33,14 +34,15 @@ rules:
     technology:
     - c
 - id: vuln-mono-8e890a3b
-  pattern: |
-    while ((full_name = mono_dl_build_path(".", $FILE_NAME, &$ITER))) {
-      ...
-    }
-  pattern-not: |
-    while ((full_name = mono_dl_build_path($DIR, $FILE_NAME, &$ITER))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while ((full_name = mono_dl_build_path(".", $FILE_NAME, &$ITER))) {
+        ...
+      }
+  - pattern-not: |
+      while ((full_name = mono_dl_build_path($DIR, $FILE_NAME, &$ITER))) {
+        ...
+      }
   languages:
   - c
   message: |

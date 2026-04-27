@@ -1,9 +1,10 @@
 rules:
 - id: vuln-aria2-37368130
-  pattern: |
-    A2_LOG_INFO(fmt(MSG_RECEIVE_RESPONSE, $CUID, $PROC->getHeaderString().c_str()));
-  pattern-not: |
-    A2_LOG_INFO(fmt(MSG_RECEIVE_RESPONSE, $CUID, eraseConfidentialInfo($PROC->getHeaderString()).c_str()));
+  patterns:
+  - pattern: |
+      A2_LOG_INFO(fmt(MSG_RECEIVE_RESPONSE, $CUID, $PROC->getHeaderString().c_str()));
+  - pattern-not: |
+      A2_LOG_INFO(fmt(MSG_RECEIVE_RESPONSE, $CUID, eraseConfidentialInfo($PROC->getHeaderString()).c_str()));
   languages:
   - cpp
   message: |

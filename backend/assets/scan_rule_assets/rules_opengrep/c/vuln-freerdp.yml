@@ -1,9 +1,10 @@
 rules:
 - id: vuln-freerdp-0332cad0
-  pattern: |
-    WLog_Print($LOG, $LEVEL, "%s Update Data PDU", UPDATE_TYPE_STRINGS[$UPDATETYPE]);
-  pattern-not: |
-    WLog_Print($LOG, $LEVEL, "%s Update Data PDU", update_type_to_string($UPDATETYPE));
+  patterns:
+  - pattern: |
+      WLog_Print($LOG, $LEVEL, "%s Update Data PDU", UPDATE_TYPE_STRINGS[$UPDATETYPE]);
+  - pattern-not: |
+      WLog_Print($LOG, $LEVEL, "%s Update Data PDU", update_type_to_string($UPDATETYPE));
   languages:
   - c
   message: |
@@ -19,16 +20,17 @@ rules:
     technology:
     - c
 - id: vuln-freerdp-09b9d4f1
-  pattern: |
-    $BITMAP->length = $DSTWIDTH * $DSTHEIGHT * GetBytesPerPixel($BITMAP->format);
-  pattern-not: |
-    $SIZE = $DSTWIDTH * $DSTHEIGHT;
-    if ((GetBytesPerPixel($BITMAP->format) == 0) ||
-        ($DSTWIDTH == 0) || ($DSTHEIGHT == 0) || ($DSTWIDTH > UINT32_MAX / $DSTHEIGHT) ||
-        ($SIZE > (UINT32_MAX / GetBytesPerPixel($BITMAP->format))))
-        return FALSE;
-    $SIZE *= GetBytesPerPixel($BITMAP->format);
-    $BITMAP->length = $SIZE;
+  patterns:
+  - pattern: |
+      $BITMAP->length = $DSTWIDTH * $DSTHEIGHT * GetBytesPerPixel($BITMAP->format);
+  - pattern-not: |
+      $SIZE = $DSTWIDTH * $DSTHEIGHT;
+      if ((GetBytesPerPixel($BITMAP->format) == 0) ||
+          ($DSTWIDTH == 0) || ($DSTHEIGHT == 0) || ($DSTWIDTH > UINT32_MAX / $DSTHEIGHT) ||
+          ($SIZE > (UINT32_MAX / GetBytesPerPixel($BITMAP->format))))
+          return FALSE;
+      $SIZE *= GetBytesPerPixel($BITMAP->format);
+      $BITMAP->length = $SIZE;
   languages:
   - c
   message: |
@@ -50,10 +52,11 @@ rules:
     technology:
     - c
 - id: vuln-freerdp-532c4205
-  pattern: |
-    update_read_pointer_color($S, $POINTER_COLOR)
-  pattern-not: |
-    update_read_pointer_color($S, $POINTER_COLOR, $BPP)
+  patterns:
+  - pattern: |
+      update_read_pointer_color($S, $POINTER_COLOR)
+  - pattern-not: |
+      update_read_pointer_color($S, $POINTER_COLOR, $BPP)
   languages:
   - c
   message: |
@@ -73,18 +76,19 @@ rules:
     technology:
     - c
 - id: vuln-freerdp-6b2bc419
-  pattern: |
-    if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsMask + $ICONINFO->cbBitsColor)
-      return $FALSE;
-  pattern-not: |
-    if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsMask)
-      return $FALSE;
-    {
-      if (Stream_GetRemainingLength($S) < $ICONINFO->cbColorTable)
+  patterns:
+  - pattern: |
+      if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsMask + $ICONINFO->cbBitsColor)
         return $FALSE;
-    }
-    if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsColor)
-      return $FALSE;
+  - pattern-not: |
+      if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsMask)
+        return $FALSE;
+      {
+        if (Stream_GetRemainingLength($S) < $ICONINFO->cbColorTable)
+          return $FALSE;
+      }
+      if (Stream_GetRemainingLength($S) < $ICONINFO->cbBitsColor)
+        return $FALSE;
   languages:
   - c
   message: |

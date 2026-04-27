@@ -1,15 +1,16 @@
 rules:
 - id: vuln-gdk-pixbuf-31a6cff3
-  pattern: |
-    $ROWSTRIDE = $WIDTH * 4;
-    if ($ROWSTRIDE / 4 != $WIDTH) { ... }
-    $BYTES = $HEIGHT * $ROWSTRIDE;
-    if ($BYTES / $ROWSTRIDE != $HEIGHT) { ... }
-  pattern-not: |
-    if ($WIDTH > G_MAXINT / 4) { ... }
-    $ROWSTRIDE = $WIDTH * 4;
-    if ($HEIGHT > G_MAXINT / $ROWSTRIDE) { ... }
-    $BYTES = $HEIGHT * $ROWSTRIDE;
+  patterns:
+  - pattern: |
+      $ROWSTRIDE = $WIDTH * 4;
+      if ($ROWSTRIDE / 4 != $WIDTH) { ... }
+      $BYTES = $HEIGHT * $ROWSTRIDE;
+      if ($BYTES / $ROWSTRIDE != $HEIGHT) { ... }
+  - pattern-not: |
+      if ($WIDTH > G_MAXINT / 4) { ... }
+      $ROWSTRIDE = $WIDTH * 4;
+      if ($HEIGHT > G_MAXINT / $ROWSTRIDE) { ... }
+      $BYTES = $HEIGHT * $ROWSTRIDE;
   languages:
   - c
   message: |
@@ -26,14 +27,15 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-3bac204e
-  pattern: |
-    if ($MODULE && $MODULE->stop_load) {
-      ...
-    }
-  pattern-not: |
-    if ($MODULE && $MODULE->stop_load && $CONTEXT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($MODULE && $MODULE->stop_load) {
+        ...
+      }
+  - pattern-not: |
+      if ($MODULE && $MODULE->stop_load && $CONTEXT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -51,21 +53,22 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-4e7b5345
-  pattern: |
-    $FRAME = g_new (GdkPixbufFrame, 1);
-    ...
-    $FRAME->composited = NULL;
-    $FRAME->revert = NULL;
-    ...
-    $FRAME->pixbuf = gdk_pixbuf_new (...);
-    ...
-    g_list_append ($ANIMATION->frames, $FRAME);
-  pattern-not: |
-    $FRAME = g_new0 (GdkPixbufFrame, 1);
-    ...
-    $FRAME->lzw_data = g_byte_array_new ();
-    ...
-    g_list_append ($ANIMATION->frames, $FRAME);
+  patterns:
+  - pattern: |
+      $FRAME = g_new (GdkPixbufFrame, 1);
+      ...
+      $FRAME->composited = NULL;
+      $FRAME->revert = NULL;
+      ...
+      $FRAME->pixbuf = gdk_pixbuf_new (...);
+      ...
+      g_list_append ($ANIMATION->frames, $FRAME);
+  - pattern-not: |
+      $FRAME = g_new0 (GdkPixbufFrame, 1);
+      ...
+      $FRAME->lzw_data = g_byte_array_new ();
+      ...
+      g_list_append ($ANIMATION->frames, $FRAME);
   languages:
   - c
   message: |
@@ -86,13 +89,14 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-57362ed4
-  pattern: |
-    g_warning("Could not thumbnail '%s': %s", $FILENAME, $ERROR->message);
-    g_error_free($ERROR);
-  pattern-not: |
-    g_warning("Could not thumbnail '%s': %s", $FILENAME,
-              $ERROR ? $ERROR->message : "Thumbnailer failed without returning an error");
-    g_clear_error(&$ERROR);
+  patterns:
+  - pattern: |
+      g_warning("Could not thumbnail '%s': %s", $FILENAME, $ERROR->message);
+      g_error_free($ERROR);
+  - pattern-not: |
+      g_warning("Could not thumbnail '%s': %s", $FILENAME,
+                $ERROR ? $ERROR->message : "Thumbnailer failed without returning an error");
+      g_clear_error(&$ERROR);
   languages:
   - c
   message: |
@@ -110,19 +114,20 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-c2a40a92
-  pattern: |
-    $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $CINFO->output_components == 4 ? TRUE : FALSE, 8, ...);
-  pattern-not: |
-    if ($CINFO->output_components == 3) {
-      $HAS_ALPHA = FALSE;
-    } else if ($CINFO->output_components == 4) {
-      $HAS_ALPHA = TRUE;
-    } else {
-      g_set_error($ERROR, $GDK_PIXBUF_ERROR, $GDK_PIXBUF_ERROR_CORRUPT_IMAGE, _("Unsupported number of color components (%d)"), $CINFO->output_components);
-      $RETVAL = FALSE;
-      goto $OUT;
-    }
-    $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $HAS_ALPHA, 8, ...);
+  patterns:
+  - pattern: |
+      $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $CINFO->output_components == 4 ? TRUE : FALSE, 8, ...);
+  - pattern-not: |
+      if ($CINFO->output_components == 3) {
+        $HAS_ALPHA = FALSE;
+      } else if ($CINFO->output_components == 4) {
+        $HAS_ALPHA = TRUE;
+      } else {
+        g_set_error($ERROR, $GDK_PIXBUF_ERROR, $GDK_PIXBUF_ERROR_CORRUPT_IMAGE, _("Unsupported number of color components (%d)"), $CINFO->output_components);
+        $RETVAL = FALSE;
+        goto $OUT;
+      }
+      $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $HAS_ALPHA, 8, ...);
   languages:
   - c
   message: |
@@ -140,16 +145,17 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-dec9ca22
-  pattern: |
-    $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
-    if ($STATE->HeaderSize < 0) {
-      ...
-    }
-  pattern-not: |
-    if ($ENTRY->DIBoffset > $G_MAXINT - $INFOHEADER_SIZE) {
-      ...
-    }
-    $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
+  patterns:
+  - pattern: |
+      $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
+      if ($STATE->HeaderSize < 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($ENTRY->DIBoffset > $G_MAXINT - $INFOHEADER_SIZE) {
+        ...
+      }
+      $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
   languages:
   - c
   message: |

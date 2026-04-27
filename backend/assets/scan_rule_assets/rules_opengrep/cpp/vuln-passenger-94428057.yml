@@ -1,33 +1,34 @@
 rules:
 - id: vuln-passenger-94428057
-  pattern: |
-    switch (getFileTypeNoFollowSymlinks($PATH)) {
-      case FT_NONEXISTANT:
-        ...
-      case FT_DIRECTORY:
-        verifyDirectoryPermissions($PATH);
-        ...
-      default:
-        throw RuntimeException("'" + $PATH + "' already exists, and is not a directory");
-    }
-  pattern-not: |
-    struct stat $BUF;
-    int $RET;
-    do {
-      $RET = lstat($PATH.c_str(), &$BUF);
-    } while ($RET == -1 && errno == EAGAIN);
-    if ($RET == 0) {
-      if (S_ISDIR($BUF.st_mode)) {
-        verifyDirectoryPermissions($PATH, $BUF);
-      } else {
-        throw RuntimeException("'" + $PATH + "' already exists, and is not a directory");
+  patterns:
+  - pattern: |
+      switch (getFileTypeNoFollowSymlinks($PATH)) {
+        case FT_NONEXISTANT:
+          ...
+        case FT_DIRECTORY:
+          verifyDirectoryPermissions($PATH);
+          ...
+        default:
+          throw RuntimeException("'" + $PATH + "' already exists, and is not a directory");
       }
-    } else if (errno == ENOENT) {
-      ...
-    } else {
-      int $E = errno;
-      throw FileSystemException("Cannot lstat '" + $PATH + "'", $E, $PATH);
-    }
+  - pattern-not: |
+      struct stat $BUF;
+      int $RET;
+      do {
+        $RET = lstat($PATH.c_str(), &$BUF);
+      } while ($RET == -1 && errno == EAGAIN);
+      if ($RET == 0) {
+        if (S_ISDIR($BUF.st_mode)) {
+          verifyDirectoryPermissions($PATH, $BUF);
+        } else {
+          throw RuntimeException("'" + $PATH + "' already exists, and is not a directory");
+        }
+      } else if (errno == ENOENT) {
+        ...
+      } else {
+        int $E = errno;
+        throw FileSystemException("Cannot lstat '" + $PATH + "'", $E, $PATH);
+      }
   languages:
   - cpp
   message: |

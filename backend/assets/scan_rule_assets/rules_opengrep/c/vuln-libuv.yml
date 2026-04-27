@@ -1,12 +1,13 @@
 rules:
 - id: vuln-libuv-0f2d7e78
-  pattern: |
-    if ($D < $DE)
+  patterns:
+  - pattern: |
+      if ($D < $DE)
+        *$D++ = '\0';
+  - pattern-not: |
+      if ($D >= $DE)
+        return $ERROR;
       *$D++ = '\0';
-  pattern-not: |
-    if ($D >= $DE)
-      return $ERROR;
-    *$D++ = '\0';
   languages:
   - c
   message: |
@@ -23,10 +24,11 @@ rules:
     technology:
     - c
 - id: vuln-libuv-e0327e1d
-  pattern: |
-    T("", "");
-  pattern-not: |
-    F("", UV_EINVAL);
+  patterns:
+  - pattern: |
+      T("", "");
+  - pattern-not: |
+      F("", UV_EINVAL);
   languages:
   - c
   message: |

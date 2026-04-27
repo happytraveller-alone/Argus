@@ -1,14 +1,15 @@
 rules:
 - id: vuln-libmspack-17038206
-  pattern: |
-    unsigned int $LEN;
-    $LEN = $READ($FH, &$BUF[0], $SIZE);
-  pattern-not: |
-    int $LEN;
-    if (($LEN = $READ($FH, &$BUF[0], $SIZE)) <= 0) {
-      $ERROR = $ERR_CODE;
-      return $NULL;
-    }
+  patterns:
+  - pattern: |
+      unsigned int $LEN;
+      $LEN = $READ($FH, &$BUF[0], $SIZE);
+  - pattern-not: |
+      int $LEN;
+      if (($LEN = $READ($FH, &$BUF[0], $SIZE)) <= 0) {
+        $ERROR = $ERR_CODE;
+        return $NULL;
+      }
   languages:
   - c
   message: |
@@ -24,11 +25,12 @@ rules:
     technology:
     - c
 - id: vuln-libmspack-18b6a2cc
-  pattern: |
-    ENSURE_BITS(16);
-    if (bits_left > 16) $VAR -= 2;
-  pattern-not: |
-    if (bits_left == 0) ENSURE_BITS(16);
+  patterns:
+  - pattern: |
+      ENSURE_BITS(16);
+      if (bits_left > 16) $VAR -= 2;
+  - pattern-not: |
+      if (bits_left == 0) ENSURE_BITS(16);
   languages:
   - c
   message: |
@@ -44,34 +46,35 @@ rules:
     technology:
     - c
 - id: vuln-libmspack-2f084136
-  pattern: |
-    if (memcmp(&$NAME[2], &$CONTENT_NAME[2], 31L) == 0) {
-      if (memcmp(&$NAME[33], &$CONTENT_NAME[33], 8L) == 0) {
+  patterns:
+  - pattern: |
+      if (memcmp(&$NAME[2], &$CONTENT_NAME[2], 31L) == 0) {
+        if (memcmp(&$NAME[33], &$CONTENT_NAME[33], 8L) == 0) {
+          $CHM->sec1.content = $FI;
+        }
+        else if (memcmp(&$NAME[33], &$CONTROL_NAME[33], 11L) == 0) {
+          $CHM->sec1.control = $FI;
+        }
+        else if (memcmp(&$NAME[33], &$SPANINFO_NAME[33], 8L) == 0) {
+          $CHM->sec1.spaninfo = $FI;
+        }
+        else if (memcmp(&$NAME[33], &$RTABLE_NAME[33], 72L) == 0) {
+          $CHM->sec1.rtable = $FI;
+        }
+      }
+  - pattern-not: |
+      if ($NAME_LEN == 40 && memcmp($NAME, $CONTENT_NAME, 40) == 0) {
         $CHM->sec1.content = $FI;
       }
-      else if (memcmp(&$NAME[33], &$CONTROL_NAME[33], 11L) == 0) {
+      else if ($NAME_LEN == 44 && memcmp($NAME, $CONTROL_NAME, 44) == 0) {
         $CHM->sec1.control = $FI;
       }
-      else if (memcmp(&$NAME[33], &$SPANINFO_NAME[33], 8L) == 0) {
+      else if ($NAME_LEN == 41 && memcmp($NAME, $SPANINFO_NAME, 41) == 0) {
         $CHM->sec1.spaninfo = $FI;
       }
-      else if (memcmp(&$NAME[33], &$RTABLE_NAME[33], 72L) == 0) {
+      else if ($NAME_LEN == 105 && memcmp($NAME, $RTABLE_NAME, 105) == 0) {
         $CHM->sec1.rtable = $FI;
       }
-    }
-  pattern-not: |
-    if ($NAME_LEN == 40 && memcmp($NAME, $CONTENT_NAME, 40) == 0) {
-      $CHM->sec1.content = $FI;
-    }
-    else if ($NAME_LEN == 44 && memcmp($NAME, $CONTROL_NAME, 44) == 0) {
-      $CHM->sec1.control = $FI;
-    }
-    else if ($NAME_LEN == 41 && memcmp($NAME, $SPANINFO_NAME, 41) == 0) {
-      $CHM->sec1.spaninfo = $FI;
-    }
-    else if ($NAME_LEN == 105 && memcmp($NAME, $RTABLE_NAME, 105) == 0) {
-      $CHM->sec1.rtable = $FI;
-    }
   languages:
   - c
   message: |
@@ -93,10 +96,11 @@ rules:
     technology:
     - c
 - id: vuln-libmspack-4fd9ccaa
-  pattern: |
-    #define TOLOWER($X) ((($X)<0||($X)>256)?($X):mspack_tolower_map[($X)])
-  pattern-not: |
-    #define TOLOWER($X) ((($X)<0||($X)>255)?($X):mspack_tolower_map[($X)])
+  patterns:
+  - pattern: |
+      #define TOLOWER($X) ((($X)<0||($X)>256)?($X):mspack_tolower_map[($X)])
+  - pattern-not: |
+      #define TOLOWER($X) ((($X)<0||($X)>255)?($X):mspack_tolower_map[($X)])
   languages:
   - c
   message: |
@@ -114,14 +118,15 @@ rules:
     technology:
     - c
 - id: vuln-libmspack-72e70a92
-  pattern: |
-    if ($VAR != 0xFFFFFFFF && $VAR > $LIMIT) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR != 0xFFFFFFFF && $VAR >= $LIMIT) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR != 0xFFFFFFFF && $VAR > $LIMIT) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR != 0xFFFFFFFF && $VAR >= $LIMIT) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -137,32 +142,33 @@ rules:
     technology:
     - c
 - id: vuln-libmspack-7cadd489
-  pattern: |
-    char *create_output_name(unsigned char *fname, unsigned char *dir, int lower, int isunix, int utf8) {
-      ...
-      if (!(name = (unsigned char *) malloc(x + 2))) {
-        fprintf(stderr, "out of memory!\n");
-        return NULL;
-      }
-      ...
-      /* remove leading slashes */
-      while (*fname == sep) fname++;
-      ...
-      return (char *) name;
-    }
-  pattern-not: |
-    char *create_output_name(char *fname) {
-      ...
-      while (*fname == '/' || *fname == '\\') fname++;
-      ...
-      for (p = out; *p; p++) {
-        if (p[0] == '.' && p[1] == '.' && (p[2] == '/' || p[2] == '\\')) {
-           p[0] = p[1] = 'x';
+  patterns:
+  - pattern: |
+      char *create_output_name(unsigned char *fname, unsigned char *dir, int lower, int isunix, int utf8) {
+        ...
+        if (!(name = (unsigned char *) malloc(x + 2))) {
+          fprintf(stderr, "out of memory!\n");
+          return NULL;
         }
+        ...
+        /* remove leading slashes */
+        while (*fname == sep) fname++;
+        ...
+        return (char *) name;
       }
-      ...
-      return out;
-    }
+  - pattern-not: |
+      char *create_output_name(char *fname) {
+        ...
+        while (*fname == '/' || *fname == '\\') fname++;
+        ...
+        for (p = out; *p; p++) {
+          if (p[0] == '.' && p[1] == '.' && (p[2] == '/' || p[2] == '\\')) {
+             p[0] = p[1] = 'x';
+          }
+        }
+        ...
+        return out;
+      }
   languages:
   - c
   message: |

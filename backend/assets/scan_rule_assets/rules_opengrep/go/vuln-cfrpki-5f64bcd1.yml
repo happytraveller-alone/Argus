@@ -1,14 +1,15 @@
 rules:
 - id: vuln-cfrpki-5f64bcd1
-  pattern: |
-    if $VAR > *$MAX {
-      log.Fatal($MESSAGE)
-    }
-  pattern-not: |
-    if $VAR > *$MAX {
-      log.Warning($MESSAGE)
-      $STABLE.Store(true)
-    }
+  patterns:
+  - pattern: |
+      if $VAR > *$MAX {
+        log.Fatal($MESSAGE)
+      }
+  - pattern-not: |
+      if $VAR > *$MAX {
+        log.Warning($MESSAGE)
+        $STABLE.Store(true)
+      }
   languages:
   - go
   message: |

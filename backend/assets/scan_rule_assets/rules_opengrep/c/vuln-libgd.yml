@@ -1,23 +1,24 @@
 rules:
 - id: vuln-libgd-01c61f8a
-  pattern: |
-    if (!(($VAR + ($EXPR * $SIZE)) < $LIMIT)) {
-      ...
-      return -1;
-    }
-    for ($I = 0; $I < $EXPR; $I++) {
-      for ($J = 0; $J < $SIZE; $J++, $CARET++) {
-        $BITMAP[$CARET] = $BUFFER[$VAR + $J];
+  patterns:
+  - pattern: |
+      if (!(($VAR + ($EXPR * $SIZE)) < $LIMIT)) {
+        ...
+        return -1;
       }
-    }
-  pattern-not: |
-    if (($CARET + ($EXPR * $SIZE)) >= $LIMIT) {
-      ...
-      return -1;
-    }
-    memcpy($BITMAP + $CARET, $BUFFER + $VAR, $EXPR * $SIZE);
-    $CARET += ($EXPR * $SIZE);
-    $VAR += ($EXPR * $SIZE);
+      for ($I = 0; $I < $EXPR; $I++) {
+        for ($J = 0; $J < $SIZE; $J++, $CARET++) {
+          $BITMAP[$CARET] = $BUFFER[$VAR + $J];
+        }
+      }
+  - pattern-not: |
+      if (($CARET + ($EXPR * $SIZE)) >= $LIMIT) {
+        ...
+        return -1;
+      }
+      memcpy($BITMAP + $CARET, $BUFFER + $VAR, $EXPR * $SIZE);
+      $CARET += ($EXPR * $SIZE);
+      $VAR += ($EXPR * $SIZE);
   languages:
   - c
   message: |
@@ -39,14 +40,15 @@ rules:
     technology:
     - c
 - id: vuln-libgd-318ebd33
-  pattern: |
-    if ($VAR == 257) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR >= 256 || $VAR < 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR == 257) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR >= 256 || $VAR < 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -62,14 +64,15 @@ rules:
     technology:
     - c
 - id: vuln-libgd-4b1e18a0
-  pattern: |
-    $FUNC($IM, $OUT, $COMPRESSION);
-    $RV = gdDPExtractData($OUT, $SIZE);
-  pattern-not: |
-    if (!_gdImageBmpCtx($IM, $OUT, $COMPRESSION))
+  patterns:
+  - pattern: |
+      $FUNC($IM, $OUT, $COMPRESSION);
       $RV = gdDPExtractData($OUT, $SIZE);
-    else
-      $RV = NULL;
+  - pattern-not: |
+      if (!_gdImageBmpCtx($IM, $OUT, $COMPRESSION))
+        $RV = gdDPExtractData($OUT, $SIZE);
+      else
+        $RV = NULL;
   languages:
   - c
   message: |
@@ -120,12 +123,13 @@ rules:
     technology:
     - c
 - id: vuln-libgd-e13a342c
-  pattern: |
-    sscanf($H, "%x", $B);
-  pattern-not: |
-    if (sscanf($H, "%x", $B) != 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      sscanf($H, "%x", $B);
+  - pattern-not: |
+      if (sscanf($H, "%x", $B) != 1) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -142,11 +146,12 @@ rules:
     technology:
     - c
 - id: vuln-libgd-e65415d9
-  pattern: |
-    gdImageDestroy($IM);
-    return NULL;
-  pattern-not: |
-    goto fail;
+  patterns:
+  - pattern: |
+      gdImageDestroy($IM);
+      return NULL;
+  - pattern-not: |
+      goto fail;
   languages:
   - c
   message: |

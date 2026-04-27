@@ -1,16 +1,12 @@
 rules:
 - id: vuln-node-jose-f92cffb4
-  pattern: |
-    var $PRIVKEY = ecUtil.convertToForge($KEY, false);
-    if (!$PROPS.public) {
-      return Promise.reject(new Error("invalid EC public key"));
-    }
-    var $PUBKEY = ecUtil.convertToForge($PROPS.public, true);
-    var $SECRET = $PRIVKEY.computeSecret($PUBKEY);
-  pattern-not: |
-    var $PRIVKEY = ecUtil.convertToForge($KEY, false);
-    var $P = validatePublic($PROPS.public, "forge");
-    $P = $P.then(function($PUBKEY) {
+  patterns:
+  - pattern: |
+      var $PRIVKEY = ecUtil.convertToForge($KEY, false);
+      if (!$PROPS.public) {
+        return Promise.reject(new Error("invalid EC public key"));
+      }
+      var $PUBKEY = ecUtil.convertToForge($PROPS.public, true);
       var $SECRET = $PRIVKEY.computeSecret($PUBKEY);
   languages:
   - javascript

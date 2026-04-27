@@ -1,9 +1,10 @@
 rules:
 - id: vuln-calibre-web-0c0313f3
-  pattern: |
-    is_public = 1 if $TO_SAVE.get("is_public") else 0
-  pattern-not: |
-    is_public = 1 if $TO_SAVE.get("is_public") == "on" else 0
+  patterns:
+  - pattern: |
+      is_public = 1 if $TO_SAVE.get("is_public") else 0
+  - pattern-not: |
+      is_public = 1 if $TO_SAVE.get("is_public") == "on" else 0
   languages:
   - python
   message: |

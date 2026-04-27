@@ -1,15 +1,16 @@
 rules:
 - id: vuln-odoo-050806b9
-  pattern: |
-    def $FUNC(...):
-      ...
-      self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').write({'is_pinned': True})
-      ...
-  pattern-not: |
-    def $FUNC(...):
-      ...
-      self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').sudo().write({'is_pinned': True})
-      ...
+  patterns:
+  - pattern: |
+      def $FUNC(...):
+        ...
+        self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').write({'is_pinned': True})
+        ...
+  - pattern-not: |
+      def $FUNC(...):
+        ...
+        self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').sudo().write({'is_pinned': True})
+        ...
   languages:
   - python
   message: Detected unsafe write operation without sudo() in Odoo channel management. This can lead to unauthorized modifications. Always use sudo() for operations that require elevated privileges.
@@ -24,12 +25,13 @@ rules:
     technology:
     - python
 - id: vuln-odoo-5ac55247
-  pattern: |
-    if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:
-        raise ValidationError(_('Invalid token found! Token partner %s != %s') % ($PAYMENT_TOKEN.partner.name, $PARTNER.name))
-  pattern-not: |
-    if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:
-        raise ValidationError(_('Invalid token found!'))
+  patterns:
+  - pattern: |
+      if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:
+          raise ValidationError(_('Invalid token found! Token partner %s != %s') % ($PAYMENT_TOKEN.partner.name, $PARTNER.name))
+  - pattern-not: |
+      if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:
+          raise ValidationError(_('Invalid token found!'))
   languages:
   - python
   message: |
@@ -43,10 +45,11 @@ rules:
     technology:
     - python
 - id: vuln-odoo-a11cb620
-  pattern: |
-    $RES = super($CLASS, $SELF).create($VALS)
-  pattern-not: |
-    $RES = super($CLASS, $SELF).create($VALS)._check_rights()
+  patterns:
+  - pattern: |
+      $RES = super($CLASS, $SELF).create($VALS)
+  - pattern-not: |
+      $RES = super($CLASS, $SELF).create($VALS)._check_rights()
   languages:
   - python
   message: |
@@ -61,10 +64,11 @@ rules:
     - https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control
     technology: python
 - id: vuln-odoo-a1b92ad2
-  pattern: |
-    re.compile(r"^(\w+)\((.*)\)$")
-  pattern-not: |
-    re.compile(r"^([a-zA-Z]\w+)\((.*)\)$")
+  patterns:
+  - pattern: |
+      re.compile(r"^(\w+)\((.*)\)$")
+  - pattern-not: |
+      re.compile(r"^([a-zA-Z]\w+)\((.*)\)$")
   languages:
   - python
   message: |
@@ -80,18 +84,19 @@ rules:
     technology:
     - python
 - id: vuln-odoo-f166400c
-  pattern: |
-    def $FUNC(...):
-        ...
-        $RESULTS = self.do_query_unaffected_earnings()
-        ...
-  pattern-not: |
-    def $FUNC(...):
-        ...
-        if not (self.env.is_admin() or self.env.user.has_group('account.group_account_user')):
-            raise AccessDenied()
-        $RESULTS = self._do_query_unaffected_earnings()
-        ...
+  patterns:
+  - pattern: |
+      def $FUNC(...):
+          ...
+          $RESULTS = self.do_query_unaffected_earnings()
+          ...
+  - pattern-not: |
+      def $FUNC(...):
+          ...
+          if not (self.env.is_admin() or self.env.user.has_group('account.group_account_user')):
+              raise AccessDenied()
+          $RESULTS = self._do_query_unaffected_earnings()
+          ...
   languages:
   - python
   message: |

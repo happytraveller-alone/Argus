@@ -1,14 +1,15 @@
 rules:
 - id: vuln-tendermint-03085c2d
-  pattern: |
-    &http.Transport{
-        Dial: $DIAL,
-    }
-  pattern-not: |
-    &http.Transport{
-        DisableCompression: true,
-        Dial: $DIAL,
-    }
+  patterns:
+  - pattern: |
+      &http.Transport{
+          Dial: $DIAL,
+      }
+  - pattern-not: |
+      &http.Transport{
+          DisableCompression: true,
+          Dial: $DIAL,
+      }
   languages:
   - go
   message: |

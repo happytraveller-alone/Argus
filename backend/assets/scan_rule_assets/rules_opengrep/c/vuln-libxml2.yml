@@ -1,19 +1,20 @@
 rules:
 - id: vuln-libxml2-1b41ec4e
-  pattern: |
-    if ($DICT != NULL) {
-        if (($ENTITY->$FIELD != NULL) && (!xmlDictOwns($DICT, $ENTITY->$FIELD)))
-            xmlFree((char *) $ENTITY->$FIELD);
-        ...
-    } else {
-        if ($ENTITY->$FIELD != NULL)
-            xmlFree((char *) $ENTITY->$FIELD);
-        ...
-    }
-  pattern-not: |
-    if (($ENTITY->$FIELD != NULL) &&
-        (($DICT == NULL) || (!xmlDictOwns($DICT, $ENTITY->$FIELD))))
-        xmlFree((char *) $ENTITY->$FIELD);
+  patterns:
+  - pattern: |
+      if ($DICT != NULL) {
+          if (($ENTITY->$FIELD != NULL) && (!xmlDictOwns($DICT, $ENTITY->$FIELD)))
+              xmlFree((char *) $ENTITY->$FIELD);
+          ...
+      } else {
+          if ($ENTITY->$FIELD != NULL)
+              xmlFree((char *) $ENTITY->$FIELD);
+          ...
+      }
+  - pattern-not: |
+      if (($ENTITY->$FIELD != NULL) &&
+          (($DICT == NULL) || (!xmlDictOwns($DICT, $ENTITY->$FIELD))))
+          xmlFree((char *) $ENTITY->$FIELD);
   languages:
   - c
   message: |
@@ -32,10 +33,11 @@ rules:
     technology:
     - c
 - id: vuln-libxml2-7ffcd44d
-  pattern: |
-    $CTXT->xsiAssemble = 0;
-  pattern-not: |
-    $CTXT->xsiAssemble = 1;
+  patterns:
+  - pattern: |
+      $CTXT->xsiAssemble = 0;
+  - pattern-not: |
+      $CTXT->xsiAssemble = 1;
   languages:
   - c
   message: |
@@ -53,18 +55,19 @@ rules:
     technology:
     - c
 - id: vuln-libxml2-bf227135
-  pattern: |
-    if ($VAR < 0xC0) {
-      ...
-    }
-  pattern-not: |
-    if (((cur[0] & 0xC0) != 0xC0) ||
-        ((cur[1] & 0xC0) != 0x80) ||
-        (((cur[0] & 0xE0) == 0xE0) && ((cur[2] & 0xC0) != 0x80)) ||
-        (((cur[0] & 0xF0) == 0xF0) && ((cur[3] & 0xC0) != 0x80)) ||
-        (((cur[0] & 0xF8) == 0xF8))) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR < 0xC0) {
+        ...
+      }
+  - pattern-not: |
+      if (((cur[0] & 0xC0) != 0xC0) ||
+          ((cur[1] & 0xC0) != 0x80) ||
+          (((cur[0] & 0xE0) == 0xE0) && ((cur[2] & 0xC0) != 0x80)) ||
+          (((cur[0] & 0xF0) == 0xF0) && ((cur[3] & 0xC0) != 0x80)) ||
+          (((cur[0] & 0xF8) == 0xF8))) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -82,12 +85,13 @@ rules:
     technology:
     - c
 - id: vuln-libxml2-c1ba6f54
-  pattern: |
-    xmlBufCCat($BUF, "\"");
-    ...
-    xmlBufCCat($BUF, "\"");
-  pattern-not: |
-    xmlBufWriteQuotedString($BUF, $ESC);
+  patterns:
+  - pattern: |
+      xmlBufCCat($BUF, "\"");
+      ...
+      xmlBufCCat($BUF, "\"");
+  - pattern-not: |
+      xmlBufWriteQuotedString($BUF, $ESC);
   languages:
   - c
   message: |

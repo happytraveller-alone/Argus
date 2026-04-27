@@ -1,9 +1,10 @@
 rules:
 - id: vuln-heimdal-6dd3eb83
-  pattern: |
-    $FUNC(..., rep->kdc_rep.ticket.sname, rep->kdc_rep.ticket.realm, ...)
-  pattern-not: |
-    $FUNC(..., rep->enc_part.sname, rep->enc_part.srealm, ...)
+  patterns:
+  - pattern: |
+      $FUNC(..., rep->kdc_rep.ticket.sname, rep->kdc_rep.ticket.realm, ...)
+  - pattern-not: |
+      $FUNC(..., rep->enc_part.sname, rep->enc_part.srealm, ...)
   languages:
   - c
   message: |
@@ -21,21 +22,22 @@ rules:
     technology:
     - c
 - id: vuln-heimdal-f9ec7002
-  pattern: |
-    if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
-        HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
-        free_NegotiationToken(&$NT);
-        return $RET;
-    }
-    $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
-  pattern-not: |
-    if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
-        send_reject($MINOR_STATUS, $OUTPUT_TOKEN);
-        HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
-        free_NegotiationToken(&$NT);
-        return $RET;
-    }
-    $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
+  patterns:
+  - pattern: |
+      if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
+          HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
+          free_NegotiationToken(&$NT);
+          return $RET;
+      }
+      $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
+  - pattern-not: |
+      if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
+          send_reject($MINOR_STATUS, $OUTPUT_TOKEN);
+          HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
+          free_NegotiationToken(&$NT);
+          return $RET;
+      }
+      $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
   languages:
   - c
   message: |

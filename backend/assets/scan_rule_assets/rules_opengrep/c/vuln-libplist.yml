@@ -1,49 +1,50 @@
 rules:
 - id: vuln-libplist-3a55ddd3
-  pattern: |
-    int $W1, $W2, $W3, $W4;
-    ...
-    while (...) {
-      $W1 = $TABLE[(int)$DATA[$N]];
-      $W2 = $TABLE[(int)$DATA[$N+1]];
-      $W3 = $TABLE[(int)$DATA[$N+2]];
-      $W4 = $TABLE[(int)$DATA[$N+3]];
+  patterns:
+  - pattern: |
+      int $W1, $W2, $W3, $W4;
       ...
-      if ($W2 >= 0) {
-        $TARGET[$I++] = (char)(($W1*4 + ($W2 >> 4)) & 255);
+      while (...) {
+        $W1 = $TABLE[(int)$DATA[$N]];
+        $W2 = $TABLE[(int)$DATA[$N+1]];
+        $W3 = $TABLE[(int)$DATA[$N+2]];
+        $W4 = $TABLE[(int)$DATA[$N+3]];
+        ...
+        if ($W2 >= 0) {
+          $TARGET[$I++] = (char)(($W1*4 + ($W2 >> 4)) & 255);
+        }
+        if ($W3 >= 0) {
+          $TARGET[$I++] = (char)(($W2*16 + ($W3 >> 2)) & 255);
+        }
+        if ($W4 >= 0) {
+          $TARGET[$I++] = (char)(($W3*64 + $W4) & 255);
+        }
       }
-      if ($W3 >= 0) {
-        $TARGET[$I++] = (char)(($W2*16 + ($W3 >> 2)) & 255);
+  - pattern-not: |
+      int $WV, $W1, $W2, $W3, $W4;
+      int $TMPVAL[4];
+      int $TMPCNT = 0;
+      ...
+      if (($WV = $TABLE[(int)(unsigned char)*$PTR++]) == -1) {
+        continue;
       }
-      if ($W4 >= 0) {
-        $TARGET[$I++] = (char)(($W3*64 + $W4) & 255);
+      $TMPVAL[$TMPCNT++] = $WV;
+      if ($TMPCNT == 4) {
+        $TMPCNT = 0;
+        $W1 = $TMPVAL[0];
+        $W2 = $TMPVAL[1];
+        $W3 = $TMPVAL[2];
+        $W4 = $TMPVAL[3];
+        if ($W2 >= 0) {
+          $OUTBUF[$P++] = (unsigned char)((($W1 << 2) + ($W2 >> 4)) & 0xFF);
+        }
+        if ($W3 >= 0) {
+          $OUTBUF[$P++] = (unsigned char)((($W2 << 4) + ($W3 >> 2)) & 0xFF);
+        }
+        if ($W4 >= 0) {
+          $OUTBUF[$P++] = (unsigned char)((($W3 << 6) + $W4) & 0xFF);
+        }
       }
-    }
-  pattern-not: |
-    int $WV, $W1, $W2, $W3, $W4;
-    int $TMPVAL[4];
-    int $TMPCNT = 0;
-    ...
-    if (($WV = $TABLE[(int)(unsigned char)*$PTR++]) == -1) {
-      continue;
-    }
-    $TMPVAL[$TMPCNT++] = $WV;
-    if ($TMPCNT == 4) {
-      $TMPCNT = 0;
-      $W1 = $TMPVAL[0];
-      $W2 = $TMPVAL[1];
-      $W3 = $TMPVAL[2];
-      $W4 = $TMPVAL[3];
-      if ($W2 >= 0) {
-        $OUTBUF[$P++] = (unsigned char)((($W1 << 2) + ($W2 >> 4)) & 0xFF);
-      }
-      if ($W3 >= 0) {
-        $OUTBUF[$P++] = (unsigned char)((($W2 << 4) + ($W3 >> 2)) & 0xFF);
-      }
-      if ($W4 >= 0) {
-        $OUTBUF[$P++] = (unsigned char)((($W3 << 6) + $W4) & 0xFF);
-      }
-    }
   languages:
   - c
   message: |
@@ -62,23 +63,24 @@ rules:
     technology:
     - c
 - id: vuln-libplist-4765d9a6
-  pattern: |
-    uint32_t $STR_J = 0;
-    uint32_t $INDEX1;
-    ...
-    $INDEX1 = UINT_TO_HOST((*$BNODE) + $STR_J, $BPLIST->ref_size);
-  pattern-not: |
-    uint64_t $STR_J = 0;
-    uint64_t $INDEX1;
-    const char *const $END_DATA = $BPLIST->data + $BPLIST->size;
-    const char *$INDEX1_PTR = NULL;
-    ...
-    $INDEX1_PTR = (*$BNODE) + $STR_J;
-    if ($INDEX1_PTR < $BPLIST->data || $INDEX1_PTR + $BPLIST->ref_size >= $END_DATA) {
-        plist_free($NODE);
-        return NULL;
-    }
-    $INDEX1 = UINT_TO_HOST($INDEX1_PTR, $BPLIST->ref_size);
+  patterns:
+  - pattern: |
+      uint32_t $STR_J = 0;
+      uint32_t $INDEX1;
+      ...
+      $INDEX1 = UINT_TO_HOST((*$BNODE) + $STR_J, $BPLIST->ref_size);
+  - pattern-not: |
+      uint64_t $STR_J = 0;
+      uint64_t $INDEX1;
+      const char *const $END_DATA = $BPLIST->data + $BPLIST->size;
+      const char *$INDEX1_PTR = NULL;
+      ...
+      $INDEX1_PTR = (*$BNODE) + $STR_J;
+      if ($INDEX1_PTR < $BPLIST->data || $INDEX1_PTR + $BPLIST->ref_size >= $END_DATA) {
+          plist_free($NODE);
+          return NULL;
+      }
+      $INDEX1 = UINT_TO_HOST($INDEX1_PTR, $BPLIST->ref_size);
   languages:
   - c
   message: |
@@ -98,19 +100,20 @@ rules:
     technology:
     - c
 - id: vuln-libplist-c086cb13
-  pattern: |
-    xmlDocPtr $DOC = xmlParseMemory($XML, $LEN);
-    xmlNodePtr $NODE = xmlDocGetRootElement($DOC);
-    ...
-    xmlFreeDoc($DOC);
-  pattern-not: |
-    xmlSetExternalEntityLoader($LOADER);
-    xmlDocPtr $DOC = xmlReadMemory($XML, $LEN, $NAME, $OPTIONS, XML_PARSE_NONET);
-    if ($DOC) {
-        xmlNodePtr $NODE = xmlDocGetRootElement($DOC);
-        ...
-        xmlFreeDoc($DOC);
-    }
+  patterns:
+  - pattern: |
+      xmlDocPtr $DOC = xmlParseMemory($XML, $LEN);
+      xmlNodePtr $NODE = xmlDocGetRootElement($DOC);
+      ...
+      xmlFreeDoc($DOC);
+  - pattern-not: |
+      xmlSetExternalEntityLoader($LOADER);
+      xmlDocPtr $DOC = xmlReadMemory($XML, $LEN, $NAME, $OPTIONS, XML_PARSE_NONET);
+      if ($DOC) {
+          xmlNodePtr $NODE = xmlDocGetRootElement($DOC);
+          ...
+          xmlFreeDoc($DOC);
+      }
   languages:
   - c
   message: |

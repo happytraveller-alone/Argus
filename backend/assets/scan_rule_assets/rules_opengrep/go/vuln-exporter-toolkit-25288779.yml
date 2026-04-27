@@ -1,14 +1,15 @@
 rules:
 - id: vuln-exporter-toolkit-25288779
-  pattern: |
-    cacheKey := hex.EncodeToString(append(append([]byte($USER), []byte($HASHED_PASSWORD)...), []byte($PASS)...))
-  pattern-not: |
-    cacheKey := strings.Join(
-      []string{
-        hex.EncodeToString([]byte($USER)),
-        hex.EncodeToString([]byte($HASHED_PASSWORD)),
-        hex.EncodeToString([]byte($PASS)),
-      }, ":")
+  patterns:
+  - pattern: |
+      cacheKey := hex.EncodeToString(append(append([]byte($USER), []byte($HASHED_PASSWORD)...), []byte($PASS)...))
+  - pattern-not: |
+      cacheKey := strings.Join(
+        []string{
+          hex.EncodeToString([]byte($USER)),
+          hex.EncodeToString([]byte($HASHED_PASSWORD)),
+          hex.EncodeToString([]byte($PASS)),
+        }, ":")
   languages:
   - go
   message: |

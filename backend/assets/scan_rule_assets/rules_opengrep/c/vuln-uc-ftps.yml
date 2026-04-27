@@ -1,13 +1,14 @@
 rules:
 - id: vuln-uc-ftps-2bbf7c61
-  pattern: |
-    while (($DIG == DEF_NO) && ($ARGS != 0)) {
-      ...
-    }
-  pattern-not: |
-    while (($DIG == DEF_NO) && ($ARGS != 0) && (*$ARGS != 0)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      while (($DIG == DEF_NO) && ($ARGS != 0)) {
+        ...
+      }
+  - pattern-not: |
+      while (($DIG == DEF_NO) && ($ARGS != 0) && (*$ARGS != 0)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,14 +24,15 @@ rules:
     technology:
     - c
 - id: vuln-uc-ftps-83393f61
-  pattern: |
-    if ($VAR.CtrlState == FTPs_STATE_LOGOUT) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR.CtrlState != FTPs_STATE_LOGIN) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR.CtrlState == FTPs_STATE_LOGOUT) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR.CtrlState != FTPs_STATE_LOGIN) {
+        ...
+      }
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-jerryscript-2faafa4c
-  pattern: |
-    indent = None
-  pattern-not: |
-    indent = 0
+  patterns:
+  - pattern: |
+      indent = None
+  - pattern-not: |
+      indent = 0
   languages:
   - python
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-tensorflow-8faa6ea6
-  pattern: |
-    ctx->allocate_output(0, TensorShape({$DIM1, $DIM2, $DIM3, $DIM4}), &$OUTPUT);
-  pattern-not: |
-    ctx->allocate_output(0, $TENSORSHAPE, &$OUTPUT);
+  patterns:
+  - pattern: |
+      ctx->allocate_output(0, TensorShape({$DIM1, $DIM2, $DIM3, $DIM4}), &$OUTPUT);
+  - pattern-not: |
+      ctx->allocate_output(0, $TENSORSHAPE, &$OUTPUT);
   languages:
   - cpp
   message: |
@@ -21,22 +22,23 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-aa0b852a
-  pattern: |
-    if ((new_shape.size() == shape.size() + 1) && new_shape.back() == 1) {
-      if (std::equal(shape.begin(), shape.end(), new_shape.begin()) &&
-          quant_dim == -1) {
-        quant_dim = shape.size() + quant_dim;
-      } else {
-        ...
+  patterns:
+  - pattern: |
+      if ((new_shape.size() == shape.size() + 1) && new_shape.back() == 1) {
+        if (std::equal(shape.begin(), shape.end(), new_shape.begin()) &&
+            quant_dim == -1) {
+          quant_dim = shape.size() + quant_dim;
+        } else {
+          ...
+        }
       }
-    }
-  pattern-not: |
-    if ((new_shape.size() == shape.size() + 1) && new_shape.front() == 1) {
-      if (!(std::equal(shape.begin(), shape.end(), new_shape.begin() + 1) &&
-            quant_dim == new_shape.size() - 1)) {
-        ...
+  - pattern-not: |
+      if ((new_shape.size() == shape.size() + 1) && new_shape.front() == 1) {
+        if (!(std::equal(shape.begin(), shape.end(), new_shape.begin() + 1) &&
+              quant_dim == new_shape.size() - 1)) {
+          ...
+        }
       }
-    }
   languages:
   - cpp
   message: |
@@ -54,15 +56,16 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-ac117ee8
-  pattern: |
-    void AddBatchOffsets(Tensor* $INDICES, const Tensor& $PARAMS) {
-      ...
-    }
-  pattern-not: |
-    void AddBatchOffsets(OpKernelContext* $CTX, Tensor* $INDICES, const Tensor& $PARAMS) {
-      OP_REQUIRES($CTX, $BATCH_SIZE != 0, errors::InvalidArgument(...));
-      ...
-    }
+  patterns:
+  - pattern: |
+      void AddBatchOffsets(Tensor* $INDICES, const Tensor& $PARAMS) {
+        ...
+      }
+  - pattern-not: |
+      void AddBatchOffsets(OpKernelContext* $CTX, Tensor* $INDICES, const Tensor& $PARAMS) {
+        OP_REQUIRES($CTX, $BATCH_SIZE != 0, errors::InvalidArgument(...));
+        ...
+      }
   languages:
   - cpp
   message: |
@@ -82,11 +85,12 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-e0b6e58c
-  pattern: |
-    components.reserve($FINALIZED->output_dtypes().size());
-  pattern-not: |
-    const int $NUM = $FINALIZED->output_dtypes().size();
-    components.reserve($NUM);
+  patterns:
+  - pattern: |
+      components.reserve($FINALIZED->output_dtypes().size());
+  - pattern-not: |
+      const int $NUM = $FINALIZED->output_dtypes().size();
+      components.reserve($NUM);
   languages:
   - cpp
   message: |

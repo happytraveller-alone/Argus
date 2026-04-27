@@ -1,17 +1,18 @@
 rules:
 - id: vuln-spreed-837a336e
-  pattern: |
-    if (!newTrack && this._outputStream) {
-      this._stopBlackVideo()
-      this._setOutputTrack('default', null)
-      return
-    }
-  pattern-not: |
-    if (!newTrack && this._outputStream) {
-      this._stopBlackVideo()
-      this._setOutputTrack('default', blackVideoTracks[1])
-      return
-    }
+  patterns:
+  - pattern: |
+      if (!newTrack && this._outputStream) {
+        this._stopBlackVideo()
+        this._setOutputTrack('default', null)
+        return
+      }
+  - pattern-not: |
+      if (!newTrack && this._outputStream) {
+        this._stopBlackVideo()
+        this._setOutputTrack('default', blackVideoTracks[1])
+        return
+      }
   languages:
   - javascript
   message: |

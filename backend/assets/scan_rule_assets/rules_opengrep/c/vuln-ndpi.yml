@@ -1,9 +1,10 @@
 rules:
 - id: vuln-ndpi-23594f03
-  pattern: |
-    char $BUFFER[64] = { '\0' }, $RDNBUF[1024] = { '\0' };
-  pattern-not: |
-    char $BUFFER[64] = { '\0' }, $RDNBUF[2048] = { '\0' };
+  patterns:
+  - pattern: |
+      char $BUFFER[64] = { '\0' }, $RDNBUF[1024] = { '\0' };
+  - pattern-not: |
+      char $BUFFER[64] = { '\0' }, $RDNBUF[2048] = { '\0' };
   languages:
   - c
   message: |
@@ -23,11 +24,9 @@ rules:
     technology:
     - c
 - id: vuln-ndpi-61066fb1
-  pattern: |
-    ndpi_min($PACKET->payload_packet_len - $A1, sizeof($FLOW->initial_binary_bytes))
-  pattern-not: |
-    $DIFF = $PACKET->payload_packet_len - $A1;
-    ndpi_min($DIFF, sizeof($FLOW->initial_binary_bytes))
+  patterns:
+  - pattern: |
+      ndpi_min($PACKET->payload_packet_len - $A1, sizeof($FLOW->initial_binary_bytes))
   languages:
   - c
   message: |
@@ -45,10 +44,11 @@ rules:
     technology:
     - c
 - id: vuln-ndpi-b69177be
-  pattern: |
-    ($PACKET->payload[0] == 0x07 && $PACKET->payload[1] == 0xff && $PACKET->payload[2] == 0x00)
-  pattern-not: |
-    ($PACKET->payload_packet_len >= 3 && $PACKET->payload[0] == 0x07 && $PACKET->payload[1] == 0xff && $PACKET->payload[2] == 0x00)
+  patterns:
+  - pattern: |
+      ($PACKET->payload[0] == 0x07 && $PACKET->payload[1] == 0xff && $PACKET->payload[2] == 0x00)
+  - pattern-not: |
+      ($PACKET->payload_packet_len >= 3 && $PACKET->payload[0] == 0x07 && $PACKET->payload[1] == 0xff && $PACKET->payload[2] == 0x00)
   languages:
   - c
   message: |
@@ -64,22 +64,23 @@ rules:
     technology:
     - c
 - id: vuln-ndpi-b7e666e4
-  pattern: |
-    if($SPORT == 1719 || $DPORT == 1719) {
-      if($PAYLOAD[0] == 0x16 && $PAYLOAD[1] == 0x80 && $PAYLOAD[4] == 0x06 && $PAYLOAD[5] == 0x00) {
-        ...
+  patterns:
+  - pattern: |
+      if($SPORT == 1719 || $DPORT == 1719) {
+        if($PAYLOAD[0] == 0x16 && $PAYLOAD[1] == 0x80 && $PAYLOAD[4] == 0x06 && $PAYLOAD[5] == 0x00) {
+          ...
+        }
       }
-    }
-  pattern-not: |
-    if($SPORT == 1719 || $DPORT == 1719) {
-      if(($PAYLOAD_PACKET_LEN >= 5)
-         && ($PAYLOAD[0] == 0x16)
-         && ($PAYLOAD[1] == 0x80)
-         && ($PAYLOAD[4] == 0x06)
-         && ($PAYLOAD[5] == 0x00)) {
-        ...
+  - pattern-not: |
+      if($SPORT == 1719 || $DPORT == 1719) {
+        if(($PAYLOAD_PACKET_LEN >= 5)
+           && ($PAYLOAD[0] == 0x16)
+           && ($PAYLOAD[1] == 0x80)
+           && ($PAYLOAD[4] == 0x06)
+           && ($PAYLOAD[5] == 0x00)) {
+          ...
+        }
       }
-    }
   languages:
   - c
   message: |

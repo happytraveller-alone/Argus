@@ -1,9 +1,10 @@
 rules:
 - id: vuln-singularity-618c9d56
-  pattern: |
-    file, err := instance.Add($NAME, $PRIVILEGED, $SUBDIR)
-  pattern-not: |
-    file, err := instance.Add($NAME, $SUBDIR)
+  patterns:
+  - pattern: |
+      file, err := instance.Add($NAME, $PRIVILEGED, $SUBDIR)
+  - pattern-not: |
+      file, err := instance.Add($NAME, $SUBDIR)
   languages:
   - go
   message: |

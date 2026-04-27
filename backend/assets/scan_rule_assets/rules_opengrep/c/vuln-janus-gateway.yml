@@ -1,17 +1,18 @@
 rules:
 - id: vuln-janus-gateway-11d78977
-  pattern: |
-    void $FUNC(janus_dtls_srtp *$DTLS, char *$LABEL, char *$BUF, int $LEN) {
-      ...
-      janus_sctp_send_data($DTLS->sctp, $LABEL, $BUF, $LEN);
-      ...
-    }
-  pattern-not: |
-    void $FUNC(janus_dtls_srtp *$DTLS, char *$LABEL, gboolean $TEXTDATA, char *$BUF, int $LEN) {
-      ...
-      janus_sctp_send_data($DTLS->sctp, $LABEL, $TEXTDATA, $BUF, $LEN);
-      ...
-    }
+  patterns:
+  - pattern: |
+      void $FUNC(janus_dtls_srtp *$DTLS, char *$LABEL, char *$BUF, int $LEN) {
+        ...
+        janus_sctp_send_data($DTLS->sctp, $LABEL, $BUF, $LEN);
+        ...
+      }
+  - pattern-not: |
+      void $FUNC(janus_dtls_srtp *$DTLS, char *$LABEL, gboolean $TEXTDATA, char *$BUF, int $LEN) {
+        ...
+        janus_sctp_send_data($DTLS->sctp, $LABEL, $TEXTDATA, $BUF, $LEN);
+        ...
+      }
   languages:
   - c
   message: |
@@ -27,10 +28,11 @@ rules:
     technology:
     - c
 - id: vuln-janus-gateway-5b15ded4
-  pattern: |
-    g_strlcat($BUFFER, $BUFFER_PART, JANUS_BUFSIZE)
-  pattern-not: |
-    g_strlcat($BUFFER, $BUFFER_PART, sizeof($BUFFER))
+  patterns:
+  - pattern: |
+      g_strlcat($BUFFER, $BUFFER_PART, JANUS_BUFSIZE)
+  - pattern-not: |
+      g_strlcat($BUFFER, $BUFFER_PART, sizeof($BUFFER))
   languages:
   - c
   message: |
@@ -46,18 +48,19 @@ rules:
     technology:
     - c
 - id: vuln-janus-gateway-d5e786ee
-  pattern: |
-    janus_videocall_session *session = (janus_videocall_session *)handle->plugin_handle;
-    if(!session)
-      return janus_plugin_result_new(JANUS_PLUGIN_ERROR, "No session associated with this handle", NULL);
-  pattern-not: |
-    janus_mutex_lock(&sessions_mutex);
-    janus_videocall_session *session = janus_videocall_lookup_session(handle);
-    if(!session) {
+  patterns:
+  - pattern: |
+      janus_videocall_session *session = (janus_videocall_session *)handle->plugin_handle;
+      if(!session)
+        return janus_plugin_result_new(JANUS_PLUGIN_ERROR, "No session associated with this handle", NULL);
+  - pattern-not: |
+      janus_mutex_lock(&sessions_mutex);
+      janus_videocall_session *session = janus_videocall_lookup_session(handle);
+      if(!session) {
+        janus_mutex_unlock(&sessions_mutex);
+        return janus_plugin_result_new(JANUS_PLUGIN_ERROR, "No session associated with this handle", NULL);
+      }
       janus_mutex_unlock(&sessions_mutex);
-      return janus_plugin_result_new(JANUS_PLUGIN_ERROR, "No session associated with this handle", NULL);
-    }
-    janus_mutex_unlock(&sessions_mutex);
   languages:
   - c
   message: |

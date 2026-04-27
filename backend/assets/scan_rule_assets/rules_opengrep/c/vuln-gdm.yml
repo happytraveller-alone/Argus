@@ -1,16 +1,17 @@
 rules:
 - id: vuln-gdm-6060db70
-  pattern: |
-    $DISPLAY = gdm_display_store_lookup($STORE, $ID);
-    if ($DISPLAY != NULL) {
-      ...
+  patterns:
+  - pattern: |
+      $DISPLAY = gdm_display_store_lookup($STORE, $ID);
+      if ($DISPLAY != NULL) {
+        ...
+        g_signal_handlers_disconnect_by_func($DISPLAY, G_CALLBACK($CALLBACK), $CONTEXT);
+        g_object_weak_unref(G_OBJECT($DISPLAY), (GWeakNotify)$NOTIFY, $CONTEXT);
+        ...
+      }
+  - pattern-not: |
       g_signal_handlers_disconnect_by_func($DISPLAY, G_CALLBACK($CALLBACK), $CONTEXT);
       g_object_weak_unref(G_OBJECT($DISPLAY), (GWeakNotify)$NOTIFY, $CONTEXT);
-      ...
-    }
-  pattern-not: |
-    g_signal_handlers_disconnect_by_func($DISPLAY, G_CALLBACK($CALLBACK), $CONTEXT);
-    g_object_weak_unref(G_OBJECT($DISPLAY), (GWeakNotify)$NOTIFY, $CONTEXT);
   languages:
   - c
   message: |
@@ -30,21 +31,22 @@ rules:
     technology:
     - c
 - id: vuln-gdm-8ce95db1
-  pattern: |
-    g_signal_connect(
-      $DISPLAY_SKELETON,
-      $SIGNAL_NAME,
-      G_CALLBACK($HANDLER),
-      $SELF
-    );
-  pattern-not: |
-    g_signal_connect_object(
-      $DISPLAY_SKELETON,
-      $SIGNAL_NAME,
-      G_CALLBACK($HANDLER),
-      $SELF,
-      $FLAGS
-    );
+  patterns:
+  - pattern: |
+      g_signal_connect(
+        $DISPLAY_SKELETON,
+        $SIGNAL_NAME,
+        G_CALLBACK($HANDLER),
+        $SELF
+      );
+  - pattern-not: |
+      g_signal_connect_object(
+        $DISPLAY_SKELETON,
+        $SIGNAL_NAME,
+        G_CALLBACK($HANDLER),
+        $SELF,
+        $FLAGS
+      );
   languages:
   - c
   message: |
@@ -64,15 +66,16 @@ rules:
     technology:
     - c
 - id: vuln-gdm-94ea12bb
-  pattern: |
-    gchar **splitstr = g_strsplit($MSG, " ", 2);
-    $FUNC($VAR);
-  pattern-not: |
-    gchar **splitstr = g_strsplit($MSG, " ", 2);
-    if (splitstr == NULL || splitstr[0] == NULL) {
-        $HANDLE_ERROR;
-    }
-    $FUNC($VAR);
+  patterns:
+  - pattern: |
+      gchar **splitstr = g_strsplit($MSG, " ", 2);
+      $FUNC($VAR);
+  - pattern-not: |
+      gchar **splitstr = g_strsplit($MSG, " ", 2);
+      if (splitstr == NULL || splitstr[0] == NULL) {
+          $HANDLE_ERROR;
+      }
+      $FUNC($VAR);
   languages:
   - c
   message: |
@@ -90,12 +93,13 @@ rules:
     technology:
     - c
 - id: vuln-gdm-dc823512
-  pattern: |
-    look_for_existing_users_sync($SELF);
-  pattern-not: |
-    if (!look_for_existing_users_sync($SELF)) {
-        exit(EXIT_FAILURE);
-    }
+  patterns:
+  - pattern: |
+      look_for_existing_users_sync($SELF);
+  - pattern-not: |
+      if (!look_for_existing_users_sync($SELF)) {
+          exit(EXIT_FAILURE);
+      }
   languages:
   - c
   message: |

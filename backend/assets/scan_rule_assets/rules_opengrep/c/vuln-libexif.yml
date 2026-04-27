@@ -1,9 +1,10 @@
 rules:
 - id: vuln-libexif-3d40ba70
-  pattern: |
-    (double)$VAR.numerator / $VAR.denominator
-  pattern-not: |
-    R2D($VAR)
+  patterns:
+  - pattern: |
+      (double)$VAR.numerator / $VAR.denominator
+  - pattern-not: |
+      R2D($VAR)
   languages:
   - c
   message: |
@@ -21,14 +22,15 @@ rules:
     technology:
     - c
 - id: vuln-libexif-435e21f0
-  pattern: |
-    if (($OFFSET + $SIZE < $OFFSET) || ($OFFSET + $SIZE < $SIZE) || ($OFFSET + $SIZE > $BUF_SIZE)) {
-      ...
-    }
-  pattern-not: |
-    if (CHECKOVERFLOW($OFFSET, $BUF_SIZE, $SIZE)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (($OFFSET + $SIZE < $OFFSET) || ($OFFSET + $SIZE < $SIZE) || ($OFFSET + $SIZE > $BUF_SIZE)) {
+        ...
+      }
+  - pattern-not: |
+      if (CHECKOVERFLOW($OFFSET, $BUF_SIZE, $SIZE)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -44,10 +46,11 @@ rules:
     technology:
     - c
 - id: vuln-libexif-6aa11df5
-  pattern: |
-    exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_DEPTH + 1)
-  pattern-not: |
-    exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_COST + level_cost($N))
+  patterns:
+  - pattern: |
+      exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_DEPTH + 1)
+  - pattern-not: |
+      exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_COST + level_cost($N))
   languages:
   - c
   message: |
@@ -65,18 +68,19 @@ rules:
     technology:
     - c
 - id: vuln-libexif-f5e7294a
-  pattern: |
-    exif_convert_utf16_to_utf8($VAL, (unsigned short*)$DATA, MIN($MAXLEN, $SIZE));
-  pattern-not: |
-    {
-      if ($SIZE+sizeof(unsigned short) < $SIZE) break;
-      unsigned short *$UTF16 = exif_mem_alloc($MEM, $SIZE+sizeof(unsigned short));
-      if (!$UTF16) break;
-      memcpy($UTF16, $DATA, $SIZE);
-      $UTF16[$SIZE/sizeof(unsigned short)] = 0;
-      exif_convert_utf16_to_utf8($VAL, $UTF16, $MAXLEN);
-      exif_mem_free($MEM, $UTF16);
-    }
+  patterns:
+  - pattern: |
+      exif_convert_utf16_to_utf8($VAL, (unsigned short*)$DATA, MIN($MAXLEN, $SIZE));
+  - pattern-not: |
+      {
+        if ($SIZE+sizeof(unsigned short) < $SIZE) break;
+        unsigned short *$UTF16 = exif_mem_alloc($MEM, $SIZE+sizeof(unsigned short));
+        if (!$UTF16) break;
+        memcpy($UTF16, $DATA, $SIZE);
+        $UTF16[$SIZE/sizeof(unsigned short)] = 0;
+        exif_convert_utf16_to_utf8($VAL, $UTF16, $MAXLEN);
+        exif_mem_free($MEM, $UTF16);
+      }
   languages:
   - c
   message: |

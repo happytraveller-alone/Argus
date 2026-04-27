@@ -1,27 +1,28 @@
 rules:
 - id: vuln-mindoc-c15da23b
-  pattern: |
-    if !f.FileInfo().IsDir() {
-        if folder := $DEST + filepath.Dir($NAME); !strings.Contains($FOLDER, "__MACOSX") {
-            os.MkdirAll($FOLDER, 0777)
-            if $FCREATE, $ERR := os.Create($DEST + strings.TrimPrefix($NAME, "./")); $ERR == nil {
-                ...
-            }
-        }
-    }
-  pattern-not: |
-    if !f.FileInfo().IsDir() {
-        $PATH := filepath.Join($DEST, $NAME)
-        if $DIR := filepath.Dir($PATH); !strings.Contains($DIR, "__MACOSX") {
-            if !strings.HasPrefix($PATH, filepath.Clean($DEST)+string(os.PathSeparator)) {
-                return fmt.Errorf("illegal file path: %s", $PATH)
-            }
-            os.MkdirAll($DIR, 0777)
-            if $FCREATE, $ERR := os.Create($PATH); $ERR == nil {
-                ...
-            }
-        }
-    }
+  patterns:
+  - pattern: |
+      if !f.FileInfo().IsDir() {
+          if folder := $DEST + filepath.Dir($NAME); !strings.Contains($FOLDER, "__MACOSX") {
+              os.MkdirAll($FOLDER, 0777)
+              if $FCREATE, $ERR := os.Create($DEST + strings.TrimPrefix($NAME, "./")); $ERR == nil {
+                  ...
+              }
+          }
+      }
+  - pattern-not: |
+      if !f.FileInfo().IsDir() {
+          $PATH := filepath.Join($DEST, $NAME)
+          if $DIR := filepath.Dir($PATH); !strings.Contains($DIR, "__MACOSX") {
+              if !strings.HasPrefix($PATH, filepath.Clean($DEST)+string(os.PathSeparator)) {
+                  return fmt.Errorf("illegal file path: %s", $PATH)
+              }
+              os.MkdirAll($DIR, 0777)
+              if $FCREATE, $ERR := os.Create($PATH); $ERR == nil {
+                  ...
+              }
+          }
+      }
   languages:
   - go
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-node-libnotify-dfe7801d
-  pattern: |
-    child_process.exec($ARGS.join(' '), $CALLBACK)
-  pattern-not: |
-    child_process.execFile($CMD, $ARGS, {}, $CALLBACK)
+  patterns:
+  - pattern: |
+      child_process.exec($ARGS.join(' '), $CALLBACK)
+  - pattern-not: |
+      child_process.execFile($CMD, $ARGS, {}, $CALLBACK)
   languages:
   - javascript
   message: |

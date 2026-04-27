@@ -30,14 +30,15 @@ rules:
     technology:
     - c
 - id: vuln-contiki-ng-3216ebf5
-  pattern: |
-    uint8_t $I = $CID - $CONST;
-    ...
-    return &$ARRAY[$CID - $CONST];
-  pattern-not: |
-    int16_t $I = $CID - $CONST;
-    ...
-    return &$ARRAY[$I];
+  patterns:
+  - pattern: |
+      uint8_t $I = $CID - $CONST;
+      ...
+      return &$ARRAY[$CID - $CONST];
+  - pattern-not: |
+      int16_t $I = $CID - $CONST;
+      ...
+      return &$ARRAY[$I];
   languages:
   - c
   message: |
@@ -53,10 +54,11 @@ rules:
     technology:
     - c
 - id: vuln-contiki-ng-6e21dd29
-  pattern: |
-    char $VARNAME[INDEX_NAME_LENGTH];
-  pattern-not: |
-    char $VARNAME[INDEX_NAME_LENGTH + 1];
+  patterns:
+  - pattern: |
+      char $VARNAME[INDEX_NAME_LENGTH];
+  - pattern-not: |
+      char $VARNAME[INDEX_NAME_LENGTH + 1];
   languages:
   - c
   message: |
@@ -73,16 +75,17 @@ rules:
     technology:
     - c
 - id: vuln-contiki-ng-99a92574
-  pattern: |
-    uint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $RPL_RH_LEN + $RPL_SRH_LEN + ($I * (16 - $CMPRI));
-  pattern-not: |
-    ptrdiff_t $RH_OFFSET = (uint8_t *)$RH_HEADER - $UIP_BUF;
-    size_t $ADDR_OFFSET = $RPL_RH_LEN + $RPL_SRH_LEN + ($I * (16 - $CMPRI));
-    if($RH_OFFSET + $ADDR_OFFSET + 16 - $CMPR > $UIP_BUFSIZE) {
-      LOG_ERR("Invalid SRH address pointer\n");
-      return 0;
-    }
-    uint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $ADDR_OFFSET;
+  patterns:
+  - pattern: |
+      uint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $RPL_RH_LEN + $RPL_SRH_LEN + ($I * (16 - $CMPRI));
+  - pattern-not: |
+      ptrdiff_t $RH_OFFSET = (uint8_t *)$RH_HEADER - $UIP_BUF;
+      size_t $ADDR_OFFSET = $RPL_RH_LEN + $RPL_SRH_LEN + ($I * (16 - $CMPRI));
+      if($RH_OFFSET + $ADDR_OFFSET + 16 - $CMPR > $UIP_BUFSIZE) {
+        LOG_ERR("Invalid SRH address pointer\n");
+        return 0;
+      }
+      uint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $ADDR_OFFSET;
   languages:
   - c
   message: |
@@ -99,30 +102,31 @@ rules:
     technology:
     - c
 - id: vuln-contiki-ng-cde4e983
-  pattern: |
-    if((UIP_TCP_BUF->tcpoffset & 0xf0) > 0x50) {
-      for($C = 0; $C < ((UIP_TCP_BUF->tcpoffset >> 4) - 5) << 2 ;) {
-        $OPT = uip_buf[UIP_IPTCPH_LEN + $C];
-        if($OPT == TCP_OPT_END) {
-          break;
-        } else if($OPT == TCP_OPT_NOOP) {
-          ++$C;
-        } else if($OPT == TCP_OPT_MSS &&
-                  uip_buf[UIP_IPTCPH_LEN + 1 + $C] == TCP_OPT_MSS_LEN) {
-          $TMP16 = (uip_buf[UIP_IPTCPH_LEN + 2 + $C] << 8) |
-                   uip_buf[UIP_IPTCPH_LEN + 3 + $C];
-          $CONN->initialmss = $CONN->mss = $TMP16 > UIP_TCP_MSS ? UIP_TCP_MSS : $TMP16;
-          break;
-        } else {
-          if(uip_buf[UIP_IPTCPH_LEN + 1 + $C] == 0) {
+  patterns:
+  - pattern: |
+      if((UIP_TCP_BUF->tcpoffset & 0xf0) > 0x50) {
+        for($C = 0; $C < ((UIP_TCP_BUF->tcpoffset >> 4) - 5) << 2 ;) {
+          $OPT = uip_buf[UIP_IPTCPH_LEN + $C];
+          if($OPT == TCP_OPT_END) {
             break;
+          } else if($OPT == TCP_OPT_NOOP) {
+            ++$C;
+          } else if($OPT == TCP_OPT_MSS &&
+                    uip_buf[UIP_IPTCPH_LEN + 1 + $C] == TCP_OPT_MSS_LEN) {
+            $TMP16 = (uip_buf[UIP_IPTCPH_LEN + 2 + $C] << 8) |
+                     uip_buf[UIP_IPTCPH_LEN + 3 + $C];
+            $CONN->initialmss = $CONN->mss = $TMP16 > UIP_TCP_MSS ? UIP_TCP_MSS : $TMP16;
+            break;
+          } else {
+            if(uip_buf[UIP_IPTCPH_LEN + 1 + $C] == 0) {
+              break;
+            }
+            $C += uip_buf[UIP_IPTCPH_LEN + 1 + $C];
           }
-          $C += uip_buf[UIP_IPTCPH_LEN + 1 + $C];
         }
       }
-    }
-  pattern-not: |
-    process_tcp_options($CONN);
+  - pattern-not: |
+      process_tcp_options($CONN);
   languages:
   - c
   message: |
@@ -138,14 +142,15 @@ rules:
     technology:
     - c
 - id: vuln-contiki-ng-f9bc65ea
-  pattern: |
-    lvm_register_variable($VALUE, $TYPE);
-    lvm_set_variable($P, $VALUE);
-  pattern-not: |
-    if(LVM_ERROR(lvm_register_variable($VALUE, $TYPE)) ||
-       LVM_ERROR(lvm_set_variable($P, $VALUE))) {
-      $RETURN($ERROR);
-    }
+  patterns:
+  - pattern: |
+      lvm_register_variable($VALUE, $TYPE);
+      lvm_set_variable($P, $VALUE);
+  - pattern-not: |
+      if(LVM_ERROR(lvm_register_variable($VALUE, $TYPE)) ||
+         LVM_ERROR(lvm_set_variable($P, $VALUE))) {
+        $RETURN($ERROR);
+      }
   languages:
   - c
   message: |

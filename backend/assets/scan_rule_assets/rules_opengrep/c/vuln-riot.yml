@@ -1,13 +1,14 @@
 rules:
 - id: vuln-riot-07f1254d
-  pattern: |
-    if (($P[1] != '\0') && ($P[2] != '\0') && ($P[1] == '/') && ($P[2] == '/')) {
-      ...
-    }
-  pattern-not: |
-    if ((($URI_END - $P) > 2) && ($P[1] == '/') && ($P[2] == '/')) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (($P[1] != '\0') && ($P[2] != '\0') && ($P[1] == '/') && ($P[2] == '/')) {
+        ...
+      }
+  - pattern-not: |
+      if ((($URI_END - $P) > 2) && ($P[1] == '/') && ($P[2] == '/')) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,14 +24,15 @@ rules:
     technology:
     - c
 - id: vuln-riot-31c6191f
-  pattern: |
-    if ($FBUF->sfr.arq_timeout_event.msg.content.ptr != NULL) {
-      ...
-    }
-  pattern-not: |
-    if (_arq_scheduled($FBUF)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($FBUF->sfr.arq_timeout_event.msg.content.ptr != NULL) {
+        ...
+      }
+  - pattern-not: |
+      if (_arq_scheduled($FBUF)) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -46,14 +48,15 @@ rules:
     technology:
     - c
 - id: vuln-riot-89afc378
-  pattern: |
-    if ($LEN < (0xff - 7)) {
-      ...
-    }
-  pattern-not: |
-    if ($LEN < 0xff) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($LEN < (0xff - 7)) {
+        ...
+      }
+  - pattern-not: |
+      if ($LEN < 0xff) {
+        ...
+      }
   languages:
   - c
   message: |

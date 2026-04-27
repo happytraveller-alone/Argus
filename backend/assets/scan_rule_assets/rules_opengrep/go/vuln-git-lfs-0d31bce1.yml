@@ -1,13 +1,14 @@
 rules:
 - id: vuln-git-lfs-0d31bce1
-  pattern: |
-    func (r *Rewriter) entryKey(e *gitobj.TreeEntry) string {
-      return fmt.Sprintf("%s:%x", $NAME, $OID)
-    }
-  pattern-not: |
-    func (r *Rewriter) entryKey(path string, e *gitobj.TreeEntry) string {
-      return fmt.Sprintf("%s:%x", $PATH, $OID)
-    }
+  patterns:
+  - pattern: |
+      func (r *Rewriter) entryKey(e *gitobj.TreeEntry) string {
+        return fmt.Sprintf("%s:%x", $NAME, $OID)
+      }
+  - pattern-not: |
+      func (r *Rewriter) entryKey(path string, e *gitobj.TreeEntry) string {
+        return fmt.Sprintf("%s:%x", $PATH, $OID)
+      }
   languages:
   - go
   message: |

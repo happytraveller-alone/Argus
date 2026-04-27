@@ -1,10 +1,11 @@
 rules:
 - id: vuln-libmysofa-0b250b6f
-  pattern: |
-    assert($VAR == $VAL);
-  pattern-not: |
-    if($VAR != $VAL)
-      return $ERROR;
+  patterns:
+  - pattern: |
+      assert($VAR == $VAL);
+  - pattern-not: |
+      if($VAR != $VAL)
+        return $ERROR;
   languages:
   - c
   message: |
@@ -20,12 +21,13 @@ rules:
     technology:
     - c
 - id: vuln-libmysofa-9be98885
-  pattern: |
-    if ($VAR->values) {
-      free($VAR->values);
-    }
-  pattern-not: |
-    arrayFree($VAR);
+  patterns:
+  - pattern: |
+      if ($VAR->values) {
+        free($VAR->values);
+      }
+  - pattern-not: |
+      arrayFree($VAR);
   languages:
   - c
   message: |
@@ -43,10 +45,11 @@ rules:
     technology:
     - c
 - id: vuln-libmysofa-ecb7b743
-  pattern: |
-    $DATA->data = malloc($SIZE);
-  pattern-not: |
-    $DATA->data = calloc(1, $SIZE);
+  patterns:
+  - pattern: |
+      $DATA->data = malloc($SIZE);
+  - pattern-not: |
+      $DATA->data = calloc(1, $SIZE);
   languages:
   - c
   message: |

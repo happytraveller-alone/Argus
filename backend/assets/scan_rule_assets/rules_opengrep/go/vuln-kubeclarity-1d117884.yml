@@ -1,9 +1,10 @@
 rules:
 - id: vuln-kubeclarity-1d117884
-  pattern: |
-    $TX.Or(fmt.Sprintf("%s = '%s' AND %s is not null", $FILTER_ID, $ID, $LOOKUP_ID))
-  pattern-not: |
-    $TX.Or("? = ? AND ? is not null", $FILTER_ID, $ID, $LOOKUP_ID)
+  patterns:
+  - pattern: |
+      $TX.Or(fmt.Sprintf("%s = '%s' AND %s is not null", $FILTER_ID, $ID, $LOOKUP_ID))
+  - pattern-not: |
+      $TX.Or("? = ? AND ? is not null", $FILTER_ID, $ID, $LOOKUP_ID)
   languages:
   - go
   message: |

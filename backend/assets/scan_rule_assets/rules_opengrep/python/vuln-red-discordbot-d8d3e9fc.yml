@@ -1,9 +1,10 @@
 rules:
 - id: vuln-red-discordbot-d8d3e9fc
-  pattern: |
-    " | ".join($FIELDS).format(member=$MEMBER, **$M_DATA)
-  pattern-not: |
-    " | ".join($FIELDS)
+  patterns:
+  - pattern: |
+      " | ".join($FIELDS).format(member=$MEMBER, **$M_DATA)
+  - pattern-not: |
+      " | ".join($FIELDS)
   languages:
   - python
   message: |

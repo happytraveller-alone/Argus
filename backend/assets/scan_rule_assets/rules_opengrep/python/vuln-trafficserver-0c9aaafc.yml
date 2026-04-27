@@ -1,10 +1,11 @@
 rules:
 - id: vuln-trafficserver-0c9aaafc
-  pattern: |
-    reval_state_path = os.path.join(ts.Variables.RUNTIMEDIR, $PATH)
-  pattern-not: |
-    reval_state_path = os.path.join(Test.Variables.RUNTIMEDIR, $PATH)
-    ts.chownForATSProcess(reval_state_path)
+  patterns:
+  - pattern: |
+      reval_state_path = os.path.join(ts.Variables.RUNTIMEDIR, $PATH)
+  - pattern-not: |
+      reval_state_path = os.path.join(Test.Variables.RUNTIMEDIR, $PATH)
+      ts.chownForATSProcess(reval_state_path)
   languages:
   - python
   message: |

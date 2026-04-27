@@ -1,9 +1,10 @@
 rules:
 - id: vuln-lua-066e0f93
-  pattern: |
-    const char *kind = (isLua($CI)) ? funcnamefromcode($L, $CI, &$NAME) : NULL;
-  pattern-not: |
-    const char *kind = funcnamefromcall($L, $CI, &$NAME);
+  patterns:
+  - pattern: |
+      const char *kind = (isLua($CI)) ? funcnamefromcode($L, $CI, &$NAME) : NULL;
+  - pattern-not: |
+      const char *kind = funcnamefromcall($L, $CI, &$NAME);
   languages:
   - c
   message: |
@@ -17,19 +18,20 @@ rules:
     technology:
     - c
 - id: vuln-lua-0bfc572e
-  pattern: |
-    global_State *$G;
-    ...
-    $G = G($L);
-    ...
-    $G->gcrunning = $VALUE;
-  pattern-not: |
-    global_State *$G = G($L);
-    ...
-    if ($G->gcstp & GCSTPGC)
-      return -1;
-    ...
-    $G->gcstp = $VALUE;
+  patterns:
+  - pattern: |
+      global_State *$G;
+      ...
+      $G = G($L);
+      ...
+      $G->gcrunning = $VALUE;
+  - pattern-not: |
+      global_State *$G = G($L);
+      ...
+      if ($G->gcstp & GCSTPGC)
+        return -1;
+      ...
+      $G->gcstp = $VALUE;
   languages:
   - c
   message: |
@@ -46,10 +48,11 @@ rules:
     technology:
     - c
 - id: vuln-lua-127e7a6c
-  pattern: |
-    markold($G, $G->survival, $G->reallyold)
-  pattern-not: |
-    markold($G, $G->allgc, $G->reallyold)
+  patterns:
+  - pattern: |
+      markold($G, $G->survival, $G->reallyold)
+  - pattern-not: |
+      markold($G, $G->allgc, $G->reallyold)
   languages:
   - c
   message: |
@@ -67,15 +70,16 @@ rules:
     technology:
     - c
 - id: vuln-lua-34affe7a
-  pattern: |
-    if (getCcalls($L) <= CSTACKERR) {
-      luaE_freeCI($L);
-    }
-  pattern-not: |
-    if (getCcalls($L) <= CSTACKERR) {
-      luaE_exitCcall($L);
-      luaE_enterCcall($L);
-    }
+  patterns:
+  - pattern: |
+      if (getCcalls($L) <= CSTACKERR) {
+        luaE_freeCI($L);
+      }
+  - pattern-not: |
+      if (getCcalls($L) <= CSTACKERR) {
+        luaE_exitCcall($L);
+        luaE_enterCcall($L);
+      }
   languages:
   - c
   message: |
@@ -93,10 +97,11 @@ rules:
     technology:
     - c
 - id: vuln-lua-597a53bb
-  pattern: |
-    $G->gcstp = GCSTPGC;
-  pattern-not: |
-    $G->gcstp |= GCSTPGC;
+  patterns:
+  - pattern: |
+      $G->gcstp = GCSTPGC;
+  - pattern-not: |
+      $G->gcstp |= GCSTPGC;
   languages:
   - c
   message: |
@@ -111,12 +116,13 @@ rules:
     technology:
     - c
 - id: vuln-lua-89aee84c
-  pattern: |
-    UpVal **$VAR1 = getupvalref($_, $_, $_, $VAR2);
-    UpVal **$VAR3 = getupvalref($_, $_, $_, NULL);
-  pattern-not: |
-    UpVal **$VAR1 = getupvalref($_, $_, $_);
-    UpVal **$VAR3 = getupvalref($_, $_, $_);
+  patterns:
+  - pattern: |
+      UpVal **$VAR1 = getupvalref($_, $_, $_, $VAR2);
+      UpVal **$VAR3 = getupvalref($_, $_, $_, NULL);
+  - pattern-not: |
+      UpVal **$VAR1 = getupvalref($_, $_, $_);
+      UpVal **$VAR3 = getupvalref($_, $_, $_);
   languages:
   - c
   message: |
@@ -134,10 +140,11 @@ rules:
     technology:
     - c
 - id: vuln-lua-cf613cdc
-  pattern: |
-    checkstackGC($L, $SIZE);
-  pattern-not: |
-    checkstackGCp($L, $SIZE - $DELTA, $FUNC);
+  patterns:
+  - pattern: |
+      checkstackGC($L, $SIZE);
+  - pattern-not: |
+      checkstackGCp($L, $SIZE - $DELTA, $FUNC);
   languages:
   - c
   message: |
@@ -155,10 +162,11 @@ rules:
     technology:
     - c
 - id: vuln-lua-eb419994
-  pattern: |
-    checkstackp($L, $SIZE, $FUNC);
-  pattern-not: |
-    checkstackGCp($L, $SIZE, $FUNC);
+  patterns:
+  - pattern: |
+      checkstackp($L, $SIZE, $FUNC);
+  - pattern-not: |
+      checkstackGCp($L, $SIZE, $FUNC);
   languages:
   - c
   message: |

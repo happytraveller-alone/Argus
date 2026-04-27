@@ -1,20 +1,21 @@
 rules:
 - id: vuln-quilt-3284be1e
-  pattern: |
-    const {shop} = $QUERY;
-    ...
-    if (shop == null) {
-      $CTX.throw(400, $ERROR);
-      return;
-    }
-  pattern-not: |
-    const {shop} = $QUERY;
-    const shopRegex = new RegExp($REGEX);
-    ...
-    if (shop == null || !shopRegex.test(shop)) {
-      $CTX.throw(400, $ERROR);
-      return;
-    }
+  patterns:
+  - pattern: |
+      const {shop} = $QUERY;
+      ...
+      if (shop == null) {
+        $CTX.throw(400, $ERROR);
+        return;
+      }
+  - pattern-not: |
+      const {shop} = $QUERY;
+      const shopRegex = new RegExp($REGEX);
+      ...
+      if (shop == null || !shopRegex.test(shop)) {
+        $CTX.throw(400, $ERROR);
+        return;
+      }
   languages:
   - typescript
   message: |

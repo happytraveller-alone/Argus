@@ -1,9 +1,10 @@
 rules:
 - id: vuln-newlib-5f15d7c5
-  pattern: |
-    $TP->tv_usec = $TS.tv_nsec * 1000;
-  pattern-not: |
-    $TP->tv_usec = $TS.tv_nsec / 1000;
+  patterns:
+  - pattern: |
+      $TP->tv_usec = $TS.tv_nsec * 1000;
+  - pattern-not: |
+      $TP->tv_usec = $TS.tv_nsec / 1000;
   languages:
   - c
   message: |

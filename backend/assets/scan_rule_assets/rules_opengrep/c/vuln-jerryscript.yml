@@ -1,21 +1,22 @@
 rules:
 - id: vuln-jerryscript-1230d453
-  pattern: |
-    #if ENABLED (JERRY_ES2015)
-        if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
-        {
-          $CONTEXT_P->token.type = LEXER_MULTIPLY;
-        }
-    #endif /* ENABLED (JERRY_ES2015) */
-  pattern-not: |
-    #if ENABLED (JERRY_ES2015)
-        if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
-        {
-          $CONTEXT_P->token.type = LEXER_MULTIPLY;
-          lexer_consume_next_character ($CONTEXT_P);
-          return;
-        }
-    #endif /* ENABLED (JERRY_ES2015) */
+  patterns:
+  - pattern: |
+      #if ENABLED (JERRY_ES2015)
+          if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
+          {
+            $CONTEXT_P->token.type = LEXER_MULTIPLY;
+          }
+      #endif /* ENABLED (JERRY_ES2015) */
+  - pattern-not: |
+      #if ENABLED (JERRY_ES2015)
+          if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
+          {
+            $CONTEXT_P->token.type = LEXER_MULTIPLY;
+            lexer_consume_next_character ($CONTEXT_P);
+            return;
+          }
+      #endif /* ENABLED (JERRY_ES2015) */
   languages:
   - c
   message: |
@@ -33,20 +34,21 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-392ee717
-  pattern: |
-    ecma_value_t $VAR = ECMA_VALUE_EMPTY;
-    ECMA_TRY_CATCH($VAR1, $VAR2, $VAR);
-    ...
-    ECMA_FINALIZE($VAR1);
-    return $VAR;
-  pattern-not: |
-    ecma_value_t $VAR = $FUNC($ARGS);
-    if (ECMA_IS_VALUE_ERROR($VAR))
-    {
+  patterns:
+  - pattern: |
+      ecma_value_t $VAR = ECMA_VALUE_EMPTY;
+      ECMA_TRY_CATCH($VAR1, $VAR2, $VAR);
+      ...
+      ECMA_FINALIZE($VAR1);
       return $VAR;
-    }
-    ...
-    return $RESULT;
+  - pattern-not: |
+      ecma_value_t $VAR = $FUNC($ARGS);
+      if (ECMA_IS_VALUE_ERROR($VAR))
+      {
+        return $VAR;
+      }
+      ...
+      return $RESULT;
   languages:
   - c
   message: |
@@ -67,10 +69,11 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-42523bd6
-  pattern: |
-    ecma_raise_standard_error($ERROR_TYPE, ecma_get_error_msg($MSG))
-  pattern-not: |
-    ecma_raise_standard_error($ERROR_TYPE, $MSG)
+  patterns:
+  - pattern: |
+      ecma_raise_standard_error($ERROR_TYPE, ecma_get_error_msg($MSG))
+  - pattern-not: |
+      ecma_raise_standard_error($ERROR_TYPE, $MSG)
   languages:
   - c
   message: |
@@ -86,22 +89,23 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-4e8d6344
-  pattern: |
-    JMEM_DEFINE_LOCAL_ARRAY($ARRAY, $LENGTH * $ELEMENT_SIZE, lit_utf8_byte_t);
-    lit_utf8_byte_t *$PASS_VALUE = $ARRAY;
-    ...
-    memcpy($PASS_VALUE, $BUFFER + $BYTE_POS, $ELEMENT_SIZE);
-    $PASS_VALUE += $ELEMENT_SIZE;
-    ...
-    memcpy($TARGET_BUFFER, $ARRAY, ($PASS_VALUE - $ARRAY));
-  pattern-not: |
-    ecma_collection_t *$COLLECTION = ecma_new_collection();
-    ...
-    ecma_collection_push_back($COLLECTION, $VALUE);
-    ...
-    ecma_typedarray_setter_fn_t $SETTER = ecma_get_typedarray_setter_fn($TARGET_INFO.id);
-    ...
-    $SETTER($TARGET_BUFFER + $TARGET_BYTE_INDEX, $COLLECTION->buffer_p[$IDX]);
+  patterns:
+  - pattern: |
+      JMEM_DEFINE_LOCAL_ARRAY($ARRAY, $LENGTH * $ELEMENT_SIZE, lit_utf8_byte_t);
+      lit_utf8_byte_t *$PASS_VALUE = $ARRAY;
+      ...
+      memcpy($PASS_VALUE, $BUFFER + $BYTE_POS, $ELEMENT_SIZE);
+      $PASS_VALUE += $ELEMENT_SIZE;
+      ...
+      memcpy($TARGET_BUFFER, $ARRAY, ($PASS_VALUE - $ARRAY));
+  - pattern-not: |
+      ecma_collection_t *$COLLECTION = ecma_new_collection();
+      ...
+      ecma_collection_push_back($COLLECTION, $VALUE);
+      ...
+      ecma_typedarray_setter_fn_t $SETTER = ecma_get_typedarray_setter_fn($TARGET_INFO.id);
+      ...
+      $SETTER($TARGET_BUFFER + $TARGET_BYTE_INDEX, $COLLECTION->buffer_p[$IDX]);
   languages:
   - c
   message: |
@@ -117,16 +121,17 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-841d536f
-  pattern: |
-    ecma_property_value_t *$PROP_VALUE;
-    $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
-    $PROP_VALUE->value = ecma_make_object_value($OBJ);
-    ecma_deref_object($OBJ);
-  pattern-not: |
-    ecma_property_value_t *$PROP_VALUE;
-    $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
-    $PROP_VALUE->value = $RESULT;
-    ecma_deref_object(ecma_get_object_from_value($RESULT));
+  patterns:
+  - pattern: |
+      ecma_property_value_t *$PROP_VALUE;
+      $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
+      $PROP_VALUE->value = ecma_make_object_value($OBJ);
+      ecma_deref_object($OBJ);
+  - pattern-not: |
+      ecma_property_value_t *$PROP_VALUE;
+      $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
+      $PROP_VALUE->value = $RESULT;
+      ecma_deref_object(ecma_get_object_from_value($RESULT));
   languages:
   - c
   message: |
@@ -145,18 +150,19 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-908240ba
-  pattern: |
-    return ecma_proxy_object_own_property_keys($OBJ);
-  pattern-not: |
-    $PROXY_KEYS = ecma_proxy_object_own_property_keys($OBJ);
-    if (JERRY_UNLIKELY ($PROXY_KEYS == NULL))
-    {
-      return $PROXY_KEYS;
-    }
-    $RETURN_KEYS = ecma_new_collection();
-    ...
-    ecma_collection_destroy($PROXY_KEYS);
-    return $RETURN_KEYS;
+  patterns:
+  - pattern: |
+      return ecma_proxy_object_own_property_keys($OBJ);
+  - pattern-not: |
+      $PROXY_KEYS = ecma_proxy_object_own_property_keys($OBJ);
+      if (JERRY_UNLIKELY ($PROXY_KEYS == NULL))
+      {
+        return $PROXY_KEYS;
+      }
+      $RETURN_KEYS = ecma_new_collection();
+      ...
+      ecma_collection_destroy($PROXY_KEYS);
+      return $RETURN_KEYS;
   languages:
   - c
   message: |
@@ -173,23 +179,24 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-d06c3a7f
-  pattern: |
-    ecma_value_t $RESULT = ECMA_VALUE_EMPTY;
-    ...
-    $RESULT = $FUNC($ARG);
-    ...
-    if (!ecma_is_value_empty ($RESULT)) {
+  patterns:
+  - pattern: |
+      ecma_value_t $RESULT = ECMA_VALUE_EMPTY;
       ...
+      $RESULT = $FUNC($ARG);
+      ...
+      if (!ecma_is_value_empty ($RESULT)) {
+        ...
+        if (ECMA_IS_VALUE_ERROR ($RESULT)) {
+          return $RESULT;
+        }
+        ...
+      }
+  - pattern-not: |
+      ecma_value_t $RESULT = $FUNC($ARG);
       if (ECMA_IS_VALUE_ERROR ($RESULT)) {
         return $RESULT;
       }
-      ...
-    }
-  pattern-not: |
-    ecma_value_t $RESULT = $FUNC($ARG);
-    if (ECMA_IS_VALUE_ERROR ($RESULT)) {
-      return $RESULT;
-    }
   languages:
   - c
   message: |
@@ -205,25 +212,26 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-da5b058d
-  pattern: |
-    if ($MODE == NUMBER_ROUTINE_TO_PRECISION
-        && ($ARG_NUM < 1 || $ARG_NUM > 100))
-    {
-      return ecma_raise_range_error($MSG);
-    }
-  pattern-not: |
-    if ($MODE == NUMBER_ROUTINE_TO_FIXED
-        && ($ARG_NUM <= -1 || $ARG_NUM >= 101))
-    {
-      ecma_stringbuilder_destroy(&$BUILDER);
-      return ecma_raise_range_error($MSG);
-    }
-    else if ($MODE == NUMBER_ROUTINE_TO_PRECISION
-            && ($ARG_NUM < 1 || $ARG_NUM > 100))
-    {
-      ecma_stringbuilder_destroy(&$BUILDER);
-      return ecma_raise_range_error($MSG);
-    }
+  patterns:
+  - pattern: |
+      if ($MODE == NUMBER_ROUTINE_TO_PRECISION
+          && ($ARG_NUM < 1 || $ARG_NUM > 100))
+      {
+        return ecma_raise_range_error($MSG);
+      }
+  - pattern-not: |
+      if ($MODE == NUMBER_ROUTINE_TO_FIXED
+          && ($ARG_NUM <= -1 || $ARG_NUM >= 101))
+      {
+        ecma_stringbuilder_destroy(&$BUILDER);
+        return ecma_raise_range_error($MSG);
+      }
+      else if ($MODE == NUMBER_ROUTINE_TO_PRECISION
+              && ($ARG_NUM < 1 || $ARG_NUM > 100))
+      {
+        ecma_stringbuilder_destroy(&$BUILDER);
+        return ecma_raise_range_error($MSG);
+      }
   languages:
   - c
   message: |
@@ -241,12 +249,13 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-dbba83fe
-  pattern: |
-    if (!ecma_is_value_object ($TYPEDARRAY))
-      return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_OBJECT);
-  pattern-not: |
-    if (!ecma_is_typedarray ($TYPEDARRAY))
-      return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_TYPED_ARRAY);
+  patterns:
+  - pattern: |
+      if (!ecma_is_value_object ($TYPEDARRAY))
+        return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_OBJECT);
+  - pattern-not: |
+      if (!ecma_is_typedarray ($TYPEDARRAY))
+        return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_TYPED_ARRAY);
   languages:
   - c
   message: |
@@ -266,17 +275,18 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-e1ce7dd7
-  pattern: |
-    if ($ARRAY_LENGTH > ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
-    {
-      return ecma_raise_range_error($ERROR_MSG);
-    }
-    uint32_t $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
-  pattern-not: |
-    if ($ARRAY_LENGTH <= ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
-    {
-      $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
-    }
+  patterns:
+  - pattern: |
+      if ($ARRAY_LENGTH > ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
+      {
+        return ecma_raise_range_error($ERROR_MSG);
+      }
+      uint32_t $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
+  - pattern-not: |
+      if ($ARRAY_LENGTH <= ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
+      {
+        $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
+      }
   languages:
   - c
   message: |
@@ -294,14 +304,15 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-ee59c226
-  pattern: |
-    $PROP->value = ECMA_VALUE_UNDEFINED;
-    if ($ARGS_COUNT != 0) {
-      $PROP->value = ecma_copy_value_if_not_object($ARGS[0]);
-    }
-  pattern-not: |
-    $ARG = $ARGS_COUNT > 0 ? $ARGS[0] : ECMA_VALUE_UNDEFINED;
-    $PROP->value = ecma_copy_value_if_not_object($ARG);
+  patterns:
+  - pattern: |
+      $PROP->value = ECMA_VALUE_UNDEFINED;
+      if ($ARGS_COUNT != 0) {
+        $PROP->value = ecma_copy_value_if_not_object($ARGS[0]);
+      }
+  - pattern-not: |
+      $ARG = $ARGS_COUNT > 0 ? $ARGS[0] : ECMA_VALUE_UNDEFINED;
+      $PROP->value = ecma_copy_value_if_not_object($ARG);
   languages:
   - c
   message: |

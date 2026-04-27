@@ -1,11 +1,12 @@
 rules:
 - id: vuln-u-boot-2ac0baab
-  pattern: |
-    strncpy($DEST, $SRC, $SIZE + 1);
-    $DEST[$SIZE + 1] = '\0';
-  pattern-not: |
-    strncpy($DEST, $SRC, min_t(u16, $SIZE + 1, FS_DIRENT_NAME_LEN - 1));
-    $DEST[min_t(u16, $SIZE + 1, FS_DIRENT_NAME_LEN - 1)] = '\0';
+  patterns:
+  - pattern: |
+      strncpy($DEST, $SRC, $SIZE + 1);
+      $DEST[$SIZE + 1] = '\0';
+  - pattern-not: |
+      strncpy($DEST, $SRC, min_t(u16, $SIZE + 1, FS_DIRENT_NAME_LEN - 1));
+      $DEST[min_t(u16, $SIZE + 1, FS_DIRENT_NAME_LEN - 1)] = '\0';
   languages:
   - c
   message: |
@@ -23,15 +24,16 @@ rules:
     technology:
     - c
 - id: vuln-u-boot-878269db
-  pattern: |
-    if ($BLOCKSIZE <= 0) {
-      return -1;
-    }
-  pattern-not: |
-    if ($BLOCKSIZE <= 0 || $LEN <= 0) {
-      ext_cache_fini(&$CACHE);
-      return -1;
-    }
+  patterns:
+  - pattern: |
+      if ($BLOCKSIZE <= 0) {
+        return -1;
+      }
+  - pattern-not: |
+      if ($BLOCKSIZE <= 0 || $LEN <= 0) {
+        ext_cache_fini(&$CACHE);
+        return -1;
+      }
   languages:
   - c
   message: |
@@ -49,18 +51,19 @@ rules:
     technology:
     - c
 - id: vuln-u-boot-8f8c04bf
-  pattern: |
-    int $ALEN;
-    int $J;
-    int $COUNT;
-    int $NBYTES;
-    int $LINEBYTES;
-  pattern-not: |
-    uint $ALEN;
-    uint $J;
-    uint $COUNT;
-    uint $NBYTES;
-    uint $LINEBYTES;
+  patterns:
+  - pattern: |
+      int $ALEN;
+      int $J;
+      int $COUNT;
+      int $NBYTES;
+      int $LINEBYTES;
+  - pattern-not: |
+      uint $ALEN;
+      uint $J;
+      uint $COUNT;
+      uint $NBYTES;
+      uint $LINEBYTES;
   languages:
   - c
   message: |

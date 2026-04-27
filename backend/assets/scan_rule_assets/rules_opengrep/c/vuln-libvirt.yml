@@ -1,9 +1,10 @@
 rules:
 - id: vuln-libvirt-15073504
-  pattern: |
-    g_strdup_printf("%s:c%d", $SENS, $CATMIN + $C1)
-  pattern-not: |
-    continue
+  patterns:
+  - pattern: |
+      g_strdup_printf("%s:c%d", $SENS, $CATMIN + $C1)
+  - pattern-not: |
+      continue
   languages:
   - c
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-28f8dfdc
-  pattern: |
-    qemuDomainDefFormatXML($DRIVER, $DEF, $FLAGS, false)
-  pattern-not: |
-    qemuDomainDefFormatXML($DRIVER, $DEF, $FLAGS)
+  patterns:
+  - pattern: |
+      qemuDomainDefFormatXML($DRIVER, $DEF, $FLAGS, false)
+  - pattern-not: |
+      qemuDomainDefFormatXML($DRIVER, $DEF, $FLAGS)
   languages:
   - c
   message: |
@@ -40,10 +42,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-29fe5d74
-  pattern: |
-    virSecurityDACGetIds($DEF, $PRIV, $USER, $GROUP)
-  pattern-not: |
-    virSecurityDACGetIds($DEF, $PRIV, $USER, $GROUP, $GROUPS, $NGROUPS)
+  patterns:
+  - pattern: |
+      virSecurityDACGetIds($DEF, $PRIV, $USER, $GROUP)
+  - pattern-not: |
+      virSecurityDACGetIds($DEF, $PRIV, $USER, $GROUP, $GROUPS, $NGROUPS)
   languages:
   - c
   message: |
@@ -59,14 +62,15 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-47b9127e
-  pattern: |
-    if (virBitmapIsSet($BITMAP, $BIT)) {
-      ignore_value(virBitmapClearBit($BITMAP, $BIT));
-      $RET--;
-    }
-  pattern-not: |
-    if (virBitmapClearBit($BITMAP, $BIT) < 0)
-      goto error;
+  patterns:
+  - pattern: |
+      if (virBitmapIsSet($BITMAP, $BIT)) {
+        ignore_value(virBitmapClearBit($BITMAP, $BIT));
+        $RET--;
+      }
+  - pattern-not: |
+      if (virBitmapClearBit($BITMAP, $BIT) < 0)
+        goto error;
   languages:
   - c
   message: |
@@ -83,11 +87,12 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-484cc321
-  pattern: |
-    qemuDomainObjEnterMonitor($DRIVER, $VM);
-  pattern-not: |
-    if (qemuDomainObjEnterMonitorAsync($DRIVER, $VM, $JOB) < 0)
-        return -1;
+  patterns:
+  - pattern: |
+      qemuDomainObjEnterMonitor($DRIVER, $VM);
+  - pattern-not: |
+      if (qemuDomainObjEnterMonitorAsync($DRIVER, $VM, $JOB) < 0)
+          return -1;
   languages:
   - c
   message: |
@@ -105,10 +110,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-4c4d0e2d
-  pattern: |
-    virMediatedDeviceTypeFree(*$VAR[i])
-  pattern-not: |
-    virMediatedDeviceTypeFree((*$VAR)[i])
+  patterns:
+  - pattern: |
+      virMediatedDeviceTypeFree(*$VAR[i])
+  - pattern-not: |
+      virMediatedDeviceTypeFree((*$VAR)[i])
   languages:
   - c
   message: |
@@ -124,10 +130,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-524de6cc
-  pattern: |
-    virDomainDiskSourceFormat($BUF, $SRC, "source", 0, false, 0, true, NULL)
-  pattern-not: |
-    virDomainDiskSourceFormat($BUF, $SRC, "source", 0, false, $FLAGS, true, NULL)
+  patterns:
+  - pattern: |
+      virDomainDiskSourceFormat($BUF, $SRC, "source", 0, false, 0, true, NULL)
+  - pattern-not: |
+      virDomainDiskSourceFormat($BUF, $SRC, "source", 0, false, $FLAGS, true, NULL)
   languages:
   - c
   message: |
@@ -145,10 +152,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-7c2d65dd
-  pattern: |
-    fchmod($FD, $PERMS->mode)
-  pattern-not: |
-    fchmod($FD, ($PERMS->mode == (mode_t) -1 ? $DEFAULT_MODE : $PERMS->mode))
+  patterns:
+  - pattern: |
+      fchmod($FD, $PERMS->mode)
+  - pattern-not: |
+      fchmod($FD, ($PERMS->mode == (mode_t) -1 ? $DEFAULT_MODE : $PERMS->mode))
   languages:
   - c
   message: |
@@ -164,11 +172,12 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-87b9437f
-  pattern: |
-    $RET = $BACKEND->uploadVol($CONN, $POOL, $VOL, $STREAM, $OFFSET, $LENGTH, $FLAGS);
-  pattern-not: |
-    if (($RET = $BACKEND->uploadVol($CONN, $POOL, $VOL, $STREAM, $OFFSET, $LENGTH, $FLAGS)) < 0)
-        goto $CLEANUP;
+  patterns:
+  - pattern: |
+      $RET = $BACKEND->uploadVol($CONN, $POOL, $VOL, $STREAM, $OFFSET, $LENGTH, $FLAGS);
+  - pattern-not: |
+      if (($RET = $BACKEND->uploadVol($CONN, $POOL, $VOL, $STREAM, $OFFSET, $LENGTH, $FLAGS)) < 0)
+          goto $CLEANUP;
   languages:
   - c
   message: |
@@ -184,12 +193,13 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-9d73efdb
-  pattern: |
-    qemuDomainObjEnterMonitorWithDriver($DRIVER, $VM);
-    $RET = qemuMonitorSetVNCPassword($PRIV->mon, $PASSWD ? $PASSWD : $DEFAULT_PASSWD);
-    qemuDomainObjExitMonitorWithDriver($DRIVER, $VM);
-  pattern-not: |
-    qemuDomainChangeGraphicsPasswords($DRIVER, $VM, $TYPE, $AUTH, $DEFAULT_PASSWD);
+  patterns:
+  - pattern: |
+      qemuDomainObjEnterMonitorWithDriver($DRIVER, $VM);
+      $RET = qemuMonitorSetVNCPassword($PRIV->mon, $PASSWD ? $PASSWD : $DEFAULT_PASSWD);
+      qemuDomainObjExitMonitorWithDriver($DRIVER, $VM);
+  - pattern-not: |
+      qemuDomainChangeGraphicsPasswords($DRIVER, $VM, $TYPE, $AUTH, $DEFAULT_PASSWD);
   languages:
   - c
   message: |
@@ -206,13 +216,14 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-a4947e8f
-  pattern: |
-    return virNWFilterObjListNumOfNWFilters($DRIVER, $CONN, $ACL);
-  pattern-not: |
-    nwfilterDriverLock();
-    $RET = virNWFilterObjListNumOfNWFilters($DRIVER, $CONN, $ACL);
-    nwfilterDriverUnlock();
-    return $RET;
+  patterns:
+  - pattern: |
+      return virNWFilterObjListNumOfNWFilters($DRIVER, $CONN, $ACL);
+  - pattern-not: |
+      nwfilterDriverLock();
+      $RET = virNWFilterObjListNumOfNWFilters($DRIVER, $CONN, $ACL);
+      nwfilterDriverUnlock();
+      return $RET;
   languages:
   - c
   message: |
@@ -227,10 +238,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-a5b064bf
-  pattern: |
-    virDomainDiskSourceFormatNetworkCookies($CHILD_BUF, $SRC)
-  pattern-not: |
-    virDomainDiskSourceFormatNetworkCookies($CHILD_BUF, $SRC, $FLAGS)
+  patterns:
+  - pattern: |
+      virDomainDiskSourceFormatNetworkCookies($CHILD_BUF, $SRC)
+  - pattern-not: |
+      virDomainDiskSourceFormatNetworkCookies($CHILD_BUF, $SRC, $FLAGS)
   languages:
   - c
   message: |
@@ -246,15 +258,16 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-aed6a032
-  pattern: |
-    if (($CONN->flags & VIR_CONNECT_RO) &&
-        ($FLAGS & VIR_DOMAIN_SAVE_IMAGE_XML_SECURE)) {
-        virReportError(VIR_ERR_OPERATION_DENIED, "%s",
-                       _("virDomainSaveImageGetXMLDesc with secure flag"));
-        goto error;
-    }
-  pattern-not: |
-    virCheckReadOnlyGoto($CONN->flags, error);
+  patterns:
+  - pattern: |
+      if (($CONN->flags & VIR_CONNECT_RO) &&
+          ($FLAGS & VIR_DOMAIN_SAVE_IMAGE_XML_SECURE)) {
+          virReportError(VIR_ERR_OPERATION_DENIED, "%s",
+                         _("virDomainSaveImageGetXMLDesc with secure flag"));
+          goto error;
+      }
+  - pattern-not: |
+      virCheckReadOnlyGoto($CONN->flags, error);
   languages:
   - c
   message: |
@@ -270,13 +283,14 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-b7ff9e69
-  pattern: |
-    return &$PROG->procs[$PROCEDURE];
-  pattern-not: |
-    $PROC = &$PROG->procs[$PROCEDURE];
-    if (!$PROC->func)
-        return NULL;
-    return $PROC;
+  patterns:
+  - pattern: |
+      return &$PROG->procs[$PROCEDURE];
+  - pattern-not: |
+      $PROC = &$PROG->procs[$PROCEDURE];
+      if (!$PROC->func)
+          return NULL;
+      return $PROC;
   languages:
   - c
   message: |
@@ -294,10 +308,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-d53d4650
-  pattern: |
-    virBufferAsprintf($BUF, "password-secret=%s,", $ARG);
-  pattern-not: |
-    virBufferAsprintf($BUF, "file.password-secret=%s,", $ARG);
+  patterns:
+  - pattern: |
+      virBufferAsprintf($BUF, "password-secret=%s,", $ARG);
+  - pattern-not: |
+      virBufferAsprintf($BUF, "file.password-secret=%s,", $ARG);
   languages:
   - c
   message: |
@@ -315,10 +330,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-dfff16a7
-  pattern: |
-    STREQ($PATH, $TARGET.path)
-  pattern-not: |
-    STREQ_NULLABLE($PATH, $TARGET.path)
+  patterns:
+  - pattern: |
+      STREQ($PATH, $TARGET.path)
+  - pattern-not: |
+      STREQ_NULLABLE($PATH, $TARGET.path)
   languages:
   - c
   message: |
@@ -336,10 +352,11 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-e7f400a1
-  pattern: |
-    struct _virDomainMemoryStat *stats;
-  pattern-not: |
-    struct _virDomainMemoryStat *stats = NULL;
+  patterns:
+  - pattern: |
+      struct _virDomainMemoryStat *stats;
+  - pattern-not: |
+      struct _virDomainMemoryStat *stats = NULL;
   languages:
   - c
   message: |
@@ -358,11 +375,9 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-f32441c6
-  pattern: |
-    qemuMonitorSetPassword($MON, $TYPE, $AUTH->passwd ? $AUTH->passwd : $DEFAULTPASSWD, $CONNECTED)
-  pattern-not: |
-    $PASSWORD = $AUTH->passwd ? $AUTH->passwd : $DEFAULTPASSWD;
-    qemuMonitorSetPassword($MON, $TYPE, $PASSWORD, $CONNECTED)
+  patterns:
+  - pattern: |
+      qemuMonitorSetPassword($MON, $TYPE, $AUTH->passwd ? $AUTH->passwd : $DEFAULTPASSWD, $CONNECTED)
   languages:
   - c
   message: |
@@ -380,14 +395,15 @@ rules:
     technology:
     - c
 - id: vuln-libvirt-f44bfb7f
-  pattern: |
-    virErrorPtr $VERR;
-    if ($CONN)
-        $VERR = virConnGetLastError($CONN);
-    else
-        $VERR = virGetLastError();
-  pattern-not: |
-    virErrorPtr $VERR = virGetLastError();
+  patterns:
+  - pattern: |
+      virErrorPtr $VERR;
+      if ($CONN)
+          $VERR = virConnGetLastError($CONN);
+      else
+          $VERR = virGetLastError();
+  - pattern-not: |
+      virErrorPtr $VERR = virGetLastError();
   languages:
   - c
   message: |

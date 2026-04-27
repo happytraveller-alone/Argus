@@ -1,9 +1,10 @@
 rules:
 - id: vuln-gnumeric-e022d704
-  pattern: |
-    static char *$VAR[] = {(char *) "gnumeric", NULL};
-  pattern-not: |
-    static char *$VAR[] = {(char *) "/dev/null/python/is/buggy/gnumeric", NULL};
+  patterns:
+  - pattern: |
+      static char *$VAR[] = {(char *) "gnumeric", NULL};
+  - pattern-not: |
+      static char *$VAR[] = {(char *) "/dev/null/python/is/buggy/gnumeric", NULL};
   languages:
   - c
   message: |

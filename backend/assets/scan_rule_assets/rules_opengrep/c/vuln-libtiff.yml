@@ -1,21 +1,22 @@
 rules:
 - id: vuln-libtiff-3ca657a8
-  pattern: |
-    static void $FUNC(TIFF* $TIFF, uint8* $CP0, tmsize_t $CC) {
-      ...
-      assert(($CC%$STRIDE)==0);
-      ...
-    }
-  pattern-not: |
-    static int $FUNC(TIFF* $TIFF, uint8* $CP0, tmsize_t $CC) {
-      ...
-      if(($CC%$STRIDE)!=0) {
-        TIFFErrorExt($TIFF->tif_clientdata, "$FUNC", "%s", "($CC%$STRIDE)!=0");
-        return 0;
+  patterns:
+  - pattern: |
+      static void $FUNC(TIFF* $TIFF, uint8* $CP0, tmsize_t $CC) {
+        ...
+        assert(($CC%$STRIDE)==0);
+        ...
       }
-      ...
-      return 1;
-    }
+  - pattern-not: |
+      static int $FUNC(TIFF* $TIFF, uint8* $CP0, tmsize_t $CC) {
+        ...
+        if(($CC%$STRIDE)!=0) {
+          TIFFErrorExt($TIFF->tif_clientdata, "$FUNC", "%s", "($CC%$STRIDE)!=0");
+          return 0;
+        }
+        ...
+        return 1;
+      }
   languages:
   - c
   message: |
@@ -35,10 +36,11 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-438274f9
-  pattern: |
-    $STRIPSPERPLANE = (($TD->td_imagelength + $ROWSPERSTRIP - 1) / $ROWSPERSTRIP);
-  pattern-not: |
-    $STRIPSPERPLANE = TIFFhowmany_32_maxuint_compat($TD->td_imagelength, $ROWSPERSTRIP);
+  patterns:
+  - pattern: |
+      $STRIPSPERPLANE = (($TD->td_imagelength + $ROWSPERSTRIP - 1) / $ROWSPERSTRIP);
+  - pattern-not: |
+      $STRIPSPERPLANE = TIFFhowmany_32_maxuint_compat($TD->td_imagelength, $ROWSPERSTRIP);
   languages:
   - c
   message: |
@@ -54,16 +56,17 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-4f020c28
-  pattern: |
-    TIFFClose($IN);
-    return (-1);
-  pattern-not: |
-    goto $ERROR;
-    ...
-    $ERROR:
-      if ($IN)
-        TIFFClose($IN);
+  patterns:
+  - pattern: |
+      TIFFClose($IN);
       return (-1);
+  - pattern-not: |
+      goto $ERROR;
+      ...
+      $ERROR:
+        if ($IN)
+          TIFFClose($IN);
+        return (-1);
   languages:
   - c
   message: |
@@ -78,10 +81,11 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-5c080298
-  pattern: |
-    (void) TIFFGetField($IN, TIFFTAG_PLANARCONFIG, &$VAR);
-  pattern-not: |
-    (void) TIFFGetFieldDefaulted($IN, TIFFTAG_PLANARCONFIG, &$VAR);
+  patterns:
+  - pattern: |
+      (void) TIFFGetField($IN, TIFFTAG_PLANARCONFIG, &$VAR);
+  - pattern-not: |
+      (void) TIFFGetFieldDefaulted($IN, TIFFTAG_PLANARCONFIG, &$VAR);
   languages:
   - c
   message: |
@@ -96,11 +100,12 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-6a984bf7
-  pattern: |
-    uint8 *$VAR = (uint8 *)_TIFFmalloc($SIZE);
-  pattern-not: |
-    uint8 *$VAR;
-    $VAR = (uint8 *)_TIFFmalloc($SIZE);
+  patterns:
+  - pattern: |
+      uint8 *$VAR = (uint8 *)_TIFFmalloc($SIZE);
+  - pattern-not: |
+      uint8 *$VAR;
+      $VAR = (uint8 *)_TIFFmalloc($SIZE);
   languages:
   - c
   message: |
@@ -120,14 +125,15 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-b6af137b
-  pattern: |
-    assert($VAR <= 0xFFFFFFFFUL);
-  pattern-not: |
-    if($VAR > 0xFFFFFFFFUL) {
-        TIFFErrorExt($TIF->tif_clientdata, $MODULE, "Illegal value for SubIFD tag");
-        _TIFFfree($O);
-        return(0);
-    }
+  patterns:
+  - pattern: |
+      assert($VAR <= 0xFFFFFFFFUL);
+  - pattern-not: |
+      if($VAR > 0xFFFFFFFFUL) {
+          TIFFErrorExt($TIF->tif_clientdata, $MODULE, "Illegal value for SubIFD tag");
+          _TIFFfree($O);
+          return(0);
+      }
   languages:
   - c
   message: |
@@ -145,10 +151,11 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-d6033205
-  pattern: |
-    $VAR = (uint8*) _TIFFmalloc($SIZE);
-  pattern-not: |
-    $VAR = (uint8*) _TIFFcalloc(1, $SIZE);
+  patterns:
+  - pattern: |
+      $VAR = (uint8*) _TIFFmalloc($SIZE);
+  - pattern-not: |
+      $VAR = (uint8*) _TIFFcalloc(1, $SIZE);
   languages:
   - c
   message: |
@@ -166,16 +173,17 @@ rules:
     technology:
     - c
 - id: vuln-libtiff-d6d2c174
-  pattern: |
-    $BUF = (unsigned char *)_TIFFmalloc(($ALPHA?4:3)*$SIZE);
-    ...
-    _TIFFmemset($BUF, 0, ($ALPHA?4:3)*$SIZE);
-  pattern-not: |
-    $BUFSIZE = TIFFSafeMultiply(tsize_t, $ALPHA?4:3, $SIZE);
-    ...
-    $BUF = (unsigned char *)_TIFFmalloc($BUFSIZE);
-    ...
-    _TIFFmemset($BUF, 0, $BUFSIZE);
+  patterns:
+  - pattern: |
+      $BUF = (unsigned char *)_TIFFmalloc(($ALPHA?4:3)*$SIZE);
+      ...
+      _TIFFmemset($BUF, 0, ($ALPHA?4:3)*$SIZE);
+  - pattern-not: |
+      $BUFSIZE = TIFFSafeMultiply(tsize_t, $ALPHA?4:3, $SIZE);
+      ...
+      $BUF = (unsigned char *)_TIFFmalloc($BUFSIZE);
+      ...
+      _TIFFmemset($BUF, 0, $BUFSIZE);
   languages:
   - c
   message: |

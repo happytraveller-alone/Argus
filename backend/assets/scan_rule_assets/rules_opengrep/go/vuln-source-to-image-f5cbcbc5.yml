@@ -1,9 +1,10 @@
 rules:
 - id: vuln-source-to-image-f5cbcbc5
-  pattern: |
-    tar.New($FS)
-  pattern-not: |
-    tar.NewParanoid($FS)
+  patterns:
+  - pattern: |
+      tar.New($FS)
+  - pattern-not: |
+      tar.NewParanoid($FS)
   languages:
   - go
   message: |

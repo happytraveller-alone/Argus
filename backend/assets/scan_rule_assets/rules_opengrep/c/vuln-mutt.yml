@@ -1,9 +1,10 @@
 rules:
 - id: vuln-mutt-3d9028fe
-  pattern: |
-    mutt_from_base64($OUT, $IN)
-  pattern-not: |
-    mutt_from_base64($OUT, $IN, $OLEN)
+  patterns:
+  - pattern: |
+      mutt_from_base64($OUT, $IN)
+  - pattern-not: |
+      mutt_from_base64($OUT, $IN, $OLEN)
   languages:
   - c
   message: |
@@ -21,12 +22,13 @@ rules:
     technology:
     - c
 - id: vuln-mutt-e0131852
-  pattern: |
-    if (!$DLEN)
-        break;
-  pattern-not: |
-    if ($DLEN < 2)
-        break;
+  patterns:
+  - pattern: |
+      if (!$DLEN)
+          break;
+  - pattern-not: |
+      if ($DLEN < 2)
+          break;
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-openjpeg-05be3084
-  pattern: |
-    get_ushort(*(unsigned short*)($VAR))
-  pattern-not: |
-    get_tga_ushort(*(unsigned short*)($VAR))
+  patterns:
+  - pattern: |
+      get_ushort(*(unsigned short*)($VAR))
+  - pattern-not: |
+      get_tga_ushort(*(unsigned short*)($VAR))
   languages:
   - c
   message: |
@@ -19,10 +20,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-0bc90e40
-  pattern: |
-    fscanf($F, "PG%[ \t]%c%c%[ \t+-]%d%[ \t]%d%[ \t]%d", ...);
-  pattern-not: |
-    fscanf($F, "PG%31[ \t]%c%c%31[ \t+-]%d%31[ \t]%d%31[ \t]%d", ...);
+  patterns:
+  - pattern: |
+      fscanf($F, "PG%[ \t]%c%c%[ \t+-]%d%[ \t]%d%[ \t]%d", ...);
+  - pattern-not: |
+      fscanf($F, "PG%31[ \t]%c%c%31[ \t+-]%d%31[ \t]%d%31[ \t]%d", ...);
   languages:
   - c
   message: |
@@ -43,10 +45,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-15cf3d95
-  pattern: |
-    $L_DATA_SIZE = 26 + (OPJ_UINT32)(($X1 - $X0) * ...);
-  pattern-not: |
-    $L_DATA_SIZE = 28 + (OPJ_UINT32)(($X1 - $X0) * ...);
+  patterns:
+  - pattern: |
+      $L_DATA_SIZE = 26 + (OPJ_UINT32)(($X1 - $X0) * ...);
+  - pattern-not: |
+      $L_DATA_SIZE = 28 + (OPJ_UINT32)(($X1 - $X0) * ...);
   languages:
   - c
   message: |
@@ -63,17 +66,18 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-162f6199
-  pattern: |
-    if($IMAGE->numcomps < 4) return;
-  pattern-not: |
-    if (
-        ($IMAGE->numcomps < 4)
-        || ($IMAGE->comps[0].dx != $IMAGE->comps[1].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[2].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[3].dx)
-        || ($IMAGE->comps[0].dy != $IMAGE->comps[1].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[2].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[3].dy)
-        ) {
-      fprintf(stderr,"%s:%d:color_cmyk_to_rgb\n\tCAN NOT CONVERT\n", __FILE__,__LINE__);
-      return;
-    }
+  patterns:
+  - pattern: |
+      if($IMAGE->numcomps < 4) return;
+  - pattern-not: |
+      if (
+          ($IMAGE->numcomps < 4)
+          || ($IMAGE->comps[0].dx != $IMAGE->comps[1].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[2].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[3].dx)
+          || ($IMAGE->comps[0].dy != $IMAGE->comps[1].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[2].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[3].dy)
+          ) {
+        fprintf(stderr,"%s:%d:color_cmyk_to_rgb\n\tCAN NOT CONVERT\n", __FILE__,__LINE__);
+        return;
+      }
   languages:
   - c
   message: |
@@ -91,18 +95,19 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-178194c0
-  pattern: |
-    assert($CMAP[$I].mtyp == 0 || $CMAP[$I].mtyp == 1);
-    if ($PCOL >= $NR_CHANNELS) {
-      ...
-    }
-  pattern-not: |
-    if ($CMAP[$I].mtyp != 0 && $CMAP[$I].mtyp != 1) {
-      opj_event_msg($MANAGER, EVT_ERROR, "Invalid value for cmap[%d].mtyp = %d.\n", $I, $CMAP[$I].mtyp);
-      $IS_SANE = OPJ_FALSE;
-    } else if ($PCOL >= $NR_CHANNELS) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      assert($CMAP[$I].mtyp == 0 || $CMAP[$I].mtyp == 1);
+      if ($PCOL >= $NR_CHANNELS) {
+        ...
+      }
+  - pattern-not: |
+      if ($CMAP[$I].mtyp != 0 && $CMAP[$I].mtyp != 1) {
+        opj_event_msg($MANAGER, EVT_ERROR, "Invalid value for cmap[%d].mtyp = %d.\n", $I, $CMAP[$I].mtyp);
+        $IS_SANE = OPJ_FALSE;
+      } else if ($PCOL >= $NR_CHANNELS) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -119,10 +124,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-18b1138f
-  pattern: |
-    $TCP_POC->compno1 = $PARAMETERS->POC[$NUM_POCS_TILE].compno1;
-  pattern-not: |
-    $TCP_POC->compno1 = opj_uint_min($PARAMETERS->POC[$NUM_POCS_TILE].compno1, $IMAGE->numcomps);
+  patterns:
+  - pattern: |
+      $TCP_POC->compno1 = $PARAMETERS->POC[$NUM_POCS_TILE].compno1;
+  - pattern-not: |
+      $TCP_POC->compno1 = opj_uint_min($PARAMETERS->POC[$NUM_POCS_TILE].compno1, $IMAGE->numcomps);
   languages:
   - c
   message: |
@@ -142,18 +148,19 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-2cd30c2b
-  pattern: |
-    static unsigned short get_ushort(const unsigned char *data) {
-        unsigned short val = *(const unsigned short *)data;
-        #ifdef OPJ_BIG_ENDIAN
-        val = ((val & 0xffU) << 8) | (val >> 8);
-        #endif
-        return val;
-    }
-  pattern-not: |
-    static unsigned short get_tga_ushort(const unsigned char *data) {
-        return data[0] | (data[1] << 8);
-    }
+  patterns:
+  - pattern: |
+      static unsigned short get_ushort(const unsigned char *data) {
+          unsigned short val = *(const unsigned short *)data;
+          #ifdef OPJ_BIG_ENDIAN
+          val = ((val & 0xffU) << 8) | (val >> 8);
+          #endif
+          return val;
+      }
+  - pattern-not: |
+      static unsigned short get_tga_ushort(const unsigned char *data) {
+          return data[0] | (data[1] << 8);
+      }
   languages:
   - c
   message: |
@@ -168,17 +175,18 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-2fa0fc61
-  pattern: |
-    $EXPR && (
-      $COMP1.dx == $COMP2.dx &&
-      $COMP2.dx == $COMP3.dx &&
-      $COMP1.dy == $COMP2.dy &&
-      $COMP2.dy == $COMP3.dy &&
-      $COMP1.prec == $COMP2.prec &&
-      $COMP2.prec == $COMP3.prec
-    )
-  pattern-not: |
-    are_comps_similar($IMAGE)
+  patterns:
+  - pattern: |
+      $EXPR && (
+        $COMP1.dx == $COMP2.dx &&
+        $COMP2.dx == $COMP3.dx &&
+        $COMP1.dy == $COMP2.dy &&
+        $COMP2.dy == $COMP3.dy &&
+        $COMP1.prec == $COMP2.prec &&
+        $COMP2.prec == $COMP3.prec
+      )
+  - pattern-not: |
+      are_comps_similar($IMAGE)
   languages:
   - c
   message: |
@@ -197,10 +205,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-397f62c0
-  pattern: |
-    $SIZE = (OPJ_UINT32)(($X1 - $X0) * ($Y1 - $Y0) * (OPJ_INT32)sizeof(OPJ_UINT32));
-  pattern-not: |
-    $SIZE = 1 + (OPJ_UINT32)(($X1 - $X0) * ($Y1 - $Y0) * (OPJ_INT32)sizeof(OPJ_UINT32));
+  patterns:
+  - pattern: |
+      $SIZE = (OPJ_UINT32)(($X1 - $X0) * ($Y1 - $Y0) * (OPJ_INT32)sizeof(OPJ_UINT32));
+  - pattern-not: |
+      $SIZE = 1 + (OPJ_UINT32)(($X1 - $X0) * ($Y1 - $Y0) * (OPJ_INT32)sizeof(OPJ_UINT32));
   languages:
   - c
   message: |
@@ -221,14 +230,15 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-39f9934a
-  pattern: |
-    for( $I = 0; $QUERY_PARAM.box_type[$I][0] != 0 && $I < $MAX_NUMOFBOX; $I++ ) {
-      ...
-    }
-  pattern-not: |
-    for( $I = 0; $I < $MAX_NUMOFBOX && $QUERY_PARAM.box_type[$I][0] != 0; $I++ ) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for( $I = 0; $QUERY_PARAM.box_type[$I][0] != 0 && $I < $MAX_NUMOFBOX; $I++ ) {
+        ...
+      }
+  - pattern-not: |
+      for( $I = 0; $I < $MAX_NUMOFBOX && $QUERY_PARAM.box_type[$I][0] != 0; $I++ ) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -247,10 +257,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-6daf5f3e
-  pattern: |
-    OPJ_FLOAT64 $VAR = opj_dwt_norms_real[$ORIENT][$LEVEL];
-  pattern-not: |
-    OPJ_FLOAT64 $VAR = opj_dwt_getnorm_real($LEVEL, $ORIENT);
+  patterns:
+  - pattern: |
+      OPJ_FLOAT64 $VAR = opj_dwt_norms_real[$ORIENT][$LEVEL];
+  - pattern-not: |
+      OPJ_FLOAT64 $VAR = opj_dwt_getnorm_real($LEVEL, $ORIENT);
   languages:
   - c
   message: |
@@ -270,12 +281,13 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-79c7d7af
-  pattern: |
-    $DIRPTR->filename_buf = (char*)malloc($SIZE * $OPJ_PATH_LEN * sizeof(char));
-    $DIRPTR->filename = (char**) malloc($SIZE * sizeof(char*));
-  pattern-not: |
-    $DIRPTR->filename_buf = (char*)calloc($SIZE, $OPJ_PATH_LEN * sizeof(char));
-    $DIRPTR->filename = (char**) calloc($SIZE, sizeof(char*));
+  patterns:
+  - pattern: |
+      $DIRPTR->filename_buf = (char*)malloc($SIZE * $OPJ_PATH_LEN * sizeof(char));
+      $DIRPTR->filename = (char**) malloc($SIZE * sizeof(char*));
+  - pattern-not: |
+      $DIRPTR->filename_buf = (char*)calloc($SIZE, $OPJ_PATH_LEN * sizeof(char));
+      $DIRPTR->filename = (char**) calloc($SIZE, sizeof(char*));
   languages:
   - c
   message: |
@@ -290,10 +302,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-a1d32a59
-  pattern: |
-    $VAR[$INDEX] *= (1 << $SHIFT)
-  pattern-not: |
-    $VAR[$INDEX] <<= $SHIFT
+  patterns:
+  - pattern: |
+      $VAR[$INDEX] *= (1 << $SHIFT)
+  - pattern-not: |
+      $VAR[$INDEX] <<= $SHIFT
   languages:
   - c
   message: |
@@ -313,19 +326,20 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-ad593c9e
-  pattern: |
-    if ($IMAGE->numcomps < 3) {
-      return;
-    }
-  pattern-not: |
-    if (
-        ($IMAGE->numcomps < 3)
-     || ($IMAGE->comps[0].dx != $IMAGE->comps[1].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[2].dx)
-     || ($IMAGE->comps[0].dy != $IMAGE->comps[1].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[2].dy)
-    ) {
-      fprintf(stderr,"%s:%d:color_esycc_to_rgb\n\tCAN NOT CONVERT\n", __FILE__,__LINE__);
-      return;
-    }
+  patterns:
+  - pattern: |
+      if ($IMAGE->numcomps < 3) {
+        return;
+      }
+  - pattern-not: |
+      if (
+          ($IMAGE->numcomps < 3)
+       || ($IMAGE->comps[0].dx != $IMAGE->comps[1].dx) || ($IMAGE->comps[0].dx != $IMAGE->comps[2].dx)
+       || ($IMAGE->comps[0].dy != $IMAGE->comps[1].dy) || ($IMAGE->comps[0].dy != $IMAGE->comps[2].dy)
+      ) {
+        fprintf(stderr,"%s:%d:color_esycc_to_rgb\n\tCAN NOT CONVERT\n", __FILE__,__LINE__);
+        return;
+      }
   languages:
   - c
   message: |
@@ -346,10 +360,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-afb308b9
-  pattern: |
-    $LHS = 1 + (OPJ_UINT32)(($X1 - $X0) * ...);
-  pattern-not: |
-    $LHS = 2 + (OPJ_UINT32)(($X1 - $X0) * ...);
+  patterns:
+  - pattern: |
+      $LHS = 1 + (OPJ_UINT32)(($X1 - $X0) * ...);
+  - pattern-not: |
+      $LHS = 2 + (OPJ_UINT32)(($X1 - $X0) * ...);
   languages:
   - c
   message: |
@@ -368,10 +383,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-b2072402
-  pattern: |
-    $EXPR1 + $EXPR2 + $EXPR3 + $EXPR4
-  pattern-not: |
-    $EXPR1 + $EXPR2 + $EXPR3
+  patterns:
+  - pattern: |
+      $EXPR1 + $EXPR2 + $EXPR3 + $EXPR4
+  - pattern-not: |
+      $EXPR1 + $EXPR2 + $EXPR3
   languages:
   - c
   message: |
@@ -393,10 +409,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-dcac91b8
-  pattern: |
-    opj_j2k_write_sot($J2K, $DATA, $NB_BYTES_WRITTEN, $STREAM, $MANAGER)
-  pattern-not: |
-    opj_j2k_write_sot($J2K, $DATA, $TOTAL_DATA_SIZE, $NB_BYTES_WRITTEN, $STREAM, $MANAGER)
+  patterns:
+  - pattern: |
+      opj_j2k_write_sot($J2K, $DATA, $NB_BYTES_WRITTEN, $STREAM, $MANAGER)
+  - pattern-not: |
+      opj_j2k_write_sot($J2K, $DATA, $TOTAL_DATA_SIZE, $NB_BYTES_WRITTEN, $STREAM, $MANAGER)
   languages:
   - c
   message: |
@@ -414,14 +431,15 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-e03e9474
-  pattern: |
-    if ($VAR->prec > 32) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR->prec > 31) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($VAR->prec > 32) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR->prec > 31) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -437,15 +455,16 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-e1740e7c
-  pattern: |
-    if ($INDEX >= $PI->include_size) {
-        opj_pi_emit_error($PI, "Invalid access to pi->include");
-        return OPJ_FALSE;
-    }
-  pattern-not: |
-    if ($INDEX >= $PI->include_size) {
-        return OPJ_FALSE;
-    }
+  patterns:
+  - pattern: |
+      if ($INDEX >= $PI->include_size) {
+          opj_pi_emit_error($PI, "Invalid access to pi->include");
+          return OPJ_FALSE;
+      }
+  - pattern-not: |
+      if ($INDEX >= $PI->include_size) {
+          return OPJ_FALSE;
+      }
   languages:
   - c
   message: Potential out-of-bounds access detected. The code checks if an index is out of bounds but does not prevent the access. This could lead to undefined behavior or security vulnerabilities. Ensure that the access is properly guarded or handled.
@@ -460,10 +479,11 @@ rules:
     technology:
     - c
 - id: vuln-openjpeg-e5285319
-  pattern: |
-    fscanf($F, "PG%[ \t]%c%c%[ \t+-]%d%[ \t]%d%[ \t]%d", ...)
-  pattern-not: |
-    fscanf($F, "PG%31[ \t]%c%c%31[ \t+-]%d%31[ \t]%d%31[ \t]%d", ...)
+  patterns:
+  - pattern: |
+      fscanf($F, "PG%[ \t]%c%c%[ \t+-]%d%[ \t]%d%[ \t]%d", ...)
+  - pattern-not: |
+      fscanf($F, "PG%31[ \t]%c%c%31[ \t+-]%d%31[ \t]%d%31[ \t]%d", ...)
   languages:
   - c
   message: |

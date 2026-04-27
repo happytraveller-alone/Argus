@@ -1,21 +1,22 @@
 rules:
 - id: vuln-varnish-cache-29870c8f
-  pattern: |
-    $RETVAL = htc_request_check_host_hdr($HP);
-    if ($RETVAL != 0) {
-        WSP($SP, SLT_Error, "Duplicated Host header");
-        return ($RETVAL);
-    }
-  pattern-not: |
-    int $SEEN_CL = 0;
-    if (http_IsHdr(&$HP->hd[$U], H_Content_Length)) {
-        if ($SEEN_CL) {
-            WSP($SP, SLT_Error, "Duplicated Content-Length header");
-            return (400);
-        }
-        $SEEN_CL = 1;
-    }
-    $RETVAL = htc_request_check_hdrs($SP, $HP);
+  patterns:
+  - pattern: |
+      $RETVAL = htc_request_check_host_hdr($HP);
+      if ($RETVAL != 0) {
+          WSP($SP, SLT_Error, "Duplicated Host header");
+          return ($RETVAL);
+      }
+  - pattern-not: |
+      int $SEEN_CL = 0;
+      if (http_IsHdr(&$HP->hd[$U], H_Content_Length)) {
+          if ($SEEN_CL) {
+              WSP($SP, SLT_Error, "Duplicated Content-Length header");
+              return (400);
+          }
+          $SEEN_CL = 1;
+      }
+      $RETVAL = htc_request_check_hdrs($SP, $HP);
   languages:
   - c
   message: |
@@ -33,41 +34,42 @@ rules:
     technology:
     - c
 - id: vuln-varnish-cache-62932b42
-  pattern: |
-    static void
-    cnt_vdp(struct req *req, struct boc *boc)
-    {
-        ...
-        if (sendbody < 0) {
-            /* Don't touch pass+HEAD C-L */
-            sendbody = 0;
-        } else if (resp_len >= 0 && resp_len == req->resp_len) {
-            /* Reuse C-L header */
-        } else {
-            http_Unset(req->resp, H_Content_Length);
-            if (req->resp_len >= 0 && sendbody)
-                http_PrintfHeader(req->resp,
-                    "Content-Length: %jd", req->resp_len);
-        }
-        ...
-    }
-  pattern-not: |
-    static enum req_fsm_nxt
-    cnt_transmit(struct worker *wrk, struct req *req)
-    {
-        ...
-        if (sendbody < 0) {
-            /* Don't touch pass+HEAD C-L */
-            sendbody = 0;
-        } else if (resp_len >= 0 && resp_len == req->resp_len) {
-            /* Reuse C-L header */
-            http_Unset(req->resp, H_Content_Length);
-            if (req->resp_len >= 0 && sendbody)
-                http_PrintfHeader(req->resp,
-                    "Content-Length: %jd", req->resp_len);
-        }
-        ...
-    }
+  patterns:
+  - pattern: |
+      static void
+      cnt_vdp(struct req *req, struct boc *boc)
+      {
+          ...
+          if (sendbody < 0) {
+              /* Don't touch pass+HEAD C-L */
+              sendbody = 0;
+          } else if (resp_len >= 0 && resp_len == req->resp_len) {
+              /* Reuse C-L header */
+          } else {
+              http_Unset(req->resp, H_Content_Length);
+              if (req->resp_len >= 0 && sendbody)
+                  http_PrintfHeader(req->resp,
+                      "Content-Length: %jd", req->resp_len);
+          }
+          ...
+      }
+  - pattern-not: |
+      static enum req_fsm_nxt
+      cnt_transmit(struct worker *wrk, struct req *req)
+      {
+          ...
+          if (sendbody < 0) {
+              /* Don't touch pass+HEAD C-L */
+              sendbody = 0;
+          } else if (resp_len >= 0 && resp_len == req->resp_len) {
+              /* Reuse C-L header */
+              http_Unset(req->resp, H_Content_Length);
+              if (req->resp_len >= 0 && sendbody)
+                  http_PrintfHeader(req->resp,
+                      "Content-Length: %jd", req->resp_len);
+          }
+          ...
+      }
   languages:
   - c
   message: |
@@ -85,10 +87,11 @@ rules:
     technology:
     - c
 - id: vuln-varnish-cache-85e8468b
-  pattern: |
-    vct_iscrlf(*$VAR)
-  pattern-not: |
-    vct_iscrlf($VAR)
+  patterns:
+  - pattern: |
+      vct_iscrlf(*$VAR)
+  - pattern-not: |
+      vct_iscrlf($VAR)
   languages:
   - c
   message: |
@@ -106,14 +109,15 @@ rules:
     technology:
     - c
 - id: vuln-varnish-cache-987ba4c4
-  pattern: |
-    for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask; $L++) {
-      ...
-    }
-  pattern-not: |
-    for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask - 7; $L++) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask; $L++) {
+        ...
+      }
+  - pattern-not: |
+      for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask - 7; $L++) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -129,20 +133,21 @@ rules:
     technology:
     - c
 - id: vuln-varnish-cache-fcf5722a
-  pattern: |
-    if ($U < 2 || $U > 19)
-      return(NULL);
-    if ($U > 3)
-      $U += $HTTP_ASSO_VALUES[((const uint8_t*)$B)[3]];
-    if ($U > 38)
-      return(NULL);
-  pattern-not: |
-    if ($U < GPERF_MIN_WORD_LENGTH || $U > GPERF_MAX_WORD_LENGTH)
-      return (NULL);
-    $U += $HTTP_ASSO_VALUES[((const uint8_t *)$B)[$U - 1]] +
-        $HTTP_ASSO_VALUES[((const uint8_t *)$B)[0]];
-    if ($U > GPERF_MAX_HASH_VALUE)
-      return (NULL);
+  patterns:
+  - pattern: |
+      if ($U < 2 || $U > 19)
+        return(NULL);
+      if ($U > 3)
+        $U += $HTTP_ASSO_VALUES[((const uint8_t*)$B)[3]];
+      if ($U > 38)
+        return(NULL);
+  - pattern-not: |
+      if ($U < GPERF_MIN_WORD_LENGTH || $U > GPERF_MAX_WORD_LENGTH)
+        return (NULL);
+      $U += $HTTP_ASSO_VALUES[((const uint8_t *)$B)[$U - 1]] +
+          $HTTP_ASSO_VALUES[((const uint8_t *)$B)[0]];
+      if ($U > GPERF_MAX_HASH_VALUE)
+        return (NULL);
   languages:
   - c
   message: |

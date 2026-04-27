@@ -1,9 +1,10 @@
 rules:
 - id: vuln-envoy-675f317d
-  pattern: |
-    const Api::SysCallSizeResult $RESULT = Api::OsSysCallsSingleton::get().recvmsg($FD, &$HDR, 0);
-  pattern-not: |
-    const Api::SysCallSizeResult $RESULT = Api::OsSysCallsSingleton::get().recvmsg($FD, &$HDR, $MSG_TRUNC);
+  patterns:
+  - pattern: |
+      const Api::SysCallSizeResult $RESULT = Api::OsSysCallsSingleton::get().recvmsg($FD, &$HDR, 0);
+  - pattern-not: |
+      const Api::SysCallSizeResult $RESULT = Api::OsSysCallsSingleton::get().recvmsg($FD, &$HDR, $MSG_TRUNC);
   languages:
   - cpp
   message: |
@@ -21,20 +22,21 @@ rules:
     technology:
     - cpp
 - id: vuln-envoy-7ca28ff7
-  pattern: |
-    const uint32_t total = $FIELD.size() + $VALUE.size() + $HEADERS.byteSize();
-    if (total > ($MAX_HEADERS_KB * 1024)) {
-      ...
-      throw CodecProtocolException($ERROR_MESSAGE);
-    }
-  pattern-not: |
-    void checkMaxHeadersSize() {
-      const uint32_t total = getHeadersSize();
-      if (total > (max_headers_kb_ * 1024)) {
+  patterns:
+  - pattern: |
+      const uint32_t total = $FIELD.size() + $VALUE.size() + $HEADERS.byteSize();
+      if (total > ($MAX_HEADERS_KB * 1024)) {
         ...
-        throw CodecProtocolException(...);
+        throw CodecProtocolException($ERROR_MESSAGE);
       }
-    }
+  - pattern-not: |
+      void checkMaxHeadersSize() {
+        const uint32_t total = getHeadersSize();
+        if (total > (max_headers_kb_ * 1024)) {
+          ...
+          throw CodecProtocolException(...);
+        }
+      }
   languages:
   - cpp
   message: |
@@ -49,14 +51,15 @@ rules:
     technology:
     - cpp
 - id: vuln-envoy-9584bcd0
-  pattern: |
-    if ($READ_BUFFER.length() > 0) {
-      ...
-    }
-  pattern-not: |
-    if ($READ_BUFFER.length() > 0 || $TRANSPORT_WANTS_READ) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($READ_BUFFER.length() > 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($READ_BUFFER.length() > 0 || $TRANSPORT_WANTS_READ) {
+        ...
+      }
   languages:
   - cpp
   message: |

@@ -1,12 +1,13 @@
 rules:
 - id: vuln-tpm2-tools-c069e4f1
-  pattern: |
-    memset($BUFFER, $VALUE, $SIZE);
-  pattern-not: |
-    int $RC = RAND_bytes($BUFFER, $SIZE);
-    if ($RC != 1) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      memset($BUFFER, $VALUE, $SIZE);
+  - pattern-not: |
+      int $RC = RAND_bytes($BUFFER, $SIZE);
+      if ($RC != 1) {
+        ...
+      }
   languages:
   - c
   message: |

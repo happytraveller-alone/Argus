@@ -1,16 +1,17 @@
 rules:
 - id: vuln-nginx-proxy-manager-e7ddcb91
-  pattern: |
-    fs.readFile('dist' + $PATH, 'utf8', function (err, $DATA) {
-        ...
-    })
-  pattern-not: |
-    var $P = path.normalize('dist' + $PATH);
-    if ($P.startsWith('dist')) {
-        fs.readFile($P, 'utf8', function (err, $DATA) {
-            ...
-        });
-    }
+  patterns:
+  - pattern: |
+      fs.readFile('dist' + $PATH, 'utf8', function (err, $DATA) {
+          ...
+      })
+  - pattern-not: |
+      var $P = path.normalize('dist' + $PATH);
+      if ($P.startsWith('dist')) {
+          fs.readFile($P, 'utf8', function (err, $DATA) {
+              ...
+          });
+      }
   languages:
   - javascript
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-pimcore-2fd46859
-  pattern: |
-    pimcore.helpers.deleteConfirm($TEXT, $DATA.data.key, $FUNC)
-  pattern-not: |
-    pimcore.helpers.deleteConfirm($TEXT, Ext.util.Format.htmlEncode($DATA.data.key), $FUNC)
+  patterns:
+  - pattern: |
+      pimcore.helpers.deleteConfirm($TEXT, $DATA.data.key, $FUNC)
+  - pattern-not: |
+      pimcore.helpers.deleteConfirm($TEXT, Ext.util.Format.htmlEncode($DATA.data.key), $FUNC)
   languages:
   - javascript
   message: |

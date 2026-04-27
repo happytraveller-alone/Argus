@@ -1,12 +1,13 @@
 rules:
 - id: vuln-jsish-1b2a9e2f
-  pattern: |
-    $THIS->d.obj->ot = $OT;
-    $THIS->d.obj->d.num = $NV;
-    Jsi_ValueMakeNumber($INTERP, $RET, $NV);
-  pattern-not: |
-    Jsi_ValueMakeNumber($INTERP, &$THIS, $NV);
-    Jsi_ValueDup2($INTERP, $RET, $THIS);
+  patterns:
+  - pattern: |
+      $THIS->d.obj->ot = $OT;
+      $THIS->d.obj->d.num = $NV;
+      Jsi_ValueMakeNumber($INTERP, $RET, $NV);
+  - pattern-not: |
+      Jsi_ValueMakeNumber($INTERP, &$THIS, $NV);
+      Jsi_ValueDup2($INTERP, $RET, $THIS);
   languages:
   - c
   message: |
@@ -24,10 +25,11 @@ rules:
     technology:
     - c
 - id: vuln-jsish-3ce16910
-  pattern: |
-    if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj->func->pkg) $RETURN;
-  pattern-not: |
-    if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj || !$FUNC->fobj->func->pkg) $RETURN;
+  patterns:
+  - pattern: |
+      if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj->func->pkg) $RETURN;
+  - pattern-not: |
+      if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj || !$FUNC->fobj->func->pkg) $RETURN;
   languages:
   - c
   message: |
@@ -43,11 +45,12 @@ rules:
     technology:
     - c
 - id: vuln-jsish-48b86dbe
-  pattern: |
-    assert($VP != $RESPTR);
-  pattern-not: |
-    if ($VP == $RESPTR)
-      return Jsi_LogError("bad eval");
+  patterns:
+  - pattern: |
+      assert($VP != $RESPTR);
+  - pattern-not: |
+      if ($VP == $RESPTR)
+        return Jsi_LogError("bad eval");
   languages:
   - c
   message: |
@@ -65,10 +68,11 @@ rules:
     technology:
     - c
 - id: vuln-jsish-5c90ca03
-  pattern: |
-    return ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER));
-  pattern-not: |
-    return ($PV && ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER)));
+  patterns:
+  - pattern: |
+      return ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER));
+  - pattern-not: |
+      return ($PV && ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER)));
   languages:
   - c
   message: |
@@ -84,20 +88,21 @@ rules:
     technology:
     - c
 - id: vuln-jsish-619df528
-  pattern: |
-    if ($I != $J && !Jsi_Strcmp($ARGS[$I].name, $ARGS[$J].name)) {
-        ...
-        Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ARGS[$I].name);
-        ...
-        pstate->err_count++;
-    }
-  pattern-not: |
-    if ($I != $J && !Jsi_Strcmp($ANAM, $ARGS[$J].name)) {
-        ...
-        Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ANAM);
-        ...
-        pstate->err_count++;
-    }
+  patterns:
+  - pattern: |
+      if ($I != $J && !Jsi_Strcmp($ARGS[$I].name, $ARGS[$J].name)) {
+          ...
+          Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ARGS[$I].name);
+          ...
+          pstate->err_count++;
+      }
+  - pattern-not: |
+      if ($I != $J && !Jsi_Strcmp($ANAM, $ARGS[$J].name)) {
+          ...
+          Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ANAM);
+          ...
+          pstate->err_count++;
+      }
   languages:
   - c
   message: |
@@ -113,25 +118,26 @@ rules:
     technology:
     - c
 - id: vuln-jsish-764f8f60
-  pattern: |
-    Assert($T >= 0);
-    Jsi_Value *$V = _jsi_THISIDX($T);
-    jsiClearThis($INTERP, $T);
-    Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
-    if ($V->vt == JSI_VT_VARIABLE) {
-        Jsi_ValueCopy($INTERP, $V, $V->d.lval);
-    }
-    $RC = Jsi_ValueToObject($INTERP, $V);
-  pattern-not: |
-    if ($T >= 0) {
-        Jsi_Value *$V = _jsi_THISIDX($T);
-        jsiClearThis($INTERP, $T);
-        Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
-        if ($V->vt == JSI_VT_VARIABLE) {
-            Jsi_ValueCopy($INTERP, $V, $V->d.lval);
-        }
-        $RC = Jsi_ValueToObject($INTERP, $V);
-    }
+  patterns:
+  - pattern: |
+      Assert($T >= 0);
+      Jsi_Value *$V = _jsi_THISIDX($T);
+      jsiClearThis($INTERP, $T);
+      Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
+      if ($V->vt == JSI_VT_VARIABLE) {
+          Jsi_ValueCopy($INTERP, $V, $V->d.lval);
+      }
+      $RC = Jsi_ValueToObject($INTERP, $V);
+  - pattern-not: |
+      if ($T >= 0) {
+          Jsi_Value *$V = _jsi_THISIDX($T);
+          jsiClearThis($INTERP, $T);
+          Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
+          if ($V->vt == JSI_VT_VARIABLE) {
+              Jsi_ValueCopy($INTERP, $V, $V->d.lval);
+          }
+          $RC = Jsi_ValueToObject($INTERP, $V);
+      }
   languages:
   - c
   message: |
@@ -148,11 +154,12 @@ rules:
     technology:
     - c
 - id: vuln-jsish-7df22ab2
-  pattern: |
-    $THIS->d.obj->d.s.str = Jsi_StrdupLen($NV, $LEN);
-  pattern-not: |
-    $NSTR = Jsi_StrdupLen($NV, $LEN);
-    $THIS->d.obj->d.s.str = $NSTR;
+  patterns:
+  - pattern: |
+      $THIS->d.obj->d.s.str = Jsi_StrdupLen($NV, $LEN);
+  - pattern-not: |
+      $NSTR = Jsi_StrdupLen($NV, $LEN);
+      $THIS->d.obj->d.s.str = $NSTR;
   languages:
   - c
   message: |
@@ -168,14 +175,15 @@ rules:
     technology:
     - c
 - id: vuln-jsish-8d57b655
-  pattern: |
-    if (!$VAR == $CONST) {
-      ...
-    }
-  pattern-not: |
-    if ($VAR == $CONST) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if (!$VAR == $CONST) {
+        ...
+      }
+  - pattern-not: |
+      if ($VAR == $CONST) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -195,17 +203,18 @@ rules:
     technology:
     - c
 - id: vuln-jsish-9c9dbe59
-  pattern: |
-    if (Jsi_ObjArraySizer($INTERP, $OBJ, $N) <= 0)
-    ...
-    $OBJ->arr[$N] = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
-  pattern-not: |
-    if (Jsi_ObjArraySizer($INTERP, $OBJ, $N+1) <= 0)
-    ...
-    Jsi_Value* $V = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
-    $OBJ->arr[$N] = $V;
-    if ($V)
-        Jsi_IncrRefCount($INTERP, $V);
+  patterns:
+  - pattern: |
+      if (Jsi_ObjArraySizer($INTERP, $OBJ, $N) <= 0)
+      ...
+      $OBJ->arr[$N] = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
+  - pattern-not: |
+      if (Jsi_ObjArraySizer($INTERP, $OBJ, $N+1) <= 0)
+      ...
+      Jsi_Value* $V = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
+      $OBJ->arr[$N] = $V;
+      if ($V)
+          Jsi_IncrRefCount($INTERP, $V);
   languages:
   - c
   message: |

@@ -1,9 +1,10 @@
 rules:
 - id: vuln-jhead-4827ed31
-  pattern: |
-    if ($CH == '\r' && $DATA[$A+1] == '\n') $CONTINUE;
-  pattern-not: |
-    if ($CH == '\r' && $A < $LENGTH-1 && $DATA[$A+1] == '\n') $CONTINUE;
+  patterns:
+  - pattern: |
+      if ($CH == '\r' && $DATA[$A+1] == '\n') $CONTINUE;
+  - pattern-not: |
+      if ($CH == '\r' && $A < $LENGTH-1 && $DATA[$A+1] == '\n') $CONTINUE;
   languages:
   - c
   message: |
@@ -21,14 +22,15 @@ rules:
     technology:
     - c
 - id: vuln-jhead-76d11094
-  pattern: |
-    if(strpbrk($VAR, "\";'&|`")) {
-      ...
-    }
-  pattern-not: |
-    if(strpbrk($VAR, "\";'&|`$")) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if(strpbrk($VAR, "\";'&|`")) {
+        ...
+      }
+  - pattern-not: |
+      if(strpbrk($VAR, "\";'&|`$")) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -49,14 +51,15 @@ rules:
     technology:
     - c
 - id: vuln-jhead-a50953a2
-  pattern: |
-    if ($OFFSETVAL + $BYTECOUNT > $EXIFLENGTH || $OFFSETVAL < 0 || $OFFSETVAL > 65536) {
-      ...
-    }
-  pattern-not: |
-    if ($OFFSETVAL + $BYTECOUNT > $EXIFLENGTH || $OFFSETVAL > 65536) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($OFFSETVAL + $BYTECOUNT > $EXIFLENGTH || $OFFSETVAL < 0 || $OFFSETVAL > 65536) {
+        ...
+      }
+  - pattern-not: |
+      if ($OFFSETVAL + $BYTECOUNT > $EXIFLENGTH || $OFFSETVAL > 65536) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -73,10 +76,11 @@ rules:
     technology:
     - c
 - id: vuln-jhead-b8d78e5e
-  pattern: |
-    memmove($SECTIONS + $A, $SECTIONS + $A + 1, sizeof($SECTION_T) * ($SECTIONS_READ - $A))
-  pattern-not: |
-    memmove($SECTIONS + $A, $SECTIONS + $A + 1, sizeof($SECTION_T) * ($SECTIONS_READ - $A - 1))
+  patterns:
+  - pattern: |
+      memmove($SECTIONS + $A, $SECTIONS + $A + 1, sizeof($SECTION_T) * ($SECTIONS_READ - $A))
+  - pattern-not: |
+      memmove($SECTIONS + $A, $SECTIONS + $A + 1, sizeof($SECTION_T) * ($SECTIONS_READ - $A - 1))
   languages:
   - c
   message: |
@@ -92,18 +96,19 @@ rules:
     technology:
     - c
 - id: vuln-jhead-f0a88421
-  pattern: |
-    void process_EXIF (unsigned char * $EXIF, int $LEN) {
-        ...
-        return;
-        ...
-    }
-  pattern-not: |
-    int process_EXIF (unsigned char * $EXIF, int $LEN) {
-        ...
-        return $RET;
-        ...
-    }
+  patterns:
+  - pattern: |
+      void process_EXIF (unsigned char * $EXIF, int $LEN) {
+          ...
+          return;
+          ...
+      }
+  - pattern-not: |
+      int process_EXIF (unsigned char * $EXIF, int $LEN) {
+          ...
+          return $RET;
+          ...
+      }
   languages:
   - c
   message: |

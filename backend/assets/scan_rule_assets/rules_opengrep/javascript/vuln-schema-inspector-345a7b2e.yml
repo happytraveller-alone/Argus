@@ -1,13 +1,14 @@
 rules:
 - id: vuln-schema-inspector-345a7b2e
-  pattern: |
-    if ($OBJ.hasOwnProperty($KEY)) {
-      ...
-    }
-  pattern-not: |
-    if (Object.prototype.hasOwnProperty.call($OBJ, $KEY)) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($OBJ.hasOwnProperty($KEY)) {
+        ...
+      }
+  - pattern-not: |
+      if (Object.prototype.hasOwnProperty.call($OBJ, $KEY)) {
+        ...
+      }
   languages:
   - javascript
   message: |

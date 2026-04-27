@@ -1,9 +1,9 @@
 rules:
 - id: vuln-xen-f8592183
-  pattern: |
-    int access_node(struct connection *conn, struct node *node, enum node_access_type type, TDB_DATA *key);
-  pattern-not: |
-    int __must_check access_node(struct connection *conn, struct node *node, enum node_access_type type, TDB_DATA *key);
+  patterns:
+  - pattern: |
+      int access_node(struct connection *conn, struct node *node, enum node_access_type type, TDB_DATA *key);
+  - pattern-not-regex: __must_check\s+access_node
   languages:
   - cpp
   message: |

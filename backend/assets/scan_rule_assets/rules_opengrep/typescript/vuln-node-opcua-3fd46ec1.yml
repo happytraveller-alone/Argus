@@ -1,9 +1,10 @@
 rules:
 - id: vuln-node-opcua-3fd46ec1
-  pattern: |
-    this._start_timer();
-  pattern-not: |
-    this._start_timer({ firstTime: $VAR });
+  patterns:
+  - pattern: |
+      this._start_timer();
+  - pattern-not: |
+      this._start_timer({ firstTime: $VAR });
   languages:
   - typescript
   message: |

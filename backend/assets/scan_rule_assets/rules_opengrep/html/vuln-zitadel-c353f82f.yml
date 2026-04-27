@@ -1,9 +1,10 @@
 rules:
 - id: vuln-zitadel-c353f82f
-  pattern: |
-    <span class="cnsl-type" [innerHtml]="$VAR"></span>
-  pattern-not: |
-    <span class="cnsl-type">{{ $VAR }}</span>
+  patterns:
+  - pattern: |
+      <span class="cnsl-type" [innerHtml]="$VAR"></span>
+  - pattern-not: |
+      <span class="cnsl-type">{{ $VAR }}</span>
   languages:
   - html
   message: |

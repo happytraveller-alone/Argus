@@ -1,41 +1,42 @@
 rules:
 - id: vuln-dhcpcd-1475a702
-  pattern: |
-    if ($TYPE & $ADDRIPV4) {
-      $SZ = sizeof(uint32_t);
-    } else if ($TYPE & $UINT16) {
-      $SZ = sizeof(uint16_t);
-    } else if ($TYPE & ($UINT8 | $BITFLAG)) {
-      $SZ = sizeof(uint8_t);
-    } else if ($TYPE & $ADDRIPV6) {
-      $SZ = $ADDR6SZ;
-    } else {
-      return (ssize_t)$DL;
-    }
-    return $DL < $SZ ? -1 : (ssize_t)$SZ;
-  pattern-not: |
-    if ($TYPE & $ADDRIPV6)
-      $SZ = $ADDR6SZ;
-    else if ($TYPE & ($UINT32 | $ADDRIPV4))
-      $SZ = sizeof(uint32_t);
-    else if ($TYPE & $UINT16)
-      $SZ = sizeof(uint16_t);
-    else if ($TYPE & ($UINT8 | $BITFLAG))
-      $SZ = sizeof(uint8_t);
-    else if ($TYPE & $FLAG)
-      return 0;
-    else {
-      if ((size_t)$OPT->len > $DL) {
-        errno = ENODATA;
+  patterns:
+  - pattern: |
+      if ($TYPE & $ADDRIPV4) {
+        $SZ = sizeof(uint32_t);
+      } else if ($TYPE & $UINT16) {
+        $SZ = sizeof(uint16_t);
+      } else if ($TYPE & ($UINT8 | $BITFLAG)) {
+        $SZ = sizeof(uint8_t);
+      } else if ($TYPE & $ADDRIPV6) {
+        $SZ = $ADDR6SZ;
+      } else {
+        return (ssize_t)$DL;
       }
-    }
-    if ($DL < $SZ) {
-      errno = ENODATA;
-      return -1;
-    }
-    if ($TYPE & $ARRAY)
-      return (ssize_t)($DL - ($DL % $SZ));
-    return (ssize_t)$SZ;
+      return $DL < $SZ ? -1 : (ssize_t)$SZ;
+  - pattern-not: |
+      if ($TYPE & $ADDRIPV6)
+        $SZ = $ADDR6SZ;
+      else if ($TYPE & ($UINT32 | $ADDRIPV4))
+        $SZ = sizeof(uint32_t);
+      else if ($TYPE & $UINT16)
+        $SZ = sizeof(uint16_t);
+      else if ($TYPE & ($UINT8 | $BITFLAG))
+        $SZ = sizeof(uint8_t);
+      else if ($TYPE & $FLAG)
+        return 0;
+      else {
+        if ((size_t)$OPT->len > $DL) {
+          errno = ENODATA;
+        }
+      }
+      if ($DL < $SZ) {
+        errno = ENODATA;
+        return -1;
+      }
+      if ($TYPE & $ARRAY)
+        return (ssize_t)($DL - ($DL % $SZ));
+      return (ssize_t)$SZ;
   languages:
   - c
   message: |

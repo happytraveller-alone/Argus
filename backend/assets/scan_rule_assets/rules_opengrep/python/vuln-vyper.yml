@@ -1,9 +1,10 @@
 rules:
 - id: vuln-vyper-02339dfd
-  pattern: |
-    ["if", ["eq", "_calldata_method_id", $METHOD_ID], $RET]
-  pattern-not: |
-    ["if", ["and", ["gt", "calldatasize", 0], ["eq", "_calldata_method_id", $METHOD_ID]], $RET]
+  patterns:
+  - pattern: |
+      ["if", ["eq", "_calldata_method_id", $METHOD_ID], $RET]
+  - pattern-not: |
+      ["if", ["and", ["gt", "calldatasize", 0], ["eq", "_calldata_method_id", $METHOD_ID]], $RET]
   languages:
   - python
   message: Detected a vulnerability where a method ID check does not validate calldatasize. This can lead to incorrect function execution when calldata is empty. Ensure that calldatasize is checked when the method ID is 0.
@@ -16,10 +17,11 @@ rules:
     technology:
     - python
 - id: vuln-vyper-10564dcc
-  pattern: |
-    $CTX.append_instruction($OPCODE, [$IRLITERAL(...)])
-  pattern-not: |
-    $BB.append_instruction($OPCODE, $VALUE)
+  patterns:
+  - pattern: |
+      $CTX.append_instruction($OPCODE, [$IRLITERAL(...)])
+  - pattern-not: |
+      $BB.append_instruction($OPCODE, $VALUE)
   languages:
   - python
   message: |
@@ -33,35 +35,36 @@ rules:
     technology:
     - python
 - id: vuln-vyper-78fa8dd8
-  pattern: |
-    IRnode.from_list(
-        [
-            "seq",
-            ["mstore", $PLACEHOLDER, $GETELEM($ARG, 0)],
-            ["mstore", ["add", $PLACEHOLDER, 32], $GETELEM($ARG, 1)],
-            ["mstore", ["add", $PLACEHOLDER, 64], $GETELEM($ARG2, 0)],
-            ["mstore", ["add", $PLACEHOLDER, 96], $GETELEM($ARG2, 1)],
-            [
-                "assert",
-                ["staticcall", ["gas"], $CALL, $PLACEHOLDER, $SIZE, $PLACEHOLDER, $RET_SIZE],
-            ],
-            $PLACEHOLDER,
-        ],
-        typ=$TYP,
-        location=$LOC,
-    )
-  pattern-not: |
-    IRnode.from_list(
-        [
-            "seq",
-            make_setter($DST0, $ARG0),
-            make_setter($DST1, $ARG1),
-            ["assert", ["staticcall", ["gas"], $CALL, $BUF, $SIZE, $BUF, $RET_SIZE]],
-            $BUF,
-        ],
-        typ=$TYP,
-        location=$LOC,
-    )
+  patterns:
+  - pattern: |
+      IRnode.from_list(
+          [
+              "seq",
+              ["mstore", $PLACEHOLDER, $GETELEM($ARG, 0)],
+              ["mstore", ["add", $PLACEHOLDER, 32], $GETELEM($ARG, 1)],
+              ["mstore", ["add", $PLACEHOLDER, 64], $GETELEM($ARG2, 0)],
+              ["mstore", ["add", $PLACEHOLDER, 96], $GETELEM($ARG2, 1)],
+              [
+                  "assert",
+                  ["staticcall", ["gas"], $CALL, $PLACEHOLDER, $SIZE, $PLACEHOLDER, $RET_SIZE],
+              ],
+              $PLACEHOLDER,
+          ],
+          typ=$TYP,
+          location=$LOC,
+      )
+  - pattern-not: |
+      IRnode.from_list(
+          [
+              "seq",
+              make_setter($DST0, $ARG0),
+              make_setter($DST1, $ARG1),
+              ["assert", ["staticcall", ["gas"], $CALL, $BUF, $SIZE, $BUF, $RET_SIZE]],
+              $BUF,
+          ],
+          typ=$TYP,
+          location=$LOC,
+      )
   languages:
   - python
   message: |
@@ -78,12 +81,13 @@ rules:
     - python
     - vyper
 - id: vuln-vyper-c3e68c30
-  pattern: |
-    num_kwargs = len($SIG.default_args)
-    kwargs_needed = num_kwargs - num_provided_kwargs
-    kw_vals = list($SIG.default_values.values())[:kwargs_needed]
-  pattern-not: |
-    kw_vals = list($SIG.default_values.values())[num_provided_kwargs:]
+  patterns:
+  - pattern: |
+      num_kwargs = len($SIG.default_args)
+      kwargs_needed = num_kwargs - num_provided_kwargs
+      kw_vals = list($SIG.default_values.values())[:kwargs_needed]
+  - pattern-not: |
+      kw_vals = list($SIG.default_values.values())[num_provided_kwargs:]
   languages:
   - python
   message: |
@@ -96,29 +100,30 @@ rules:
     owasp: A06:2021-Vulnerable and Outdated Components
     technology: python
 - id: vuln-vyper-eae0eaf8
-  pattern: |
-    if $TYPE.nonreentrant is not None:
-      $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
+  patterns:
+  - pattern: |
+      if $TYPE.nonreentrant is not None:
+        $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
+        $VARIABLE_NAME = f"nonreentrant.{$TYPE.nonreentrant}"
+        $RET[$VARIABLE_NAME] = {
+            "type": "nonreentrant lock",
+            "location": "storage",
+            "slot": $STORAGE_SLOT,
+        }
+        $STORAGE_SLOT += 1
+  - pattern-not: |
+      if $TYPE.nonreentrant is None:
+        continue
       $VARIABLE_NAME = f"nonreentrant.{$TYPE.nonreentrant}"
+      if $VARIABLE_NAME in $RET:
+        continue
+      $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
       $RET[$VARIABLE_NAME] = {
           "type": "nonreentrant lock",
           "location": "storage",
           "slot": $STORAGE_SLOT,
       }
       $STORAGE_SLOT += 1
-  pattern-not: |
-    if $TYPE.nonreentrant is None:
-      continue
-    $VARIABLE_NAME = f"nonreentrant.{$TYPE.nonreentrant}"
-    if $VARIABLE_NAME in $RET:
-      continue
-    $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
-    $RET[$VARIABLE_NAME] = {
-        "type": "nonreentrant lock",
-        "location": "storage",
-        "slot": $STORAGE_SLOT,
-    }
-    $STORAGE_SLOT += 1
   languages:
   - python
   message: |

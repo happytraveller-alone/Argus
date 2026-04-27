@@ -1,21 +1,22 @@
 rules:
 - id: vuln-gthumb-14860321
-  pattern: |
-    while ($SRCINFO.output_scanline < $SRCINFO.output_height) {
-      ...
-      for ($X = 0; $X < $SRCINFO.output_width; $X++) {
+  patterns:
+  - pattern: |
+      while ($SRCINFO.output_scanline < $SRCINFO.output_height) {
+        ...
+        for ($X = 0; $X < $SRCINFO.output_width; $X++) {
+          ...
+        }
         ...
       }
-      ...
-    }
-  pattern-not: |
-    while ($SRCINFO.output_scanline < $OUTPUT_HEIGHT) {
-      ...
-      for ($X = 0; $X < $OUTPUT_WIDTH; $X++) {
+  - pattern-not: |
+      while ($SRCINFO.output_scanline < $OUTPUT_HEIGHT) {
+        ...
+        for ($X = 0; $X < $OUTPUT_WIDTH; $X++) {
+          ...
+        }
         ...
       }
-      ...
-    }
   languages:
   - c
   message: |

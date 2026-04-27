@@ -1,13 +1,14 @@
 rules:
 - id: vuln-weave-15f21f18
-  pattern: |
-    func $FUNC($VAR1 string, $VAR2 int) string {
-      return filepath.Join($VAR1, fmt.Sprintf("/proc/%d/ns/net", $VAR2))
-    }
-  pattern-not: |
-    func $FUNC($VAR1 string, $VAR2 int) string {
-      return filepath.Join($VAR1, fmt.Sprint($VAR2), "/ns/net")
-    }
+  patterns:
+  - pattern: |
+      func $FUNC($VAR1 string, $VAR2 int) string {
+        return filepath.Join($VAR1, fmt.Sprintf("/proc/%d/ns/net", $VAR2))
+      }
+  - pattern-not: |
+      func $FUNC($VAR1 string, $VAR2 int) string {
+        return filepath.Join($VAR1, fmt.Sprint($VAR2), "/ns/net")
+      }
   languages:
   - go
   message: |

@@ -1,21 +1,22 @@
 rules:
 - id: vuln-gosaml2-f9d66040
-  pattern: |
-    func maybeDeflate($DATA []byte, $DECODER func([]byte) error) error {
-      ...
-      $DEFLATED, $ERR := ioutil.ReadAll(flate.NewReader(bytes.NewReader($DATA)))
-      ...
-    }
-  pattern-not: |
-    func maybeDeflate($DATA []byte, $MAXSIZE int64, $DECODER func([]byte) error) error {
-      ...
-      $LR := io.LimitReader(flate.NewReader(bytes.NewReader($DATA)), $MAXSIZE+1)
-      $DEFLATED, $ERR := io.ReadAll($LR)
-      if int64(len($DEFLATED)) > $MAXSIZE {
-        return fmt.Errorf("deflated response exceeds maximum size of %d bytes", $MAXSIZE)
+  patterns:
+  - pattern: |
+      func maybeDeflate($DATA []byte, $DECODER func([]byte) error) error {
+        ...
+        $DEFLATED, $ERR := ioutil.ReadAll(flate.NewReader(bytes.NewReader($DATA)))
+        ...
       }
-      ...
-    }
+  - pattern-not: |
+      func maybeDeflate($DATA []byte, $MAXSIZE int64, $DECODER func([]byte) error) error {
+        ...
+        $LR := io.LimitReader(flate.NewReader(bytes.NewReader($DATA)), $MAXSIZE+1)
+        $DEFLATED, $ERR := io.ReadAll($LR)
+        if int64(len($DEFLATED)) > $MAXSIZE {
+          return fmt.Errorf("deflated response exceeds maximum size of %d bytes", $MAXSIZE)
+        }
+        ...
+      }
   languages:
   - go
   message: |

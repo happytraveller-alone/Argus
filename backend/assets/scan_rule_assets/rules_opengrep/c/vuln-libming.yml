@@ -1,16 +1,17 @@
 rules:
 - id: vuln-libming-0aab70a3
-  pattern: |
-    return $ACT->p.String;
-  pattern-not: |
-    if (!$ACT->p.String)
-    {
-        SWF_warn("WARNING: Call to getString with PUSH_VARIABLE defining NULL string.\n");
-        break;
-    }
-    $T=malloc(strlen($ACT->p.String)+1);
-    strcpy($T,$ACT->p.String);
-    return $T;
+  patterns:
+  - pattern: |
+      return $ACT->p.String;
+  - pattern-not: |
+      if (!$ACT->p.String)
+      {
+          SWF_warn("WARNING: Call to getString with PUSH_VARIABLE defining NULL string.\n");
+          break;
+      }
+      $T=malloc(strlen($ACT->p.String)+1);
+      strcpy($T,$ACT->p.String);
+      return $T;
   languages:
   - c
   message: |
@@ -28,22 +29,23 @@ rules:
     technology:
     - c
 - id: vuln-libming-1a1d2704
-  pattern: |
-    char *readBytes(FILE *f, int $SIZE) {
-      ...
-      SWF_warn("readBytes: want to read %i < 1 bytes: Handling a 0\n", $SIZE);
-      ...
-      int $I;
-      ...
-    }
-  pattern-not: |
-    char *readBytes(FILE *f, unsigned long $SIZE) {
-      ...
-      SWF_warn("readBytes: want to read %lu < 1 bytes: Handling a 0\n", $SIZE);
-      ...
-      unsigned long $I;
-      ...
-    }
+  patterns:
+  - pattern: |
+      char *readBytes(FILE *f, int $SIZE) {
+        ...
+        SWF_warn("readBytes: want to read %i < 1 bytes: Handling a 0\n", $SIZE);
+        ...
+        int $I;
+        ...
+      }
+  - pattern-not: |
+      char *readBytes(FILE *f, unsigned long $SIZE) {
+        ...
+        SWF_warn("readBytes: want to read %lu < 1 bytes: Handling a 0\n", $SIZE);
+        ...
+        unsigned long $I;
+        ...
+      }
   languages:
   - c
   message: |
@@ -60,10 +62,11 @@ rules:
     technology:
     - c
 - id: vuln-libming-1d698a4b
-  pattern: |
-    $VAR->Actions[$VAR->numActions-1].SWF_ACTIONRECORD.ActionCode == SWFACTION_JUMP
-  pattern-not: |
-    OpCode($VAR->Actions, $VAR->numActions-1, $VAR2) == SWFACTION_JUMP
+  patterns:
+  - pattern: |
+      $VAR->Actions[$VAR->numActions-1].SWF_ACTIONRECORD.ActionCode == SWFACTION_JUMP
+  - pattern-not: |
+      OpCode($VAR->Actions, $VAR->numActions-1, $VAR2) == SWFACTION_JUMP
   languages:
   - c
   message: |
@@ -83,18 +86,19 @@ rules:
     technology:
     - c
 - id: vuln-libming-2e5a98a0
-  pattern: |
-    $FLAGS += fgetc($F) << 16;
-    $FLAGS += fgetc($F) << 8;
-    $FLAGS += fgetc($F);
-  pattern-not: |
-    for ($I = 2; $I >= 0; --$I) {
-      if (($FLAGS_CHAR = fgetc($F)) == EOF) {
-        error("truncated file");
-      } else {
-        $FLAGS += $FLAGS_CHAR << ($I * 8);
+  patterns:
+  - pattern: |
+      $FLAGS += fgetc($F) << 16;
+      $FLAGS += fgetc($F) << 8;
+      $FLAGS += fgetc($F);
+  - pattern-not: |
+      for ($I = 2; $I >= 0; --$I) {
+        if (($FLAGS_CHAR = fgetc($F)) == EOF) {
+          error("truncated file");
+        } else {
+          $FLAGS += $FLAGS_CHAR << ($I * 8);
+        }
       }
-    }
   languages:
   - c
   message: |
@@ -110,10 +114,11 @@ rules:
     technology:
     - c
 - id: vuln-libming-3120f1cd
-  pattern: |
-    int $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
-  pattern-not: |
-    unsigned long $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
+  patterns:
+  - pattern: |
+      int $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
+  - pattern-not: |
+      unsigned long $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
   languages:
   - c
   message: |
@@ -131,10 +136,11 @@ rules:
     technology:
     - c
 - id: vuln-libming-459fa79d
-  pattern: |
-    $VAR->Password = readBytes($F, $LENGTH);
-  pattern-not: |
-    $VAR->Password = readString($F);
+  patterns:
+  - pattern: |
+      $VAR->Password = readBytes($F, $LENGTH);
+  - pattern-not: |
+      $VAR->Password = readString($F);
   languages:
   - c
   message: |
@@ -153,10 +159,11 @@ rules:
     technology:
     - c
 - id: vuln-libming-80ebea95
-  pattern: |
-    outputSWF_UNKNOWNBLOCK($VAR);
-  pattern-not: |
-    SWF_error("printing type:  %d (%s) is not implemented", $TYPE, blockName($TYPE));
+  patterns:
+  - pattern: |
+      outputSWF_UNKNOWNBLOCK($VAR);
+  - pattern-not: |
+      SWF_error("printing type:  %d (%s) is not implemented", $TYPE, blockName($TYPE));
   languages:
   - c
   message: |
@@ -174,16 +181,17 @@ rules:
     technology:
     - c
 - id: vuln-libming-8dd118ea
-  pattern: |
-    $T = malloc(strlen($VAR) + $N);
-    strcpy($T, $VAR);
-    if (strlen($T))
-      return $T;
-  pattern-not: |
-    $T = malloc(strlen($VAR) + $N);
-    strcpyext($T, $VAR);
-    if (strlen($VAR))
-      return $T;
+  patterns:
+  - pattern: |
+      $T = malloc(strlen($VAR) + $N);
+      strcpy($T, $VAR);
+      if (strlen($T))
+        return $T;
+  - pattern-not: |
+      $T = malloc(strlen($VAR) + $N);
+      strcpyext($T, $VAR);
+      if (strlen($VAR))
+        return $T;
   languages:
   - c
   message: |
@@ -203,14 +211,15 @@ rules:
     technology:
     - c
 - id: vuln-libming-cff9a3bd
-  pattern: |
-    for($I = 0; $I <= $N; ++$I) {
-      ...
-    }
-  pattern-not: |
-    for($I = 0; $I < $N; ++$I) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      for($I = 0; $I <= $N; ++$I) {
+        ...
+      }
+  - pattern-not: |
+      for($I = 0; $I < $N; ++$I) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -226,20 +235,21 @@ rules:
     technology:
     - c
 - id: vuln-libming-efc75c28
-  pattern: |
-    $T = malloc(10);
-    sprintf($T, "%ld", $VAR);
-  pattern-not: |
-    {
-      char $LENGTH_FINDER[1];
-      int $NEEDED_LENGTH = snprintf($LENGTH_FINDER, 1, "%ld", $VAR) + 1;
-      if ($NEEDED_LENGTH <= 0) {
-        $WARN_FUNC("WARNING: could not evaluate size of buffer (memory issue ?).\n");
-        break;
-      }
-      $T = malloc($NEEDED_LENGTH);
+  patterns:
+  - pattern: |
+      $T = malloc(10);
       sprintf($T, "%ld", $VAR);
-    }
+  - pattern-not: |
+      {
+        char $LENGTH_FINDER[1];
+        int $NEEDED_LENGTH = snprintf($LENGTH_FINDER, 1, "%ld", $VAR) + 1;
+        if ($NEEDED_LENGTH <= 0) {
+          $WARN_FUNC("WARNING: could not evaluate size of buffer (memory issue ?).\n");
+          break;
+        }
+        $T = malloc($NEEDED_LENGTH);
+        sprintf($T, "%ld", $VAR);
+      }
   languages:
   - c
   message: |
@@ -259,10 +269,11 @@ rules:
     technology:
     - c
 - id: vuln-libming-f42fdb48
-  pattern: |
-    int $VAR = ($ACTIONS[$INDEX-$OFFSET].$RECORD.$FIELD == $VALUE) ? $TRUE : $FALSE;
-  pattern-not: |
-    int $VAR = ($FUNC($ACTIONS, $INDEX-$OFFSET, $MAX) == $VALUE) ? $TRUE : $FALSE;
+  patterns:
+  - pattern: |
+      int $VAR = ($ACTIONS[$INDEX-$OFFSET].$RECORD.$FIELD == $VALUE) ? $TRUE : $FALSE;
+  - pattern-not: |
+      int $VAR = ($FUNC($ACTIONS, $INDEX-$OFFSET, $MAX) == $VALUE) ? $TRUE : $FALSE;
   languages:
   - c
   message: |

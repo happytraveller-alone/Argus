@@ -1,11 +1,12 @@
 rules:
 - id: vuln-w3m-d43527cf
-  pattern: |
-    $NEWLEN = $X->length * 6 / 5;
-    if ($NEWLEN == $X->length) { ... }
-  pattern-not: |
-    $NEWLEN = $X->area_size * 6 / 5;
-    if ($NEWLEN == $X->area_size) { ... }
+  patterns:
+  - pattern: |
+      $NEWLEN = $X->length * 6 / 5;
+      if ($NEWLEN == $X->length) { ... }
+  - pattern-not: |
+      $NEWLEN = $X->area_size * 6 / 5;
+      if ($NEWLEN == $X->area_size) { ... }
   languages:
   - c
   message: |
@@ -23,12 +24,13 @@ rules:
     technology:
     - c
 - id: vuln-w3m-ddf28e2c
-  pattern: |
-    if ($A->start.line != $A->end.line || $SPOS > $EPOS)
-      $EPOS = $SPOS;
-  pattern-not: |
-    if ($A->start.line != $A->end.line || $SPOS > $EPOS || $EPOS >= $L->len)
-      break;
+  patterns:
+  - pattern: |
+      if ($A->start.line != $A->end.line || $SPOS > $EPOS)
+        $EPOS = $SPOS;
+  - pattern-not: |
+      if ($A->start.line != $A->end.line || $SPOS > $EPOS || $EPOS >= $L->len)
+        break;
   languages:
   - c
   message: |

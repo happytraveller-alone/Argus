@@ -1,9 +1,10 @@
 rules:
 - id: vuln-rclone-c8b11d27
-  pattern: |
-    rand.Seed(time.Now().Unix())
-  pattern-not: |
-    random.Seed()
+  patterns:
+  - pattern: |
+      rand.Seed(time.Now().Unix())
+  - pattern-not: |
+      random.Seed()
   languages:
   - go
   message: |

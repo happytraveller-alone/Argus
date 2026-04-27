@@ -1,13 +1,14 @@
 rules:
 - id: vuln-util-linux-018a1090
-  pattern: |
-    $P = (char *) endswith($FS->target, $SUFFIX);
-    if ($P && *$P)
-        *$P = '\0';
-  pattern-not: |
-    $P = (char *) endswith($FS->target, PATH_DELETED_SUFFIX);
-    if ($P && *$P)
-        *$P = '\0';
+  patterns:
+  - pattern: |
+      $P = (char *) endswith($FS->target, $SUFFIX);
+      if ($P && *$P)
+          *$P = '\0';
+  - pattern-not: |
+      $P = (char *) endswith($FS->target, PATH_DELETED_SUFFIX);
+      if ($P && *$P)
+          *$P = '\0';
   languages:
   - c
   message: |
@@ -28,20 +29,13 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-0377ef91
-  pattern: |
-    {
-      const char *$FSTYPE;
-      $FSTYPE = fsprobe_get_fstype_by_devname($OPTARG);
-      printf("%s\n", $FSTYPE ? $FSTYPE : "unknown");
-      exit($FSTYPE ? 0 : $EX_FAIL);
-    }
-  pattern-inside: |
-    case $CASE_NUM:
-      ...
+  patterns:
+  - pattern: |
       {
-        ...
-        $PATTERN
-        ...
+        const char *$FSTYPE;
+        $FSTYPE = fsprobe_get_fstype_by_devname($OPTARG);
+        printf("%s\n", $FSTYPE ? $FSTYPE : "unknown");
+        exit($FSTYPE ? 0 : $EX_FAIL);
       }
   languages:
   - c
@@ -60,16 +54,17 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-166e8736
-  pattern: |
-    int mnt_fs_is_deleted(struct libmnt_fs *fs)
-    {
-        return mnt_fs_get_flags(fs) & MNT_FS_DELETED;
-    }
-  pattern-not: |
-    int mnt_fs_is_deleted(struct libmnt_fs *fs)
-    {
-        return (mnt_fs_get_flags(fs) & MNT_FS_DELETED) != 0;
-    }
+  patterns:
+  - pattern: |
+      int mnt_fs_is_deleted(struct libmnt_fs *fs)
+      {
+          return mnt_fs_get_flags(fs) & MNT_FS_DELETED;
+      }
+  - pattern-not: |
+      int mnt_fs_is_deleted(struct libmnt_fs *fs)
+      {
+          return (mnt_fs_get_flags(fs) & MNT_FS_DELETED) != 0;
+      }
   languages:
   - c
   message: |
@@ -84,24 +79,25 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-57202f57
-  pattern: |
-    char *$USER_ID = NULL;
-    size_t $SZ;
-    uid_t $UID;
-    char $UIDSTR[sizeof(stringify_value(ULONG_MAX))];
-    ...
-    if (mnt_optstr_get_option($OPTSTR, "user_id", &$USER_ID, &$SZ) != 0)
-      return 0;
-    ...
-    snprintf($UIDSTR, sizeof($UIDSTR), "%lu", (unsigned long) $UID);
-    return strncmp($USER_ID, $UIDSTR, $SZ) == 0;
-  pattern-not: |
-    uid_t $UID, $ENTRY_UID;
-    ...
-    if (mnt_optstr_get_uid($OPTSTR, "user_id", &$ENTRY_UID) != 0)
-      return 0;
-    ...
-    return $UID == $ENTRY_UID;
+  patterns:
+  - pattern: |
+      char *$USER_ID = NULL;
+      size_t $SZ;
+      uid_t $UID;
+      char $UIDSTR[sizeof(stringify_value(ULONG_MAX))];
+      ...
+      if (mnt_optstr_get_option($OPTSTR, "user_id", &$USER_ID, &$SZ) != 0)
+        return 0;
+      ...
+      snprintf($UIDSTR, sizeof($UIDSTR), "%lu", (unsigned long) $UID);
+      return strncmp($USER_ID, $UIDSTR, $SZ) == 0;
+  - pattern-not: |
+      uid_t $UID, $ENTRY_UID;
+      ...
+      if (mnt_optstr_get_uid($OPTSTR, "user_id", &$ENTRY_UID) != 0)
+        return 0;
+      ...
+      return $UID == $ENTRY_UID;
   languages:
   - c
   message: |
@@ -117,32 +113,33 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-687cc5d5
-  pattern: |
-    bool $PERMITTED;
-    ...
-    if (getuid() == 0)
-        $PERMITTED = TRUE;
-    else {
-        if (($SET || $SYSTOHC || $ADJUST) && !$TESTING) {
-            warnx(_("Sorry, only the superuser can change the Hardware Clock."));
-            $PERMITTED = FALSE;
-        } else if (($SYSTZ || $HCTOSYS) && !$TESTING) {
-            warnx(_("Sorry, only the superuser can change the System Clock."));
-            $PERMITTED = FALSE;
-        } else if ($SETEPOCH && !$TESTING) {
-            warnx(_("Sorry, only the superuser can change the Hardware Clock epoch in the kernel."));
-            $PERMITTED = FALSE;
-        } else
-            $PERMITTED = TRUE;
-    }
-    ...
-    if (!$PERMITTED)
-        $EXIT(EX_NOPERM);
-  pattern-not: |
-    if (getuid() != 0) {
-        warnx(_("Sorry, only the superuser can use the Hardware Clock."));
-        $EXIT(EX_NOPERM);
-    }
+  patterns:
+  - pattern: |
+      bool $PERMITTED;
+      ...
+      if (getuid() == 0)
+          $PERMITTED = TRUE;
+      else {
+          if (($SET || $SYSTOHC || $ADJUST) && !$TESTING) {
+              warnx(_("Sorry, only the superuser can change the Hardware Clock."));
+              $PERMITTED = FALSE;
+          } else if (($SYSTZ || $HCTOSYS) && !$TESTING) {
+              warnx(_("Sorry, only the superuser can change the System Clock."));
+              $PERMITTED = FALSE;
+          } else if ($SETEPOCH && !$TESTING) {
+              warnx(_("Sorry, only the superuser can change the Hardware Clock epoch in the kernel."));
+              $PERMITTED = FALSE;
+          } else
+              $PERMITTED = TRUE;
+      }
+      ...
+      if (!$PERMITTED)
+          $EXIT(EX_NOPERM);
+  - pattern-not: |
+      if (getuid() != 0) {
+          warnx(_("Sorry, only the superuser can use the Hardware Clock."));
+          $EXIT(EX_NOPERM);
+      }
   languages:
   - c
   message: |
@@ -162,10 +159,11 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-70e3fcf2
-  pattern: |
-    wchar_t $ARRAY[PAGE_ARRAY_ROWS][PAGE_ARRAY_COLS];
-  pattern-not: |
-    wchar_t $ARRAY[PAGE_ARRAY_ROWS + 1][PAGE_ARRAY_COLS + 1];
+  patterns:
+  - pattern: |
+      wchar_t $ARRAY[PAGE_ARRAY_ROWS][PAGE_ARRAY_COLS];
+  - pattern-not: |
+      wchar_t $ARRAY[PAGE_ARRAY_ROWS + 1][PAGE_ARRAY_COLS + 1];
   languages:
   - c
   message: |
@@ -183,28 +181,29 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-89e90ae7
-  pattern: |
-    strchr($VALUE + 1, '"');
-    if (!$END) {
-      ...
-    }
-  pattern-not: |
-    char *$P = $END = $VALUE + 1;
-    while (*$P) {
-      if (*$P == '\\') {
-        $P++;
-        *$END = *$P;
-      } else {
-        *$END = *$P;
-        if (*$P == '"')
-          break;
+  patterns:
+  - pattern: |
+      strchr($VALUE + 1, '"');
+      if (!$END) {
+        ...
       }
-      $P++;
-      $END++;
-    }
-    if (*$END != '"') {
-      $END = ++$P;
-    }
+  - pattern-not: |
+      char *$P = $END = $VALUE + 1;
+      while (*$P) {
+        if (*$P == '\\') {
+          $P++;
+          *$END = *$P;
+        } else {
+          *$END = *$P;
+          if (*$P == '"')
+            break;
+        }
+        $P++;
+        $END++;
+      }
+      if (*$END != '"') {
+        $END = ++$P;
+      }
   languages:
   - c
   message: |
@@ -220,14 +219,15 @@ rules:
     technology:
     - c
 - id: vuln-util-linux-ebbeb2c7
-  pattern: |
-    setuid(getuid());
-    setgid(getgid());
-  pattern-not: |
-    if(setgid(getgid()) < 0)
-      die(EX_FAIL, _("$MSG: cannot set group id: %s"), strerror(errno));
-    if(setuid(getuid()) < 0)
-      die(EX_FAIL, _("$MSG: cannot set user id: %s"), strerror(errno));
+  patterns:
+  - pattern: |
+      setuid(getuid());
+      setgid(getgid());
+  - pattern-not: |
+      if(setgid(getgid()) < 0)
+        die(EX_FAIL, _("$MSG: cannot set group id: %s"), strerror(errno));
+      if(setuid(getuid()) < 0)
+        die(EX_FAIL, _("$MSG: cannot set user id: %s"), strerror(errno));
   languages:
   - c
   message: |

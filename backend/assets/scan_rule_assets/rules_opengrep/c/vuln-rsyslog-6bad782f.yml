@@ -1,9 +1,10 @@
 rules:
 - id: vuln-rsyslog-6bad782f
-  pattern: |
-    unsigned short $VAR;
-  pattern-not: |
-    size_t $VAR;
+  patterns:
+  - pattern: |
+      unsigned short $VAR;
+  - pattern-not: |
+      size_t $VAR;
   languages:
   - c
   message: |

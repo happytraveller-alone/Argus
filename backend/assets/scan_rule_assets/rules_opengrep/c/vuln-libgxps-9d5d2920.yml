@@ -1,11 +1,12 @@
 rules:
 - id: vuln-libgxps-9d5d2920
-  pattern: |
-    g_hash_table_add($VAR, g_strdup(archive_entry_pathname($ENTRY)));
-  pattern-not: |
-    $PATHNAME = archive_entry_pathname($ENTRY);
-    if ($PATHNAME != NULL)
-      g_hash_table_add($VAR, g_strdup($PATHNAME));
+  patterns:
+  - pattern: |
+      g_hash_table_add($VAR, g_strdup(archive_entry_pathname($ENTRY)));
+  - pattern-not: |
+      $PATHNAME = archive_entry_pathname($ENTRY);
+      if ($PATHNAME != NULL)
+        g_hash_table_add($VAR, g_strdup($PATHNAME));
   languages:
   - c
   message: |

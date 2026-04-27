@@ -1,11 +1,12 @@
 rules:
 - id: vuln-libevent-ec65c420
-  pattern: |
-    const char $VAR = $BASE[$LEN - 1] == '.' ? 0 : 1;
-  pattern-not: |
-    char $VAR;
-    if (!$LEN) return NULL;
-    $VAR = $BASE[$LEN - 1] == '.' ? 0 : 1;
+  patterns:
+  - pattern: |
+      const char $VAR = $BASE[$LEN - 1] == '.' ? 0 : 1;
+  - pattern-not: |
+      char $VAR;
+      if (!$LEN) return NULL;
+      $VAR = $BASE[$LEN - 1] == '.' ? 0 : 1;
   languages:
   - c
   message: |

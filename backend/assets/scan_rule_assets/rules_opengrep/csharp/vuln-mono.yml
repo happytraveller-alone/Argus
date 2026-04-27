@@ -1,11 +1,12 @@
 rules:
 - id: vuln-mono-3e4bd5f6
-  pattern: |
-    if (!$FILEINFO.Exists)
-    ...
-  pattern-not: |
-    if (!$FILEINFO.Exists || !ValidFileName($FILENAME))
-    ...
+  patterns:
+  - pattern: |
+      if (!$FILEINFO.Exists)
+      ...
+  - pattern-not: |
+      if (!$FILEINFO.Exists || !ValidFileName($FILENAME))
+      ...
   languages:
   - csharp
   message: |
@@ -28,10 +29,11 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-8125ab9c
-  pattern: |
-    internal bool EnableViewStateMac = false;
-  pattern-not: |
-    internal bool EnableViewStateMac = true;
+  patterns:
+  - pattern: |
+      internal bool EnableViewStateMac = false;
+  - pattern-not: |
+      internal bool EnableViewStateMac = true;
   languages:
   - csharp
   message: |
@@ -49,45 +51,46 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-b371da6b
-  pattern: |
-    private byte[] ReadClientHelloV2(Stream $RECORD)
-    {
-      int $MSGLENGTH = $RECORD.ReadByte();
-      if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
+  patterns:
+  - pattern: |
+      private byte[] ReadClientHelloV2(Stream $RECORD)
       {
-        return null;
-      }
-      byte[] $MESSAGE = new byte[$MSGLENGTH];
-      $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
-      ...
-      byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
-      Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
-      ...
-      if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
-      {
+        int $MSGLENGTH = $RECORD.ReadByte();
+        if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
+        {
+          return null;
+        }
+        byte[] $MESSAGE = new byte[$MSGLENGTH];
+        $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
         ...
-      }
-    }
-  pattern-not: |
-    private byte[] ReadClientHelloV2(Stream $RECORD)
-    {
-      int $MSGLENGTH = $RECORD.ReadByte();
-      if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
-      {
-        return null;
-      }
-      byte[] $MESSAGE = new byte[$MSGLENGTH];
-      $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
-      ...
-      int $LENGTH = ($CHALLENGELENGTH > 32) ? 32 : $CHALLENGELENGTH;
-      byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
-      Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
-      ...
-      if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
-      {
+        byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
+        Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
         ...
+        if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
+        {
+          ...
+        }
       }
-    }
+  - pattern-not: |
+      private byte[] ReadClientHelloV2(Stream $RECORD)
+      {
+        int $MSGLENGTH = $RECORD.ReadByte();
+        if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
+        {
+          return null;
+        }
+        byte[] $MESSAGE = new byte[$MSGLENGTH];
+        $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
+        ...
+        int $LENGTH = ($CHALLENGELENGTH > 32) ? 32 : $CHALLENGELENGTH;
+        byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
+        Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
+        ...
+        if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
+        {
+          ...
+        }
+      }
   languages:
   - csharp
   message: |
@@ -106,10 +109,11 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-c3e088bf
-  pattern: |
-    new NameValueCollection()
-  pattern-not: |
-    new NameValueCollection(SecureHashCodeProvider.DefaultInvariant, CaseInsensitiveComparer.DefaultInvariant)
+  patterns:
+  - pattern: |
+      new NameValueCollection()
+  - pattern-not: |
+      new NameValueCollection(SecureHashCodeProvider.DefaultInvariant, CaseInsensitiveComparer.DefaultInvariant)
   languages:
   - csharp
   message: |

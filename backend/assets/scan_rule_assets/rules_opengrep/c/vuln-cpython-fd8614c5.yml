@@ -1,14 +1,15 @@
 rules:
 - id: vuln-cpython-fd8614c5
-  pattern: |
-    Py_ssize_t $NEWLEN = $RECODE_ENCODING ? 4 * $LEN : $LEN;
-  pattern-not: |
-    Py_ssize_t $NEWLEN;
-    if ($RECODE_ENCODING && ($LEN > PY_SSIZE_T_MAX / 4)) {
-        PyErr_SetString(PyExc_OverflowError, "string is too large");
-        return NULL;
-    }
-    $NEWLEN = $RECODE_ENCODING ? 4 * $LEN : $LEN;
+  patterns:
+  - pattern: |
+      Py_ssize_t $NEWLEN = $RECODE_ENCODING ? 4 * $LEN : $LEN;
+  - pattern-not: |
+      Py_ssize_t $NEWLEN;
+      if ($RECODE_ENCODING && ($LEN > PY_SSIZE_T_MAX / 4)) {
+          PyErr_SetString(PyExc_OverflowError, "string is too large");
+          return NULL;
+      }
+      $NEWLEN = $RECODE_ENCODING ? 4 * $LEN : $LEN;
   languages:
   - c
   message: |

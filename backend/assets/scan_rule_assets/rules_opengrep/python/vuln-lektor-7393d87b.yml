@@ -1,11 +1,12 @@
 rules:
 - id: vuln-lektor-7393d87b
-  pattern: |
-    $PATH = $PATH.strip("/").replace("/", os.path.sep)
-  pattern-not: |
-    $PATH = cleanup_path($PATH)
-    assert $PATH.startswith("/")
-    $PATH = $PATH[1:].replace("/", os.path.sep)
+  patterns:
+  - pattern: |
+      $PATH = $PATH.strip("/").replace("/", os.path.sep)
+  - pattern-not: |
+      $PATH = cleanup_path($PATH)
+      assert $PATH.startswith("/")
+      $PATH = $PATH[1:].replace("/", os.path.sep)
   languages:
   - python
   message: Detected unsafe path manipulation that could allow path traversal attacks. Use `cleanup_path` and validate paths to prevent directory traversal vulnerabilities.

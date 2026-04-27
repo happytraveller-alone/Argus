@@ -1,16 +1,17 @@
 rules:
 - id: vuln-pupnp-c805c1de
-  pattern: |
-    if ($TABLE && parse_uri($URL, strlen($URL), $PARSED_URL) == $HTTP_SUCCESS) {
-      ...
-    }
-  pattern-not: |
-    if (!$TABLE || !$URL) {
-      return $NULL;
-    }
-    if (parse_uri($URL, strlen($URL), $PARSED_URL) == $HTTP_SUCCESS) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($TABLE && parse_uri($URL, strlen($URL), $PARSED_URL) == $HTTP_SUCCESS) {
+        ...
+      }
+  - pattern-not: |
+      if (!$TABLE || !$URL) {
+        return $NULL;
+      }
+      if (parse_uri($URL, strlen($URL), $PARSED_URL) == $HTTP_SUCCESS) {
+        ...
+      }
   languages:
   - c
   message: |

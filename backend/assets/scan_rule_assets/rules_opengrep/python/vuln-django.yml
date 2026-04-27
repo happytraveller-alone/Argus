@@ -1,11 +1,12 @@
 rules:
 - id: vuln-django-2eb86b01
-  pattern: |
-    if ($MODIFIED or settings.SESSION_SAVE_EVERY_REQUEST):
-        ...
-  pattern-not: |
-    if ($MODIFIED or settings.SESSION_SAVE_EVERY_REQUEST) and not $EMPTY:
-        ...
+  patterns:
+  - pattern: |
+      if ($MODIFIED or settings.SESSION_SAVE_EVERY_REQUEST):
+          ...
+  - pattern-not: |
+      if ($MODIFIED or settings.SESSION_SAVE_EVERY_REQUEST) and not $EMPTY:
+          ...
   languages:
   - python
   message: |
@@ -21,10 +22,11 @@ rules:
     technology:
     - python
 - id: vuln-django-42a66e96
-  pattern: |
-    re.compile(r'<.*?>|((?:\w[-\w]*|&.*?;)+)', re.U | re.S)
-  pattern-not: |
-    re.compile(r'<[^>]+?>|([^<>\s]+)', re.S)
+  patterns:
+  - pattern: |
+      re.compile(r'<.*?>|((?:\w[-\w]*|&.*?;)+)', re.U | re.S)
+  - pattern-not: |
+      re.compile(r'<[^>]+?>|([^<>\s]+)', re.S)
   languages:
   - python
   message: |
@@ -42,10 +44,11 @@ rules:
     technology:
     - python
 - id: vuln-django-90363e38
-  pattern: |
-    final_attrs = {'href': mark_safe($URL)}
-  pattern-not: |
-    final_attrs = {'href': smart_urlquote($URL)}
+  patterns:
+  - pattern: |
+      final_attrs = {'href': mark_safe($URL)}
+  - pattern-not: |
+      final_attrs = {'href': smart_urlquote($URL)}
   languages:
   - python
   message: |
@@ -64,12 +67,13 @@ rules:
     technology:
     - python
 - id: vuln-django-e34f3c0e
-  pattern: |
-    if len($NEW_VALUE) >= len($VALUE):
-        ...
-  pattern-not: |
-    if $VALUE.count('<') == $NEW_VALUE.count('<'):
-        ...
+  patterns:
+  - pattern: |
+      if len($NEW_VALUE) >= len($VALUE):
+          ...
+  - pattern-not: |
+      if $VALUE.count('<') == $NEW_VALUE.count('<'):
+          ...
   languages:
   - python
   message: |

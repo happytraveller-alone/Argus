@@ -1,17 +1,18 @@
 rules:
 - id: vuln-sqlite-396afe6f
-  pattern: |
-    if( $SUBSRC->nSrc > $X || $ISAGG || IsVirtual($SUBSRC->a[0].pTab) ) {
-      ...
-    }
-  pattern-not: |
-    if( $SUBSRC->nSrc > $X                   /* (3a) */
-     || $ISAGG                             /* (3b) */
-     || IsVirtual($SUBSRC->a[0].pTab)     /* (3c) */
-     || ($P->selFlags & SF_Distinct) != 0    /* (3d) */
-    ) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if( $SUBSRC->nSrc > $X || $ISAGG || IsVirtual($SUBSRC->a[0].pTab) ) {
+        ...
+      }
+  - pattern-not: |
+      if( $SUBSRC->nSrc > $X                   /* (3a) */
+       || $ISAGG                             /* (3b) */
+       || IsVirtual($SUBSRC->a[0].pTab)     /* (3c) */
+       || ($P->selFlags & SF_Distinct) != 0    /* (3d) */
+      ) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -29,14 +30,15 @@ rules:
     technology:
     - c
 - id: vuln-sqlite-78d1d225
-  pattern: |
-    if( sqlite3ExprIsVtabRef($EXPR) ){
-      ...
-    }
-  pattern-not: |
-    if( ExprIsVtab($EXPR) ){
-      ...
-    }
+  patterns:
+  - pattern: |
+      if( sqlite3ExprIsVtabRef($EXPR) ){
+        ...
+      }
+  - pattern-not: |
+      if( ExprIsVtab($EXPR) ){
+        ...
+      }
   languages:
   - c
   message: |
@@ -52,14 +54,15 @@ rules:
     technology:
     - c
 - id: vuln-sqlite-a6c1a71c
-  pattern: |
-    if( $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){
-      ...
-    }
-  pattern-not: |
-    if( $PARSE->nErr || $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){
-      ...
-    }
+  patterns:
+  - pattern: |
+      if( $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){
+        ...
+      }
+  - pattern-not: |
+      if( $PARSE->nErr || $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){
+        ...
+      }
   languages:
   - c
   message: |
@@ -75,10 +78,11 @@ rules:
     technology:
     - c
 - id: vuln-sqlite-bf48ce49
-  pattern: |
-    $EXPR->op==TK_COLUMN && IsVirtual($EXPR->y.pTab)
-  pattern-not: |
-    sqlite3ExprIsVtabRef($EXPR)
+  patterns:
+  - pattern: |
+      $EXPR->op==TK_COLUMN && IsVirtual($EXPR->y.pTab)
+  - pattern-not: |
+      sqlite3ExprIsVtabRef($EXPR)
   languages:
   - c
   message: |
@@ -96,11 +100,12 @@ rules:
     technology:
     - c
 - id: vuln-sqlite-f39168e4
-  pattern: |
-    if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) ){
-        ...
-    }
-  pattern-not: "if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) \n && ExprAlwaysFalse($EXPR)==0\n){\n    ...\n}\n"
+  patterns:
+  - pattern: |
+      if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) ){
+          ...
+      }
+  - pattern-not: "if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) \n && ExprAlwaysFalse($EXPR)==0\n){\n    ...\n}\n"
   languages:
   - c
   message: |

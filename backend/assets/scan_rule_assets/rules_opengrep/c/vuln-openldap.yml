@@ -1,14 +1,15 @@
 rules:
 - id: vuln-openldap-21981053
-  pattern: |
-    if ($VAR != NULL) {
-      vrFilter_free($OP, $VAR);
-    }
-  pattern-not: |
-    if ($VAR != NULL) {
-      vrFilter_free($OP, $VAR);
-      $VAR = NULL;
-    }
+  patterns:
+  - pattern: |
+      if ($VAR != NULL) {
+        vrFilter_free($OP, $VAR);
+      }
+  - pattern-not: |
+      if ($VAR != NULL) {
+        vrFilter_free($OP, $VAR);
+        $VAR = NULL;
+      }
   languages:
   - c
   message: |
@@ -24,21 +25,22 @@ rules:
     technology:
     - c
 - id: vuln-openldap-2f1a2dd3
-  pattern: |
-    ValuesReturnFilter *$P, *$NEXT;
-    if ($VRF == NULL) {
-      return;
-    }
-    for ($P = $VRF; $P != NULL; $P = $NEXT) {
-      $NEXT = $P->vrf_next;
-      ...
-    }
-  pattern-not: |
-    ValuesReturnFilter *$NEXT;
-    for ( ; $VRF != NULL; $VRF = $NEXT ) {
-      $NEXT = $VRF->vrf_next;
-      ...
-    }
+  patterns:
+  - pattern: |
+      ValuesReturnFilter *$P, *$NEXT;
+      if ($VRF == NULL) {
+        return;
+      }
+      for ($P = $VRF; $P != NULL; $P = $NEXT) {
+        $NEXT = $P->vrf_next;
+        ...
+      }
+  - pattern-not: |
+      ValuesReturnFilter *$NEXT;
+      for ( ; $VRF != NULL; $VRF = $NEXT ) {
+        $NEXT = $VRF->vrf_next;
+        ...
+      }
   languages:
   - c
   message: |
@@ -57,25 +59,26 @@ rules:
     technology:
     - c
 - id: vuln-openldap-463c1fa2
-  pattern: |
-    for ( $J = 0; !BER_BVISNULL( &$A->a_nvals[$J] ); $J++ ) {
-      assert( $J < $I );
-      ber_dupbv( &$TMP->a_nvals[$J], &$A->a_nvals[$J] );
-      if ( BER_BVISNULL( &$TMP->a_nvals[$J] ) ) break;
-      ...
-    }
-    assert( $J == $I );
-  pattern-not: |
-    $J = 0;
-    if ( $I ) {
-      for ( ; !BER_BVISNULL( &$A->a_nvals[$J] ); $J++ ) {
+  patterns:
+  - pattern: |
+      for ( $J = 0; !BER_BVISNULL( &$A->a_nvals[$J] ); $J++ ) {
         assert( $J < $I );
         ber_dupbv( &$TMP->a_nvals[$J], &$A->a_nvals[$J] );
         if ( BER_BVISNULL( &$TMP->a_nvals[$J] ) ) break;
         ...
       }
       assert( $J == $I );
-    }
+  - pattern-not: |
+      $J = 0;
+      if ( $I ) {
+        for ( ; !BER_BVISNULL( &$A->a_nvals[$J] ); $J++ ) {
+          assert( $J < $I );
+          ber_dupbv( &$TMP->a_nvals[$J], &$A->a_nvals[$J] );
+          if ( BER_BVISNULL( &$TMP->a_nvals[$J] ) ) break;
+          ...
+        }
+        assert( $J == $I );
+      }
   languages:
   - c
   message: |
@@ -95,10 +98,11 @@ rules:
     technology:
     - c
 - id: vuln-openldap-6fe51a9a
-  pattern: |
-    assert(0);
-  pattern-not: |
-    /* invalid input */
+  patterns:
+  - pattern: |
+      assert(0);
+  - pattern-not: |
+      /* invalid input */
   languages:
   - c
   message: |
@@ -114,14 +118,15 @@ rules:
     technology:
     - c
 - id: vuln-openldap-91dccd25
-  pattern: |
-    if ( $VAR[0] != '{' && $VAR[$LEN-1] != '}' ) {
-      ...
-    }
-  pattern-not: |
-    if ( $VAR[0] != '{' || $VAR[$LEN-1] != '}' ) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ( $VAR[0] != '{' && $VAR[$LEN-1] != '}' ) {
+        ...
+      }
+  - pattern-not: |
+      if ( $VAR[0] != '{' || $VAR[$LEN-1] != '}' ) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -139,19 +144,20 @@ rules:
     technology:
     - c
 - id: vuln-openldap-fbe5611e
-  pattern: |
-    if ($OP->o_conn->c_authz_backend && be_isroot_dn($OP->o_conn->c_authz_backend, $AUTHC_DN)) {
-      $RC = LDAP_SUCCESS;
-      goto DONE;
-    }
-  pattern-not: |
-    if ($OP->o_conn->c_authz_backend) {
-      $ZBE = select_backend($AUTHZ_DN, 1);
-      if ($ZBE && be_isroot_dn($ZBE, $AUTHC_DN)) {
+  patterns:
+  - pattern: |
+      if ($OP->o_conn->c_authz_backend && be_isroot_dn($OP->o_conn->c_authz_backend, $AUTHC_DN)) {
         $RC = LDAP_SUCCESS;
         goto DONE;
       }
-    }
+  - pattern-not: |
+      if ($OP->o_conn->c_authz_backend) {
+        $ZBE = select_backend($AUTHZ_DN, 1);
+        if ($ZBE && be_isroot_dn($ZBE, $AUTHC_DN)) {
+          $RC = LDAP_SUCCESS;
+          goto DONE;
+        }
+      }
   languages:
   - c
   message: |

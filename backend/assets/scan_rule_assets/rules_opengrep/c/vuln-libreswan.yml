@@ -1,13 +1,14 @@
 rules:
 - id: vuln-libreswan-2aecf49d
-  pattern: |
-    if ($SEC_LABEL->len != 0) {
-      ...
-    }
-  pattern-not: |
-    if ($SEC_LABEL != NULL && $SEC_LABEL->len > 0) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($SEC_LABEL->len != 0) {
+        ...
+      }
+  - pattern-not: |
+      if ($SEC_LABEL != NULL && $SEC_LABEL->len > 0) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -23,24 +24,25 @@ rules:
     technology:
     - c
 - id: vuln-libreswan-7ceef9a7
-  pattern: |
-    for ($NR = 0; $NR < $ISAT_NUM; ) {
-      ...
-      $TS = &$TSS->ts[$NR];
-      ...
-      if ($START_PORT > $END_PORT) {
+  patterns:
+  - pattern: |
+      for ($NR = 0; $NR < $ISAT_NUM; ) {
+        ...
+        $TS = &$TSS->ts[$NR];
+        ...
+        if ($START_PORT > $END_PORT) {
+          ...
+        }
         ...
       }
-      ...
-    }
-  pattern-not: |
-    for (unsigned $N = 0; $N < $ISAT_NUM; $N++) {
-      ...
-      if ($START_PORT > $END_PORT) {
+  - pattern-not: |
+      for (unsigned $N = 0; $N < $ISAT_NUM; $N++) {
+        ...
+        if ($START_PORT > $END_PORT) {
+          ...
+        }
         ...
       }
-      ...
-    }
   languages:
   - c
   message: |
@@ -57,15 +59,16 @@ rules:
     technology:
     - c
 - id: vuln-libreswan-d64ec242
-  pattern: |
-    if ($ST == NULL ||
-        ($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {
-      ...
-    }
-  pattern-not: |
-    if (($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($ST == NULL ||
+          ($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {
+        ...
+      }
+  - pattern-not: |
+      if (($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -80,22 +83,23 @@ rules:
     technology:
     - c
 - id: vuln-libreswan-dcd6050a
-  pattern: |
-    int $TYPE_PROPOSED = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);
-    int $TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;
-    if ($TYPE_PROPOSED != $TYPE_MATCHED) {
-      ...
-    }
-  pattern-not: |
-    bool $LOCAL_TRANSFORM_TYPE_PRESENT = $LOCAL_TRANSFORMS->transform[0].valid;
-    bool $REMOTE_TRANSFORM_TYPE_PRESENT = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);
-    if ($LOCAL_TRANSFORM_TYPE_PRESENT != $REMOTE_TRANSFORM_TYPE_PRESENT) {
-      ...
-    }
-    bool $REMOTE_TRANSFORM_TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;
-    if ($LOCAL_TRANSFORM_TYPE_PRESENT != $REMOTE_TRANSFORM_TYPE_MATCHED) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      int $TYPE_PROPOSED = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);
+      int $TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;
+      if ($TYPE_PROPOSED != $TYPE_MATCHED) {
+        ...
+      }
+  - pattern-not: |
+      bool $LOCAL_TRANSFORM_TYPE_PRESENT = $LOCAL_TRANSFORMS->transform[0].valid;
+      bool $REMOTE_TRANSFORM_TYPE_PRESENT = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);
+      if ($LOCAL_TRANSFORM_TYPE_PRESENT != $REMOTE_TRANSFORM_TYPE_PRESENT) {
+        ...
+      }
+      bool $REMOTE_TRANSFORM_TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;
+      if ($LOCAL_TRANSFORM_TYPE_PRESENT != $REMOTE_TRANSFORM_TYPE_MATCHED) {
+        ...
+      }
   languages:
   - c
   message: |
@@ -112,10 +116,11 @@ rules:
     technology:
     - c
 - id: vuln-libreswan-f32feb1d
-  pattern: |
-    change_v1_state(&$IKE->sa, STATE_AGGR_R1);
-  pattern-not: |
-    change_v1_state(&$IKE->sa, STATE_AGGR_R0);
+  patterns:
+  - pattern: |
+      change_v1_state(&$IKE->sa, STATE_AGGR_R1);
+  - pattern-not: |
+      change_v1_state(&$IKE->sa, STATE_AGGR_R0);
   languages:
   - c
   message: |

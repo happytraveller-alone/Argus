@@ -1,13 +1,14 @@
 rules:
 - id: vuln-cups-filters-8f274035
-  pattern: |
-    $RETVAL = system($CMDLINE) >> 8;
-  pattern-not: |
-    $PID = fork();
-    if ($PID == 0) {
-      $RETVAL = execv($BACKEND_PATH, $BACKEND_ARGV);
-      ...
-    }
+  patterns:
+  - pattern: |
+      $RETVAL = system($CMDLINE) >> 8;
+  - pattern-not: |
+      $PID = fork();
+      if ($PID == 0) {
+        $RETVAL = execv($BACKEND_PATH, $BACKEND_ARGV);
+        ...
+      }
   languages:
   - c
   message: |
