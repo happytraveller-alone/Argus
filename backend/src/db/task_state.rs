@@ -60,6 +60,22 @@ pub struct AgentTaskRecord {
     pub target_files: Option<Vec<String>>,
     pub error_message: Option<String>,
     pub report: Option<String>,
+    #[serde(default)]
+    pub runtime: Option<String>,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub topology_version: Option<String>,
+    #[serde(default)]
+    pub input_digest: Option<String>,
+    #[serde(default)]
+    pub artifact_index: Option<Value>,
+    #[serde(default)]
+    pub report_snapshot: Option<Value>,
+    #[serde(default)]
+    pub feedback_bundle: Option<Value>,
+    #[serde(default)]
+    pub diagnostics: Option<Value>,
     pub events: Vec<AgentEventRecord>,
     pub findings: Vec<AgentFindingRecord>,
     pub checkpoints: Vec<AgentCheckpointRecord>,
@@ -80,6 +96,16 @@ pub struct AgentEventRecord {
     pub finding_id: Option<String>,
     pub tokens_used: Option<i64>,
     pub metadata: Option<Value>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub correlation_id: Option<String>,
+    #[serde(default)]
+    pub topology_version: Option<String>,
+    #[serde(default)]
+    pub source_node_id: Option<String>,
     pub sequence: i64,
     pub timestamp: String,
 }
@@ -132,6 +158,24 @@ pub struct AgentFindingRecord {
     pub ai_explanation: Option<String>,
     pub ai_confidence: Option<f64>,
     pub confidence: Option<f64>,
+    #[serde(default)]
+    pub source_node_id: Option<String>,
+    #[serde(default)]
+    pub source_role: Option<String>,
+    #[serde(default)]
+    pub artifact_refs: Option<Value>,
+    #[serde(default)]
+    pub risk_lifecycle: Option<Value>,
+    #[serde(default)]
+    pub confidence_history: Option<Value>,
+    #[serde(default)]
+    pub data_flow: Option<Value>,
+    #[serde(default)]
+    pub impact: Option<String>,
+    #[serde(default)]
+    pub remediation: Option<String>,
+    #[serde(default)]
+    pub verification: Option<String>,
     pub created_at: String,
 }
 
@@ -319,4 +363,66 @@ fn task_state_file_path(state: &AppState) -> PathBuf {
 async fn ensure_file_storage_root(state: &AppState) -> Result<()> {
     fs::create_dir_all(&state.config.zip_storage_path).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AgentEventRecord, AgentFindingRecord, AgentTaskRecord};
+    use serde_json::json;
+
+    #[test]
+    fn agent_task_state_defaults_legacy_snapshots_for_agentflow_fields() {
+        let record: AgentTaskRecord = serde_json::from_value(json!({
+            "id": "task-1",
+            "project_id": "project-1",
+            "task_type": "agent_audit",
+            "status": "completed",
+            "created_at": "2026-04-27T00:00:00Z"
+        }))
+        .expect("legacy task snapshot should deserialize");
+
+        assert_eq!(record.runtime, None);
+        assert_eq!(record.artifact_index, None);
+        assert_eq!(record.report_snapshot, None);
+        assert!(record.events.is_empty());
+    }
+
+    #[test]
+    fn agent_event_and_finding_state_accept_agentflow_view_fields() {
+        let event: AgentEventRecord = serde_json::from_value(json!({
+            "id": "event-1",
+            "task_id": "task-1",
+            "event_type": "node_completed",
+            "sequence": 1,
+            "timestamp": "2026-04-27T00:00:00Z",
+            "role": "vuln-reasoner",
+            "visibility": "user",
+            "correlation_id": "task-1",
+            "topology_version": "p1",
+            "source_node_id": "node-1"
+        }))
+        .expect("event envelope should deserialize");
+        assert_eq!(event.role.as_deref(), Some("vuln-reasoner"));
+        assert_eq!(event.visibility.as_deref(), Some("user"));
+
+        let finding: AgentFindingRecord = serde_json::from_value(json!({
+            "id": "finding-1",
+            "task_id": "task-1",
+            "vulnerability_type": "sql_injection",
+            "severity": "high",
+            "title": "SQL injection",
+            "status": "verified",
+            "is_verified": true,
+            "created_at": "2026-04-27T00:00:00Z",
+            "source_node_id": "node-1",
+            "source_role": "vuln-reasoner",
+            "artifact_refs": [{"path": "reports/finding.json"}],
+            "impact": "database disclosure",
+            "remediation": "use parameterized queries",
+            "verification": "confirmed by reasoning"
+        }))
+        .expect("finding view fields should deserialize");
+        assert_eq!(finding.source_role.as_deref(), Some("vuln-reasoner"));
+        assert_eq!(finding.impact.as_deref(), Some("database disclosure"));
+    }
 }
