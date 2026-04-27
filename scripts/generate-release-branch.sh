@@ -132,7 +132,6 @@ validate_release_tree() {
     "backend/src/main.rs"
     "backend/src/lib.rs"
     "backend/src/bootstrap/preflight.rs"
-    "backend/migrations/0001_system_configs.sql"
     "frontend/package.json"
     "frontend/pnpm-lock.yaml"
     "frontend/vite.config.ts"

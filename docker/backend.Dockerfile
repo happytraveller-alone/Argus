@@ -88,7 +88,6 @@ RUN set -eux; \
 
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
-COPY backend/migrations ./migrations
 COPY backend/tests ./tests
 
 RUN --mount=type=cache,id=Argus-backend-cargo-registry,target=/usr/local/cargo/registry \
