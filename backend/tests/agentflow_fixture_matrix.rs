@@ -63,14 +63,26 @@ fn agentflow_fixture_matrix_accepts_happy_path_direct_finding() {
     let fixture = load_fixture("p1_happy_path_output.json");
 
     assert_importable_agentflow_output(&fixture);
-    assert_eq!(fixture.get("status").and_then(Value::as_str), Some("completed"));
+    assert_eq!(
+        fixture.get("status").and_then(Value::as_str),
+        Some("completed")
+    );
     assert_eq!(array_field(&fixture, "findings").len(), 1);
     assert_eq!(array_field(&fixture, "native_artifacts").len(), 2);
 
     let finding = &array_field(&fixture, "findings")[0];
-    assert_eq!(finding.get("id").and_then(Value::as_str), Some("af-sql-001"));
-    assert_eq!(finding.get("is_verified").and_then(Value::as_bool), Some(true));
-    assert_eq!(finding.get("status").and_then(Value::as_str), Some("verified"));
+    assert_eq!(
+        finding.get("id").and_then(Value::as_str),
+        Some("af-sql-001")
+    );
+    assert_eq!(
+        finding.get("is_verified").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        finding.get("status").and_then(Value::as_str),
+        Some("verified")
+    );
 }
 
 #[test]
@@ -78,7 +90,10 @@ fn agentflow_fixture_matrix_surfaces_failure_without_findings() {
     let fixture = load_fixture("p1_failure_path_output.json");
 
     assert_importable_agentflow_output(&fixture);
-    assert_eq!(fixture.get("status").and_then(Value::as_str), Some("failed"));
+    assert_eq!(
+        fixture.get("status").and_then(Value::as_str),
+        Some("failed")
+    );
     assert!(array_field(&fixture, "findings").is_empty());
     let user_message = string_at(&fixture, &["error", "user_message"]).unwrap_or_default();
     assert!(
@@ -92,7 +107,11 @@ fn agentflow_fixture_matrix_rejects_static_origin_direct_findings() {
     let fixture = load_fixture("p1_static_origin_rejected_output.json");
     let findings = array_field(&fixture, "findings");
 
-    assert_eq!(findings.len(), 1, "negative fixture should contain one rejected candidate");
+    assert_eq!(
+        findings.len(),
+        1,
+        "negative fixture should contain one rejected candidate"
+    );
     assert!(
         has_static_origin(&findings[0]),
         "negative fixture must exercise the static-origin rejection guard"
