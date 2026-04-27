@@ -17,15 +17,20 @@ services:
       dockerfile: docker/agentflow-runner.Dockerfile
       args:
         DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        AGENTFLOW_REPOSITORY: ${AGENTFLOW_REPOSITORY:-https://github.com/berabuddies/agentflow.git}
+        AGENTFLOW_REPOSITORY: ${AGENTFLOW_REPOSITORY:-https://v6.gh-proxy.org/https://github.com/berabuddies/agentflow.git}
         AGENTFLOW_COMMIT: ${AGENTFLOW_COMMIT:-1667fa35ed99e3c1583a7d60cac8e3406cafd3ee}
         AGENTFLOW_VERSION: ${AGENTFLOW_VERSION:-0.1.0}
+        AGENTFLOW_LOCAL_SOURCE: ${AGENTFLOW_LOCAL_SOURCE:-vendor/agentflow-src}
         BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
         BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
-        BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
+        BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://pypi.org/simple}
+        BACKEND_PYPI_EXTRA_INDEX_URLS: ${BACKEND_PYPI_EXTRA_INDEX_URLS:-https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple/}
+        BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
+        BACKEND_PIP_TIMEOUT_SECONDS: ${BACKEND_PIP_TIMEOUT_SECONDS:-300}
+        BACKEND_PIP_RETRIES: ${BACKEND_PIP_RETRIES:-20}
+        AGENTFLOW_P1_PYTHON_DEPS: ${AGENTFLOW_P1_PYTHON_DEPS:-jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0}
     restart: "no"
     mem_limit: 4g
     cpus: "2.0"
@@ -143,6 +148,9 @@ services:
       Argus_IMAGE_TAG: ${Argus_IMAGE_TAG:-latest}
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
+      ARGUS_AGENTFLOW_RUNNER_IMAGE: ${ARGUS_AGENTFLOW_RUNNER_IMAGE:-argus/agentflow-runner:1667fa35}
+      AGENTFLOW_RUNNER_WORK_VOLUME: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}
+      AGENTFLOW_DEFAULT_RUNNER_ENABLED: ${AGENTFLOW_DEFAULT_RUNNER_ENABLED:-true}
       OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"
       OPENGREP_SCAN_JOBS: "${OPENGREP_SCAN_JOBS:-0}"
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
@@ -193,6 +201,8 @@ services:
       start_period: 180s
       retries: 120
     depends_on:
+      agentflow-runner:
+        condition: service_completed_successfully
       opengrep-runner:
         condition: service_completed_successfully
       db:
@@ -274,6 +284,7 @@ networks:
 
 volumes:
   agentflow_runner_work:
+    name: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}
   postgres_data:
   backend_uploads:
   backend_runtime_data:

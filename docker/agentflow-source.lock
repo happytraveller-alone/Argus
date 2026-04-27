@@ -1,11 +1,12 @@
 AgentFlow source pin for Argus P1 runner
 
-Repository: https://github.com/berabuddies/agentflow.git
+Repository: https://v6.gh-proxy.org/https://github.com/berabuddies/agentflow.git
 Commit: 1667fa35ed99e3c1583a7d60cac8e3406cafd3ee
 Package: agentflow
 Version: 0.1.0
 Python: >=3.10
 License: see /licenses/agentflow/LICENSE inside the runner image
+Local source: vendor/agentflow-src
 
 This lock is consumed by docker/agentflow-runner.Dockerfile. Do not replace it
 with a runtime curl/install path; production runner images must be built from a

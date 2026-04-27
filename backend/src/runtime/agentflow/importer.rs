@@ -9,6 +9,8 @@ use crate::db::task_state::{
     AgentCheckpointRecord, AgentEventRecord, AgentFindingRecord, AgentTaskRecord,
 };
 
+use super::contracts::{ARGUS_AGENTFLOW_CONTRACT_VERSION, P1_TOPOLOGY_VERSION};
+
 pub const FORBIDDEN_STATIC_FIELDS: &[&str] = &[
     "static_task_id",
     "opengrep_task_id",
@@ -77,11 +79,15 @@ fn collect_static_candidate_violations(value: &Value, path: &str, violations: &m
                 }
                 if matches!(
                     lower_key.as_str(),
-                    "candidate_origin" | "source_engine" | "origin" | "engine"
+                    "candidate_origin"
+                        | "source_origin"
+                        | "source_engine"
+                        | "origin"
+                        | "engine"
+                        | "kind"
                 ) {
                     if let Some(origin) = child.as_str() {
-                        let normalized = origin.to_ascii_lowercase();
-                        if FORBIDDEN_STATIC_ORIGINS.contains(&normalized.as_str()) {
+                        if text_mentions_forbidden_static_origin(origin) {
                             violations.push(format!("{child_path}={origin}"));
                         }
                     }
@@ -102,13 +108,35 @@ fn collect_static_candidate_violations(value: &Value, path: &str, violations: &m
             }
         }
         Value::String(text) => {
-            let lower = text.to_ascii_lowercase();
-            if lower.contains("static finding") || lower.contains("static scan") {
+            if text_mentions_static_bootstrap(text) {
                 violations.push(format!("{path}=<static-scan-text>"));
             }
         }
         _ => {}
     }
+}
+
+fn text_mentions_forbidden_static_origin(text: &str) -> bool {
+    let normalized = normalize_static_gate_token(text);
+    FORBIDDEN_STATIC_ORIGINS
+        .iter()
+        .map(|origin| normalize_static_gate_token(origin))
+        .any(|origin| normalized == origin || normalized.contains(&origin))
+        || normalized.contains("staticengine")
+}
+
+fn text_mentions_static_bootstrap(text: &str) -> bool {
+    let normalized = normalize_static_gate_token(text);
+    normalized.contains("staticfinding")
+        || normalized.contains("staticscan")
+        || normalized.contains("scannerbootstrap")
+}
+
+fn normalize_static_gate_token(text: &str) -> String {
+    text.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
 }
 
 pub fn sanitize_value(value: &Value) -> Value {
@@ -202,18 +230,25 @@ pub fn import_runner_output(record: &mut AgentTaskRecord, raw_output: &Value) ->
     validate_no_static_candidates(raw_output)?;
     reject_native_only_output(raw_output)?;
     let output = sanitize_value(raw_output);
+    if is_canonical_runner_output(&output) {
+        return import_canonical_runner_output(record, &output);
+    }
+    import_legacy_runner_output(record, &output)
+}
+
+fn import_legacy_runner_output(record: &mut AgentTaskRecord, output: &Value) -> ImportResult<()> {
     if output.get("runtime").and_then(Value::as_str) != Some("agentflow") {
         return Err(ImportError::new(
             "runner_output_invalid",
             "runner output runtime must be `agentflow`",
         ));
     }
-    let run_id = required_string(&output, "run_id")?;
+    let run_id = required_string(output, "run_id")?;
     let topology_version = output
         .get("topology_version")
         .and_then(Value::as_str)
         .unwrap_or("agentflow-p1-v1");
-    validate_artifacts(&output)?;
+    validate_artifacts(output)?;
 
     let now = now_rfc3339();
     record.status = "completed".to_string();
@@ -222,10 +257,10 @@ pub fn import_runner_output(record: &mut AgentTaskRecord, raw_output: &Value) ->
     record.completed_at = Some(now.clone());
     record.progress_percentage = 100.0;
 
-    merge_agentflow_scope(record, &run_id, topology_version, &output);
-    import_events(record, &output, topology_version);
-    import_checkpoints(record, &output, topology_version);
-    import_findings(record, &output)?;
+    merge_agentflow_scope(record, &run_id, topology_version, output);
+    import_events(record, output, topology_version);
+    import_checkpoints(record, output, topology_version);
+    import_findings(record, output)?;
     record.agent_tree = output
         .get("agent_tree")
         .or_else(|| output.get("nodes"))
@@ -257,9 +292,109 @@ pub fn import_runner_output(record: &mut AgentTaskRecord, raw_output: &Value) ->
     Ok(())
 }
 
+fn import_canonical_runner_output(
+    record: &mut AgentTaskRecord,
+    output: &Value,
+) -> ImportResult<()> {
+    let run = output
+        .get("run")
+        .ok_or_else(|| ImportError::new("runner_output_invalid", "runner output missing `run`"))?;
+    let run_id = required_string(run, "run_id")?;
+    let topology_version = run
+        .get("topology_version")
+        .and_then(Value::as_str)
+        .unwrap_or(P1_TOPOLOGY_VERSION);
+    if topology_version != P1_TOPOLOGY_VERSION {
+        return Err(ImportError::new(
+            "runner_output_invalid",
+            format!("runner output topology_version must be `{P1_TOPOLOGY_VERSION}`"),
+        ));
+    }
+    let status = run
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("completed");
+    validate_artifacts(output)?;
+
+    let now = now_rfc3339();
+    record.status = match status {
+        "completed" => "completed",
+        "cancelled" => "cancelled",
+        "failed" => "failed",
+        _ => "failed",
+    }
+    .to_string();
+    record.current_phase = Some(record.status.clone());
+    record.current_step = Some(match record.status.as_str() {
+        "completed" => "AgentFlow runner output imported".to_string(),
+        "cancelled" => "AgentFlow runner cancelled".to_string(),
+        _ => "AgentFlow runner reported failure".to_string(),
+    });
+    record.completed_at = Some(now);
+    record.progress_percentage = 100.0;
+
+    merge_agentflow_scope(record, &run_id, topology_version, output);
+    import_events(record, output, topology_version);
+    import_checkpoints(record, output, topology_version);
+    import_findings(record, output)?;
+    record.agent_tree = output
+        .get("agent_tree")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_else(|| default_agent_tree(record, topology_version));
+    record.report = canonical_report_text(output).or_else(|| {
+        if record.findings.is_empty() {
+            Some("# AgentFlow 智能审计报告\n\n未发现可确认漏洞。".to_string())
+        } else {
+            None
+        }
+    });
+    if record.status == "failed" && record.error_message.is_none() {
+        record.error_message = output
+            .get("diagnostics")
+            .and_then(|diagnostics| diagnostics.get("message"))
+            .or_else(|| {
+                output
+                    .get("report")
+                    .and_then(|report| report.get("summary"))
+            })
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .or_else(|| Some("智能审计运行失败：AgentFlow runner 返回失败状态".to_string()));
+    }
+    refresh_aggregates(record);
+    push_import_event(
+        record,
+        if record.status == "completed" {
+            "report_generated"
+        } else {
+            "import_failed"
+        },
+        Some(record.status.clone().as_str()),
+        Some(if record.status == "completed" {
+            "AgentFlow 智能审计结果已导入 Argus"
+        } else {
+            "AgentFlow 智能审计结果导入为失败状态"
+        }),
+        Some(json!({
+            "runtime": "agentflow",
+            "run_id": run_id,
+            "topology_version": topology_version,
+        })),
+    );
+    Ok(())
+}
+
+fn is_canonical_runner_output(output: &Value) -> bool {
+    output.get("contract_version").and_then(Value::as_str) == Some(ARGUS_AGENTFLOW_CONTRACT_VERSION)
+        && output.get("run").is_some()
+}
+
 fn reject_native_only_output(output: &Value) -> ImportResult<()> {
-    let has_argus_business_shape = output.get("runtime").and_then(Value::as_str)
+    let has_argus_business_shape = (output.get("runtime").and_then(Value::as_str)
         == Some("agentflow")
+        || output.get("contract_version").and_then(Value::as_str)
+            == Some(ARGUS_AGENTFLOW_CONTRACT_VERSION))
         && (output.get("findings").is_some()
             || output.get("report").is_some()
             || output.get("events").is_some());
@@ -292,7 +427,10 @@ fn required_string(value: &Value, key: &'static str) -> ImportResult<String> {
 }
 
 fn validate_artifacts(output: &Value) -> ImportResult<()> {
-    if let Some(artifacts) = output.get("artifact_index").and_then(Value::as_array) {
+    for artifacts_key in ["artifact_index", "artifacts"] {
+        let Some(artifacts) = output.get(artifacts_key).and_then(Value::as_array) else {
+            continue;
+        };
         for artifact in artifacts {
             if let Some(path) = artifact.get("path").and_then(Value::as_str) {
                 validate_relative_artifact_path(path)?;
@@ -308,6 +446,25 @@ fn merge_agentflow_scope(
     topology_version: &str,
     output: &Value,
 ) {
+    let artifact_index = output
+        .get("artifact_index")
+        .or_else(|| output.get("artifacts"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let report_snapshot = output.get("report").cloned().unwrap_or(Value::Null);
+    let diagnostics = output.get("diagnostics").cloned().unwrap_or(Value::Null);
+    record.runtime = Some("agentflow".to_string());
+    record.run_id = Some(run_id.to_string());
+    record.topology_version = Some(topology_version.to_string());
+    record.input_digest = output
+        .get("input_digest")
+        .or_else(|| output.get("run").and_then(|run| run.get("input_digest")))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    record.artifact_index = Some(artifact_index.clone());
+    record.report_snapshot = Some(report_snapshot.clone());
+    record.diagnostics = Some(diagnostics.clone());
+
     let mut scope = record.audit_scope.clone().unwrap_or_else(|| json!({}));
     if !scope.is_object() {
         scope = json!({ "value": scope });
@@ -319,10 +476,10 @@ fn merge_agentflow_scope(
             "runtime": "agentflow",
             "run_id": run_id,
             "topology_version": topology_version,
-            "input_digest": output.get("input_digest").cloned().unwrap_or(Value::Null),
-            "artifact_index": output.get("artifact_index").cloned().unwrap_or_else(|| json!([])),
-            "report_snapshot": output.get("report").cloned().unwrap_or(Value::Null),
-            "diagnostics": output.get("diagnostics").cloned().unwrap_or(Value::Null),
+            "input_digest": record.input_digest.clone().map(Value::String).unwrap_or(Value::Null),
+            "artifact_index": artifact_index,
+            "report_snapshot": report_snapshot,
+            "diagnostics": diagnostics,
         }),
     );
     record.audit_scope = Some(scope);
@@ -338,7 +495,11 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                 .unwrap_or("agentflow_event");
             let phase = event.get("phase").and_then(Value::as_str);
             let message = event.get("message").and_then(Value::as_str);
-            let mut metadata = event.get("metadata").cloned().unwrap_or_else(|| json!({}));
+            let mut metadata = event
+                .get("metadata")
+                .or_else(|| event.get("data"))
+                .cloned()
+                .unwrap_or_else(|| json!({}));
             if let Some(obj) = metadata.as_object_mut() {
                 obj.insert("topology_version".to_string(), json!(topology_version));
                 obj.insert(
@@ -351,7 +512,53 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                     json!(Uuid::new_v4().to_string()),
                 );
             }
-            push_import_event(record, event_type, phase, message, Some(metadata));
+            record.events.push(AgentEventRecord {
+                id: event
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| Uuid::new_v4().to_string()),
+                task_id: record.id.clone(),
+                event_type: event_type.to_string(),
+                phase: phase.map(ToString::to_string),
+                message: message.map(ToString::to_string),
+                tool_name: None,
+                tool_input: None,
+                tool_output: None,
+                tool_duration_ms: None,
+                finding_id: event
+                    .get("finding_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                tokens_used: None,
+                metadata: Some(metadata),
+                role: event
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                visibility: event
+                    .get("visibility")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                correlation_id: event
+                    .get("correlation_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                topology_version: Some(topology_version.to_string()),
+                source_node_id: event
+                    .get("node_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                sequence: event
+                    .get("sequence")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(record.events.len() as i64 + 1),
+                timestamp: event
+                    .get("timestamp")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(now_rfc3339),
+            });
         }
     }
 }
@@ -477,10 +684,29 @@ fn import_findings(record: &mut AgentTaskRecord, output: &Value) -> ImportResult
                     .map(ToString::to_string),
                 file_path: finding
                     .get("file_path")
+                    .or_else(|| {
+                        finding
+                            .get("location")
+                            .and_then(|location| location.get("file_path"))
+                    })
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
-                line_start: finding.get("line_start").and_then(Value::as_i64),
-                line_end: finding.get("line_end").and_then(Value::as_i64),
+                line_start: finding
+                    .get("line_start")
+                    .or_else(|| {
+                        finding
+                            .get("location")
+                            .and_then(|location| location.get("line_start"))
+                    })
+                    .and_then(Value::as_i64),
+                line_end: finding
+                    .get("line_end")
+                    .or_else(|| {
+                        finding
+                            .get("location")
+                            .and_then(|location| location.get("line_end"))
+                    })
+                    .and_then(Value::as_i64),
                 resolved_file_path: finding
                     .get("resolved_file_path")
                     .and_then(Value::as_str)
@@ -527,6 +753,7 @@ fn import_findings(record: &mut AgentTaskRecord, output: &Value) -> ImportResult
                     .map(ToString::to_string),
                 verification_evidence: finding
                     .get("verification_evidence")
+                    .or_else(|| finding.get("verification"))
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
                 verification_todo_id: finding
@@ -585,6 +812,34 @@ fn import_findings(record: &mut AgentTaskRecord, output: &Value) -> ImportResult
                     .map(ToString::to_string),
                 ai_confidence: finding.get("ai_confidence").and_then(Value::as_f64),
                 confidence: finding.get("confidence").and_then(Value::as_f64),
+                source_node_id: finding
+                    .get("source")
+                    .and_then(|source| source.get("node_id"))
+                    .or_else(|| finding.get("source_node_id"))
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                source_role: finding
+                    .get("source")
+                    .and_then(|source| source.get("node_role"))
+                    .or_else(|| finding.get("source_role"))
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                artifact_refs: finding.get("artifact_refs").cloned(),
+                risk_lifecycle: finding.get("risk_lifecycle").cloned(),
+                confidence_history: finding.get("confidence_history").cloned(),
+                data_flow: finding.get("data_flow").cloned(),
+                impact: finding
+                    .get("impact")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                remediation: finding
+                    .get("remediation")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                verification: finding
+                    .get("verification")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 created_at: finding
                     .get("created_at")
                     .and_then(Value::as_str)
@@ -604,6 +859,16 @@ fn string_vec(value: Option<&Value>) -> Option<Vec<String>> {
             .map(ToString::to_string)
             .collect()
     })
+}
+
+fn canonical_report_text(output: &Value) -> Option<String> {
+    let report = output.get("report")?;
+    report
+        .get("markdown")
+        .or_else(|| report.get("summary_markdown"))
+        .or_else(|| report.get("summary"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
 }
 
 fn default_agent_tree(record: &AgentTaskRecord, topology_version: &str) -> Vec<Value> {
@@ -682,6 +947,11 @@ fn push_import_event(
         finding_id: None,
         tokens_used: None,
         metadata,
+        role: None,
+        visibility: None,
+        correlation_id: None,
+        topology_version: None,
+        source_node_id: None,
         sequence: record.events.len() as i64 + 1,
         timestamp: now_rfc3339(),
     });
@@ -746,6 +1016,14 @@ mod tests {
             target_files: None,
             error_message: None,
             report: None,
+            runtime: Some("agentflow".to_string()),
+            run_id: None,
+            topology_version: None,
+            input_digest: None,
+            artifact_index: None,
+            report_snapshot: None,
+            feedback_bundle: None,
+            diagnostics: None,
             events: Vec::new(),
             findings: Vec::new(),
             checkpoints: Vec::new(),
@@ -765,6 +1043,36 @@ mod tests {
         assert_eq!(error.reason_code, "forbidden_static_input");
         assert!(error.message.contains("static_task_id"));
         assert!(error.message.contains("opengrep"));
+    }
+
+    #[test]
+    fn agentflow_importer_rejects_static_engine_origin_aliases() {
+        let payload = json!({
+            "contract_version": ARGUS_AGENTFLOW_CONTRACT_VERSION,
+            "task_id": "task-1",
+            "run": {
+                "run_id": "run-1",
+                "status": "completed",
+                "topology_version": P1_TOPOLOGY_VERSION
+            },
+            "events": [],
+            "checkpoints": [],
+            "findings": [{
+                "id": "finding-1",
+                "source_origin": "static_engine_fixture",
+                "source": {"kind": "static_engine", "engine": "static_engine_fixture"},
+                "vulnerability_type": "sql_injection",
+                "severity": "high",
+                "title": "must reject",
+                "status": "pending",
+                "is_verified": false
+            }],
+            "report": {"title": "report", "summary": "summary"}
+        });
+        let mut record = record();
+        let error = import_runner_output(&mut record, &payload).unwrap_err();
+        assert_eq!(error.reason_code, "forbidden_static_input");
+        assert!(error.message.contains("static_engine_fixture"));
     }
 
     #[test]
@@ -839,5 +1147,80 @@ mod tests {
             Some("normalize paths")
         );
         assert!(record.audit_scope.unwrap()["agentflow"]["run_id"] == "run-1");
+    }
+
+    #[test]
+    fn agentflow_importer_maps_canonical_contract_output_into_argus_task_state() {
+        let mut record = record();
+        let output = json!({
+            "contract_version": ARGUS_AGENTFLOW_CONTRACT_VERSION,
+            "task_id": "task-1",
+            "run": {
+                "run_id": "run-canonical",
+                "status": "completed",
+                "topology_version": P1_TOPOLOGY_VERSION,
+                "input_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            },
+            "events": [{
+                "id": "event-1",
+                "sequence": 1,
+                "timestamp": "2026-04-27T00:00:00Z",
+                "event_type": "node_completed",
+                "role": "vuln-reasoner",
+                "visibility": "user",
+                "correlation_id": "run:event-1",
+                "topology_version": P1_TOPOLOGY_VERSION,
+                "node_id": "vuln-reasoner",
+                "message": "done",
+                "data": {}
+            }],
+            "checkpoints": [],
+            "findings": [{
+                "id": "finding-1",
+                "vulnerability_type": "path_traversal",
+                "severity": "high",
+                "title": "unsafe path join",
+                "status": "verified",
+                "is_verified": true,
+                "source": {
+                    "node_id": "vuln-reasoner",
+                    "node_role": "vuln-reasoner",
+                    "agent_id": "agent-1"
+                },
+                "location": {"file_path": "src/main.rs", "line_start": 12},
+                "impact": "read files",
+                "remediation": "normalize paths",
+                "verification": "confirmed",
+                "confidence": 0.91,
+                "confidence_history": [],
+                "data_flow": ["route -> read"],
+                "artifact_refs": [],
+                "metadata": {}
+            }],
+            "report": {
+                "title": "智能审计报告",
+                "summary": "发现 1 个可确认漏洞",
+                "markdown": "# Report",
+                "verified_count": 1,
+                "findings_count": 1,
+                "severity_counts": {"high": 1}
+            },
+            "agent_tree": [],
+            "artifacts": [],
+            "diagnostics": {}
+        });
+        import_runner_output(&mut record, &output).unwrap();
+        assert_eq!(record.status, "completed");
+        assert_eq!(record.run_id.as_deref(), Some("run-canonical"));
+        assert_eq!(
+            record.topology_version.as_deref(),
+            Some(P1_TOPOLOGY_VERSION)
+        );
+        assert_eq!(
+            record.findings[0].source_node_id.as_deref(),
+            Some("vuln-reasoner")
+        );
+        assert_eq!(record.findings[0].impact.as_deref(), Some("read files"));
+        assert_eq!(record.events[0].role.as_deref(), Some("vuln-reasoner"));
     }
 }

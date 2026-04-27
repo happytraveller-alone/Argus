@@ -1,4 +1,8 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    env,
+    path::{Path, PathBuf},
+};
 
 use axum::{
     body::Body,
@@ -15,11 +19,24 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
-    db::{projects, task_state},
+    archive::extract_archive_path_to_directory,
+    config::AppConfig,
+    db::{projects, system_config, task_state},
     error::ApiError,
     routes::skills,
-    state::AppState,
+    runtime::agentflow::{
+        contracts::{ARGUS_AGENTFLOW_CONTRACT_VERSION, P1_TOPOLOGY_VERSION},
+        importer::{import_runner_output, sha256_hex},
+        preflight::{run_preflight, PreflightInput},
+        runner::{run_controlled_command, RunnerCommand},
+    },
+    state::{AppState, StoredProject, StoredSystemConfig},
 };
+
+const DEFAULT_AGENTFLOW_RUNNER_IMAGE: &str = "argus/agentflow-runner:1667fa35";
+const DEFAULT_AGENTFLOW_WORK_VOLUME: &str = "Argus_agentflow_runner_work";
+const DEFAULT_SCAN_WORKSPACE_ROOT: &str = "/tmp/Argus/scans";
+const DEFAULT_SCAN_WORKSPACE_VOLUME: &str = "Argus_scan_workspace";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -53,6 +70,7 @@ pub fn router() -> Router<AppState> {
         .route("/{task_id}/report", get(download_report))
 }
 
+#[cfg(test)]
 const AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR: &str =
     "AgentFlow runtime is not configured yet; legacy agent runtime has been retired";
 
@@ -324,34 +342,347 @@ async fn start_agent_task(
     let mut snapshot = task_state::load_snapshot(&state)
         .await
         .map_err(internal_error)?;
-    let record = snapshot
-        .agent_tasks
-        .get_mut(&task_id)
-        .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
     let now = now_rfc3339();
-    record.started_at = Some(now.clone());
-    record.total_iterations = record.total_iterations.max(1);
+    let (project_id, audit_scope_for_preflight) = {
+        let record = snapshot
+            .agent_tasks
+            .get_mut(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        record.started_at = Some(now.clone());
+        record.completed_at = None;
+        record.status = "running".to_string();
+        record.current_phase = Some("preflight".to_string());
+        record.current_step = Some("AgentFlow preflight".to_string());
+        record.progress_percentage = 5.0;
+        record.total_iterations = record.total_iterations.max(1);
+        if let Err(error) = reject_optional_audit_scope(record.audit_scope.as_ref()) {
+            finalize_agent_task_forbidden_static_input(record, &now, &error.to_string());
+            task_state::save_snapshot(&state, &snapshot)
+                .await
+                .map_err(internal_error)?;
+            return Ok(Json(json!({
+                "message": "agent task failed because forbidden static input was detected",
+                "task_id": task_id,
+                "reason_code": "forbidden_static_input",
+            })));
+        }
+        push_agent_event(
+            record,
+            "phase_start",
+            Some("preflight"),
+            Some("AgentFlow 智能审计预检开始"),
+            None,
+        );
+        push_checkpoint(record, "preflight", Some("running"));
+        (
+            record.project_id.clone(),
+            record.audit_scope.clone().unwrap_or_else(|| json!({})),
+        )
+    };
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .map_err(internal_error)?;
 
-    if let Err(error) = reject_optional_audit_scope(record.audit_scope.as_ref()) {
-        finalize_agent_task_forbidden_static_input(record, &now, &error.to_string());
+    let project = projects::get_project(&state, &project_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::NotFound(format!("project not found: {project_id}")))?;
+    let stored_config = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?;
+    let llm_config = agentflow_llm_config_value(state.config.as_ref(), stored_config);
+    let runner_command = agentflow_runner_command();
+    let output_dir = agentflow_output_dir(&state, &task_id);
+    let pipeline_path = agentflow_pipeline_path();
+    let preflight = run_preflight(PreflightInput {
+        llm_config: &llm_config,
+        audit_scope: Some(&audit_scope_for_preflight),
+        runner_command: runner_command
+            .as_ref()
+            .map(|command| command.command.as_str()),
+        pipeline_path: Some(&pipeline_path),
+        output_dir: Some(&output_dir),
+        max_parallel_nodes: state.config.runner_preflight_max_concurrency,
+    })
+    .await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    if !preflight.ok {
+        let record = snapshot
+            .agent_tasks
+            .get_mut(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        finalize_agent_task_agentflow_failure(
+            record,
+            &now_rfc3339(),
+            "preflight failed",
+            preflight
+                .reason_code
+                .as_deref()
+                .unwrap_or("preflight_failed"),
+            "preflight_failed",
+            &preflight.message,
+            Some(json!({
+                "preflight": preflight,
+            })),
+        );
         task_state::save_snapshot(&state, &snapshot)
             .await
             .map_err(internal_error)?;
         return Ok(Json(json!({
-            "message": "agent task failed because forbidden static input was detected",
+            "message": "agent task failed during AgentFlow preflight",
             "task_id": task_id,
-            "reason_code": "forbidden_static_input",
+            "reason_code": snapshot.agent_tasks.get(&task_id).and_then(|record| {
+                record.diagnostics.as_ref()?.get("reason_code")?.as_str()
+            }).unwrap_or("preflight_failed"),
         })));
     }
 
-    finalize_agent_task_failed(record, &now, AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR);
+    let prepared_workspace = if runner_command
+        .as_ref()
+        .is_some_and(|command| command.source == AgentflowRunnerCommandSource::DefaultDocker)
+    {
+        match prepare_agentflow_workspace(&project, &task_id).await {
+            Ok(workspace) => Some(workspace),
+            Err(error) => {
+                let record = snapshot.agent_tasks.get_mut(&task_id).ok_or_else(|| {
+                    ApiError::NotFound(format!("agent task not found: {task_id}"))
+                })?;
+                finalize_agent_task_agentflow_failure(
+                    record,
+                    &now_rfc3339(),
+                    "workspace prepare failed",
+                    error.reason_code,
+                    "preflight_failed",
+                    &error.message,
+                    Some(json!({
+                        "workspace": {
+                            "reason_code": error.reason_code,
+                            "message": error.message,
+                        }
+                    })),
+                );
+                task_state::save_snapshot(&state, &snapshot)
+                    .await
+                    .map_err(internal_error)?;
+                return Ok(Json(json!({
+                    "message": "agent task failed while preparing AgentFlow workspace",
+                    "task_id": task_id,
+                    "reason_code": error.reason_code,
+                })));
+            }
+        }
+    } else {
+        None
+    };
+    let runner_project_root = prepared_workspace
+        .as_ref()
+        .map(|workspace| workspace.container_source_dir.clone())
+        .or_else(|| {
+            project
+                .archive
+                .as_ref()
+                .map(|archive| archive.storage_path.clone())
+        })
+        .unwrap_or_else(|| "/workspace/src".to_string());
+    let runner_output_dir = prepared_workspace
+        .as_ref()
+        .map(|workspace| workspace.container_output_dir.clone())
+        .unwrap_or_else(|| output_dir.display().to_string());
+
+    let runner_input = {
+        let record = snapshot
+            .agent_tasks
+            .get_mut(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        record.current_phase = Some("running".to_string());
+        record.current_step = Some("AgentFlow runner executing".to_string());
+        record.progress_percentage = 15.0;
+        push_agent_event(
+            record,
+            "runner_started",
+            Some("running"),
+            Some("AgentFlow runner 已启动"),
+            Some(json!({
+                "runtime": "agentflow",
+                "pipeline": pipeline_path.display().to_string(),
+            })),
+        );
+        push_checkpoint(record, "runner", Some("running"));
+        build_agentflow_runner_input(
+            record,
+            &project,
+            state.config.as_ref(),
+            &llm_config,
+            &runner_project_root,
+            &runner_output_dir,
+        )
+    };
+    {
+        let record = snapshot
+            .agent_tasks
+            .get_mut(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        record.input_digest = Some(format!(
+            "sha256:{}",
+            sha256_hex(runner_input.to_string().as_bytes())
+        ));
+    }
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .map_err(internal_error)?;
+
+    let Some(runner_command) = runner_command else {
+        let mut snapshot = task_state::load_snapshot(&state)
+            .await
+            .map_err(internal_error)?;
+        let record = snapshot
+            .agent_tasks
+            .get_mut(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        finalize_agent_task_agentflow_failure(
+            record,
+            &now_rfc3339(),
+            "runner missing",
+            "runner_missing",
+            "preflight_failed",
+            "AgentFlow runner 未配置，无法启动智能审计任务",
+            None,
+        );
+        task_state::save_snapshot(&state, &snapshot)
+            .await
+            .map_err(internal_error)?;
+        return Ok(Json(json!({
+            "message": "agent task failed because AgentFlow runner is missing",
+            "task_id": task_id,
+            "reason_code": "runner_missing",
+        })));
+    };
+    let outcome = run_controlled_command(RunnerCommand {
+        program: "sh".to_string(),
+        args: vec!["-c".to_string(), runner_command.command],
+        cwd: None,
+        timeout_seconds: state.config.agent_timeout_seconds.max(1) as u64,
+        stdin_json: Some(runner_input.clone()),
+    })
+    .await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    let record = snapshot
+        .agent_tasks
+        .get_mut(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+    match outcome {
+        Ok(outcome) if outcome.timed_out => {
+            finalize_agent_task_agentflow_failure(
+                record,
+                &now_rfc3339(),
+                "runner timed out",
+                "runner_failed",
+                "runner_failed",
+                "智能审计运行失败：AgentFlow runner 执行超时",
+                Some(json!({"runner": outcome})),
+            );
+        }
+        Ok(outcome) if outcome.exit_code != Some(0) => {
+            finalize_agent_task_agentflow_failure(
+                record,
+                &now_rfc3339(),
+                "runner failed",
+                "runner_failed",
+                "runner_failed",
+                "智能审计运行失败：AgentFlow runner 返回非零退出码",
+                Some(json!({"runner": outcome})),
+            );
+        }
+        Ok(outcome) => {
+            let Some(output_json) = outcome.output_json.clone() else {
+                finalize_agent_task_agentflow_failure(
+                    record,
+                    &now_rfc3339(),
+                    "runner output invalid",
+                    "runner_output_invalid",
+                    "import_failed",
+                    "智能审计运行失败：AgentFlow runner 未输出标准 JSON",
+                    Some(json!({"runner": outcome})),
+                );
+                task_state::save_snapshot(&state, &snapshot)
+                    .await
+                    .map_err(internal_error)?;
+                if let Some(workspace) = &prepared_workspace {
+                    let _ = tokio::fs::remove_dir_all(&workspace.workspace_dir).await;
+                }
+                return Ok(Json(json!({
+                    "message": "agent task failed because AgentFlow runner output was invalid",
+                    "task_id": task_id,
+                    "reason_code": "runner_output_invalid",
+                })));
+            };
+            match import_runner_output(record, &output_json) {
+                Ok(()) => {
+                    let phase = record.status.clone();
+                    push_agent_event(
+                        record,
+                        "task_completed",
+                        Some(&phase),
+                        Some("AgentFlow 智能审计任务已完成导入"),
+                        Some(json!({
+                            "runtime": "agentflow",
+                            "runner_exit_code": outcome.exit_code,
+                        })),
+                    );
+                }
+                Err(error) => {
+                    finalize_agent_task_agentflow_failure(
+                        record,
+                        &now_rfc3339(),
+                        "import failed",
+                        error.reason_code,
+                        "import_failed",
+                        &error.message,
+                        Some(json!({
+                            "runner": outcome,
+                            "import_error": {
+                                "reason_code": error.reason_code,
+                                "message": error.message,
+                            }
+                        })),
+                    );
+                }
+            }
+        }
+        Err(error) => {
+            finalize_agent_task_agentflow_failure(
+                record,
+                &now_rfc3339(),
+                "runner failed",
+                error.reason_code,
+                "runner_failed",
+                &error.message,
+                Some(json!({
+                    "runner_error": {
+                        "reason_code": error.reason_code,
+                        "message": error.message,
+                    }
+                })),
+            );
+        }
+    }
 
     task_state::save_snapshot(&state, &snapshot)
         .await
         .map_err(internal_error)?;
+    if let Some(workspace) = prepared_workspace {
+        let _ = tokio::fs::remove_dir_all(workspace.workspace_dir).await;
+    }
     Ok(Json(json!({
-        "message": "agent task failed because AgentFlow runtime is not configured",
+        "message": "agent task start processed by AgentFlow runtime adapter",
         "task_id": task_id,
+        "status": snapshot.agent_tasks.get(&task_id).map(|record| record.status.clone()),
     })))
 }
 
@@ -1017,6 +1348,7 @@ fn finalize_agent_task_forbidden_static_input(
     push_checkpoint(record, "import_failed", Some("forbidden_static_input"));
 }
 
+#[cfg(test)]
 fn finalize_agent_task_failed(record: &mut task_state::AgentTaskRecord, now: &str, error: &str) {
     if record.agent_tree.is_empty() {
         seed_failed_agent_task_tree(record, error);
@@ -1048,6 +1380,45 @@ fn finalize_agent_task_failed(record: &mut task_state::AgentTaskRecord, now: &st
         Some(json!({"error": error})),
     );
     push_checkpoint(record, "final", Some("failed"));
+}
+
+fn finalize_agent_task_agentflow_failure(
+    record: &mut task_state::AgentTaskRecord,
+    now: &str,
+    current_step: &str,
+    reason_code: &str,
+    checkpoint_name: &str,
+    error: &str,
+    diagnostics: Option<Value>,
+) {
+    if record.agent_tree.is_empty() {
+        seed_failed_agent_task_tree(record, error);
+    } else {
+        mark_agent_tree_failed(&mut record.agent_tree, error);
+    }
+    record.status = "failed".to_string();
+    record.current_phase = Some("failed".to_string());
+    record.current_step = Some(current_step.to_string());
+    record.completed_at = Some(now.to_string());
+    record.progress_percentage = 100.0;
+    record.quality_score = 0.0;
+    record.security_score = Some(0.0);
+    record.error_message = Some(error.to_string());
+    let diagnostic_payload = json!({
+        "runtime": "agentflow",
+        "reason_code": reason_code,
+        "message": error,
+        "details": diagnostics.unwrap_or(Value::Null),
+    });
+    record.diagnostics = Some(diagnostic_payload.clone());
+    push_agent_event(
+        record,
+        reason_code,
+        Some("failed"),
+        Some(error),
+        Some(diagnostic_payload),
+    );
+    push_checkpoint(record, "failed", Some(checkpoint_name));
 }
 
 fn finding_export_status(finding: &task_state::AgentFindingRecord) -> &'static str {
@@ -1620,6 +1991,377 @@ fn percent_encode_utf8(text: &str) -> String {
         }
     }
     encoded
+}
+
+#[derive(Clone, Debug)]
+struct AgentflowRunnerCommand {
+    command: String,
+    source: AgentflowRunnerCommandSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AgentflowRunnerCommandSource {
+    ExplicitEnv,
+    DefaultDocker,
+}
+
+#[derive(Debug)]
+struct AgentflowWorkspace {
+    workspace_dir: PathBuf,
+    container_source_dir: String,
+    container_output_dir: String,
+}
+
+#[derive(Debug)]
+struct AgentflowWorkspaceError {
+    reason_code: &'static str,
+    message: String,
+}
+
+fn agentflow_runner_command() -> Option<AgentflowRunnerCommand> {
+    if let Some(command) = env::var("AGENTFLOW_RUNNER_COMMAND")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return Some(AgentflowRunnerCommand {
+            command,
+            source: AgentflowRunnerCommandSource::ExplicitEnv,
+        });
+    }
+
+    default_agentflow_runner_enabled().then(|| AgentflowRunnerCommand {
+        command: default_agentflow_runner_command(),
+        source: AgentflowRunnerCommandSource::DefaultDocker,
+    })
+}
+
+fn default_agentflow_runner_enabled() -> bool {
+    env::var("AGENTFLOW_DEFAULT_RUNNER_ENABLED")
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !matches!(
+                normalized.as_str(),
+                "0" | "false" | "no" | "off" | "disabled"
+            )
+        })
+        .unwrap_or(true)
+}
+
+fn default_agentflow_runner_command() -> String {
+    let image = env_trimmed("ARGUS_AGENTFLOW_RUNNER_IMAGE")
+        .unwrap_or_else(|| DEFAULT_AGENTFLOW_RUNNER_IMAGE.to_string());
+    let scan_volume = env_trimmed("SCAN_WORKSPACE_VOLUME")
+        .unwrap_or_else(|| DEFAULT_SCAN_WORKSPACE_VOLUME.to_string());
+    let work_volume = env_trimmed("AGENTFLOW_RUNNER_WORK_VOLUME")
+        .unwrap_or_else(|| DEFAULT_AGENTFLOW_WORK_VOLUME.to_string());
+    let container_cli = env_trimmed("CONTAINER_CLI")
+        .or_else(|| env_trimmed("BACKEND_DOCKER_BIN"))
+        .unwrap_or_else(|| "docker".to_string());
+    [
+        container_cli,
+        "run".to_string(),
+        "--rm".to_string(),
+        "-i".to_string(),
+        "--pull".to_string(),
+        "never".to_string(),
+        "--network".to_string(),
+        "none".to_string(),
+        "--read-only".to_string(),
+        "--security-opt".to_string(),
+        "no-new-privileges:true".to_string(),
+        "--cap-drop".to_string(),
+        "ALL".to_string(),
+        "--pids-limit".to_string(),
+        "512".to_string(),
+        "--memory".to_string(),
+        "4g".to_string(),
+        "--cpus".to_string(),
+        "2".to_string(),
+        "--tmpfs".to_string(),
+        "/tmp:rw,nosuid,nodev,noexec,size=512m".to_string(),
+        "-v".to_string(),
+        format!("{scan_volume}:/workspace:ro"),
+        "-v".to_string(),
+        format!("{work_volume}:/work:rw"),
+        "-e".to_string(),
+        "AGENTFLOW_RUNS_DIR=/work/agentflow-runs".to_string(),
+        "-e".to_string(),
+        "ARGUS_AGENTFLOW_OUTPUT_DIR=/work/outputs".to_string(),
+        "-e".to_string(),
+        "ARGUS_AGENTFLOW_INPUT_PATH=/work/input/runner_input.json".to_string(),
+        "-e".to_string(),
+        "HOME=/tmp/argus-agentflow-home".to_string(),
+        image,
+        "argus-agentflow-runner".to_string(),
+    ]
+    .into_iter()
+    .map(|part| shell_quote(&part))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+fn env_trimmed(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn shell_quote(value: &str) -> String {
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | ':' | '='))
+    {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
+    }
+}
+
+async fn prepare_agentflow_workspace(
+    project: &StoredProject,
+    task_id: &str,
+) -> Result<AgentflowWorkspace, AgentflowWorkspaceError> {
+    let archive = project
+        .archive
+        .as_ref()
+        .ok_or_else(|| AgentflowWorkspaceError {
+            reason_code: "project_archive_missing",
+            message: "智能审计启动失败：项目归档不存在，无法准备 AgentFlow 源码工作区".to_string(),
+        })?;
+    let workspace_root = agentflow_scan_workspace_root();
+    let task_segment = safe_path_segment(task_id);
+    let workspace_dir = workspace_root.join("agentflow-runtime").join(&task_segment);
+    let source_dir = workspace_dir.join("source");
+    let output_dir = workspace_dir.join("output");
+    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+    tokio::fs::create_dir_all(&source_dir)
+        .await
+        .map_err(|error| AgentflowWorkspaceError {
+            reason_code: "workspace_prepare_failed",
+            message: format!("智能审计启动失败：无法创建 AgentFlow 源码工作区：{error}"),
+        })?;
+    tokio::fs::create_dir_all(&output_dir)
+        .await
+        .map_err(|error| AgentflowWorkspaceError {
+            reason_code: "workspace_prepare_failed",
+            message: format!("智能审计启动失败：无法创建 AgentFlow 输出工作区：{error}"),
+        })?;
+
+    let source_dir_for_extract = source_dir.clone();
+    let archive_path = PathBuf::from(&archive.storage_path);
+    let archive_name = archive.original_filename.clone();
+    tokio::task::spawn_blocking(move || {
+        extract_archive_path_to_directory(&archive_path, &archive_name, &source_dir_for_extract)
+    })
+    .await
+    .map_err(|error| AgentflowWorkspaceError {
+        reason_code: "workspace_prepare_failed",
+        message: format!("智能审计启动失败：AgentFlow 源码工作区准备任务异常：{error}"),
+    })?
+    .map_err(|error| AgentflowWorkspaceError {
+        reason_code: "workspace_prepare_failed",
+        message: format!("智能审计启动失败：项目归档解压失败：{error}"),
+    })?;
+
+    Ok(AgentflowWorkspace {
+        workspace_dir,
+        container_source_dir: shared_workspace_container_path(&workspace_root, &source_dir),
+        container_output_dir: shared_workspace_container_path(&workspace_root, &output_dir),
+    })
+}
+
+fn agentflow_scan_workspace_root() -> PathBuf {
+    env_trimmed("SCAN_WORKSPACE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_SCAN_WORKSPACE_ROOT))
+}
+
+fn shared_workspace_container_path(workspace_root: &Path, path: &Path) -> String {
+    let relative = path.strip_prefix(workspace_root).unwrap_or(path);
+    let relative = relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    if relative.is_empty() {
+        "/workspace".to_string()
+    } else {
+        format!("/workspace/{relative}")
+    }
+}
+
+fn safe_path_segment(value: &str) -> String {
+    let segment = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if segment.is_empty() {
+        Uuid::new_v4().to_string()
+    } else {
+        segment
+    }
+}
+
+fn agentflow_pipeline_path() -> PathBuf {
+    let project_path = PathBuf::from("backend/agentflow/pipelines/intelligent_audit.py");
+    if project_path.exists() {
+        project_path
+    } else {
+        PathBuf::from("agentflow/pipelines/intelligent_audit.py")
+    }
+}
+
+fn agentflow_output_dir(state: &AppState, task_id: &str) -> PathBuf {
+    state
+        .config
+        .zip_storage_path
+        .join("agentflow")
+        .join(task_id)
+}
+
+fn agentflow_llm_config_value(config: &AppConfig, stored: Option<StoredSystemConfig>) -> Value {
+    let saved = stored.map(|stored| stored.llm_config_json);
+    let saved_ref = saved.as_ref();
+    json!({
+        "llmProvider": config_value(saved_ref, "llmProvider").unwrap_or_else(|| config.llm_provider.clone()),
+        "llmModel": config_value(saved_ref, "llmModel").unwrap_or_else(|| config.llm_model.clone()),
+        "llmBaseUrl": config_value(saved_ref, "llmBaseUrl").unwrap_or_else(|| config.llm_base_url.clone()),
+        "llmApiKey": config_value(saved_ref, "llmApiKey").unwrap_or_else(|| config.llm_api_key.clone()),
+    })
+}
+
+fn config_value(value: Option<&Value>, key: &str) -> Option<String> {
+    value?
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn build_agentflow_runner_input(
+    record: &task_state::AgentTaskRecord,
+    project: &StoredProject,
+    config: &AppConfig,
+    llm_config: &Value,
+    project_root: &str,
+    output_dir: &str,
+) -> Value {
+    let audit_scope = record.audit_scope.as_ref();
+    let target_files = record
+        .target_files
+        .clone()
+        .filter(|items| !items.is_empty())
+        .or_else(|| scope_string_array(audit_scope, "target_files"))
+        .unwrap_or_default();
+    let exclude_patterns = record
+        .exclude_patterns
+        .clone()
+        .filter(|items| !items.is_empty())
+        .or_else(|| scope_string_array(audit_scope, "exclude_patterns"))
+        .unwrap_or_default();
+    let target_vulnerabilities = record
+        .target_vulnerabilities
+        .clone()
+        .filter(|items| !items.is_empty())
+        .or_else(|| scope_string_array(audit_scope, "target_vulnerabilities"))
+        .unwrap_or_default();
+    let scoped_verification_level = scope_string(audit_scope, "verification_level");
+    let verification_level = normalize_agentflow_verification_level(
+        record
+            .verification_level
+            .as_deref()
+            .or(scoped_verification_level.as_deref()),
+    );
+    let prompt_skill = scope_string(audit_scope, "prompt_skill");
+    let max_concurrency = config.runner_preflight_max_concurrency.max(1) as u32;
+
+    json!({
+        "contract_version": ARGUS_AGENTFLOW_CONTRACT_VERSION,
+        "task_id": record.id,
+        "project_id": record.project_id,
+        "project_root": project_root,
+        "target": "container",
+        "topology_version": P1_TOPOLOGY_VERSION,
+        "audit_scope": {
+            "target_files": target_files,
+            "exclude_patterns": exclude_patterns,
+            "target_vulnerabilities": target_vulnerabilities,
+            "verification_level": verification_level,
+            "prompt_skill": prompt_skill,
+            "extra": {
+                "task_name": record.name,
+                "task_description": record.description,
+                "project_name": project.name,
+                "prompt_skill_runtime": audit_scope
+                    .and_then(|scope| scope.get("prompt_skill_runtime"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            }
+        },
+        "output_dir": output_dir,
+        "llm": {
+            "provider": llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai"),
+            "model": llm_config.get("llmModel").and_then(Value::as_str).unwrap_or(""),
+            "base_url": llm_config.get("llmBaseUrl").and_then(Value::as_str),
+            "api_key_ref": if llm_config.get("llmApiKey").and_then(Value::as_str).unwrap_or("").is_empty() {
+                Value::Null
+            } else {
+                Value::String("system_config:llmApiKey".to_string())
+            },
+        },
+        "resource_budget": {
+            "max_cpu_cores": 2.0,
+            "max_memory_mb": 4096,
+            "max_duration_seconds": config.agent_timeout_seconds.max(1),
+            "max_concurrency": max_concurrency,
+        },
+        "metadata": {
+            "runtime": "agentflow",
+            "argus_task_status": record.status,
+            "serve_enabled": false,
+            "remote_target": false,
+            "dynamic_experts": false,
+        }
+    })
+}
+
+fn scope_string_array(scope: Option<&Value>, key: &str) -> Option<Vec<String>> {
+    scope
+        .and_then(|scope| scope.get(key))
+        .and_then(string_array)
+        .filter(|items| !items.is_empty())
+}
+
+fn scope_string(scope: Option<&Value>, key: &str) -> Option<String> {
+    scope?
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn normalize_agentflow_verification_level(value: Option<&str>) -> &'static str {
+    match value
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "basic" | "quick" => "basic",
+        "strict" | "deep" | "analysis_with_poc" | "analysis_with_poc_plan" => "strict",
+        _ => "standard",
+    }
 }
 
 fn prepare_audit_scope(

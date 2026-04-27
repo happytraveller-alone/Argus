@@ -138,6 +138,15 @@ impl EnvVarGuard {
             original,
         }
     }
+
+    fn remove(key: &str) -> Self {
+        let original = env::var(key).ok();
+        env::remove_var(key);
+        Self {
+            key: key.to_string(),
+            original,
+        }
+    }
 }
 
 impl Drop for EnvVarGuard {
@@ -658,6 +667,7 @@ async fn seed_agent_lifecycle_state(state: &AppState, task_id: &str) {
         metadata: None,
         sequence: 1,
         timestamp: "2026-04-12T11:00:01Z".to_string(),
+        ..Default::default()
     });
     record.events.push(task_state::AgentEventRecord {
         id: Uuid::new_v4().to_string(),
@@ -682,6 +692,7 @@ async fn seed_agent_lifecycle_state(state: &AppState, task_id: &str) {
         metadata: Some(json!({"agent": "analysis"})),
         sequence: 2,
         timestamp: "2026-04-12T11:00:05Z".to_string(),
+        ..Default::default()
     });
     record.events.push(task_state::AgentEventRecord {
         id: Uuid::new_v4().to_string(),
@@ -698,6 +709,7 @@ async fn seed_agent_lifecycle_state(state: &AppState, task_id: &str) {
         metadata: Some(json!({"severity": "critical"})),
         sequence: 3,
         timestamp: "2026-04-12T11:00:09Z".to_string(),
+        ..Default::default()
     });
     task_state::save_snapshot(state, &snapshot).await.unwrap();
 }
@@ -912,14 +924,142 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
 }
 
 #[tokio::test]
-async fn agent_task_start_fails_until_agentflow_runtime_is_configured() {
-    let state = AppState::from_config(isolated_test_config(
-        "agent-task-agentflow-runtime-unconfigured",
-    ))
-    .await
-    .expect("state should build");
+async fn agent_task_start_runs_agentflow_adapter_and_imports_output() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().expect("temp dir");
+    let runner_script = temp_dir.path().join("fake-agentflow-runner.py");
+    fs::write(
+        &runner_script,
+        r##"import json
+import sys
+
+request = json.load(sys.stdin)
+task_id = request["task_id"]
+output = {
+    "contract_version": "argus-agentflow-p1/v1",
+    "task_id": task_id,
+    "run": {
+        "run_id": "run-" + task_id[:8],
+        "status": "completed",
+        "topology_version": "p1-fixed-dag-v1",
+        "input_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    },
+    "events": [{
+        "id": "event-1",
+        "sequence": 1,
+        "timestamp": "2026-04-27T00:00:00Z",
+        "event_type": "report_generated",
+        "role": "audit-reporter",
+        "visibility": "user",
+        "correlation_id": "run:event-1",
+        "topology_version": "p1-fixed-dag-v1",
+        "node_id": "audit-reporter",
+        "message": "智能审计报告已生成",
+        "data": {},
+    }],
+    "checkpoints": [{
+        "id": "checkpoint-1",
+        "agent_id": "audit-reporter",
+        "agent_name": "Audit Reporter",
+        "agent_type": "agentflow",
+        "role": "audit-reporter",
+        "status": "completed",
+        "checkpoint_type": "completed",
+        "topology_version": "p1-fixed-dag-v1",
+        "iteration": 1,
+        "total_tokens": 7,
+        "tool_calls": 1,
+        "findings_count": 1,
+        "state_data": {},
+        "metadata": {},
+    }],
+    "findings": [{
+        "id": "af-route-001",
+        "vulnerability_type": "path_traversal",
+        "severity": "high",
+        "title": "路径拼接缺少规范化",
+        "status": "verified",
+        "is_verified": True,
+        "source": {
+            "node_id": "vuln-reasoner",
+            "node_role": "vuln-reasoner",
+            "agent_id": "agent-vuln-reasoner",
+        },
+        "location": {
+            "file_path": "src/main.py",
+            "line_start": 1,
+            "line_end": 1,
+        },
+        "description": "AgentFlow 直接输出的业务漏洞",
+        "impact": "攻击者可能读取越权文件",
+        "remediation": "使用安全路径规范化和根目录约束",
+        "verification": "已验证输入可达危险路径",
+        "confidence": 0.93,
+        "confidence_history": [],
+        "data_flow": ["route -> file read"],
+        "artifact_refs": [],
+        "metadata": {},
+    }],
+    "report": {
+        "title": "智能审计报告",
+        "summary": "发现 1 个可确认漏洞",
+        "markdown": "# 智能审计报告\n\n发现 1 个可确认漏洞。",
+        "verified_count": 1,
+        "findings_count": 1,
+        "severity_counts": {"high": 1},
+        "diagnostics": {},
+    },
+    "agent_tree": [{
+        "id": "audit-reporter",
+        "role": "audit-reporter",
+        "label": "Audit Reporter",
+        "status": "completed",
+        "topology_version": "p1-fixed-dag-v1",
+        "findings_count": 1,
+        "metadata": {},
+    }],
+    "artifacts": [],
+    "diagnostics": {"runner_exit_code": 0},
+}
+print(json.dumps(output, ensure_ascii=False))
+"##,
+    )
+    .expect("write fake runner");
+    let _runner_guard = EnvVarGuard::set(
+        "AGENTFLOW_RUNNER_COMMAND",
+        &format!("python3 {}", runner_script.display()),
+    );
+
+    let state = AppState::from_config(isolated_test_config("agent-task-agentflow-start-success"))
+        .await
+        .expect("state should build");
     let app = build_router(state);
     let project_id = create_project(&app).await;
+
+    let save_config_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "llmConfig": {
+                            "llmProvider": "openai",
+                            "llmModel": "gpt-5",
+                            "llmBaseUrl": "https://api.example.invalid/v1",
+                            "llmApiKey": "sk-test-agentflow"
+                        },
+                        "otherConfig": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_config_response.status(), StatusCode::OK);
 
     let create_response = app
         .clone()
@@ -931,8 +1071,11 @@ async fn agent_task_start_fails_until_agentflow_runtime_is_configured() {
                 .body(Body::from(
                     json!({
                         "project_id": project_id,
-                        "name": "agentflow-runtime-unconfigured",
-                        "description": "surface agentflow runtime gap",
+                        "name": "agentflow-start-success",
+                        "description": "run P1 adapter",
+                        "target_files": ["src/main.py"],
+                        "target_vulnerabilities": ["path_traversal"],
+                        "verification_level": "strict",
                         "max_iterations": 1
                     })
                     .to_string(),
@@ -980,18 +1123,122 @@ async fn agent_task_start_fails_until_agentflow_runtime_is_configured() {
     )
     .unwrap();
 
+    assert_eq!(task_json["status"], "completed");
+    assert_eq!(task_json["runtime"], "agentflow");
+    assert_eq!(task_json["topology_version"], "p1-fixed-dag-v1");
+    assert_eq!(task_json["findings_count"], 1);
+    assert_eq!(task_json["verified_count"], 1);
+    assert_eq!(task_json["high_count"], 1);
+    assert_eq!(task_json["agent_tree"][0]["status"], "completed");
+    assert_eq!(task_json["findings"][0]["source_node_id"], "vuln-reasoner");
+    assert_eq!(task_json["findings"][0]["source_role"], "vuln-reasoner");
+    assert_eq!(task_json["findings"][0]["impact"], "攻击者可能读取越权文件");
+    assert!(task_json["report"]
+        .as_str()
+        .unwrap()
+        .contains("发现 1 个可确认漏洞"));
+}
+
+#[tokio::test]
+async fn agent_task_start_fails_preflight_when_runner_missing() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let _runner_guard = EnvVarGuard::remove("AGENTFLOW_RUNNER_COMMAND");
+    let _default_runner_guard = EnvVarGuard::set("AGENTFLOW_DEFAULT_RUNNER_ENABLED", "false");
+    let state = AppState::from_config(isolated_test_config("agent-task-agentflow-runner-missing"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let save_config_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "llmConfig": {
+                            "llmProvider": "openai",
+                            "llmModel": "gpt-5",
+                            "llmBaseUrl": "https://api.example.invalid/v1",
+                            "llmApiKey": "sk-test-agentflow"
+                        },
+                        "otherConfig": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_config_response.status(), StatusCode::OK);
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "agentflow-runner-missing",
+                        "max_iterations": 1
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let task_id = create_json["id"].as_str().unwrap().to_string();
+
+    let start_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/agent-tasks/{task_id}/start"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_response.status(), StatusCode::OK);
+
+    let task_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let task_json: Value = serde_json::from_slice(
+        &to_bytes(task_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
     assert_eq!(task_json["status"], "failed");
-    assert_eq!(task_json["current_phase"], "failed");
-    assert_eq!(task_json["current_step"], "agentflow runtime failed");
-    assert_eq!(
-        task_json["error_message"],
-        "AgentFlow runtime is not configured yet; legacy agent runtime has been retired"
-    );
-    assert_eq!(task_json["agent_tree"][0]["status"], "failed");
-    assert_eq!(
-        task_json["agent_tree"][0]["result_summary"],
-        "AgentFlow runtime is not configured yet; legacy agent runtime has been retired"
-    );
+    assert_eq!(task_json["current_step"], "preflight failed");
+    assert_eq!(task_json["diagnostics"]["reason_code"], "runner_missing");
+    assert!(task_json["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("AgentFlow runner 未配置"));
 }
 
 #[tokio::test]

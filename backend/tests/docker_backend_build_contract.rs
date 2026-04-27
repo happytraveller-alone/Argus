@@ -1,6 +1,9 @@
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
 const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
+const AGENTFLOW_RUNNER_DOCKERFILE: &str = include_str!("../../docker/agentflow-runner.Dockerfile");
+const AGENTFLOW_RUNNER_SCRIPT: &str = include_str!("../../docker/agentflow-runner.sh");
+const AGENTFLOW_RUNNER_ADAPTER: &str = include_str!("../../docker/agentflow-runner-adapter.py");
 const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
@@ -90,6 +93,55 @@ fn opengrep_runner_packages_only_unified_rule_root() {
         !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
         "opengrep runner image must not reference the retired rules_from_patches root"
     );
+}
+
+#[test]
+fn agentflow_runner_emits_argus_contract_instead_of_native_runrecord() {
+    assert!(
+        AGENTFLOW_RUNNER_DOCKERFILE
+            .contains("ARG AGENTFLOW_COMMIT=1667fa35ed99e3c1583a7d60cac8e3406cafd3ee"),
+        "agentflow runner image must pin the reviewed AgentFlow source commit"
+    );
+    assert!(
+        AGENTFLOW_RUNNER_DOCKERFILE.contains("COPY docker/agentflow-runner-adapter.py"),
+        "agentflow runner image must package the Argus output adapter"
+    );
+    assert!(
+        AGENTFLOW_RUNNER_SCRIPT.contains("argus-agentflow-runner-adapter"),
+        "agentflow runner entrypoint must delegate to the Argus adapter"
+    );
+    assert!(
+        ROOT_COMPOSE.contains(
+            "AGENTFLOW_RUNNER_WORK_VOLUME: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}"
+        ),
+        "backend must know the named AgentFlow runner work volume used by docker-runner invocations"
+    );
+    assert!(
+        ROOT_COMPOSE.contains(
+            "agentflow_runner_work:\n    name: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}"
+        ),
+        "AgentFlow runner work volume must be stable so backend-launched containers can mount it"
+    );
+    assert!(
+        ROOT_COMPOSE
+            .contains("agentflow-runner:\n        condition: service_completed_successfully"),
+        "backend must wait for the AgentFlow runner image preflight service before serving tasks"
+    );
+    for required in [
+        "CONTRACT_VERSION = \"argus-agentflow-p1/v1\"",
+        "TOPOLOGY_VERSION = \"p1-fixed-dag-v1\"",
+        "[\"agentflow\", \"validate\", pipeline_path]",
+        "[\"agentflow\", \"run\", pipeline_path, \"--runs-dir\", runs_dir, \"--output\", \"json\", *extra_args]",
+        "safe_path_segment(task_id)",
+        "extract_argus_contract",
+        "failure_contract",
+        "\"runner_output_invalid\"",
+    ] {
+        assert!(
+            AGENTFLOW_RUNNER_ADAPTER.contains(required),
+            "agentflow adapter must contain contract marker {required:?}"
+        );
+    }
 }
 
 #[test]
