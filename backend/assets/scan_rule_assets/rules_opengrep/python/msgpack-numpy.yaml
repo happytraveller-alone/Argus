@@ -1,8 +1,6 @@
 rules:
 - id: msgpack-numpy
-  message: Found usage of msgpack-numpy unpacking, which relies on pickle to deserialize
-    numpy arrays containing objects. Functions reliant on pickle can result in arbitrary
-    code execution.  Consider switching to a safer serialization method.
+  message: Found usage of msgpack-numpy unpacking, which relies on pickle to deserialize numpy arrays containing objects. Functions reliant on pickle can result in arbitrary code execution.  Consider switching to a safer serialization method.
   languages:
   - python
   severity: ERROR
@@ -25,11 +23,9 @@ rules:
     - metavariable-regex:
         metavariable: $FN
         regex: (loads?|dumps?|packb?|unpackb?)
-    - pattern-inside: 'msgpack_numpy.patch()
-
+    - pattern-inside: |
+        msgpack_numpy.patch()
         ...
-
-        '
   - patterns:
     - pattern: msgpack.$FN(..., object_hook=msgpack_numpy.decode, ...)
     - metavariable-regex:

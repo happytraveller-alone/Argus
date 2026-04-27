@@ -1,15 +1,21 @@
 rules:
 - id: vuln-git-12294990
-  pattern: "if (!$NORMCOND)\n  return 0;\n...\n$RETVAL = match_urls($URL, $NORMINFO, $MATCHED);\n"
-  pattern-not: "if ($NORMCOND)\n  $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);\nelse if ($COLLECT->fallback_match_fn)\n\
-    \  $RETVAL = $COLLECT->fallback_match_fn($CONFIGURL, $COLLECT->cb);\nelse\n  $RETVAL = 0;\n"
+  pattern: |
+    if (!$NORMCOND)
+      return 0;
+    ...
+    $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);
+  pattern-not: |
+    if ($NORMCOND)
+      $RETVAL = match_urls($URL, $NORMINFO, $MATCHED);
+    else if ($COLLECT->fallback_match_fn)
+      $RETVAL = $COLLECT->fallback_match_fn($CONFIGURL, $COLLECT->cb);
+    else
+      $RETVAL = 0;
   languages:
   - c
-  message: 'The code contains a vulnerability where it returns early without considering fallback mechanisms for URL matching.
-    This can lead to incomplete or incorrect credential matching, potentially exposing sensitive information. The fix ensures
-    that if the primary URL matching fails, a fallback mechanism is used to attempt the match, improving security and reliability.
-
-    '
+  message: |
+    The code contains a vulnerability where it returns early without considering fallback mechanisms for URL matching. This can lead to incomplete or incorrect credential matching, potentially exposing sensitive information. The fix ensures that if the primary URL matching fails, a fallback mechanism is used to attempt the match, improving security and reliability.
   severity: ERROR
   metadata:
     source-url: github.com/git-for-windows/git/commit/12294990c90e043862be9eb7eb22c3784b526340
@@ -24,17 +30,16 @@ rules:
     technology:
     - c
 - id: vuln-git-75e00e1d
-  pattern: 'credential_from_url(&$C, $URL);
-
-    '
-  pattern-not: "if (credential_from_potentially_partial_url(&$C, $URL) < 0) {\n  ...\n}\n"
+  pattern: |
+    credential_from_url(&$C, $URL);
+  pattern-not: |
+    if (credential_from_potentially_partial_url(&$C, $URL) < 0) {
+      ...
+    }
   languages:
   - c
-  message: 'Direct use of credential_from_url() without error handling can lead to security issues when processing partial
-    URLs. This could cause credential lookup failures or incorrect credential handling. Always use credential_from_potentially_partial_url()
-    with proper error handling as shown in the fix.
-
-    '
+  message: |
+    Direct use of credential_from_url() without error handling can lead to security issues when processing partial URLs. This could cause credential lookup failures or incorrect credential handling. Always use credential_from_potentially_partial_url() with proper error handling as shown in the fix.
   severity: ERROR
   metadata:
     source-url: github.com/git-for-windows/git/commit/75e00e1d48eb7034705e9715b6b1af542cc1be4b
@@ -47,14 +52,25 @@ rules:
     technology:
     - c
 - id: vuln-git-bffc762f
-  pattern: "if (stat($PATH, $STAT) < 0) {\n  ...\n}\n"
-  pattern-not: "if ($FLAGS & DIR_ITERATOR_FOLLOW_SYMLINKS)\n  $ERR = stat($PATH, $STAT);\nelse\n  $ERR = lstat($PATH, $STAT);\n\
-    \nif ($ERR < 0) {\n  ...\n}\n"
+  pattern: |
+    if (stat($PATH, $STAT) < 0) {
+      ...
+    }
+  pattern-not: |
+    if ($FLAGS & DIR_ITERATOR_FOLLOW_SYMLINKS)
+      $ERR = stat($PATH, $STAT);
+    else
+      $ERR = lstat($PATH, $STAT);
+
+    if ($ERR < 0) {
+      ...
+    }
   languages:
   - c
-  message: "Direct use of `stat()` without considering symlink handling can lead to security vulnerabilities. \nUse `stat()`\
-    \ or `lstat()` based on the `DIR_ITERATOR_FOLLOW_SYMLINKS` flag to properly handle symlinks.\nThis prevents potential\
-    \ security issues where symlinks could be exploited to access unintended files.\n"
+  message: |
+    Direct use of `stat()` without considering symlink handling can lead to security vulnerabilities.
+    Use `stat()` or `lstat()` based on the `DIR_ITERATOR_FOLLOW_SYMLINKS` flag to properly handle symlinks.
+    This prevents potential security issues where symlinks could be exploited to access unintended files.
   severity: ERROR
   metadata:
     source-url: github.com/git-for-windows/git/commit/bffc762f87ae8d18c6001bf0044a76004245754c
@@ -68,21 +84,25 @@ rules:
     technology:
     - c
 - id: vuln-git-c716fe4b
-  pattern: "void credential_from_url(struct credential *$C, const char *$URL) {\n  ...\n  $CREDENTIAL_ACCESS($C->$FIELD);\n\
-    \  ...\n}\n"
-  pattern-not: "void credential_from_url(struct credential *$C, const char *$URL) {\n  if (credential_from_url_gently($C,\
-    \ $URL, 0) < 0) {\n    ...\n  }\n}\n"
+  pattern: |
+    void credential_from_url(struct credential *$C, const char *$URL) {
+      ...
+      $CREDENTIAL_ACCESS($C->$FIELD);
+      ...
+    }
+  pattern-not: |
+    void credential_from_url(struct credential *$C, const char *$URL) {
+      if (credential_from_url_gently($C, $URL, 0) < 0) {
+        ...
+      }
+    }
   languages:
   - c
-  message: 'Detected potential URL component injection vulnerability. The code accesses credential fields
-
+  message: |
+    Detected potential URL component injection vulnerability. The code accesses credential fields
     directly without checking for newline characters, which could lead to injection attacks.
-
     The vulnerability allows attackers to inject malicious input via newline characters in URL components.
-
     To fix, use `credential_from_url_gently` which includes proper validation of URL components.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/git-for-windows/git/commit/c716fe4bd917e013bf376a678b3a924447777b2d
@@ -96,25 +116,18 @@ rules:
     technology:
     - c
 - id: vuln-git-cf8f6ce0
-  pattern: 'transport = transport_get($REMOTE, $REMOTE->url[0]);
-
+  pattern: |
+    transport = transport_get($REMOTE, $REMOTE->url[0]);
     ...
-
-    '
-  pattern-not: 'transport = transport_get($REMOTE, $PATH ? $PATH : $REMOTE->url[0]);
-
+  pattern-not: |
+    transport = transport_get($REMOTE, $PATH ? $PATH : $REMOTE->url[0]);
     ...
-
-    '
   languages:
   - c
-  message: 'Directly using remote->url[0] without null check can lead to null pointer dereference.
-
+  message: |
+    Directly using remote->url[0] without null check can lead to null pointer dereference.
     This is dangerous as it can cause crashes or undefined behavior when the URL is null.
-
     Fix it by using a ternary operator to check for null path before using remote->url[0].
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/git-for-windows/git/commit/cf8f6ce02a13f4d1979a53241afbee15a293fce9

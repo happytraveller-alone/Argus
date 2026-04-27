@@ -2,12 +2,9 @@ rules:
 - id: kotlin_xxe_rule-SaxParserXXE
   languages:
   - kotlin
-  message: 'XML External Entity (XXE) attacks can occur when an XML parser supports
-    XML
-
+  message: |
+    XML External Entity (XXE) attacks can occur when an XML parser supports XML
     entities while processing XML received from an untrusted source.
-
-    '
   metadata:
     shortDescription: Improper restriction of XML external entity reference ('XXE')
     category: security
@@ -18,25 +15,16 @@ rules:
     security-severity: CRITICAL
   severity: ERROR
   patterns:
-  - pattern-inside: '$SF = SAXParserFactory.newInstance()
-
+  - pattern-inside: |
+      $SF = SAXParserFactory.newInstance()
       ...
-
-      '
-  - pattern-not-inside: '$SF.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-
+  - pattern-not-inside: |
+      $SF.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
       ...
-
-      '
-  - pattern-not-inside: '$SF.setFeature("http://apache.org/xml/features/disallow-doctype-decl",
-      true);
-
+  - pattern-not-inside: |
+      $SF.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
       ...
-
-      '
-  - pattern-inside: '$P = $SFP.newSAXParser();
-
+  - pattern-inside: |
+      $P = $SFP.newSAXParser();
       ...
-
-      '
   - pattern: $P.parse(...);

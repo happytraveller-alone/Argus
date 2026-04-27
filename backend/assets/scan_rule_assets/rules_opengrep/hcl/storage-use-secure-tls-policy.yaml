@@ -1,16 +1,24 @@
 rules:
 - id: storage-use-secure-tls-policy
-  message: 'Azure Storage currently supports three versions of the TLS protocol: 1.0,
-    1.1, and 1.2. Azure Storage uses TLS 1.2 on public HTTPS endpoints, but TLS 1.0
-    and TLS 1.1 are still supported for backward compatibility. This check will warn
-    if the minimum TLS is not set to TLS1_2.'
+  message: 'Azure Storage currently supports three versions of the TLS protocol: 1.0, 1.1, and 1.2. Azure Storage uses TLS 1.2 on public HTTPS endpoints, but TLS 1.0 and TLS 1.1 are still supported for backward compatibility. This check will warn if the minimum TLS is not set to TLS1_2.'
   patterns:
   - pattern-either:
-    - pattern-inside: "resource \"azurerm_storage_account\" \"...\" {\n  ...\n  min_tls_version\
-        \ = \"$ANYTHING\"\n  ...\n}\n"
-    - pattern-inside: "resource \"azurerm_storage_account\" \"...\" {\n  ...\n}\n"
-  - pattern-not-inside: "resource \"azurerm_storage_account\" \"...\" {\n  ...\n \
-      \ min_tls_version = \"TLS1_2\"\n  ...\n}\n"
+    - pattern-inside: |
+        resource "azurerm_storage_account" "..." {
+          ...
+          min_tls_version = "$ANYTHING"
+          ...
+        }
+    - pattern-inside: |
+        resource "azurerm_storage_account" "..." {
+          ...
+        }
+  - pattern-not-inside: |
+      resource "azurerm_storage_account" "..." {
+        ...
+        min_tls_version = "TLS1_2"
+        ...
+      }
   metadata:
     cwe:
     - 'CWE-326: Inadequate Encryption Strength'

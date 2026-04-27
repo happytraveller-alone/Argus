@@ -1,15 +1,17 @@
 rules:
 - id: vuln-lldpd-73d42680
-  pattern: "if (length < SONMP_SIZE) {\n  ...\n}\n"
-  pattern-not: "if (length < SONMP_SIZE + 2*ETHER_ADDR_LEN + sizeof(u_int16_t)) {\n  ...\n}\n"
+  pattern: |
+    if (length < SONMP_SIZE) {
+      ...
+    }
+  pattern-not: |
+    if (length < SONMP_SIZE + 2*ETHER_ADDR_LEN + sizeof(u_int16_t)) {
+      ...
+    }
   languages:
   - c
-  message: 'This rule detects insufficient length checks in SONMP protocol handling. The original check only verifies if the
-    length is greater than SONMP_SIZE, but it does not account for additional required fields like Ethernet addresses and
-    a 16-bit integer. This could lead to buffer underflows or incorrect packet processing. The fix adds the necessary length
-    for these additional fields. Always ensure that length checks account for all required fields in network protocols.
-
-    '
+  message: |
+    This rule detects insufficient length checks in SONMP protocol handling. The original check only verifies if the length is greater than SONMP_SIZE, but it does not account for additional required fields like Ethernet addresses and a 16-bit integer. This could lead to buffer underflows or incorrect packet processing. The fix adds the necessary length for these additional fields. Always ensure that length checks account for all required fields in network protocols.
   severity: ERROR
   metadata:
     source-url: github.com/lldpd/lldpd/commit/73d42680fce8598324364dbb31b9bc3b8320adf7
@@ -25,20 +27,30 @@ rules:
     technology:
     - c
 - id: vuln-lldpd-a8d3c90f
-  pattern: "if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR)\n  ...\nelse if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME)\n  ...\nelse\n  $CHASSIS->$C_DESCR\
-    \ = $B;\n"
-  pattern-not: "if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR) {\n  free($PORT->$P_DESCR);\n  ...\n} else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME)\
-    \ {\n  free($CHASSIS->$C_NAME);\n  ...\n} else {\n  free($CHASSIS->$C_DESCR);\n  $CHASSIS->$C_DESCR = $B;\n}\n"
+  pattern: |
+    if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR)
+      ...
+    else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME)
+      ...
+    else
+      $CHASSIS->$C_DESCR = $B;
+  pattern-not: |
+    if ($TLV_TYPE == $LLDP_TLV_PORT_DESCR) {
+      free($PORT->$P_DESCR);
+      ...
+    } else if ($TLV_TYPE == $LLDP_TLV_SYSTEM_NAME) {
+      free($CHASSIS->$C_NAME);
+      ...
+    } else {
+      free($CHASSIS->$C_DESCR);
+      $CHASSIS->$C_DESCR = $B;
+    }
   languages:
   - c
-  message: 'Missing free() calls before reassigning pointers can lead to memory leaks.
-
-    This vulnerability occurs when a pointer is reassigned without freeing the previously allocated memory, potentially causing
-    memory leaks and resource exhaustion.
-
+  message: |
+    Missing free() calls before reassigning pointers can lead to memory leaks.
+    This vulnerability occurs when a pointer is reassigned without freeing the previously allocated memory, potentially causing memory leaks and resource exhaustion.
     To fix this, ensure that free() is called on the pointer before reassigning it.
-
-    '
   severity: ERROR
   metadata:
     source-url: https://github.com/lldpd/lldpd/commit/a8d3c90feca548fc0656d95b5d278713db86ff61
@@ -50,20 +62,14 @@ rules:
     technology:
     - c
 - id: vuln-lldpd-dd4f16e7
-  pattern: 'CHECK_TLV_SIZE(4, "Organisational")
-
-    '
-  pattern-not: 'CHECK_TLV_SIZE(1 + (int)sizeof($ORGID), "Organisational")
-
-    '
+  pattern: |
+    CHECK_TLV_SIZE(4, "Organisational")
+  pattern-not: |
+    CHECK_TLV_SIZE(1 + (int)sizeof($ORGID), "Organisational")
   languages:
   - c
-  message: 'The vulnerability is a hardcoded size check in the `CHECK_TLV_SIZE` macro, which can lead to buffer overflows
-    or incorrect parsing of LLDP packets. This is dangerous because it can allow attackers to craft malicious packets that
-    bypass validation checks, potentially leading to memory corruption or denial of service. The fix is to use a dynamic size
-    check based on the actual size of the organizational ID (`orgid`).
-
-    '
+  message: |
+    The vulnerability is a hardcoded size check in the `CHECK_TLV_SIZE` macro, which can lead to buffer overflows or incorrect parsing of LLDP packets. This is dangerous because it can allow attackers to craft malicious packets that bypass validation checks, potentially leading to memory corruption or denial of service. The fix is to use a dynamic size check based on the actual size of the organizational ID (`orgid`).
   severity: ERROR
   metadata:
     source-url: github.com/lldpd/lldpd/commit/dd4f16e7e816f2165fba76e3d162cd8d2978dcb2

@@ -1,9 +1,6 @@
 rules:
 - id: express-sequelize-injection
-  message: Detected a sequelize statement that is tainted by user-input. This could
-    lead to SQL injection if the variable is user-controlled and is not properly sanitized.
-    In order to prevent SQL injection, it is recommended to use parameterized queries
-    or prepared statements.
+  message: Detected a sequelize statement that is tainted by user-input. This could lead to SQL injection if the variable is user-controlled and is not properly sanitized. In order to prevent SQL injection, it is recommended to use parameterized queries or prepared statements.
   options:
     interfile: true
   metadata:
@@ -14,8 +11,7 @@ rules:
     technology:
     - express
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
@@ -52,14 +48,11 @@ rules:
       - pattern: $REQ.files.$ANYTHING['data'].toString('utf8')
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

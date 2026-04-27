@@ -1,17 +1,13 @@
 rules:
 - id: vuln-yara-0a3ede01
-  pattern: '_yr_arena_page_for_address($ARENA, $ADDRESS)
-
-    '
-  pattern-not: 'yr_arena_page_for_address($ARENA, $ADDRESS)
-
-    '
+  pattern: |
+    _yr_arena_page_for_address($ARENA, $ADDRESS)
+  pattern-not: |
+    yr_arena_page_for_address($ARENA, $ADDRESS)
   languages:
   - c
-  message: 'The function `_yr_arena_page_for_address` was renamed to `yr_arena_page_for_address` to address a vulnerability.
-    Ensure to use the updated function name to avoid potential issues.
-
-    '
+  message: |
+    The function `_yr_arena_page_for_address` was renamed to `yr_arena_page_for_address` to address a vulnerability. Ensure to use the updated function name to avoid potential issues.
   severity: ERROR
   metadata:
     cwe: 'CWE-477: Use of Obsolete Function'
@@ -21,19 +17,14 @@ rules:
     technology:
     - c
 - id: vuln-yara-1ecb0e66
-  pattern: '(int) get_integer($OBJECT, $PATTERN, $INDEX)
-
-    '
-  pattern-not: 'dex_get_integer($OBJECT, $PATTERN, $INDEX)
-
-    '
+  pattern: |
+    (int) get_integer($OBJECT, $PATTERN, $INDEX)
+  pattern-not: |
+    dex_get_integer($OBJECT, $PATTERN, $INDEX)
   languages:
   - c
-  message: 'Direct casting of get_integer results without bounds checking can lead to integer overflow or undefined behavior.
-    The vulnerability was fixed by introducing dex_get_integer which includes bounds checking. Always validate integer inputs
-    before casting to prevent potential security issues.
-
-    '
+  message: |
+    Direct casting of get_integer results without bounds checking can lead to integer overflow or undefined behavior. The vulnerability was fixed by introducing dex_get_integer which includes bounds checking. Always validate integer inputs before casting to prevent potential security issues.
   severity: ERROR
   metadata:
     source-url: github.com/VirusTotal/yara/commit/1ecb0e66431bf5c5b4c2fdf622be969eb5f4a7cc
@@ -45,16 +36,14 @@ rules:
     technology:
     - c
 - id: vuln-yara-4a342f01
-  pattern: 'count = yr_max(64, ($INDEX + 1) * 2);
-
-    '
-  pattern-not: "count = 64;\nwhile (count <= $INDEX)\n  count *= 2;\n"
-  message: 'The original code uses `yr_max(64, (index + 1) * 2)` to calculate the array size, which can lead to insufficient
-    allocation if `index` is large. This can cause buffer overflow or out-of-bounds access. The fix uses a while loop to ensure
-    the allocated size is sufficient by doubling the count until it exceeds the index. Always ensure dynamic array sizes are
-    calculated safely to prevent memory corruption.
-
-    '
+  pattern: |
+    count = yr_max(64, ($INDEX + 1) * 2);
+  pattern-not: |
+    count = 64;
+    while (count <= $INDEX)
+      count *= 2;
+  message: |
+    The original code uses `yr_max(64, (index + 1) * 2)` to calculate the array size, which can lead to insufficient allocation if `index` is large. This can cause buffer overflow or out-of-bounds access. The fix uses a while loop to ensure the allocated size is sufficient by doubling the count until it exceeds the index. Always ensure dynamic array sizes are calculated safely to prevent memory corruption.
   languages:
   - c
   severity: ERROR

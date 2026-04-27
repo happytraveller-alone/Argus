@@ -1,26 +1,18 @@
 rules:
 - id: vuln-eclair-5d662fc3
-  pattern: 'final case class PublishAsap(tx: Transaction)
-
-    '
-  pattern-not: 'final case class PublishAsap(tx: Transaction, strategy: PublishStrategy)
-
-    '
+  pattern: |
+    final case class PublishAsap(tx: Transaction)
+  pattern-not: |
+    final case class PublishAsap(tx: Transaction, strategy: PublishStrategy)
   languages:
   - scala
-  message: 'The PublishAsap case class is missing a strategy parameter, which is required
-
+  message: |
+    The PublishAsap case class is missing a strategy parameter, which is required
     to properly handle transaction publishing with appropriate feerate management.
-
     Without this, transactions may be published with suboptimal fees, leading to
-
     delays or failures in confirmation. The fix adds a PublishStrategy parameter
-
     to control the feerate and other publishing behavior. Always include a proper
-
     publishing strategy when creating transactions.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/ACINQ/eclair/commit/5d662fc3d7aa91ed7906aa21e0f9c2ffc5cf4b78
@@ -33,19 +25,14 @@ rules:
     - scala
     - bitcoin
 - id: vuln-eclair-ea8f9402
-  pattern: 'new NodeRelay($NODE_PARAMS, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
-
-    '
-  pattern-not: 'new NodeRelay($NODE_PARAMS, $PARENT, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
-
-    '
+  pattern: |
+    new NodeRelay($NODE_PARAMS, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
+  pattern-not: |
+    new NodeRelay($NODE_PARAMS, $PARENT, $ROUTER, $REGISTER, $RELAY_ID, $PAYMENT_HASH, $CONTEXT, $FSM_FACTORY)()
   languages:
   - scala
-  message: 'The NodeRelay constructor is missing the parent ActorRef parameter, which is crucial for proper actor lifecycle
-    management and preventing race conditions. This can lead to improper handling of payment relays and potential memory leaks.
-    Always include the parent ActorRef when initializing NodeRelay to ensure proper cleanup and coordination.
-
-    '
+  message: |
+    The NodeRelay constructor is missing the parent ActorRef parameter, which is crucial for proper actor lifecycle management and preventing race conditions. This can lead to improper handling of payment relays and potential memory leaks. Always include the parent ActorRef when initializing NodeRelay to ensure proper cleanup and coordination.
   severity: ERROR
   metadata:
     source-url: github.com/ACINQ/eclair/commit/ea8f94022e734aaca189ae1288fc00197907a19f

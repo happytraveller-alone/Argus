@@ -1,17 +1,13 @@
 rules:
 - id: vuln-libyang-298b30ea
-  pattern: 'lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS)
-
-    '
-  pattern-not: 'lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS, $BT_COUNT)
-
-    '
+  pattern: |
+    lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS)
+  pattern-not: |
+    lyxml_parse_elem($CTX, $DATA, $LEN, $PARENT, $OPTIONS, $BT_COUNT)
   languages:
   - c
-  message: 'Missing recursion limit check in lyxml_parse_elem function. This can lead to stack overflow and potential denial
-    of service. Add a recursion counter parameter and check against LY_RECURSION_LIMIT to prevent excessive recursion.
-
-    '
+  message: |
+    Missing recursion limit check in lyxml_parse_elem function. This can lead to stack overflow and potential denial of service. Add a recursion counter parameter and check against LY_RECURSION_LIMIT to prevent excessive recursion.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/298b30ea4ebee137226acf9bb38678bd82704582
@@ -23,20 +19,14 @@ rules:
     technology:
     - c
 - id: vuln-libyang-32fb4993
-  pattern: 'lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $RET)
-
-    '
-  pattern-not: 'lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $OPTS, $RET)
-
-    '
+  pattern: |
+    lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $RET)
+  pattern-not: |
+    lys_getnext_data($MODULE, $PARENT, $NAME, $LEN, $TYPE, $OPTS, $RET)
   languages:
   - c
-  message: 'The function `lys_getnext_data` is being called without the `getnext_opts` parameter, which can lead to potential
-    security vulnerabilities. The missing parameter can cause incorrect state checks and unexpected behavior. Always include
-    the `getnext_opts` parameter with the appropriate value (e.g., `LYS_GETNEXT_NOSTATECHECK` or `0`) to ensure proper state
-    validation.
-
-    '
+  message: |
+    The function `lys_getnext_data` is being called without the `getnext_opts` parameter, which can lead to potential security vulnerabilities. The missing parameter can cause incorrect state checks and unexpected behavior. Always include the `getnext_opts` parameter with the appropriate value (e.g., `LYS_GETNEXT_NOSTATECHECK` or `0`) to ensure proper state validation.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/32fb4993bc8bb49e93e84016af3c10ea53964be5
@@ -47,17 +37,21 @@ rules:
     technology:
     - c
 - id: vuln-libyang-59a0bff1
-  pattern: "if (!strcmp($NAME, $EXT_PLUGINS[$U].name) &&\n    !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&\n    (!$EXT_PLUGINS[$U].revision\
-    \ || !strcmp($REVISION, $EXT_PLUGINS[$U].revision))) {\n  ...\n}\n"
-  pattern-not: "if (!strcmp($NAME, $EXT_PLUGINS[$U].name) && !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&\n    ((!$REVISION\
-    \ && !$EXT_PLUGINS[$U].revision) || ($REVISION && !strcmp($REVISION, $EXT_PLUGINS[$U].revision)))) {\n  ...\n}\n"
+  pattern: |
+    if (!strcmp($NAME, $EXT_PLUGINS[$U].name) &&
+        !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
+        (!$EXT_PLUGINS[$U].revision || !strcmp($REVISION, $EXT_PLUGINS[$U].revision))) {
+      ...
+    }
+  pattern-not: |
+    if (!strcmp($NAME, $EXT_PLUGINS[$U].name) && !strcmp($MODULE, $EXT_PLUGINS[$U].module) &&
+        ((!$REVISION && !$EXT_PLUGINS[$U].revision) || ($REVISION && !strcmp($REVISION, $EXT_PLUGINS[$U].revision)))) {
+      ...
+    }
   languages:
   - c
-  message: 'This rule detects a logical error in the condition checking for plugin revisions. The original code could lead
-    to incorrect behavior when handling NULL revisions, potentially causing security issues or unexpected behavior. The fix
-    ensures proper handling of NULL revisions by explicitly checking for NULL values before performing string comparisons.
-
-    '
+  message: |
+    This rule detects a logical error in the condition checking for plugin revisions. The original code could lead to incorrect behavior when handling NULL revisions, potentially causing security issues or unexpected behavior. The fix ensures proper handling of NULL revisions by explicitly checking for NULL values before performing string comparisons.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/59a0bff1a5a2f0a0eac07e4bf94d4aea9dd3708d
@@ -70,19 +64,14 @@ rules:
     technology:
     - c
 - id: vuln-libyang-5ce30801
-  pattern: 'lys_node_free($NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
-
-    '
-  pattern-not: 'lys_node_free($CTX, $NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
-
-    '
+  pattern: |
+    lys_node_free($NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
+  pattern-not: |
+    lys_node_free($CTX, $NODE, $PRIVATE_DESTRUCTOR, $SHALLOW);
   languages:
   - c
-  message: 'The function `lys_node_free` is being called without the required `ctx` parameter, which could lead to undefined
-    behavior or memory corruption. This vulnerability was fixed by adding the `ctx` parameter to all calls to `lys_node_free`.
-    Ensure that the `ctx` parameter is always passed to `lys_node_free` to avoid this issue.
-
-    '
+  message: |
+    The function `lys_node_free` is being called without the required `ctx` parameter, which could lead to undefined behavior or memory corruption. This vulnerability was fixed by adding the `ctx` parameter to all calls to `lys_node_free`. Ensure that the `ctx` parameter is always passed to `lys_node_free` to avoid this issue.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/5ce30801f9ccc372bbe9b7c98bb5324b15fb010a
@@ -94,15 +83,18 @@ rules:
     technology:
     - c
 - id: vuln-libyang-bdb596dd
-  pattern: "if ($EXPR->expr) {\n    ...\n}\n"
-  pattern-not: "if ($EXPR->expr && $EXPR->features[0]) {\n    ...\n}\n"
+  pattern: |
+    if ($EXPR->expr) {
+        ...
+    }
+  pattern-not: |
+    if ($EXPR->expr && $EXPR->features[0]) {
+        ...
+    }
   languages:
   - c
-  message: 'This code checks for the existence of ''expr'' without verifying the presence of ''features[0]''. This can lead
-    to undefined behavior or security vulnerabilities if ''features'' is accessed without proper validation. Always check
-    both conditions to ensure safe access to ''features''.
-
-    '
+  message: |
+    This code checks for the existence of 'expr' without verifying the presence of 'features[0]'. This can lead to undefined behavior or security vulnerabilities if 'features' is accessed without proper validation. Always check both conditions to ensure safe access to 'features'.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/bdb596ddc07596fa212f231135b87d0b9178f6f8
@@ -114,21 +106,23 @@ rules:
     technology:
     - c
 - id: vuln-libyang-dc668d29
-  pattern: "if (!strcmp($MOD->name, \"yang\") && (strcmp($M->revision, $MOD->revision) > 0)) {\n    LOGVRB(\"Internal module\
-    \ \\\"%s@%s\\\" is already implemented in revision \\\"%s\\\", using it instead.\",\n          $MOD->name, $MOD->revision\
-    \ ? $MOD->revision : \"<none>\", $M->revision ? $M->revision : \"<none>\");\n} else {\n    LOGERR($MOD->ctx, $LY_EDENIED,\
-    \ \"Module \\\"%s@%s\\\" is already implemented in revision \\\"%s\\\".\",\n          $MOD->name, $MOD->revision ? $MOD->revision\
-    \ : \"<none>\", $M->revision ? $M->revision : \"<none>\");\n    return $LY_EDENIED;\n}\n"
-  pattern-not: "LOGERR($MOD->ctx, $LY_EDENIED, \"Module \\\"%s@%s\\\" is already implemented in revision \\\"%s\\\".\",\n\
-    \      $MOD->name, $MOD->revision ? $MOD->revision : \"<none>\", $M->revision ? $M->revision : \"<none>\");\nreturn $LY_EDENIED;\n"
+  pattern: |
+    if (!strcmp($MOD->name, "yang") && (strcmp($M->revision, $MOD->revision) > 0)) {
+        LOGVRB("Internal module \"%s@%s\" is already implemented in revision \"%s\", using it instead.",
+              $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+    } else {
+        LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
+              $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+        return $LY_EDENIED;
+    }
+  pattern-not: |
+    LOGERR($MOD->ctx, $LY_EDENIED, "Module \"%s@%s\" is already implemented in revision \"%s\".",
+          $MOD->name, $MOD->revision ? $MOD->revision : "<none>", $M->revision ? $M->revision : "<none>");
+    return $LY_EDENIED;
   languages:
   - c
-  message: 'The code previously had a conditional block that allowed bypassing an error condition when a module with the name
-    "yang" was found with a newer revision. This could lead to inconsistent module states or security issues by allowing the
-    use of outdated or incorrect module revisions. The fix ensures that the error condition is always enforced, preventing
-    potential security risks.
-
-    '
+  message: |
+    The code previously had a conditional block that allowed bypassing an error condition when a module with the name "yang" was found with a newer revision. This could lead to inconsistent module states or security issues by allowing the use of outdated or incorrect module revisions. The fix ensures that the error condition is always enforced, preventing potential security risks.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/dc668d296f9f05aeab6315d44cff3208641e3096
@@ -142,18 +136,17 @@ rules:
     technology:
     - c
 - id: vuln-libyang-f6d684ad
-  pattern: 'make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2);
-
-    '
-  pattern-not: "if (make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2) == -1) {\n  ...\n  goto error;\n}\n"
+  pattern: |
+    make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2);
+  pattern-not: |
+    if (make_canonical($CTX, $TYPE, $VALUE, $ARG, $ARG2) == -1) {
+      ...
+      goto error;
+    }
   languages:
   - c
-  message: 'The function `make_canonical` is called without checking its return value, which can lead to unhandled errors.
-    This can cause the program to continue execution in an inconsistent state, potentially leading to security vulnerabilities
-    or crashes. Always check the return value of `make_canonical` and handle errors appropriately by using `goto error` or
-    other error handling mechanisms.
-
-    '
+  message: |
+    The function `make_canonical` is called without checking its return value, which can lead to unhandled errors. This can cause the program to continue execution in an inconsistent state, potentially leading to security vulnerabilities or crashes. Always check the return value of `make_canonical` and handle errors appropriately by using `goto error` or other error handling mechanisms.
   severity: ERROR
   metadata:
     source-url: github.com/CESNET/libyang/commit/f6d684ade99dd37b21babaa8a856f64faa1e2e0d

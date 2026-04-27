@@ -8,9 +8,9 @@ rules:
   - pattern-either:
     - pattern: shutil.unpack_archive(...)
   - pattern-not: shutil.unpack_archive(..., format='zip', ...)
-  - pattern-inside: 'import shutil
-
-      ...'
+  - pattern-inside: |-
+      import shutil
+      ...
   metadata:
     cwe:
     - 'CWE-22: Improper Restriction of Filename or Path'

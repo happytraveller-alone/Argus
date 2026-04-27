@@ -1,15 +1,12 @@
 rules:
 - id: vuln-revolution-20049805
-  pattern: '$TITLE += '': <span dir="ltr">'' + $RECORD.pagetitle + '' (''+ $RECORD.id + '')</span>'';
-
-    '
-  pattern-not: '$TITLE += '': <span dir="ltr">'' + Ext.util.Format.htmlEncode($RECORD.pagetitle) + '' (''+ $RECORD.id + '')</span>'';
-
-    '
+  pattern: |
+    $TITLE += ': <span dir="ltr">' + $RECORD.pagetitle + ' ('+ $RECORD.id + ')</span>';
+  pattern-not: |
+    $TITLE += ': <span dir="ltr">' + Ext.util.Format.htmlEncode($RECORD.pagetitle) + ' ('+ $RECORD.id + ')</span>';
   languages:
   - javascript
-  message: Potential XSS vulnerability due to unencoded user input in HTML. Use Ext.util.Format.htmlEncode to sanitize user-supplied
-    data before rendering it in HTML.
+  message: Potential XSS vulnerability due to unencoded user input in HTML. Use Ext.util.Format.htmlEncode to sanitize user-supplied data before rendering it in HTML.
   severity: ERROR
   metadata:
     source-url: github.com/modxcms/revolution/commit/20049805dad576250185e4317c4ded1d21871219
@@ -19,20 +16,15 @@ rules:
     technology:
     - javascript
 - id: vuln-revolution-a490f43f
-  pattern: 'Ext.getCmp(''modx-resource-header'').getEl().update(''<h2>''+Ext.util.Format.stripTags($TITLE)+''</h2>'');
-
-    '
-  pattern-not: '$TITLE = Ext.util.Format.stripTags($TITLE);
-
+  pattern: |
+    Ext.getCmp('modx-resource-header').getEl().update('<h2>'+Ext.util.Format.stripTags($TITLE)+'</h2>');
+  pattern-not: |
+    $TITLE = Ext.util.Format.stripTags($TITLE);
     $TITLE = Ext.util.Format.htmlEncode($TITLE);
-
-    Ext.getCmp(''modx-resource-header'').getEl().update(''<h2>''+$TITLE+''</h2>'');
-
-    '
+    Ext.getCmp('modx-resource-header').getEl().update('<h2>'+$TITLE+'</h2>');
   languages:
   - javascript
-  message: Potential XSS vulnerability due to insufficient HTML encoding. Use Ext.util.Format.htmlEncode() after stripTags()
-    to properly sanitize the title.
+  message: Potential XSS vulnerability due to insufficient HTML encoding. Use Ext.util.Format.htmlEncode() after stripTags() to properly sanitize the title.
   severity: ERROR
   metadata:
     source-url: github.com/modxcms/revolution/commit/a490f43f4a537ce054e8cf37cee9841bcc8d688b

@@ -3,36 +3,35 @@ rules:
   languages:
   - java
   patterns:
-  - pattern: '$LOG.$INFO($X + $Y,...)
-
-      '
+  - pattern: |
+      $LOG.$INFO($X + $Y,...)
   - pattern-either:
-    - pattern-inside: 'import org.jboss.seam.log.Log;
-
+    - pattern-inside: |
+        import org.jboss.seam.log.Log;
         ...
-
-        '
-    - pattern-inside: 'org.jboss.seam.log.Log $LOG = ...;
-
+    - pattern-inside: |
+        org.jboss.seam.log.Log $LOG = ...;
         ...
-
-        '
   - metavariable-regex:
       metavariable: $INFO
       regex: (debug|error|fatal|info|trace|warn)
-  message: "The Seam logging API supports an expression language that allows developers\
-    \ to \nintroduce bean properties to log messages. The expression language can\
-    \ also be \nthe source to unwanted code execution. Expressions could be executed\
-    \ by dynamically\ninserting user-controlled input into the various logging calls.\
-    \ \n\nUse the [Seam logging API format specifier](https://docs.jboss.org/seam/2.1.2/reference/en-US/html/concepts.html#d0e4244)\
-    \ to ensure values are logged and expressions\nare not executed dynamically prior\
-    \ to output.\n\nExample logging call that safely logs the unfiltered values.\n\
-    ```\nlog.info(\"This is a user controlled input = #0\", input);\n```\n"
+  message: |
+    The Seam logging API supports an expression language that allows developers to
+    introduce bean properties to log messages. The expression language can also be
+    the source to unwanted code execution. Expressions could be executed by dynamically
+    inserting user-controlled input into the various logging calls.
+
+    Use the [Seam logging API format specifier](https://docs.jboss.org/seam/2.1.2/reference/en-US/html/concepts.html#d0e4244) to ensure values are logged and expressions
+    are not executed dynamically prior to output.
+
+    Example logging call that safely logs the unfiltered values.
+    ```
+    log.info("This is a user controlled input = #0", input);
+    ```
   severity: ERROR
   metadata:
     category: security
-    shortDescription: Improper neutralization of directives in dynamically evaluated
-      code ('Eval Injection')
+    shortDescription: Improper neutralization of directives in dynamically evaluated code ('Eval Injection')
     cwe: CWE-95
     owasp:
     - A1:2017-Injection

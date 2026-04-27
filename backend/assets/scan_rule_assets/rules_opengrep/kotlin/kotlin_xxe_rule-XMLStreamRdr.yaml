@@ -2,12 +2,9 @@ rules:
 - id: kotlin_xxe_rule-XMLStreamRdr
   languages:
   - kotlin
-  message: 'XML External Entity (XXE) attacks can occur when an XML parser supports
-    XML
-
+  message: |
+    XML External Entity (XXE) attacks can occur when an XML parser supports XML
     entities while processing XML received from an untrusted source.
-
-    '
   metadata:
     shortDescription: Improper restriction of XML external entity reference ('XXE')
     category: security
@@ -18,31 +15,19 @@ rules:
     security-severity: CRITICAL
   severity: ERROR
   patterns:
-  - pattern-inside: '$SF = XMLInputFactory.newFactory();
-
+  - pattern-inside: |
+      $SF = XMLInputFactory.newFactory();
       ...
-
-      '
-  - pattern-not-inside: '$SF.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-
+  - pattern-not-inside: |
+      $SF.setProperty(XMLInputFactory.SUPPORT_DTD, false);
       ...
-
-      '
-  - pattern-not-inside: '$SF.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES,
-      false);
-
+  - pattern-not-inside: |
+      $SF.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
       ...
-
-      '
-  - pattern-not-inside: '$SF.setProperty(XMLInputFactory.SUPPORT_DTD, Boolean.FALSE);
-
+  - pattern-not-inside: |
+      $SF.setProperty(XMLInputFactory.SUPPORT_DTD, Boolean.FALSE);
       ...
-
-      '
-  - pattern-not-inside: '$SF.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES,
-      Boolean.FALSE);
-
+  - pattern-not-inside: |
+      $SF.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, Boolean.FALSE);
       ...
-
-      '
   - pattern: $SF.createXMLStreamReader(...)

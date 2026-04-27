@@ -2,11 +2,16 @@ rules:
 - id: c_crypto_rule-EVP-des-ecb-EVP-des-cbc
   languages:
   - cpp
-  message: "The DES algorithm has not been recommended for over 15 years and was withdrawn\
-    \ from NIST (FIPS\n46-3) in 2005.\n\nConsider using libsodium's `crypto_secretbox_easy`\
-    \ authenticated encryption functions instead.\n\nFor more information please see:\n\
-    \ https://libsodium.gitbook.io/doc/secret-key_cryptography/secretbox.\n\nIf you\
-    \ must be FIPS compliant, consider using OpenSSLs AES or 3DES ciphers.\n"
+  message: |
+    The DES algorithm has not been recommended for over 15 years and was withdrawn from NIST (FIPS
+    46-3) in 2005.
+
+    Consider using libsodium's `crypto_secretbox_easy` authenticated encryption functions instead.
+
+    For more information please see:
+     https://libsodium.gitbook.io/doc/secret-key_cryptography/secretbox.
+
+    If you must be FIPS compliant, consider using OpenSSLs AES or 3DES ciphers.
   metadata:
     shortDescription: Insecure encryption algorithm (DES)
     cwe: CWE-327

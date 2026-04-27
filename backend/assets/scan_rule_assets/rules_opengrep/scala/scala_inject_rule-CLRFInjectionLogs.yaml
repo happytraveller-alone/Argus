@@ -2,21 +2,14 @@ rules:
 - id: scala_inject_rule-CLRFInjectionLogs
   languages:
   - scala
-  message: 'When data from an untrusted source is put into a logger and not neutralized correctly, an
-
+  message: |
+    When data from an untrusted source is put into a logger and not neutralized correctly, an
     attacker could forge log entries or include malicious content. Inserted false entries could be
-
     used to skew statistics, distract the administrator or even to implicate another party in the
-
     commission of a malicious act. If the log file is processed automatically, the attacker can
-
     render the file unusable by corrupting the format of the file or injecting unexpected
-
     characters. An attacker may also inject code or other commands into the log file and take
-
     advantage of a vulnerability in the log processing utility (e.g. command injection or XSS).
-
-    '
   metadata:
     category: security
     cwe: CWE-93
@@ -60,27 +53,23 @@ rules:
         - pattern: java.util.logging.Logger
   pattern-sources:
   - patterns:
-    - pattern-inside: "def $FUNC(..., $REQ: HttpServletRequest, ...) : $TYPE = {\n  ...\n}\n"
+    - pattern-inside: |
+        def $FUNC(..., $REQ: HttpServletRequest, ...) : $TYPE = {
+          ...
+        }
     - pattern: $REQ.getParameter(...)
   severity: ERROR
 - id: scala_inject_rule-CLRFInjectionLogs_1
   languages:
   - scala
-  message: 'When data from an untrusted source is put into a logger and not neutralized correctly, an
-
+  message: |
+    When data from an untrusted source is put into a logger and not neutralized correctly, an
     attacker could forge log entries or include malicious content. Inserted false entries could be
-
     used to skew statistics, distract the administrator or even to implicate another party in the
-
     commission of a malicious act. If the log file is processed automatically, the attacker can
-
     render the file unusable by corrupting the format of the file or injecting unexpected
-
     characters. An attacker may also inject code or other commands into the log file and take
-
     advantage of a vulnerability in the log processing utility (e.g. command injection or XSS).
-
-    '
   metadata:
     category: security
     cwe: CWE-93
@@ -124,6 +113,9 @@ rules:
         - pattern: java.util.logging.Logger
   pattern-sources:
   - patterns:
-    - pattern-inside: "def $FUNC(..., $REQ: HttpServletRequest, ...) : $TYPE = {\n  ...\n}\n"
+    - pattern-inside: |
+        def $FUNC(..., $REQ: HttpServletRequest, ...) : $TYPE = {
+          ...
+        }
     - pattern: $REQ.getParameter(...)
   severity: ERROR

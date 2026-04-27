@@ -1,18 +1,13 @@
 rules:
 - id: vuln-mutt-3d9028fe
-  pattern: 'mutt_from_base64($OUT, $IN)
-
-    '
-  pattern-not: 'mutt_from_base64($OUT, $IN, $OLEN)
-
-    '
+  pattern: |
+    mutt_from_base64($OUT, $IN)
+  pattern-not: |
+    mutt_from_base64($OUT, $IN, $OLEN)
   languages:
   - c
-  message: 'The function `mutt_from_base64` is being called without the `olen` parameter, which can lead to buffer overflow
-    vulnerabilities. This is dangerous because it allows for potential memory corruption and exploitation. Always provide
-    the output buffer length (`olen`) to ensure safe operation.
-
-    '
+  message: |
+    The function `mutt_from_base64` is being called without the `olen` parameter, which can lead to buffer overflow vulnerabilities. This is dangerous because it allows for potential memory corruption and exploitation. Always provide the output buffer length (`olen`) to ensure safe operation.
   severity: ERROR
   metadata:
     source-url: github.com/muttmua/mutt/commit/3d9028fec8f4d08db2251096307c0bbbebce669a
@@ -26,15 +21,19 @@ rules:
     technology:
     - c
 - id: vuln-mutt-e0131852
-  pattern: "if (!$DLEN)\n    break;\n"
-  pattern-not: "if ($DLEN < 2)\n    break;\n"
+  pattern: |
+    if (!$DLEN)
+        break;
+  pattern-not: |
+    if ($DLEN < 2)
+        break;
   languages:
   - c
-  message: "The vulnerability occurs due to insufficient boundary checking when handling string lengths. \nThe original code\
-    \ fails to account for the required space for both the pre/post quote characters and the trailing null, which can lead\
-    \ to buffer underflow or incorrect string termination. \nThis can result in memory corruption or undefined behavior. \n\
-    The fix ensures proper length checking by verifying that there is enough space for both quote characters and the null\
-    \ terminator.\n"
+  message: |
+    The vulnerability occurs due to insufficient boundary checking when handling string lengths.
+    The original code fails to account for the required space for both the pre/post quote characters and the trailing null, which can lead to buffer underflow or incorrect string termination.
+    This can result in memory corruption or undefined behavior.
+    The fix ensures proper length checking by verifying that there is enough space for both quote characters and the null terminator.
   severity: ERROR
   metadata:
     source-url: github.com/muttmua/mutt/commit/e0131852c6059107939893016c8ff56b6e42865d

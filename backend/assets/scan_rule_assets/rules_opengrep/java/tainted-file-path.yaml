@@ -3,11 +3,7 @@ rules:
   languages:
   - java
   severity: ERROR
-  message: Detected user input controlling a file path. An attacker could control
-    the location of this file, to include going backwards in the directory with '../'.
-    To address this, ensure that user-controlled variables in file paths are sanitized.
-    You may also consider using a utility method such as org.apache.commons.io.FilenameUtils.getName(...)
-    to only retrieve the file name from the path.
+  message: Detected user input controlling a file path. An attacker could control the location of this file, to include going backwards in the directory with '../'. To address this, ensure that user-controlled variables in file paths are sanitized. You may also consider using a utility method such as org.apache.commons.io.FilenameUtils.getName(...) to only retrieve the file name from the path.
   options:
     interfile: true
   metadata:
@@ -31,9 +27,14 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern-inside: "$METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {\n  ...\n\
-          }\n"
-      - pattern-inside: "$METHODNAME(..., @$REQ $TYPE $SOURCE,...) {\n  ...\n}\n"
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
     - metavariable-regex:
         metavariable: $TYPE
         regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
@@ -52,9 +53,8 @@ rules:
       - pattern: new java.io.FileInputStream(...)
       - pattern: (Paths $PATHS).get(...)
       - patterns:
-        - pattern: '$CLASS.$FUNC(...)
-
-            '
+        - pattern: |
+            $CLASS.$FUNC(...)
         - metavariable-regex:
             metavariable: $FUNC
             regex: ^(getResourceAsStream|getResource)$

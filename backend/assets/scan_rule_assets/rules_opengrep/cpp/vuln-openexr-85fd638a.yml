@@ -1,21 +1,13 @@
 rules:
 - id: vuln-openexr-85fd638a
-  pattern: 'checkArraySize(uiMult(maxScanLineSize, numScanLines), ...)
-
-    '
-  pattern-not: 'checkArraySize(uiMult(maxScanLineSize / sizeof(unsigned short), numScanLines),
-    ...)
-
-    '
+  pattern: |
+    checkArraySize(uiMult(maxScanLineSize, numScanLines), ...)
+  pattern-not: |
+    checkArraySize(uiMult(maxScanLineSize / sizeof(unsigned short), numScanLines), ...)
   languages:
   - cpp
-  message: 'The vulnerability arises from incorrect array size calculation due to
-    missing division by `sizeof(unsigned short)`. This can lead to buffer overflow
-    or underflow, potentially causing memory corruption or crashes. To fix this, ensure
-    the array size is calculated by dividing `maxScanLineSize` by `sizeof(unsigned
-    short)` before multiplying by `numScanLines`.
-
-    '
+  message: |
+    The vulnerability arises from incorrect array size calculation due to missing division by `sizeof(unsigned short)`. This can lead to buffer overflow or underflow, potentially causing memory corruption or crashes. To fix this, ensure the array size is calculated by dividing `maxScanLineSize` by `sizeof(unsigned short)` before multiplying by `numScanLines`.
   severity: ERROR
   metadata:
     source-url: github.com/openexr/openexr/commit/85fd638ae0d5fa132434f4cbf32590261c1dba97

@@ -1,29 +1,19 @@
 rules:
 - id: vuln-gravity-00e53c36
-  pattern: 'char $VAR[new_size+1];
-
+  pattern: |
+    char $VAR[new_size+1];
     ...
-
     strcpy($VAR, $STR);
-
     ...
-
     strcat($VAR, $STR);
-
-    '
-  pattern-not: 'char *$VAR = mem_alloc($SIZE);
-
+  pattern-not: |
+    char *$VAR = mem_alloc($SIZE);
     ...
-
     memcpy($VAR+$SEEK, $STR, $LEN);
-
-    '
   languages:
   - c
-  message: 'Detected unsafe string manipulation using strcpy and strcat without proper bounds checking. This can lead to buffer
-    overflows and memory corruption. Replace with memcpy and ensure proper allocation and bounds checking.
-
-    '
+  message: |
+    Detected unsafe string manipulation using strcpy and strcat without proper bounds checking. This can lead to buffer overflows and memory corruption. Replace with memcpy and ensure proper allocation and bounds checking.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/00e53c362677ba9363e89e859a54027581c60cf2
@@ -39,19 +29,14 @@ rules:
     technology:
     - c
 - id: vuln-gravity-0e0ac575
-  pattern: '$X = mem_alloc($SIZE);
-
-    '
-  pattern-not: '$X = mem_alloc(NULL, $SIZE);
-
-    '
+  pattern: |
+    $X = mem_alloc($SIZE);
+  pattern-not: |
+    $X = mem_alloc(NULL, $SIZE);
   languages:
   - c
-  message: 'Detected unsafe memory allocation using mem_alloc without passing NULL as the first argument. This can lead to
-    memory management issues and potential vulnerabilities. Always pass NULL as the first argument to mem_alloc to ensure
-    proper memory allocation and error handling.
-
-    '
+  message: |
+    Detected unsafe memory allocation using mem_alloc without passing NULL as the first argument. This can lead to memory management issues and potential vulnerabilities. Always pass NULL as the first argument to mem_alloc to ensure proper memory allocation and error handling.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/0e0ac575718d5e429ba0747f552545b5c22489ae
@@ -63,30 +48,25 @@ rules:
     technology:
     - c
 - id: vuln-gravity-5b73d291
-  pattern: 'if (!$VAR) goto $LABEL;
-
+  pattern: |
+    if (!$VAR) goto $LABEL;
     if (!$VAR2) $VAR2 = $FUNC();
-
     if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
-
     $FUNC4($VAR2, $VAR);
-
-    '
-  pattern-not: "if ($VAR) {\n    if (!$VAR2) $VAR2 = $FUNC();\n    if ($VAR3) $FUNC2($VAR2, $FUNC3(...));\n    $FUNC4($VAR2,\
-    \ $VAR);\n}\nif (!$VAR) goto $LABEL;\n"
+  pattern-not: |
+    if ($VAR) {
+        if (!$VAR2) $VAR2 = $FUNC();
+        if ($VAR3) $FUNC2($VAR2, $FUNC3(...));
+        $FUNC4($VAR2, $VAR);
+    }
+    if (!$VAR) goto $LABEL;
   languages:
   - c
-  message: 'The code contains a potential null pointer dereference vulnerability.
-
-    The original code executes multiple operations after a null check but before the goto statement, which can lead to undefined
-    behavior if the null condition is true.
-
-    The fix ensures that all operations are performed only if the pointer is not null, and the goto statement is executed
-    only after all operations are complete.
-
+  message: |
+    The code contains a potential null pointer dereference vulnerability.
+    The original code executes multiple operations after a null check but before the goto statement, which can lead to undefined behavior if the null condition is true.
+    The fix ensures that all operations are performed only if the pointer is not null, and the goto statement is executed only after all operations are complete.
     To fix this, ensure that all operations dependent on the pointer are enclosed within the null check block.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/5b73d291c6969696947d2f264c6f935b8d78e0a8
@@ -100,21 +80,33 @@ rules:
     technology:
     - c
 - id: vuln-gravity-8cf63796
-  pattern: "char *$BUFFER = mem_alloc($ALLOC);\n...\nif ($FREE < $REQ + $SEPLEN) {\n    $BUFFER = mem_realloc($BUFFER, $ALLOC\
-    \ * 2 + $REQ + $SEPLEN);\n    $ALLOC += $ALLOC + $REQ + $SEPLEN;\n}\n"
-  pattern-not: "char *$_BUFFER = mem_alloc($ALLOC);\n...\nif ($FREE_MEM < $REQ + $SEPLEN) {\n    uint64_t $TO_ALLOC = $ALLOC\
-    \ + ($REQ + $SEPLEN) * 2 + 4096;\n    if ($TO_ALLOC > $MAX_MEMORY_BLOCK) {\n        mem_free($_BUFFER);\n        RETURN_ERROR(\"\
-    Maximum memory block size reached (max %d, requested %lld).\", $MAX_MEMORY_BLOCK, $TO_ALLOC);\n    }\n    $_BUFFER = mem_realloc($_BUFFER,\
-    \ (uint32_t)$TO_ALLOC);\n    if (!$_BUFFER) {\n        mem_free($_BUFFER);\n        RETURN_ERROR(\"Not enought memory\
-    \ to re-allocate a buffer for the join operation.\");\n    }\n    $ALLOC = (uint32_t)$TO_ALLOC;\n}\n"
+  pattern: |
+    char *$BUFFER = mem_alloc($ALLOC);
+    ...
+    if ($FREE < $REQ + $SEPLEN) {
+        $BUFFER = mem_realloc($BUFFER, $ALLOC * 2 + $REQ + $SEPLEN);
+        $ALLOC += $ALLOC + $REQ + $SEPLEN;
+    }
+  pattern-not: |
+    char *$_BUFFER = mem_alloc($ALLOC);
+    ...
+    if ($FREE_MEM < $REQ + $SEPLEN) {
+        uint64_t $TO_ALLOC = $ALLOC + ($REQ + $SEPLEN) * 2 + 4096;
+        if ($TO_ALLOC > $MAX_MEMORY_BLOCK) {
+            mem_free($_BUFFER);
+            RETURN_ERROR("Maximum memory block size reached (max %d, requested %lld).", $MAX_MEMORY_BLOCK, $TO_ALLOC);
+        }
+        $_BUFFER = mem_realloc($_BUFFER, (uint32_t)$TO_ALLOC);
+        if (!$_BUFFER) {
+            mem_free($_BUFFER);
+            RETURN_ERROR("Not enought memory to re-allocate a buffer for the join operation.");
+        }
+        $ALLOC = (uint32_t)$TO_ALLOC;
+    }
   languages:
   - c
-  message: 'The code lacks proper sanity checks when reallocating memory, which can lead to excessive memory allocation or
-    memory corruption. This vulnerability can be exploited to cause a denial of service or potentially execute arbitrary code.
-    Always validate the size of the memory block before reallocating and ensure proper error handling for memory allocation
-    failures.
-
-    '
+  message: |
+    The code lacks proper sanity checks when reallocating memory, which can lead to excessive memory allocation or memory corruption. This vulnerability can be exploited to cause a denial of service or potentially execute arbitrary code. Always validate the size of the memory block before reallocating and ensure proper error handling for memory allocation failures.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/8cf6379645f458384fc44b627662de5345696072
@@ -126,19 +118,14 @@ rules:
     technology:
     - c
 - id: vuln-gravity-c67888e6
-  pattern: 'gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT);
-
-    '
-  pattern-not: 'if (!gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT)) return false;
-
-    '
+  pattern: |
+    gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT);
+  pattern-not: |
+    if (!gravity_vm_runclosure($VM, $CLOSURE, $VALUE, $ARGS, $COUNT)) return false;
   languages:
   - c
-  message: 'The function `gravity_vm_runclosure` is called without checking its return value, which can lead to uncontrolled
-    execution flow in case of failure. This can result in undefined behavior or security vulnerabilities. Always check the
-    return value of `gravity_vm_runclosure` and handle failures appropriately by returning an error or terminating the function.
-
-    '
+  message: |
+    The function `gravity_vm_runclosure` is called without checking its return value, which can lead to uncontrolled execution flow in case of failure. This can result in undefined behavior or security vulnerabilities. Always check the return value of `gravity_vm_runclosure` and handle failures appropriately by returning an error or terminating the function.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/c67888e6d2f65b1e9ba0e53a86bf2a538335b5b6
@@ -150,20 +137,15 @@ rules:
     technology:
     - c
 - id: vuln-gravity-d4935246
-  pattern: 'if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC))) return
-    $RETURN_VALUE;
-
-    '
-  pattern-not: "if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC))\
-    \ ||\n    gravity_vm_getclosure($VM) == $CLOSURE) return $RETURN_VALUE;\n"
+  pattern: |
+    if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC))) return $RETURN_VALUE;
+  pattern-not: |
+    if ((!$CLOSURE) || (($CLOSURE->f->tag == $EXEC_TYPE_INTERNAL) && ($CLOSURE->f->internal == $CONVERT_FUNC)) ||
+        gravity_vm_getclosure($VM) == $CLOSURE) return $RETURN_VALUE;
   languages:
   - c
-  message: 'The vulnerability occurs due to insufficient validation of closure objects in the Gravity runtime. This can lead
-    to incorrect handling of object conversions, potentially causing unexpected behavior or crashes. The fix adds an additional
-    check using `gravity_vm_getclosure` to ensure proper validation. To fix this, always validate the closure object with
-    `gravity_vm_getclosure` before returning a value.
-
-    '
+  message: |
+    The vulnerability occurs due to insufficient validation of closure objects in the Gravity runtime. This can lead to incorrect handling of object conversions, potentially causing unexpected behavior or crashes. The fix adds an additional check using `gravity_vm_getclosure` to ensure proper validation. To fix this, always validate the closure object with `gravity_vm_getclosure` before returning a value.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/d493524612edb6763c6ec07355ce584d83695e9b
@@ -175,16 +157,20 @@ rules:
     technology:
     - c
 - id: vuln-gravity-f00c04df
-  pattern: "if (VALUE_ISA_INSTANCE(GET_VALUE(0))) {\n    $OBJECT = VALUE_AS_OBJECT(GET_VALUE(0));\n} else if (VALUE_ISA_CLASS(GET_VALUE(0)))\
-    \ {\n    ...\n}\n"
-  pattern-not: "if (VALUE_ISA_INSTANCE(GET_VALUE(0)) || VALUE_ISA_CLASS(GET_VALUE(0))) {\n    ...\n}\n"
+  pattern: |
+    if (VALUE_ISA_INSTANCE(GET_VALUE(0))) {
+        $OBJECT = VALUE_AS_OBJECT(GET_VALUE(0));
+    } else if (VALUE_ISA_CLASS(GET_VALUE(0))) {
+        ...
+    }
+  pattern-not: |
+    if (VALUE_ISA_INSTANCE(GET_VALUE(0)) || VALUE_ISA_CLASS(GET_VALUE(0))) {
+        ...
+    }
   languages:
   - c
-  message: 'The code checks for instance and class types separately, which can lead to inconsistent handling of core classes.
-    This could potentially cause issues with bound methods in core classes. The fix combines the checks and adds additional
-    validation to prevent binding methods to core classes.
-
-    '
+  message: |
+    The code checks for instance and class types separately, which can lead to inconsistent handling of core classes. This could potentially cause issues with bound methods in core classes. The fix combines the checks and adds additional validation to prevent binding methods to core classes.
   severity: ERROR
   metadata:
     source-url: github.com/marcobambini/gravity/commit/f00c04dfa62d5f6ce0bc30e26545066de31d622c

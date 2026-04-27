@@ -4,46 +4,62 @@ rules:
   - java
   patterns:
   - pattern-either:
-    - pattern: '(groovy.lang.GroovyShell $SHELL).parse(...)
+    - pattern: |
+        (groovy.lang.GroovyShell $SHELL).parse(...)
+    - pattern: |
+        (groovy.lang.GroovyShell $SHELL).evaluate(...)
+    - pattern: |
+        (groovy.lang.GroovyClassLoader $SHELL).parseClass(...)
+  - pattern-not: |
+      $SHELL.parse("...",...)
+  - pattern-not: |
+      $SHELL.evaluate("...",...)
+  - pattern-not: |
+      $SHELL.parseClass("...",...)
+  - pattern-not-inside: |
+      if($ALLOWLIST.contains($INPUT)){
+        ...
+      }
+  message: |
+    This application implements unsafe invocations of methods within the
+    `groovy.lang.GroovyShell` or `groovy.lang.GroovyClassLoader` classes,
+    which are used to evaluate or compile Groovy code dynamically. When
+    user-controlled input is directly passed to `parse`, `evaluate`, or
+    `parseClass` methods, it can lead to Remote Code Execution (RCE), where an
+    attacker can execute arbitrary code on the server. This could potentially
+    allow an attacker to gain unauthorized access to system resources, modify
+    internal application states, or execute commands on the server depending
+    on the level of permissions assigned to the application process.
 
-        '
-    - pattern: '(groovy.lang.GroovyShell $SHELL).evaluate(...)
+    To mitigate this vulnerability, always validate and sanitize all user inputs
+    before using them in dynamic code evaluations. Consider using safer alternatives
+    to executing dynamic code if possible. If dynamic code execution is absolutely
+    necessary, use strict allowlists of safe inputs and context-specific validation.
 
-        '
-    - pattern: '(groovy.lang.GroovyClassLoader $SHELL).parseClass(...)
+    Secure Code Example:
 
-        '
-  - pattern-not: '$SHELL.parse("...",...)
+    ```
+    import groovy.lang.GroovyShell;
 
-      '
-  - pattern-not: '$SHELL.evaluate("...",...)
+    class SafeDynamicEvaluation {
+      private static final Set<String> ALLOWED_EXPRESSIONS = new HashSet<>(Arrays.asList(
+          "println 'Hello World!'",
+          "println 'Goodbye World!'"));
 
-      '
-  - pattern-not: '$SHELL.parseClass("...",...)
+      public static void test4(String[] args, ClassLoader loader) throws Exception {
+        GroovyShell shell = new GroovyShell();
+        String userInput = args[0];
 
-      '
-  - pattern-not-inside: "if($ALLOWLIST.contains($INPUT)){\n  ...\n}\n"
-  message: "This application implements unsafe invocations of methods within the\n\
-    `groovy.lang.GroovyShell` or `groovy.lang.GroovyClassLoader` classes,\nwhich are\
-    \ used to evaluate or compile Groovy code dynamically. When\nuser-controlled input\
-    \ is directly passed to `parse`, `evaluate`, or\n`parseClass` methods, it can\
-    \ lead to Remote Code Execution (RCE), where an\nattacker can execute arbitrary\
-    \ code on the server. This could potentially\nallow an attacker to gain unauthorized\
-    \ access to system resources, modify\ninternal application states, or execute\
-    \ commands on the server depending\non the level of permissions assigned to the\
-    \ application process.\n\nTo mitigate this vulnerability, always validate and\
-    \ sanitize all user inputs \nbefore using them in dynamic code evaluations. Consider\
-    \ using safer alternatives \nto executing dynamic code if possible. If dynamic\
-    \ code execution is absolutely \nnecessary, use strict allowlists of safe inputs\
-    \ and context-specific validation.\n\nSecure Code Example:\n\n```\nimport groovy.lang.GroovyShell;\n\
-    \nclass SafeDynamicEvaluation {\n  private static final Set<String> ALLOWED_EXPRESSIONS\
-    \ = new HashSet<>(Arrays.asList(\n      \"println 'Hello World!'\",\n      \"\
-    println 'Goodbye World!'\"));\n\n  public static void test4(String[] args, ClassLoader\
-    \ loader) throws Exception {\n    GroovyShell shell = new GroovyShell();\n   \
-    \ String userInput = args[0];\n\n    // Validate the user input against the allowlist\n\
-    \    if (ALLOWED_EXPRESSIONS.contains(userInput)) {\n      shell.evaluate(userInput);\n\
-    \      // shell.parse(userInput);\n    } else {\n      throw new IllegalArgumentException(\"\
-    Invalid or unauthorized command.\");\n    }\n  }\n}\n```\n"
+        // Validate the user input against the allowlist
+        if (ALLOWED_EXPRESSIONS.contains(userInput)) {
+          shell.evaluate(userInput);
+          // shell.parse(userInput);
+        } else {
+          throw new IllegalArgumentException("Invalid or unauthorized command.");
+        }
+      }
+    }
+    ```
   metadata:
     shortDescription: Improper control of generation of code ('Code Injection')
     category: security

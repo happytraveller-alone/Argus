@@ -16,9 +16,18 @@ rules:
     - https://www.paradigm.xyz/2021/08/two-rights-might-make-a-wrong
   patterns:
   - pattern-either:
-    - pattern-inside: "contract $C is ..., BoringBatchable, ... {\n  ...\n}\n"
-    - pattern-inside: "contract $C is ..., Multicall, ... {\n  ...\n}\n"
-  - pattern-inside: "function $F(...) {\n  ...\n}\n"
+    - pattern-inside: |
+        contract $C is ..., BoringBatchable, ... {
+          ...
+        }
+    - pattern-inside: |
+        contract $C is ..., Multicall, ... {
+          ...
+        }
+  - pattern-inside: |
+      function $F(...) {
+        ...
+      }
   - pattern: msg.value
   languages:
   - solidity

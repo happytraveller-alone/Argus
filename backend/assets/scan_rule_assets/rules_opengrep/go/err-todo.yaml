@@ -7,7 +7,10 @@ rules:
       - pattern-regex: // ?(TODO|FIXME).*
   - pattern-either:
     - patterns:
-      - pattern-inside: "if ... ; err != nil {\n        ...\n}\n"
+      - pattern-inside: |
+          if ... ; err != nil {
+                  ...
+          }
       - pattern-regex: // ?(TODO|FIXME).*
   message: TODO in error handling code
   languages:

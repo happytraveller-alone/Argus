@@ -2,13 +2,10 @@ rules:
 - id: scala_cookie_rule-RequestParamToHeader
   languages:
   - scala
-  message: 'This code directly writes an HTTP parameter to an HTTP header, which allows for a HTTP
-
+  message: |
+    This code directly writes an HTTP parameter to an HTTP header, which allows for a HTTP
     response splitting vulnerability. See http://en.wikipedia.org/wiki/HTTP_response_splitting for
-
     more information.
-
-    '
   metadata:
     category: security
     cwe: CWE-113
@@ -41,13 +38,10 @@ rules:
 - id: scala_cookie_rule-RequestParamToHeader_1
   languages:
   - scala
-  message: 'This code directly writes an HTTP parameter to an HTTP header, which allows for a HTTP
-
+  message: |
+    This code directly writes an HTTP parameter to an HTTP header, which allows for a HTTP
     response splitting vulnerability. See http://en.wikipedia.org/wiki/HTTP_response_splitting for
-
     more information.
-
-    '
   metadata:
     category: security
     cwe: CWE-113

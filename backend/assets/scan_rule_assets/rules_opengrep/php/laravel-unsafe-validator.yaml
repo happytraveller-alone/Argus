@@ -3,18 +3,15 @@ rules:
   mode: taint
   pattern-sources:
   - patterns:
-    - pattern: 'public function $F(...,Request $R,...){...}
-
-        '
+    - pattern: |
+        public function $F(...,Request $R,...){...}
     - focus-metavariable: $R
   - patterns:
     - pattern-either:
-      - pattern: '$this->$PROPERTY
-
-          '
-      - pattern: '$this->$PROPERTY->$GET
-
-          '
+      - pattern: |
+          $this->$PROPERTY
+      - pattern: |
+          $this->$PROPERTY->$GET
     - metavariable-pattern:
         metavariable: $PROPERTY
         patterns:
@@ -32,29 +29,23 @@ rules:
           - pattern: post
           - pattern: json
     - pattern-either:
-      - pattern-inside: 'class $CL extends Illuminate\Http\Request {...}
-
-          '
-      - pattern-inside: 'class $CL extends Illuminate\Foundation\Http\FormRequest
-          {...}
-
-          '
+      - pattern-inside: |
+          class $CL extends Illuminate\Http\Request {...}
+      - pattern-inside: |
+          class $CL extends Illuminate\Foundation\Http\FormRequest {...}
   pattern-sinks:
   - patterns:
-    - pattern: 'Illuminate\Validation\Rule::unique(...)->ignore(...,$IGNORE,...)
-
-        '
+    - pattern: |
+        Illuminate\Validation\Rule::unique(...)->ignore(...,$IGNORE,...)
     - focus-metavariable: $IGNORE
-  message: Found a request argument passed to an `ignore()` definition in a Rule constraint.
-    This can lead to SQL injection.
+  message: Found a request argument passed to an `ignore()` definition in a Rule constraint. This can lead to SQL injection.
   languages:
   - php
   severity: ERROR
   metadata:
     category: security
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection

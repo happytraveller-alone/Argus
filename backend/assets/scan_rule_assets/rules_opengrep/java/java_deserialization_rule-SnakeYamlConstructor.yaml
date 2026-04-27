@@ -3,34 +3,49 @@ rules:
   languages:
   - java
   patterns:
-  - pattern: '$Y = new org.yaml.snakeyaml.Yaml();
-
+  - pattern: |
+      $Y = new org.yaml.snakeyaml.Yaml();
       ...
-
       $Y.load(...);
+  message: |
+    The application uses SnakeYAML org.yaml.snakeyaml.Yaml() constructor
+    with no arguments, which is vulnerable to deserialization attacks.
+    When Yaml() (no-argument constructor) is used, SnakeYAML uses the
+    default Constructor which can instantiate any Java object during
+    deserialization. This is risky because an attacker could craft malicious
+    YAML files to execute arbitrary code or perform unauthorized actions.
 
-      '
-  message: "The application uses SnakeYAML org.yaml.snakeyaml.Yaml() constructor \n\
-    with no arguments, which is vulnerable to deserialization attacks. \nWhen Yaml()\
-    \ (no-argument constructor) is used, SnakeYAML uses the \ndefault Constructor\
-    \ which can instantiate any Java object during \ndeserialization. This is risky\
-    \ because an attacker could craft malicious \nYAML files to execute arbitrary\
-    \ code or perform unauthorized actions.\n\nTo mitigate the issue and to safely\
-    \ use SnakeYaml to parse YAML data, \nalways make sure to only ever use a Yaml\
-    \ instance that is constructed \neither with a SafeConstructor or an instance\
-    \ constructed with a \nConstructor specifying a specific class. \n\nPlease note,\
-    \ if you want to use Constructor with a specific target class\nas a mitigation\
-    \ criteria, ensure that snakeyaml version is 2.0 or higher\nas Constructor class\
-    \ is vulnerable in snakeyaml versions lower than 2.0.\nRefer - https://github.com/google/security-research/security/advisories/GHSA-mjmj-j48q-9wg2\n\
-    \nSecure Code Examples:\n```\npublic void safeConstructorLoad(String toLoad) {\n\
-    \  // Configure LoaderOptions for safe deserialization\n  LoaderOptions loaderOptions\
-    \ = new LoaderOptions();\n  loaderOptions.setAllowDuplicateKeys(false);\n  loaderOptions.setMaxAliasesForCollections(50);\n\
-    \n  Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptipon()));\n  yaml.load(toLoad);\n\
-    }\n\npublic void customConstructorLoad(String toLoad, Class<?> goodClass) {\n\
-    \  // Use Constructor with a specific target class\n  LoaderOptions loaderOptions\
-    \ = new LoaderOptions();\n  Constructor customConstructor = new Constructor(goodClass,\
-    \ loaderOptions);\n\n  Yaml yaml = new Yaml(customConstructor);\n  yaml.load(toLoad);\n\
-    }\n```\n"
+    To mitigate the issue and to safely use SnakeYaml to parse YAML data,
+    always make sure to only ever use a Yaml instance that is constructed
+    either with a SafeConstructor or an instance constructed with a
+    Constructor specifying a specific class.
+
+    Please note, if you want to use Constructor with a specific target class
+    as a mitigation criteria, ensure that snakeyaml version is 2.0 or higher
+    as Constructor class is vulnerable in snakeyaml versions lower than 2.0.
+    Refer - https://github.com/google/security-research/security/advisories/GHSA-mjmj-j48q-9wg2
+
+    Secure Code Examples:
+    ```
+    public void safeConstructorLoad(String toLoad) {
+      // Configure LoaderOptions for safe deserialization
+      LoaderOptions loaderOptions = new LoaderOptions();
+      loaderOptions.setAllowDuplicateKeys(false);
+      loaderOptions.setMaxAliasesForCollections(50);
+
+      Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptipon()));
+      yaml.load(toLoad);
+    }
+
+    public void customConstructorLoad(String toLoad, Class<?> goodClass) {
+      // Use Constructor with a specific target class
+      LoaderOptions loaderOptions = new LoaderOptions();
+      Constructor customConstructor = new Constructor(goodClass, loaderOptions);
+
+      Yaml yaml = new Yaml(customConstructor);
+      yaml.load(toLoad);
+    }
+    ```
   metadata:
     cwe: CWE-502
     owasp:

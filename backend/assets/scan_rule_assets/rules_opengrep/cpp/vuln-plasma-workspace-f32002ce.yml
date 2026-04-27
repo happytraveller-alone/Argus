@@ -1,17 +1,15 @@
 rules:
 - id: vuln-plasma-workspace-f32002ce
-  pattern: '$MX.expandMacros($EXEC)
-
-    '
-  pattern-not: '$MX.expandMacrosShellQuote($EXEC)
-
-    '
+  pattern: |
+    $MX.expandMacros($EXEC)
+  pattern-not: |
+    $MX.expandMacrosShellQuote($EXEC)
   languages:
   - cpp
-  message: "The use of `expandMacros` without shell quoting can lead to command injection\
-    \ vulnerabilities. \nThis is dangerous because it allows an attacker to inject\
-    \ arbitrary commands by manipulating the input. \nTo fix this, use `expandMacrosShellQuote`\
-    \ to ensure proper shell quoting of arguments.\n"
+  message: |
+    The use of `expandMacros` without shell quoting can lead to command injection vulnerabilities.
+    This is dangerous because it allows an attacker to inject arbitrary commands by manipulating the input.
+    To fix this, use `expandMacrosShellQuote` to ensure proper shell quoting of arguments.
   severity: ERROR
   metadata:
     source-url: github.com/KDE/plasma-workspace/commit/f32002ce50edc3891f1fa41173132c820b917d57

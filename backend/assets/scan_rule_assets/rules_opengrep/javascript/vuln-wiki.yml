@@ -1,16 +1,23 @@
 rules:
 - id: vuln-wiki-57b56d3a
-  pattern: "if ($CONFIG.scanSVG && $OPTS.mimetype === 'image/svg+xml') {\n  ...\n}\n"
-  pattern-not: "if (\n  $CONFIG.scanSVG &&\n  (\n    $OPTS.mimetype.toLowerCase().startsWith('image/svg') ||\n    $OPTS.ext.toLowerCase()\
-    \ === 'svg'\n  )\n) {\n  ...\n}\n"
+  pattern: |
+    if ($CONFIG.scanSVG && $OPTS.mimetype === 'image/svg+xml') {
+      ...
+    }
+  pattern-not: |
+    if (
+      $CONFIG.scanSVG &&
+      (
+        $OPTS.mimetype.toLowerCase().startsWith('image/svg') ||
+        $OPTS.ext.toLowerCase() === 'svg'
+      )
+    ) {
+      ...
+    }
   languages:
   - javascript
-  message: 'Incomplete SVG file type validation detected. The original check only verifies the MIME type ''image/svg+xml'',
-    which can be bypassed by using alternative MIME types or file extensions. This could allow malicious SVG files to bypass
-    security checks. To fix this, ensure the validation checks for both the MIME type and file extension, and use case-insensitive
-    comparison.
-
-    '
+  message: |
+    Incomplete SVG file type validation detected. The original check only verifies the MIME type 'image/svg+xml', which can be bypassed by using alternative MIME types or file extensions. This could allow malicious SVG files to bypass security checks. To fix this, ensure the validation checks for both the MIME type and file extension, and use case-insensitive comparison.
   severity: ERROR
   metadata:
     source-url: github.com/Requarks/wiki/commit/57b56d3a5b9c00358814e76f3ee5b4bb353ad62f
@@ -22,12 +29,18 @@ rules:
     technology:
     - javascript
 - id: vuln-wiki-9e08718e
-  pattern: "if ($RAW_TEXT.indexOf('{{') >= 0 && $RAW_TEXT.indexOf('}}') > 1) {\n  ...\n}\n"
-  pattern-not: "const $REGEX = /(\\{|&#x7b;?){2}(.+?)(\\}|&#x7d;?){2}/i;\nif ($REGEX.test($RAW_TEXT)) {\n  ...\n}\n"
+  pattern: |
+    if ($RAW_TEXT.indexOf('{{') >= 0 && $RAW_TEXT.indexOf('}}') > 1) {
+      ...
+    }
+  pattern-not: |
+    const $REGEX = /(\{|&#x7b;?){2}(.+?)(\}|&#x7d;?){2}/i;
+    if ($REGEX.test($RAW_TEXT)) {
+      ...
+    }
   languages:
   - javascript
-  message: Insecure detection of Mustache templates using string indexOf. This can lead to template injection vulnerabilities.
-    Use a regular expression to properly validate Mustache templates.
+  message: Insecure detection of Mustache templates using string indexOf. This can lead to template injection vulnerabilities. Use a regular expression to properly validate Mustache templates.
   severity: ERROR
   metadata:
     source-url: github.com/Requarks/wiki/commit/9e08718ee904046f8b2294ef6ac79e8a75a451e3

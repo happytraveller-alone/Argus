@@ -1,18 +1,16 @@
 rules:
 - id: vuln-nova-25e761ac
-  pattern: '$DATA = images.qemu_img_info($PATH)
-
-    $DRIVER_FORMAT = $DATA.file_format or ''raw''
-
-    '
-  pattern-not: '$DRIVER_FORMAT = self.resolve_driver_format()
-
-    '
+  pattern: |
+    $DATA = images.qemu_img_info($PATH)
+    $DRIVER_FORMAT = $DATA.file_format or 'raw'
+  pattern-not: |
+    $DRIVER_FORMAT = self.resolve_driver_format()
   languages:
   - python
-  message: "Directly using qemu_img_info to determine driver format without proper validation can lead to security vulnerabilities.\
-    \ \nThe patch introduces a safer approach using resolve_driver_format() which validates the disk format through a secure\
-    \ disk info file.\nAlways use the resolve_driver_format() method to ensure proper validation and prevent format manipulation.\n"
+  message: |
+    Directly using qemu_img_info to determine driver format without proper validation can lead to security vulnerabilities.
+    The patch introduces a safer approach using resolve_driver_format() which validates the disk format through a secure disk info file.
+    Always use the resolve_driver_format() method to ensure proper validation and prevent format manipulation.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/nova/commit/25e761acd56d4c820273fc0245ada06c500c1637
@@ -23,13 +21,17 @@ rules:
     - python
     - openstack
 - id: vuln-nova-3d4ffb64
-  pattern: "if 'nova.context' in request.environ and $PROJECT_ID:\n    request.environ['nova.context'].project_id = $PROJECT_ID\n"
-  pattern-not: "if ('nova.context' in request.environ and $PROJECT_ID\n    and $PROJECT_ID != request.environ['nova.context'].project_id):\n\
-    \    msg = _(\"Malformed request url\")\n    return faults.Fault(webob.exc.HTTPBadRequest(explanation=msg))\n"
+  pattern: |
+    if 'nova.context' in request.environ and $PROJECT_ID:
+        request.environ['nova.context'].project_id = $PROJECT_ID
+  pattern-not: |
+    if ('nova.context' in request.environ and $PROJECT_ID
+        and $PROJECT_ID != request.environ['nova.context'].project_id):
+        msg = _("Malformed request url")
+        return faults.Fault(webob.exc.HTTPBadRequest(explanation=msg))
   languages:
   - python
-  message: Detected insecure project ID assignment without validation. This can lead to unauthorized project ID changes. Validate
-    the project ID before assignment.
+  message: Detected insecure project ID assignment without validation. This can lead to unauthorized project ID changes. Validate the project ID before assignment.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/nova/commit/3d4ffb64f1e18117240c26809788528979e3bd15
@@ -39,18 +41,16 @@ rules:
     technology:
     - python
 - id: vuln-nova-b83cae02
-  pattern: 'map(operator.methodcaller(''refresh_connection_info'', *$ARGS, **$KWARGS), $DEVICES)
-
-    '
-  pattern-not: "for $DEVICE in $DEVICES:\n    if hasattr($DEVICE, 'refresh_connection_info'):\n        $DEVICE.refresh_connection_info(*$ARGS,\
-    \ **$KWARGS)\n"
+  pattern: |
+    map(operator.methodcaller('refresh_connection_info', *$ARGS, **$KWARGS), $DEVICES)
+  pattern-not: |
+    for $DEVICE in $DEVICES:
+        if hasattr($DEVICE, 'refresh_connection_info'):
+            $DEVICE.refresh_connection_info(*$ARGS, **$KWARGS)
   languages:
   - python
-  message: 'Detected unsafe use of `map` with `operator.methodcaller` to call `refresh_connection_info` on all devices without
-    checking if they support the method. This can lead to attribute errors or unintended behavior. Use a for-loop with `hasattr`
-    check instead.
-
-    '
+  message: |
+    Detected unsafe use of `map` with `operator.methodcaller` to call `refresh_connection_info` on all devices without checking if they support the method. This can lead to attribute errors or unintended behavior. Use a for-loop with `hasattr` check instead.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/nova/commit/b83cae02ece4c338e09c3606c6ae69b715bd6f8c
@@ -60,16 +60,15 @@ rules:
     technology:
     - python
 - id: vuln-nova-ce4b2e27
-  pattern: 'os.path.realpath(os.path.join($FS, *$ARGS))
-
-    '
-  pattern-not: 'utils.execute(''readlink'', ''-nm'', os.path.join($FS, *$ARGS), run_as_root=True)
-
-    '
+  pattern: |
+    os.path.realpath(os.path.join($FS, *$ARGS))
+  pattern-not: |
+    utils.execute('readlink', '-nm', os.path.join($FS, *$ARGS), run_as_root=True)
   languages:
   - python
-  message: "Detected unsafe path resolution using os.path.realpath(). This can lead to path traversal vulnerabilities. \n\
-    Use utils.execute with 'readlink -nm' to safely resolve paths and prevent path traversal attacks.\n"
+  message: |
+    Detected unsafe path resolution using os.path.realpath(). This can lead to path traversal vulnerabilities.
+    Use utils.execute with 'readlink -nm' to safely resolve paths and prevent path traversal attacks.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/nova/commit/ce4b2e27be45a85b310237615c47eb53f37bb5f3
@@ -81,18 +80,14 @@ rules:
     technology:
     - python
 - id: vuln-nova-ff9d353b
-  pattern: 'images.fetch($CONTEXT, $IMAGE_ID, $TARGET, $USER_ID, $PROJECT_ID)
-
-    '
-  pattern-not: 'images.fetch_to_raw($CONTEXT, $IMAGE_ID, $TARGET, $USER_ID, $PROJECT_ID)
-
-    '
+  pattern: |
+    images.fetch($CONTEXT, $IMAGE_ID, $TARGET, $USER_ID, $PROJECT_ID)
+  pattern-not: |
+    images.fetch_to_raw($CONTEXT, $IMAGE_ID, $TARGET, $USER_ID, $PROJECT_ID)
   languages:
   - python
-  message: 'Detected unsafe image fetching without raw conversion. This can lead to security vulnerabilities if the image
-    format is not validated and converted to raw. Use `fetch_to_raw` instead to ensure the image is converted to a safe format.
-
-    '
+  message: |
+    Detected unsafe image fetching without raw conversion. This can lead to security vulnerabilities if the image format is not validated and converted to raw. Use `fetch_to_raw` instead to ensure the image is converted to a safe format.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/nova/commit/ff9d353b2f4fee469e530fbc8dc231a41f6fed84

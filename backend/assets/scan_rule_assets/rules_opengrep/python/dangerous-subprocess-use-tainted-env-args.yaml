@@ -23,40 +23,32 @@ rules:
               - pattern: sys.argv
               - pattern: sys.orig_argv
           - patterns:
-            - pattern-inside: '$PARSER = argparse.ArgumentParser(...)
-
+            - pattern-inside: |
+                $PARSER = argparse.ArgumentParser(...)
                 ...
-
-                '
-            - pattern-inside: '$ARGS = $PARSER.parse_args()
-
-                '
+            - pattern-inside: |
+                $ARGS = $PARSER.parse_args()
             - pattern: <... $ARGS ...>
           - patterns:
-            - pattern-inside: '$PARSER = optparse.OptionParser(...)
-
+            - pattern-inside: |
+                $PARSER = optparse.OptionParser(...)
                 ...
-
-                '
-            - pattern-inside: '$ARGS = $PARSER.parse_args()
-
-                '
+            - pattern-inside: |
+                $ARGS = $PARSER.parse_args()
             - pattern: <... $ARGS ...>
           - patterns:
             - pattern-either:
-              - pattern-inside: '$OPTS, $ARGS = getopt.getopt(...)
-
+              - pattern-inside: |
+                  $OPTS, $ARGS = getopt.getopt(...)
                   ...
-
-                  '
-              - pattern-inside: '$OPTS, $ARGS = getopt.gnu_getopt(...)
-
+              - pattern-inside: |
+                  $OPTS, $ARGS = getopt.gnu_getopt(...)
                   ...
-
-                  '
             - pattern-either:
               - patterns:
-                - pattern-inside: "for $O, $A in $OPTS:\n  ...\n"
+                - pattern-inside: |
+                    for $O, $A in $OPTS:
+                      ...
                 - pattern: $A
               - pattern: $ARGS
   pattern-sinks:
@@ -76,10 +68,8 @@ rules:
         - pattern-not: subprocess.$FUNC(["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c","...",...],...)
         - pattern-not: subprocess.$FUNC(("=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c","...",...),...)
         - pattern-either:
-          - pattern: subprocess.$FUNC(["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c", $CMD],
-              ...)
-          - pattern: subprocess.$FUNC(("=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c", $CMD),
-              ...)
+          - pattern: subprocess.$FUNC(["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c", $CMD], ...)
+          - pattern: subprocess.$FUNC(("=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c", $CMD), ...)
       - patterns:
         - pattern-not: subprocess.$FUNC("=~/(python)/","...",...)
         - pattern: subprocess.$FUNC("=~/(python)/", $CMD)
@@ -90,16 +80,13 @@ rules:
           - pattern: subprocess.$FUNC(["=~/(python)/", $CMD],...)
           - pattern: subprocess.$FUNC(("=~/(python)/", $CMD),...)
     - focus-metavariable: $CMD
-  message: Detected subprocess function '$FUNC' with user controlled data. A malicious
-    actor could leverage this to perform command injection. You may consider using
-    'shlex.quote()'.
+  message: Detected subprocess function '$FUNC' with user controlled data. A malicious actor could leverage this to perform command injection. You may consider using 'shlex.quote()'.
   metadata:
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     asvs:
       section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
       control_id: 5.3.8 OS Command Injection

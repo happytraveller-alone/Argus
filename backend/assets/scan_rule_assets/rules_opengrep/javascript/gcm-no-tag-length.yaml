@@ -1,11 +1,6 @@
 rules:
 - id: gcm-no-tag-length
-  message: The call to 'createDecipheriv' with the Galois Counter Mode (GCM) mode
-    of operation is missing an expected authentication tag length. If the expected
-    authentication tag length is not specified or otherwise checked, the application
-    might be tricked into verifying a shorter-than-expected authentication tag. This
-    can be abused by an attacker to spoof ciphertexts or recover the implicit authentication
-    key of GCM, allowing arbitrary forgeries.
+  message: The call to 'createDecipheriv' with the Galois Counter Mode (GCM) mode of operation is missing an expected authentication tag length. If the expected authentication tag length is not specified or otherwise checked, the application might be tricked into verifying a shorter-than-expected authentication tag. This can be abused by an attacker to spoof ciphertexts or recover the implicit authentication key of GCM, allowing arbitrary forgeries.
   metadata:
     cwe:
     - 'CWE-310: CWE CATEGORY: Cryptographic Issues'
@@ -27,9 +22,8 @@ rules:
   - javascript
   severity: ERROR
   patterns:
-  - pattern: '$CRYPTO.createDecipheriv(''$ALGO'', $KEY, $IV)
-
-      '
+  - pattern: |
+      $CRYPTO.createDecipheriv('$ALGO', $KEY, $IV)
   - metavariable-regex:
       metavariable: $ALGO
       regex: .*(-gcm)$

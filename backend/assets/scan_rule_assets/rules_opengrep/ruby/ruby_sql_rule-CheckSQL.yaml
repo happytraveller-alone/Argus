@@ -3,95 +3,91 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: 'cookies[...]
-
-        '
+    - pattern: |
+        cookies[...]
     - patterns:
-      - pattern: 'cookies. ... .$PROPERTY[...]
-
-          '
+      - pattern: |
+          cookies. ... .$PROPERTY[...]
       - metavariable-regex:
           metavariable: $PROPERTY
           regex: (?!signed|encrypted)
-    - pattern: 'params[...]
-
-        '
-    - pattern: 'request.env[...]
-
-        '
+    - pattern: |
+        params[...]
+    - pattern: |
+        request.env[...]
   pattern-sanitizers:
   - patterns:
     - pattern-either:
       - patterns:
         - pattern: $X
         - pattern-either:
-          - pattern-inside: ':$KEY => $X
-
-              '
-          - pattern-inside: '["...",$X,...]
-
-              '
-      - pattern: 'params[...].to_i
-
-          '
-      - pattern: 'params[...].to_f
-
-          '
+          - pattern-inside: |
+              :$KEY => $X
+          - pattern-inside: |
+              ["...",$X,...]
+      - pattern: |
+          params[...].to_i
+      - pattern: |
+          params[...].to_f
       - patterns:
-        - pattern: 'params[...] ? $A : $B
-
-            '
+        - pattern: |
+            params[...] ? $A : $B
         - metavariable-pattern:
             metavariable: $A
             patterns:
-            - pattern-not: 'params[...]
-
-                '
+            - pattern-not: |
+                params[...]
         - metavariable-pattern:
             metavariable: $B
             patterns:
-            - pattern-not: 'params[...]
-
-                '
+            - pattern-not: |
+                params[...]
   pattern-sinks:
   - patterns:
     - pattern: $X
-    - pattern-not-inside: '$P.where("...",...)
-
-        '
-    - pattern-not-inside: '$P.where(:$KEY => $VAL,...)
-
-        '
+    - pattern-not-inside: |
+        $P.where("...",...)
+    - pattern-not-inside: |
+        $P.where(:$KEY => $VAL,...)
     - pattern-either:
-      - pattern-inside: '$P.$M(...)
-
-          '
-      - pattern-inside: '$P.$M("...",...)
-
-          '
-    - pattern-inside: "class $P < ActiveRecord::Base\n  ...\nend\n"
+      - pattern-inside: |
+          $P.$M(...)
+      - pattern-inside: |
+          $P.$M("...",...)
+    - pattern-inside: |
+        class $P < ActiveRecord::Base
+          ...
+        end
     - metavariable-regex:
         metavariable: $M
         regex: (where|find|first|last|select|minimum|maximum|calculate|sum|average)
-  message: "SQL Injection is a critical vulnerability that can lead to data or system\
-    \ compromise. By\ndynamically generating SQL query strings, user input may be\
-    \ able to influence the logic of\nthe SQL statement. This could lead to an adversary\
-    \ accessing information they should\nnot have access to, or in some circumstances,\
-    \ being able to execute OS functionality or code.\n\nTo mitigate this issue, always\
-    \ use parameterized queries or the \nActiveRecord query interface, which ensures\
-    \ that inputs are properly \nescaped, preventing SQL injection attacks. Avoid\
-    \ string interpolation \nor concatenation with user-controlled input for constructing\
-    \ SQL queries.\n\nSecure Code Example:\n```\n# Secure: Using parameterized queries\
-    \ with ActiveRecord\nuser_id = params[:id]\nUser.where(\"id = ?\", user_id)\n\n\
-    # Secure: Using ActiveRecord's query methods, which automatically handle parameterization\n\
-    # Converting to integer as an additional layer of input sanitization\nuser_id\
-    \ = params[:id].to_i  \nUser.where(id: user_id)\n```\n"
+  message: |
+    SQL Injection is a critical vulnerability that can lead to data or system compromise. By
+    dynamically generating SQL query strings, user input may be able to influence the logic of
+    the SQL statement. This could lead to an adversary accessing information they should
+    not have access to, or in some circumstances, being able to execute OS functionality or code.
+
+    To mitigate this issue, always use parameterized queries or the
+    ActiveRecord query interface, which ensures that inputs are properly
+    escaped, preventing SQL injection attacks. Avoid string interpolation
+    or concatenation with user-controlled input for constructing SQL queries.
+
+    Secure Code Example:
+    ```
+    # Secure: Using parameterized queries with ActiveRecord
+    user_id = params[:id]
+    User.where("id = ?", user_id)
+
+    # Secure: Using ActiveRecord's query methods, which automatically handle parameterization
+    # Converting to integer as an additional layer of input sanitization
+    user_id = params[:id].to_i
+    User.where(id: user_id)
+    ```
   languages:
   - ruby
   severity: ERROR
   metadata:
-    shortDescription: Improper neutralization of special elements used in a SQL command
-      ('SQL Injection')
+    shortDescription: Improper neutralization of special elements used in a SQL command ('SQL Injection')
     category: security
     cwe: CWE-89
     owasp:

@@ -1,11 +1,9 @@
 rules:
 - id: dangerous-spawn-shell
-  message: Detected non-literal calls to $EXEC(). This could lead to a command injection
-    vulnerability.
+  message: Detected non-literal calls to $EXEC(). This could lead to a command injection vulnerability.
   metadata:
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
@@ -28,45 +26,38 @@ rules:
   mode: taint
   pattern-sources:
   - patterns:
-    - pattern-inside: "function ... (...,$FUNC,...) {\n  ...\n}\n"
+    - pattern-inside: |
+        function ... (...,$FUNC,...) {
+          ...
+        }
     - focus-metavariable: $FUNC
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'require(''child_process'')
-
+      - pattern-inside: |
+          require('child_process')
           ...
-
-          '
-      - pattern-inside: 'import ''child_process''
-
+      - pattern-inside: |
+          import 'child_process'
           ...
-
-          '
     - pattern-either:
       - pattern: spawn(...)
       - pattern: spawnSync(...)
       - pattern: $CP.spawn(...)
       - pattern: $CP.spawnSync(...)
     - pattern-either:
-      - pattern: '$EXEC("=~/(sh|bash|ksh|csh|tcsh|zsh)/",["-c", $ARG, ...],...)
-
-          '
+      - pattern: |
+          $EXEC("=~/(sh|bash|ksh|csh|tcsh|zsh)/",["-c", $ARG, ...],...)
       - patterns:
         - pattern: $EXEC($CMD,["-c", $ARG, ...],...)
-        - pattern-inside: '$CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
-
+        - pattern-inside: |
+            $CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
             ...
-
-            '
-      - pattern: '$EXEC("=~/(sh|bash|ksh|csh|tcsh|zsh)/",[$ARG, ...],...)
-
-          '
+      - pattern: |
+          $EXEC("=~/(sh|bash|ksh|csh|tcsh|zsh)/",[$ARG, ...],...)
       - patterns:
         - pattern: $EXEC($CMD,[$ARG, ...],...)
-        - pattern-inside: '$CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
-
+        - pattern-inside: |
+            $CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
             ...
-
-            '
     - focus-metavariable: $ARG

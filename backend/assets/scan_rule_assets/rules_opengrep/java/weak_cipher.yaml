@@ -2,14 +2,11 @@ rules:
 - id: weak_cipher
   patterns:
   - pattern-either:
-    - pattern: '$C.getInstance("=~/des|desede|rc2|rc4|blowfish/i", ...);
-
-        '
-    - pattern: '$C = new NullCipher();
-
-        '
-  message: Weak encryption algorithm identified. This algorithm is vulnerable to cryptographic
-    attacks.
+    - pattern: |
+        $C.getInstance("=~/des|desede|rc2|rc4|blowfish/i", ...);
+    - pattern: |
+        $C = new NullCipher();
+  message: Weak encryption algorithm identified. This algorithm is vulnerable to cryptographic attacks.
   severity: ERROR
   languages:
   - java

@@ -1,31 +1,19 @@
 rules:
 - id: vuln-gdk-pixbuf-31a6cff3
-  pattern: '$ROWSTRIDE = $WIDTH * 4;
-
-    if ($ROWSTRIDE / 4 != $WIDTH) { ... }
-
-    $BYTES = $HEIGHT * $ROWSTRIDE;
-
-    if ($BYTES / $ROWSTRIDE != $HEIGHT) { ... }
-
-    '
-  pattern-not: 'if ($WIDTH > G_MAXINT / 4) { ... }
-
+  pattern: |
     $ROWSTRIDE = $WIDTH * 4;
-
-    if ($HEIGHT > G_MAXINT / $ROWSTRIDE) { ... }
-
+    if ($ROWSTRIDE / 4 != $WIDTH) { ... }
     $BYTES = $HEIGHT * $ROWSTRIDE;
-
-    '
+    if ($BYTES / $ROWSTRIDE != $HEIGHT) { ... }
+  pattern-not: |
+    if ($WIDTH > G_MAXINT / 4) { ... }
+    $ROWSTRIDE = $WIDTH * 4;
+    if ($HEIGHT > G_MAXINT / $ROWSTRIDE) { ... }
+    $BYTES = $HEIGHT * $ROWSTRIDE;
   languages:
   - c
-  message: 'Detected an integer overflow vulnerability in image processing code. The original code checks for overflow by
-    dividing back, which is unreliable and can lead to buffer overflows. The fix should check for potential overflow before
-    multiplication by comparing against G_MAXINT divided by the multiplier. This vulnerability could lead to memory corruption
-    and potential remote code execution. Fix by using the pattern shown in the pattern-not section.
-
-    '
+  message: |
+    Detected an integer overflow vulnerability in image processing code. The original code checks for overflow by dividing back, which is unreliable and can lead to buffer overflows. The fix should check for potential overflow before multiplication by comparing against G_MAXINT divided by the multiplier. This vulnerability could lead to memory corruption and potential remote code execution. Fix by using the pattern shown in the pattern-not section.
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/31a6cff3dfc6944aad4612a9668b8ad39122e48b
@@ -38,17 +26,20 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-3bac204e
-  pattern: "if ($MODULE && $MODULE->stop_load) {\n  ...\n}\n"
-  pattern-not: "if ($MODULE && $MODULE->stop_load && $CONTEXT) {\n  ...\n}\n"
+  pattern: |
+    if ($MODULE && $MODULE->stop_load) {
+      ...
+    }
+  pattern-not: |
+    if ($MODULE && $MODULE->stop_load && $CONTEXT) {
+      ...
+    }
   languages:
   - c
-  message: 'Missing context validation in image module stop_load function.
-
+  message: |
+    Missing context validation in image module stop_load function.
     This can lead to null pointer dereference if context is not initialized.
-
     Always validate context pointer before using it in stop_load function.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/3bac204e0d0241a0d68586ece7099e6acf0e9bea
@@ -60,40 +51,30 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-4e7b5345
-  pattern: '$FRAME = g_new (GdkPixbufFrame, 1);
-
+  pattern: |
+    $FRAME = g_new (GdkPixbufFrame, 1);
     ...
-
     $FRAME->composited = NULL;
-
     $FRAME->revert = NULL;
-
     ...
-
     $FRAME->pixbuf = gdk_pixbuf_new (...);
-
     ...
-
     g_list_append ($ANIMATION->frames, $FRAME);
-
-    '
-  pattern-not: '$FRAME = g_new0 (GdkPixbufFrame, 1);
-
+  pattern-not: |
+    $FRAME = g_new0 (GdkPixbufFrame, 1);
     ...
-
     $FRAME->lzw_data = g_byte_array_new ();
-
     ...
-
     g_list_append ($ANIMATION->frames, $FRAME);
-
-    '
   languages:
   - c
-  message: "Missing initialization of critical frame data in GIF animation handling. \nThis vulnerability could lead to memory\
-    \ corruption or crashes when processing \nmalformed GIF files. The issue was fixed by properly initializing frame data\
-    \ \nstructures with g_new0() and adding LZW decoder support.\nTo fix this, ensure all frame data is properly initialized\
-    \ and use secure \nmemory allocation patterns.\n"
+  message: |
+    Missing initialization of critical frame data in GIF animation handling.
+    This vulnerability could lead to memory corruption or crashes when processing
+    malformed GIF files. The issue was fixed by properly initializing frame data
+    structures with g_new0() and adding LZW decoder support.
+    To fix this, ensure all frame data is properly initialized and use secure
+    memory allocation patterns.
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/4e7b5345d2fc8f0d1dee93d8ba9ab805bc95d42f
@@ -105,22 +86,17 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-57362ed4
-  pattern: 'g_warning("Could not thumbnail ''%s'': %s", $FILENAME, $ERROR->message);
-
+  pattern: |
+    g_warning("Could not thumbnail '%s': %s", $FILENAME, $ERROR->message);
     g_error_free($ERROR);
-
-    '
-  pattern-not: "g_warning(\"Could not thumbnail '%s': %s\", $FILENAME,\n          $ERROR ? $ERROR->message : \"Thumbnailer\
-    \ failed without returning an error\");\ng_clear_error(&$ERROR);\n"
+  pattern-not: |
+    g_warning("Could not thumbnail '%s': %s", $FILENAME,
+              $ERROR ? $ERROR->message : "Thumbnailer failed without returning an error");
+    g_clear_error(&$ERROR);
   languages:
   - c
-  message: 'Detected unsafe error handling in GDK-Pixbuf thumbnailer. The original code directly accesses the error message
-    without checking if the error pointer is NULL, which could lead to a NULL pointer dereference. Additionally, g_error_free()
-    is used instead of g_clear_error(), which doesn''t properly clear the error pointer. This could result in use-after-free
-    vulnerabilities or memory leaks. To fix this, always check if the error pointer is NULL before accessing its message field
-    and use g_clear_error() instead of g_error_free() to properly clear the error.
-
-    '
+  message: |
+    Detected unsafe error handling in GDK-Pixbuf thumbnailer. The original code directly accesses the error message without checking if the error pointer is NULL, which could lead to a NULL pointer dereference. Additionally, g_error_free() is used instead of g_clear_error(), which doesn't properly clear the error pointer. This could result in use-after-free vulnerabilities or memory leaks. To fix this, always check if the error pointer is NULL before accessing its message field and use g_clear_error() instead of g_error_free() to properly clear the error.
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/57362ed4c1f37c05723e25e136327e262f32d35f
@@ -134,20 +110,23 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-c2a40a92
-  pattern: '$CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $CINFO->output_components == 4 ? TRUE : FALSE, 8, ...);
-
-    '
-  pattern-not: "if ($CINFO->output_components == 3) {\n  $HAS_ALPHA = FALSE;\n} else if ($CINFO->output_components == 4) {\n\
-    \  $HAS_ALPHA = TRUE;\n} else {\n  g_set_error($ERROR, $GDK_PIXBUF_ERROR, $GDK_PIXBUF_ERROR_CORRUPT_IMAGE, _(\"Unsupported\
-    \ number of color components (%d)\"), $CINFO->output_components);\n  $RETVAL = FALSE;\n  goto $OUT;\n}\n$CONTEXT->pixbuf\
-    \ = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $HAS_ALPHA, 8, ...);\n"
+  pattern: |
+    $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $CINFO->output_components == 4 ? TRUE : FALSE, 8, ...);
+  pattern-not: |
+    if ($CINFO->output_components == 3) {
+      $HAS_ALPHA = FALSE;
+    } else if ($CINFO->output_components == 4) {
+      $HAS_ALPHA = TRUE;
+    } else {
+      g_set_error($ERROR, $GDK_PIXBUF_ERROR, $GDK_PIXBUF_ERROR_CORRUPT_IMAGE, _("Unsupported number of color components (%d)"), $CINFO->output_components);
+      $RETVAL = FALSE;
+      goto $OUT;
+    }
+    $CONTEXT->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, $HAS_ALPHA, 8, ...);
   languages:
   - c
-  message: 'The code directly uses the output_components value to determine the alpha channel without proper validation. This
-    can lead to undefined behavior or security vulnerabilities when processing images with unsupported numbers of color components.
-    Always validate the number of components before using them to create a pixbuf.
-
-    '
+  message: |
+    The code directly uses the output_components value to determine the alpha channel without proper validation. This can lead to undefined behavior or security vulnerabilities when processing images with unsupported numbers of color components. Always validate the number of components before using them to create a pixbuf.
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/c2a40a92fe3df4111ed9da51fe3368c079b86926
@@ -161,18 +140,20 @@ rules:
     technology:
     - c
 - id: vuln-gdk-pixbuf-dec9ca22
-  pattern: "$STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;\nif ($STATE->HeaderSize < 0) {\n  ...\n}\n"
-  pattern-not: "if ($ENTRY->DIBoffset > $G_MAXINT - $INFOHEADER_SIZE) {\n  ...\n}\n$STATE->HeaderSize = $ENTRY->DIBoffset\
-    \ + $INFOHEADER_SIZE;\n"
+  pattern: |
+    $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
+    if ($STATE->HeaderSize < 0) {
+      ...
+    }
+  pattern-not: |
+    if ($ENTRY->DIBoffset > $G_MAXINT - $INFOHEADER_SIZE) {
+      ...
+    }
+    $STATE->HeaderSize = $ENTRY->DIBoffset + $INFOHEADER_SIZE;
   languages:
   - c
-  message: 'This rule detects integer overflow vulnerabilities in C code where an arithmetic operation is performed without
-    checking for potential overflow, leading to undefined behavior. The vulnerability occurs when adding two integers without
-    verifying if the result exceeds the maximum value that can be stored in the resulting variable. This can lead to security
-    issues such as memory corruption or crashes. To fix this, ensure that the addition operation is checked for potential
-    overflow before performing the calculation.
-
-    '
+  message: |
+    This rule detects integer overflow vulnerabilities in C code where an arithmetic operation is performed without checking for potential overflow, leading to undefined behavior. The vulnerability occurs when adding two integers without verifying if the result exceeds the maximum value that can be stored in the resulting variable. This can lead to security issues such as memory corruption or crashes. To fix this, ensure that the addition operation is checked for potential overflow before performing the calculation.
   severity: ERROR
   metadata:
     source-url: github.com/GNOME/gdk-pixbuf/commit/dec9ca22d70c0f0d4492333b4e8147afb038afd2

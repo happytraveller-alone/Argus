@@ -1,10 +1,8 @@
 rules:
 - id: express-xml2json-xxe
-  message: 'Make sure that unverified user data can not reach the XML Parser,
-
+  message: |
+    Make sure that unverified user data can not reach the XML Parser,
     as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities
-
-    '
   metadata:
     owasp: 'A4: XML External Entities (XXE)'
     cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
@@ -12,13 +10,10 @@ rules:
   languages:
   - javascript
   patterns:
-  - pattern-inside: '...
-
-      require(''xml2json'');
-
+  - pattern-inside: |
       ...
-
-      '
+      require('xml2json');
+      ...
   - pattern-either:
     - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
     - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
@@ -27,23 +22,18 @@ rules:
   - pattern-either:
     - pattern: $EXPAT.toJson(<... $REQ.$QUERY.$FOO ...>,...)
     - pattern: $EXPAT.toJson(<... $REQ.$BODY ...>,...)
-    - pattern: '$INPUT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $EXPAT.toJson(<... $INPUT ...>,...);
-
-        '
-    - pattern: '$INPUT = <... $REQ.$BODY ...>;
-
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
         ...
-
-        $EXPAT.toJson(<... $INPUT ...>,...);'
+        $EXPAT.toJson(<... $INPUT ...>,...);
 - id: express-xml2json-xxe_1
   languages:
   - javascript
-  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal
-    Entity (XXE) Processing vulnerabilities
+  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities
   metadata:
     asvs:
       control_id: 5.5.2 Insecue XML Deserialization
@@ -71,16 +61,12 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'require(''xml2json'');
-
+      - pattern-inside: |
+          require('xml2json');
           ...
-
-          '
-      - pattern-inside: 'import ''xml2json'';
-
+      - pattern-inside: |
+          import 'xml2json';
           ...
-
-          '
     - pattern: $EXPAT.toJson($SINK,...)
     - focus-metavariable: $SINK
   pattern-sources:
@@ -105,14 +91,11 @@ rules:
       - pattern: $REQ.files.$ANYTHING['data'].toString('utf8')
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

@@ -1,11 +1,9 @@
 rules:
 - id: deno-dangerous-run
-  message: Detected non-literal calls to Deno.run(). This could lead to a command
-    injection vulnerability.
+  message: Detected non-literal calls to Deno.run(). This could lead to a command injection vulnerability.
   metadata:
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
@@ -32,19 +30,14 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern: 'Deno.run({cmd: [$INPUT,...]},...)
-
-          '
-      - pattern: 'Deno.run({cmd: ["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c",$INPUT,...]},...)
-
-          '
+      - pattern: |
+          Deno.run({cmd: [$INPUT,...]},...)
+      - pattern: |
+          Deno.run({cmd: ["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c",$INPUT,...]},...)
       - patterns:
-        - pattern: 'Deno.run({cmd: [$CMD,"-c",$INPUT,...]},...)
-
-            '
-        - pattern-inside: '$CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
-
+        - pattern: |
+            Deno.run({cmd: [$CMD,"-c",$INPUT,...]},...)
+        - pattern-inside: |
+            $CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
             ...
-
-            '
     - focus-metavariable: $INPUT

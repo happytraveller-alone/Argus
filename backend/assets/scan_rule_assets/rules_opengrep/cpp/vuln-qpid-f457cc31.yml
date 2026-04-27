@@ -1,18 +1,17 @@
 rules:
 - id: vuln-qpid-f457cc31
-  pattern: 'add(SequenceNumber($BUFFER.getLong()), SequenceNumber($BUFFER.getLong()));
-
-    '
-  pattern-not: "SequenceNumber $A($BUFFER.getLong());\nSequenceNumber $B($BUFFER.getLong());\n\
-    if ($B < $A)\n    throw IllegalArgumentException(...);\nadd($A, $B);\n"
+  pattern: |
+    add(SequenceNumber($BUFFER.getLong()), SequenceNumber($BUFFER.getLong()));
+  pattern-not: |
+    SequenceNumber $A($BUFFER.getLong());
+    SequenceNumber $B($BUFFER.getLong());
+    if ($B < $A)
+        throw IllegalArgumentException(...);
+    add($A, $B);
   languages:
   - cpp
-  message: 'Detected a potentially invalid sequence range without validation. This
-    can lead to incorrect processing of sequence numbers, which may cause unexpected
-    behavior or security issues. Always validate that the second sequence number is
-    greater than or equal to the first before adding the range.
-
-    '
+  message: |
+    Detected a potentially invalid sequence range without validation. This can lead to incorrect processing of sequence numbers, which may cause unexpected behavior or security issues. Always validate that the second sequence number is greater than or equal to the first before adding the range.
   severity: ERROR
   metadata:
     source-url: github.com/apache/qpid/commit/f457cc314c6bc692731a87e8fed86d049e7c66c6

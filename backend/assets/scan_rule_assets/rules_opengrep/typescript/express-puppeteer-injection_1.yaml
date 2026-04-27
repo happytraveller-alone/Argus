@@ -2,8 +2,7 @@ rules:
 - id: express-puppeteer-injection_1
   languages:
   - typescript
-  message: If unverified user data can reach the `puppeteer` methods it can result
-    in Server-Side Request Forgery vulnerabilities
+  message: If unverified user data can reach the `puppeteer` methods it can result in Server-Side Request Forgery vulnerabilities
   metadata:
     category: security
     confidence: MEDIUM
@@ -25,16 +24,12 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'require(''puppeteer'');
-
+      - pattern-inside: |
+          require('puppeteer');
           ...
-
-          '
-      - pattern-inside: 'import ''puppeteer'';
-
+      - pattern-inside: |
+          import 'puppeteer';
           ...
-
-          '
     - pattern-either:
       - pattern: $PAGE.goto($SINK,...)
       - pattern: $PAGE.setContent($SINK,...)
@@ -65,14 +60,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

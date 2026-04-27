@@ -7,25 +7,17 @@ rules:
     - pattern: cookies
   pattern-sinks:
   - pattern-either:
-    - pattern: 'CSV.load(...)
-
-        '
-    - pattern: 'Marshal.load(...)
-
-        '
-    - pattern: 'Marshal.restore(...)
-
-        '
-    - pattern: 'Oj.object_load(...)
-
-        '
-    - pattern: 'Oj.load($X)
-
-        '
-  message: Checks for unsafe deserialization. Objects in Ruby can be serialized into
-    strings, then later loaded from strings. However, uses of load and object_load
-    can cause remote code execution. Loading user input with MARSHAL or CSV can potentially
-    be dangerous. Use JSON in a secure fashion instead.
+    - pattern: |
+        CSV.load(...)
+    - pattern: |
+        Marshal.load(...)
+    - pattern: |
+        Marshal.restore(...)
+    - pattern: |
+        Oj.object_load(...)
+    - pattern: |
+        Oj.load($X)
+  message: Checks for unsafe deserialization. Objects in Ruby can be serialized into strings, then later loaded from strings. However, uses of load and object_load can cause remote code execution. Loading user input with MARSHAL or CSV can potentially be dangerous. Use JSON in a secure fashion instead.
   metadata:
     references:
     - https://groups.google.com/g/rubyonrails-security/c/61bkgvnSGTQ/m/nehwjA8tQ8EJ

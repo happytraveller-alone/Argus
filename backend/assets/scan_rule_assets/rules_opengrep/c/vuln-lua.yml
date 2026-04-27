@@ -1,19 +1,13 @@
 rules:
 - id: vuln-lua-066e0f93
-  pattern: 'const char *kind = (isLua($CI)) ? funcnamefromcode($L, $CI, &$NAME) : NULL;
-
-    '
-  pattern-not: 'const char *kind = funcnamefromcall($L, $CI, &$NAME);
-
-    '
+  pattern: |
+    const char *kind = (isLua($CI)) ? funcnamefromcode($L, $CI, &$NAME) : NULL;
+  pattern-not: |
+    const char *kind = funcnamefromcall($L, $CI, &$NAME);
   languages:
   - c
-  message: 'The function `funcnamefromcode` is being used to retrieve a function name, which can lead to incorrect or incomplete
-    information about the calling function. This can cause issues in error handling and debugging, particularly in cases involving
-    finalizers or hooks. The fix replaces `funcnamefromcode` with `funcnamefromcall`, which provides a more reliable way to
-    determine the function name based on how it was called. Ensure to use `funcnamefromcall` for accurate function name resolution.
-
-    '
+  message: |
+    The function `funcnamefromcode` is being used to retrieve a function name, which can lead to incorrect or incomplete information about the calling function. This can cause issues in error handling and debugging, particularly in cases involving finalizers or hooks. The fix replaces `funcnamefromcode` with `funcnamefromcall`, which provides a more reliable way to determine the function name based on how it was called. Ensure to use `funcnamefromcall` for accurate function name resolution.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/066e0f93c4901e601d93e31fb700f8f66f95feb8
@@ -23,27 +17,25 @@ rules:
     technology:
     - c
 - id: vuln-lua-0bfc572e
-  pattern: 'global_State *$G;
-
+  pattern: |
+    global_State *$G;
     ...
-
     $G = G($L);
-
     ...
-
     $G->gcrunning = $VALUE;
-
-    '
-  pattern-not: "global_State *$G = G($L);\n...\nif ($G->gcstp & GCSTPGC)\n  return -1;\n...\n$G->gcstp = $VALUE;\n"
+  pattern-not: |
+    global_State *$G = G($L);
+    ...
+    if ($G->gcstp & GCSTPGC)
+      return -1;
+    ...
+    $G->gcstp = $VALUE;
   languages:
   - c
-  message: 'Detected unsafe modification of the garbage collector state without proper checks.
-
+  message: |
+    Detected unsafe modification of the garbage collector state without proper checks.
     This could lead to incorrect garbage collection behavior, potentially causing memory leaks or crashes.
-
-    Ensure the garbage collector state is checked and updated safely using the new ''gcstp'' mechanism.
-
-    '
+    Ensure the garbage collector state is checked and updated safely using the new 'gcstp' mechanism.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/0bfc572e51d9035a615ef6e9523f736c9ffa8e57
@@ -54,19 +46,14 @@ rules:
     technology:
     - c
 - id: vuln-lua-127e7a6c
-  pattern: 'markold($G, $G->survival, $G->reallyold)
-
-    '
-  pattern-not: 'markold($G, $G->allgc, $G->reallyold)
-
-    '
+  pattern: |
+    markold($G, $G->survival, $G->reallyold)
+  pattern-not: |
+    markold($G, $G->allgc, $G->reallyold)
   languages:
   - c
-  message: 'The function `markold` incorrectly uses `g->survival` instead of `g->allgc` for marking old objects. This can
-    lead to incomplete garbage collection, potentially causing memory leaks or undefined behavior. The fix is to use `g->allgc`
-    to ensure all objects are properly marked.
-
-    '
+  message: |
+    The function `markold` incorrectly uses `g->survival` instead of `g->allgc` for marking old objects. This can lead to incomplete garbage collection, potentially causing memory leaks or undefined behavior. The fix is to use `g->allgc` to ensure all objects are properly marked.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/127e7a6c8942b362aa3c6627f44d660a4fb75312
@@ -80,16 +67,19 @@ rules:
     technology:
     - c
 - id: vuln-lua-34affe7a
-  pattern: "if (getCcalls($L) <= CSTACKERR) {\n  luaE_freeCI($L);\n}\n"
-  pattern-not: "if (getCcalls($L) <= CSTACKERR) {\n  luaE_exitCcall($L);\n  luaE_enterCcall($L);\n}\n"
+  pattern: |
+    if (getCcalls($L) <= CSTACKERR) {
+      luaE_freeCI($L);
+    }
+  pattern-not: |
+    if (getCcalls($L) <= CSTACKERR) {
+      luaE_exitCcall($L);
+      luaE_enterCcall($L);
+    }
   languages:
   - c
-  message: 'Detected a vulnerable stack overflow handling pattern in Lua. The original code only frees the call info structures
-    when a stack overflow is detected, which may not properly handle the overflow condition. This could lead to undefined
-    behavior or crashes. The fix involves properly checking and handling the stack overflow by using `luaE_exitCcall` and
-    `luaE_enterCcall`. Update the code to use these functions to ensure proper stack overflow handling.
-
-    '
+  message: |
+    Detected a vulnerable stack overflow handling pattern in Lua. The original code only frees the call info structures when a stack overflow is detected, which may not properly handle the overflow condition. This could lead to undefined behavior or crashes. The fix involves properly checking and handling the stack overflow by using `luaE_exitCcall` and `luaE_enterCcall`. Update the code to use these functions to ensure proper stack overflow handling.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/34affe7a63fc5d842580a9f23616d057e17dfe27
@@ -103,19 +93,14 @@ rules:
     technology:
     - c
 - id: vuln-lua-597a53bb
-  pattern: '$G->gcstp = GCSTPGC;
-
-    '
-  pattern-not: '$G->gcstp |= GCSTPGC;
-
-    '
+  pattern: |
+    $G->gcstp = GCSTPGC;
+  pattern-not: |
+    $G->gcstp |= GCSTPGC;
   languages:
   - c
-  message: 'The vulnerability involves the incorrect use of assignment instead of bitwise OR operation for setting the GCSTPGC
-    flag. This can lead to unintended behavior in garbage collection, potentially causing memory leaks or crashes. Use the
-    bitwise OR operator (|=) to properly set the flag without overwriting other bits.
-
-    '
+  message: |
+    The vulnerability involves the incorrect use of assignment instead of bitwise OR operation for setting the GCSTPGC flag. This can lead to unintended behavior in garbage collection, potentially causing memory leaks or crashes. Use the bitwise OR operator (|=) to properly set the flag without overwriting other bits.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/597a53bbc681089d85b082b46c2e2428dec43b86
@@ -126,23 +111,16 @@ rules:
     technology:
     - c
 - id: vuln-lua-89aee84c
-  pattern: 'UpVal **$VAR1 = getupvalref($_, $_, $_, $VAR2);
-
+  pattern: |
+    UpVal **$VAR1 = getupvalref($_, $_, $_, $VAR2);
     UpVal **$VAR3 = getupvalref($_, $_, $_, NULL);
-
-    '
-  pattern-not: 'UpVal **$VAR1 = getupvalref($_, $_, $_);
-
+  pattern-not: |
+    UpVal **$VAR1 = getupvalref($_, $_, $_);
     UpVal **$VAR3 = getupvalref($_, $_, $_);
-
-    '
   languages:
   - c
-  message: 'The function `getupvalref` was called with an unnecessary `LClosure` pointer parameter, which could lead to undefined
-    behavior or security vulnerabilities. This issue was fixed by removing the unused parameter. Ensure that `getupvalref`
-    is called without the `LClosure` pointer parameter to avoid potential risks.
-
-    '
+  message: |
+    The function `getupvalref` was called with an unnecessary `LClosure` pointer parameter, which could lead to undefined behavior or security vulnerabilities. This issue was fixed by removing the unused parameter. Ensure that `getupvalref` is called without the `LClosure` pointer parameter to avoid potential risks.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/89aee84cbc9224f638f3b7951b306d2ee8ecb71e
@@ -156,20 +134,14 @@ rules:
     technology:
     - c
 - id: vuln-lua-cf613cdc
-  pattern: 'checkstackGC($L, $SIZE);
-
-    '
-  pattern-not: 'checkstackGCp($L, $SIZE - $DELTA, $FUNC);
-
-    '
+  pattern: |
+    checkstackGC($L, $SIZE);
+  pattern-not: |
+    checkstackGCp($L, $SIZE - $DELTA, $FUNC);
   languages:
   - c
-  message: 'The function `checkstackGC` is called without considering the delta value, which can lead to stack overflow vulnerabilities.
-    This vulnerability occurs because the stack size calculation does not account for the delta, potentially causing insufficient
-    stack space to be allocated. The fix involves using `checkstackGCp` with the correct delta calculation to ensure proper
-    stack space management. Always ensure that stack size calculations account for any necessary adjustments to prevent overflow.
-
-    '
+  message: |
+    The function `checkstackGC` is called without considering the delta value, which can lead to stack overflow vulnerabilities. This vulnerability occurs because the stack size calculation does not account for the delta, potentially causing insufficient stack space to be allocated. The fix involves using `checkstackGCp` with the correct delta calculation to ensure proper stack space management. Always ensure that stack size calculations account for any necessary adjustments to prevent overflow.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/cf613cdc6fa367257fc61c256f63d917350858b5
@@ -183,17 +155,17 @@ rules:
     technology:
     - c
 - id: vuln-lua-eb419994
-  pattern: 'checkstackp($L, $SIZE, $FUNC);
-
-    '
-  pattern-not: 'checkstackGCp($L, $SIZE, $FUNC);
-
-    '
+  pattern: |
+    checkstackp($L, $SIZE, $FUNC);
+  pattern-not: |
+    checkstackGCp($L, $SIZE, $FUNC);
   languages:
   - c
-  message: "The use of `checkstackp` instead of `checkstackGCp` can lead to stack overflow vulnerabilities. \nThe `checkstackGCp`\
-    \ function ensures proper garbage collection during stack checks, \npreventing potential memory corruption or undefined\
-    \ behavior. \nReplace `checkstackp` with `checkstackGCp` to ensure safe stack operations.\n"
+  message: |
+    The use of `checkstackp` instead of `checkstackGCp` can lead to stack overflow vulnerabilities.
+    The `checkstackGCp` function ensures proper garbage collection during stack checks,
+    preventing potential memory corruption or undefined behavior.
+    Replace `checkstackp` with `checkstackGCp` to ensure safe stack operations.
   severity: ERROR
   metadata:
     source-url: github.com/lua/lua/commit/eb41999461b6f428186c55abd95f4ce1a76217d5

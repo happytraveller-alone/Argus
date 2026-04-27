@@ -1,25 +1,19 @@
 rules:
 - id: vuln-paste-markdown-32b7ea3f
-  pattern: 'const $EL = document.createElement(''div'');
-
+  pattern: |
+    const $EL = document.createElement('div');
     $EL.innerHTML = $HTML;
-
-    let $TABLE = $EL.querySelector(''table'');
-
-    '
-  pattern-not: 'const $PARSER = new DOMParser();
-
-    const $PARSED_DOCUMENT = $PARSER.parseFromString($HTML, ''text/html'');
-
-    let $TABLE = $PARSED_DOCUMENT.querySelector(''table'');
-
-    '
+    let $TABLE = $EL.querySelector('table');
+  pattern-not: |
+    const $PARSER = new DOMParser();
+    const $PARSED_DOCUMENT = $PARSER.parseFromString($HTML, 'text/html');
+    let $TABLE = $PARSED_DOCUMENT.querySelector('table');
   languages:
   - typescript
-  message: "Directly assigning innerHTML to a dynamically created element can lead\
-    \ to XSS vulnerabilities. \nUse DOMParser to safely parse HTML strings instead\
-    \ of innerHTML. \nThis prevents malicious scripts from executing in the context\
-    \ of the application.\n"
+  message: |
+    Directly assigning innerHTML to a dynamically created element can lead to XSS vulnerabilities.
+    Use DOMParser to safely parse HTML strings instead of innerHTML.
+    This prevents malicious scripts from executing in the context of the application.
   severity: ERROR
   metadata:
     source-url: github.com/github/paste-markdown/commit/32b7ea3f29ae8f256f9d19768387be42678ddf30

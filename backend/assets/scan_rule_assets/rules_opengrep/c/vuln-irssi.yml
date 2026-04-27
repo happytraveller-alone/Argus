@@ -1,21 +1,27 @@
 rules:
 - id: vuln-irssi-38ba3ca2
-  pattern: "if (!IS_IRC_SERVER($SERVER))\n  return;\n\nif (!server_ischannel($SERVER, $TARGET))\n  return;\n\n$REC = IRC_SERVER($SERVER);\n\
-    if ($REC->$FIELD != NULL)\n  $FUNC($REC, NULL);\n"
-  pattern-not: "for ($TMP = $LIST; $TMP != NULL; $TMP = $NEXT) {\n  $REC = $TMP->data;\n  if (IS_IRC_SERVER($REC) && $REC->$FIELD\
-    \ != NULL)\n    $FUNC($REC, NULL);\n}\n"
+  pattern: |
+    if (!IS_IRC_SERVER($SERVER))
+      return;
+
+    if (!server_ischannel($SERVER, $TARGET))
+      return;
+
+    $REC = IRC_SERVER($SERVER);
+    if ($REC->$FIELD != NULL)
+      $FUNC($REC, NULL);
+  pattern-not: |
+    for ($TMP = $LIST; $TMP != NULL; $TMP = $NEXT) {
+      $REC = $TMP->data;
+      if (IS_IRC_SERVER($REC) && $REC->$FIELD != NULL)
+        $FUNC($REC, NULL);
+    }
   languages:
   - c
-  message: 'Missing proper iteration over server list and validation checks can lead to null pointer dereference or incorrect
-    server handling.
-
-    The vulnerability occurs when direct server access is used without proper iteration and validation, which was fixed by
-    adding a loop over the server list and proper IS_IRC_SERVER checks within the loop.
-
-    To fix this, ensure you iterate over the server list and validate each server using IS_IRC_SERVER before accessing its
-    fields.
-
-    '
+  message: |
+    Missing proper iteration over server list and validation checks can lead to null pointer dereference or incorrect server handling.
+    The vulnerability occurs when direct server access is used without proper iteration and validation, which was fixed by adding a loop over the server list and proper IS_IRC_SERVER checks within the loop.
+    To fix this, ensure you iterate over the server list and validate each server using IS_IRC_SERVER before accessing its fields.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/38ba3ca2c40fc8ccccec8dc3f360c4087e7dd498
@@ -29,18 +35,14 @@ rules:
     technology:
     - c
 - id: vuln-irssi-5a4e7ab6
-  pattern: 'g_hash_table_insert($SERVER->cap_supported, $KEY, $VAL);
-
-    '
-  pattern-not: 'g_hash_table_replace($SERVER->cap_supported, $KEY, $VAL);
-
-    '
+  pattern: |
+    g_hash_table_insert($SERVER->cap_supported, $KEY, $VAL);
+  pattern-not: |
+    g_hash_table_replace($SERVER->cap_supported, $KEY, $VAL);
   languages:
   - c
-  message: 'The use of `g_hash_table_insert` can lead to memory leaks or unexpected behavior if the key already exists in
-    the hash table. Use `g_hash_table_replace` instead, which ensures the old value is properly freed if the key exists.
-
-    '
+  message: |
+    The use of `g_hash_table_insert` can lead to memory leaks or unexpected behavior if the key already exists in the hash table. Use `g_hash_table_replace` instead, which ensures the old value is properly freed if the key exists.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/5a4e7ab659aba2855895c9f43e9a7a131f4e89b3
@@ -52,19 +54,26 @@ rules:
     technology:
     - c
 - id: vuln-irssi-5e263253
-  pattern: "if ($LIST == $NICK || $LIST->next == NULL) {\n  g_hash_table_remove($CHANNEL->nicks, $NICK->nick);\n  if ($LIST->next\
-    \ != NULL) {\n    g_hash_table_insert($CHANNEL->nicks, $NICK->next->nick, $NICK->next);\n  }\n}\n"
-  pattern-not: "if ($LIST == $NICK) {\n  $NEWLIST = $NICK->next;\n  $NEWLIST = $LIST;\n  g_hash_table_remove($CHANNEL->nicks,\
-    \ $NICK->nick);\n  if ($NEWLIST != NULL) {\n    g_hash_table_insert($CHANNEL->nicks, $NEWLIST->nick, $NEWLIST);\n  }\n\
-    }\n"
+  pattern: |
+    if ($LIST == $NICK || $LIST->next == NULL) {
+      g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
+      if ($LIST->next != NULL) {
+        g_hash_table_insert($CHANNEL->nicks, $NICK->next->nick, $NICK->next);
+      }
+    }
+  pattern-not: |
+    if ($LIST == $NICK) {
+      $NEWLIST = $NICK->next;
+      $NEWLIST = $LIST;
+      g_hash_table_remove($CHANNEL->nicks, $NICK->nick);
+      if ($NEWLIST != NULL) {
+        g_hash_table_insert($CHANNEL->nicks, $NEWLIST->nick, $NEWLIST);
+      }
+    }
   languages:
   - c
-  message: 'The vulnerability occurs due to improper handling of the linked list in the nicklist removal logic. The original
-    code fails to correctly update the hash table when removing a nick, potentially leading to memory corruption or undefined
-    behavior. The fix introduces a new variable `newlist` to properly manage the list updates. To fix this, ensure that the
-    list is correctly updated and that the hash table operations are performed safely.
-
-    '
+  message: |
+    The vulnerability occurs due to improper handling of the linked list in the nicklist removal logic. The original code fails to correctly update the hash table when removing a nick, potentially leading to memory corruption or undefined behavior. The fix introduces a new variable `newlist` to properly manage the list updates. To fix this, ensure that the list is correctly updated and that the hash table operations are performed safely.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/5e26325317c72a04c1610ad952974e206384d291
@@ -78,19 +87,14 @@ rules:
     technology:
     - c
 - id: vuln-irssi-c03057f3
-  pattern: 'special_push_collector(NULL);
-
-    '
-  pattern-not: 'special_push_collector($VAR);
-
-    '
+  pattern: |
+    special_push_collector(NULL);
+  pattern-not: |
+    special_push_collector($VAR);
   languages:
   - c
-  message: 'The function `special_push_collector` is called with a NULL argument, which can lead to undefined behavior or
-    crashes. This is dangerous because it can cause the application to terminate unexpectedly or behave in unpredictable ways.
-    To fix this, ensure that `special_push_collector` is called with a valid argument.
-
-    '
+  message: |
+    The function `special_push_collector` is called with a NULL argument, which can lead to undefined behavior or crashes. This is dangerous because it can cause the application to terminate unexpectedly or behave in unpredictable ways. To fix this, ensure that `special_push_collector` is called with a valid argument.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/c03057f36a2abd37a1176da2890d89116bab5139
@@ -104,15 +108,18 @@ rules:
     technology:
     - c
 - id: vuln-irssi-e32e9d63
-  pattern: "if (*$VAR == '\\\\') {\n  ...\n}\n"
-  pattern-not: "if (*$VAR == '\\\\' && $VAR[1] != '\\0') {\n  ...\n}\n"
+  pattern: |
+    if (*$VAR == '\\') {
+      ...
+    }
+  pattern-not: |
+    if (*$VAR == '\\' && $VAR[1] != '\0') {
+      ...
+    }
   languages:
   - c
-  message: 'This rule detects a potential out-of-bounds read vulnerability where a backslash character is checked without
-    ensuring the next character is not the null terminator. This can lead to reading beyond the intended memory boundary,
-    causing undefined behavior or crashes. Always check for the null terminator before accessing the next character.
-
-    '
+  message: |
+    This rule detects a potential out-of-bounds read vulnerability where a backslash character is checked without ensuring the next character is not the null terminator. This can lead to reading beyond the intended memory boundary, causing undefined behavior or crashes. Always check for the null terminator before accessing the next character.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/e32e9d63c67ab95ef0576154680a6c52334b97af
@@ -124,17 +131,17 @@ rules:
     technology:
     - c
 - id: vuln-irssi-fa850840
-  pattern: "if (!(dest->level & MSGLEVEL_PUBLIC))\n  return;\n...\nprint_netjoins(rec, dest->target);\n"
-  pattern-not: 'print_netjoins(rec, NULL);
-
-    '
+  pattern: |
+    if (!(dest->level & MSGLEVEL_PUBLIC))
+      return;
+    ...
+    print_netjoins(rec, dest->target);
+  pattern-not: |
+    print_netjoins(rec, NULL);
   languages:
   - c
-  message: 'The code checks for a specific message level and uses the target directly, which can lead to potential security
-    vulnerabilities. The patch replaces the target with NULL to avoid misuse. Ensure that the target parameter is handled
-    safely.
-
-    '
+  message: |
+    The code checks for a specific message level and uses the target directly, which can lead to potential security vulnerabilities. The patch replaces the target with NULL to avoid misuse. Ensure that the target parameter is handled safely.
   severity: ERROR
   metadata:
     source-url: github.com/irssi/irssi/commit/fa8508404f4c4a02749cae5148662e2322c2abf0

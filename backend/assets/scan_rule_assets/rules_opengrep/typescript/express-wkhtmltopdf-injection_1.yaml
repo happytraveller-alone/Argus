@@ -2,8 +2,7 @@ rules:
 - id: express-wkhtmltopdf-injection_1
   languages:
   - typescript
-  message: If unverified user data can reach the `wkhtmltopdf` methods it can result
-    in Server-Side Request Forgery vulnerabilities
+  message: If unverified user data can reach the `wkhtmltopdf` methods it can result in Server-Side Request Forgery vulnerabilities
   metadata:
     category: security
     confidence: LOW
@@ -24,11 +23,9 @@ rules:
   mode: taint
   pattern-sinks:
   - patterns:
-    - pattern-inside: '$WK = require(''wkhtmltopdf'');
-
+    - pattern-inside: |
+        $WK = require('wkhtmltopdf');
         ...
-
-        '
     - pattern: $WK($SINK,...)
     - focus-metavariable: $SINK
   pattern-sources:
@@ -51,14 +48,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

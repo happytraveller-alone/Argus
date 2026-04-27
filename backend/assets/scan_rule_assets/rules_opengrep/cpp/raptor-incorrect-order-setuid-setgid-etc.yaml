@@ -12,111 +12,66 @@ rules:
     - 'CWE-696: Incorrect Behavior Order'
     - 'CWE-269: Improper Privilege Management'
     - 'CWE-284: Improper Access Control'
-  message: A compromised process might be able to regain elevated group privileges
-    if set(e)gid() is called after set(e)uid(). A similar case is when  privileges
-    are temporarily dropped with seteuid() and then setuid() or  seteuid() are called
-    from while under unprivileged user.
+  message: A compromised process might be able to regain elevated group privileges if set(e)gid() is called after set(e)uid(). A similar case is when  privileges are temporarily dropped with seteuid() and then setuid() or  seteuid() are called from while under unprivileged user.
   severity: ERROR
   languages:
   - cpp
   pattern-either:
   - patterns:
-    - pattern: 'setuid(...);
-
+    - pattern: |
+        setuid(...);
         ...
-
         setgid(...);
-
-        '
-    - pattern-not: 'setuid(0);
-
+    - pattern-not: |
+        setuid(0);
         ...
-
         setgid(...);
-
-        '
   - patterns:
-    - pattern: 'seteuid(...);
-
+    - pattern: |
+        seteuid(...);
         ...
-
         setegid(...);
-
-        '
-    - pattern-not: 'seteuid(0);
-
-        ...
-
-        setegid(...);
-
-        '
-    - pattern-not-inside: 'seteuid(...);
-
-        ...
-
+    - pattern-not: |
         seteuid(0);
-
         ...
-
         setegid(...);
-
-        '
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        setegid(...);
   - patterns:
-    - pattern: 'seteuid(...);
-
+    - pattern: |
+        seteuid(...);
         ...
-
         setuid(...);
-
-        '
-    - pattern-not: 'seteuid(0);
-
-        ...
-
-        setuid(...);
-
-        '
-    - pattern-not-inside: 'seteuid(...);
-
-        ...
-
+    - pattern-not: |
         seteuid(0);
-
         ...
-
         setuid(...);
-
-        '
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        setuid(...);
   - patterns:
-    - pattern: 'seteuid(...);
-
-        ...
-
+    - pattern: |
         seteuid(...);
-
-        '
-    - pattern-not: 'seteuid(0);
-
         ...
-
         seteuid(...);
-
-        '
-    - pattern-not: 'seteuid(...);
-
-        ...
-
+    - pattern-not: |
         seteuid(0);
-
-        '
-    - pattern-not-inside: 'seteuid(...);
-
         ...
-
-        seteuid(0);
-
-        ...
-
         seteuid(...);
-
-        '
+    - pattern-not: |
+        seteuid(...);
+        ...
+        seteuid(0);
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        seteuid(...);

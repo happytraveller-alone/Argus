@@ -3,62 +3,70 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: 'cookies[...]
-
-        '
+    - pattern: |
+        cookies[...]
     - patterns:
-      - pattern: 'cookies. ... .$PROPERTY[...]
-
-          '
+      - pattern: |
+          cookies. ... .$PROPERTY[...]
       - metavariable-regex:
           metavariable: $PROPERTY
           regex: (?!signed|encrypted)
-    - pattern: 'params[...]
-
-        '
-    - pattern: 'request.env[...]
-
-        '
+    - pattern: |
+        params[...]
+    - pattern: |
+        request.env[...]
   pattern-sinks:
   - patterns:
     - pattern: $X
     - pattern-either:
-      - pattern-inside: '$X. ... .to_proc
-
-          '
+      - pattern-inside: |
+          $X. ... .to_proc
       - patterns:
-        - pattern-inside: '$Y.method($Z)
-
-            '
+        - pattern-inside: |
+            $Y.method($Z)
         - focus-metavariable: $Z
       - patterns:
-        - pattern-inside: '$Y.tap($Z)
-
-            '
+        - pattern-inside: |
+            $Y.tap($Z)
         - focus-metavariable: $Z
       - patterns:
-        - pattern-inside: '$Y.tap{ |$ANY| $Z }
-
-            '
+        - pattern-inside: |
+            $Y.tap{ |$ANY| $Z }
         - focus-metavariable: $Z
-  message: "The application was found calling a reflection method with user-controllable\n\
-    input. This practice can lead to unauthorized alteration of program behavior,\
-    \ \nincluding the potential execution of arbitrary code. Reflection methods \n\
-    allow dynamic execution of code, which is powerful but risky if not properly \n\
-    sanitized, as it could enable attackers to execute unintended methods or \nblocks.\n\
-    \nRemediation:\n- Validate and sanitize input: Ensure that any user input is strictly\
-    \ \nvalidated against a whitelist of allowed values before being passed to \n\
-    reflection methods. Avoid direct mapping of user input to method names \nor proc\
-    \ conversions.\n- Limit reflection use: Minimize the use of reflection with user\
-    \ input. \nPrefer direct method calls or other non-reflective approaches whenever\
-    \ \npossible.\n- Use safer alternatives: When dynamic behavior is necessary, use\
-    \ controlled \nmethods like `public_send` with proper input validation to reduce\
-    \ risk.\n\nSecure Code Example:\n```\n# Assume user input is to invoke a method\
-    \ on an object\nuser_method = params[:method_name]\n\n# Define an allow list of\
-    \ permissible methods\nallowed_methods = ['safe_method_1', 'safe_method_2']\n\n\
-    if allowed_methods.include?(user_method)\n    # Using public_send for controlled\
-    \ method invocation\n    result = my_object.public_send(user_method)\nelse\n \
-    \   raise 'Unauthorized method access'\nend\n```\n"
+  message: |
+    The application was found calling a reflection method with user-controllable
+    input. This practice can lead to unauthorized alteration of program behavior,
+    including the potential execution of arbitrary code. Reflection methods
+    allow dynamic execution of code, which is powerful but risky if not properly
+    sanitized, as it could enable attackers to execute unintended methods or
+    blocks.
+
+    Remediation:
+    - Validate and sanitize input: Ensure that any user input is strictly
+    validated against a whitelist of allowed values before being passed to
+    reflection methods. Avoid direct mapping of user input to method names
+    or proc conversions.
+    - Limit reflection use: Minimize the use of reflection with user input.
+    Prefer direct method calls or other non-reflective approaches whenever
+    possible.
+    - Use safer alternatives: When dynamic behavior is necessary, use controlled
+    methods like `public_send` with proper input validation to reduce risk.
+
+    Secure Code Example:
+    ```
+    # Assume user input is to invoke a method on an object
+    user_method = params[:method_name]
+
+    # Define an allow list of permissible methods
+    allowed_methods = ['safe_method_1', 'safe_method_2']
+
+    if allowed_methods.include?(user_method)
+        # Using public_send for controlled method invocation
+        result = my_object.public_send(user_method)
+    else
+        raise 'Unauthorized method access'
+    end
+    ```
   languages:
   - ruby
   severity: ERROR

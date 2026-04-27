@@ -1,15 +1,19 @@
 rules:
 - id: vuln-jaeger-360c38be
-  pattern: "type $STRUCT struct {\n    Password string `mapstructure:\"password\"\
-    `\n}\n"
-  pattern-not: "type $STRUCT struct {\n    Password string `mapstructure:\"password\"\
-    \ json:\"-\"`\n}\n"
+  pattern: |
+    type $STRUCT struct {
+        Password string `mapstructure:"password"`
+    }
+  pattern-not: |
+    type $STRUCT struct {
+        Password string `mapstructure:"password" json:"-"`
+    }
   languages:
   - go
-  message: "Sensitive fields like passwords should not be exposed in JSON output.\
-    \ \nAdding `json:\"-\"` tag prevents the field from being serialized, reducing\
-    \ the risk of accidental exposure in logs or API responses.\nThis vulnerability\
-    \ could lead to sensitive information disclosure.\n"
+  message: |
+    Sensitive fields like passwords should not be exposed in JSON output.
+    Adding `json:"-"` tag prevents the field from being serialized, reducing the risk of accidental exposure in logs or API responses.
+    This vulnerability could lead to sensitive information disclosure.
   severity: ERROR
   metadata:
     source-url: github.com/jaegertracing/jaeger/commit/360c38bec3f9718ebba7ddbf0b409b05995f3ace

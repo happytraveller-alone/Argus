@@ -1,7 +1,6 @@
 rules:
 - id: scikit-joblib-load
-  message: Scikit `joblib` uses pickle under the hood. Functions reliant on pickle
-    can result in arbitrary code execution. Consider using `skops` instead.
+  message: Scikit `joblib` uses pickle under the hood. Functions reliant on pickle can result in arbitrary code execution. Consider using `skops` instead.
   languages:
   - python
   severity: ERROR
@@ -15,8 +14,7 @@ rules:
     impact: HIGH
     technology:
     - scikit
-    description: Potential arbitrary code execution from `SciKit.Joblib` functions
-      reliant on pickling
+    description: Potential arbitrary code execution from `SciKit.Joblib` functions reliant on pickling
     references:
     - https://scikit-learn.org/stable/model_persistence.html
   patterns:

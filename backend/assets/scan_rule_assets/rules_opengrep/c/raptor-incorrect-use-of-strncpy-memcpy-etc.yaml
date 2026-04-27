@@ -12,9 +12,7 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-125: Out-of-bounds Read'
-  message: The software uses the size of a source buffer when reading from or writing
-    to a destination buffer, which may cause it to access memory that is outside of
-    the bounds of the buffer.
+  message: The software uses the size of a source buffer when reading from or writing to a destination buffer, which may cause it to access memory that is outside of the bounds of the buffer.
   severity: ERROR
   languages:
   - c
@@ -34,16 +32,12 @@ rules:
         - pattern: wmemcpy
         - pattern: wmemmove
     - pattern-either:
-      - pattern-inside: '$_ $SRC[$LEN];
-
+      - pattern-inside: |
+          $_ $SRC[$LEN];
           ...
-
-          '
-      - pattern-inside: '$_ $SRC[$LEN] = $_;
-
+      - pattern-inside: |
+          $_ $SRC[$LEN] = $_;
           ...
-
-          '
   - patterns:
     - pattern: $FUN($_, $SRC, <... $SRC ...>)
     - pattern-not: $FUN($_, "...", <... $SRC ...>)

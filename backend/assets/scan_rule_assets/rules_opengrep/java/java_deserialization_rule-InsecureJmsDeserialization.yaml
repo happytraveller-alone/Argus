@@ -3,29 +3,49 @@ rules:
   languages:
   - java
   patterns:
-  - pattern-inside: "class $JMS_LISTENER implements MessageListener {\n  ...\n  public\
-      \ void onMessage(Message $JMS_MSG) {\n      ...\n  }\n}\n"
+  - pattern-inside: |
+      class $JMS_LISTENER implements MessageListener {
+        ...
+        public void onMessage(Message $JMS_MSG) {
+            ...
+        }
+      }
   - pattern: $Y.getObject(...);
-  message: "Deserialization of untrusted JMS ObjectMessage can lead to arbitrary \n\
-    code execution. This vulnerability occurs when `ObjectMessage.getObject()` \n\
-    is called to deserialize the payload of an ObjectMessage, potentially \nallowing\
-    \ remote attackers to execute arbitrary code with the permissions \nof the JMS\
-    \ MessageListener application. \n\nTo mitigate the issue, avoid deserialization\
-    \ of untrusted data and \nconsider alternative message formats or explicit whitelisting\
-    \ of \nallowable classes for deserialization.\n\nTo implement allowlisting, override\
-    \ the ObjectInputStream#resolveClass() \nmethod to limit deserialization to allowed\
-    \ classes only. This prevents \ndeserialization of any class except those explicitly\
-    \ permitted, such as \nin the following example that restricts deserialization\
-    \ to the Bicycle \nclass only:\n\n```\n// Code from https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html\n\
-    public class LookAheadObjectInputStream extends ObjectInputStream {\n    public\
-    \ LookAheadObjectInputStream(InputStream inputStream) throws IOException {\n \
-    \       super(inputStream);\n    }\n    /**\n    * Only deserialize instances\
-    \ of our expected Bicycle class\n    */\n    @Override\n    protected Class<?>\
-    \ resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException\
-    \ {\n        if (!desc.getName().equals(Bicycle.class.getName())) {\n        \
-    \    throw new InvalidClassException(\"Unauthorized deserialization attempt\"\
-    , desc.getName());\n        }\n        return super.resolveClass(desc);\n    }\n\
-    }\n```\n"
+  message: |
+    Deserialization of untrusted JMS ObjectMessage can lead to arbitrary
+    code execution. This vulnerability occurs when `ObjectMessage.getObject()`
+    is called to deserialize the payload of an ObjectMessage, potentially
+    allowing remote attackers to execute arbitrary code with the permissions
+    of the JMS MessageListener application.
+
+    To mitigate the issue, avoid deserialization of untrusted data and
+    consider alternative message formats or explicit whitelisting of
+    allowable classes for deserialization.
+
+    To implement allowlisting, override the ObjectInputStream#resolveClass()
+    method to limit deserialization to allowed classes only. This prevents
+    deserialization of any class except those explicitly permitted, such as
+    in the following example that restricts deserialization to the Bicycle
+    class only:
+
+    ```
+    // Code from https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    public class LookAheadObjectInputStream extends ObjectInputStream {
+        public LookAheadObjectInputStream(InputStream inputStream) throws IOException {
+            super(inputStream);
+        }
+        /**
+        * Only deserialize instances of our expected Bicycle class
+        */
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+            if (!desc.getName().equals(Bicycle.class.getName())) {
+                throw new InvalidClassException("Unauthorized deserialization attempt", desc.getName());
+            }
+            return super.resolveClass(desc);
+        }
+    }
+    ```
   metadata:
     cwe: CWE-502
     owasp:

@@ -2,18 +2,12 @@ rules:
 - id: tainted-sql-string
   languages:
   - go
-  message: User data flows into this manually-constructed SQL string. User data can
-    be safely inserted into SQL strings using prepared statements or an object-relational
-    mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL
-    injection, which could let an attacker steal or manipulate data from the database.
-    Instead, use prepared statements (`db.Query("SELECT * FROM t WHERE id = ?", id)`)
-    or a safe library.
+  message: User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate data from the database. Instead, use prepared statements (`db.Query("SELECT * FROM t WHERE id = ?", id)`) or a safe library.
   options:
     interfile: true
   metadata:
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
@@ -36,12 +30,10 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern: '($REQUEST : *http.Request).$ANYTHING
-
-          '
-      - pattern: '($REQUEST : http.Request).$ANYTHING
-
-          '
+      - pattern: |
+          ($REQUEST : *http.Request).$ANYTHING
+      - pattern: |
+          ($REQUEST : http.Request).$ANYTHING
     - metavariable-regex:
         metavariable: $ANYTHING
         regex: ^(BasicAuth|Body|Cookie|Cookies|Form|FormValue|GetBody|Host|MultipartReader|ParseForm|ParseMultipartForm|PostForm|PostFormValue|Referer|RequestURI|Trailer|TransferEncoding|UserAgent|URL)$
@@ -50,32 +42,23 @@ rules:
     - pattern-either:
       - patterns:
         - pattern-either:
-          - pattern: '"$SQLSTR" + ...
-
-              '
+          - pattern: |
+              "$SQLSTR" + ...
           - patterns:
-            - pattern-inside: '$VAR = "$SQLSTR";
-
+            - pattern-inside: |
+                $VAR = "$SQLSTR";
                 ...
-
-                '
             - pattern: $VAR += ...
           - patterns:
-            - pattern-inside: 'var $SB strings.Builder
-
+            - pattern-inside: |
+                var $SB strings.Builder
                 ...
-
-                '
-            - pattern-inside: '$SB.WriteString("$SQLSTR")
-
+            - pattern-inside: |
+                $SB.WriteString("$SQLSTR")
                 ...
-
                 $SB.String(...)
-
-                '
-            - pattern: '$SB.WriteString(...)
-
-                '
+            - pattern: |
+                $SB.WriteString(...)
         - metavariable-regex:
             metavariable: $SQLSTR
             regex: (?i)(select|delete|insert|create|update|alter|drop).*
@@ -90,6 +73,5 @@ rules:
   pattern-sanitizers:
   - pattern-either:
     - pattern: strconv.Atoi(...)
-    - pattern: '($X: bool)
-
-        '
+    - pattern: |
+        ($X: bool)

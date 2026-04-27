@@ -1,15 +1,12 @@
 rules:
 - id: vuln-pgadmin4-46a8c1ad
-  pattern: 'from eventlet.green import subprocess
-
-    '
-  pattern-not: 'import subprocess
-
-    '
+  pattern: |
+    from eventlet.green import subprocess
+  pattern-not: |
+    import subprocess
   languages:
   - python
-  message: Detected use of eventlet.green.subprocess instead of the standard subprocess module. Using eventlet's subprocess
-    can lead to unexpected behavior and security issues. Use the standard subprocess module instead.
+  message: Detected use of eventlet.green.subprocess instead of the standard subprocess module. Using eventlet's subprocess can lead to unexpected behavior and security issues. Use the standard subprocess module instead.
   severity: ERROR
   metadata:
     source-url: github.com/pgadmin-org/pgadmin4/commit/46a8c1ad6a0797ede9ddca1ebe0fc4e2aeba9073
@@ -21,16 +18,13 @@ rules:
     technology:
     - python
 - id: vuln-pgadmin4-a1c7265c
-  pattern: 'type($VAR) == $TYPE
-
-    '
-  pattern-not: 'isinstance($VAR, $TYPE)
-
-    '
+  pattern: |
+    type($VAR) == $TYPE
+  pattern-not: |
+    isinstance($VAR, $TYPE)
   languages:
   - python
-  message: Using 'type() ==' for type checking is unsafe. Use 'isinstance()' instead as it handles inheritance and is more
-    robust.
+  message: Using 'type() ==' for type checking is unsafe. Use 'isinstance()' instead as it handles inheritance and is more robust.
   severity: ERROR
   metadata:
     source-url: github.com/pgadmin-org/pgadmin4/commit/a1c7265c41baba3a74d1812ae0c9d86f4860eed8
@@ -42,14 +36,17 @@ rules:
     technology:
     - python
 - id: vuln-pgadmin4-fbbbfe22
-  pattern: "if 'utility_path' in $DATA and $DATA['utility_path'] is not None:\n    ...\n"
-  pattern-not: "if 'utility_path' in $DATA and $DATA['utility_path'] is not None and \\\n    Path($CONFIG.STORAGE_DIR) !=\
-    \ Path($DATA['utility_path']) and \\\n        Path($CONFIG.STORAGE_DIR) not in Path($DATA['utility_path']).parents:\n\
-    \    ...\n"
+  pattern: |
+    if 'utility_path' in $DATA and $DATA['utility_path'] is not None:
+        ...
+  pattern-not: |
+    if 'utility_path' in $DATA and $DATA['utility_path'] is not None and \
+        Path($CONFIG.STORAGE_DIR) != Path($DATA['utility_path']) and \
+            Path($CONFIG.STORAGE_DIR) not in Path($DATA['utility_path']).parents:
+        ...
   languages:
   - python
-  message: Detected unsafe utility path validation. The utility path should not be within the storage directory to prevent
-    security vulnerabilities.
+  message: Detected unsafe utility path validation. The utility path should not be within the storage directory to prevent security vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/pgadmin-org/pgadmin4/commit/fbbbfe22dd468bcfef1e1f833ec32289a6e56a8b

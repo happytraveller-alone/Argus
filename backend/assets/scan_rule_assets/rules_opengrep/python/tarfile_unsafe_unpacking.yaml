@@ -5,18 +5,16 @@ rules:
   severity: ERROR
   message: Unsafe Tarfile Unpacking
   patterns:
-  - pattern-inside: 'import tarfile
-
+  - pattern-inside: |
+      import tarfile
       ...
-
-      '
   - pattern-either:
-    - pattern-inside: "with tarfile.open($FILE, ...) as $FD:\n  ...\n"
-    - pattern-inside: '$FD = tarfile.open($FILE, ...)
-
+    - pattern-inside: |
+        with tarfile.open($FILE, ...) as $FD:
+          ...
+    - pattern-inside: |
+        $FD = tarfile.open($FILE, ...)
         ...
-
-        '
   - pattern-either:
     - patterns:
       - pattern: $FD.extract($MEMBER, ...)
@@ -24,9 +22,14 @@ rules:
       - pattern: $FD.extract($MEMBER, ..., ..., ...)
       - pattern: $FD.extract($MEMBER, ..., ..., ..., ...)
       - pattern-either:
-        - pattern-inside: "$FILELIST = $FD.getmembers()\n...\nfor $MEMBER in $FILELIST:\n\
-            \  ...\n"
-        - pattern-inside: "for $MEMBER in $FD.getmembers():\n  ...\n"
+        - pattern-inside: |
+            $FILELIST = $FD.getmembers()
+            ...
+            for $MEMBER in $FILELIST:
+              ...
+        - pattern-inside: |
+            for $MEMBER in $FD.getmembers():
+              ...
     - pattern: $FD.extractall(..., ..., ..., ..., ...)
   metadata:
     cwe:

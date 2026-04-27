@@ -2,24 +2,15 @@ rules:
 - id: c_buffer_rule-strcpyA-strcpyW
   languages:
   - c
-  message: 'The `StrCpy` family of functions do not guarantee the final string to
-    be null terminated.
-
+  message: |
+    The `StrCpy` family of functions do not guarantee the final string to be null terminated.
     Consider
-
     using one of the following alternatives `StringCbCopy`, `StringCbCopyEx`, `StringCbCopyN`,
-
     `StringCbCopyNEx`, `StringCchCopy`, `StringCchCopyEx`, `StringCchCopyN`, or `StringCchCopyNEx`.
 
-
-    If developing for C Runtime Library (CRT), more secure versions of these functions
-    should be
-
+    If developing for C Runtime Library (CRT), more secure versions of these functions should be
     used, see:
-
     https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strncpy-s-strncpy-s-l-wcsncpy-s-wcsncpy-s-l-mbsncpy-s-mbsncpy-s-l?view=msvc-170
-
-    '
   metadata:
     shortDescription: Insecure string processing function
     cwe: CWE-120

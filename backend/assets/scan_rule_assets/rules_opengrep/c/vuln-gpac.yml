@@ -1,26 +1,23 @@
 rules:
 - id: vuln-gpac-0fc71487
-  pattern: 'char $VAR[500];
-
+  pattern: |
+    char $VAR[500];
     ...
-
     $VAR[...] = ...;
-
-    '
-  pattern-not: "char $VAR[1025];\n...\n$VAR[1024] = 0;\nif (len>1024) {\n  ...\n}\n"
+  pattern-not: |
+    char $VAR[1025];
+    ...
+    $VAR[1024] = 0;
+    if (len>1024) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential buffer overflow vulnerability due to insufficient buffer size.
-
-    The original code uses a fixed-size buffer of 500 bytes, which may not be sufficient for all inputs, leading to buffer
-    overflow.
-
+  message: |
+    Detected a potential buffer overflow vulnerability due to insufficient buffer size.
+    The original code uses a fixed-size buffer of 500 bytes, which may not be sufficient for all inputs, leading to buffer overflow.
     This can be exploited to execute arbitrary code or cause a denial of service.
-
-    To fix this, increase the buffer size to 1025 bytes and add a length check to ensure the input does not exceed the buffer
-    size.
-
-    '
+    To fix this, increase the buffer size to 1025 bytes and add a length check to ensure the input does not exceed the buffer size.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/0fc714872ba4536a1190f93aa278b6e08f8c60df
@@ -34,16 +31,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-14ec709a
-  pattern: "if (version == 1 && read->jpeg_hdr_size) {\n  ...\n}\n"
-  pattern-not: "if (version == 1 && read->jpeg_hdr_size >= 2) {\n  ...\n}\n"
+  pattern: |
+    if (version == 1 && read->jpeg_hdr_size) {
+      ...
+    }
+  pattern-not: |
+    if (version == 1 && read->jpeg_hdr_size >= 2) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential integer overflow vulnerability. The condition `read->jpeg_hdr_size` without a lower bound
-    check can lead to buffer overflows or undefined behavior. Always ensure proper bounds checking when dealing with sizes
-    or lengths, especially in security-sensitive contexts. Fix by adding a minimum size check, e.g., `read->jpeg_hdr_size
-    >= 2`.
-
-    '
+  message: |
+    Detected a potential integer overflow vulnerability. The condition `read->jpeg_hdr_size` without a lower bound check can lead to buffer overflows or undefined behavior. Always ensure proper bounds checking when dealing with sizes or lengths, especially in security-sensitive contexts. Fix by adding a minimum size check, e.g., `read->jpeg_hdr_size >= 2`.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/14ec709a1ffae23ad777c37320290caa0a754341
@@ -55,27 +54,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-2191e66a
-  pattern: 'GF_LOG($LOG_LEVEL, $LOG_CATEGORY, ("[SVG Parsing] Cannot parse attribute %s\n", $INFO_NAME ? $INFO_NAME : ""));
-
+  pattern: |
+    GF_LOG($LOG_LEVEL, $LOG_CATEGORY, ("[SVG Parsing] Cannot parse attribute %s\n", $INFO_NAME ? $INFO_NAME : ""));
     break;
-
-    '
-  pattern-not: 'GF_LOG($LOG_LEVEL, $LOG_CATEGORY, ("[SVG Parsing] Cannot parse attribute \"%s\"\n", $INFO_NAME ? $INFO_NAME
-    : ""));
-
+  pattern-not: |
+    GF_LOG($LOG_LEVEL, $LOG_CATEGORY, ("[SVG Parsing] Cannot parse attribute \"%s\"\n", $INFO_NAME ? $INFO_NAME : ""));
     return GF_OK;
-
-    '
   languages:
   - c
-  message: 'The SVG parser fails to properly handle attribute parsing errors by only logging and breaking, without proper
-    error handling.
-
+  message: |
+    The SVG parser fails to properly handle attribute parsing errors by only logging and breaking, without proper error handling.
     This can lead to incomplete error recovery and potential security issues when processing malformed SVG files.
-
     Fix by returning an error code (GF_OK) after logging the error and adding proper error handling.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/2191e66aa7df750e8ef01781b1930bea87b713bb
@@ -89,17 +79,15 @@ rules:
     technology:
     - c
 - id: vuln-gpac-328c6d68
-  pattern: '$ENT->internal_type = GF_ISOM_SAMPLE_ENTRY_MP4S;
-
-    '
-  pattern-not: "if ($ENT->internal_type != GF_ISOM_SAMPLE_ENTRY_MP4S)\n  return GF_ISOM_INVALID_MEDIA;\n"
+  pattern: |
+    $ENT->internal_type = GF_ISOM_SAMPLE_ENTRY_MP4S;
+  pattern-not: |
+    if ($ENT->internal_type != GF_ISOM_SAMPLE_ENTRY_MP4S)
+      return GF_ISOM_INVALID_MEDIA;
   languages:
   - c
-  message: 'Setting internal_type to GF_ISOM_SAMPLE_ENTRY_MP4S without proper validation can lead to media processing vulnerabilities.
-    The patch adds validation checks before using the internal_type field. Always validate media type before processing to
-    prevent invalid media handling.
-
-    '
+  message: |
+    Setting internal_type to GF_ISOM_SAMPLE_ENTRY_MP4S without proper validation can lead to media processing vulnerabilities. The patch adds validation checks before using the internal_type field. Always validate media type before processing to prevent invalid media handling.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/328c6d682698fdb9878dbb4f282963d42c538c01
@@ -111,15 +99,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-348d7722
-  pattern: "if (gf_bs_available($BS) < $SIZE) {\n  ...\n}\n"
-  pattern-not: "if ((gf_bs_available($BS) < $SIZE) || ($SIZE > $MAX_SIZE)) {\n  ...\n}\n"
+  pattern: |
+    if (gf_bs_available($BS) < $SIZE) {
+      ...
+    }
+  pattern-not: |
+    if ((gf_bs_available($BS) < $SIZE) || ($SIZE > $MAX_SIZE)) {
+      ...
+    }
   languages:
   - c
-  message: 'Missing size validation check can lead to buffer overflow. The code checks if there is enough data available but
-    fails to validate if the requested size exceeds the maximum allowed buffer size. This can lead to memory corruption or
-    crashes. Fix by adding a size check against a defined maximum buffer size constant.
-
-    '
+  message: |
+    Missing size validation check can lead to buffer overflow. The code checks if there is enough data available but fails to validate if the requested size exceeds the maximum allowed buffer size. This can lead to memory corruption or crashes. Fix by adding a size check against a defined maximum buffer size constant.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/348d7722c1e90c7811b43b0eed5c2aca2cb8a717
@@ -132,19 +123,21 @@ rules:
     technology:
     - c
 - id: vuln-gpac-362fc486
-  pattern: "if ($PTR->num_views) {\n  ...\n}\n"
-  pattern-not: "if ($PTR->views) {\n  ...\n}\n"
+  pattern: |
+    if ($PTR->num_views) {
+      ...
+    }
+  pattern-not: |
+    if ($PTR->views) {
+      ...
+    }
   languages:
   - c
-  message: 'The code checks for the existence of views using ''num_views'' instead of ''views''.
-
-    This could lead to null pointer dereference or incorrect logic since ''num_views''
-
-    might be non-zero even when ''views'' is null. Always check the pointer itself
-
+  message: |
+    The code checks for the existence of views using 'num_views' instead of 'views'.
+    This could lead to null pointer dereference or incorrect logic since 'num_views'
+    might be non-zero even when 'views' is null. Always check the pointer itself
     rather than just its size/count field.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/362fc486b5c0eea04f26793d5623f6a9272bd85a
@@ -157,13 +150,21 @@ rules:
     technology:
     - c
 - id: vuln-gpac-3661da28
-  pattern: "if ($SAMPLE_INDEX > $TRF_SDTP->sampleCount) {\n  ...\n}\n"
-  pattern-not: "if ($SAMPLE_INDEX >= $TRF_SDTP->sampleCount) {\n  ...\n}\n"
+  pattern: |
+    if ($SAMPLE_INDEX > $TRF_SDTP->sampleCount) {
+      ...
+    }
+  pattern-not: |
+    if ($SAMPLE_INDEX >= $TRF_SDTP->sampleCount) {
+      ...
+    }
   languages:
   - c
-  message: "This rule detects an off-by-one error in the comparison of sample_index with traf->sdtp->sampleCount. \nThe original\
-    \ code used a '>' comparison, which could lead to accessing an out-of-bounds index. \nThis vulnerability can cause undefined\
-    \ behavior or crashes. \nThe fix changes the comparison to '>=' to properly handle the boundary condition.\n"
+  message: |
+    This rule detects an off-by-one error in the comparison of sample_index with traf->sdtp->sampleCount.
+    The original code used a '>' comparison, which could lead to accessing an out-of-bounds index.
+    This vulnerability can cause undefined behavior or crashes.
+    The fix changes the comparison to '>=' to properly handle the boundary condition.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/3661da280b3eba75490e75ff20ad440c66e24de9
@@ -175,22 +176,33 @@ rules:
     technology:
     - c
 - id: vuln-gpac-3fcf66c6
-  pattern: "$SIZE = (u32) $PTR->size;\n$STR = (char *)gf_malloc(sizeof(char)*$SIZE);\n...\nwhile ($SIZE) {\n  $STR[$I] = gf_bs_read_u8($BS);\n\
-    \  $SIZE--;\n  if (!$STR[$I])\n    break;\n  $I++;\n}\nif ($I) $PTR->config = gf_strdup($STR);\ngf_free($STR);\n"
-  pattern-not: '$PTR->config = (char *)gf_malloc(sizeof(char)*((u32) $PTR->size+1));
-
+  pattern: |
+    $SIZE = (u32) $PTR->size;
+    $STR = (char *)gf_malloc(sizeof(char)*$SIZE);
+    ...
+    while ($SIZE) {
+      $STR[$I] = gf_bs_read_u8($BS);
+      $SIZE--;
+      if (!$STR[$I])
+        break;
+      $I++;
+    }
+    if ($I) $PTR->config = gf_strdup($STR);
+    gf_free($STR);
+  pattern-not: |
+    $PTR->config = (char *)gf_malloc(sizeof(char)*((u32) $PTR->size+1));
     gf_bs_read_data($BS, $PTR->config, (u32) $PTR->size);
-
     $PTR->config[$PTR->size] = 0;
-
-    '
   languages:
   - c
-  message: "The code manually reads data into a buffer without properly null-terminating it, \nwhich can lead to buffer overflows\
-    \ or undefined behavior. The vulnerability occurs \nbecause the allocated buffer size does not account for the null terminator,\
-    \ and \nthe manual reading loop does not ensure proper termination. The fix involves \nallocating an extra byte for the\
-    \ null terminator and using gf_bs_read_data to \nsafely read the data. Always ensure buffers are properly null-terminated\
-    \ when \nhandling string data.\n"
+  message: |
+    The code manually reads data into a buffer without properly null-terminating it,
+    which can lead to buffer overflows or undefined behavior. The vulnerability occurs
+    because the allocated buffer size does not account for the null terminator, and
+    the manual reading loop does not ensure proper termination. The fix involves
+    allocating an extra byte for the null terminator and using gf_bs_read_data to
+    safely read the data. Always ensure buffers are properly null-terminated when
+    handling string data.
   severity: ERROR
   metadata:
     source-url: https://github.com/gpac/gpac/commit/3fcf66c6031da966cf33ee89bcbefa2f8bec4b02
@@ -202,16 +214,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-5692dc72
-  pattern: "if (!$CTX->in_seek) {\n  ...\n}\n"
-  pattern-not: "if (!$CTX->in_seek && $REMAIN >= $CTX->hdr.framesize) {\n  ...\n}\n"
+  pattern: |
+    if (!$CTX->in_seek) {
+      ...
+    }
+  pattern-not: |
+    if (!$CTX->in_seek && $REMAIN >= $CTX->hdr.framesize) {
+      ...
+    }
   languages:
   - c
-  message: 'A missing bounds check in the AC3 reframe filter could lead to out-of-bounds memory access. This vulnerability
-    occurs when the code processes data without verifying that the remaining buffer size is sufficient for the frame size.
-    This could result in memory corruption or crashes. To fix this, always ensure the remaining buffer size is checked against
-    the frame size before processing.
-
-    '
+  message: |
+    A missing bounds check in the AC3 reframe filter could lead to out-of-bounds memory access. This vulnerability occurs when the code processes data without verifying that the remaining buffer size is sufficient for the frame size. This could result in memory corruption or crashes. To fix this, always ensure the remaining buffer size is checked against the frame size before processing.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/5692dc729491805e0e5f55c21d50ba1e6b19e88e
@@ -224,14 +238,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-613dbc57
-  pattern: "if ($VAR.decodingOffset <= INT32_MIN) {\n  ...\n}\n"
-  pattern-not: "if ($VAR.decodingOffset <= INT_MIN) {\n  ...\n}\n"
+  pattern: |
+    if ($VAR.decodingOffset <= INT32_MIN) {
+      ...
+    }
+  pattern-not: |
+    if ($VAR.decodingOffset <= INT_MIN) {
+      ...
+    }
   languages:
   - c
-  message: 'The comparison uses INT32_MIN, which is incorrect for the context. This can lead to incorrect boundary checks
-    and potential vulnerabilities. Use INT_MIN instead to ensure proper boundary checking across different platforms.
-
-    '
+  message: |
+    The comparison uses INT32_MIN, which is incorrect for the context. This can lead to incorrect boundary checks and potential vulnerabilities. Use INT_MIN instead to ensure proper boundary checking across different platforms.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/613dbc5702b09063b101cfc3d6ad74b45ad87521
@@ -243,19 +261,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-62dbd5ca
-  pattern: 'if (!$STSZ->sampleCount) ...
-
-    '
-  pattern-not: 'if (!$STSZ || !$STSZ->sampleCount) ...
-
-    '
+  pattern: |
+    if (!$STSZ->sampleCount) ...
+  pattern-not: |
+    if (!$STSZ || !$STSZ->sampleCount) ...
   languages:
   - c
-  message: 'Null pointer dereference vulnerability detected. The code accesses `sampleCount` without first checking if `stsz`
-    is null. This can lead to a crash or undefined behavior if `stsz` is null. Always check for null pointers before accessing
-    their members.
-
-    '
+  message: |
+    Null pointer dereference vulnerability detected. The code accesses `sampleCount` without first checking if `stsz` is null. This can lead to a crash or undefined behavior if `stsz` is null. Always check for null pointers before accessing their members.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/62dbd5caad6b89b33535dfa19ef65419f0378303
@@ -267,17 +280,22 @@ rules:
     technology:
     - c
 - id: vuln-gpac-64a2e1b7
-  pattern: "for (i=0; i<$PTR->nb_entries; i++) {\n  if ($PTR->entries[i].name) gf_free($PTR->entries[i].name);\n}\nif ($PTR->entries)\
-    \ gf_free($PTR->entries);\n"
-  pattern-not: "if ($PTR->entries) {\n  for (i=0; i<$PTR->nb_entries; i++) {\n    if ($PTR->entries[i].name) gf_free($PTR->entries[i].name);\n\
-    \  }\n  gf_free($PTR->entries);\n}\n"
+  pattern: |
+    for (i=0; i<$PTR->nb_entries; i++) {
+      if ($PTR->entries[i].name) gf_free($PTR->entries[i].name);
+    }
+    if ($PTR->entries) gf_free($PTR->entries);
+  pattern-not: |
+    if ($PTR->entries) {
+      for (i=0; i<$PTR->nb_entries; i++) {
+        if ($PTR->entries[i].name) gf_free($PTR->entries[i].name);
+      }
+      gf_free($PTR->entries);
+    }
   languages:
   - c
-  message: 'Detected a potential use-after-free vulnerability. The code frees memory in a loop without checking if the pointer
-    array is valid, which could lead to undefined behavior if the array is already freed. Always check if the pointer array
-    is valid before accessing its elements and freeing them.
-
-    '
+  message: |
+    Detected a potential use-after-free vulnerability. The code frees memory in a loop without checking if the pointer array is valid, which could lead to undefined behavior if the array is already freed. Always check if the pointer array is valid before accessing its elements and freeing them.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/64a2e1b799352ac7d7aad1989bc06e7b0f2b01db
@@ -289,19 +307,21 @@ rules:
     technology:
     - c
 - id: vuln-gpac-6bff06cd
-  pattern: "if (gf_node_get_tag($NODE) != TAG_ProtoNode) {\n  ...\n}\n"
-  pattern-not: "if ($INF->name && (gf_node_get_tag($NODE) != TAG_ProtoNode)) {\n  ...\n}\n"
+  pattern: |
+    if (gf_node_get_tag($NODE) != TAG_ProtoNode) {
+      ...
+    }
+  pattern-not: |
+    if ($INF->name && (gf_node_get_tag($NODE) != TAG_ProtoNode)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a missing null check before accessing a field in a conditional statement.
-
+  message: |
+    Detected a missing null check before accessing a field in a conditional statement.
     This vulnerability could lead to null pointer dereference and potential crashes.
-
     The fix adds a null check for inf->name before the tag comparison.
-
     Always ensure proper null checks are in place before accessing structure fields.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/6bff06cdb8e9b4e8ed2e789ee9340877759536fd
@@ -314,17 +334,17 @@ rules:
     technology:
     - c
 - id: vuln-gpac-6c1e7ddf
-  pattern: 'assert(($VAR == 8) || ($VAR == 16));
-
-    '
-  pattern-not: "if (($VAR != 8) && ($VAR != 16)) {\n  ...\n  return NULL;\n}\n"
+  pattern: |
+    assert(($VAR == 8) || ($VAR == 16));
+  pattern-not: |
+    if (($VAR != 8) && ($VAR != 16)) {
+      ...
+      return NULL;
+    }
   languages:
   - c
-  message: 'The use of `assert` for input validation is dangerous because it can be disabled at compile time, potentially
-    leading to undefined behavior. Instead, explicitly check the condition and handle the error case appropriately, such as
-    by logging a warning and returning an error value.
-
-    '
+  message: |
+    The use of `assert` for input validation is dangerous because it can be disabled at compile time, potentially leading to undefined behavior. Instead, explicitly check the condition and handle the error case appropriately, such as by logging a warning and returning an error value.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/6c1e7ddfae2ad4daeda7f7e544da34cb765d36c9
@@ -336,16 +356,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-6c51ddec
-  pattern: "if ($NOW - $CTX->last_rcv_time < $CTX->timeout * 1000) {\n  ...\n}\n"
-  pattern-not: "if ($NOW - $CTX->last_rcv_time < $CTX->timeout) {\n  ...\n}\n"
+  pattern: |
+    if ($NOW - $CTX->last_rcv_time < $CTX->timeout * 1000) {
+      ...
+    }
+  pattern-not: |
+    if ($NOW - $CTX->last_rcv_time < $CTX->timeout) {
+      ...
+    }
   languages:
   - c
-  message: 'The vulnerability involves incorrect timeout calculation due to improper unit conversion. The original code multiplies
-    the timeout by 1000, which can lead to incorrect behavior in timeout handling. This could result in premature or delayed
-    timeout detection, affecting the reliability of network operations. The fix removes the multiplication by 1000, ensuring
-    proper timeout calculation. Always verify the units of time-related variables and ensure consistency in calculations.
-
-    '
+  message: |
+    The vulnerability involves incorrect timeout calculation due to improper unit conversion. The original code multiplies the timeout by 1000, which can lead to incorrect behavior in timeout handling. This could result in premature or delayed timeout detection, affecting the reliability of network operations. The fix removes the multiplication by 1000, ensuring proper timeout calculation. Always verify the units of time-related variables and ensure consistency in calculations.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/6c51ddec7a1d8b9881e633188c88f73aae36a3ee
@@ -356,19 +378,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-70c6f6f8
-  pattern: '$INFO->fieldType = GF_SG_VRML_SFNODE
-
-    '
-  pattern-not: '$INFO->fieldType = GF_SG_VRML_MFNODE
-
-    '
+  pattern: |
+    $INFO->fieldType = GF_SG_VRML_SFNODE
+  pattern-not: |
+    $INFO->fieldType = GF_SG_VRML_MFNODE
   languages:
   - c
-  message: 'Detected incorrect field type assignment. Using GF_SG_VRML_SFNODE instead of GF_SG_VRML_MFNODE can lead to incorrect
-    scene graph node handling and potential security vulnerabilities. Replace GF_SG_VRML_SFNODE with GF_SG_VRML_MFNODE to
-    ensure proper node type handling.
-
-    '
+  message: |
+    Detected incorrect field type assignment. Using GF_SG_VRML_SFNODE instead of GF_SG_VRML_MFNODE can lead to incorrect scene graph node handling and potential security vulnerabilities. Replace GF_SG_VRML_SFNODE with GF_SG_VRML_MFNODE to ensure proper node type handling.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/70c6f6f832dccff814a19a74d87b97b3d68a4af5
@@ -379,17 +396,29 @@ rules:
     technology:
     - c
 - id: vuln-gpac-74e53280
-  pattern: "char $STR[1024];\n...\nwhile ($I < GF_ARRAY_LENGTH($STR)) {\n  ...\n}\n"
-  pattern-not: "char *$STR = gf_malloc(sizeof(char)*($SIZE+1));\nif (!$STR) return $ERROR;\n$MSIZE = $SIZE;\n$STR[$MSIZE]\
-    \ = 0;\nwhile ($I < $MSIZE) {\n  ...\n}\nif ($I == $MSIZE) {\n  gf_free($STR);\n  return $ERROR;\n}\ngf_free($STR);\n"
+  pattern: |
+    char $STR[1024];
+    ...
+    while ($I < GF_ARRAY_LENGTH($STR)) {
+      ...
+    }
+  pattern-not: |
+    char *$STR = gf_malloc(sizeof(char)*($SIZE+1));
+    if (!$STR) return $ERROR;
+    $MSIZE = $SIZE;
+    $STR[$MSIZE] = 0;
+    while ($I < $MSIZE) {
+      ...
+    }
+    if ($I == $MSIZE) {
+      gf_free($STR);
+      return $ERROR;
+    }
+    gf_free($STR);
   languages:
   - c
-  message: 'Detected use of fixed-size buffer without proper bounds checking. This can lead to buffer overflows when processing
-    input larger than the allocated size. The vulnerability was fixed by dynamically allocating memory based on input size
-    and adding proper bounds checking. Always use dynamic memory allocation with size validation when handling variable-length
-    input data.
-
-    '
+  message: |
+    Detected use of fixed-size buffer without proper bounds checking. This can lead to buffer overflows when processing input larger than the allocated size. The vulnerability was fixed by dynamically allocating memory based on input size and adding proper bounds checking. Always use dynamic memory allocation with size validation when handling variable-length input data.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/74e53280dad7b29f85386c6a1286fb92643465da
@@ -400,19 +429,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-77510778
-  pattern: 'gf_malloc(sizeof(char) * ($PROP_SIZE + 2))
-
-    '
-  pattern-not: 'gf_malloc(sizeof(char) * ($PROP_SIZE + 3))
-
-    '
+  pattern: |
+    gf_malloc(sizeof(char) * ($PROP_SIZE + 2))
+  pattern-not: |
+    gf_malloc(sizeof(char) * ($PROP_SIZE + 3))
   languages:
   - c
-  message: 'Insufficient memory allocation for UTF16 string dump. The original code allocates only 2 extra bytes, which may
-    lead to misalignment issues when handling UTF16 strings. This can cause memory corruption or undefined behavior. Allocate
-    3 extra bytes to ensure proper alignment and null-termination.
-
-    '
+  message: |
+    Insufficient memory allocation for UTF16 string dump. The original code allocates only 2 extra bytes, which may lead to misalignment issues when handling UTF16 strings. This can cause memory corruption or undefined behavior. Allocate 3 extra bytes to ensure proper alignment and null-termination.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/77510778516803b7f7402d7423c6d6bef50254c3
@@ -424,17 +448,26 @@ rules:
     technology:
     - c
 - id: vuln-gpac-77ed81c0
-  pattern: "if (!$VAR) $VAR = 1;\n...\nif ($VAR > 1) {\n  ...\n}\n"
-  pattern-not: "if (!$VAR) $VAR = 1;\nelse if ((s32) $VAR < 0) {\n  GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, (\"[iso file] Too\
-    \ many samples %u in packed sample\\n\", $VAR));\n  return $ERR;\n}\n...\nif ($VAR > 1) {\n  ...\n}\n"
+  pattern: |
+    if (!$VAR) $VAR = 1;
+    ...
+    if ($VAR > 1) {
+      ...
+    }
+  pattern-not: |
+    if (!$VAR) $VAR = 1;
+    else if ((s32) $VAR < 0) {
+      GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("[iso file] Too many samples %u in packed sample\n", $VAR));
+      return $ERR;
+    }
+    ...
+    if ($VAR > 1) {
+      ...
+    }
   languages:
   - c
-  message: 'The code fails to properly validate the `nb_pack` parameter, which could lead to integer overflow or other undefined
-    behavior. This vulnerability occurs when the parameter is not checked for negative values before being used in calculations.
-    The patch adds a validation check to ensure `nb_pack` is not negative. To fix this, always validate input parameters for
-    valid ranges before using them in calculations.
-
-    '
+  message: |
+    The code fails to properly validate the `nb_pack` parameter, which could lead to integer overflow or other undefined behavior. This vulnerability occurs when the parameter is not checked for negative values before being used in calculations. The patch adds a validation check to ensure `nb_pack` is not negative. To fix this, always validate input parameters for valid ranges before using them in calculations.
   severity: ERROR
   metadata:
     source-url: https://github.com/gpac/gpac/commit/77ed81c069e10b3861d88f72e1c6be1277ee7eae
@@ -448,12 +481,21 @@ rules:
     technology:
     - c
 - id: vuln-gpac-7d4538e1
-  pattern: "if (!stricmp($ATT_NAME, $STR)) {\n  strcpy($DEST, $SRC);\n}\n"
-  pattern-not: "if (!stricmp($ATT_NAME, $STR)) {\n  strncpy($DEST, $SRC, $SIZE);\n  $DEST[$SIZE]=0;\n}\n"
+  pattern: |
+    if (!stricmp($ATT_NAME, $STR)) {
+      strcpy($DEST, $SRC);
+    }
+  pattern-not: |
+    if (!stricmp($ATT_NAME, $STR)) {
+      strncpy($DEST, $SRC, $SIZE);
+      $DEST[$SIZE]=0;
+    }
   languages:
   - c
-  message: "Detected unsafe use of strcpy() which can lead to buffer overflows. \nReplace with strncpy() and ensure proper\
-    \ null-termination to prevent \npotential security vulnerabilities.\n"
+  message: |
+    Detected unsafe use of strcpy() which can lead to buffer overflows.
+    Replace with strncpy() and ensure proper null-termination to prevent
+    potential security vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/7d4538e104f2b3ff6a65a41394795654e6972339
@@ -467,16 +509,17 @@ rules:
     technology:
     - c
 - id: vuln-gpac-ad19e0c4
-  pattern: 'if ($EXPR->pixels) gf_free($EXPR->pixels);
-
-    '
-  pattern-not: "if ($EXPR->pixels) {\n  gf_free($EXPR->pixels);\n  $EXPR->pixels = NULL;\n}\n"
+  pattern: |
+    if ($EXPR->pixels) gf_free($EXPR->pixels);
+  pattern-not: |
+    if ($EXPR->pixels) {
+      gf_free($EXPR->pixels);
+      $EXPR->pixels = NULL;
+    }
   languages:
   - c
-  message: 'Detected a missing NULL assignment after freeing memory. This can lead to use-after-free vulnerabilities if the
-    pointer is accessed after being freed. Ensure that the pointer is set to NULL after freeing to prevent such issues.
-
-    '
+  message: |
+    Detected a missing NULL assignment after freeing memory. This can lead to use-after-free vulnerabilities if the pointer is accessed after being freed. Ensure that the pointer is set to NULL after freeing to prevent such issues.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/ad19e0c4504a89ca273442b1b1483ae7adfb9491
@@ -489,19 +532,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-ae831621
-  pattern: '$NAME[$EXPR-1] = 0;
-
-    '
-  pattern-not: '$NAME[$EXPR ? $EXPR-1 : 0] = 0;
-
-    '
+  pattern: |
+    $NAME[$EXPR-1] = 0;
+  pattern-not: |
+    $NAME[$EXPR ? $EXPR-1 : 0] = 0;
   languages:
   - c
-  message: 'Potential null pointer dereference vulnerability found. The code directly accesses array index $EXPR-1 without
-    checking if $EXPR is zero, which could lead to out-of-bounds memory access. Always check if the size is zero before accessing
-    the array index. Fix by using a ternary operator to handle the zero case.
-
-    '
+  message: |
+    Potential null pointer dereference vulnerability found. The code directly accesses array index $EXPR-1 without checking if $EXPR is zero, which could lead to out-of-bounds memory access. Always check if the size is zero before accessing the array index. Fix by using a ternary operator to handle the zero case.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/ae831621a08a64e3325ce532f8b78811a1581716
@@ -513,18 +551,20 @@ rules:
     technology:
     - c
 - id: vuln-gpac-c1b9c794
-  pattern: "XMT_ODLink *$VAR = gf_list_last($PARSER->od_links);\nif ((GF_Descriptor *) $VAR->od == $DESC) {\n  gf_list_pop_back($PARSER->od_links);\n\
-    \  if ($VAR->desc_name) gf_free($VAR->desc_name);\n  gf_list_del($VAR->mf_urls);\n  gf_free($VAR);\n}\n"
-  pattern-not: 'xmt_remove_link_for_descriptor($PARSER, $DESC);
-
-    '
+  pattern: |
+    XMT_ODLink *$VAR = gf_list_last($PARSER->od_links);
+    if ((GF_Descriptor *) $VAR->od == $DESC) {
+      gf_list_pop_back($PARSER->od_links);
+      if ($VAR->desc_name) gf_free($VAR->desc_name);
+      gf_list_del($VAR->mf_urls);
+      gf_free($VAR);
+    }
+  pattern-not: |
+    xmt_remove_link_for_descriptor($PARSER, $DESC);
   languages:
   - c
-  message: 'The code directly manipulates the linked list without proper checks, which can lead to memory corruption or use-after-free
-    vulnerabilities. The fix introduces a dedicated function `xmt_remove_link_for_descriptor` to handle the removal of links
-    safely. Always use dedicated functions for complex memory operations to ensure proper resource management and avoid vulnerabilities.
-
-    '
+  message: |
+    The code directly manipulates the linked list without proper checks, which can lead to memory corruption or use-after-free vulnerabilities. The fix introduces a dedicated function `xmt_remove_link_for_descriptor` to handle the removal of links safely. Always use dedicated functions for complex memory operations to ensure proper resource management and avoid vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/c1b9c794bad8f262c56f3cf690567980d96662f5
@@ -535,15 +575,18 @@ rules:
     technology:
     - c
 - id: vuln-gpac-c4a5109d
-  pattern: "if (saiz && saio) {\n  ...\n}\n"
-  pattern-not: "if (saiz && saio && senc) {\n  ...\n}\n"
+  pattern: |
+    if (saiz && saio) {
+      ...
+    }
+  pattern-not: |
+    if (saiz && saio && senc) {
+      ...
+    }
   languages:
   - c
-  message: 'The code checks for the presence of `saiz` and `saio` but fails to check for `senc`, which could lead to undefined
-    behavior or security vulnerabilities. Always ensure all necessary conditions are checked before proceeding with operations
-    that depend on these variables. Add a check for `senc` to prevent potential issues.
-
-    '
+  message: |
+    The code checks for the presence of `saiz` and `saio` but fails to check for `senc`, which could lead to undefined behavior or security vulnerabilities. Always ensure all necessary conditions are checked before proceeding with operations that depend on these variables. Add a check for `senc` to prevent potential issues.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/c4a5109dad73abe25ad12d8d529a728ae98d78ca
@@ -555,18 +598,25 @@ rules:
     technology:
     - c
 - id: vuln-gpac-d2f74e49
-  pattern: "if ($FIELD.fieldType == GF_SG_VRML_SFNODE) {\n  $PREV_NODE = *((GF_Node **) $FIELD.far_ptr);\n}\n...\nif ($FIELD.fieldType\
-    \ == GF_SG_VRML_SFNODE) {\n  if ($PREV_NODE) $E = gf_node_unregister($PREV_NODE, $NODE);\n}\n"
-  pattern-not: "if ($FIELD.fieldType == GF_SG_VRML_SFNODE) {\n  if (*((GF_Node **) $FIELD->far_ptr) != NULL) {\n    gf_node_unregister(*((GF_Node\
-    \ **) $FIELD->far_ptr), $NODE);\n    *((GF_Node **) $FIELD->far_ptr) = NULL;\n  }\n}\n"
+  pattern: |
+    if ($FIELD.fieldType == GF_SG_VRML_SFNODE) {
+      $PREV_NODE = *((GF_Node **) $FIELD.far_ptr);
+    }
+    ...
+    if ($FIELD.fieldType == GF_SG_VRML_SFNODE) {
+      if ($PREV_NODE) $E = gf_node_unregister($PREV_NODE, $NODE);
+    }
+  pattern-not: |
+    if ($FIELD.fieldType == GF_SG_VRML_SFNODE) {
+      if (*((GF_Node **) $FIELD->far_ptr) != NULL) {
+        gf_node_unregister(*((GF_Node **) $FIELD->far_ptr), $NODE);
+        *((GF_Node **) $FIELD->far_ptr) = NULL;
+      }
+    }
   languages:
   - c
-  message: 'The code fails to properly unregister previous nodes in certain conditions, which can lead to undefined behavior
-    or memory issues. This vulnerability arises when nodes are not correctly unregistered before being replaced, potentially
-    causing cyclic references or memory leaks. To fix this, ensure that previous nodes are always unregistered and their pointers
-    are set to NULL when they are no longer in use.
-
-    '
+  message: |
+    The code fails to properly unregister previous nodes in certain conditions, which can lead to undefined behavior or memory issues. This vulnerability arises when nodes are not correctly unregistered before being replaced, potentially causing cyclic references or memory leaks. To fix this, ensure that previous nodes are always unregistered and their pointers are set to NULL when they are no longer in use.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/d2f74e49f2cb8d687c0dc38f66b99e3c5c7d7fec
@@ -580,19 +630,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-d33ecf81
-  pattern: 'if ($NBITS > 32) return $ERROR;
-
-    '
-  pattern-not: 'if (!$NBITS || $NBITS > 32) return $ERROR;
-
-    '
+  pattern: |
+    if ($NBITS > 32) return $ERROR;
+  pattern-not: |
+    if (!$NBITS || $NBITS > 32) return $ERROR;
   languages:
   - c
-  message: 'The code fails to check if NbBits is zero before validating its upper bound, which could lead to undefined behavior
-    or security vulnerabilities. This issue was fixed by adding a check for zero. Always validate both lower and upper bounds
-    of input values to ensure they are within expected ranges.
-
-    '
+  message: |
+    The code fails to check if NbBits is zero before validating its upper bound, which could lead to undefined behavior or security vulnerabilities. This issue was fixed by adding a check for zero. Always validate both lower and upper bounds of input values to ensure they are within expected ranges.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/d33ecf8142d9103eff9d6fd72fbab4e499e3e9b8
@@ -604,18 +649,42 @@ rules:
     technology:
     - c
 - id: vuln-gpac-dc7de8d3
-  pattern: "for (i=0; i<nbFields; i++) {\n  GF_Node *new_node = gf_bifs_dec_node(codec, bs, field->NDTtype);\n  if (new_node)\
-    \ {\n    e = gf_node_register(new_node, is_mem_com ? NULL : node);\n    if (e) return e;\n    ...\n    if (codec->force_keep_qp)\
-    \ {\n      e = gf_node_list_add_child_last(field->far_ptr, new_node, &last);\n      if (e) return e;\n    }\n  } else\
-    \ {\n    return codec->LastError ? codec->LastError : GF_NON_COMPLIANT_BITSTREAM;\n  }\n}\n"
-  pattern-not: "for (i=0; i<nbFields; i++) {\n  GF_Node *new_node = gf_bifs_dec_node(codec, bs, field->NDTtype);\n  if (new_node)\
-    \ {\n    e = gf_node_register(new_node, is_mem_com ? NULL : node);\n    if (e) goto exit;\n    ...\n    if (codec->force_keep_qp)\
-    \ {\n      e = gf_node_list_add_child_last(field->far_ptr, new_node, &last);\n      if (e) goto exit;\n    }\n  } else\
-    \ {\n    e = codec->LastError ? codec->LastError : GF_NON_COMPLIANT_BITSTREAM;\n    goto exit;\n  }\n}\n"
+  pattern: |
+    for (i=0; i<nbFields; i++) {
+      GF_Node *new_node = gf_bifs_dec_node(codec, bs, field->NDTtype);
+      if (new_node) {
+        e = gf_node_register(new_node, is_mem_com ? NULL : node);
+        if (e) return e;
+        ...
+        if (codec->force_keep_qp) {
+          e = gf_node_list_add_child_last(field->far_ptr, new_node, &last);
+          if (e) return e;
+        }
+      } else {
+        return codec->LastError ? codec->LastError : GF_NON_COMPLIANT_BITSTREAM;
+      }
+    }
+  pattern-not: |
+    for (i=0; i<nbFields; i++) {
+      GF_Node *new_node = gf_bifs_dec_node(codec, bs, field->NDTtype);
+      if (new_node) {
+        e = gf_node_register(new_node, is_mem_com ? NULL : node);
+        if (e) goto exit;
+        ...
+        if (codec->force_keep_qp) {
+          e = gf_node_list_add_child_last(field->far_ptr, new_node, &last);
+          if (e) goto exit;
+        }
+      } else {
+        e = codec->LastError ? codec->LastError : GF_NON_COMPLIANT_BITSTREAM;
+        goto exit;
+      }
+    }
   languages:
   - c
-  message: "The code directly returns errors within a loop without proper cleanup, which can lead to resource leaks and inconsistent\
-    \ states. \nUse a goto exit pattern to ensure proper cleanup and error handling.\n"
+  message: |
+    The code directly returns errors within a loop without proper cleanup, which can lead to resource leaks and inconsistent states.
+    Use a goto exit pattern to ensure proper cleanup and error handling.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/dc7de8d3d604426c7a6e628d90cb9fb88e7b4c2c
@@ -625,17 +694,20 @@ rules:
     technology:
     - c
 - id: vuln-gpac-de7f3a85
-  pattern: "if ($NUM1 * ($TYPE) $DEN1 < ($TYPE) $NUM2 * $DEN2) {\n  ...\n}\n"
-  pattern-not: "if (gf_timestamp_less($NUM1, $DEN1, $NUM2, $DEN2)) {\n  ...\n}\n"
+  pattern: |
+    if ($NUM1 * ($TYPE) $DEN1 < ($TYPE) $NUM2 * $DEN2) {
+      ...
+    }
+  pattern-not: |
+    if (gf_timestamp_less($NUM1, $DEN1, $NUM2, $DEN2)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential integer overflow vulnerability due to direct arithmetic comparison.
-
+  message: |
+    Detected a potential integer overflow vulnerability due to direct arithmetic comparison.
     This can lead to incorrect comparisons and unexpected behavior. Use the safe comparison
-
     function `gf_timestamp_less` to avoid this issue.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/de7f3a852bef72a52825fd307cf4e8f486401a76
@@ -647,19 +719,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-e4c1f09a
-  pattern: 'Bool dump_mode = GF_FALSE;
-
-    '
-  pattern-not: 'Bool dump_mode = use_dump_mode;
-
-    '
+  pattern: |
+    Bool dump_mode = GF_FALSE;
+  pattern-not: |
+    Bool dump_mode = use_dump_mode;
   languages:
   - c
-  message: 'Detected use of a hardcoded initialization value for a boolean flag. This can lead to unexpected behavior or security
-    vulnerabilities if the flag is intended to be controlled externally. Instead, initialize the flag with a value from an
-    external source or configuration to ensure proper control flow.
-
-    '
+  message: |
+    Detected use of a hardcoded initialization value for a boolean flag. This can lead to unexpected behavior or security vulnerabilities if the flag is intended to be controlled externally. Instead, initialize the flag with a value from an external source or configuration to ensure proper control flow.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/e4c1f09ab9618b6af3bec6b94b8b349f2d01dbf8
@@ -671,18 +738,24 @@ rules:
     technology:
     - c
 - id: vuln-gpac-e7f96c2d
-  pattern: "if ($PROBE_SIZE <= 10000) {\n  gf_filter_pid_drop_packet($CTX->ipid);\n  return GF_OK;\n}\nGF_LOG(GF_LOG_WARNING,\
-    \ GF_LOG_MEDIA, (\"[PCMReframe] Cannot find wave data chink afetr %d bytes, aborting\\n\", $PROBE_SIZE));\n"
-  pattern-not: "if (!$HDR_FOUND) {\n  if ($PROBE_SIZE <= 10000) {\n    gf_filter_pid_drop_packet($CTX->ipid);\n    return\
-    \ GF_OK;\n  }\n  GF_LOG(GF_LOG_WARNING, GF_LOG_MEDIA, (\"[PCMReframe] Cannot find wave data chunk after %d bytes, aborting\\\
-    n\", $PROBE_SIZE));\n}\n"
+  pattern: |
+    if ($PROBE_SIZE <= 10000) {
+      gf_filter_pid_drop_packet($CTX->ipid);
+      return GF_OK;
+    }
+    GF_LOG(GF_LOG_WARNING, GF_LOG_MEDIA, ("[PCMReframe] Cannot find wave data chink afetr %d bytes, aborting\n", $PROBE_SIZE));
+  pattern-not: |
+    if (!$HDR_FOUND) {
+      if ($PROBE_SIZE <= 10000) {
+        gf_filter_pid_drop_packet($CTX->ipid);
+        return GF_OK;
+      }
+      GF_LOG(GF_LOG_WARNING, GF_LOG_MEDIA, ("[PCMReframe] Cannot find wave data chunk after %d bytes, aborting\n", $PROBE_SIZE));
+    }
   languages:
   - c
-  message: 'The code lacks a proper check for the header before processing the data, which could lead to incorrect handling
-    of PCM data. This vulnerability could cause the filter to drop valid packets prematurely or fail to detect corrupted data.
-    The fix introduces a header check (`hdr_found`) to ensure proper validation before processing.
-
-    '
+  message: |
+    The code lacks a proper check for the header before processing the data, which could lead to incorrect handling of PCM data. This vulnerability could cause the filter to drop valid packets prematurely or fail to detect corrupted data. The fix introduces a header check (`hdr_found`) to ensure proper validation before processing.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/e7f96c2d3774e4ea25f952bcdf55af1dd6e919f4
@@ -696,18 +769,20 @@ rules:
     technology:
     - c
 - id: vuln-gpac-ea13945f
-  pattern: "while (($WAVE->data[$OFFSET + 4] != 'e') && ($WAVE->data[$OFFSET + 5] != 's')) {\n  ...\n}\n"
-  pattern-not: "while ($OFFSET + 5 < $WAVE->dataSize && ($WAVE->data[$OFFSET + 4] != 'e') && ($WAVE->data[$OFFSET + 5] !=\
-    \ 's')) {\n  ...\n}\n"
+  pattern: |
+    while (($WAVE->data[$OFFSET + 4] != 'e') && ($WAVE->data[$OFFSET + 5] != 's')) {
+      ...
+    }
+  pattern-not: |
+    while ($OFFSET + 5 < $WAVE->dataSize && ($WAVE->data[$OFFSET + 4] != 'e') && ($WAVE->data[$OFFSET + 5] != 's')) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential out-of-bounds read vulnerability due to missing bounds check in a while loop condition.
-
+  message: |
+    Detected a potential out-of-bounds read vulnerability due to missing bounds check in a while loop condition.
     This can lead to reading beyond the allocated memory, causing undefined behavior, crashes, or information disclosure.
-
     To fix this, ensure the offset is checked against the data size before accessing the array.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/ea13945f3c2dc2c21e30e2731bf2782384307a13
@@ -721,23 +796,26 @@ rules:
     technology:
     - c
 - id: vuln-gpac-eb71812f
-  pattern: 'fprintf(stderr, "\t%s\n", (char *) $UDTA);
-
-    '
-  pattern-not: "fprintf(stderr, \"\\t\");\nfor ($IDX=0; $IDX<$UDTA_SIZE; $IDX++) {\n  if (!$UDTA[$IDX]) break;\n  fprintf(stderr,\
-    \ \"%c\", $UDTA[$IDX]);\n}\nfprintf(stderr, \"\\n\");\n"
-  pattern-inside: "if (gf_utf8_is_legal($UDTA, $UDTA_SIZE)) {\n  ...\n}\n"
+  pattern: |
+    fprintf(stderr, "\t%s\n", (char *) $UDTA);
+  pattern-not: |
+    fprintf(stderr, "\t");
+    for ($IDX=0; $IDX<$UDTA_SIZE; $IDX++) {
+      if (!$UDTA[$IDX]) break;
+      fprintf(stderr, "%c", $UDTA[$IDX]);
+    }
+    fprintf(stderr, "\n");
+  pattern-inside: |
+    if (gf_utf8_is_legal($UDTA, $UDTA_SIZE)) {
+      ...
+    }
   languages:
   - c
-  message: 'The code directly prints user-controlled data using %s format specifier without proper bounds checking,
-
+  message: |
+    The code directly prints user-controlled data using %s format specifier without proper bounds checking,
     which could lead to information disclosure or crashes if the data contains null bytes or is malformed.
-
     The fix adds proper bounds checking and character-by-character printing with null byte handling.
-
     Always validate and sanitize user-controlled data before printing it.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/eb71812fcc10e9c5348a5d1c61bd25b6fa06eaed
@@ -750,22 +828,15 @@ rules:
     technology:
     - c
 - id: vuln-gpac-f0ba8371
-  pattern: 'if (!$MPOD->trackIDs || gf_isom_get_track_from_id($MDIA->mediaTrack->moov, $MPOD->trackIDs[$REF->trackRef - 1])
-    == NULL) continue;
-
-    '
-  pattern-not: 'if (!$MPOD->trackIDs || !$REF->trackRef || ($REF->trackRef > $MPOD->trackIDCount)) continue;
-
+  pattern: |
+    if (!$MPOD->trackIDs || gf_isom_get_track_from_id($MDIA->mediaTrack->moov, $MPOD->trackIDs[$REF->trackRef - 1]) == NULL) continue;
+  pattern-not: |
+    if (!$MPOD->trackIDs || !$REF->trackRef || ($REF->trackRef > $MPOD->trackIDCount)) continue;
     if (gf_isom_get_track_from_id($MDIA->mediaTrack->moov, $MPOD->trackIDs[$REF->trackRef - 1]) == NULL) continue;
-
-    '
   languages:
   - c
-  message: 'The code lacks proper bounds checking before accessing array elements, which could lead to out-of-bounds memory
-    access. This vulnerability can cause crashes, information disclosure, or even arbitrary code execution. Always validate
-    array indices against the array size before accessing elements.
-
-    '
+  message: |
+    The code lacks proper bounds checking before accessing array elements, which could lead to out-of-bounds memory access. This vulnerability can cause crashes, information disclosure, or even arbitrary code execution. Always validate array indices against the array size before accessing elements.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/f0ba83717b6e4d7a15a1676d1fe06152e199b011
@@ -777,19 +848,14 @@ rules:
     technology:
     - c
 - id: vuln-gpac-f73da86b
-  pattern: '$CODE->LastError = SFScript_Parse($CODE, (SFScript*)$FIELD->far_ptr, $BS, $NODE);
-
-    '
-  pattern-not: '$CODE->LastError = $NODE ? SFScript_Parse($CODE, (SFScript*)$FIELD->far_ptr, $BS, $NODE) : $ERROR;
-
-    '
+  pattern: |
+    $CODE->LastError = SFScript_Parse($CODE, (SFScript*)$FIELD->far_ptr, $BS, $NODE);
+  pattern-not: |
+    $CODE->LastError = $NODE ? SFScript_Parse($CODE, (SFScript*)$FIELD->far_ptr, $BS, $NODE) : $ERROR;
   languages:
   - c
-  message: 'Detected a potential null pointer dereference vulnerability. The function SFScript_Parse is called without checking
-    if the node parameter is null, which could lead to undefined behavior. This was fixed by adding a conditional check to
-    handle the case where node is null.
-
-    '
+  message: |
+    Detected a potential null pointer dereference vulnerability. The function SFScript_Parse is called without checking if the node parameter is null, which could lead to undefined behavior. This was fixed by adding a conditional check to handle the case where node is null.
   severity: ERROR
   metadata:
     source-url: github.com/gpac/gpac/commit/f73da86bf32992f62b9ff2b9c9e853e3c97edf8e

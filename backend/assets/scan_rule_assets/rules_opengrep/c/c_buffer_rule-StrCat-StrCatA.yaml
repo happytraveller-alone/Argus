@@ -2,20 +2,13 @@ rules:
 - id: c_buffer_rule-StrCat-StrCatA
   languages:
   - c
-  message: 'The `StrCat` family of functions do not guarantee the final string to
-    be null terminated.
-
+  message: |
+    The `StrCat` family of functions do not guarantee the final string to be null terminated.
     Consider using one of the following alternatives: `StringCbCat`, `StringCbCatEx`,
-
-    `StringCbCatN`, `StringCbCatNEx`, `StringCchCat`, `StringCchCatEx`, `StringCchCatN`,
-    or
-
+    `StringCbCatN`, `StringCbCatNEx`, `StringCchCat`, `StringCchCatEx`, `StringCchCatN`, or
     `StringCchCatNEx`.
 
-
     For more information please see: https://learn.microsoft.com/en-us/windows/win32/api/strsafe/
-
-    '
   metadata:
     shortDescription: Insecure string processing function
     cwe: CWE-120

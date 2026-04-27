@@ -7,31 +7,29 @@ rules:
   patterns:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'import java.util.zip.ZipFile;
-
+      - pattern-inside: |
+          import java.util.zip.ZipFile;
           ...
-
-          '
     - pattern-either:
-      - pattern-inside: "try(ZipInputStream $ZIP = new ZipInputStream(...)) {\n  ...\n\
-          }\n"
-      - pattern-inside: "try(ZipFile $ZIP = new ZipFile(...)) {\n  ...\n}\n"
+      - pattern-inside: |
+          try(ZipInputStream $ZIP = new ZipInputStream(...)) {
+            ...
+          }
+      - pattern-inside: |
+          try(ZipFile $ZIP = new ZipFile(...)) {
+            ...
+          }
   - pattern-either:
     - patterns:
       - pattern-either:
-        - pattern-inside: 'ZipEntry $ENTRY;
-
+        - pattern-inside: |
+            ZipEntry $ENTRY;
             ...
-
-            '
-        - pattern-inside: 'ZipEntry $ENTRY = ...;
-
+        - pattern-inside: |
+            ZipEntry $ENTRY = ...;
             ...
-
-            '
-        - pattern-inside: '$ZIP.entries().asIterator().forEachRemaining(...)
-
-            '
+        - pattern-inside: |
+            $ZIP.entries().asIterator().forEachRemaining(...)
       - pattern-either:
         - pattern-either:
           - pattern: new FileOutputStream(<... $ENTRY.getName() ...>, ...)
@@ -49,53 +47,34 @@ rules:
             - pattern: Files.copy(..., $PATH, ...)
             - pattern: Files.newOutputStream($PATH, ...)
           - pattern-either:
-            - pattern-inside: 'String $PATH = <... $ENTRY.getName() ...>;
-
+            - pattern-inside: |
+                String $PATH = <... $ENTRY.getName() ...>;
                 ...
-
-                '
-            - pattern-inside: 'File $PATH = new File(..., <... $ENTRY.getName() ...>);
-
+            - pattern-inside: |
+                File $PATH = new File(..., <... $ENTRY.getName() ...>);
                 ...
-
-                '
-            - pattern-inside: 'String $ENTRYNAME = <... $ENTRY.getName() ...>;
-
+            - pattern-inside: |
+                String $ENTRYNAME = <... $ENTRY.getName() ...>;
                 ...
-
                 File $PATH = new File(..., $ENTRYNAME);
-
                 ...
-
-                '
-            - pattern-inside: 'Path $PATH = $DEST.resolve(entry.getName());
-
+            - pattern-inside: |
+                Path $PATH = $DEST.resolve(entry.getName());
                 ...
-
-                '
-            - pattern-inside: 'Path $PATH = Paths.get(entry.getName());
-
+            - pattern-inside: |
+                Path $PATH = Paths.get(entry.getName());
                 ...
-
-                '
-            - pattern-inside: 'Path $PATH = Paths.get(new URI(<... entry.getName()
-                ...>));
-
+            - pattern-inside: |
+                Path $PATH = Paths.get(new URI(<... entry.getName() ...>));
                 ...
-
-                '
-            - pattern-inside: 'Path $PATH = Paths.get(..., entry.getName());
-
+            - pattern-inside: |
+                Path $PATH = Paths.get(..., entry.getName());
                 ...
-
-                '
-            - pattern-inside: 'Path $PATH = Paths.get(..., new URI(<... entry.getName()
-                ...>));
-
-                ...'
+            - pattern-inside: |-
+                Path $PATH = Paths.get(..., new URI(<... entry.getName() ...>));
+                ...
   metadata:
     cwe:
-    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path
-      Traversal'')'
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path Traversal'')'
     - 'CWE-36: Absolute Path Traversal'
     - 'CWE-73: External Control of File Name or Path'

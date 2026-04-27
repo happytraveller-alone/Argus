@@ -1,18 +1,15 @@
 rules:
 - id: vuln-mlflow-8174250f
-  pattern: 'return session.request($METHOD, $URL, **$KWARGS)
-
-    '
-  pattern-not: 'return session.request($METHOD, $URL, allow_redirects=$ALLOW_REDIRECTS,
-    **$KWARGS)
-
-    '
+  pattern: |
+    return session.request($METHOD, $URL, **$KWARGS)
+  pattern-not: |
+    return session.request($METHOD, $URL, allow_redirects=$ALLOW_REDIRECTS, **$KWARGS)
   languages:
   - python
-  message: "Detected missing allow_redirects parameter in session.request(). \nThis\
-    \ can lead to security risks by allowing HTTP redirects to untrusted locations.\
-    \ \nEnsure allow_redirects is explicitly set based on the MLFLOW_ALLOW_HTTP_REDIRECTS\
-    \ environment variable or a secure default.\n"
+  message: |
+    Detected missing allow_redirects parameter in session.request().
+    This can lead to security risks by allowing HTTP redirects to untrusted locations.
+    Ensure allow_redirects is explicitly set based on the MLFLOW_ALLOW_HTTP_REDIRECTS environment variable or a secure default.
   severity: ERROR
   metadata:
     source-url: github.com/mlflow/mlflow/commit/8174250f83352a04c2d42079f414759060458555

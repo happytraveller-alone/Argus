@@ -2,11 +2,12 @@ rules:
 - id: unsigned-security-token
   patterns:
   - pattern: RequireSignedTokens = false
-  - pattern-inside: "new TokenValidationParameters {\n  ...\n}\n"
+  - pattern-inside: |
+      new TokenValidationParameters {
+        ...
+      }
   fix: RequireSignedTokens = true
-  message: Accepting unsigned security tokens as valid security tokens allows an attacker
-    to remove its signature and potentially forge an identity. As a fix, set RequireSignedTokens
-    to be true.
+  message: Accepting unsigned security tokens as valid security tokens allows an attacker to remove its signature and potentially forge an identity. As a fix, set RequireSignedTokens to be true.
   metadata:
     category: security
     technology:

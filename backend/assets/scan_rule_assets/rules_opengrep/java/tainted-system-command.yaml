@@ -13,9 +13,14 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern-inside: "$METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {\n  ...\n\
-          }\n"
-      - pattern-inside: "$METHODNAME(..., @$REQ $TYPE $SOURCE,...) {\n  ...\n}\n"
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
     - metavariable-regex:
         metavariable: $TYPE
         regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
@@ -39,54 +44,39 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern: '(Process $P) = new Process(...);
-
-          '
-      - pattern: '(ProcessBuilder $PB).command(...);
-
-          '
+      - pattern: |
+          (Process $P) = new Process(...);
+      - pattern: |
+          (ProcessBuilder $PB).command(...);
       - patterns:
         - pattern-either:
-          - pattern: '(Runtime $R).$EXEC(...);
-
-              '
-          - pattern: 'Runtime.getRuntime(...).$EXEC(...);
-
-              '
+          - pattern: |
+              (Runtime $R).$EXEC(...);
+          - pattern: |
+              Runtime.getRuntime(...).$EXEC(...);
         - metavariable-regex:
             metavariable: $EXEC
             regex: (exec|loadLibrary|load)
       - patterns:
-        - pattern: '(ProcessBuilder $PB).command(...).$ADD(...);
-
-            '
+        - pattern: |
+            (ProcessBuilder $PB).command(...).$ADD(...);
         - metavariable-regex:
             metavariable: $ADD
             regex: (add|addAll)
       - patterns:
         - pattern-either:
           - patterns:
-            - pattern-inside: '$BUILDER = new ProcessBuilder(...);
-
+            - pattern-inside: |
+                $BUILDER = new ProcessBuilder(...);
                 ...
-
-                '
             - pattern: $BUILDER.start(...)
-          - pattern: 'new ProcessBuilder(...). ... .start(...);
-
-              '
+          - pattern: |
+              new ProcessBuilder(...). ... .start(...);
     requires: CONCAT
-  message: 'Detected user input entering a method which executes a system command.
-    This could result in a command injection vulnerability, which allows an attacker
-    to inject an arbitrary system command onto the server. The attacker could download
-    malware onto or steal data from the server. Instead, use ProcessBuilder, separating
-    the command into individual arguments, like this: `new ProcessBuilder("ls", "-al",
-    targetDirectory)`. Further, make sure you hardcode or allowlist the actual command
-    so that attackers can''t run arbitrary commands.'
+  message: 'Detected user input entering a method which executes a system command. This could result in a command injection vulnerability, which allows an attacker to inject an arbitrary system command onto the server. The attacker could download malware onto or steal data from the server. Instead, use ProcessBuilder, separating the command into individual arguments, like this: `new ProcessBuilder("ls", "-al", targetDirectory)`. Further, make sure you hardcode or allowlist the actual command so that attackers can''t run arbitrary commands.'
   metadata:
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection

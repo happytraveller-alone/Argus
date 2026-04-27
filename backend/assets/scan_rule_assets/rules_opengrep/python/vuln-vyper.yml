@@ -1,15 +1,12 @@
 rules:
 - id: vuln-vyper-02339dfd
-  pattern: '["if", ["eq", "_calldata_method_id", $METHOD_ID], $RET]
-
-    '
-  pattern-not: '["if", ["and", ["gt", "calldatasize", 0], ["eq", "_calldata_method_id", $METHOD_ID]], $RET]
-
-    '
+  pattern: |
+    ["if", ["eq", "_calldata_method_id", $METHOD_ID], $RET]
+  pattern-not: |
+    ["if", ["and", ["gt", "calldatasize", 0], ["eq", "_calldata_method_id", $METHOD_ID]], $RET]
   languages:
   - python
-  message: Detected a vulnerability where a method ID check does not validate calldatasize. This can lead to incorrect function
-    execution when calldata is empty. Ensure that calldatasize is checked when the method ID is 0.
+  message: Detected a vulnerability where a method ID check does not validate calldatasize. This can lead to incorrect function execution when calldata is empty. Ensure that calldatasize is checked when the method ID is 0.
   severity: ERROR
   metadata:
     source-url: github.com/vyperlang/vyper/commit/02339dfda0f3caabad142060d511d10bfe93c520
@@ -19,18 +16,14 @@ rules:
     technology:
     - python
 - id: vuln-vyper-10564dcc
-  pattern: '$CTX.append_instruction($OPCODE, [$IRLITERAL(...)])
-
-    '
-  pattern-not: '$BB.append_instruction($OPCODE, $VALUE)
-
-    '
+  pattern: |
+    $CTX.append_instruction($OPCODE, [$IRLITERAL(...)])
+  pattern-not: |
+    $BB.append_instruction($OPCODE, $VALUE)
   languages:
   - python
-  message: 'Detected unsafe usage of IRLiteral in append_instruction. Directly passing raw integers without proper wrapping
-    can lead to security vulnerabilities. Use the updated append_instruction method that automatically wraps integers in IRLiteral.
-
-    '
+  message: |
+    Detected unsafe usage of IRLiteral in append_instruction. Directly passing raw integers without proper wrapping can lead to security vulnerabilities. Use the updated append_instruction method that automatically wraps integers in IRLiteral.
   severity: ERROR
   metadata:
     source-url: github.com/vyperlang/vyper/commit/10564dcc37756f3d3684b7a91fd8f4325a38c4d8
@@ -40,21 +33,39 @@ rules:
     technology:
     - python
 - id: vuln-vyper-78fa8dd8
-  pattern: "IRnode.from_list(\n    [\n        \"seq\",\n        [\"mstore\", $PLACEHOLDER, $GETELEM($ARG, 0)],\n        [\"\
-    mstore\", [\"add\", $PLACEHOLDER, 32], $GETELEM($ARG, 1)],\n        [\"mstore\", [\"add\", $PLACEHOLDER, 64], $GETELEM($ARG2,\
-    \ 0)],\n        [\"mstore\", [\"add\", $PLACEHOLDER, 96], $GETELEM($ARG2, 1)],\n        [\n            \"assert\",\n \
-    \           [\"staticcall\", [\"gas\"], $CALL, $PLACEHOLDER, $SIZE, $PLACEHOLDER, $RET_SIZE],\n        ],\n        $PLACEHOLDER,\n\
-    \    ],\n    typ=$TYP,\n    location=$LOC,\n)\n"
-  pattern-not: "IRnode.from_list(\n    [\n        \"seq\",\n        make_setter($DST0, $ARG0),\n        make_setter($DST1,\
-    \ $ARG1),\n        [\"assert\", [\"staticcall\", [\"gas\"], $CALL, $BUF, $SIZE, $BUF, $RET_SIZE]],\n        $BUF,\n  \
-    \  ],\n    typ=$TYP,\n    location=$LOC,\n)\n"
+  pattern: |
+    IRnode.from_list(
+        [
+            "seq",
+            ["mstore", $PLACEHOLDER, $GETELEM($ARG, 0)],
+            ["mstore", ["add", $PLACEHOLDER, 32], $GETELEM($ARG, 1)],
+            ["mstore", ["add", $PLACEHOLDER, 64], $GETELEM($ARG2, 0)],
+            ["mstore", ["add", $PLACEHOLDER, 96], $GETELEM($ARG2, 1)],
+            [
+                "assert",
+                ["staticcall", ["gas"], $CALL, $PLACEHOLDER, $SIZE, $PLACEHOLDER, $RET_SIZE],
+            ],
+            $PLACEHOLDER,
+        ],
+        typ=$TYP,
+        location=$LOC,
+    )
+  pattern-not: |
+    IRnode.from_list(
+        [
+            "seq",
+            make_setter($DST0, $ARG0),
+            make_setter($DST1, $ARG1),
+            ["assert", ["staticcall", ["gas"], $CALL, $BUF, $SIZE, $BUF, $RET_SIZE]],
+            $BUF,
+        ],
+        typ=$TYP,
+        location=$LOC,
+    )
   languages:
   - python
-  message: 'Detected unsafe memory handling in Vyper''s built-in functions. The original code directly manipulated memory
-    using mstore and get_element_ptr, which could lead to memory corruption or undefined behavior. The patch replaces this
-    with safer make_setter calls. Always use safe memory management patterns in smart contract development.
-
-    '
+  message: |
+    Detected unsafe memory handling in Vyper's built-in functions. The original code directly manipulated memory using mstore and get_element_ptr, which could lead to memory corruption or undefined behavior. The patch replaces this with safer make_setter calls. Always use safe memory management patterns in smart contract development.
   severity: ERROR
   metadata:
     source-url: github.com/vyperlang/vyper/commit/78fa8dd8f91ba0cb26277eeffb585c68c83e7daa
@@ -67,23 +78,16 @@ rules:
     - python
     - vyper
 - id: vuln-vyper-c3e68c30
-  pattern: 'num_kwargs = len($SIG.default_args)
-
+  pattern: |
+    num_kwargs = len($SIG.default_args)
     kwargs_needed = num_kwargs - num_provided_kwargs
-
     kw_vals = list($SIG.default_values.values())[:kwargs_needed]
-
-    '
-  pattern-not: 'kw_vals = list($SIG.default_values.values())[num_provided_kwargs:]
-
-    '
+  pattern-not: |
+    kw_vals = list($SIG.default_values.values())[num_provided_kwargs:]
   languages:
   - python
-  message: 'Detected incorrect handling of keyword arguments in Vyper code. This vulnerability can lead to incorrect argument
-    processing and potential security issues. The fix involves correctly slicing the default values based on the number of
-    provided keyword arguments.
-
-    '
+  message: |
+    Detected incorrect handling of keyword arguments in Vyper code. This vulnerability can lead to incorrect argument processing and potential security issues. The fix involves correctly slicing the default values based on the number of provided keyword arguments.
   severity: ERROR
   metadata:
     source-url: github.com/vyperlang/vyper/commit/c3e68c302aa6e1429946473769dd1232145822ac
@@ -92,19 +96,33 @@ rules:
     owasp: A06:2021-Vulnerable and Outdated Components
     technology: python
 - id: vuln-vyper-eae0eaf8
-  pattern: "if $TYPE.nonreentrant is not None:\n  $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))\n  $VARIABLE_NAME\
-    \ = f\"nonreentrant.{$TYPE.nonreentrant}\"\n  $RET[$VARIABLE_NAME] = {\n      \"type\": \"nonreentrant lock\",\n     \
-    \ \"location\": \"storage\",\n      \"slot\": $STORAGE_SLOT,\n  }\n  $STORAGE_SLOT += 1\n"
-  pattern-not: "if $TYPE.nonreentrant is None:\n  continue\n$VARIABLE_NAME = f\"nonreentrant.{$TYPE.nonreentrant}\"\nif $VARIABLE_NAME\
-    \ in $RET:\n  continue\n$TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))\n$RET[$VARIABLE_NAME] = {\n    \"\
-    type\": \"nonreentrant lock\",\n    \"location\": \"storage\",\n    \"slot\": $STORAGE_SLOT,\n}\n$STORAGE_SLOT += 1\n"
+  pattern: |
+    if $TYPE.nonreentrant is not None:
+      $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
+      $VARIABLE_NAME = f"nonreentrant.{$TYPE.nonreentrant}"
+      $RET[$VARIABLE_NAME] = {
+          "type": "nonreentrant lock",
+          "location": "storage",
+          "slot": $STORAGE_SLOT,
+      }
+      $STORAGE_SLOT += 1
+  pattern-not: |
+    if $TYPE.nonreentrant is None:
+      continue
+    $VARIABLE_NAME = f"nonreentrant.{$TYPE.nonreentrant}"
+    if $VARIABLE_NAME in $RET:
+      continue
+    $TYPE.set_reentrancy_key_position(StorageSlot($STORAGE_SLOT))
+    $RET[$VARIABLE_NAME] = {
+        "type": "nonreentrant lock",
+        "location": "storage",
+        "slot": $STORAGE_SLOT,
+    }
+    $STORAGE_SLOT += 1
   languages:
   - python
-  message: 'Detected incorrect handling of nonreentrant keys in storage layout. The original code could assign multiple storage
-    slots to the same nonreentrant key, leading to potential storage collisions. The fix ensures that a nonreentrant key only
-    takes one slot, ignoring subsequent occurrences.
-
-    '
+  message: |
+    Detected incorrect handling of nonreentrant keys in storage layout. The original code could assign multiple storage slots to the same nonreentrant key, leading to potential storage collisions. The fix ensures that a nonreentrant key only takes one slot, ignoring subsequent occurrences.
   severity: ERROR
   metadata:
     source-url: github.com/vyperlang/vyper/commit/eae0eaf86eb462746e4867352126f6c1dd43302f

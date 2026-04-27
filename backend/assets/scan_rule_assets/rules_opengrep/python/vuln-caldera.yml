@@ -1,13 +1,22 @@
 rules:
 - id: vuln-caldera-b478416d
-  pattern: "def $FUNC(...):\n    ...\n    file_svc = BaseService.get_service('file_svc')\n    for $PLUGIN in os.listdir('plugins'):\n\
-    \        if await file_svc.walk_file_path(os.path.join('plugins', $PLUGIN, 'data', ''), '%s.yml' % $ID):\n           \
-    \ return $PLUGIN\n    return None\n"
-  pattern-not: "def $FUNC(...):\n    ...\n    return self.plugin\n"
+  pattern: |
+    def $FUNC(...):
+        ...
+        file_svc = BaseService.get_service('file_svc')
+        for $PLUGIN in os.listdir('plugins'):
+            if await file_svc.walk_file_path(os.path.join('plugins', $PLUGIN, 'data', ''), '%s.yml' % $ID):
+                return $PLUGIN
+        return None
+  pattern-not: |
+    def $FUNC(...):
+        ...
+        return self.plugin
   languages:
   - python
-  message: "Detected insecure plugin path resolution using direct filesystem access. This can lead to path traversal or incorrect\
-    \ plugin resolution. \nUse the fixed version that relies on the plugin field instead of filesystem access.\n"
+  message: |
+    Detected insecure plugin path resolution using direct filesystem access. This can lead to path traversal or incorrect plugin resolution.
+    Use the fixed version that relies on the plugin field instead of filesystem access.
   severity: ERROR
   metadata:
     source-url: github.com/mitre/caldera/commit/b478416d0f83ec244f42b5e7de9c822162ebfc8f
@@ -18,12 +27,15 @@ rules:
     - https://cwe.mitre.org/data/definitions/22.html
     technology: python
 - id: vuln-caldera-fde715c9
-  pattern: "with mocker.patch('datetime.datetime') as $VAR:\n  ...\n"
-  pattern-not: "with mocker.patch('app.objects.secondclass.c_fact.datetime') as $VAR:\n  ...\n"
+  pattern: |
+    with mocker.patch('datetime.datetime') as $VAR:
+      ...
+  pattern-not: |
+    with mocker.patch('app.objects.secondclass.c_fact.datetime') as $VAR:
+      ...
   languages:
   - python
-  message: Directly patching 'datetime.datetime' can lead to inconsistent behavior and security issues. Instead, patch the
-    specific module's datetime instance to ensure proper isolation in tests.
+  message: Directly patching 'datetime.datetime' can lead to inconsistent behavior and security issues. Instead, patch the specific module's datetime instance to ensure proper isolation in tests.
   severity: ERROR
   metadata:
     source-url: github.com/mitre/caldera/commit/fde715c963b1430e656a93c29568f33f0b596805

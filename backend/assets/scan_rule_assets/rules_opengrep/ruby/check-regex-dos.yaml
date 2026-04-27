@@ -4,31 +4,25 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern: 'cookies[...]
-
-          '
+      - pattern: |
+          cookies[...]
       - patterns:
-        - pattern: 'cookies. ... .$PROPERTY[...]
-
-            '
+        - pattern: |
+            cookies. ... .$PROPERTY[...]
         - metavariable-regex:
             metavariable: $PROPERTY
             regex: (?!signed|encrypted)
-      - pattern: 'params[...]
-
-          '
-      - pattern: 'request.env[...]
-
-          '
+      - pattern: |
+          params[...]
+      - pattern: |
+          request.env[...]
       - patterns:
         - pattern: $Y
         - pattern-either:
-          - pattern-inside: '$RECORD.read_attribute($Y)
-
-              '
-          - pattern-inside: '$RECORD[$Y]
-
-              '
+          - pattern-inside: |
+              $RECORD.read_attribute($Y)
+          - pattern-inside: |
+              $RECORD[$Y]
         - metavariable-regex:
             metavariable: $RECORD
             regex: '[A-Z][a-z]+'
@@ -37,20 +31,13 @@ rules:
     - pattern-either:
       - patterns:
         - pattern: $Y
-        - pattern-inside: '/...#{...}.../
-
-            '
+        - pattern-inside: |
+            /...#{...}.../
       - patterns:
         - pattern: $Y
-        - pattern-inside: 'Regexp.new(...)
-
-            '
-  message: Found a potentially user-controllable argument in the construction of a
-    regular expressions. This may result in excessive resource consumption when applied
-    to certain inputs, or when the user is allowed to control the match target. Avoid
-    allowing users to specify regular expressions processed by the server. If you
-    must support user-controllable input in a regular expression, use an allow-list
-    to restrict the expressions users may supply to limit catastrophic backtracking.
+        - pattern-inside: |
+            Regexp.new(...)
+  message: Found a potentially user-controllable argument in the construction of a regular expressions. This may result in excessive resource consumption when applied to certain inputs, or when the user is allowed to control the match target. Avoid allowing users to specify regular expressions processed by the server. If you must support user-controllable input in a regular expression, use an allow-list to restrict the expressions users may supply to limit catastrophic backtracking.
   languages:
   - ruby
   severity: ERROR

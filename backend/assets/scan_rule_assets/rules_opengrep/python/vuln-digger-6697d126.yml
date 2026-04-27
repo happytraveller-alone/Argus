@@ -1,18 +1,13 @@
 rules:
 - id: vuln-digger-6697d126
-  pattern: '$PARSE(..., encoding=''utf-8'')
-
-    '
-  pattern-not: '$PARSE(..., encoding=''utf-8'', resolve_entities=False)
-
-    '
+  pattern: |
+    $PARSE(..., encoding='utf-8')
+  pattern-not: |
+    $PARSE(..., encoding='utf-8', resolve_entities=False)
   languages:
   - python
-  message: 'Detected XML parsing without disabling external entity resolution. This
-    can lead to XXE (XML External Entity) attacks, allowing attackers to read arbitrary
-    files or perform SSRF. Always set resolve_entities=False when parsing XML.
-
-    '
+  message: |
+    Detected XML parsing without disabling external entity resolution. This can lead to XXE (XML External Entity) attacks, allowing attackers to read arbitrary files or perform SSRF. Always set resolve_entities=False when parsing XML.
   severity: ERROR
   metadata:
     source-url: github.com/KBNLresearch/digger/commit/6697d1269d981e35e11f240725b16401b5ce3db5

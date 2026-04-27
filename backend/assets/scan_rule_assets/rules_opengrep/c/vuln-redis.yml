@@ -1,18 +1,13 @@
 rules:
 - id: vuln-redis-01173bc8
-  pattern: 'getnum($FMT, $DF)
-
-    '
-  pattern-not: 'getnum($L, $FMT, $DF)
-
-    '
+  pattern: |
+    getnum($FMT, $DF)
+  pattern-not: |
+    getnum($L, $FMT, $DF)
   languages:
   - c
-  message: 'Detected unsafe use of getnum() without lua_State parameter, which can lead to integer overflow vulnerabilities.
-    The function does not perform proper bounds checking, which could result in undefined behavior or security issues. Always
-    use the updated version of getnum() that includes the lua_State parameter and performs overflow checks.
-
-    '
+  message: |
+    Detected unsafe use of getnum() without lua_State parameter, which can lead to integer overflow vulnerabilities. The function does not perform proper bounds checking, which could result in undefined behavior or security issues. Always use the updated version of getnum() that includes the lua_State parameter and performs overflow checks.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/01173bc8097391b2e46c4d56a080709c219fda53
@@ -26,16 +21,24 @@ rules:
     technology:
     - c
 - id: vuln-redis-0bf90d94
-  pattern: "static void *getMcontextEip(ucontext_t *uc) {\n  ...\n  return (void*) $EXPRESSION;\n  ...\n}\n"
-  pattern-not: "static void* getAndSetMcontextEip(ucontext_t *uc, void *eip) {\n  ...\n  GET_SET_RETURN($EXPRESSION, eip);\n\
-    \  ...\n}\n"
+  pattern: |
+    static void *getMcontextEip(ucontext_t *uc) {
+      ...
+      return (void*) $EXPRESSION;
+      ...
+    }
+  pattern-not: |
+    static void* getAndSetMcontextEip(ucontext_t *uc, void *eip) {
+      ...
+      GET_SET_RETURN($EXPRESSION, eip);
+      ...
+    }
   languages:
   - c
-  message: "Direct return of instruction pointer from ucontext_t without proper validation can lead to crashes when accessing\
-    \ invalid addresses. \nThis vulnerability occurs when the instruction pointer (eip/rip) is directly returned without checking\
-    \ if it points to a valid memory location, potentially causing crashes when logging stack traces.\nThe fix involves using\
-    \ a safer function (getAndSetMcontextEip) that allows validation and modification of the instruction pointer before returning\
-    \ it.\n"
+  message: |
+    Direct return of instruction pointer from ucontext_t without proper validation can lead to crashes when accessing invalid addresses.
+    This vulnerability occurs when the instruction pointer (eip/rip) is directly returned without checking if it points to a valid memory location, potentially causing crashes when logging stack traces.
+    The fix involves using a safer function (getAndSetMcontextEip) that allows validation and modification of the instruction pointer before returning it.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/0bf90d944313919eb8e63d3588bf63a367f020a3
@@ -51,19 +54,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-12b5ff10
-  pattern: 'int $VAR[HLL_Q+2] = {0};
-
-    '
-  pattern-not: 'int $VAR[64] = {0};
-
-    '
+  pattern: |
+    int $VAR[HLL_Q+2] = {0};
+  pattern-not: |
+    int $VAR[64] = {0};
   languages:
   - c
-  message: 'The array `reghisto` was originally declared with a size of `HLL_Q+2`, which could lead to buffer overflows if
-    the input exceeds this size. This vulnerability can result in memory corruption and potential security exploits. To fix
-    this, the array should be declared with a safe size, such as 64, to handle all possible inputs without overflow.
-
-    '
+  message: |
+    The array `reghisto` was originally declared with a size of `HLL_Q+2`, which could lead to buffer overflows if the input exceeds this size. This vulnerability can result in memory corruption and potential security exploits. To fix this, the array should be declared with a safe size, such as 64, to handle all possible inputs without overflow.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/12b5ff109508c2a192f700c7738da7e7f09670f1
@@ -75,20 +73,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-15c078df
-  pattern: 'asyncCloseClientOnOutputBufferLimitReached($C);
-
-    '
-  pattern-not: 'closeClientOnOutputBufferLimitReached($C, $ASYNC);
-
-    '
+  pattern: |
+    asyncCloseClientOnOutputBufferLimitReached($C);
+  pattern-not: |
+    closeClientOnOutputBufferLimitReached($C, $ASYNC);
   languages:
   - c
-  message: 'The function `asyncCloseClientOnOutputBufferLimitReached` has been replaced with `closeClientOnOutputBufferLimitReached`
-    to handle client closure more safely. The old function did not provide control over whether the client should be closed
-    immediately or asynchronously, which could lead to unsafe client handling. Use `closeClientOnOutputBufferLimitReached`
-    with an appropriate `async` parameter to ensure safe client closure.
-
-    '
+  message: |
+    The function `asyncCloseClientOnOutputBufferLimitReached` has been replaced with `closeClientOnOutputBufferLimitReached` to handle client closure more safely. The old function did not provide control over whether the client should be closed immediately or asynchronously, which could lead to unsafe client handling. Use `closeClientOnOutputBufferLimitReached` with an appropriate `async` parameter to ensure safe client closure.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/15c078df61985c76944995bfcb94c1c391c1a46d
@@ -102,19 +94,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-1dc89e2d
-  pattern: 'addReply($CLIENT, $HDR[$LL])
-
-    '
-  pattern-not: 'addReplyProto($CLIENT, $HDR[$LL]->ptr, $HDR_LEN)
-
-    '
+  pattern: |
+    addReply($CLIENT, $HDR[$LL])
+  pattern-not: |
+    addReplyProto($CLIENT, $HDR[$LL]->ptr, $HDR_LEN)
   languages:
   - c
-  message: 'The function `addReply` is being used to send a response header directly, which can lead to potential vulnerabilities
-    due to incorrect handling of the response length. This can cause issues with protocol compliance and buffer overflows.
-    Use `addReplyProto` instead, which explicitly handles the length of the response to ensure proper protocol handling.
-
-    '
+  message: |
+    The function `addReply` is being used to send a response header directly, which can lead to potential vulnerabilities due to incorrect handling of the response length. This can cause issues with protocol compliance and buffer overflows. Use `addReplyProto` instead, which explicitly handles the length of the response to ensure proper protocol handling.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/1dc89e2d0230f4bcadf21ee8185b79a12b001cf0
@@ -128,18 +115,25 @@ rules:
     technology:
     - c
 - id: vuln-redis-1ddecf19
-  pattern: 'uint32_t *$LCS = zmalloc((size_t)($ALEN+1)*($BLEN+1)*sizeof(uint32_t));
-
-    '
-  pattern-not: "unsigned long long $LCS_SIZE = (unsigned long long)($ALEN+1)*($BLEN+1);\nunsigned long long $LCS_ALLOC = $LCS_SIZE\
-    \ * sizeof(uint32_t);\nuint32_t *$LCS = NULL;\nif ($LCS_ALLOC < SIZE_MAX && $LCS_ALLOC / $LCS_SIZE == sizeof(uint32_t))\n\
-    \  $LCS = ztrymalloc($LCS_ALLOC);\nif (!$LCS) {\n  addReplyError($C, \"Insufficient memory\");\n  goto cleanup;\n}\n"
+  pattern: |
+    uint32_t *$LCS = zmalloc((size_t)($ALEN+1)*($BLEN+1)*sizeof(uint32_t));
+  pattern-not: |
+    unsigned long long $LCS_SIZE = (unsigned long long)($ALEN+1)*($BLEN+1);
+    unsigned long long $LCS_ALLOC = $LCS_SIZE * sizeof(uint32_t);
+    uint32_t *$LCS = NULL;
+    if ($LCS_ALLOC < SIZE_MAX && $LCS_ALLOC / $LCS_SIZE == sizeof(uint32_t))
+      $LCS = ztrymalloc($LCS_ALLOC);
+    if (!$LCS) {
+      addReplyError($C, "Insufficient memory");
+      goto cleanup;
+    }
   languages:
   - c
-  message: "Potential integer overflow vulnerability in memory allocation. \nThe original code directly multiplies the length\
-    \ of two strings without checking for overflow, which could lead to a buffer overflow. \nThe fix introduces checks to\
-    \ ensure the allocation size does not overflow and uses a larger data type for the calculation.\nTo fix this, always validate\
-    \ the size of memory allocations and use appropriate data types to prevent overflow.\n"
+  message: |
+    Potential integer overflow vulnerability in memory allocation.
+    The original code directly multiplies the length of two strings without checking for overflow, which could lead to a buffer overflow.
+    The fix introduces checks to ensure the allocation size does not overflow and uses a larger data type for the calculation.
+    To fix this, always validate the size of memory allocations and use appropriate data types to prevent overflow.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/1ddecf1958924b178b76a31d989ef1e05af81964
@@ -153,20 +147,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-39feee8e
-  pattern: 'robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], shared.null[$C->resp]);
-
-    '
-  pattern-not: 'robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], $HASCOUNT ? shared.nullarray[$C->resp] : shared.null[$C->resp]);
-
-    '
+  pattern: |
+    robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], shared.null[$C->resp]);
+  pattern-not: |
+    robj *$O = lookupKeyWriteOrReply($C, $C->argv[1], $HASCOUNT ? shared.nullarray[$C->resp] : shared.null[$C->resp]);
   languages:
   - c
-  message: 'Detected a potential vulnerability where the response type is not correctly handled based on the presence of a
-    count parameter. This could lead to incorrect or unsafe behavior in the Redis list operations. The fix involves using
-    a conditional check to determine the appropriate response type (nullarray or null) based on whether a count parameter
-    is present.
-
-    '
+  message: |
+    Detected a potential vulnerability where the response type is not correctly handled based on the presence of a count parameter. This could lead to incorrect or unsafe behavior in the Redis list operations. The fix involves using a conditional check to determine the appropriate response type (nullarray or null) based on whether a count parameter is present.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/39feee8e3a6fee885aee60672a9d9de0dfd08896c
@@ -178,16 +166,21 @@ rules:
     technology:
     - c
 - id: vuln-redis-5674b005
-  pattern: "int $AUTH_REQUIRED = (!(DefaultUser->flags & USER_FLAG_NOPASS) ||\n                      (DefaultUser->flags &\
-    \ USER_FLAG_DISABLED)) &&\n                    !$C->authenticated;\nif ($AUTH_REQUIRED) {\n    ...\n}\n"
-  pattern-not: "if (authRequired($C)) {\n    ...\n}\n"
+  pattern: |
+    int $AUTH_REQUIRED = (!(DefaultUser->flags & USER_FLAG_NOPASS) ||
+                          (DefaultUser->flags & USER_FLAG_DISABLED)) &&
+                        !$C->authenticated;
+    if ($AUTH_REQUIRED) {
+        ...
+    }
+  pattern-not: |
+    if (authRequired($C)) {
+        ...
+    }
   languages:
   - c
-  message: 'Insecure authentication check detected. The authentication logic is duplicated and may lead to inconsistencies.
-    Use the centralized `authRequired` function instead to ensure consistent authentication checks across the codebase. This
-    vulnerability could allow unauthenticated access to sensitive operations.
-
-    '
+  message: |
+    Insecure authentication check detected. The authentication logic is duplicated and may lead to inconsistencies. Use the centralized `authRequired` function instead to ensure consistent authentication checks across the codebase. This vulnerability could allow unauthenticated access to sensitive operations.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/5674b0057ff2903d43eaff802017eddf37c360f8
@@ -201,19 +194,20 @@ rules:
     technology:
     - c
 - id: vuln-redis-599e59eb
-  pattern: 'ASSERT_NO_SIZE_OVERFLOW($SIZE);
-
-    '
-  pattern-not: "if ($SIZE >= SIZE_MAX/2) return NULL;\nif ($SIZE >= SIZE_MAX/2) zmalloc_oom_handler($SIZE);\nif ($SIZE >=\
-    \ SIZE_MAX/2) {\n    zfree($PTR);\n    if ($USABLE) *$USABLE = 0;\n    return NULL;\n}\n"
+  pattern: |
+    ASSERT_NO_SIZE_OVERFLOW($SIZE);
+  pattern-not: |
+    if ($SIZE >= SIZE_MAX/2) return NULL;
+    if ($SIZE >= SIZE_MAX/2) zmalloc_oom_handler($SIZE);
+    if ($SIZE >= SIZE_MAX/2) {
+        zfree($PTR);
+        if ($USABLE) *$USABLE = 0;
+        return NULL;
+    }
   languages:
   - c
-  message: 'The code uses an assertion to check for size overflow, which is insufficient for handling potential integer overflows
-    during memory allocation. This can lead to security vulnerabilities such as buffer overflows or memory corruption. Instead,
-    explicitly check for overflow conditions and handle them appropriately by returning NULL or invoking an out-of-memory
-    handler.
-
-    '
+  message: |
+    The code uses an assertion to check for size overflow, which is insufficient for handling potential integer overflows during memory allocation. This can lead to security vulnerabilities such as buffer overflows or memory corruption. Instead, explicitly check for overflow conditions and handle them appropriately by returning NULL or invoking an out-of-memory handler.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/599e59ebc57283f52c60a8de56ec5f44d053109a
@@ -227,19 +221,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-697af434
-  pattern: 'server.vm_enabled
-
-    '
-  pattern-not: 'server.ds_enabled
-
-    '
+  pattern: |
+    server.vm_enabled
+  pattern-not: |
+    server.ds_enabled
   languages:
   - c
-  message: 'Detected usage of deprecated `vm_enabled` variable, which has been replaced by `ds_enabled`. This could lead to
-    incorrect behavior or security vulnerabilities due to outdated memory management logic. Update the code to use `ds_enabled`
-    instead.
-
-    '
+  message: |
+    Detected usage of deprecated `vm_enabled` variable, which has been replaced by `ds_enabled`. This could lead to incorrect behavior or security vulnerabilities due to outdated memory management logic. Update the code to use `ds_enabled` instead.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/697af434fbeb2e3ba2ba9687cd283ed1a2734fa5
@@ -253,16 +242,27 @@ rules:
     technology:
     - c
 - id: vuln-redis-6ac3c0b7
-  pattern: "sds *$FUNC(int *$ARGC) {\n    ...\n    $P = strstr($P,\"\\r\\n\");\n    if (!$P) goto $LABEL;\n    ...\n}\n"
-  pattern-not: "sds *$FUNC(int *$ARGC, char** $ERR) {\n    ...\n    $P = strstr($P,\"\\r\\n\");\n    if (!$P) goto $LABEL;\n\
-    \    ...\n}\n"
+  pattern: |
+    sds *$FUNC(int *$ARGC) {
+        ...
+        $P = strstr($P,"\r\n");
+        if (!$P) goto $LABEL;
+        ...
+    }
+  pattern-not: |
+    sds *$FUNC(int *$ARGC, char** $ERR) {
+        ...
+        $P = strstr($P,"\r\n");
+        if (!$P) goto $LABEL;
+        ...
+    }
   languages:
   - c
-  message: "The function `ldbReplParseCommand` is vulnerable to a protocol error due to insufficient error handling. \nThe\
-    \ original version did not properly handle cases where the input buffer was incomplete, leading to potential protocol\
-    \ errors.\nThis could be exploited by an attacker to cause undefined behavior or crashes. \nThe fix introduces proper\
-    \ error handling by using an additional `err` parameter to manage protocol errors and ensures the function handles incomplete\
-    \ buffers correctly.\n"
+  message: |
+    The function `ldbReplParseCommand` is vulnerable to a protocol error due to insufficient error handling.
+    The original version did not properly handle cases where the input buffer was incomplete, leading to potential protocol errors.
+    This could be exploited by an attacker to cause undefined behavior or crashes.
+    The fix introduces proper error handling by using an additional `err` parameter to manage protocol errors and ensures the function handles incomplete buffers correctly.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/6ac3c0b7abd35f37201ed2d6298ecef4ea1ae1dd
@@ -274,15 +274,18 @@ rules:
     technology:
     - c
 - id: vuln-redis-6d9f8e24
-  pattern: "if (getClientTypeByName($VAR) == -1) {\n  ...\n}\n"
-  pattern-not: "if (getClientTypeByName($VAR) == -1 || getClientTypeByName($VAR) == CLIENT_TYPE_MASTER) {\n  ...\n}\n"
+  pattern: |
+    if (getClientTypeByName($VAR) == -1) {
+      ...
+    }
+  pattern-not: |
+    if (getClientTypeByName($VAR) == -1 || getClientTypeByName($VAR) == CLIENT_TYPE_MASTER) {
+      ...
+    }
   languages:
   - c
-  message: 'The code does not properly handle the case where the client type is ''master'', which has no buffer limits. This
-    can lead to incorrect client limit enforcement. To fix this, ensure that the condition checks for both invalid client
-    types and the ''master'' type explicitly.
-
-    '
+  message: |
+    The code does not properly handle the case where the client type is 'master', which has no buffer limits. This can lead to incorrect client limit enforcement. To fix this, ensure that the condition checks for both invalid client types and the 'master' type explicitly.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/6d9f8e2462fc2c426d48c941edeb78e5df7d2977
@@ -296,33 +299,22 @@ rules:
     technology:
     - c
 - id: vuln-redis-71536684
-  pattern: 'FILE *$FP = fopen($FILENAME, "w");
-
-    '
-  pattern-not: 'mode_t $OLD_UMASK = umask($MODE);
-
+  pattern: |
+    FILE *$FP = fopen($FILENAME, "w");
+  pattern-not: |
+    mode_t $OLD_UMASK = umask($MODE);
     FILE *$FP;
-
     $FP = fopen($FILENAME, "w");
-
     umask($OLD_UMASK);
-
     chmod($FILENAME, $PERMISSIONS);
-
-    '
   languages:
   - c
-  message: 'Detected insecure file creation without proper permissions. This can lead to
-
+  message: |
+    Detected insecure file creation without proper permissions. This can lead to
     security vulnerabilities where sensitive files are created with overly permissive
-
     access rights, allowing unauthorized users to read or modify them. To fix this,
-
     use umask to restrict permissions during file creation and explicitly set
-
     appropriate permissions with chmod.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/71536684a788dc859e42132a2c5a2b7373414375
@@ -333,20 +325,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-79f089bd
-  pattern: 'createSentinelAddr($HOSTNAME, $PORT)
-
-    '
-  pattern-not: 'createSentinelAddr($HOSTNAME, $PORT, $IS_ACCEPT_UNRESOLVED)
-
-    '
+  pattern: |
+    createSentinelAddr($HOSTNAME, $PORT)
+  pattern-not: |
+    createSentinelAddr($HOSTNAME, $PORT, $IS_ACCEPT_UNRESOLVED)
   languages:
   - c
-  message: 'The function `createSentinelAddr` is called without the `is_accept_unresolved` parameter, which can lead to unresolved
-    hostname issues. This can cause the function to return NULL when it fails to resolve the hostname, potentially leading
-    to unexpected behavior or crashes. The fix includes adding the `is_accept_unresolved` parameter to control whether unresolved
-    hostnames are accepted.
-
-    '
+  message: |
+    The function `createSentinelAddr` is called without the `is_accept_unresolved` parameter, which can lead to unresolved hostname issues. This can cause the function to return NULL when it fails to resolve the hostname, potentially leading to unexpected behavior or crashes. The fix includes adding the `is_accept_unresolved` parameter to control whether unresolved hostnames are accepted.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/79f089bdd92348d5fa3965258f539752f2eb8e78
@@ -360,20 +346,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-874804da
-  pattern: 'if ($C->flags & CLIENT_CLOSE_AFTER_REPLY) break;
-
-    '
-  pattern-not: 'if ($C->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
-
-    '
+  pattern: |
+    if ($C->flags & CLIENT_CLOSE_AFTER_REPLY) break;
+  pattern-not: |
+    if ($C->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
   languages:
   - c
-  message: 'Detected a missing check for CLIENT_CLOSE_ASAP flag in Redis networking code. This vulnerability could allow cross-protocol
-    scripting attacks where an attacker sends HTTP commands (like POST or Host:) to Redis, potentially compromising the instance.
-    The fix involves adding a check for the CLIENT_CLOSE_ASAP flag to terminate connections immediately when such commands
-    are detected.
-
-    '
+  message: |
+    Detected a missing check for CLIENT_CLOSE_ASAP flag in Redis networking code. This vulnerability could allow cross-protocol scripting attacks where an attacker sends HTTP commands (like POST or Host:) to Redis, potentially compromising the instance. The fix involves adding a check for the CLIENT_CLOSE_ASAP flag to terminate connections immediately when such commands are detected.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/874804da0c014a7d704b3d285aa500098a931f50
@@ -387,18 +367,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-875a1f07
-  pattern: 'preventCommandLogging($C);
-
-    '
-  pattern-not: 'redactClientCommandArgument($C, $ARG);
-
-    '
+  pattern: |
+    preventCommandLogging($C);
+  pattern-not: |
+    redactClientCommandArgument($C, $ARG);
   languages:
   - c
-  message: 'The use of `preventCommandLogging` can lead to information leakage as it only prevents logging without redacting
-    sensitive information. Replace it with `redactClientCommandArgument` to properly redact sensitive data.
-
-    '
+  message: |
+    The use of `preventCommandLogging` can lead to information leakage as it only prevents logging without redacting sensitive information. Replace it with `redactClientCommandArgument` to properly redact sensitive data.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/875a1f07d821dc5abe737b064018a27bbc7175d2
@@ -410,19 +386,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-9f63e75a
-  pattern: 'getnum($FMT, $DF)
-
-    '
-  pattern-not: 'getnum($L, $FMT, $DF)
-
-    '
+  pattern: |
+    getnum($FMT, $DF)
+  pattern-not: |
+    getnum($L, $FMT, $DF)
   languages:
   - c
-  message: 'Detected a call to `getnum` without the `lua_State` parameter, which can lead to integer overflow vulnerabilities.
-    This is dangerous because it can cause undefined behavior, crashes, or security exploits. Always include the `lua_State`
-    parameter to enable proper error handling for integer overflow checks.
-
-    '
+  message: |
+    Detected a call to `getnum` without the `lua_State` parameter, which can lead to integer overflow vulnerabilities. This is dangerous because it can cause undefined behavior, crashes, or security exploits. Always include the `lua_State` parameter to enable proper error handling for integer overflow checks.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/9f63e75a07e73f40fec72ef83545f6e7f0438e90
@@ -436,18 +407,17 @@ rules:
     technology:
     - c
 - id: vuln-redis-a4b90be9
-  pattern: 'int reghisto[$X+2] = {0};
-
-    '
-  pattern-not: 'int reghisto[64] = {0};
-
-    '
+  pattern: |
+    int reghisto[$X+2] = {0};
+  pattern-not: |
+    int reghisto[64] = {0};
   languages:
   - c
-  message: "The array 'reghisto' is declared with a size that could lead to buffer overflow vulnerabilities. \nThe size should\
-    \ be fixed to a safe value (e.g., 64) to prevent potential overflows that could write data to incorrect memory locations.\n\
-    This vulnerability is dangerous because it could lead to memory corruption, crashes, or even arbitrary code execution.\n\
-    To fix this, ensure the array size is set to a safe, fixed value that accommodates all possible input scenarios.\n"
+  message: |
+    The array 'reghisto' is declared with a size that could lead to buffer overflow vulnerabilities.
+    The size should be fixed to a safe value (e.g., 64) to prevent potential overflows that could write data to incorrect memory locations.
+    This vulnerability is dangerous because it could lead to memory corruption, crashes, or even arbitrary code execution.
+    To fix this, ensure the array size is set to a safe, fixed value that accommodates all possible input scenarios.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/a4b90be9fcd5e1668ac941cabce3b1ab38dbe326
@@ -462,22 +432,18 @@ rules:
     technology:
     - c
 - id: vuln-redis-aa856b39
-  pattern: 'lua_pushstring($LUA, $ERR);
-
+  pattern: |
+    lua_pushstring($LUA, $ERR);
     lua_error($LUA);
-
-    '
-  pattern-not: 'luaPushError($LUA, $ERR);
-
+  pattern-not: |
+    luaPushError($LUA, $ERR);
     luaError($LUA);
-
-    '
   languages:
   - c
-  message: "Direct use of `lua_pushstring` followed by `lua_error` can lead to inconsistent error handling and potential security\
-    \ issues. \nThe vulnerability arises because the error message is not properly formatted and doesn't include necessary\
-    \ metadata. \nInstead, use `luaPushError` and `luaError` which properly format the error message and include additional\
-    \ context like source and line number.\n"
+  message: |
+    Direct use of `lua_pushstring` followed by `lua_error` can lead to inconsistent error handling and potential security issues.
+    The vulnerability arises because the error message is not properly formatted and doesn't include necessary metadata.
+    Instead, use `luaPushError` and `luaError` which properly format the error message and include additional context like source and line number.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/aa856b39f2ca65dbcc0eaae2d2c52f7a35291bbf
@@ -490,19 +456,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-b099889a
-  pattern: '$VAR = callReplyCreate($PROTO, $CTX);
-
-    '
-  pattern-not: '$VAR = callReplyCreate($PROTO, $ERROR_LIST, $CTX);
-
-    '
+  pattern: |
+    $VAR = callReplyCreate($PROTO, $CTX);
+  pattern-not: |
+    $VAR = callReplyCreate($PROTO, $ERROR_LIST, $CTX);
   languages:
   - c
-  message: 'The function `callReplyCreate` is missing the `deferred_error_list` parameter, which can lead to unhandled error
-    propagation and potential memory leaks. This vulnerability can cause incorrect error handling and statistics in Redis.
-    To fix this, ensure that the `deferred_error_list` parameter is passed to `callReplyCreate` and properly managed.
-
-    '
+  message: |
+    The function `callReplyCreate` is missing the `deferred_error_list` parameter, which can lead to unhandled error propagation and potential memory leaks. This vulnerability can cause incorrect error handling and statistics in Redis. To fix this, ensure that the `deferred_error_list` parameter is passed to `callReplyCreate` and properly managed.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/b099889a3a6dccf5243135f0611b8cdb11cab7b8
@@ -514,22 +475,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-c9928576
-  pattern: 'createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LLONG_MAX, $VAR, 512ll*1024*1024,
-    MEMORY_CONFIG, NULL, NULL)
-
-    '
-  pattern-not: 'createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LONG_MAX, $VAR, 512ll*1024*1024,
-    MEMORY_CONFIG, NULL, NULL)
-
-    '
+  pattern: |
+    createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LLONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
+  pattern-not: |
+    createLongLongConfig("proto-max-bulk-len", NULL, MODIFIABLE_CONFIG, 1024*1024, LONG_MAX, $VAR, 512ll*1024*1024, MEMORY_CONFIG, NULL, NULL)
   languages:
   - c
-  message: 'The vulnerability involves the use of `LLONG_MAX` instead of `LONG_MAX` for the `proto-max-bulk-len` configuration
-    parameter. This can lead to integer overflow issues, especially on systems where `LLONG_MAX` exceeds the expected range
-    for memory allocation. This could result in undefined behavior, crashes, or security vulnerabilities. The fix replaces
-    `LLONG_MAX` with `LONG_MAX` to ensure the value stays within a safe range.
-
-    '
+  message: |
+    The vulnerability involves the use of `LLONG_MAX` instead of `LONG_MAX` for the `proto-max-bulk-len` configuration parameter. This can lead to integer overflow issues, especially on systems where `LLONG_MAX` exceeds the expected range for memory allocation. This could result in undefined behavior, crashes, or security vulnerabilities. The fix replaces `LLONG_MAX` with `LONG_MAX` to ensure the value stays within a safe range.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/c992857618db99776917f10bf4f2345a5fdc78b0
@@ -540,17 +493,23 @@ rules:
     technology:
     - c
 - id: vuln-redis-e216ceaf
-  pattern: "if (($RUNLEN + $IDX) > HLL_REGISTERS) {\n    ...\n    return C_ERR;\n}\n"
-  pattern-not: 'if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
-
-    '
+  pattern: |
+    if (($RUNLEN + $IDX) > HLL_REGISTERS) {
+        ...
+        return C_ERR;
+    }
+  pattern-not: |
+    if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
   languages:
   - c
-  message: "Detected a potential integer overflow vulnerability in Redis. The original code \nreturns an error when an overflow\
-    \ condition is detected, but this can lead to \nundefined behavior or security issues. The fix replaces the error return\
-    \ with \na break statement to properly handle the overflow condition. This vulnerability \ncould be exploited to cause\
-    \ unexpected behavior or crashes in the application. \nTo fix this, ensure that overflow conditions are handled gracefully\
-    \ by breaking \nout of the loop or using appropriate boundary checks.\n"
+  message: |
+    Detected a potential integer overflow vulnerability in Redis. The original code
+    returns an error when an overflow condition is detected, but this can lead to
+    undefined behavior or security issues. The fix replaces the error return with
+    a break statement to properly handle the overflow condition. This vulnerability
+    could be exploited to cause unexpected behavior or crashes in the application.
+    To fix this, ensure that overflow conditions are handled gracefully by breaking
+    out of the loop or using appropriate boundary checks.
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/e216ceaf0e099536fe3658a29dcb725d812364e0
@@ -564,36 +523,23 @@ rules:
     technology:
     - c
 - id: vuln-redis-e89086e0
-  pattern: 'size_t $POS = luaL_optinteger($L, $ARG, 1) - 1;
-
+  pattern: |
+    size_t $POS = luaL_optinteger($L, $ARG, 1) - 1;
     ...
-
     luaL_argcheck($L, $POS + $SIZE <= $LD, $ARG2, "data string too short");
-
-    '
-  pattern-not: 'size_t $POS = luaL_optinteger($L, $ARG, 1);
-
+  pattern-not: |
+    size_t $POS = luaL_optinteger($L, $ARG, 1);
     luaL_argcheck($L, $POS > 0, $ARG, "offset must be 1 or greater");
-
     $POS--;
-
     ...
-
     luaL_argcheck($L, $SIZE <= $LD && $POS <= $LD - $SIZE, $ARG2, "data string too short");
-
-    '
   languages:
   - c
-  message: 'The code contains a potential integer underflow vulnerability due to incorrect offset calculation.
-
-    When `luaL_optinteger` returns a value less than 1, subtracting 1 can cause an underflow, leading to memory corruption
-    or crashes.
-
+  message: |
+    The code contains a potential integer underflow vulnerability due to incorrect offset calculation.
+    When `luaL_optinteger` returns a value less than 1, subtracting 1 can cause an underflow, leading to memory corruption or crashes.
     The fix includes a check to ensure the offset is greater than 0 before subtraction and corrects the bounds checking logic.
-
     To fix this, ensure the offset is validated before subtraction and use proper bounds checking.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/antirez/redis/commit/e89086e09a38cc6713bcd4b9c29abf92cf393936
@@ -607,17 +553,17 @@ rules:
     technology:
     - c
 - id: vuln-redis-ef1833b3
-  pattern: "if (($RUNLEN + $IDX) > HLL_REGISTERS) {\n    $ACTION;\n    return C_ERR;\n}\n"
-  pattern-not: 'if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
-
-    '
+  pattern: |
+    if (($RUNLEN + $IDX) > HLL_REGISTERS) {
+        $ACTION;
+        return C_ERR;
+    }
+  pattern-not: |
+    if (($RUNLEN + $IDX) > HLL_REGISTERS) break;
   languages:
   - c
-  message: 'A potential buffer overflow vulnerability exists in the code. The check for overflow returns an error but does
-    not break the loop, which could lead to undefined behavior or memory corruption. Instead of returning an error, the loop
-    should be terminated using a ''break'' statement to prevent further execution that could cause overflow.
-
-    '
+  message: |
+    A potential buffer overflow vulnerability exists in the code. The check for overflow returns an error but does not break the loop, which could lead to undefined behavior or memory corruption. Instead of returning an error, the loop should be terminated using a 'break' statement to prevent further execution that could cause overflow.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/ef1833b3f9d02261617b757fd6ebe0ec3f1be507
@@ -631,20 +577,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-f613873d
-  pattern: '($D->ht[1].size / $D->ht[0].size < $RATIO)
-
-    '
-  pattern-not: '(($S1 > $S0 && $S1 / $S0 < $RATIO) || ($S1 < $S0 && $S0 / $S1 < $RATIO))
-
-    '
+  pattern: |
+    ($D->ht[1].size / $D->ht[0].size < $RATIO)
+  pattern-not: |
+    (($S1 > $S0 && $S1 / $S0 < $RATIO) || ($S1 < $S0 && $S0 / $S1 < $RATIO))
   languages:
   - c
-  message: 'The vulnerability involves a division operation that could lead to incorrect behavior when the size of the first
-    hash table is smaller than the second. This could cause incorrect resizing decisions in the dictionary, potentially leading
-    to performance issues or unexpected behavior. The fix ensures that the ratio is checked in both directions, preventing
-    incorrect resizing decisions.
-
-    '
+  message: |
+    The vulnerability involves a division operation that could lead to incorrect behavior when the size of the first hash table is smaller than the second. This could cause incorrect resizing decisions in the dictionary, potentially leading to performance issues or unexpected behavior. The fix ensures that the ratio is checked in both directions, preventing incorrect resizing decisions.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/f613873de02340f70abcc606b5fa59caebb076f3
@@ -656,28 +596,18 @@ rules:
     technology:
     - c
 - id: vuln-redis-f6a40570
-  pattern: 'size_t $MAXELELEN = 0;
-
+  pattern: |
+    size_t $MAXELELEN = 0;
     ...
-
     zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN);
-
-    '
-  pattern-not: 'size_t $MAXELELEN = 0, $TOTELELEN = 0;
-
+  pattern-not: |
+    size_t $MAXELELEN = 0, $TOTELELEN = 0;
     ...
-
     zsetConvertToZiplistIfNeeded($ZOBJ, $MAXELELEN, $TOTELELEN);
-
-    '
   languages:
   - c
-  message: 'The code is vulnerable to integer overflow when converting a zset to a ziplist because it only checks the maximum
-    element length but not the total length of all elements. This can lead to memory corruption or crashes when the total
-    size exceeds safe limits. To fix this, ensure the total length of all elements is checked using `ziplistSafeToAdd()` before
-    conversion.
-
-    '
+  message: |
+    The code is vulnerable to integer overflow when converting a zset to a ziplist because it only checks the maximum element length but not the total length of all elements. This can lead to memory corruption or crashes when the total size exceeds safe limits. To fix this, ensure the total length of all elements is checked using `ziplistSafeToAdd()` before conversion.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/f6a40570fa63d5afdd596c78083d754081d80ae3
@@ -688,20 +618,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-fa6815e1
-  pattern: 'getRangeLongFromObjectOrReply($C, $ARG, 1, LONG_MAX, $COUNT, "COUNT must be > 0")
-
-    '
-  pattern-not: 'getRangeLongFromObjectOrReply($C, $ARG, 1, $MAX_COUNT, $COUNT, "COUNT must be > 0")
-
-    '
+  pattern: |
+    getRangeLongFromObjectOrReply($C, $ARG, 1, LONG_MAX, $COUNT, "COUNT must be > 0")
+  pattern-not: |
+    getRangeLongFromObjectOrReply($C, $ARG, 1, $MAX_COUNT, $COUNT, "COUNT must be > 0")
   languages:
   - c
-  message: 'Detected potential integer overflow vulnerability due to unchecked use of LONG_MAX in getRangeLongFromObjectOrReply.
-    This can lead to excessive memory allocation or incorrect calculations. The fix introduces a max_count limit by dividing
-    LONG_MAX by a factor (sizeof(streamID) * attempts_factor) to prevent overflow. Ensure proper bounds checking when handling
-    large input values.
-
-    '
+  message: |
+    Detected potential integer overflow vulnerability due to unchecked use of LONG_MAX in getRangeLongFromObjectOrReply. This can lead to excessive memory allocation or incorrect calculations. The fix introduces a max_count limit by dividing LONG_MAX by a factor (sizeof(streamID) * attempts_factor) to prevent overflow. Ensure proper bounds checking when handling large input values.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/fa6815e14ea5adff93c5cd7be513c02a7c6e3f2a
@@ -712,19 +636,14 @@ rules:
     technology:
     - c
 - id: vuln-redis-fad0b0d2
-  pattern: 'updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US);
-
-    '
-  pattern-not: 'updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US, $HAD_ERRORS);
-
-    '
+  pattern: |
+    updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US);
+  pattern-not: |
+    updateStatsOnUnblock($CLIENT, $BLOCKED_US, $REPLY_US, $HAD_ERRORS);
   languages:
   - c
-  message: 'The function `updateStatsOnUnblock` is being called without the `had_errors` parameter, which is necessary to
-    track failed calls accurately. This can lead to incorrect statistics and potentially mask error conditions. Always include
-    the `had_errors` parameter when calling this function.
-
-    '
+  message: |
+    The function `updateStatsOnUnblock` is being called without the `had_errors` parameter, which is necessary to track failed calls accurately. This can lead to incorrect statistics and potentially mask error conditions. Always include the `had_errors` parameter when calling this function.
   severity: ERROR
   metadata:
     source-url: github.com/redis/redis/commit/fad0b0d2a680498fce1cd7e153f8ad7396a79edf

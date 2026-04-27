@@ -7,38 +7,42 @@ rules:
   patterns:
   - pattern-either:
     - pattern: shutil.copyfileobj($SOURCE, $DESTINATION)
-  - pattern-inside: 'import zipfile
-
+  - pattern-inside: |
+      import zipfile
       ...
-
-      '
   - pattern-either:
-    - pattern-inside: "with zipfile.ZipFile($FILE, ...) as $FD:\n  ...\n"
-    - pattern-inside: '$FD = zipfile.ZipFile($FILE, ...)
-
+    - pattern-inside: |
+        with zipfile.ZipFile($FILE, ...) as $FD:
+          ...
+    - pattern-inside: |
+        $FD = zipfile.ZipFile($FILE, ...)
         ...
-
-        '
   - pattern-either:
-    - pattern-inside: "$FILELIST = $FD.namelist()\n...\nfor $FILENAME in $FILELIST:\n\
-        \  ...\n"
-    - pattern-inside: "for $FILENAME in $FD.namelist():\n  ...\n"
+    - pattern-inside: |
+        $FILELIST = $FD.namelist()
+        ...
+        for $FILENAME in $FILELIST:
+          ...
+    - pattern-inside: |
+        for $FILENAME in $FD.namelist():
+          ...
   - pattern-either:
-    - pattern-inside: "with open($FILENAME, ...) as $DESTINATION:\n  ...\n"
-    - pattern-inside: '$DESTINATION = open($FILENAME, ...)
-
+    - pattern-inside: |
+        with open($FILENAME, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |
+        $DESTINATION = open($FILENAME, ...)
         ...
-
-        '
-    - pattern-inside: "$DESTINATION_PATH = os.path.join(..., $FILENAME)\n...\nwith\
-        \ open($DESTINATION_PATH, ...) as $DESTINATION:\n  ...\n"
-    - pattern-inside: '$DESTINATION_PATH = os.path.join(..., $FILENAME)
-
+    - pattern-inside: |
+        $DESTINATION_PATH = os.path.join(..., $FILENAME)
         ...
-
+        with open($DESTINATION_PATH, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |-
+        $DESTINATION_PATH = os.path.join(..., $FILENAME)
+        ...
         $DESTINATION = open($DESTINATION_PATH, ...)
-
-        ...'
+        ...
   metadata:
     cwe:
     - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'

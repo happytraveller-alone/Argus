@@ -2,14 +2,12 @@ rules:
 - id: ldap-injection_1
   languages:
   - csharp
-  message: LDAP queries are constructed dynamically on user-controlled input. This
-    vulnerability in code could lead to an arbitrary LDAP query execution.
+  message: LDAP queries are constructed dynamically on user-controlled input. This vulnerability in code could lead to an arbitrary LDAP query execution.
   metadata:
     category: security
     confidence: MEDIUM
     cwe:
-    - 'CWE-90: Improper Neutralization of Special Elements used in an LDAP Query (''LDAP
-      Injection'')'
+    - 'CWE-90: Improper Neutralization of Special Elements used in an LDAP Query (''LDAP Injection'')'
     impact: MEDIUM
     likelihood: MEDIUM
     owasp:

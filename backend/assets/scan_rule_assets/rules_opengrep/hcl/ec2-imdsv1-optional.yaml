@@ -25,15 +25,41 @@ rules:
   pattern-either:
   - patterns:
     - pattern: http_tokens = "optional"
-    - pattern-inside: 'metadata_options { ... }
-
-        '
+    - pattern-inside: |
+        metadata_options { ... }
   - patterns:
-    - pattern: "resource \"aws_instance\" \"$NAME\" {\n  ...\n}\n"
-    - pattern-not: "resource \"aws_instance\" \"$NAME\" {\n  ...\n  metadata_options\
-        \ {\n    ...\n    http_tokens = \"required\"\n    ...\n  }\n  ...\n}\n"
-    - pattern-not: "resource \"aws_instance\" \"$NAME\" {\n  ...\n  metadata_options\
-        \ {\n    ...\n    http_tokens = \"optional\"\n    ...\n  }\n  ...\n}\n"
-    - pattern-not: "resource \"aws_instance\" \"$NAME\" {\n  ...\n  metadata_options\
-        \ {\n    ...\n    http_endpoint = \"disabled\"\n    ...\n  }\n  ...\n}\n"
+    - pattern: |
+        resource "aws_instance" "$NAME" {
+          ...
+        }
+    - pattern-not: |
+        resource "aws_instance" "$NAME" {
+          ...
+          metadata_options {
+            ...
+            http_tokens = "required"
+            ...
+          }
+          ...
+        }
+    - pattern-not: |
+        resource "aws_instance" "$NAME" {
+          ...
+          metadata_options {
+            ...
+            http_tokens = "optional"
+            ...
+          }
+          ...
+        }
+    - pattern-not: |
+        resource "aws_instance" "$NAME" {
+          ...
+          metadata_options {
+            ...
+            http_endpoint = "disabled"
+            ...
+          }
+          ...
+        }
   severity: ERROR

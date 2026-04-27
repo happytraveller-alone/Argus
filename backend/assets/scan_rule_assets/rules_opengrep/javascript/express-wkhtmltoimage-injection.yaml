@@ -1,8 +1,7 @@
 rules:
 - id: express-wkhtmltoimage-injection
-  message: 'If unverified user data can reach the `phantom` methods it can result in Server-Side Request Forgery vulnerabilities
-
-    '
+  message: |
+    If unverified user data can reach the `phantom` methods it can result in Server-Side Request Forgery vulnerabilities
   metadata:
     owasp: 'A1: Injection'
     cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
@@ -10,20 +9,14 @@ rules:
   languages:
   - javascript
   patterns:
-  - pattern-inside: '...
-
-      $WK = require(''wkhtmltoimage'');
-
+  - pattern-inside: |
       ...
-
-      '
-  - pattern-inside: '...
-
-      require(''express'');
-
+      $WK = require('wkhtmltoimage');
       ...
-
-      '
+  - pattern-inside: |
+      ...
+      require('express');
+      ...
   - pattern-either:
     - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
     - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
@@ -32,20 +25,14 @@ rules:
   - pattern-either:
     - pattern: $WK.generate(<... $REQ.$QUERY.$FOO ...>,...)
     - pattern: $WK.generate(<... $REQ.$BODY ...>,...)
-    - pattern: '$INPUT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $WK.generate(<... $INPUT ...>,...);
-
-        '
-    - pattern: '$INPUT = <... $REQ.$BODY ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
         ...
-
         $WK.generate(<... $INPUT ...>,...);
-
-        '
 - id: express-wkhtmltoimage-injection_1
   languages:
   - javascript
@@ -92,14 +79,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

@@ -2,9 +2,8 @@ rules:
 - id: kotlin_smtp_rule-InsecureSmtp
   languages:
   - kotlin
-  message: 'Server identity verification is disabled when making SSL connections.
-
-    '
+  message: |
+    Server identity verification is disabled when making SSL connections.
   metadata:
     shortDescription: Improper validation of certificate with host mismatch
     category: security
@@ -16,35 +15,22 @@ rules:
   severity: ERROR
   patterns:
   - pattern-either:
-    - pattern-inside: '$E = org.apache.commons.mail.SimpleEmail(...)
-
+    - pattern-inside: |
+        $E = org.apache.commons.mail.SimpleEmail(...)
         ...
-
-        '
-    - pattern-inside: '$E = org.apache.commons.mail.Email(...)
-
+    - pattern-inside: |
+        $E = org.apache.commons.mail.Email(...)
         ...
-
-        '
-    - pattern-inside: '$E = org.apache.commons.mail.MultiPartEmail(...)
-
+    - pattern-inside: |
+        $E = org.apache.commons.mail.MultiPartEmail(...)
         ...
-
-        '
-    - pattern-inside: '$E = org.apache.commons.mail.HtmlEmail(...)
-
+    - pattern-inside: |
+        $E = org.apache.commons.mail.HtmlEmail(...)
         ...
-
-        '
-    - pattern-inside: '$E = org.apache.commons.mail.ImageHtmlEmail(...)
-
+    - pattern-inside: |
+        $E = org.apache.commons.mail.ImageHtmlEmail(...)
         ...
-
-        '
-  - pattern-not: '$E.setSSLOnConnect(true)
-
+  - pattern-not: |
+      $E.setSSLOnConnect(true)
       ...
-
       $E.setSSLCheckServerIdentity(true)
-
-      '

@@ -26,28 +26,82 @@ rules:
       - pattern: function $FUNC(..., address $ADDR, ...) public { ... }
     - pattern-not: function $FUNC(...) $MODIFIER { ... }
     - pattern-not: function $FUNC(...) $MODIFIER(...) { ... }
-    - pattern-not: "function $FUNC(...) {\n  ...\n  require(<... msg.sender ...>,\
-        \ ...);\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  assert(<... msg.sender ...>, ...);\n\
-        \  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  require(<... _msgSender ...>,\
-        \ ...);\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  assert(<... _msgSender ...>, ...);\n\
-        \  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  if (<... msg.sender ...>) {\n\
-        \    ...\n  }\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  if (<... _msgSender ...>) {\n\
-        \    ...\n  }\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  onlyOwner(...);\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  requireOwner(...);\n  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  _requireOwnership(...);\n  ...\n\
-        }\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  $C._enforceIsContractOwner(...);\n\
-        \  ...\n}\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  $C._enforceOwner(...);\n  ...\n\
-        }\n"
-    - pattern-not: "function $FUNC(...) {\n  ...\n  $C.enforceIsContractOwner(...);\n\
-        \  ...\n}\n"
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          require(<... msg.sender ...>, ...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          assert(<... msg.sender ...>, ...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          require(<... _msgSender ...>, ...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          assert(<... _msgSender ...>, ...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          if (<... msg.sender ...>) {
+            ...
+          }
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          if (<... _msgSender ...>) {
+            ...
+          }
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          onlyOwner(...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          requireOwner(...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          _requireOwnership(...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          $C._enforceIsContractOwner(...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          $C._enforceOwner(...);
+          ...
+        }
+    - pattern-not: |
+        function $FUNC(...) {
+          ...
+          $C.enforceIsContractOwner(...);
+          ...
+        }
   pattern-sinks:
   - pattern-either:
     - pattern: selfdestruct(...);

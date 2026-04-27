@@ -1,30 +1,51 @@
 rules:
 - id: ruby_eval_rule-NoEval
-  message: "The `eval` method in Ruby executes a string argument as Ruby code. When\
-    \ \n`eval` is used with input that can be controlled or manipulated by an \nexternal\
-    \ user, it can allow arbitrary code execution. This \nmeans an attacker could\
-    \ potentially execute malicious code on the server, \nleading to unauthorized\
-    \ access, data leakage, or server compromise.\n\nRemediation Steps:\n- Validate\
-    \ and sanitize input: If there's an absolute necessity to use \n`eval`, ensure\
-    \ that any user input is rigorously validated and sanitized \nto remove potentially\
-    \ harmful code. However, this is generally not \nrecommended due to the difficulty\
-    \ of securely sanitizing code.\n- Use safer alternatives: Depending on the requirement,\
-    \ consider using \nsafer alternatives to `eval`, such as `send` for calling methods\
-    \ dynamically \nor employing DSLs (Domain-Specific Languages) and safe parsing\
-    \ libraries \ndesigned for specific tasks.\n\nSecure Code Example:\n```\nclass\
-    \ Calculator\n  def add(a, b)\n    a + b\n  end\nend\n\n# Safer alternative using\
-    \ send\ncalculator = Calculator.new\nmethod = params[:operation] # Example: 'add'\
-    \ or 'subtract'\na = params[:a].to_i\nb = params[:b].to_i\n\nif calculator.respond_to?(method)\n\
-    \  result = calculator.send(method, a, b)\nelse\n  puts \"Invalid operation\"\n\
-    end\n```\n\nIn this example, `send` is used to dynamically call a method on the\
-    \ \nCalculator object based on user input. This approach is safer than \neval\
-    \ because it strictly limits the operations to those defined in \nthe class, preventing\
-    \ arbitrary code execution.\n"
+  message: |
+    The `eval` method in Ruby executes a string argument as Ruby code. When
+    `eval` is used with input that can be controlled or manipulated by an
+    external user, it can allow arbitrary code execution. This
+    means an attacker could potentially execute malicious code on the server,
+    leading to unauthorized access, data leakage, or server compromise.
+
+    Remediation Steps:
+    - Validate and sanitize input: If there's an absolute necessity to use
+    `eval`, ensure that any user input is rigorously validated and sanitized
+    to remove potentially harmful code. However, this is generally not
+    recommended due to the difficulty of securely sanitizing code.
+    - Use safer alternatives: Depending on the requirement, consider using
+    safer alternatives to `eval`, such as `send` for calling methods dynamically
+    or employing DSLs (Domain-Specific Languages) and safe parsing libraries
+    designed for specific tasks.
+
+    Secure Code Example:
+    ```
+    class Calculator
+      def add(a, b)
+        a + b
+      end
+    end
+
+    # Safer alternative using send
+    calculator = Calculator.new
+    method = params[:operation] # Example: 'add' or 'subtract'
+    a = params[:a].to_i
+    b = params[:b].to_i
+
+    if calculator.respond_to?(method)
+      result = calculator.send(method, a, b)
+    else
+      puts "Invalid operation"
+    end
+    ```
+
+    In this example, `send` is used to dynamically call a method on the
+    Calculator object based on user input. This approach is safer than
+    eval because it strictly limits the operations to those defined in
+    the class, preventing arbitrary code execution.
   severity: ERROR
   metadata:
     cwe: CWE-95
-    shortDescription: Improper neutralization of directives in dynamically evaluated
-      code ('Eval Injection')
+    shortDescription: Improper neutralization of directives in dynamically evaluated code ('Eval Injection')
     category: security
     owasp:
     - A1:2017-Injection
@@ -43,12 +64,10 @@ rules:
     - pattern: params
     - pattern: cookies
     - patterns:
-      - pattern: 'RubyVM::InstructionSequence.compile(...)
-
-          '
-      - pattern-not: 'RubyVM::InstructionSequence.compile("...")
-
-          '
+      - pattern: |
+          RubyVM::InstructionSequence.compile(...)
+      - pattern-not: |
+          RubyVM::InstructionSequence.compile("...")
   pattern-sinks:
   - patterns:
     - pattern-either:

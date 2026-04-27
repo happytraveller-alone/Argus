@@ -11,9 +11,7 @@ rules:
     - 'CWE-457: Use of Uninitialized Variable'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
-  message: The invocation of memset() is easy to get wrong. The second argument is
-    the character and the third argument is the size, but sometimes these arguments
-    are in the wrong order. This results in a no-op.
+  message: The invocation of memset() is easy to get wrong. The second argument is the character and the third argument is the size, but sometimes these arguments are in the wrong order. This results in a no-op.
   severity: ERROR
   languages:
   - c

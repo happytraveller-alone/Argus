@@ -2,13 +2,10 @@ rules:
 - id: scala_endpoint_rule-UnvalidatedRedirect
   languages:
   - scala
-  message: 'Unvalidated redirects occur when an application redirects a user to a
-
+  message: |
+    Unvalidated redirects occur when an application redirects a user to a
     destination URL specified by a user supplied parameter that is not validated.
-
     Such vulnerabilities can be used to facilitate phishing attacks.
-
-    '
   metadata:
     category: security
     cwe: CWE-601
@@ -32,13 +29,10 @@ rules:
 - id: scala_endpoint_rule-UnvalidatedRedirect_1
   languages:
   - scala
-  message: 'Unvalidated redirects occur when an application redirects a user to a
-
+  message: |
+    Unvalidated redirects occur when an application redirects a user to a
     destination URL specified by a user supplied parameter that is not validated.
-
     Such vulnerabilities can be used to facilitate phishing attacks.
-
-    '
   metadata:
     category: security
     cwe: CWE-601

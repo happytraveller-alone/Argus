@@ -1,20 +1,27 @@
 rules:
 - id: vuln-sudo-0274a4f3
-  pattern: "const char *$ENV_EDITOR;\n...\nif ($CONDITION) {\n    $FUNCTION_CALL(U_(\"specified editor (%s) doesn't exist\"\
-    ), $ENV_EDITOR);\n}\n"
-  pattern-not: "const char *$ENV_EDITOR = NULL;\n...\nif ($CONDITION) {\n    if (errno == ENOENT) {\n        $FUNCTION_CALL(U_(\"\
-    specified editor (%s) doesn't exist\"), $ENV_EDITOR);\n    }\n    exit(EXIT_FAILURE);\n}\n"
+  pattern: |
+    const char *$ENV_EDITOR;
+    ...
+    if ($CONDITION) {
+        $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
+    }
+  pattern-not: |
+    const char *$ENV_EDITOR = NULL;
+    ...
+    if ($CONDITION) {
+        if (errno == ENOENT) {
+            $FUNCTION_CALL(U_("specified editor (%s) doesn't exist"), $ENV_EDITOR);
+        }
+        exit(EXIT_FAILURE);
+    }
   languages:
   - c
-  message: 'The code uses an uninitialized environment editor variable without proper error handling.
-
+  message: |
+    The code uses an uninitialized environment editor variable without proper error handling.
     This can lead to undefined behavior when the editor is not found. The fix initializes
-
     the variable and adds specific error handling for ENOENT. Always initialize variables
-
     and handle specific error conditions explicitly.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/0274a4f3b403162a37a10f199c989f3727ed3ad4
@@ -27,23 +34,23 @@ rules:
     technology:
     - c
 - id: vuln-sudo-1f863857
-  pattern: "if ($MODE & ($FLAG1|$FLAG2)) {\n  ...\n}\n"
-  pattern-not: "if (ISSET($MODE, $FLAG1|$FLAG2)) {\n  ...\n}\n"
+  pattern: |
+    if ($MODE & ($FLAG1|$FLAG2)) {
+      ...
+    }
+  pattern-not: |
+    if (ISSET($MODE, $FLAG1|$FLAG2)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected unsafe bitwise operation in condition check. Using the bitwise
-
+  message: |
+    Detected unsafe bitwise operation in condition check. Using the bitwise
     AND operator (&) directly with flags can lead to incorrect evaluations
-
     when multiple flags are combined. Use the ISSET macro instead to properly
-
     check if specific flags are set in the mode variable. This vulnerability
-
     could lead to incorrect privilege checks and potential security bypass.
-
-    Replace ''if (mode & flag)'' with ''if (ISSET(mode, flag))''.
-
-    '
+    Replace 'if (mode & flag)' with 'if (ISSET(mode, flag))'.
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/1f8638577d0c80a4ff864a2aad80a0d95488e9a8
@@ -54,18 +61,19 @@ rules:
     technology:
     - c
 - id: vuln-sudo-7873f833
-  pattern: '$RET = !strcmp($STR1, $STR2);
-
+  pattern: |
+    $RET = !strcmp($STR1, $STR2);
     debug_return_int($RET ? $SUCCESS : $FAILURE);
-
-    '
-  pattern-not: "if (strcmp($STR1, $STR2) == 0)\n  $RET = $SUCCESS;\nelse\n  $RET = $FAILURE;\ndebug_return_int($RET);\n"
+  pattern-not: |
+    if (strcmp($STR1, $STR2) == 0)
+      $RET = $SUCCESS;
+    else
+      $RET = $FAILURE;
+    debug_return_int($RET);
   languages:
   - c
-  message: 'The code directly assigns the result of strcmp to a return variable without proper error handling. This can lead
-    to incorrect authentication results. Instead, explicitly check the result of strcmp and set the return value accordingly.
-
-    '
+  message: |
+    The code directly assigns the result of strcmp to a return variable without proper error handling. This can lead to incorrect authentication results. Instead, explicitly check the result of strcmp and set the return value accordingly.
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/7873f8334c8d31031f8cfa83bd97ac6029309e4f
@@ -77,29 +85,20 @@ rules:
     technology:
     - c
 - id: vuln-sudo-817fd283
-  pattern: 'sudo_ttyname_scan($DIR, $RDEV, true, $NAME, $NAMELEN)
-
-    '
-  pattern-not: 'sudo_ttyname_scan($DIR, $RDEV, $NAME, $NAMELEN)
-
-    '
+  pattern: |
+    sudo_ttyname_scan($DIR, $RDEV, true, $NAME, $NAMELEN)
+  pattern-not: |
+    sudo_ttyname_scan($DIR, $RDEV, $NAME, $NAMELEN)
   languages:
   - c
-  message: 'The function sudo_ttyname_scan() was vulnerable to a security issue where it
-
+  message: |
+    The function sudo_ttyname_scan() was vulnerable to a security issue where it
     would perform a breadth-first scan of directories without checking if they
-
     were world-writable. This could allow an attacker to manipulate the search
-
     path and potentially cause the function to return an incorrect or malicious
-
     tty device. The fix removes the breadth-first scan and adds a check for
-
     world-writable directories. Update the code to use the fixed version of
-
-    sudo_ttyname_scan() without the ''builtin'' parameter.
-
-    '
+    sudo_ttyname_scan() without the 'builtin' parameter.
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/817fd283124c61e8d5c8243b9ba276ba37ed87fe
@@ -113,19 +112,14 @@ rules:
     technology:
     - c
 - id: vuln-sudo-ab2cba0f
-  pattern: 'getln($FD, $BUF, $BUFSIZ, $FEEDBACK)
-
-    '
-  pattern-not: 'getln($FD, $BUF, $BUFSIZ, $FEEDBACK, $ERRVAL)
-
-    '
+  pattern: |
+    getln($FD, $BUF, $BUFSIZ, $FEEDBACK)
+  pattern-not: |
+    getln($FD, $BUF, $BUFSIZ, $FEEDBACK, $ERRVAL)
   languages:
   - c
-  message: 'The function `getln` is being called without an error handling mechanism, which can lead to unhandled errors during
-    password input. This can result in security issues such as unhandled timeouts or read errors. To fix this, ensure that
-    `getln` is called with an additional `errval` parameter to handle errors appropriately.
-
-    '
+  message: |
+    The function `getln` is being called without an error handling mechanism, which can lead to unhandled errors during password input. This can result in security issues such as unhandled timeouts or read errors. To fix this, ensure that `getln` is called with an additional `errval` parameter to handle errors appropriately.
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/ab2cba0f5d8b286e8e52c06076efd32434f538ae
@@ -137,36 +131,23 @@ rules:
     technology:
     - c
 - id: vuln-sudo-bd209b9f
-  pattern: 'char $VAR;
-
+  pattern: |
+    char $VAR;
     ...
-
     $SAV = $PASS[8];
-
     ...
-
-    $PASS[8] = ''\0'';
-
+    $PASS[8] = '\0';
     ...
-
     $PASS[8] = $SAV;
-
-    '
-  pattern-not: 'char $DES_PASS[9];
-
+  pattern-not: |
+    char $DES_PASS[9];
     ...
-
     strlcpy($DES_PASS, $PASS, sizeof($DES_PASS));
-
     $PASS = $DES_PASS;
-
-    '
   languages:
   - c
-  message: 'Detected unsafe manipulation of password array by temporarily truncating it. This can lead to buffer overflows
-    and undefined behavior. Use a separate buffer with proper bounds checking instead of modifying the original array.
-
-    '
+  message: |
+    Detected unsafe manipulation of password array by temporarily truncating it. This can lead to buffer overflows and undefined behavior. Use a separate buffer with proper bounds checking instead of modifying the original array.
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/bd209b9f16fcd1270c13db27ae3329c677d48050
@@ -182,13 +163,10 @@ rules:
   pattern-not: init_parse_tree($TREE, $LHOST, $SHOST)
   languages:
   - c
-  message: 'Detected insecure initialization of parse tree without host parameters.
-
+  message: |
+    Detected insecure initialization of parse tree without host parameters.
     This vulnerability could allow improper host validation in sudoers configuration.
-
     Always provide local and source host parameters when initializing parse trees.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/sudo-project/sudo/commit/e99082e05b9f0dd0e0f47fa1d2e1b9d922ea8c4c

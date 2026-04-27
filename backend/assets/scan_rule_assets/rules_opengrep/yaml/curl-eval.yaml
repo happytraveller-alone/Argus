@@ -2,16 +2,11 @@ rules:
 - id: curl-eval
   languages:
   - yaml
-  message: Data is being eval'd from a `curl` command. An attacker with control of
-    the server in the `curl` command could inject malicious code into the `eval`,
-    resulting in a system comrpomise. Avoid eval'ing untrusted data if you can. If
-    you must do this, consider checking the SHA sum of the content returned by the
-    server to verify its integrity.
+  message: Data is being eval'd from a `curl` command. An attacker with control of the server in the `curl` command could inject malicious code into the `eval`, resulting in a system comrpomise. Avoid eval'ing untrusted data if you can. If you must do this, consider checking the SHA sum of the content returned by the server to verify its integrity.
   metadata:
     category: security
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection
@@ -30,17 +25,16 @@ rules:
     confidence: LOW
   patterns:
   - pattern-inside: 'steps: [...]'
-  - pattern-inside: "- run: ...\n  ...\n"
+  - pattern-inside: |
+      - run: ...
+        ...
   - pattern: 'run: $SHELL'
   - metavariable-pattern:
       language: bash
       metavariable: $SHELL
       patterns:
-      - pattern: '$DATA=<... curl ...>
-
+      - pattern: |
+          $DATA=<... curl ...>
           ...
-
           eval <... $DATA ...>
-
-          '
   severity: ERROR

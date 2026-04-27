@@ -12,9 +12,7 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-121: Stack-based Buffer Overflow'
     - 'CWE-20: Improper Input Validation'
-  message: The gets() function is always unsafe because it does not perform bounds  checking
-    on the size of its input. An attacker can easily send  arbitrarily-sized input
-    to gets() and overflow the destination buffer.
+  message: The gets() function is always unsafe because it does not perform bounds  checking on the size of its input. An attacker can easily send  arbitrarily-sized input to gets() and overflow the destination buffer.
   severity: ERROR
   languages:
   - c

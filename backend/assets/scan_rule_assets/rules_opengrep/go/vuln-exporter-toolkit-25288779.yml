@@ -1,19 +1,20 @@
 rules:
 - id: vuln-exporter-toolkit-25288779
-  pattern: 'cacheKey := hex.EncodeToString(append(append([]byte($USER), []byte($HASHED_PASSWORD)...),
-    []byte($PASS)...))
-
-    '
-  pattern-not: "cacheKey := strings.Join(\n  []string{\n    hex.EncodeToString([]byte($USER)),\n\
-    \    hex.EncodeToString([]byte($HASHED_PASSWORD)),\n    hex.EncodeToString([]byte($PASS)),\n\
-    \  }, \":\")\n"
+  pattern: |
+    cacheKey := hex.EncodeToString(append(append([]byte($USER), []byte($HASHED_PASSWORD)...), []byte($PASS)...))
+  pattern-not: |
+    cacheKey := strings.Join(
+      []string{
+        hex.EncodeToString([]byte($USER)),
+        hex.EncodeToString([]byte($HASHED_PASSWORD)),
+        hex.EncodeToString([]byte($PASS)),
+      }, ":")
   languages:
   - go
-  message: "The code is vulnerable to a cache poisoning attack due to improper construction\
-    \ of the cache key. \nBy appending byte arrays directly, it allows for potential\
-    \ collisions in the cache key, which can lead to authentication bypass. \nThe\
-    \ fix involves using `strings.Join` to create a more secure cache key with proper\
-    \ separation between components.\n"
+  message: |
+    The code is vulnerable to a cache poisoning attack due to improper construction of the cache key.
+    By appending byte arrays directly, it allows for potential collisions in the cache key, which can lead to authentication bypass.
+    The fix involves using `strings.Join` to create a more secure cache key with proper separation between components.
   severity: ERROR
   metadata:
     source-url: github.com/prometheus/exporter-toolkit/commit/25288779bc59d00c41b4a1706c6b87f0561ef2d7

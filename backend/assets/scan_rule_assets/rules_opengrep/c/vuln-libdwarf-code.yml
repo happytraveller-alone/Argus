@@ -1,16 +1,15 @@
 rules:
 - id: vuln-libdwarf-code-0b28b923
-  pattern: 'Dwarf_Sword $SHIFT = 0;
-
-    '
-  pattern-not: 'unsigned $SHIFT = 0;
-
-    '
+  pattern: |
+    Dwarf_Sword $SHIFT = 0;
+  pattern-not: |
+    unsigned $SHIFT = 0;
   languages:
   - c
-  message: "Using `Dwarf_Sword` for the shift variable can lead to potential integer overflow issues. \nThis is dangerous\
-    \ because it can cause undefined behavior or security vulnerabilities in the code. \nThe fix is to use `unsigned` instead\
-    \ of `Dwarf_Sword` to ensure proper handling of the shift operation.\n"
+  message: |
+    Using `Dwarf_Sword` for the shift variable can lead to potential integer overflow issues.
+    This is dangerous because it can cause undefined behavior or security vulnerabilities in the code.
+    The fix is to use `unsigned` instead of `Dwarf_Sword` to ensure proper handling of the shift operation.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/0b28b923c3bd9827d1d904feed2abadde4fa5de2
@@ -22,19 +21,14 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-268c1f18
-  pattern: 'DECODE_LEB128_UWORD($LINE_PTR, $UTMP2);
-
-    '
-  pattern-not: 'DECODE_LEB128_UWORD_CK($LINE_PTR, $UTMP2, $DBG, $ERROR, $LINE_PTR_END);
-
-    '
+  pattern: |
+    DECODE_LEB128_UWORD($LINE_PTR, $UTMP2);
+  pattern-not: |
+    DECODE_LEB128_UWORD_CK($LINE_PTR, $UTMP2, $DBG, $ERROR, $LINE_PTR_END);
   languages:
   - c
-  message: 'The code uses DECODE_LEB128_UWORD without bounds checking, which can lead to buffer overflows. This vulnerability
-    can be exploited to read or write out-of-bounds memory, potentially leading to crashes or arbitrary code execution. Always
-    use the checked version DECODE_LEB128_UWORD_CK which includes bounds checking and error handling.
-
-    '
+  message: |
+    The code uses DECODE_LEB128_UWORD without bounds checking, which can lead to buffer overflows. This vulnerability can be exploited to read or write out-of-bounds memory, potentially leading to crashes or arbitrary code execution. Always use the checked version DECODE_LEB128_UWORD_CK which includes bounds checking and error handling.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/268c1f18d1d28612af3b72d7c670076b1b88e51c
@@ -49,19 +43,14 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-2d14a779
-  pattern: '_dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERROR)
-
-    '
-  pattern-not: '_dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERRCODE, $ERROR)
-
-    '
+  pattern: |
+    _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERROR)
+  pattern-not: |
+    _dwarf_check_string_valid($DBG, $SECBEGIN, $STRBEGIN, $SECEND, $ERRCODE, $ERROR)
   languages:
   - c
-  message: 'The function `_dwarf_check_string_valid` is called without an error code parameter, which can lead to insufficient
-    error handling and potential security vulnerabilities. Always include the error code parameter to ensure proper error
-    reporting and handling.
-
-    '
+  message: |
+    The function `_dwarf_check_string_valid` is called without an error code parameter, which can lead to insufficient error handling and potential security vulnerabilities. Always include the error code parameter to ensure proper error reporting and handling.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/2d14a7792889e33bc542c28d0f3792964c46214f
@@ -72,16 +61,31 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-3767305d
-  pattern: "$RE = calloc(sizeof(struct ranges_entry), 1);\n...\nif ($RANGEPTR >= $SECTION_END) {\n    free($RE);\n    return\
-    \ $DW_DLV_NO_ENTRY;\n}\n"
-  pattern-not: "$RE = calloc(sizeof(struct ranges_entry), 1);\n...\nif ($RANGEPTR == $SECTION_END) {\n    break;\n}\nif ($RANGEPTR\
-    \ > $SECTION_END) {\n    free_allocated_ranges($BASE);\n    _dwarf_error($DBG, $ERROR, $DW_DLE_DEBUG_RANGES_OFFSET_BAD);\n\
-    \    return $DW_DLV_ERROR;\n    break;\n}\n"
+  pattern: |
+    $RE = calloc(sizeof(struct ranges_entry), 1);
+    ...
+    if ($RANGEPTR >= $SECTION_END) {
+        free($RE);
+        return $DW_DLV_NO_ENTRY;
+    }
+  pattern-not: |
+    $RE = calloc(sizeof(struct ranges_entry), 1);
+    ...
+    if ($RANGEPTR == $SECTION_END) {
+        break;
+    }
+    if ($RANGEPTR > $SECTION_END) {
+        free_allocated_ranges($BASE);
+        _dwarf_error($DBG, $ERROR, $DW_DLE_DEBUG_RANGES_OFFSET_BAD);
+        return $DW_DLV_ERROR;
+        break;
+    }
   languages:
   - c
-  message: "Detected a vulnerability where memory is not properly freed when a pointer exceeds the section end. \nThis can\
-    \ lead to memory leaks and undefined behavior. The fix involves properly freeing allocated ranges \nand handling the error\
-    \ condition correctly.\n"
+  message: |
+    Detected a vulnerability where memory is not properly freed when a pointer exceeds the section end.
+    This can lead to memory leaks and undefined behavior. The fix involves properly freeing allocated ranges
+    and handling the error condition correctly.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/3767305debcba8bd7e1c483ae48c509d25399252
@@ -93,16 +97,25 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-4f19e105
-  pattern: "if (($SHIFT < sizeof(Dwarf_Signed) * BITSINBYTE) && $SIGN) {\n    $NUMBER |= -(Dwarf_Signed)((Dwarf_Unsigned)\
-    \ 1 << $SHIFT);\n}\n"
-  pattern-not: "if ($SIGN) {\n    unsigned shiftlim = sizeof(Dwarf_Signed) * BITSINBYTE -1;\n    if ($SHIFT < shiftlim) {\n\
-    \        $NUMBER |= -(Dwarf_Signed)(((Dwarf_Unsigned)1) << $SHIFT);\n    } else if ($SHIFT == shiftlim) {\n        $NUMBER\
-    \ |= (((Dwarf_Unsigned)1) << $SHIFT);\n    }\n}\n"
+  pattern: |
+    if (($SHIFT < sizeof(Dwarf_Signed) * BITSINBYTE) && $SIGN) {
+        $NUMBER |= -(Dwarf_Signed)((Dwarf_Unsigned) 1 << $SHIFT);
+    }
+  pattern-not: |
+    if ($SIGN) {
+        unsigned shiftlim = sizeof(Dwarf_Signed) * BITSINBYTE -1;
+        if ($SHIFT < shiftlim) {
+            $NUMBER |= -(Dwarf_Signed)(((Dwarf_Unsigned)1) << $SHIFT);
+        } else if ($SHIFT == shiftlim) {
+            $NUMBER |= (((Dwarf_Unsigned)1) << $SHIFT);
+        }
+    }
   languages:
   - c
-  message: "The original code may cause undefined behavior due to shifting a signed integer beyond its bit width. \nThis can\
-    \ lead to unexpected results or crashes. The fix introduces a shift limit to avoid undefined behavior.\nAlways ensure\
-    \ shifts are within the bounds of the integer type being used.\n"
+  message: |
+    The original code may cause undefined behavior due to shifting a signed integer beyond its bit width.
+    This can lead to unexpected results or crashes. The fix introduces a shift limit to avoid undefined behavior.
+    Always ensure shifts are within the bounds of the integer type being used.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/4f19e1050cd8e9ddf2cb6caa061ff2fec4c9b5f9
@@ -112,21 +125,15 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-8151575a
-  pattern: 'pubnames_like_ptr = pubnames_like_ptr + strlen((char *) pubnames_like_ptr) + 1;
-
-    '
-  pattern-not: '$NSTRLEN = strlen((char *)pubnames_like_ptr);
-
+  pattern: |
+    pubnames_like_ptr = pubnames_like_ptr + strlen((char *) pubnames_like_ptr) + 1;
+  pattern-not: |
+    $NSTRLEN = strlen((char *)pubnames_like_ptr);
     pubnames_like_ptr += $NSTRLEN + 1;
-
-    '
   languages:
   - c
-  message: 'This pattern detects unsafe pointer arithmetic in string operations. The original code directly adds the result
-    of `strlen` to the pointer, which can lead to miscalculations and potential memory corruption. The fixed version first
-    stores the length in a variable and then performs the pointer arithmetic, making the operation safer and more predictable.
-
-    '
+  message: |
+    This pattern detects unsafe pointer arithmetic in string operations. The original code directly adds the result of `strlen` to the pointer, which can lead to miscalculations and potential memory corruption. The fixed version first stores the length in a variable and then performs the pointer arithmetic, making the operation safer and more predictable.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/8151575a6ace77d005ca5bb5d71c1bfdba3f7069
@@ -137,14 +144,23 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-9565964f
-  pattern: "if(!$VAR) {\n  return;\n}\n$LEN = strlen($VAR);\n$FUNC($DATA, $VAR, $LEN);\n"
-  pattern-not: "if($VAR) {\n  $LEN = strlen($VAR);\n  if ($LEN) {\n    $FUNC($DATA, $VAR, $LEN);\n  }\n}\n"
+  pattern: |
+    if(!$VAR) {
+      return;
+    }
+    $LEN = strlen($VAR);
+    $FUNC($DATA, $VAR, $LEN);
+  pattern-not: |
+    if($VAR) {
+      $LEN = strlen($VAR);
+      if ($LEN) {
+        $FUNC($DATA, $VAR, $LEN);
+      }
+    }
   languages:
   - c
-  message: 'The code checks for a null pointer but does not verify the string length before using it. This could lead to undefined
-    behavior if the string is empty. Always verify the string length before passing it to functions like `strlen` and `esb_appendn_internal`.
-
-    '
+  message: |
+    The code checks for a null pointer but does not verify the string length before using it. This could lead to undefined behavior if the string is empty. Always verify the string length before passing it to functions like `strlen` and `esb_appendn_internal`.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/9565964f26966d8391fe2cfa8e6e8e59278c5f91
@@ -156,19 +172,38 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-98a3da1e
-  pattern: "void\nprint_error(Dwarf_Debug dbg,\n    const char * msg,\n    int dwarf_code,\n    Dwarf_Error lerr)\n{\n   \
-    \ print_error_and_continue(dbg,msg,dwarf_code,lerr);\n    if (dbg) {\n        Dwarf_Error ignored_err = 0;\n        dwarf_finish(dbg,\
-    \ &ignored_err);\n    }\n    exit(FAILED);\n}\n"
-  pattern-not: "void\nprint_error(Dwarf_Debug dbg,\n    const char * msg,\n    int dwarf_code,\n    Dwarf_Error lerr)\n{\n\
-    \    print_error_maybe_continue(dbg,msg,dwarf_code,lerr,FALSE);\n    if (dbg) {\n        Dwarf_Error ignored_err = 0;\n\
-    \        dwarf_finish(dbg, &ignored_err);\n    }\n    exit(FAILED);\n}\n"
+  pattern: |
+    void
+    print_error(Dwarf_Debug dbg,
+        const char * msg,
+        int dwarf_code,
+        Dwarf_Error lerr)
+    {
+        print_error_and_continue(dbg,msg,dwarf_code,lerr);
+        if (dbg) {
+            Dwarf_Error ignored_err = 0;
+            dwarf_finish(dbg, &ignored_err);
+        }
+        exit(FAILED);
+    }
+  pattern-not: |
+    void
+    print_error(Dwarf_Debug dbg,
+        const char * msg,
+        int dwarf_code,
+        Dwarf_Error lerr)
+    {
+        print_error_maybe_continue(dbg,msg,dwarf_code,lerr,FALSE);
+        if (dbg) {
+            Dwarf_Error ignored_err = 0;
+            dwarf_finish(dbg, &ignored_err);
+        }
+        exit(FAILED);
+    }
   languages:
   - c
-  message: 'The print_error function directly calls print_error_and_continue without checking if the dbg pointer is valid,
-    which can lead to undefined behavior if dbg is NULL. The function should use print_error_maybe_continue with a FALSE parameter
-    to properly handle the error condition and avoid potential crashes.
-
-    '
+  message: |
+    The print_error function directly calls print_error_and_continue without checking if the dbg pointer is valid, which can lead to undefined behavior if dbg is NULL. The function should use print_error_maybe_continue with a FALSE parameter to properly handle the error condition and avoid potential crashes.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/98a3da1e8237fe0d45b67ef77f3fa5ed9ff0215f
@@ -181,18 +216,22 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-da724a0b
-  pattern: "$LIST = _dwarf_get_abbrev_for_code($CONTEXT, $CODE);\nif ($LIST == NULL) {\n  ...\n}\n"
-  pattern-not: "$RES = _dwarf_get_abbrev_for_code($CONTEXT, $CODE, &$LIST, $ERROR);\nif ($RES == DW_DLV_ERROR) {\n  ...\n\
-    }\n"
+  pattern: |
+    $LIST = _dwarf_get_abbrev_for_code($CONTEXT, $CODE);
+    if ($LIST == NULL) {
+      ...
+    }
+  pattern-not: |
+    $RES = _dwarf_get_abbrev_for_code($CONTEXT, $CODE, &$LIST, $ERROR);
+    if ($RES == DW_DLV_ERROR) {
+      ...
+    }
   languages:
   - c
-  message: 'Direct assignment and NULL check of _dwarf_get_abbrev_for_code() result is unsafe.
-
+  message: |
+    Direct assignment and NULL check of _dwarf_get_abbrev_for_code() result is unsafe.
     The function may fail in ways that are not captured by a simple NULL check.
-
     Use the updated function signature that returns an error code and properly handles error conditions.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/da724a0bc5eec8e9ec0b0cb0c238a80e34466459
@@ -202,20 +241,14 @@ rules:
     technology:
     - c
 - id: vuln-libdwarf-code-faf99408
-  pattern: 'dwarfstring_append_printf_s($VAR, $FORMAT, (char *) $VAR2->fi_file_name);
-
-    '
-  pattern-not: 'dwarfstring_append_printf_s($VAR, $FORMAT, $VAR2->fi_file_name ? (char *) $VAR2->fi_file_name : "<no file
-    name>");
-
-    '
+  pattern: |
+    dwarfstring_append_printf_s($VAR, $FORMAT, (char *) $VAR2->fi_file_name);
+  pattern-not: |
+    dwarfstring_append_printf_s($VAR, $FORMAT, $VAR2->fi_file_name ? (char *) $VAR2->fi_file_name : "<no file name>");
   languages:
   - c
-  message: 'The code does not handle the case where `fi_file_name` is null, which can occur in DWARF5 with unknown format
-    codes or corrupt object files. This can lead to null pointer dereference vulnerabilities. Always check for null pointers
-    before dereferencing them.
-
-    '
+  message: |
+    The code does not handle the case where `fi_file_name` is null, which can occur in DWARF5 with unknown format codes or corrupt object files. This can lead to null pointer dereference vulnerabilities. Always check for null pointers before dereferencing them.
   severity: ERROR
   metadata:
     source-url: github.com/davea42/libdwarf-code/commit/faf99408e3f9f706fc3809dd400e831f989778d3

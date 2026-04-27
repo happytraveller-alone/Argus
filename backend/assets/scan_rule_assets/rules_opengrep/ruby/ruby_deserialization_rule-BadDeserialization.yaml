@@ -7,42 +7,61 @@ rules:
     - pattern: cookies
   pattern-sinks:
   - pattern-either:
-    - pattern: 'Marshal.load(...)
+    - pattern: |
+        Marshal.load(...)
+    - pattern: |
+        Marshal.restore(...)
+    - pattern: |
+        Oj.object_load(...)
+    - pattern: |
+        Oj.load($X)
+  message: |
+    In Ruby, objects can be serialized into strings using various methods
+    and later reconstituted into objects. The `load` and `object_load`
+    methods, associated with modules like Marshal and CSV, is particularly
+    risky when used to deserialize data from untrusted sources.
+    If an attacker is able to manipulate the serialized data, they could
+    execute arbitrary code on the system when the data is deserialized.
+    This vulnerability can lead to remote code execution (RCE), where an
+    attacker gains the ability to execute commands on the host machine.
+    The Marshal and CSV modules are often used for serialization and
+    deserialization in Ruby but they do not inherently sanitize or validate
+    the data being processed. This makes them unsafe for handling input from
+    untrusted sources.
 
-        '
-    - pattern: 'Marshal.restore(...)
+    To mitigate the risks associated with unsafe deserialization, it is
+    recommended to:
+    - Avoid deserializing from untrusted sources
+    - Use JSON for serialization/deserialization as JSON is considered
+    safer for data interchange between systems. However, it's crucial
+    to use JSON securely by validating and sanitizing the input before
+    deserialization.
 
-        '
-    - pattern: 'Oj.object_load(...)
+    Secure Code Example:
+    ```
+    require 'json'
 
-        '
-    - pattern: 'Oj.load($X)
+    def safe_deserialize(json_data)
+      # Validate and sanitize json_data before parsing
+      begin
+        parsed_data = JSON.parse(json_data)
+        return parsed_data
+      rescue JSON::ParserError => e
+        puts "Error parsing JSON data: #{e.message}"
+        return nil
+      end
+    end
 
-        '
-  message: "In Ruby, objects can be serialized into strings using various methods\
-    \ \nand later reconstituted into objects. The `load` and `object_load` \nmethods,\
-    \ associated with modules like Marshal and CSV, is particularly \nrisky when used\
-    \ to deserialize data from untrusted sources. \nIf an attacker is able to manipulate\
-    \ the serialized data, they could \nexecute arbitrary code on the system when\
-    \ the data is deserialized. \nThis vulnerability can lead to remote code execution\
-    \ (RCE), where an \nattacker gains the ability to execute commands on the host\
-    \ machine. \nThe Marshal and CSV modules are often used for serialization and\
-    \ \ndeserialization in Ruby but they do not inherently sanitize or validate \n\
-    the data being processed. This makes them unsafe for handling input from \nuntrusted\
-    \ sources.\n\nTo mitigate the risks associated with unsafe deserialization, it\
-    \ is \nrecommended to:\n- Avoid deserializing from untrusted sources\n- Use JSON\
-    \ for serialization/deserialization as JSON is considered \nsafer for data interchange\
-    \ between systems. However, it's crucial \nto use JSON securely by validating\
-    \ and sanitizing the input before \ndeserialization.\n\nSecure Code Example:\n\
-    ```\nrequire 'json'\n\ndef safe_deserialize(json_data)\n  # Validate and sanitize\
-    \ json_data before parsing\n  begin\n    parsed_data = JSON.parse(json_data)\n\
-    \    return parsed_data\n  rescue JSON::ParserError => e\n    puts \"Error parsing\
-    \ JSON data: #{e.message}\"\n    return nil\n  end\nend\n\n# Example usage\n#\
-    \ Example of input JSON string\njson_input = '{\"name\": \"John Doe\", \"age\"\
-    : 30}' \nuser_data = safe_deserialize(json_input)\nputs user_data.inspect if user_data\n\
-    ```\n\nAlways ensure that any data deserialized from JSON (or any format) is \n\
-    validated and sanitized according to the context of your application \nto prevent\
-    \ injection attacks or other security issues.\n"
+    # Example usage
+    # Example of input JSON string
+    json_input = '{"name": "John Doe", "age": 30}'
+    user_data = safe_deserialize(json_input)
+    puts user_data.inspect if user_data
+    ```
+
+    Always ensure that any data deserialized from JSON (or any format) is
+    validated and sanitized according to the context of your application
+    to prevent injection attacks or other security issues.
   languages:
   - ruby
   severity: ERROR

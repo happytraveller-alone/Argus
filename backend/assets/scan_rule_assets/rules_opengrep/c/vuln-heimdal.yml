@@ -1,18 +1,13 @@
 rules:
 - id: vuln-heimdal-6dd3eb83
-  pattern: '$FUNC(..., rep->kdc_rep.ticket.sname, rep->kdc_rep.ticket.realm, ...)
-
-    '
-  pattern-not: '$FUNC(..., rep->enc_part.sname, rep->enc_part.srealm, ...)
-
-    '
+  pattern: |
+    $FUNC(..., rep->kdc_rep.ticket.sname, rep->kdc_rep.ticket.realm, ...)
+  pattern-not: |
+    $FUNC(..., rep->enc_part.sname, rep->enc_part.srealm, ...)
   languages:
   - c
-  message: 'The code uses incorrect structure fields `kdc_rep.ticket.sname` and `kdc_rep.ticket.realm` instead of `enc_part.sname`
-    and `enc_part.srealm`. This could lead to incorrect data handling or security vulnerabilities. Update the code to use
-    the correct fields `enc_part.sname` and `enc_part.srealm`.
-
-    '
+  message: |
+    The code uses incorrect structure fields `kdc_rep.ticket.sname` and `kdc_rep.ticket.realm` instead of `enc_part.sname` and `enc_part.srealm`. This could lead to incorrect data handling or security vulnerabilities. Update the code to use the correct fields `enc_part.sname` and `enc_part.srealm`.
   severity: ERROR
   metadata:
     source-url: github.com/heimdal/heimdal/commit/6dd3eb836bbb80a00ffced4ad57077a1cdf227ea
@@ -26,17 +21,25 @@ rules:
     technology:
     - c
 - id: vuln-heimdal-f9ec7002
-  pattern: "if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {\n    HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);\n    free_NegotiationToken(&$NT);\n\
-    \    return $RET;\n}\n$CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;\n"
-  pattern-not: "if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {\n    send_reject($MINOR_STATUS, $OUTPUT_TOKEN);\n    HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);\n\
-    \    free_NegotiationToken(&$NT);\n    return $RET;\n}\n$CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;\n"
+  pattern: |
+    if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
+        HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
+        free_NegotiationToken(&$NT);
+        return $RET;
+    }
+    $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
+  pattern-not: |
+    if ($PREFERRED_MECH_TYPE == GSS_C_NO_OID) {
+        send_reject($MINOR_STATUS, $OUTPUT_TOKEN);
+        HEIMDAL_MUTEX_unlock(&$CTX->ctx_id_mutex);
+        free_NegotiationToken(&$NT);
+        return $RET;
+    }
+    $CTX->preferred_mech_type = $PREFERRED_MECH_TYPE;
   languages:
   - c
-  message: 'The vulnerability occurs when the code fails to properly handle the case where `preferred_mech_type` is `GSS_C_NO_OID`.
-    This can lead to incorrect state management and potential security issues. The patch adds a call to `send_reject` to properly
-    handle this case. Ensure that all error paths are correctly managed to avoid security vulnerabilities.
-
-    '
+  message: |
+    The vulnerability occurs when the code fails to properly handle the case where `preferred_mech_type` is `GSS_C_NO_OID`. This can lead to incorrect state management and potential security issues. The patch adds a call to `send_reject` to properly handle this case. Ensure that all error paths are correctly managed to avoid security vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/heimdal/heimdal/commit/f9ec7002cdd526ae84fbacbf153162e118f22580

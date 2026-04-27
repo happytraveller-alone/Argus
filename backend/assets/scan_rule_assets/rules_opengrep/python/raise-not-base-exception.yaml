@@ -3,13 +3,10 @@ rules:
   patterns:
   - pattern-either:
     - pattern: raise "..."
-    - pattern: '$X: BaseException
-
+    - pattern: |
+        $X: BaseException
         raise $X(...)
-
-        '
-  message: In Python3, a runtime `TypeError` will be thrown if you attempt to raise
-    an object or class which does not inherit from `BaseException`
+  message: In Python3, a runtime `TypeError` will be thrown if you attempt to raise an object or class which does not inherit from `BaseException`
   languages:
   - python
   severity: ERROR

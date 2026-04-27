@@ -2,11 +2,18 @@ rules:
 - id: check-http-verb-confusion
   mode: search
   patterns:
-  - pattern: "if request.get?\n  ...\nelse\n  ...\nend\n"
-  - pattern-not-inside: "if ...\nelsif ...\n  ...\nend\n"
-  message: Found an improperly constructed control flow block with `request.get?`.
-    Rails will route HEAD requests as GET requests but they will fail the `request.get?`
-    check, potentially causing unexpected behavior unless an `elif` condition is used.
+  - pattern: |
+      if request.get?
+        ...
+      else
+        ...
+      end
+  - pattern-not-inside: |
+      if ...
+      elsif ...
+        ...
+      end
+  message: Found an improperly constructed control flow block with `request.get?`. Rails will route HEAD requests as GET requests but they will fail the `request.get?` check, potentially causing unexpected behavior unless an `elif` condition is used.
   languages:
   - ruby
   severity: ERROR

@@ -1,20 +1,21 @@
 rules:
 - id: vuln-css-what-4cdaacfd
-  pattern: "const reAttr =\n    /^\\s*(?:(\\*|[-\\w]*)\\|)?((?:\\\\.|[\\w\\u00b0-\\\
-    uFFFF-])+)\\s*(?:(\\S?)=\\s*(?:(['\"])((?:[^\\\\]|\\\\[^])*?)\\4|(#?(?:\\\\.|[\\\
-    w\\u00b0-\\uFFFF-])*)|)|)\\s*([iIsS])?\\s*\\]/;\n"
-  pattern-not: "const actionTypes = new Map<string, AttributeAction>([\n    [\"~\"\
-    , \"element\"],\n    [\"^\", \"start\"],\n    [\"$\", \"end\"],\n    [\"*\", \"\
-    any\"],\n    [\"!\", \"not\"],\n    [\"|\", \"hyphen\"],\n]);\n"
+  pattern: |
+    const reAttr =
+        /^\s*(?:(\*|[-\w]*)\|)?((?:\\.|[\w\u00b0-\uFFFF-])+)\s*(?:(\S?)=\s*(?:(['"])((?:[^\\]|\\[^])*?)\4|(#?(?:\\.|[\w\u00b0-\uFFFF-])*)|)|)\s*([iIsS])?\s*\]/;
+  pattern-not: |
+    const actionTypes = new Map<string, AttributeAction>([
+        ["~", "element"],
+        ["^", "start"],
+        ["$", "end"],
+        ["*", "any"],
+        ["!", "not"],
+        ["|", "hyphen"],
+    ]);
   languages:
   - typescript
-  message: 'The regex pattern used for parsing CSS attribute selectors is vulnerable
-    to malformed input and lacks proper handling of edge cases. This can lead to incorrect
-    parsing of attribute selectors, potentially causing security issues in CSS processing.
-    Replace the regex-based parsing with a more robust and explicit parsing logic
-    that handles edge cases and malformed input correctly.
-
-    '
+  message: |
+    The regex pattern used for parsing CSS attribute selectors is vulnerable to malformed input and lacks proper handling of edge cases. This can lead to incorrect parsing of attribute selectors, potentially causing security issues in CSS processing. Replace the regex-based parsing with a more robust and explicit parsing logic that handles edge cases and malformed input correctly.
   severity: ERROR
   metadata:
     source-url: github.com/fb55/css-what/commit/4cdaacfd0d4b6fd00614be030da0dea6c2994655

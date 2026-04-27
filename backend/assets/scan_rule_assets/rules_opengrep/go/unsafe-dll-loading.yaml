@@ -1,7 +1,6 @@
 rules:
 - id: unsafe-dll-loading
-  message: The function is vulnerable to DLL hijacking attacks. Use `windows.NewLazySystemDLL()`
-    function to limit DLL search to the Windows directory
+  message: The function is vulnerable to DLL hijacking attacks. Use `windows.NewLazySystemDLL()` function to limit DLL search to the Windows directory
   languages:
   - go
   severity: ERROR
@@ -25,32 +24,19 @@ rules:
     - pattern: windows.LoadDLL(...)
     - pattern: windows.MustLoadDLL(...)
     - pattern: syscall.NewLazyDLL(...)
-    - pattern: '$X = windows.NewLazyDLL(...)
-
+    - pattern: |
+        $X = windows.NewLazyDLL(...)
         ...
-
         $X.$Y()
-
         ...
-
         $X.System = true
-
-        '
-    - pattern: '$X = windows.NewLazyDLL(...)
-
+    - pattern: |
+        $X = windows.NewLazyDLL(...)
         ...
-
         $X.$Y()
-
-        '
-  - pattern-not: '$X = windows.NewLazyDLL(...)
-
+  - pattern-not: |
+      $X = windows.NewLazyDLL(...)
       ...
-
       $X.System = true
-
       ...
-
       $X.$Y()
-
-      '

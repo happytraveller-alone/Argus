@@ -1,16 +1,14 @@
 rules:
 - id: vuln-nasm-2d4e6952
-  pattern: "while ($NBS--)\n  *$Q++ = '\\\\';\n"
-  pattern-not: '$Q = mempset($Q, ''\\'', $NBS);
-
-    '
+  pattern: |
+    while ($NBS--)
+      *$Q++ = '\\';
+  pattern-not: |
+    $Q = mempset($Q, '\\', $NBS);
   languages:
   - c
-  message: 'Detected a potentially unsafe manual memory copy operation using a while loop. This pattern can lead to buffer
-    overflows or other memory-related vulnerabilities. Replace the manual loop with a safer function like `memset` or `mempset`
-    to ensure proper memory handling.
-
-    '
+  message: |
+    Detected a potentially unsafe manual memory copy operation using a while loop. This pattern can lead to buffer overflows or other memory-related vulnerabilities. Replace the manual loop with a safer function like `memset` or `mempset` to ensure proper memory handling.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/2d4e6952417ec6f08b6f135d2b5d0e19b7dae30d
@@ -24,19 +22,17 @@ rules:
     technology:
     - c
 - id: vuln-nasm-3079f796
-  pattern: "$VAR = readnum($TEXT, &$ERR);\nif ($ERR) {\n  nasm_error(ERR_NONFATAL, \"unable to parse parameter count `%s'\"\
-    , $TEXT);\n}\n"
-  pattern-not: '$VAR = read_param_count($TEXT);
-
-    '
+  pattern: |
+    $VAR = readnum($TEXT, &$ERR);
+    if ($ERR) {
+      nasm_error(ERR_NONFATAL, "unable to parse parameter count `%s'", $TEXT);
+    }
+  pattern-not: |
+    $VAR = read_param_count($TEXT);
   languages:
   - c
-  message: 'The code directly uses readnum() without proper bounds checking, which can lead to invalid parameter counts being
-    accepted. This vulnerability could allow out-of-bounds values to be processed, potentially causing undefined behavior
-    or security issues. The fix introduces a new read_param_count() function that validates the input is within [0, INT_MAX]
-    range. Always validate numeric inputs against expected ranges and use dedicated validation functions when available.
-
-    '
+  message: |
+    The code directly uses readnum() without proper bounds checking, which can lead to invalid parameter counts being accepted. This vulnerability could allow out-of-bounds values to be processed, potentially causing undefined behavior or security issues. The fix introduces a new read_param_count() function that validates the input is within [0, INT_MAX] range. Always validate numeric inputs against expected ranges and use dedicated validation functions when available.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/3079f7966dbed4497e36d5067cbfd896a90358cb
@@ -47,18 +43,16 @@ rules:
     technology:
     - c
 - id: vuln-nasm-3144e84a
-  pattern: '$P = nasm_skip_string($P - 1) + 1;
-
-    '
-  pattern-not: "$P = nasm_skip_string($P - 1);\nif (*$P)\n    $P++;\n"
+  pattern: |
+    $P = nasm_skip_string($P - 1) + 1;
+  pattern-not: |
+    $P = nasm_skip_string($P - 1);
+    if (*$P)
+        $P++;
   languages:
   - c
-  message: 'This pattern detects a potential vulnerability where the code increments the pointer without checking if it points
-    to a valid character. This could lead to out-of-bounds memory access, which is dangerous as it can cause crashes, data
-    corruption, or even arbitrary code execution. To fix this, ensure that the pointer is only incremented if it points to
-    a valid character.
-
-    '
+  message: |
+    This pattern detects a potential vulnerability where the code increments the pointer without checking if it points to a valid character. This could lead to out-of-bounds memory access, which is dangerous as it can cause crashes, data corruption, or even arbitrary code execution. To fix this, ensure that the pointer is only incremented if it points to a valid character.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/3144e84add8b152cc7a71e44617ce6f21daa4ba3
@@ -70,22 +64,24 @@ rules:
     technology:
     - c
 - id: vuln-nasm-6ac6ac57
-  pattern: '$EOP->val = $SUBEXPR->val;
-
+  pattern: |
+    $EOP->val = $SUBEXPR->val;
     $EOP->type = $SUBEXPR->type;
-
     $EOP->dup *= $SUBEXPR->dup;
-
     nasm_free($SUBEXPR);
-
-    '
-  pattern-not: "if (!$SUBEXPR->elem)\n    $SUBEXPR->elem = $EOP->elem;\n$SUBEXPR->dup *= $EOP->dup;\nnasm_free($EOP);\n$EOP\
-    \ = $SUBEXPR;\n"
+  pattern-not: |
+    if (!$SUBEXPR->elem)
+        $SUBEXPR->elem = $EOP->elem;
+    $SUBEXPR->dup *= $EOP->dup;
+    nasm_free($EOP);
+    $EOP = $SUBEXPR;
   languages:
   - c
-  message: "This pattern detects a potentially dangerous memory management issue where\na structure is freed without considering\
-    \ its associated allocated buffer.\nThis can lead to use-after-free or double-free vulnerabilities. The fix \ninvolves\
-    \ properly transferring ownership of the buffer before freeing.\n"
+  message: |
+    This pattern detects a potentially dangerous memory management issue where
+    a structure is freed without considering its associated allocated buffer.
+    This can lead to use-after-free or double-free vulnerabilities. The fix
+    involves properly transferring ownership of the buffer before freeing.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/6ac6ac57e3d01ea8ed4ea47706eb724b59176461
@@ -95,33 +91,24 @@ rules:
     technology:
     - c
 - id: vuln-nasm-7c88289e
-  pattern: 'char *$P;
-
+  pattern: |
+    char *$P;
     ...
-
     $P = nasm_malloc($LEN + 1);
-
     ...
-
     set_text_free($T, $P, $LEN);
-
-    '
-  pattern-not: 'char *$P, *$FROM;
-
+  pattern-not: |
+    char *$P, *$FROM;
     ...
-
     $FROM = $P = nasm_malloc($LEN + 1);
-
     ...
-
     set_text_free($T, $FROM, $LEN);
-
-    '
   languages:
   - c
-  message: "Detected a potential vulnerability where the wrong pointer is passed to `set_text_free`. \nThis can lead to incorrect\
-    \ memory management, potentially causing memory leaks or undefined behavior.\nThe fix involves using a separate pointer\
-    \ (`from`) to track the allocated memory and pass it to `set_text_free`.\n"
+  message: |
+    Detected a potential vulnerability where the wrong pointer is passed to `set_text_free`.
+    This can lead to incorrect memory management, potentially causing memory leaks or undefined behavior.
+    The fix involves using a separate pointer (`from`) to track the allocated memory and pass it to `set_text_free`.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/7c88289e222dc5ef9f53f9e86ecaab1924744b88
@@ -133,21 +120,16 @@ rules:
     technology:
     - c
 - id: vuln-nasm-98578071
-  pattern: 'define_label($LABEL, $SEGMENT, $OFFSET, $SPECIAL, false, false);
-
-    '
-  pattern-not: 'backend_label($LABEL, $SEGMENT, $OFFSET);
-
-    '
+  pattern: |
+    define_label($LABEL, $SEGMENT, $OFFSET, $SPECIAL, false, false);
+  pattern-not: |
+    backend_label($LABEL, $SEGMENT, $OFFSET);
   languages:
   - c
-  message: 'Found use of deprecated define_label() function with hardcoded boolean parameters.
-
+  message: |
+    Found use of deprecated define_label() function with hardcoded boolean parameters.
     This can lead to incorrect label handling and potential security issues.
-
     Replace with backend_label() for proper label management.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/98578071b9d71ecaa2344dd9c185237c1765041e
@@ -157,14 +139,22 @@ rules:
     technology:
     - c
 - id: vuln-nasm-9b7ee09a
-  pattern: "if ($TYPE == TOK_PREPROC_ID && $TEXT[1] == '!') {\n  ...\n}\n"
-  pattern-not: "if ($TYPE == TOK_PREPROC_ID && $TEXT &&\n    $TEXT[0] && $TEXT[1] == '!') {\n  ...\n}\n"
+  pattern: |
+    if ($TYPE == TOK_PREPROC_ID && $TEXT[1] == '!') {
+      ...
+    }
+  pattern-not: |
+    if ($TYPE == TOK_PREPROC_ID && $TEXT &&
+        $TEXT[0] && $TEXT[1] == '!') {
+      ...
+    }
   languages:
   - c
-  message: "Detected a potential null pointer dereference in the preprocessor token check. \nThe code accesses `t->text[1]`\
-    \ without first verifying that `t->text` is non-null and `t->text[0]` is valid. \nThis can lead to undefined behavior\
-    \ or crashes if `t->text` is null. \nTo fix this, ensure that `t->text` is checked for null and that `t->text[0]` is valid\
-    \ before accessing `t->text[1]`.\n"
+  message: |
+    Detected a potential null pointer dereference in the preprocessor token check.
+    The code accesses `t->text[1]` without first verifying that `t->text` is non-null and `t->text[0]` is valid.
+    This can lead to undefined behavior or crashes if `t->text` is null.
+    To fix this, ensure that `t->text` is checked for null and that `t->text[0]` is valid before accessing `t->text[1]`.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/9b7ee09abfd426b99aa1ea81d19a3b2818eeabf9
@@ -177,19 +167,14 @@ rules:
     technology:
     - c
 - id: vuln-nasm-c713b5f9
-  pattern: 'return sizes[bsii($STR, $NAMES, $SIZE)+1];
-
-    '
-  pattern-not: 'return $STR ? sizes[bsii($STR, $NAMES, $SIZE)+1] : 0;
-
-    '
+  pattern: |
+    return sizes[bsii($STR, $NAMES, $SIZE)+1];
+  pattern-not: |
+    return $STR ? sizes[bsii($STR, $NAMES, $SIZE)+1] : 0;
   languages:
   - c
-  message: 'Detected a potential null pointer dereference vulnerability. The function `bsii` may return a value that leads
-    to accessing an invalid index in the `sizes` array if `$STR` is null. This can cause undefined behavior or crashes. To
-    fix this, add a null check before accessing the array, as shown in the patch.
-
-    '
+  message: |
+    Detected a potential null pointer dereference vulnerability. The function `bsii` may return a value that leads to accessing an invalid index in the `sizes` array if `$STR` is null. This can cause undefined behavior or crashes. To fix this, add a null check before accessing the array, as shown in the patch.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/c713b5f994cf7b29164c3b6838b91f0499591434
@@ -203,14 +188,18 @@ rules:
     technology:
     - c
 - id: vuln-nasm-ceec0d81
-  pattern: "if ($J != '*' && !is_unknown($F) && reloc_value($F) == 0) {\n  ...\n}\n"
-  pattern-not: "if ($J != '*' && !is_just_unknown($F) && reloc_value($F) == 0) {\n  ...\n}\n"
+  pattern: |
+    if ($J != '*' && !is_unknown($F) && reloc_value($F) == 0) {
+      ...
+    }
+  pattern-not: |
+    if ($J != '*' && !is_just_unknown($F) && reloc_value($F) == 0) {
+      ...
+    }
   languages:
   - c
-  message: 'The function ''is_unknown'' is incorrectly used for checking unknown values. This could lead to incorrect evaluation
-    of expressions. Use ''is_just_unknown'' instead to properly check for unknown values in expressions.
-
-    '
+  message: |
+    The function 'is_unknown' is incorrectly used for checking unknown values. This could lead to incorrect evaluation of expressions. Use 'is_just_unknown' instead to properly check for unknown values in expressions.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/ceec0d818798aeaa75ed4907e6135b0247ed46b2
@@ -222,16 +211,23 @@ rules:
     technology:
     - c
 - id: vuln-nasm-e996d28c
-  pattern: "if (!$VAR) {\n  nasm_error($ERR, $MSG);\n}\nif ($COND1 && $COND2 && $COND3) {\n  ...\n}\n"
-  pattern-not: "if (!$VAR) {\n  nasm_error($ERR, $MSG);\n} else if ($COND1 && $COND2 && $COND3) {\n  ...\n}\n"
+  pattern: |
+    if (!$VAR) {
+      nasm_error($ERR, $MSG);
+    }
+    if ($COND1 && $COND2 && $COND3) {
+      ...
+    }
+  pattern-not: |
+    if (!$VAR) {
+      nasm_error($ERR, $MSG);
+    } else if ($COND1 && $COND2 && $COND3) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected an issue where conditional checks are not properly chained, which could lead to incorrect error handling.
-    The vulnerability occurs when two separate if statements are used instead of an if-else chain, potentially causing unintended
-    behavior. To fix this, ensure that the second condition is checked only if the first condition fails by using an else
-    if statement.
-
-    '
+  message: |
+    Detected an issue where conditional checks are not properly chained, which could lead to incorrect error handling. The vulnerability occurs when two separate if statements are used instead of an if-else chain, potentially causing unintended behavior. To fix this, ensure that the second condition is checked only if the first condition fails by using an else if statement.
   severity: ERROR
   metadata:
     source-url: github.com/netwide-assembler/nasm/commit/e996d28c70d45008085322b442b44a9224308548

@@ -2,17 +2,12 @@ rules:
 - id: scala_strings_rule-FormatStringManipulation
   languages:
   - scala
-  message: 'Allowing user input to control format parameters could enable an attacker to cause exceptions
-
+  message: |
+    Allowing user input to control format parameters could enable an attacker to cause exceptions
     to be thrown or leak information.Attackers may be able  to modify the format string argument,
-
     such that an exception is thrown. If this exception is left uncaught, it may crash the
-
     application. Alternatively, if sensitive information is used within the unused arguments,
-
     attackers may change the format string to reveal this information.
-
-    '
   metadata:
     category: security
     confidence: HIGH
@@ -22,31 +17,22 @@ rules:
   patterns:
   - pattern-either:
     - patterns:
-      - pattern-inside: '$INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
-
+      - pattern-inside: |
+          $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
           ...
-
-          '
-      - pattern-inside: '$FORMAT_STR = <... $INPUT ...>;
-
-          '
+      - pattern-inside: |
+          $FORMAT_STR = <... $INPUT ...>;
     - patterns:
-      - pattern-inside: 'val $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
-
+      - pattern-inside: |
+          val $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
           ...
-
-          '
-      - pattern-inside: 'val $FORMAT_STR = <... $INPUT ...>;
-
+      - pattern-inside: |
+          val $FORMAT_STR = <... $INPUT ...>;
           ...
-
-          '
-    - pattern-inside: 'val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...) + ...; ...
-
-        '
-    - pattern-inside: 'val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...); ...
-
-        '
+    - pattern-inside: |
+        val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...) + ...; ...
+    - pattern-inside: |
+        val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...); ...
   - pattern-either:
     - pattern: $VAL = <... $INPUT ...>
     - pattern: String.format($FORMAT_STR, ...);
@@ -65,17 +51,12 @@ rules:
 - id: scala_strings_rule-FormatStringManipulation_1
   languages:
   - scala
-  message: 'Allowing user input to control format parameters could enable an attacker to cause exceptions
-
+  message: |
+    Allowing user input to control format parameters could enable an attacker to cause exceptions
     to be thrown or leak information.Attackers may be able  to modify the format string argument,
-
     such that an exception is thrown. If this exception is left uncaught, it may crash the
-
     application. Alternatively, if sensitive information is used within the unused arguments,
-
     attackers may change the format string to reveal this information.
-
-    '
   metadata:
     category: security
     confidence: HIGH
@@ -85,31 +66,22 @@ rules:
   patterns:
   - pattern-either:
     - patterns:
-      - pattern-inside: '$INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
-
+      - pattern-inside: |
+          $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
           ...
-
-          '
-      - pattern-inside: '$FORMAT_STR = <... $INPUT ...>;
-
-          '
+      - pattern-inside: |
+          $FORMAT_STR = <... $INPUT ...>;
     - patterns:
-      - pattern-inside: 'val $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
-
+      - pattern-inside: |
+          val $INPUT = ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...);
           ...
-
-          '
-      - pattern-inside: 'val $FORMAT_STR = <... $INPUT ...>;
-
+      - pattern-inside: |
+          val $FORMAT_STR = <... $INPUT ...>;
           ...
-
-          '
-    - pattern-inside: 'val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...) + ...; ...
-
-        '
-    - pattern-inside: 'val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...); ...
-
-        '
+    - pattern-inside: |
+        val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...) + ...; ...
+    - pattern-inside: |
+        val $FORMAT_STR = ... + ($REQ: javax.servlet.http.HttpServletRequest).getParameter(...); ...
   - pattern-either:
     - pattern: $VAL = <... $INPUT ...>
     - pattern: String.format($FORMAT_STR, ...);

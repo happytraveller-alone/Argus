@@ -1,16 +1,14 @@
 rules:
 - id: vuln-steeltoe-c5d4a94e
-  pattern: '$LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedUri())
-
-    '
-  pattern-not: '$LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedString())
-
-    '
+  pattern: |
+    $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedUri())
+  pattern-not: |
+    $LOGGER.LogError($EXCEPTION, $MESSAGE, $URI.ToMaskedString())
   languages:
   - csharp
-  message: "Detected use of ToMaskedUri() in logging statements which may expose sensitive\
-    \ information. \nUse ToMaskedString() instead to properly mask URIs containing\
-    \ basic authentication credentials.\n"
+  message: |
+    Detected use of ToMaskedUri() in logging statements which may expose sensitive information.
+    Use ToMaskedString() instead to properly mask URIs containing basic authentication credentials.
   severity: ERROR
   metadata:
     source-url: github.com/SteeltoeOSS/Steeltoe/commit/c5d4a94e90ccb77f8e851bc681a2e348a95e7ecb

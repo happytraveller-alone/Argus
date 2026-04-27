@@ -15,9 +15,7 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-121: Stack-based Buffer Overflow'
     - 'CWE-122: Heap-based Buffer Overflow'
-  message: A buffer overflow condition exists when a program attempts to put more
-    data in a buffer than it can hold, or when a program attempts to put data in a
-    memory area outside of the boundaries of a buffer.
+  message: A buffer overflow condition exists when a program attempts to put more data in a buffer than it can hold, or when a program attempts to put data in a memory area outside of the boundaries of a buffer.
   severity: ERROR
   languages:
   - cpp

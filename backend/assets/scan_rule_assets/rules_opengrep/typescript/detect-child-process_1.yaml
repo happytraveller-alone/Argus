@@ -2,16 +2,12 @@ rules:
 - id: detect-child-process_1
   languages:
   - typescript
-  message: Allowing spawning arbitrary programs or running shell processes with arbitrary
-    arguments may end up in a command injection vulnerability. Try to avoid non-literal
-    values for the command string. If it is not possible, then do not let running
-    arbitrary commands, use a white list for inputs.
+  message: Allowing spawning arbitrary programs or running shell processes with arbitrary arguments may end up in a command injection vulnerability. Try to avoid non-literal values for the command string. If it is not possible, then do not let running arbitrary commands, use a white list for inputs.
   metadata:
     category: security
     confidence: MEDIUM
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     cwe2021-top25: true
     cwe2022-top25: true
     impact: HIGH
@@ -40,33 +36,26 @@ rules:
       - pattern: $CP.spawn($CMD,...)
       - pattern: $CP.spawnSync($CMD,...)
     - pattern-either:
-      - pattern-inside: 'require(''child_process'')
-
+      - pattern-inside: |
+          require('child_process')
           ...
-
-          '
-      - pattern-inside: 'import ''child_process''
-
+      - pattern-inside: |
+          import 'child_process'
           ...
-
-          '
   pattern-sources:
   - patterns:
     - pattern: $EVENT
     - pattern-either:
-      - pattern-inside: "exports.handler = function ($EVENT, ...) {\n  ...\n}\n"
-      - pattern-inside: 'function $FUNC ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
-      - pattern-inside: '$FUNC = function ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
   severity: ERROR

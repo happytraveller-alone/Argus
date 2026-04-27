@@ -2,18 +2,13 @@ rules:
 - id: python_crypto_rule-import-pycrypto
   languages:
   - python
-  message: 'The application was detected importing `pycrypto`. This package has been deprecated as it
-
+  message: |
+    The application was detected importing `pycrypto`. This package has been deprecated as it
     contains
-
     security vulnerabilities.
 
-
     To remediate this issue, consider using the [cryptography](https://cryptography.io/)
-
     package instead.
-
-    '
   metadata:
     cwe: CWE-1104
     owasp:
@@ -36,18 +31,13 @@ rules:
 - id: python_crypto_rule-import-pycrypto_1
   languages:
   - python
-  message: 'The application was detected importing `pycrypto`. This package has been deprecated as it
-
+  message: |
+    The application was detected importing `pycrypto`. This package has been deprecated as it
     contains
-
     security vulnerabilities.
 
-
     To remediate this issue, consider using the [cryptography](https://cryptography.io/)
-
     package instead.
-
-    '
   metadata:
     cwe: CWE-1104
     owasp:

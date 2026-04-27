@@ -2,63 +2,60 @@ rules:
 - id: accept_self_signed_certificate
   patterns:
   - pattern-either:
-    - pattern: '$X.SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
-
-        '
-    - pattern: '$X.setHostnameVerifier($Z.ALLOW_ALL_HOSTNAME_VERIFIER);
-
-        '
-    - pattern: '$X.setHostnameVerifier(new AllowAllHostnameVerifier());
-
-        '
-    - pattern: '$X.setDefaultHostnameVerifier(new NullHostnameVerifier());
-
-        '
-    - pattern: '$X.setDefaultHostnameVerifier((HostnameVerifier) new NullHostnameVerifier());
-
-        '
-    - pattern: "$RET verify(..., SSLSession $X) {\n  ...\n  return true;\n}\n"
-    - pattern: '$Y = SSLContext.getInstance(...);
-
+    - pattern: |
+        $X.SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER
+    - pattern: |
+        $X.setHostnameVerifier($Z.ALLOW_ALL_HOSTNAME_VERIFIER);
+    - pattern: |
+        $X.setHostnameVerifier(new AllowAllHostnameVerifier());
+    - pattern: |
+        $X.setDefaultHostnameVerifier(new NullHostnameVerifier());
+    - pattern: |
+        $X.setDefaultHostnameVerifier((HostnameVerifier) new NullHostnameVerifier());
+    - pattern: |
+        $RET verify(..., SSLSession $X) {
+          ...
+          return true;
+        }
+    - pattern: |
+        $Y = SSLContext.getInstance(...);
         ...
-
         $Y.init(null, ...);
-
-        '
-    - pattern: '$Y = $S.SSLContext.getInstance(...);
-
+    - pattern: |
+        $Y = $S.SSLContext.getInstance(...);
         ...
-
         $Y.init(null, ...);
-
-        '
-    - pattern: '$Z = new TLSClientParameters(...);
-
+    - pattern: |
+        $Z = new TLSClientParameters(...);
         ...
-
         $Z.setDisableCNCheck(true);
-
-        '
-    - pattern: "X509Certificate[] getAcceptedIssuers() { \n  ...\n  return new X509Certificate[]{};\n\
-        }\n"
-    - pattern: "X509Certificate[] getAcceptedIssuers() {\n  ...\n  return new java.security.cert.X509Certificate[]{};\n\
-        }\n"
-    - pattern: "X509Certificate[] getAcceptedIssuers() { \n  ...\n  $Y = new X509Certificate[]{};\n\
-        \  ...\n  return $Y;\n}\n"
-    - pattern: "X509Certificate[] getAcceptedIssuers() {\n  return new X509Certificate[0];\n\
-        }\n"
-    - pattern: "X509Certificate[] getAcceptedIssuers() {\n  ...\n  $X =  new X509Certificate[0];\n\
-        \  ...\n  return $X;\n}\n"
-    - pattern: "X509Certificate[] getAcceptedIssuers() {\n  return null;\n}\n"
-    - pattern: 'sslContext.init(null, ...);
-
-        '
-    - pattern: 'setSslSocketFactory(new NonValidatingSSLSocketFactory());
-
-        '
-  message: Insecure Implementation of SSL. Trusting all the certificates or accepting
-    self signed certificates is a critical Security Hole. This application is vulnerable
-    to MITM attacks.
+    - pattern: "X509Certificate[] getAcceptedIssuers() { \n  ...\n  return new X509Certificate[]{};\n}\n"
+    - pattern: |
+        X509Certificate[] getAcceptedIssuers() {
+          ...
+          return new java.security.cert.X509Certificate[]{};
+        }
+    - pattern: "X509Certificate[] getAcceptedIssuers() { \n  ...\n  $Y = new X509Certificate[]{};\n  ...\n  return $Y;\n}\n"
+    - pattern: |
+        X509Certificate[] getAcceptedIssuers() {
+          return new X509Certificate[0];
+        }
+    - pattern: |
+        X509Certificate[] getAcceptedIssuers() {
+          ...
+          $X =  new X509Certificate[0];
+          ...
+          return $X;
+        }
+    - pattern: |
+        X509Certificate[] getAcceptedIssuers() {
+          return null;
+        }
+    - pattern: |
+        sslContext.init(null, ...);
+    - pattern: |
+        setSslSocketFactory(new NonValidatingSSLSocketFactory());
+  message: Insecure Implementation of SSL. Trusting all the certificates or accepting self signed certificates is a critical Security Hole. This application is vulnerable to MITM attacks.
   languages:
   - java
   severity: ERROR

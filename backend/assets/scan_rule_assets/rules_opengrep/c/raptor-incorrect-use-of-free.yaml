@@ -9,9 +9,7 @@ rules:
     cwe:
     - 'CWE-590: Free of Memory not on the Heap'
     - 'CWE-416: Use After Free'
-  message: The software calls free() on a pointer to memory that has a short  lifetime
-    and was not allocated using associated heap allocation  functions such as malloc(),
-    calloc(), or realloc().
+  message: The software calls free() on a pointer to memory that has a short  lifetime and was not allocated using associated heap allocation  functions such as malloc(), calloc(), or realloc().
   severity: ERROR
   languages:
   - c
@@ -19,64 +17,40 @@ rules:
   - patterns:
     - pattern: free($PTR)
     - pattern-either:
-      - pattern-inside: '$_ $PTR[$_];
-
+      - pattern-inside: |
+          $_ $PTR[$_];
           ...
-
-          '
-      - pattern-inside: '$_ $PTR[$_] = $_;
-
+      - pattern-inside: |
+          $_ $PTR[$_] = $_;
           ...
-
-          '
-      - pattern-inside: '$_ $ARR[$_];
-
+      - pattern-inside: |
+          $_ $ARR[$_];
           ...
-
           $PTR = $ARR;
-
           ...
-
-          '
-      - pattern-inside: '$_ $ARR[$_] = $_;
-
+      - pattern-inside: |
+          $_ $ARR[$_] = $_;
           ...
-
           $PTR = $ARR;
-
           ...
-
-          '
   - patterns:
     - pattern: free(&$VAR)
     - pattern-either:
-      - pattern-inside: '$_ $VAR;
-
+      - pattern-inside: |
+          $_ $VAR;
           ...
-
-          '
-      - pattern-inside: '$_ $VAR = $_;
-
+      - pattern-inside: |
+          $_ $VAR = $_;
           ...
-
-          '
-      - pattern-inside: '$_ $VAR[$_];
-
+      - pattern-inside: |
+          $_ $VAR[$_];
           ...
-
-          '
-      - pattern-inside: '$_ $VAR[$_] = $_;
-
+      - pattern-inside: |
+          $_ $VAR[$_] = $_;
           ...
-
-          '
-      - pattern-inside: '$_ * $VAR;
-
+      - pattern-inside: |
+          $_ * $VAR;
           ...
-
-          '
-      - pattern-inside: '$_ * $VAR = $_;
-
+      - pattern-inside: |
+          $_ * $VAR = $_;
           ...
-
-          '

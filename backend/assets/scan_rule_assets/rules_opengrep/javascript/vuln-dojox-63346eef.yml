@@ -1,18 +1,16 @@
 rules:
 - id: vuln-dojox-63346eef
-  pattern: '$D = $GET ? $GET($ROW, $ITEM) : ($VALUE || $DEFAULT);
-
-    $D = ($D && $D.replace && $GRID.escapeHTMLInData) ? $D.replace(/&/g, ''&amp;'').replace(/</g,
-    ''&lt;'') : $D;
-
-    '
-  pattern-not: "$D = $GET ? $GET($ROW, $ITEM) : ($VALUE || $DEFAULT);\nif ($D && $D.replace\
-    \ && $GRID.escapeHTMLInData) {\n  $D = $D.replace(/&/g, '&amp;').replace(/</g,\
-    \ '&lt;');\n}\n"
+  pattern: |
+    $D = $GET ? $GET($ROW, $ITEM) : ($VALUE || $DEFAULT);
+    $D = ($D && $D.replace && $GRID.escapeHTMLInData) ? $D.replace(/&/g, '&amp;').replace(/</g, '&lt;') : $D;
+  pattern-not: |
+    $D = $GET ? $GET($ROW, $ITEM) : ($VALUE || $DEFAULT);
+    if ($D && $D.replace && $GRID.escapeHTMLInData) {
+      $D = $D.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    }
   languages:
   - javascript
-  message: Potential XSS vulnerability due to improper HTML escaping. Ensure proper
-    escaping of HTML content to prevent XSS attacks.
+  message: Potential XSS vulnerability due to improper HTML escaping. Ensure proper escaping of HTML content to prevent XSS attacks.
   severity: ERROR
   metadata:
     source-url: github.com/dojo/dojox/commit/63346eef9e731e58f9c68ae52e8903494b00ebd2

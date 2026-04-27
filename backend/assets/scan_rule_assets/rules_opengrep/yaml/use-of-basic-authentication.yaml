@@ -2,22 +2,25 @@ rules:
 - id: use-of-basic-authentication
   languages:
   - yaml
-  message: Basic authentication is considered weak and should be avoided.  Use a different
-    authentication scheme, such of OAuth2, OpenID Connect, or mTLS.
+  message: Basic authentication is considered weak and should be avoided.  Use a different authentication scheme, such of OAuth2, OpenID Connect, or mTLS.
   severity: ERROR
   patterns:
-  - pattern-inside: "openapi: $VERSION\n...\ncomponents:\n  ...\n  securitySchemes:\n\
-      \    ...\n    $SCHEME:\n      ...\n"
+  - pattern-inside: |
+      openapi: $VERSION
+      ...
+      components:
+        ...
+        securitySchemes:
+          ...
+          $SCHEME:
+            ...
   - metavariable-regex:
       metavariable: $VERSION
       regex: 3.*
-  - pattern: 'type: http
-
+  - pattern: |
+      type: http
       ...
-
       scheme: basic
-
-      '
   metadata:
     category: security
     subcategory:

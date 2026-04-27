@@ -1,50 +1,50 @@
 rules:
 - id: ruby_injection_rule-BadSend
   pattern-either:
-  - pattern: '$PARAM = params[...]
-
+  - pattern: |
+      $PARAM = params[...]
       ...
-
       $RES = $MOD.send($PARAM.$FUNC)
-
-      '
-  - pattern: '$PARAM = params[...]
-
+  - pattern: |
+      $PARAM = params[...]
       ...
-
       $RES = $MOD.try($PARAM.$FUNC)
-
-      '
-  - pattern: '$PARAM = params[...]
-
+  - pattern: |
+      $PARAM = params[...]
       ...
-
       $RES = $MOD.__send__($PARAM.$FUNC)
-
-      '
-  - pattern: '$PARAM = params[...]
-
+  - pattern: |
+      $PARAM = params[...]
       ...
-
       $RES = $MOD.public_send($PARAM.$FUNC)
+  message: |
+    The application was found calling dynamic method invocations in Ruby.
+    In particular one of the methods of: `Object#send`, `Object#try`, `Object#__send__`,
+    or `Object#public_send`. These methods are powerful Ruby features that allow
+    calling another method on an object
+    by name, where the method's name is passed as a string or symbol.
+    However, when combined with untrusted input, such as parameters from
+    web requests, they can lead to severe security vulnerabilities, including
+    arbitrary method execution and potentially arbitrary code execution.
 
-      '
-  message: "The application was found calling dynamic method invocations in Ruby.\
-    \ \nIn particular one of the methods of: `Object#send`, `Object#try`, `Object#__send__`,\
-    \ \nor `Object#public_send`. These methods are powerful Ruby features that allow\
-    \ \ncalling another method on an object \nby name, where the method's name is\
-    \ passed as a string or symbol. \nHowever, when combined with untrusted input,\
-    \ such as parameters from \nweb requests, they can lead to severe security vulnerabilities,\
-    \ including \narbitrary method execution and potentially arbitrary code execution.\n\
-    \nTo mitigate these risks, it's crucial to validate and sanitize any user \ninput\
-    \ that might determine which methods are invoked. Moreover, consider \nusing safer\
-    \ alternatives to direct method invocation based on user input, \nsuch as explicitly\
-    \ whitelisting allowed methods or using conditional logic \nto determine method\
-    \ calls.\n\nSecure Code Example:\n```\n# Secure method invocation with validation\
-    \ and allow lists\nmethod_name = params[:method].to_sym\nallowed_methods = [:allowed_method_1,\
-    \ :allowed_method_2, :safe_method]\n\nif allowed_methods.include?(method_name)\n\
-    \  result = object.public_send(method_name)\nelse\n  raise \"Unauthorized method\
-    \ call\"\nend\n```\n"
+    To mitigate these risks, it's crucial to validate and sanitize any user
+    input that might determine which methods are invoked. Moreover, consider
+    using safer alternatives to direct method invocation based on user input,
+    such as explicitly whitelisting allowed methods or using conditional logic
+    to determine method calls.
+
+    Secure Code Example:
+    ```
+    # Secure method invocation with validation and allow lists
+    method_name = params[:method].to_sym
+    allowed_methods = [:allowed_method_1, :allowed_method_2, :safe_method]
+
+    if allowed_methods.include?(method_name)
+      result = object.public_send(method_name)
+    else
+      raise "Unauthorized method call"
+    end
+    ```
   languages:
   - ruby
   severity: ERROR

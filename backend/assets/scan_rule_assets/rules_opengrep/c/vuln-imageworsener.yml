@@ -1,28 +1,27 @@
 rules:
 - id: vuln-imageworsener-62bfbfb1
-  pattern: 'if(!ret) return FALSE;
-
+  pattern: |
+    if(!ret) return FALSE;
     ...
-
     if(bytesread<1) return FALSE;
-
-    '
-  pattern-not: "if((!ret) || (bytesread<1)) {\n  iw_set_error(rctx->ctx, \"Unexpected end of file\");\n  rctx->buffer[0] =\
-    \ 0xffU;\n  rctx->buffer[1] = 0xd9U;\n  rctx->pub.bytes_in_buffer = 2;\n}\nelse {\n  rctx->pub.bytes_in_buffer = bytesread;\n\
-    }\n"
+  pattern-not: |
+    if((!ret) || (bytesread<1)) {
+      iw_set_error(rctx->ctx, "Unexpected end of file");
+      rctx->buffer[0] = 0xffU;
+      rctx->buffer[1] = 0xd9U;
+      rctx->pub.bytes_in_buffer = 2;
+    }
+    else {
+      rctx->pub.bytes_in_buffer = bytesread;
+    }
   languages:
   - c
-  message: 'Detected unsafe handling of JPEG read operations that could lead to truncated
-
+  message: |
+    Detected unsafe handling of JPEG read operations that could lead to truncated
     or malformed image processing. The original code fails silently when read operations
-
     return zero bytes or fail, which could lead to incomplete image processing or
-
     undefined behavior. The fix adds proper error handling and ensures a valid EOI
-
     marker is returned in case of read errors.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/jsummers/imageworsener/commit/62bfbfb1527953312f8cc10901fccba5d20e3e93
@@ -34,19 +33,14 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-a75fd487
-  pattern: 'lzw_add_to_dict($D, $OLDCODE, $VAL)
-
-    '
-  pattern-not: 'lzw_add_to_dict($RCTX, $D, $OLDCODE, $VAL)
-
-    '
+  pattern: |
+    lzw_add_to_dict($D, $OLDCODE, $VAL)
+  pattern-not: |
+    lzw_add_to_dict($RCTX, $D, $OLDCODE, $VAL)
   languages:
   - c
-  message: 'The function `lzw_add_to_dict` is called without the required `rctx` parameter, which is necessary for proper
-    error handling. This can lead to unhandled errors during GIF decoding, potentially causing crashes or undefined behavior.
-    Always include the `rctx` parameter to ensure proper error management.
-
-    '
+  message: |
+    The function `lzw_add_to_dict` is called without the required `rctx` parameter, which is necessary for proper error handling. This can lead to unhandled errors during GIF decoding, potentially causing crashes or undefined behavior. Always include the `rctx` parameter to ensure proper error management.
   severity: ERROR
   metadata:
     source-url: github.com/jsummers/imageworsener/commit/a75fd4879c55c89651f7f247293a61eef3e51be1
@@ -60,18 +54,16 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-bb321cff
-  pattern: 'if(!read_next_pam_token($CTX, $LINEBUF, $TOKENBUF, sizeof($TOKENBUF), $CURPOS)) goto $LABEL;
-
-    '
-  pattern-not: "if(!read_next_pam_token($CTX, $LINEBUF, (int)sizeof($LINEBUF), $TOKENBUF, (int)sizeof($TOKENBUF), $CURPOS))\
-    \ {\n  goto $LABEL;\n}\n"
+  pattern: |
+    if(!read_next_pam_token($CTX, $LINEBUF, $TOKENBUF, sizeof($TOKENBUF), $CURPOS)) goto $LABEL;
+  pattern-not: |
+    if(!read_next_pam_token($CTX, $LINEBUF, (int)sizeof($LINEBUF), $TOKENBUF, (int)sizeof($TOKENBUF), $CURPOS)) {
+      goto $LABEL;
+    }
   languages:
   - c
-  message: 'The function `read_next_pam_token` is called with an incorrect buffer size for `linebuf`. This can lead to buffer
-    overflow vulnerabilities. Always pass the correct buffer size for all buffers to prevent potential security issues. Fix
-    by casting the `sizeof` result to `int` and ensuring the correct buffer size is passed.
-
-    '
+  message: |
+    The function `read_next_pam_token` is called with an incorrect buffer size for `linebuf`. This can lead to buffer overflow vulnerabilities. Always pass the correct buffer size for all buffers to prevent potential security issues. Fix by casting the `sizeof` result to `int` and ensuring the correct buffer size is passed.
   severity: ERROR
   metadata:
     source-url: github.com/jsummers/imageworsener/commit/bb321cfff3b1ab969c4cf1b692473c78672fa4ad
@@ -85,19 +77,30 @@ rules:
     technology:
     - c
 - id: vuln-imageworsener-dc49c807
-  pattern: "*$PCODE = $CTX->img1.density_code;\nif($CTX->img1.density_code != $IW_DENSITY_UNKNOWN) {\n  *$PX = $CTX->img1.density_x;\n\
-    \  *$PY = $CTX->img1.density_y;\n  return 1;\n}\nreturn 0;\n"
-  pattern-not: "*$PCODE = $IW_DENSITY_UNKNOWN;\nif($CTX->img1.density_code == $IW_DENSITY_UNKNOWN) {\n  return 0;\n}\nif(!iw_is_valid_density($CTX->img1.density_x,\
-    \ $CTX->img1.density_y, $CTX->img1.density_code)) {\n  return 0;\n}\n*$PX = $CTX->img1.density_x;\n*$PY = $CTX->img1.density_y;\n\
-    *$PCODE = $CTX->img1.density_code;\nreturn 1;\n"
+  pattern: |
+    *$PCODE = $CTX->img1.density_code;
+    if($CTX->img1.density_code != $IW_DENSITY_UNKNOWN) {
+      *$PX = $CTX->img1.density_x;
+      *$PY = $CTX->img1.density_y;
+      return 1;
+    }
+    return 0;
+  pattern-not: |
+    *$PCODE = $IW_DENSITY_UNKNOWN;
+    if($CTX->img1.density_code == $IW_DENSITY_UNKNOWN) {
+      return 0;
+    }
+    if(!iw_is_valid_density($CTX->img1.density_x, $CTX->img1.density_y, $CTX->img1.density_code)) {
+      return 0;
+    }
+    *$PX = $CTX->img1.density_x;
+    *$PY = $CTX->img1.density_y;
+    *$PCODE = $CTX->img1.density_code;
+    return 1;
   languages:
   - c
-  message: 'The original code directly assigns density values without proper validation, which could lead to processing invalid
-    density values. This can cause unexpected behavior or security issues in image processing. The fix adds validation using
-    iw_is_valid_density() before assigning and using the density values. Always validate input values before processing them
-    to prevent potential security vulnerabilities.
-
-    '
+  message: |
+    The original code directly assigns density values without proper validation, which could lead to processing invalid density values. This can cause unexpected behavior or security issues in image processing. The fix adds validation using iw_is_valid_density() before assigning and using the density values. Always validate input values before processing them to prevent potential security vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/jsummers/imageworsener/commit/dc49c807926b96e503bd7c0dec35119eecd6c6fe

@@ -14,10 +14,7 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-20: Improper Input Validation'
-  message: Use of alloca() is unsafe because it cannot ensure that the pointer  returned
-    points to a valid and usable block of memory. The allocation  made may exceed
-    the bounds of the stack, or even go further into other  objects in memory, and
-    alloca() cannot determine such an error.
+  message: Use of alloca() is unsafe because it cannot ensure that the pointer  returned points to a valid and usable block of memory. The allocation  made may exceed the bounds of the stack, or even go further into other  objects in memory, and alloca() cannot determine such an error.
   severity: ERROR
   languages:
   - cpp

@@ -1,8 +1,6 @@
 rules:
 - id: remote-property-injection
-  message: Bracket object notation with user input is present, this might allow an
-    attacker to access all properties of the object and even it's prototype. Use literal
-    values for object properties.
+  message: Bracket object notation with user input is present, this might allow an attacker to access all properties of the object and even it's prototype. Use literal values for object properties.
   metadata:
     confidence: LOW
     owasp:
@@ -44,14 +42,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params
@@ -65,12 +60,10 @@ rules:
     - pattern-not-inside: $OBJ["..."] = ...
     - pattern-not-inside: $OBJ[...] = "..."
     - pattern: $INDEX
-    - pattern-not: '"..." + $INDEX
-
-        '
-    - pattern-not: '$INDEX + "..."
-
-        '
+    - pattern-not: |
+        "..." + $INDEX
+    - pattern-not: |
+        $INDEX + "..."
   pattern-sanitizers:
   - patterns:
     - pattern: var $X = ...

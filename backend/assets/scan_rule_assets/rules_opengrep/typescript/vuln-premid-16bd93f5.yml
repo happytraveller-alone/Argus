@@ -1,16 +1,23 @@
 rules:
 - id: vuln-premid-16bd93f5
-  pattern: "{\n  cors: { origin: \"*\" }\n}\n"
-  pattern-not: "{\n  allowRequest: (req, callback) => {\n    const noOriginHeader\
-    \ = req.headers.origin === undefined;\n    callback(null, noOriginHeader);\n \
-    \ }\n}\n"
+  pattern: |
+    {
+      cors: { origin: "*" }
+    }
+  pattern-not: |
+    {
+      allowRequest: (req, callback) => {
+        const noOriginHeader = req.headers.origin === undefined;
+        callback(null, noOriginHeader);
+      }
+    }
   languages:
   - typescript
-  message: "Detected a vulnerable CORS configuration that allows all origins (`origin:\
-    \ \"*\"`). \nThis is dangerous as it exposes the application to Cross-Origin Resource\
-    \ Sharing (CORS) attacks, \npotentially allowing malicious websites to access\
-    \ sensitive data. \nTo fix this, implement a custom `allowRequest` function that\
-    \ validates the origin header.\n"
+  message: |
+    Detected a vulnerable CORS configuration that allows all origins (`origin: "*"`).
+    This is dangerous as it exposes the application to Cross-Origin Resource Sharing (CORS) attacks,
+    potentially allowing malicious websites to access sensitive data.
+    To fix this, implement a custom `allowRequest` function that validates the origin header.
   severity: ERROR
   metadata:
     source-url: github.com/PreMiD/PreMiD/commit/16bd93f56605dc0db9843d22ebcaa8f9f580420d

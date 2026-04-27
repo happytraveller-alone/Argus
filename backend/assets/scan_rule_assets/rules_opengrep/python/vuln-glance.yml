@@ -1,17 +1,13 @@
 rules:
 - id: vuln-glance-108f0e04
-  pattern: 'LOG.warn(_(''Get image %(id)s data from %(loc)s failed: %(err)s.'') % {''id'': $ID, ''loc'': $LOC, ''err'': $ERR})
-
-    '
-  pattern-not: 'LOG.warn(_(''Get image %(id)s data failed: %(err)s.'') % {''id'': $ID, ''err'': $ERR})
-
-    '
+  pattern: |
+    LOG.warn(_('Get image %(id)s data from %(loc)s failed: %(err)s.') % {'id': $ID, 'loc': $LOC, 'err': $ERR})
+  pattern-not: |
+    LOG.warn(_('Get image %(id)s data failed: %(err)s.') % {'id': $ID, 'err': $ERR})
   languages:
   - python
-  message: 'Detected insecure logging of sensitive information. The patch removed the ''loc'' parameter from the log message
-    to prevent exposure of sensitive location data. Avoid logging sensitive information to prevent security risks.
-
-    '
+  message: |
+    Detected insecure logging of sensitive information. The patch removed the 'loc' parameter from the log message to prevent exposure of sensitive location data. Avoid logging sensitive information to prevent security risks.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/glance/commit/108f0e04ad2ed3dc287f1b71b987a7e9d66072ba
@@ -23,17 +19,30 @@ rules:
     technology:
     - python
 - id: vuln-glance-fc0ee762
-  pattern: "status = 'deleted'\nif $IMAGE['location']:\n    if $CONF.delayed_delete:\n        status = 'pending_delete'\n\
-    \        $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)\n    else:\n        $STORE_API.safe_delete_from_backend($IMAGE['location'],\
-    \ $CONTEXT, $ID)\n"
-  pattern-not: "if $IMAGE['location'] and $CONF.delayed_delete:\n    status = 'pending_delete'\nelse:\n    status = 'deleted'\n\
-    \    if $IMAGE['location']:\n        if $CONF.delayed_delete:\n            $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'],\
-    \ $ID)\n        else:\n            $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)\n"
+  pattern: |
+    status = 'deleted'
+    if $IMAGE['location']:
+        if $CONF.delayed_delete:
+            status = 'pending_delete'
+            $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
+        else:
+            $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
+  pattern-not: |
+    if $IMAGE['location'] and $CONF.delayed_delete:
+        status = 'pending_delete'
+    else:
+        status = 'deleted'
+        if $IMAGE['location']:
+            if $CONF.delayed_delete:
+                $STORE_API.schedule_delayed_delete_from_backend($IMAGE['location'], $ID)
+            else:
+                $STORE_API.safe_delete_from_backend($IMAGE['location'], $CONTEXT, $ID)
   languages:
   - python
-  message: "Detected a vulnerability where the deletion status and deletion operations are not properly synchronized. \nThis\
-    \ could lead to inconsistent states where an image is marked as 'deleted' but its data is not actually removed from the\
-    \ backend. \nEnsure that the status and deletion operations are handled in a consistent manner.\n"
+  message: |
+    Detected a vulnerability where the deletion status and deletion operations are not properly synchronized.
+    This could lead to inconsistent states where an image is marked as 'deleted' but its data is not actually removed from the backend.
+    Ensure that the status and deletion operations are handled in a consistent manner.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/glance/commit/fc0ee7623ec59c87ac6fc671e95a9798d6f2e2c3

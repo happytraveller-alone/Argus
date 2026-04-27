@@ -8,70 +8,44 @@ rules:
     - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
     - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
   - pattern-either:
-    - pattern: '$INP = $REQ.$QUERY;
-
+    - pattern: |
+        $INP = $REQ.$QUERY;
         ...
-
         $RES.set(..., <... $INP ...>, ...)
-
-        '
-    - pattern: '$INP = $REQ.$QUERY.$VAR;
-
+    - pattern: |
+        $INP = $REQ.$QUERY.$VAR;
         ...
-
         $RES.set(..., <... $INP ...>, ...)
-
-        '
-    - pattern: '$INP = $REQ.$VAR;
-
+    - pattern: |
+        $INP = $REQ.$VAR;
         ...
-
         $RES.set(..., { $X: <... $INP ...>}, ...)
-
-        '
-    - pattern: '$INP = $REQ.$QUERY.$FOO;
-
+    - pattern: |
+        $INP = $REQ.$QUERY.$FOO;
         ...
-
         $RES.set(..., { $X: <... $INP ...>}, ...)
-
-        '
-    - pattern: '$INP = $REQ.$VAR;
-
+    - pattern: |
+        $INP = $REQ.$VAR;
         ...
-
         $RES.writeHead(..., { $X: <... $INP ...> }, ...)
-
-        '
-    - pattern: '$INP = $REQ.$QUERY.$FOO;
-
+    - pattern: |
+        $INP = $REQ.$QUERY.$FOO;
         ...
-
         $RES.writeHead(..., { $X: <... $INP ...> }, ...)
-
-        '
-    - pattern: '$RES.set(..., <... $REQ.$QUERY ...>, ...)
-
-        '
-    - pattern: '$RES.set(..., <... $REQ.$QUERY.$VAR ...>, ...)
-
-        '
-    - pattern: '$RES.set(..., { $X: <... $REQ.$VAR ...>}, ...)
-
-        '
-    - pattern: '$RES.set(..., { $X: <... $REQ.$QUERY.$FOO ...>}, ...)
-
-        '
-    - pattern: '$RES.writeHead(..., { $X: <... $REQ.$VAR ...> }, ...)
-
-        '
-    - pattern: '$RES.writeHead(..., { $X: <... $REQ.$QUERY.$FOO ...> }, ...)
-
-        '
-  message: 'Untrusted user input in response header will result in HTTP Header Injection
-    or Response Splitting Attacks.
-
-    '
+    - pattern: |
+        $RES.set(..., <... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $RES.set(..., <... $REQ.$QUERY.$VAR ...>, ...)
+    - pattern: |
+        $RES.set(..., { $X: <... $REQ.$VAR ...>}, ...)
+    - pattern: |
+        $RES.set(..., { $X: <... $REQ.$QUERY.$FOO ...>}, ...)
+    - pattern: |
+        $RES.writeHead(..., { $X: <... $REQ.$VAR ...> }, ...)
+    - pattern: |
+        $RES.writeHead(..., { $X: <... $REQ.$QUERY.$FOO ...> }, ...)
+  message: |
+    Untrusted user input in response header will result in HTTP Header Injection or Response Splitting Attacks.
   languages:
   - javascript
   severity: ERROR

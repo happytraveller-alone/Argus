@@ -41,14 +41,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params
@@ -58,22 +55,16 @@ rules:
       - pattern: body
   pattern-sinks:
   - patterns:
-    - pattern-inside: '$VM = require(''vm'');
-
+    - pattern-inside: |
+        $VM = require('vm');
         ...
-
-        '
     - pattern-either:
-      - pattern: '$VM.runInContext(...)
-
-          '
-      - pattern: '$VM.runInNewContext(...)
-
-          '
-      - pattern: '$VM.compileFunction(...)
-
-          '
-      - pattern: '$VM.runInThisContext(...)
-
-          '
+      - pattern: |
+          $VM.runInContext(...)
+      - pattern: |
+          $VM.runInNewContext(...)
+      - pattern: |
+          $VM.compileFunction(...)
+      - pattern: |
+          $VM.runInThisContext(...)
       - pattern: new $VM.Script(...)

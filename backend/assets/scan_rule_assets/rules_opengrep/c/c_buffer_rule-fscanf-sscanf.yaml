@@ -2,10 +2,16 @@ rules:
 - id: c_buffer_rule-fscanf-sscanf
   languages:
   - c
-  message: "Format specifiers can take optional field widths, which should be\nused\
-    \ to limit how many characters are copied into the target buffer.\n\nExample:\n\
-    ```\n  const char str[20] = \"AAAAAAAAAAAAAAAAAAA\";\n  char buf[11] = {0};\n\
-    \  sscanf(str, \"%10s\", &buf); // buf = AAAAAAAAAA\\0\n```\n"
+  message: |
+    Format specifiers can take optional field widths, which should be
+    used to limit how many characters are copied into the target buffer.
+
+    Example:
+    ```
+      const char str[20] = "AAAAAAAAAAAAAAAAAAA";
+      char buf[11] = {0};
+      sscanf(str, "%10s", &buf); // buf = AAAAAAAAAA\0
+    ```
   metadata:
     shortDescription: sscanf() functions may allow format string based overflows
     cwe: CWE-120

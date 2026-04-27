@@ -1,7 +1,6 @@
 rules:
 - id: arbitrary-low-level-call
-  message: An attacker may perform call() to an arbitrary address with controlled
-    calldata
+  message: An attacker may perform call() to an arbitrary address with controlled calldata
   metadata:
     category: security
     technology:
@@ -21,14 +20,10 @@ rules:
     - https://etherscan.io/address/0x73a499e043b03fc047189ab1ba72eb595ff1fc8e
   patterns:
   - pattern-either:
-    - pattern-inside: 'function $F(..., address $ADDR, ..., bytes calldata $DATA,
-        ...) external { ... }
-
-        '
-    - pattern-inside: 'function $F(..., address $ADDR, ..., bytes calldata $DATA,
-        ...) public { ... }
-
-        '
+    - pattern-inside: |
+        function $F(..., address $ADDR, ..., bytes calldata $DATA, ...) external { ... }
+    - pattern-inside: |
+        function $F(..., address $ADDR, ..., bytes calldata $DATA, ...) public { ... }
   - pattern-either:
     - pattern: $ADDR.call($DATA);
     - pattern: $ADDR.call{$VALUE:...}($DATA);

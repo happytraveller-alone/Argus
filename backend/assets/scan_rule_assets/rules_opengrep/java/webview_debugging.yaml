@@ -1,14 +1,18 @@
 rules:
 - id: webview_debugging
   patterns:
-  - pattern-not-inside: "if (BuildConfig.DEBUG) {\n  ...\n}\n"
-  - pattern-not-inside: "if ($X.DEBUG) {\n  ...\n}\n"
+  - pattern-not-inside: |
+      if (BuildConfig.DEBUG) {
+        ...
+      }
+  - pattern-not-inside: |
+      if ($X.DEBUG) {
+        ...
+      }
   - pattern-either:
-    - pattern: '$WB.setWebContentsDebuggingEnabled(true);
-
-        '
-  message: Remote WebView debugging is enabled. This allows an attacker with debugging
-    access to interact with the webview and steal or corrupt data.
+    - pattern: |
+        $WB.setWebContentsDebuggingEnabled(true);
+  message: Remote WebView debugging is enabled. This allows an attacker with debugging access to interact with the webview and steal or corrupt data.
   languages:
   - java
   severity: ERROR

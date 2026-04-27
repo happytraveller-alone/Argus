@@ -2,11 +2,7 @@ rules:
 - id: csv-writer-injection
   languages:
   - python
-  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate
-    the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet
-    application that runs an attacker script, which could steal data from the importing user or, at worst, install malware
-    on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula
-    injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
   metadata:
     category: security
     confidence: MEDIUM
@@ -29,22 +25,21 @@ rules:
   mode: taint
   pattern-sinks:
   - patterns:
-    - pattern-inside: '$WRITER = csv.writer(...)
-
+    - pattern-inside: |
+        $WRITER = csv.writer(...)
 
         ...
 
-
         $WRITER.$WRITE(...)
-
-        '
     - pattern: $WRITER.$WRITE(...)
     - metavariable-regex:
         metavariable: $WRITE
         regex: ^(writerow|writerows|writeheader)$
   pattern-sources:
   - patterns:
-    - pattern-inside: "def $FUNC(..., $REQUEST, ...):\n  ...\n"
+    - pattern-inside: |
+        def $FUNC(..., $REQUEST, ...):
+          ...
     - focus-metavariable: $REQUEST
     - metavariable-pattern:
         metavariable: $REQUEST
@@ -55,11 +50,7 @@ rules:
 - id: csv-writer-injection_1
   languages:
   - python
-  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate
-    the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet
-    application that runs an attacker script, which could steal data from the importing user or, at worst, install malware
-    on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula
-    injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
   metadata:
     category: security
     confidence: MEDIUM
@@ -82,15 +73,12 @@ rules:
   mode: taint
   pattern-sinks:
   - patterns:
-    - pattern-inside: '$WRITER = csv.writer(...)
-
+    - pattern-inside: |
+        $WRITER = csv.writer(...)
 
         ...
 
-
         $WRITER.$WRITE(...)
-
-        '
     - pattern: $WRITER.$WRITE(...)
     - metavariable-regex:
         metavariable: $WRITE
@@ -119,6 +107,9 @@ rules:
           - pattern: flask.request.view_args.get(...)
           - pattern: flask.request.view_args[...]
       - patterns:
-        - pattern-inside: "@$APP.route($ROUTE, ...)\ndef $FUNC(..., $ROUTEVAR, ...):\n  ...\n"
+        - pattern-inside: |
+            @$APP.route($ROUTE, ...)
+            def $FUNC(..., $ROUTEVAR, ...):
+              ...
         - focus-metavariable: $ROUTEVAR
   severity: ERROR

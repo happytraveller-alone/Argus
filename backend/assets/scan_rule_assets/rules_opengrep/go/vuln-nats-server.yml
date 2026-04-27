@@ -1,14 +1,21 @@
 rules:
 - id: vuln-nats-server-1e08b67f
-  pattern: "if $REVOCATIONS != nil {\n  if $T, $OK := $REVOCATIONS[$SUBJECT]; $OK && $T <= time.Now().Unix() {\n    return\
-    \ false\n  }\n}\n"
-  pattern-not: "if isRevoked($REVOCATIONS, $SUBJECT, $ISSUED_AT) {\n  return false\n}\n"
+  pattern: |
+    if $REVOCATIONS != nil {
+      if $T, $OK := $REVOCATIONS[$SUBJECT]; $OK && $T <= time.Now().Unix() {
+        return false
+      }
+    }
+  pattern-not: |
+    if isRevoked($REVOCATIONS, $SUBJECT, $ISSUED_AT) {
+      return false
+    }
   languages:
   - go
-  message: "The code directly checks revocation status using `time.Now().Unix()` which can lead to time synchronization issues\
-    \ and incorrect revocation checks. \nThis can allow revoked tokens to be accepted if the server's clock is not synchronized.\
-    \ \nInstead, use the `isRevoked` function which compares against the token's `issuedAt` timestamp to ensure consistent\
-    \ and accurate revocation checks.\n"
+  message: |
+    The code directly checks revocation status using `time.Now().Unix()` which can lead to time synchronization issues and incorrect revocation checks.
+    This can allow revoked tokens to be accepted if the server's clock is not synchronized.
+    Instead, use the `isRevoked` function which compares against the token's `issuedAt` timestamp to ensure consistent and accurate revocation checks.
   severity: ERROR
   metadata:
     source-url: github.com/nats-io/nats-server/commit/1e08b67f08e18cd844dce833a265aaa72500a12f
@@ -22,14 +29,20 @@ rules:
     technology:
     - go
 - id: vuln-nats-server-9ff8bcde
-  pattern: "func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {\n  return $FUNC.Revocations.IsRevoked($PUBKEY, time.Now())\n\
-    }\n"
-  pattern-not: "func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {\n  return true\n}\n"
+  pattern: |
+    func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {
+      return $FUNC.Revocations.IsRevoked($PUBKEY, time.Now())
+    }
+  pattern-not: |
+    func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {
+      return true
+    }
   languages:
   - go
-  message: "The IsRevoked method uses time.Now() to check if a JWT is revoked, which can lead to unstable and unexpected behavior.\
-    \ \nInstead, use IsRevokedAt with the JWT's issue time for a stable response.\nThis vulnerability can cause incorrect\
-    \ revocation checks and security issues.\n"
+  message: |
+    The IsRevoked method uses time.Now() to check if a JWT is revoked, which can lead to unstable and unexpected behavior.
+    Instead, use IsRevokedAt with the JWT's issue time for a stable response.
+    This vulnerability can cause incorrect revocation checks and security issues.
   severity: ERROR
   metadata:
     source-url: github.com/nats-io/nats-server/commit/9ff8bcde2e46009e98bd9e88f598af355f62c168
@@ -38,15 +51,18 @@ rules:
     owasp: A02:2021 - Cryptographic Failures
     technology: go
 - id: vuln-nats-server-fa5b7afc
-  pattern: "if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ {\n  ...\n}\n"
-  pattern-not: "if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ && !$OPTS.authBlockDefined\
-    \ {\n  ...\n}\n"
+  pattern: |
+    if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ {
+      ...
+    }
+  pattern-not: |
+    if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ && !$OPTS.authBlockDefined {
+      ...
+    }
   languages:
   - go
-  message: 'Missing check for authBlockDefined in authorization logic. This can lead to unauthorized access when no authorization
-    block is defined. Always check authBlockDefined to ensure proper authorization handling.
-
-    '
+  message: |
+    Missing check for authBlockDefined in authorization logic. This can lead to unauthorized access when no authorization block is defined. Always check authBlockDefined to ensure proper authorization handling.
   severity: ERROR
   metadata:
     source-url: github.com/nats-io/nats-server/commit/fa5b7afcb64e7e887e49afdd032358802b5c4478

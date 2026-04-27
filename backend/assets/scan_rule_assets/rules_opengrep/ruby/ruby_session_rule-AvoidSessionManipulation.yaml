@@ -7,21 +7,35 @@ rules:
   - pattern: request.env
   pattern-sinks:
   - pattern: session[...]
-  message: "The application was found retrieving session data using user input. A\
-    \ \nmalicious user may be able to retrieve information from the session \nthat\
-    \ was not meant to be allowed. \nSession manipulation can occur when an application\
-    \ allows user-input in \nsession keys. Since sessions are typically considered\
-    \ a source of truth \n(e.g. to check the logged-in user or to match CSRF tokens),\
-    \ allowing an \nattacker to manipulate the session may lead to unintended behavior.\
-    \ \n\nTo mitigate this issue, never use user input as a session key. Instead,\
-    \ \nconsider an allow list approach to control access to session keys, \nensuring\
-    \ only predefined keys are accessible, and user input is not used\nto directly\
-    \ access the session key values. \n\nSecure Code Example:\n```\n# Define an allowed\
-    \ list of permitted session keys\nALLOWED_SESSION_KEYS = ['display_settings',\
-    \ 'locale']\n\nuser_provided_key = params[:key]\n\n# Validate the key against\
-    \ the list\nif ALLOWED_SESSION_KEYS.include?(user_provided_key)\n  # Access the\
-    \ session value safely\n  value = session[user_provided_key]\nelse\n  raise \"\
-    Invalid session key provided.\"\nend\n```\n"
+  message: |
+    The application was found retrieving session data using user input. A
+    malicious user may be able to retrieve information from the session
+    that was not meant to be allowed.
+    Session manipulation can occur when an application allows user-input in
+    session keys. Since sessions are typically considered a source of truth
+    (e.g. to check the logged-in user or to match CSRF tokens), allowing an
+    attacker to manipulate the session may lead to unintended behavior.
+
+    To mitigate this issue, never use user input as a session key. Instead,
+    consider an allow list approach to control access to session keys,
+    ensuring only predefined keys are accessible, and user input is not used
+    to directly access the session key values.
+
+    Secure Code Example:
+    ```
+    # Define an allowed list of permitted session keys
+    ALLOWED_SESSION_KEYS = ['display_settings', 'locale']
+
+    user_provided_key = params[:key]
+
+    # Validate the key against the list
+    if ALLOWED_SESSION_KEYS.include?(user_provided_key)
+      # Access the session value safely
+      value = session[user_provided_key]
+    else
+      raise "Invalid session key provided."
+    end
+    ```
   languages:
   - ruby
   severity: ERROR

@@ -2,30 +2,19 @@ rules:
 - id: cbc_static_iv
   patterns:
   - pattern-either:
-    - pattern: 'byte[] $X = {...};
-
+    - pattern: |
+        byte[] $X = {...};
         ...
-
         $Y =  new IvParameterSpec($X, ...);
-
         ...
-
         $C.getInstance("=~/AES/CBC.*/i");
-
-        '
-    - pattern: 'byte[] $X = "...".$FUNC(...);
-
+    - pattern: |
+        byte[] $X = "...".$FUNC(...);
         ...
-
         $Y =  new IvParameterSpec($X, ...);
-
         ...
-
         $C.getInstance("=~/AES/CBC.*/i");
-
-        '
-  message: The IV for AES CBC mode should be random. A static IV makes the ciphertext
-    vulnerable to Chosen Plaintext Attack.
+  message: The IV for AES CBC mode should be random. A static IV makes the ciphertext vulnerable to Chosen Plaintext Attack.
   languages:
   - java
   severity: ERROR

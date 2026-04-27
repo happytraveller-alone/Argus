@@ -2,8 +2,7 @@ rules:
 - id: express-expat-xxe_1
   languages:
   - typescript
-  message: Make sure that unverified user data can not reach the XML Parser, as it
-    can result in XML External or Internal Entity (XXE) Processing vulnerabilities.
+  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities.
   metadata:
     asvs:
       control_id: 5.5.2 Insecue XML Deserialization
@@ -34,27 +33,19 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: '$XML = require(''node-expat'')
-
+      - pattern-inside: |
+          $XML = require('node-expat')
           ...
-
-          '
-      - pattern-inside: 'import $XML from ''node-expat''
-
+      - pattern-inside: |
+          import $XML from 'node-expat'
           ...
-
-          '
-      - pattern-inside: 'import * as $XML from ''node-expat''
-
+      - pattern-inside: |
+          import * as $XML from 'node-expat'
           ...
-
-          '
     - pattern-either:
-      - pattern-inside: '$PARSER = new $XML.Parser(...);
-
+      - pattern-inside: |
+          $PARSER = new $XML.Parser(...);
           ...
-
-          '
     - pattern-either:
       - pattern: $PARSER.parse($QUERY)
       - pattern: $PARSER.write($QUERY)
@@ -79,14 +70,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

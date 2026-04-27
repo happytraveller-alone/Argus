@@ -1,19 +1,13 @@
 rules:
 - id: vuln-nfdump-7b26ee97
-  pattern: 'lzo1x_decompress($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
-
-    '
-  pattern-not: 'lzo1x_decompress_safe($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
-
-    '
+  pattern: |
+    lzo1x_decompress($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
+  pattern-not: |
+    lzo1x_decompress_safe($IN, $IN_LEN, $OUT, $OUT_LEN, $NULL)
   languages:
   - c
-  message: 'The use of `lzo1x_decompress` instead of `lzo1x_decompress_safe` can lead to buffer overflow vulnerabilities.
-    The `lzo1x_decompress` function does not perform bounds checking, which can result in memory corruption if the input data
-    is malformed or too large. Always use `lzo1x_decompress_safe` to ensure proper bounds checking and prevent potential security
-    issues.
-
-    '
+  message: |
+    The use of `lzo1x_decompress` instead of `lzo1x_decompress_safe` can lead to buffer overflow vulnerabilities. The `lzo1x_decompress` function does not perform bounds checking, which can result in memory corruption if the input data is malformed or too large. Always use `lzo1x_decompress_safe` to ensure proper bounds checking and prevent potential security issues.
   severity: ERROR
   metadata:
     source-url: github.com/phaag/nfdump/commit/7b26ee976ab64e4e30fef1b14df335e5977eb8e2
@@ -27,15 +21,20 @@ rules:
     technology:
     - c
 - id: vuln-nfdump-9f0fe956
-  pattern: 'ConvertCommonV0($RECORD, $BUFFER);
-
-    '
-  pattern-not: "if ( !ConvertCommonV0($RECORD, $BUFFER) ) {\n  $ERROR_HANDLING;\n  exit(255);\n}\n"
+  pattern: |
+    ConvertCommonV0($RECORD, $BUFFER);
+  pattern-not: |
+    if ( !ConvertCommonV0($RECORD, $BUFFER) ) {
+      $ERROR_HANDLING;
+      exit(255);
+    }
   languages:
   - c
-  message: "Detected a missing error check on the return value of ConvertCommonV0. \nThis can lead to processing corrupted\
-    \ data without proper error handling, \npotentially causing undefined behavior or security issues. \nAlways check the\
-    \ return value of ConvertCommonV0 and handle errors appropriately.\n"
+  message: |
+    Detected a missing error check on the return value of ConvertCommonV0.
+    This can lead to processing corrupted data without proper error handling,
+    potentially causing undefined behavior or security issues.
+    Always check the return value of ConvertCommonV0 and handle errors appropriately.
   severity: ERROR
   metadata:
     source-url: github.com/phaag/nfdump/commit/9f0fe9563366f62a71d34c92229da3432ec5cf0e
@@ -48,19 +47,14 @@ rules:
     technology:
     - c
 - id: vuln-nfdump-fd3d3dbb
-  pattern: 'defragmented = IPFrag_tree_Update($SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
-
-    '
-  pattern-not: 'defragmented = IPFrag_tree_Update($WHEN, $SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
-
-    '
+  pattern: |
+    defragmented = IPFrag_tree_Update($SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
+  pattern-not: |
+    defragmented = IPFrag_tree_Update($WHEN, $SRC, $DST, $IDENT, $LENGTH, $IP_OFF, $DATA);
   languages:
   - c
-  message: 'The function IPFrag_tree_Update is missing a timestamp parameter, which can lead to incorrect handling of IP fragments.
-    This can cause security issues such as denial of service or incorrect packet reassembly. Add a timestamp parameter to
-    ensure proper fragment expiration handling.
-
-    '
+  message: |
+    The function IPFrag_tree_Update is missing a timestamp parameter, which can lead to incorrect handling of IP fragments. This can cause security issues such as denial of service or incorrect packet reassembly. Add a timestamp parameter to ensure proper fragment expiration handling.
   severity: ERROR
   metadata:
     source-url: github.com/phaag/nfdump/commit/fd3d3dbbbf5691fa6e3f609d60ee016a1a5ec618

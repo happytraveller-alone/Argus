@@ -1,23 +1,22 @@
 rules:
 - id: vuln-gitea-194a11eb
-  pattern: 'SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, $TOS)
-
+  pattern: |
+    SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, $TOS)
     ...
-
     SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, getUserEmailsByNames($E, $TOS))
-
-    '
-  pattern-not: "for _, $TO := range $TOS {\n    SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})\n}\n\
-    ...\n$EMAILS := getUserEmailsByNames($E, $TOS)\nfor _, $TO := range $EMAILS {\n    SendIssueMentionMail($ISSUE, $DOER,\
-    \ $CONTENT, $COMMENT, []string{$TO})\n}\n"
+  pattern-not: |
+    for _, $TO := range $TOS {
+        SendIssueCommentMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
+    }
+    ...
+    $EMAILS := getUserEmailsByNames($E, $TOS)
+    for _, $TO := range $EMAILS {
+        SendIssueMentionMail($ISSUE, $DOER, $CONTENT, $COMMENT, []string{$TO})
+    }
   languages:
   - go
-  message: 'Detected a potential security vulnerability where email addresses are passed directly to SendIssueCommentMail
-    and SendIssueMentionMail functions without being properly iterated over. This could lead to unintended email delivery
-    or information leakage. The fix involves iterating over each recipient and sending the email individually to ensure proper
-    handling of recipients.
-
-    '
+  message: |
+    Detected a potential security vulnerability where email addresses are passed directly to SendIssueCommentMail and SendIssueMentionMail functions without being properly iterated over. This could lead to unintended email delivery or information leakage. The fix involves iterating over each recipient and sending the email individually to ensure proper handling of recipients.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/194a11eb110cd98fc2ba52861abf7770db6885a3
@@ -31,16 +30,20 @@ rules:
     technology:
     - go
 - id: vuln-gitea-387a4b09
-  pattern: "if !$VAR.IsTagExist($TAG) {\n  $CTX.Status(404)\n  return\n}\n"
-  pattern-not: "if !$VAR.IsTagExist($TAG) {\n  $CTX.Status(404)\n  return\n}\n"
+  pattern: |
+    if !$VAR.IsTagExist($TAG) {
+      $CTX.Status(404)
+      return
+    }
+  pattern-not: |
+    if !$VAR.IsTagExist($TAG) {
+      $CTX.Status(404)
+      return
+    }
   languages:
   - go
-  message: 'This pattern detects missing validation of tag existence in Go code, which can lead to incorrect HTTP 404 responses.
-    The vulnerability occurs when the code fails to properly check if a tag exists before proceeding, potentially causing
-    incorrect behavior or information leakage. To fix this, ensure proper validation and error handling are in place before
-    returning a 404 status.
-
-    '
+  message: |
+    This pattern detects missing validation of tag existence in Go code, which can lead to incorrect HTTP 404 responses. The vulnerability occurs when the code fails to properly check if a tag exists before proceeding, potentially causing incorrect behavior or information leakage. To fix this, ensure proper validation and error handling are in place before returning a 404 status.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/387a4b09c1b62a2a5eb70b89559d5ae53032c989
@@ -54,18 +57,18 @@ rules:
     technology:
     - go
 - id: vuln-gitea-3ee3a4b5
-  pattern: '$VAR = strings.Trim(path.Clean("/"+$TREEPATH), " /")
-
-    '
-  pattern-not: "$VAR = cleanUploadFileName($TREEPATH)\nif len($VAR) == 0 {\n    ctx.Error(500, \"Upload file name is invalid\"\
-    )\n    return\n}\n"
+  pattern: |
+    $VAR = strings.Trim(path.Clean("/"+$TREEPATH), " /")
+  pattern-not: |
+    $VAR = cleanUploadFileName($TREEPATH)
+    if len($VAR) == 0 {
+        ctx.Error(500, "Upload file name is invalid")
+        return
+    }
   languages:
   - go
-  message: 'The use of `strings.Trim(path.Clean("/"+$TREEPATH), " /")` for path sanitization is insecure as it does not properly
-    validate the input. This can lead to directory traversal or invalid file names. Use `cleanUploadFileName` instead and
-    check for empty results to ensure the file name is valid.
-
-    '
+  message: |
+    The use of `strings.Trim(path.Clean("/"+$TREEPATH), " /")` for path sanitization is insecure as it does not properly validate the input. This can lead to directory traversal or invalid file names. Use `cleanUploadFileName` instead and check for empty results to ensure the file name is valid.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/3ee3a4b59574887f33451f0f21e6fdca627dfd8b
@@ -81,16 +84,18 @@ rules:
     technology:
     - go
 - id: vuln-gitea-4b87aa36
-  pattern: "if err := $ISSUE.MailParticipants(); err != nil {\n  ...\n}\n"
-  pattern-not: "if err := $ISSUE.MailParticipants($ACTION); err != nil {\n  ...\n}\n"
+  pattern: |
+    if err := $ISSUE.MailParticipants(); err != nil {
+      ...
+    }
+  pattern-not: |
+    if err := $ISSUE.MailParticipants($ACTION); err != nil {
+      ...
+    }
   languages:
   - go
-  message: 'The function `MailParticipants` is called without specifying the action type, which can lead to incorrect notification
-    content. This vulnerability occurs because the content of the notification is not properly set based on the action being
-    performed (e.g., closing or reopening an issue or pull request). Always pass the appropriate action type to ensure the
-    correct notification content is generated.
-
-    '
+  message: |
+    The function `MailParticipants` is called without specifying the action type, which can lead to incorrect notification content. This vulnerability occurs because the content of the notification is not properly set based on the action being performed (e.g., closing or reopening an issue or pull request). Always pass the appropriate action type to ensure the correct notification content is generated.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/4b87aa367c87e56de36ab12b3340b450c55cb9f6
@@ -102,19 +107,14 @@ rules:
     technology:
     - go
 - id: vuln-gitea-6d318140
-  pattern: 'migrateRepository($DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
-
-    '
-  pattern-not: 'migrateRepository($DOER, $DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
-
-    '
+  pattern: |
+    migrateRepository($DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
+  pattern-not: |
+    migrateRepository($DOER, $DOWNLOADER, $UPLOADER, $OPTS, $MESSENGER)
   languages:
   - go
-  message: 'The function `migrateRepository` is being called without a `doer` parameter, which is required for proper URL
-    validation during migration. This can lead to security vulnerabilities by allowing unauthorized or unsafe URLs to be processed.
-    Always include the `doer` parameter, typically obtained via `user_model.GetAdminUser()`, to ensure proper URL validation.
-
-    '
+  message: |
+    The function `migrateRepository` is being called without a `doer` parameter, which is required for proper URL validation during migration. This can lead to security vulnerabilities by allowing unauthorized or unsafe URLs to be processed. Always include the `doer` parameter, typically obtained via `user_model.GetAdminUser()`, to ensure proper URL validation.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/6d3181406d87503dbd15e4a7c764c8963f13977f
@@ -128,19 +128,14 @@ rules:
     technology:
     - go
 - id: vuln-gitea-c7bbfd8f
-  pattern: 'template.HTML($DESC_PATTERN.ReplaceAllStringFunc(markup.Sanitize($DESCRIPTION), $SANITIZE_FUNC))
-
-    '
-  pattern-not: 'template.HTML(markup.Sanitize(string($DESC)))
-
-    '
+  pattern: |
+    template.HTML($DESC_PATTERN.ReplaceAllStringFunc(markup.Sanitize($DESCRIPTION), $SANITIZE_FUNC))
+  pattern-not: |
+    template.HTML(markup.Sanitize(string($DESC)))
   languages:
   - go
-  message: 'The code uses a custom sanitization function with `ReplaceAllStringFunc`, which may not properly sanitize HTML
-    content, leading to potential XSS vulnerabilities. The fix uses `RenderDescriptionHTML` with a proper link processor to
-    safely handle HTML content. Always use established sanitization methods to prevent XSS attacks.
-
-    '
+  message: |
+    The code uses a custom sanitization function with `ReplaceAllStringFunc`, which may not properly sanitize HTML content, leading to potential XSS vulnerabilities. The fix uses `RenderDescriptionHTML` with a proper link processor to safely handle HTML content. Always use established sanitization methods to prevent XSS attacks.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/c7bbfd8f5eb097c6910e142415fcdf48fc3c9814
@@ -152,15 +147,24 @@ rules:
     technology:
     - go
 - id: vuln-gitea-da0460de
-  pattern: "repo, err := models.GetRepositoryByOwnerAndName($OWNER_NAME, $REPO_NAME)\n...\nif err != nil {\n    ...\n}\n"
-  pattern-not: "repo, err := models.GetRepositoryByName($OWNER_ID, $REPO_NAME)\n...\nif err != nil {\n    ...\n}\n"
+  pattern: |
+    repo, err := models.GetRepositoryByOwnerAndName($OWNER_NAME, $REPO_NAME)
+    ...
+    if err != nil {
+        ...
+    }
+  pattern-not: |
+    repo, err := models.GetRepositoryByName($OWNER_ID, $REPO_NAME)
+    ...
+    if err != nil {
+        ...
+    }
   languages:
   - go
-  message: "The code directly retrieves a repository by owner name and repository name without verifying the owner's active\
-    \ status. This can lead to unauthorized access to repositories owned by inactive accounts. \nThe vulnerability is dangerous\
-    \ because it bypasses account activation checks, potentially allowing access to restricted resources.\nTo fix this, ensure\
-    \ the owner's active status is checked before retrieving the repository, and use the owner's ID instead of the owner's\
-    \ name for repository lookup.\n"
+  message: |
+    The code directly retrieves a repository by owner name and repository name without verifying the owner's active status. This can lead to unauthorized access to repositories owned by inactive accounts.
+    The vulnerability is dangerous because it bypasses account activation checks, potentially allowing access to restricted resources.
+    To fix this, ensure the owner's active status is checked before retrieving the repository, and use the owner's ID instead of the owner's name for repository lookup.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/da0460dea092194fb6af68e73e1e992d84b552aa
@@ -174,19 +178,14 @@ rules:
     technology:
     - go
 - id: vuln-gitea-e00e8d8a
-  pattern: '$VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(false)
-
-    '
-  pattern-not: '$VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(true)
-
-    '
+  pattern: |
+    $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(false)
+  pattern-not: |
+    $VAR = sec.Key("DISABLE_GIT_HOOKS").MustBool(true)
   languages:
   - go
-  message: 'The configuration setting `DISABLE_GIT_HOOKS` is set to `false`, which can allow untrusted git hooks to execute.
-    This is dangerous because it can lead to arbitrary code execution. To fix this, set `DISABLE_GIT_HOOKS` to `true` to prevent
-    the execution of potentially malicious git hooks.
-
-    '
+  message: |
+    The configuration setting `DISABLE_GIT_HOOKS` is set to `false`, which can allow untrusted git hooks to execute. This is dangerous because it can lead to arbitrary code execution. To fix this, set `DISABLE_GIT_HOOKS` to `true` to prevent the execution of potentially malicious git hooks.
   severity: ERROR
   metadata:
     source-url: github.com/go-gitea/gitea/commit/e00e8d8ad391ded1316d9dade4d2542199141be6

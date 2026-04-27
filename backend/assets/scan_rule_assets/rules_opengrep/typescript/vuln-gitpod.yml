@@ -1,21 +1,23 @@
 rules:
 - id: vuln-gitpod-12956988
-  pattern: "const verifyCSRF = ($ORIGIN) => {\n  let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME);\n  ...\n}\n"
-  pattern-not: "const verifyOrigin = ($ORIGIN, $STRICT) => {\n  let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME,\
-    \ $STRICT);\n  ...\n}\n"
+  pattern: |
+    const verifyCSRF = ($ORIGIN) => {
+      let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME);
+      ...
+    }
+  pattern-not: |
+    const verifyOrigin = ($ORIGIN, $STRICT) => {
+      let $ALLOWED = isAllowedWebsocketDomain($ORIGIN, $HOSTNAME, $STRICT);
+      ...
+    }
   languages:
   - typescript
-  message: 'Detected a vulnerable CSRF protection implementation in websocket origin verification.
-
+  message: |
+    Detected a vulnerable CSRF protection implementation in websocket origin verification.
     The old version of `isAllowedWebsocketDomain` did not enforce strict origin checks,
-
     potentially allowing CSRF attacks from unauthorized domains.
-
     The fix introduces a `strict` parameter to enforce stricter origin validation.
-
     Update the CSRF verification to use the strict mode for cookie/session authentication.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/gitpod-io/gitpod/commit/12956988eec0031f42ffdfa3bdc3359f65628f9f
@@ -32,19 +34,14 @@ rules:
     - typescript
     - websocket
 - id: vuln-gitpod-6771283c
-  pattern: 'redirect = $PROTOCOL !== "http:" && $PROTOCOL !== "https:"
-
-    '
-  pattern-not: 'redirect = $TRUSTED_PROTOCOLS.includes($PROTOCOL)
-
-    '
+  pattern: |
+    redirect = $PROTOCOL !== "http:" && $PROTOCOL !== "https:"
+  pattern-not: |
+    redirect = $TRUSTED_PROTOCOLS.includes($PROTOCOL)
   languages:
   - typescript
-  message: 'The code allows redirects based on a negative check for HTTP and HTTPS protocols, which can lead to unsafe redirects
-    to untrusted protocols. This can be exploited to redirect users to malicious sites or applications. To fix this, use a
-    whitelist of trusted protocols and check if the protocol is included in that list.
-
-    '
+  message: |
+    The code allows redirects based on a negative check for HTTP and HTTPS protocols, which can lead to unsafe redirects to untrusted protocols. This can be exploited to redirect users to malicious sites or applications. To fix this, use a whitelist of trusted protocols and check if the protocol is included in that list.
   severity: ERROR
   metadata:
     source-url: github.com/gitpod-io/gitpod/commit/6771283c3406586e352337675b79ff2ca50f191b

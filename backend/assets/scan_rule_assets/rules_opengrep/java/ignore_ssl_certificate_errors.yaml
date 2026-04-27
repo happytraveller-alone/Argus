@@ -2,10 +2,12 @@ rules:
 - id: ignore_ssl_certificate_errors
   patterns:
   - pattern-either:
-    - pattern: "$RET onReceivedSslError(WebView $W, SslErrorHandler $H, SslError $E)\
-        \ {\n  ...\n  $H.proceed();\n}\n"
-  message: Insecure WebView Implementation. WebView ignores SSL Certificate errors
-    and accept any SSL Certificate. This application is vulnerable to MITM attacks.
+    - pattern: |
+        $RET onReceivedSslError(WebView $W, SslErrorHandler $H, SslError $E) {
+          ...
+          $H.proceed();
+        }
+  message: Insecure WebView Implementation. WebView ignores SSL Certificate errors and accept any SSL Certificate. This application is vulnerable to MITM attacks.
   languages:
   - java
   severity: ERROR

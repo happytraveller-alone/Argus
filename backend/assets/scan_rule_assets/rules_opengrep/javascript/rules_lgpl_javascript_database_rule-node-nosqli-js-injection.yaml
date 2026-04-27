@@ -2,88 +2,52 @@ rules:
 - id: rules_lgpl_javascript_database_rule-node-nosqli-js-injection
   patterns:
   - pattern-either:
-    - pattern: '$OBJ.$FUNC({$where: <... $REQ.$FOO.$BAR ...>}, ...)
-
-        '
-    - pattern: '$OBJ.$FUNC({$where: <... $REQ.$QUERY ...>}, ...)
-
-        '
-    - pattern: '$NSQL = <... $REQ.$QUERY.$...>;
-
+    - pattern: |
+        $OBJ.$FUNC({$where: <... $REQ.$FOO.$BAR ...>}, ...)
+    - pattern: |
+        $OBJ.$FUNC({$where: <... $REQ.$QUERY ...>}, ...)
+    - pattern: |
+        $NSQL = <... $REQ.$QUERY.$...>;
         ...
-
         $OBJ.$FUNC({$where: <... $NSQL ...>}, ...)
-
-        '
-    - pattern: '$NSQL = <... $REQ.$QUERY ...>;
-
+    - pattern: |
+        $NSQL = <... $REQ.$QUERY ...>;
         ...
-
         $OBJ.$FUNC({$where: <... $NSQL ...>}, ...)
-
-        '
-    - pattern: '$INP = $REQ.$FOO.$BAR;
-
+    - pattern: |
+        $INP = $REQ.$FOO.$BAR;
         ...
-
         $QRY = {$where: <... $INP ...>};
-
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-    - pattern: '$INP = $REQ.$FOO;
-
+    - pattern: |
+        $INP = $REQ.$FOO;
         ...
-
         $QRY = {$where: <... $INP ...>};
-
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-    - pattern: '$QRY["$where"] = <... $REQ.$FOO ...>;
-
+    - pattern: |
+        $QRY["$where"] = <... $REQ.$FOO ...>;
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-    - pattern: '$QRY["$where"] = <... $REQ.$FOO.$BAR ...>;
-
+    - pattern: |
+        $QRY["$where"] = <... $REQ.$FOO.$BAR ...>;
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-    - pattern: '$INP = $REQ.$FOO;
-
+    - pattern: |
+        $INP = $REQ.$FOO;
         ...
-
         $QRY["$where"] = <... $INP ...>;
-
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-    - pattern: '$INP = $REQ.$FOO.$BAR;
-
+    - pattern: |
+        $INP = $REQ.$FOO.$BAR;
         ...
-
         $QRY["$where"] = <... $INP ...>;
-
         ...
-
         $OBJ.$FUNC(<... $QRY ...>, ...)
-
-        '
-  message: 'Untrusted user input in MongoDB $where operator can result in NoSQL JavaScript
-    Injection.
-
-    '
+  message: |
+    Untrusted user input in MongoDB $where operator can result in NoSQL JavaScript Injection.
   languages:
   - javascript
   severity: ERROR

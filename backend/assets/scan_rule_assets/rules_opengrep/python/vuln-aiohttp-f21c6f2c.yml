@@ -1,24 +1,19 @@
 rules:
 - id: vuln-aiohttp-f21c6f2c
-  pattern: '$PAYLOAD = $WRITER.append($DATA)
-
+  pattern: |
+    $PAYLOAD = $WRITER.append($DATA)
     ...
-
     assert $CONTENT_DISPOSITION in $PAYLOAD.headers
-
-    '
-  pattern-not: '$PAYLOAD = $WRITER.append($DATA)
-
+  pattern-not: |
+    $PAYLOAD = $WRITER.append($DATA)
     $PAYLOAD.set_content_disposition("form-data", name=$NAME)
-
     assert $CONTENT_DISPOSITION in $PAYLOAD.headers
-
-    '
   languages:
   - python
-  message: "Detected missing Content-Disposition header in multipart payload. \nThis\
-    \ can lead to incorrect handling of form data by clients or servers. \nEnsure\
-    \ to set Content-Disposition with a proper name attribute for each part.\n"
+  message: |
+    Detected missing Content-Disposition header in multipart payload.
+    This can lead to incorrect handling of form data by clients or servers.
+    Ensure to set Content-Disposition with a proper name attribute for each part.
   severity: ERROR
   metadata:
     source-url: github.com/aio-libs/aiohttp/commit/f21c6f2ca512a026ce7f0f6c6311f62d6a638866

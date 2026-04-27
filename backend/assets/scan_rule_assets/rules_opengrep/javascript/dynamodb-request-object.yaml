@@ -1,9 +1,6 @@
 rules:
 - id: dynamodb-request-object
-  message: Detected DynamoDB query params that are tainted by `$EVENT` object. This
-    could lead to NoSQL injection if the variable is user-controlled and not properly
-    sanitized. Explicitly assign query params instead of passing data from `$EVENT`
-    directly to DynamoDB client.
+  message: Detected DynamoDB query params that are tainted by `$EVENT` object. This could lead to NoSQL injection if the variable is user-controlled and not properly sanitized. Explicitly assign query params instead of passing data from `$EVENT` directly to DynamoDB client.
   metadata:
     cwe:
     - 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
@@ -29,53 +26,40 @@ rules:
   - patterns:
     - pattern: $EVENT
     - pattern-either:
-      - pattern-inside: "exports.handler = function ($EVENT, ...) {\n  ...\n}\n"
-      - pattern-inside: 'function $FUNC ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
-      - pattern-inside: '$FUNC = function ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
   pattern-sinks:
   - patterns:
     - focus-metavariable: $SINK
-    - pattern: '$DC.$METHOD($SINK, ...)
-
-        '
+    - pattern: |
+        $DC.$METHOD($SINK, ...)
     - metavariable-regex:
         metavariable: $METHOD
         regex: (query|send|scan|delete|put|transactWrite|update|batchExecuteStatement|executeStatement|executeTransaction|transactWriteItems)
     - pattern-either:
-      - pattern-inside: '$DC = new $AWS.DocumentClient(...);
-
+      - pattern-inside: |
+          $DC = new $AWS.DocumentClient(...);
           ...
-
-          '
-      - pattern-inside: '$DC = new $AWS.DynamoDB(...);
-
+      - pattern-inside: |
+          $DC = new $AWS.DynamoDB(...);
           ...
-
-          '
-      - pattern-inside: '$DC = new DynamoDBClient(...);
-
+      - pattern-inside: |
+          $DC = new DynamoDBClient(...);
           ...
-
-          '
-      - pattern-inside: '$DC = DynamoDBDocumentClient.from(...);
-
+      - pattern-inside: |
+          $DC = DynamoDBDocumentClient.from(...);
           ...
-
-          '
   pattern-sanitizers:
   - patterns:
-    - pattern: '{...}
-
-        '
+    - pattern: |
+        {...}

@@ -2,13 +2,10 @@ rules:
 - id: scala_inject_rule-SqlInjection
   languages:
   - scala
-  message: 'The input values included in SQL queries need to be passed in safely. Bind
-
+  message: |
+    The input values included in SQL queries need to be passed in safely. Bind
     variables in prepared statements can be used to easily mitigate the risk of
-
     SQL injection.
-
-    '
   metadata:
     category: security
     cwe: CWE-89
@@ -18,13 +15,21 @@ rules:
     shortDescription: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')
     security-severity: Medium
   patterns:
-  - pattern-not-inside: '$ARG = ...
-
+  - pattern-not-inside: |
+      $ARG = ...
       ...
-
-      '
-  - pattern-not-inside: "object $CLAZZ {\n  ...\n  $ARG = ...\n  ...\n}\n"
-  - pattern-not-inside: "class $CLAZZ {\n  ...\n  $ARG = ...\n  ...\n}\n"
+  - pattern-not-inside: |
+      object $CLAZZ {
+        ...
+        $ARG = ...
+        ...
+      }
+  - pattern-not-inside: |
+      class $CLAZZ {
+        ...
+        $ARG = ...
+        ...
+      }
   - pattern-either:
     - patterns:
       - pattern: ($PM:javax.jdo.PersistenceManager).newQuery(<...$ARG...>)
@@ -93,10 +98,8 @@ rules:
       - pattern: new org.springframework.jdbc.core.PreparedStatementCreatorFactory(<...$ARG...>, ...)
       - pattern-not: new org.springframework.jdbc.core.PreparedStatementCreatorFactory("...", ...)
     - patterns:
-      - pattern: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator(<...$ARG...>,
-          ...)
-      - pattern-not: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator("...",
-          ...)
+      - pattern: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator(<...$ARG...>, ...)
+      - pattern-not: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator("...", ...)
     - patterns:
       - pattern: '($O: org.springframework.jdbc.core.JdbcOperations).batchUpdate(<...$ARG...>, ...)'
       - pattern-not: '($O: org.springframework.jdbc.core.JdbcOperations).batchUpdate("...", ...)'
@@ -185,24 +188,19 @@ rules:
       - pattern: anorm.SQL(<...$ARG...>)
       - pattern-not: anorm.SQL("...")
     - patterns:
-      - pattern-inside: 'import anorm._
-
+      - pattern-inside: |
+          import anorm._
           ...
-
-          '
       - pattern: SQL(<...$ARG...>)
       - pattern-not: SQL("...")
   severity: ERROR
 - id: scala_inject_rule-SqlInjection_1
   languages:
   - scala
-  message: 'The input values included in SQL queries need to be passed in safely. Bind
-
+  message: |
+    The input values included in SQL queries need to be passed in safely. Bind
     variables in prepared statements can be used to easily mitigate the risk of
-
     SQL injection.
-
-    '
   metadata:
     category: security
     cwe: CWE-89
@@ -212,13 +210,21 @@ rules:
     shortDescription: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')
     security-severity: Medium
   patterns:
-  - pattern-not-inside: '$ARG = ...
-
+  - pattern-not-inside: |
+      $ARG = ...
       ...
-
-      '
-  - pattern-not-inside: "object $CLAZZ {\n  ...\n  $ARG = ...\n  ...\n}\n"
-  - pattern-not-inside: "class $CLAZZ {\n  ...\n  $ARG = ...\n  ...\n}\n"
+  - pattern-not-inside: |
+      object $CLAZZ {
+        ...
+        $ARG = ...
+        ...
+      }
+  - pattern-not-inside: |
+      class $CLAZZ {
+        ...
+        $ARG = ...
+        ...
+      }
   - pattern-either:
     - patterns:
       - pattern: ($PM:javax.jdo.PersistenceManager).newQuery(<...$ARG...>)
@@ -287,10 +293,8 @@ rules:
       - pattern: new org.springframework.jdbc.core.PreparedStatementCreatorFactory(<...$ARG...>, ...)
       - pattern-not: new org.springframework.jdbc.core.PreparedStatementCreatorFactory("...", ...)
     - patterns:
-      - pattern: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator(<...$ARG...>,
-          ...)
-      - pattern-not: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator("...",
-          ...)
+      - pattern: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator(<...$ARG...>, ...)
+      - pattern-not: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator("...", ...)
     - patterns:
       - pattern: '($O: org.springframework.jdbc.core.JdbcOperations).batchUpdate(<...$ARG...>, ...)'
       - pattern-not: '($O: org.springframework.jdbc.core.JdbcOperations).batchUpdate("...", ...)'
@@ -379,11 +383,9 @@ rules:
       - pattern: anorm.SQL(<...$ARG...>)
       - pattern-not: anorm.SQL("...")
     - patterns:
-      - pattern-inside: 'import anorm._
-
+      - pattern-inside: |
+          import anorm._
           ...
-
-          '
       - pattern: SQL(<...$ARG...>)
       - pattern-not: SQL("...")
   severity: ERROR

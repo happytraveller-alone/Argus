@@ -17,23 +17,43 @@ rules:
   paths:
     include:
     - '**/*.m'
-  message: "App allows self signed or invalid SSL certificates. App is \nvulnerable\
-    \ to MITM attacks. If the app does not verify the \nauthenticity of the server's\
-    \ SSL certificate, an attacker could \nimpersonate the server and intercept sensitive\
-    \ data transmitted \nbetween the app and the server.\nTo fix these security issues,\
-    \ you should ensure proper SSL \ncertificate validation in your Objective-C code.\
-    \ Here's how you \ncan do it:\n```\n- (void)loadSecureURL {\n  NSURL *url = [NSURL\
-    \ URLWithString:@\"https://example.com\"];\n  NSURLRequest *request = [NSURLRequest\
-    \ requestWithURL:url];\n\n  // Create session configuration\n  NSURLSessionConfiguration\
-    \ *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];\n\
-    \  configuration.TLSMinimumSupportedProtocol = kTLSProtocol12;\n\n  // Create\
-    \ session with configuration\n  NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];\n\
-    \n  // Create data task\n  NSURLSessionDataTask *task = [session dataTaskWithRequest:request\
-    \ completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response,\
-    \ NSError * _Nullable error) {\n      if (error) {\n          NSLog(@\"Error loading\
-    \ URL: %@\", error);\n          // Handle error\n      } else {\n          //\
-    \ Handle response\n          NSLog(@\"Response: %@\", response);\n      }\n  }];\n\
-    \n  // Start task\n  [task resume];\n}\n\n```\n"
+  message: |
+    App allows self signed or invalid SSL certificates. App is
+    vulnerable to MITM attacks. If the app does not verify the
+    authenticity of the server's SSL certificate, an attacker could
+    impersonate the server and intercept sensitive data transmitted
+    between the app and the server.
+    To fix these security issues, you should ensure proper SSL
+    certificate validation in your Objective-C code. Here's how you
+    can do it:
+    ```
+    - (void)loadSecureURL {
+      NSURL *url = [NSURL URLWithString:@"https://example.com"];
+      NSURLRequest *request = [NSURLRequest requestWithURL:url];
+
+      // Create session configuration
+      NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
+      configuration.TLSMinimumSupportedProtocol = kTLSProtocol12;
+
+      // Create session with configuration
+      NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+
+      // Create data task
+      NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+          if (error) {
+              NSLog(@"Error loading URL: %@", error);
+              // Handle error
+          } else {
+              // Handle response
+              NSLog(@"Response: %@", response);
+          }
+      }];
+
+      // Start task
+      [task resume];
+    }
+
+    ```
   languages:
   - generic
   severity: ERROR

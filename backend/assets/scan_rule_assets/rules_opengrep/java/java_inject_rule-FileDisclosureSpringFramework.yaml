@@ -12,37 +12,64 @@ rules:
   - pattern: (javax.servlet.http.HttpServletRequest $VAR).getPathInfo();
   pattern-sinks:
   - patterns:
-    - pattern-not-inside: "$FST = $MAP.getOrDefault(..., \"...\");\n  ...\n"
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
+          ...
     - pattern: new org.springframework.web.servlet.ModelAndView($FST, ...);
     - focus-metavariable: $FST
   - patterns:
-    - pattern-not-inside: '$FST = $MAP.getOrDefault(..., "...");
-
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
         ...
-
-        '
-    - pattern-inside: '$MVC = new org.springframework.web.servlet.ModelAndView();
-
+    - pattern-inside: |
+        $MVC = new org.springframework.web.servlet.ModelAndView();
         ...
-
-        '
     - pattern: $MVC.setViewName(...);
-  message: "The `org.springframework.web.servlet.ModelAndView` class may\npotentially allow access to restricted files if\
-    \ called with user-supplied input.\n\nThe ModelAndView class looks up a view by name to resolve a `.jsp`\nfile. If this\
-    \ view name comes from user-supplied input, it could be abused to attempt\nto return a JSP view that the user should not\
-    \ have access to.\n\nUse a lookup table or hardcode which views or paths the user should be directed to.\n\nExample using\
-    \ a lookup table to resolve a view from a Spring MVC application:\n```\n@RequestMapping(value=\"/mvc\", method=RequestMethod.GET)\n\
-    public ModelAndView mvc(HttpServletRequest request, HttpServletResponse response, Model model)\n {\n  // Create a look\
-    \ up table or pull from a data source\n  HashMap<String, String> lookupTable = new HashMap<>();\n  lookupTable.put(\"\
-    key1\", \"view1\");\n  lookupTable.put(\"key2\", \"view2\");\n  // Get user input\n  String userInput = request.getParameter(\"\
-    key\");\n  // Look up view from the user input\n  String viewValue = lookupTable.getOrDefault(userInput, \"Resource1\"\
-    );\n  // return the new model and view\n  return new ModelAndView(viewValue);\n}\n```\n\nExample using a redirect instead\
-    \ of a `RequestDispatcher` in Spring:\n```\n@RequestMapping(value=\"/mvc\", method=RequestMethod.GET)\npublic void mvc(HttpServletRequest\
-    \ request, HttpServletResponse response, Model model)\n {\n  // Create a look up table or pull from a data source\n  HashMap<String,\
-    \ String> lookupTable = new HashMap<>();\n  lookupTable.put(\"key1\", \"view1\");\n  lookupTable.put(\"key2\", \"view2\"\
-    );\n  // Get user input\n  String userInput = request.getParameter(\"key\");\n  // Look up resource to redirect to from\
-    \ the user input\n  String redirectValue = lookupTable.getOrDefault(userInput, \"/Resource1\");\n  // return the new model\
-    \ and view\n  response.sendRedirect(redirectValue);\n}\n```\n"
+  message: |
+    The `org.springframework.web.servlet.ModelAndView` class may
+    potentially allow access to restricted files if called with user-supplied input.
+
+    The ModelAndView class looks up a view by name to resolve a `.jsp`
+    file. If this view name comes from user-supplied input, it could be abused to attempt
+    to return a JSP view that the user should not have access to.
+
+    Use a lookup table or hardcode which views or paths the user should be directed to.
+
+    Example using a lookup table to resolve a view from a Spring MVC application:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public ModelAndView mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up view from the user input
+      String viewValue = lookupTable.getOrDefault(userInput, "Resource1");
+      // return the new model and view
+      return new ModelAndView(viewValue);
+    }
+    ```
+
+    Example using a redirect instead of a `RequestDispatcher` in Spring:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public void mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up resource to redirect to from the user input
+      String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
+      // return the new model and view
+      response.sendRedirect(redirectValue);
+    }
+    ```
   metadata:
     shortDescription: Files or directories accessible to external parties
     category: security
@@ -65,37 +92,64 @@ rules:
   - pattern: (javax.servlet.http.HttpServletRequest $VAR).getPathInfo();
   pattern-sinks:
   - patterns:
-    - pattern-not-inside: "$FST = $MAP.getOrDefault(..., \"...\");\n  ...\n"
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
+          ...
     - pattern: new org.springframework.web.servlet.ModelAndView($FST, ...);
     - focus-metavariable: $FST
   - patterns:
-    - pattern-not-inside: '$FST = $MAP.getOrDefault(..., "...");
-
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
         ...
-
-        '
-    - pattern-inside: '$MVC = new org.springframework.web.servlet.ModelAndView();
-
+    - pattern-inside: |
+        $MVC = new org.springframework.web.servlet.ModelAndView();
         ...
-
-        '
     - pattern: $MVC.setViewName(...);
-  message: "The `org.springframework.web.servlet.ModelAndView` class may\npotentially allow access to restricted files if\
-    \ called with user-supplied input.\n\nThe ModelAndView class looks up a view by name to resolve a `.jsp`\nfile. If this\
-    \ view name comes from user-supplied input, it could be abused to attempt\nto return a JSP view that the user should not\
-    \ have access to.\n\nUse a lookup table or hardcode which views or paths the user should be directed to.\n\nExample using\
-    \ a lookup table to resolve a view from a Spring MVC application:\n```\n@RequestMapping(value=\"/mvc\", method=RequestMethod.GET)\n\
-    public ModelAndView mvc(HttpServletRequest request, HttpServletResponse response, Model model)\n {\n  // Create a look\
-    \ up table or pull from a data source\n  HashMap<String, String> lookupTable = new HashMap<>();\n  lookupTable.put(\"\
-    key1\", \"view1\");\n  lookupTable.put(\"key2\", \"view2\");\n  // Get user input\n  String userInput = request.getParameter(\"\
-    key\");\n  // Look up view from the user input\n  String viewValue = lookupTable.getOrDefault(userInput, \"Resource1\"\
-    );\n  // return the new model and view\n  return new ModelAndView(viewValue);\n}\n```\n\nExample using a redirect instead\
-    \ of a `RequestDispatcher` in Spring:\n```\n@RequestMapping(value=\"/mvc\", method=RequestMethod.GET)\npublic void mvc(HttpServletRequest\
-    \ request, HttpServletResponse response, Model model)\n {\n  // Create a look up table or pull from a data source\n  HashMap<String,\
-    \ String> lookupTable = new HashMap<>();\n  lookupTable.put(\"key1\", \"view1\");\n  lookupTable.put(\"key2\", \"view2\"\
-    );\n  // Get user input\n  String userInput = request.getParameter(\"key\");\n  // Look up resource to redirect to from\
-    \ the user input\n  String redirectValue = lookupTable.getOrDefault(userInput, \"/Resource1\");\n  // return the new model\
-    \ and view\n  response.sendRedirect(redirectValue);\n}\n```\n"
+  message: |
+    The `org.springframework.web.servlet.ModelAndView` class may
+    potentially allow access to restricted files if called with user-supplied input.
+
+    The ModelAndView class looks up a view by name to resolve a `.jsp`
+    file. If this view name comes from user-supplied input, it could be abused to attempt
+    to return a JSP view that the user should not have access to.
+
+    Use a lookup table or hardcode which views or paths the user should be directed to.
+
+    Example using a lookup table to resolve a view from a Spring MVC application:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public ModelAndView mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up view from the user input
+      String viewValue = lookupTable.getOrDefault(userInput, "Resource1");
+      // return the new model and view
+      return new ModelAndView(viewValue);
+    }
+    ```
+
+    Example using a redirect instead of a `RequestDispatcher` in Spring:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public void mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up resource to redirect to from the user input
+      String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
+      // return the new model and view
+      response.sendRedirect(redirectValue);
+    }
+    ```
   metadata:
     shortDescription: Files or directories accessible to external parties
     category: security

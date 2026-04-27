@@ -1,8 +1,6 @@
 rules:
 - id: aead-no-final
-  message: The 'final' call of a Decipher object checks the authentication tag in
-    a mode for authenticated encryption. Failing to call 'final' will invalidate all
-    integrity guarantees of the released ciphertext.
+  message: The 'final' call of a Decipher object checks the authentication tag in a mode for authenticated encryption. Failing to call 'final' will invalidate all integrity guarantees of the released ciphertext.
   metadata:
     cwe:
     - 'CWE-310: CWE CATEGORY: Cryptographic Issues'
@@ -23,20 +21,14 @@ rules:
   - typescript
   severity: ERROR
   patterns:
-  - pattern: '$DECIPHER = $CRYPTO.createDecipheriv(''$ALGO'', ...)
-
+  - pattern: |
+      $DECIPHER = $CRYPTO.createDecipheriv('$ALGO', ...)
       ...
-
       $DECIPHER.update(...)
-
-      '
-  - pattern-not-inside: '$DECIPHER = $CRYPTO.createDecipheriv(''$ALGO'', ...)
-
+  - pattern-not-inside: |
+      $DECIPHER = $CRYPTO.createDecipheriv('$ALGO', ...)
       ...
-
       $DECIPHER.final(...)
-
-      '
   - metavariable-regex:
       metavariable: $ALGO
       regex: .*(-gcm|-ccm|-ocb|chacha20-poly1305)$

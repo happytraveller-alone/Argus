@@ -1,19 +1,16 @@
 rules:
 - id: vuln-inflect-a9a0a8e9
-  pattern: 'util.string.gsub($SELF, /([A-Z]+)([A-Z][a-z])/, ''$1_$2'')
-
-    '
-  pattern-not: 'util.string.gsub($SELF, /([A-Z])([A-Z][a-z])/, ''$1_$2'')
-
-    '
+  pattern: |
+    util.string.gsub($SELF, /([A-Z]+)([A-Z][a-z])/, '$1_$2')
+  pattern-not: |
+    util.string.gsub($SELF, /([A-Z])([A-Z][a-z])/, '$1_$2')
   languages:
   - javascript
-  message: "The regular expression /([A-Z]+)([A-Z][a-z])/ is vulnerable to incorrect\
-    \ string transformation due to the greedy quantifier '+'. \nThis can lead to unexpected\
-    \ behavior when processing strings with multiple consecutive uppercase letters.\
-    \ \nThe fix replaces the greedy quantifier with a single character match to ensure\
-    \ correct transformation.\nUpdate the regex to /([A-Z])([A-Z][a-z])/ for proper\
-    \ handling.\n"
+  message: |
+    The regular expression /([A-Z]+)([A-Z][a-z])/ is vulnerable to incorrect string transformation due to the greedy quantifier '+'.
+    This can lead to unexpected behavior when processing strings with multiple consecutive uppercase letters.
+    The fix replaces the greedy quantifier with a single character match to ensure correct transformation.
+    Update the regex to /([A-Z])([A-Z][a-z])/ for proper handling.
   severity: ERROR
   metadata:
     source-url: github.com/pksunkara/inflect/commit/a9a0a8e9561c3487854c7cae42565d9652ec858b

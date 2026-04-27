@@ -1,24 +1,31 @@
 rules:
 - id: vuln-mindoc-c15da23b
-  pattern: "if !f.FileInfo().IsDir() {\n    if folder := $DEST + filepath.Dir($NAME);\
-    \ !strings.Contains($FOLDER, \"__MACOSX\") {\n        os.MkdirAll($FOLDER, 0777)\n\
-    \        if $FCREATE, $ERR := os.Create($DEST + strings.TrimPrefix($NAME, \"./\"\
-    )); $ERR == nil {\n            ...\n        }\n    }\n}\n"
-  pattern-not: "if !f.FileInfo().IsDir() {\n    $PATH := filepath.Join($DEST, $NAME)\n\
-    \    if $DIR := filepath.Dir($PATH); !strings.Contains($DIR, \"__MACOSX\") {\n\
-    \        if !strings.HasPrefix($PATH, filepath.Clean($DEST)+string(os.PathSeparator))\
-    \ {\n            return fmt.Errorf(\"illegal file path: %s\", $PATH)\n       \
-    \ }\n        os.MkdirAll($DIR, 0777)\n        if $FCREATE, $ERR := os.Create($PATH);\
-    \ $ERR == nil {\n            ...\n        }\n    }\n}\n"
+  pattern: |
+    if !f.FileInfo().IsDir() {
+        if folder := $DEST + filepath.Dir($NAME); !strings.Contains($FOLDER, "__MACOSX") {
+            os.MkdirAll($FOLDER, 0777)
+            if $FCREATE, $ERR := os.Create($DEST + strings.TrimPrefix($NAME, "./")); $ERR == nil {
+                ...
+            }
+        }
+    }
+  pattern-not: |
+    if !f.FileInfo().IsDir() {
+        $PATH := filepath.Join($DEST, $NAME)
+        if $DIR := filepath.Dir($PATH); !strings.Contains($DIR, "__MACOSX") {
+            if !strings.HasPrefix($PATH, filepath.Clean($DEST)+string(os.PathSeparator)) {
+                return fmt.Errorf("illegal file path: %s", $PATH)
+            }
+            os.MkdirAll($DIR, 0777)
+            if $FCREATE, $ERR := os.Create($PATH); $ERR == nil {
+                ...
+            }
+        }
+    }
   languages:
   - go
-  message: 'This rule detects a Zip Slip vulnerability where file paths are concatenated
-    without proper validation, allowing attackers to write files outside the intended
-    destination directory. This can lead to arbitrary file overwrite and potential
-    remote code execution. To fix this, ensure that the destination path is validated
-    using `filepath.Join` and `strings.HasPrefix` to prevent directory traversal.
-
-    '
+  message: |
+    This rule detects a Zip Slip vulnerability where file paths are concatenated without proper validation, allowing attackers to write files outside the intended destination directory. This can lead to arbitrary file overwrite and potential remote code execution. To fix this, ensure that the destination path is validated using `filepath.Join` and `strings.HasPrefix` to prevent directory traversal.
   severity: ERROR
   metadata:
     source-url: github.com/mindoc-org/mindoc/commit/c15da23bf2e6ca87274ff8d313152b0bd132cc1a

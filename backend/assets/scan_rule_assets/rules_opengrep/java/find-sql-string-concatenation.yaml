@@ -5,22 +5,37 @@ rules:
   - java
   severity: ERROR
   pattern-either:
-  - pattern: "$RETURN $METHOD(...,String $X,...){\n  ...\n  Session $SESSION = ...;\n\
-      \  ...\n  String $QUERY = ... + $X + ...;\n  ...\n  PreparedStatement $PS =\
-      \ $SESSION.connection().prepareStatement($QUERY);\n  ...\n  ResultSet $RESULT\
-      \ = $PS.executeQuery();\n  ...\n}\n"
-  - pattern: "$RETURN $METHOD(...,String $X,...){\n  ...\n  String $QUERY = ... +\
-      \ $X + ...;\n  ...\n  Session $SESSION = ...;\n  ...\n  PreparedStatement $PS\
-      \ = $SESSION.connection().prepareStatement($QUERY);\n  ...\n  ResultSet $RESULT\
-      \ = $PS.executeQuery();\n  ...\n}\n"
+  - pattern: |
+      $RETURN $METHOD(...,String $X,...){
+        ...
+        Session $SESSION = ...;
+        ...
+        String $QUERY = ... + $X + ...;
+        ...
+        PreparedStatement $PS = $SESSION.connection().prepareStatement($QUERY);
+        ...
+        ResultSet $RESULT = $PS.executeQuery();
+        ...
+      }
+  - pattern: |
+      $RETURN $METHOD(...,String $X,...){
+        ...
+        String $QUERY = ... + $X + ...;
+        ...
+        Session $SESSION = ...;
+        ...
+        PreparedStatement $PS = $SESSION.connection().prepareStatement($QUERY);
+        ...
+        ResultSet $RESULT = $PS.executeQuery();
+        ...
+      }
   metadata:
     category: security
     technology:
     - jboss
     confidence: MEDIUM
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     owasp:
     - A01:2017 - Injection
     - A03:2021 - Injection

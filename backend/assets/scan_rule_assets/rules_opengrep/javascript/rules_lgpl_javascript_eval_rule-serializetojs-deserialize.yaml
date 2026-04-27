@@ -2,26 +2,18 @@ rules:
 - id: rules_lgpl_javascript_eval_rule-serializetojs-deserialize
   patterns:
   - pattern-either:
-    - pattern: 'require(''serialize-to-js'').deserialize(...)
-
-        '
-    - pattern-inside: '$MOD = require(''serialize-to-js'')
-
+    - pattern: |
+        require('serialize-to-js').deserialize(...)
+    - pattern-inside: |
+        $MOD = require('serialize-to-js')
         ...
-
-        '
-    - pattern-inside: 'import $MOD from ''serialize-to-js''
-
+    - pattern-inside: |
+        import $MOD from 'serialize-to-js'
         ...
-
-        '
-  - pattern: '$MOD.deserialize(...)
-
-      '
-  message: 'User controlled data in ''unserialize()'' or ''deserialize()'' function
-    can result in Object Injection or Remote Code Injection.
-
-    '
+  - pattern: |
+      $MOD.deserialize(...)
+  message: |
+    User controlled data in 'unserialize()' or 'deserialize()' function can result in Object Injection or Remote Code Injection.
   languages:
   - javascript
   severity: ERROR

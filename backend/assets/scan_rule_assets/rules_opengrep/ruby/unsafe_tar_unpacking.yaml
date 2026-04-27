@@ -6,19 +6,28 @@ rules:
   message: Unsafe Tar Unpacking
   patterns:
   - pattern-either:
-    - pattern-inside: 'Gem::Package::TarReader.new($FILE).each do |$ENTRY|
-
+    - pattern-inside: |
+        Gem::Package::TarReader.new($FILE).each do |$ENTRY|
         ...
-
         end
-
-        '
-    - pattern-inside: "$TAR = Gem::Package::TarReader.new(...)\n...\n$TAR.each do\
-        \ |$ENTRY|\n  ...\nend\n"
-    - pattern-inside: "$TAR = Gem::Package::TarReader.new(...)\n...\n$TAR.each_entry\
-        \ do |$ENTRY|\n  ...\nend\n"
-    - pattern-inside: "$TAR = Gem::Package::TarReader.new(...)\n...\n$TAR.seek(...)\
-        \ do |$ENTRY|\n  ...\nend\n"
+    - pattern-inside: |
+        $TAR = Gem::Package::TarReader.new(...)
+        ...
+        $TAR.each do |$ENTRY|
+          ...
+        end
+    - pattern-inside: |
+        $TAR = Gem::Package::TarReader.new(...)
+        ...
+        $TAR.each_entry do |$ENTRY|
+          ...
+        end
+    - pattern-inside: |
+        $TAR = Gem::Package::TarReader.new(...)
+        ...
+        $TAR.seek(...) do |$ENTRY|
+          ...
+        end
   - pattern-either:
     - patterns:
       - metavariable-regex:
@@ -29,59 +38,45 @@ rules:
         - pattern: ::File.open(<... $ENTRY.full_name ...>, $MODE)
         - pattern: File.open(<... $ENTRY.full_name ...>)
     - patterns:
-      - pattern-not-inside: "unless $PATH.start_with?(...)\n  ...\nend\n...\n"
+      - pattern-not-inside: |
+          unless $PATH.start_with?(...)
+            ...
+          end
+          ...
       - pattern-either:
         - pattern: File.open(<... $PATH ...>, $MODE)
         - pattern: ::File.open(<... $PATH ...>, $MODE)
         - pattern: File.open(<... $PATH ...>)
       - pattern-either:
-        - pattern-inside: '$PATH = File.join(..., <... $ENTRY.full_name ...>)
-
+        - pattern-inside: |
+            $PATH = File.join(..., <... $ENTRY.full_name ...>)
             ...
-
-            '
-        - pattern-inside: '$PATH = File.join(<... $ENTRY.full_name ...>, ...)
-
+        - pattern-inside: |
+            $PATH = File.join(<... $ENTRY.full_name ...>, ...)
             ...
-
-            '
-        - pattern-inside: '$PATH = File.expand_path(<... $ENTRY.full_name ...>, ...)
-
+        - pattern-inside: |
+            $PATH = File.expand_path(<... $ENTRY.full_name ...>, ...)
             ...
-
-            '
-        - pattern-inside: '$PATH = File.expand_path(..., <... $ENTRY.full_name ...>)
-
+        - pattern-inside: |
+            $PATH = File.expand_path(..., <... $ENTRY.full_name ...>)
             ...
-
-            '
         - patterns:
           - pattern-either:
-            - pattern-inside: '$NAME = <... $ENTRY.full_name ...>
-
+            - pattern-inside: |
+                $NAME = <... $ENTRY.full_name ...>
                 ...
-
                 $PATH = File.join(..., $NAME)
-
                 ...
-
-                '
-            - pattern-inside: '$NAME = <... $ENTRY.full_name ...>
-
+            - pattern-inside: |
+                $NAME = <... $ENTRY.full_name ...>
                 ...
-
                 $PATH = File.expand_path($NAME, ...)
-
                 ...
-
-                '
-            - pattern-inside: '$NAME = <... $ENTRY.full_name ...>
-
+            - pattern-inside: |-
+                $NAME = <... $ENTRY.full_name ...>
                 ...
-
                 $PATH = File.expand_path(..., $NAME)
-
-                ...'
+                ...
   metadata:
     cwe:
     - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'

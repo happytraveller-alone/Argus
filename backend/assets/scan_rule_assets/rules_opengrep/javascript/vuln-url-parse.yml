@@ -1,17 +1,13 @@
 rules:
 - id: vuln-url-parse-0e3fb542
-  pattern: '/^[ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
-
-    '
-  pattern-not: '/^[\x00-\x20\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
-
-    '
+  pattern: |
+    /^[ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
+  pattern-not: |
+    /^[\x00-\x20\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/
   languages:
   - javascript
-  message: 'Incomplete whitespace regex pattern may miss control characters, leading to potential security issues. The regex
-    should include control characters (\x00-\x20) to ensure all potentially harmful characters are stripped.
-
-    '
+  message: |
+    Incomplete whitespace regex pattern may miss control characters, leading to potential security issues. The regex should include control characters (\x00-\x20) to ensure all potentially harmful characters are stripped.
   severity: ERROR
   metadata:
     source-url: github.com/unshiftio/url-parse/commit/0e3fb542d60ddbf6933f22eb9b1e06e25eaa5b63
@@ -23,18 +19,14 @@ rules:
     technology:
     - javascript
 - id: vuln-url-parse-53b1794e
-  pattern: 'if (!extracted.slashes) instructions[2] = [/(.*)/, ''pathname''];
-
-    '
-  pattern-not: 'if (!extracted.slashes) instructions[3] = [/(.*)/, ''pathname''];
-
-    '
+  pattern: |
+    if (!extracted.slashes) instructions[2] = [/(.*)/, 'pathname'];
+  pattern-not: |
+    if (!extracted.slashes) instructions[3] = [/(.*)/, 'pathname'];
   languages:
   - javascript
-  message: 'Incorrect array index used in URL pathname instructions. This can lead to incorrect URL parsing and potential
-    security vulnerabilities. The correct index should be 3 instead of 2 to properly handle pathnames.
-
-    '
+  message: |
+    Incorrect array index used in URL pathname instructions. This can lead to incorrect URL parsing and potential security vulnerabilities. The correct index should be 3 instead of 2 to properly handle pathnames.
   severity: ERROR
   metadata:
     source-url: github.com/unshiftio/url-parse/commit/53b1794e54d0711ceb52505e0f74145270570d5a

@@ -2,26 +2,19 @@ rules:
 - id: cbc_padding_oracle
   patterns:
   - pattern-either:
-    - pattern: 'Cipher.getInstance("AES/CBC/PKCS5Padding")
-
-        '
-    - pattern: 'Cipher.getInstance("Blowfish/CBC/PKCS5Padding")
-
-        '
-    - pattern: 'Cipher.getInstance("DES/CBC/PKCS5Padding")
-
-        '
-    - pattern: 'Cipher.getInstance("AES/CBC/PKCS7Padding")
-
-        '
-    - pattern: 'Cipher.getInstance("Blowfish/CBC/PKCS7Padding")
-
-        '
-    - pattern: 'Cipher.getInstance("DES/CBC/PKCS7Padding")
-
-        '
-  message: The App uses the encryption mode CBC with PKCS5/PKCS7 padding. This configuration
-    is vulnerable to padding oracle attacks.
+    - pattern: |
+        Cipher.getInstance("AES/CBC/PKCS5Padding")
+    - pattern: |
+        Cipher.getInstance("Blowfish/CBC/PKCS5Padding")
+    - pattern: |
+        Cipher.getInstance("DES/CBC/PKCS5Padding")
+    - pattern: |
+        Cipher.getInstance("AES/CBC/PKCS7Padding")
+    - pattern: |
+        Cipher.getInstance("Blowfish/CBC/PKCS7Padding")
+    - pattern: |
+        Cipher.getInstance("DES/CBC/PKCS7Padding")
+  message: The App uses the encryption mode CBC with PKCS5/PKCS7 padding. This configuration is vulnerable to padding oracle attacks.
   languages:
   - java
   severity: ERROR

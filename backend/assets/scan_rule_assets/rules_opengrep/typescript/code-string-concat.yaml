@@ -1,8 +1,6 @@
 rules:
 - id: code-string-concat
-  message: Found data from an Express or Next web request flowing to `eval`. If this
-    data is user-controllable this can lead to execution of arbitrary system commands
-    in the context of your application process. Avoid `eval` whenever possible.
+  message: Found data from an Express or Next web request flowing to `eval`. If this data is user-controllable this can lead to execution of arbitrary system commands in the context of your application process. Avoid `eval` whenever possible.
   options:
     interfile: true
   metadata:
@@ -11,8 +9,7 @@ rules:
     owasp:
     - A03:2021 - Injection
     cwe:
-    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code
-      (''Eval Injection'')'
+    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (''Eval Injection'')'
     references:
     - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval
     - https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback
@@ -40,8 +37,7 @@ rules:
         - patterns:
           - pattern-either:
             - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
-            - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT)
-                {...})
+            - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
           - metavariable-regex:
               metavariable: $METHOD
               regex: ^(get|post|put|head|delete|options)$
@@ -53,51 +49,36 @@ rules:
         - pattern: $REQ.headers
     - patterns:
       - pattern-either:
-        - pattern-inside: 'import { ...,$IMPORT,... } from ''next/router''
-
+        - pattern-inside: |
+            import { ...,$IMPORT,... } from 'next/router'
             ...
-
-            '
-        - pattern-inside: 'import $IMPORT from ''next/router'';
-
+        - pattern-inside: |
+            import $IMPORT from 'next/router';
             ...
-
-            '
       - pattern-either:
         - patterns:
-          - pattern-inside: '$ROUTER = $IMPORT()
-
+          - pattern-inside: |
+              $ROUTER = $IMPORT()
               ...
-
-              '
           - pattern-either:
-            - pattern-inside: 'const { ...,$PROPS,... } = $ROUTER.query
-
+            - pattern-inside: |
+                const { ...,$PROPS,... } = $ROUTER.query
                 ...
-
-                '
-            - pattern-inside: 'var { ...,$PROPS,... } = $ROUTER.query
-
+            - pattern-inside: |
+                var { ...,$PROPS,... } = $ROUTER.query
                 ...
-
-                '
-            - pattern-inside: 'let { ...,$PROPS,... } = $ROUTER.query
-
+            - pattern-inside: |
+                let { ...,$PROPS,... } = $ROUTER.query
                 ...
-
-                '
           - focus-metavariable: $PROPS
         - patterns:
-          - pattern-inside: '$ROUTER = $IMPORT()
-
+          - pattern-inside: |
+              $ROUTER = $IMPORT()
               ...
-
-              '
           - pattern: "$ROUTER.query.$VALUE \n"
         - patterns:
           - pattern: $IMPORT().query.$VALUE
   pattern-sinks:
   - patterns:
-    - pattern: 'eval(...)
-
-        '
+    - pattern: |
+        eval(...)

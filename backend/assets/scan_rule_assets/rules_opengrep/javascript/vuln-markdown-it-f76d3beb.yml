@@ -1,16 +1,22 @@
 rules:
 - id: vuln-markdown-it-f76d3beb
-  pattern: "var $URL = $VAR.trim().toLowerCase();\nif ($URL.indexOf(':') >= 0 && $BAD_PROTOCOLS.indexOf($URL.split(':')[0])\
-    \ >= 0) {\n  ...\n}\n"
-  pattern-not: "var $URL = $VAR.trim().toLowerCase(),\n    $PROTOCOL = $URL.split(':')[0];\n\
-    if ($URL.indexOf(':') >= 0 && $BAD_PROTOCOLS.indexOf($PROTOCOL) >= 0) {\n  if\
-    \ ($PROTOCOL === 'data' && $ALLOWED_DATA_MIMES.indexOf($URL.split(';')[0]) >=\
-    \ 0) {\n    return true;\n  }\n  ...\n}\n"
+  pattern: |
+    var $URL = $VAR.trim().toLowerCase();
+    if ($URL.indexOf(':') >= 0 && $BAD_PROTOCOLS.indexOf($URL.split(':')[0]) >= 0) {
+      ...
+    }
+  pattern-not: |
+    var $URL = $VAR.trim().toLowerCase(),
+        $PROTOCOL = $URL.split(':')[0];
+    if ($URL.indexOf(':') >= 0 && $BAD_PROTOCOLS.indexOf($PROTOCOL) >= 0) {
+      if ($PROTOCOL === 'data' && $ALLOWED_DATA_MIMES.indexOf($URL.split(';')[0]) >= 0) {
+        return true;
+      }
+      ...
+    }
   languages:
   - javascript
-  message: Insecure URL validation detected. The original code fails to properly validate
-    data URLs, potentially allowing malicious content. Update the validation to include
-    specific allowed MIME types for data URLs.
+  message: Insecure URL validation detected. The original code fails to properly validate data URLs, potentially allowing malicious content. Update the validation to include specific allowed MIME types for data URLs.
   severity: ERROR
   metadata:
     source-url: github.com/markdown-it/markdown-it/commit/f76d3beb46abd121892a2e2e5c78376354c214e3

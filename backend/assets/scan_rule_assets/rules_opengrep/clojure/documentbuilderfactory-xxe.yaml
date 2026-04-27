@@ -30,38 +30,33 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: HIGH
-  message: DOCTYPE declarations are enabled for javax.xml.parsers.SAXParserFactory.
-    Without prohibiting external entity declarations, this is vulnerable to XML external
-    entity attacks. Disable this by setting the feature "http://apache.org/xml/features/disallow-doctype-decl"
-    to true. Alternatively, allow DOCTYPE declarations and only prohibit external
-    entities declarations. This can be done by setting the features "http://xml.org/sax/features/external-general-entities"
-    and "http://xml.org/sax/features/external-parameter-entities" to false.
+  message: DOCTYPE declarations are enabled for javax.xml.parsers.SAXParserFactory. Without prohibiting external entity declarations, this is vulnerable to XML external entity attacks. Disable this by setting the feature "http://apache.org/xml/features/disallow-doctype-decl" to true. Alternatively, allow DOCTYPE declarations and only prohibit external entities declarations. This can be done by setting the features "http://xml.org/sax/features/external-general-entities" and "http://xml.org/sax/features/external-parameter-entities" to false.
   patterns:
-  - pattern-inside: '(ns ... (:require [clojure.xml :as ...]))
-
+  - pattern-inside: |
+      (ns ... (:require [clojure.xml :as ...]))
       ...
-
-      '
   - pattern-either:
-    - pattern-inside: '(def ... ... ( ... ))
-
-        '
-    - pattern-inside: '(defn ... ... ( ... ))
-
-        '
+    - pattern-inside: |
+        (def ... ... ( ... ))
+    - pattern-inside: |
+        (defn ... ... ( ... ))
   - pattern-either:
     - pattern: (clojure.xml/parse $INPUT)
     - patterns:
-      - pattern-inside: '(doto (javax.xml.parsers.SAXParserFactory/newInstance) ...)
-
-          '
-      - pattern: (.setFeature "http://apache.org/xml/features/disallow-doctype-decl"
-          false)
-      - pattern-not-inside: "(doto (javax.xml.parsers.SAXParserFactory/newInstance)\n\
-          \  ...\n  (.setFeature \"http://xml.org/sax/features/external-general-entities\"\
-          \ false)\n  ...\n  (.setFeature \"http://xml.org/sax/features/external-parameter-entities\"\
-          \ false)\n  ...)\n"
-      - pattern-not-inside: "(doto (javax.xml.parsers.SAXParserFactory/newInstance)\n\
-          \  ...\n  (.setFeature \"http://xml.org/sax/features/external-parameter-entities\"\
-          \ false)\n  ...\n  (.setFeature \"http://xml.org/sax/features/external-general-entities\"\
-          \ false)\n  ...)\n"
+      - pattern-inside: |
+          (doto (javax.xml.parsers.SAXParserFactory/newInstance) ...)
+      - pattern: (.setFeature "http://apache.org/xml/features/disallow-doctype-decl" false)
+      - pattern-not-inside: |
+          (doto (javax.xml.parsers.SAXParserFactory/newInstance)
+            ...
+            (.setFeature "http://xml.org/sax/features/external-general-entities" false)
+            ...
+            (.setFeature "http://xml.org/sax/features/external-parameter-entities" false)
+            ...)
+      - pattern-not-inside: |
+          (doto (javax.xml.parsers.SAXParserFactory/newInstance)
+            ...
+            (.setFeature "http://xml.org/sax/features/external-parameter-entities" false)
+            ...
+            (.setFeature "http://xml.org/sax/features/external-general-entities" false)
+            ...)

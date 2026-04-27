@@ -1,14 +1,17 @@
 rules:
 - id: vuln-framework-887b0fa9
-  pattern: "if ((/__proto__|constructor|prototype|eval/).test($VAR)) {\n  ...\n}\n"
-  pattern-not: "if ((/__proto__|constructor|prototype|eval|function|\\*|\\+|;|\\s|\\(|\\)|!/).test($VAR)) {\n  ...\n}\n"
+  pattern: |
+    if ((/__proto__|constructor|prototype|eval/).test($VAR)) {
+      ...
+    }
+  pattern-not: |
+    if ((/__proto__|constructor|prototype|eval|function|\*|\+|;|\s|\(|\)|!/).test($VAR)) {
+      ...
+    }
   languages:
   - javascript
-  message: 'Insecure validation of path parameters detected. The original validation only checked for a limited set of dangerous
-    keywords, which could allow injection attacks. The patch expands the validation to include additional dangerous patterns.
-    Use the updated regex pattern to prevent potential security vulnerabilities.
-
-    '
+  message: |
+    Insecure validation of path parameters detected. The original validation only checked for a limited set of dangerous keywords, which could allow injection attacks. The patch expands the validation to include additional dangerous patterns. Use the updated regex pattern to prevent potential security vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/totaljs/framework/commit/887b0fa9e162ef7a2dd9cec20a5ca122726373b3
@@ -18,12 +21,15 @@ rules:
     technology:
     - javascript
 - id: vuln-framework-c812bbca
-  pattern: "if ((/__proto__|constructor|prototype/).test($VAR))\n  throw new Error('Prototype pollution');\n"
-  pattern-not: "if ((/__proto__|constructor|prototype|eval/).test($VAR))\n  throw new Error('Potential vulnerability');\n"
+  pattern: |
+    if ((/__proto__|constructor|prototype/).test($VAR))
+      throw new Error('Prototype pollution');
+  pattern-not: |
+    if ((/__proto__|constructor|prototype|eval/).test($VAR))
+      throw new Error('Potential vulnerability');
   languages:
   - javascript
-  message: Incomplete protection against prototype pollution. The regular expression check should include 'eval' to prevent
-    potential vulnerabilities.
+  message: Incomplete protection against prototype pollution. The regular expression check should include 'eval' to prevent potential vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/totaljs/framework/commit/c812bbcab8981797d3a1b9993fc42dad3d246f04
@@ -33,14 +39,23 @@ rules:
     technology:
     - javascript
 - id: vuln-framework-de16238d
-  pattern: "if ($REQ.uri.pathname.indexOf('./') !== -1) {\n  $REQ.$total_status(404);\n  return;\n}\n"
-  pattern-not: "for (var $I = 0; $I < $REQ.uri.pathname.length; $I++) {\n  var $C = $REQ.uri.pathname[$I];\n  var $N = $REQ.uri.pathname[$I\
-    \ + 1];\n  if (($C === '.' && $N === '/') || ($C === '%' && $N === '2' && $REQ.uri.pathname[$I + 2] === 'e')) {\n    $REQ.$total_status(404);\n\
-    \    return;\n  }\n}\n"
+  pattern: |
+    if ($REQ.uri.pathname.indexOf('./') !== -1) {
+      $REQ.$total_status(404);
+      return;
+    }
+  pattern-not: |
+    for (var $I = 0; $I < $REQ.uri.pathname.length; $I++) {
+      var $C = $REQ.uri.pathname[$I];
+      var $N = $REQ.uri.pathname[$I + 1];
+      if (($C === '.' && $N === '/') || ($C === '%' && $N === '2' && $REQ.uri.pathname[$I + 2] === 'e')) {
+        $REQ.$total_status(404);
+        return;
+      }
+    }
   languages:
   - javascript
-  message: Insecure path validation detected. The previous check for './' in pathnames was insufficient and could be bypassed.
-    Use a more robust validation that checks for both './' and URL-encoded variations to prevent path traversal attacks.
+  message: Insecure path validation detected. The previous check for './' in pathnames was insufficient and could be bypassed. Use a more robust validation that checks for both './' and URL-encoded variations to prevent path traversal attacks.
   severity: ERROR
   metadata:
     source-url: github.com/totaljs/framework/commit/de16238d13848149f5d1dae51f54e397a525932b

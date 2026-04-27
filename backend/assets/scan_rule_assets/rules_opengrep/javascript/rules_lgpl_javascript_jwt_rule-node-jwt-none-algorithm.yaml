@@ -7,14 +7,16 @@ rules:
   pattern-sinks:
   - pattern: $JWT.verify($P, $X, {...,algorithms:[...,'none',...],...},...)
   - pattern: $JWT.sign($P, $X, {...,algorithm:'none',...},...)
-  message: "Use of `{algorithm:'none'}` detected with `jsonwebtoken`. \nUsing none\
-    \ as the algorithm for jsonwebtoken can directly impact the integrity of the information\
-    \ transfer through the JWT token.\nConsider using a secure algorithm to sign your\
-    \ JWT token such as HMAC or RSA.\nSome safe usage examples:\n```\nlet token =\
-    \ jwt.sign({user:\"user1\"}, 'secret', {algorithm: 'HS256'});  \n```\nUsing a\
-    \ secure algorithm can protect the integrity of the token information. \nAvoid\
-    \ using none as the algorithm when signing jwt tokens since it can violate the\
-    \ integrity of the JWT information.\n"
+  message: |
+    Use of `{algorithm:'none'}` detected with `jsonwebtoken`.
+    Using none as the algorithm for jsonwebtoken can directly impact the integrity of the information transfer through the JWT token.
+    Consider using a secure algorithm to sign your JWT token such as HMAC or RSA.
+    Some safe usage examples:
+    ```
+    let token = jwt.sign({user:"user1"}, 'secret', {algorithm: 'HS256'});
+    ```
+    Using a secure algorithm can protect the integrity of the token information.
+    Avoid using none as the algorithm when signing jwt tokens since it can violate the integrity of the JWT information.
   languages:
   - javascript
   severity: ERROR

@@ -1,10 +1,11 @@
 rules:
 - id: rules_lgpl_javascript_database_rule-sequelize-tls-cert-validation
-  message: "The Sequelize connection string indicates that TLS certificate validation\
-    \ \nof database server is disabled. This is equivalent to not having TLS. An \n\
-    attacker can present any invalid certificate and Sequelize will make database\
-    \ \nconnection ignoring certificate errors. This setting make the connection\n\
-    susceptible to man in the middle (MITM) attacks. Not applicable to SQLite database.\n"
+  message: |
+    The Sequelize connection string indicates that TLS certificate validation
+    of database server is disabled. This is equivalent to not having TLS. An
+    attacker can present any invalid certificate and Sequelize will make database
+    connection ignoring certificate errors. This setting make the connection
+    susceptible to man in the middle (MITM) attacks. Not applicable to SQLite database.
   severity: ERROR
   languages:
   - javascript
@@ -17,8 +18,17 @@ rules:
     security-severity: HIGH
     category: security
   patterns:
-  - pattern: "{\n  host: $HOST,\n  database: $DATABASE,\n  dialect: $DIALECT,\n  dialectOptions:\
-      \ {\n    ssl: {\n      rejectUnauthorized: false\n    }\n  }\n }\n"
+  - pattern: |
+      {
+        host: $HOST,
+        database: $DATABASE,
+        dialect: $DIALECT,
+        dialectOptions: {
+          ssl: {
+            rejectUnauthorized: false
+          }
+        }
+       }
   - metavariable-regex:
       metavariable: $DIALECT
       regex: '[''"](mariadb|mysql|postgres)[''"]'

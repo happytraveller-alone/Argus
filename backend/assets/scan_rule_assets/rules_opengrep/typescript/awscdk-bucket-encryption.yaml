@@ -1,7 +1,6 @@
 rules:
 - id: awscdk-bucket-encryption
-  message: 'Add "encryption: $Y.BucketEncryption.KMS_MANAGED" or "encryption: $Y.BucketEncryption.S3_MANAGED"
-    to the bucket props for Bucket construct $X'
+  message: 'Add "encryption: $Y.BucketEncryption.KMS_MANAGED" or "encryption: $Y.BucketEncryption.S3_MANAGED" to the bucket props for Bucket construct $X'
   metadata:
     cwe:
     - 'CWE-311: Missing Encryption of Sensitive Data'
@@ -23,40 +22,24 @@ rules:
   severity: ERROR
   pattern-either:
   - patterns:
-    - pattern-inside: 'import {Bucket} from ''@aws-cdk/aws-s3''
-
+    - pattern-inside: |
+        import {Bucket} from '@aws-cdk/aws-s3'
         ...
-
-        '
     - pattern: const $X = new Bucket(...)
-    - pattern-not: 'const $X = new Bucket(..., {..., encryption: BucketEncryption.KMS_MANAGED,
-        ...})
-
-        '
-    - pattern-not: 'const $X = new Bucket(..., {..., encryption: BucketEncryption.KMS,
-        ...})
-
-        '
-    - pattern-not: 'const $X = new Bucket(..., {..., encryption: BucketEncryption.S3_MANAGED,
-        ...})
-
-        '
+    - pattern-not: |
+        const $X = new Bucket(..., {..., encryption: BucketEncryption.KMS_MANAGED, ...})
+    - pattern-not: |
+        const $X = new Bucket(..., {..., encryption: BucketEncryption.KMS, ...})
+    - pattern-not: |
+        const $X = new Bucket(..., {..., encryption: BucketEncryption.S3_MANAGED, ...})
   - patterns:
-    - pattern-inside: 'import * as $Y from ''@aws-cdk/aws-s3''
-
+    - pattern-inside: |
+        import * as $Y from '@aws-cdk/aws-s3'
         ...
-
-        '
     - pattern: const $X = new $Y.Bucket(...)
-    - pattern-not: 'const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.KMS_MANAGED,
-        ...})
-
-        '
-    - pattern-not: 'const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.KMS,
-        ...})
-
-        '
-    - pattern-not: 'const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.S3_MANAGED,
-        ...})
-
-        '
+    - pattern-not: |
+        const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.KMS_MANAGED, ...})
+    - pattern-not: |
+        const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.KMS, ...})
+    - pattern-not: |
+        const $X = new $Y.Bucket(..., {..., encryption: $Y.BucketEncryption.S3_MANAGED, ...})

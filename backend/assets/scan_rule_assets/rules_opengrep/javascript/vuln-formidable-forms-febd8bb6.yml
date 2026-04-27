@@ -4,8 +4,7 @@ rules:
   pattern-not: jQuery('.license-level').text($DATA)
   languages:
   - javascript
-  message: Potential XSS vulnerability using .html() method. Use .text() instead to
-    safely set text content and prevent HTML injection.
+  message: Potential XSS vulnerability using .html() method. Use .text() instead to safely set text content and prevent HTML injection.
   severity: ERROR
   metadata:
     source-url: github.com/Strategy11/formidable-forms/commit/febd8bb6549fb92e01398289095b89a697927def

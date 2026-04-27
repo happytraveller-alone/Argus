@@ -1,19 +1,22 @@
 rules:
 - id: vuln-cryptography-58494b41
-  pattern: "def _handle_rsa_enc_dec_error($BACKEND, $KEY):\n    $ERRORS = $BACKEND._consume_errors_with_text()\n\
-    \    if isinstance($KEY, $RSAPUBLICKEY):\n        raise ValueError(\n        \
-    \    \"Data too long for key size. Encrypt less data or use a larger key size.\"\
-    ,\n            $ERRORS,\n        )\n    else:\n        raise ValueError(\"Decryption\
-    \ failed.\", $ERRORS)\n"
-  pattern-not: "def _handle_rsa_enc_dec_error($BACKEND, $KEY):\n    raise ValueError(\"\
-    Encryption/decryption failed.\")\n"
+  pattern: |
+    def _handle_rsa_enc_dec_error($BACKEND, $KEY):
+        $ERRORS = $BACKEND._consume_errors_with_text()
+        if isinstance($KEY, $RSAPUBLICKEY):
+            raise ValueError(
+                "Data too long for key size. Encrypt less data or use a larger key size.",
+                $ERRORS,
+            )
+        else:
+            raise ValueError("Decryption failed.", $ERRORS)
+  pattern-not: |
+    def _handle_rsa_enc_dec_error($BACKEND, $KEY):
+        raise ValueError("Encryption/decryption failed.")
   languages:
   - python
-  message: 'Detected insecure error handling in RSA encryption/decryption. The original
-    code exposed detailed error messages which could be exploited in timing attacks.
-    The fix removes specific error details to prevent information leakage.
-
-    '
+  message: |
+    Detected insecure error handling in RSA encryption/decryption. The original code exposed detailed error messages which could be exploited in timing attacks. The fix removes specific error details to prevent information leakage.
   severity: ERROR
   metadata:
     source-url: github.com/pyca/cryptography/commit/58494b41d6ecb0f56b7c5f05d5f5e3ca0320d494

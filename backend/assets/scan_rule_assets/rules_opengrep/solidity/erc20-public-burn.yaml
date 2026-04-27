@@ -20,10 +20,22 @@ rules:
     - pattern: "function burn(...) external { \n    _burn($ACCOUNT, $AMOUNT);\n }\n"
   - pattern-not: function burn(...) $M { ... }
   - pattern-not: function burn(...) $M(...) { ... }
-  - pattern-not: "function burn(...) {\n  _burn(msg.sender, ...);\n}\n"
-  - pattern-not: "function burn(...) {\n  _burn(_msgSender(), ...);\n}\n"
-  - pattern-not: "function burn(...) {\n  _burn(tokenId, ...);\n}\n"
-  - pattern-not: "function burn(...) {\n  _burn(_tokenId, ...);\n}\n"
+  - pattern-not: |
+      function burn(...) {
+        _burn(msg.sender, ...);
+      }
+  - pattern-not: |
+      function burn(...) {
+        _burn(_msgSender(), ...);
+      }
+  - pattern-not: |
+      function burn(...) {
+        _burn(tokenId, ...);
+      }
+  - pattern-not: |
+      function burn(...) {
+        _burn(_tokenId, ...);
+      }
   languages:
   - solidity
   severity: ERROR

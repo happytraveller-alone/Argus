@@ -2,12 +2,7 @@ rules:
 - id: dangerous-subprocess-use_1
   languages:
   - python
-  message: Detected subprocess function with argument tainted by an `event` object.  If
-    this data can be controlled by a malicious actor, it may be an instance of command
-    injection. The default option for `shell` is False, and this is secure by default.
-    Consider removing the `shell=True` or setting it to False explicitely. Using `shell=False`
-    means you have to split the command string into an array of strings for the command
-    and its arguments. You may consider using 'shlex.split()' for this purpose.
+  message: Detected subprocess function with argument tainted by an `event` object.  If this data can be controlled by a malicious actor, it may be an instance of command injection. The default option for `shell` is False, and this is secure by default. Consider removing the `shell=True` or setting it to False explicitely. Using `shell=False` means you have to split the command string into an array of strings for the command and its arguments. You may consider using 'shlex.split()' for this purpose.
   metadata:
     asvs:
       control_id: 5.3.8 OS Command Injection
@@ -17,8 +12,7 @@ rules:
     category: security
     confidence: MEDIUM
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     cwe2021-top25: true
     cwe2022-top25: true
     impact: MEDIUM
@@ -45,5 +39,7 @@ rules:
   pattern-sources:
   - patterns:
     - pattern: event
-    - pattern-inside: "def $HANDLER(event, context):\n  ...\n"
+    - pattern-inside: |
+        def $HANDLER(event, context):
+          ...
   severity: ERROR

@@ -6,23 +6,17 @@ rules:
   message: Unsafe Zip Unpacking
   patterns:
   - patterns:
-    - pattern-inside: '$ZIP = new ZipArchive;
-
+    - pattern-inside: |
+        $ZIP = new ZipArchive;
         ...
-
-        '
     - pattern-either:
-      - pattern-inside: '$ZIP->open($FILE);
-
+      - pattern-inside: |
+          $ZIP->open($FILE);
           ...
-
-          '
-      - pattern-inside: 'for ($INITIAL; <... $ZIP ...>; $DO) { ... }
-
-          '
-      - pattern-inside: 'while (<... $ZIP ...>) { ... }
-
-          '
+      - pattern-inside: |
+          for ($INITIAL; <... $ZIP ...>; $DO) { ... }
+      - pattern-inside: |
+          while (<... $ZIP ...>) { ... }
   - pattern-either:
     - pattern-either:
       - pattern: copy(..., <... $ZIP ...>)
@@ -31,46 +25,32 @@ rules:
         - pattern: copy(..., <... $PATH ...>)
         - pattern: file_put_contents($PATH, ..., ..., ...)
       - pattern-either:
-        - pattern-inside: '$PATH = <... $ZIP->getNameIndex($I) ...>;
-
+        - pattern-inside: |
+            $PATH = <... $ZIP->getNameIndex($I) ...>;
             ...
-
-            '
-        - pattern-inside: '$ENTRY = <... $ZIP->getNameIndex($I) ...>;
-
+        - pattern-inside: |
+            $ENTRY = <... $ZIP->getNameIndex($I) ...>;
             ...
-
             $PATH = <... $ENTRY ...>;
-
             ...
-
-            '
     - patterns:
       - pattern-either:
         - pattern: stream_copy_to_stream(..., $DESTSTREAM, ..., ...)
         - pattern: fwrite($DESTREAM, ..., ...)
         - pattern: file_put_contents($DESTREAM, ..., ..., ...)
       - pattern-either:
-        - pattern-inside: '$DESTSTREAM = fopen(<... $PATH ...>, ...);
-
+        - pattern-inside: |
+            $DESTSTREAM = fopen(<... $PATH ...>, ...);
             ...
-
-            '
       - pattern-either:
-        - pattern-inside: '$PATH = <... $ZIP->getNameIndex($I) ...>;
-
+        - pattern-inside: |
+            $PATH = <... $ZIP->getNameIndex($I) ...>;
             ...
-
-            '
-        - pattern-inside: '$ENTRY = <... $ZIP->getNameIndex($I) ...>;
-
+        - pattern-inside: |
+            $ENTRY = <... $ZIP->getNameIndex($I) ...>;
             ...
-
             $PATH = <... $ENTRY ...>;
-
             ...
-
-            '
   metadata:
     cwe:
     - 'CWE-22: Path Traversal'

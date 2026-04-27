@@ -24,6 +24,5 @@ rules:
   patterns:
   - pattern-either:
     - pattern: new GCMParameterSpec(..., "...".getBytes(...), ...);
-    - pattern: byte[] $NONCE = "...".getBytes(...); ... new GCMParameterSpec(...,
-        $NONCE, ...);
+    - pattern: byte[] $NONCE = "...".getBytes(...); ... new GCMParameterSpec(..., $NONCE, ...);
   severity: ERROR

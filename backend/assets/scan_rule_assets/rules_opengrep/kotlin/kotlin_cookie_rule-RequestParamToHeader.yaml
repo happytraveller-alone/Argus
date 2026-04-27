@@ -2,19 +2,13 @@ rules:
 - id: kotlin_cookie_rule-RequestParamToHeader
   languages:
   - kotlin
-  message: 'This code directly writes an HTTP parameter to an HTTP header, which allows
-    for a HTTP
-
-    response splitting vulnerability. See http://en.wikipedia.org/wiki/HTTP_response_splitting
-    for
-
+  message: |
+    This code directly writes an HTTP parameter to an HTTP header, which allows for a HTTP
+    response splitting vulnerability. See http://en.wikipedia.org/wiki/HTTP_response_splitting for
     more information.
-
-    '
   severity: ERROR
   metadata:
-    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP
-      Response Splitting')
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
     category: security
     cwe: CWE-113
     owasp:
@@ -36,19 +30,15 @@ rules:
         patterns:
         - pattern: '...'
         - pattern-regex: .*\[\]?(?=[^]]*\\r)(?=[^]]*\\n)[^]]*\]\+
-    - pattern-inside: '$STR.replace($PATTERN, $S0);
-
+    - pattern-inside: |
+        $STR.replace($PATTERN, $S0);
         ...
-
-        '
   - pattern: org.apache.commons.text.StringEscapeUtils.unescapeJava(...);
   pattern-sinks:
   - pattern: '($RES: $X.servlet.http.HttpServletResponse).setHeader("$KEY", ...);'
   - pattern: '($RES: $X.servlet.http.HttpServletResponse).addHeader("$KEY", ...);'
-  - pattern: '($WRP: $X.servlet.http.HttpServletResponseWrapper).setHeader("$KEY",
-      ...);'
-  - pattern: '($WRP: $X.servlet.http.HttpServletResponseWrapper).addHeader("$KEY",
-      ...);'
+  - pattern: '($WRP: $X.servlet.http.HttpServletResponseWrapper).setHeader("$KEY", ...);'
+  - pattern: '($WRP: $X.servlet.http.HttpServletResponseWrapper).addHeader("$KEY", ...);'
   pattern-sources:
   - pattern: '($REQ: $X.servlet.http.HttpServletRequest).getParameter(...);'
   - pattern: '($REQ: $X.servlet.http.HttpServletRequest).getParameterNames();'

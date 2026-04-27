@@ -2,8 +2,7 @@ rules:
 - id: v4-csrf-prevention
   languages:
   - typescript
-  message: The Apollo GraphQL server sets the 'csrfPrevention' option to false. This
-    can enable CSRF attacks.
+  message: The Apollo GraphQL server sets the 'csrfPrevention' option to false. This can enable CSRF attacks.
   severity: ERROR
   metadata:
     category: security
@@ -24,6 +23,5 @@ rules:
       regex: csrfPrevention:\s*false
       replacement: 'csrfPrevention: true'
   patterns:
-  - pattern: 'new ApolloServer({..., csrfPrevention: false, ...})
-
-      '
+  - pattern: |
+      new ApolloServer({..., csrfPrevention: false, ...})

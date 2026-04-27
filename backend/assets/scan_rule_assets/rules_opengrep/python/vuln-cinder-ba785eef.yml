@@ -1,12 +1,19 @@
 rules:
 - id: vuln-cinder-ba785eef
-  pattern: "{\n    'serverPassword': $PASSWORD,\n    'serverToken': $TOKEN,\n    ...\n\
-    }\n"
-  pattern-not: "{\n    'config_group': $CONFIG_GROUP,\n    ...\n}\n"
+  pattern: |
+    {
+        'serverPassword': $PASSWORD,
+        'serverToken': $TOKEN,
+        ...
+    }
+  pattern-not: |
+    {
+        'config_group': $CONFIG_GROUP,
+        ...
+    }
   languages:
   - python
-  message: Detected insecure storage of server credentials in a dictionary. This can
-    lead to exposure of sensitive information. Use a secure configuration group instead.
+  message: Detected insecure storage of server credentials in a dictionary. This can lead to exposure of sensitive information. Use a secure configuration group instead.
   severity: ERROR
   metadata:
     source-url: github.com/openstack/cinder/commit/ba785eef5f515b869c0d68016e84bb74f76ab45e

@@ -1,16 +1,15 @@
 rules:
 - id: vuln-libsndfile-2ccb23fe
-  pattern: 'sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE);
-
-    '
-  pattern-not: "if (sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE) != 0) {\n  ...\n}\n"
+  pattern: |
+    sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE);
+  pattern-not: |
+    if (sfe_copy_data_fp($OUTFILE, $INFILE, $CHANNELS, $NORMALIZE) != 0) {
+      ...
+    }
   languages:
   - c
-  message: 'The function `sfe_copy_data_fp` is called without checking its return value, which can lead to unhandled errors.
-    This can cause the program to continue execution even when an error occurs, potentially leading to undefined behavior
-    or security vulnerabilities. Always check the return value of `sfe_copy_data_fp` and handle errors appropriately.
-
-    '
+  message: |
+    The function `sfe_copy_data_fp` is called without checking its return value, which can lead to unhandled errors. This can cause the program to continue execution even when an error occurs, potentially leading to undefined behavior or security vulnerabilities. Always check the return value of `sfe_copy_data_fp` and handle errors appropriately.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/2ccb23fe724d1d946b4e0c51b791cc655da6962e
@@ -24,16 +23,21 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-60b23430
-  pattern: "if (FLAC__stream_decoder_get_state($FSD) >= FLAC__STREAM_DECODER_END_OF_STREAM)\n{\n    ...\n}\n"
-  pattern-not: "$STATE = FLAC__stream_decoder_get_state($FSD);\nif ($STATE >= FLAC__STREAM_DECODER_END_OF_STREAM)\n{\n   \
-    \ ...\n}\n"
+  pattern: |
+    if (FLAC__stream_decoder_get_state($FSD) >= FLAC__STREAM_DECODER_END_OF_STREAM)
+    {
+        ...
+    }
+  pattern-not: |
+    $STATE = FLAC__stream_decoder_get_state($FSD);
+    if ($STATE >= FLAC__STREAM_DECODER_END_OF_STREAM)
+    {
+        ...
+    }
   languages:
   - c
-  message: 'The code directly uses the result of FLAC__stream_decoder_get_state in a comparison without storing it in a variable.
-    This can lead to inconsistent state checks and potential NULL pointer dereferences. Store the state in a variable before
-    comparison to ensure consistent state handling.
-
-    '
+  message: |
+    The code directly uses the result of FLAC__stream_decoder_get_state in a comparison without storing it in a variable. This can lead to inconsistent state checks and potential NULL pointer dereferences. Store the state in a variable before comparison to ensure consistent state handling.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/60b234301adf258786d8b90be5c1d437fc8799e0
@@ -45,18 +49,19 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-6be89067
-  pattern: 'byte_count += $FUNC($PSF, $PTR, $SIZE);
-
-    '
-  pattern-not: "$READ_BYTES = $FUNC($PSF, $PTR, $SIZE);\nif ($READ_BYTES > 0 && byte_count > (INT_MAX - $READ_BYTES)) {\n\
-    \  ...\n} else {\n  byte_count += $READ_BYTES;\n}\n"
+  pattern: |
+    byte_count += $FUNC($PSF, $PTR, $SIZE);
+  pattern-not: |
+    $READ_BYTES = $FUNC($PSF, $PTR, $SIZE);
+    if ($READ_BYTES > 0 && byte_count > (INT_MAX - $READ_BYTES)) {
+      ...
+    } else {
+      byte_count += $READ_BYTES;
+    }
   languages:
   - c
-  message: 'Integer overflow vulnerability detected. The code adds the result of a function call directly to `byte_count`
-    without checking for potential overflow, which can lead to undefined behavior or security issues. To fix this, ensure
-    that the addition does not exceed `INT_MAX` by checking the result before adding it to `byte_count`.
-
-    '
+  message: |
+    Integer overflow vulnerability detected. The code adds the result of a function call directly to `byte_count` without checking for potential overflow, which can lead to undefined behavior or security issues. To fix this, ensure that the addition does not exceed `INT_MAX` by checking the result before adding it to `byte_count`.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/6be8906740cdca067f12920bb4a63f728485aff0
@@ -68,16 +73,16 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-6d7ce94c
-  pattern: '$VAR->instrument->loop_count &= $MASK;
-
-    '
-  pattern-not: "if ($VAR->instrument->loop_count > ARRAY_LEN ($VAR->instrument->loops))\n  $VAR->instrument->loop_count =\
-    \ ARRAY_LEN ($VAR->instrument->loops);\n"
+  pattern: |
+    $VAR->instrument->loop_count &= $MASK;
+  pattern-not: |
+    if ($VAR->instrument->loop_count > ARRAY_LEN ($VAR->instrument->loops))
+      $VAR->instrument->loop_count = ARRAY_LEN ($VAR->instrument->loops);
   languages:
   - c
-  message: "The code performs a bitwise AND operation to limit the loop count, which does not prevent reading past the array\
-    \ bounds. This can lead to out-of-bounds access and potential memory corruption. \nThe fix ensures that the loop count\
-    \ does not exceed the length of the loops array, preventing out-of-bounds access.\n"
+  message: |
+    The code performs a bitwise AND operation to limit the loop count, which does not prevent reading past the array bounds. This can lead to out-of-bounds access and potential memory corruption.
+    The fix ensures that the loop count does not exceed the length of the loops array, preventing out-of-bounds access.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/6d7ce94c020cc720a6b28719d1a7879181790008
@@ -89,19 +94,20 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-708e996c
-  pattern: "if ($PSF->headindex < SIGNED_SIZEOF($PSF->header) - $SIZE) {\n  $PSF->header[$PSF->headindex++] = $X;\n  ...\n\
-    }\n"
-  pattern-not: "if ($PSF->header.indx + $SIZE > $PSF->header.len && psf_bump_header_allocation($PSF, $SIZE)) {\n  return $RESULT;\n\
-    }\n$PSF->header.ptr[$PSF->header.indx++] = $X;\n"
+  pattern: |
+    if ($PSF->headindex < SIGNED_SIZEOF($PSF->header) - $SIZE) {
+      $PSF->header[$PSF->headindex++] = $X;
+      ...
+    }
+  pattern-not: |
+    if ($PSF->header.indx + $SIZE > $PSF->header.len && psf_bump_header_allocation($PSF, $SIZE)) {
+      return $RESULT;
+    }
+    $PSF->header.ptr[$PSF->header.indx++] = $X;
   languages:
   - c
-  message: 'The code lacks proper bounds checking when writing to the header buffer, which could lead to buffer overflow vulnerabilities.
-    The original code only checks against a fixed header size but doesn''t properly handle dynamic buffer allocation. This
-    can be exploited to write beyond the allocated buffer boundaries. The fix introduces proper bounds checking and dynamic
-    buffer reallocation using psf_bump_header_allocation(). To fix this issue, always check buffer bounds and use dynamic
-    buffer reallocation when needed.
-
-    '
+  message: |
+    The code lacks proper bounds checking when writing to the header buffer, which could lead to buffer overflow vulnerabilities. The original code only checks against a fixed header size but doesn't properly handle dynamic buffer allocation. This can be exploited to write beyond the allocated buffer boundaries. The fix introduces proper bounds checking and dynamic buffer reallocation using psf_bump_header_allocation(). To fix this issue, always check buffer bounds and use dynamic buffer reallocation when needed.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/708e996c87c5fae77b104ccfeb8f6db784c32074
@@ -115,33 +121,22 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-71565532
-  pattern: 'int $VAR;
-
+  pattern: |
+    int $VAR;
     ...
-
     $VAR = $EXPR1 * $EXPR2;
-
     ...
-
-    '
-  pattern-not: 'int_fast32_t $VAR;
-
+  pattern-not: |
+    int_fast32_t $VAR;
     ...
-
     $VAR = (int_fast32_t) $EXPR1 * $EXPR2;
-
     ...
-
-    '
   languages:
   - c
-  message: 'Detected use of ''int'' instead of ''int_fast32_t'' for arithmetic operations.
-
+  message: |
+    Detected use of 'int' instead of 'int_fast32_t' for arithmetic operations.
     This can lead to integer overflow vulnerabilities due to insufficient range.
-
-    Replace ''int'' with ''int_fast32_t'' for operations involving large values.
-
-    '
+    Replace 'int' with 'int_fast32_t' for operations involving large values.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/71565532463b22c24824101845a533a67bff4c9c
@@ -151,27 +146,18 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-9e0e55f8
-  pattern: '#define $CONSTANT 666
-
+  pattern: |
+    #define $CONSTANT 666
     ...
-
     return $CONSTANT ;
-
-    '
-  pattern-not: '#define $CONSTANT $VALUE
-
+  pattern-not: |
+    #define $CONSTANT $VALUE
     ...
-
     return $CONSTANT ;
-
-    '
   languages:
   - c
-  message: 'The use of a hardcoded error code value (666) is a security vulnerability. This can lead to ambiguous error handling
-    and potential confusion in error management. Replace the hardcoded value with a meaningful and descriptive constant to
-    improve code readability and maintainability.
-
-    '
+  message: |
+    The use of a hardcoded error code value (666) is a security vulnerability. This can lead to ambiguous error handling and potential confusion in error management. Replace the hardcoded value with a meaningful and descriptive constant to improve code readability and maintainability.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/9e0e55f8bfa60bddca083ff85699f855c91c42e7
@@ -185,18 +171,14 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-cb3c87aa
-  pattern: '$STRUCT->sf.frames = $STRUCT->datalength / $STRUCT->blockwidth;
-
-    '
-  pattern-not: '$STRUCT->sf.frames = $STRUCT->blockwidth > 0 ? $STRUCT->datalength / $STRUCT->blockwidth : $VALUE;
-
-    '
+  pattern: |
+    $STRUCT->sf.frames = $STRUCT->datalength / $STRUCT->blockwidth;
+  pattern-not: |
+    $STRUCT->sf.frames = $STRUCT->blockwidth > 0 ? $STRUCT->datalength / $STRUCT->blockwidth : $VALUE;
   languages:
   - c
-  message: 'Division by zero vulnerability detected. The code performs a division by `blockwidth` without checking if it is
-    zero, which can lead to undefined behavior. Always check if the divisor is greater than zero before performing the division.
-
-    '
+  message: |
+    Division by zero vulnerability detected. The code performs a division by `blockwidth` without checking if it is zero, which can lead to undefined behavior. Always check if the divisor is greater than zero before performing the division.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/cb3c87aa3bba868dd6477d35cf4b86d67c3e1f77
@@ -208,16 +190,24 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-deb669ee
-  pattern: "if ($BLOCKALIGN < 7 * $CHANNELS) {\n    psf_log_printf($PSF, \"*** Error blockalign (%d) should be > %d.\\n\"\
-    , $BLOCKALIGN, 7 * $CHANNELS);\n    ...\n}\n"
-  pattern-not: "if (2 * $BLOCKALIGN < $SAMPLESPERBLOCK * $CHANNELS) {\n    psf_log_printf($PSF, \"*** Error blockalign (%d)\
-    \ should be >= %d.\\n\", $BLOCKALIGN, $SAMPLESPERBLOCK * $CHANNELS / 2);\n    ...\n}\n"
+  pattern: |
+    if ($BLOCKALIGN < 7 * $CHANNELS) {
+        psf_log_printf($PSF, "*** Error blockalign (%d) should be > %d.\n", $BLOCKALIGN, 7 * $CHANNELS);
+        ...
+    }
+  pattern-not: |
+    if (2 * $BLOCKALIGN < $SAMPLESPERBLOCK * $CHANNELS) {
+        psf_log_printf($PSF, "*** Error blockalign (%d) should be >= %d.\n", $BLOCKALIGN, $SAMPLESPERBLOCK * $CHANNELS / 2);
+        ...
+    }
   languages:
   - c
-  message: "The code contains a vulnerability where the block alignment check is insufficient. \nThe original check only ensures\
-    \ that blockalign is greater than 7 times the number of channels, \nbut it should also ensure that blockalign is at least\
-    \ half of samplesperblock times the number of channels. \nThis can lead to incorrect block alignment and potential buffer\
-    \ overflows or data corruption. \nTo fix this, ensure that blockalign is checked against both conditions.\n"
+  message: |
+    The code contains a vulnerability where the block alignment check is insufficient.
+    The original check only ensures that blockalign is greater than 7 times the number of channels,
+    but it should also ensure that blockalign is at least half of samplesperblock times the number of channels.
+    This can lead to incorrect block alignment and potential buffer overflows or data corruption.
+    To fix this, ensure that blockalign is checked against both conditions.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/deb669ee8be55a94565f6f8a6b60890c2e7c6f32
@@ -231,15 +221,18 @@ rules:
     technology:
     - c
 - id: vuln-libsndfile-e4cc9d35
-  pattern: "if ($VAR->blocksize == 0) {\n    ...\n}\n"
-  pattern-not: "if ($VAR->blocksize <= 0) {\n    ...\n}\n"
+  pattern: |
+    if ($VAR->blocksize == 0) {
+        ...
+    }
+  pattern-not: |
+    if ($VAR->blocksize <= 0) {
+        ...
+    }
   languages:
   - c
-  message: 'Detected a comparison of `blocksize` with zero, which should be checked for being less than or equal to zero instead.
-    This can lead to incorrect handling of invalid block sizes. The fix ensures that any non-positive value is caught, preventing
-    potential issues in block processing.
-
-    '
+  message: |
+    Detected a comparison of `blocksize` with zero, which should be checked for being less than or equal to zero instead. This can lead to incorrect handling of invalid block sizes. The fix ensures that any non-positive value is caught, preventing potential issues in block processing.
   severity: ERROR
   metadata:
     source-url: github.com/erikd/libsndfile/commit/e4cc9d350ab162374ebe2e88d712dba70e511a3b

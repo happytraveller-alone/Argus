@@ -1,11 +1,9 @@
 rules:
 - id: rules_lgpl_javascript_eval_rule-vm-runincontext-injection
   patterns:
-  - pattern-inside: 'require(''vm'')
-
+  - pattern-inside: |
+      require('vm')
       ...
-
-      '
   - pattern-either:
     - pattern-inside: function ($REQ, $RES, ...) {...}
     - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
@@ -13,73 +11,44 @@ rules:
     - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
     - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
   - pattern-either:
-    - pattern: '$CONTEXT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $CONTEXT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$CONTEXT = <... {$NAME:$REQ.$QUERY.$FOO} ...>;
-
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$QUERY.$FOO} ...>;
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$CONTEXT = {$NAME: <... $REQ.$QUERY.$FOO ...>};
-
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$QUERY.$FOO ...>};
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$VAR = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $VAR = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $CONTEXT = {$NAME: <... $VAR ...>};
-
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$CONTEXT = <... $REQ.$BODY ...>;
-
+    - pattern: |
+        $CONTEXT = <... $REQ.$BODY ...>;
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$CONTEXT = <... {$NAME:$REQ.$BODY} ...>;
-
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$BODY} ...>;
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$CONTEXT = {$NAME: <... $REQ.$BODY ...>};
-
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$BODY ...>};
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-    - pattern: '$VAR = <... $REQ.$BODY ...>;
-
+    - pattern: |
+        $VAR = <... $REQ.$BODY ...>;
         ...
-
         $CONTEXT = {$NAME: <... $VAR ...>};
-
         ...
-
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
-
-        '
-  message: 'Untrusted user input in `vm.runInContext()` can result in code injection.
-
-    '
+  message: |
+    Untrusted user input in `vm.runInContext()` can result in code injection.
   severity: ERROR
   languages:
   - javascript

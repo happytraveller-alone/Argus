@@ -1,13 +1,17 @@
 rules:
 - id: vuln-nodebb-1783f918
-  pattern: "if (!$SOCKET.uid || !$DATA || !$DATA.chunk || !$DATA.params || !$DATA.params.method || !$METHODTOFUNC[$DATA.params.method])\
-    \ {\n  ...\n}\n"
-  pattern-not: "if (!$SOCKET.uid || !$DATA || !$DATA.chunk ||\n  !$DATA.params || !$DATA.params.method || !$METHODTOFUNC.hasOwnProperty($DATA.params.method))\
-    \ {\n  ...\n}\n"
+  pattern: |
+    if (!$SOCKET.uid || !$DATA || !$DATA.chunk || !$DATA.params || !$DATA.params.method || !$METHODTOFUNC[$DATA.params.method]) {
+      ...
+    }
+  pattern-not: |
+    if (!$SOCKET.uid || !$DATA || !$DATA.chunk ||
+      !$DATA.params || !$DATA.params.method || !$METHODTOFUNC.hasOwnProperty($DATA.params.method)) {
+      ...
+    }
   languages:
   - javascript
-  message: Insecure property access in method validation. Using direct property access can lead to prototype pollution or
-    unexpected behavior. Use `hasOwnProperty` to safely check for method existence.
+  message: Insecure property access in method validation. Using direct property access can lead to prototype pollution or unexpected behavior. Use `hasOwnProperty` to safely check for method existence.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/1783f918bc19568f421473824461ff2ed7755e4c
@@ -17,16 +21,13 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-2f9d8c35
-  pattern: 'uri: `${nconf.get(''url'')}/register/abort`
-
-    '
-  pattern-not: 'uri: `${nconf.get(''url'')}/register/abort?_csrf=${$CSRF}`
-
-    '
+  pattern: |
+    uri: `${nconf.get('url')}/register/abort`
+  pattern-not: |
+    uri: `${nconf.get('url')}/register/abort?_csrf=${$CSRF}`
   languages:
   - javascript
-  message: Missing CSRF token in the URI for the /register/abort endpoint. This can lead to CSRF attacks where an attacker
-    can force a user to perform unintended actions. Always include a CSRF token in sensitive requests to prevent such attacks.
+  message: Missing CSRF token in the URI for the /register/abort endpoint. This can lead to CSRF attacks where an attacker can force a user to perform unintended actions. Always include a CSRF token in sensitive requests to prevent such attacks.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/2f9d8c350e54543f608d3d4c8e1a49bbb6cdea38
@@ -38,17 +39,18 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-37b48b82
-  pattern: 'const $PARTS = $EVENTNAME.toString().split(''.'');
-
-    '
-  pattern-not: "if (typeof $EVENTNAME !== 'string') {\n  const $ESCAPEDNAME = validator.escape(String($EVENTNAME));\n  return\
-    \ $CALLBACK({ message: `[[error:invalid-event, ${$ESCAPEDNAME}]]` });\n}\nconst $PARTS = $EVENTNAME.split('.');\n"
+  pattern: |
+    const $PARTS = $EVENTNAME.toString().split('.');
+  pattern-not: |
+    if (typeof $EVENTNAME !== 'string') {
+      const $ESCAPEDNAME = validator.escape(String($EVENTNAME));
+      return $CALLBACK({ message: `[[error:invalid-event, ${$ESCAPEDNAME}]]` });
+    }
+    const $PARTS = $EVENTNAME.split('.');
   languages:
   - javascript
-  message: 'Directly converting eventName to string and splitting it without type validation can lead to unexpected behavior
-    or security issues. Always validate the type of eventName and escape it if necessary.
-
-    '
+  message: |
+    Directly converting eventName to string and splitting it without type validation can lead to unexpected behavior or security issues. Always validate the type of eventName and escape it if necessary.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/37b48b82a4bc7680c6e4c42647209010cb239c2c
@@ -60,16 +62,13 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-51096ad2
-  pattern: 'helpers.connectSocketIO($RES, $CALLBACK)
-
-    '
-  pattern-not: 'helpers.connectSocketIO($RES, $CSRF_TOKEN, $CALLBACK)
-
-    '
+  pattern: |
+    helpers.connectSocketIO($RES, $CALLBACK)
+  pattern-not: |
+    helpers.connectSocketIO($RES, $CSRF_TOKEN, $CALLBACK)
   languages:
   - javascript
-  message: Missing CSRF token in Socket.IO connection. This can lead to CSRF attacks. Always include a CSRF token in the query
-    parameters.
+  message: Missing CSRF token in Socket.IO connection. This can lead to CSRF attacks. Always include a CSRF token in the query parameters.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/51096ad2345fb1d1380bec0a447113489ef6c359
@@ -79,21 +78,20 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-81e3c1ba
-  pattern: "'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n  const r = Math.random() * 16 | 0;\n\
-    \  const v = c === 'x' ? r : ((r & 0x3) | 0x8);\n  return v.toString(16);\n});\n"
-  pattern-not: 'const temp_url = URL.createObjectURL(new Blob());
-
+  pattern: |
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+      return v.toString(16);
+    });
+  pattern-not: |
+    const temp_url = URL.createObjectURL(new Blob());
     const uuid = temp_url.toString();
-
     URL.revokeObjectURL(temp_url);
-
     return uuid.split(/[:\/]/g).pop().toLowerCase();
-
-    '
   languages:
   - javascript
-  message: Insecure UUID generation using Math.random(). This can lead to predictable UUIDs. Use crypto.randomBytes() or URL.createObjectURL()
-    for secure UUID generation.
+  message: Insecure UUID generation using Math.random(). This can lead to predictable UUIDs. Use crypto.randomBytes() or URL.createObjectURL() for secure UUID generation.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/81e3c1ba488d03371a5ce8d0ebb5c5803026e0f9
@@ -107,18 +105,30 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-830f142b
-  pattern: "const Loader = {\n    timesStarted: 0,\n};\n...\nif ($CODE !== 0) {\n    if (Loader.timesStarted < $NUM_PROCS\
-    \ * 3) {\n        Loader.timesStarted += 1;\n        if (Loader.crashTimer) {\n            clearTimeout(Loader.crashTimer);\n\
-    \        }\n        Loader.crashTimer = setTimeout(() => {\n            Loader.timesStarted = 0;\n        }, 10000);\n\
-    \    } else {\n        console.log(`${$NUM_PROCS * 3} restarts in 10 seconds, most likely an error on startup. Halting.`);\n\
-    \        process.exit();\n    }\n}\n"
-  pattern-not: 'const Loader = {};
-
-    '
+  pattern: |
+    const Loader = {
+        timesStarted: 0,
+    };
+    ...
+    if ($CODE !== 0) {
+        if (Loader.timesStarted < $NUM_PROCS * 3) {
+            Loader.timesStarted += 1;
+            if (Loader.crashTimer) {
+                clearTimeout(Loader.crashTimer);
+            }
+            Loader.crashTimer = setTimeout(() => {
+                Loader.timesStarted = 0;
+            }, 10000);
+        } else {
+            console.log(`${$NUM_PROCS * 3} restarts in 10 seconds, most likely an error on startup. Halting.`);
+            process.exit();
+        }
+    }
+  pattern-not: |
+    const Loader = {};
   languages:
   - javascript
-  message: Potential infinite restart loop vulnerability. The code allows multiple restarts without proper handling, which
-    could lead to a denial of service. Remove the restart counter and handle errors more gracefully.
+  message: Potential infinite restart loop vulnerability. The code allows multiple restarts without proper handling, which could lead to a denial of service. Remove the restart counter and handle errors more gracefully.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/830f142b7aea2e597294a84d52c05aab3a3539ca
@@ -130,12 +140,17 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-a2400f6b
-  pattern: "if ($STRATEGY.checkState) {\n    ...\n}\n"
-  pattern-not: "if ($STRATEGY.checkState !== false) {\n    ...\n}\n"
+  pattern: |
+    if ($STRATEGY.checkState) {
+        ...
+    }
+  pattern-not: |
+    if ($STRATEGY.checkState !== false) {
+        ...
+    }
   languages:
   - javascript
-  message: Insecure state checking detected. The condition 'if (strategy.checkState)' can be bypassed if checkState is undefined
-    or null. Use 'if (strategy.checkState !== false)' to ensure proper state validation.
+  message: Insecure state checking detected. The condition 'if (strategy.checkState)' can be bypassed if checkState is undefined or null. Use 'if (strategy.checkState !== false)' to ensure proper state validation.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/a2400f6baff44cb2996487bcd0cc6e2acc74b3d4
@@ -147,18 +162,18 @@ rules:
     technology:
     - javascript
 - id: vuln-nodebb-c8b2fc46
-  pattern: 'const $DATA = await fs.promises.readFile(path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`), ''utf8'');
-
-    '
-  pattern-not: "const $PATH_TO_FILE = path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`);\nif (!$PATH_TO_FILE.startsWith($PATH))\
-    \ {\n  throw new Error('[[error:invalid-path]]');\n}\nconst $DATA = await fs.promises.readFile($PATH_TO_FILE, 'utf8');\n"
+  pattern: |
+    const $DATA = await fs.promises.readFile(path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`), 'utf8');
+  pattern-not: |
+    const $PATH_TO_FILE = path.join($PATH, $LANGUAGE, `${$NAMESPACE}.json`);
+    if (!$PATH_TO_FILE.startsWith($PATH)) {
+      throw new Error('[[error:invalid-path]]');
+    }
+    const $DATA = await fs.promises.readFile($PATH_TO_FILE, 'utf8');
   languages:
   - javascript
-  message: 'Potential path traversal vulnerability detected. The code reads a file without validating that the constructed
-    path is within the intended directory. This could allow an attacker to access arbitrary files on the system. To fix this,
-    validate that the constructed path starts with the expected base directory before reading the file.
-
-    '
+  message: |
+    Potential path traversal vulnerability detected. The code reads a file without validating that the constructed path is within the intended directory. This could allow an attacker to access arbitrary files on the system. To fix this, validate that the constructed path starts with the expected base directory before reading the file.
   severity: ERROR
   metadata:
     source-url: github.com/NodeBB/NodeBB/commit/c8b2fc46dc698db687379106b3f01c71b80f495f

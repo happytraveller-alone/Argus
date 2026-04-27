@@ -1,15 +1,21 @@
 rules:
 - id: vuln-e2fsprogs-49d0fe2a
-  pattern: "int $OLD_DESC_BLOCKS;\n...\nif ($OLD_DESC_BLOCKS > $FS->super->s_first_meta_bg) {\n  ...\n}\n"
-  pattern-not: "blk64_t $OLD_DESC_BLOCKS;\n...\nif ($OLD_DESC_BLOCKS > $FS->desc_blocks) {\n  ...\n}\n"
+  pattern: |
+    int $OLD_DESC_BLOCKS;
+    ...
+    if ($OLD_DESC_BLOCKS > $FS->super->s_first_meta_bg) {
+      ...
+    }
+  pattern-not: |
+    blk64_t $OLD_DESC_BLOCKS;
+    ...
+    if ($OLD_DESC_BLOCKS > $FS->desc_blocks) {
+      ...
+    }
   languages:
   - c
-  message: 'The variable `old_desc_blocks` is declared as `int` and compared against `fs->super->s_first_meta_bg`, which can
-    lead to integer overflow or incorrect comparisons due to type mismatch. This vulnerability can cause incorrect behavior
-    in filesystem operations. Use `blk64_t` for `old_desc_blocks` and compare it against `fs->desc_blocks` to ensure proper
-    type handling and comparison logic.
-
-    '
+  message: |
+    The variable `old_desc_blocks` is declared as `int` and compared against `fs->super->s_first_meta_bg`, which can lead to integer overflow or incorrect comparisons due to type mismatch. This vulnerability can cause incorrect behavior in filesystem operations. Use `blk64_t` for `old_desc_blocks` and compare it against `fs->desc_blocks` to ensure proper type handling and comparison logic.
   severity: ERROR
   metadata:
     source-url: github.com/tytso/e2fsprogs/commit/49d0fe2a14f2a23da2fe299643379b8c1d37df73
@@ -23,19 +29,21 @@ rules:
     technology:
     - c
 - id: vuln-e2fsprogs-8dbe7b47
-  pattern: "if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {\n  log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks,\
-    \ $NAME);\n}\n"
-  pattern-not: "if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {\n  log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks,\
-    \ $NAME);\n  return -1;\n}\n"
+  pattern: |
+    if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
+      log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
+    }
+  pattern-not: |
+    if ($B >= $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks) {
+      log_err($MSG, $B, $H->qh_info.u.v2_mdqi.dqi_qtree.dqi_blocks, $NAME);
+      return -1;
+    }
   languages:
   - c
-  message: 'The code fails to return an error after detecting an illegal reference in the quota file.
-
+  message: |
+    The code fails to return an error after detecting an illegal reference in the quota file.
     This can lead to continued processing of corrupted data, potentially causing undefined behavior.
-
     Ensure to return an error code after logging the issue to prevent further processing of invalid data.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/tytso/e2fsprogs/commit/8dbe7b475ec5e91ed767239f0e85880f416fc384

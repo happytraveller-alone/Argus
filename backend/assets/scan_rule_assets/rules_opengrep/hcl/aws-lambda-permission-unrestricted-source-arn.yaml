@@ -1,19 +1,22 @@
 rules:
 - id: aws-lambda-permission-unrestricted-source-arn
   patterns:
-  - pattern: "resource \"aws_lambda_permission\" $ANYTHING {\n  ...\n  principal =\
-      \ \"$PRINCIPAL\"\n  ...\n}\n"
-  - pattern-not: "resource \"aws_lambda_permission\" $ANYTHING {\n  ...\n  source_arn\
-      \ = ...\n  ...\n}\n"
+  - pattern: |
+      resource "aws_lambda_permission" $ANYTHING {
+        ...
+        principal = "$PRINCIPAL"
+        ...
+      }
+  - pattern-not: |
+      resource "aws_lambda_permission" $ANYTHING {
+        ...
+        source_arn = ...
+        ...
+      }
   - metavariable-regex:
       metavariable: $PRINCIPAL
       regex: .*[.]amazonaws[.]com$
-  message: The AWS Lambda permission has an AWS service principal but does not specify
-    a source ARN. If you grant permission to a service principal without specifying
-    the source, other accounts could potentially configure resources in their account
-    to invoke your Lambda function. Set the source_arn value to the ARN of the AWS
-    resource that invokes the function, eg. an S3 bucket, CloudWatch Events Rule,
-    API Gateway, or SNS topic.
+  message: The AWS Lambda permission has an AWS service principal but does not specify a source ARN. If you grant permission to a service principal without specifying the source, other accounts could potentially configure resources in their account to invoke your Lambda function. Set the source_arn value to the ARN of the AWS resource that invokes the function, eg. an S3 bucket, CloudWatch Events Rule, API Gateway, or SNS topic.
   languages:
   - hcl
   severity: ERROR

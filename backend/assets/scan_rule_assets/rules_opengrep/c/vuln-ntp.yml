@@ -1,15 +1,19 @@
 rules:
 - id: vuln-ntp-1bb40157
-  pattern: "if (NULL == $SK->secret) {\n  $SK->secret = emalloc($LEN);\n}\n"
-  pattern-not: "if (NULL != $SK->secret) {\n  memset($SK->secret, 0, $SK->secretsize);\n  free($SK->secret);\n}\n$SK->secret\
-    \ = emalloc($LEN);\n"
+  pattern: |
+    if (NULL == $SK->secret) {
+      $SK->secret = emalloc($LEN);
+    }
+  pattern-not: |
+    if (NULL != $SK->secret) {
+      memset($SK->secret, 0, $SK->secretsize);
+      free($SK->secret);
+    }
+    $SK->secret = emalloc($LEN);
   languages:
   - c
-  message: 'This rule detects insecure memory handling in NTP''s authkeys.c where a buffer is allocated without properly clearing
-    or freeing the existing secret. This can lead to sensitive information leakage or use-after-free vulnerabilities. Always
-    ensure that existing buffers are properly cleared and freed before reallocating them.
-
-    '
+  message: |
+    This rule detects insecure memory handling in NTP's authkeys.c where a buffer is allocated without properly clearing or freeing the existing secret. This can lead to sensitive information leakage or use-after-free vulnerabilities. Always ensure that existing buffers are properly cleared and freed before reallocating them.
   severity: ERROR
   metadata:
     source-url: github.com/ntp/ntp/commit/1bb401576f412532d8cdcca5509b85ad29605913
@@ -21,16 +25,28 @@ rules:
     technology:
     - c
 - id: vuln-ntp-8a0c765f
-  pattern: "static void list_restrict4(restrict_u *res, struct info_restrict **ppir) {\n  ...\n  if (res->link != NULL)\n\
-    \    list_restrict4(res->link, ppir);\n  ...\n}\n"
-  pattern-not: "static void list_restrict4(const restrict_u *res, struct info_restrict **ppir) {\n  ...\n  for (rpad = NULL;\
-    \ res; res = res->link)\n    if (!pushRestriction(&rpad, res))\n      break;\n  ...\n}\n"
+  pattern: |
+    static void list_restrict4(restrict_u *res, struct info_restrict **ppir) {
+      ...
+      if (res->link != NULL)
+        list_restrict4(res->link, ppir);
+      ...
+    }
+  pattern-not: |
+    static void list_restrict4(const restrict_u *res, struct info_restrict **ppir) {
+      ...
+      for (rpad = NULL; res; res = res->link)
+        if (!pushRestriction(&rpad, res))
+          break;
+      ...
+    }
   languages:
   - c
-  message: "Detected a recursive function that could lead to stack overflow in NTP's restrict list processing. \nThe vulnerability\
-    \ occurs due to deep recursion in handling restrict lists, which can cause stack overflows. \nThe fix replaces recursion\
-    \ with an iterative approach using a stack structure. \nUpdate the function to use an iterative approach with a stack\
-    \ to prevent potential stack overflows.\n"
+  message: |
+    Detected a recursive function that could lead to stack overflow in NTP's restrict list processing.
+    The vulnerability occurs due to deep recursion in handling restrict lists, which can cause stack overflows.
+    The fix replaces recursion with an iterative approach using a stack structure.
+    Update the function to use an iterative approach with a stack to prevent potential stack overflows.
   severity: ERROR
   metadata:
     source-url: github.com/ntp/ntp/commit/8a0c765f3c47633fa262356b0818788d1cf249b1
@@ -42,19 +58,14 @@ rules:
     technology:
     - c
 - id: vuln-ntp-99e5c6cd
-  pattern: 'sprintf($STATSTR, $FORMAT, ...)
-
-    '
-  pattern-not: 'snprintf($STATSTR, $SIZE, $FORMAT, ...)
-
-    '
+  pattern: |
+    sprintf($STATSTR, $FORMAT, ...)
+  pattern-not: |
+    snprintf($STATSTR, $SIZE, $FORMAT, ...)
   languages:
   - c
-  message: 'The use of `sprintf` without a size limit can lead to buffer overflows, which is a security vulnerability. This
-    can be exploited to execute arbitrary code or cause a denial of service. Replace `sprintf` with `snprintf` and specify
-    the buffer size to prevent buffer overflows.
-
-    '
+  message: |
+    The use of `sprintf` without a size limit can lead to buffer overflows, which is a security vulnerability. This can be exploited to execute arbitrary code or cause a denial of service. Replace `sprintf` with `snprintf` and specify the buffer size to prevent buffer overflows.
   severity: ERROR
   metadata:
     source-url: github.com/ntp/ntp/commit/99e5c6cd07ee70ec93f7b7efd62e54ea2b5d944e
@@ -68,17 +79,16 @@ rules:
     technology:
     - c
 - id: vuln-ntp-ba716a46
-  pattern: 'REQUIRE(strlen($VAR) < sizeof($NAME));
-
-    '
-  pattern-not: "if (strlen($VAR) >= sizeof($NAME)) {\n  return 0;\n}\n"
+  pattern: |
+    REQUIRE(strlen($VAR) < sizeof($NAME));
+  pattern-not: |
+    if (strlen($VAR) >= sizeof($NAME)) {
+      return 0;
+    }
   languages:
   - c
-  message: 'The code uses REQUIRE to check if the length of a string is less than the size of a buffer, but this is dangerous
-    because REQUIRE is not a standard C function and may not handle the condition safely. This can lead to buffer overflows
-    if the condition is not met. Replace REQUIRE with an explicit check and handle the condition properly.
-
-    '
+  message: |
+    The code uses REQUIRE to check if the length of a string is less than the size of a buffer, but this is dangerous because REQUIRE is not a standard C function and may not handle the condition safely. This can lead to buffer overflows if the condition is not met. Replace REQUIRE with an explicit check and handle the condition properly.
   severity: ERROR
   metadata:
     source-url: github.com/ntp/ntp/commit/ba716a464ecb20618560075f2e4e1051e5b6f24f
@@ -92,18 +102,21 @@ rules:
     technology:
     - c
 - id: vuln-ntp-c4cd4aaf
-  pattern: "$VALLEN = ntohl($EP->vallen);\n...\nif ($VALLEN == 0 || $VALLEN > $MAXHOSTNAME || $LEN - $VALUE_LEN < $VALLEN)\
-    \ {\n  ...\n}\n"
-  pattern-not: "$LEN = exten_payload_size($EP);\nif ($LEN == 0 || $LEN > $MAX_VALLEN) {\n  ...\n}\n"
+  pattern: |
+    $VALLEN = ntohl($EP->vallen);
+    ...
+    if ($VALLEN == 0 || $VALLEN > $MAXHOSTNAME || $LEN - $VALUE_LEN < $VALLEN) {
+      ...
+    }
+  pattern-not: |
+    $LEN = exten_payload_size($EP);
+    if ($LEN == 0 || $LEN > $MAX_VALLEN) {
+      ...
+    }
   languages:
   - c
-  message: 'The code is vulnerable to a buffer overflow due to insufficient validation of the length field in an extension
-    packet. The original code directly uses `ntohl(ep->vallen)` without proper bounds checking, which could allow an attacker
-    to craft a malicious packet that exceeds the expected size, leading to memory corruption. The fix introduces a new function
-    `exten_payload_size` to properly validate the payload size against the packet''s declared frame size. Always validate
-    the length of incoming packets against expected bounds and use helper functions to ensure consistency.
-
-    '
+  message: |
+    The code is vulnerable to a buffer overflow due to insufficient validation of the length field in an extension packet. The original code directly uses `ntohl(ep->vallen)` without proper bounds checking, which could allow an attacker to craft a malicious packet that exceeds the expected size, leading to memory corruption. The fix introduces a new function `exten_payload_size` to properly validate the payload size against the packet's declared frame size. Always validate the length of incoming packets against expected bounds and use helper functions to ensure consistency.
   severity: ERROR
   metadata:
     source-url: github.com/ntp/ntp/commit/c4cd4aaf418f57f7225708a93bf48afb2bc9c1da

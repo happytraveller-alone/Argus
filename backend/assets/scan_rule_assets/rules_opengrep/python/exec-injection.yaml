@@ -3,11 +3,9 @@ rules:
   languages:
   - python
   severity: ERROR
-  message: 'Found user data in a call to ''exec''. This is extremely dangerous because
-
+  message: |
+    Found user data in a call to 'exec'. This is extremely dangerous because
     it can enable an attacker to execute remote code.
-
-    '
   metadata:
     cwe: 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (''Eval Injection'')'
     owasp: 'A1: Injection'
@@ -16,16 +14,16 @@ rules:
   patterns:
   - pattern-either:
     - patterns:
-      - pattern-inside: "@$APP.route($ROUTE, ...)\ndef $FUNC(..., $ROUTEVAR, ...):\n  ...\n"
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
       - pattern-either:
         - pattern: exec(..., <... $ROUTEVAR ...>, ...)
-        - pattern: '$INTERM = <... $ROUTEVAR ...>
-
+        - pattern: |
+            $INTERM = <... $ROUTEVAR ...>
             ...
-
             exec(..., <... $INTERM ...>, ...)
-
-            '
     - patterns:
       - pattern-either:
         - pattern: exec(..., <... flask.request.$W.get(...) ...>, ...)
@@ -69,48 +67,44 @@ rules:
   - patterns:
     - pattern: exec(...)
     - pattern-either:
-      - pattern-inside: "@$APP.route($ROUTE, ...)\ndef $FUNC(..., $ROUTEVAR, ...):\n  ...\n  exec(..., <... $ROUTEVAR ...>,\
-          \ ...)\n"
-      - pattern-inside: "@$APP.route($ROUTE, ...)\ndef $FUNC(..., $ROUTEVAR, ...):\n  ...\n  $INTERM = <... $ROUTEVAR ...>\n\
-          \  ...\n  exec(..., <... $INTERM ...>, ...)\n"
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+            exec(..., <... $ROUTEVAR ...>, ...)
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            exec(..., <... $INTERM ...>, ...)
   - pattern: exec(..., <... flask.request.$W.get(...) ...>, ...)
   - pattern: exec(..., <... flask.request.$W[...] ...>, ...)
   - pattern: exec(..., <... flask.request.$W(...) ...>, ...)
   - pattern: exec(..., <... flask.request.$W ...>, ...)
   - patterns:
-    - pattern-inside: '$INTERM = <... flask.request.$W.get(...) ...>
-
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W.get(...) ...>
         ...
-
         exec(..., <... $INTERM ...>, ...)
-
-        '
     - pattern: exec(...)
   - patterns:
-    - pattern-inside: '$INTERM = <... flask.request.$W[...] ...>
-
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W[...] ...>
         ...
-
         exec(..., <... $INTERM ...>, ...)
-
-        '
     - pattern: exec(...)
   - patterns:
-    - pattern-inside: '$INTERM = <... flask.request.$W(...) ...>
-
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W(...) ...>
         ...
-
         exec(..., <... $INTERM ...>, ...)
-
-        '
     - pattern: exec(...)
   - patterns:
-    - pattern-inside: '$INTERM = <... flask.request.$W ...>
-
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W ...>
         ...
-
         exec(..., <... $INTERM ...>, ...)
-
-        '
     - pattern: exec(...)
   severity: ERROR

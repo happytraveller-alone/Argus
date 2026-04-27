@@ -1,24 +1,19 @@
 rules:
 - id: vuln-libx11-2fcfcc49
-  pattern: 'INT16 $LEN = $DATA[0];
-
+  pattern: |
+    INT16 $LEN = $DATA[0];
     ...
-
     (void)strncpy($BASE_NAME, (char *)&$DATA[1], (int)$LEN);
-
-    '
-  pattern-not: 'CARD16 $LEN = $DATA[0];
-
+  pattern-not: |
+    CARD16 $LEN = $DATA[0];
     if ($LEN > $DATA_LEN) return False;
-
     (void)strncpy($BASE_NAME, (char *)&$DATA[1], (size_t)$LEN);
-
-    '
   languages:
   - c
-  message: "Potential buffer overflow vulnerability due to unsafe use of strncpy with an INT16 length parameter. \nThe length\
-    \ parameter should be validated to ensure it does not exceed the buffer size, and the type should be CARD16 to avoid negative\
-    \ values. \nAlways use size_t for length parameters in strncpy to prevent integer overflow and ensure proper bounds checking.\n"
+  message: |
+    Potential buffer overflow vulnerability due to unsafe use of strncpy with an INT16 length parameter.
+    The length parameter should be validated to ensure it does not exceed the buffer size, and the type should be CARD16 to avoid negative values.
+    Always use size_t for length parameters in strncpy to prevent integer overflow and ensure proper bounds checking.
   severity: ERROR
   metadata:
     source-url: github.com/mirror/libX11/commit/2fcfcc49f3b1be854bb9085993a01d17c62acf60
@@ -33,25 +28,22 @@ rules:
     technology:
     - c
 - id: vuln-libx11-b469da14
-  pattern: "$CHEND = $CH + ($LEN + 1);\n...\nif ($CH <= $CHEND) {\n    ...\n}\n"
-  pattern-not: '$CHEND = $CH + $LEN;
-
+  pattern: |
+    $CHEND = $CH + ($LEN + 1);
     ...
-
+    if ($CH <= $CHEND) {
+        ...
+    }
+  pattern-not: |
+    $CHEND = $CH + $LEN;
+    ...
     $LENGTH = *$CH;
-
-    *$CH = ''\0'';
-
+    *$CH = '\0';
     $COUNT++;
-
-    '
   languages:
   - c
-  message: 'The code incorrectly calculates the end pointer by adding an extra byte, which can lead to out-of-bounds access.
-    This vulnerability occurs because the calculation includes an unnecessary +1, potentially causing memory corruption or
-    crashes. To fix this, ensure the end pointer is calculated without the extra byte, as shown in the fixed version.
-
-    '
+  message: |
+    The code incorrectly calculates the end pointer by adding an extra byte, which can lead to out-of-bounds access. This vulnerability occurs because the calculation includes an unnecessary +1, potentially causing memory corruption or crashes. To fix this, ensure the end pointer is calculated without the extra byte, as shown in the fixed version.
   severity: ERROR
   metadata:
     source-url: github.com/mirror/libX11/commit/b469da1430cdcee06e31c6251b83aede072a1ff0

@@ -1,19 +1,13 @@
 rules:
 - id: vuln-frr-21418d64
-  pattern: 'bgp_attr_check($PEER, $ATTR)
-
-    '
-  pattern-not: 'bgp_attr_check($PEER, $ATTR, $LENGTH)
-
-    '
+  pattern: |
+    bgp_attr_check($PEER, $ATTR)
+  pattern-not: |
+    bgp_attr_check($PEER, $ATTR, $LENGTH)
   languages:
   - c
-  message: 'The function `bgp_attr_check` is called without the required `length` parameter, which can lead to improper validation
-    of BGP attributes. This vulnerability could allow an attacker to bypass security checks, potentially leading to unauthorized
-    access or other security issues. To fix this, ensure that the `bgp_attr_check` function is called with all required parameters,
-    including `length`.
-
-    '
+  message: |
+    The function `bgp_attr_check` is called without the required `length` parameter, which can lead to improper validation of BGP attributes. This vulnerability could allow an attacker to bypass security checks, potentially leading to unauthorized access or other security issues. To fix this, ensure that the `bgp_attr_check` function is called with all required parameters, including `length`.
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/21418d64af11553c402f932b0311c812d98ac3e4
@@ -25,20 +19,20 @@ rules:
     technology:
     - c
 - id: vuln-frr-30b5c2a4
-  pattern: "if ($CONDITION || $ATTR_PARSE_RET == BGP_ATTR_PARSE_EOR) {\n  ...\n}\n"
-  pattern-not: "if ($CONDITION) {\n  ...\n}\n"
+  pattern: |
+    if ($CONDITION || $ATTR_PARSE_RET == BGP_ATTR_PARSE_EOR) {
+      ...
+    }
+  pattern-not: |
+    if ($CONDITION) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected improper handling of BGP_ATTR_PARSE_EOR return value. This can lead to malformed attribute processing
-    in BGP updates. The vulnerability occurs when BGP_ATTR_PARSE_EOR is used as a condition in control flow without proper
-    error handling. Instead, bgp_attr_malformed should be called to handle the error case properly.
-
-    This is dangerous as it could allow malformed BGP attributes to be processed incorrectly, potentially leading to network
-    instability or security issues.
-
+  message: |
+    Detected improper handling of BGP_ATTR_PARSE_EOR return value. This can lead to malformed attribute processing in BGP updates. The vulnerability occurs when BGP_ATTR_PARSE_EOR is used as a condition in control flow without proper error handling. Instead, bgp_attr_malformed should be called to handle the error case properly.
+    This is dangerous as it could allow malformed BGP attributes to be processed incorrectly, potentially leading to network instability or security issues.
     To fix this, replace the BGP_ATTR_PARSE_EOR check with proper error handling using bgp_attr_malformed.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/30b5c2a434d25981e16792f6f50162beb517ae4d
@@ -53,17 +47,20 @@ rules:
     - bgp
     - networking
 - id: vuln-frr-3515178d
-  pattern: "if (*$PNT & $MASK) {\n  ...\n}\n"
-  pattern-not: "if ($PNT < $P_END && *$PNT & $MASK) {\n  ...\n}\n"
+  pattern: |
+    if (*$PNT & $MASK) {
+      ...
+    }
+  pattern-not: |
+    if ($PNT < $P_END && *$PNT & $MASK) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential buffer overflow vulnerability due to missing bounds check before pointer dereference.
-
+  message: |
+    Detected a potential buffer overflow vulnerability due to missing bounds check before pointer dereference.
     This is dangerous as it could allow reading past the end of a buffer, leading to undefined behavior or memory corruption.
-
     Always validate that pointers are within bounds before dereferencing them.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/3515178de4a56d66ed948a774efcbe4a854e1ca7
@@ -77,21 +74,22 @@ rules:
     technology:
     - c
 - id: vuln-frr-6814f2e0
-  pattern: "if ($RET != BGP_ATTR_PARSE_ERROR) {\n    ...\n}\n"
-  pattern-not: "if ($RET == BGP_ATTR_PARSE_PROCEED) {\n    ...\n}\n"
+  pattern: |
+    if ($RET != BGP_ATTR_PARSE_ERROR) {
+        ...
+    }
+  pattern-not: |
+    if ($RET == BGP_ATTR_PARSE_PROCEED) {
+        ...
+    }
   languages:
   - c
-  message: 'Detected unsafe handling of BGP attribute parsing. The code continues processing
-
+  message: |
+    Detected unsafe handling of BGP attribute parsing. The code continues processing
     when it should treat certain cases as errors. This could allow processing of
-
     malformed BGP updates with missing mandatory attributes, potentially leading to
-
     security issues. The fix is to explicitly check for BGP_ATTR_PARSE_PROCEED and
-
     treat other cases as errors.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/6814f2e0138a6ea5e1f83bdd9085d9a77999900b
@@ -106,18 +104,14 @@ rules:
     - bgp
     - networking
 - id: vuln-frr-ba6a8f1a
-  pattern: '$ATTR->flag |= ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID);
-
-    '
-  pattern-not: 'SET_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID));
-
-    '
+  pattern: |
+    $ATTR->flag |= ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID);
+  pattern-not: |
+    SET_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_PREFIX_SID));
   languages:
   - c
-  message: 'Direct bitwise OR assignment on flags without using the SET_FLAG macro can lead to improper flag setting. This
-    could cause incorrect handling of BGP attributes. Use the SET_FLAG macro instead to ensure proper flag manipulation.
-
-    '
+  message: |
+    Direct bitwise OR assignment on flags without using the SET_FLAG macro can lead to improper flag setting. This could cause incorrect handling of BGP attributes. Use the SET_FLAG macro instead to ensure proper flag manipulation.
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/ba6a8f1a31e1a88df2de69ea46068e8bd9b97138
@@ -129,18 +123,24 @@ rules:
     technology:
     - c
 - id: vuln-frr-babb23b7
-  pattern: "if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&\n    CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&\n    CHECK_FLAG($FLAGS,\
-    \ BGP_ATTR_FLAG_PARTIAL))\n    return BGP_ATTR_PARSE_WITHDRAW;\n...\nreturn BGP_ATTR_PARSE_ERROR_NOTIFYPLS;\n"
-  pattern-not: "if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&\n    CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&\n    CHECK_FLAG($FLAGS,\
-    \ BGP_ATTR_FLAG_PARTIAL))\n    return BGP_ATTR_PARSE_WITHDRAW;\n...\nreturn BGP_ATTR_PARSE_WITHDRAW;\n"
+  pattern: |
+    if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
+        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
+        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
+        return BGP_ATTR_PARSE_WITHDRAW;
+    ...
+    return BGP_ATTR_PARSE_ERROR_NOTIFYPLS;
+  pattern-not: |
+    if (CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_TRANS) &&
+        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_OPTIONAL) &&
+        CHECK_FLAG($FLAGS, BGP_ATTR_FLAG_PARTIAL))
+        return BGP_ATTR_PARSE_WITHDRAW;
+    ...
+    return BGP_ATTR_PARSE_WITHDRAW;
   languages:
   - c
-  message: 'The code handles malformed partial optional attributes by resetting the session, which can lead to denial of service.
-    Instead, such attributes should be treated as withdrawals to prevent session resets. This vulnerability can be exploited
-    to disrupt BGP sessions. The fix is to ensure that malformed attributes are treated as withdrawals rather than triggering
-    session resets.
-
-    '
+  message: |
+    The code handles malformed partial optional attributes by resetting the session, which can lead to denial of service. Instead, such attributes should be treated as withdrawals to prevent session resets. This vulnerability can be exploited to disrupt BGP sessions. The fix is to ensure that malformed attributes are treated as withdrawals rather than triggering session resets.
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/babb23b74855e23c987a63f8256d24e28c044d07
@@ -154,25 +154,24 @@ rules:
     technology:
     - c
 - id: vuln-frr-c37119df
-  pattern: "if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&\n    CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))\n\
-    \    return BGP_ATTR_PARSE_PROCEED;\n"
-  pattern-not: "if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&\n    CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))\n\
-    \    return $TYPE ? BGP_ATTR_PARSE_MISSING_MANDATORY\n                : BGP_ATTR_PARSE_PROCEED;\n"
+  pattern: |
+    if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
+        CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
+        return BGP_ATTR_PARSE_PROCEED;
+  pattern-not: |
+    if (!CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_REACH_NLRI)) &&
+        CHECK_FLAG($ATTR->flag, ATTR_FLAG_BIT(BGP_ATTR_MP_UNREACH_NLRI)))
+        return $TYPE ? BGP_ATTR_PARSE_MISSING_MANDATORY
+                    : BGP_ATTR_PARSE_PROCEED;
   languages:
   - c
-  message: 'A BGP UPDATE message containing MP_UNREACH_NLRI without proper attribute validation
-
+  message: |
+    A BGP UPDATE message containing MP_UNREACH_NLRI without proper attribute validation
     can lead to improper handling of network routes. The vulnerability occurs when
-
     MP_UNREACH_NLRI is present without MP_REACH_NLRI, but mandatory attributes are not
-
     properly checked. This could allow invalid or malicious routes to be processed.
-
     The fix adds proper validation by returning BGP_ATTR_PARSE_MISSING_MANDATORY when
-
     mandatory attributes are missing.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/c37119df45bbf4ef713bc10475af2ee06e12f3bf
@@ -184,20 +183,19 @@ rules:
     technology:
     - c
 - id: vuln-frr-d28c9042
-  pattern: "bgp_notify_send_with_data(\n  $PEER, BGP_NOTIFY_UPDATE_ERR,\n  BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $STARTP, $TOTAL\n\
-    );\n"
-  pattern-not: 'bgp_attr_malformed($ARGS, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $ARGS->total);
-
-    '
+  pattern: |
+    bgp_notify_send_with_data(
+      $PEER, BGP_NOTIFY_UPDATE_ERR,
+      BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $STARTP, $TOTAL
+    );
+  pattern-not: |
+    bgp_attr_malformed($ARGS, BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, $ARGS->total);
   languages:
   - c
-  message: 'The code directly calls `bgp_notify_send_with_data` instead of using the safer `bgp_attr_malformed` function.
-
+  message: |
+    The code directly calls `bgp_notify_send_with_data` instead of using the safer `bgp_attr_malformed` function.
     This can lead to inconsistent error handling and potential security vulnerabilities.
-
     Use `bgp_attr_malformed` to ensure proper error handling and attribute validation.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/d28c904206c0c1587caa215c903613755c3764e9
@@ -207,15 +205,18 @@ rules:
     technology:
     - c
 - id: vuln-frr-e08495a4
-  pattern: "if (PROTO_RM_MAP($ZV, $AFI, $RT)) {\n  ...\n}\n"
-  pattern-not: "if (PROTO_RM_NAME($ZV, $AFI, $RT)) {\n  ...\n}\n"
+  pattern: |
+    if (PROTO_RM_MAP($ZV, $AFI, $RT)) {
+      ...
+    }
+  pattern-not: |
+    if (PROTO_RM_NAME($ZV, $AFI, $RT)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected use of PROTO_RM_MAP instead of PROTO_RM_NAME in routing map checks. This could lead to incorrect route
-    map handling or potential security vulnerabilities. Replace PROTO_RM_MAP with PROTO_RM_NAME to ensure proper routing map
-    validation.
-
-    '
+  message: |
+    Detected use of PROTO_RM_MAP instead of PROTO_RM_NAME in routing map checks. This could lead to incorrect route map handling or potential security vulnerabilities. Replace PROTO_RM_MAP with PROTO_RM_NAME to ensure proper routing map validation.
   severity: ERROR
   metadata:
     source-url: github.com/FRRouting/frr/commit/e08495a4a8ad4d2050691d9e5e13662d2635b2e0

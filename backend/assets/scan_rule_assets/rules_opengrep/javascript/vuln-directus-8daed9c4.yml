@@ -1,18 +1,32 @@
 rules:
 - id: vuln-directus-8daed9c4
-  pattern: "{\n  title: 'Guides',\n  children: [\n    {\n      type: 'page',\n   \
-    \   path: '/configuration/sso',\n      title: 'Single Sign-On (SSO)',\n    },\n\
-    \  ],\n}\n"
-  pattern-not: "{\n  title: 'Guides',\n  children: [\n    {\n      type: 'page',\n\
-    \      path: '/configuration/sso',\n      title: 'Single Sign-On (SSO)',\n   \
-    \   secure: true,\n    },\n  ],\n}\n"
+  pattern: |
+    {
+      title: 'Guides',
+      children: [
+        {
+          type: 'page',
+          path: '/configuration/sso',
+          title: 'Single Sign-On (SSO)',
+        },
+      ],
+    }
+  pattern-not: |
+    {
+      title: 'Guides',
+      children: [
+        {
+          type: 'page',
+          path: '/configuration/sso',
+          title: 'Single Sign-On (SSO)',
+          secure: true,
+        },
+      ],
+    }
   languages:
   - javascript
-  message: 'Insecure configuration detected in VuePress setup. The SSO configuration
-    lacks security measures which could expose sensitive data. Ensure all sensitive
-    routes are properly secured.
-
-    '
+  message: |
+    Insecure configuration detected in VuePress setup. The SSO configuration lacks security measures which could expose sensitive data. Ensure all sensitive routes are properly secured.
   severity: ERROR
   metadata:
     source-url: github.com/directus/directus/commit/8daed9c41baeaf1d08c1e292bf9f0dcef65e48fb

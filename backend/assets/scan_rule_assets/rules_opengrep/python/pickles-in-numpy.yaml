@@ -1,7 +1,6 @@
 rules:
 - id: pickles-in-numpy
-  message: Functions reliant on pickle can result in arbitrary code execution.  Consider
-    using fickling or switching to a safer serialization method
+  message: Functions reliant on pickle can result in arbitrary code execution.  Consider using fickling or switching to a safer serialization method
   languages:
   - python
   severity: ERROR
@@ -15,8 +14,7 @@ rules:
     impact: HIGH
     technology:
     - numpy
-    description: Potential arbitrary code execution from `NumPy` functions reliant
-      on pickling
+    description: Potential arbitrary code execution from `NumPy` functions reliant on pickling
     references:
     - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
   patterns:
@@ -26,15 +24,11 @@ rules:
   - metavariable-pattern:
       metavariable: $VALUE
       patterns:
-      - pattern-not: 'False
-
-          '
-      - pattern-not: '[]
-
-          '
-      - pattern-not: 'None
-
-          '
-      - pattern-not: '""
-
-          '
+      - pattern-not: |
+          False
+      - pattern-not: |
+          []
+      - pattern-not: |
+          None
+      - pattern-not: |
+          ""

@@ -2,13 +2,10 @@ rules:
 - id: scala_cookie_rule-RequestParamToCookie
   languages:
   - scala
-  message: 'This code constructs an HTTP Cookie using an untrusted HTTP parameter. If this cookie is added
-
+  message: |
+    This code constructs an HTTP Cookie using an untrusted HTTP parameter. If this cookie is added
     to an HTTP response, it will allow a HTTP response splitting vulnerability. See
-
     http://en.wikipedia.org/wiki/HTTP_response_splitting for more information.
-
-    '
   metadata:
     category: security
     cwe: CWE-113
@@ -33,11 +30,9 @@ rules:
   pattern-sinks:
   - pattern: new javax.servlet.http.Cookie("$KEY", ...);
   - patterns:
-    - pattern-inside: '$C = new javax.servlet.http.Cookie("$KEY", ...);
-
+    - pattern-inside: |
+        $C = new javax.servlet.http.Cookie("$KEY", ...);
         ...
-
-        '
     - pattern: $C.setValue(...);
   pattern-sources:
   - pattern: '($REQ: HttpServletRequest).getParameter(...);'
@@ -45,13 +40,10 @@ rules:
 - id: scala_cookie_rule-RequestParamToCookie_1
   languages:
   - scala
-  message: 'This code constructs an HTTP Cookie using an untrusted HTTP parameter. If this cookie is added
-
+  message: |
+    This code constructs an HTTP Cookie using an untrusted HTTP parameter. If this cookie is added
     to an HTTP response, it will allow a HTTP response splitting vulnerability. See
-
     http://en.wikipedia.org/wiki/HTTP_response_splitting for more information.
-
-    '
   metadata:
     category: security
     cwe: CWE-113
@@ -76,11 +68,9 @@ rules:
   pattern-sinks:
   - pattern: new javax.servlet.http.Cookie("$KEY", ...);
   - patterns:
-    - pattern-inside: '$C = new javax.servlet.http.Cookie("$KEY", ...);
-
+    - pattern-inside: |
+        $C = new javax.servlet.http.Cookie("$KEY", ...);
         ...
-
-        '
     - pattern: $C.setValue(...);
   pattern-sources:
   - pattern: '($REQ: HttpServletRequest).getParameter(...);'

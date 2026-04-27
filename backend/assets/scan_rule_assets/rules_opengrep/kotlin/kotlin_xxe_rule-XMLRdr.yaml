@@ -2,12 +2,9 @@ rules:
 - id: kotlin_xxe_rule-XMLRdr
   languages:
   - kotlin
-  message: 'XML External Entity (XXE) attacks can occur when an XML parser supports
-    XML
-
+  message: |
+    XML External Entity (XXE) attacks can occur when an XML parser supports XML
     entities while processing XML received from an untrusted source.
-
-    '
   metadata:
     shortDescription: Improper restriction of XML external entity reference ('XXE')
     category: security
@@ -18,14 +15,10 @@ rules:
     security-severity: CRITICAL
   severity: ERROR
   patterns:
-  - pattern-inside: '$R = XMLReaderFactory.createXMLReader()
-
+  - pattern-inside: |
+      $R = XMLReaderFactory.createXMLReader()
       ...
-
-      '
-  - pattern-not-inside: '$R.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-
+  - pattern-not-inside: |
+      $R.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
       ...
-
-      '
   - pattern: $R.parse(...)

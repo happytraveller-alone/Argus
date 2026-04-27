@@ -2,8 +2,7 @@ rules:
 - id: detect-shai-hulud-backdoor
   languages:
   - yaml
-  message: The Shai-hulud backdoor creates a purposefully vulnerable github action
-    with the name `discussion.yaml`.
+  message: The Shai-hulud backdoor creates a purposefully vulnerable github action with the name `discussion.yaml`.
   paths:
     include:
     - '**/.github/workflows/discussion.yaml'
@@ -31,7 +30,9 @@ rules:
     - https://www.aikido.dev/blog/shai-hulud-strikes-again-hitting-zapier-ensdomains
   patterns:
   - pattern-inside: 'steps: [...]'
-  - pattern-inside: "- run: ...\n  ...\n"
+  - pattern-inside: |
+      - run: ...
+        ...
   - pattern: 'run: $SHELL'
   - metavariable-pattern:
       language: generic

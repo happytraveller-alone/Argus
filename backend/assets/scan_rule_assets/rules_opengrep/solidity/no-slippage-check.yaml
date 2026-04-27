@@ -16,31 +16,53 @@ rules:
   patterns:
   - pattern-either:
     - pattern: $X.swapExactTokensForTokens($A, $LIMIT, $B, $C, $D)
-    - pattern: $X.swapExactTokensForTokensSupportingFeeOnTransferTokens($A, $LIMIT,
-        $B, $C, $D)
+    - pattern: $X.swapExactTokensForTokensSupportingFeeOnTransferTokens($A, $LIMIT, $B, $C, $D)
     - pattern: $X.swapExactTokensForETH($A, $LIMIT, $B, $C, $D)
-    - pattern: $X.swapExactTokensForETHSupportingFeeOnTransferTokens($A, $LIMIT, $B,
-        $C, $D)
+    - pattern: $X.swapExactTokensForETHSupportingFeeOnTransferTokens($A, $LIMIT, $B, $C, $D)
     - pattern: $X.swapExactETHForTokens{$VALUE:...}($LIMIT, $A, $B, $C)
-    - pattern: $X.swapExactETHForTokensSupportingFeeOnTransferTokens{$VALUE:...}($LIMIT,
-        $A, $B, $C)
+    - pattern: $X.swapExactETHForTokensSupportingFeeOnTransferTokens{$VALUE:...}($LIMIT, $A, $B, $C)
     - pattern: $X.swapTokensForExactTokens($A, $LIMIT, $B, $C, $D)
     - pattern: $X.swapTokensForExactETH($A, $LIMIT, $B, $C, $D)
-    - pattern: "function $FUNC(...) {\n  ...\n  $Y = $SWAPROUTER.ExactInputSingleParams({\n\
-        \    tokenIn: $A, \n    tokenOut: $B, \n    fee: $C, \n    recipient: $D,\
-        \ \n    deadline: $E, \n    amountIn: $F, \n    amountOutMinimum: $LIMIT,\
-        \ \n    sqrtPriceLimitX96: 0\n  });\n  ...\n  $X.exactInputSingle($Y);\n \
-        \ ...\n}\n"
-    - pattern: "$X.exactInputSingle($SWAPROUTER.ExactInputSingleParams({\n  tokenIn:\
-        \ $A,\n  tokenOut: $B,\n  fee: $C,\n  recipient: $D,\n  deadline: $E,\n  amountIn:\
-        \ $F,\n  amountOutMinimum: $LIMIT,\n  sqrtPriceLimitX96: 0\n}));\n"
-    - pattern: "function $FUNC(...) {\n  ...\n  $Y = $SWAPROUTER.ExactOutputSingleParams({\n\
-        \    tokenIn: $A,\n    tokenOut: $B,\n    fee: $C,\n    recipient: $D,\n \
-        \   deadline: $E,\n    amountOut: $F,\n    amountInMaximum: $LIMIT,\n    sqrtPriceLimitX96:\
-        \ 0\n  });\n  ...\n  $X.exactOutputSingle($Y);\n  ...\n}\n"
-    - pattern: "$X.exactOutputSingle($SWAPROUTER.ExactOutputSingleParams({\n  tokenIn:\
-        \ $A,\n  tokenOut: $B,\n  fee: $C,\n  recipient: $D,\n  deadline: $E,\n  amountOut:\
-        \ $F,\n  amountInMaximum: $LIMIT,\n  sqrtPriceLimitX96: 0\n}));\n"
+    - pattern: "function $FUNC(...) {\n  ...\n  $Y = $SWAPROUTER.ExactInputSingleParams({\n    tokenIn: $A, \n    tokenOut: $B, \n    fee: $C, \n    recipient: $D, \n    deadline: $E, \n    amountIn: $F, \n    amountOutMinimum: $LIMIT, \n    sqrtPriceLimitX96: 0\n  });\n  ...\n  $X.exactInputSingle($Y);\n  ...\n}\n"
+    - pattern: |
+        $X.exactInputSingle($SWAPROUTER.ExactInputSingleParams({
+          tokenIn: $A,
+          tokenOut: $B,
+          fee: $C,
+          recipient: $D,
+          deadline: $E,
+          amountIn: $F,
+          amountOutMinimum: $LIMIT,
+          sqrtPriceLimitX96: 0
+        }));
+    - pattern: |
+        function $FUNC(...) {
+          ...
+          $Y = $SWAPROUTER.ExactOutputSingleParams({
+            tokenIn: $A,
+            tokenOut: $B,
+            fee: $C,
+            recipient: $D,
+            deadline: $E,
+            amountOut: $F,
+            amountInMaximum: $LIMIT,
+            sqrtPriceLimitX96: 0
+          });
+          ...
+          $X.exactOutputSingle($Y);
+          ...
+        }
+    - pattern: |
+        $X.exactOutputSingle($SWAPROUTER.ExactOutputSingleParams({
+          tokenIn: $A,
+          tokenOut: $B,
+          fee: $C,
+          recipient: $D,
+          deadline: $E,
+          amountOut: $F,
+          amountInMaximum: $LIMIT,
+          sqrtPriceLimitX96: 0
+        }));
     - pattern: $X.swap($RECIPIENT, $ZEROFORONE, $AMOUNTIN, $LIMIT, $DATA)
   - metavariable-regex:
       metavariable: $LIMIT

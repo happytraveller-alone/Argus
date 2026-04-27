@@ -1,17 +1,17 @@
 rules:
 - id: vuln-moddable-6c88625e
-  pattern: 'the->stack->value.string = (txString)fxNewChunk(the, $L + 1);
-
-    '
-  pattern-not: 'the->stack->value.string = (txString)fxNewChunk(the, fxAddChunkSizes(the, $L, 1));
-
-    '
+  pattern: |
+    the->stack->value.string = (txString)fxNewChunk(the, $L + 1);
+  pattern-not: |
+    the->stack->value.string = (txString)fxNewChunk(the, fxAddChunkSizes(the, $L, 1));
   languages:
   - c
-  message: "This rule detects potential integer overflow vulnerabilities in memory allocation. \nThe vulnerable code directly\
-    \ adds 1 to the length `l` without checking for overflow, \nwhich could lead to insufficient memory allocation and potential\
-    \ security issues. \nThe fix uses `fxAddChunkSizes` to safely handle the addition. Always use safe addition \nfunctions\
-    \ when calculating memory sizes to prevent integer overflow.\n"
+  message: |
+    This rule detects potential integer overflow vulnerabilities in memory allocation.
+    The vulnerable code directly adds 1 to the length `l` without checking for overflow,
+    which could lead to insufficient memory allocation and potential security issues.
+    The fix uses `fxAddChunkSizes` to safely handle the addition. Always use safe addition
+    functions when calculating memory sizes to prevent integer overflow.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/6c88625e020649ebdfdd12862c44f5bf4ef5d994
@@ -23,20 +23,17 @@ rules:
     technology:
     - c
 - id: vuln-moddable-723816ab
-  pattern: "if ($TOKEN_FLAGS[$TOKEN] & $TOKEN_BEGIN_EXPRESSION)\n    $EXPRESSION_FUNC($PARSER);\nelse\n    $REPORT_ERROR($PARSER,\
-    \ $ERROR_MSG);\n"
-  pattern-not: '$EXPRESSION_FUNC($PARSER);
-
-    '
+  pattern: |
+    if ($TOKEN_FLAGS[$TOKEN] & $TOKEN_BEGIN_EXPRESSION)
+        $EXPRESSION_FUNC($PARSER);
+    else
+        $REPORT_ERROR($PARSER, $ERROR_MSG);
+  pattern-not: |
+    $EXPRESSION_FUNC($PARSER);
   languages:
   - c
-  message: 'The code directly checks token flags to decide whether to execute an expression or report an error, which can
-    lead to incorrect behavior if the token flags are not properly validated. This vulnerability can cause the parser to miss
-    critical error conditions or execute unintended code paths. The fix removes the conditional check and always executes
-    the expression function, ensuring consistent behavior. To fix this, remove the conditional check and always call the expression
-    function.
-
-    '
+  message: |
+    The code directly checks token flags to decide whether to execute an expression or report an error, which can lead to incorrect behavior if the token flags are not properly validated. This vulnerability can cause the parser to miss critical error conditions or execute unintended code paths. The fix removes the conditional check and always executes the expression function, ensuring consistent behavior. To fix this, remove the conditional check and always call the expression function.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/723816ab9b52f807180c99fc69c7d08cf6c6bd61
@@ -48,18 +45,17 @@ rules:
     technology:
     - c
 - id: vuln-moddable-736e508e
-  pattern: '$VAR = fxToInteger($THE, $STACK);
-
-    '
-  pattern-not: '$VAR = (txInteger)fxToLength($THE, $STACK);
-
-    '
+  pattern: |
+    $VAR = fxToInteger($THE, $STACK);
+  pattern-not: |
+    $VAR = (txInteger)fxToLength($THE, $STACK);
   languages:
   - c
-  message: "Detected unsafe use of `fxToInteger` which may lead to integer overflow or undefined behavior. \nThe function\
-    \ `fxToInteger` directly converts a value to an integer without proper bounds checking, \nwhich can be dangerous when\
-    \ dealing with large values. Use `fxToLength` with appropriate type \ncasting instead, as it ensures the value is within\
-    \ a safe range.\n"
+  message: |
+    Detected unsafe use of `fxToInteger` which may lead to integer overflow or undefined behavior.
+    The function `fxToInteger` directly converts a value to an integer without proper bounds checking,
+    which can be dangerous when dealing with large values. Use `fxToLength` with appropriate type
+    casting instead, as it ensures the value is within a safe range.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/736e508edfacd531f86214343201477c5b84a436
@@ -71,20 +67,14 @@ rules:
     technology:
     - c
 - id: vuln-moddable-83dadd3d
-  pattern: 'return (char*)$VAR + (32 * 1024);
-
-    '
-  pattern-not: 'return (char*)$VAR + (16 * 1024) + mxASANStackMargin;
-
-    '
+  pattern: |
+    return (char*)$VAR + (32 * 1024);
+  pattern-not: |
+    return (char*)$VAR + (16 * 1024) + mxASANStackMargin;
   languages:
   - c
-  message: 'The code uses a fixed stack margin of 32 KB, which may not be sufficient for certain environments and could lead
-    to stack overflow vulnerabilities. This was fixed by reducing the base margin to 16 KB and adding a configurable mxASANStackMargin
-    to adjust for different environments. To fix this, ensure the stack margin is configurable and appropriate for the target
-    environment.
-
-    '
+  message: |
+    The code uses a fixed stack margin of 32 KB, which may not be sufficient for certain environments and could lead to stack overflow vulnerabilities. This was fixed by reducing the base margin to 16 KB and adding a configurable mxASANStackMargin to adjust for different environments. To fix this, ensure the stack margin is configurable and appropriate for the target environment.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/83dadd3def6d2e7e75fc003a5ab409aa81275dd8
@@ -98,19 +88,14 @@ rules:
     technology:
     - c
 - id: vuln-moddable-8e94a366
-  pattern: '(txSize)c_floor(c_log($INTEGER) / c_log($RADIX))
-
-    '
-  pattern-not: '(txSize)c_floor(c_log1p($INTEGER) / c_log($RADIX))
-
-    '
+  pattern: |
+    (txSize)c_floor(c_log($INTEGER) / c_log($RADIX))
+  pattern-not: |
+    (txSize)c_floor(c_log1p($INTEGER) / c_log($RADIX))
   languages:
   - c
-  message: 'The use of `c_log` instead of `c_log1p` can lead to precision loss and incorrect calculations, especially for
-    large values of `integer`. This can result in incorrect length calculations, potentially leading to buffer overflows or
-    other memory corruption issues. Replace `c_log` with `c_log1p` to ensure accurate calculations.
-
-    '
+  message: |
+    The use of `c_log` instead of `c_log1p` can lead to precision loss and incorrect calculations, especially for large values of `integer`. This can result in incorrect length calculations, potentially leading to buffer overflows or other memory corruption issues. Replace `c_log` with `c_log1p` to ensure accurate calculations.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/8e94a36699bfe8b1eab2218081badff1cb7f97ce
@@ -124,23 +109,16 @@ rules:
     technology:
     - c
 - id: vuln-moddable-c31b8fd1
-  pattern: 'while (COMPARE($I) < 0) $I++;
-
+  pattern: |
+    while (COMPARE($I) < 0) $I++;
     while (COMPARE($J) > 0) $J--;
-
-    '
-  pattern-not: 'while ((COMPARE($I) < 0) && ($I <= $J)) $I++;
-
+  pattern-not: |
+    while ((COMPARE($I) < 0) && ($I <= $J)) $I++;
     while ((COMPARE($J) > 0) && ($I <= $J)) $J--;
-
-    '
   languages:
   - c
-  message: 'The code contains a potential out-of-bounds access vulnerability due to missing bounds checks in while loops.
-    This could lead to undefined behavior or memory corruption if the loop variables exceed valid bounds. To fix this, ensure
-    that bounds checks (e.g., `i <= j`) are included in the loop conditions.
-
-    '
+  message: |
+    The code contains a potential out-of-bounds access vulnerability due to missing bounds checks in while loops. This could lead to undefined behavior or memory corruption if the loop variables exceed valid bounds. To fix this, ensure that bounds checks (e.g., `i <= j`) are included in the loop conditions.
   severity: ERROR
   metadata:
     source-url: https://github.com/Moddable-OpenSource/moddable/commit/c31b8fd15df1ce5fdc11161d4d88fae278e974e1
@@ -156,19 +134,14 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ce937b4e
-  pattern: '$VAR = fxCombinePath($PARSER, $BASE, $NAME);
-
-    '
-  pattern-not: '$VAR = fxRealFilePath($PARSER, fxCombinePath($PARSER, $BASE, $NAME));
-
-    '
+  pattern: |
+    $VAR = fxCombinePath($PARSER, $BASE, $NAME);
+  pattern-not: |
+    $VAR = fxRealFilePath($PARSER, fxCombinePath($PARSER, $BASE, $NAME));
   languages:
   - c
-  message: 'Direct usage of `fxCombinePath` without `fxRealFilePath` can lead to path manipulation vulnerabilities. This can
-    allow an attacker to construct malicious paths that bypass security checks. Always use `fxRealFilePath` to resolve and
-    validate the final path.
-
-    '
+  message: |
+    Direct usage of `fxCombinePath` without `fxRealFilePath` can lead to path manipulation vulnerabilities. This can allow an attacker to construct malicious paths that bypass security checks. Always use `fxRealFilePath` to resolve and validate the final path.
   severity: ERROR
   metadata:
     source-url: https://github.com/Moddable-OpenSource/moddable/commit/ce937b4ee6fad6b17dcc482c3fde55c379459e05
@@ -179,16 +152,21 @@ rules:
     technology:
     - c
 - id: vuln-moddable-dbd3a5f4
-  pattern: "if ($PARSER->errorCount == 0)\n  $FUNC($PARSER->root, $CODER);\n"
-  pattern-not: "if ($PARSER->errorCount == 0) {\n  mxTryParser($PARSER) {\n    $FUNC($PARSER->root, $CODER);\n  }\n  mxCatchParser($PARSER)\
-    \ {\n  }\n}\n"
+  pattern: |
+    if ($PARSER->errorCount == 0)
+      $FUNC($PARSER->root, $CODER);
+  pattern-not: |
+    if ($PARSER->errorCount == 0) {
+      mxTryParser($PARSER) {
+        $FUNC($PARSER->root, $CODER);
+      }
+      mxCatchParser($PARSER) {
+      }
+    }
   languages:
   - c
-  message: 'Vulnerable code pattern detected where error handling is not properly wrapped in try-catch blocks. This can lead
-    to unhandled exceptions and potential crashes. The code should be wrapped in mxTryParser/mxCatchParser blocks to ensure
-    proper error handling and resource cleanup.
-
-    '
+  message: |
+    Vulnerable code pattern detected where error handling is not properly wrapped in try-catch blocks. This can lead to unhandled exceptions and potential crashes. The code should be wrapped in mxTryParser/mxCatchParser blocks to ensure proper error handling and resource cleanup.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/dbd3a5f4e52d3baa2f823e67274c2e8a9b31fb88
@@ -199,15 +177,18 @@ rules:
     technology:
     - c
 - id: vuln-moddable-df143cb6
-  pattern: "if ($VAR->root->description->token == $TOKEN) {\n    ...\n}\n"
-  pattern-not: "if ($VAR->root->description && ($VAR->root->description->token == $TOKEN)) {\n    ...\n}\n"
+  pattern: |
+    if ($VAR->root->description->token == $TOKEN) {
+        ...
+    }
+  pattern-not: |
+    if ($VAR->root->description && ($VAR->root->description->token == $TOKEN)) {
+        ...
+    }
   languages:
   - c
-  message: 'Detected a potential null pointer dereference vulnerability. Accessing `description->token` without first checking
-    if `description` is null can lead to a crash or undefined behavior. Always check for null pointers before dereferencing
-    them.
-
-    '
+  message: |
+    Detected a potential null pointer dereference vulnerability. Accessing `description->token` without first checking if `description` is null can lead to a crash or undefined behavior. Always check for null pointers before dereferencing them.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/df143cb68a45e5bbbc9bc95fdcd7478f3ac8c263
@@ -219,36 +200,25 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ebb1acf2
-  pattern: '$PROXY = instance->next;
-
+  pattern: |
+    $PROXY = instance->next;
     $FUNCTION = fxCheckProxyFunction($THE, $PROXY, $_ID);
-
     ...
-
     mxPushReference($PROXY->value.proxy.target);
-
     ...
-
     mxBehaviorCall($THE, $PROXY->value.proxy.target, $_THIS, $ARGUMENTS);
-
-    '
-  pattern-not: 'mxProxyDeclarations($_ID);
-
+  pattern-not: |
+    mxProxyDeclarations($_ID);
     ...
-
     mxPushSlot($TARGET);
-
     ...
-
     mxBehaviorCall($THE, $TARGET->value.reference, $_THIS, $ARGUMENTS);
-
-    '
   languages:
   - c
-  message: "Direct usage of proxy->value.proxy.target without proper validation can lead to security vulnerabilities. \nThe\
-    \ patch introduces a safer macro `mxProxyDeclarations` to handle proxy-related operations, ensuring that the target is\
-    \ properly validated before use. \nTo fix this, replace direct references to proxy->value.proxy.target with the safer\
-    \ `mxProxyDeclarations` macro.\n"
+  message: |
+    Direct usage of proxy->value.proxy.target without proper validation can lead to security vulnerabilities.
+    The patch introduces a safer macro `mxProxyDeclarations` to handle proxy-related operations, ensuring that the target is properly validated before use.
+    To fix this, replace direct references to proxy->value.proxy.target with the safer `mxProxyDeclarations` macro.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/ebb1acf2294dff88ec4fd70b2791e2df1ea37ef2
@@ -260,16 +230,22 @@ rules:
     technology:
     - c
 - id: vuln-moddable-ef5216cc
-  pattern: "if (!$VAR && ($BYTE != $CONST))\n  $FUNC($ERROR, $MSG, $ID);\n"
-  pattern-not: "if ($VAR) {\n  if ($VAR->$FIELD < 0)\n    $FUNC($ERROR, $MSG, $ID);\n}\nelse {\n  if ($BYTE != $CONST)\n \
-    \   $FUNC($ERROR, $MSG, $ID);\n}\n"
+  pattern: |
+    if (!$VAR && ($BYTE != $CONST))
+      $FUNC($ERROR, $MSG, $ID);
+  pattern-not: |
+    if ($VAR) {
+      if ($VAR->$FIELD < 0)
+        $FUNC($ERROR, $MSG, $ID);
+    }
+    else {
+      if ($BYTE != $CONST)
+        $FUNC($ERROR, $MSG, $ID);
+    }
   languages:
   - c
-  message: 'The code fails to check if a variable is initialized before accessing it, which can lead to undefined behavior.
-    This vulnerability can result in reference errors and potential security issues. The fix involves adding a proper check
-    to ensure the variable is initialized before use.
-
-    '
+  message: |
+    The code fails to check if a variable is initialized before accessing it, which can lead to undefined behavior. This vulnerability can result in reference errors and potential security issues. The fix involves adding a proper check to ensure the variable is initialized before use.
   severity: ERROR
   metadata:
     source-url: github.com/Moddable-OpenSource/moddable/commit/ef5216cc8bf87f8b16313eb13af0b54b06917c06

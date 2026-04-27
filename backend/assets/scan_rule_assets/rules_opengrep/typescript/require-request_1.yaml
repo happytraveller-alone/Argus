@@ -2,8 +2,7 @@ rules:
 - id: require-request_1
   languages:
   - typescript
-  message: If an attacker controls the x in require(x) then they can cause code to
-    load that was not intended to run on the server.
+  message: If an attacker controls the x in require(x) then they can cause code to load that was not intended to run on the server.
   metadata:
     category: security
     confidence: MEDIUM
@@ -48,14 +47,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

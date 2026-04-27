@@ -1,17 +1,20 @@
 rules:
 - id: vuln-lightdash-d34802a6
-  pattern: 'await page.setExtraHTTPHeaders({ cookie });
-
-    '
-  pattern-not: "await page.setCookie({\n    name: 'connect.sid',\n    value: $COOKIE_VALUE,\n\
-    \    domain: $DOMAIN,\n    sameSite: 'Strict',\n});\n"
+  pattern: |
+    await page.setExtraHTTPHeaders({ cookie });
+  pattern-not: |
+    await page.setCookie({
+        name: 'connect.sid',
+        value: $COOKIE_VALUE,
+        domain: $DOMAIN,
+        sameSite: 'Strict',
+    });
   languages:
   - typescript
-  message: "Using `setExtraHTTPHeaders` to set cookies can lead to cookie leakage\
-    \ across domains. \nThis is dangerous because it allows cookies to be sent to\
-    \ unintended domains, potentially exposing sensitive session information. \nInstead,\
-    \ use `setCookie` with explicit domain restrictions and `sameSite` attributes\
-    \ to ensure cookies are only sent to the intended domain.\n"
+  message: |
+    Using `setExtraHTTPHeaders` to set cookies can lead to cookie leakage across domains.
+    This is dangerous because it allows cookies to be sent to unintended domains, potentially exposing sensitive session information.
+    Instead, use `setCookie` with explicit domain restrictions and `sameSite` attributes to ensure cookies are only sent to the intended domain.
   severity: ERROR
   metadata:
     source-url: github.com/lightdash/lightdash/commit/d34802a6d25c2aa82ac6debb60f35be3667a0596

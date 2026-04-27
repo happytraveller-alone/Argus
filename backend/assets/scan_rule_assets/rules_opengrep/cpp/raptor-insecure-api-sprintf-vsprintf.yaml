@@ -10,9 +10,7 @@ rules:
     confidence: HIGH
     cwe:
     - 'CWE-134: Use of Externally-Controlled Format String'
-  message: A buffer overflow condition exists when a program attempts to put more
-    data in a buffer than it can hold, or when a program attempts to put data in a
-    memory area outside of the boundaries of a buffer.
+  message: A buffer overflow condition exists when a program attempts to put more data in a buffer than it can hold, or when a program attempts to put data in a memory area outside of the boundaries of a buffer.
   severity: ERROR
   languages:
   - cpp

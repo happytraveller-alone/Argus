@@ -2,10 +2,22 @@ rules:
 - id: ctx-done-and-timers
   patterns:
   - pattern-either:
-    - pattern: "select {\ncase <-ctx.Done():\n    $BODY\ncase <-time.After(...):\n\
-        \    $BODY\n}\n"
-    - pattern: "$T := time.NewTicker(...)\n...\nselect {\ncase <-ctx.Done():\n   \
-        \ $BODY\ncase <-$T.C:\n    $BODY\n}\n"
+    - pattern: |
+        select {
+        case <-ctx.Done():
+            $BODY
+        case <-time.After(...):
+            $BODY
+        }
+    - pattern: |
+        $T := time.NewTicker(...)
+        ...
+        select {
+        case <-ctx.Done():
+            $BODY
+        case <-$T.C:
+            $BODY
+        }
   message: ctx.Done() and time.After/time.NewTicker
   languages:
   - go

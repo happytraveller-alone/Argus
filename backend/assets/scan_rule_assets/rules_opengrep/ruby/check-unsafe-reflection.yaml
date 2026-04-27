@@ -3,42 +3,31 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: 'cookies[...]
-
-        '
+    - pattern: |
+        cookies[...]
     - patterns:
-      - pattern: 'cookies. ... .$PROPERTY[...]
-
-          '
+      - pattern: |
+          cookies. ... .$PROPERTY[...]
       - metavariable-regex:
           metavariable: $PROPERTY
           regex: (?!signed|encrypted)
-    - pattern: 'params[...]
-
-        '
-    - pattern: 'request.env[...]
-
-        '
+    - pattern: |
+        params[...]
+    - pattern: |
+        request.env[...]
   pattern-sinks:
   - patterns:
     - pattern: $X
     - pattern-either:
-      - pattern-inside: '$X.constantize
-
-          '
-      - pattern-inside: '$X. ... .safe_constantize
-
-          '
-      - pattern-inside: 'const_get(...)
-
-          '
-      - pattern-inside: 'qualified_const_get(...)
-
-          '
-  message: Found user-controllable input to Ruby reflection functionality. This allows
-    a remote user to influence runtime behavior, up to and including arbitrary remote
-    code execution. Do not provide user-controllable input to reflection functionality.
-    Do not call symbol conversion on user-controllable input.
+      - pattern-inside: |
+          $X.constantize
+      - pattern-inside: |
+          $X. ... .safe_constantize
+      - pattern-inside: |
+          const_get(...)
+      - pattern-inside: |
+          qualified_const_get(...)
+  message: Found user-controllable input to Ruby reflection functionality. This allows a remote user to influence runtime behavior, up to and including arbitrary remote code execution. Do not provide user-controllable input to reflection functionality. Do not call symbol conversion on user-controllable input.
   languages:
   - ruby
   severity: ERROR

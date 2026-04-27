@@ -2,11 +2,9 @@ rules:
 - id: scala_xxe_rule-Trans
   languages:
   - scala
-  message: 'XML External Entity (XXE) attacks can occur when an XML parser supports XML
-
+  message: |
+    XML External Entity (XXE) attacks can occur when an XML parser supports XML
     entities while processing XML received from an untrusted source.
-
-    '
   metadata:
     category: security
     cwe: CWE-611
@@ -22,22 +20,20 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'import javax.xml.transform._
-
-          ...'
-      - pattern-inside: 'import javax.xml.transform.Transformer
-
-          ...'
+      - pattern-inside: |-
+          import javax.xml.transform._
+          ...
+      - pattern-inside: |-
+          import javax.xml.transform.Transformer
+          ...
     - pattern: $FACT.newTransformer
   severity: ERROR
 - id: scala_xxe_rule-Trans_1
   languages:
   - scala
-  message: 'XML External Entity (XXE) attacks can occur when an XML parser supports XML
-
+  message: |
+    XML External Entity (XXE) attacks can occur when an XML parser supports XML
     entities while processing XML received from an untrusted source.
-
-    '
   metadata:
     category: security
     cwe: CWE-611
@@ -53,11 +49,11 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'import javax.xml.transform._
-
-          ...'
-      - pattern-inside: 'import javax.xml.transform.Transformer
-
-          ...'
+      - pattern-inside: |-
+          import javax.xml.transform._
+          ...
+      - pattern-inside: |-
+          import javax.xml.transform.Transformer
+          ...
     - pattern: $FACT.newTransformer
   severity: ERROR

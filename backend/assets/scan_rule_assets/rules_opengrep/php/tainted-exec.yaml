@@ -16,8 +16,7 @@ rules:
   - pattern: proc_open(...)
   pattern-sanitizers:
   - pattern: escapeshellarg(...)
-  message: Executing non-constant commands. This can lead to command injection. You
-    should use `escapeshellarg()` when using command.
+  message: Executing non-constant commands. This can lead to command injection. You should use `escapeshellarg()` when using command.
   metadata:
     cwe:
     - 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'

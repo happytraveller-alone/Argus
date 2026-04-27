@@ -3,14 +3,12 @@ rules:
   languages:
   - php
   severity: ERROR
-  message: Authentication and authorization checks are often implemented in  "beforeAction"
-    functions in Yii framework. When an authentication or authorization check is failed,
-    the user is usually redirected to  a login page or to an exception one. The "beforeAction
-    must return  "false" also if the user is redirected, otherwise the code protected  by
-    the "beforeAction" function is executed before the redirection,  posing a secrious
-    security risk.
+  message: Authentication and authorization checks are often implemented in  "beforeAction" functions in Yii framework. When an authentication or authorization check is failed, the user is usually redirected to  a login page or to an exception one. The "beforeAction must return  "false" also if the user is redirected, otherwise the code protected  by the "beforeAction" function is executed before the redirection,  posing a secrious security risk.
   patterns:
-  - pattern-inside: "function beforeAction(...) {\n  ...\n}\n"
+  - pattern-inside: |
+      function beforeAction(...) {
+        ...
+      }
   - patterns:
     - pattern: return <... $REDIRECT ...>;
     - metavariable-regex:

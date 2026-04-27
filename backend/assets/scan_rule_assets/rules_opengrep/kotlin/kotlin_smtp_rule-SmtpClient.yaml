@@ -2,20 +2,13 @@ rules:
 - id: kotlin_smtp_rule-SmtpClient
   languages:
   - kotlin
-  message: 'Simple Mail Transfer Protocol (SMTP) is a the text based protocol used
-    for
-
+  message: |
+    Simple Mail Transfer Protocol (SMTP) is a the text based protocol used for
     email delivery. Like with HTTP, headers are separate by new line separator. If
-
     kuser input is place in a header line, the application should remove or replace
-
     new line characters (CR / LF). You should use a safe wrapper such as Apache
-
     Common Email and Simple Java Mail which filter special characters that can lead
-
     to header injection.
-
-    '
   metadata:
     shortDescription: Improper neutralization of special elements used in a command
     category: security
@@ -26,11 +19,9 @@ rules:
     security-severity: CRITICAL
   severity: ERROR
   patterns:
-  - pattern-inside: '$M = MimeMessage(...);
-
+  - pattern-inside: |
+      $M = MimeMessage(...);
       ...
-
-      '
   - pattern-either:
     - patterns:
       - pattern-either:

@@ -1,15 +1,18 @@
 rules:
 - id: vuln-slurm-351669e7
-  pattern: "if (memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {\n  ...\n}\n"
-  pattern-not: "if ($MSG->io_key_len != $SIG_LEN ||\n    memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {\n\
-    \  ...\n}\n"
+  pattern: |
+    if (memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
+      ...
+    }
+  pattern-not: |
+    if ($MSG->io_key_len != $SIG_LEN ||
+        memcmp((void *) $SIG, (void *) $MSG->io_key, $MSG->io_key_len)) {
+      ...
+    }
   languages:
   - c
-  message: 'The code performs a memory comparison without first checking the length of the input, which can lead to buffer
-    overflows or incorrect validation. This vulnerability was fixed by adding a length check before the `memcmp` call. Always
-    validate input lengths before performing memory comparisons to ensure safe handling of buffers.
-
-    '
+  message: |
+    The code performs a memory comparison without first checking the length of the input, which can lead to buffer overflows or incorrect validation. This vulnerability was fixed by adding a length check before the `memcmp` call. Always validate input lengths before performing memory comparisons to ensure safe handling of buffers.
   severity: ERROR
   metadata:
     source-url: github.com/SchedMD/slurm/commit/351669e7db3b5bc84b5791dc3626d683b8abe18e
@@ -23,19 +26,14 @@ rules:
     technology:
     - c
 - id: vuln-slurm-5ac031b2
-  pattern: 'info("Warning: Unable to assume uid=%u", $UID);
-
-    '
-  pattern-not: 'fatal("Unable to assume uid=%u", $UID);
-
-    '
+  pattern: |
+    info("Warning: Unable to assume uid=%u", $UID);
+  pattern-not: |
+    fatal("Unable to assume uid=%u", $UID);
   languages:
   - c
-  message: 'The code uses `info()` instead of `fatal()` to handle failure in assuming a user ID, which can lead to continued
-    execution with incorrect privileges. This is dangerous because it may allow unauthorized access or privilege escalation.
-    Replace `info()` with `fatal()` to ensure the program terminates when it cannot assume the specified user ID.
-
-    '
+  message: |
+    The code uses `info()` instead of `fatal()` to handle failure in assuming a user ID, which can lead to continued execution with incorrect privileges. This is dangerous because it may allow unauthorized access or privilege escalation. Replace `info()` with `fatal()` to ensure the program terminates when it cannot assume the specified user ID.
   severity: ERROR
   metadata:
     source-url: github.com/SchedMD/slurm/commit/5ac031b2ef5462f6e8e47dad0247bd474614c118
@@ -47,17 +45,20 @@ rules:
     technology:
     - c
 - id: vuln-slurm-750cc23e
-  pattern: "void *slurm_xmalloc(size_t $SIZE, bool $CLEAR, ...) {\n  ...\n}\n"
-  pattern-not: "void *slurm_xmalloc(uint64_t $SIZE, bool $CLEAR, ...) {\n  if ($SIZE > 0xffffffff)\n    fatal(\"attempt at\
-    \ overflow\");\n  ...\n}\n"
+  pattern: |
+    void *slurm_xmalloc(size_t $SIZE, bool $CLEAR, ...) {
+      ...
+    }
+  pattern-not: |
+    void *slurm_xmalloc(uint64_t $SIZE, bool $CLEAR, ...) {
+      if ($SIZE > 0xffffffff)
+        fatal("attempt at overflow");
+      ...
+    }
   languages:
   - c
-  message: 'The function `slurm_xmalloc` uses `size_t` for the size parameter, which can lead to integer overflow vulnerabilities.
-    This is dangerous because it can result in memory allocation of an incorrect size, potentially leading to buffer overflows
-    or other memory corruption issues. The fix changes the type to `uint64_t` and adds a check to prevent overflow. To fix
-    this, ensure the size parameter is of a type that can handle large values and add bounds checking to prevent overflow.
-
-    '
+  message: |
+    The function `slurm_xmalloc` uses `size_t` for the size parameter, which can lead to integer overflow vulnerabilities. This is dangerous because it can result in memory allocation of an incorrect size, potentially leading to buffer overflows or other memory corruption issues. The fix changes the type to `uint64_t` and adds a check to prevent overflow. To fix this, ensure the size parameter is of a type that can handle large values and add bounds checking to prevent overflow.
   severity: ERROR
   metadata:
     source-url: https://github.com/SchedMD/slurm/commit/750cc23edcc6fddfff21d33bdaf4fb7deb28cfda
@@ -69,24 +70,16 @@ rules:
     technology:
     - c
 - id: vuln-slurm-7e4e8a77
-  pattern: 'uint32_t $VAR;
-
+  pattern: |
+    uint32_t $VAR;
     unpackstr_xmalloc((char **) $OBJ, &$VAR, $BUF);
-
-    '
-  pattern-not: 'safe_unpackstr((char **) $OBJ, $BUF);
-
+  pattern-not: |
+    safe_unpackstr((char **) $OBJ, $BUF);
     return $SUCCESS;
-
-    '
   languages:
   - c
-  message: 'The use of `unpackstr_xmalloc` with an uninitialized `uint32_t` variable can lead to undefined behavior or memory
-    corruption. This function attempts to read a string from a buffer, but the size parameter is uninitialized, which can
-    result in incorrect memory allocation or access. The fix replaces this with `safe_unpackstr`, which handles the string
-    extraction safely and correctly. Always ensure that variables used in memory operations are properly initialized and validated.
-
-    '
+  message: |
+    The use of `unpackstr_xmalloc` with an uninitialized `uint32_t` variable can lead to undefined behavior or memory corruption. This function attempts to read a string from a buffer, but the size parameter is uninitialized, which can result in incorrect memory allocation or access. The fix replaces this with `safe_unpackstr`, which handles the string extraction safely and correctly. Always ensure that variables used in memory operations are properly initialized and validated.
   severity: ERROR
   metadata:
     source-url: github.com/SchedMD/slurm/commit/7e4e8a77c97bcdc5fa2803762f25318f40107ed4
@@ -97,17 +90,17 @@ rules:
     technology:
     - c
 - id: vuln-slurm-b30e9e9e
-  pattern: "if ($JOB_ENV->spank_job_env_size) {\n  env_array_merge_spank(&$ENV, (const char **) $JOB_ENV->spank_job_env);\n\
-    }\n"
-  pattern-not: "if ($JOB_ENV->spank_job_env_size)\n  env_array_merge(&$ENV, (const char **) $JOB_ENV->spank_job_env);\n"
+  pattern: |
+    if ($JOB_ENV->spank_job_env_size) {
+      env_array_merge_spank(&$ENV, (const char **) $JOB_ENV->spank_job_env);
+    }
+  pattern-not: |
+    if ($JOB_ENV->spank_job_env_size)
+      env_array_merge(&$ENV, (const char **) $JOB_ENV->spank_job_env);
   languages:
   - c
-  message: 'The function `env_array_merge_spank` was incorrectly used instead of `env_array_merge` to handle job environment
-    variables. This could lead to improper handling of environment variables, potentially causing security vulnerabilities
-    or unexpected behavior. The issue was fixed by replacing `env_array_merge_spank` with `env_array_merge`. Ensure that the
-    correct function is used for merging environment variables.
-
-    '
+  message: |
+    The function `env_array_merge_spank` was incorrectly used instead of `env_array_merge` to handle job environment variables. This could lead to improper handling of environment variables, potentially causing security vulnerabilities or unexpected behavior. The issue was fixed by replacing `env_array_merge_spank` with `env_array_merge`. Ensure that the correct function is used for merging environment variables.
   severity: ERROR
   metadata:
     source-url: github.com/SchedMD/slurm/commit/b30e9e9ee2ade6951bfaf28e15ef77325a206971
@@ -118,17 +111,20 @@ rules:
     technology:
     - c
 - id: vuln-slurm-bfda1aa8
-  pattern: "if (!is_admin && (slurm_conf.private_data & PRIVATE_DATA_JOBS)) {\n  ...\n}\n"
-  pattern-not: "if (!is_admin && ((slurm_conf.private_data & PRIVATE_DATA_JOBS) ||\n                  (job_cond->flags & JOBCOND_FLAG_SCRIPT)\
-    \ ||\n                  (job_cond->flags & JOBCOND_FLAG_ENV))) {\n  ...\n}\n"
+  pattern: |
+    if (!is_admin && (slurm_conf.private_data & PRIVATE_DATA_JOBS)) {
+      ...
+    }
+  pattern-not: |
+    if (!is_admin && ((slurm_conf.private_data & PRIVATE_DATA_JOBS) ||
+                      (job_cond->flags & JOBCOND_FLAG_SCRIPT) ||
+                      (job_cond->flags & JOBCOND_FLAG_ENV))) {
+      ...
+    }
   languages:
   - c
-  message: 'The access control check in the code is incomplete, potentially allowing unauthorized access to job-related data.
-    The original condition only checks for admin privileges and the private data flag, but it does not account for additional
-    job condition flags (JOBCOND_FLAG_SCRIPT and JOBCOND_FLAG_ENV). This can lead to information disclosure or unauthorized
-    access. To fix this, ensure the condition includes checks for all relevant job condition flags.
-
-    '
+  message: |
+    The access control check in the code is incomplete, potentially allowing unauthorized access to job-related data. The original condition only checks for admin privileges and the private data flag, but it does not account for additional job condition flags (JOBCOND_FLAG_SCRIPT and JOBCOND_FLAG_ENV). This can lead to information disclosure or unauthorized access. To fix this, ensure the condition includes checks for all relevant job condition flags.
   severity: ERROR
   metadata:
     source-url: https://github.com/SchedMD/slurm/commit/bfda1aa87885cfa0aac96092c29b4733492efb54

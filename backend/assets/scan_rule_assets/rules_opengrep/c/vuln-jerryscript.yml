@@ -1,18 +1,25 @@
 rules:
 - id: vuln-jerryscript-1230d453
-  pattern: "#if ENABLED (JERRY_ES2015)\n    if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)\n    {\n      $CONTEXT_P->token.type\
-    \ = LEXER_MULTIPLY;\n    }\n#endif /* ENABLED (JERRY_ES2015) */\n"
-  pattern-not: "#if ENABLED (JERRY_ES2015)\n    if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)\n    {\n      $CONTEXT_P->token.type\
-    \ = LEXER_MULTIPLY;\n      lexer_consume_next_character ($CONTEXT_P);\n      return;\n    }\n#endif /* ENABLED (JERRY_ES2015)\
-    \ */\n"
+  pattern: |
+    #if ENABLED (JERRY_ES2015)
+        if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
+        {
+          $CONTEXT_P->token.type = LEXER_MULTIPLY;
+        }
+    #endif /* ENABLED (JERRY_ES2015) */
+  pattern-not: |
+    #if ENABLED (JERRY_ES2015)
+        if ($CONTEXT_P->source_p[0] == LIT_CHAR_ASTERISK)
+        {
+          $CONTEXT_P->token.type = LEXER_MULTIPLY;
+          lexer_consume_next_character ($CONTEXT_P);
+          return;
+        }
+    #endif /* ENABLED (JERRY_ES2015) */
   languages:
   - c
-  message: 'The vulnerability arises from missing a critical call to `lexer_consume_next_character` and a `return` statement
-    after setting the token type to `LEXER_MULTIPLY`. This can lead to incorrect parsing behavior and potential security issues
-    in the lexer. To fix this, ensure that `lexer_consume_next_character` is called and the function returns immediately after
-    setting the token type.
-
-    '
+  message: |
+    The vulnerability arises from missing a critical call to `lexer_consume_next_character` and a `return` statement after setting the token type to `LEXER_MULTIPLY`. This can lead to incorrect parsing behavior and potential security issues in the lexer. To fix this, ensure that `lexer_consume_next_character` is called and the function returns immediately after setting the token type.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/1230d4532c215abe8679a3c6ecda6152c502ae60
@@ -26,24 +33,27 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-392ee717
-  pattern: 'ecma_value_t $VAR = ECMA_VALUE_EMPTY;
-
+  pattern: |
+    ecma_value_t $VAR = ECMA_VALUE_EMPTY;
     ECMA_TRY_CATCH($VAR1, $VAR2, $VAR);
-
     ...
-
     ECMA_FINALIZE($VAR1);
-
     return $VAR;
-
-    '
-  pattern-not: "ecma_value_t $VAR = $FUNC($ARGS);\nif (ECMA_IS_VALUE_ERROR($VAR))\n{\n  return $VAR;\n}\n...\nreturn $RESULT;\n"
+  pattern-not: |
+    ecma_value_t $VAR = $FUNC($ARGS);
+    if (ECMA_IS_VALUE_ERROR($VAR))
+    {
+      return $VAR;
+    }
+    ...
+    return $RESULT;
   languages:
   - c
-  message: "Found use of ECMA_TRY_CATCH/ECMA_FINALIZE macros for error handling instead of direct error checking. \nThis pattern\
-    \ can lead to resource leaks and improper error handling. \nInstead, directly check for errors using ECMA_IS_VALUE_ERROR\
-    \ and handle them immediately.\nThe fix involves replacing the macro-based error handling with direct error checking and\
-    \ proper resource cleanup.\n"
+  message: |
+    Found use of ECMA_TRY_CATCH/ECMA_FINALIZE macros for error handling instead of direct error checking.
+    This pattern can lead to resource leaks and improper error handling.
+    Instead, directly check for errors using ECMA_IS_VALUE_ERROR and handle them immediately.
+    The fix involves replacing the macro-based error handling with direct error checking and proper resource cleanup.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/392ee717128f6daaf0b94e54fc9512eb26d680e2
@@ -57,19 +67,14 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-42523bd6
-  pattern: 'ecma_raise_standard_error($ERROR_TYPE, ecma_get_error_msg($MSG))
-
-    '
-  pattern-not: 'ecma_raise_standard_error($ERROR_TYPE, $MSG)
-
-    '
+  pattern: |
+    ecma_raise_standard_error($ERROR_TYPE, ecma_get_error_msg($MSG))
+  pattern-not: |
+    ecma_raise_standard_error($ERROR_TYPE, $MSG)
   languages:
   - c
-  message: 'The code directly passes a string message to ecma_raise_standard_error, which can lead to potential security vulnerabilities.
-    Instead, it should use predefined error codes from ecma_errors.h. This ensures consistent error handling and reduces the
-    risk of injection attacks or memory corruption.
-
-    '
+  message: |
+    The code directly passes a string message to ecma_raise_standard_error, which can lead to potential security vulnerabilities. Instead, it should use predefined error codes from ecma_errors.h. This ensures consistent error handling and reduces the risk of injection attacks or memory corruption.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/42523bd6e2b114755498c9f68fd78545f9b33476
@@ -81,43 +86,26 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-4e8d6344
-  pattern: 'JMEM_DEFINE_LOCAL_ARRAY($ARRAY, $LENGTH * $ELEMENT_SIZE, lit_utf8_byte_t);
-
+  pattern: |
+    JMEM_DEFINE_LOCAL_ARRAY($ARRAY, $LENGTH * $ELEMENT_SIZE, lit_utf8_byte_t);
     lit_utf8_byte_t *$PASS_VALUE = $ARRAY;
-
     ...
-
     memcpy($PASS_VALUE, $BUFFER + $BYTE_POS, $ELEMENT_SIZE);
-
     $PASS_VALUE += $ELEMENT_SIZE;
-
     ...
-
     memcpy($TARGET_BUFFER, $ARRAY, ($PASS_VALUE - $ARRAY));
-
-    '
-  pattern-not: 'ecma_collection_t *$COLLECTION = ecma_new_collection();
-
+  pattern-not: |
+    ecma_collection_t *$COLLECTION = ecma_new_collection();
     ...
-
     ecma_collection_push_back($COLLECTION, $VALUE);
-
     ...
-
     ecma_typedarray_setter_fn_t $SETTER = ecma_get_typedarray_setter_fn($TARGET_INFO.id);
-
     ...
-
     $SETTER($TARGET_BUFFER + $TARGET_BYTE_INDEX, $COLLECTION->buffer_p[$IDX]);
-
-    '
   languages:
   - c
-  message: 'Detected unsafe memory handling in TypedArray operations. The original code uses direct memory copies and pointer
-    arithmetic, which can lead to buffer overflows or memory corruption. The fix replaces this with a safer collection-based
-    approach using setter functions. To fix this, use the collection-based pattern shown in the patch.
-
-    '
+  message: |
+    Detected unsafe memory handling in TypedArray operations. The original code uses direct memory copies and pointer arithmetic, which can lead to buffer overflows or memory corruption. The fix replaces this with a safer collection-based approach using setter functions. To fix this, use the collection-based pattern shown in the patch.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/4e8d6344a8b5cf8f00bd3d5e869147af06d0189e
@@ -129,35 +117,23 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-841d536f
-  pattern: 'ecma_property_value_t *$PROP_VALUE;
-
+  pattern: |
+    ecma_property_value_t *$PROP_VALUE;
     $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
-
     $PROP_VALUE->value = ecma_make_object_value($OBJ);
-
     ecma_deref_object($OBJ);
-
-    '
-  pattern-not: 'ecma_property_value_t *$PROP_VALUE;
-
+  pattern-not: |
+    ecma_property_value_t *$PROP_VALUE;
     $PROP_VALUE = ecma_create_named_data_property($LEX_ENV, $NAME, $FLAGS, NULL);
-
     $PROP_VALUE->value = $RESULT;
-
     ecma_deref_object(ecma_get_object_from_value($RESULT));
-
-    '
   languages:
   - c
-  message: 'Detected unsafe handling of ecma_property_value_t without proper return value management.
-
+  message: |
+    Detected unsafe handling of ecma_property_value_t without proper return value management.
     This can lead to memory leaks or undefined behavior when the object is dereferenced.
-
     The fix ensures that the return value from ecma_op_create_arguments_object is properly managed
-
     and freed using ecma_free_value.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/841d536fce1ce29267cdf0ea12be4026e1c35d3a
@@ -169,18 +145,22 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-908240ba
-  pattern: 'return ecma_proxy_object_own_property_keys($OBJ);
-
-    '
-  pattern-not: "$PROXY_KEYS = ecma_proxy_object_own_property_keys($OBJ);\nif (JERRY_UNLIKELY ($PROXY_KEYS == NULL))\n{\n \
-    \ return $PROXY_KEYS;\n}\n$RETURN_KEYS = ecma_new_collection();\n...\necma_collection_destroy($PROXY_KEYS);\nreturn $RETURN_KEYS;\n"
+  pattern: |
+    return ecma_proxy_object_own_property_keys($OBJ);
+  pattern-not: |
+    $PROXY_KEYS = ecma_proxy_object_own_property_keys($OBJ);
+    if (JERRY_UNLIKELY ($PROXY_KEYS == NULL))
+    {
+      return $PROXY_KEYS;
+    }
+    $RETURN_KEYS = ecma_new_collection();
+    ...
+    ecma_collection_destroy($PROXY_KEYS);
+    return $RETURN_KEYS;
   languages:
   - c
-  message: 'Directly returning the result of `ecma_proxy_object_own_property_keys` without checking for NULL or processing
-    the keys can lead to memory leaks and undefined behavior. The patch adds proper NULL checking and key processing to ensure
-    safe handling of the proxy keys. Always validate and process the returned collection before using it.
-
-    '
+  message: |
+    Directly returning the result of `ecma_proxy_object_own_property_keys` without checking for NULL or processing the keys can lead to memory leaks and undefined behavior. The patch adds proper NULL checking and key processing to ensure safe handling of the proxy keys. Always validate and process the returned collection before using it.
   severity: ERROR
   metadata:
     source-url: https://github.com/jerryscript-project/jerryscript/commit/908240ba6223fb54e72c2ab85c3765db3492a968
@@ -193,16 +173,27 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-d06c3a7f
-  pattern: "ecma_value_t $RESULT = ECMA_VALUE_EMPTY;\n...\n$RESULT = $FUNC($ARG);\n...\nif (!ecma_is_value_empty ($RESULT))\
-    \ {\n  ...\n  if (ECMA_IS_VALUE_ERROR ($RESULT)) {\n    return $RESULT;\n  }\n  ...\n}\n"
-  pattern-not: "ecma_value_t $RESULT = $FUNC($ARG);\nif (ECMA_IS_VALUE_ERROR ($RESULT)) {\n  return $RESULT;\n}\n"
+  pattern: |
+    ecma_value_t $RESULT = ECMA_VALUE_EMPTY;
+    ...
+    $RESULT = $FUNC($ARG);
+    ...
+    if (!ecma_is_value_empty ($RESULT)) {
+      ...
+      if (ECMA_IS_VALUE_ERROR ($RESULT)) {
+        return $RESULT;
+      }
+      ...
+    }
+  pattern-not: |
+    ecma_value_t $RESULT = $FUNC($ARG);
+    if (ECMA_IS_VALUE_ERROR ($RESULT)) {
+      return $RESULT;
+    }
   languages:
   - c
-  message: 'The code incorrectly checks for errors after modifying the result value, which can lead to undefined behavior
-    or security vulnerabilities. The error check should be performed immediately after the function call to ensure proper
-    error handling. Fix this by checking for errors directly after the function call and handling them appropriately.
-
-    '
+  message: |
+    The code incorrectly checks for errors after modifying the result value, which can lead to undefined behavior or security vulnerabilities. The error check should be performed immediately after the function call to ensure proper error handling. Fix this by checking for errors directly after the function call and handling them appropriately.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/d06c3a7f5090034054d03d2d18f8cc1d2fd6bead
@@ -214,19 +205,29 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-da5b058d
-  pattern: "if ($MODE == NUMBER_ROUTINE_TO_PRECISION\n    && ($ARG_NUM < 1 || $ARG_NUM > 100))\n{\n  return ecma_raise_range_error($MSG);\n\
-    }\n"
-  pattern-not: "if ($MODE == NUMBER_ROUTINE_TO_FIXED\n    && ($ARG_NUM <= -1 || $ARG_NUM >= 101))\n{\n  ecma_stringbuilder_destroy(&$BUILDER);\n\
-    \  return ecma_raise_range_error($MSG);\n}\nelse if ($MODE == NUMBER_ROUTINE_TO_PRECISION\n        && ($ARG_NUM < 1 ||\
-    \ $ARG_NUM > 100))\n{\n  ecma_stringbuilder_destroy(&$BUILDER);\n  return ecma_raise_range_error($MSG);\n}\n"
+  pattern: |
+    if ($MODE == NUMBER_ROUTINE_TO_PRECISION
+        && ($ARG_NUM < 1 || $ARG_NUM > 100))
+    {
+      return ecma_raise_range_error($MSG);
+    }
+  pattern-not: |
+    if ($MODE == NUMBER_ROUTINE_TO_FIXED
+        && ($ARG_NUM <= -1 || $ARG_NUM >= 101))
+    {
+      ecma_stringbuilder_destroy(&$BUILDER);
+      return ecma_raise_range_error($MSG);
+    }
+    else if ($MODE == NUMBER_ROUTINE_TO_PRECISION
+            && ($ARG_NUM < 1 || $ARG_NUM > 100))
+    {
+      ecma_stringbuilder_destroy(&$BUILDER);
+      return ecma_raise_range_error($MSG);
+    }
   languages:
   - c
-  message: 'The code lacks proper boundary checks for the `toFixed` method, which can lead to incorrect or unsafe behavior.
-    Specifically, the `toFixed` method should validate that the argument is within the range of 0 to 100. Without this check,
-    invalid inputs can cause unexpected behavior or errors. The fix includes adding a boundary check for the `toFixed` method
-    and ensuring proper cleanup with `ecma_stringbuilder_destroy`.
-
-    '
+  message: |
+    The code lacks proper boundary checks for the `toFixed` method, which can lead to incorrect or unsafe behavior. Specifically, the `toFixed` method should validate that the argument is within the range of 0 to 100. Without this check, invalid inputs can cause unexpected behavior or errors. The fix includes adding a boundary check for the `toFixed` method and ensuring proper cleanup with `ecma_stringbuilder_destroy`.
   severity: ERROR
   metadata:
     source-url: github.com/galpeter/jerryscript/commit/da5b058decd93c8a067068018ec8c242ab16b39d
@@ -240,21 +241,20 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-dbba83fe
-  pattern: "if (!ecma_is_value_object ($TYPEDARRAY))\n  return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_OBJECT);\n"
-  pattern-not: "if (!ecma_is_typedarray ($TYPEDARRAY))\n  return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_TYPED_ARRAY);\n"
+  pattern: |
+    if (!ecma_is_value_object ($TYPEDARRAY))
+      return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_OBJECT);
+  pattern-not: |
+    if (!ecma_is_typedarray ($TYPEDARRAY))
+      return ecma_raise_type_error (ECMA_ERR_ARGUMENT_THIS_NOT_TYPED_ARRAY);
   languages:
   - c
-  message: 'The code incorrectly checks if a value is an object instead of a typed array,
-
+  message: |
+    The code incorrectly checks if a value is an object instead of a typed array,
     which can lead to incorrect type validation and potential security issues.
-
     This vulnerability can cause improper handling of typed arrays, leading to
-
     undefined behavior or type errors. To fix this, use `ecma_is_typedarray` to
-
     correctly validate typed arrays.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/dbba83fe4022382eede89d9dd36e8ffbfb1b2316
@@ -266,15 +266,23 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-e1ce7dd7
-  pattern: "if ($ARRAY_LENGTH > ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))\n{\n  return ecma_raise_range_error($ERROR_MSG);\n}\n\
-    uint32_t $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;\n"
-  pattern-not: "if ($ARRAY_LENGTH <= ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))\n{\n  $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;\n\
-    }\n"
+  pattern: |
+    if ($ARRAY_LENGTH > ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
+    {
+      return ecma_raise_range_error($ERROR_MSG);
+    }
+    uint32_t $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
+  pattern-not: |
+    if ($ARRAY_LENGTH <= ($UINT32_MAX >> $ELEMENT_SIZE_SHIFT))
+    {
+      $BYTE_LENGTH = $ARRAY_LENGTH << $ELEMENT_SIZE_SHIFT;
+    }
   languages:
   - c
-  message: "The code checks for an overflow condition in a TypedArray length calculation but fails to handle it correctly.\
-    \ \nThis can lead to integer overflow and potentially cause memory corruption or unexpected behavior. \nThe fix should\
-    \ include proper bounds checking and error handling for invalid array lengths.\n"
+  message: |
+    The code checks for an overflow condition in a TypedArray length calculation but fails to handle it correctly.
+    This can lead to integer overflow and potentially cause memory corruption or unexpected behavior.
+    The fix should include proper bounds checking and error handling for invalid array lengths.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/e1ce7dd7271288be8c0c8136eea9107df73a8ce2
@@ -286,20 +294,18 @@ rules:
     technology:
     - c
 - id: vuln-jerryscript-ee59c226
-  pattern: "$PROP->value = ECMA_VALUE_UNDEFINED;\nif ($ARGS_COUNT != 0) {\n  $PROP->value = ecma_copy_value_if_not_object($ARGS[0]);\n\
-    }\n"
-  pattern-not: '$ARG = $ARGS_COUNT > 0 ? $ARGS[0] : ECMA_VALUE_UNDEFINED;
-
+  pattern: |
+    $PROP->value = ECMA_VALUE_UNDEFINED;
+    if ($ARGS_COUNT != 0) {
+      $PROP->value = ecma_copy_value_if_not_object($ARGS[0]);
+    }
+  pattern-not: |
+    $ARG = $ARGS_COUNT > 0 ? $ARGS[0] : ECMA_VALUE_UNDEFINED;
     $PROP->value = ecma_copy_value_if_not_object($ARG);
-
-    '
   languages:
   - c
-  message: 'Detected a potential vulnerability where the argument count is not properly checked before accessing the argument
-    array. This can lead to undefined behavior or crashes if the argument array is accessed with an invalid index. The fix
-    involves safely handling the argument by checking the count and using a default value when no arguments are provided.
-
-    '
+  message: |
+    Detected a potential vulnerability where the argument count is not properly checked before accessing the argument array. This can lead to undefined behavior or crashes if the argument array is accessed with an invalid index. The fix involves safely handling the argument by checking the count and using a default value when no arguments are provided.
   severity: ERROR
   metadata:
     source-url: github.com/jerryscript-project/jerryscript/commit/ee59c226d974ceb6cbdf8a3e0c19fafc7ce6f279

@@ -1,12 +1,9 @@
 rules:
 - id: unverified-ssl-context
   pattern: ssl._create_unverified_context(...)
-  message: 'Unverified SSL context detected. This will permit insecure connections
-    without verifying
-
-    SSL certificates. Use ''ssl.create_default_context()'' instead.
-
-    '
+  message: |
+    Unverified SSL context detected. This will permit insecure connections without verifying
+    SSL certificates. Use 'ssl.create_default_context()' instead.
   metadata:
     owasp: 'A6: Security Misconfiguration'
     cwe: 'CWE-295: Improper Certificate Validation'

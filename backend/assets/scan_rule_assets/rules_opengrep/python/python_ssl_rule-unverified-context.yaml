@@ -2,22 +2,49 @@ rules:
 - id: python_ssl_rule-unverified-context
   languages:
   - python
-  message: "The application was found creating a SSL context using the `_create_unverified_context`.\nThis effectively disables\
-    \ the validation of server certificates.\n\nThis allows for an adversary who is in between the application and the target\
-    \ host to intercept\npotentially sensitive information or transmit malicious data.\n\nTo remediate this issue remove the\
-    \ call to `_create_unverified_context` and either create a\ndefault\ncontext using `ssl.create_default_context` or create\
-    \ a context with TLS 1.3.\n\nExample creating a TLS 1.3 client socket connection by using a newer version of Python\n\
-    (3.11.4) and\nthe SSL module:\n```\nimport ssl\nimport socket\n\n# Create our initial socket\nwith socket.socket(socket.AF_INET,\
-    \ socket.SOCK_STREAM) as sock:\n    # Connect the socket\n    sock.connect(('www.example.org', 443))\n\n    # Create a\
-    \ new SSLContext with protocol set to ssl.PROTOCOL_TLS_CLIENT\n    # This will auto-select the highest grade TLS protocol\
-    \ version (1.3)\n    context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)\n    # Load our a certificates for server\
-    \ certificate authentication\n    context.load_verify_locations('cert.pem')\n    # Create our TLS socket, and validate\
-    \ the server hostname matches\n    with context.wrap_socket(sock, server_hostname=\"www.example.org\") as tls_sock:\n\
-    \        # Send some bytes over the socket (HTTP request in this case)\\\n        data = bytes('GET / HTTP/1.1\\r\\nHost:\
-    \ example.org\\r\\n\\r\\n', 'utf-8')\n        sent_bytes = tls_sock.send(data)\n        # Validate number of sent bytes\n\
-    \        # ...\n        # Read the response\n        resp = tls_sock.recv()\n        # Work with the response\n      \
-    \  # ...\n```\n\nUnverified SSL context detected. This will permit insecure connections without `verifyingSSL`\ncertificates.\
-    \ Use `ssl.create_default_context()` instead.\n"
+  message: |
+    The application was found creating a SSL context using the `_create_unverified_context`.
+    This effectively disables the validation of server certificates.
+
+    This allows for an adversary who is in between the application and the target host to intercept
+    potentially sensitive information or transmit malicious data.
+
+    To remediate this issue remove the call to `_create_unverified_context` and either create a
+    default
+    context using `ssl.create_default_context` or create a context with TLS 1.3.
+
+    Example creating a TLS 1.3 client socket connection by using a newer version of Python
+    (3.11.4) and
+    the SSL module:
+    ```
+    import ssl
+    import socket
+
+    # Create our initial socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # Connect the socket
+        sock.connect(('www.example.org', 443))
+
+        # Create a new SSLContext with protocol set to ssl.PROTOCOL_TLS_CLIENT
+        # This will auto-select the highest grade TLS protocol version (1.3)
+        context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
+        # Load our a certificates for server certificate authentication
+        context.load_verify_locations('cert.pem')
+        # Create our TLS socket, and validate the server hostname matches
+        with context.wrap_socket(sock, server_hostname="www.example.org") as tls_sock:
+            # Send some bytes over the socket (HTTP request in this case)\
+            data = bytes('GET / HTTP/1.1\r\nHost: example.org\r\n\r\n', 'utf-8')
+            sent_bytes = tls_sock.send(data)
+            # Validate number of sent bytes
+            # ...
+            # Read the response
+            resp = tls_sock.recv()
+            # Work with the response
+            # ...
+    ```
+
+    Unverified SSL context detected. This will permit insecure connections without `verifyingSSL`
+    certificates. Use `ssl.create_default_context()` instead.
   metadata:
     cwe: CWE-295
     owasp:
@@ -31,22 +58,49 @@ rules:
 - id: python_ssl_rule-unverified-context_1
   languages:
   - python
-  message: "The application was found creating a SSL context using the `_create_unverified_context`.\nThis effectively disables\
-    \ the validation of server certificates.\n\nThis allows for an adversary who is in between the application and the target\
-    \ host to intercept\npotentially sensitive information or transmit malicious data.\n\nTo remediate this issue remove the\
-    \ call to `_create_unverified_context` and either create a\ndefault\ncontext using `ssl.create_default_context` or create\
-    \ a context with TLS 1.3.\n\nExample creating a TLS 1.3 client socket connection by using a newer version of Python\n\
-    (3.11.4) and\nthe SSL module:\n```\nimport ssl\nimport socket\n\n# Create our initial socket\nwith socket.socket(socket.AF_INET,\
-    \ socket.SOCK_STREAM) as sock:\n    # Connect the socket\n    sock.connect(('www.example.org', 443))\n\n    # Create a\
-    \ new SSLContext with protocol set to ssl.PROTOCOL_TLS_CLIENT\n    # This will auto-select the highest grade TLS protocol\
-    \ version (1.3)\n    context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)\n    # Load our a certificates for server\
-    \ certificate authentication\n    context.load_verify_locations('cert.pem')\n    # Create our TLS socket, and validate\
-    \ the server hostname matches\n    with context.wrap_socket(sock, server_hostname=\"www.example.org\") as tls_sock:\n\
-    \        # Send some bytes over the socket (HTTP request in this case)\\\n        data = bytes('GET / HTTP/1.1\\r\\nHost:\
-    \ example.org\\r\\n\\r\\n', 'utf-8')\n        sent_bytes = tls_sock.send(data)\n        # Validate number of sent bytes\n\
-    \        # ...\n        # Read the response\n        resp = tls_sock.recv()\n        # Work with the response\n      \
-    \  # ...\n```\n\nUnverified SSL context detected. This will permit insecure connections without `verifyingSSL`\ncertificates.\
-    \ Use `ssl.create_default_context()` instead.\n"
+  message: |
+    The application was found creating a SSL context using the `_create_unverified_context`.
+    This effectively disables the validation of server certificates.
+
+    This allows for an adversary who is in between the application and the target host to intercept
+    potentially sensitive information or transmit malicious data.
+
+    To remediate this issue remove the call to `_create_unverified_context` and either create a
+    default
+    context using `ssl.create_default_context` or create a context with TLS 1.3.
+
+    Example creating a TLS 1.3 client socket connection by using a newer version of Python
+    (3.11.4) and
+    the SSL module:
+    ```
+    import ssl
+    import socket
+
+    # Create our initial socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # Connect the socket
+        sock.connect(('www.example.org', 443))
+
+        # Create a new SSLContext with protocol set to ssl.PROTOCOL_TLS_CLIENT
+        # This will auto-select the highest grade TLS protocol version (1.3)
+        context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
+        # Load our a certificates for server certificate authentication
+        context.load_verify_locations('cert.pem')
+        # Create our TLS socket, and validate the server hostname matches
+        with context.wrap_socket(sock, server_hostname="www.example.org") as tls_sock:
+            # Send some bytes over the socket (HTTP request in this case)\
+            data = bytes('GET / HTTP/1.1\r\nHost: example.org\r\n\r\n', 'utf-8')
+            sent_bytes = tls_sock.send(data)
+            # Validate number of sent bytes
+            # ...
+            # Read the response
+            resp = tls_sock.recv()
+            # Work with the response
+            # ...
+    ```
+
+    Unverified SSL context detected. This will permit insecure connections without `verifyingSSL`
+    certificates. Use `ssl.create_default_context()` instead.
   metadata:
     cwe: CWE-295
     owasp:

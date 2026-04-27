@@ -1,20 +1,15 @@
 rules:
 - id: vuln-open5gs-2f8ae91b
-  pattern: 'const char *$VAR[argc];
-
-    '
-  pattern-not: 'const char *$VAR[argc+1];
-
-    '
+  pattern: |
+    const char *$VAR[argc];
+  pattern-not: |
+    const char *$VAR[argc+1];
   languages:
   - c
-  message: 'Detected a potential buffer overflow vulnerability due to insufficient array size.
-
+  message: |
+    Detected a potential buffer overflow vulnerability due to insufficient array size.
     The array size should account for the null-terminator to prevent buffer overflows.
-
     Always ensure the array size is at least argc+1 to safely store all arguments.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/open5gs/open5gs/commit/2f8ae91b0b9467f94f128090c88cae91bd73e008
@@ -26,16 +21,18 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-71a1516b
-  pattern: "if ($VAR->version > $OGS_PFCP_VERSION) {\n  ...\n}\n"
-  pattern-not: "if ($VAR->version != $OGS_PFCP_VERSION) {\n  ...\n}\n"
+  pattern: |
+    if ($VAR->version > $OGS_PFCP_VERSION) {
+      ...
+    }
+  pattern-not: |
+    if ($VAR->version != $OGS_PFCP_VERSION) {
+      ...
+    }
   languages:
   - c
-  message: 'The code uses a greater-than comparison (`>`) to check the version of the PFCP protocol, which is incorrect and
-    can lead to security issues. The correct comparison should be an equality check (`!=`) to ensure compatibility with the
-    exact version. This vulnerability can cause protocol mismatches and potential security vulnerabilities. Replace the `>`
-    comparison with `!=`.
-
-    '
+  message: |
+    The code uses a greater-than comparison (`>`) to check the version of the PFCP protocol, which is incorrect and can lead to security issues. The correct comparison should be an equality check (`!=`) to ensure compatibility with the exact version. This vulnerability can cause protocol mismatches and potential security vulnerabilities. Replace the `>` comparison with `!=`.
   severity: ERROR
   metadata:
     source-url: github.com/open5gs/open5gs/commit/71a1516b0376340d267caa85920cb0a4da261176
@@ -47,23 +44,17 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-9b762158
-  pattern: '$MESSAGE->param.discovery_option.$FIELD
-
-    '
-  pattern-not: '$DISCOVERY_OPTION = $MESSAGE->param.discovery_option;
-
+  pattern: |
+    $MESSAGE->param.discovery_option.$FIELD
+  pattern-not: |
+    $DISCOVERY_OPTION = $MESSAGE->param.discovery_option;
     $DISCOVERY_OPTION->$FIELD
-
-    '
   languages:
   - c
-  message: 'Direct access to discovery_option fields without null check can lead to null pointer dereference.
-
+  message: |
+    Direct access to discovery_option fields without null check can lead to null pointer dereference.
     Always check if discovery_option is not null before accessing its fields.
-
     This vulnerability was fixed in commit 9b762158a6ef3f8c4f3967d04e01d1a13cc9908a.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/open5gs/open5gs/commit/9b762158a6ef3f8c4f3967d04e01d1a13cc9908a
@@ -75,23 +66,17 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-a5010a61
-  pattern: 'ogs_pool_init(&pool, ogs_app()->pool.gtp_node);
-
-    '
-  pattern-not: 'ogs_pool_init(&pool, ogs_app()->pool.nf);
-
-    '
+  pattern: |
+    ogs_pool_init(&pool, ogs_app()->pool.gtp_node);
+  pattern-not: |
+    ogs_pool_init(&pool, ogs_app()->pool.nf);
   languages:
   - c
-  message: 'Detected use of deprecated gtp_node pool initialization. This can lead to
-
+  message: |
+    Detected use of deprecated gtp_node pool initialization. This can lead to
     resource allocation issues as the gtp_node pool is being phased out in favor
-
     of the more general nf pool. Update the code to use the nf pool instead to
-
     ensure proper resource management and future compatibility.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/open5gs/open5gs/commit/a5010a61effce92fe9dfb2cbf8df1f04ddc1de64
@@ -103,16 +88,20 @@ rules:
     technology:
     - c
 - id: vuln-open5gs-c2f6a020
-  pattern: 'ogs_assert($LENGTH == ($POS - $BLK));
-
-    '
-  pattern-not: "if ($LENGTH != ($POS - $BLK)) {\n    ogs_fatal(...);\n    ogs_log_hexdump(...);\n    ogs_assert_if_reached();\n\
-    }\n"
+  pattern: |
+    ogs_assert($LENGTH == ($POS - $BLK));
+  pattern-not: |
+    if ($LENGTH != ($POS - $BLK)) {
+        ogs_fatal(...);
+        ogs_log_hexdump(...);
+        ogs_assert_if_reached();
+    }
   languages:
   - c
-  message: "The code uses `ogs_assert` to validate the length of a TLV block without proper error handling. \nThis can lead\
-    \ to undefined behavior or crashes if the assertion fails. \nInstead, use proper error handling with logging and graceful\
-    \ termination.\n"
+  message: |
+    The code uses `ogs_assert` to validate the length of a TLV block without proper error handling.
+    This can lead to undefined behavior or crashes if the assertion fails.
+    Instead, use proper error handling with logging and graceful termination.
   severity: ERROR
   metadata:
     source-url: github.com/open5gs/open5gs/commit/c2f6a020a7b505e0d55748464406fb9aca062026

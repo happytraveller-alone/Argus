@@ -2,26 +2,18 @@ rules:
 - id: rules_lgpl_javascript_eval_rule-node-deserialize
   patterns:
   - pattern-either:
-    - pattern: 'require(''node-serialize'').unserialize(...)
-
-        '
-    - pattern-inside: '$MOD = require(''node-serialize'')
-
+    - pattern: |
+        require('node-serialize').unserialize(...)
+    - pattern-inside: |
+        $MOD = require('node-serialize')
         ...
-
-        '
-    - pattern-inside: 'import $MOD from ''node-serialize''
-
+    - pattern-inside: |
+        import $MOD from 'node-serialize'
         ...
-
-        '
-  - pattern: '$MOD.unserialize(...)
-
-      '
-  message: 'User controlled data in ''unserialize()'' or ''deserialize()'' function
-    can result in Object Injection or Remote Code Injection.
-
-    '
+  - pattern: |
+      $MOD.unserialize(...)
+  message: |
+    User controlled data in 'unserialize()' or 'deserialize()' function can result in Object Injection or Remote Code Injection.
   languages:
   - typescript
   severity: ERROR

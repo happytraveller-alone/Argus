@@ -2,17 +2,37 @@ rules:
 - id: python_ssh_rule-ssh-nohost-key-verification
   languages:
   - python
-  message: "The application was found to ignore host keys. Host keys are important as\nthey provide assurance that the client\
-    \ can prove that the host is trusted.\nBy ignoring these host keys, it is impossible for the client to validate the\n\
-    connection is to a trusted host.\n\nTo remediate this issue, remove the call to `set_missing_host_key_policy(...)` which\n\
-    sets the host key policy. Instead, load key files using either `load_system_host_keys`\nor `load_host_keys` to only allow\
-    \ known good hosts. By not setting a host key policy\nfor unknown hosts, `paramiko`'s default policy is to use `RejectPolicy`.\n\
-    \nExample configuration connecting to a known, trusted host, and not allowing connections\nto unknown hosts:\n```\nimport\
-    \ paramiko\n\n# Create an SSH client\nwith paramiko.SSHClient() as ssh:\n    # Load the system host keys so we can confirm\
-    \ the\n    # host we are connecting to is legitimate\n    ssh.load_system_host_keys('/home/appuser/.ssh/known_hosts')\n\
-    \n    # Connect to the remote host using our SSH private key\n    ssh.connect(hostname='example.org',\n              \
-    \  port=22,\n                username='appuser',\n                key_filename='/home/appuser/.ssh/private_key')\n```\n\
-    \nFor more information on `set_missing_host_key_policy` see:\n- https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy\n"
+  message: |
+    The application was found to ignore host keys. Host keys are important as
+    they provide assurance that the client can prove that the host is trusted.
+    By ignoring these host keys, it is impossible for the client to validate the
+    connection is to a trusted host.
+
+    To remediate this issue, remove the call to `set_missing_host_key_policy(...)` which
+    sets the host key policy. Instead, load key files using either `load_system_host_keys`
+    or `load_host_keys` to only allow known good hosts. By not setting a host key policy
+    for unknown hosts, `paramiko`'s default policy is to use `RejectPolicy`.
+
+    Example configuration connecting to a known, trusted host, and not allowing connections
+    to unknown hosts:
+    ```
+    import paramiko
+
+    # Create an SSH client
+    with paramiko.SSHClient() as ssh:
+        # Load the system host keys so we can confirm the
+        # host we are connecting to is legitimate
+        ssh.load_system_host_keys('/home/appuser/.ssh/known_hosts')
+
+        # Connect to the remote host using our SSH private key
+        ssh.connect(hostname='example.org',
+                    port=22,
+                    username='appuser',
+                    key_filename='/home/appuser/.ssh/private_key')
+    ```
+
+    For more information on `set_missing_host_key_policy` see:
+    - https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy
   metadata:
     cwe: CWE-322
     category: security
@@ -22,13 +42,10 @@ rules:
     shortDescription: Key exchange without entity authentication
     security-severity: Medium
   patterns:
-  - pattern-inside: '$CLIENT = paramiko.client.SSHClient(...)
-
+  - pattern-inside: |
+      $CLIENT = paramiko.client.SSHClient(...)
       ...
-
       $CLIENT.set_missing_host_key_policy(...)
-
-      '
   - pattern-either:
     - pattern: paramiko.client.AutoAddPolicy
     - pattern: paramiko.client.WarningPolicy
@@ -36,17 +53,37 @@ rules:
 - id: python_ssh_rule-ssh-nohost-key-verification_1
   languages:
   - python
-  message: "The application was found to ignore host keys. Host keys are important as\nthey provide assurance that the client\
-    \ can prove that the host is trusted.\nBy ignoring these host keys, it is impossible for the client to validate the\n\
-    connection is to a trusted host.\n\nTo remediate this issue, remove the call to `set_missing_host_key_policy(...)` which\n\
-    sets the host key policy. Instead, load key files using either `load_system_host_keys`\nor `load_host_keys` to only allow\
-    \ known good hosts. By not setting a host key policy\nfor unknown hosts, `paramiko`'s default policy is to use `RejectPolicy`.\n\
-    \nExample configuration connecting to a known, trusted host, and not allowing connections\nto unknown hosts:\n```\nimport\
-    \ paramiko\n\n# Create an SSH client\nwith paramiko.SSHClient() as ssh:\n    # Load the system host keys so we can confirm\
-    \ the\n    # host we are connecting to is legitimate\n    ssh.load_system_host_keys('/home/appuser/.ssh/known_hosts')\n\
-    \n    # Connect to the remote host using our SSH private key\n    ssh.connect(hostname='example.org',\n              \
-    \  port=22,\n                username='appuser',\n                key_filename='/home/appuser/.ssh/private_key')\n```\n\
-    \nFor more information on `set_missing_host_key_policy` see:\n- https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy\n"
+  message: |
+    The application was found to ignore host keys. Host keys are important as
+    they provide assurance that the client can prove that the host is trusted.
+    By ignoring these host keys, it is impossible for the client to validate the
+    connection is to a trusted host.
+
+    To remediate this issue, remove the call to `set_missing_host_key_policy(...)` which
+    sets the host key policy. Instead, load key files using either `load_system_host_keys`
+    or `load_host_keys` to only allow known good hosts. By not setting a host key policy
+    for unknown hosts, `paramiko`'s default policy is to use `RejectPolicy`.
+
+    Example configuration connecting to a known, trusted host, and not allowing connections
+    to unknown hosts:
+    ```
+    import paramiko
+
+    # Create an SSH client
+    with paramiko.SSHClient() as ssh:
+        # Load the system host keys so we can confirm the
+        # host we are connecting to is legitimate
+        ssh.load_system_host_keys('/home/appuser/.ssh/known_hosts')
+
+        # Connect to the remote host using our SSH private key
+        ssh.connect(hostname='example.org',
+                    port=22,
+                    username='appuser',
+                    key_filename='/home/appuser/.ssh/private_key')
+    ```
+
+    For more information on `set_missing_host_key_policy` see:
+    - https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy
   metadata:
     cwe: CWE-322
     category: security
@@ -56,13 +93,10 @@ rules:
     shortDescription: Key exchange without entity authentication
     security-severity: Medium
   patterns:
-  - pattern-inside: '$CLIENT = paramiko.client.SSHClient(...)
-
+  - pattern-inside: |
+      $CLIENT = paramiko.client.SSHClient(...)
       ...
-
       $CLIENT.set_missing_host_key_policy(...)
-
-      '
   - pattern-either:
     - pattern: paramiko.client.AutoAddPolicy
     - pattern: paramiko.client.WarningPolicy

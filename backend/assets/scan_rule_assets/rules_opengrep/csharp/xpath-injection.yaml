@@ -1,7 +1,6 @@
 rules:
 - id: xpath-injection
-  message: XPath queries are constructed dynamically on user-controlled input. This
-    vulnerability in code could lead to an XPath Injection exploitation.
+  message: XPath queries are constructed dynamically on user-controlled input. This vulnerability in code could lead to an XPath Injection exploitation.
   severity: ERROR
   metadata:
     likelihood: MEDIUM
@@ -9,8 +8,7 @@ rules:
     confidence: MEDIUM
     category: security
     cwe:
-    - 'CWE-643: Improper Neutralization of Data within XPath Expressions (''XPath
-      Injection'')'
+    - 'CWE-643: Improper Neutralization of Data within XPath Expressions (''XPath Injection'')'
     owasp:
     - A03:2021 - Injection
     references:
@@ -26,7 +24,11 @@ rules:
   pattern-sources:
   - pattern-either:
     - pattern: $T $M($INPUT,...) {...}
-    - pattern: "$T $M(...) {\n  ...\n  string $INPUT;\n}\n"
+    - pattern: |
+        $T $M(...) {
+          ...
+          string $INPUT;
+        }
   pattern-sinks:
   - pattern-either:
     - pattern: XPathExpression $EXPR = $NAV.Compile("..." + $INPUT + "...");

@@ -7,43 +7,45 @@ rules:
   patterns:
   - pattern-either:
     - pattern: shutil.copyfileobj($SOURCE, $DESTINATION)
-  - pattern-inside: 'import tarfile
-
+  - pattern-inside: |
+      import tarfile
       ...
-
-      '
   - pattern-either:
-    - pattern-inside: "with tarfile.open($FILE, ...) as $FD:\n  ...\n"
-    - pattern-inside: '$FD = tarfile.open($FILE, ...)
-
+    - pattern-inside: |
+        with tarfile.open($FILE, ...) as $FD:
+          ...
+    - pattern-inside: |
+        $FD = tarfile.open($FILE, ...)
         ...
-
-        '
   - pattern-either:
-    - pattern-inside: "$FILELIST = $FD.getmembers()\n...\nfor $FILENAME in $FILELIST:\n\
-        \  ...\n"
-    - pattern-inside: "for $FILENAME in $FD.getmembers():\n  ...\n"
+    - pattern-inside: |
+        $FILELIST = $FD.getmembers()
+        ...
+        for $FILENAME in $FILELIST:
+          ...
+    - pattern-inside: |
+        for $FILENAME in $FD.getmembers():
+          ...
   - pattern-either:
-    - pattern-inside: "with open($FILENAME.name, ...) as $DESTINATION:\n  ...\n"
-    - pattern-inside: '$DESTINATION = open($FILENAME.name, ...)
-
+    - pattern-inside: |
+        with open($FILENAME.name, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |
+        $DESTINATION = open($FILENAME.name, ...)
         ...
-
-        '
-    - pattern-inside: "$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)\n...\n\
-        with open($DESTINATION_PATH, ...) as $DESTINATION:\n  ...\n"
-    - pattern-inside: '$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
-
+    - pattern-inside: |
+        $DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
         ...
-
+        with open($DESTINATION_PATH, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |
+        $DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
+        ...
         $DESTINATION = open($DESTINATION_PATH, ...)
-
         ...
-
-        '
-    - pattern-inside: '$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
-
-        ...'
+    - pattern-inside: |-
+        $DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
+        ...
   metadata:
     cwe:
     - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'

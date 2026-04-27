@@ -4,13 +4,10 @@ rules:
   - python
   patterns:
   - patterns:
-    - pattern-not-inside: '...
-
-        $ARG = ''...''.format(''...'')
-
+    - pattern-not-inside: |
         ...
-
-        '
+        $ARG = '...'.format('...')
+        ...
     - pattern: subprocess.$FUNC($ARG, ...)
     - pattern-not: subprocess.$FUNC('...', ...)
     - pattern-not: subprocess.$FUNC('...' % '...', ...)
@@ -28,17 +25,12 @@ rules:
     - patterns:
       - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
       - pattern-not: subprocess.$FUNC(..., shell='', ...)
-  message: 'Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
-
+  message: |
+    Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
     spawn the command using a shell process. Doing so propagates current shell settings and
-
     variables,
-
     which makes it much easier for a malicious actor to execute commands. Use `shell=False`
-
     instead.
-
-    '
   metadata:
     cwe: CWE-78
     owasp:
@@ -53,13 +45,10 @@ rules:
   - python
   patterns:
   - patterns:
-    - pattern-not-inside: '...
-
-        $ARG = ''...''.format(''...'')
-
+    - pattern-not-inside: |
         ...
-
-        '
+        $ARG = '...'.format('...')
+        ...
     - pattern: subprocess.$FUNC($ARG, ...)
     - pattern-not: subprocess.$FUNC('...', ...)
     - pattern-not: subprocess.$FUNC('...' % '...', ...)
@@ -77,17 +66,12 @@ rules:
     - patterns:
       - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
       - pattern-not: subprocess.$FUNC(..., shell='', ...)
-  message: 'Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
-
+  message: |
+    Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
     spawn the command using a shell process. Doing so propagates current shell settings and
-
     variables,
-
     which makes it much easier for a malicious actor to execute commands. Use `shell=False`
-
     instead.
-
-    '
   metadata:
     cwe: CWE-78
     owasp:

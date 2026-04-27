@@ -1,18 +1,17 @@
 rules:
 - id: vuln-engine-73db8c77
-  pattern: "for _, $M := range []string{\"password\", \"secret\", \"jointoken\", \"\
-    unlockkey\", \"signingcakey\"} {\n  ...\n}\n"
-  pattern-not: "for _, $M := range $SCRUB {\n  ...\n}\n"
+  pattern: |
+    for _, $M := range []string{"password", "secret", "jointoken", "unlockkey", "signingcakey"} {
+      ...
+    }
+  pattern-not: |
+    for _, $M := range $SCRUB {
+      ...
+    }
   languages:
   - go
-  message: 'Sensitive data fields such as ''password'', ''secret'', ''jointoken'',
-    ''unlockkey'', and ''signingcakey'' are being scrubbed in a hardcoded manner.
-    This approach is risky because it may miss new sensitive fields added in the future.
-    Instead, use a predefined list of sensitive fields (like ''scrub'') to ensure
-    consistent handling of sensitive data across all endpoints. This prevents potential
-    data leaks due to oversight.
-
-    '
+  message: |
+    Sensitive data fields such as 'password', 'secret', 'jointoken', 'unlockkey', and 'signingcakey' are being scrubbed in a hardcoded manner. This approach is risky because it may miss new sensitive fields added in the future. Instead, use a predefined list of sensitive fields (like 'scrub') to ensure consistent handling of sensitive data across all endpoints. This prevents potential data leaks due to oversight.
   severity: ERROR
   metadata:
     source-url: github.com/docker/engine/commit/73db8c77bfb2d0cbdf71ce491f3d3e66c9dd5be6

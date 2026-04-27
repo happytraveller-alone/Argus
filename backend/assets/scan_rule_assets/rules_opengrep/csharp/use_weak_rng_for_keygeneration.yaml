@@ -1,8 +1,6 @@
 rules:
 - id: use_weak_rng_for_keygeneration
-  message: You are using an insecure random number generator (RNG) to create a cryptographic
-    key. System.Random must never be used for cryptographic purposes. Use System.Security.Cryptography.RandomNumberGenerator
-    instead.
+  message: You are using an insecure random number generator (RNG) to create a cryptographic key. System.Random must never be used for cryptographic purposes. Use System.Security.Cryptography.RandomNumberGenerator instead.
   severity: ERROR
   metadata:
     likelihood: HIGH

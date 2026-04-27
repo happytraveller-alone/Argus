@@ -1,24 +1,17 @@
 rules:
 - id: vuln-mono-3e4bd5f6
-  pattern: 'if (!$FILEINFO.Exists)
-
+  pattern: |
+    if (!$FILEINFO.Exists)
     ...
-
-    '
-  pattern-not: 'if (!$FILEINFO.Exists || !ValidFileName($FILENAME))
-
+  pattern-not: |
+    if (!$FILEINFO.Exists || !ValidFileName($FILENAME))
     ...
-
-    '
   languages:
   - csharp
-  message: 'Detected a vulnerability where file existence is checked without validating the file name.
-
+  message: |
+    Detected a vulnerability where file existence is checked without validating the file name.
     This can lead to security issues such as directory traversal or handling of malicious files.
-
     Ensure to validate the file name using a method like ValidFileName before checking file existence.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/mono/mono/commit/3e4bd5f6e0dfc74907b40cdefcf91ee3a791876b
@@ -35,19 +28,14 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-8125ab9c
-  pattern: 'internal bool EnableViewStateMac = false;
-
-    '
-  pattern-not: 'internal bool EnableViewStateMac = true;
-
-    '
+  pattern: |
+    internal bool EnableViewStateMac = false;
+  pattern-not: |
+    internal bool EnableViewStateMac = true;
   languages:
   - csharp
-  message: 'The EnableViewStateMac property is set to false, which disables the Message Authentication Code (MAC) validation
-    for ViewState. This can lead to security vulnerabilities such as tampering with ViewState data. Always set EnableViewStateMac
-    to true to ensure ViewState integrity.
-
-    '
+  message: |
+    The EnableViewStateMac property is set to false, which disables the Message Authentication Code (MAC) validation for ViewState. This can lead to security vulnerabilities such as tampering with ViewState data. Always set EnableViewStateMac to true to ensure ViewState integrity.
   severity: ERROR
   metadata:
     source-url: github.com/mono/mono/commit/8125ab9c2a8c9b0d7da01b6909d54c47344eaa67
@@ -61,21 +49,51 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-b371da6b
-  pattern: "private byte[] ReadClientHelloV2(Stream $RECORD)\n{\n  int $MSGLENGTH = $RECORD.ReadByte();\n  if ($RECORD.CanSeek\
-    \ && ($MSGLENGTH + 1 > $RECORD.Length))\n  {\n    return null;\n  }\n  byte[] $MESSAGE = new byte[$MSGLENGTH];\n  $RECORD.Read($MESSAGE,\
-    \ 0, $MSGLENGTH);\n  ...\n  byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];\n  Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE,\
-    \ 0, $CHALLENGELENGTH);\n  ...\n  if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)\n\
-    \  {\n    ...\n  }\n}\n"
-  pattern-not: "private byte[] ReadClientHelloV2(Stream $RECORD)\n{\n  int $MSGLENGTH = $RECORD.ReadByte();\n  if ($RECORD.CanSeek\
-    \ && ($MSGLENGTH + 1 > $RECORD.Length))\n  {\n    return null;\n  }\n  byte[] $MESSAGE = new byte[$MSGLENGTH];\n  $RECORD.Read($MESSAGE,\
-    \ 0, $MSGLENGTH);\n  ...\n  int $LENGTH = ($CHALLENGELENGTH > 32) ? 32 : $CHALLENGELENGTH;\n  byte[] $CHALLENGE = new\
-    \ byte[$CHALLENGELENGTH];\n  Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);\n  ...\n  if ($CHALLENGELENGTH\
-    \ < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)\n  {\n    ...\n  }\n}\n"
+  pattern: |
+    private byte[] ReadClientHelloV2(Stream $RECORD)
+    {
+      int $MSGLENGTH = $RECORD.ReadByte();
+      if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
+      {
+        return null;
+      }
+      byte[] $MESSAGE = new byte[$MSGLENGTH];
+      $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
+      ...
+      byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
+      Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
+      ...
+      if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
+      {
+        ...
+      }
+    }
+  pattern-not: |
+    private byte[] ReadClientHelloV2(Stream $RECORD)
+    {
+      int $MSGLENGTH = $RECORD.ReadByte();
+      if ($RECORD.CanSeek && ($MSGLENGTH + 1 > $RECORD.Length))
+      {
+        return null;
+      }
+      byte[] $MESSAGE = new byte[$MSGLENGTH];
+      $RECORD.Read($MESSAGE, 0, $MSGLENGTH);
+      ...
+      int $LENGTH = ($CHALLENGELENGTH > 32) ? 32 : $CHALLENGELENGTH;
+      byte[] $CHALLENGE = new byte[$CHALLENGELENGTH];
+      Buffer.BlockCopy($MESSAGE, $OFFSET, $CHALLENGE, 0, $CHALLENGELENGTH);
+      ...
+      if ($CHALLENGELENGTH < 16 || $CIPHERSPECLENGTH == 0 || ($CIPHERSPECLENGTH % 3) != 0)
+      {
+        ...
+      }
+    }
   languages:
   - csharp
-  message: "The vulnerability allows for insufficient validation of challenge length in SSL/TLS ClientHello message processing.\
-    \ \nThis could lead to buffer overflow or incorrect handling of client random data. \nThe fix ensures challenge length\
-    \ is properly constrained to 32 bytes.\n"
+  message: |
+    The vulnerability allows for insufficient validation of challenge length in SSL/TLS ClientHello message processing.
+    This could lead to buffer overflow or incorrect handling of client random data.
+    The fix ensures challenge length is properly constrained to 32 bytes.
   severity: ERROR
   metadata:
     source-url: https://github.com/mono/mono/commit/b371da6b2d68b4cdd0f21d6342af6c42794f998b
@@ -88,19 +106,14 @@ rules:
     technology:
     - csharp
 - id: vuln-mono-c3e088bf
-  pattern: 'new NameValueCollection()
-
-    '
-  pattern-not: 'new NameValueCollection(SecureHashCodeProvider.DefaultInvariant, CaseInsensitiveComparer.DefaultInvariant)
-
-    '
+  pattern: |
+    new NameValueCollection()
+  pattern-not: |
+    new NameValueCollection(SecureHashCodeProvider.DefaultInvariant, CaseInsensitiveComparer.DefaultInvariant)
   languages:
   - csharp
-  message: 'Detected insecure instantiation of NameValueCollection without secure hash code provider and case-insensitive
-    comparer. This can lead to security vulnerabilities such as hash collision attacks. Always use SecureHashCodeProvider.DefaultInvariant
-    and CaseInsensitiveComparer.DefaultInvariant when creating NameValueCollection instances.
-
-    '
+  message: |
+    Detected insecure instantiation of NameValueCollection without secure hash code provider and case-insensitive comparer. This can lead to security vulnerabilities such as hash collision attacks. Always use SecureHashCodeProvider.DefaultInvariant and CaseInsensitiveComparer.DefaultInvariant when creating NameValueCollection instances.
   severity: ERROR
   metadata:
     source-url: github.com/mono/mono/commit/c3e088bf2fc22d66d0f17b74676de366f661c3eb

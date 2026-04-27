@@ -1,20 +1,13 @@
 rules:
 - id: vuln-joplin-9c20d594
-  pattern: 'const disallowedTags = [''script'', ''iframe'', ''frameset'', ''frame'', ''object'', ''base'', ''embed'', ''link'',
-    ''meta''];
-
-    '
-  pattern-not: 'const disallowedTags = [''script'', ''iframe'', ''frameset'', ''frame'', ''object'', ''base'', ''embed'',
-    ''link'', ''meta'', ''noscript''];
-
-    '
+  pattern: |
+    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta'];
+  pattern-not: |
+    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
   languages:
   - typescript
-  message: 'The disallowed tags list in the sanitizeHtml function is missing ''noscript'', which can lead to XSS vulnerabilities.
-    ''noscript'' tags can execute JavaScript in certain browsers when scripts are disabled, making them a potential security
-    risk. To fix this, ensure that ''noscript'' is included in the disallowed tags list.
-
-    '
+  message: |
+    The disallowed tags list in the sanitizeHtml function is missing 'noscript', which can lead to XSS vulnerabilities. 'noscript' tags can execute JavaScript in certain browsers when scripts are disabled, making them a potential security risk. To fix this, ensure that 'noscript' is included in the disallowed tags list.
   severity: ERROR
   metadata:
     source-url: github.com/laurent22/joplin/commit/9c20d5947d1fa4678a8b640792ff3d31224f0adf
@@ -28,21 +21,14 @@ rules:
     technology:
     - typescript
 - id: vuln-joplin-feaecf76
-  pattern: 'const disallowedTags = [''script'', ''iframe'', ''frameset'', ''frame'', ''object'', ''base'', ''embed'', ''link'',
-    ''meta'', ''noscript''];
-
-    '
-  pattern-not: 'const disallowedTags = [''script'', ''iframe'', ''frameset'', ''frame'', ''object'', ''base'', ''embed'',
-    ''link'', ''meta'', ''noscript'', ''button'', ''form'', ''input'', ''select'', ''textarea'', ''option'', ''optgroup''];
-
-    '
+  pattern: |
+    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript'];
+  pattern-not: |
+    const disallowedTags = ['script', 'iframe', 'frameset', 'frame', 'object', 'base', 'embed', 'link', 'meta', 'noscript', 'button', 'form', 'input', 'select', 'textarea', 'option', 'optgroup'];
   languages:
   - typescript
-  message: 'The list of disallowed HTML tags is incomplete, potentially allowing dangerous HTML elements like forms and inputs.
-    This can lead to security vulnerabilities such as XSS or CSRF attacks. Update the list to include additional form-related
-    tags like ''button'', ''form'', ''input'', ''select'', ''textarea'', ''option'', and ''optgroup''.
-
-    '
+  message: |
+    The list of disallowed HTML tags is incomplete, potentially allowing dangerous HTML elements like forms and inputs. This can lead to security vulnerabilities such as XSS or CSRF attacks. Update the list to include additional form-related tags like 'button', 'form', 'input', 'select', 'textarea', 'option', and 'optgroup'.
   severity: ERROR
   metadata:
     source-url: github.com/laurent22/joplin/commit/feaecf765368f2c273bea3a9fa641ff0da7e6b26

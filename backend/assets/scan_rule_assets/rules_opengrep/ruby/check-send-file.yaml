@@ -3,30 +3,23 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: 'cookies[...]
-
-        '
+    - pattern: |
+        cookies[...]
     - patterns:
-      - pattern: 'cookies. ... .$PROPERTY[...]
-
-          '
+      - pattern: |
+          cookies. ... .$PROPERTY[...]
       - metavariable-regex:
           metavariable: $PROPERTY
           regex: (?!signed|encrypted)
-    - pattern: 'params[...]
-
-        '
-    - pattern: 'request.env[...]
-
-        '
+    - pattern: |
+        params[...]
+    - pattern: |
+        request.env[...]
   pattern-sinks:
   - patterns:
-    - pattern: 'send_file ...
-
-        '
-  message: Allowing user input to `send_file` allows a malicious user to potentially
-    read arbitrary files from the server. Avoid accepting user input in `send_file`
-    or normalize with `File.basename(...)`
+    - pattern: |
+        send_file ...
+  message: Allowing user input to `send_file` allows a malicious user to potentially read arbitrary files from the server. Avoid accepting user input in `send_file` or normalize with `File.basename(...)`
   languages:
   - ruby
   severity: ERROR

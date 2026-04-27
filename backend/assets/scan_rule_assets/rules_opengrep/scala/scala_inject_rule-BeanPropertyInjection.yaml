@@ -2,15 +2,11 @@ rules:
 - id: scala_inject_rule-BeanPropertyInjection
   languages:
   - scala
-  message: 'An attacker can set arbitrary bean properties that can compromise system integrity. An
-
+  message: |
+    An attacker can set arbitrary bean properties that can compromise system integrity. An
     attacker can leverage this functionality to access special bean properties like
-
     class.classLoader that will allow them to override system properties and potentially execute
-
     arbitrary code.
-
-    '
   metadata:
     category: security
     cwe: CWE-15
@@ -21,15 +17,17 @@ rules:
   patterns:
   - pattern-inside: 'def $FUNC(..., $REQ: HttpServletRequest, ...): $TYPE = { ... }'
   - pattern-either:
-    - pattern: '$MAP.put(..., $REQ.getParameter(...))
-
+    - pattern: |
+        $MAP.put(..., $REQ.getParameter(...))
         ...
-
         $BEAN_UTIL.populate(..., $MAP)
-
-        '
-    - pattern: "while (...) {\n    ...\n    $MAP.put(..., $REQ.getParameterValues(...). ...)\n}\n...\n$BEAN_UTIL.populate(...,\
-        \ $MAP)\n"
+    - pattern: |
+        while (...) {
+            ...
+            $MAP.put(..., $REQ.getParameterValues(...). ...)
+        }
+        ...
+        $BEAN_UTIL.populate(..., $MAP)
   - metavariable-pattern:
       metavariable: $BEAN_UTIL
       pattern-either:
@@ -40,15 +38,11 @@ rules:
 - id: scala_inject_rule-BeanPropertyInjection_1
   languages:
   - scala
-  message: 'An attacker can set arbitrary bean properties that can compromise system integrity. An
-
+  message: |
+    An attacker can set arbitrary bean properties that can compromise system integrity. An
     attacker can leverage this functionality to access special bean properties like
-
     class.classLoader that will allow them to override system properties and potentially execute
-
     arbitrary code.
-
-    '
   metadata:
     category: security
     cwe: CWE-15
@@ -59,15 +53,17 @@ rules:
   patterns:
   - pattern-inside: 'def $FUNC(..., $REQ: HttpServletRequest, ...): $TYPE = { ... }'
   - pattern-either:
-    - pattern: '$MAP.put(..., $REQ.getParameter(...))
-
+    - pattern: |
+        $MAP.put(..., $REQ.getParameter(...))
         ...
-
         $BEAN_UTIL.populate(..., $MAP)
-
-        '
-    - pattern: "while (...) {\n    ...\n    $MAP.put(..., $REQ.getParameterValues(...). ...)\n}\n...\n$BEAN_UTIL.populate(...,\
-        \ $MAP)\n"
+    - pattern: |
+        while (...) {
+            ...
+            $MAP.put(..., $REQ.getParameterValues(...). ...)
+        }
+        ...
+        $BEAN_UTIL.populate(..., $MAP)
   - metavariable-pattern:
       metavariable: $BEAN_UTIL
       pattern-either:

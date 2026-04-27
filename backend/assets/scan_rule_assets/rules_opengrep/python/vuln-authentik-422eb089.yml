@@ -1,16 +1,26 @@
 rules:
 - id: vuln-authentik-422eb089
-  pattern: "def validate_code($CODE, $REQUEST):\n    ...\n    $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()\n\
-    \    if not $TOKEN:\n        return None\n    $APP = get_application($TOKEN.provider)\n\
-    \    if not $APP:\n        return None\n    ...\n"
-  pattern-not: "def validate_code($CODE, $REQUEST):\n    ...\n    $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()\n\
-    \    if not $TOKEN:\n        raise Application.DoesNotExist\n    $APP = $TOKEN.provider.application\n\
-    \    ...\n"
+  pattern: |
+    def validate_code($CODE, $REQUEST):
+        ...
+        $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
+        if not $TOKEN:
+            return None
+        $APP = get_application($TOKEN.provider)
+        if not $APP:
+            return None
+        ...
+  pattern-not: |
+    def validate_code($CODE, $REQUEST):
+        ...
+        $TOKEN = DeviceToken.objects.filter(user_code=$CODE).first()
+        if not $TOKEN:
+            raise Application.DoesNotExist
+        $APP = $TOKEN.provider.application
+        ...
   languages:
   - python
-  message: 'Potential security issue detected: Missing proper exception handling and
-    application validation in OAuth2 device code validation. This could lead to improper
-    access control. Use the PolicyAccessView approach for consistent policy enforcement.'
+  message: 'Potential security issue detected: Missing proper exception handling and application validation in OAuth2 device code validation. This could lead to improper access control. Use the PolicyAccessView approach for consistent policy enforcement.'
   severity: ERROR
   metadata:
     source-url: github.com/goauthentik/authentik/commit/422eb0890cd82536a2a0f75df250447664979b22

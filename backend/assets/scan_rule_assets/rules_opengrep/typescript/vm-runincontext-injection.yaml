@@ -1,9 +1,6 @@
 rules:
 - id: vm-runincontext-injection
-  message: The `vm` module enables compiling and running code within V8 Virtual Machine
-    contexts. The `vm` module is not a security mechanism. Do not use it to run untrusted
-    code. If code passed to `vm` functions is controlled by user input it could result
-    in command injection. Do not let user input in `vm` functions.
+  message: The `vm` module enables compiling and running code within V8 Virtual Machine contexts. The `vm` module is not a security mechanism. Do not use it to run untrusted code. If code passed to `vm` functions is controlled by user input it could result in command injection. Do not let user input in `vm` functions.
   metadata:
     owasp:
     - A03:2021 - Injection
@@ -29,34 +26,27 @@ rules:
   - patterns:
     - pattern: $EVENT
     - pattern-either:
-      - pattern-inside: "exports.handler = function ($EVENT, ...) {\n  ...\n}\n"
-      - pattern-inside: 'function $FUNC ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
-      - pattern-inside: '$FUNC = function ($EVENT, ...) {...}
-
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
           ...
-
           exports.handler = $FUNC
-
-          '
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'require(''vm'');
-
+      - pattern-inside: |
+          require('vm');
           ...
-
-          '
-      - pattern-inside: 'import ''vm''
-
+      - pattern-inside: |
+          import 'vm'
           ...
-
-          '
     - pattern-either:
       - pattern: $VM.runInContext($X,...)
       - pattern: $VM.runInNewContext($X,...)

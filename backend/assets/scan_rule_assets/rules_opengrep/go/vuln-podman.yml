@@ -1,17 +1,13 @@
 rules:
 - id: vuln-podman-0282f98b
-  pattern: 'cmd := []string{"dd", ...}
-
-    '
-  pattern-not: 'cmd := []string{"/bin/dd", ...}
-
-    '
+  pattern: |
+    cmd := []string{"dd", ...}
+  pattern-not: |
+    cmd := []string{"/bin/dd", ...}
   languages:
   - go
-  message: 'Using ''dd'' without an absolute path can lead to command injection or execution of unintended binaries if the
-    PATH is compromised. Always use absolute paths for system commands to prevent such vulnerabilities.
-
-    '
+  message: |
+    Using 'dd' without an absolute path can lead to command injection or execution of unintended binaries if the PATH is compromised. Always use absolute paths for system commands to prevent such vulnerabilities.
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/0282f98b3cabad5ff873dc7c391151854f1501b7
@@ -25,24 +21,28 @@ rules:
     technology:
     - go
 - id: vuln-podman-550cff9a
-  pattern: "func readStatusUserNS($PID string) ([]string, error) {\n  $PATH := fmt.Sprintf(\"/proc/%s/status\", $PID)\n  $ARGS\
-    \ := []string{\"nsenter\", \"-U\", \"-t\", $PID, \"cat\", $PATH}\n  $CMD := exec.Command($ARGS[0], $ARGS[1:]...)\n  $OUTPUT,\
-    \ $ERR := $CMD.CombinedOutput()\n  ...\n}\n"
-  pattern-not: "func readStatus($PID string) ([]string, error) {\n  $PATH := fmt.Sprintf(\"/proc/%s/status\", $PID)\n  $DATA,\
-    \ $ERR := ioutil.ReadFile($PATH)\n  ...\n}\n"
+  pattern: |
+    func readStatusUserNS($PID string) ([]string, error) {
+      $PATH := fmt.Sprintf("/proc/%s/status", $PID)
+      $ARGS := []string{"nsenter", "-U", "-t", $PID, "cat", $PATH}
+      $CMD := exec.Command($ARGS[0], $ARGS[1:]...)
+      $OUTPUT, $ERR := $CMD.CombinedOutput()
+      ...
+    }
+  pattern-not: |
+    func readStatus($PID string) ([]string, error) {
+      $PATH := fmt.Sprintf("/proc/%s/status", $PID)
+      $DATA, $ERR := ioutil.ReadFile($PATH)
+      ...
+    }
   languages:
   - go
-  message: 'Detected use of nsenter to read process status files. This approach is vulnerable to security issues as it:
-
+  message: |
+    Detected use of nsenter to read process status files. This approach is vulnerable to security issues as it:
     1. Executes external commands
-
     2. Exposes potential privilege escalation vectors
-
     3. Can be manipulated via PID namespaces
-
     Instead, use direct file reading with proper permission checks.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/550cff9aceef27ff7fdefe0b39badb760c7e5331
@@ -57,14 +57,19 @@ rules:
     - https://man7.org/linux/man-pages/man1/nsenter.1.html
     - https://man7.org/linux/man-pages/man2/pid_namespaces.7.html
 - id: vuln-podman-5e65f0ba
-  pattern: "func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping) error {\n  ...\n}\n"
-  pattern-not: "func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping, $CHILDIP string) error {\n  ...\n\
-    }\n"
+  pattern: |
+    func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping) error {
+      ...
+    }
+  pattern-not: |
+    func exposePorts($PM rkport.Manager, $PORTMAPPINGS []ocicni.PortMapping, $CHILDIP string) error {
+      ...
+    }
   languages:
   - go
-  message: "The function `exposePorts` is missing the `childIP` parameter, which is required for proper IP address handling\
-    \ in rootless port mappings. This can lead to incorrect network configuration or security issues. \nTo fix this, ensure\
-    \ the `exposePorts` function includes the `childIP` parameter and uses it in the port mapping configuration.\n"
+  message: |
+    The function `exposePorts` is missing the `childIP` parameter, which is required for proper IP address handling in rootless port mappings. This can lead to incorrect network configuration or security issues.
+    To fix this, ensure the `exposePorts` function includes the `childIP` parameter and uses it in the port mapping configuration.
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/5e65f0ba30f3fca73f8c207825632afef08378c1
@@ -75,19 +80,14 @@ rules:
     technology:
     - go
 - id: vuln-podman-6ca857fe
-  pattern: '$X, $ERR := archive.Tar($SOURCE, $COMPRESSION)
-
-    '
-  pattern-not: '$X, $ERR := chrootarchive.Tar($SOURCE, $OPTIONS, $CHROOT)
-
-    '
+  pattern: |
+    $X, $ERR := archive.Tar($SOURCE, $COMPRESSION)
+  pattern-not: |
+    $X, $ERR := chrootarchive.Tar($SOURCE, $OPTIONS, $CHROOT)
   languages:
   - go
-  message: 'Detected use of insecure `archive.Tar` function which does not chroot the archive process. This can lead to path
-    traversal vulnerabilities where files outside the intended directory can be included in the tarball. Use `chrootarchive.Tar`
-    instead to properly chroot the archive process and prevent path traversal.
-
-    '
+  message: |
+    Detected use of insecure `archive.Tar` function which does not chroot the archive process. This can lead to path traversal vulnerabilities where files outside the intended directory can be included in the tarball. Use `chrootarchive.Tar` instead to properly chroot the archive process and prevent path traversal.
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/6ca857feb07a5fdc96fd947afef03916291673d8
@@ -101,17 +101,16 @@ rules:
     technology:
     - go
 - id: vuln-podman-7ef3981a
-  pattern: '$NET, $ERR = common.NetFlagsToNetOptions($CMD)
-
-    '
-  pattern-not: '$NET, $ERR = common.NetFlagsToNetOptions($CMD, $NETNS_FROM_CONFIG)
-
-    '
+  pattern: |
+    $NET, $ERR = common.NetFlagsToNetOptions($CMD)
+  pattern-not: |
+    $NET, $ERR = common.NetFlagsToNetOptions($CMD, $NETNS_FROM_CONFIG)
   languages:
   - go
-  message: "The function `NetFlagsToNetOptions` should be called with the `netnsFromConfig` parameter to ensure proper network\
-    \ flag parsing. \nMissing this parameter can lead to incorrect network configuration handling, potentially causing security\
-    \ issues or misconfigurations.\nAlways pass the `netnsFromConfig` parameter to `NetFlagsToNetOptions`.\n"
+  message: |
+    The function `NetFlagsToNetOptions` should be called with the `netnsFromConfig` parameter to ensure proper network flag parsing.
+    Missing this parameter can lead to incorrect network configuration handling, potentially causing security issues or misconfigurations.
+    Always pass the `netnsFromConfig` parameter to `NetFlagsToNetOptions`.
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/7ef3981abe2412727840a2886489a08c03a05299
@@ -120,20 +119,14 @@ rules:
     owasp: 'OWASP Top 10 2021: A03:2021 - Injection'
     technology: go
 - id: vuln-podman-d102d02e
-  pattern: 'acquireCNILock(filepath.Join($CONFIG.Engine.TmpDir, $LOCKFILE))
-
-    '
-  pattern-not: 'acquireCNILock($CONFIG)
-
-    '
+  pattern: |
+    acquireCNILock(filepath.Join($CONFIG.Engine.TmpDir, $LOCKFILE))
+  pattern-not: |
+    acquireCNILock($CONFIG)
   languages:
   - go
-  message: 'Detected a potential security vulnerability where the CNI lock file is created in a temporary directory. This
-    could lead to race conditions or security issues if the temporary directory is not properly secured. The issue has been
-    fixed by creating the lock file in a dedicated CNI configuration directory. To fix this, ensure that the lock file is
-    created in a secure, dedicated directory.
-
-    '
+  message: |
+    Detected a potential security vulnerability where the CNI lock file is created in a temporary directory. This could lead to race conditions or security issues if the temporary directory is not properly secured. The issue has been fixed by creating the lock file in a dedicated CNI configuration directory. To fix this, ensure that the lock file is created in a secure, dedicated directory.
   severity: ERROR
   metadata:
     source-url: github.com/containers/podman/commit/d102d02eb1cd135d877d946249a4fa1769ba17d0

@@ -1,12 +1,8 @@
 rules:
 - id: xmlinputfactory_xxe_enabled
-  pattern: $XMLFACTORY.setProperty("javax.xml.stream.isSupportingExternalEntities",
-    true);
-  message: 'XML external entities are enabled for this XMLInputFactory. This is vulnerable
-    to XML external entity attacks. Disable external entities by setting "javax.xml.stream.isSupportingExternalEntities"
-    to false.
-
-    '
+  pattern: $XMLFACTORY.setProperty("javax.xml.stream.isSupportingExternalEntities", true);
+  message: |
+    XML external entities are enabled for this XMLInputFactory. This is vulnerable to XML external entity attacks. Disable external entities by setting "javax.xml.stream.isSupportingExternalEntities" to false.
   languages:
   - java
   severity: ERROR

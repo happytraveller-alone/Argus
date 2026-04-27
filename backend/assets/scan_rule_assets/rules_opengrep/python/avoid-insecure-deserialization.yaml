@@ -4,67 +4,49 @@ rules:
     owasp: 'A8: Insecure Deserialization'
     cwe: 'CWE-502: Deserialization of Untrusted Data'
     references: https://docs.python.org/3/library/pickle.html
-  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`,
-    which are known to lead to remote code execution vulnerabilities.
+  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`, which are known to lead to remote code execution vulnerabilities.
   languages:
   - python
   severity: ERROR
   patterns:
-  - pattern-inside: "def $X(..., request, ...):\n  ...\n"
+  - pattern-inside: |
+      def $X(..., request, ...):
+        ...
   - pattern-either:
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         pickle.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: pickle.$FUNC(<... request.$Y.get(...) ...>)
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         _pickle.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: _pickle.$FUNC(<... request.$Y.get(...) ...>)
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         cPickle.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: cPickle.$FUNC(<... request.$Y.get(...) ...>)
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         dill.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: dill.$FUNC(<... request.$Y.get(...) ...>)
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         shelve.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: shelve.$FUNC(<... request.$Y.get(...) ...>)
-    - pattern: '$VAR = <... request.$Y.get(...) ...>
-
+    - pattern: |
+        $VAR = <... request.$Y.get(...) ...>
         ...
-
         yaml.$FUNC(<... $VAR ...>)
-
-        '
     - pattern: yaml.$FUNC(<... request.$Y.get(...) ...>)
 - id: avoid-insecure-deserialization_1
   languages:
   - python
-  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`,
-    which are known to lead to remote code execution vulnerabilities.
+  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`, which are known to lead to remote code execution vulnerabilities.
   metadata:
     category: security
     confidence: MEDIUM
@@ -88,18 +70,14 @@ rules:
   - pattern-either:
     - patterns:
       - pattern-either:
-        - pattern: 'pickle.$PICKLEFUNC(...)
-
-            '
-        - pattern: '_pickle.$PICKLEFUNC(...)
-
-            '
-        - pattern: 'cPickle.$PICKLEFUNC(...)
-
-            '
-        - pattern: 'shelve.$PICKLEFUNC(...)
-
-            '
+        - pattern: |
+            pickle.$PICKLEFUNC(...)
+        - pattern: |
+            _pickle.$PICKLEFUNC(...)
+        - pattern: |
+            cPickle.$PICKLEFUNC(...)
+        - pattern: |
+            shelve.$PICKLEFUNC(...)
       - metavariable-regex:
           metavariable: $PICKLEFUNC
           regex: dumps|dump|load|loads
@@ -120,7 +98,9 @@ rules:
   pattern-sources:
   - pattern-either:
     - patterns:
-      - pattern-inside: "def $INSIDE(..., $PARAM, ...):\n  ...\n"
+      - pattern-inside: |
+          def $INSIDE(..., $PARAM, ...):
+            ...
       - pattern-either:
         - pattern: request.$REQFUNC(...)
         - pattern: request.$REQFUNC.get(...)

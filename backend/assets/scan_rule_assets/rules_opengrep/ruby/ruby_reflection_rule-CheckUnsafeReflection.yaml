@@ -3,56 +3,69 @@ rules:
   mode: taint
   pattern-sources:
   - pattern-either:
-    - pattern: 'cookies[...]
-
-        '
+    - pattern: |
+        cookies[...]
     - patterns:
-      - pattern: 'cookies. ... .$PROPERTY[...]
-
-          '
+      - pattern: |
+          cookies. ... .$PROPERTY[...]
       - metavariable-regex:
           metavariable: $PROPERTY
           regex: (?!signed|encrypted)
-    - pattern: 'params[...]
-
-        '
-    - pattern: 'request.env[...]
-
-        '
+    - pattern: |
+        params[...]
+    - pattern: |
+        request.env[...]
   pattern-sinks:
   - patterns:
     - pattern: $X
     - pattern-either:
-      - pattern-inside: '$X.constantize
+      - pattern-inside: |
+          $X.constantize
+      - pattern-inside: |
+          $X. ... .safe_constantize
+      - pattern-inside: |
+          const_get(...)
+      - pattern-inside: |
+          qualified_const_get(...)
+  message: |
+    The application was found calling a reflection method with user-controllable
+    input. Reflection in Ruby allows a program to examine and modify its own
+    structure and behavior at runtime. When user input is used unsafely
+    with reflection methods (like `constantize`, `safe_constantize`, `const_get`,
+    `qualified_const_get`), it poses a significant security risk, potentially
+    leading to arbitrary code execution.
 
-          '
-      - pattern-inside: '$X. ... .safe_constantize
+    To mitigate these risks:
+    - Avoid direct user input in reflection: Never use user-controllable input
+    directly with reflection methods.
+    - Validate and sanitize input: If user input must influence program behavior,
+    rigorously validate and sanitize the input against a whitelist of allowed
+    values.
+    - Use indirect references: Instead of allowing direct specification of class
+    or method names, map user inputs to a predefined set of allowed actions or
+    classes.
+    - Do not provide user-controllable input to reflection functionality.
+    - Do not call symbol conversion on user-controllable input.
 
-          '
-      - pattern-inside: 'const_get(...)
+    Secure Code Example:
+    ```
+    class SafeClassHandler
+      ALLOWED_CLASSES = {
+        'user' => User,
+        'product' => Product
+      }.freeze
 
-          '
-      - pattern-inside: 'qualified_const_get(...)
+      def self.handle_class_action(class_key)
+        klass = ALLOWED_CLASSES[class_key]
+        raise ArgumentError, "Invalid class key" unless klass
 
-          '
-  message: "The application was found calling a reflection method with user-controllable\n\
-    input. Reflection in Ruby allows a program to examine and modify its own \nstructure\
-    \ and behavior at runtime. When user input is used unsafely \nwith reflection\
-    \ methods (like `constantize`, `safe_constantize`, `const_get`, \n`qualified_const_get`),\
-    \ it poses a significant security risk, potentially \nleading to arbitrary code\
-    \ execution.\n\nTo mitigate these risks:\n- Avoid direct user input in reflection:\
-    \ Never use user-controllable input \ndirectly with reflection methods.\n- Validate\
-    \ and sanitize input: If user input must influence program behavior, \nrigorously\
-    \ validate and sanitize the input against a whitelist of allowed \nvalues.\n-\
-    \ Use indirect references: Instead of allowing direct specification of class \n\
-    or method names, map user inputs to a predefined set of allowed actions or \n\
-    classes.\n- Do not provide user-controllable input to reflection functionality.\
-    \ \n- Do not call symbol conversion on user-controllable input.\n\nSecure Code\
-    \ Example:\n```\nclass SafeClassHandler\n  ALLOWED_CLASSES = {\n    'user' =>\
-    \ User,\n    'product' => Product\n  }.freeze\n\n  def self.handle_class_action(class_key)\n\
-    \    klass = ALLOWED_CLASSES[class_key]\n    raise ArgumentError, \"Invalid class\
-    \ key\" unless klass\n\n    klass.some_method\n  end\nend\n\n# Example usage\n\
-    SafeClassHandler.handle_class_action(params[:class_key])\n```\n"
+        klass.some_method
+      end
+    end
+
+    # Example usage
+    SafeClassHandler.handle_class_action(params[:class_key])
+    ```
   languages:
   - ruby
   severity: ERROR

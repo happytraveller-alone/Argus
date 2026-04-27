@@ -1,18 +1,13 @@
 rules:
 - id: vuln-mruby-2742ded3
-  pattern: 'mrb_bool $VAR = $COND ? FALSE : TRUE;
-
-    '
-  pattern-not: 'mrb_bool $VAR = ($COND) ? TRUE : FALSE;
-
-    '
+  pattern: |
+    mrb_bool $VAR = $COND ? FALSE : TRUE;
+  pattern-not: |
+    mrb_bool $VAR = ($COND) ? TRUE : FALSE;
   languages:
   - c
-  message: 'The ternary operator is incorrectly used to set a boolean value, which can lead to logical errors. The condition
-    should be negated to ensure the correct boolean assignment. This can cause unexpected behavior in the program logic. Fix
-    by inverting the condition and swapping the TRUE and FALSE values.
-
-    '
+  message: |
+    The ternary operator is incorrectly used to set a boolean value, which can lead to logical errors. The condition should be negated to ensure the correct boolean assignment. This can cause unexpected behavior in the program logic. Fix by inverting the condition and swapping the TRUE and FALSE values.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/2742ded32fe18f88833d76b297f5c2170b6880c3
@@ -25,17 +20,23 @@ rules:
     technology:
     - c
 - id: vuln-mruby-38b164ac
-  pattern: "if ($IS_SPLAT || $N > $LIMIT || $CURSP() >= $SLIMIT) {\n  ...\n}\n"
-  pattern-not: "if ($IS_SPLAT || $CURSP() >= $SLIMIT) {\n  ...\n}\nelse if ($N > $LIMIT) {\n  pop_n($N);\n  genop_2($S, $OP_ARRAY,\
-    \ $CURSP(), $N);\n  return -1;\n}\n"
+  pattern: |
+    if ($IS_SPLAT || $N > $LIMIT || $CURSP() >= $SLIMIT) {
+      ...
+    }
+  pattern-not: |
+    if ($IS_SPLAT || $CURSP() >= $SLIMIT) {
+      ...
+    }
+    else if ($N > $LIMIT) {
+      pop_n($N);
+      genop_2($S, $OP_ARRAY, $CURSP(), $N);
+      return -1;
+    }
   languages:
   - c
-  message: 'The vulnerability occurs when multiple conditions are combined in a single if statement without proper handling
-    of the `n > limit` case. This can lead to incorrect stack management and potential security issues. The fix separates
-    the `n > limit` condition into a distinct else-if block with proper handling. Ensure that each condition is handled independently
-    to prevent stack corruption.
-
-    '
+  message: |
+    The vulnerability occurs when multiple conditions are combined in a single if statement without proper handling of the `n > limit` case. This can lead to incorrect stack management and potential security issues. The fix separates the `n > limit` condition into a distinct else-if block with proper handling. Ensure that each condition is handled independently to prevent stack corruption.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/38b164ace7d6ae1c367883a3d67d7f559783faad
@@ -46,19 +47,14 @@ rules:
     technology:
     - c
 - id: vuln-mruby-55edae02
-  pattern: '$VAR->flags = $EXPR;
-
-    '
-  pattern-not: '$VAR->flags |= $EXPR & MRB_FLAG_IS_FROZEN;
-
-    '
+  pattern: |
+    $VAR->flags = $EXPR;
+  pattern-not: |
+    $VAR->flags |= $EXPR & MRB_FLAG_IS_FROZEN;
   languages:
   - c
-  message: 'Direct assignment of flags without proper bitwise masking can lead to unintended overwrites of critical flags.
-    This can cause security issues such as bypassing frozen object checks. Use bitwise operations to ensure only the intended
-    flags are modified.
-
-    '
+  message: |
+    Direct assignment of flags without proper bitwise masking can lead to unintended overwrites of critical flags. This can cause security issues such as bypassing frozen object checks. Use bitwise operations to ensure only the intended flags are modified.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/55edae0226409de25e59922807cb09acb45731a2
@@ -70,18 +66,24 @@ rules:
     technology:
     - c
 - id: vuln-mruby-5c114c91
-  pattern: "if (mrb_basic_ptr($VAR)->tt == MRB_TT_FREE) {\n  $ARRAY[$INDEX] = mrb_nil_value();\n}\nelse {\n  mrb_gc_mark($MRB,\
-    \ mrb_basic_ptr($VAR));\n}\n"
-  pattern-not: "mrb_gc_mark($MRB, mrb_basic_ptr($VAR));\n$E = $C->stend - $C->stbase;\n$NIL = mrb_nil_value();\nfor (; $I<$E;\
-    \ $I++) {\n  $C->stbase[$I] = $NIL;\n}\n"
+  pattern: |
+    if (mrb_basic_ptr($VAR)->tt == MRB_TT_FREE) {
+      $ARRAY[$INDEX] = mrb_nil_value();
+    }
+    else {
+      mrb_gc_mark($MRB, mrb_basic_ptr($VAR));
+    }
+  pattern-not: |
+    mrb_gc_mark($MRB, mrb_basic_ptr($VAR));
+    $E = $C->stend - $C->stbase;
+    $NIL = mrb_nil_value();
+    for (; $I<$E; $I++) {
+      $C->stbase[$I] = $NIL;
+    }
   languages:
   - c
-  message: 'The vulnerability occurs when the garbage collector fails to properly mark and clear memory, leading to potential
-    use-after-free or memory corruption issues. The original code conditionally marks or clears memory based on the type of
-    the object, which can result in inconsistent memory states. The fix ensures that all memory is consistently marked and
-    cleared. To fix this, ensure that all memory is properly marked and cleared in a consistent manner.
-
-    '
+  message: |
+    The vulnerability occurs when the garbage collector fails to properly mark and clear memory, leading to potential use-after-free or memory corruption issues. The original code conditionally marks or clears memory based on the type of the object, which can result in inconsistent memory states. The fix ensures that all memory is consistently marked and cleared. To fix this, ensure that all memory is properly marked and cleared in a consistent manner.
   severity: ERROR
   metadata:
     source-url: https://github.com/mruby/mruby/commit/5c114c91d4ff31859fcd84cf8bf349b737b90d99
@@ -97,19 +99,14 @@ rules:
     technology:
     - c
 - id: vuln-mruby-70e57468
-  pattern: 'mrb_bool $VAR = $COND ? TRUE : FALSE;
-
-    '
-  pattern-not: 'mrb_bool $VAR = $COND ? FALSE : TRUE;
-
-    '
+  pattern: |
+    mrb_bool $VAR = $COND ? TRUE : FALSE;
+  pattern-not: |
+    mrb_bool $VAR = $COND ? FALSE : TRUE;
   languages:
   - c
-  message: 'Detected a potentially dangerous ternary operation where the TRUE and FALSE values are incorrectly assigned. This
-    can lead to unintended behavior and security vulnerabilities. Ensure the logic correctly assigns TRUE and FALSE based
-    on the condition. The fix should swap the TRUE and FALSE values in the ternary operation.
-
-    '
+  message: |
+    Detected a potentially dangerous ternary operation where the TRUE and FALSE values are incorrectly assigned. This can lead to unintended behavior and security vulnerabilities. Ensure the logic correctly assigns TRUE and FALSE based on the condition. The fix should swap the TRUE and FALSE values in the ternary operation.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/70e574689664c10ed2c47581999cc2ce3e3c5afb
@@ -121,17 +118,16 @@ rules:
     technology:
     - c
 - id: vuln-mruby-adb1eae9
-  pattern: 'mrb_raisef($MRB, $ERROR, "negative (or overflowed) string size");
-
-    '
-  pattern-not: 'mrb_raise($MRB, $ERROR, "negative (or overflowed) string size");
-
-    '
+  pattern: |
+    mrb_raisef($MRB, $ERROR, "negative (or overflowed) string size");
+  pattern-not: |
+    mrb_raise($MRB, $ERROR, "negative (or overflowed) string size");
   languages:
   - c
-  message: "The use of `mrb_raisef` with a format string in this context can lead to potential formatting vulnerabilities.\
-    \ \nThis is dangerous because it could allow for format string attacks, which might lead to memory corruption or information\
-    \ disclosure.\nUse `mrb_raise` instead, which does not involve format string processing.\n"
+  message: |
+    The use of `mrb_raisef` with a format string in this context can lead to potential formatting vulnerabilities.
+    This is dangerous because it could allow for format string attacks, which might lead to memory corruption or information disclosure.
+    Use `mrb_raise` instead, which does not involve format string processing.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/adb1eae912659d680a9c5b7832e22cf73d36a69a
@@ -145,17 +141,17 @@ rules:
     technology:
     - c
 - id: vuln-mruby-b1d0296a
-  pattern: 'if ($H && mt_del($MRB, $H, $MID)) return;
-
-    '
-  pattern-not: "if ($H && mt_del($MRB, $H, $MID)) {\n  mrb_mc_clear_by_class($MRB, $C);\n  return;\n}\n"
+  pattern: |
+    if ($H && mt_del($MRB, $H, $MID)) return;
+  pattern-not: |
+    if ($H && mt_del($MRB, $H, $MID)) {
+      mrb_mc_clear_by_class($MRB, $C);
+      return;
+    }
   languages:
   - c
-  message: 'The vulnerability involves a missing cleanup operation after deleting a method table entry. This can lead to memory
-    corruption or undefined behavior due to stale references. The fix adds a call to `mrb_mc_clear_by_class` to properly clean
-    up the class cache. Ensure that all cleanup operations are performed before returning from the function.
-
-    '
+  message: |
+    The vulnerability involves a missing cleanup operation after deleting a method table entry. This can lead to memory corruption or undefined behavior due to stale references. The fix adds a call to `mrb_mc_clear_by_class` to properly clean up the class cache. Ensure that all cleanup operations are performed before returning from the function.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/b1d0296a937fe278239bdfac840a3fd0e93b3ee9
@@ -167,15 +163,18 @@ rules:
     technology:
     - c
 - id: vuln-mruby-c8c083cb
-  pattern: "if ($N == 14) {\n  ...\n}\n"
-  pattern-not: "if ($N == 13 || $N == 14) {\n  ...\n}\n"
+  pattern: |
+    if ($N == 14) {
+      ...
+    }
+  pattern-not: |
+    if ($N == 13 || $N == 14) {
+      ...
+    }
   languages:
   - c
-  message: 'The code checks for a specific value (14) but does not account for a related value (13) that should also be handled.
-    This can lead to incorrect behavior or security issues when the unhandled value is encountered. To fix this, ensure all
-    relevant values are checked in the condition.
-
-    '
+  message: |
+    The code checks for a specific value (14) but does not account for a related value (13) that should also be handled. This can lead to incorrect behavior or security issues when the unhandled value is encountered. To fix this, ensure all relevant values are checked in the condition.
   severity: ERROR
   metadata:
     source-url: github.com/mruby/mruby/commit/c8c083cb750606b2da81582cd8e43b442bb143e6

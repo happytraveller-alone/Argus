@@ -1,7 +1,6 @@
 rules:
 - id: sync-mutex-value-copied
-  message: A `sync.Mutex` is copied in function `$FUNC` given that `$T` is value receiver.  As
-    a result, the struct `$T` may not be locked as intended
+  message: A `sync.Mutex` is copied in function `$FUNC` given that `$T` is value receiver.  As a result, the struct `$T` may not be locked as intended
   languages:
   - go
   severity: ERROR
@@ -20,6 +19,19 @@ rules:
     - https://go101.org/article/concurrent-common-mistakes.html
   patterns:
   - pattern-either:
-    - pattern: "func ($T $TYPE) $FUNC(...){\n  ...\n  $T.Lock()\n  ...\n}\n"
-    - pattern: "func ($T $TYPE) $FUNC(...){\n  ...\n  $T.RLock()\n  ...\n}\n"
-  - pattern-not: "func ($T2 *$TYPE2) $FUNC(...){\n  ...\n}\n"
+    - pattern: |
+        func ($T $TYPE) $FUNC(...){
+          ...
+          $T.Lock()
+          ...
+        }
+    - pattern: |
+        func ($T $TYPE) $FUNC(...){
+          ...
+          $T.RLock()
+          ...
+        }
+  - pattern-not: |
+      func ($T2 *$TYPE2) $FUNC(...){
+        ...
+      }

@@ -1,9 +1,6 @@
 rules:
 - id: jwt-simple-noverify
-  message: Detected the decoding of a JWT token without a verify step. JWT tokens
-    must be verified before use, otherwise the token's integrity is unknown. This
-    means a malicious actor could forge a JWT token with any claims. Set 'verify'
-    to `true` before using the token.
+  message: Detected the decoding of a JWT token without a verify step. JWT tokens must be verified before use, otherwise the token's integrity is unknown. This means a malicious actor could forge a JWT token with any claims. Set 'verify' to `true` before using the token.
   severity: ERROR
   metadata:
     owasp:
@@ -30,19 +27,15 @@ rules:
   languages:
   - javascript
   patterns:
-  - pattern-inside: '$JWT = require(''jwt-simple'');
-
+  - pattern-inside: |
+      $JWT = require('jwt-simple');
       ...
-
-      '
   - pattern: $JWT.decode($TOKEN, $SECRET, $NOVERIFY, ...)
   - metavariable-pattern:
       metavariable: $NOVERIFY
       patterns:
       - pattern-either:
-        - pattern: 'true
-
-            '
-        - pattern: '"..."
-
-            '
+        - pattern: |
+            true
+        - pattern: |
+            "..."

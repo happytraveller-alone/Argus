@@ -1,17 +1,17 @@
 rules:
 - id: vuln-libuv-0f2d7e78
-  pattern: "if ($D < $DE)\n  *$D++ = '\\0';\n"
-  pattern-not: "if ($D >= $DE)\n  return $ERROR;\n*$D++ = '\\0';\n"
+  pattern: |
+    if ($D < $DE)
+      *$D++ = '\0';
+  pattern-not: |
+    if ($D >= $DE)
+      return $ERROR;
+    *$D++ = '\0';
   languages:
   - c
-  message: 'Detected a potential buffer underwrite vulnerability. The original code conditionally writes a null terminator
-    without checking if the destination pointer is within bounds, which could lead to memory corruption. The fix ensures that
-    the destination pointer is within bounds before performing the write.
-
-    This is dangerous because it could allow an attacker to corrupt memory or cause a crash. Always validate buffer boundaries
-    before writing to memory.
-
-    '
+  message: |
+    Detected a potential buffer underwrite vulnerability. The original code conditionally writes a null terminator without checking if the destination pointer is within bounds, which could lead to memory corruption. The fix ensures that the destination pointer is within bounds before performing the write.
+    This is dangerous because it could allow an attacker to corrupt memory or cause a crash. Always validate buffer boundaries before writing to memory.
   severity: ERROR
   metadata:
     source-url: github.com/libuv/libuv/commit/0f2d7e784a256b54b2385043438848047bc2a629
@@ -23,19 +23,14 @@ rules:
     technology:
     - c
 - id: vuln-libuv-e0327e1d
-  pattern: 'T("", "");
-
-    '
-  pattern-not: 'F("", UV_EINVAL);
-
-    '
+  pattern: |
+    T("", "");
+  pattern-not: |
+    F("", UV_EINVAL);
   languages:
   - c
-  message: 'Detected a potentially dangerous use of the T() macro with an empty string, which could lead to incorrect handling
-    of invalid input. This vulnerability can cause undefined behavior or security issues if the input is not properly validated.
-    Replace the T() macro with F() and pass the appropriate error code (UV_EINVAL) to handle invalid input correctly.
-
-    '
+  message: |
+    Detected a potentially dangerous use of the T() macro with an empty string, which could lead to incorrect handling of invalid input. This vulnerability can cause undefined behavior or security issues if the input is not properly validated. Replace the T() macro with F() and pass the appropriate error code (UV_EINVAL) to handle invalid input correctly.
   severity: ERROR
   metadata:
     source-url: github.com/libuv/libuv/commit/e0327e1d508b8207c9150b6e582f0adf26213c39

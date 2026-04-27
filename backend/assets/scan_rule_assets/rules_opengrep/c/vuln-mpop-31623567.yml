@@ -1,24 +1,34 @@
 rules:
 - id: vuln-mpop-31623567
-  pattern: "if ($ACC->tls_nocertcheck && $ACC->tls_trust_file)\n{\n    $ERRSTR = xasprintf(_(\"\
-    cannot use tls_trust_file with tls_certcheck turned off\"));\n    return CONF_ESYNTAX;\n\
-    }\nif ($ACC->tls_nocertcheck\n        && ($ACC->tls_sha256_fingerprint\n     \
-    \       || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))\n{\n    $ERRSTR\
-    \ = xasprintf(_(\"cannot use tls_fingerprint with tls_certcheck turned off\"));\n\
-    \    return CONF_ESYNTAX;\n}\nif ($ACC->tls_trust_file\n        && ($ACC->tls_sha256_fingerprint\n\
-    \            || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))\n{\n\
-    \    $ERRSTR = xasprintf(_(\"cannot use both tls_trust_file and tls_fingerprint\"\
-    ));\n    return CONF_ESYNTAX;\n}\n"
-  pattern-not: "if (!account->tls_trust_file && !(account->mask & ACC_TLS_TRUST_FILE))\n\
-    {\n    account->tls_trust_file = xstrdup(\"system\");\n}\n"
+  pattern: |
+    if ($ACC->tls_nocertcheck && $ACC->tls_trust_file)
+    {
+        $ERRSTR = xasprintf(_("cannot use tls_trust_file with tls_certcheck turned off"));
+        return CONF_ESYNTAX;
+    }
+    if ($ACC->tls_nocertcheck
+            && ($ACC->tls_sha256_fingerprint
+                || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
+    {
+        $ERRSTR = xasprintf(_("cannot use tls_fingerprint with tls_certcheck turned off"));
+        return CONF_ESYNTAX;
+    }
+    if ($ACC->tls_trust_file
+            && ($ACC->tls_sha256_fingerprint
+                || $ACC->tls_sha1_fingerprint || $ACC->tls_md5_fingerprint))
+    {
+        $ERRSTR = xasprintf(_("cannot use both tls_trust_file and tls_fingerprint"));
+        return CONF_ESYNTAX;
+    }
+  pattern-not: |
+    if (!account->tls_trust_file && !(account->mask & ACC_TLS_TRUST_FILE))
+    {
+        account->tls_trust_file = xstrdup("system");
+    }
   languages:
   - c
-  message: 'The code contains logic that prevents the use of TLS trust files and fingerprints
-    when certificate checking is disabled. This can lead to insecure TLS configurations.
-    Ensure that TLS trust files and fingerprints are used correctly and that certificate
-    checking is not disabled when these features are in use.
-
-    '
+  message: |
+    The code contains logic that prevents the use of TLS trust files and fingerprints when certificate checking is disabled. This can lead to insecure TLS configurations. Ensure that TLS trust files and fingerprints are used correctly and that certificate checking is not disabled when these features are in use.
   severity: ERROR
   metadata:
     source-url: github.com/marlam/mpop/commit/3162356734663a0ea0f88857c4ace21fac1b023b

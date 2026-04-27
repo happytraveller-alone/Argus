@@ -1,19 +1,13 @@
 rules:
 - id: vuln-hangfire-9781bdbc
-  pattern: 'AsyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
-
-    '
-  pattern-not: '_asyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
-
-    '
+  pattern: |
+    AsyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
+  pattern-not: |
+    _asyncAuthorization = new IDashboardAsyncAuthorizationFilter[0];
   languages:
   - csharp
-  message: 'Direct assignment to AsyncAuthorization property can lead to security
-    vulnerabilities by bypassing proper authorization checks. Use the private field
-    `_asyncAuthorization` instead to ensure proper initialization and control over
-    authorization filters.
-
-    '
+  message: |
+    Direct assignment to AsyncAuthorization property can lead to security vulnerabilities by bypassing proper authorization checks. Use the private field `_asyncAuthorization` instead to ensure proper initialization and control over authorization filters.
   severity: ERROR
   metadata:
     source-url: github.com/HangfireIO/Hangfire/commit/9781bdbc95fcb87f182b166630a4b10373ad07ae

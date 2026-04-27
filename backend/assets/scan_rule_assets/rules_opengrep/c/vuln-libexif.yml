@@ -1,18 +1,13 @@
 rules:
 - id: vuln-libexif-3d40ba70
-  pattern: '(double)$VAR.numerator / $VAR.denominator
-
-    '
-  pattern-not: 'R2D($VAR)
-
-    '
+  pattern: |
+    (double)$VAR.numerator / $VAR.denominator
+  pattern-not: |
+    R2D($VAR)
   languages:
   - c
-  message: 'The code performs a division operation without checking if the denominator is zero, which can lead to a division-by-zero
-    vulnerability. This can cause undefined behavior or crashes. To fix this, ensure the denominator is checked before performing
-    the division, or use the R2D macro which includes this check.
-
-    '
+  message: |
+    The code performs a division operation without checking if the denominator is zero, which can lead to a division-by-zero vulnerability. This can cause undefined behavior or crashes. To fix this, ensure the denominator is checked before performing the division, or use the R2D macro which includes this check.
   severity: ERROR
   metadata:
     source-url: github.com/libexif/libexif/commit/3d40ba705fcb2f2f9bb5a496980297e1f706f594
@@ -26,15 +21,18 @@ rules:
     technology:
     - c
 - id: vuln-libexif-435e21f0
-  pattern: "if (($OFFSET + $SIZE < $OFFSET) || ($OFFSET + $SIZE < $SIZE) || ($OFFSET + $SIZE > $BUF_SIZE)) {\n  ...\n}\n"
-  pattern-not: "if (CHECKOVERFLOW($OFFSET, $BUF_SIZE, $SIZE)) {\n  ...\n}\n"
+  pattern: |
+    if (($OFFSET + $SIZE < $OFFSET) || ($OFFSET + $SIZE < $SIZE) || ($OFFSET + $SIZE > $BUF_SIZE)) {
+      ...
+    }
+  pattern-not: |
+    if (CHECKOVERFLOW($OFFSET, $BUF_SIZE, $SIZE)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potentially unsafe integer overflow check. The condition may not correctly handle all overflow cases,
-    leading to buffer overflows or other memory corruption vulnerabilities. Replace with the CHECKOVERFLOW macro or a safer
-    overflow check that ensures all edge cases are handled correctly.
-
-    '
+  message: |
+    Detected a potentially unsafe integer overflow check. The condition may not correctly handle all overflow cases, leading to buffer overflows or other memory corruption vulnerabilities. Replace with the CHECKOVERFLOW macro or a safer overflow check that ensures all edge cases are handled correctly.
   severity: ERROR
   metadata:
     source-url: github.com/libexif/libexif/commit/435e21f05001fb03f9f186fa7cbc69454afd00d1
@@ -46,20 +44,14 @@ rules:
     technology:
     - c
 - id: vuln-libexif-6aa11df5
-  pattern: 'exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_DEPTH + 1)
-
-    '
-  pattern-not: 'exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_COST + level_cost($N))
-
-    '
+  pattern: |
+    exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_DEPTH + 1)
+  pattern-not: |
+    exif_data_load_data_content($DATA, $IFD, $D, $DS, $O, $RECURSION_COST + level_cost($N))
   languages:
   - c
-  message: 'Deep recursion vulnerability detected. The original code uses a simple counter for recursion depth, which can
-    lead to excessive recursion and potential stack overflow in pathological cases. The fix introduces a logarithmic-scale
-    recursion cost calculation to better manage and limit recursion depth. Replace the simple recursion depth counter with
-    a recursion cost calculation using the `level_cost` function.
-
-    '
+  message: |
+    Deep recursion vulnerability detected. The original code uses a simple counter for recursion depth, which can lead to excessive recursion and potential stack overflow in pathological cases. The fix introduces a logarithmic-scale recursion cost calculation to better manage and limit recursion depth. Replace the simple recursion depth counter with a recursion cost calculation using the `level_cost` function.
   severity: ERROR
   metadata:
     source-url: github.com/libexif/libexif/commit/6aa11df549114ebda520dde4cdaea2f9357b2c89
@@ -73,19 +65,22 @@ rules:
     technology:
     - c
 - id: vuln-libexif-f5e7294a
-  pattern: 'exif_convert_utf16_to_utf8($VAL, (unsigned short*)$DATA, MIN($MAXLEN, $SIZE));
-
-    '
-  pattern-not: "{\n  if ($SIZE+sizeof(unsigned short) < $SIZE) break;\n  unsigned short *$UTF16 = exif_mem_alloc($MEM, $SIZE+sizeof(unsigned\
-    \ short));\n  if (!$UTF16) break;\n  memcpy($UTF16, $DATA, $SIZE);\n  $UTF16[$SIZE/sizeof(unsigned short)] = 0;\n  exif_convert_utf16_to_utf8($VAL,\
-    \ $UTF16, $MAXLEN);\n  exif_mem_free($MEM, $UTF16);\n}\n"
+  pattern: |
+    exif_convert_utf16_to_utf8($VAL, (unsigned short*)$DATA, MIN($MAXLEN, $SIZE));
+  pattern-not: |
+    {
+      if ($SIZE+sizeof(unsigned short) < $SIZE) break;
+      unsigned short *$UTF16 = exif_mem_alloc($MEM, $SIZE+sizeof(unsigned short));
+      if (!$UTF16) break;
+      memcpy($UTF16, $DATA, $SIZE);
+      $UTF16[$SIZE/sizeof(unsigned short)] = 0;
+      exif_convert_utf16_to_utf8($VAL, $UTF16, $MAXLEN);
+      exif_mem_free($MEM, $UTF16);
+    }
   languages:
   - c
-  message: 'The code directly uses untrusted data without proper bounds checking, which can lead to buffer overflow vulnerabilities.
-    The patch adds a sanity check to prevent integer overflow and ensures the data is properly null-terminated before conversion.
-    To fix this, always validate the size of the input data and create a safe copy before processing.
-
-    '
+  message: |
+    The code directly uses untrusted data without proper bounds checking, which can lead to buffer overflow vulnerabilities. The patch adds a sanity check to prevent integer overflow and ensures the data is properly null-terminated before conversion. To fix this, always validate the size of the input data and create a safe copy before processing.
   severity: ERROR
   metadata:
     source-url: github.com/libexif/libexif/commit/f5e7294ab588f9eff0188588e45fa2dd33911dd2

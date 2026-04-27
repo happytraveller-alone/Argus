@@ -1,22 +1,18 @@
 rules:
 - id: vuln-jsish-1b2a9e2f
-  pattern: '$THIS->d.obj->ot = $OT;
-
+  pattern: |
+    $THIS->d.obj->ot = $OT;
     $THIS->d.obj->d.num = $NV;
-
     Jsi_ValueMakeNumber($INTERP, $RET, $NV);
-
-    '
-  pattern-not: 'Jsi_ValueMakeNumber($INTERP, &$THIS, $NV);
-
+  pattern-not: |
+    Jsi_ValueMakeNumber($INTERP, &$THIS, $NV);
     Jsi_ValueDup2($INTERP, $RET, $THIS);
-
-    '
   languages:
   - c
-  message: "Direct modification of object type and value fields can lead to inconsistent state and potential memory corruption.\
-    \ \nThe vulnerability occurs when the object type and value are set directly instead of using the proper API functions.\n\
-    To fix this, use Jsi_ValueMakeNumber and Jsi_ValueDup2 to ensure proper object initialization and duplication.\n"
+  message: |
+    Direct modification of object type and value fields can lead to inconsistent state and potential memory corruption.
+    The vulnerability occurs when the object type and value are set directly instead of using the proper API functions.
+    To fix this, use Jsi_ValueMakeNumber and Jsi_ValueDup2 to ensure proper object initialization and duplication.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/1b2a9e2f35ecd5041e1c40b376a3d2959df73c24
@@ -28,19 +24,14 @@ rules:
     technology:
     - c
 - id: vuln-jsish-3ce16910
-  pattern: 'if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj->func->pkg) $RETURN;
-
-    '
-  pattern-not: 'if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj || !$FUNC->fobj->func->pkg) $RETURN;
-
-    '
+  pattern: |
+    if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj->func->pkg) $RETURN;
+  pattern-not: |
+    if (!$FUNC || $FUNC->type != $TYPE || !$FUNC->fobj || !$FUNC->fobj->func->pkg) $RETURN;
   languages:
   - c
-  message: 'Detected a potential NULL pointer dereference vulnerability. The code does not check if `fobj` is NULL before
-    accessing `fobj->func->pkg`. This can lead to a crash or undefined behavior if `fobj` is NULL. To fix this, ensure that
-    `fobj` is checked for NULL before dereferencing it.
-
-    '
+  message: |
+    Detected a potential NULL pointer dereference vulnerability. The code does not check if `fobj` is NULL before accessing `fobj->func->pkg`. This can lead to a crash or undefined behavior if `fobj` is NULL. To fix this, ensure that `fobj` is checked for NULL before dereferencing it.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/3ce16910be93b50cc83a3110903847fb6ca8a841
@@ -52,17 +43,15 @@ rules:
     technology:
     - c
 - id: vuln-jsish-48b86dbe
-  pattern: 'assert($VP != $RESPTR);
-
-    '
-  pattern-not: "if ($VP == $RESPTR)\n  return Jsi_LogError(\"bad eval\");\n"
+  pattern: |
+    assert($VP != $RESPTR);
+  pattern-not: |
+    if ($VP == $RESPTR)
+      return Jsi_LogError("bad eval");
   languages:
   - c
-  message: 'The use of `assert` for validation can lead to undefined behavior if the assertion fails in production builds.
-    This is dangerous because it can cause the program to terminate abruptly without proper error handling. Replace `assert`
-    with proper error handling to ensure graceful failure and better security.
-
-    '
+  message: |
+    The use of `assert` for validation can lead to undefined behavior if the assertion fails in production builds. This is dangerous because it can cause the program to terminate abruptly without proper error handling. Replace `assert` with proper error handling to ensure graceful failure and better security.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/48b86dbeb287dca8e5451cb6d6a60e98156c5c8b
@@ -76,19 +65,14 @@ rules:
     technology:
     - c
 - id: vuln-jsish-5c90ca03
-  pattern: 'return ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER));
-
-    '
-  pattern-not: 'return ($PV && ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER)));
-
-    '
+  pattern: |
+    return ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER));
+  pattern-not: |
+    return ($PV && ($PV->vt == JSI_VT_NUMBER || ($PV->vt == JSI_VT_OBJECT && $PV->d.obj->ot == JSI_OT_NUMBER)));
   languages:
   - c
-  message: 'Detected a potential null pointer dereference vulnerability. The code checks the type of a pointer without first
-    verifying that the pointer is not null. This can lead to undefined behavior or crashes if the pointer is null. To fix
-    this, add a null check before accessing the pointer.
-
-    '
+  message: |
+    Detected a potential null pointer dereference vulnerability. The code checks the type of a pointer without first verifying that the pointer is not null. This can lead to undefined behavior or crashes if the pointer is null. To fix this, add a null check before accessing the pointer.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/5c90ca033c7cc1074ff5f3fb67c2bac498d955bc
@@ -100,17 +84,24 @@ rules:
     technology:
     - c
 - id: vuln-jsish-619df528
-  pattern: "if ($I != $J && !Jsi_Strcmp($ARGS[$I].name, $ARGS[$J].name)) {\n    ...\n    Jsi_LogError(\"function %s():  duplicate\
-    \ parameter name '%s'\", $NAME?$NAME:\"\", $ARGS[$I].name);\n    ...\n    pstate->err_count++;\n}\n"
-  pattern-not: "if ($I != $J && !Jsi_Strcmp($ANAM, $ARGS[$J].name)) {\n    ...\n    Jsi_LogError(\"function %s():  duplicate\
-    \ parameter name '%s'\", $NAME?$NAME:\"\", $ANAM);\n    ...\n    pstate->err_count++;\n}\n"
+  pattern: |
+    if ($I != $J && !Jsi_Strcmp($ARGS[$I].name, $ARGS[$J].name)) {
+        ...
+        Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ARGS[$I].name);
+        ...
+        pstate->err_count++;
+    }
+  pattern-not: |
+    if ($I != $J && !Jsi_Strcmp($ANAM, $ARGS[$J].name)) {
+        ...
+        Jsi_LogError("function %s():  duplicate parameter name '%s'", $NAME?$NAME:"", $ANAM);
+        ...
+        pstate->err_count++;
+    }
   languages:
   - c
-  message: 'The code directly accesses the `name` field of `args` structure without checking if it is a reserved keyword.
-    This can lead to parameter name conflicts with reserved keywords, potentially causing unexpected behavior or security
-    issues. Use a temporary variable to store the parameter name and check if it is a reserved keyword before using it.
-
-    '
+  message: |
+    The code directly accesses the `name` field of `args` structure without checking if it is a reserved keyword. This can lead to parameter name conflicts with reserved keywords, potentially causing unexpected behavior or security issues. Use a temporary variable to store the parameter name and check if it is a reserved keyword before using it.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/619df528295ef564592a898d58b560c3f3176e21
@@ -122,20 +113,29 @@ rules:
     technology:
     - c
 - id: vuln-jsish-764f8f60
-  pattern: "Assert($T >= 0);\nJsi_Value *$V = _jsi_THISIDX($T);\njsiClearThis($INTERP, $T);\nJsi_ValueCopy($INTERP, $V, _jsi_TOQ);\n\
-    if ($V->vt == JSI_VT_VARIABLE) {\n    Jsi_ValueCopy($INTERP, $V, $V->d.lval);\n}\n$RC = Jsi_ValueToObject($INTERP, $V);\n"
-  pattern-not: "if ($T >= 0) {\n    Jsi_Value *$V = _jsi_THISIDX($T);\n    jsiClearThis($INTERP, $T);\n    Jsi_ValueCopy($INTERP,\
-    \ $V, _jsi_TOQ);\n    if ($V->vt == JSI_VT_VARIABLE) {\n        Jsi_ValueCopy($INTERP, $V, $V->d.lval);\n    }\n    $RC\
-    \ = Jsi_ValueToObject($INTERP, $V);\n}\n"
+  pattern: |
+    Assert($T >= 0);
+    Jsi_Value *$V = _jsi_THISIDX($T);
+    jsiClearThis($INTERP, $T);
+    Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
+    if ($V->vt == JSI_VT_VARIABLE) {
+        Jsi_ValueCopy($INTERP, $V, $V->d.lval);
+    }
+    $RC = Jsi_ValueToObject($INTERP, $V);
+  pattern-not: |
+    if ($T >= 0) {
+        Jsi_Value *$V = _jsi_THISIDX($T);
+        jsiClearThis($INTERP, $T);
+        Jsi_ValueCopy($INTERP, $V, _jsi_TOQ);
+        if ($V->vt == JSI_VT_VARIABLE) {
+            Jsi_ValueCopy($INTERP, $V, $V->d.lval);
+        }
+        $RC = Jsi_ValueToObject($INTERP, $V);
+    }
   languages:
   - c
-  message: 'The code previously used an assert statement to ensure that the value of `t` is non-negative, which could lead
-    to undefined behavior if the assertion fails in a non-debug build. The patch adds a conditional check to ensure that `t`
-    is non-negative before proceeding with the operations, making the code safer and more robust. This vulnerability could
-    lead to crashes or undefined behavior in production builds where assertions are typically disabled. To fix this, always
-    use explicit checks instead of assertions for critical conditions.
-
-    '
+  message: |
+    The code previously used an assert statement to ensure that the value of `t` is non-negative, which could lead to undefined behavior if the assertion fails in a non-debug build. The patch adds a conditional check to ensure that `t` is non-negative before proceeding with the operations, making the code safer and more robust. This vulnerability could lead to crashes or undefined behavior in production builds where assertions are typically disabled. To fix this, always use explicit checks instead of assertions for critical conditions.
   severity: ERROR
   metadata:
     source-url: https://github.com/pcmacdon/jsish/commit/764f8f60d00808cc12321ba7a276de2c5118f835
@@ -148,22 +148,15 @@ rules:
     technology:
     - c
 - id: vuln-jsish-7df22ab2
-  pattern: '$THIS->d.obj->d.s.str = Jsi_StrdupLen($NV, $LEN);
-
-    '
-  pattern-not: '$NSTR = Jsi_StrdupLen($NV, $LEN);
-
+  pattern: |
+    $THIS->d.obj->d.s.str = Jsi_StrdupLen($NV, $LEN);
+  pattern-not: |
+    $NSTR = Jsi_StrdupLen($NV, $LEN);
     $THIS->d.obj->d.s.str = $NSTR;
-
-    '
   languages:
   - c
-  message: 'Direct assignment of the result of `Jsi_StrdupLen` to a structure field can lead to memory leaks if the field
-    previously held a dynamically allocated string. This is dangerous because it can result in unreleased memory, leading
-    to memory exhaustion over time. The fix involves storing the result in a temporary variable before assigning it to the
-    structure field.
-
-    '
+  message: |
+    Direct assignment of the result of `Jsi_StrdupLen` to a structure field can lead to memory leaks if the field previously held a dynamically allocated string. This is dangerous because it can result in unreleased memory, leading to memory exhaustion over time. The fix involves storing the result in a temporary variable before assigning it to the structure field.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/7df22ab2fad6bf7cecf96465caede6401b9b451c
@@ -175,13 +168,20 @@ rules:
     technology:
     - c
 - id: vuln-jsish-8d57b655
-  pattern: "if (!$VAR == $CONST) {\n  ...\n}\n"
-  pattern-not: "if ($VAR == $CONST) {\n  ...\n}\n"
+  pattern: |
+    if (!$VAR == $CONST) {
+      ...
+    }
+  pattern-not: |
+    if ($VAR == $CONST) {
+      ...
+    }
   languages:
   - c
-  message: "The condition checks for the negation of a comparison, which is likely a logical error. \nThis can lead to incorrect\
-    \ control flow and potential security vulnerabilities. \nThe correct way is to directly compare the variable with the\
-    \ constant.\n"
+  message: |
+    The condition checks for the negation of a comparison, which is likely a logical error.
+    This can lead to incorrect control flow and potential security vulnerabilities.
+    The correct way is to directly compare the variable with the constant.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/8d57b65503fe955acc6d219a9c31b43361653289
@@ -195,23 +195,21 @@ rules:
     technology:
     - c
 - id: vuln-jsish-9c9dbe59
-  pattern: 'if (Jsi_ObjArraySizer($INTERP, $OBJ, $N) <= 0)
-
+  pattern: |
+    if (Jsi_ObjArraySizer($INTERP, $OBJ, $N) <= 0)
     ...
-
     $OBJ->arr[$N] = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
-
-    '
-  pattern-not: "if (Jsi_ObjArraySizer($INTERP, $OBJ, $N+1) <= 0)\n...\nJsi_Value* $V = (Jsi_Value*)Jsi_TreeValueGet($HPTR);\n\
-    $OBJ->arr[$N] = $V;\nif ($V)\n    Jsi_IncrRefCount($INTERP, $V);\n"
+  pattern-not: |
+    if (Jsi_ObjArraySizer($INTERP, $OBJ, $N+1) <= 0)
+    ...
+    Jsi_Value* $V = (Jsi_Value*)Jsi_TreeValueGet($HPTR);
+    $OBJ->arr[$N] = $V;
+    if ($V)
+        Jsi_IncrRefCount($INTERP, $V);
   languages:
   - c
-  message: 'Detected a potential vulnerability where the array size is not properly incremented before assignment, which could
-    lead to out-of-bounds access. Additionally, the reference count for the assigned value is not incremented, which could
-    lead to use-after-free or memory corruption issues. To fix this, ensure the array size is incremented by 1 and increment
-    the reference count of the value being assigned.
-
-    '
+  message: |
+    Detected a potential vulnerability where the array size is not properly incremented before assignment, which could lead to out-of-bounds access. Additionally, the reference count for the assigned value is not incremented, which could lead to use-after-free or memory corruption issues. To fix this, ensure the array size is incremented by 1 and increment the reference count of the value being assigned.
   severity: ERROR
   metadata:
     source-url: github.com/pcmacdon/jsish/commit/9c9dbe59760a660e21d69d5cf6007c9ccbb5c9a3

@@ -1,7 +1,6 @@
 rules:
 - id: lxml-in-pandas
-  message: Found usage of the `$FLAVOR` library, which is vulnerable to attacks such
-    as XML external entity (XXE) attacks
+  message: Found usage of the `$FLAVOR` library, which is vulnerable to attacks such as XML external entity (XXE) attacks
   languages:
   - python
   severity: ERROR
@@ -27,20 +26,15 @@ rules:
         metavariable: $FLAVOR
         patterns:
         - pattern: '...'
-        - pattern-not: '"bs4"
-
-            '
-        - pattern-not: '"html5lib"
-
-            '
+        - pattern-not: |
+            "bs4"
+        - pattern-not: |
+            "html5lib"
     - pattern-either:
       - pattern: pandas.read_html(..., flavor=$FLAVOR, ...)
       - patterns:
-        - pattern-inside: '$KWARGS = {..., "flavor": $FLAVOR, ...}
-
+        - pattern-inside: |
+            $KWARGS = {..., "flavor": $FLAVOR, ...}
             ...
-
-            '
-        - pattern: 'pandas.read_html(**$KWARGS)
-
-            '
+        - pattern: |
+            pandas.read_html(**$KWARGS)

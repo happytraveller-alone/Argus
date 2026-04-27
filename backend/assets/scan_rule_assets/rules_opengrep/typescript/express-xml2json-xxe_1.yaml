@@ -2,8 +2,7 @@ rules:
 - id: express-xml2json-xxe_1
   languages:
   - typescript
-  message: Make sure that unverified user data can not reach the XML Parser, as it
-    can result in XML External or Internal Entity (XXE) Processing vulnerabilities
+  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities
   metadata:
     asvs:
       control_id: 5.5.2 Insecue XML Deserialization
@@ -31,16 +30,12 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: 'require(''xml2json'');
-
+      - pattern-inside: |
+          require('xml2json');
           ...
-
-          '
-      - pattern-inside: 'import ''xml2json'';
-
+      - pattern-inside: |
+          import 'xml2json';
           ...
-
-          '
     - pattern: $EXPAT.toJson($SINK,...)
     - focus-metavariable: $SINK
   pattern-sources:
@@ -65,14 +60,11 @@ rules:
       - pattern: $REQ.files.$ANYTHING['data'].toString('utf8')
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

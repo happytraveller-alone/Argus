@@ -2,12 +2,21 @@ rules:
 - id: c_buffer_rule-scanf-vscanf
   languages:
   - cpp
-  message: "Format specifiers can take optional field widths, which should be\nused\
-    \ to limit how many characters are copied into the target buffer.\n\nFor more\
-    \ information please see: https://linux.die.net/man/3/scanf\n\nExample:\n```\n\
-    \  char buf[11] = {0};\n  scanf(\"%10s\", &buf); // buf = AAAAAAAAAA\\0\n```\n\
-    \nIf developing for C Runtime Library (CRT), more secure versions of these functions\
-    \ should be\nused, see:\nhttps://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/scanf-s-scanf-s-l-wscanf-s-wscanf-s-l?view=msvc-170\n"
+  message: |
+    Format specifiers can take optional field widths, which should be
+    used to limit how many characters are copied into the target buffer.
+
+    For more information please see: https://linux.die.net/man/3/scanf
+
+    Example:
+    ```
+      char buf[11] = {0};
+      scanf("%10s", &buf); // buf = AAAAAAAAAA\0
+    ```
+
+    If developing for C Runtime Library (CRT), more secure versions of these functions should be
+    used, see:
+    https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/scanf-s-scanf-s-l-wscanf-s-wscanf-s-l?view=msvc-170
   metadata:
     shortDescription: scanf() functions may allow format string based overflows
     cwe: CWE-120

@@ -2,13 +2,7 @@ rules:
 - id: github-script-injection
   languages:
   - yaml
-  message: 'Using variable interpolation `${{...}}` with `github` context data in
-    a `actions/github-script`''s `script:` step could allow an attacker to inject
-    their own code into the runner. This would allow them to steal secrets and code.
-    `github` context data can have arbitrary user input and should be treated as untrusted.
-    Instead, use an intermediate environment variable with `env:` to store the data
-    and use the environment variable in the `run:` script. Be sure to use double-quotes
-    the environment variable, like this: "$ENVVAR".'
+  message: 'Using variable interpolation `${{...}}` with `github` context data in a `actions/github-script`''s `script:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: "$ENVVAR".'
   metadata:
     category: security
     cwe:
@@ -29,12 +23,14 @@ rules:
     confidence: HIGH
   patterns:
   - pattern-inside: 'steps: [...]'
-  - pattern-inside: 'uses: $ACTION
-
+  - pattern-inside: |
+      uses: $ACTION
       ...
-
-      '
-  - pattern-inside: "with:\n  ...\n  script: ...\n  ...\n"
+  - pattern-inside: |
+      with:
+        ...
+        script: ...
+        ...
   - pattern: 'script: $SHELL'
   - metavariable-regex:
       metavariable: $ACTION

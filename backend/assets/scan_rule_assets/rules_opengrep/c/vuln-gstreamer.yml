@@ -1,19 +1,13 @@
 rules:
 - id: vuln-gstreamer-14d306da
-  pattern: '$Z.avail_out += 4096;
-
-    '
-  pattern-not: '$Z.avail_out += $LENGTH - $Z.total_out;
-
-    '
+  pattern: |
+    $Z.avail_out += 4096;
+  pattern-not: |
+    $Z.avail_out += $LENGTH - $Z.total_out;
   languages:
   - c
-  message: 'The code directly adds 4096 to `avail_out` without checking if it exceeds the maximum allowed size, which can
-    lead to integer overflow and memory corruption. This vulnerability can be exploited to cause a denial of service or potentially
-    execute arbitrary code. To fix this, ensure that the length is checked against the maximum allowed size before performing
-    the addition.
-
-    '
+  message: |
+    The code directly adds 4096 to `avail_out` without checking if it exceeds the maximum allowed size, which can lead to integer overflow and memory corruption. This vulnerability can be exploited to cause a denial of service or potentially execute arbitrary code. To fix this, ensure that the length is checked against the maximum allowed size before performing the addition.
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/14d306da6da51a762c4dc701d161bb52ab66d774
@@ -25,19 +19,14 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-45dcd0b9
-  pattern: 'gst_object_unref($VAR);
-
-    '
-  pattern-not: 'gst_object_unref(flxdec);
-
-    '
+  pattern: |
+    gst_object_unref($VAR);
+  pattern-not: |
+    gst_object_unref(flxdec);
   languages:
   - c
-  message: 'The code contains a potentially unsafe use of `gst_object_unref` with a variable that may not be properly managed,
-    leading to potential double-free or use-after-free vulnerabilities. This can cause crashes or security exploits. Ensure
-    that the object being unreferenced is properly managed and not unrefed multiple times.
-
-    '
+  message: |
+    The code contains a potentially unsafe use of `gst_object_unref` with a variable that may not be properly managed, leading to potential double-free or use-after-free vulnerabilities. This can cause crashes or security exploits. Ensure that the object being unreferenced is properly managed and not unrefed multiple times.
   severity: ERROR
   metadata:
     source-url: github.com/gstreamer/gstreamer/commit/45dcd0b9ccf33ed85cdafeb871a3781f5be57fd9
@@ -51,18 +40,14 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-4cb1bcf1
-  pattern: '$DEC->imagedata = g_malloc($WIDTH * $HEIGHT);
-
-    '
-  pattern-not: '$DEC->imagedata = g_malloc0($WIDTH * $HEIGHT);
-
-    '
+  pattern: |
+    $DEC->imagedata = g_malloc($WIDTH * $HEIGHT);
+  pattern-not: |
+    $DEC->imagedata = g_malloc0($WIDTH * $HEIGHT);
   languages:
   - c
-  message: 'Detected unsafe memory allocation without initialization. Using `g_malloc` instead of `g_malloc0` can lead to
-    uninitialized memory access vulnerabilities. Replace `g_malloc` with `g_malloc0` to ensure memory is zero-initialized.
-
-    '
+  message: |
+    Detected unsafe memory allocation without initialization. Using `g_malloc` instead of `g_malloc0` can lead to uninitialized memory access vulnerabilities. Replace `g_malloc` with `g_malloc0` to ensure memory is zero-initialized.
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/4cb1bcf1422bbcd79c0f683edb7ee85e3f7a31fe
@@ -76,13 +61,25 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-7b12593c
-  pattern: "guint16 $I = 0, $NB_PROGRAMS;\n...\nwhile ($DATA < $END - 4) {\n  ...\n  $I++;\n}\n"
-  pattern-not: "guint16 $I, $NB_PROGRAMS;\n...\nfor ($I = 0; $I < $NB_PROGRAMS; $I++) {\n  ...\n}\n"
+  pattern: |
+    guint16 $I = 0, $NB_PROGRAMS;
+    ...
+    while ($DATA < $END - 4) {
+      ...
+      $I++;
+    }
+  pattern-not: |
+    guint16 $I, $NB_PROGRAMS;
+    ...
+    for ($I = 0; $I < $NB_PROGRAMS; $I++) {
+      ...
+    }
   languages:
   - c
-  message: "Detected a potential unbounded loop due to missing bounds check on the loop counter. \nThis could lead to out-of-bounds\
-    \ access or infinite loops if the loop condition is not properly constrained. \nEnsure the loop counter is bounded by\
-    \ the number of programs (nb_programs) using a for loop instead of a while loop.\n"
+  message: |
+    Detected a potential unbounded loop due to missing bounds check on the loop counter.
+    This could lead to out-of-bounds access or infinite loops if the loop condition is not properly constrained.
+    Ensure the loop counter is bounded by the number of programs (nb_programs) using a for loop instead of a while loop.
   severity: ERROR
   metadata:
     source-url: github.com/gstreamer/gstreamer/commit/7b12593cceaa0726d7fc370a7556a8e773ccf318
@@ -92,20 +89,27 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-91811915
-  pattern: "gsize $SIZE;\n...\nif ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {\n  break;\n}\n"
-  pattern-not: "gsize $SIZE;\n...\nif ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {\n  GST_ERROR_OBJECT($ELEMENT, \"Too small\
-    \ wavpack buffer\");\n  gst_buffer_unmap($BUF, $MAP);\n  return GST_FLOW_ERROR;\n}\n"
+  pattern: |
+    gsize $SIZE;
+    ...
+    if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
+      break;
+    }
+  pattern-not: |
+    gsize $SIZE;
+    ...
+    if ($BLOCKSIZE == 0 || $SIZE < $BLOCKSIZE) {
+      GST_ERROR_OBJECT($ELEMENT, "Too small wavpack buffer");
+      gst_buffer_unmap($BUF, $MAP);
+      return GST_FLOW_ERROR;
+    }
   languages:
   - c
-  message: 'Detected a potential buffer underflow vulnerability due to insufficient size validation.
-
+  message: |
+    Detected a potential buffer underflow vulnerability due to insufficient size validation.
     The code breaks without proper error handling when the buffer size is too small,
-
     which could lead to undefined behavior or crashes. Always validate buffer sizes
-
     and handle errors appropriately by returning an error flow and cleaning up resources.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/9181191511f9c0be6a89c98b311f49d66bd46dc3
@@ -116,38 +120,23 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-ad601215
-  pattern: '$SIZE = *$SIZE_OUT;
-
+  pattern: |
+    $SIZE = *$SIZE_OUT;
     ...
-
     $NEW_SIZE = $SIZE;
-
     ...
-
     $STREAM.avail_out += 4096;
-
-    '
-  pattern-not: '$SIZE = *$SIZE_OUT;
-
+  pattern-not: |
+    $SIZE = *$SIZE_OUT;
     ...
-
     $NEW_SIZE = $SIZE;
-
     ...
-
     g_assert($NEW_SIZE - $STREAM.total_out <= G_MAXUINT);
-
     $STREAM.avail_out = $NEW_SIZE - $STREAM.total_out;
-
-    '
   languages:
   - c
-  message: 'The code fails to properly check for integer overflow when calculating the size of decompressed data, which can
-    lead to memory corruption or out-of-bounds writes. This vulnerability can be exploited to cause denial of service or potentially
-    execute arbitrary code. Always validate the size of decompressed data against maximum allowed values and ensure proper
-    bounds checking when manipulating stream buffers.
-
-    '
+  message: |
+    The code fails to properly check for integer overflow when calculating the size of decompressed data, which can lead to memory corruption or out-of-bounds writes. This vulnerability can be exploited to cause denial of service or potentially execute arbitrary code. Always validate the size of decompressed data against maximum allowed values and ensure proper bounds checking when manipulating stream buffers.
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/ad6012159acf18c6b5c0f4edf037e8c9a2dbc966
@@ -159,15 +148,19 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-d21017b5
-  pattern: '$TYPE $VAR = GST_READ_UINT32_LE($VALUE);
-
-    '
-  pattern-not: "$TYPE $VAR;\nif ($VALUE_LEN < 4)\n  break;\n$VAR = GST_READ_UINT32_LE($VALUE);\n"
+  pattern: |
+    $TYPE $VAR = GST_READ_UINT32_LE($VALUE);
+  pattern-not: |
+    $TYPE $VAR;
+    if ($VALUE_LEN < 4)
+      break;
+    $VAR = GST_READ_UINT32_LE($VALUE);
   languages:
   - c
-  message: "Detected unsafe reading of a 32-bit value without checking the buffer length. \nThis can lead to buffer overflow\
-    \ vulnerabilities when the input buffer is smaller than expected. \nAlways check the buffer length before reading to prevent\
-    \ potential memory corruption.\n"
+  message: |
+    Detected unsafe reading of a 32-bit value without checking the buffer length.
+    This can lead to buffer overflow vulnerabilities when the input buffer is smaller than expected.
+    Always check the buffer length before reading to prevent potential memory corruption.
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/d21017b52a585f145e8d62781bcc1c5fefc7ee37
@@ -179,16 +172,25 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-d58f668e
-  pattern: "guint16 $SECTION_LENGTH;\n...\nif (G_UNLIKELY ($DATA_SIZE < $MIN_SIZE)) {\n  ...\n}\n"
-  pattern-not: "guint16 $SECTION_LENGTH = 0;\n...\nif (G_UNLIKELY ($DATA_SIZE < 3)) {\n  ...\n}\nif (G_UNLIKELY ($DATA_SIZE\
-    \ < 11)) {\n  ...\n}\n"
+  pattern: |
+    guint16 $SECTION_LENGTH;
+    ...
+    if (G_UNLIKELY ($DATA_SIZE < $MIN_SIZE)) {
+      ...
+    }
+  pattern-not: |
+    guint16 $SECTION_LENGTH = 0;
+    ...
+    if (G_UNLIKELY ($DATA_SIZE < 3)) {
+      ...
+    }
+    if (G_UNLIKELY ($DATA_SIZE < 11)) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential vulnerability due to missing initialization of section_length and insufficient size checks
-    for MPEG-TS packets. This can lead to undefined behavior or security issues when processing malformed packets. The fix
-    initializes section_length to 0 and adds proper size checks for both short and long packets.
-
-    '
+  message: |
+    Detected a potential vulnerability due to missing initialization of section_length and insufficient size checks for MPEG-TS packets. This can lead to undefined behavior or security issues when processing malformed packets. The fix initializes section_length to 0 and adds proper size checks for both short and long packets.
   severity: ERROR
   metadata:
     source-url: github.com/gstreamer/gstreamer/commit/d58f668ece8795bddb3316832e1848c7b7cf38ac
@@ -203,21 +205,22 @@ rules:
     technology:
     - c
 - id: vuln-gstreamer-f6722775
-  pattern: "for ($I = 0; $SESSION_ID[$I] != '\\0'; $I++) {\n  ...\n}\n"
-  pattern-not: "for ($I = 0; $I < $MAXLEN && $SESSION_ID[$I] != '\\0'; $I++) {\n  ...\n}\n"
+  pattern: |
+    for ($I = 0; $SESSION_ID[$I] != '\0'; $I++) {
+      ...
+    }
+  pattern-not: |
+    for ($I = 0; $I < $MAXLEN && $SESSION_ID[$I] != '\0'; $I++) {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a potential buffer overflow vulnerability due to missing bounds checking
-
+  message: |
+    Detected a potential buffer overflow vulnerability due to missing bounds checking
     in a loop that iterates over a string. This can lead to out-of-bounds memory access
-
     if the string is not null-terminated or exceeds expected length. To fix this, add
-
     a length check in the loop condition to ensure the loop does not exceed the maximum
-
     allowed length.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/GStreamer/gstreamer/commit/f672277509705c4034bc92a141eefee4524d15aa

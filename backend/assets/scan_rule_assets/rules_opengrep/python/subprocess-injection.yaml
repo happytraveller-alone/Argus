@@ -7,7 +7,9 @@ rules:
     symbolic_propagation: true
   pattern-sources:
   - patterns:
-    - pattern-inside: "def $FUNC(..., $REQUEST, ...):\n  ...\n"
+    - pattern-inside: |
+        def $FUNC(..., $REQUEST, ...):
+          ...
     - focus-metavariable: $REQUEST
     - metavariable-pattern:
         metavariable: $REQUEST
@@ -21,13 +23,10 @@ rules:
         - pattern: subprocess.$FUNC(...)
         - pattern-not: subprocess.$FUNC("...", ...)
         - pattern-not: subprocess.$FUNC(["...", ...], ...)
-        - pattern-not-inside: '$CMD = ["...", ...]
-
+        - pattern-not-inside: |
+            $CMD = ["...", ...]
             ...
-
             subprocess.$FUNC($CMD, ...)
-
-            '
       - patterns:
         - pattern: subprocess.$FUNC(["$SHELL", "-c", ...], ...)
         - metavariable-regex:
@@ -43,11 +42,7 @@ rules:
     - pattern: $DICT[$KEY]
     - focus-metavariable: $KEY
   severity: ERROR
-  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability.
-    An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware,
-    scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general,
-    prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set
-    of commands.
+  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability. An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware, scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general, prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set of commands.
   metadata:
     category: security
     technology:
@@ -69,11 +64,7 @@ rules:
 - id: subprocess-injection_1
   languages:
   - python
-  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability.
-    An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware,
-    scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general,
-    prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set
-    of commands.
+  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability. An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware, scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general, prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set of commands.
   metadata:
     category: security
     confidence: HIGH
@@ -106,13 +97,10 @@ rules:
         - pattern: subprocess.$FUNC(...)
         - pattern-not: subprocess.$FUNC("...", ...)
         - pattern-not: subprocess.$FUNC(["...", ...], ...)
-        - pattern-not-inside: '$CMD = ["...", ...]
-
+        - pattern-not-inside: |
+            $CMD = ["...", ...]
             ...
-
             subprocess.$FUNC($CMD, ...)
-
-            '
       - patterns:
         - pattern: subprocess.$FUNC(["$SHELL", "-c", ...], ...)
         - metavariable-regex:
@@ -146,6 +134,9 @@ rules:
         - pattern: flask.request.view_args.get(...)
         - pattern: flask.request.view_args[...]
     - patterns:
-      - pattern-inside: "@$APP.route($ROUTE, ...)\ndef $FUNC(..., $ROUTEVAR, ...):\n  ...\n"
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
       - focus-metavariable: $ROUTEVAR
   severity: ERROR

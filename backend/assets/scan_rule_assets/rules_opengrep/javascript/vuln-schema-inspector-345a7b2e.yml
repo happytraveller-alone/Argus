@@ -1,14 +1,17 @@
 rules:
 - id: vuln-schema-inspector-345a7b2e
-  pattern: "if ($OBJ.hasOwnProperty($KEY)) {\n  ...\n}\n"
-  pattern-not: "if (Object.prototype.hasOwnProperty.call($OBJ, $KEY)) {\n  ...\n}\n"
+  pattern: |
+    if ($OBJ.hasOwnProperty($KEY)) {
+      ...
+    }
+  pattern-not: |
+    if (Object.prototype.hasOwnProperty.call($OBJ, $KEY)) {
+      ...
+    }
   languages:
   - javascript
-  message: 'Using `hasOwnProperty` directly on objects can be dangerous as it can
-    be overridden or shadowed. Always use `Object.prototype.hasOwnProperty.call` to
-    ensure the correct method is invoked.
-
-    '
+  message: |
+    Using `hasOwnProperty` directly on objects can be dangerous as it can be overridden or shadowed. Always use `Object.prototype.hasOwnProperty.call` to ensure the correct method is invoked.
   severity: ERROR
   metadata:
     source-url: github.com/Atinux/schema-inspector/commit/345a7b2eed11bb6128421150d65f4f83fdbb737d

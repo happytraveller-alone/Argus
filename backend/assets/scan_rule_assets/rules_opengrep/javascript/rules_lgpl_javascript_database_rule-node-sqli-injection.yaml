@@ -1,62 +1,41 @@
 rules:
 - id: rules_lgpl_javascript_database_rule-node-sqli-injection
   patterns:
-  - pattern-inside: 'require(''$LIB'')
-
+  - pattern-inside: |
+      require('$LIB')
       ...
-
-      '
   - metavariable-regex:
       metavariable: $LIB
       regex: \b(sql-client|mysql|pg|mssql|oracledb|sequelize)\b
-  - pattern-not: '$CON.query("..." + "...", ...)
-
-      '
-  - pattern-not: '$SQL = "...";
-
+  - pattern-not: |
+      $CON.query("..." + "...", ...)
+  - pattern-not: |
+      $SQL = "...";
       ...
-
       $CON.query(<... $SQL ...>, ...)
-
-      '
   - pattern-either:
-    - pattern: '$CON.query(<... $REQ.$QUERY ...>, ...)
-
-        '
-    - pattern: '$SQL = <... $REQ.$QUERY ...>;
-
+    - pattern: |
+        $CON.query(<... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $SQL = <... $REQ.$QUERY ...>;
         ...
-
         $CON.query(<... $SQL ...>, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$QUERY ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$QUERY ...>;
         ...
-
         $SQL = <... $INP ...>;
-
         ...
-
         $CON.query(<... $SQL ...>, ...)
-
-        '
-    - pattern: '$CON.query(`...${...}...`, ...)
-
-        '
-    - pattern: '$CON.query("..."+...+"...", ...)
-
-        '
-    - pattern: '$SQL = <... $INP ...>;
-
+    - pattern: |
+        $CON.query(`...${...}...`, ...)
+    - pattern: |
+        $CON.query("..."+...+"...", ...)
+    - pattern: |
+        $SQL = <... $INP ...>;
         ...
-
         $CON.query(<... $SQL ...>, ...)
-
-        '
-  message: 'Untrusted input concatinated with raw SQL query can result in SQL Injection.
-
-    '
+  message: |
+    Untrusted input concatinated with raw SQL query can result in SQL Injection.
   languages:
   - javascript
   severity: ERROR
@@ -65,7 +44,6 @@ rules:
     - A1:2017-Injection
     - A03:2021-Injection
     cwe: CWE-89
-    shortDescription: Improper neutralization of special elements used in an SQL command
-      (SQL Injection)
+    shortDescription: Improper neutralization of special elements used in an SQL command (SQL Injection)
     security-severity: CRITICAL
     category: security

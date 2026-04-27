@@ -1,42 +1,80 @@
 rules:
 - id: vuln-nocodb-f46e89b0
-  pattern: "if (!$USER) {\n  return next(new Error('This email is not registered with\
-    \ us.'));\n}\nconst $TOKEN = uuidv4();\nawait $THIS.users\n  .update({\n    reset_password_token:\
-    \ $TOKEN,\n    reset_password_expires: new Date(Date.now() + 60 * 60 * 1000)\n\
-    \  })\n  .where({ id: $USER.id });\ntry {\n  const $TEMPLATE = (await import('./ui/emailTemplates/forgotPassword'))\n\
-    \    .default;\n  await $THIS.emailClient.mailSend({\n    to: $USER.email,\n \
-    \   subject: 'Password Reset Link',\n    text: `Visit following link to update\
-    \ your password : ${$REQ.ncSiteUrl}/password/reset/${$TOKEN}.`,\n    html: ejs.render($TEMPLATE,\
-    \ {\n      resetLink: $REQ.ncSiteUrl + `/password/reset/${$TOKEN}`\n    })\n \
-    \ });\n} catch ($E) {\n  console.log(\n    'Warning : `mailSend` failed, Please\
-    \ configure emailClient configuration.'\n  );\n}\nconsole.log(`Password reset\
-    \ token : ${$TOKEN}`);\n$THIS.xcMeta.audit(null, null, 'nc_audit', {\n  op_type:\
-    \ 'AUTHENTICATION',\n  op_sub_type: 'PASSWORD_FORGOT',\n  user: $USER.email,\n\
-    \  description: `requested for password reset `,\n  ip: $REQ.clientIp\n});\n$RES.json({\
-    \ msg: 'Check your email for password reset link.' });\n"
-  pattern-not: "if ($USER) {\n  const $TOKEN = uuidv4();\n  await $THIS.users\n  \
-    \  .update({\n      reset_password_token: $TOKEN,\n      reset_password_expires:\
-    \ new Date(Date.now() + 60 * 60 * 1000)\n    })\n    .where({ id: $USER.id });\n\
-    \  try {\n    const $TEMPLATE = (await import('./ui/emailTemplates/forgotPassword'))\n\
-    \      .default;\n    await $THIS.emailClient.mailSend({\n      to: $USER.email,\n\
-    \      subject: 'Password Reset Link',\n      text: `Visit following link to update\
-    \ your password : ${$REQ.ncSiteUrl}/password/reset/${$TOKEN}.`,\n      html: ejs.render($TEMPLATE,\
-    \ {\n        resetLink: $REQ.ncSiteUrl + `/password/reset/${$TOKEN}`\n      })\n\
-    \    });\n  } catch ($E) {\n    console.log(\n      'Warning : `mailSend` failed,\
-    \ Please configure emailClient configuration.'\n    );\n  }\n  console.log(`Password\
-    \ reset token : ${$TOKEN}`);\n  $THIS.xcMeta.audit(null, null, 'nc_audit', {\n\
-    \    op_type: 'AUTHENTICATION',\n    op_sub_type: 'PASSWORD_FORGOT',\n    user:\
-    \ $USER.email,\n    description: `requested for password reset `,\n    ip: $REQ.clientIp\n\
-    \  });\n  $RES.json({ msg: 'Check your email if you are registered with us.' });\n\
-    }\n"
+  pattern: |
+    if (!$USER) {
+      return next(new Error('This email is not registered with us.'));
+    }
+    const $TOKEN = uuidv4();
+    await $THIS.users
+      .update({
+        reset_password_token: $TOKEN,
+        reset_password_expires: new Date(Date.now() + 60 * 60 * 1000)
+      })
+      .where({ id: $USER.id });
+    try {
+      const $TEMPLATE = (await import('./ui/emailTemplates/forgotPassword'))
+        .default;
+      await $THIS.emailClient.mailSend({
+        to: $USER.email,
+        subject: 'Password Reset Link',
+        text: `Visit following link to update your password : ${$REQ.ncSiteUrl}/password/reset/${$TOKEN}.`,
+        html: ejs.render($TEMPLATE, {
+          resetLink: $REQ.ncSiteUrl + `/password/reset/${$TOKEN}`
+        })
+      });
+    } catch ($E) {
+      console.log(
+        'Warning : `mailSend` failed, Please configure emailClient configuration.'
+      );
+    }
+    console.log(`Password reset token : ${$TOKEN}`);
+    $THIS.xcMeta.audit(null, null, 'nc_audit', {
+      op_type: 'AUTHENTICATION',
+      op_sub_type: 'PASSWORD_FORGOT',
+      user: $USER.email,
+      description: `requested for password reset `,
+      ip: $REQ.clientIp
+    });
+    $RES.json({ msg: 'Check your email for password reset link.' });
+  pattern-not: |
+    if ($USER) {
+      const $TOKEN = uuidv4();
+      await $THIS.users
+        .update({
+          reset_password_token: $TOKEN,
+          reset_password_expires: new Date(Date.now() + 60 * 60 * 1000)
+        })
+        .where({ id: $USER.id });
+      try {
+        const $TEMPLATE = (await import('./ui/emailTemplates/forgotPassword'))
+          .default;
+        await $THIS.emailClient.mailSend({
+          to: $USER.email,
+          subject: 'Password Reset Link',
+          text: `Visit following link to update your password : ${$REQ.ncSiteUrl}/password/reset/${$TOKEN}.`,
+          html: ejs.render($TEMPLATE, {
+            resetLink: $REQ.ncSiteUrl + `/password/reset/${$TOKEN}`
+          })
+        });
+      } catch ($E) {
+        console.log(
+          'Warning : `mailSend` failed, Please configure emailClient configuration.'
+        );
+      }
+      console.log(`Password reset token : ${$TOKEN}`);
+      $THIS.xcMeta.audit(null, null, 'nc_audit', {
+        op_type: 'AUTHENTICATION',
+        op_sub_type: 'PASSWORD_FORGOT',
+        user: $USER.email,
+        description: `requested for password reset `,
+        ip: $REQ.clientIp
+      });
+      $RES.json({ msg: 'Check your email if you are registered with us.' });
+    }
   languages:
   - typescript
-  message: 'Detected a vulnerability where a password reset token is generated and
-    sent even if the user does not exist. This can lead to information disclosure
-    and potential security risks. The fix ensures that the token is only generated
-    and sent if the user exists.
-
-    '
+  message: |
+    Detected a vulnerability where a password reset token is generated and sent even if the user does not exist. This can lead to information disclosure and potential security risks. The fix ensures that the token is only generated and sent if the user exists.
   severity: ERROR
   metadata:
     source-url: github.com/nocodb/nocodb/commit/f46e89b0

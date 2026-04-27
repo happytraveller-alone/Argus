@@ -6,8 +6,7 @@ rules:
   severity: ERROR
   metadata:
     category: security
-    cwe: 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization
-      (''Race Condition'')'
+    cwe: 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization (''Race Condition'')'
     subcategory:
     - vuln
     confidence: MEDIUM
@@ -19,24 +18,26 @@ rules:
     references:
     - https://go.dev/blog/maps#concurrency
   patterns:
-  - pattern: '$MAP[$KEY] = $VALUE
-
-      '
-  - pattern-inside: "$MAP = make(map[$KTYPE]$VTYPE)\n...\nfor ... {\n  ...\n  go func(...)\
-      \ {\n    ...\n    $MAP[$KEY] = $VALUE\n    ...\n  }(...)\n  ...\n}\n"
-  - pattern-not-inside: '$MUTEX.Lock()
-
+  - pattern: |
+      $MAP[$KEY] = $VALUE
+  - pattern-inside: |
+      $MAP = make(map[$KTYPE]$VTYPE)
       ...
-
+      for ... {
+        ...
+        go func(...) {
+          ...
+          $MAP[$KEY] = $VALUE
+          ...
+        }(...)
+        ...
+      }
+  - pattern-not-inside: |
+      $MUTEX.Lock()
+      ...
       $MUTEX.Unlock()
-
-      '
-  - pattern-not-inside: '$MUTEX.Lock()
-
+  - pattern-not-inside: |
+      $MUTEX.Lock()
       ...
-
       defer $MUTEX.Unlock()
-
       ...
-
-      '

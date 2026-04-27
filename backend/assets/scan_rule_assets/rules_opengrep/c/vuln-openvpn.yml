@@ -1,18 +1,13 @@
 rules:
 - id: vuln-openvpn-42639294
-  pattern: 'return "ERROR: embedded null value";
-
-    '
-  pattern-not: 'return string_alloc("ERROR: embedded null value", $GC);
-
-    '
+  pattern: |
+    return "ERROR: embedded null value";
+  pattern-not: |
+    return string_alloc("ERROR: embedded null value", $GC);
   languages:
   - c
-  message: 'Returning a string literal directly can lead to memory management issues and potential vulnerabilities. This pattern
-    detects cases where string literals are returned directly instead of using a safe allocation function. The fix involves
-    using a function like `string_alloc` to properly manage the string''s memory.
-
-    '
+  message: |
+    Returning a string literal directly can lead to memory management issues and potential vulnerabilities. This pattern detects cases where string literals are returned directly instead of using a safe allocation function. The fix involves using a function like `string_alloc` to properly manage the string's memory.
   severity: ERROR
   metadata:
     source-url: github.com/OpenVPN/openvpn/commit/426392940c7060300a10077c389f5156c790c2f6
@@ -26,30 +21,27 @@ rules:
     technology:
     - c
 - id: vuln-openvpn-7718c898
-  pattern: 'char $BUF[128];
-
+  pattern: |
+    char $BUF[128];
     ...
-
     char *$PTR = $BUF + $BUF[$INDEX];
-
-    '
-  pattern-not: "unsigned char $BUF[128];\n...\nint $POS = $BUF[$INDEX];\nif ($POS + $LEN > sizeof($BUF)) {\n  return $NULL;\n\
-    }\nchar *$PTR = $BUF + $POS;\n"
+  pattern-not: |
+    unsigned char $BUF[128];
+    ...
+    int $POS = $BUF[$INDEX];
+    if ($POS + $LEN > sizeof($BUF)) {
+      return $NULL;
+    }
+    char *$PTR = $BUF + $POS;
   languages:
   - c
-  message: 'This rule detects potential buffer overflows in code that directly uses an array index
-
+  message: |
+    This rule detects potential buffer overflows in code that directly uses an array index
     without bounds checking. The vulnerability occurs when a pointer is calculated using
-
     an index from a buffer without verifying that the resulting pointer is within bounds.
-
     This can lead to memory corruption and potential exploitation. To fix this, always
-
     validate the index and ensure the resulting pointer is within the bounds of the buffer
-
     before using it.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/OpenVPN/openvpn/commit/7718c8984f04b507c1885f363970e2124e3c6c77
@@ -64,15 +56,21 @@ rules:
     technology:
     - c
 - id: vuln-openvpn-c3f47077
-  pattern: "if (buf_advance(&$BUF, 40))\n{\n  ...\n}\n"
-  pattern-not: "if (buf_advance(&$BUF, 40)\n    && BLEN(&$BUF) >= (int) sizeof(struct openvpn_tcphdr))\n{\n  ...\n}\n"
+  pattern: |
+    if (buf_advance(&$BUF, 40))
+    {
+      ...
+    }
+  pattern-not: |
+    if (buf_advance(&$BUF, 40)
+        && BLEN(&$BUF) >= (int) sizeof(struct openvpn_tcphdr))
+    {
+      ...
+    }
   languages:
   - c
-  message: 'Detected a missing buffer length check after advancing the buffer pointer. This vulnerability could lead to buffer
-    overreads when processing TCP headers, potentially causing crashes or information disclosure. Always verify the remaining
-    buffer size after advancing the pointer to ensure it contains enough data for the expected structure.
-
-    '
+  message: |
+    Detected a missing buffer length check after advancing the buffer pointer. This vulnerability could lead to buffer overreads when processing TCP headers, potentially causing crashes or information disclosure. Always verify the remaining buffer size after advancing the pointer to ensure it contains enough data for the expected structure.
   severity: ERROR
   metadata:
     source-url: github.com/OpenVPN/openvpn/commit/c3f47077a7756de5929094569421a95aa66f2022

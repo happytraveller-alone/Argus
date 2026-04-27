@@ -7,43 +7,29 @@ rules:
   patterns:
   - patterns:
     - pattern-either:
-      - pattern-inside: '$ADMZIP = require(''adm-zip'')
-
+      - pattern-inside: |
+          $ADMZIP = require('adm-zip')
           ...
-
-          '
-      - pattern-inside: 'import $ADMZIP from ''adm-zip''
-
+      - pattern-inside: |
+          import $ADMZIP from 'adm-zip'
           ...
-
-          '
-    - pattern-inside: '$ZIP = new $ADMZIP($FILENAME)
-
+    - pattern-inside: |
+        $ZIP = new $ADMZIP($FILENAME)
         ...
-
-        '
   - patterns:
     - pattern-either:
-      - pattern-inside: '$ENTRIES = $ZIP.getEntries()
-
+      - pattern-inside: |
+          $ENTRIES = $ZIP.getEntries()
           ...
-
           $ENTRIES.forEach(...)
-
-          '
-      - pattern-inside: '$ZIP.getEntries().forEach(...)
-
-          '
-      - pattern-inside: '$ENTRIES = $ZIP.getEntries()
-
+      - pattern-inside: |
+          $ZIP.getEntries().forEach(...)
+      - pattern-inside: |
+          $ENTRIES = $ZIP.getEntries()
           ...
-
           for ($ENTRY of $ENTRIES) (...)
-
-          '
-      - pattern-inside: 'for ($ENTRY of $ZIP.getEntries()) (...)
-
-          '
+      - pattern-inside: |
+          for ($ENTRY of $ZIP.getEntries()) (...)
     - pattern-either:
       - pattern-either:
         - pattern: $FS.createWriteStream(<... $ENTRY.entryName ...>, ...);
@@ -54,23 +40,16 @@ rules:
           - pattern: $FS.createWriteStream(<... $PATH ...>, ...)
           - pattern: $FS.writeFileSync(<... $PATH ...>, ..., ...)
           - pattern: $FS.writeFileAsync(<... $PATH ...>, ..., ...)
-        - pattern-not-inside: '$PATH = path.join(..., path.basename(<... $ENTRY.entryName
-            ...>))
-
+        - pattern-not-inside: |
+            $PATH = path.join(..., path.basename(<... $ENTRY.entryName ...>))
             ...
-
-            '
         - pattern-either:
-          - pattern-inside: '$PATH = path.join(..., <... $ENTRY.entryName ...>)
-
+          - pattern-inside: |
+              $PATH = path.join(..., <... $ENTRY.entryName ...>)
               ...
-
-              '
-          - pattern-inside: '$PATH = path.join(<... $ENTRY.entryName ...>, ...)
-
+          - pattern-inside: |
+              $PATH = path.join(<... $ENTRY.entryName ...>, ...)
               ...
-
-              '
           - pattern-inside: $PATH = <... $ENTRY.entryName ...>
   metadata:
     cwe:

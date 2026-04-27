@@ -17,11 +17,9 @@ rules:
     - https://polygonscan.com/address/0x07711bb6dfbc99a1df1f2d7f57545a67519941e7
   patterns:
   - pattern: $T.decodeCtx(ctx);
-  - pattern-not-inside: 'require($T.isCtxValid(...), "...");
-
+  - pattern-not-inside: |
+      require($T.isCtxValid(...), "...");
       ...
-
-      '
   languages:
   - solidity
   severity: ERROR

@@ -1,129 +1,77 @@
 rules:
 - id: rules_lgpl_javascript_database_rule-node-nosqli-injection
   patterns:
-  - pattern-not-inside: '$SANITIZE = require(''mongo-sanitize'')
-
+  - pattern-not-inside: |
+      $SANITIZE = require('mongo-sanitize')
       ...
-
       $SANITIZE(...)
-
       ...
-
-      '
-  - pattern-not-inside: 'import $SANITIZE from ''mongo-sanitize''
-
+  - pattern-not-inside: |
+      import $SANITIZE from 'mongo-sanitize'
       ...
-
       $SANITIZE(...)
-
       ...
-
-      '
-  - pattern-not: '$OBJ.findOne({$KEY : String(...).$FUNC()}, ...)
-
-      '
-  - pattern-not: '$OBJ.findOne({$KEY : String(...).$FUNC}, ...)
-
-      '
-  - pattern-not: '$OBJ.findOne({$KEY : String(...)}, ...)
-
-      '
+  - pattern-not: |
+      $OBJ.findOne({$KEY : String(...).$FUNC()}, ...)
+  - pattern-not: |
+      $OBJ.findOne({$KEY : String(...).$FUNC}, ...)
+  - pattern-not: |
+      $OBJ.findOne({$KEY : String(...)}, ...)
   - pattern-either:
-    - pattern: '$OBJ.findOne({$KEY : <... $REQ.$FOO.$BAR ...> }, ...)
-
-        '
-    - pattern: '$OBJ.findOne({$KEY: <... $REQ.$FOO ...> }, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO.$BAR ...>;
-
+    - pattern: |
+        $OBJ.findOne({$KEY : <... $REQ.$FOO.$BAR ...> }, ...)
+    - pattern: |
+        $OBJ.findOne({$KEY: <... $REQ.$FOO ...> }, ...)
+    - pattern: |
+        $INP = <... $REQ.$FOO.$BAR ...>;
         ...
-
         $OBJ.findOne({$KEY : <... $INP ...> }, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$FOO ...>;
         ...
-
         $OBJ.findOne({$KEY: <... $INP ...> }, ...)
-
-        '
-    - pattern: '$QUERY = {$KEY: <... $REQ.$FOO.$BAR ...>};
-
+    - pattern: |
+        $QUERY = {$KEY: <... $REQ.$FOO.$BAR ...>};
         ...
-
         $OBJ.findOne($QUERY, ...)
-
-        '
-    - pattern: '$QUERY = {$KEY: <... $REQ.$FOO ...>};
-
+    - pattern: |
+        $QUERY = {$KEY: <... $REQ.$FOO ...>};
         ...
-
         $OBJ.findOne($QUERY, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO.$BAR ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$FOO.$BAR ...>;
         ...
-
         $QUERY = {$KEY : <... $INP ...> };
-
         ...
-
         $OBJ.findOne(<... $QUERY  ...>, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$FOO ...>;
         ...
-
         $QUERY = {$KEY : <... $INP ...> };
-
         ...
-
         $OBJ.findOne(<... $QUERY  ...>, ...)
-
-        '
-    - pattern: '$QUERY[$KEY] = <... $REQ.$FOO.$BAR ...>;
-
+    - pattern: |
+        $QUERY[$KEY] = <... $REQ.$FOO.$BAR ...>;
         ...
-
         $OBJ.findOne($QUERY, ...)
-
-        '
-    - pattern: '$QUERY[$KEY] = <... $REQ.$FOO ...>;
-
+    - pattern: |
+        $QUERY[$KEY] = <... $REQ.$FOO ...>;
         ...
-
         $OBJ.findOne($QUERY, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO.$BAR ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$FOO.$BAR ...>;
         ...
-
         $QUERY[$KEY] = <... $INP ...>;
-
         ...
-
         $OBJ.findOne(<... $QUERY  ...>, ...)
-
-        '
-    - pattern: '$INP = <... $REQ.$FOO ...>;
-
+    - pattern: |
+        $INP = <... $REQ.$FOO ...>;
         ...
-
         $QUERY[$KEY] = <... $INP ...>;
-
         ...
-
         $OBJ.findOne(<... $QUERY  ...>, ...)
-
-        '
-  message: 'Untrusted user input in findOne() function can result in NoSQL Injection.
-
-    '
+  message: |
+    Untrusted user input in findOne() function can result in NoSQL Injection.
   languages:
   - javascript
   severity: ERROR

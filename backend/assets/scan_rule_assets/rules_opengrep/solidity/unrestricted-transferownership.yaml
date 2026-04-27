@@ -18,35 +18,76 @@ rules:
   - pattern-either:
     - pattern: function transferOwnership(address $X) public {...}
     - pattern: function transferOwnership(address $X) external {...}
-  - pattern-not: 'function transferOwnership(address $X) $M {...}
-
-      '
-  - pattern-not: 'function transferOwnership(address $X) $M(...) {...}
-
-      '
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  require(<...\
-      \ msg.sender ...>, ...);\n  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  require(<...\
-      \ _msgSender ...>, ...);\n  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  if (<... msg.sender\
-      \ ...>) {\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  if (<... _msgSender\
-      \ ...>) {\n    ...\n  }\n  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  onlyOwner(...);\n\
-      \  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  requireOwner(...);\n\
-      \  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  _requireOwnership(...);\n\
-      \  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C._enforceIsContractOwner(...);\n\
-      \  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C._enforceOwner(...);\n\
-      \  ...\n}\n"
-  - pattern-not: "function transferOwnership(address $X) {\n  ...\n  $C.enforceIsContractOwner(...);\n\
-      \  ...\n}\n"
-  - pattern-not: 'function transferOwnership(address $X) {}
-
-      '
+  - pattern-not: |
+      function transferOwnership(address $X) $M {...}
+  - pattern-not: |
+      function transferOwnership(address $X) $M(...) {...}
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        require(<... msg.sender ...>, ...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        require(<... _msgSender ...>, ...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        if (<... msg.sender ...>) {
+          ...
+        }
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        if (<... _msgSender ...>) {
+          ...
+        }
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        onlyOwner(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        requireOwner(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        _requireOwnership(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        $C._enforceIsContractOwner(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        $C._enforceOwner(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {
+        ...
+        $C.enforceIsContractOwner(...);
+        ...
+      }
+  - pattern-not: |
+      function transferOwnership(address $X) {}
   languages:
   - solidity
   severity: ERROR

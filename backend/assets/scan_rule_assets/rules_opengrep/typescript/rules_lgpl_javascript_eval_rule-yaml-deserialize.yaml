@@ -2,26 +2,18 @@ rules:
 - id: rules_lgpl_javascript_eval_rule-yaml-deserialize
   patterns:
   - pattern-either:
-    - pattern: 'require(''js-yaml'').load(...)
-
-        '
-    - pattern-inside: '$MOD = require(''js-yaml'')
-
+    - pattern: |
+        require('js-yaml').load(...)
+    - pattern-inside: |
+        $MOD = require('js-yaml')
         ...
-
-        '
-    - pattern-inside: 'import $MOD from ''js-yaml''
-
+    - pattern-inside: |
+        import $MOD from 'js-yaml'
         ...
-
-        '
-  - pattern: '$MOD.load(...)
-
-      '
-  message: 'User controlled data in ''yaml.load()'' function can result in Remote
-    Code Injection.
-
-    '
+  - pattern: |
+      $MOD.load(...)
+  message: |
+    User controlled data in 'yaml.load()' function can result in Remote Code Injection.
   languages:
   - typescript
   severity: ERROR

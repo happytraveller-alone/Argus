@@ -2,30 +2,44 @@ rules:
 - id: kotlin_pathtraversal_rule-FilePathTraversal
   languages:
   - kotlin
-  message: "The application is found using untrusted user input with file \noperations,\
-    \ which can potentially lead to Path Traversal vulnerabilities. \nPath traversal\
-    \ (also known as directory traversal) allows attackers to \naccess files and directories\
-    \ outside of intended boundaries by inserting \nspecial characters or sequences\
-    \ (like ../, ..\\\\, or URL-encoded variants) \nto navigate to arbitrary locations\
-    \ in the filesystem.\nThe vulnerability can lead to unauthorized access to sensitive\
-    \ files \n(configuration files, credentials), code execution (if attackers can\
-    \ write \nto or include executable files), information disclosure, or complete\
-    \ system \ncompromise.\n\nWhere possible, do not send user input to file operation\
-    \ methods. If that \ncannot be avoided, follow the below mitigation strategy:\n\
-    1. Validate and sanitize all user inputs used in file operations \n2. Use allowlisting\
-    \ approaches to validate file paths where possible\n3. Apply canonicalization\
-    \ before validation to prevent bypass techniques\n4. Restrict operations to a\
-    \ specific designated directory\n5. Use application-specific user accounts with\
-    \ limited privileges\n\nSecure Code Example:\n```\nfun safeWrite(filename: String,\
-    \ content: String) {\n    val baseDir = File(\"/safe-dir/\")\n    val target =\
-    \ File(baseDir, filename).canonicalFile\n\n    // Ensure the target path is within\
-    \ the allowed directory\n    if (!target.path.startsWith(baseDir.canonicalPath))\
-    \ {\n        throw SecurityException(\"Invalid file path: $filename\")\n    }\n\
-    \n    FileWriter(target).use { writer ->\n        writer.write(content)\n    }\n\
-    }\n```\n"
+  message: |
+    The application is found using untrusted user input with file
+    operations, which can potentially lead to Path Traversal vulnerabilities.
+    Path traversal (also known as directory traversal) allows attackers to
+    access files and directories outside of intended boundaries by inserting
+    special characters or sequences (like ../, ..\\, or URL-encoded variants)
+    to navigate to arbitrary locations in the filesystem.
+    The vulnerability can lead to unauthorized access to sensitive files
+    (configuration files, credentials), code execution (if attackers can write
+    to or include executable files), information disclosure, or complete system
+    compromise.
+
+    Where possible, do not send user input to file operation methods. If that
+    cannot be avoided, follow the below mitigation strategy:
+    1. Validate and sanitize all user inputs used in file operations
+    2. Use allowlisting approaches to validate file paths where possible
+    3. Apply canonicalization before validation to prevent bypass techniques
+    4. Restrict operations to a specific designated directory
+    5. Use application-specific user accounts with limited privileges
+
+    Secure Code Example:
+    ```
+    fun safeWrite(filename: String, content: String) {
+        val baseDir = File("/safe-dir/")
+        val target = File(baseDir, filename).canonicalFile
+
+        // Ensure the target path is within the allowed directory
+        if (!target.path.startsWith(baseDir.canonicalPath)) {
+            throw SecurityException("Invalid file path: $filename")
+        }
+
+        FileWriter(target).use { writer ->
+            writer.write(content)
+        }
+    }
+    ```
   metadata:
-    shortDescription: Improper limitation of a pathname to a restricted directory
-      ('Path Traversal')
+    shortDescription: Improper limitation of a pathname to a restricted directory ('Path Traversal')
     cwe: CWE-22
     owasp:
     - A5:2017-Broken Access Control
@@ -39,29 +53,31 @@ rules:
   pattern-sources:
   - patterns:
     - patterns:
-      - pattern-inside: 'import $IMPORT
-
+      - pattern-inside: |
+          import $IMPORT
           ...
-
-          '
       - metavariable-regex:
           metavariable: $IMPORT
           regex: .*springframework.*
       - focus-metavariable: $VAR
       - patterns:
         - pattern-either:
-          - pattern-inside: "fun $_(..., @$REQ(...) $VAR: $TYPE,...): $_ {\n  ...\n\
-              }\n"
-          - pattern-inside: "fun $_(..., @$REQ $VAR: $TYPE,...): $_ {\n  ...\n}\n"
+          - pattern-inside: |
+              fun $_(..., @$REQ(...) $VAR: $TYPE,...): $_ {
+                ...
+              }
+          - pattern-inside: |
+              fun $_(..., @$REQ $VAR: $TYPE,...): $_ {
+                ...
+              }
         - metavariable-regex:
             metavariable: $TYPE
             regex: ^(?!(Int|Long|Float|Double|Char|Boolean))
         - metavariable-regex:
             metavariable: $REQ
             regex: (RequestBody|PathVariable|RequestParam|RequestHeader|CookieValue|ModelAttribute|RequestPart)
-  - pattern: '($REQ: javax.servlet.ServletRequest)
-
-      '
+  - pattern: |
+      ($REQ: javax.servlet.ServletRequest)
   - pattern: "($REQ: javax.servlet.http.HttpServletRequest)                  \n"
   pattern-sinks:
   - pattern: java.io.File(...)

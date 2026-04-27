@@ -3,19 +3,14 @@ rules:
   mode: search
   patterns:
   - pattern-either:
-    - pattern: 'validates ..., :format => <... $V ...>,...
-
-        '
-    - pattern: 'validates_format_of ..., :with => <... $V ...>,...
-
-        '
+    - pattern: |
+        validates ..., :format => <... $V ...>,...
+    - pattern: |
+        validates_format_of ..., :with => <... $V ...>,...
   - metavariable-regex:
       metavariable: $V
       regex: /(.{2}(?<!\\A)[^\/]+|[^\/]+(?<!\\[Zz]))\/
-  message: $V Found an incorrectly-bounded regex passed to `validates_format_of` or
-    `validate ... format => ...`. Ruby regex behavior is multiline by default and
-    lines should be terminated by `\A` for beginning of line and `\Z` for end of line,
-    respectively.
+  message: $V Found an incorrectly-bounded regex passed to `validates_format_of` or `validate ... format => ...`. Ruby regex behavior is multiline by default and lines should be terminated by `\A` for beginning of line and `\Z` for end of line, respectively.
   languages:
   - ruby
   severity: ERROR

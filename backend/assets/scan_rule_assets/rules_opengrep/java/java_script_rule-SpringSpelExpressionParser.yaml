@@ -13,24 +13,44 @@ rules:
   - metavariable-regex:
       metavariable: $METHOD
       regex: (parseExpression|parseRaw)
-  message: "The application was found calling SpringFramework's `SpelExpressionParser.parseExpression`.\nCalling this method\
-    \ directly with user-supplied input may allow an adversary to\nexecute arbitrary Java code including OS system commands.\n\
-    \nNever call `parseExpression` or `parseRaw` directly with user-supplied input. Consider\nalternate\nmethods such as a\
-    \ lookup table to take user input and resolve hardcoded values.\n\nLater versions of SpringFramework introduced a `SimpleEvaluationContext`\
-    \ which can be\nused to access bound data when calling the `getValue` result of `parseExpression`. This\n`SimpleEvaluationContext`\
-    \ has a reduced set of functionality and can restrict data binding\nto read-only or read-write contexts. An adversary\
-    \ could still access public properties\nor fields on custom types that have been provided to the evaluation context. Use\
-    \ with caution.\n\nExample using `SimpleEvaluationContext` with a read-write data binding context:\n```\n@RequestMapping(value=\"\
-    /spel\", method=RequestMethod.POST)\npublic String spel(@Validated User user, Model model)  {\n  // Create the Expression\
-    \ Parser\n  SpelExpressionParser parser = new SpelExpressionParser();\n  // Parse the expression\n  Expression parsedExpression\
-    \ = parser.parseExpression(model.getPossiblyUnsafeData());\n  // Create the read-write data binding context\n  SimpleEvaluationContext\
-    \ context = SimpleEvaluationContext.forReadWriteDataBinding().build();\n  // Execute the expression, passing in the read-write\
-    \ context\n  Object result = parsedExpression.getValue(context);\n  // work with the result\n  // ...\n  return \"user\"\
-    ;\n}\n```\n\nFor more information on SimpleEvaluationContext see:\nhttps://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html\n"
+  message: |
+    The application was found calling SpringFramework's `SpelExpressionParser.parseExpression`.
+    Calling this method directly with user-supplied input may allow an adversary to
+    execute arbitrary Java code including OS system commands.
+
+    Never call `parseExpression` or `parseRaw` directly with user-supplied input. Consider
+    alternate
+    methods such as a lookup table to take user input and resolve hardcoded values.
+
+    Later versions of SpringFramework introduced a `SimpleEvaluationContext` which can be
+    used to access bound data when calling the `getValue` result of `parseExpression`. This
+    `SimpleEvaluationContext` has a reduced set of functionality and can restrict data binding
+    to read-only or read-write contexts. An adversary could still access public properties
+    or fields on custom types that have been provided to the evaluation context. Use with caution.
+
+    Example using `SimpleEvaluationContext` with a read-write data binding context:
+    ```
+    @RequestMapping(value="/spel", method=RequestMethod.POST)
+    public String spel(@Validated User user, Model model)  {
+      // Create the Expression Parser
+      SpelExpressionParser parser = new SpelExpressionParser();
+      // Parse the expression
+      Expression parsedExpression = parser.parseExpression(model.getPossiblyUnsafeData());
+      // Create the read-write data binding context
+      SimpleEvaluationContext context = SimpleEvaluationContext.forReadWriteDataBinding().build();
+      // Execute the expression, passing in the read-write context
+      Object result = parsedExpression.getValue(context);
+      // work with the result
+      // ...
+      return "user";
+    }
+    ```
+
+    For more information on SimpleEvaluationContext see:
+    https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html
   severity: ERROR
   metadata:
-    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language
-      Injection')
+    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language Injection')
     category: security
     cwe: CWE-917
     owasp:
@@ -51,24 +71,44 @@ rules:
   - metavariable-regex:
       metavariable: $METHOD
       regex: (parseExpression|parseRaw)
-  message: "The application was found calling SpringFramework's `SpelExpressionParser.parseExpression`.\nCalling this method\
-    \ directly with user-supplied input may allow an adversary to\nexecute arbitrary Java code including OS system commands.\n\
-    \nNever call `parseExpression` or `parseRaw` directly with user-supplied input. Consider\nalternate\nmethods such as a\
-    \ lookup table to take user input and resolve hardcoded values.\n\nLater versions of SpringFramework introduced a `SimpleEvaluationContext`\
-    \ which can be\nused to access bound data when calling the `getValue` result of `parseExpression`. This\n`SimpleEvaluationContext`\
-    \ has a reduced set of functionality and can restrict data binding\nto read-only or read-write contexts. An adversary\
-    \ could still access public properties\nor fields on custom types that have been provided to the evaluation context. Use\
-    \ with caution.\n\nExample using `SimpleEvaluationContext` with a read-write data binding context:\n```\n@RequestMapping(value=\"\
-    /spel\", method=RequestMethod.POST)\npublic String spel(@Validated User user, Model model)  {\n  // Create the Expression\
-    \ Parser\n  SpelExpressionParser parser = new SpelExpressionParser();\n  // Parse the expression\n  Expression parsedExpression\
-    \ = parser.parseExpression(model.getPossiblyUnsafeData());\n  // Create the read-write data binding context\n  SimpleEvaluationContext\
-    \ context = SimpleEvaluationContext.forReadWriteDataBinding().build();\n  // Execute the expression, passing in the read-write\
-    \ context\n  Object result = parsedExpression.getValue(context);\n  // work with the result\n  // ...\n  return \"user\"\
-    ;\n}\n```\n\nFor more information on SimpleEvaluationContext see:\nhttps://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html\n"
+  message: |
+    The application was found calling SpringFramework's `SpelExpressionParser.parseExpression`.
+    Calling this method directly with user-supplied input may allow an adversary to
+    execute arbitrary Java code including OS system commands.
+
+    Never call `parseExpression` or `parseRaw` directly with user-supplied input. Consider
+    alternate
+    methods such as a lookup table to take user input and resolve hardcoded values.
+
+    Later versions of SpringFramework introduced a `SimpleEvaluationContext` which can be
+    used to access bound data when calling the `getValue` result of `parseExpression`. This
+    `SimpleEvaluationContext` has a reduced set of functionality and can restrict data binding
+    to read-only or read-write contexts. An adversary could still access public properties
+    or fields on custom types that have been provided to the evaluation context. Use with caution.
+
+    Example using `SimpleEvaluationContext` with a read-write data binding context:
+    ```
+    @RequestMapping(value="/spel", method=RequestMethod.POST)
+    public String spel(@Validated User user, Model model)  {
+      // Create the Expression Parser
+      SpelExpressionParser parser = new SpelExpressionParser();
+      // Parse the expression
+      Expression parsedExpression = parser.parseExpression(model.getPossiblyUnsafeData());
+      // Create the read-write data binding context
+      SimpleEvaluationContext context = SimpleEvaluationContext.forReadWriteDataBinding().build();
+      // Execute the expression, passing in the read-write context
+      Object result = parsedExpression.getValue(context);
+      // work with the result
+      // ...
+      return "user";
+    }
+    ```
+
+    For more information on SimpleEvaluationContext see:
+    https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html
   severity: ERROR
   metadata:
-    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language
-      Injection')
+    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language Injection')
     category: security
     cwe: CWE-917
     owasp:

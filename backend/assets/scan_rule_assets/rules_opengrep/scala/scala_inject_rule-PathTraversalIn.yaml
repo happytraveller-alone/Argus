@@ -2,15 +2,11 @@ rules:
 - id: scala_inject_rule-PathTraversalIn
   languages:
   - scala
-  message: 'A file is opened to read its content. The filename comes from an input parameter. If an
-
+  message: |
+    A file is opened to read its content. The filename comes from an input parameter. If an
     unfiltered parameter is passed to this file API, files from an arbitrary filesystem location
-
     could be read. This rule identifies potential path traversal vulnerabilities. In many cases,
-
     the constructed file path cannot be controlled by the user.
-
-    '
   metadata:
     owasp:
     - A5:2017-Broken Access Control
@@ -24,39 +20,26 @@ rules:
   patterns:
   - pattern-either:
     - patterns:
-      - pattern-inside: 'def $FUNC(...,$ARGS: Array[String], ...): $TYPE = {
-
+      - pattern-inside: |
+          def $FUNC(...,$ARGS: Array[String], ...): $TYPE = {
           ...
-
           }
-
-          '
-      - pattern-inside: '$VAR = $ARGS($IDX)
-
+      - pattern-inside: |
+          $VAR = $ARGS($IDX)
           ...
-
-          '
-    - pattern-inside: 'def $FUNC(...,$VAR: String, ...): $TYPE = {
-
+    - pattern-inside: |
+        def $FUNC(...,$VAR: String, ...): $TYPE = {
         ...
-
         }
-
-        '
-  - pattern-not-inside: '...
-
-      org.apache.commons.io.FilenameUtils.getName($VAR)
-
+  - pattern-not-inside: |
       ...
-
-      '
+      org.apache.commons.io.FilenameUtils.getName($VAR)
+      ...
   - pattern-either:
     - patterns:
-      - pattern-inside: '$U = new java.net.URI($VAR)
-
+      - pattern-inside: |
+          $U = new java.net.URI($VAR)
           ...
-
-          '
       - pattern-either:
         - pattern: new java.io.File($U)
         - pattern: java.nio.file.Paths.get($U)
@@ -77,15 +60,11 @@ rules:
 - id: scala_inject_rule-PathTraversalIn_1
   languages:
   - scala
-  message: 'A file is opened to read its content. The filename comes from an input parameter. If an
-
+  message: |
+    A file is opened to read its content. The filename comes from an input parameter. If an
     unfiltered parameter is passed to this file API, files from an arbitrary filesystem location
-
     could be read. This rule identifies potential path traversal vulnerabilities. In many cases,
-
     the constructed file path cannot be controlled by the user.
-
-    '
   metadata:
     owasp:
     - A5:2017-Broken Access Control
@@ -99,39 +78,26 @@ rules:
   patterns:
   - pattern-either:
     - patterns:
-      - pattern-inside: 'def $FUNC(...,$ARGS: Array[String], ...): $TYPE = {
-
+      - pattern-inside: |
+          def $FUNC(...,$ARGS: Array[String], ...): $TYPE = {
           ...
-
           }
-
-          '
-      - pattern-inside: '$VAR = $ARGS($IDX)
-
+      - pattern-inside: |
+          $VAR = $ARGS($IDX)
           ...
-
-          '
-    - pattern-inside: 'def $FUNC(...,$VAR: String, ...): $TYPE = {
-
+    - pattern-inside: |
+        def $FUNC(...,$VAR: String, ...): $TYPE = {
         ...
-
         }
-
-        '
-  - pattern-not-inside: '...
-
-      org.apache.commons.io.FilenameUtils.getName($VAR)
-
+  - pattern-not-inside: |
       ...
-
-      '
+      org.apache.commons.io.FilenameUtils.getName($VAR)
+      ...
   - pattern-either:
     - patterns:
-      - pattern-inside: '$U = new java.net.URI($VAR)
-
+      - pattern-inside: |
+          $U = new java.net.URI($VAR)
           ...
-
-          '
       - pattern-either:
         - pattern: new java.io.File($U)
         - pattern: java.nio.file.Paths.get($U)

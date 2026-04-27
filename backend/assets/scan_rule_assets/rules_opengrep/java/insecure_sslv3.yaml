@@ -2,9 +2,8 @@ rules:
 - id: insecure_sslv3
   patterns:
   - pattern-either:
-    - pattern: '$S.getInstance("SSLv3");
-
-        '
+    - pattern: |
+        $S.getInstance("SSLv3");
   message: SSLv3 is insecure and has multiple known vulnerabilities.
   languages:
   - java

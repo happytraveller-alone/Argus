@@ -2,9 +2,8 @@ rules:
 - id: scala_strings_rule-ImproperUnicode
   languages:
   - scala
-  message: 'Improper Handling of Unicode Encoding
-
-    '
+  message: |
+    Improper Handling of Unicode Encoding
   metadata:
     category: security
     confidence: HIGH
@@ -14,13 +13,10 @@ rules:
   pattern-either:
   - patterns:
     - pattern-either:
-      - pattern: '$S = ($INPUT: String).$TRANSFORM(...);
-
+      - pattern: |
+          $S = ($INPUT: String).$TRANSFORM(...);
           ...
-
           $S.$METHOD(...);
-
-          '
       - pattern: '($INPUT: String).$TRANSFORM().$METHOD(...);'
     - metavariable-regex:
         metavariable: $METHOD
@@ -35,9 +31,8 @@ rules:
 - id: scala_strings_rule-ImproperUnicode_1
   languages:
   - scala
-  message: 'Improper Handling of Unicode Encoding
-
-    '
+  message: |
+    Improper Handling of Unicode Encoding
   metadata:
     category: security
     confidence: HIGH
@@ -47,13 +42,10 @@ rules:
   pattern-either:
   - patterns:
     - pattern-either:
-      - pattern: '$S = ($INPUT: String).$TRANSFORM(...);
-
+      - pattern: |
+          $S = ($INPUT: String).$TRANSFORM(...);
           ...
-
           $S.$METHOD(...);
-
-          '
       - pattern: '($INPUT: String).$TRANSFORM().$METHOD(...);'
     - metavariable-regex:
         metavariable: $METHOD

@@ -2,26 +2,18 @@ rules:
 - id: wrong-lock-unlock
   patterns:
   - pattern-either:
-    - pattern: '$M.Lock()
-
+    - pattern: |
+        $M.Lock()
         defer $M.RUnlock()
-
-        '
-    - pattern: '$M.RLock()
-
+    - pattern: |
+        $M.RLock()
         defer $M.Unlock()
-
-        '
-    - pattern: '$M.Lock()
-
+    - pattern: |
+        $M.Lock()
         defer $M.Lock()
-
-        '
-    - pattern: '$M.RLock()
-
+    - pattern: |
+        $M.RLock()
         defer $M.RLock()
-
-        '
   message: Wrong lock/unlock pair?
   languages:
   - go

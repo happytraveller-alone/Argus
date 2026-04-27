@@ -5,24 +5,42 @@ rules:
     - pattern: .biometryAny
     - pattern: .userPresence
     - pattern: .touchIDAny
-  message: "Weak biometric ACL flag is associated with a key stored in Keychain. \n\
-    With '.biometryAny/.userPresence/.touchIDAny' flag, an attacker with \nthe ability\
-    \ to add a biometry to the device can authenticate as the \nuser. It is recommended\
-    \ to use more specific and secure authentication \nmechanisms like '.biometryCurrentSet'\
-    \ and '.touchIDCurrentSet'.\n\nHere's an example of how to fix the problem by\
-    \ using .biometryCurrentSet \nfor biometric authentication in Swift:\n```\nimport\
-    \ LocalAuthentication\n\n// Create an instance of LAContext for biometric authentication\n\
-    let context = LAContext()\n\n// Check if biometric authentication is available\n\
-    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error:\
-    \ nil) {\n  // Use biometryCurrentSet for biometric authentication\n  context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,\
-    \ \n        localizedReason: \"Authenticate with biometrics\", \n        reply:\
-    \ { success, error in\n            if success {\n              print(\"Biometric\
-    \ authentication successful.\")\n              // Proceed with authenticated actions\n\
-    \            } else {\n              print(\"Biometric authentication failed:\
-    \ \n                    \\(error?.localizedDescription ?? \"Unknown error\")\"\
-    )\n              // Handle authentication failure\n            }\n  })\n} else\
-    \ {\n  print(\"Biometric authentication not available.\")\n  // Fallback to alternative\
-    \ authentication method\n}\n\n```\n"
+  message: |
+    Weak biometric ACL flag is associated with a key stored in Keychain.
+    With '.biometryAny/.userPresence/.touchIDAny' flag, an attacker with
+    the ability to add a biometry to the device can authenticate as the
+    user. It is recommended to use more specific and secure authentication
+    mechanisms like '.biometryCurrentSet' and '.touchIDCurrentSet'.
+
+    Here's an example of how to fix the problem by using .biometryCurrentSet
+    for biometric authentication in Swift:
+    ```
+    import LocalAuthentication
+
+    // Create an instance of LAContext for biometric authentication
+    let context = LAContext()
+
+    // Check if biometric authentication is available
+    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+      // Use biometryCurrentSet for biometric authentication
+      context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+            localizedReason: "Authenticate with biometrics",
+            reply: { success, error in
+                if success {
+                  print("Biometric authentication successful.")
+                  // Proceed with authenticated actions
+                } else {
+                  print("Biometric authentication failed:
+                        \(error?.localizedDescription ?? "Unknown error")")
+                  // Handle authentication failure
+                }
+      })
+    } else {
+      print("Biometric authentication not available.")
+      // Fallback to alternative authentication method
+    }
+
+    ```
   languages:
   - swift
   severity: ERROR

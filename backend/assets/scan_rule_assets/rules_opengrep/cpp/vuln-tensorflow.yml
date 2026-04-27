@@ -1,17 +1,13 @@
 rules:
 - id: vuln-tensorflow-8faa6ea6
-  pattern: 'ctx->allocate_output(0, TensorShape({$DIM1, $DIM2, $DIM3, $DIM4}), &$OUTPUT);
-
-    '
-  pattern-not: 'ctx->allocate_output(0, $TENSORSHAPE, &$OUTPUT);
-
-    '
+  pattern: |
+    ctx->allocate_output(0, TensorShape({$DIM1, $DIM2, $DIM3, $DIM4}), &$OUTPUT);
+  pattern-not: |
+    ctx->allocate_output(0, $TENSORSHAPE, &$OUTPUT);
   languages:
   - cpp
-  message: 'Directly constructing TensorShape within allocate_output can lead to potential memory corruption or undefined
-    behavior. Use TensorShape::BuildTensorShape to properly construct the shape before passing it to allocate_output.
-
-    '
+  message: |
+    Directly constructing TensorShape within allocate_output can lead to potential memory corruption or undefined behavior. Use TensorShape::BuildTensorShape to properly construct the shape before passing it to allocate_output.
   severity: ERROR
   metadata:
     source-url: github.com/tensorflow/tensorflow/commit/8faa6ea692985dbe6ce10e1a3168e0bd60a723ba
@@ -25,17 +21,29 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-aa0b852a
-  pattern: "if ((new_shape.size() == shape.size() + 1) && new_shape.back() == 1) {\n  if (std::equal(shape.begin(), shape.end(),\
-    \ new_shape.begin()) &&\n      quant_dim == -1) {\n    quant_dim = shape.size() + quant_dim;\n  } else {\n    ...\n  }\n\
-    }\n"
-  pattern-not: "if ((new_shape.size() == shape.size() + 1) && new_shape.front() == 1) {\n  if (!(std::equal(shape.begin(),\
-    \ shape.end(), new_shape.begin() + 1) &&\n        quant_dim == new_shape.size() - 1)) {\n    ...\n  }\n}\n"
+  pattern: |
+    if ((new_shape.size() == shape.size() + 1) && new_shape.back() == 1) {
+      if (std::equal(shape.begin(), shape.end(), new_shape.begin()) &&
+          quant_dim == -1) {
+        quant_dim = shape.size() + quant_dim;
+      } else {
+        ...
+      }
+    }
+  pattern-not: |
+    if ((new_shape.size() == shape.size() + 1) && new_shape.front() == 1) {
+      if (!(std::equal(shape.begin(), shape.end(), new_shape.begin() + 1) &&
+            quant_dim == new_shape.size() - 1)) {
+        ...
+      }
+    }
   languages:
   - cpp
-  message: "Detected incorrect handling of shape and quantization dimension in reshape operations. \nThe original code incorrectly\
-    \ shifts the quantization dimension when the new shape has an extra dimension at the end, \nwhich can lead to incorrect\
-    \ quantization and potential security vulnerabilities. \nThe fix ensures that the quantization dimension is correctly\
-    \ handled when the new shape has an extra dimension at the beginning.\n"
+  message: |
+    Detected incorrect handling of shape and quantization dimension in reshape operations.
+    The original code incorrectly shifts the quantization dimension when the new shape has an extra dimension at the end,
+    which can lead to incorrect quantization and potential security vulnerabilities.
+    The fix ensures that the quantization dimension is correctly handled when the new shape has an extra dimension at the beginning.
   severity: ERROR
   metadata:
     source-url: https://github.com/tensorflow/tensorflow/commit/aa0b852a4588cea4d36b74feb05d93055540b450
@@ -46,20 +54,22 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-ac117ee8
-  pattern: "void AddBatchOffsets(Tensor* $INDICES, const Tensor& $PARAMS) {\n  ...\n}\n"
-  pattern-not: "void AddBatchOffsets(OpKernelContext* $CTX, Tensor* $INDICES, const Tensor& $PARAMS) {\n  OP_REQUIRES($CTX,\
-    \ $BATCH_SIZE != 0, errors::InvalidArgument(...));\n  ...\n}\n"
+  pattern: |
+    void AddBatchOffsets(Tensor* $INDICES, const Tensor& $PARAMS) {
+      ...
+    }
+  pattern-not: |
+    void AddBatchOffsets(OpKernelContext* $CTX, Tensor* $INDICES, const Tensor& $PARAMS) {
+      OP_REQUIRES($CTX, $BATCH_SIZE != 0, errors::InvalidArgument(...));
+      ...
+    }
   languages:
   - cpp
-  message: 'Missing error status check and division by zero validation in AddBatchOffsets function.
-
+  message: |
+    Missing error status check and division by zero validation in AddBatchOffsets function.
     This can lead to division by zero vulnerabilities when batch_size is 0.
-
-    The function should validate batch_size and check the operation''s status.
-
+    The function should validate batch_size and check the operation's status.
     Add OP_REQUIRES to validate batch_size and ensure proper error handling.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/tensorflow/tensorflow/commit/ac117ee8a8ea57b73d34665cdf00ef3303bc0b11
@@ -72,23 +82,17 @@ rules:
     technology:
     - cpp
 - id: vuln-tensorflow-e0b6e58c
-  pattern: 'components.reserve($FINALIZED->output_dtypes().size());
-
-    '
-  pattern-not: 'const int $NUM = $FINALIZED->output_dtypes().size();
-
+  pattern: |
+    components.reserve($FINALIZED->output_dtypes().size());
+  pattern-not: |
+    const int $NUM = $FINALIZED->output_dtypes().size();
     components.reserve($NUM);
-
-    '
   languages:
   - cpp
-  message: 'Potential memory allocation issue due to direct use of output_dtypes().size() in reserve().
-
+  message: |
+    Potential memory allocation issue due to direct use of output_dtypes().size() in reserve().
     This can lead to incorrect memory allocation if the size changes between calls.
-
     Store the size in a variable first to ensure consistent behavior.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/tensorflow/tensorflow/commit/e0b6e58c328059829c3eb968136f17aa72b6c876

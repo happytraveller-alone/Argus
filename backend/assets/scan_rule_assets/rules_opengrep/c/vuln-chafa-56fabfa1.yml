@@ -1,25 +1,19 @@
 rules:
 - id: vuln-chafa-56fabfa1
-  pattern: '$TYPE *$P = (const $TYPE *) &$IN;
-
+  pattern: |
+    $TYPE *$P = (const $TYPE *) &$IN;
     ...
-
     $H->$FIELD = g_ntohl (*(p++));
-
-    '
-  pattern-not: '$TYPE *$P = &$IN;
-
+  pattern-not: |
+    $TYPE *$P = &$IN;
     ...
-
     UNPACK_FIELD_U32 ($H, $P, $FIELD);
-
-    '
   languages:
   - c
-  message: "Detected unsafe direct memory manipulation and byte order conversion using\
-    \ g_ntohl. \nThis can lead to incorrect data interpretation and potential security\
-    \ vulnerabilities. \nUse the UNPACK_FIELD_U32 macro for safe and consistent byte\
-    \ order conversion.\n"
+  message: |
+    Detected unsafe direct memory manipulation and byte order conversion using g_ntohl.
+    This can lead to incorrect data interpretation and potential security vulnerabilities.
+    Use the UNPACK_FIELD_U32 macro for safe and consistent byte order conversion.
   severity: ERROR
   metadata:
     source-url: github.com/hpjansson/chafa/commit/56fabfa18a6880b4cb66047fa6557920078048d9

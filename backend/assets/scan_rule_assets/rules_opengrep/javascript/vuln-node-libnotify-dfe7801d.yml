@@ -1,16 +1,15 @@
 rules:
 - id: vuln-node-libnotify-dfe7801d
-  pattern: 'child_process.exec($ARGS.join('' ''), $CALLBACK)
-
-    '
-  pattern-not: 'child_process.execFile($CMD, $ARGS, {}, $CALLBACK)
-
-    '
+  pattern: |
+    child_process.exec($ARGS.join(' '), $CALLBACK)
+  pattern-not: |
+    child_process.execFile($CMD, $ARGS, {}, $CALLBACK)
   languages:
   - javascript
-  message: "Detected unsafe use of child_process.exec with concatenated arguments.\
-    \ \nThis can lead to command injection vulnerabilities. \nUse child_process.execFile\
-    \ with separate arguments instead.\n"
+  message: |
+    Detected unsafe use of child_process.exec with concatenated arguments.
+    This can lead to command injection vulnerabilities.
+    Use child_process.execFile with separate arguments instead.
   severity: ERROR
   metadata:
     source-url: github.com/mytrile/node-libnotify/commit/dfe7801d73a0dda10663a0ff3d0ec8b4d5f0d448

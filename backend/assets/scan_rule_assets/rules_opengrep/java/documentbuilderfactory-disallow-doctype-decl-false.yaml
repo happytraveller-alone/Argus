@@ -28,26 +28,40 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: HIGH
-  message: DOCTYPE declarations are enabled for $DBFACTORY. Without prohibiting external
-    entity declarations, this is vulnerable to XML external entity attacks. Disable
-    this by setting the feature "http://apache.org/xml/features/disallow-doctype-decl"
-    to true. Alternatively, allow DOCTYPE declarations and only prohibit external
-    entities declarations. This can be done by setting the features "http://xml.org/sax/features/external-general-entities"
-    and "http://xml.org/sax/features/external-parameter-entities" to false.
+  message: DOCTYPE declarations are enabled for $DBFACTORY. Without prohibiting external entity declarations, this is vulnerable to XML external entity attacks. Disable this by setting the feature "http://apache.org/xml/features/disallow-doctype-decl" to true. Alternatively, allow DOCTYPE declarations and only prohibit external entities declarations. This can be done by setting the features "http://xml.org/sax/features/external-general-entities" and "http://xml.org/sax/features/external-parameter-entities" to false.
   patterns:
-  - pattern: $DBFACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl",
-      false);
-  - pattern-not-inside: "$RETURNTYPE $METHOD(...){\n  ...\n  $DBF.setFeature(\"http://xml.org/sax/features/external-general-entities\"\
-      , false);\n  ...\n  $DBF.setFeature(\"http://xml.org/sax/features/external-parameter-entities\"\
-      , false);\n  ...\n}\n"
-  - pattern-not-inside: "$RETURNTYPE $METHOD(...){\n  ...\n  $DBF.setFeature(\"http://xml.org/sax/features/external-parameter-entities\"\
-      , false);\n  ...\n  $DBF.setFeature(\"http://xml.org/sax/features/external-general-entities\"\
-      , false);\n  ...\n}\n"
-  - pattern-not-inside: "$RETURNTYPE $METHOD(...){\n  ...\n  $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD,\
-      \ \"\");\n  ...\n  $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, \"\
-      \");\n  ...\n}\n"
-  - pattern-not-inside: "$RETURNTYPE $METHOD(...){\n  ...\n  $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA,\
-      \ \"\");\n  ...\n  $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, \"\"\
-      );\n  ...\n}\n"
+  - pattern: $DBFACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...){
+        ...
+        $DBF.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        ...
+        $DBF.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        ...
+      }
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...){
+        ...
+        $DBF.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        ...
+        $DBF.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        ...
+      }
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...){
+        ...
+        $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        ...
+        $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        ...
+      }
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...){
+        ...
+        $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        ...
+        $DBF.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        ...
+      }
   languages:
   - java

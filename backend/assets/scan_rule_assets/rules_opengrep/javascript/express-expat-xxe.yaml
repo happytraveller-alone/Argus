@@ -1,10 +1,8 @@
 rules:
 - id: express-expat-xxe
-  message: 'Make sure that unverified user data can not reach the XML Parser,
-
+  message: |
+    Make sure that unverified user data can not reach the XML Parser,
     as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities
-
-    '
   metadata:
     owasp: 'A4: XML External Entities (XXE)'
     cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
@@ -12,76 +10,53 @@ rules:
   languages:
   - javascript
   patterns:
-  - pattern-inside: '...
-
-      require(''node-expat'');
-
+  - pattern-inside: |
       ...
-
-      '
-  - pattern-inside: '...
-
-      require(''express'');
-
+      require('node-expat');
       ...
-
-      '
+  - pattern-inside: |
+      ...
+      require('express');
+      ...
   - pattern-either:
     - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
     - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
     - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
     - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
   - pattern-either:
-    - pattern-inside: '...
-
+    - pattern-inside: |
+        ...
         $PARSER = new $EXPAT.Parser(...);
-
         ...
-
-        '
-    - pattern-inside: '...
-
+    - pattern-inside: |
+        ...
         $PARSER = new Parser(...);
-
         ...
-
-        '
   - pattern-either:
     - pattern: $PARSER.parse(<... $REQ.$QUERY.$FOO ...>,...)
     - pattern: $PARSER.parse(<... $REQ.$BODY ...>,...)
-    - pattern: '$INPUT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $PARSER.parse(<... $INPUT ...>,...);
-
-        '
-    - pattern: '$INPUT = <... $REQ.$BODY ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
         ...
-
         $PARSER.parse(<... $INPUT ...>,...);
-
-        '
     - pattern: $PARSER.write(<... $REQ.$QUERY.$FOO ...>,...)
     - pattern: $PARSER.write(<... $REQ.$BODY ...>,...)
-    - pattern: '$INPUT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $PARSER.write(<... $INPUT ...>,...);
-
-        '
-    - pattern: '$INPUT = <... $REQ.$BODY ...>;
-
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
         ...
-
-        $PARSER.write(<... $INPUT ...>,...);'
+        $PARSER.write(<... $INPUT ...>,...);
 - id: express-expat-xxe_1
   languages:
   - javascript
-  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal
-    Entity (XXE) Processing vulnerabilities.
+  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities.
   metadata:
     asvs:
       control_id: 5.5.2 Insecue XML Deserialization
@@ -112,27 +87,19 @@ rules:
   pattern-sinks:
   - patterns:
     - pattern-either:
-      - pattern-inside: '$XML = require(''node-expat'')
-
+      - pattern-inside: |
+          $XML = require('node-expat')
           ...
-
-          '
-      - pattern-inside: 'import $XML from ''node-expat''
-
+      - pattern-inside: |
+          import $XML from 'node-expat'
           ...
-
-          '
-      - pattern-inside: 'import * as $XML from ''node-expat''
-
+      - pattern-inside: |
+          import * as $XML from 'node-expat'
           ...
-
-          '
     - pattern-either:
-      - pattern-inside: '$PARSER = new $XML.Parser(...);
-
+      - pattern-inside: |
+          $PARSER = new $XML.Parser(...);
           ...
-
-          '
     - pattern-either:
       - pattern: $PARSER.parse($QUERY)
       - pattern: $PARSER.write($QUERY)
@@ -157,14 +124,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

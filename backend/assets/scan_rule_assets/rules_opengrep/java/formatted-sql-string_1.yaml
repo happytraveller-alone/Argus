@@ -2,10 +2,7 @@ rules:
 - id: formatted-sql-string_1
   languages:
   - java
-  message: Detected a formatted string in a SQL statement. This could lead to SQL
-    injection if variables in the SQL statement are not properly sanitized. Use a
-    prepared statements (java.sql.PreparedStatement) instead. You can obtain a PreparedStatement
-    using 'connection.prepareStatement'.
+  message: Detected a formatted string in a SQL statement. This could lead to SQL injection if variables in the SQL statement are not properly sanitized. Use a prepared statements (java.sql.PreparedStatement) instead. You can obtain a PreparedStatement using 'connection.prepareStatement'.
   metadata:
     asvs:
       control_id: 5.3.5 Injection
@@ -15,8 +12,7 @@ rules:
     category: security
     confidence: MEDIUM
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     cwe2021-top25: true
     cwe2022-top25: true
     impact: MEDIUM
@@ -65,11 +61,13 @@ rules:
   - label: INPUT
     patterns:
     - pattern-either:
-      - pattern: '(HttpServletRequest $REQ)
-
-          '
+      - pattern: |
+          (HttpServletRequest $REQ)
       - patterns:
-        - pattern-inside: "$ANNOT $FUNC (..., $INPUT, ...) {\n  ...\n}\n"
+        - pattern-inside: |
+            $ANNOT $FUNC (..., $INPUT, ...) {
+              ...
+            }
         - pattern: (String $INPUT)
         - focus-metavariable: $INPUT
   - label: CONCAT

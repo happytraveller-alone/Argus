@@ -1,8 +1,7 @@
 rules:
 - id: express-wkhtmltopdf-injection
-  message: 'If unverified user data can reach the `phantom` methods it can result in Server-Side Request Forgery vulnerabilities
-
-    '
+  message: |
+    If unverified user data can reach the `phantom` methods it can result in Server-Side Request Forgery vulnerabilities
   metadata:
     owasp: 'A1: Injection'
     cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
@@ -10,20 +9,14 @@ rules:
   languages:
   - javascript
   patterns:
-  - pattern-inside: '...
-
-      $WK = require(''wkhtmltopdf'');
-
+  - pattern-inside: |
       ...
-
-      '
-  - pattern-inside: '...
-
-      require(''express'');
-
+      $WK = require('wkhtmltopdf');
       ...
-
-      '
+  - pattern-inside: |
+      ...
+      require('express');
+      ...
   - pattern-either:
     - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
     - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
@@ -32,18 +25,14 @@ rules:
   - pattern-either:
     - pattern: $WK(<... $REQ.$QUERY.$FOO ...>,...)
     - pattern: $WK(<... $REQ.$BODY ...>,...)
-    - pattern: '$INPUT = <... $REQ.$QUERY.$FOO ...>;
-
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
         ...
-
         $WK(<... $INPUT ...>,...);
-
-        '
-    - pattern: '$INPUT = <... $REQ.$BODY ...>;
-
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
         ...
-
-        $WK(<... $INPUT ...>,...);'
+        $WK(<... $INPUT ...>,...);
 - id: express-wkhtmltopdf-injection_1
   languages:
   - javascript
@@ -68,11 +57,9 @@ rules:
   mode: taint
   pattern-sinks:
   - patterns:
-    - pattern-inside: '$WK = require(''wkhtmltopdf'');
-
+    - pattern-inside: |
+        $WK = require('wkhtmltopdf');
         ...
-
-        '
     - pattern: $WK($SINK,...)
     - focus-metavariable: $SINK
   pattern-sources:
@@ -95,14 +82,11 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
           {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

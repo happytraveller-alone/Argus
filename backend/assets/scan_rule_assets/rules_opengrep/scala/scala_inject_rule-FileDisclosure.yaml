@@ -2,13 +2,10 @@ rules:
 - id: scala_inject_rule-FileDisclosure
   languages:
   - scala
-  message: 'Constructing a server-side redirect path with user input could allow an
-
+  message: |
+    Constructing a server-side redirect path with user input could allow an
     attacker to download application binaries (including application classes or
-
     jar files) or view arbitrary files within protected directories.
-
-    '
   metadata:
     category: security
     cwe: CWE-552
@@ -38,25 +35,19 @@ rules:
     - pattern: new org.apache.struts.action.ActionForward($FST, $SND, $TRD)
     - pattern: $TRD
   - patterns:
-    - pattern-inside: '$ACTION = new org.apache.struts.action.ActionForward()
-
+    - pattern-inside: |
+        $ACTION = new org.apache.struts.action.ActionForward()
         ...
-
-        '
     - pattern: $ACTION.setPath(...)
   - patterns:
-    - pattern-inside: '$MVC = new org.springframework.web.servlet.ModelAndView()
-
+    - pattern-inside: |
+        $MVC = new org.springframework.web.servlet.ModelAndView()
         ...
-
-        '
     - pattern: $MVC.setViewName(...);
   - patterns:
-    - pattern-inside: '$REQ = $HTTP.getRequestDispatcher(...)
-
+    - pattern-inside: |
+        $REQ = $HTTP.getRequestDispatcher(...)
         ...
-
-        '
     - pattern-either:
       - pattern: $REQ.include($FST, $SND)
       - pattern: $REQ.forward($FST, $SND)
@@ -66,13 +57,10 @@ rules:
 - id: scala_inject_rule-FileDisclosure_1
   languages:
   - scala
-  message: 'Constructing a server-side redirect path with user input could allow an
-
+  message: |
+    Constructing a server-side redirect path with user input could allow an
     attacker to download application binaries (including application classes or
-
     jar files) or view arbitrary files within protected directories.
-
-    '
   metadata:
     category: security
     cwe: CWE-552
@@ -102,25 +90,19 @@ rules:
     - pattern: new org.apache.struts.action.ActionForward($FST, $SND, $TRD)
     - pattern: $TRD
   - patterns:
-    - pattern-inside: '$ACTION = new org.apache.struts.action.ActionForward()
-
+    - pattern-inside: |
+        $ACTION = new org.apache.struts.action.ActionForward()
         ...
-
-        '
     - pattern: $ACTION.setPath(...)
   - patterns:
-    - pattern-inside: '$MVC = new org.springframework.web.servlet.ModelAndView()
-
+    - pattern-inside: |
+        $MVC = new org.springframework.web.servlet.ModelAndView()
         ...
-
-        '
     - pattern: $MVC.setViewName(...);
   - patterns:
-    - pattern-inside: '$REQ = $HTTP.getRequestDispatcher(...)
-
+    - pattern-inside: |
+        $REQ = $HTTP.getRequestDispatcher(...)
         ...
-
-        '
     - pattern-either:
       - pattern: $REQ.include($FST, $SND)
       - pattern: $REQ.forward($FST, $SND)

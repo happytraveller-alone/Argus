@@ -11,9 +11,8 @@ rules:
         - pattern: $_REQUEST
         - pattern: $_SERVER
     - patterns:
-      - pattern: 'Route::$METHOD($ROUTENAME, function(..., $ARG, ...) { ... })
-
-          '
+      - pattern: |
+          Route::$METHOD($ROUTENAME, function(..., $ARG, ...) { ... })
       - focus-metavariable: $ARG
   pattern-sinks:
   - patterns:
@@ -25,8 +24,7 @@ rules:
     owasp:
     - A03:2021 - Injection
     cwe:
-    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code
-      (''Eval Injection'')'
+    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (''Eval Injection'')'
     references:
     - https://www.php.net/manual/en/function.assert
     - https://github.com/FloeDesignTechnologies/phpcs-security-audit/blob/master/Security/Sniffs/BadFunctions/AssertsSniff.php

@@ -1,20 +1,13 @@
 rules:
 - id: vuln-source-to-image-f5cbcbc5
-  pattern: 'tar.New($FS)
-
-    '
-  pattern-not: 'tar.NewParanoid($FS)
-
-    '
+  pattern: |
+    tar.New($FS)
+  pattern-not: |
+    tar.NewParanoid($FS)
   languages:
   - go
-  message: 'The use of `tar.New` without the `Paranoid` mode can lead to security
-    vulnerabilities such as path traversal, symlink attacks, and overwriting of existing
-    files. The `Paranoid` mode enforces restrictions on file extraction, including
-    disallowing relative paths, special files, and overwrites. Always use `tar.NewParanoid`
-    to mitigate these risks.
-
-    '
+  message: |
+    The use of `tar.New` without the `Paranoid` mode can lead to security vulnerabilities such as path traversal, symlink attacks, and overwriting of existing files. The `Paranoid` mode enforces restrictions on file extraction, including disallowing relative paths, special files, and overwrites. Always use `tar.NewParanoid` to mitigate these risks.
   severity: ERROR
   metadata:
     source-url: github.com/openshift/source-to-image/commit/f5cbcbc5cc6f8cc2f479a7302443bea407a700cb

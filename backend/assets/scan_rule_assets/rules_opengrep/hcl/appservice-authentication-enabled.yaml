@@ -1,22 +1,33 @@
 rules:
 - id: appservice-authentication-enabled
-  message: Enabling authentication ensures that all communications in the application
-    are authenticated. The `auth_settings` block needs to be filled out with the appropriate
-    auth backend settings
+  message: Enabling authentication ensures that all communications in the application are authenticated. The `auth_settings` block needs to be filled out with the appropriate auth backend settings
   patterns:
   - pattern: resource
-  - pattern-not-inside: "resource \"azurerm_app_service\" \"...\" {\n...\n  auth_settings\
-      \ {\n    ...\n    enabled = true\n    ...\n  }\n...\n}\n"
-  - pattern-either:
-    - pattern-inside: 'resource "azurerm_app_service" "..." {
-
-        ...
-
+  - pattern-not-inside: |
+      resource "azurerm_app_service" "..." {
+      ...
+        auth_settings {
+          ...
+          enabled = true
+          ...
         }
-
-        '
-    - pattern-inside: "resource \"azurerm_app_service\" \"...\" {\n...\n  auth_settings\
-        \ {\n    ...\n    enabled = false\n    ...\n  }\n...\n}\n"
+      ...
+      }
+  - pattern-either:
+    - pattern-inside: |
+        resource "azurerm_app_service" "..." {
+        ...
+        }
+    - pattern-inside: |
+        resource "azurerm_app_service" "..." {
+        ...
+          auth_settings {
+            ...
+            enabled = false
+            ...
+          }
+        ...
+        }
   metadata:
     cwe:
     - 'CWE-287: Improper Authentication'

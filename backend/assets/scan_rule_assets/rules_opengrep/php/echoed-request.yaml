@@ -1,8 +1,7 @@
 rules:
 - id: echoed-request
   mode: taint
-  message: '`Echo`ing user input risks cross-site scripting vulnerability. You should
-    use `htmlentities()` when showing data to users.'
+  message: '`Echo`ing user input risks cross-site scripting vulnerability. You should use `htmlentities()` when showing data to users.'
   languages:
   - php
   severity: ERROR
@@ -35,8 +34,7 @@ rules:
     technology:
     - php
     cwe:
-    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site
-      Scripting'')'
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site Scripting'')'
     owasp:
     - A07:2017 - Cross-Site Scripting (XSS)
     - A03:2021 - Injection

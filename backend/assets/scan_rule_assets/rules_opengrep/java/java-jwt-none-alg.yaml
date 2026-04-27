@@ -1,9 +1,6 @@
 rules:
 - id: java-jwt-none-alg
-  message: Detected use of the 'none' algorithm in a JWT token. The 'none' algorithm
-    assumes the integrity of the token has already been verified. This would allow
-    a malicious actor to forge a JWT token that will automatically be verified. Do
-    not explicitly use the 'none' algorithm. Instead, use an algorithm such as 'HS256'.
+  message: Detected use of the 'none' algorithm in a JWT token. The 'none' algorithm assumes the integrity of the token has already been verified. This would allow a malicious actor to forge a JWT token that will automatically be verified. Do not explicitly use the 'none' algorithm. Instead, use an algorithm such as 'HS256'.
   metadata:
     cwe:
     - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
@@ -25,16 +22,21 @@ rules:
   - java
   severity: ERROR
   pattern-either:
-  - pattern: '$JWT.sign(com.auth0.jwt.algorithms.Algorithm.none());
-
-      '
-  - pattern: '$NONE = com.auth0.jwt.algorithms.Algorithm.none();
-
+  - pattern: |
+      $JWT.sign(com.auth0.jwt.algorithms.Algorithm.none());
+  - pattern: |
+      $NONE = com.auth0.jwt.algorithms.Algorithm.none();
       ...
-
       $JWT.sign($NONE);
-
-      '
-  - pattern: "class $CLASS {\n  ...\n  $TYPE $NONE = com.auth0.jwt.algorithms.Algorithm.none();\n\
-      \  ...\n  $RETURNTYPE $FUNC (...) {\n    ...\n    $JWT.sign($NONE);\n    ...\n\
-      \  }\n  ...\n}"
+  - pattern: |-
+      class $CLASS {
+        ...
+        $TYPE $NONE = com.auth0.jwt.algorithms.Algorithm.none();
+        ...
+        $RETURNTYPE $FUNC (...) {
+          ...
+          $JWT.sign($NONE);
+          ...
+        }
+        ...
+      }

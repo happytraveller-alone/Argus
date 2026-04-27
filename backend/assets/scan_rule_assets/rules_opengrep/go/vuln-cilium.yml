@@ -1,38 +1,24 @@
 rules:
 - id: vuln-cilium-a652c123
-  pattern: '$INPUT := append($GLOBALKEY, $SRCNODEIP...)
-
+  pattern: |
+    $INPUT := append($GLOBALKEY, $SRCNODEIP...)
     $INPUT = append($INPUT, $SRCBOOTID...)
-
     $INPUT = append($INPUT, $DSTBOOTID...)
-
-    '
-  pattern-not: '$INPUTLEN := len($GLOBALKEY) + len($SRCNODEIP) + len($DSTNODEIP) + len($SRCBOOTID) + len($DSTBOOTID)
-
+  pattern-not: |
+    $INPUTLEN := len($GLOBALKEY) + len($SRCNODEIP) + len($DSTNODEIP) + len($SRCBOOTID) + len($DSTBOOTID)
     $INPUT := make([]byte, 0, $INPUTLEN)
-
     $INPUT = append($INPUT, $GLOBALKEY...)
-
     $INPUT = append($INPUT, $SRCNODEIP...)
-
     $INPUT = append($INPUT, $SRCBOOTID[:36]...)
-
     $INPUT = append($INPUT, $DSTBOOTID[:36]...)
-
-    '
   languages:
   - go
-  message: 'Detected potential buffer overflow vulnerability due to unsafe concatenation of byte slices.
-
+  message: |
+    Detected potential buffer overflow vulnerability due to unsafe concatenation of byte slices.
     The original code appends multiple byte slices without pre-allocating the required memory,
-
     which can lead to buffer overflows and undefined behavior. The fix pre-allocates the
-
     required memory and ensures proper bounds checking by truncating the boot IDs to 36 bytes.
-
     To fix this, pre-allocate the memory using `make` and ensure proper bounds checking.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/cilium/cilium/commit/a652c123331852cca90c74202f993d4170fd37fa
@@ -42,19 +28,20 @@ rules:
     technology:
     - go
 - id: vuln-cilium-bf9a1ae1
-  pattern: "func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string) error {\n  ...\n  return downloadToFile($CLIENT,\
-    \ $RESOURCE, filepath.Join($ROOTDIR, $FILENAME))\n}\n"
-  pattern-not: "func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string, $POSTPROCESS postProcessFunc) error {\n\
-    \  ...\n  return downloadToFileWithPostProcess($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME), $POSTPROCESS)\n\
-    }\n"
+  pattern: |
+    func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string) error {
+      ...
+      return downloadToFile($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME))
+    }
+  pattern-not: |
+    func dumpEnvoy($ROOTDIR string, $RESOURCE string, $FILENAME string, $POSTPROCESS postProcessFunc) error {
+      ...
+      return downloadToFileWithPostProcess($CLIENT, $RESOURCE, filepath.Join($ROOTDIR, $FILENAME), $POSTPROCESS)
+    }
   languages:
   - go
-  message: 'The function `dumpEnvoy` is vulnerable because it does not apply post-processing to sensitive data before writing
-    it to a file. This can lead to exposure of sensitive information such as API keys, certificates, and private keys. The
-    fix involves using `downloadToFileWithPostProcess` to apply a post-processing function that masks sensitive data. Always
-    ensure sensitive data is properly masked or redacted before writing it to a file.
-
-    '
+  message: |
+    The function `dumpEnvoy` is vulnerable because it does not apply post-processing to sensitive data before writing it to a file. This can lead to exposure of sensitive information such as API keys, certificates, and private keys. The fix involves using `downloadToFileWithPostProcess` to apply a post-processing function that masks sensitive data. Always ensure sensitive data is properly masked or redacted before writing it to a file.
   severity: ERROR
   metadata:
     source-url: github.com/cilium/cilium/commit/bf9a1ae1b2d2b2c9cca329d7aa96aa4858032a61
@@ -68,15 +55,18 @@ rules:
     technology:
     - go
 - id: vuln-cilium-d367fb38
-  pattern: "if $ID.ID == $NEWID.ID {\n  ...\n}\n"
-  pattern-not: "if $ID.ID == $NEWID.ID && $PREFIXINFO.Source() == $ID.Source {\n  ...\n}\n"
+  pattern: |
+    if $ID.ID == $NEWID.ID {
+      ...
+    }
+  pattern-not: |
+    if $ID.ID == $NEWID.ID && $PREFIXINFO.Source() == $ID.Source {
+      ...
+    }
   languages:
   - go
-  message: 'Detected a vulnerability where the ipcache upsert operation only checks the ID without verifying the source. This
-    can lead to incorrect ipcache entries when the same identity is sourced from different locations. Always verify both the
-    ID and the source to ensure correct ipcache updates. See GH-24502 for more details.
-
-    '
+  message: |
+    Detected a vulnerability where the ipcache upsert operation only checks the ID without verifying the source. This can lead to incorrect ipcache entries when the same identity is sourced from different locations. Always verify both the ID and the source to ensure correct ipcache updates. See GH-24502 for more details.
   severity: ERROR
   metadata:
     source-url: github.com/cilium/cilium/commit/d367fb38acef88ab7e8d308ec167721dad2e1c82

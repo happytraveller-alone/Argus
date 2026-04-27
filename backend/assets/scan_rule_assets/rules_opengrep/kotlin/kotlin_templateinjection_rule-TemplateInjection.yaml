@@ -2,11 +2,9 @@ rules:
 - id: kotlin_templateinjection_rule-TemplateInjection
   languages:
   - kotlin
-  message: 'A malicious user in control of a template can run malicious code on the
-
+  message: |
+    A malicious user in control of a template can run malicious code on the
     server-side. Velocity templates should be seen as scripts.
-
-    '
   metadata:
     shortDescription: Improper control of generation of code ('Code Injection')
     category: security
@@ -21,31 +19,21 @@ rules:
     - pattern: org.apache.velocity.app.Velocity.evaluate(..., $VAR)
     - pattern-not: org.apache.velocity.app.Velocity.evaluate(..., "...")
   - patterns:
-    - pattern-not-inside: '$C = ($CFG: freemarker.template.Configuration).getTemplate("...");
-
+    - pattern-not-inside: |
+        $C = ($CFG: freemarker.template.Configuration).getTemplate("...");
         ...
-
-        '
-    - pattern-inside: '$C = ($CFG: freemarker.template.Configuration).getTemplate($IN);
-
+    - pattern-inside: |
+        $C = ($CFG: freemarker.template.Configuration).getTemplate($IN);
         ...
-
-        '
     - pattern: $C.process(...)
   - patterns:
-    - pattern-inside: 'import com.mitchellbosecke.pebble.PebbleEngine;
-
+    - pattern-inside: |
+        import com.mitchellbosecke.pebble.PebbleEngine;
         ...
-
-        '
-    - pattern-inside: '$C = $T.getTemplate($IN);
-
+    - pattern-inside: |
+        $C = $T.getTemplate($IN);
         ...
-
-        '
-    - pattern-not-inside: '$C = $T.getTemplate("...");
-
+    - pattern-not-inside: |
+        $C = $T.getTemplate("...");
         ...
-
-        '
     - pattern: $C.evaluate(...)

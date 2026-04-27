@@ -1,21 +1,25 @@
 rules:
 - id: appservice-enable-https-only
-  message: By default, clients can connect to App Service by using both HTTP or HTTPS.
-    HTTP should be disabled enabling the HTTPS Only setting.
+  message: By default, clients can connect to App Service by using both HTTP or HTTPS. HTTP should be disabled enabling the HTTPS Only setting.
   patterns:
   - pattern: resource
-  - pattern-not-inside: "resource \"azurerm_app_service\" \"...\" {\n...\n  https_only\
-      \ = true\n...\n}\n"
+  - pattern-not-inside: |
+      resource "azurerm_app_service" "..." {
+      ...
+        https_only = true
+      ...
+      }
   - pattern-either:
-    - pattern-inside: 'resource "azurerm_app_service" "..." {
-
+    - pattern-inside: |
+        resource "azurerm_app_service" "..." {
         ...
-
         }
-
-        '
-    - pattern-inside: "resource \"azurerm_app_service\" \"...\" {\n...\n  https_only\
-        \ = false\n...\n}\n"
+    - pattern-inside: |
+        resource "azurerm_app_service" "..." {
+        ...
+          https_only = false
+        ...
+        }
   metadata:
     cwe:
     - 'CWE-319: Cleartext Transmission of Sensitive Information'

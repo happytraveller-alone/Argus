@@ -1,10 +1,8 @@
 rules:
 - id: waitgroup-add-called-inside-goroutine
-  message: 'Calling `$WG.Add` inside of an anonymous goroutine may result in `$WG.Wait`
-
+  message: |
+    Calling `$WG.Add` inside of an anonymous goroutine may result in `$WG.Wait`
     waiting for more or less calls to `$WG.Done()` than expected
-
-    '
   languages:
   - go
   severity: ERROR
@@ -23,8 +21,29 @@ rules:
     - https://go101.org/article/concurrent-common-mistakes.html
   patterns:
   - pattern-either:
-    - pattern: "$WG := &sync.WaitGroup{}\n...\ngo func(...) {\n  ...\n  $WG.Add(...)\n\
-        \  ...\n}(...)\n...\n$WG.Wait()\n"
-    - pattern: "var $WG sync.WaitGroup\n...\ngo func(...) {\n  ...\n  $WG.Add(...)\n\
-        \  ...\n}(...)\n...\n$WG.Wait()\n"
-  - pattern-not-inside: "for ... {\n  ...\n  $WG.Add(...)\n  ...\n}\n"
+    - pattern: |
+        $WG := &sync.WaitGroup{}
+        ...
+        go func(...) {
+          ...
+          $WG.Add(...)
+          ...
+        }(...)
+        ...
+        $WG.Wait()
+    - pattern: |
+        var $WG sync.WaitGroup
+        ...
+        go func(...) {
+          ...
+          $WG.Add(...)
+          ...
+        }(...)
+        ...
+        $WG.Wait()
+  - pattern-not-inside: |
+      for ... {
+        ...
+        $WG.Add(...)
+        ...
+      }

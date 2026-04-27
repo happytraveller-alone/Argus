@@ -1,17 +1,25 @@
 rules:
 - id: vuln-arrow-f1417097
-  pattern: "class $CLASS(pa.PyExtensionType):\n    def __init__(self, $STORAGE_TYPE):\n\
-    \        pa.PyExtensionType.__init__(self, $STORAGE_TYPE)\n    def __reduce__(self):\n\
-    \        return $CLASS, ($ARGS)\n"
-  pattern-not: "class $CLASS(pa.ExtensionType):\n    def __init__(self, $STORAGE_TYPE,\
-    \ $EXT_NAME):\n        super().__init__($STORAGE_TYPE, $EXT_NAME)\n    def __arrow_ext_serialize__(self):\n\
-    \        ...\n    @classmethod\n    def __arrow_ext_deserialize__(cls, $STORAGE_TYPE,\
-    \ $SERIALIZED):\n        ...\n"
+  pattern: |
+    class $CLASS(pa.PyExtensionType):
+        def __init__(self, $STORAGE_TYPE):
+            pa.PyExtensionType.__init__(self, $STORAGE_TYPE)
+        def __reduce__(self):
+            return $CLASS, ($ARGS)
+  pattern-not: |
+    class $CLASS(pa.ExtensionType):
+        def __init__(self, $STORAGE_TYPE, $EXT_NAME):
+            super().__init__($STORAGE_TYPE, $EXT_NAME)
+        def __arrow_ext_serialize__(self):
+            ...
+        @classmethod
+        def __arrow_ext_deserialize__(cls, $STORAGE_TYPE, $SERIALIZED):
+            ...
   languages:
   - python
-  message: "Detected insecure use of PyExtensionType which is deprecated and can lead\
-    \ to unsafe deserialization. \nMigrate to using ExtensionType with proper serialization\
-    \ methods (__arrow_ext_serialize__ and __arrow_ext_deserialize__).\n"
+  message: |
+    Detected insecure use of PyExtensionType which is deprecated and can lead to unsafe deserialization.
+    Migrate to using ExtensionType with proper serialization methods (__arrow_ext_serialize__ and __arrow_ext_deserialize__).
   severity: ERROR
   metadata:
     source-url: github.com/apache/arrow/commit/f14170976372436ec1d03a724d8d3f3925484ecf

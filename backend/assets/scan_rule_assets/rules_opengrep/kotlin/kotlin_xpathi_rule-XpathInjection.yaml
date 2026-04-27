@@ -2,17 +2,12 @@ rules:
 - id: kotlin_xpathi_rule-XpathInjection
   languages:
   - kotlin
-  message: 'The input values included in SQL queries need to be passed in safely.
-    Bind
-
+  message: |
+    The input values included in SQL queries need to be passed in safely. Bind
     variables in prepared statements can be used to easily mitigate the risk of
-
     SQL injection.
-
-    '
   metadata:
-    shortDescription: Improper neutralization of data within XPath expressions ('XPath
-      Injection')
+    shortDescription: Improper neutralization of data within XPath expressions ('XPath Injection')
     category: security
     cwe: CWE-643
     owasp:
@@ -23,7 +18,10 @@ rules:
   mode: taint
   pattern-sources:
   - patterns:
-    - pattern-inside: "fun $FUNC(..., $VAR: $T, ...) {\n  ...\n}\n"
+    - pattern-inside: |
+        fun $FUNC(..., $VAR: $T, ...) {
+          ...
+        }
     - pattern: $VAR
   pattern-sinks:
   - patterns:
@@ -40,17 +38,11 @@ rules:
           - pattern-not: $X.evaluate("...", ...)
   pattern-sanitizers:
   - pattern-either:
-    - pattern-inside: '$X.xPathVariableResolver = ...;
-
+    - pattern-inside: |
+        $X.xPathVariableResolver = ...;
         ...;
-
         $X.compile("...");
-
-        '
-    - pattern-inside: '$X.setXPathVariableResolver(...);
-
+    - pattern-inside: |
+        $X.setXPathVariableResolver(...);
         ...;
-
         $X.compile("...");
-
-        '

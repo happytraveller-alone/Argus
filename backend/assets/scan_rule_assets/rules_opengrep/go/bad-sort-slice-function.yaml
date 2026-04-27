@@ -2,22 +2,38 @@ rules:
 - id: bad-sort-slice-function
   patterns:
   - pattern-either:
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I]\
-        \ < $SLICE[$I]\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J]\
-        \ < $SLICE[$I]\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I].$FIELD\
-        \ < $SLICE[$I].$FIELD\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J].$FIELD\
-        \ < $SLICE[$J].$FIELD\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I]\
-        \ > $SLICE[$I]\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J]\
-        \ > $SLICE[$I]\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$I].$FIELD\
-        \ > $SLICE[$I].$FIELD\n})\n"
-    - pattern: "sort.Slice($SLICE, func($I, $J int) bool {\n    return $SLICE[$J].$FIELD\
-        \ > $SLICE[$J].$FIELD\n})\n"
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$I] < $SLICE[$I]
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$J] < $SLICE[$I]
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$I].$FIELD < $SLICE[$I].$FIELD
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$J].$FIELD < $SLICE[$J].$FIELD
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$I] > $SLICE[$I]
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$J] > $SLICE[$I]
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$I].$FIELD > $SLICE[$I].$FIELD
+        })
+    - pattern: |
+        sort.Slice($SLICE, func($I, $J int) bool {
+            return $SLICE[$J].$FIELD > $SLICE[$J].$FIELD
+        })
   message: Maybe bad sort.Slice() less function
   languages:
   - go

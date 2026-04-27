@@ -1,19 +1,14 @@
 rules:
 - id: vuln-weblate-9e19a841
-  pattern: 'return `<a>${$VAR}</a>`;
-
-    '
-  pattern-not: 'let $LINK = document.createElement("a");
-
+  pattern: |
+    return `<a>${$VAR}</a>`;
+  pattern-not: |
+    let $LINK = document.createElement("a");
     $LINK.innerText = $VAR;
-
     return $LINK.outerHTML;
-
-    '
   languages:
   - javascript
-  message: Potential XSS vulnerability due to unsafe string interpolation in HTML.
-    Use document.createElement to safely create DOM elements.
+  message: Potential XSS vulnerability due to unsafe string interpolation in HTML. Use document.createElement to safely create DOM elements.
   severity: ERROR
   metadata:
     source-url: github.com/WeblateOrg/weblate/commit/9e19a8414337692cc90da2a91c9af5420f2952f1

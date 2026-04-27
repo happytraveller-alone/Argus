@@ -5,8 +5,7 @@ rules:
     - A01:2017 - Injection
     - A03:2021 - Injection
     cwe:
-    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS
-      Command Injection'')'
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     references:
     - https://github.com/presidentbeef/brakeman/blob/main/docs/warning_types/file_access/index.markdown
     category: security
@@ -19,8 +18,7 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
-  message: Using user input when accessing files is potentially dangerous. A malicious
-    actor could use this to modify or access files they have no right to.
+  message: Using user input when accessing files is potentially dangerous. A malicious actor could use this to modify or access files they have no right to.
   languages:
   - ruby
   severity: ERROR
@@ -39,13 +37,10 @@ rules:
         - pattern-either:
           - pattern: Shell.$X(...)
           - patterns:
-            - pattern-inside: '$SHELL = Shell.$ANY(...)
-
+            - pattern-inside: |
+                $SHELL = Shell.$ANY(...)
                 ...
-
                 $SHELL.$X(...)
-
-                '
             - pattern: $SHELL.$X(...)
     - metavariable-pattern:
         metavariable: $X

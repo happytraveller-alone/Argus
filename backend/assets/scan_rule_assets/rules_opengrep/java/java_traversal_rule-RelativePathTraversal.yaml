@@ -2,13 +2,22 @@ rules:
 - id: java_traversal_rule-RelativePathTraversal
   languages:
   - java
-  message: "Detected user input controlling a file path. An attacker could control\n\
-    the location of this file, to include going backwards in the directory\nwith '../'.\
-    \ \n\nTo address this, ensure that user-controlled variables in file\npaths are\
-    \ sanitized. You may also consider using a utility method such as\norg.apache.commons.io.FilenameUtils.getName(...)\
-    \ to only retrieve the file\nname from the path.\n\nExample of using `org.apache.commons.io.FilenameUtils.getName(...)`\
-    \ to \nonly retrieve the file name from the path\n```\nString fileName = org.apache.commons.io.FilenameUtils.getName(userControlledInput);\n\
-    File file = new File(\"/path/to/directory/\" + fileName);\n```\n"
+  message: |
+    Detected user input controlling a file path. An attacker could control
+    the location of this file, to include going backwards in the directory
+    with '../'.
+
+    To address this, ensure that user-controlled variables in file
+    paths are sanitized. You may also consider using a utility method such as
+    org.apache.commons.io.FilenameUtils.getName(...) to only retrieve the file
+    name from the path.
+
+    Example of using `org.apache.commons.io.FilenameUtils.getName(...)` to
+    only retrieve the file name from the path
+    ```
+    String fileName = org.apache.commons.io.FilenameUtils.getName(userControlledInput);
+    File file = new File("/path/to/directory/" + fileName);
+    ```
   options:
     interfile: true
   severity: ERROR
@@ -27,9 +36,14 @@ rules:
   pattern-sources:
   - patterns:
     - pattern-either:
-      - pattern-inside: "$METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {\n  ...\n\
-          }\n"
-      - pattern-inside: "$METHODNAME(..., @$REQ $TYPE $SOURCE,...) {\n  ...\n}\n"
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
     - metavariable-regex:
         metavariable: $TYPE
         regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
@@ -48,9 +62,8 @@ rules:
       - pattern: new java.io.FileInputStream(...)
       - pattern: (Paths $PATHS).get(...)
       - patterns:
-        - pattern: '$CLASS.$FUNC(...)
-
-            '
+        - pattern: |
+            $CLASS.$FUNC(...)
         - metavariable-regex:
             metavariable: $FUNC
             regex: ^(getResourceAsStream|getResource)$

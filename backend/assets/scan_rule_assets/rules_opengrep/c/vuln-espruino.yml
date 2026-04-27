@@ -1,18 +1,13 @@
 rules:
 - id: vuln-espruino-013cb1be
-  pattern: 'char $FILENAME[6] = ".bootX";
-
-    '
-  pattern-not: 'char $FILENAME[7] = ".bootX";
-
-    '
+  pattern: |
+    char $FILENAME[6] = ".bootX";
+  pattern-not: |
+    char $FILENAME[7] = ".bootX";
   languages:
   - c
-  message: 'The array `$FILENAME` is declared with insufficient size to hold the string ".bootX" and the null terminator.
-    This can lead to buffer overflow vulnerabilities. Increase the array size to 7 to accommodate the string and the null
-    terminator.
-
-    '
+  message: |
+    The array `$FILENAME` is declared with insufficient size to hold the string ".bootX" and the null terminator. This can lead to buffer overflow vulnerabilities. Increase the array size to 7 to accommodate the string and the null terminator.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/013cb1be964e4ca06b5246d72467130a9abd7f10
@@ -26,25 +21,18 @@ rules:
     technology:
     - c
 - id: vuln-espruino-0a761987
-  pattern: 'strncpy($STR, $VAL, $LEN);
-
+  pattern: |
+    strncpy($STR, $VAL, $LEN);
     itostr($TOKEN, &$STR[2], 10);
-
     strncat($STR, "]", $LEN);
-
-    '
-  pattern-not: 'espruino_snprintf($STR, $LEN, "?[%d]", $TOKEN);
-
-    '
+  pattern-not: |
+    espruino_snprintf($STR, $LEN, "?[%d]", $TOKEN);
   languages:
   - c
-  message: 'The code uses strncpy and strncat in a way that can lead to buffer overflow or truncation issues.
-
+  message: |
+    The code uses strncpy and strncat in a way that can lead to buffer overflow or truncation issues.
     This is dangerous because it can result in memory corruption or data loss.
-
     Use espruino_snprintf instead to ensure proper string formatting and buffer handling.
-
-    '
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/0a7619875bf79877907205f6bee08465b89ff10b
@@ -57,19 +45,34 @@ rules:
     technology:
     - c
 - id: vuln-espruino-0a9f07a0
-  pattern: "int timeout = 1000;\nwhile (timeout-- && !(spiFlashStatus()&2)) {\n  $BUF[0] = 6; // write enable\n  spiFlashWriteCS($BUF,1);\n\
-    }\n$BUF[0] = 1; // write status register\n$BUF[1] = 0;\nspiFlashWriteCS($BUF,2);\n"
-  pattern-not: "int tries = 3;\ndo {\n  int timeout = 1000;\n  while (timeout-- && !(spiFlashStatus()&2)) {\n    $BUF[0] =\
-    \ 6; // write enable\n    spiFlashWriteCS($BUF,1);\n    jshDelayMicroseconds(10);\n  }\n  jshDelayMicroseconds(10);\n\
-    \  $BUF[0] = 1; // write status register, disable BP0/1/2\n  $BUF[1] = 0;\n  spiFlashWriteCS($BUF,2);\n  jshDelayMicroseconds(10);\n\
-    } while (tries-- && (spiFlashStatus()&28));\n"
+  pattern: |
+    int timeout = 1000;
+    while (timeout-- && !(spiFlashStatus()&2)) {
+      $BUF[0] = 6; // write enable
+      spiFlashWriteCS($BUF,1);
+    }
+    $BUF[0] = 1; // write status register
+    $BUF[1] = 0;
+    spiFlashWriteCS($BUF,2);
+  pattern-not: |
+    int tries = 3;
+    do {
+      int timeout = 1000;
+      while (timeout-- && !(spiFlashStatus()&2)) {
+        $BUF[0] = 6; // write enable
+        spiFlashWriteCS($BUF,1);
+        jshDelayMicroseconds(10);
+      }
+      jshDelayMicroseconds(10);
+      $BUF[0] = 1; // write status register, disable BP0/1/2
+      $BUF[1] = 0;
+      spiFlashWriteCS($BUF,2);
+      jshDelayMicroseconds(10);
+    } while (tries-- && (spiFlashStatus()&28));
   languages:
   - c
-  message: 'The SPI flash write operation lacks proper retry logic and timing delays, which can lead to unreliable flash operations.
-    This can result in failed writes or corrupted data. The fix includes adding retry logic with a limited number of attempts
-    and proper delays between operations.
-
-    '
+  message: |
+    The SPI flash write operation lacks proper retry logic and timing delays, which can lead to unreliable flash operations. This can result in failed writes or corrupted data. The fix includes adding retry logic with a limited number of attempts and proper delays between operations.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/0a9f07a0fc21d1f989adaa8f35f74b29349307d6
@@ -79,19 +82,14 @@ rules:
     technology:
     - c
 - id: vuln-espruino-b6d362f6
-  pattern: 'jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR));
-
-    '
-  pattern-not: 'jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR)?jswGetBasicObjectName($VAR):"unknown ArrayBuffer");
-
-    '
+  pattern: |
+    jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR));
+  pattern-not: |
+    jsiConsolePrintf("%s ", jswGetBasicObjectName($VAR)?jswGetBasicObjectName($VAR):"unknown ArrayBuffer");
   languages:
   - c
-  message: 'The code directly uses the return value of `jswGetBasicObjectName` without checking if it is NULL. This can lead
-    to undefined behavior or crashes if the function returns NULL. To fix this, add a null check and provide a default value
-    when `jswGetBasicObjectName` returns NULL.
-
-    '
+  message: |
+    The code directly uses the return value of `jswGetBasicObjectName` without checking if it is NULL. This can lead to undefined behavior or crashes if the function returns NULL. To fix this, add a null check and provide a default value when `jswGetBasicObjectName` returns NULL.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/b6d362f6a1f2de0b3e7604848116efb509196bf4
@@ -105,20 +103,14 @@ rules:
     technology:
     - c
 - id: vuln-espruino-bed844f1
-  pattern: 'strncpy($STR, $SRC, $LEN);
-
-    '
-  pattern-not: 'strcpy($STR, $SRC);
-
-    '
+  pattern: |
+    strncpy($STR, $SRC, $LEN);
+  pattern-not: |
+    strcpy($STR, $SRC);
   languages:
   - c
-  message: 'The use of `strncpy` without proper length checking can lead to buffer overflows or truncation issues. In this
-    case, `strncpy` was replaced with `strcpy` after ensuring the destination buffer is large enough to handle the source
-    string. This change prevents potential truncation and ensures the string is copied correctly. Always validate buffer sizes
-    before using `strcpy` or ensure `strncpy` is used with proper length checks.
-
-    '
+  message: |
+    The use of `strncpy` without proper length checking can lead to buffer overflows or truncation issues. In this case, `strncpy` was replaced with `strcpy` after ensuring the destination buffer is large enough to handle the source string. This change prevents potential truncation and ensures the string is copied correctly. Always validate buffer sizes before using `strcpy` or ensure `strncpy` is used with proper length checks.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/bed844f109b6c222816740555068de2e101e8018
@@ -130,19 +122,14 @@ rules:
     technology:
     - c
 - id: vuln-espruino-c1043117
-  pattern: 'jsvGetString($VAR, $BUF, sizeof($TYPE) + 1)
-
-    '
-  pattern-not: 'jsvGetStringChars($VAR, 0, $BUF, sizeof($TYPE))
-
-    '
+  pattern: |
+    jsvGetString($VAR, $BUF, sizeof($TYPE) + 1)
+  pattern-not: |
+    jsvGetStringChars($VAR, 0, $BUF, sizeof($TYPE))
   languages:
   - c
-  message: 'Detected use of `jsvGetString` with buffer size calculation including an extra byte for trailing zero. This can
-    lead to buffer overflow vulnerabilities when the buffer size is incorrectly calculated. Use `jsvGetStringChars` instead,
-    which does not add a trailing zero and ensures the buffer size matches the data size.
-
-    '
+  message: |
+    Detected use of `jsvGetString` with buffer size calculation including an extra byte for trailing zero. This can lead to buffer overflow vulnerabilities when the buffer size is incorrectly calculated. Use `jsvGetStringChars` instead, which does not add a trailing zero and ensures the buffer size matches the data size.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/c1043117262abef28903adbb944c0861da8dd8ec
@@ -158,15 +145,18 @@ rules:
     technology:
     - c
 - id: vuln-espruino-ce192419
-  pattern: "while (*$S && $L<$LEN) {\n  ...\n}\n"
-  pattern-not: "while ($S[$L] && $L<$LEN) {\n  ...\n}\n"
+  pattern: |
+    while (*$S && $L<$LEN) {
+      ...
+    }
+  pattern-not: |
+    while ($S[$L] && $L<$LEN) {
+      ...
+    }
   languages:
   - c
-  message: 'The code uses pointer dereferencing (*s) in a loop condition, which can lead to out-of-bounds access if the pointer
-    is incremented incorrectly. This is dangerous because it can cause memory corruption or crashes. Use array indexing (s[l])
-    instead to ensure bounds checking.
-
-    '
+  message: |
+    The code uses pointer dereferencing (*s) in a loop condition, which can lead to out-of-bounds access if the pointer is incremented incorrectly. This is dangerous because it can cause memory corruption or crashes. Use array indexing (s[l]) instead to ensure bounds checking.
   severity: ERROR
   metadata:
     source-url: github.com/espruino/Espruino/commit/ce1924193862d58cb43d3d4d9dada710a8361b89

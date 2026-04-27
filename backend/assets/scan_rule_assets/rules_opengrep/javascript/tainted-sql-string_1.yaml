@@ -2,18 +2,12 @@ rules:
 - id: tainted-sql-string_1
   languages:
   - javascript
-  message: Detected user input used to manually construct a SQL string. This is usually
-    bad practice because manual construction could accidentally result in a SQL injection.
-    An attacker could use a SQL injection to steal or modify contents of the database.
-    Instead, use a parameterized query which is available by default in most database
-    engines. Alternatively, consider using an object-relational mapper (ORM) such
-    as Sequelize which will protect your queries.
+  message: Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as Sequelize which will protect your queries.
   metadata:
     category: security
     confidence: LOW
     cwe:
-    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command
-      (''SQL Injection'')'
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
     cwe2021-top25: true
     cwe2022-top25: true
     impact: MEDIUM
@@ -33,16 +27,13 @@ rules:
     - pattern-either:
       - patterns:
         - pattern-either:
-          - pattern-inside: '"$SQLSTR" + $EXPR
-
-              '
-          - pattern-inside: '"$SQLSTR".concat($EXPR)
-
-              '
+          - pattern-inside: |
+              "$SQLSTR" + $EXPR
+          - pattern-inside: |
+              "$SQLSTR".concat($EXPR)
           - pattern: util.format($SQLSTR, $EXPR)
-          - pattern: '`$SQLSTR${$EXPR}...`
-
-              '
+          - pattern: |
+              `$SQLSTR${$EXPR}...`
         - metavariable-regex:
             metavariable: $SQLSTR
             regex: .*\b(?i)(select|delete|insert|create|update\s+.+\sset|alter|drop)\b.*
@@ -59,12 +50,10 @@ rules:
       - pattern: $REQ.headers
   - patterns:
     - pattern-either:
-      - pattern-inside: '(...,{ $REQ }: Request,...) => {...}
-
-          '
-      - pattern-inside: '(...,{ $REQ }: $EXPRESS.Request,...) => {...}
-
-          '
+      - pattern-inside: |
+          (...,{ $REQ }: Request,...) => {...}
+      - pattern-inside: |
+          (...,{ $REQ }: $EXPRESS.Request,...) => {...}
     - focus-metavariable: $REQ
     - pattern-either:
       - pattern: params

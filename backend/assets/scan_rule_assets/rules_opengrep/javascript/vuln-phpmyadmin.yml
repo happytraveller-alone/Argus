@@ -1,17 +1,13 @@
 rules:
 - id: vuln-phpmyadmin-019c4f25
-  pattern: '"<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, PMA_commonParams.get(''table'')) + "</h3>"
-
-    '
-  pattern-not: '"<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, escapeHtml(PMA_commonParams.get(''table''))) + "</h3>"
-
-    '
+  pattern: |
+    "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, PMA_commonParams.get('table')) + "</h3>"
+  pattern-not: |
+    "<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, escapeHtml(PMA_commonParams.get('table'))) + "</h3>"
   languages:
   - javascript
-  message: 'Potential XSS vulnerability detected. The table parameter is not properly sanitized before being included in HTML
-    output. Use escapeHtml() to sanitize user input and prevent XSS attacks.
-
-    '
+  message: |
+    Potential XSS vulnerability detected. The table parameter is not properly sanitized before being included in HTML output. Use escapeHtml() to sanitize user input and prevent XSS attacks.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/019c4f25d500ec5db9ba3b84cc961a7e4e850738
@@ -25,17 +21,17 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-0cd293f5
-  pattern: '''DROP VIEW '' + PMA_commonParams.get(''table'')
-
-    '
-  pattern-not: '''DROP VIEW '' + escapeHtml(PMA_commonParams.get(''table''))
-
-    '
+  pattern: |
+    'DROP VIEW ' + PMA_commonParams.get('table')
+  pattern-not: |
+    'DROP VIEW ' + escapeHtml(PMA_commonParams.get('table'))
   languages:
   - javascript
-  message: "Potential XSS vulnerability due to unescaped user input in SQL query. \nThe table name is used directly in a DROP\
-    \ VIEW statement without proper escaping, \nwhich could allow an attacker to inject malicious SQL code. \nAlways sanitize\
-    \ user input using appropriate escaping functions like escapeHtml().\n"
+  message: |
+    Potential XSS vulnerability due to unescaped user input in SQL query.
+    The table name is used directly in a DROP VIEW statement without proper escaping,
+    which could allow an attacker to inject malicious SQL code.
+    Always sanitize user input using appropriate escaping functions like escapeHtml().
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/0cd293f5e13aa245e4a57b8d373597cc0e421b6f
@@ -47,16 +43,13 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-1490533d
-  pattern: 'var $VAR = $STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB;
-
-    '
-  pattern-not: 'var $VAR = escapeHtml($STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB);
-
-    '
+  pattern: |
+    var $VAR = $STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB;
+  pattern-not: |
+    var $VAR = escapeHtml($STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB);
   languages:
   - javascript
-  message: Potential XSS vulnerability due to unescaped user input in string concatenation. Use escapeHtml or similar sanitization
-    functions to prevent XSS attacks.
+  message: Potential XSS vulnerability due to unescaped user input in string concatenation. Use escapeHtml or similar sanitization functions to prevent XSS attacks.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/1490533d91e9d3820e78ca4eac7981886eaea2cb
@@ -70,17 +63,25 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-24d0eb55
-  pattern: "try {\n    if (top != self) {\n        top.location.href = self.location.href;\n    }\n} catch($E) {\n    alert(\"\
-    Redirecting... (error: \" + $E);\n    top.location.href = self.location.href;\n}\n"
-  pattern-not: "if(self == top) {\n    document.documentElement.style.display = 'block';\n} else {\n    top.location = self.location;\n\
-    }\n"
+  pattern: |
+    try {
+        if (top != self) {
+            top.location.href = self.location.href;
+        }
+    } catch($E) {
+        alert("Redirecting... (error: " + $E);
+        top.location.href = self.location.href;
+    }
+  pattern-not: |
+    if(self == top) {
+        document.documentElement.style.display = 'block';
+    } else {
+        top.location = self.location;
+    }
   languages:
   - javascript
-  message: 'Insecure cross-framing protection detected. The vulnerable code attempts to redirect to the same URL when framed,
-    but uses a try-catch block that can expose error details. This can lead to information disclosure or other security issues.
-    Use a simple if-else check to handle framing protection securely.
-
-    '
+  message: |
+    Insecure cross-framing protection detected. The vulnerable code attempts to redirect to the same URL when framed, but uses a try-catch block that can expose error details. This can lead to information disclosure or other security issues. Use a simple if-else check to handle framing protection securely.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/24d0eb55203b029f250c77d63f2900ffbe099e8b
@@ -98,8 +99,7 @@ rules:
   pattern-not: columnNames.push(escapeHtml($(this).text()))
   languages:
   - javascript
-  message: Potential XSS vulnerability due to missing HTML escaping when pushing text to columnNames. Use escapeHtml() to
-    sanitize the input.
+  message: Potential XSS vulnerability due to missing HTML escaping when pushing text to columnNames. Use escapeHtml() to sanitize the input.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/4d21b5c077db50c2a54b7f569d20f463cc2651f5
@@ -113,18 +113,14 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-50edafc0
-  pattern: '$.getScript(''http://www.phpmyadmin.net/home_page/version.js'', $FUNC)
-
-    '
-  pattern-not: '$.getJSON(''http://www.phpmyadmin.net/home_page/version.json'', {}, $FUNC)
-
-    '
+  pattern: |
+    $.getScript('http://www.phpmyadmin.net/home_page/version.js', $FUNC)
+  pattern-not: |
+    $.getJSON('http://www.phpmyadmin.net/home_page/version.json', {}, $FUNC)
   languages:
   - javascript
-  message: 'Dangerous use of `$.getScript` detected. This can lead to remote code execution by loading untrusted JavaScript.
-    Use `$.getJSON` to safely fetch and parse JSON data instead.
-
-    '
+  message: |
+    Dangerous use of `$.getScript` detected. This can lead to remote code execution by loading untrusted JavaScript. Use `$.getJSON` to safely fetch and parse JSON data instead.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/50edafc0884aa15d0a1aa178089ac6a1ad2eb18a
@@ -136,19 +132,14 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-647c9d12
-  pattern: 'var $VAR = $.sprintf($MSG, $(this).closest(''td'').find(''div'').text());
-
-    '
-  pattern-not: 'var $VAR = $.sprintf($MSG, escapeHtml($(this).closest(''td'').find(''div'').text()));
-
-    '
+  pattern: |
+    var $VAR = $.sprintf($MSG, $(this).closest('td').find('div').text());
+  pattern-not: |
+    var $VAR = $.sprintf($MSG, escapeHtml($(this).closest('td').find('div').text()));
   languages:
   - javascript
-  message: 'Potential XSS vulnerability detected. The code directly uses user input in a sprintf call without proper HTML
-    escaping, which could allow for cross-site scripting attacks. Use escapeHtml() or a similar function to sanitize the input
-    before using it in the sprintf call.
-
-    '
+  message: |
+    Potential XSS vulnerability detected. The code directly uses user input in a sprintf call without proper HTML escaping, which could allow for cross-site scripting attacks. Use escapeHtml() or a similar function to sanitize the input before using it in the sprintf call.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/647c9d12e33a6b64e1c3ff7487f72696bdf2dccb
@@ -160,16 +151,16 @@ rules:
     technology:
     - javascript
 - id: vuln-phpmyadmin-6ea8fad3
-  pattern: 'var $QUESTION = $(''<div/>'').text($CURR_ROW.children(''td'').children(''.drop_sql'').html());
-
-    '
-  pattern-not: 'var $QUESTION = $(''<div/>'').text($CURR_ROW.children(''td'').children(''.drop_sql'').text());
-
-    '
+  pattern: |
+    var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').html());
+  pattern-not: |
+    var $QUESTION = $('<div/>').text($CURR_ROW.children('td').children('.drop_sql').text());
   languages:
   - javascript
-  message: "Potential XSS vulnerability due to use of .html() instead of .text(). \nUsing .html() can lead to script injection\
-    \ if the content is not properly sanitized. \nUse .text() to safely extract text content without interpreting HTML tags.\n"
+  message: |
+    Potential XSS vulnerability due to use of .html() instead of .text().
+    Using .html() can lead to script injection if the content is not properly sanitized.
+    Use .text() to safely extract text content without interpreting HTML tags.
   severity: ERROR
   metadata:
     source-url: github.com/phpmyadmin/phpmyadmin/commit/6ea8fad3f999bfdf79eb6fe31309592bca54d611

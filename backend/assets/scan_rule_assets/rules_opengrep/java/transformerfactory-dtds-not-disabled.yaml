@@ -28,37 +28,74 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: HIGH
-  message: DOCTYPE declarations are enabled for this TransformerFactory. This is vulnerable
-    to XML external entity attacks. Disable this by setting the attributes "accessExternalDTD"
-    and "accessExternalStylesheet" to "".
+  message: DOCTYPE declarations are enabled for this TransformerFactory. This is vulnerable to XML external entity attacks. Disable this by setting the attributes "accessExternalDTD" and "accessExternalStylesheet" to "".
   mode: taint
   pattern-sources:
   - by-side-effect: true
     patterns:
     - pattern-either:
-      - pattern: '$FACTORY = TransformerFactory.newInstance();
-
-          '
+      - pattern: |
+          $FACTORY = TransformerFactory.newInstance();
       - patterns:
         - pattern: $FACTORY
-        - pattern-inside: "class $C {\n  ...\n  $V $FACTORY = TransformerFactory.newInstance();\n\
-            \  ...\n}\n"
-        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = TransformerFactory.newInstance();\n\
-            \  static {\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD,\
-            \ \"\");\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,\
-            \ \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = TransformerFactory.newInstance();\n\
-            \  static {\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,\
-            \ \"\");\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD,\
-            \ \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = TransformerFactory.newInstance();\n\
-            \  static {\n    ...\n    $FACTORY.setAttribute(\"=~/.*accessExternalDTD.*/\"\
-            , \"\");\n    ...\n    $FACTORY.setAttribute(\"=~/.*accessExternalStylesheet.*/\"\
-            , \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-not-inside: "class $C {\n  ...\n  $V $FACTORY = TransformerFactory.newInstance();\n\
-            \  static {\n    ...\n    $FACTORY.setAttribute(\"=~/.*accessExternalStylesheet.*/\"\
-            , \"\");\n    ...\n    $FACTORY.setAttribute(\"=~/.*accessExternalDTD.*/\"\
-            , \"\");\n    ...\n  }\n  ...\n}\n"
+        - pattern-inside: |
+            class $C {
+              ...
+              $V $FACTORY = TransformerFactory.newInstance();
+              ...
+            }
+        - pattern-not-inside: |
+            class $C {
+              ...
+              $V $FACTORY = TransformerFactory.newInstance();
+              static {
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+                ...
+              }
+              ...
+            }
+        - pattern-not-inside: |
+            class $C {
+              ...
+              $V $FACTORY = TransformerFactory.newInstance();
+              static {
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                ...
+              }
+              ...
+            }
+        - pattern-not-inside: |
+            class $C {
+              ...
+              $V $FACTORY = TransformerFactory.newInstance();
+              static {
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
+                ...
+              }
+              ...
+            }
+        - pattern-not-inside: |
+            class $C {
+              ...
+              $V $FACTORY = TransformerFactory.newInstance();
+              static {
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
+                ...
+              }
+              ...
+            }
   pattern-sinks:
   - patterns:
     - pattern: $FACTORY.newTransformer(...);
@@ -67,54 +104,75 @@ rules:
     pattern-either:
     - patterns:
       - pattern-either:
-        - pattern: '$FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,
-            ""); ...
-
+        - pattern: |
+            $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, ""); ...
             $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-
-            '
-        - pattern: '$FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-
+        - pattern: |
+            $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             ...
-
             $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
-
-            '
-        - pattern: '$FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
-            ...
-
+        - pattern: |
+            $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", ""); ...
             $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
-
-            '
-        - pattern: '$FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
-
+        - pattern: |
+            $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
             ...
-
             $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
-
-            '
       - focus-metavariable: $FACTORY
     - patterns:
       - pattern-either:
-        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,\
-            \ \"\");\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD,\
-            \ \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD,\
-            \ \"\");\n    ...\n    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,\
-            \ \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setAttribute(\"\
-            =~/.*accessExternalStylesheet.*/\", \"\");\n    ...\n    $FACTORY.setAttribute(\"\
-            =~/.*accessExternalDTD.*/\", \"\");\n    ...\n  }\n  ...\n}\n"
-        - pattern-inside: "class $C {\n  ...\n  $T $M(...) {\n    ...\n    $FACTORY.setAttribute(\"\
-            =~/.*accessExternalDTD.*/\", \"\");\n    ...\n    $FACTORY.setAttribute(\"\
-            =~/.*accessExternalStylesheet.*/\", \"\");\n    ...\n  }\n  ...\n}\n"
+        - pattern-inside: |
+            class $C {
+              ...
+              $T $M(...) {
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                ...
+              }
+              ...
+            }
+        - pattern-inside: |
+            class $C {
+              ...
+              $T $M(...) {
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                ...
+                $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+                ...
+              }
+              ...
+            }
+        - pattern-inside: |
+            class $C {
+              ...
+              $T $M(...) {
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
+                ...
+              }
+              ...
+            }
+        - pattern-inside: |
+            class $C {
+              ...
+              $T $M(...) {
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalDTD.*/", "");
+                ...
+                $FACTORY.setAttribute("=~/.*accessExternalStylesheet.*/", "");
+                ...
+              }
+              ...
+            }
       - pattern: $M($X)
       - focus-metavariable: $X
-  fix: '$FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, ""); $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET,
-    "");
-
+  fix: |
+    $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, ""); $FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
     $FACTORY.newTransformer(...);
-
-    '
   languages:
   - java

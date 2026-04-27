@@ -2,9 +2,8 @@ rules:
 - id: python_exec_rule-start-process-path
   languages:
   - python
-  message: 'Starting a process with a partial executable path
-
-    '
+  message: |
+    Starting a process with a partial executable path
   patterns:
   - pattern-either:
     - pattern: subprocess.Popen($BIN, shell=False)
@@ -27,8 +26,7 @@ rules:
     owasp:
     - A1:2017-Injection
     - A03:2021-Injection
-    shortDescription: Improper neutralization of special elements used in an OS Command
-      ('OS Command Injection')
+    shortDescription: Improper neutralization of special elements used in an OS Command ('OS Command Injection')
     security-severity: High
     category: security
   severity: ERROR

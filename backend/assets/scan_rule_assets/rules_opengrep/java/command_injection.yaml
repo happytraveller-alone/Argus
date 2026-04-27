@@ -4,9 +4,8 @@ rules:
   - pattern-not: Runtime.getRuntime().exec("...", ...);
   - pattern-not: Runtime.getRuntime().exec(new String[] {"...", ...}, ...);
   - pattern-either:
-    - pattern: 'Runtime.getRuntime().exec(...);
-
-        '
+    - pattern: |
+        Runtime.getRuntime().exec(...);
   message: User controlled strings in exec() will result in command execution.
   languages:
   - java
