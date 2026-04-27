@@ -1779,7 +1779,7 @@ fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
 
 #[cfg(test)]
 mod tests {
-    use super::{finalize_agent_task_failed, task_state};
+    use super::{finalize_agent_task_failed, task_state, AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR};
     use serde_json::json;
 
     #[test]

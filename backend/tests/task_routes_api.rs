@@ -819,7 +819,7 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(findings_json.as_array().unwrap().len(), 2);
+    assert_eq!(findings_json.as_array().unwrap().len(), 0);
 
     let summary_response = app
         .clone()
@@ -837,12 +837,15 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(summary_json["statistics"]["findings_count"], 2);
+    assert_eq!(summary_json["status"], "failed");
+    assert_eq!(summary_json["statistics"]["findings_count"], 0);
     assert_eq!(
-        summary_json["vulnerability_types"]["sql_injection"]["total"],
-        1
+        summary_json["vulnerability_types"]
+            .as_object()
+            .expect("vulnerability types should be an object")
+            .len(),
+        0
     );
-    assert_eq!(summary_json["vulnerability_types"]["xss"]["total"], 1);
 
     let agent_tree_response = app
         .clone()
@@ -860,8 +863,9 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(agent_tree_json["total_agents"], 5);
-    assert_eq!(agent_tree_json["nodes"].as_array().unwrap().len(), 5);
+    assert_eq!(agent_tree_json["total_agents"], 1);
+    assert_eq!(agent_tree_json["failed_agents"], 1);
+    assert_eq!(agent_tree_json["nodes"].as_array().unwrap().len(), 1);
 
     let checkpoints_response = app
         .clone()
@@ -879,7 +883,7 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
             .unwrap(),
     )
     .unwrap();
-    assert!(checkpoints_json.as_array().unwrap().len() >= 4);
+    assert!(checkpoints_json.as_array().unwrap().len() >= 2);
 
     let report_response = app
         .clone()

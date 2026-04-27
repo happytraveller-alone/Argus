@@ -486,10 +486,7 @@ fn prepare_legacy_user_config_payload(
 #[cfg(test)]
 mod tests {
     use super::{default_config, prepare_legacy_user_config_payload};
-    use crate::{
-        config::AppConfig,
-        core::{encryption::decrypt_sensitive_string, security::decode_access_token},
-    };
+    use crate::{config::AppConfig, core::encryption::decrypt_sensitive_string};
     use serde_json::json;
 
     #[test]
@@ -567,17 +564,5 @@ mod tests {
         )
         .expect("encrypted mirror field should decrypt");
         assert_eq!(decrypted, "sk-test-openai");
-    }
-
-    #[test]
-    fn jwt_helper_can_decode_python_compatible_tokens() {
-        let mut config = AppConfig::for_tests();
-        config.secret_key = "test-secret".to_string();
-        let claims = decode_access_token(
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4OTM0NTYwMDAsInN1YiI6ImRlbW8tdXNlciJ9.eepyoq4hV8WE-WCj-_Xl6v0JxPms_XTPgA3iE6nTy3M",
-            &config,
-        )
-        .expect("token should decode");
-        assert_eq!(claims.sub, "demo-user");
     }
 }

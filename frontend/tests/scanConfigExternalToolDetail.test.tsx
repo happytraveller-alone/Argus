@@ -269,7 +269,7 @@ test("ScanConfigExternalToolDetailContent 对 structured_tool 渲染结构化参
       resolved_file_path: "src/xplist.c",
       resolved_line_start: 42,
       resolved_line_end: 58,
-      runner_image: "Argus/flow-parser-runner-local:latest",
+      runner_image: "Argus/opengrep-runner-local:latest",
       input_payload: structuredDetail.tool_test_preset,
     },
   });
@@ -279,7 +279,7 @@ test("ScanConfigExternalToolDetailContent 对 structured_tool 渲染结构化参
   assert.match(markup, /plist_from_xml/);
   assert.match(markup, /variable_name/);
   assert.match(markup, /sink_hints/);
-  assert.match(markup, /flow-parser-runner-local:latest/);
+  assert.match(markup, /opengrep-runner-local:latest/);
   assert.doesNotMatch(markup, /请输入基于 libplist 的自然语言测试问题/);
 });
 

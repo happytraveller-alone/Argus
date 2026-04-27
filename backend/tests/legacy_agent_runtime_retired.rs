@@ -139,6 +139,9 @@ fn retired_auxiliary_runtime_surface_is_removed() {
         "docker-compose.yml",
         "scripts/release-templates/docker-compose.release-slim.yml",
         "docker/env/backend/env.example",
+        "frontend/tests/agentAuditToolEvidenceDialog.test.tsx",
+        "frontend/tests/scanConfigExternalToolDetail.test.tsx",
+        "frontend/tests/toolEvidenceRendering.test.tsx",
     ] {
         assert_file_lacks(repo.join(relative_path), &compose_needles);
     }
