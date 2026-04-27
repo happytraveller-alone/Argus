@@ -60,10 +60,22 @@ Current status: checklist prepared; final command execution is blocked until imp
 | Lifecycle gate | Status | Evidence / Notes |
 | --- | --- | --- |
 | Team startup | PARTIAL | Team state exists at `/home/xyf/argus/.omx/state/team/plan-ai-audit-sourcecode-agent`; tasks 1-7 exist. Need final worker/session count evidence before shutdown. |
-| Worker ACK/mailbox | PARTIAL | `worker-7` sent startup ACK and lane ACK. Need aggregate ACK evidence for workers 1-6 from leader/team state. |
+| Worker ACK/mailbox | PARTIAL | Leader mailbox shows startup ACKs for workers 1-5 and lane ACKs for workers 1,4,5,6,7. Worker-2 and worker-3 startup ACKs are present; explicit lane ACKs not found in sampled leader mailbox yet. |
 | Periodic status/await | PENDING | Need leader status/await snapshots covering freeze gates and final verification precheck. |
 | Terminal task counts | PENDING | Current task state at preparation time: tasks 1-7 all `in_progress`. Final counts required before sign-off. |
 | Shutdown evidence | PENDING | Required only after all lanes complete/blocked/failed and final evidence is saved. |
+
+## Worker ACK Evidence Snapshot
+
+Read from `mailbox/leader-fixed.json` on 2026-04-27:
+
+- worker-1: startup ACK at 2026-04-27T11:11:16.124Z; lane ACK at 2026-04-27T11:16:24.104Z.
+- worker-2: startup ACK at 2026-04-27T11:11:59.564Z; explicit lane ACK not found in sampled mailbox.
+- worker-3: startup ACK at 2026-04-27T11:12:37.301Z; explicit lane ACK not found in sampled mailbox.
+- worker-4: startup ACK at 2026-04-27T11:13:15.928Z; lane ACK at 2026-04-27T11:13:34.670Z.
+- worker-5: startup ACK at 2026-04-27T11:13:59.382Z; lane ACK at 2026-04-27T11:14:22.590Z.
+- worker-6: lane ACK at 2026-04-27T11:13:47.851Z.
+- worker-7: startup ACK at 2026-04-27T11:15:00.324Z; lane ACK at 2026-04-27T11:15:13.358Z.
 
 ## Current Team Task Snapshot
 
