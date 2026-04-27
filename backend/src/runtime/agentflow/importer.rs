@@ -148,12 +148,15 @@ fn redact_marker_values(text: &str, marker: &str) -> String {
     let mut remaining = text;
     while let Some(start) = remaining.find(marker) {
         output.push_str(&remaining[..start + marker.len()]);
-        output.push_str(" [REDACTED]");
         let value = &remaining[start + marker.len()..];
-        let end = value
+        let whitespace_len = value.len() - value.trim_start().len();
+        output.push_str(&value[..whitespace_len]);
+        output.push_str("[REDACTED]");
+        let token = &value[whitespace_len..];
+        let end = token
             .find(|c: char| c.is_whitespace() || c == '&' || c == ',' || c == ';')
-            .unwrap_or(value.len());
-        remaining = &value[end..];
+            .unwrap_or(token.len());
+        remaining = &token[end..];
     }
     output.push_str(remaining);
     output
