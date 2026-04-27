@@ -63,6 +63,20 @@ fn backend_dockerfiles_configure_cargo_mirror_before_building() {
 }
 
 #[test]
+fn backend_dockerfile_locks_cargo_cache_mounts_for_multi_platform_builds() {
+    for mount in [
+        "id=argus-backend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked",
+        "id=argus-backend-cargo-git,target=/usr/local/cargo/git,sharing=locked",
+        "id=argus-backend-cargo-target,target=/app/target,sharing=locked",
+    ] {
+        assert!(
+            BACKEND_DOCKERFILE.contains(mount),
+            "docker/backend.Dockerfile must lock Cargo cache mount {mount} so concurrent buildx platforms cannot corrupt shared cache state"
+        );
+    }
+}
+
+#[test]
 fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
         OPENGREP_RUNNER_DOCKERFILE.contains("COPY backend/assets/scan_rule_assets/rules_opengrep"),

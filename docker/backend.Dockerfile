@@ -90,9 +90,9 @@ COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 COPY backend/tests ./tests
 
-RUN --mount=type=cache,id=argus-backend-cargo-registry,target=/usr/local/cargo/registry \
-  --mount=type=cache,id=argus-backend-cargo-git,target=/usr/local/cargo/git \
-  --mount=type=cache,id=argus-backend-cargo-target,target=/app/target \
+RUN --mount=type=cache,id=argus-backend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+  --mount=type=cache,id=argus-backend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+  --mount=type=cache,id=argus-backend-cargo-target,target=/app/target,sharing=locked \
   CARGO_HTTP_TIMEOUT="${BACKEND_CARGO_HTTP_TIMEOUT_SECONDS}" \
   CARGO_NET_RETRY="${BACKEND_CARGO_NET_RETRY}" \
   cargo build --locked --release --bin backend-rust \
