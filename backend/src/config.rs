@@ -45,8 +45,6 @@ pub struct AppConfig {
     pub llm_concurrency: i64,
     pub llm_gap_ms: i64,
     pub scanner_opengrep_image: String,
-    pub flow_parser_runner_image: String,
-    pub sandbox_runner_image: String,
     pub opengrep_scan_timeout_seconds: u64,
     pub opengrep_scan_jobs: usize,
     pub opengrep_scan_jobs_explicit: bool,
@@ -120,10 +118,6 @@ impl AppConfig {
             llm_gap_ms: parse_i64_env("LLM_GAP_MS", 3_000),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
                 .unwrap_or_else(|_| "Argus/opengrep-runner:latest".to_string()),
-            flow_parser_runner_image: env::var("FLOW_PARSER_RUNNER_IMAGE")
-                .unwrap_or_else(|_| "Argus/flow-parser-runner:latest".to_string()),
-            sandbox_runner_image: env::var("SANDBOX_RUNNER_IMAGE")
-                .unwrap_or_else(|_| "Argus/sandbox-runner:latest".to_string()),
             opengrep_scan_timeout_seconds: parse_u64_env("OPENGREP_SCAN_TIMEOUT_SECONDS", 0),
             opengrep_scan_jobs: opengrep_scan_jobs_env
                 .as_deref()
@@ -190,8 +184,6 @@ impl AppConfig {
             llm_concurrency: 1,
             llm_gap_ms: 3_000,
             scanner_opengrep_image: "Argus/opengrep-runner:test".to_string(),
-            flow_parser_runner_image: "Argus/flow-parser-runner:test".to_string(),
-            sandbox_runner_image: "Argus/sandbox-runner:test".to_string(),
             opengrep_scan_timeout_seconds: 0,
             opengrep_scan_jobs: 8,
             opengrep_scan_jobs_explicit: true,

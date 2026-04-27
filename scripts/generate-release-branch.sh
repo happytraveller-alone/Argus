@@ -219,8 +219,7 @@ prune_release_tree() {
     "$OUTPUT_DIR/docker-compose.frontend-only.yml" \
     "$OUTPUT_DIR/docker-compose.podman.yml" \
     "$OUTPUT_DIR/backend/.env" \
-    "$OUTPUT_DIR/backend/README.md" \
-    "$OUTPUT_DIR/backend/SANDBOX_RUNNER_MIGRATION.md"
+    "$OUTPUT_DIR/backend/README.md"
 
   prune_frontend_release_scripts
 

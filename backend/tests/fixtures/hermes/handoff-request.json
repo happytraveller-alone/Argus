@@ -1,9 +1,0 @@
-{
-  "role": "recon",
-  "task_id": "t1",
-  "project_id": "p1",
-  "correlation_id": "c1",
-  "payload": {
-    "project_path": "/scan"
-  }
-}

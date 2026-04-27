@@ -87,14 +87,8 @@ fn docker_bin_with_priority(keys: &[&str]) -> String {
         .unwrap_or_else(|| "docker".to_string())
 }
 
-fn docker_bin(scanner_type: Option<&str>) -> String {
-    let preferred_keys: &[&str] = if matches!(scanner_type, Some("flow_parser")) {
-        &["BACKEND_DOCKER_BIN", "Argus_DOCKER_BIN"]
-    } else {
-        &["Argus_DOCKER_BIN", "BACKEND_DOCKER_BIN"]
-    };
-
-    docker_bin_with_priority(preferred_keys)
+fn docker_bin(_scanner_type: Option<&str>) -> String {
+    docker_bin_with_priority(&["Argus_DOCKER_BIN", "BACKEND_DOCKER_BIN"])
 }
 
 fn ensure_workspace_artifacts(workspace_dir: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {

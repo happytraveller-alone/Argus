@@ -58,7 +58,6 @@ jobs:
               - '!backend/data/**'
               - '!backend/.env'
               - '!backend/README.md'
-              - '!backend/SANDBOX_RUNNER_MIGRATION.md'
               - '!frontend/tests/**'
               - '!frontend/docs/**'
               - '!frontend/dist/**'

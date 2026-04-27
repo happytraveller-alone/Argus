@@ -1,6 +1,6 @@
 use anyhow::Result;
 use backend_rust::{
-    runtime::{bootstrap, code2flow, finding_payload, flow_parser, runner},
+    runtime::{bootstrap, finding_payload, runner},
     scan::scope_filters,
 };
 use std::{env, path::Path, process};
@@ -8,22 +8,18 @@ use std::{env, path::Path, process};
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| {
-        eprintln!(
-            "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope|finding-payload>"
-        );
+        eprintln!("Usage: backend-runtime-startup <dev|prod|runner|scan-scope|finding-payload>");
         process::exit(1);
     });
 
     match command.as_str() {
         "dev" | "prod" => bootstrap::run(&command)?,
         "runner" => handle_runner(args)?,
-        "code2flow" => handle_code2flow(args)?,
-        "flow-parser" => handle_flow_parser(args)?,
         "scan-scope" => handle_scan_scope(args)?,
         "finding-payload" => handle_finding_payload(args)?,
         _ => {
             eprintln!(
-                "Usage: backend-runtime-startup <dev|prod|runner|code2flow|flow-parser|scan-scope|finding-payload>"
+                "Usage: backend-runtime-startup <dev|prod|runner|scan-scope|finding-payload>"
             );
             process::exit(1);
         }
@@ -100,23 +96,6 @@ fn handle_runner(mut args: impl Iterator<Item = String>) -> Result<()> {
     Ok(())
 }
 
-fn handle_code2flow(mut args: impl Iterator<Item = String>) -> Result<()> {
-    let flag = args.next().unwrap_or_default();
-    let request_path = args.next().unwrap_or_default();
-    if flag != "--request" || request_path.is_empty() {
-        eprintln!("Usage: backend-runtime-startup code2flow --request <path>");
-        process::exit(1);
-    }
-
-    println!(
-        "{}",
-        serde_json::to_string(&code2flow::execute_from_request_path(Path::new(
-            &request_path
-        )))?
-    );
-    Ok(())
-}
-
 fn handle_scan_scope(mut args: impl Iterator<Item = String>) -> Result<()> {
     let operation = args.next().unwrap_or_else(|| {
         eprintln!(
@@ -143,39 +122,6 @@ fn handle_scan_scope(mut args: impl Iterator<Item = String>) -> Result<()> {
     println!(
         "{}",
         serde_json::to_string(&scope_filters::execute_from_request_path(
-            operation,
-            Path::new(&request_path),
-        ))?
-    );
-    Ok(())
-}
-
-fn handle_flow_parser(mut args: impl Iterator<Item = String>) -> Result<()> {
-    let operation = args.next().unwrap_or_else(|| {
-        eprintln!(
-            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
-        );
-        process::exit(1);
-    });
-    let operation = flow_parser::FlowParserOperation::from_cli(&operation).unwrap_or_else(|_| {
-        eprintln!(
-            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
-        );
-        process::exit(1);
-    });
-
-    let flag = args.next().unwrap_or_default();
-    let request_path = args.next().unwrap_or_default();
-    if flag != "--request" || request_path.is_empty() {
-        eprintln!(
-            "Usage: backend-runtime-startup flow-parser <definitions-batch|locate-enclosing-function> --request <path>"
-        );
-        process::exit(1);
-    }
-
-    println!(
-        "{}",
-        serde_json::to_string(&flow_parser::execute_from_request_path(
             operation,
             Path::new(&request_path),
         ))?

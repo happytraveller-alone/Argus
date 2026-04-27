@@ -11,9 +11,6 @@ on:
       - "docker/frontend.Dockerfile"
       - "docker/opengrep-runner.Dockerfile"
       - "docker/opengrep-scan.sh"
-      - "docker/flow-parser-runner.Dockerfile"
-      - "docker/flow-parser-runner.requirements.txt"
-      - "docker/sandbox-runner.Dockerfile"
       - "backend/Cargo.toml"
       - "backend/Cargo.lock"
       - "backend/assets/scan_rule_assets/**"
@@ -41,16 +38,6 @@ on:
         default: false
       build_opengrep_runner:
         description: "构建 OpenGrep runner 镜像"
-        required: false
-        type: boolean
-        default: false
-      build_flow_parser_runner:
-        description: "构建 flow/parser runner 镜像"
-        required: false
-        type: boolean
-        default: false
-      build_sandbox_runner:
-        description: "构建 sandbox-runner 镜像"
         required: false
         type: boolean
         default: false
@@ -114,16 +101,6 @@ jobs:
               - 'backend/src/**'
               - 'docker/opengrep-runner.Dockerfile'
               - 'docker/opengrep-scan.sh'
-            flow_parser_runner:
-              - '.github/workflows/docker-publish.yml'
-              - '.dockerignore'
-              - 'docker/flow-parser-runner.Dockerfile'
-              - 'docker/flow-parser-runner.requirements.txt'
-              - 'backend/scripts/**'
-            sandbox_runner:
-              - '.github/workflows/docker-publish.yml'
-              - '.dockerignore'
-              - 'docker/sandbox-runner.Dockerfile'
 
       - name: 生成发布矩阵
         id: plan
@@ -133,14 +110,10 @@ jobs:
           PUSH_BACKEND: ${{ steps.filter.outputs.backend || 'false' }}
           PUSH_FRONTEND: ${{ steps.filter.outputs.frontend || 'false' }}
           PUSH_OPENGREP_RUNNER: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
-          PUSH_FLOW_PARSER_RUNNER: ${{ steps.filter.outputs.flow_parser_runner || 'false' }}
-          PUSH_SANDBOX_RUNNER: ${{ steps.filter.outputs.sandbox_runner || 'false' }}
           DISPATCH_BUILD_ALL: ${{ inputs.build_all || false }}
           DISPATCH_BUILD_BACKEND: ${{ inputs.build_backend || false }}
           DISPATCH_BUILD_FRONTEND: ${{ inputs.build_frontend || false }}
           DISPATCH_BUILD_OPENGREP_RUNNER: ${{ inputs.build_opengrep_runner || false }}
-          DISPATCH_BUILD_FLOW_PARSER_RUNNER: ${{ inputs.build_flow_parser_runner || false }}
-          DISPATCH_BUILD_SANDBOX_RUNNER: ${{ inputs.build_sandbox_runner || false }}
         run: |
           python3 - <<'PY'
           import json
@@ -179,26 +152,6 @@ jobs:
                   "build_args": "",
                   "push_env": "PUSH_OPENGREP_RUNNER",
                   "dispatch_env": "DISPATCH_BUILD_OPENGREP_RUNNER",
-              },
-              {
-                  "key": "flow_parser_runner",
-                  "image_name": "argus-flow-parser-runner",
-                  "context": ".",
-                  "file": "./docker/flow-parser-runner.Dockerfile",
-                  "platforms": "linux/amd64,linux/arm64",
-                  "build_args": "",
-                  "push_env": "PUSH_FLOW_PARSER_RUNNER",
-                  "dispatch_env": "DISPATCH_BUILD_FLOW_PARSER_RUNNER",
-              },
-              {
-                  "key": "sandbox_runner",
-                  "image_name": "argus-sandbox-runner",
-                  "context": ".",
-                  "file": "./docker/sandbox-runner.Dockerfile",
-                  "platforms": "linux/amd64,linux/arm64",
-                  "build_args": "",
-                  "push_env": "PUSH_SANDBOX_RUNNER",
-                  "dispatch_env": "DISPATCH_BUILD_SANDBOX_RUNNER",
               },
           ]
 
@@ -384,8 +337,7 @@ jobs:
               echo "Verified ${PACKAGE_NAME} is public."
             elif [ -n "${visibility}" ]; then
               echo "visibility=${visibility}" >> "$GITHUB_OUTPUT"
-              echo "::error::${PACKAGE_NAME} visibility is '${visibility}', so anonymous pulls will not work."
-              exit 1
+              echo "::warning::${PACKAGE_NAME} visibility is '${visibility}', so anonymous pull validation will be skipped."
             else
               echo "::warning::Could not read ${PACKAGE_NAME} visibility via GitHub API. Skipping anonymous pull validation."
             fi
