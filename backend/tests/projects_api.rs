@@ -483,6 +483,26 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
                 "warning_count": 1,
                 "high_confidence_count": 4,
             }),
+            findings: vec![
+                task_state::StaticFindingRecord {
+                    id: "static-finding-error".to_string(),
+                    scan_task_id: "opengrep-cumulative".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id": "static-finding-error", "severity": "ERROR"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-finding-warning".to_string(),
+                    scan_task_id: "opengrep-cumulative".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id": "static-finding-warning", "severity": "WARNING"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-finding-medium".to_string(),
+                    scan_task_id: "opengrep-cumulative".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"id": "static-finding-medium", "severity": "MEDIUM"}),
+                },
+            ],
             ..Default::default()
         },
     );
@@ -557,6 +577,59 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
     .unwrap();
     assert_eq!(recalculated["static_medium"], 0);
     assert_eq!(recalculated["low"], 3);
+}
+
+#[tokio::test]
+async fn project_management_metrics_ignore_static_summary_counts_without_detail_findings() {
+    let state = AppState::from_config(isolated_test_config("projects-static-metrics-no-details"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_named(&app, "Static Metrics No Details").await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.static_tasks.insert(
+        "opengrep-summary-only".to_string(),
+        task_state::StaticTaskRecord {
+            id: "opengrep-summary-only".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: project_id.clone(),
+            name: "static summary only".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            total_findings: 7,
+            created_at: "2026-04-26T10:00:00Z".to_string(),
+            updated_at: Some("2026-04-26T10:01:00Z".to_string()),
+            extra: json!({
+                "error_count": 4,
+                "warning_count": 3,
+                "high_confidence_count": 2,
+            }),
+            findings: Vec::new(),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/v1/projects/{project_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let project: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let metrics = &project["management_metrics"];
+
+    assert_eq!(metrics["static_low"], 0);
+    assert_eq!(metrics["low"], 0);
 }
 
 #[tokio::test]

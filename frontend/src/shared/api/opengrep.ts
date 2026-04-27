@@ -339,6 +339,10 @@ export interface OpengrepScanTask {
     status: string;
     target_path: string;
     total_findings: number;
+    critical_count?: number;
+    high_count?: number;
+    medium_count?: number;
+    low_count?: number;
     error_count: number;
     warning_count: number;
     high_confidence_count?: number;

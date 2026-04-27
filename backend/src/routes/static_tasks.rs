@@ -1650,6 +1650,25 @@ fn visible_static_finding_count(record: &task_state::StaticTaskRecord) -> i64 {
         .count() as i64
 }
 
+fn visible_static_finding_severity_counts(
+    record: &task_state::StaticTaskRecord,
+) -> (i64, i64, i64) {
+    let mut high = 0;
+    let mut medium = 0;
+    let mut low = 0;
+
+    for finding in &record.findings {
+        match static_finding_display_severity(&finding.payload) {
+            Some("HIGH") => high += 1,
+            Some("MEDIUM") => medium += 1,
+            Some("LOW") => low += 1,
+            _ => {}
+        }
+    }
+
+    (high, medium, low)
+}
+
 fn static_finding_visible_payload(finding: &task_state::StaticFindingRecord) -> Option<Value> {
     let display_severity = static_finding_display_severity(&finding.payload)?;
     let mut payload = finding.payload.clone();
@@ -1889,20 +1908,29 @@ async fn merged_opengrep_rules_from_snapshot(
 }
 
 fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
-    let mut value = json!({
+    let mut value = json!({});
+    let (high_count, medium_count, low_count) = visible_static_finding_severity_counts(record);
+    merge_json_object(&mut value, &record.extra);
+    merge_json_object(
+        &mut value,
+        &json!({
         "id": record.id,
         "project_id": record.project_id,
         "name": record.name,
         "status": record.status,
         "target_path": record.target_path,
         "total_findings": visible_static_finding_count(record),
+        "critical_count": 0,
+        "high_count": high_count,
+        "medium_count": medium_count,
+        "low_count": low_count,
         "scan_duration_ms": record.scan_duration_ms,
         "files_scanned": record.files_scanned,
         "error_message": record.error_message,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
-    });
-    merge_json_object(&mut value, &record.extra);
+        }),
+    );
     value
 }
 
@@ -2251,6 +2279,10 @@ rules:
         let value = static_task_value(&record);
 
         assert_eq!(value["total_findings"], 1);
+        assert_eq!(value["critical_count"], 0);
+        assert_eq!(value["high_count"], 0);
+        assert_eq!(value["medium_count"], 0);
+        assert_eq!(value["low_count"], 1);
     }
 
     #[test]
@@ -2260,6 +2292,79 @@ rules:
         let value = static_task_value(&record);
 
         assert_eq!(value["total_findings"], 0);
+    }
+
+    #[test]
+    fn static_task_value_reports_visible_severity_buckets() {
+        let record = static_task_record_with_findings(vec![
+            task_state::StaticFindingRecord {
+                id: "finding-critical".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-critical",
+                    "severity": "CRITICAL",
+                }),
+            },
+            task_state::StaticFindingRecord {
+                id: "finding-high".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-high",
+                    "severity": "HIGH",
+                }),
+            },
+            task_state::StaticFindingRecord {
+                id: "finding-error".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-error",
+                    "severity": "ERROR",
+                }),
+            },
+            task_state::StaticFindingRecord {
+                id: "finding-hidden".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-hidden",
+                    "severity": "INFO",
+                }),
+            },
+        ]);
+
+        let value = static_task_value(&record);
+
+        assert_eq!(value["total_findings"], 3);
+        assert_eq!(value["critical_count"], 0);
+        assert_eq!(value["high_count"], 1);
+        assert_eq!(value["medium_count"], 1);
+        assert_eq!(value["low_count"], 1);
+    }
+
+    #[test]
+    fn static_task_value_prefers_visible_findings_over_extra_summary_count() {
+        let mut record = static_task_record_with_findings(vec![task_state::StaticFindingRecord {
+            id: "finding-1".to_string(),
+            scan_task_id: "task-1".to_string(),
+            status: "open".to_string(),
+            payload: json!({
+                "id": "finding-1",
+                "severity": "ERROR",
+            }),
+        }]);
+        record.extra = json!({
+            "total_findings": 9,
+            "error_count": 9,
+            "warning_count": 0,
+        });
+
+        let value = static_task_value(&record);
+
+        assert_eq!(value["total_findings"], 1);
+        assert_eq!(value["error_count"], 9);
     }
 
     #[test]

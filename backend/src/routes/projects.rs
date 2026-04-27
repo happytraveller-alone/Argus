@@ -1546,19 +1546,7 @@ fn non_negative_i64(value: i64) -> i64 {
     value.max(0)
 }
 
-fn json_non_negative_i64(value: &Value, key: &str) -> i64 {
-    value
-        .get(key)
-        .and_then(Value::as_i64)
-        .unwrap_or_default()
-        .max(0)
-}
-
 fn static_task_severity_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {
-    if record.findings.is_empty() {
-        return static_task_summary_counts(record);
-    }
-
     let mut counts = SeverityMetricCounts::default();
     for finding in &record.findings {
         let Some(bucket) = static_finding_severity_bucket(&finding.payload) else {
@@ -1571,17 +1559,6 @@ fn static_task_severity_counts(record: &task_state::StaticTaskRecord) -> Severit
         }
     }
     counts
-}
-
-fn static_task_summary_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {
-    let low = json_non_negative_i64(&record.extra, "error_count")
-        + json_non_negative_i64(&record.extra, "warning_count");
-    SeverityMetricCounts {
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low,
-    }
 }
 
 #[derive(Clone, Copy, Debug)]

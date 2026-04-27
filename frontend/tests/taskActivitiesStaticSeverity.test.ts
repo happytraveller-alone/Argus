@@ -5,7 +5,7 @@ import { appendStaticScanBatchMarker } from "../src/shared/utils/staticScanBatch
 import { apiClient } from "../src/shared/api/serverClient.ts";
 import { fetchTaskActivities } from "../src/features/tasks/services/taskActivities.ts";
 
-test("fetchTaskActivities aggregates opengrep static task severities by detail-page mapping", async () => {
+test("fetchTaskActivities uses backend visible total for opengrep static defect counts", async () => {
 	const originalGet = apiClient.get;
 	const batchId = "static-batch-1";
 
@@ -48,14 +48,68 @@ test("fetchTaskActivities aggregates opengrep static task severities by detail-p
 			critical: 0,
 			high: 0,
 			medium: 0,
-			low: 3,
+			low: 5,
 		});
 	} finally {
 		apiClient.get = originalGet;
 	}
 });
 
-test("fetchTaskActivities clamps downgraded opengrep low count to total findings", async () => {
+test("fetchTaskActivities uses backend visible opengrep severity buckets", async () => {
+	const originalGet = apiClient.get;
+	const batchId = "static-batch-buckets";
+
+	apiClient.get = (async (url: string) => {
+		if (url.startsWith("/agent-tasks")) {
+			return { data: [] };
+		}
+		if (url.startsWith("/static-tasks/tasks")) {
+			return {
+				data: [
+					{
+						id: "og-buckets",
+						project_id: "project-buckets",
+						name: appendStaticScanBatchMarker("静态分析-Opengrep", batchId),
+						status: "completed",
+						target_path: ".",
+						total_findings: 3,
+						critical_count: 0,
+						high_count: 1,
+						medium_count: 1,
+						low_count: 1,
+						error_count: 3,
+						warning_count: 0,
+						scan_duration_ms: 1000,
+						files_scanned: 10,
+						lines_scanned: 200,
+						created_at: "2026-03-13T10:00:00.000Z",
+						updated_at: "2026-03-13T10:01:00.000Z",
+					},
+				],
+			};
+		}
+		throw new Error(`Unexpected apiClient.get call: ${url}`);
+	}) as typeof apiClient.get;
+
+	try {
+		const activities = await fetchTaskActivities(
+			[{ id: "project-buckets", name: "Bucket Project" }] as any,
+			20,
+		);
+
+		assert.equal(activities.length, 1);
+		assert.deepEqual(activities[0]?.staticFindingStats, {
+			critical: 0,
+			high: 1,
+			medium: 1,
+			low: 1,
+		});
+	} finally {
+		apiClient.get = originalGet;
+	}
+});
+
+test("fetchTaskActivities keeps zero visible opengrep findings at zero despite stale summary counts", async () => {
 	const originalGet = apiClient.get;
 	const batchId = "static-batch-2";
 
@@ -72,7 +126,7 @@ test("fetchTaskActivities clamps downgraded opengrep low count to total findings
 						name: appendStaticScanBatchMarker("静态分析-Opengrep", batchId),
 						status: "completed",
 						target_path: ".",
-						total_findings: 2,
+						total_findings: 0,
 						error_count: 1,
 						warning_count: 3,
 						scan_duration_ms: 1000,
@@ -98,7 +152,7 @@ test("fetchTaskActivities clamps downgraded opengrep low count to total findings
 			critical: 0,
 			high: 0,
 			medium: 0,
-			low: 2,
+			low: 0,
 		});
 	} finally {
 		apiClient.get = originalGet;

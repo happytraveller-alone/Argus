@@ -116,17 +116,55 @@ function toNonNegativeInt(value: unknown): number {
 	return Math.floor(parsed);
 }
 
+function toOptionalNonNegativeInt(value: unknown): number | null {
+	if (value === null || value === undefined) {
+		return null;
+	}
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		return 0;
+	}
+	return Math.floor(parsed);
+}
+
+export function getOpengrepVisibleFindingCount(
+	task?: OpengrepScanTask | null,
+): number {
+	const total = toOptionalNonNegativeInt(task?.total_findings);
+	if (total !== null) {
+		return total;
+	}
+
+	const severityTotal =
+		toNonNegativeInt(task?.error_count) + toNonNegativeInt(task?.warning_count);
+	if (severityTotal > 0) {
+		return severityTotal;
+	}
+
+	return toNonNegativeInt(task?.high_confidence_count);
+}
+
 export function buildOpengrepSeverityCounts(
 	task?: OpengrepScanTask | null,
 ): SeverityCounts {
-	const total = toNonNegativeInt(task?.total_findings);
-	const error = toNonNegativeInt(task?.error_count);
-	const warning = toNonNegativeInt(task?.warning_count);
+	const critical = toOptionalNonNegativeInt(task?.critical_count);
+	const high = toOptionalNonNegativeInt(task?.high_count);
+	const medium = toOptionalNonNegativeInt(task?.medium_count);
+	const low = toOptionalNonNegativeInt(task?.low_count);
+	if (critical !== null || high !== null || medium !== null || low !== null) {
+		return {
+			critical: critical ?? 0,
+			high: high ?? 0,
+			medium: medium ?? 0,
+			low: low ?? 0,
+		};
+	}
+
 	return {
 		critical: 0,
 		high: 0,
 		medium: 0,
-		low: Math.min(error + warning, total || error + warning),
+		low: getOpengrepVisibleFindingCount(task),
 	};
 }
 

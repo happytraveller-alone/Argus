@@ -4,6 +4,7 @@ import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import {
 	buildOpengrepSeverityCounts,
 	getAgentSeverityCounts,
+	getOpengrepVisibleFindingCount,
 	getSeverityCountTotal,
 	mergeSeverityCounts,
 	type SeverityCounts,
@@ -394,9 +395,7 @@ export function getProjectCardRecentTasks(params: {
 				scanTypeLabel: "静态审计",
 				scannedFiles: toNullableNonNegativeNumber(task.files_scanned),
 				scannedLines: toNullableNonNegativeNumber(task.lines_scanned),
-				vulnerabilities: toNullableNonNegativeNumber(
-					Math.max(task.high_confidence_count ?? 0, 0),
-				),
+				vulnerabilities: getOpengrepVisibleFindingCount(task),
 				taskCategory: "static",
 				supportsFindingsDetail: true,
 				findingsButtonDisabledReason: null,

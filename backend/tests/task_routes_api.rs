@@ -2106,6 +2106,10 @@ async fn static_task_findings_route_downgrades_and_hides_invalid_severity() {
     )
     .unwrap();
     assert_eq!(task_body["total_findings"], 3);
+    assert_eq!(task_body["critical_count"], 0);
+    assert_eq!(task_body["high_count"], 1);
+    assert_eq!(task_body["medium_count"], 1);
+    assert_eq!(task_body["low_count"], 1);
 
     let response = app
         .clone()
