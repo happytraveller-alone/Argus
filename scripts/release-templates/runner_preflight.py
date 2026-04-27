@@ -66,6 +66,7 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
 def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResult:
     container = None
     container_id: str | None = None
+    remove_container = False
     try:
         client = docker.from_env()
         _ensure_runner_image(client, spec)
@@ -80,6 +81,7 @@ def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResul
         container_id = getattr(container, "id", None)
         wait_result = container.wait(timeout=max(1, int(spec.timeout_seconds)))
         exit_code = int((wait_result or {}).get("StatusCode", 1))
+        remove_container = exit_code == 0
         stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
         stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
         success = exit_code == 0
@@ -97,17 +99,20 @@ def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResul
             container_id=container_id,
         )
     except TimeoutError as exc:
+        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 124, "", "", str(exc), container_id)
     except DOCKER_EXCEPTION as exc:
+        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 1, "", "", str(exc), container_id)
     except Exception as exc:
+        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 1, "", "", str(exc), container_id)
     finally:
-        if container is not None:
+        if container is not None and remove_container:
             try:
                 container.remove(force=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("runner preflight cleanup failed for %s: %s", spec.name, exc)
 
 
 async def run_runner_preflight(spec: RunnerPreflightSpec) -> RunnerPreflightResult:

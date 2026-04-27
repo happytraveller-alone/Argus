@@ -129,15 +129,7 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
         };
     }
 
-    let mut command = Command::new("docker");
-    command.arg("run").arg("--rm");
-    for (host_path, container_path) in &spec.mounts {
-        command
-            .arg("-v")
-            .arg(format!("{}:{}", host_path.display(), container_path));
-    }
-    command.arg(&spec.image).args(&spec.command);
-    let output = command.output();
+    let output = Command::new("docker").args(docker_run_args(&spec)).output();
 
     match output {
         Ok(output) => RunnerPreflightCheckStatus {
@@ -157,6 +149,17 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
             error: Some(error.to_string()),
         },
     }
+}
+
+fn docker_run_args(spec: &RunnerPreflightSpec) -> Vec<String> {
+    let mut args = vec!["run".to_string(), "--rm".to_string()];
+    for (host_path, container_path) in &spec.mounts {
+        args.push("-v".to_string());
+        args.push(format!("{}:{}", host_path.display(), container_path));
+    }
+    args.push(spec.image.clone());
+    args.extend(spec.command.clone());
+    args
 }
 
 fn ensure_runner_image(image: &str) -> Result<()> {
@@ -215,9 +218,11 @@ async fn build_opengrep_preflight_inputs(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use crate::{config::AppConfig, state::AppState};
 
-    use super::configured_specs;
+    use super::{configured_specs, docker_run_args, RunnerPreflightSpec};
 
     #[tokio::test]
     async fn configured_specs_only_include_opengrep_preflight() {
@@ -239,5 +244,38 @@ mod tests {
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
         }
+    }
+
+    #[test]
+    fn opengrep_preflight_docker_run_uses_rm_cleanup() {
+        let spec = RunnerPreflightSpec {
+            name: "opengrep",
+            image: "opengrep-runner:test".to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            mounts: vec![(
+                PathBuf::from("/tmp/argus-preflight"),
+                "/workspace".to_string(),
+            )],
+        };
+
+        let args = docker_run_args(&spec);
+
+        assert_eq!(args.first().map(String::as_str), Some("run"));
+        assert!(
+            args.iter().any(|arg| arg == "--rm"),
+            "opengrep preflight must remove the successful container"
+        );
+        assert_eq!(
+            args,
+            vec![
+                "run",
+                "--rm",
+                "-v",
+                "/tmp/argus-preflight:/workspace",
+                "opengrep-runner:test",
+                "opengrep-scan",
+                "--self-test",
+            ]
+        );
     }
 }
