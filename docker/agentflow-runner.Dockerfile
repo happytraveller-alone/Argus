@@ -3,11 +3,13 @@ ARG AGENTFLOW_REPOSITORY=https://v6.gh-proxy.org/https://github.com/berabuddies/
 ARG AGENTFLOW_COMMIT=1667fa35ed99e3c1583a7d60cac8e3406cafd3ee
 ARG AGENTFLOW_VERSION=0.1.0
 ARG AGENTFLOW_LOCAL_SOURCE=vendor/agentflow-src
+ARG AGENTFLOW_BUILD_CACHE_SCOPE=argus-agentflow
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS agentflow-build
 ARG AGENTFLOW_REPOSITORY
 ARG AGENTFLOW_COMMIT
 ARG AGENTFLOW_LOCAL_SOURCE
+ARG AGENTFLOW_BUILD_CACHE_SCOPE
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
@@ -26,8 +28,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN --mount=type=cache,id=argus-agentflow-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=argus-agentflow-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     sed -i "s|deb.debian.org|${BACKEND_APT_MIRROR_PRIMARY}|g; s|security.debian.org|${BACKEND_APT_SECURITY_PRIMARY}|g" /etc/apt/sources.list.d/debian.sources; \
     apt-get update || { \
@@ -44,7 +46,7 @@ RUN set -eux; \
     test -f /opt/agentflow-src/pyproject.toml; \
     test -d /opt/agentflow-src/agentflow
 
-RUN --mount=type=cache,id=argus-agentflow-pip,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip,target=/root/.cache/pip,sharing=locked \
     set -eux; \
     pip_index_args=""; \
     if [ -n "${BACKEND_PYPI_INDEX_PRIMARY}" ]; then \
@@ -82,6 +84,7 @@ FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS agentflow-runner
 ARG AGENTFLOW_REPOSITORY
 ARG AGENTFLOW_COMMIT
 ARG AGENTFLOW_VERSION
+ARG AGENTFLOW_BUILD_CACHE_SCOPE
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
@@ -111,8 +114,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ARGUS_AGENTFLOW_INPUT_PATH=/work/input/runner_input.json \
     HOME=/tmp/argus-agentflow-home
 
-RUN --mount=type=cache,id=argus-agentflow-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=argus-agentflow-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     sed -i "s|deb.debian.org|${BACKEND_APT_MIRROR_PRIMARY}|g; s|security.debian.org|${BACKEND_APT_SECURITY_PRIMARY}|g" /etc/apt/sources.list.d/debian.sources; \
     apt-get update || { \

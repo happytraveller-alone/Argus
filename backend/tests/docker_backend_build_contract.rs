@@ -103,6 +103,17 @@ fn agentflow_runner_emits_argus_contract_instead_of_native_runrecord() {
         "agentflow runner image must pin the reviewed AgentFlow source commit"
     );
     assert!(
+        ROOT_COMPOSE.contains(
+            "AGENTFLOW_BUILD_CACHE_SCOPE: ${AGENTFLOW_BUILD_CACHE_SCOPE:-argus-agentflow}"
+        ),
+        "agentflow runner build must expose a cache scope knob for fresh dependency rebuilds"
+    );
+    assert!(
+        AGENTFLOW_RUNNER_DOCKERFILE
+            .contains("id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip,target=/root/.cache/pip"),
+        "agentflow runner pip cache mount must be scoped by build arg so a rebuild can avoid stale cache mounts"
+    );
+    assert!(
         AGENTFLOW_RUNNER_DOCKERFILE.contains("COPY docker/agentflow-runner-adapter.py"),
         "agentflow runner image must package the Argus output adapter"
     );
