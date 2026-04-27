@@ -1,5 +1,6 @@
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
+const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
 const RELEASE_BACKEND_DOCKERFILE: &str =
     include_str!("../../scripts/release-templates/backend.Dockerfile");
 
@@ -57,4 +58,20 @@ fn backend_dockerfiles_configure_cargo_mirror_before_building() {
             "{name} must build from the committed lockfile"
         );
     }
+}
+
+#[test]
+fn opengrep_runner_packages_only_unified_rule_root() {
+    assert!(
+        OPENGREP_RUNNER_DOCKERFILE.contains("COPY backend/assets/scan_rule_assets/rules_opengrep"),
+        "opengrep runner image must package the unified rules_opengrep root"
+    );
+    assert!(
+        OPENGREP_RUNNER_DOCKERFILE.contains("rules.tar.gz rules_opengrep"),
+        "opengrep runner image must archive the unified rules_opengrep root"
+    );
+    assert!(
+        !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
+        "opengrep runner image must not reference the retired rules_from_patches root"
+    );
 }

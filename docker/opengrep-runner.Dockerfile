@@ -89,14 +89,13 @@ RUN --mount=type=cache,id=Argus-opengrep-runner-apt-lists,target=/var/lib/apt/li
     chmod +x /usr/local/bin/opengrep
 
 COPY backend/assets/scan_rule_assets/rules_opengrep /opt/opengrep/rules/rules_opengrep
-COPY backend/assets/scan_rule_assets/rules_from_patches /opt/opengrep/rules/rules_from_patches
 COPY docker/opengrep-scan.sh /usr/local/bin/opengrep-scan
 RUN chmod +x /usr/local/bin/opengrep-scan && /usr/local/bin/opengrep-scan --self-test
 
 FROM opengrep-builder AS opengrep-runtime-assets
 
 RUN mkdir -p /opt/opengrep-archive \
-    && tar -C /opt/opengrep/rules -czf /opt/opengrep-archive/rules.tar.gz rules_opengrep rules_from_patches \
+    && tar -C /opt/opengrep/rules -czf /opt/opengrep-archive/rules.tar.gz rules_opengrep \
     && tar -tzf /opt/opengrep-archive/rules.tar.gz >/dev/null
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS opengrep-runner
