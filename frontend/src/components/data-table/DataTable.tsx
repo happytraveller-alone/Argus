@@ -2,6 +2,7 @@ import * as React from "react";
 import type { RowData } from "@tanstack/react-table";
 import {
   type Cell,
+  type Column,
   type ColumnDef,
   flexRender,
   functionalUpdate,
@@ -77,6 +78,12 @@ function resolveFilterFn(column: ColumnDef<any>) {
 
 function resolvePixelSize(value?: string | number) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function resolveStringSize(value?: string | number) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
 }
 
 function buildColumnWithDefaults<TData extends RowData>(
@@ -266,6 +273,33 @@ function getCellAutoWidth<TData extends RowData>(
   return autoColumnWidths[cell.column.id];
 }
 
+function hasStringColumnSizing(column: Column<any, unknown>) {
+  const meta = column.columnDef.meta;
+  return Boolean(
+    resolveStringSize(meta?.width) ||
+      resolveStringSize(meta?.minWidth) ||
+      resolveStringSize(meta?.maxWidth),
+  );
+}
+
+function resolveAutoStyleWidth(
+  meta: ColumnDef<any>["meta"],
+  autoWidth: number | undefined,
+) {
+  return resolveStringSize(meta?.width) ?? autoWidth;
+}
+
+function resolveAutoStyleMinWidth(
+  meta: ColumnDef<any>["meta"],
+  width: string | number | undefined,
+) {
+  return resolveStringSize(meta?.minWidth) ?? width ?? meta?.minWidth;
+}
+
+function resolveAutoStyleMaxWidth(meta: ColumnDef<any>["meta"]) {
+  return resolveStringSize(meta?.maxWidth) ?? resolvePixelSize(meta?.maxWidth);
+}
+
 export function DataTable<TData extends RowData>({
   data,
   columns,
@@ -443,14 +477,19 @@ export function DataTable<TData extends RowData>({
       {},
     );
   }, [enableColumnResizing, table, visibleRows]);
+  const hasStringSizedColumns =
+    !enableColumnResizing &&
+    table.getVisibleLeafColumns().some((column) => hasStringColumnSizing(column));
   const autoTableWidth = enableColumnResizing
     ? undefined
-    : table
-        .getVisibleLeafColumns()
-        .reduce(
-          (total, column) => total + (autoColumnWidths[column.id] ?? 0),
-          0,
-        );
+    : hasStringSizedColumns && !fillContainerWidth
+      ? undefined
+      : table
+          .getVisibleLeafColumns()
+          .reduce(
+            (total, column) => total + (autoColumnWidths[column.id] ?? 0),
+            0,
+          );
   const summaryContext = {
     table,
     rows: visibleRows.map((row) => row.original),
@@ -514,9 +553,13 @@ export function DataTable<TData extends RowData>({
                   const shouldRenderPlainSortableHeader =
                     shouldRenderPlainHeader &&
                     header.column.getCanSort();
+                  const autoColumnWidth = getHeaderAutoWidth(
+                    header,
+                    autoColumnWidths,
+                  );
                   const columnWidth = enableColumnResizing
                     ? header.getSize()
-                    : getHeaderAutoWidth(header, autoColumnWidths);
+                    : resolveAutoStyleWidth(meta, autoColumnWidth);
                   const canResizeColumn =
                     enableColumnResizing &&
                     header.subHeaders.length === 0 &&
@@ -548,7 +591,10 @@ export function DataTable<TData extends RowData>({
                         width: columnWidth,
                         minWidth: enableColumnResizing
                           ? meta?.minWidth
-                          : columnWidth ?? meta?.minWidth,
+                          : resolveAutoStyleMinWidth(meta, columnWidth),
+                        maxWidth: enableColumnResizing
+                          ? undefined
+                          : resolveAutoStyleMaxWidth(meta),
                       }}
                     >
                       {header.isPlaceholder
@@ -632,9 +678,13 @@ export function DataTable<TData extends RowData>({
                 <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta;
+                    const autoColumnWidth = getCellAutoWidth(
+                      cell,
+                      autoColumnWidths,
+                    );
                     const columnWidth = enableColumnResizing
                       ? cell.column.getSize()
-                      : getCellAutoWidth(cell, autoColumnWidths);
+                      : resolveAutoStyleWidth(meta, autoColumnWidth);
                     return (
                       <TableCell
                         key={cell.id}
@@ -650,7 +700,10 @@ export function DataTable<TData extends RowData>({
                           width: columnWidth,
                           minWidth: enableColumnResizing
                             ? meta?.minWidth
-                            : columnWidth ?? meta?.minWidth,
+                            : resolveAutoStyleMinWidth(meta, columnWidth),
+                          maxWidth: enableColumnResizing
+                            ? undefined
+                            : resolveAutoStyleMaxWidth(meta),
                         }}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

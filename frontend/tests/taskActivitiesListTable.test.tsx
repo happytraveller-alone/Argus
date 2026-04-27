@@ -117,7 +117,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
   assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
   assert.match(markup, /严重 0 \/ 高危 2 \/ 中危 3 \/ 低危 5/);
   assert.match(markup, /style="width:100%;min-width:\d+px"/);
-  assert.match(markup, /style="width:156px;min-width:156px"/);
+  assert.match(markup, /style="width:156px;min-width:156px;max-width:156px"/);
   assert.match(markup, /style="width:132px;min-width:132px"/);
   assert.match(markup, /class="block truncate text-base text-muted-foreground"/);
   assert.match(markup, /Demo Agent[\s\S]*?">-<\/td>/);

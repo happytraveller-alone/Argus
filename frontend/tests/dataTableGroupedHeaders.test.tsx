@@ -149,6 +149,33 @@ test("DataTable sizes columns from the current page header and cell content", as
   assert.doesNotMatch(markup, /style="width:520px;min-width:520px"/);
 });
 
+test("DataTable preserves explicit string column widths", async () => {
+  const dataTableModule = await importOrFail<any>(
+    "../src/components/data-table/index.ts",
+  );
+
+  const markup = renderToStaticMarkup(
+    createElement(dataTableModule.DataTable, {
+      data: [{ id: "p1", name: "Project One" }],
+      columns: [
+        {
+          accessorKey: "name",
+          header: "项目名称",
+          meta: {
+            width: "24%",
+            minWidth: "8rem",
+            maxWidth: "32rem",
+          },
+        },
+      ],
+      pagination: false,
+    }),
+  );
+
+  assert.match(markup, /style="width:24%;min-width:8rem;max-width:32rem"/);
+  assert.doesNotMatch(markup, /style="width:\d+px;min-width:\d+px"/);
+});
+
 test("DataTable renders draggable resize handles when column resizing is enabled", async () => {
   const dataTableModule = await importOrFail<any>(
     "../src/components/data-table/index.ts",
