@@ -34,11 +34,11 @@ interface AgentTaskPreflightPayload {
   stage?: "llm_config" | "llm_test";
   message: string;
   reasonCode?:
-    | "default_config"
-    | "missing_fields"
-    | "llm_test_failed"
-    | "llm_test_timeout"
-    | "llm_test_exception";
+  | "default_config"
+  | "missing_fields"
+  | "llm_test_failed"
+  | "llm_test_timeout"
+  | "llm_test_exception";
   missingFields?: Array<"llmModel" | "llmBaseUrl" | "llmApiKey">;
   effectiveConfig: LlmQuickConfigSnapshotPayload;
   savedConfig?: LlmQuickConfigSnapshotPayload | null;
@@ -578,7 +578,7 @@ export const api = {
     const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     const basicMatch = disposition.match(/filename="?([^";]+)"?/i);
     const decodedUtf8 = utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : null;
-    const filename = decodedUtf8 || basicMatch?.[1] || "Argus-project-export.zip";
+    const filename = decodedUtf8 || basicMatch?.[1] || "argus-project-export.zip";
 
     return {
       blob: res.data,

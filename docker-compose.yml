@@ -33,7 +33,7 @@ services:
       OPENGREP_SCAN_JOBS: ${OPENGREP_SCAN_JOBS:-0}
       OPENGREP_SCAN_MAX_MEMORY_MB: ${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}
     networks:
-      - Argus-network
+      - argus-network
 
   db:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
@@ -55,7 +55,7 @@ services:
       start_period: 30s
       retries: 12
     networks:
-      - Argus-network
+      - argus-network
 
   backend:
     build:
@@ -166,7 +166,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - Argus-network
+      - argus-network
 
   frontend:
     build:
@@ -203,7 +203,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - Argus-network
+      - argus-network
 
   redis:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23
@@ -220,7 +220,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - Argus-network
+      - argus-network
 
   adminer:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
@@ -232,10 +232,10 @@ services:
       db:
         condition: service_healthy
     networks:
-      - Argus-network
+      - argus-network
 
 networks:
-  Argus-network:
+  argus-network:
     driver: bridge
 
 volumes:

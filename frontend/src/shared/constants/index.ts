@@ -95,9 +95,9 @@ export const API_ENDPOINTS = {
 
 // 本地存储键名
 export const STORAGE_KEYS = {
-  THEME: 'Argus-theme',
-  USER_PREFERENCES: 'Argus-preferences',
-  RECENT_PROJECTS: 'Argus-recent-projects',
+  THEME: 'argus-theme',
+  USER_PREFERENCES: 'argus-preferences',
+  RECENT_PROJECTS: 'argus-recent-projects',
 } as const;
 
 // 导出项目类型相关常量

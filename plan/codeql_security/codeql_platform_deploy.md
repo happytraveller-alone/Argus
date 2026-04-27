@@ -506,7 +506,7 @@ codeql database analyze /scan/output/db/cpp \
 
 - input：`build_codeql_runner`（bool）
 - step：构建并推送 `docker/codeql-runner.Dockerfile`
-- tag：`ghcr.io/${{ github.repository_owner }}/Argus-codeql-runner:${{ github.event.inputs.tag }}`
+- tag：`ghcr.io/${{ github.repository_owner }}/argus-codeql-runner:${{ github.event.inputs.tag }}`
 
 ---
 

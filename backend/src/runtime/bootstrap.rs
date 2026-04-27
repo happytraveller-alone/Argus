@@ -16,7 +16,7 @@ const DEFAULT_VENV_PATH: &str = "/opt/backend-venv";
 const DEFAULT_APP_ROOT: &str = "/app";
 const DEFAULT_BACKEND_SERVER_BIN: &str = "/usr/local/bin/backend";
 const DEFAULT_BACKEND_DOCKER_ENV_DIR: &str = "/docker/env/backend";
-const LOCK_STAMP_FILENAME: &str = ".Argus-dev-lock.sha256";
+const LOCK_STAMP_FILENAME: &str = ".argus-dev-lock.sha256";
 const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
     "https://mirrors.aliyun.com/pypi/simple/,",
     "https://pypi.tuna.tsinghua.edu.cn/simple,",

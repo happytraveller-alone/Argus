@@ -1,6 +1,8 @@
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
 const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
+const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
+    include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
     include_str!("../../scripts/release-templates/backend.Dockerfile");
 
@@ -73,5 +75,46 @@ fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
         !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
         "opengrep runner image must not reference the retired rules_from_patches root"
+    );
+}
+
+#[test]
+fn opengrep_rebuild_verify_script_rebuilds_image_and_scans_in_container() {
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT
+            .contains("SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest"),
+        "script must default to the same local opengrep runner image used by compose"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT
+            .contains("docker build -f \"$ROOT_DIR/docker/opengrep-runner.Dockerfile\""),
+        "script must rebuild the opengrep runner Dockerfile after rule changes"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("opengrep-scan --self-test"),
+        "script must run the packaged scanner self-test before scanning a project"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("opengrep-scan \\"),
+        "script must execute the container scanner entrypoint"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("--target /scan/source")
+            && OPENGREP_REBUILD_VERIFY_SCRIPT.contains("--output /scan/output/results.json")
+            && OPENGREP_REBUILD_VERIFY_SCRIPT.contains("--summary /scan/output/summary.json"),
+        "script must write stable scan artifacts from the container"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT
+            .contains("ARGUS_BACKEND_UPLOADS_VOLUME:-argus_backend_uploads"),
+        "script must support the compose uploads volume as a default validation source"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("-v \"$UPLOADS_VOLUME:/uploads:ro\""),
+        "script must read imported archives through Docker volume mounts"
+    );
+    assert!(
+        !OPENGREP_REBUILD_VERIFY_SCRIPT.contains("/var/lib/docker/volumes"),
+        "script must not depend on host-specific Docker volume mount paths"
     );
 }

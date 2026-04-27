@@ -152,7 +152,7 @@ jobs:
           catalog = [
               {
                   "key": "backend",
-                  "image_name": "Argus-backend",
+                  "image_name": "argus-backend",
                   "context": ".",
                   "file": "./docker/backend.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
@@ -162,7 +162,7 @@ jobs:
               },
               {
                   "key": "frontend",
-                  "image_name": "Argus-frontend",
+                  "image_name": "argus-frontend",
                   "context": "./frontend",
                   "file": "./docker/frontend.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
@@ -172,7 +172,7 @@ jobs:
               },
               {
                   "key": "opengrep_runner",
-                  "image_name": "Argus-opengrep-runner",
+                  "image_name": "argus-opengrep-runner",
                   "context": ".",
                   "file": "./docker/opengrep-runner.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
@@ -182,7 +182,7 @@ jobs:
               },
               {
                   "key": "flow_parser_runner",
-                  "image_name": "Argus-flow-parser-runner",
+                  "image_name": "argus-flow-parser-runner",
                   "context": ".",
                   "file": "./docker/flow-parser-runner.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
@@ -192,7 +192,7 @@ jobs:
               },
               {
                   "key": "sandbox_runner",
-                  "image_name": "Argus-sandbox-runner",
+                  "image_name": "argus-sandbox-runner",
                   "context": ".",
                   "file": "./docker/sandbox-runner.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
