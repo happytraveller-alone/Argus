@@ -15,14 +15,14 @@ Lane contract:
 
 | Step | Command | Status | Evidence / Notes |
 | --- | --- | --- | --- |
-| Backend agentflow targeted tests | `cargo test --manifest-path backend/Cargo.toml agentflow` | PENDING | Run after implementation lanes merge into verification worktree. |
-| Backend agent task route/state tests | `cargo test --manifest-path backend/Cargo.toml agent_tasks` | PENDING | Run after backend lifecycle/runtime lanes merge. |
-| Frontend agent targeted tests | `pnpm --dir frontend test:node -- agent` | PENDING | Run after frontend/tests lanes merge. |
-| Frontend type check | `pnpm --dir frontend type-check` | PENDING | Run after frontend lane merge. |
-| Frontend lint | `pnpm --dir frontend lint` | PENDING | Run after frontend lane merge. |
-| Runner image build | `docker compose build agentflow-runner` | PENDING | Run after runner/compose lane merge. |
-| Runner CLI help | `docker compose run --rm agentflow-runner agentflow --help` | PENDING | Requires successful runner image build. |
-| Pipeline validate | `docker compose run --rm agentflow-runner agentflow validate /app/backend/agentflow/pipelines/intelligent_audit.py` | PENDING | Requires successful runner image build. |
+| Backend agentflow targeted tests | `cargo test --manifest-path backend/Cargo.toml agentflow` | FAIL | 2026-04-27: failed with Rust E0428 duplicate `agentflow` module in `backend/src/runtime/mod.rs:7`; log `/tmp/worker-7-backend-verification.log`. |
+| Backend agent task route/state tests | `cargo test --manifest-path backend/Cargo.toml agent_tasks` | FAIL | Same E0428 duplicate `agentflow` module in `backend/src/runtime/mod.rs:7`; log `/tmp/worker-7-backend-verification.log`. |
+| Frontend agent targeted tests | `pnpm --dir frontend test:node -- agent` | FAIL | Test harness reported `Could not find 'agent'`; log `/tmp/worker-7-frontend-verification.log`. |
+| Frontend type check | `pnpm --dir frontend type-check` | PASS | `tsc --noEmit` completed with exit 0; log `/tmp/worker-7-frontend-verification.log`. |
+| Frontend lint | `pnpm --dir frontend lint` | PASS | `tsgo` plus Biome completed; `Checked 389 files in 351ms. No fixes applied.` |
+| Runner image build | `docker compose build agentflow-runner` | FAIL | First build failed during pip download with `ReadTimeoutError` from `files.pythonhosted.org`; log `/tmp/worker-7-runner-verification.log`. |
+| Runner CLI help | `docker compose run --rm agentflow-runner agentflow --help` | BLOCKED | Runner image build failed; follow-up run attempted rebuild and was stopped after repeated dependency download/build wait. |
+| Pipeline validate | `docker compose run --rm agentflow-runner agentflow validate /app/backend/agentflow/pipelines/intelligent_audit.py` | BLOCKED | Runner image build failed; validate cannot run without successful image. |
 
 ## Section 10 Manual Smoke
 
@@ -53,7 +53,7 @@ Lane contract:
 
 ## Section 13.9 Final Verification Path
 
-Current status: checklist prepared; final command execution is blocked until implementation lanes are merged into this verification worktree or leader provides an integrated branch.
+Current status: integrated leader worktree was available and verification started. Backend verification is blocked by duplicate `pub mod agentflow;` in `backend/src/runtime/mod.rs`; runner verification is blocked by image build dependency download timeout; frontend type-check/lint pass but targeted test selector failed.
 
 ## Section 13.11 Team Lifecycle Evidence
 
@@ -93,3 +93,18 @@ At initial preparation time, task status summary from team state:
 
 - Final code verification cannot be honestly executed until implementation and fixture lanes are merged or otherwise made visible to this verification worktree.
 - Manual smoke depends on local runtime availability, model API configuration, and test project data.
+
+## Verification Run 2026-04-27T19:19+08:00
+
+Commands executed from leader worktree `/home/xyf/argus` after implementation commits were visible there:
+
+- `cargo test --manifest-path backend/Cargo.toml agentflow` -> FAIL: `error[E0428]: the name agentflow is defined multiple times` at `backend/src/runtime/mod.rs:7`.
+- `cargo test --manifest-path backend/Cargo.toml agent_tasks` -> FAIL: same E0428 duplicate module definition.
+- `pnpm --dir frontend test:node -- agent` -> FAIL: node test harness reported `Could not find 'agent'`.
+- `pnpm --dir frontend type-check` -> PASS.
+- `pnpm --dir frontend lint` -> PASS; Biome checked 389 files.
+- `docker compose build agentflow-runner` -> FAIL: pip download timed out from `files.pythonhosted.org` while upgrading/downloading pip.
+- `docker compose run --rm agentflow-runner agentflow --help` -> BLOCKED by image build failure; command attempted rebuild and hit dependency download/build wait.
+- `docker compose run --rm agentflow-runner agentflow validate /app/backend/agentflow/pipelines/intelligent_audit.py` -> BLOCKED by image build failure.
+
+Concrete blocker to回派 before final sign-off: backend duplicate module export in `backend/src/runtime/mod.rs` must be fixed by the owning implementation lane or leader approval before backend tests can pass. Runner image build also needs a stable package index/cache path before CLI/validate evidence can be collected.
