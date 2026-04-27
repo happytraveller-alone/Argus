@@ -56,6 +56,23 @@ pub fn router() -> Router<AppState> {
 const AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR: &str =
     "AgentFlow runtime is not configured yet; legacy agent runtime has been retired";
 
+const FORBIDDEN_STATIC_INPUT_ERROR: &str =
+    "智能审计 P1 禁止使用静态扫描任务或静态 finding 候选输入";
+
+const FORBIDDEN_STATIC_INPUT_KEYS: &[&str] = &[
+    "static_task_id",
+    "opengrep_task_id",
+    "candidate_finding_ids",
+    "static_findings",
+    "bootstrap_task_id",
+    "bootstrap_candidate_count",
+    "candidate_findings",
+];
+
+const FORBIDDEN_STATIC_INPUT_VALUES: &[&str] = &[
+    "opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd",
+];
+
 #[derive(Debug, Deserialize)]
 pub struct AgentTaskListQuery {
     project_id: Option<String>,
@@ -110,6 +127,7 @@ pub async fn create_agent_task(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
+    reject_forbidden_static_input(&payload)?;
 
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
@@ -306,6 +324,18 @@ async fn start_agent_task(
     let now = now_rfc3339();
     record.started_at = Some(now.clone());
     record.total_iterations = record.total_iterations.max(1);
+
+    if let Err(error) = reject_optional_audit_scope(record.audit_scope.as_ref()) {
+        finalize_agent_task_forbidden_static_input(record, &now, &error.to_string());
+        task_state::save_snapshot(&state, &snapshot)
+            .await
+            .map_err(internal_error)?;
+        return Ok(Json(json!({
+            "message": "agent task failed because forbidden static input was detected",
+            "task_id": task_id,
+            "reason_code": "forbidden_static_input",
+        })));
+    }
 
     finalize_agent_task_failed(record, &now, AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR);
 
@@ -952,6 +982,34 @@ fn mark_agent_tree_failed(nodes: &mut [Value], summary: &str) {
     }
 }
 
+fn finalize_agent_task_forbidden_static_input(
+    record: &mut task_state::AgentTaskRecord,
+    now: &str,
+    error: &str,
+) {
+    if record.agent_tree.is_empty() {
+        seed_failed_agent_task_tree(record, error);
+    } else {
+        mark_agent_tree_failed(&mut record.agent_tree, error);
+    }
+    record.status = "failed".to_string();
+    record.current_phase = Some("failed".to_string());
+    record.current_step = Some("forbidden static input".to_string());
+    record.completed_at = Some(now.to_string());
+    record.progress_percentage = 100.0;
+    record.quality_score = 0.0;
+    record.security_score = Some(0.0);
+    record.error_message = Some(error.to_string());
+    push_agent_event(
+        record,
+        "forbidden_static_input",
+        Some("failed"),
+        Some("智能审计任务包含禁止的静态扫描候选输入，已拒绝启动"),
+        Some(json!({"reason_code": "forbidden_static_input", "error": error})),
+    );
+    push_checkpoint(record, "import_failed", Some("forbidden_static_input"));
+}
+
 fn finalize_agent_task_failed(record: &mut task_state::AgentTaskRecord, now: &str, error: &str) {
     if record.agent_tree.is_empty() {
         seed_failed_agent_task_tree(record, error);
@@ -1563,6 +1621,8 @@ fn prepare_audit_scope(
 ) -> Result<Option<Value>, ApiError> {
     match audit_scope {
         Some(Value::Object(mut object)) => {
+            let scope_value = Value::Object(object.clone());
+            reject_forbidden_static_input(&scope_value)?;
             object.insert("prompt_skill_runtime".to_string(), prompt_skill_runtime);
             Ok(Some(Value::Object(object)))
         }
@@ -1573,6 +1633,65 @@ fn prepare_audit_scope(
         _ => Ok(Some(json!({
             "prompt_skill_runtime": prompt_skill_runtime,
         }))),
+    }
+}
+
+fn reject_optional_audit_scope(audit_scope: Option<&Value>) -> Result<(), ApiError> {
+    match audit_scope {
+        Some(value) => reject_forbidden_static_input(value),
+        None => Ok(()),
+    }
+}
+
+fn reject_forbidden_static_input(value: &Value) -> Result<(), ApiError> {
+    if let Some(reason) = find_forbidden_static_input(value, "$") {
+        return Err(ApiError::BadRequest(format!(
+            "{FORBIDDEN_STATIC_INPUT_ERROR}: {reason}"
+        )));
+    }
+    Ok(())
+}
+
+fn find_forbidden_static_input(value: &Value, path: &str) -> Option<String> {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                let normalized_key = key.trim().to_ascii_lowercase();
+                let child_path = format!("{path}.{key}");
+                if FORBIDDEN_STATIC_INPUT_KEYS.contains(&normalized_key.as_str()) {
+                    return Some(format!("field `{child_path}` is not allowed"));
+                }
+                if matches!(normalized_key.as_str(), "candidate_origin" | "source_engine") {
+                    if let Some(text) = child.as_str() {
+                        let normalized_value = text.trim().to_ascii_lowercase();
+                        if FORBIDDEN_STATIC_INPUT_VALUES.contains(&normalized_value.as_str()) {
+                            return Some(format!(
+                                "field `{child_path}` cannot be `{normalized_value}`"
+                            ));
+                        }
+                    }
+                }
+                if let Some(reason) = find_forbidden_static_input(child, &child_path) {
+                    return Some(reason);
+                }
+            }
+            None
+        }
+        Value::Array(items) => items.iter().enumerate().find_map(|(index, child)| {
+            find_forbidden_static_input(child, &format!("{path}[{index}]"))
+        }),
+        Value::String(text) => {
+            let normalized = text.trim().to_ascii_lowercase();
+            if normalized.contains("static scan")
+                || normalized.contains("static finding")
+                || normalized.contains("scanner bootstrap")
+            {
+                Some(format!("value at `{path}` references `{normalized}`"))
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
 
@@ -1779,7 +1898,10 @@ fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
 
 #[cfg(test)]
 mod tests {
-    use super::{finalize_agent_task_failed, task_state, AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR};
+    use super::{
+        finalize_agent_task_failed, finalize_agent_task_forbidden_static_input,
+        reject_forbidden_static_input, task_state, AGENTFLOW_RUNTIME_UNCONFIGURED_ERROR,
+    };
     use serde_json::json;
 
     #[test]
@@ -1857,5 +1979,55 @@ mod tests {
             .events
             .iter()
             .any(|event| event.event_type == "task_error"));
+    }
+
+    #[test]
+    fn forbidden_static_input_scan_rejects_nested_static_candidates() {
+        let payload = json!({
+            "audit_scope": {
+                "targets": [{
+                    "path": "src/main.py",
+                    "candidate_origin": "opengrep"
+                }]
+            }
+        });
+
+        let error = reject_forbidden_static_input(&payload).expect_err("opengrep source rejected");
+        assert!(error.to_string().contains("candidate_origin"));
+        assert!(error.to_string().contains("opengrep"));
+    }
+
+    #[test]
+    fn forbidden_static_input_finalizer_records_dedicated_event_and_checkpoint() {
+        let mut record = task_state::AgentTaskRecord {
+            id: "task-1".to_string(),
+            project_id: "project-1".to_string(),
+            name: Some("demo".to_string()),
+            description: Some("demo task".to_string()),
+            task_type: "agent_audit".to_string(),
+            status: "pending".to_string(),
+            current_phase: Some("created".to_string()),
+            current_step: Some("waiting".to_string()),
+            total_iterations: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            audit_scope: Some(json!({"candidate_findings": ["finding-1"]})),
+            ..Default::default()
+        };
+
+        finalize_agent_task_forbidden_static_input(
+            &mut record,
+            "2026-01-01T00:00:02Z",
+            "forbidden static input",
+        );
+
+        assert_eq!(record.status, "failed");
+        assert_eq!(record.current_step.as_deref(), Some("forbidden static input"));
+        assert!(record
+            .events
+            .iter()
+            .any(|event| event.event_type == "forbidden_static_input"));
+        assert!(record.checkpoints.iter().any(|checkpoint| {
+            checkpoint.checkpoint_name.as_deref() == Some("forbidden_static_input")
+        }));
     }
 }
