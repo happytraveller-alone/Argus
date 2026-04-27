@@ -18,6 +18,7 @@ pub struct TaskStateSnapshot {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct AgentTaskRecord {
     pub id: String,
     pub project_id: String,
@@ -83,6 +84,7 @@ pub struct AgentTaskRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct AgentEventRecord {
     pub id: String,
     pub task_id: String,
@@ -111,6 +113,7 @@ pub struct AgentEventRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct AgentFindingRecord {
     pub id: String,
     pub task_id: String,
@@ -180,6 +183,7 @@ pub struct AgentFindingRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct AgentCheckpointRecord {
     pub id: String,
     pub task_id: String,
