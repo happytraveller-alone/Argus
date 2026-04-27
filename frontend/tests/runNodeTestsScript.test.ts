@@ -43,6 +43,20 @@ test("normalizeTestArgs strips pnpm separator and resolves bare test filenames",
   });
 });
 
+test("normalizeTestArgs expands a bare token to matching test filenames", () => {
+  withTempDir((dir) => {
+    fs.writeFileSync(path.join(dir, "agentAlpha.test.ts"), "");
+    fs.writeFileSync(path.join(dir, "projectBeta.test.ts"), "");
+    fs.writeFileSync(path.join(dir, "agentZeta.test.tsx"), "");
+
+    assert.deepEqual(normalizeTestArgs(["agent"], { testsDirPath: dir }), [
+      "tests/agentAlpha.test.ts",
+      "tests/agentZeta.test.tsx",
+    ]);
+  });
+});
+
+
 test("buildNodeTestCommand uses node --import tsx --test", () => {
   const command = buildNodeTestCommand(["tests/example.test.ts"]);
 

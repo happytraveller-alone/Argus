@@ -60,7 +60,7 @@ test("AgentFlow P1 happy-path finding renders as an agent detail, not a static f
 
   assert.equal(model.pageTitle, "统一漏洞详情");
   assert.equal(model.overviewItems[0]?.value, "订单查询接口可被拼接 SQL 输入影响");
-  assert.match(model.narrativeSections[0]?.content || "", /业务调用链验证/);
+  assert.match(model.narrativeSections[0]?.finding?.description || "", /业务调用链验证/);
   assert.equal(model.codeSections[0]?.filePath, "src/orders/repository.ts");
   assert.equal(model.codeSections[0]?.fullFileAvailable, true);
 });

@@ -26,16 +26,24 @@ export function listDefaultTestFiles({ testsDirPath = defaultTestsDir } = {}) {
 
 function resolveSingleTestArg(arg, { testsDirPath = defaultTestsDir } = {}) {
   const normalized = toPosixPath(arg).trim();
-  if (!normalized) return normalized;
-  if (path.isAbsolute(arg)) return arg;
-  if (normalized.startsWith("tests/")) return normalized;
+  if (!normalized) return [];
+  if (path.isAbsolute(arg)) return [arg];
+  if (normalized.startsWith("tests/")) return [normalized];
 
   const fileName = path.basename(normalized);
   if (fs.existsSync(path.join(testsDirPath, fileName))) {
-    return `tests/${fileName}`;
+    return [`tests/${fileName}`];
   }
 
-  return normalized;
+  if (!fileName.includes(".") && fs.existsSync(testsDirPath)) {
+    const matches = listDefaultTestFiles({ testsDirPath })
+      .filter((testFile) => path.basename(testFile).toLowerCase().includes(fileName.toLowerCase()));
+    if (matches.length > 0) {
+      return matches;
+    }
+  }
+
+  return [normalized];
 }
 
 export function normalizeTestArgs(rawArgs, { testsDirPath = defaultTestsDir } = {}) {
@@ -44,7 +52,7 @@ export function normalizeTestArgs(rawArgs, { testsDirPath = defaultTestsDir } = 
     return listDefaultTestFiles({ testsDirPath });
   }
   return filteredArgs
-    .map((arg) => resolveSingleTestArg(arg, { testsDirPath }))
+    .flatMap((arg) => resolveSingleTestArg(arg, { testsDirPath }))
     .filter(Boolean);
 }
 
