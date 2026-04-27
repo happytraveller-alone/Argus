@@ -155,6 +155,67 @@ async fn system_config_helper_endpoints_are_available() {
     .unwrap();
     assert_eq!(preflight_json["ok"], false);
     assert_eq!(preflight_json["reasonCode"], "default_config");
+    assert_eq!(
+        preflight_json["metadata"]["runner"]["reason_code"],
+        "not_checked"
+    );
+}
+
+#[tokio::test]
+async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
+    let state = AppState::from_config(isolated_test_config("system-config-agent-preflight-runner"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai",
+            "llmApiKey": "sk-agentflow-secret",
+            "llmModel": "gpt-5",
+            "llmBaseUrl": "https://api.openai.com/v1"
+        },
+        "otherConfig": {}
+    });
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let preflight_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/agent-preflight")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight_response.status(), StatusCode::OK);
+    let preflight_json: Value = serde_json::from_slice(
+        &to_bytes(preflight_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(preflight_json["ok"], false);
+    assert_eq!(preflight_json["stage"], "runner");
+    assert_eq!(preflight_json["reasonCode"], "runner_missing");
+    assert_eq!(preflight_json["savedConfig"]["apiKey"], "***configured***");
+    assert!(!preflight_json.to_string().contains("sk-agentflow-secret"));
+    assert_eq!(preflight_json["metadata"]["runner"]["ok"], false);
 }
 
 #[tokio::test]

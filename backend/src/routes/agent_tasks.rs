@@ -69,9 +69,8 @@ const FORBIDDEN_STATIC_INPUT_KEYS: &[&str] = &[
     "candidate_findings",
 ];
 
-const FORBIDDEN_STATIC_INPUT_VALUES: &[&str] = &[
-    "opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd",
-];
+const FORBIDDEN_STATIC_INPUT_VALUES: &[&str] =
+    &["opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd"];
 
 #[derive(Debug, Deserialize)]
 pub struct AgentTaskListQuery {
@@ -1661,7 +1660,10 @@ fn find_forbidden_static_input(value: &Value, path: &str) -> Option<String> {
                 if FORBIDDEN_STATIC_INPUT_KEYS.contains(&normalized_key.as_str()) {
                     return Some(format!("field `{child_path}` is not allowed"));
                 }
-                if matches!(normalized_key.as_str(), "candidate_origin" | "source_engine") {
+                if matches!(
+                    normalized_key.as_str(),
+                    "candidate_origin" | "source_engine"
+                ) {
                     if let Some(text) = child.as_str() {
                         let normalized_value = text.trim().to_ascii_lowercase();
                         if FORBIDDEN_STATIC_INPUT_VALUES.contains(&normalized_value.as_str()) {
@@ -2021,7 +2023,10 @@ mod tests {
         );
 
         assert_eq!(record.status, "failed");
-        assert_eq!(record.current_step.as_deref(), Some("forbidden static input"));
+        assert_eq!(
+            record.current_step.as_deref(),
+            Some("forbidden static input")
+        );
         assert!(record
             .events
             .iter()

@@ -1037,7 +1037,10 @@ async fn create_agent_task_rejects_forbidden_static_candidate_inputs() {
         .as_str()
         .unwrap()
         .contains("禁止使用静态扫描任务"));
-    assert!(error_json["error"].as_str().unwrap().contains("source_engine"));
+    assert!(error_json["error"]
+        .as_str()
+        .unwrap()
+        .contains("source_engine"));
 }
 
 #[tokio::test]
