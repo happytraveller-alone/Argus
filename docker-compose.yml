@@ -8,6 +8,56 @@
 # 动态拉起临时 runner 容器，并在结束后清理。
 
 services:
+
+  agentflow-runner:
+    image: ${ARGUS_AGENTFLOW_RUNNER_IMAGE:-argus/agentflow-runner:1667fa35}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/agentflow-runner.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        AGENTFLOW_REPOSITORY: ${AGENTFLOW_REPOSITORY:-https://github.com/berabuddies/agentflow.git}
+        AGENTFLOW_COMMIT: ${AGENTFLOW_COMMIT:-1667fa35ed99e3c1583a7d60cac8e3406cafd3ee}
+        AGENTFLOW_VERSION: ${AGENTFLOW_VERSION:-0.1.0}
+        BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
+        BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
+    restart: "no"
+    mem_limit: 4g
+    cpus: "2.0"
+    pids_limit: 512
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=512m
+    volumes:
+  agentflow_runner_work:
+      - .:/workspace/src:ro
+      - ./backend/agentflow:/app/backend/agentflow:ro
+      - agentflow_runner_work:/work
+    environment:
+      AGENTFLOW_RUNS_DIR: /work/agentflow-runs
+      AGENTFLOW_MAX_CONCURRENT_RUNS: ${AGENTFLOW_MAX_CONCURRENT_RUNS:-2}
+      ARGUS_AGENTFLOW_INPUT_PATH: ${ARGUS_AGENTFLOW_INPUT_PATH:-/work/input/runner_input.json}
+      ARGUS_AGENTFLOW_OUTPUT_DIR: ${ARGUS_AGENTFLOW_OUTPUT_DIR:-/work/outputs}
+      HOME: /tmp/argus-agentflow-home
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      NO_PROXY: "*"
+    command:
+      - "agentflow"
+      - "--help"
+    networks:
+      - argus-network
   opengrep-runner:
     image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
     pull_policy: never
