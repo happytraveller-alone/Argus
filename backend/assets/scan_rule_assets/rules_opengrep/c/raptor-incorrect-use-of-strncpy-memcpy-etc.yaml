@@ -27,10 +27,6 @@ rules:
         - pattern: stpncpy
         - pattern: strlcpy
         - pattern: strscpy
-        - pattern: memcpy
-        - pattern: memmove
-        - pattern: wmemcpy
-        - pattern: wmemmove
     - pattern-either:
       - pattern-inside: |
           $_ $SRC[$LEN];
@@ -48,7 +44,3 @@ rules:
         - pattern: stpncpy
         - pattern: strlcpy
         - pattern: strscpy
-        - pattern: memcpy
-        - pattern: memmove
-        - pattern: wmemcpy
-        - pattern: wmemmove

@@ -38,6 +38,27 @@ test("TaskActivitiesListTable aligns all header font sizes with the row-number h
   );
 });
 
+test("TaskActivitiesListTable aligns project, duration and defect body text with status badges", () => {
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+
+  assert.match(
+    source,
+    /const TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME = "text-sm"/,
+  );
+  assert.match(
+    source,
+    /TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME\} font-medium text-foreground/,
+  );
+  assert.match(
+    source,
+    /TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME\} font-mono text-foreground/,
+  );
+  assert.match(
+    source,
+    /block truncate \$\{TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME\} text-muted-foreground/,
+  );
+});
+
 test("TaskActivitiesListTable uses compact table width and column minimums", () => {
   const source = readFileSync(taskActivitiesListTablePath, "utf8");
 
@@ -101,6 +122,23 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
             route: "/static-analysis/static-1",
           },
           {
+            id: "static-zero",
+            projectName: "Zero Static",
+            kind: "rule_scan",
+            sourceMode: "static",
+            status: "completed",
+            staticFindingStats: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+            },
+            createdAt: "2026-03-13T11:30:00.000Z",
+            startedAt: "2026-03-13T11:31:00.000Z",
+            completedAt: "2026-03-13T11:35:00.000Z",
+            route: "/static-analysis/static-zero",
+          },
+          {
             id: "agent-2",
             projectName: "Demo Agent",
             kind: "intelligent_audit",
@@ -119,13 +157,20 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
   );
 
   assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
-  assert.match(markup, /严重 0 \/ 高危 2 \/ 中危 3 \/ 低危 5/);
+  assert.match(markup, /高危 2 \/ 中危 3 \/ 低危 5/);
+  assert.doesNotMatch(markup, /严重 0/);
+  assert.doesNotMatch(markup, /高危 0/);
+  assert.doesNotMatch(markup, /中危 0/);
+  assert.doesNotMatch(markup, /低危 0/);
   assert.match(markup, /style="width:100%;min-width:\d+px"/);
   assert.match(markup, /style="width:136px;min-width:136px;max-width:136px"/);
   assert.match(markup, /style="width:240px;min-width:240px;max-width:240px"/);
   assert.match(markup, /style="width:132px;min-width:132px"/);
   assert.match(markup, /data-align="left"/);
-  assert.match(markup, /class="block truncate text-base text-muted-foreground"/);
+  assert.match(markup, /class="text-sm font-medium text-foreground"/);
+  assert.match(markup, /class="text-sm font-mono text-foreground"/);
+  assert.match(markup, /class="block truncate text-sm text-muted-foreground"/);
+  assert.match(markup, /Zero Static[\s\S]*?">-<\/td>/);
   assert.match(markup, /Demo Agent[\s\S]*?">-<\/td>/);
 });
 

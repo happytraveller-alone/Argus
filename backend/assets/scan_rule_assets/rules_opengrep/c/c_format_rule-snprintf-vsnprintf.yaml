@@ -28,17 +28,27 @@ rules:
   pattern-either:
   - patterns:
     - pattern: snprintf($BUF,$SIZE,$FMT,...)
-    - pattern-not: snprintf($BUF,$SIZE,"...",...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   - patterns:
     - pattern: vsnprintf($BUF,$SIZE,$FMT)
-    - pattern-not: vsnprintf($BUF,$SIZE,"...",...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   - patterns:
     - pattern: _snprintf($BUF,$SIZE,$FMT,...)
-    - pattern-not: _snprintf($BUF,$SIZE,$FMT,"...",...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   - patterns:
     - pattern: _sntprintf($VAR,$FMT,...)
-    - pattern-not: sntprintf($VAR,"...",...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   - patterns:
     - pattern: _vsntprintf($VAR,$FMT,...)
-    - pattern-not: _vsntprintf($VAR,"...",...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   severity: ERROR

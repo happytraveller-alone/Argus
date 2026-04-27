@@ -39,3 +39,20 @@ test("CreateProjectDialog no longer exposes repository creation controls", () =>
 	assert.doesNotMatch(source, /TabsTrigger value="repository"/);
 	assert.doesNotMatch(source, /远程仓库/);
 });
+
+test("CreateProjectDialog archive chooser button has the only chooser label", () => {
+	const filePath = path.resolve(
+		process.cwd(),
+		"src/pages/projects/components/CreateProjectDialog.tsx",
+	);
+	const source = fs.readFileSync(filePath, "utf8");
+	const chooserLabelCount = source.match(/选择压缩包/g)?.length ?? 0;
+
+	assert.doesNotMatch(
+		source,
+		/<Button[\s\S]*?>\s*\{\/\*[\s\S]*?选择压缩包[\s\S]*?\*\/\}\s*<\/Button>/,
+	);
+	assert.equal(chooserLabelCount, 1);
+	assert.match(source, /<Upload className="w-3 h-3 mr-2" \/>/);
+	assert.match(source, /<Upload className="w-3 h-3 mr-2" \/>[\s\S]*选择压缩包/);
+});

@@ -346,7 +346,7 @@ export default function CreateProjectDialog({
                                 >
                                     <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                                     <h3 className="text-base font-bold text-foreground uppercase mb-1">
-                                        选择压缩包
+                                        拖拽压缩包到此处
                                     </h3>
                                     <Button
                                         type="button"
@@ -358,8 +358,8 @@ export default function CreateProjectDialog({
                                             fileInputRef.current?.click();
                                         }}
                                     >
-                                        {/* <FileText className="w-3 h-3 mr-2" />
-                                        选择压缩包 */}
+                                        <Upload className="w-3 h-3 mr-2" />
+                                        选择压缩包
                                     </Button>
                                 </div>
                             ) : (

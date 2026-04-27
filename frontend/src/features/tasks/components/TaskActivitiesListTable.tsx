@@ -28,6 +28,13 @@ interface TaskActivitiesListTableProps {
 }
 
 const TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME = "text-sm";
+const TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME = "text-sm";
+const DEFECT_SUMMARY_ITEMS = [
+	{ key: "critical", label: "严重" },
+	{ key: "high", label: "高危" },
+	{ key: "medium", label: "中危" },
+	{ key: "low", label: "低危" },
+] as const;
 
 function createTaskActivitiesTableMeta(
 	meta: AppColumnDef<TaskActivityItem, unknown>["meta"],
@@ -39,15 +46,17 @@ function createTaskActivitiesTableMeta(
 }
 
 function getDefectSummaryLabel(activity: TaskActivityItem): string {
-	if (activity.agentFindingStats) {
-		const { critical, high, medium, low } = activity.agentFindingStats;
-		return `严重 ${critical} / 高危 ${high} / 中危 ${medium} / 低危 ${low}`;
-	}
-	if (!activity.staticFindingStats) {
+	const stats = activity.agentFindingStats ?? activity.staticFindingStats;
+	if (!stats) {
 		return "-";
 	}
-	const { critical, high, medium, low } = activity.staticFindingStats;
-	return `严重 ${critical} / 高危 ${high} / 中危 ${medium} / 低危 ${low}`;
+
+	const visibleItems = DEFECT_SUMMARY_ITEMS.flatMap(({ key, label }) => {
+		const count = stats[key];
+		return count > 0 ? [`${label} ${count}`] : [];
+	});
+
+	return visibleItems.length > 0 ? visibleItems.join(" / ") : "-";
 }
 
 function getColumns(
@@ -85,7 +94,9 @@ function getColumns(
 				filterVariant: "text",
 			}),
 			cell: ({ row }) => (
-				<span className="font-medium text-foreground">
+				<span
+					className={`${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} font-medium text-foreground`}
+				>
 					{row.original.projectName}
 				</span>
 			),
@@ -125,7 +136,11 @@ function getColumns(
 					.replace("用时：", "")
 					.replace("已运行：", "");
 				return (
-					<span className="font-mono text-foreground">{durationText}</span>
+					<span
+						className={`${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} font-mono text-foreground`}
+					>
+						{durationText}
+					</span>
 				);
 			},
 		},
@@ -181,7 +196,7 @@ function getColumns(
 				if (summary === "-") return "-";
 				return (
 					<span
-						className="block truncate text-base text-muted-foreground"
+						className={`block truncate ${TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME} text-muted-foreground`}
 						title={summary}
 					>
 						{summary}
