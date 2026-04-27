@@ -1,7 +1,6 @@
 rules:
 - id: rules_lgpl_oc_other_rule-ios-webview-ignore-ssl
   pattern-either:
-  - pattern: allowsAnyHTTPSCertificateForHost
   - patterns:
     - pattern: loadingUnvalidatedHTTPSPage = $YES
     - metavariable-regex:

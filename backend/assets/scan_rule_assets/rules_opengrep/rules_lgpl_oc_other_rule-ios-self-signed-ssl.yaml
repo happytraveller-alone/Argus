@@ -1,8 +1,6 @@
 rules:
 - id: rules_lgpl_oc_other_rule-ios-self-signed-ssl
   pattern-either:
-  - pattern: canAuthenticateAgainstProtectionSpace
-  - pattern: continueWithoutCredentialForAuthenticationChallenge
   - pattern: kCFStreamSSLAllowsExpiredCertificates
   - pattern: kCFStreamSSLAllowsAnyRoot
   - pattern: kCFStreamSSLAllowsExpiredRoots

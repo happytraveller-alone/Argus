@@ -31,5 +31,7 @@ rules:
     - A06:2021-Vulnerable and Outdated Components
     security-severity: Low
     category: security
-  pattern: cuserid(...)
+  patterns:
+  - pattern: cuserid($BUFFER)
+  - pattern-not: cuserid(NULL)
   severity: ERROR

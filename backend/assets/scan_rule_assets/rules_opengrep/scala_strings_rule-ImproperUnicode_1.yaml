@@ -28,7 +28,4 @@ rules:
     - metavariable-regex:
         metavariable: $TRANSFORM
         regex: (toLowerCase|toUpperCase)
-  - pattern: java.text.Normalizer.normalize(...);
-  - pattern: java.net.IDN.toASCII(...);
-  - pattern: '($U: URI).toASCIIString()'
   severity: ERROR

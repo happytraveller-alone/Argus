@@ -5,7 +5,6 @@ rules:
     - pattern: .biometryAny
     - pattern: .userPresence
     - pattern: .touchIDAny
-    - pattern: SecAccessControlCreateWithFlags(...)
   message: "Weak biometric ACL flag is associated with a key stored in Keychain. \n\
     With '.biometryAny/.userPresence/.touchIDAny' flag, an attacker with \nthe ability\
     \ to add a biometry to the device can authenticate as the \nuser. It is recommended\

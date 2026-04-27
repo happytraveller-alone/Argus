@@ -1,15 +1,10 @@
 rules:
 - id: webview_debugging
   patterns:
+  - pattern-not-inside: "if (BuildConfig.DEBUG) {\n  ...\n}\n"
+  - pattern-not-inside: "if ($X.DEBUG) {\n  ...\n}\n"
   - pattern-either:
     - pattern: '$WB.setWebContentsDebuggingEnabled(true);
-
-        '
-    - pattern: '$X = true;
-
-        ...
-
-        $WB.setWebContentsDebuggingEnabled($X);
 
         '
   message: Remote WebView debugging is enabled. This allows an attacker with debugging
