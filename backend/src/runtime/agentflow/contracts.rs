@@ -516,11 +516,11 @@ mod tests {
     #[test]
     fn agentflow_contract_schema_files_are_valid_json_and_name_frozen_contract() {
         let input_schema: Value = serde_json::from_str(include_str!(
-            "../../../../agentflow/schemas/runner_input.schema.json"
+            "../../../agentflow/schemas/runner_input.schema.json"
         ))
         .expect("runner input schema json");
         let output_schema: Value = serde_json::from_str(include_str!(
-            "../../../../agentflow/schemas/runner_output.schema.json"
+            "../../../agentflow/schemas/runner_output.schema.json"
         ))
         .expect("runner output schema json");
         assert_eq!(
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn agentflow_contract_empty_findings_fixture_decodes_as_business_output() {
         let fixture: ArgusAgentflowRunnerOutput = serde_json::from_str(include_str!(
-            "../../../../agentflow/fixtures/runner_output_empty_findings.json"
+            "../../../agentflow/fixtures/runner_output_empty_findings.json"
         ))
         .expect("fixture decodes as Argus business output");
         assert_eq!(fixture.contract_version, ARGUS_AGENTFLOW_CONTRACT_VERSION);
