@@ -2,9 +2,23 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, bootstrap, config::AppConfig, state::AppState};
+use backend_rust::{
+    app::build_router, bootstrap, config::AppConfig, db::scan_rule_assets, state::AppState,
+};
 use serde_json::Value;
 use tower::util::ServiceExt;
+use uuid::Uuid;
+
+fn optional_db_test_config(scope: &str) -> Option<AppConfig> {
+    let database_url = std::env::var("RUST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
+    let mut config = AppConfig::for_tests();
+    config.rust_database_url = Some(database_url);
+    config.zip_storage_path =
+        std::env::temp_dir().join(format!("argus-rust-{scope}-{}", Uuid::new_v4()));
+    Some(config)
+}
 
 #[tokio::test]
 async fn bandit_routes_are_not_owned_when_static_tasks_are_opengrep_only() {
@@ -182,6 +196,91 @@ async fn pmd_routes_are_not_owned_when_static_tasks_are_opengrep_only() {
 }
 
 #[tokio::test]
+async fn opengrep_rule_asset_sync_deactivates_removed_builtin_assets() {
+    let Some(config) = optional_db_test_config("opengrep-stale-rule-assets") else {
+        eprintln!("skipping db-backed scan rule asset sync test without RUST_DATABASE_URL");
+        return;
+    };
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create scan rule asset schema");
+    let pool = state
+        .db_pool
+        .as_ref()
+        .expect("db-backed test config should create a pool");
+
+    let stale_asset_path = format!(
+        "rules_opengrep/c/__removed-test-rule-{}.yml",
+        Uuid::new_v4()
+    );
+    sqlx::query(
+        r#"
+        insert into rust_scan_rule_assets (
+            engine, source_kind, asset_path, file_format, sha256, content, metadata_json, is_active
+        )
+        values ('opengrep', 'internal_rule', $1, 'yml', 'stale-sha', 'rules: []', '{}'::jsonb, true)
+        on conflict (engine, source_kind, asset_path) do update
+        set sha256 = excluded.sha256,
+            content = excluded.content,
+            is_active = true,
+            updated_at = now()
+        "#,
+    )
+    .bind(&stale_asset_path)
+    .execute(pool)
+    .await
+    .expect("stale asset row should be insertable");
+
+    let summary = scan_rule_assets::ensure_initialized(&state)
+        .await
+        .expect("scan rule assets should sync");
+    assert!(
+        summary.deactivated >= 1,
+        "expected removed builtin rule asset rows to be deactivated"
+    );
+
+    let is_active = sqlx::query_scalar::<_, bool>(
+        r#"
+        select is_active
+        from rust_scan_rule_assets
+        where engine = 'opengrep' and source_kind = 'internal_rule' and asset_path = $1
+        "#,
+    )
+    .bind(&stale_asset_path)
+    .fetch_one(pool)
+    .await
+    .expect("stale asset row should remain queryable");
+    assert!(!is_active, "removed builtin rule asset should be inactive");
+
+    let loaded = scan_rule_assets::load_asset_content(
+        &state,
+        "opengrep",
+        "internal_rule",
+        &stale_asset_path,
+    )
+    .await
+    .expect("asset lookup should complete");
+    assert!(
+        loaded.is_none(),
+        "inactive stale rule assets must not be materialized for future scans"
+    );
+
+    sqlx::query(
+        r#"
+        delete from rust_scan_rule_assets
+        where engine = 'opengrep' and source_kind = 'internal_rule' and asset_path = $1
+        "#,
+    )
+    .bind(&stale_asset_path)
+    .execute(pool)
+    .await
+    .expect("test stale asset row should be removable");
+}
+
+#[tokio::test]
 async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
     let state = AppState::from_config(AppConfig::for_tests())
         .await
@@ -222,11 +321,16 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
         "expected builtin opengrep assets to expose only active internal ERROR-severity rules"
     );
     assert!(
-        items.iter().any(|item| {
-            item.get("id").and_then(Value::as_str)
-                == Some("rules_opengrep/c/vim-double-free-b29f4abc.yml")
+        items.iter().all(|item| {
+            item.get("id").and_then(Value::as_str).is_some_and(|id| {
+                !id.rsplit('/')
+                    .next()
+                    .unwrap_or_default()
+                    .starts_with("vuln-")
+                    && id != "rules_opengrep/c/vim-double-free-b29f4abc.yml"
+            })
         }),
-        "expected migrated patch-derived rule to be served from rules_opengrep"
+        "expected generated project/CVE-specific opengrep rules to stay pruned"
     );
     let representative_rule = items
         .iter()

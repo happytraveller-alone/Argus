@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     env,
     num::NonZeroUsize,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Condvar, LazyLock, Mutex},
 };
 
@@ -25,7 +25,7 @@ use crate::{
     error::ApiError,
     llm_rule,
     runtime::runner::{self, RunnerSpec},
-    scan::opengrep,
+    scan::{opengrep, scope_filters},
     state::AppState,
 };
 
@@ -1000,6 +1000,26 @@ async fn run_opengrep_scan_inner(
     )
     .await??;
 
+    let source_dir_for_prune = source_dir.clone();
+    let files_excluded = tokio::task::spawn_blocking(
+        move || -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+            prune_static_scan_test_and_fuzz_paths(&source_dir_for_prune)
+        },
+    )
+    .await??;
+    let scan_input_paths = collect_relative_paths_from_directory(&source_dir)?;
+    let files_scanned = scan_input_paths.len();
+    if files_excluded > 0 {
+        update_scan_progress(
+            state,
+            task_id,
+            25.0,
+            "filtering",
+            &format!("excluded {files_excluded} test/fuzz files from opengrep scan input"),
+        )
+        .await;
+    }
+
     update_scan_progress(
         state,
         task_id,
@@ -1057,7 +1077,7 @@ async fn run_opengrep_scan_inner(
     let scanner_image = state.config.scanner_opengrep_image.clone();
     let container_source_dir = "/scan/source";
 
-    let known_paths = collect_relative_paths_from_directory(&source_dir).ok();
+    let known_paths = scan_input_paths;
     let config_container_path = rule_inputs
         .workspace_rules_dir
         .as_ref()
@@ -1125,12 +1145,8 @@ async fn run_opengrep_scan_inner(
         return Err("opengrep output missing results array".into());
     }
 
-    let findings = opengrep::parse_scan_output(
-        &json_text,
-        task_id,
-        source_dir.to_str(),
-        known_paths.as_ref(),
-    );
+    let findings =
+        opengrep::parse_scan_output(&json_text, task_id, source_dir.to_str(), Some(&known_paths));
 
     update_scan_progress(state, task_id, 90.0, "finalizing", "saving findings").await;
 
@@ -1176,13 +1192,15 @@ async fn run_opengrep_scan_inner(
         record.status = "completed".to_string();
         record.total_findings = findings.len() as i64;
         record.scan_duration_ms = elapsed_ms;
-        record.files_scanned = files_extracted as i64;
+        record.files_scanned = files_scanned as i64;
         record.updated_at = Some(now.clone());
         record.extra = json!({
             "error_count": error_count,
             "warning_count": warning_count,
             "high_confidence_count": high_confidence_count,
             "lines_scanned": 0,
+            "files_extracted": files_extracted,
+            "files_excluded": files_excluded,
         });
         record.progress = task_state::StaticTaskProgressRecord {
             progress: 100.0,
@@ -1202,7 +1220,7 @@ async fn run_opengrep_scan_inner(
                     message: format!(
                         "scan completed: {} findings, {} files scanned",
                         findings.len(),
-                        files_extracted
+                        files_scanned
                     ),
                     progress: 100.0,
                     level: "info".to_string(),
@@ -1224,6 +1242,39 @@ async fn read_opengrep_results_text(results_path: &std::path::Path) -> Result<St
         .map_err(|results_error| {
             format!("missing opengrep results output: results_error={results_error}")
         })
+}
+
+fn prune_static_scan_test_and_fuzz_paths(
+    source_dir: &Path,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let mut stack = vec![source_dir.to_path_buf()];
+    let mut files = Vec::new();
+    while let Some(path) = stack.pop() {
+        for entry in std::fs::read_dir(&path)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                stack.push(entry_path);
+            } else if file_type.is_file() {
+                files.push(entry_path);
+            }
+        }
+    }
+
+    let mut removed = 0usize;
+    for file_path in files {
+        let relative = file_path
+            .strip_prefix(source_dir)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if scope_filters::is_static_scan_test_or_fuzz_path(&relative) {
+            std::fs::remove_file(&file_path)?;
+            removed += 1;
+        }
+    }
+
+    Ok(removed)
 }
 
 struct OpengrepRunnerPaths<'a> {

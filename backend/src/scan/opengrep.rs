@@ -368,13 +368,19 @@ mod tests {
         let assets = load_rule_assets(&state)
             .await
             .expect("opengrep assets should load");
-        assert!(assets.len() > 900);
+        assert!(assets.len() > 500);
         assert!(assets
             .iter()
             .any(|asset| asset.asset_path == "rules_opengrep/java/aes_ecb_mode.yaml"));
+        assert!(assets.iter().all(|asset| !asset
+            .asset_path
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .starts_with("vuln-")));
         assert!(assets
             .iter()
-            .any(|asset| asset.asset_path == "rules_opengrep/c/vim-double-free-b29f4abc.yml"));
+            .all(|asset| asset.asset_path != "rules_opengrep/c/vim-double-free-b29f4abc.yml"));
         assert!(assets
             .iter()
             .all(|asset| asset.source_kind == "internal_rule"));
@@ -400,11 +406,42 @@ mod tests {
 
         let internal_rule = path.join("internal/java/aes_ecb_mode.yaml");
         assert!(internal_rule.exists());
-        let migrated_patch_rule = path.join("internal/c/vim-double-free-b29f4abc.yml");
-        assert!(migrated_patch_rule.exists());
+        let nongeneric_patch_rule = path.join("internal/c/vim-double-free-b29f4abc.yml");
+        assert!(!nongeneric_patch_rule.exists());
+        let generated_project_rules = materialized_rule_filenames(&path, "vuln-")
+            .expect("materialized rules should be readable");
+        assert!(
+            generated_project_rules.is_empty(),
+            "expected generated project/CVE-specific rules to stay pruned, got {generated_project_rules:?}"
+        );
         let legacy_patch_rules_dir = path.join("patch");
         assert!(!legacy_patch_rules_dir.exists());
         let _ = fs::remove_dir_all(&workspace).await;
+    }
+
+    fn materialized_rule_filenames(
+        root: &std::path::Path,
+        prefix: &str,
+    ) -> std::io::Result<Vec<String>> {
+        let mut stack = vec![root.to_path_buf()];
+        let mut filenames = Vec::new();
+        while let Some(path) = stack.pop() {
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                let entry_path = entry.path();
+                if entry_path.is_dir() {
+                    stack.push(entry_path);
+                    continue;
+                }
+                if let Some(filename) = entry_path.file_name().and_then(|name| name.to_str()) {
+                    if filename.starts_with(prefix) {
+                        filenames.push(filename.to_string());
+                    }
+                }
+            }
+        }
+        filenames.sort();
+        Ok(filenames)
     }
 
     #[tokio::test]

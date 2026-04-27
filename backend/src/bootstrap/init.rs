@@ -97,8 +97,12 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
 
         let summary = scan_rule_assets::ensure_initialized(state).await?;
         actions.push(format!(
-            "scan rule assets synced: discovered={} inserted={} updated={} skipped={}",
-            summary.discovered, summary.inserted, summary.updated, summary.skipped
+            "scan rule assets synced: discovered={} inserted={} updated={} skipped={} deactivated={}",
+            summary.discovered,
+            summary.inserted,
+            summary.updated,
+            summary.skipped,
+            summary.deactivated
         ));
     } else {
         actions.push("scan rule asset import skipped without rust db".to_string());

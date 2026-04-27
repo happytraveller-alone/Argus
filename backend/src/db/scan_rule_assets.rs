@@ -16,6 +16,7 @@ pub struct ScanRuleAssetImportSummary {
     pub inserted: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub deactivated: usize,
 }
 
 pub async fn ensure_initialized(state: &AppState) -> Result<ScanRuleAssetImportSummary> {
@@ -24,20 +25,37 @@ pub async fn ensure_initialized(state: &AppState) -> Result<ScanRuleAssetImportS
     };
 
     let assets = discover_rule_assets()?;
-    let existing_rows = sqlx::query_as::<_, (String, String)>(
-        "select asset_path, sha256 from rust_scan_rule_assets",
+    let existing_rows = sqlx::query_as::<_, (String, String, String, String, bool)>(
+        "select engine, source_kind, asset_path, sha256, is_active from rust_scan_rule_assets",
     )
     .fetch_all(pool)
     .await?;
-    let existing = existing_rows.into_iter().collect::<BTreeMap<_, _>>();
+    let existing = existing_rows
+        .into_iter()
+        .map(|(engine, source_kind, asset_path, sha256, is_active)| {
+            ((engine, source_kind, asset_path), (sha256, is_active))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut discovered_by_scope = BTreeMap::<(String, String), Vec<String>>::new();
+    for asset in &assets {
+        discovered_by_scope
+            .entry((asset.engine.clone(), asset.source_kind.clone()))
+            .or_default()
+            .push(asset.asset_path.clone());
+    }
 
     let mut inserted = 0;
     let mut updated = 0;
     let mut skipped = 0;
 
     for asset in &assets {
-        match existing.get(&asset.asset_path) {
-            Some(existing_sha) if existing_sha == &asset.sha256 => skipped += 1,
+        match existing.get(&(
+            asset.engine.clone(),
+            asset.source_kind.clone(),
+            asset.asset_path.clone(),
+        )) {
+            Some((existing_sha, true)) if existing_sha == &asset.sha256 => skipped += 1,
             Some(_) => {
                 sqlx::query(
                     r#"
@@ -89,11 +107,32 @@ pub async fn ensure_initialized(state: &AppState) -> Result<ScanRuleAssetImportS
         }
     }
 
+    let mut deactivated = 0;
+    for ((engine, source_kind), asset_paths) in discovered_by_scope {
+        let result = sqlx::query(
+            r#"
+            update rust_scan_rule_assets
+            set is_active = false, updated_at = now()
+            where engine = $1
+              and source_kind = $2
+              and is_active = true
+              and not (asset_path = any($3))
+            "#,
+        )
+        .bind(&engine)
+        .bind(&source_kind)
+        .bind(&asset_paths)
+        .execute(pool)
+        .await?;
+        deactivated += result.rows_affected() as usize;
+    }
+
     Ok(ScanRuleAssetImportSummary {
         discovered: assets.len(),
         inserted,
         updated,
         skipped,
+        deactivated,
     })
 }
 
@@ -354,7 +393,7 @@ mod tests {
     #[test]
     fn discovers_only_retained_rule_asset_families() {
         let assets = discover_rule_assets().expect("rule assets should load");
-        assert!(assets.len() > 900);
+        assert!(assets.len() > 500);
 
         let paths = assets
             .iter()
@@ -363,9 +402,6 @@ mod tests {
         assert!(paths
             .iter()
             .any(|path| path == &"rules_opengrep/java/aes_ecb_mode.yaml"));
-        assert!(paths
-            .iter()
-            .any(|path| path == &"rules_opengrep/c/vim-double-free-b29f4abc.yml"));
 
         let roots = paths
             .iter()
@@ -443,6 +479,24 @@ mod tests {
                     .into_iter()
                     .filter(|severity| severity != "ERROR")
                     .collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn retained_assets_exclude_nongeneric_patch_rules() {
+        let assets = discover_rule_assets().expect("rule assets should load");
+
+        for asset in assets {
+            let filename = asset.asset_path.rsplit('/').next().unwrap_or_default();
+            assert!(
+                !filename.starts_with("vuln-"),
+                "expected generated project/CVE-specific rule asset to stay pruned: {}",
+                asset.asset_path
+            );
+            assert_ne!(
+                asset.asset_path, "rules_opengrep/c/vim-double-free-b29f4abc.yml",
+                "expected commit-specific Vim rule to stay pruned"
             );
         }
     }

@@ -36,6 +36,53 @@ const CORE_AUDIT_EXCLUDE_PATTERNS: &[&str] = &[
     "**/*.xml",
 ];
 
+const STATIC_SCAN_TEST_FUZZ_DIRS: &[&str] = &[
+    "test",
+    "tests",
+    "__tests__",
+    "testdata",
+    "test_data",
+    "testing",
+    "fuzz",
+    "fuzzing",
+    "fuzzer",
+    "fuzzers",
+    "fuzz_tests",
+    "fuzz_corpus",
+];
+
+const STATIC_SCAN_TEST_FUZZ_FILE_PATTERNS: &[&str] = &[
+    "test_*",
+    "tests_*",
+    "*_test",
+    "*_tests",
+    "*_test.*",
+    "*_tests.*",
+    "*-test",
+    "*-tests",
+    "*-test.*",
+    "*-tests.*",
+    "*.test.*",
+    "*.tests.*",
+    "fuzz_*",
+    "fuzzer_*",
+    "*_fuzz",
+    "*_fuzzer",
+    "*_fuzzing",
+    "*_fuzz.*",
+    "*_fuzzer.*",
+    "*_fuzzing.*",
+    "*-fuzz",
+    "*-fuzzer",
+    "*-fuzzing",
+    "*-fuzz.*",
+    "*-fuzzer.*",
+    "*-fuzzing.*",
+    "*.fuzz.*",
+    "*.fuzzer.*",
+    "*.fuzzing.*",
+];
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScopeFilterOperation {
@@ -191,6 +238,28 @@ pub fn is_core_ignored_path(path: &str, exclude_patterns: Option<&[String]>) -> 
     matches_exclude_patterns(&normalized, &effective_patterns)
 }
 
+pub fn is_static_scan_test_or_fuzz_path(path: &str) -> bool {
+    let normalized = normalize_scan_path(path);
+    if normalized.is_empty() {
+        return false;
+    }
+
+    let parts = path_components(&normalized);
+    if parts.is_empty() {
+        return false;
+    }
+
+    for part in parts.iter().take(parts.len().saturating_sub(1)) {
+        if is_static_scan_test_or_fuzz_dir(part) {
+            return true;
+        }
+    }
+
+    parts
+        .last()
+        .is_some_and(|basename| is_static_scan_test_or_fuzz_file(basename))
+}
+
 pub fn filter_bootstrap_findings(
     normalized_findings: &[Value],
     exclude_patterns: Option<&[String]>,
@@ -235,6 +304,29 @@ pub fn filter_bootstrap_findings(
     }
 
     filtered
+}
+
+fn is_static_scan_test_or_fuzz_dir(name: &str) -> bool {
+    let lowered = name.trim().to_ascii_lowercase();
+    STATIC_SCAN_TEST_FUZZ_DIRS
+        .iter()
+        .any(|candidate| lowered == *candidate)
+}
+
+fn is_static_scan_test_or_fuzz_file(name: &str) -> bool {
+    let lowered = name.trim().to_ascii_lowercase();
+    if lowered.is_empty() {
+        return false;
+    }
+    if STATIC_SCAN_TEST_FUZZ_DIRS
+        .iter()
+        .any(|candidate| lowered == *candidate)
+    {
+        return true;
+    }
+    STATIC_SCAN_TEST_FUZZ_FILE_PATTERNS
+        .iter()
+        .any(|pattern| wildcard_matches(&lowered, pattern))
 }
 
 fn normalize_bootstrap_confidence(value: Option<&Value>) -> Option<String> {
@@ -420,7 +512,8 @@ fn match_character_class(
 mod tests {
     use super::{
         build_core_audit_exclude_patterns, execute, execute_from_request_path,
-        filter_bootstrap_findings, is_core_ignored_path, ScopeFilterOperation, ScopeFilterRequest,
+        filter_bootstrap_findings, is_core_ignored_path, is_static_scan_test_or_fuzz_path,
+        ScopeFilterOperation, ScopeFilterRequest,
     };
     use serde_json::json;
     use std::fs;
@@ -462,6 +555,42 @@ mod tests {
         assert!(is_core_ignored_path("app/settings.py", None));
         assert!(is_core_ignored_path("custom/demo.py", Some(&custom)));
         assert!(!is_core_ignored_path("src/service.py", None));
+    }
+
+    #[test]
+    fn detects_static_scan_test_and_fuzz_paths() {
+        for path in [
+            "tests/test_api.py",
+            "src/test/login_test.go",
+            "src/__tests__/widget.ts",
+            "src/testdata/fixture.json",
+            "src/service_test.py",
+            "src/service.tests.ts",
+            "src/foo.test.ts",
+            "src/fuzz/fuzz_target.c",
+            "src/fuzzers/parser.cc",
+            "src/fuzz_corpus/input.bin",
+            "src/fuzz_parser.c",
+            "src/parser_fuzz.cc",
+            "src/parser.fuzz.cpp",
+        ] {
+            assert!(
+                is_static_scan_test_or_fuzz_path(path),
+                "expected {path} to be excluded from static scans"
+            );
+        }
+
+        for path in [
+            "src/service.py",
+            "src/contest/ranking.py",
+            "src/profuzzer_client.c",
+            "src/fuzzy_matcher.rs",
+        ] {
+            assert!(
+                !is_static_scan_test_or_fuzz_path(path),
+                "expected {path} to remain in static scans"
+            );
+        }
     }
 
     #[test]

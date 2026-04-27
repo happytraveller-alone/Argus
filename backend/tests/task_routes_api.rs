@@ -68,6 +68,33 @@ fn test_zip_bytes() -> Vec<u8> {
     bytes
 }
 
+fn static_scan_test_fuzz_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        for (path, content) in [
+            ("src/main.py", b"print('prod')\n".as_slice()),
+            ("tests/test_api.py", b"print('test dir')\n".as_slice()),
+            ("src/service_test.py", b"print('test file')\n".as_slice()),
+            (
+                "fuzz/fuzz_target.c",
+                b"int LLVMFuzzerTestOneInput() { return 0; }\n".as_slice(),
+            ),
+            (
+                "src/fuzz_parser.c",
+                b"int fuzz_parser(void) { return 0; }\n".as_slice(),
+            ),
+        ] {
+            writer.start_file(path, options).unwrap();
+            writer.write_all(content).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
 fn test_tar_bytes() -> Vec<u8> {
     let mut bytes = Vec::new();
     {
@@ -166,9 +193,14 @@ case "$cmd" in
     output_path=""
     summary_path=""
     log_path=""
+    target_path=""
     prev=""
     for arg in "$@"; do
       case "$prev" in
+        target)
+          target_path="$arg"
+          prev=""
+          ;;
         output)
           output_path="$arg"
           prev=""
@@ -183,6 +215,7 @@ case "$cmd" in
           ;;
         *)
           case "$arg" in
+            --target) prev="target" ;;
             --output) prev="output" ;;
             --summary) prev="summary" ;;
             --log) prev="log" ;;
@@ -193,6 +226,11 @@ case "$cmd" in
     printf '%s' "$output_path" > "$state_dir/output_path"
     printf '%s' "$summary_path" > "$state_dir/summary_path"
     printf '%s' "$log_path" > "$state_dir/log_path"
+    if [ -n "${FAKE_TASK_SOURCE_SNAPSHOT_PATH:-}" ] && [ -n "$target_path" ]; then
+      rm -rf "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}"
+      mkdir -p "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}"
+      cp -R "$target_path/." "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}/"
+    fi
     printf '%s\n' "${FAKE_CONTAINER_ID:-task-container-xyz}"
     ;;
   start)
@@ -2243,6 +2281,100 @@ async fn opengrep_task_completes_without_missing_results_when_summary_is_complet
     assert!(logged.contains("start|task-container-xyz"), "{logged}");
     assert!(logged.contains("wait|task-container-xyz"), "{logged}");
     assert!(!logged.contains("stop|-t 2 task-container-xyz"), "{logged}");
+}
+
+#[tokio::test]
+async fn opengrep_task_prunes_test_and_fuzz_sources_before_scanning() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_opengrep_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    let source_snapshot = temp_dir.path().join("source-snapshot");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _source_snapshot = EnvVarGuard::set(
+        "FAKE_TASK_SOURCE_SNAPSHOT_PATH",
+        source_snapshot.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+    let state = AppState::from_config(isolated_test_config("opengrep-test-fuzz-prune"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project(&app).await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        static_scan_test_fuzz_zip_bytes(),
+    )
+    .expect("write project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "opengrep test/fuzz prune task",
+                        "rule_ids": [],
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert_eq!(final_status.files_scanned, 1, "{final_status:?}");
+    assert_eq!(final_status.extra["files_excluded"], 4);
+    assert!(source_snapshot.join("src/main.py").is_file());
+    for excluded in [
+        "tests/test_api.py",
+        "src/service_test.py",
+        "fuzz/fuzz_target.c",
+        "src/fuzz_parser.c",
+    ] {
+        assert!(
+            !source_snapshot.join(excluded).exists(),
+            "excluded test/fuzz source should not reach scanner: {excluded}"
+        );
+    }
 }
 
 #[tokio::test]
