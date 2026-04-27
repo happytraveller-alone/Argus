@@ -20,6 +20,7 @@ import {
 	getOpengrepScanFindings,
 	type OpengrepFinding,
 } from "@/shared/api/opengrep";
+import { getStaticAnalysisOpengrepRuleName } from "@/pages/static-analysis/viewModel";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import {
 	appendReturnTo,
@@ -124,6 +125,12 @@ function resolveStaticFindingTitle(finding: OpengrepFinding): string {
 		String(finding.description || "").trim() ||
 		"未命名漏洞"
 	);
+}
+
+function resolveStaticFindingRuleLabel(finding: OpengrepFinding): string {
+	const ruleLabel = getStaticAnalysisOpengrepRuleName(finding);
+	if (ruleLabel && ruleLabel !== "-") return ruleLabel;
+	return resolveStaticFindingTitle(finding);
 }
 
 function toProjectRelativePath(projectName: string, filePath: string): string {
@@ -266,11 +273,10 @@ function normalizeStaticFindings(
 	findings: OpengrepFinding[],
 ): TaskFindingRow[] {
 	return findings.map((finding) => {
+		const ruleLabel = resolveStaticFindingRuleLabel(finding);
 		const typeDisplay = resolveCweDisplay({
 			cwe: finding.cwe,
-			fallbackLabel:
-				String(finding.rule_name || "").trim() ||
-				resolveStaticFindingTitle(finding),
+			fallbackLabel: ruleLabel,
 		});
 
 		return {
@@ -278,8 +284,8 @@ function normalizeStaticFindings(
 			taskId,
 			taskCategory: "static",
 			title: resolveStaticFindingTitle(finding),
-			typeLabel: typeDisplay.label,
-			typeTooltip: typeDisplay.tooltip,
+			typeLabel: ruleLabel,
+			typeTooltip: typeDisplay.tooltip || ruleLabel,
 			filePath: String(finding.file_path || "").trim() || "-",
 			line: toPositiveLine(finding.start_line),
 			severity: normalizeTaskFindingSeverity(finding.severity),
@@ -435,16 +441,22 @@ export default function ProjectTaskFindingsDialog({
 					header: "漏洞类型",
 					meta: {
 						label: "漏洞类型",
-						minWidth: 280,
+						width: 260,
+						minWidth: 220,
+						maxWidth: 320,
 						filterVariant: "text",
 					},
 					cell: ({ row }) => (
-						<div
-							className="text-sm text-foreground break-words"
-							title={row.original.typeTooltip || row.original.title}
+						<span
+							className="block max-w-full truncate text-sm"
+							title={
+								row.original.typeTooltip ||
+								row.original.typeLabel ||
+								row.original.title
+							}
 						>
-							{row.original.typeLabel}
-						</div>
+							{row.original.typeLabel || "-"}
+						</span>
 					),
 				},
 				{
@@ -453,7 +465,7 @@ export default function ProjectTaskFindingsDialog({
 					header: "位置",
 					meta: {
 						label: "位置",
-						minWidth: 260,
+						minWidth: 420,
 					},
 					cell: ({ row }) => {
 						const location = formatLocation(
@@ -461,12 +473,12 @@ export default function ProjectTaskFindingsDialog({
 							row.original.line,
 						);
 						return (
-							<div
-								className="text-xs text-muted-foreground break-all"
+							<span
+								className="block max-w-full whitespace-nowrap font-mono text-xs text-muted-foreground"
 								title={location}
 							>
 								{location}
-							</div>
+							</span>
 						);
 					},
 				},
@@ -524,7 +536,7 @@ export default function ProjectTaskFindingsDialog({
 					meta: {
 						label: "操作",
 						align: "center",
-						width: 120,
+						width: 140,
 					},
 					cell: ({ row }) =>
 						row.original.route ? (
@@ -559,7 +571,7 @@ export default function ProjectTaskFindingsDialog({
 			<DialogContent
 				aria-describedby={undefined}
 				showCloseButton={false}
-				className="!w-[min(96vw,1200px)] !max-w-none max-h-[88vh] overflow-hidden flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg"
+				className="!w-[min(96vw,1320px)] !max-w-none max-h-[88vh] overflow-hidden flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg"
 			>
 				<DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0">
 					<div className="flex items-center justify-between gap-3">
@@ -591,8 +603,8 @@ export default function ProjectTaskFindingsDialog({
 					</div>
 				</DialogHeader>
 
-				<div className="flex-1 min-h-0 overflow-hidden px-6 py-4 space-y-4">
-					<div className="flex-1 min-h-0 overflow-hidden [&_[data-slot=table-container]]:overflow-auto">
+				<div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+					<div className="min-w-0">
 						<DataTable
 							key={`${cacheKey}:${open ? "open" : "closed"}`}
 							data={allRows}
@@ -604,10 +616,7 @@ export default function ProjectTaskFindingsDialog({
 								status === "failed" ? errorMessage || "加载漏洞失败" : undefined
 							}
 							emptyState={{
-								title:
-									allRows.length === 0
-										? "暂无漏洞"
-										: "暂无符合条件的漏洞",
+								title: allRows.length === 0 ? "暂无漏洞" : "暂无符合条件的漏洞",
 							}}
 							toolbar={{
 								searchPlaceholder: "搜索漏洞类型或位置",
@@ -624,7 +633,10 @@ export default function ProjectTaskFindingsDialog({
 								},
 							}}
 							className="border border-border rounded-md"
-							tableClassName="min-w-[980px] table-fixed"
+							containerClassName="max-w-full overflow-x-auto"
+							tableContainerClassName="overflow-x-auto rounded-sm border border-border"
+							tableClassName="min-w-[1280px]"
+							fillContainerWidth
 						/>
 					</div>
 				</div>
