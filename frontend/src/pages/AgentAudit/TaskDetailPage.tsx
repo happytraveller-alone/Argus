@@ -30,15 +30,14 @@ import {
   getAgentFindings,
   cancelAgentTask,
   getAgentTree,
+  getAgentCheckpoints,
   getAgentEvents,
   updateAgentFindingStatus,
   AgentFinding,
   AgentEvent,
+  type AgentArtifactRef,
+  type AgentCheckpoint,
 } from "@/shared/api/agentTasks";
-import {
-  getOpengrepScanFindings,
-  type OpengrepFinding,
-} from "@/shared/api/opengrep";
 
 // Local imports
 import {
@@ -78,7 +77,6 @@ import {
   toZhAgentName,
 } from "./localization";
 import type {
-  BootstrapInputsSummary,
   DetailViewState,
   FindingsFiltersChangeOptions,
   FindingsViewFilters,
@@ -190,6 +188,30 @@ type HomeScanCard = {
   accentClassName: string;
   targetRoute: string;
 };
+
+function collectAgentArtifactRefs(
+  nodes: Array<{ artifact_refs?: AgentArtifactRef[] | null; children?: unknown }>,
+): AgentArtifactRef[] {
+  const refs: AgentArtifactRef[] = [];
+  const visit = (node: { artifact_refs?: AgentArtifactRef[] | null; children?: unknown }) => {
+    if (Array.isArray(node.artifact_refs)) {
+      refs.push(...node.artifact_refs.filter((item) => typeof item?.path === "string" && item.path.trim()));
+    }
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child) => visit(child as { artifact_refs?: AgentArtifactRef[] | null; children?: unknown }));
+    }
+  };
+  nodes.forEach(visit);
+  return refs.slice(0, 6);
+}
+
+function formatAgentDuration(durationMs: number | null | undefined): string {
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return "-";
+  }
+  if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
 
 const createDefaultFindingsFilters = (): FindingsViewFilters => ({
   keyword: "",
@@ -688,17 +710,8 @@ function AgentAuditPageContent() {
   const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>(() =>
     createDefaultFindingsFilters(),
   );
-  // NOTE: bootstrap (opengrep) input UI is currently not shown in the new realtime layout,
-  // but we keep the plumbing in place for future toggles.
-  const [bootstrapInputsSummary, setBootstrapInputsSummary] =
-    useState<BootstrapInputsSummary | null>(null);
-  const [, setBootstrapInputFindings] = useState<
-    OpengrepFinding[]
-  >([]);
-  const [, setBootstrapInputsLoading] = useState(false);
-  const [, setBootstrapInputsError] = useState<string | null>(
-    null,
-  );
+  const [agentCheckpoints, setAgentCheckpoints] = useState<AgentCheckpoint[]>([]);
+  const [agentDiagnosticsError, setAgentDiagnosticsError] = useState<string | null>(null);
   const [detailViewState, setDetailViewState] = useState<DetailViewState | null>(null);
   const [detailDialog, setDetailDialog] = useState<{
     type: "log" | "finding" | "agent";
@@ -1367,10 +1380,8 @@ function AgentAuditPageContent() {
       });
       setTokenUsage(createTokenUsageAccumulator());
       setStatsNow(new Date());
-      setBootstrapInputsSummary(null);
-      setBootstrapInputFindings([]);
-      setBootstrapInputsLoading(false);
-      setBootstrapInputsError(null);
+      setAgentCheckpoints([]);
+      setAgentDiagnosticsError(null);
       setDetailViewState(null);
       setDetailDialog(null);
       setHighlightedLogId(null);
@@ -1556,58 +1567,19 @@ function AgentAuditPageContent() {
     [task?.status, taskId, setFindings],
   );
 
-  const loadBootstrapInputFindings = useCallback(async (scanTaskId: string) => {
-    setBootstrapInputsLoading(true);
-    setBootstrapInputsError(null);
-    try {
-      const allFindings: OpengrepFinding[] = [];
-      let skip = 0;
-      for (let batch = 0; batch < EVENT_BATCH_SAFETY_LIMIT; batch += 1) {
-        const page = await getOpengrepScanFindings({
-          taskId: scanTaskId,
-          skip,
-          limit: BOOTSTRAP_FINDING_PAGE_SIZE,
-        });
-        if (!page.length) break;
-        allFindings.push(...page);
-        skip += page.length;
-        if (page.length < BOOTSTRAP_FINDING_PAGE_SIZE) break;
-      }
-
-      const filtered = allFindings.filter((item) => {
-        const severity = String(item.severity || "").trim().toUpperCase();
-        const confidence = String(item.confidence || "").trim().toUpperCase();
-        return (
-          severity === "ERROR" && (confidence === "HIGH" || confidence === "MEDIUM")
-        );
-      });
-
-      setBootstrapInputFindings(filtered);
-      setBootstrapInputsSummary((prev) =>
-        prev && prev.taskId === scanTaskId
-          ? {
-            ...prev,
-            candidateCount: Math.max(prev.candidateCount, filtered.length),
-            totalFindings: Math.max(prev.totalFindings, allFindings.length),
-          }
-          : prev,
-      );
-    } catch (error) {
-      console.error("Failed to load bootstrap input findings:", error);
-      setBootstrapInputsError("加载静态输入失败");
-      setBootstrapInputFindings([]);
-    } finally {
-      setBootstrapInputsLoading(false);
-    }
-  }, []);
-
   const loadAgentTree = useCallback(async () => {
     if (!taskId) return;
     try {
-      const data = await getAgentTree(taskId);
-      setAgentTree(data);
+      const [treeData, checkpointData] = await Promise.all([
+        getAgentTree(taskId),
+        getAgentCheckpoints(taskId, { limit: 8 }),
+      ]);
+      setAgentTree(treeData);
+      setAgentCheckpoints(checkpointData);
+      setAgentDiagnosticsError(null);
     } catch (err) {
       console.error(err);
+      setAgentDiagnosticsError("AgentFlow 诊断加载失败，任务日志仍可继续查看");
     }
   }, [taskId, setAgentTree]);
 
@@ -1899,29 +1871,6 @@ function AgentAuditPageContent() {
         tool_duration_ms: event.tool_duration_ms ?? null,
         event_timestamp: eventTimestamp,
       };
-      const bootstrapTaskId =
-        typeof metadata?.bootstrap_task_id === "string"
-          ? metadata.bootstrap_task_id.trim()
-          : "";
-      if (
-        bootstrapTaskId &&
-        (metadata?.bootstrap === true ||
-          typeof metadata?.bootstrap_source === "string")
-      ) {
-        const totalFindings = toSafeNumber(metadata?.bootstrap_total_findings);
-        const candidateCount = toSafeNumber(metadata?.bootstrap_candidate_count);
-        const sourceValue =
-          typeof metadata?.bootstrap_source === "string"
-            ? metadata.bootstrap_source
-            : "scan_forced";
-        setBootstrapInputsSummary((prev) => ({
-          taskId: bootstrapTaskId,
-          source: sourceValue || prev?.source || "scan_forced",
-          totalFindings: totalFindings ?? prev?.totalFindings ?? 0,
-          candidateCount: candidateCount ?? prev?.candidateCount ?? 0,
-        }));
-      }
-
       if (typeof event.sequence === "number") {
         lastEventSequenceRef.current = Math.max(
           lastEventSequenceRef.current,
@@ -2957,17 +2906,6 @@ function AgentAuditPageContent() {
     fetchAllHistoricalEvents,
     ingestTokenEvents,
     taskId,
-  ]);
-
-  useEffect(() => {
-    const bootstrapTaskId = bootstrapInputsSummary?.taskId;
-    if (!bootstrapTaskId) return;
-    void loadBootstrapInputFindings(bootstrapTaskId);
-  }, [
-    bootstrapInputsSummary?.taskId,
-    bootstrapInputsSummary?.candidateCount,
-    bootstrapInputsSummary?.totalFindings,
-    loadBootstrapInputFindings,
   ]);
 
   // Backfill "potential findings" from DB findings so they persist across reloads.
