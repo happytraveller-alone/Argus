@@ -19,14 +19,8 @@ pub const FORBIDDEN_STATIC_FIELDS: &[&str] = &[
     "candidate_findings",
 ];
 
-pub const FORBIDDEN_STATIC_ORIGINS: &[&str] = &[
-    "opengrep",
-    "static",
-    "bandit",
-    "gitleaks",
-    "phpstan",
-    "pmd",
-];
+pub const FORBIDDEN_STATIC_ORIGINS: &[&str] =
+    &["opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd"];
 
 const SENSITIVE_KEYS: &[&str] = &[
     "apikey",
@@ -81,7 +75,10 @@ fn collect_static_candidate_violations(value: &Value, path: &str, violations: &m
                 if FORBIDDEN_STATIC_FIELDS.contains(&lower_key.as_str()) {
                     violations.push(child_path.clone());
                 }
-                if matches!(lower_key.as_str(), "candidate_origin" | "source_engine" | "origin" | "engine") {
+                if matches!(
+                    lower_key.as_str(),
+                    "candidate_origin" | "source_engine" | "origin" | "engine"
+                ) {
                     if let Some(origin) = child.as_str() {
                         let normalized = origin.to_ascii_lowercase();
                         if FORBIDDEN_STATIC_ORIGINS.contains(&normalized.as_str()) {
@@ -90,7 +87,9 @@ fn collect_static_candidate_violations(value: &Value, path: &str, violations: &m
                     }
                 }
                 if lower_key.contains("static")
-                    && (lower_key.contains("finding") || lower_key.contains("scan") || lower_key.contains("candidate"))
+                    && (lower_key.contains("finding")
+                        || lower_key.contains("scan")
+                        || lower_key.contains("candidate"))
                 {
                     violations.push(child_path.clone());
                 }
@@ -136,7 +135,14 @@ pub fn sanitize_value(value: &Value) -> Value {
 
 pub fn redact_text(text: &str) -> String {
     let mut redacted = text.to_string();
-    for marker in ["Authorization:", "authorization:", "Cookie:", "cookie:", "apiKey=", "api_key="] {
+    for marker in [
+        "Authorization:",
+        "authorization:",
+        "Cookie:",
+        "cookie:",
+        "apiKey=",
+        "api_key=",
+    ] {
         redacted = redact_marker_values(&redacted, marker);
     }
     redacted = redacted.replace("/var/run/docker.sock", "[REDACTED_DOCKER_SOCKET]");
@@ -170,14 +176,20 @@ pub fn validate_relative_artifact_path(path: &str) -> ImportResult<()> {
             format!("artifact path must be relative: {path}"),
         ));
     }
-    if candidate.components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+    if candidate.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
         return Err(ImportError::new(
             "runner_output_invalid",
             format!("artifact path escapes task output directory: {path}"),
         ));
     }
     let lower = path.to_ascii_lowercase();
-    if lower.contains("docker.sock") || lower.contains("/var/run") || lower.contains("/run/docker") {
+    if lower.contains("docker.sock") || lower.contains("/var/run") || lower.contains("/run/docker")
+    {
         return Err(ImportError::new(
             "runner_output_invalid",
             format!("artifact path points at a forbidden host runtime path: {path}"),
@@ -222,22 +234,35 @@ pub fn import_runner_output(record: &mut AgentTaskRecord, raw_output: &Value) ->
         .unwrap_or_else(|| default_agent_tree(record, topology_version));
     record.report = output
         .get("report")
-        .and_then(|report| report.get("summary_markdown").or_else(|| report.get("summary")))
+        .and_then(|report| {
+            report
+                .get("summary_markdown")
+                .or_else(|| report.get("summary"))
+        })
         .and_then(Value::as_str)
         .map(ToString::to_string)
         .or_else(|| Some("# AgentFlow 智能审计报告\n\n未发现可确认漏洞。".to_string()));
     refresh_aggregates(record);
-    push_import_event(record, "report_generated", Some("completed"), Some("AgentFlow 智能审计结果已导入 Argus"), Some(json!({
-        "runtime": "agentflow",
-        "run_id": run_id,
-        "topology_version": topology_version,
-    })));
+    push_import_event(
+        record,
+        "report_generated",
+        Some("completed"),
+        Some("AgentFlow 智能审计结果已导入 Argus"),
+        Some(json!({
+            "runtime": "agentflow",
+            "run_id": run_id,
+            "topology_version": topology_version,
+        })),
+    );
     Ok(())
 }
 
 fn reject_native_only_output(output: &Value) -> ImportResult<()> {
-    let has_argus_business_shape = output.get("runtime").and_then(Value::as_str) == Some("agentflow")
-        && (output.get("findings").is_some() || output.get("report").is_some() || output.get("events").is_some());
+    let has_argus_business_shape = output.get("runtime").and_then(Value::as_str)
+        == Some("agentflow")
+        && (output.get("findings").is_some()
+            || output.get("report").is_some()
+            || output.get("events").is_some());
     let native_only = output.get("pipeline").is_some()
         && output.get("nodes").is_some()
         && output.get("findings").is_none()
@@ -258,7 +283,12 @@ fn required_string(value: &Value, key: &'static str) -> ImportResult<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-        .ok_or_else(|| ImportError::new("runner_output_invalid", format!("runner output missing `{key}`")))
+        .ok_or_else(|| {
+            ImportError::new(
+                "runner_output_invalid",
+                format!("runner output missing `{key}`"),
+            )
+        })
 }
 
 fn validate_artifacts(output: &Value) -> ImportResult<()> {
@@ -272,7 +302,12 @@ fn validate_artifacts(output: &Value) -> ImportResult<()> {
     Ok(())
 }
 
-fn merge_agentflow_scope(record: &mut AgentTaskRecord, run_id: &str, topology_version: &str, output: &Value) {
+fn merge_agentflow_scope(
+    record: &mut AgentTaskRecord,
+    run_id: &str,
+    topology_version: &str,
+    output: &Value,
+) {
     let mut scope = record.audit_scope.clone().unwrap_or_else(|| json!({}));
     if !scope.is_object() {
         scope = json!({ "value": scope });
@@ -296,15 +331,25 @@ fn merge_agentflow_scope(record: &mut AgentTaskRecord, run_id: &str, topology_ve
 fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version: &str) {
     if let Some(events) = output.get("events").and_then(Value::as_array) {
         for event in events {
-            let event_type = event.get("type").or_else(|| event.get("event_type")).and_then(Value::as_str).unwrap_or("agentflow_event");
+            let event_type = event
+                .get("type")
+                .or_else(|| event.get("event_type"))
+                .and_then(Value::as_str)
+                .unwrap_or("agentflow_event");
             let phase = event.get("phase").and_then(Value::as_str);
             let message = event.get("message").and_then(Value::as_str);
             let mut metadata = event.get("metadata").cloned().unwrap_or_else(|| json!({}));
             if let Some(obj) = metadata.as_object_mut() {
                 obj.insert("topology_version".to_string(), json!(topology_version));
-                obj.insert("role".to_string(), event.get("role").cloned().unwrap_or(Value::Null));
+                obj.insert(
+                    "role".to_string(),
+                    event.get("role").cloned().unwrap_or(Value::Null),
+                );
                 obj.insert("visibility".to_string(), json!("user"));
-                obj.insert("correlation_id".to_string(), json!(Uuid::new_v4().to_string()));
+                obj.insert(
+                    "correlation_id".to_string(),
+                    json!(Uuid::new_v4().to_string()),
+                );
             }
             push_import_event(record, event_type, phase, message, Some(metadata));
         }
@@ -315,22 +360,75 @@ fn import_checkpoints(record: &mut AgentTaskRecord, output: &Value, topology_ver
     if let Some(checkpoints) = output.get("checkpoints").and_then(Value::as_array) {
         for checkpoint in checkpoints {
             record.checkpoints.push(AgentCheckpointRecord {
-                id: checkpoint.get("id").and_then(Value::as_str).map(ToString::to_string).unwrap_or_else(|| Uuid::new_v4().to_string()),
+                id: checkpoint
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| Uuid::new_v4().to_string()),
                 task_id: record.id.clone(),
-                agent_id: checkpoint.get("agent_id").and_then(Value::as_str).unwrap_or("agentflow").to_string(),
-                agent_name: checkpoint.get("agent_name").and_then(Value::as_str).unwrap_or("AgentFlow").to_string(),
-                agent_type: checkpoint.get("role").or_else(|| checkpoint.get("agent_type")).and_then(Value::as_str).unwrap_or("agentflow").to_string(),
-                parent_agent_id: checkpoint.get("parent_agent_id").and_then(Value::as_str).map(ToString::to_string),
-                iteration: checkpoint.get("iteration").and_then(Value::as_i64).unwrap_or(0),
-                status: checkpoint.get("status").and_then(Value::as_str).unwrap_or("completed").to_string(),
-                total_tokens: checkpoint.get("tokens_used").and_then(Value::as_i64).unwrap_or(0),
-                tool_calls: checkpoint.get("tool_calls").and_then(Value::as_i64).unwrap_or(0),
-                findings_count: checkpoint.get("findings_count").and_then(Value::as_i64).unwrap_or(0),
-                checkpoint_type: checkpoint.get("type").or_else(|| checkpoint.get("checkpoint_type")).and_then(Value::as_str).unwrap_or("agentflow").to_string(),
-                checkpoint_name: checkpoint.get("name").and_then(Value::as_str).map(ToString::to_string),
-                created_at: checkpoint.get("created_at").and_then(Value::as_str).map(ToString::to_string).or_else(|| Some(now_rfc3339())),
-                state_data: checkpoint.get("state_data").cloned().unwrap_or_else(|| json!({"topology_version": topology_version})),
-                metadata: Some(json!({"source": "agentflow", "topology_version": topology_version})),
+                agent_id: checkpoint
+                    .get("agent_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("agentflow")
+                    .to_string(),
+                agent_name: checkpoint
+                    .get("agent_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("AgentFlow")
+                    .to_string(),
+                agent_type: checkpoint
+                    .get("role")
+                    .or_else(|| checkpoint.get("agent_type"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("agentflow")
+                    .to_string(),
+                parent_agent_id: checkpoint
+                    .get("parent_agent_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                iteration: checkpoint
+                    .get("iteration")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
+                status: checkpoint
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("completed")
+                    .to_string(),
+                total_tokens: checkpoint
+                    .get("tokens_used")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
+                tool_calls: checkpoint
+                    .get("tool_calls")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
+                findings_count: checkpoint
+                    .get("findings_count")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
+                checkpoint_type: checkpoint
+                    .get("type")
+                    .or_else(|| checkpoint.get("checkpoint_type"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("agentflow")
+                    .to_string(),
+                checkpoint_name: checkpoint
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                created_at: checkpoint
+                    .get("created_at")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .or_else(|| Some(now_rfc3339())),
+                state_data: checkpoint
+                    .get("state_data")
+                    .cloned()
+                    .unwrap_or_else(|| json!({"topology_version": topology_version})),
+                metadata: Some(
+                    json!({"source": "agentflow", "topology_version": topology_version}),
+                ),
             });
         }
     }
@@ -341,55 +439,157 @@ fn import_findings(record: &mut AgentTaskRecord, output: &Value) -> ImportResult
     if let Some(findings) = output.get("findings").and_then(Value::as_array) {
         for finding in findings {
             validate_no_static_candidates(finding)?;
-            let id = finding.get("id").and_then(Value::as_str).map(ToString::to_string).unwrap_or_else(|| Uuid::new_v4().to_string());
+            let id = finding
+                .get("id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
             record.findings.push(AgentFindingRecord {
                 id,
                 task_id: record.id.clone(),
-                vulnerability_type: finding.get("vulnerability_type").or_else(|| finding.get("type")).and_then(Value::as_str).unwrap_or("unknown").to_string(),
-                severity: finding.get("severity").and_then(Value::as_str).unwrap_or("medium").to_string(),
-                title: finding.get("title").and_then(Value::as_str).unwrap_or("AgentFlow finding").to_string(),
-                display_title: finding.get("display_title").and_then(Value::as_str).map(ToString::to_string),
-                description: finding.get("description").and_then(Value::as_str).map(ToString::to_string),
-                description_markdown: finding.get("description_markdown").and_then(Value::as_str).map(ToString::to_string),
-                file_path: finding.get("file_path").and_then(Value::as_str).map(ToString::to_string),
+                vulnerability_type: finding
+                    .get("vulnerability_type")
+                    .or_else(|| finding.get("type"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_string(),
+                severity: finding
+                    .get("severity")
+                    .and_then(Value::as_str)
+                    .unwrap_or("medium")
+                    .to_string(),
+                title: finding
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("AgentFlow finding")
+                    .to_string(),
+                display_title: finding
+                    .get("display_title")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                description: finding
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                description_markdown: finding
+                    .get("description_markdown")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                file_path: finding
+                    .get("file_path")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 line_start: finding.get("line_start").and_then(Value::as_i64),
                 line_end: finding.get("line_end").and_then(Value::as_i64),
-                resolved_file_path: finding.get("resolved_file_path").and_then(Value::as_str).map(ToString::to_string),
+                resolved_file_path: finding
+                    .get("resolved_file_path")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 resolved_line_start: finding.get("resolved_line_start").and_then(Value::as_i64),
-                code_snippet: finding.get("code_snippet").and_then(Value::as_str).map(ToString::to_string),
-                code_context: finding.get("code_context").and_then(Value::as_str).map(ToString::to_string),
-                cwe_id: finding.get("cwe_id").and_then(Value::as_str).map(ToString::to_string),
-                cwe_name: finding.get("cwe_name").and_then(Value::as_str).map(ToString::to_string),
+                code_snippet: finding
+                    .get("code_snippet")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                code_context: finding
+                    .get("code_context")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                cwe_id: finding
+                    .get("cwe_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                cwe_name: finding
+                    .get("cwe_name")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 context_start_line: finding.get("context_start_line").and_then(Value::as_i64),
                 context_end_line: finding.get("context_end_line").and_then(Value::as_i64),
-                status: finding.get("status").and_then(Value::as_str).unwrap_or("verified").to_string(),
-                is_verified: finding.get("is_verified").and_then(Value::as_bool).unwrap_or(true),
-                verdict: finding.get("verdict").and_then(Value::as_str).map(ToString::to_string),
-                reachability: finding.get("reachability").and_then(Value::as_str).map(ToString::to_string),
-                authenticity: finding.get("authenticity").and_then(Value::as_str).map(ToString::to_string),
-                verification_evidence: finding.get("verification_evidence").and_then(Value::as_str).map(ToString::to_string),
-                verification_todo_id: finding.get("verification_todo_id").and_then(Value::as_str).map(ToString::to_string),
-                verification_fingerprint: finding.get("verification_fingerprint").and_then(Value::as_str).map(ToString::to_string),
-                reachability_file: finding.get("reachability_file").and_then(Value::as_str).map(ToString::to_string),
-                reachability_function: finding.get("reachability_function").and_then(Value::as_str).map(ToString::to_string),
-                reachability_function_start_line: finding.get("reachability_function_start_line").and_then(Value::as_i64),
-                reachability_function_end_line: finding.get("reachability_function_end_line").and_then(Value::as_i64),
+                status: finding
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("verified")
+                    .to_string(),
+                is_verified: finding
+                    .get("is_verified")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                verdict: finding
+                    .get("verdict")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                reachability: finding
+                    .get("reachability")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                authenticity: finding
+                    .get("authenticity")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                verification_evidence: finding
+                    .get("verification_evidence")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                verification_todo_id: finding
+                    .get("verification_todo_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                verification_fingerprint: finding
+                    .get("verification_fingerprint")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                reachability_file: finding
+                    .get("reachability_file")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                reachability_function: finding
+                    .get("reachability_function")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                reachability_function_start_line: finding
+                    .get("reachability_function_start_line")
+                    .and_then(Value::as_i64),
+                reachability_function_end_line: finding
+                    .get("reachability_function_end_line")
+                    .and_then(Value::as_i64),
                 flow_path_score: finding.get("flow_path_score").and_then(Value::as_f64),
                 flow_call_chain: string_vec(finding.get("flow_call_chain")),
                 function_trigger_flow: string_vec(finding.get("function_trigger_flow")),
                 flow_control_conditions: string_vec(finding.get("flow_control_conditions")),
                 logic_authz_evidence: string_vec(finding.get("logic_authz_evidence")),
-                has_poc: finding.get("has_poc").and_then(Value::as_bool).unwrap_or(false),
-                poc_code: finding.get("poc_code").and_then(Value::as_str).map(ToString::to_string),
+                has_poc: finding
+                    .get("has_poc")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                poc_code: finding
+                    .get("poc_code")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 trigger_flow: finding.get("trigger_flow").cloned(),
                 poc_trigger_chain: finding.get("poc_trigger_chain").cloned(),
-                suggestion: finding.get("suggestion").or_else(|| finding.get("remediation")).and_then(Value::as_str).map(ToString::to_string),
-                fix_code: finding.get("fix_code").and_then(Value::as_str).map(ToString::to_string),
-                report: finding.get("report").and_then(Value::as_str).map(ToString::to_string),
-                ai_explanation: finding.get("ai_explanation").and_then(Value::as_str).map(ToString::to_string),
+                suggestion: finding
+                    .get("suggestion")
+                    .or_else(|| finding.get("remediation"))
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                fix_code: finding
+                    .get("fix_code")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                report: finding
+                    .get("report")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                ai_explanation: finding
+                    .get("ai_explanation")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 ai_confidence: finding.get("ai_confidence").and_then(Value::as_f64),
                 confidence: finding.get("confidence").and_then(Value::as_f64),
-                created_at: finding.get("created_at").and_then(Value::as_str).map(ToString::to_string).unwrap_or_else(now_rfc3339),
+                created_at: finding
+                    .get("created_at")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(now_rfc3339),
             });
         }
     }
@@ -423,7 +623,11 @@ fn default_agent_tree(record: &AgentTaskRecord, topology_version: &str) -> Vec<V
 
 fn refresh_aggregates(record: &mut AgentTaskRecord) {
     record.findings_count = record.findings.len() as i64;
-    record.verified_count = record.findings.iter().filter(|finding| finding.is_verified).count() as i64;
+    record.verified_count = record
+        .findings
+        .iter()
+        .filter(|finding| finding.is_verified)
+        .count() as i64;
     record.critical_count = count_severity(record, "critical");
     record.high_count = count_severity(record, "high");
     record.medium_count = count_severity(record, "medium");
@@ -432,15 +636,30 @@ fn refresh_aggregates(record: &mut AgentTaskRecord) {
     record.verified_high_count = count_verified_severity(record, "high");
     record.verified_medium_count = count_verified_severity(record, "medium");
     record.verified_low_count = count_verified_severity(record, "low");
-    record.security_score = Some((100.0 - (record.critical_count * 20 + record.high_count * 12 + record.medium_count * 6 + record.low_count * 2) as f64).max(0.0));
+    record.security_score = Some(
+        (100.0
+            - (record.critical_count * 20
+                + record.high_count * 12
+                + record.medium_count * 6
+                + record.low_count * 2) as f64)
+            .max(0.0),
+    );
 }
 
 fn count_severity(record: &AgentTaskRecord, severity: &str) -> i64 {
-    record.findings.iter().filter(|finding| finding.severity.eq_ignore_ascii_case(severity)).count() as i64
+    record
+        .findings
+        .iter()
+        .filter(|finding| finding.severity.eq_ignore_ascii_case(severity))
+        .count() as i64
 }
 
 fn count_verified_severity(record: &AgentTaskRecord, severity: &str) -> i64 {
-    record.findings.iter().filter(|finding| finding.is_verified && finding.severity.eq_ignore_ascii_case(severity)).count() as i64
+    record
+        .findings
+        .iter()
+        .filter(|finding| finding.is_verified && finding.severity.eq_ignore_ascii_case(severity))
+        .count() as i64
 }
 
 fn push_import_event(
@@ -615,7 +834,10 @@ mod tests {
         assert_eq!(record.status, "completed");
         assert_eq!(record.findings_count, 1);
         assert_eq!(record.high_count, 1);
-        assert_eq!(record.findings[0].suggestion.as_deref(), Some("normalize paths"));
+        assert_eq!(
+            record.findings[0].suggestion.as_deref(),
+            Some("normalize paths")
+        );
         assert!(record.audit_scope.unwrap()["agentflow"]["run_id"] == "run-1");
     }
 }

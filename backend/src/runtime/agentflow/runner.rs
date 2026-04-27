@@ -34,16 +34,25 @@ pub struct RunnerError {
 
 impl RunnerError {
     fn new(reason_code: &'static str, message: impl Into<String>) -> Self {
-        Self { reason_code, message: message.into() }
+        Self {
+            reason_code,
+            message: message.into(),
+        }
     }
 }
 
 pub async fn run_controlled_command(command: RunnerCommand) -> Result<RunnerOutcome, RunnerError> {
     if command.program.trim().is_empty() {
-        return Err(RunnerError::new("runner_missing", "AgentFlow runner command is empty"));
+        return Err(RunnerError::new(
+            "runner_missing",
+            "AgentFlow runner command is empty",
+        ));
     }
     let mut child = Command::new(&command.program);
-    child.args(&command.args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    child
+        .args(&command.args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(cwd) = &command.cwd {
         child.current_dir(cwd);
     }
@@ -51,17 +60,32 @@ pub async fn run_controlled_command(command: RunnerCommand) -> Result<RunnerOutc
         child.stdin(Stdio::piped());
     }
     let mut child = child.spawn().map_err(|error| {
-        RunnerError::new("runner_missing", format!("failed to spawn AgentFlow runner `{}`: {error}", command.program))
+        RunnerError::new(
+            "runner_missing",
+            format!(
+                "failed to spawn AgentFlow runner `{}`: {error}",
+                command.program
+            ),
+        )
     })?;
     if let Some(stdin_json) = command.stdin_json {
-        let mut stdin = child.stdin.take().ok_or_else(|| RunnerError::new("runner_failed", "runner stdin unavailable"))?;
-        let bytes = serde_json::to_vec(&stdin_json).map_err(|error| RunnerError::new("runner_failed", error.to_string()))?;
-        stdin.write_all(&bytes).await.map_err(|error| RunnerError::new("runner_failed", error.to_string()))?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| RunnerError::new("runner_failed", "runner stdin unavailable"))?;
+        let bytes = serde_json::to_vec(&stdin_json)
+            .map_err(|error| RunnerError::new("runner_failed", error.to_string()))?;
+        stdin
+            .write_all(&bytes)
+            .await
+            .map_err(|error| RunnerError::new("runner_failed", error.to_string()))?;
     }
 
     let timeout = Duration::from_secs(command.timeout_seconds.max(1));
     let output = match time::timeout(timeout, child.wait_with_output()).await {
-        Ok(result) => result.map_err(|error| RunnerError::new("runner_failed", error.to_string()))?,
+        Ok(result) => {
+            result.map_err(|error| RunnerError::new("runner_failed", error.to_string()))?
+        }
         Err(_) => {
             return Ok(RunnerOutcome {
                 exit_code: None,
@@ -96,18 +120,27 @@ mod tests {
     #[test]
     fn agentflow_runner_tails_are_bounded_and_utf8_lossy() {
         let bytes = vec![b'a'; DEFAULT_TAIL_LIMIT + 10];
-        assert_eq!(tail_utf8(&bytes, DEFAULT_TAIL_LIMIT).len(), DEFAULT_TAIL_LIMIT);
+        assert_eq!(
+            tail_utf8(&bytes, DEFAULT_TAIL_LIMIT).len(),
+            DEFAULT_TAIL_LIMIT
+        );
     }
 
     #[tokio::test]
     async fn agentflow_runner_collects_fake_process_json_and_redacts_logs() {
         let outcome = run_controlled_command(RunnerCommand {
             program: "sh".to_string(),
-            args: vec!["-c".to_string(), "printf '{\"runtime\":\"agentflow\"}'; printf 'Authorization: secret' >&2".to_string()],
+            args: vec![
+                "-c".to_string(),
+                "printf '{\"runtime\":\"agentflow\"}'; printf 'Authorization: secret' >&2"
+                    .to_string(),
+            ],
             cwd: None,
             timeout_seconds: 5,
             stdin_json: None,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         assert_eq!(outcome.exit_code, Some(0));
         assert_eq!(outcome.output_json.unwrap()["runtime"], "agentflow");
         assert!(!outcome.stderr_tail.contains("secret"));
