@@ -38,7 +38,6 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=512m
     volumes:
-  agentflow_runner_work:
       - .:/workspace/src:ro
       - ./backend/agentflow:/app/backend/agentflow:ro
       - agentflow_runner_work:/work
@@ -274,6 +273,7 @@ networks:
     driver: bridge
 
 volumes:
+  agentflow_runner_work:
   postgres_data:
   backend_uploads:
   backend_runtime_data:
