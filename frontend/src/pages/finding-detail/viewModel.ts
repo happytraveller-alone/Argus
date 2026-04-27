@@ -414,6 +414,14 @@ function buildAgentMarkdownNarrativeSections(
   finding: AgentFinding,
 ): FindingDetailNarrativeSection[] {
   const sections = extractMarkdownSections(String(finding.description_markdown || ""));
+  const impact = String(finding.impact || sections.get("业务影响") || "").trim();
+  const remediation = String(
+    finding.remediation || finding.suggestion || sections.get("修复建议") || "",
+  ).trim();
+  const verification = String(
+    finding.verification || finding.verification_evidence || sections.get("验证结论") || "",
+  ).trim();
+
   return [
     buildNarrativeSection({
       id: `agent:${finding.id}:root-cause`,
@@ -422,7 +430,52 @@ function buildAgentMarkdownNarrativeSections(
       content: sections.get("根因解释"),
       emptyBody: MISSING_MARKDOWN_SECTION,
     }),
+    buildNarrativeSection({
+      id: `agent:${finding.id}:impact`,
+      title: "影响分析",
+      emphasis: "secondary",
+      content: impact,
+      emptyBody: MISSING_MARKDOWN_SECTION,
+    }),
+    buildNarrativeSection({
+      id: `agent:${finding.id}:remediation`,
+      title: "修复建议",
+      emphasis: "success",
+      content: remediation,
+      emptyBody: MISSING_MARKDOWN_SECTION,
+    }),
+    buildNarrativeSection({
+      id: `agent:${finding.id}:verification`,
+      title: "验证结论",
+      emphasis: "neutral",
+      content: verification,
+      emptyBody: MISSING_MARKDOWN_SECTION,
+    }),
   ];
+}
+
+function buildAgentFlowSourceItems(finding: AgentFinding): FindingDetailTrackingItem[] {
+  const items: FindingDetailTrackingItem[] = [{ label: "来源", value: "AgentFlow 智能审计" }];
+  const nodeName = String(finding.source_node_name || finding.source_node_id || "").trim();
+  if (nodeName) {
+    items.push({ label: "来源节点", value: nodeName, mono: Boolean(finding.source_node_id) });
+  }
+  const role = String(finding.source_role || "").trim();
+  if (role) {
+    items.push({ label: "来源角色", value: role });
+  }
+  if (Array.isArray(finding.artifact_refs) && finding.artifact_refs.length > 0) {
+    items.push({
+      label: "Artifact",
+      value: finding.artifact_refs
+        .map((artifact) => String(artifact?.path || "").trim())
+        .filter(Boolean)
+        .slice(0, 3)
+        .join("；") || MISSING_VALUE,
+      mono: true,
+    });
+  }
+  return items;
 }
 
 function parseStaticEndLine(finding: OpengrepFinding): number | null {
@@ -822,13 +875,16 @@ export function buildAgentFindingDetailModel(params: {
     cwe: finding.cwe_id,
     fallbackLabel: String(finding.vulnerability_type || "").trim() || MISSING_VALUE,
   });
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "智能审计",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    location,
-    includeSource: false,
-  });
+  const trackingItems = [
+    ...buildTrackingItems({
+      sourceLabel: "AgentFlow 智能审计",
+      taskId: params.taskId,
+      findingId: params.findingId,
+      location,
+      includeSource: false,
+    }),
+    ...buildAgentFlowSourceItems(finding),
+  ];
   const codeSections = buildFindingDetailCodeSections(buildAgentFindingCodeViews(finding));
 
   if (isFalsePositive) {
