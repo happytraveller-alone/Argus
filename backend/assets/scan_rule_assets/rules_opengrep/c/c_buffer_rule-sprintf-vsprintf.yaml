@@ -23,8 +23,6 @@ rules:
   pattern-either:
   - pattern: sprintf(...)
   - pattern: vsprintf(...)
-  - pattern: swprintf(...)
-  - pattern: vswprintf(...)
   - pattern: _stprintf(...)
   - pattern: _vstprintf(...)
   severity: ERROR

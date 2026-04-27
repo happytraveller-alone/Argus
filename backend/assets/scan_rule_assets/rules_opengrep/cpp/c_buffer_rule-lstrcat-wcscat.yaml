@@ -18,9 +18,20 @@ rules:
     - A03:2021-Injection
     security-severity: High
     category: security
-  pattern-either:
-  - pattern: lstrcat(...)
-  - pattern: wcscat(...)
-  - pattern: _tcscat(...)
-  - pattern: _mbscat(...)
+  patterns:
+  - pattern-either:
+    - pattern: lstrcat(...)
+    - pattern: wcscat(...)
+    - pattern: _tcscat(...)
+    - pattern: _mbscat(...)
+  - pattern-not-inside: |
+      $LEN = wcslen($SRC);
+      ...
+      $SIZE = $BASE_LEN + $LEN + 2;
+      ...
+      $NEW = av_realloc_array($BASE, $SIZE, sizeof *$BASE);
+      ...
+      $BASE = $NEW;
+      ...
+      wcscat($BASE, $SRC);
   severity: ERROR

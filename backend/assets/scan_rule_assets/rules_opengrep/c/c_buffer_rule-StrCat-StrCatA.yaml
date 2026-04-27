@@ -18,7 +18,8 @@ rules:
     security-severity: High
     category: security
   pattern-either:
-  - pattern: strcat(...)
+  - pattern: StrCatA(...)
+  - pattern: StrCatW(...)
   - pattern: strcatA(...)
   - pattern: StrcatW(...)
   - pattern: lstrcatA(...)
