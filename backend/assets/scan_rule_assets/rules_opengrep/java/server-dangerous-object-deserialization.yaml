@@ -8,10 +8,8 @@ rules:
     - https://mogwailabs.de/blog/2019/03/attacking-java-rmi-services-after-jep-290/
     - https://frohoff.github.io/appseccali-marshalling-pickles/
   message: |
-    Using an arbitrary object ('Object $PARAM') with Java RMI is an insecure deserialization
-    vulnerability. This object can be manipulated by a malicious actor allowing them to execute
-    code on your system. Instead, use an integer ID to look up your object, or consider alternative
-    serializiation schemes such as JSON.
+    检测到不安全反序列化风险（规则：server-dangerous-object-deserialization）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：$PARAM。
   patterns:
   - pattern: |
       interface $INTERFACE extends Remote {

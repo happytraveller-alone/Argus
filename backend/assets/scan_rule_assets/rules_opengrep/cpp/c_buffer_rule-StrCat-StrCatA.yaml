@@ -3,12 +3,9 @@ rules:
   languages:
   - cpp
   message: |
-    The `StrCat` family of functions do not guarantee the final string to be null terminated.
-    Consider using one of the following alternatives: `StringCbCat`, `StringCbCatEx`,
-    `StringCbCatN`, `StringCbCatNEx`, `StringCchCat`, `StringCchCatEx`, `StringCchCatN`, or
-    `StringCchCatNEx`.
-
-    For more information please see: https://learn.microsoft.com/en-us/windows/win32/api/strsafe/
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-StrCat-StrCatA）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+    保留的关键标识：https://learn.microsoft.com/en-us/windows/win32/api/strsafe/、`StrCat`、`StringCbCat`、`StringCbCatEx`、`StringCbCatN`、`StringCbCatNEx`、`StringCchCat`、`StringCchCatEx`、`StringCchCatN`、`StringCchCatNEx`。
   metadata:
     shortDescription: Insecure string processing function
     cwe: CWE-120

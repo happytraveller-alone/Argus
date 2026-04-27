@@ -9,7 +9,8 @@ rules:
         $S = new SecretKeySpec($P.getBytes(), "AES");
         ...
         $C.init(..., $S);
-  message: Hardcoded encryption key makes AES symmetric encryption useless. An attacker can easily reverse engineer the application and recover the keys.
+  message: |
+    检测到硬编码凭据风险（规则：aes_hardcoded_key）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
   languages:
   - java
   severity: ERROR

@@ -3,15 +3,8 @@ rules:
   languages:
   - c
   message: |
-    Format specifiers can take optional field widths, which should be
-    used to limit how many characters are copied into the target buffer.
-
-    Example:
-    ```
-      const char str[20] = "AAAAAAAAAAAAAAAAAAA";
-      char buf[11] = {0};
-      sscanf(str, "%10s", &buf); // buf = AAAAAAAAAA\0
-    ```
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-fscanf-sscanf）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
   metadata:
     shortDescription: sscanf() functions may allow format string based overflows
     cwe: CWE-120

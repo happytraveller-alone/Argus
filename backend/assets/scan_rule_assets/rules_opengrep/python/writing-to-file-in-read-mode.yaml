@@ -1,8 +1,8 @@
 rules:
 - id: writing-to-file-in-read-mode
   message: |
-    The file object '$FD' was opened in read mode, but is being
-    written to. This will cause a runtime error.
+    检测到文件打开模式错误缺陷（规则：writing-to-file-in-read-mode）。危害：以只读模式打开的文件被写入会触发运行时错误，导致数据写入失败。建议：根据用途使用写入、追加或读写模式打开文件。
+    保留的关键标识：$FD、'$FD'。
   patterns:
   - pattern-either:
     - pattern-inside: |

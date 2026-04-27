@@ -35,7 +35,8 @@ rules:
         ...
         $CON.query(<... $SQL ...>, ...)
   message: |
-    Untrusted input concatinated with raw SQL query can result in SQL Injection.
+    检测到SQL 注入风险（规则：rules_lgpl_javascript_database_rule-node-sqli-injection）。危害：未受信任输入可能改变 SQL
+    语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全 API，避免拼接原始 SQL。
   languages:
   - javascript
   severity: ERROR

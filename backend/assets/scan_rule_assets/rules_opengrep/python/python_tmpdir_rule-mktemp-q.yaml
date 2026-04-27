@@ -3,30 +3,9 @@ rules:
   languages:
   - python
   message: |
-    The application was found creating temporary files with the insecure `mktemp` method.
-    Depending on how the application uses this temporary file, an attacker may be able to create
-    symlinks that point to other files prior to the application creating or writing
-    to the target file, leading to unintended files being created or overwritten.
-
-    To remediate this issue consider using `tempfile.TemporaryFile` instead.
-
-    Example using `tempfile.TemporaryFile` to write a file:
-    ```
-    import tempfile
-
-    # Open a new temporary file using a context manager
-    with tempfile.TemporaryFile() as fp:
-        # Write some data to the temporary file
-        fp.write(b'Some data')
-        # Seek back to beginning of file
-        fp.seek(0)
-        # Read it
-        data = fp.read()
-    # File is automatically closed/removed once we exit the with context
-    ```
-
-    For more information on alternative tempfile functions see:
-    - https://docs.python.org/3/library/tempfile.html
+    检测到临时文件使用不安全风险（规则：python_tmpdir_rule-mktemp-q）。危害：可预测或未同步的临时文件可能被抢占、覆盖或读取，造成信息泄露或文件篡改。建议：使用安全的临时文件创建
+    API，并在使用前正确刷新/关闭。
+    保留的关键标识：https://docs.python.org/3/library/tempfile.html、`mktemp`、`tempfile.TemporaryFile`。
   metadata:
     cwe: CWE-377
     category: security
@@ -41,30 +20,9 @@ rules:
   languages:
   - python
   message: |
-    The application was found creating temporary files with the insecure `mktemp` method.
-    Depending on how the application uses this temporary file, an attacker may be able to create
-    symlinks that point to other files prior to the application creating or writing
-    to the target file, leading to unintended files being created or overwritten.
-
-    To remediate this issue consider using `tempfile.TemporaryFile` instead.
-
-    Example using `tempfile.TemporaryFile` to write a file:
-    ```
-    import tempfile
-
-    # Open a new temporary file using a context manager
-    with tempfile.TemporaryFile() as fp:
-        # Write some data to the temporary file
-        fp.write(b'Some data')
-        # Seek back to beginning of file
-        fp.seek(0)
-        # Read it
-        data = fp.read()
-    # File is automatically closed/removed once we exit the with context
-    ```
-
-    For more information on alternative tempfile functions see:
-    - https://docs.python.org/3/library/tempfile.html
+    检测到临时文件使用不安全风险（规则：python_tmpdir_rule-mktemp-q_1）。危害：可预测或未同步的临时文件可能被抢占、覆盖或读取，造成信息泄露或文件篡改。建议：使用安全的临时文件创建
+    API，并在使用前正确刷新/关闭。
+    保留的关键标识：https://docs.python.org/3/library/tempfile.html、`mktemp`、`tempfile.TemporaryFile`。
   metadata:
     cwe: CWE-377
     category: security

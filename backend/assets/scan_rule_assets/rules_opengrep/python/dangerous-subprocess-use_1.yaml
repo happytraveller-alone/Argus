@@ -2,7 +2,9 @@ rules:
 - id: dangerous-subprocess-use_1
   languages:
   - python
-  message: Detected subprocess function with argument tainted by an `event` object.  If this data can be controlled by a malicious actor, it may be an instance of command injection. The default option for `shell` is False, and this is secure by default. Consider removing the `shell=True` or setting it to False explicitely. Using `shell=False` means you have to split the command string into an array of strings for the command and its arguments. You may consider using 'shlex.split()' for this purpose.
+  message: |
+    检测到命令注入风险（规则：dangerous-subprocess-use_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：shlex.split()、'shlex.split()'、`event`、`shell`、`shell=True`、`shell=False`。
   metadata:
     asvs:
       control_id: 5.3.8 OS Command Injection

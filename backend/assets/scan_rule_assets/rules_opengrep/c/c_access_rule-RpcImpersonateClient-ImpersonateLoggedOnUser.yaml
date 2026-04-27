@@ -3,15 +3,8 @@ rules:
   languages:
   - c
   message: |
-    These functions may be used to either drop or change account privileges. If the calls
-    fail, the process will continue to run with the privileges assigned to it on start. Depending
-    on
-    the logic of the application, this may allow attackers to abuse the system due to privileges
-    never
-    being changed to a different access level.
-
-    Always ensure return values of this function are checked to determine if the application should
-    continue to operate.
+    检测到权限/访问控制缺陷（规则：c_access_rule-RpcImpersonateClient-ImpersonateLoggedOnUser）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。
   metadata:
     shortDescription: Ensure return values are checked when attempting to drop privileges
     cwe: CWE-250

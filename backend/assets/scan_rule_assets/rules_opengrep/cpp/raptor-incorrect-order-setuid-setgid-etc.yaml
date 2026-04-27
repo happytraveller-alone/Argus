@@ -12,7 +12,9 @@ rules:
     - 'CWE-696: Incorrect Behavior Order'
     - 'CWE-269: Improper Privilege Management'
     - 'CWE-284: Improper Access Control'
-  message: A compromised process might be able to regain elevated group privileges if set(e)gid() is called after set(e)uid(). A similar case is when  privileges are temporarily dropped with seteuid() and then setuid() or  seteuid() are called from while under unprivileged user.
+  message: |
+    检测到权限/访问控制缺陷（规则：raptor-incorrect-order-setuid-setgid-etc）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。 保留的关键标识：gid()、uid()、seteuid()、setuid()、set(e)。
   severity: ERROR
   languages:
   - cpp

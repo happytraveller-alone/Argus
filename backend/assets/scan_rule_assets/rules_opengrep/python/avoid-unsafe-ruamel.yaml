@@ -8,10 +8,8 @@ rules:
   languages:
   - python
   message: |
-    Avoid using unsafe `ruamel.yaml.YAML()`. `ruamel.yaml.YAML` can
-    create arbitrary Python objects. A malicious actor could exploit
-    this to run arbitrary code. Use `YAML(typ='rt')` or
-    `YAML(typ='safe')` instead.
+    检测到不安全反序列化风险（规则：avoid-unsafe-ruamel）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：ruamel.yaml.YAML()、YAML(typ='rt')、YAML(typ='safe')、'rt'、'safe'、`ruamel.yaml.YAML()`、`ruamel.yaml.YAML`、`YAML(typ='rt')`、`YAML(typ='safe')`。
   severity: ERROR
   pattern-either:
   - pattern: ruamel.yaml.YAML(..., typ='unsafe', ...)

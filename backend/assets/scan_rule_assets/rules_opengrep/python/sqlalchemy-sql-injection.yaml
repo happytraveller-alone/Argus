@@ -1,6 +1,8 @@
 rules:
 - id: sqlalchemy-sql-injection
-  message: Distinct, Having, Group_by, Order_by, and Filter in SQLAlchemy can cause sql injections if the developer inputs raw SQL into the before-mentioned clauses. This pattern captures relevant cases in which the developer inputs raw SQL into the distinct, having, group_by, order_by or filter clauses and injects user-input into the raw SQL with any function besides "bindparams". Use bindParams to securely bind user-input to SQL statements.
+  message: |
+    检测到SQL 注入风险（规则：sqlalchemy-sql-injection）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM
+    的安全 API，避免拼接原始 SQL。 保留的关键标识："bindparams"。
   languages:
   - python
   severity: ERROR

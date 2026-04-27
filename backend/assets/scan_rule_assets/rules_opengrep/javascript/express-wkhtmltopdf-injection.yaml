@@ -1,7 +1,8 @@
 rules:
 - id: express-wkhtmltopdf-injection
   message: |
-    If unverified user data can reach the `phantom` methods it can result in Server-Side Request Forgery vulnerabilities
+    检测到服务端请求伪造（SSRF）风险（规则：express-wkhtmltopdf-injection）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`phantom`。
   metadata:
     owasp: 'A1: Injection'
     cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
@@ -36,7 +37,9 @@ rules:
 - id: express-wkhtmltopdf-injection_1
   languages:
   - javascript
-  message: If unverified user data can reach the `wkhtmltopdf` methods it can result in Server-Side Request Forgery vulnerabilities
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：express-wkhtmltopdf-injection_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`wkhtmltopdf`。
   metadata:
     category: security
     confidence: LOW

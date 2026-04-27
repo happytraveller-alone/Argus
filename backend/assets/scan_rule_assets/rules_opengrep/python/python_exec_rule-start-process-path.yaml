@@ -3,7 +3,7 @@ rules:
   languages:
   - python
   message: |
-    Starting a process with a partial executable path
+    检测到命令注入风险（规则：python_exec_rule-start-process-path）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
   patterns:
   - pattern-either:
     - pattern: subprocess.Popen($BIN, shell=False)

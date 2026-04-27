@@ -1,6 +1,9 @@
 rules:
 - id: jwt-simple-noverify
-  message: Detected the decoding of a JWT token without a verify step. JWT tokens must be verified before use, otherwise the token's integrity is unknown. This means a malicious actor could forge a JWT token with any claims. Set 'verify' to `true` before using the token.
+  message: |
+    检测到JWT
+    验证/密钥配置风险（规则：jwt-simple-noverify）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
+    保留的关键标识：'verify'、`true`。
   severity: ERROR
   metadata:
     owasp:

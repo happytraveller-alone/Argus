@@ -197,7 +197,9 @@ rules:
             def $F(..., $D=[], ...):
               ...
               $D.insert(...)
-  message: Function $F mutates default list $D. Instances of default function arguments in Python are shared between function calls.  Mutating a default function argument changes the result for all function consumers. This will most likely cause unexpected results, or lead to security vulnerabilities whereby one function consumer can either view or modify the data of another function consumer.
+  message: |
+    检测到Python 可变默认参数缺陷（规则：default-mutable-list）。危害：可变默认参数会在多次函数调用之间共享状态，导致数据串扰和难以复现的逻辑错误。建议：使用 `None`
+    作为默认值，并在函数体内创建新的列表或字典。 保留的关键标识：$F、$D。
   languages:
   - python
   severity: ERROR

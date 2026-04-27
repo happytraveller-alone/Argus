@@ -1,6 +1,8 @@
 rules:
 - id: vm-runincontext-injection
-  message: The `vm` module enables compiling and running code within V8 Virtual Machine contexts. The `vm` module is not a security mechanism. Do not use it to run untrusted code. If code passed to `vm` functions is controlled by user input it could result in command injection. Do not let user input in `vm` functions.
+  message: |
+    检测到命令注入风险（规则：vm-runincontext-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`vm`。
   metadata:
     owasp:
     - A03:2021 - Injection

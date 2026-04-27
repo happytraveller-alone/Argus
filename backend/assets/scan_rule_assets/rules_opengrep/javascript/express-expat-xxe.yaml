@@ -1,8 +1,8 @@
 rules:
 - id: express-expat-xxe
   message: |
-    Make sure that unverified user data can not reach the XML Parser,
-    as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：express-expat-xxe）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
   metadata:
     owasp: 'A4: XML External Entities (XXE)'
     cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
@@ -56,7 +56,9 @@ rules:
 - id: express-expat-xxe_1
   languages:
   - javascript
-  message: Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities.
+  message: |
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：express-expat-xxe_1）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
   metadata:
     asvs:
       control_id: 5.5.2 Insecue XML Deserialization

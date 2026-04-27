@@ -12,10 +12,8 @@ rules:
     replacement: https://
     count: 1
   message: |
-    Authentication detected over HTTP. HTTP does not provide any
-    encryption or protection for these authentication credentials.
-    This may expose these credentials to unauthhorized parties.
-    Use 'https://' instead.
+    检测到硬编码凭据风险（规则：no-auth-over-http）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：https://'、'https://'。
   metadata:
     cwe: 'CWE-523: Unprotected Transport of Credentials'
     owasp: 'A2: Broken Authentication'

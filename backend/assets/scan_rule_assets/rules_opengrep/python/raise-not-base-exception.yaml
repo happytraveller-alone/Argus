@@ -6,7 +6,9 @@ rules:
     - pattern: |
         $X: BaseException
         raise $X(...)
-  message: In Python3, a runtime `TypeError` will be thrown if you attempt to raise an object or class which does not inherit from `BaseException`
+  message: |
+    检测到异常类型使用缺陷（规则：raise-not-base-exception）。危害：抛出非 `BaseException` 派生对象会在 Python3
+    中触发运行时错误，掩盖原始控制流。建议：只抛出继承自 `BaseException` 的异常类型或实例。 保留的关键标识：`TypeError`、`BaseException`。
   languages:
   - python
   severity: ERROR

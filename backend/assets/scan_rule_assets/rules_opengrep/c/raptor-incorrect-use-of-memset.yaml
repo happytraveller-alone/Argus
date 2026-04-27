@@ -11,7 +11,9 @@ rules:
     - 'CWE-457: Use of Uninitialized Variable'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
-  message: The invocation of memset() is easy to get wrong. The second argument is the character and the third argument is the size, but sometimes these arguments are in the wrong order. This results in a no-op.
+  message: |
+    检测到内存清理调用错误风险（规则：raptor-incorrect-use-of-memset）。危害：参数顺序或长度错误可能导致清理无效，使敏感数据残留或逻辑失效。建议：确认 `memset`
+    的填充值和长度参数顺序正确，必要时使用显式清零 API。 保留的关键标识：memset()。
   severity: ERROR
   languages:
   - c

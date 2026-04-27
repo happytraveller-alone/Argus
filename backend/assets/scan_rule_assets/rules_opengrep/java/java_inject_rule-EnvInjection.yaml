@@ -1,47 +1,8 @@
 rules:
 - id: java_inject_rule-EnvInjection
   message: |
-    Detected input from a HTTPServletRequest going into the environment
-    variables of an 'exec' command. The user input is passed directly to
-    the Runtime.exec() function to set an environment variable. This allows
-    malicious input from the user to modify the command that will be executed.
-    To remediate this, do not pass user input directly to Runtime.exec().
-    Validate any user input before using it to set environment variables
-    or command arguments. Consider using an allow list of allowed values
-    rather than a deny list. If dynamic commands must be constructed, use
-    a map to look up valid values based on user input instead of using
-    the input directly.
-    Example of safely executing an OS command:
-    ```
-    public void doPost(HttpServletRequest request, HttpServletResponse response)
-          throws ServletException, IOException {
-      response.setContentType("text/html;charset=UTF-8");
-
-      String param = "";
-      if (request.getHeader("UserDefined") != null) {
-          param = request.getHeader("UserDefined");
-      }
-
-      param = java.net.URLDecoder.decode(param, "UTF-8");
-      String cmd = "/bin/cmd";
-
-      String[] allowList = {"FOO=true","FOO=false","BAR=true", "BAR=false"}
-      if(Arrays.asList(allowList).contains(param)){
-          String[] argsEnv = {param};
-      }
-
-      Runtime r = Runtime.getRuntime();
-
-      try {
-          Process p = r.exec(cmd, argsEnv);
-          printOSCommandResults(p, response);
-      } catch (IOException e) {
-          System.out.println("Problem executing command");
-          response.getWriter()
-                  .println(org.owasp.esapi.ESAPI.encoder().encodeForHTML(e.getMessage()));
-          return;
-      }
-    ```
+    检测到命令注入风险（规则：java_inject_rule-EnvInjection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：Runtime.exec()、'exec'。
   languages:
   - java
   severity: ERROR

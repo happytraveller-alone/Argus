@@ -12,40 +12,8 @@ rules:
       }
   - pattern: $Y.getObject(...);
   message: |
-    Deserialization of untrusted JMS ObjectMessage can lead to arbitrary
-    code execution. This vulnerability occurs when `ObjectMessage.getObject()`
-    is called to deserialize the payload of an ObjectMessage, potentially
-    allowing remote attackers to execute arbitrary code with the permissions
-    of the JMS MessageListener application.
-
-    To mitigate the issue, avoid deserialization of untrusted data and
-    consider alternative message formats or explicit whitelisting of
-    allowable classes for deserialization.
-
-    To implement allowlisting, override the ObjectInputStream#resolveClass()
-    method to limit deserialization to allowed classes only. This prevents
-    deserialization of any class except those explicitly permitted, such as
-    in the following example that restricts deserialization to the Bicycle
-    class only:
-
-    ```
-    // Code from https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
-    public class LookAheadObjectInputStream extends ObjectInputStream {
-        public LookAheadObjectInputStream(InputStream inputStream) throws IOException {
-            super(inputStream);
-        }
-        /**
-        * Only deserialize instances of our expected Bicycle class
-        */
-        @Override
-        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
-            if (!desc.getName().equals(Bicycle.class.getName())) {
-                throw new InvalidClassException("Unauthorized deserialization attempt", desc.getName());
-            }
-            return super.resolveClass(desc);
-        }
-    }
-    ```
+    检测到不安全反序列化风险（规则：java_deserialization_rule-InsecureJmsDeserialization）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：ObjectMessage.getObject()、`ObjectMessage.getObject()`。
   metadata:
     cwe: CWE-502
     owasp:

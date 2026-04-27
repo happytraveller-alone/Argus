@@ -4,11 +4,9 @@ rules:
   - pattern: document.write(<... document.location.$W ...>)
   - pattern: document.write(<... location.$W ...>)
   message: |
-    Detected possible DOM-based XSS. This occurs because a portion of the URL is being used
-    to construct an element added directly to the page. For example, a malicious actor could
-    send someone a link like this: http://www.some.site/page.html?default=<script>alert(document.cookie)</script>
-    which would add the script to the page.
-    Consider whitelisting appropriate values or using an approach which does not involve the URL.
+    检测到跨站脚本（XSS）风险（规则：dom-based-xss）。危害：未可信数据进入页面脚本或 DOM
+    可能执行恶意脚本，窃取凭据或劫持用户操作。建议：对输出做上下文编码，避免把用户输入直接写入可执行上下文。
+    保留的关键标识：http://www.some.site/page.html?default=<script、alert(document.cookie)。
   metadata:
     cwe: 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site Scripting'')'
     owasp: 'A7: Cross-site Scripting (XSS)'

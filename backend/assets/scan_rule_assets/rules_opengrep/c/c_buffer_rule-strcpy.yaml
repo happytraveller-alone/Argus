@@ -3,16 +3,8 @@ rules:
   languages:
   - c
   message: |
-    The `strcpy` family of functions do not provide the ability to limit or check buffer
-    sizes before copying to a destination buffer. This can lead to buffer overflows. Consider
-    using more secure alternatives such as `strncpy` and provide the correct limit to the
-    destination buffer and ensure the string is null terminated.
-
-    For more information please see: https://linux.die.net/man/3/strncpy
-
-    If developing for C Runtime Library (CRT), more secure versions of these functions should be
-    used, see:
-    https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strncpy-s-strncpy-s-l-wcsncpy-s-wcsncpy-s-l-mbsncpy-s-mbsncpy-s-l?view=msvc-170
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcpy）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。 保留的关键标识：https://linux.die.net/man/3/strncpy、`strcpy`、`strncpy`。
   metadata:
     shortDescription: Insecure string processing function (strcpy)
     cwe: CWE-120

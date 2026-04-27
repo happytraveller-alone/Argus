@@ -3,41 +3,8 @@ rules:
   languages:
   - java
   message: |
-    The application may allow control over a template string. Providing user input directly in the
-    template by
-    dynamically creating template strings may allow an adversary to execute arbitrary Java code,
-    including
-    OS system commands.
-
-    For Velocity, never call `evaluate` with user-supplied input in the template string. Use a
-    `VelocityContext`
-    object instead to data-bind user-supplied information as it will be treated as an underlying
-    data type and not
-    template code.
-
-    Example using Apache Velocity's `VelocityContext` and escape tools to pass in user-supplied
-    data to a template:
-    ```
-    // Create a tool manager
-    ToolManager manager = new ToolManager(true);
-    // Create a context from the tool manager
-    Context context = manager.createContext();
-    // For demonstration purposes, alternatively configure from a properties file
-    context.put("esc", new EscapeTool());
-    // For demonstration purposes, create an output buffer
-    StringWriter stringWriter = new StringWriter();
-    // Get userInput
-    String userInput = "potentially malicious data";
-    // Use the context to pass in the userInput value
-    context.put("userInput", userInput);
-    // Pass in the context, the output buffer, a logtag (demo), and the template with userInput
-    // making sure to escape it if in the context of HTML.
-    Velocity.evaluate(context, stringWriter, "demo", "Hello $esc.html($userInput)");
-    // Work with the output buffer
-    // ...
-    ```
-
-    For other templating engines, please see your framework's documentation.
+    检测到代码执行/模板注入风险（规则：java_templateinjection_rule-TemplateInjection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`evaluate`、`VelocityContext`。
   pattern-either:
   - patterns:
     - pattern: org.apache.velocity.app.Velocity.evaluate(..., $VAR)
@@ -74,41 +41,8 @@ rules:
   languages:
   - java
   message: |
-    The application may allow control over a template string. Providing user input directly in the
-    template by
-    dynamically creating template strings may allow an adversary to execute arbitrary Java code,
-    including
-    OS system commands.
-
-    For Velocity, never call `evaluate` with user-supplied input in the template string. Use a
-    `VelocityContext`
-    object instead to data-bind user-supplied information as it will be treated as an underlying
-    data type and not
-    template code.
-
-    Example using Apache Velocity's `VelocityContext` and escape tools to pass in user-supplied
-    data to a template:
-    ```
-    // Create a tool manager
-    ToolManager manager = new ToolManager(true);
-    // Create a context from the tool manager
-    Context context = manager.createContext();
-    // For demonstration purposes, alternatively configure from a properties file
-    context.put("esc", new EscapeTool());
-    // For demonstration purposes, create an output buffer
-    StringWriter stringWriter = new StringWriter();
-    // Get userInput
-    String userInput = "potentially malicious data";
-    // Use the context to pass in the userInput value
-    context.put("userInput", userInput);
-    // Pass in the context, the output buffer, a logtag (demo), and the template with userInput
-    // making sure to escape it if in the context of HTML.
-    Velocity.evaluate(context, stringWriter, "demo", "Hello $esc.html($userInput)");
-    // Work with the output buffer
-    // ...
-    ```
-
-    For other templating engines, please see your framework's documentation.
+    检测到代码执行/模板注入风险（规则：java_templateinjection_rule-TemplateInjection_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`evaluate`、`VelocityContext`。
   pattern-either:
   - patterns:
     - pattern: org.apache.velocity.app.Velocity.evaluate(..., $VAR)

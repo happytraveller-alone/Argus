@@ -26,11 +26,8 @@ rules:
       - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
       - pattern-not: subprocess.$FUNC(..., shell='', ...)
   message: |
-    Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
-    spawn the command using a shell process. Doing so propagates current shell settings and
-    variables,
-    which makes it much easier for a malicious actor to execute commands. Use `shell=False`
-    instead.
+    检测到命令注入风险（规则：python_exec_rule-subprocess-popen-shell-true）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：$FUNC、`subprocess`、`$FUNC`、`shell=True`、`shell=False`。
   metadata:
     cwe: CWE-78
     owasp:
@@ -67,11 +64,8 @@ rules:
       - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
       - pattern-not: subprocess.$FUNC(..., shell='', ...)
   message: |
-    Found `subprocess` function `$FUNC` with `shell=True`. This is dangerous because this call will
-    spawn the command using a shell process. Doing so propagates current shell settings and
-    variables,
-    which makes it much easier for a malicious actor to execute commands. Use `shell=False`
-    instead.
+    检测到命令注入风险（规则：python_exec_rule-subprocess-popen-shell-true_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：$FUNC、`subprocess`、`$FUNC`、`shell=True`、`shell=False`。
   metadata:
     cwe: CWE-78
     owasp:

@@ -14,7 +14,10 @@ rules:
         $Y =  new IvParameterSpec($X, ...);
         ...
         $C.getInstance("=~/AES/CBC.*/i");
-  message: The IV for AES CBC mode should be random. A static IV makes the ciphertext vulnerable to Chosen Plaintext Attack.
+  message: |
+    检测到弱加密/加密参数错误风险（规则：cbc_static_iv）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
   languages:
   - java
   severity: ERROR

@@ -28,7 +28,11 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: HIGH
-  message: DOCTYPE declarations are enabled for $DBFACTORY. Without prohibiting external entity declarations, this is vulnerable to XML external entity attacks. Disable this by setting the feature "http://apache.org/xml/features/disallow-doctype-decl" to true. Alternatively, allow DOCTYPE declarations and only prohibit external entities declarations. This can be done by setting the features "http://xml.org/sax/features/external-general-entities" and "http://xml.org/sax/features/external-parameter-entities" to false.
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：documentbuilderfactory-disallow-doctype-decl-false）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+    保留的关键标识：http://apache.org/xml/features/disallow-doctype-decl"、http://xml.org/sax/features/external-general-entities"、http://xml.org/sax/features/external-parameter-entities"、$DBFACTORY、"http://apache.org/xml/features/disallow-doctype-decl"、"http://xml.org/sax/features/external-general-entities"、"http://xml.org/sax/features/external-parameter-entities"。
   patterns:
   - pattern: $DBFACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
   - pattern-not-inside: |

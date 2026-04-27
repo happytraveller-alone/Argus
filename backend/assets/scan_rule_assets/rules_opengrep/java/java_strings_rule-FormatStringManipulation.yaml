@@ -38,24 +38,8 @@ rules:
     - pattern: System.out.format($FORMAT_STR, ...);
     - pattern: System.out.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
   message: |
-    The application allows user input to control format string parameters. By passing invalid
-    format
-    string specifiers an adversary could cause the application to throw exceptions or possibly
-    leak
-    internal information depending on application logic.
-
-    Never allow user-supplied input to be used to create a format string. Replace all format
-    string
-    arguments with hardcoded format strings containing the necessary specifiers.
-
-    Example of using `String.format` safely:
-    ```
-    // Get untrusted user input
-    String userInput = request.getParameter("someInput");
-    // Ensure that user input is not included in the first argument to String.format
-    String.format("Hardcoded string expecting a string: %s", userInput);
-    // ...
-    ```
+    检测到硬编码凭据风险（规则：java_strings_rule-FormatStringManipulation）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：`String.format`。
   metadata:
     shortDescription: Use of externally-controlled format string
     cwe: CWE-134
@@ -105,24 +89,8 @@ rules:
     - pattern: System.out.format($FORMAT_STR, ...);
     - pattern: System.out.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
   message: |
-    The application allows user input to control format string parameters. By passing invalid
-    format
-    string specifiers an adversary could cause the application to throw exceptions or possibly
-    leak
-    internal information depending on application logic.
-
-    Never allow user-supplied input to be used to create a format string. Replace all format
-    string
-    arguments with hardcoded format strings containing the necessary specifiers.
-
-    Example of using `String.format` safely:
-    ```
-    // Get untrusted user input
-    String userInput = request.getParameter("someInput");
-    // Ensure that user input is not included in the first argument to String.format
-    String.format("Hardcoded string expecting a string: %s", userInput);
-    // ...
-    ```
+    检测到硬编码凭据风险（规则：java_strings_rule-FormatStringManipulation_1）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：`String.format`。
   metadata:
     shortDescription: Use of externally-controlled format string
     cwe: CWE-134

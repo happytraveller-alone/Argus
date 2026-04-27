@@ -4,7 +4,9 @@ rules:
   - pattern-either:
     - pattern: if ($X=true) { ... }
     - pattern: if ($X=false) { ... }
-  message: The value of `$X` is being ignored and will be used in the conditional test
+  message: |
+    检测到条件表达式赋值缺陷（规则：assignment-comparison）。危害：条件判断中误用赋值会忽略预期比较结果，使分支逻辑与代码意图不一致。建议：确认条件表达式使用比较运算，并避免在判断中写入状态。
+    保留的关键标识：$X、`$X`。
   languages:
   - java
   severity: ERROR

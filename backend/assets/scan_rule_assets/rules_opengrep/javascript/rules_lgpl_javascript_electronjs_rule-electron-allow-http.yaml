@@ -7,7 +7,8 @@ rules:
     - pattern: |
         var $X = {webPreferences: {allowRunningInsecureContent: true}};
   message: |
-    Application can load content over HTTP and that makes the app vulnerable to Man in the middle attacks.
+    检测到客户端容器安全配置风险（规则：rules_lgpl_javascript_electronjs_rule-electron-allow-http）。危害：WebView/Electron
+    安全配置过宽可能允许调试、明文加载或跨域访问，扩大代码执行和数据窃取风险。建议：关闭危险调试/禁用项，只加载可信 HTTPS 内容并隔离不可信页面。
   languages:
   - javascript
   severity: ERROR

@@ -14,7 +14,9 @@ rules:
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-134: Use of Externally-Controlled Format String'
     - 'CWE-119: Buffer Overflow'
-  message: A buffer overflow condition exists when a program attempts to put more data in a buffer than it can hold, or when a program attempts to put data in a memory area outside of the boundaries of a buffer.
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-insecure-api-scanf-etc）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
   severity: ERROR
   languages:
   - c

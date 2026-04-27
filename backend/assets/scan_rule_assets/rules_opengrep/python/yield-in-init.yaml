@@ -7,7 +7,9 @@ rules:
           def __init__(...):
               ...
   - pattern: yield ...
-  message: '`yield` should never appear inside a class __init__ function. This will cause a runtime error.'
+  message: |
+    检测到Python 构造函数逻辑缺陷（规则：yield-in-init）。危害：`__init__` 中出现 `yield` 会让构造流程变成生成器语义，导致对象初始化不符合预期。建议：不要在
+    `__init__` 中使用 `yield`；将生成逻辑移到普通生成器函数。 保留的关键标识：`yield`。
   languages:
   - python
   severity: ERROR

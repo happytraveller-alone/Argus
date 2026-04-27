@@ -3,15 +3,9 @@ rules:
   languages:
   - c
   message: |
-    `cuserid()` is poorly defined (e.g., some systems use the effective
-    UID, like Linux, while others like System V use the real UID). Therefore, you can't trust
-    what it does. The cuserid function was included in the 1988 version of POSIX, but removed
-    from the 1990 version.  Also, if passed a non-null parameter, there's a risk of a buffer
-    overflow if the passed-in buffer is not at least `L_cuserid` characters long.
-
-    Use `getpwuid(geteuid())` and extract the desired information instead.
-
-    For more information please see: https://linux.die.net/man/3/getpwuid
+    检测到废弃 C 身份 API/缓冲区风险（规则：c_misc_rule-cuserid）。危害：`cuserid()`
+    行为在不同系统上不一致，且非空缓冲区过小时可能造成溢出，导致身份判断错误或内存破坏。建议：改用 `getpwuid(geteuid())` 等语义明确的 API，并保证调用方提供的缓冲区边界安全。
+    保留的关键标识：https://linux.die.net/man/3/getpwuid、cuserid()、geteuid()、getpwuid(geteuid()、`cuserid()`、`L_cuserid`、`getpwuid(geteuid())`。
   metadata:
     shortDescription: Usage of deprecated function (cuserid)
     cwe: CWE-120

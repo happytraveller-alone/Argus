@@ -1,9 +1,8 @@
 rules:
 - id: servletresponse-writer-xss
   message: |
-    Cross-site scripting detected in HttpServletResponse writer with variable $VAR. User
-    input was detected going directly from the HttpServletRequest into output. Ensure your
-    data is properly encoded using org.owasp.encoder.Encode.forHtml: 'Encode.forHtml($VAR)'.
+    检测到跨站脚本（XSS）风险（规则：servletresponse-writer-xss）。危害：未可信数据进入页面脚本或 DOM
+    可能执行恶意脚本，窃取凭据或劫持用户操作。建议：对输出做上下文编码，避免把用户输入直接写入可执行上下文。 保留的关键标识：$VAR、Encode.forHtml($VAR)。
   metadata:
     cwe: 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site Scripting'')'
     owasp: 'A7: Cross-Site Scripting (''XSS'')'
@@ -23,7 +22,9 @@ rules:
 - id: servletresponse-writer-xss_1
   languages:
   - java
-  message: 'Cross-site scripting detected in HttpServletResponse writer with variable ''$VAR''. User input was detected going directly from the HttpServletRequest into output. Ensure your data is properly encoded using org.owasp.encoder.Encode.forHtml: ''Encode.forHtml($VAR)''.'
+  message: |
+    检测到跨站脚本（XSS）风险（规则：servletresponse-writer-xss_1）。危害：未可信数据进入页面脚本或 DOM
+    可能执行恶意脚本，窃取凭据或劫持用户操作。建议：对输出做上下文编码，避免把用户输入直接写入可执行上下文。 保留的关键标识：$VAR、Encode.forHtml($VAR)、'$VAR'。
   metadata:
     category: security
     confidence: MEDIUM

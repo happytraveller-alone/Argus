@@ -16,7 +16,9 @@ rules:
         $X = <... $E.getExternalFilesDir(...) ...>;
         ...
         $WV.loadUrl(<... $X ...>);
-  message: WebView load files from external storage. Files in external storage can be modified by any application.
+  message: |
+    检测到客户端容器安全配置风险（规则：webview_external_storage）。危害：WebView/Electron
+    安全配置过宽可能允许调试、明文加载或跨域访问，扩大代码执行和数据窃取风险。建议：关闭危险调试/禁用项，只加载可信 HTTPS 内容并隔离不可信页面。
   languages:
   - java
   severity: ERROR

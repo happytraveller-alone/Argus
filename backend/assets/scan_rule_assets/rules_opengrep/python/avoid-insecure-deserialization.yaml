@@ -4,7 +4,9 @@ rules:
     owasp: 'A8: Insecure Deserialization'
     cwe: 'CWE-502: Deserialization of Untrusted Data'
     references: https://docs.python.org/3/library/pickle.html
-  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`, which are known to lead to remote code execution vulnerabilities.
+  message: |
+    检测到不安全反序列化风险（规则：avoid-insecure-deserialization）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：`pickle`、`_pickle`、`cpickle`、`dill`、`shelve`、`yaml`。
   languages:
   - python
   severity: ERROR
@@ -46,7 +48,9 @@ rules:
 - id: avoid-insecure-deserialization_1
   languages:
   - python
-  message: Avoid using insecure deserialization library, backed by `pickle`, `_pickle`, `cpickle`, `dill`, `shelve`, or `yaml`, which are known to lead to remote code execution vulnerabilities.
+  message: |
+    检测到不安全反序列化风险（规则：avoid-insecure-deserialization_1）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：`pickle`、`_pickle`、`cpickle`、`dill`、`shelve`、`yaml`。
   metadata:
     category: security
     confidence: MEDIUM

@@ -2,7 +2,9 @@ rules:
 - id: formatted-sql-string_1
   languages:
   - java
-  message: Detected a formatted string in a SQL statement. This could lead to SQL injection if variables in the SQL statement are not properly sanitized. Use a prepared statements (java.sql.PreparedStatement) instead. You can obtain a PreparedStatement using 'connection.prepareStatement'.
+  message: |
+    检测到SQL 注入风险（规则：formatted-sql-string_1）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全
+    API，避免拼接原始 SQL。 保留的关键标识：'connection.prepareStatement'。
   metadata:
     asvs:
       control_id: 5.3.5 Injection

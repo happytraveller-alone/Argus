@@ -1,6 +1,8 @@
 rules:
 - id: schema-directives
-  message: The Apollo GraphQL uses the 'schemaDirectives' option. This works in ApolloServer v2, but does nothing in version >=3. Depending on what the directives are used for, this can expose authenticated endpoints, disable rate limiting, and more. See the references on how to create custom directives in v3 and v4.
+  message: |
+    检测到权限/访问控制缺陷（规则：schema-directives）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关 API
+    的返回值，在失败时停止敏感操作并按最小权限原则设计流程。 保留的关键标识：'schemaDirectives'。
   languages:
   - javascript
   severity: ERROR

@@ -1,7 +1,10 @@
 rules:
 - id: tempfile-insecure
   pattern: tempfile.mktemp(...)
-  message: 'Use tempfile.NamedTemporaryFile instead. From the official Python documentation: THIS FUNCTION IS UNSAFE AND SHOULD NOT BE USED. The file name may refer to a file that did not exist at some point, but by the time you get around to creating it, someone else may have beaten you to the punch.'
+  message: |
+    检测到竞态条件/TOCTOU
+    风险（规则：tempfile-insecure）。危害：检查和使用之间的状态变化可能被攻击者利用，导致权限绕过或操作错误目标。建议：避免先检查后使用的分离流程，使用原子操作或基于文件描述符的安全
+    API。
   languages:
   - python
   severity: ERROR

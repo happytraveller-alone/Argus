@@ -3,12 +3,9 @@ rules:
   languages:
   - python
   message: |
-    The application was detected importing `pycrypto`. This package has been deprecated as it
-    contains
-    security vulnerabilities.
-
-    To remediate this issue, consider using the [cryptography](https://cryptography.io/)
-    package instead.
+    检测到弱加密/加密参数错误风险（规则：python_crypto_rule-import-pycrypto）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。 保留的关键标识：https://cryptography.io/、`pycrypto`。
   metadata:
     cwe: CWE-1104
     owasp:
@@ -32,12 +29,9 @@ rules:
   languages:
   - python
   message: |
-    The application was detected importing `pycrypto`. This package has been deprecated as it
-    contains
-    security vulnerabilities.
-
-    To remediate this issue, consider using the [cryptography](https://cryptography.io/)
-    package instead.
+    检测到弱加密/加密参数错误风险（规则：python_crypto_rule-import-pycrypto_1）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。 保留的关键标识：https://cryptography.io/、`pycrypto`。
   metadata:
     cwe: CWE-1104
     owasp:

@@ -21,45 +21,9 @@ rules:
         ...
       }
   message: |
-    This application implements unsafe invocations of methods within the
-    `groovy.lang.GroovyShell` or `groovy.lang.GroovyClassLoader` classes,
-    which are used to evaluate or compile Groovy code dynamically. When
-    user-controlled input is directly passed to `parse`, `evaluate`, or
-    `parseClass` methods, it can lead to Remote Code Execution (RCE), where an
-    attacker can execute arbitrary code on the server. This could potentially
-    allow an attacker to gain unauthorized access to system resources, modify
-    internal application states, or execute commands on the server depending
-    on the level of permissions assigned to the application process.
-
-    To mitigate this vulnerability, always validate and sanitize all user inputs
-    before using them in dynamic code evaluations. Consider using safer alternatives
-    to executing dynamic code if possible. If dynamic code execution is absolutely
-    necessary, use strict allowlists of safe inputs and context-specific validation.
-
-    Secure Code Example:
-
-    ```
-    import groovy.lang.GroovyShell;
-
-    class SafeDynamicEvaluation {
-      private static final Set<String> ALLOWED_EXPRESSIONS = new HashSet<>(Arrays.asList(
-          "println 'Hello World!'",
-          "println 'Goodbye World!'"));
-
-      public static void test4(String[] args, ClassLoader loader) throws Exception {
-        GroovyShell shell = new GroovyShell();
-        String userInput = args[0];
-
-        // Validate the user input against the allowlist
-        if (ALLOWED_EXPRESSIONS.contains(userInput)) {
-          shell.evaluate(userInput);
-          // shell.parse(userInput);
-        } else {
-          throw new IllegalArgumentException("Invalid or unauthorized command.");
-        }
-      }
-    }
-    ```
+    检测到代码执行/模板注入风险（规则：java_inject_rule-DangerousGroovyShell）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。
+    保留的关键标识：`groovy.lang.GroovyShell`、`groovy.lang.GroovyClassLoader`、`parse`、`evaluate`、`parseClass`。
   metadata:
     shortDescription: Improper control of generation of code ('Code Injection')
     category: security

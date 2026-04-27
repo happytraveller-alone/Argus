@@ -14,9 +14,8 @@ rules:
         Unmarshaller $JU = $JC.createUnmarshaller();
   - pattern-not-inside: "$RETURNTYPE $METHOD(...) {\n  ...\n  $X.setFeature(\"http://xml.org/sax/features/external-general-entities\", false);\n  $X.setFeature(\"http://xml.org/sax/features/external-parameter-entities\", false);\n  $X.setFeature(\"http://apache.org/xml/features/nonvalidating/load-external-dtd\", false);\n  ...\n}     \n"
   message: |
-    Generic XXE in `$JC`. The 'javax.xml.bind.Unmarshaller' parses XML and does not support any flags for disabling XXE, it's imperative
-    to parse the untrusted XML through a configurable secure parser first, generate a source object as a result, and pass the
-    source object to the Unmarshaller.
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：XXE）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识：$JC、'javax.xml.bind.Unmarshaller'、`$JC`。
   languages:
   - java
   severity: ERROR

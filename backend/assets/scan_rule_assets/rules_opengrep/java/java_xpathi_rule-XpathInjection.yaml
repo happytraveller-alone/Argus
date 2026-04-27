@@ -3,54 +3,8 @@ rules:
   languages:
   - java
   message: |
-    The application processes `XPath` queries with potentially malicious input.
-    An adversary who is able to control the XPath query could potentially influence the logic
-    of how data is retrieved, processed or even bypass protections.
-
-    To mitigate the vulnerability, avoid using user input in XPath queries.
-    If it cannot be avoided, validate the user input against an allowlist
-    of expected values before using it in the query.
-
-    Following is an example that demonstrates how to perform an XPath query
-    using user input validated against an allowlist.
-
-    Secure code example:
-    ```
-    public class SecureXPathWithoutResolver {
-
-      private static final List<String> ALLOWED_AUTHORS = List.of("Author1", "Author2", "Author3");
-
-      public static void main(String[] args) {
-        try {
-          String userInput = "Author1"; // Example user input
-            if (ALLOWED_AUTHORS.contains(userInput)) {
-              // User input is safe to use
-              DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-              DocumentBuilder builder = factory.newDocumentBuilder();
-              Document doc = builder.parse("path/to/your/xmlfile.xml");
-
-              XPathFactory xpathFactory = XPathFactory.newInstance();
-              XPath xpath = xpathFactory.newXPath();
-
-              // Safely embed the validated user input into the XPath expression
-              String expression = String.format("//books/book[author='%s']", userInput);
-              NodeList nodes = (NodeList) xpath.evaluate(expression, doc, XPathConstants.NODESET);
-
-              for (int i = 0; i < nodes.getLength(); i++) {
-                  System.out.println(nodes.item(i).getTextContent());
-              }
-            } else {
-              throw new IllegalArgumentException("Input is not allowed.");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-      }
-    }
-    ```
-
-    For more information on XPath Injection see:
-    - https://owasp.org/www-community/attacks/XPATH_Injection
+    检测到XPath 注入风险（规则：java_xpathi_rule-XpathInjection）。危害：攻击者可能改变 XPath 查询逻辑，读取或匹配非预期 XML 数据。建议：对 XPath
+    参数进行转义或使用安全的参数化查询方式。 保留的关键标识：https://owasp.org/www-community/attacks/XPATH_Injection、`XPath`。
   metadata:
     shortDescription: Improper neutralization of data within XPath expressions ('XPath Injection')
     category: security

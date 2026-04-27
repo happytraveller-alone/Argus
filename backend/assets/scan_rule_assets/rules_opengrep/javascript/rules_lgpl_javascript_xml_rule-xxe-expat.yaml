@@ -38,7 +38,9 @@ rules:
         ...
         $PARSER.write(<... $INPUT ...>,...)
   message: |
-    Make sure that unverified user data can not reach the XML Parser, as it can result in XML External or Internal Entity (XXE) Processing vulnerabilities.
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：rules_lgpl_javascript_xml_rule-xxe-expat）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
   metadata:
     owasp:
     - A4:2017-XML External Entities (XXE)

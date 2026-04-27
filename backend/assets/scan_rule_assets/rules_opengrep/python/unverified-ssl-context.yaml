@@ -2,8 +2,9 @@ rules:
 - id: unverified-ssl-context
   pattern: ssl._create_unverified_context(...)
   message: |
-    Unverified SSL context detected. This will permit insecure connections without verifying
-    SSL certificates. Use 'ssl.create_default_context()' instead.
+    检测到TLS/证书或主机校验配置不当风险（规则：unverified-ssl-context）。危害：跳过证书、主机密钥校验或使用弱 TLS
+    配置会使连接暴露于中间人攻击，导致数据被窃听或篡改。建议：启用证书链、主机名或主机密钥校验，禁用过时协议和弱加密套件。
+    保留的关键标识：ssl.create_default_context()、'ssl.create_default_context()'。
   metadata:
     owasp: 'A6: Security Misconfiguration'
     cwe: 'CWE-295: Improper Certificate Validation'

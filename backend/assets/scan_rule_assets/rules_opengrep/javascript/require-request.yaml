@@ -1,7 +1,8 @@
 rules:
 - id: require-request
   message: |
-    If an attacker controls the x in require(x) then they can cause code to load that was not intended to run on the server.
+    检测到代码执行/模板注入风险（规则：require-request）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：require(x)。
   severity: ERROR
   languages:
   - javascript
@@ -22,7 +23,9 @@ rules:
 - id: require-request_1
   languages:
   - javascript
-  message: If an attacker controls the x in require(x) then they can cause code to load that was not intended to run on the server.
+  message: |
+    检测到代码执行/模板注入风险（规则：require-request_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：require(x)。
   metadata:
     category: security
     confidence: MEDIUM
@@ -82,7 +85,8 @@ rules:
   severity: ERROR
 - id: require-request_5
   message: |
-    If an attacker controls the x in require(x) then they can cause code to load that was not intended to run on the server.
+    检测到代码执行/模板注入风险（规则：require-request_5）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：require(x)。
   severity: ERROR
   languages:
   - javascript

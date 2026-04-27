@@ -1,6 +1,9 @@
 rules:
 - id: crypto-mode-without-authentication
-  message: 'An encryption mode of operation is being used without proper message authentication. This can potentially result in the encrypted content to be decrypted by an attacker. Consider instead use an AEAD mode of operation like GCM. '
+  message: |
+    检测到弱加密/加密参数错误风险（规则：crypto-mode-without-authentication）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
   languages:
   - python
   severity: ERROR
@@ -44,7 +47,10 @@ rules:
 - id: crypto-mode-without-authentication_1
   languages:
   - python
-  message: 'An encryption mode of operation is being used without proper message authentication. This can potentially result in the encrypted content to be decrypted by an attacker. Consider instead use an AEAD mode of operation like GCM. '
+  message: |
+    检测到弱加密/加密参数错误风险（规则：crypto-mode-without-authentication_1）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
   metadata:
     category: security
     confidence: MEDIUM

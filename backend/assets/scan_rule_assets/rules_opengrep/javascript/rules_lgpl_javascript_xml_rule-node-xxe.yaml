@@ -95,7 +95,9 @@ rules:
         ...
         $PARSER.push(..., <... $FOO ...> , ...)
   message: |
-    User controlled data in XML parsers can result in XML External or Internal Entity (XXE) Processing vulnerabilities
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：rules_lgpl_javascript_xml_rule-node-xxe）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
   languages:
   - javascript
   severity: ERROR

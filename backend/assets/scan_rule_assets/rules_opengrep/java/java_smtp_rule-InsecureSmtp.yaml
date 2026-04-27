@@ -24,38 +24,10 @@ rules:
       ...
       $E.setSSLCheckServerIdentity(true);
   message: |
-    The Apache commons mail client by default does not enable TLS server identity.
-    This allows for an adversary who is in between the application and the target host to intercept
-    potentially sensitive information or transmit malicious data.
-
-    Enable checking server identity by calling `Email.setSSLCheckServerIdentity(true)`
-
-    Example email client that enables TLS and server identity:
-    ```
-    // Create an email client
-    Email email = new SimpleEmail();
-    // Configure the email hostname
-    email.setHostName("smtp.mail.example.com");
-    // Set the port
-    email.setSmtpPort(465);
-    // Securely retrieve username and password values
-    String username = getUserNameFromKMSorSecretStore();
-    String password = getPasswordFromKMSorSecretStore();
-    // Configure the Authenticator
-    DefaultAuthenticator auth = new DefaultAuthenticator(username, password);
-    // Set the authenticator
-    email.setAuthenticator(auth);
-    // Ensure we use SSL on connect
-    email.setSSLOnConnect(true);
-    // Ensure we validate server identity
-    email.setSSLCheckServerIdentity(true);
-    // configure the rest of the email
-    email.setFrom("x@example.com");
-    email.setSubject("TestMail");
-    email.setMsg("This is a test mail ... :-)");
-    email.addTo("y@example.com");
-    email.send();
-    ```
+    检测到弱加密/加密参数错误风险（规则：java_smtp_rule-InsecureSmtp）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
+    保留的关键标识：Email.setSSLCheckServerIdentity(true)、`Email.setSSLCheckServerIdentity(true)`。
   metadata:
     shortDescription: Improper validation of certificate with host mismatch
     category: security
@@ -90,38 +62,10 @@ rules:
       ...
       $E.setSSLCheckServerIdentity(true);
   message: |
-    The Apache commons mail client by default does not enable TLS server identity.
-    This allows for an adversary who is in between the application and the target host to intercept
-    potentially sensitive information or transmit malicious data.
-
-    Enable checking server identity by calling `Email.setSSLCheckServerIdentity(true)`
-
-    Example email client that enables TLS and server identity:
-    ```
-    // Create an email client
-    Email email = new SimpleEmail();
-    // Configure the email hostname
-    email.setHostName("smtp.mail.example.com");
-    // Set the port
-    email.setSmtpPort(465);
-    // Securely retrieve username and password values
-    String username = getUserNameFromKMSorSecretStore();
-    String password = getPasswordFromKMSorSecretStore();
-    // Configure the Authenticator
-    DefaultAuthenticator auth = new DefaultAuthenticator(username, password);
-    // Set the authenticator
-    email.setAuthenticator(auth);
-    // Ensure we use SSL on connect
-    email.setSSLOnConnect(true);
-    // Ensure we validate server identity
-    email.setSSLCheckServerIdentity(true);
-    // configure the rest of the email
-    email.setFrom("x@example.com");
-    email.setSubject("TestMail");
-    email.setMsg("This is a test mail ... :-)");
-    email.addTo("y@example.com");
-    email.send();
-    ```
+    检测到弱加密/加密参数错误风险（规则：java_smtp_rule-InsecureSmtp_1）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
+    保留的关键标识：Email.setSSLCheckServerIdentity(true)、`Email.setSSLCheckServerIdentity(true)`。
   metadata:
     shortDescription: Improper validation of certificate with host mismatch
     category: security

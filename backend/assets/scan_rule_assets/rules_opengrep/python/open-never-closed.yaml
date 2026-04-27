@@ -86,7 +86,9 @@ rules:
     - pattern: $F = tempfile.TemporaryFile(...)
     - pattern: $F = tempfile.NamedTemporaryFile(...)
     - pattern: $F = tempfile.SpooledTemporaryFile(...)
-  message: file object opened without corresponding close
+  message: |
+    检测到文件资源泄漏风险（规则：open-never-closed）。危害：文件对象未关闭会泄漏文件描述符，并可能导致数据未刷新或后续文件操作失败。建议：使用 `with` 上下文管理器或确保在
+    `finally` 中关闭文件。
   languages:
   - python
   severity: ERROR

@@ -3,20 +3,9 @@ rules:
   languages:
   - c
   message: |
-    Format specifiers can take optional field widths, which should be
-    used to limit how many characters are copied into the target buffer.
-
-    For more information please see: https://linux.die.net/man/3/scanf
-
-    Example:
-    ```
-      char buf[11] = {0};
-      scanf("%10s", &buf); // buf = AAAAAAAAAA\0
-    ```
-
-    If developing for C Runtime Library (CRT), more secure versions of these functions should be
-    used, see:
-    https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/scanf-s-scanf-s-l-wscanf-s-wscanf-s-l?view=msvc-170
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-scanf-vscanf）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+    保留的关键标识：https://linux.die.net/man/3/scanf、https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/scanf-s-scanf-s-l-wscanf-s-wscanf-s-l?view=msvc-170。
   metadata:
     shortDescription: scanf() functions may allow format string based overflows
     cwe: CWE-120

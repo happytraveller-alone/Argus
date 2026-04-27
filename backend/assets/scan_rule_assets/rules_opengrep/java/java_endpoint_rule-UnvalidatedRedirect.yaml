@@ -3,33 +3,7 @@ rules:
   languages:
   - java
   message: |
-    Unvalidated redirects occur when an application redirects a user to a
-    destination URL specified by a user supplied parameter that is not validated.
-    Such vulnerabilities can be used to facilitate phishing attacks.
-
-    To avoid open redirect vulnerabilities in Java, one effective strategy is to
-    only allow redirection to URLs that are pre-defined in a safe list. This safe
-    list can be implemented using a collection like a Map, List, or Dictionary,
-    where you store all the valid URLs or URL patterns. When a redirect request is
-    made, you can check if the requested URL is in this safe list before proceeding
-    with the redirection. For example:
-
-    ```
-      protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-          private List<String> safeUrls = new ArrayList<>();
-          safeUrls.add("/home");
-          safeUrls.add("/user/profile");
-          safeUrls.add("/dashboard");
-
-          String redirectUrl = request.getParameter("url");
-
-          if (safeUrls.contains(redirectUrl)) {
-              response.sendRedirect(redirectUrl);
-          } else {
-              response.sendRedirect("/errorPage");
-          }
-      }"
-    ```
+    检测到开放重定向风险（规则：java_endpoint_rule-UnvalidatedRedirect）。危害：攻击者可能把用户重定向到钓鱼站点或恶意页面，破坏登录和授权流程。建议：只允许跳转到可信域名或使用服务端固定路径映射。
   mode: taint
   pattern-sources:
   - patterns:
@@ -68,33 +42,7 @@ rules:
   languages:
   - java
   message: |
-    Unvalidated redirects occur when an application redirects a user to a
-    destination URL specified by a user supplied parameter that is not validated.
-    Such vulnerabilities can be used to facilitate phishing attacks.
-
-    To avoid open redirect vulnerabilities in Java, one effective strategy is to
-    only allow redirection to URLs that are pre-defined in a safe list. This safe
-    list can be implemented using a collection like a Map, List, or Dictionary,
-    where you store all the valid URLs or URL patterns. When a redirect request is
-    made, you can check if the requested URL is in this safe list before proceeding
-    with the redirection. For example:
-
-    ```
-      protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-          private List<String> safeUrls = new ArrayList<>();
-          safeUrls.add("/home");
-          safeUrls.add("/user/profile");
-          safeUrls.add("/dashboard");
-
-          String redirectUrl = request.getParameter("url");
-
-          if (safeUrls.contains(redirectUrl)) {
-              response.sendRedirect(redirectUrl);
-          } else {
-              response.sendRedirect("/errorPage");
-          }
-      }"
-    ```
+    检测到开放重定向风险（规则：java_endpoint_rule-UnvalidatedRedirect_1）。危害：攻击者可能把用户重定向到钓鱼站点或恶意页面，破坏登录和授权流程。建议：只允许跳转到可信域名或使用服务端固定路径映射。
   mode: taint
   pattern-sources:
   - patterns:

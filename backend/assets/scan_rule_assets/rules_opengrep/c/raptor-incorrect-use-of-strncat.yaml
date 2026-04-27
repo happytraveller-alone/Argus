@@ -11,7 +11,9 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-193: Off-by-one Error'
-  message: 'The strncat() function is nearly as dangerous as strcat(), in that it''s quite easy to misuse. The first common mistake is supplying the size of  the entire buffer instead of the size remaining in the buffer. A more  subtle mistake can be made: the size parameter needs to be the amount of space left in the buffer less one; otherwise, the NUL byte is written  one byte past the end of the buffer.'
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-incorrect-use-of-strncat）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。 保留的关键标识：strncat()、strcat()。
   severity: ERROR
   languages:
   - c

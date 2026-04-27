@@ -1,7 +1,8 @@
 rules:
 - id: express-vm2-context-injection
   message: |
-    Make sure that unverified user data can not reach `vm2`.
+    检测到代码执行/模板注入风险（规则：express-vm2-context-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`vm2`。
   severity: ERROR
   languages:
   - javascript

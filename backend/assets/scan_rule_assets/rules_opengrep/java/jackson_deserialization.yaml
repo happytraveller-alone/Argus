@@ -6,7 +6,8 @@ rules:
         import com.fasterxml.jackson.databind.ObjectMapper;
         ...
         $Z.enableDefaultTyping();
-  message: The app uses jackson deserialization library. Deserialization of untrusted input can result in arbitrary code execution. Consider using HMACs to sign the data stream to make sure it is not tampered with, or consider only  transmitting object fields and populating a new object.
+  message: |
+    检测到不安全反序列化风险（规则：jackson_deserialization）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
   languages:
   - java
   severity: ERROR

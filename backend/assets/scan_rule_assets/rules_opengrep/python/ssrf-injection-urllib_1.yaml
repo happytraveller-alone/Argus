@@ -2,7 +2,8 @@ rules:
 - id: ssrf-injection-urllib_1
   languages:
   - python
-  message: Data from request object is passed to a new server-side request. This could lead to a server-side request forgery (SSRF), which could result in attackers gaining access to private organization data. To mitigate, ensure that schemes and hosts are validated against an allowlist, do not forward the response to the user, and ensure proper authentication and transport-layer security in the proxied request.
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：ssrf-injection-urllib_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
   metadata:
     category: security
     confidence: MEDIUM

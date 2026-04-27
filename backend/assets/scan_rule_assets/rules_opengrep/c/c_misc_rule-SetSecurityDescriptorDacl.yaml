@@ -3,15 +3,9 @@ rules:
   languages:
   - c
   message: |
-    When `SetSecurityDescriptorDacl` is called with a null `pDacl` parameter and the
-    `bDaclPresent` flag is `TRUE`, all access to the object is allowed. An attacker
-    could set the object to Deny all, which would include even the Administrator user(s).
-
-    Either call `SetSecurityDescriptorDacl` with bDaclPresent as `FALSE`, or supply a valid
-    non-null `pDacl` parameter value.
-
-    For more information please see:
-    https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-setsecuritydescriptordacl#remarks
+    检测到权限/访问控制缺陷（规则：c_misc_rule-SetSecurityDescriptorDacl）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。
+    保留的关键标识：https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-setsecuritydescriptordacl#remarks、`SetSecurityDescriptorDacl`、`pDacl`、`bDaclPresent`、`TRUE`、`FALSE`。
   metadata:
     shortDescription: Null ACL when calling SetSecurityDescriptorDacl may allow all access to objects
     cwe: CWE-732

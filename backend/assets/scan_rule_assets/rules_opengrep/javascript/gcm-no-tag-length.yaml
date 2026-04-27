@@ -1,6 +1,9 @@
 rules:
 - id: gcm-no-tag-length
-  message: The call to 'createDecipheriv' with the Galois Counter Mode (GCM) mode of operation is missing an expected authentication tag length. If the expected authentication tag length is not specified or otherwise checked, the application might be tricked into verifying a shorter-than-expected authentication tag. This can be abused by an attacker to spoof ciphertexts or recover the implicit authentication key of GCM, allowing arbitrary forgeries.
+  message: |
+    检测到弱加密/加密参数错误风险（规则：gcm-no-tag-length）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。 保留的关键标识：'createDecipheriv'。
   metadata:
     cwe:
     - 'CWE-310: CWE CATEGORY: Cryptographic Issues'

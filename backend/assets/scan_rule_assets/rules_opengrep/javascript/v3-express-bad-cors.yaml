@@ -2,7 +2,9 @@ rules:
 - id: v3-express-bad-cors
   languages:
   - javascript
-  message: The Apollo GraphQL server is setup with a CORS policy that reflects any origin, or with a regex that has known flaws.
+  message: |
+    检测到CORS 配置不当风险（规则：v3-express-bad-cors）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF 影响。建议：限制允许的
+    Origin，并避免反射任意来源。
   severity: ERROR
   metadata:
     category: security

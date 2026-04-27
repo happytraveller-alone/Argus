@@ -3,28 +3,9 @@ rules:
   languages:
   - python
   message: |
-    The application was found using the `requests` module without configuring a timeout value for
-    connections. The `verify=False` argument has been set, which effectively disables the
-    validation
-    of server certificates.
-
-    This allows for an adversary who is in between the application and the target host to intercept
-    potentially sensitive information or transmit malicious data.
-
-    To remediate this issue either remove the `verify=False` argument, or set `verify=True`to each
-    `requests` call.
-
-    Example verifying server certificates for an HTTP GET request:
-    ```
-    # Issue a GET request to https://example.com with a timeout of 10 seconds and verify the
-    # server certificate explicitly.
-    response = requests.get('https://example.com', timeout=10, verify=True)
-    # Work with the response object
-    # ...
-    ```
-
-    For more information on using the requests module see:
-    - https://requests.readthedocs.io/en/latest/api/
+    检测到TLS/证书或主机校验配置不当风险（规则：python_ssl_rule-req-no-certvalid）。危害：跳过证书、主机密钥校验或使用弱 TLS
+    配置会使连接暴露于中间人攻击，导致数据被窃听或篡改。建议：启用证书链、主机名或主机密钥校验，禁用过时协议和弱加密套件。
+    保留的关键标识：https://requests.readthedocs.io/en/latest/api/、`requests`、`verify=False`、`verify=True`。
   metadata:
     cwe: CWE-295
     owasp:
@@ -48,28 +29,9 @@ rules:
   languages:
   - python
   message: |
-    The application was found using the `requests` module without configuring a timeout value for
-    connections. The `verify=False` argument has been set, which effectively disables the
-    validation
-    of server certificates.
-
-    This allows for an adversary who is in between the application and the target host to intercept
-    potentially sensitive information or transmit malicious data.
-
-    To remediate this issue either remove the `verify=False` argument, or set `verify=True`to each
-    `requests` call.
-
-    Example verifying server certificates for an HTTP GET request:
-    ```
-    # Issue a GET request to https://example.com with a timeout of 10 seconds and verify the
-    # server certificate explicitly.
-    response = requests.get('https://example.com', timeout=10, verify=True)
-    # Work with the response object
-    # ...
-    ```
-
-    For more information on using the requests module see:
-    - https://requests.readthedocs.io/en/latest/api/
+    检测到TLS/证书或主机校验配置不当风险（规则：python_ssl_rule-req-no-certvalid_1）。危害：跳过证书、主机密钥校验或使用弱 TLS
+    配置会使连接暴露于中间人攻击，导致数据被窃听或篡改。建议：启用证书链、主机名或主机密钥校验，禁用过时协议和弱加密套件。
+    保留的关键标识：https://requests.readthedocs.io/en/latest/api/、`requests`、`verify=False`、`verify=True`。
   metadata:
     cwe: CWE-295
     owasp:

@@ -14,7 +14,9 @@ rules:
     - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
     - 'CWE-787: Out-of-bounds Write'
     - 'CWE-20: Improper Input Validation'
-  message: Use of alloca() is unsafe because it cannot ensure that the pointer  returned points to a valid and usable block of memory. The allocation  made may exceed the bounds of the stack, or even go further into other  objects in memory, and alloca() cannot determine such an error.
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-insecure-api-alloca）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。 保留的关键标识：alloca()。
   severity: ERROR
   languages:
   - c

@@ -3,41 +3,8 @@ rules:
   languages:
   - java
   message: |
-    The application was found calling `MimeMessage` methods without encoding
-    new line characters. Much like HTTP, Simple Mail Transfer Protocol (SMTP) is a
-    text based protocol that uses headers to convey additional directives for how
-    email messages should be treated. An adversary could potentially cause email
-    messages to be sent to unintended recipients by abusing the CC or BCC headers
-    if they were able to inject them.
-
-    To mitigate this issue, `\r\n` (CRLF) character sequences must be escaped
-    or encoded prior to being used in any of the `MimeMessage` methods.
-
-    Example that escapes values that come from user input with
-    [Apache Commons Text](https://commons.apache.org/proper/commons-text/):
-    ```
-    // Create a MimeMessage with a javax.mail.Session
-    Message message = new MimeMessage(session);
-    // Set the from address
-    message.setFrom(new InternetAddress("source@example.com"));
-    // Set the to address
-    message.setRecipients(Message.RecipientType.TO,new InternetAddress[] {new
-    InternetAddress("destination@example.com")});
-    // Example user input
-    String subject = "potentially malicious data";
-    String headerValue = "potentially malicious data";
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setSubject(StringEscapeUtils.escapeJava(subject));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.addHeader("HeaderName", StringEscapeUtils.escapeJava(header));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setDescription(StringEscapeUtils.escapeJava("some description"));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setDisposition(StringEscapeUtils.escapeJava("some disposition"));
-    // Set the mail body text
-    message.setText("Some email content.");
-    // Send the message
-    ```
+    检测到不安全明文通信风险（规则：java_smtp_rule-SmtpClient）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS 等加密通道并校验证书。
+    保留的关键标识：`MimeMessage`、`\r\n`。
   patterns:
   - pattern-inside: |
       $M = new MimeMessage(...);
@@ -87,41 +54,9 @@ rules:
   languages:
   - java
   message: |
-    The application was found calling `MimeMessage` methods without encoding
-    new line characters. Much like HTTP, Simple Mail Transfer Protocol (SMTP) is a
-    text based protocol that uses headers to convey additional directives for how
-    email messages should be treated. An adversary could potentially cause email
-    messages to be sent to unintended recipients by abusing the CC or BCC headers
-    if they were able to inject them.
-
-    To mitigate this issue, `\r\n` (CRLF) character sequences must be escaped
-    or encoded prior to being used in any of the `MimeMessage` methods.
-
-    Example that escapes values that come from user input with
-    [Apache Commons Text](https://commons.apache.org/proper/commons-text/):
-    ```
-    // Create a MimeMessage with a javax.mail.Session
-    Message message = new MimeMessage(session);
-    // Set the from address
-    message.setFrom(new InternetAddress("source@example.com"));
-    // Set the to address
-    message.setRecipients(Message.RecipientType.TO,new InternetAddress[] {new
-    InternetAddress("destination@example.com")});
-    // Example user input
-    String subject = "potentially malicious data";
-    String headerValue = "potentially malicious data";
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setSubject(StringEscapeUtils.escapeJava(subject));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.addHeader("HeaderName", StringEscapeUtils.escapeJava(header));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setDescription(StringEscapeUtils.escapeJava("some description"));
-    // Use Apache Commons Text StringEscapeUtils.escapeJava to encode \r\n to \\r\\n.
-    message.setDisposition(StringEscapeUtils.escapeJava("some disposition"));
-    // Set the mail body text
-    message.setText("Some email content.");
-    // Send the message
-    ```
+    检测到HTTP/邮件头注入风险（规则：java_smtp_rule-SmtpClient_1）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：`MimeMessage`、`\r\n`。
   patterns:
   - pattern-inside: |
       $M = new MimeMessage(...);

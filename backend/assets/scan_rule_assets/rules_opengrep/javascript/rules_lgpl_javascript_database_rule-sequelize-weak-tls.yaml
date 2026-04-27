@@ -1,7 +1,8 @@
 rules:
 - id: rules_lgpl_javascript_database_rule-sequelize-weak-tls
   message: |
-    'The Sequelize connection string indicates that an older version of TLS is in use. TLS1.0 and TLS1.1 are deprecated and should be used. By default, Sequelize use TLSv1.2 but it''s recommended to use TLS1.3. Not applicable to SQLite database.'
+    检测到SQL 注入风险（规则：rules_lgpl_javascript_database_rule-sequelize-weak-tls）。危害：未受信任输入可能改变 SQL
+    语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全 API，避免拼接原始 SQL。
   metadata:
     owasp:
     - A3:2017-Sensitive Data Exposure

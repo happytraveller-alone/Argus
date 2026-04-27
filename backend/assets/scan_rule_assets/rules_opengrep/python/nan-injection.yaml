@@ -1,6 +1,8 @@
 rules:
 - id: nan-injection
-  message: Found user input going directly into typecast for bool(), float(), or complex(). This allows an attacker to inject Python's not-a-number (NaN) into the typecast. This results in undefind behavior, particularly when doing comparisons. Either cast to a different type, or add a guard checking for all capitalizations of the string 'nan'.
+  message: |
+    检测到数值转换异常风险（规则：nan-injection）。危害：用户输入可生成 NaN 等特殊值，导致比较、排序或权限判断出现非预期行为。建议：在类型转换前拒绝特殊数值字符串并显式校验范围。
+    保留的关键标识：bool()、float()、complex()、'nan'。
   languages:
   - python
   severity: ERROR
@@ -43,7 +45,9 @@ rules:
 - id: nan-injection_1
   languages:
   - python
-  message: Found user input going directly into typecast for bool(), float(), or complex(). This allows an attacker to inject Python's not-a-number (NaN) into the typecast. This results in undefind behavior, particularly when doing comparisons. Either cast to a different type, or add a guard checking for all capitalizations of the string 'nan'.
+  message: |
+    检测到数值转换异常风险（规则：nan-injection_1）。危害：用户输入可生成 NaN 等特殊值，导致比较、排序或权限判断出现非预期行为。建议：在类型转换前拒绝特殊数值字符串并显式校验范围。
+    保留的关键标识：bool()、float()、complex()、'nan'。
   metadata:
     category: security
     confidence: MEDIUM

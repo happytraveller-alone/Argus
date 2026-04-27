@@ -10,10 +10,9 @@ rules:
     - pattern: $S is "..."
     - pattern: '"..." is $S'
   message: |
-    Found string comparison using 'is' operator. The 'is' operator
-    is for reference equality, not value equality, and therefore should
-    not be used to compare strings. For more information, see
-    https://github.com/satwikkansal/wtfpython#-how-not-to-use-is-operator"
+    检测到对象身份比较缺陷（规则：string-is-comparison）。危害：把值比较写成对象身份比较会导致结果依赖解释器对象复用，产生不稳定或错误的判断。建议：比较字符串、数字等值语义对象时使用
+    `==`，仅在判断同一对象时使用 `is`。
+    保留的关键标识：https://github.com/satwikkansal/wtfpython#-how-not-to-use-is-operator"、'is'。
   languages:
   - python
   severity: ERROR

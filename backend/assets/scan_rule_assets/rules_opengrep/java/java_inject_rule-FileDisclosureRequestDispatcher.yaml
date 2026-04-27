@@ -22,30 +22,9 @@ rules:
       - pattern: $REQ.include($FST, $SND)
       - pattern: $REQ.forward($FST, $SND)
   message: |
-    The `HttpRequest.getRequestDispatcher()`'s `include` and `forward` methods will return
-    any file that is resolvable within the web application context. This includes the `web.xml`
-    file, any compiled classes, `jsp` files, and additional JAR or WAR libraries that are
-    accessible.
-
-    Never pass user-supplied input directly to any of these methods. Use a lookup table or
-    hardcode
-    which views or paths the user should be directed to. Another option is to use a simple HTTP
-    redirect by returning an empty response body with a 301 status code and a `Location` redirect
-    header. In Java servlets, this can be done by using the `response.sendRedirect(...)` method.
-
-    Example using a redirect instead of a `RequestDispatcher`:
-    ```
-    // Create a look up table or pull from a data source
-    HashMap<String, String> lookupTable = new HashMap<>();
-    lookupTable.put("key1", "/Resource1");
-    lookupTable.put("key2", "/Resource2");
-    // Get user input
-    String userInput = request.getParameter("key");
-    // Look up resource to redirect to from the user input
-    String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
-    // Redirect the user
-    response.sendRedirect(redirectValue);
-    ```
+    检测到路径穿越/不安全解包风险（规则：java_inject_rule-FileDisclosureRequestDispatcher）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+    保留的关键标识：HttpRequest.getRequestDispatcher()、response.sendRedirect(...)、`HttpRequest.getRequestDispatcher()`、`include`、`forward`、`web.xml`、`jsp`、`Location`、`response.sendRedirect(...)`、`RequestDispatcher`。
   metadata:
     shortDescription: Files or directories accessible to external parties
     category: security
@@ -78,30 +57,9 @@ rules:
       - pattern: $REQ.include($FST, $SND)
       - pattern: $REQ.forward($FST, $SND)
   message: |
-    The `HttpRequest.getRequestDispatcher()`'s `include` and `forward` methods will return
-    any file that is resolvable within the web application context. This includes the `web.xml`
-    file, any compiled classes, `jsp` files, and additional JAR or WAR libraries that are
-    accessible.
-
-    Never pass user-supplied input directly to any of these methods. Use a lookup table or
-    hardcode
-    which views or paths the user should be directed to. Another option is to use a simple HTTP
-    redirect by returning an empty response body with a 301 status code and a `Location` redirect
-    header. In Java servlets, this can be done by using the `response.sendRedirect(...)` method.
-
-    Example using a redirect instead of a `RequestDispatcher`:
-    ```
-    // Create a look up table or pull from a data source
-    HashMap<String, String> lookupTable = new HashMap<>();
-    lookupTable.put("key1", "/Resource1");
-    lookupTable.put("key2", "/Resource2");
-    // Get user input
-    String userInput = request.getParameter("key");
-    // Look up resource to redirect to from the user input
-    String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
-    // Redirect the user
-    response.sendRedirect(redirectValue);
-    ```
+    检测到路径穿越/不安全解包风险（规则：java_inject_rule-FileDisclosureRequestDispatcher_1）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+    保留的关键标识：HttpRequest.getRequestDispatcher()、response.sendRedirect(...)、`HttpRequest.getRequestDispatcher()`、`include`、`forward`、`web.xml`、`jsp`、`Location`、`response.sendRedirect(...)`、`RequestDispatcher`。
   metadata:
     shortDescription: Files or directories accessible to external parties
     category: security

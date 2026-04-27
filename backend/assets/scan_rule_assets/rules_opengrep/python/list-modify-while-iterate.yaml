@@ -19,8 +19,8 @@ rules:
           ...
           $LIST.extend(...)
   message: |
-    It appears that `$LIST` is a list that is being modified while in a for loop.
-    This will likely cause a runtime error or an infinite loop.
+    检测到迭代期间修改列表缺陷（规则：list-modify-while-iterate）。危害：遍历列表时同时修改列表可能跳过元素、重复处理或触发运行时错误。建议：遍历副本、收集待修改项，或改用新的结果列表。
+    保留的关键标识：$LIST、`$LIST`。
   languages:
   - python
   severity: ERROR

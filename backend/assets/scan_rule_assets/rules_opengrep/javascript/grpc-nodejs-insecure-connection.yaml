@@ -1,8 +1,7 @@
 rules:
 - id: grpc-nodejs-insecure-connection
   message: |
-    Found an insecure gRPC connection. This creates a connection without encryption to a gRPC client/server. A malicious attacker
-    could tamper with the gRPC message, which could compromise the machine.
+    检测到不安全反序列化风险（规则：grpc-nodejs-insecure-connection）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
   metadata:
     owasp: 'A8: Insecure Deserialization'
     cwe: 'CWE-502: Deserialization of Untrusted Data'

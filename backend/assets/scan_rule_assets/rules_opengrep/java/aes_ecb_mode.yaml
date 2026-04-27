@@ -4,7 +4,10 @@ rules:
   - pattern-either:
     - pattern: |
         Cipher.getInstance("=~/AES\/ECB.*/i")
-  message: The App uses ECB mode in Cryptographic encryption algorithm. ECB mode is known to be weak as it results in the same ciphertext for identical blocks of plaintext.
+  message: |
+    检测到弱加密/加密参数错误风险（规则：aes_ecb_mode）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
   severity: ERROR
   languages:
   - java

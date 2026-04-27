@@ -1,6 +1,9 @@
 rules:
 - id: express-libxml-noent
-  message: The libxml library processes user-input with the `noent` attribute is set to `true` which can lead to being vulnerable to XML External Entities (XXE) type attacks. It is recommended to set `noent` to `false` when using this feature to ensure you are protected.
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：express-libxml-noent）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识：`noent`、`true`、`false`。
   options:
     interfile: true
   metadata:

@@ -1,9 +1,7 @@
 rules:
 - id: spawn-git-clone
   message: |
-    Git allows shell commands to be specified in ext URLs for remote repositories.
-    For example, git clone 'ext::sh -c whoami% >&2' will execute the whoami command to try to connect to a remote repository.
-    Make sure that the URL is not controlled by external input.
+    检测到命令注入风险（规则：spawn-git-clone）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
   metadata:
     cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
     owasp: 'A1: Injection'

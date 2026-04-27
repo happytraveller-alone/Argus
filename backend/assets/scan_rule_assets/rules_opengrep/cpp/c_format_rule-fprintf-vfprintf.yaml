@@ -3,18 +3,8 @@ rules:
   languages:
   - cpp
   message: |
-    Format string vulnerabilities allow an attacker to read or in some cases,
-    potentially write data to
-    and from locations in the processes' memory. To prevent against format
-    string attacks, do not allow
-    users or un-validated input to provide the format specification.
-    Consider using a constant for the format specification, or only allow specific
-    characters to be provided to the format argument for the `fprintf` family of functions.
-
-    For more information please see: https://linux.die.net/man/3/fprintf
-
-    For more information on format string attacks please see OWASP's attack
-    guide: https://owasp.org/www-community/attacks/Format_string_attack
+    检测到格式化字符串风险（规则：c_format_rule-fprintf-vfprintf）。危害：用户可控格式串可能泄露内存、破坏内存或导致进程崩溃。建议：使用固定格式字符串，把用户输入作为普通参数传入。
+    保留的关键标识：https://linux.die.net/man/3/fprintf、https://owasp.org/www-community/attacks/Format_string_attack、`fprintf`。
   metadata:
     shortDescription: Potential format string vulnerability
     cwe: CWE-134

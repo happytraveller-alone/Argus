@@ -1,6 +1,9 @@
 rules:
 - id: tainted-env-from-http-request
-  message: Detected input from a HTTPServletRequest going into the environment variables of an 'exec' command.  Instead, call the command with user-supplied arguments by using the overloaded method with one String array as the argument. `exec({"command", "arg1", "arg2"})`.
+  message: |
+    检测到命令注入风险（规则：tainted-env-from-http-request）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：exec({"command", "arg1", "arg2"})、'exec'、"command"、"arg1"、"arg2"、`exec({"command", "arg1",
+    "arg2"})`。
   languages:
   - java
   severity: ERROR

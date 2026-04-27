@@ -15,7 +15,9 @@ rules:
     regex: (json\.){0,1}dumps
     replacement: flask.jsonify
     count: 1
-  message: flask.jsonify() is a Flask helper method which handles the correct settings for returning JSON from Flask routes
+  message: |
+    检测到响应构造不当风险（规则：use-jsonify）。危害：手动构造 JSON 响应可能遗漏正确的内容类型、编码或安全处理，造成客户端解析或安全边界问题。建议：使用框架提供的 JSON 响应对象。
+    保留的关键标识：flask.jsonify()。
   languages:
   - python
   severity: ERROR

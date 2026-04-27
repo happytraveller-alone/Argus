@@ -3,9 +3,8 @@ rules:
   pattern: |
     jwt.decode(..., verify=False, ...)
   message: |
-    Detected JWT token decoded with 'verify=False'. This bypasses any integrity
-    checks for the token which means the token could be tampered with by
-    malicious actors. Ensure that the JWT token is verified.
+    检测到JWT
+    验证/密钥配置风险（规则：unverified-jwt-decode）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
   metadata:
     owasp: 'A5: Broken Authentication'
     cwe: 'CWE-287: Improper Authentication'

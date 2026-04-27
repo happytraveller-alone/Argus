@@ -87,7 +87,8 @@ rules:
         ...
         $CONTEXT.addInitScript($INPUT,...)
   message: |
-    If unverified user data can reach the `puppeteer` methods it can result in Server-Side Request Forgery vulnerabilities.
+    检测到服务端请求伪造（SSRF）风险（规则：rules_lgpl_javascript_ssrf_rule-playwright-ssrf）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`puppeteer`。
   metadata:
     owasp:
     - A1:2017-Injection

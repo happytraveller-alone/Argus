@@ -8,15 +8,9 @@ rules:
   - pattern: $JWT.verify($P, $X, {...,algorithms:[...,'none',...],...},...)
   - pattern: $JWT.sign($P, $X, {...,algorithm:'none',...},...)
   message: |
-    Use of `{algorithm:'none'}` detected with `jsonwebtoken`.
-    Using none as the algorithm for jsonwebtoken can directly impact the integrity of the information transfer through the JWT token.
-    Consider using a secure algorithm to sign your JWT token such as HMAC or RSA.
-    Some safe usage examples:
-    ```
-    let token = jwt.sign({user:"user1"}, 'secret', {algorithm: 'HS256'});
-    ```
-    Using a secure algorithm can protect the integrity of the token information.
-    Avoid using none as the algorithm when signing jwt tokens since it can violate the integrity of the JWT information.
+    检测到JWT
+    验证/密钥配置风险（规则：rules_lgpl_javascript_jwt_rule-node-jwt-none-algorithm）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
+    保留的关键标识：'none'、`{algorithm:'none'}`、`jsonwebtoken`。
   languages:
   - javascript
   severity: ERROR

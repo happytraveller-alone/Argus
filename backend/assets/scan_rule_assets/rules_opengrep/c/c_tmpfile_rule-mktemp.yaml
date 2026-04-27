@@ -3,17 +3,9 @@ rules:
   languages:
   - c
   message: |
-    The `mktemp` function should no longer be used due to multiple flaws. Some implementations
-    created random files by using known information like the process ID and a single letter. This
-    allows for possible race conditions where an attacker could guess or manipulate these files
-    prior to them being used.
-
-    Consider using the `mkstemp` function instead, but be aware it also contains possible
-    risks. Ensure the process has called the `umask` function with restricted permissions prior
-    to calling `mkstemp` and validate the permissions prior to using the file descriptor.
-
-    For more information on temporary files please see:
-    https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=87152425
+    检测到临时文件使用不安全风险（规则：c_tmpfile_rule-mktemp）。危害：可预测或未同步的临时文件可能被抢占、覆盖或读取，造成信息泄露或文件篡改。建议：使用安全的临时文件创建
+    API，并在使用前正确刷新/关闭。
+    保留的关键标识：https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=87152425、`mktemp`、`mkstemp`、`umask`。
   metadata:
     shortDescription: Use of deprecated function (mktemp)
     cwe: CWE-377

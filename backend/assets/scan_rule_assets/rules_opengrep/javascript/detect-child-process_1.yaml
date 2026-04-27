@@ -2,7 +2,8 @@ rules:
 - id: detect-child-process_1
   languages:
   - javascript
-  message: Allowing spawning arbitrary programs or running shell processes with arbitrary arguments may end up in a command injection vulnerability. Try to avoid non-literal values for the command string. If it is not possible, then do not let running arbitrary commands, use a white list for inputs.
+  message: |
+    检测到命令注入风险（规则：detect-child-process_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
   metadata:
     category: security
     confidence: MEDIUM

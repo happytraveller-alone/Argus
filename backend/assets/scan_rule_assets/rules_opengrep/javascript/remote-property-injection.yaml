@@ -1,6 +1,7 @@
 rules:
 - id: remote-property-injection
-  message: Bracket object notation with user input is present, this might allow an attacker to access all properties of the object and even it's prototype. Use literal values for object properties.
+  message: |
+    检测到硬编码凭据风险（规则：remote-property-injection）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
   metadata:
     confidence: LOW
     owasp:

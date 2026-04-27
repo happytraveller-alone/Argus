@@ -3,35 +3,10 @@ rules:
   languages:
   - java
   message: |
-    External XML entities are a feature of XML parsers that allow documents to contain references
-    to
-    other documents or data. This feature can be abused to read files, communicate with external
-    hosts,
-    exfiltrate data, or cause a Denial of Service (DoS).
-
-    The XMLReaderFactory has been deprecated. It is recommended that
-    [SAXParserFactory](https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html)
-    be used
-    instead. Additionally when using the SAXParser it must be configured to disallow doctypes,
-    which will
-    protect against the majority of XXE attacks.
-
-    Example creating a SAXParser with disallowing the doctypes feature enabled:
-    ```
-    // Create a SAXParserFactory
-    SAXParserFactory saxParserFactory = SAXParserFactory.newInstance();
-    // Enable the feature which disallows <!DOCTYPE declarations which includes referencing
-    external entities.
-    saxParserFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-    // Create a new parser from this factory
-    SAXParser parser = saxParserFactory.newSAXParser();
-    // Parse the XML file, passing in a DefaultHandler (which also includes an empty entityResolve
-    method)
-    parser.parse(new FileInputStream(new File("bad.xml")), new DefaultHandler());
-    ```
-
-    For more information on XML security see OWASP's guide:
-    https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：java_xxe_rule-XMLRdr）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+    保留的关键标识：https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html、https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java。
   patterns:
   - pattern-inside: |
       $R = XMLReaderFactory.createXMLReader();
@@ -53,35 +28,10 @@ rules:
   languages:
   - java
   message: |
-    External XML entities are a feature of XML parsers that allow documents to contain references
-    to
-    other documents or data. This feature can be abused to read files, communicate with external
-    hosts,
-    exfiltrate data, or cause a Denial of Service (DoS).
-
-    The XMLReaderFactory has been deprecated. It is recommended that
-    [SAXParserFactory](https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html)
-    be used
-    instead. Additionally when using the SAXParser it must be configured to disallow doctypes,
-    which will
-    protect against the majority of XXE attacks.
-
-    Example creating a SAXParser with disallowing the doctypes feature enabled:
-    ```
-    // Create a SAXParserFactory
-    SAXParserFactory saxParserFactory = SAXParserFactory.newInstance();
-    // Enable the feature which disallows <!DOCTYPE declarations which includes referencing
-    external entities.
-    saxParserFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-    // Create a new parser from this factory
-    SAXParser parser = saxParserFactory.newSAXParser();
-    // Parse the XML file, passing in a DefaultHandler (which also includes an empty entityResolve
-    method)
-    parser.parse(new FileInputStream(new File("bad.xml")), new DefaultHandler());
-    ```
-
-    For more information on XML security see OWASP's guide:
-    https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：java_xxe_rule-XMLRdr_1）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+    保留的关键标识：https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html、https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java。
   patterns:
   - pattern-inside: |
       $R = XMLReaderFactory.createXMLReader();

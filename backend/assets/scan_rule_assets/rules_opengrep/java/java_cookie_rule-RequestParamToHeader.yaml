@@ -26,52 +26,9 @@ rules:
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
   message: |
-    HTTP Response Splitting is a vulnerability where Carriage Return (CR `\r`) and Line Feed (LF
-    `\n`)
-    characters are introduced into an HTTP header from user-supplied input. By injecting the
-    `\r\n`
-    character sequence, an adversary could potentially modify how the response is interpreted by
-    the
-    client or any down stream caching services. This could allow an adversary to poison the cache
-    data or execute Cross-Site Scripting (XSS) attacks.
-
-    Some Java application servers such as [Apache Tomcat](https://tomcat.apache.org/) will
-    automatically encode
-    characters from being set in response headers as a space `0x20` character. If your application
-    server does
-    not automatically provide this functionality, user-supplied input that is used in header keys
-    or values must be
-    validated.
-
-    Example of validating headers to only allow valid characters:
-    ```
-    // throws an IllegalArgumentException if the provided value contains invalid characters
-    public void validateHeader(String value) throws IllegalArgumentException {
-        char[] chars = value.toCharArray();
-
-        // iterate over every character
-        for (int i = 0; i < chars.length; i++) {
-            char c = chars[i];
-
-            // check for any characters below 0x21 as well as: '"' ',' ';' '\' and 0x7f.
-            if (c < 0x21 || c == '"' || c == ',' || c == ';' || c == '\\' || c == 0x7f) {
-                throw new IllegalArgumentException("Invalid character in cookie detected:
-    {0}".format(Integer.toString(c)));
-            }
-        }
-    }
-    ```
-
-    Alternatively, you could use a string escape package such as
-    [Apache Commons Text](https://commons.apache.org/proper/commons-text/) to escape the input:
-    ```
-    public String escapeValue(String value) {
-      return StringEscapeUtils.escapeJava(value);
-    }
-    ```
-
-    For more information on response splitting attacks see OWASP:
-    https://owasp.org/www-community/attacks/HTTP_Response_Splitting
+    检测到HTTP/邮件头注入风险（规则：java_cookie_rule-RequestParamToHeader）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：https://owasp.org/www-community/attacks/HTTP_Response_Splitting、`\r`、`\n`、`\r\n`、`0x20`。
   severity: ERROR
   metadata:
     shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
@@ -110,52 +67,9 @@ rules:
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
   message: |
-    HTTP Response Splitting is a vulnerability where Carriage Return (CR `\r`) and Line Feed (LF
-    `\n`)
-    characters are introduced into an HTTP header from user-supplied input. By injecting the
-    `\r\n`
-    character sequence, an adversary could potentially modify how the response is interpreted by
-    the
-    client or any down stream caching services. This could allow an adversary to poison the cache
-    data or execute Cross-Site Scripting (XSS) attacks.
-
-    Some Java application servers such as [Apache Tomcat](https://tomcat.apache.org/) will
-    automatically encode
-    characters from being set in response headers as a space `0x20` character. If your application
-    server does
-    not automatically provide this functionality, user-supplied input that is used in header keys
-    or values must be
-    validated.
-
-    Example of validating headers to only allow valid characters:
-    ```
-    // throws an IllegalArgumentException if the provided value contains invalid characters
-    public void validateHeader(String value) throws IllegalArgumentException {
-        char[] chars = value.toCharArray();
-
-        // iterate over every character
-        for (int i = 0; i < chars.length; i++) {
-            char c = chars[i];
-
-            // check for any characters below 0x21 as well as: '"' ',' ';' '\' and 0x7f.
-            if (c < 0x21 || c == '"' || c == ',' || c == ';' || c == '\\' || c == 0x7f) {
-                throw new IllegalArgumentException("Invalid character in cookie detected:
-    {0}".format(Integer.toString(c)));
-            }
-        }
-    }
-    ```
-
-    Alternatively, you could use a string escape package such as
-    [Apache Commons Text](https://commons.apache.org/proper/commons-text/) to escape the input:
-    ```
-    public String escapeValue(String value) {
-      return StringEscapeUtils.escapeJava(value);
-    }
-    ```
-
-    For more information on response splitting attacks see OWASP:
-    https://owasp.org/www-community/attacks/HTTP_Response_Splitting
+    检测到HTTP/邮件头注入风险（规则：java_cookie_rule-RequestParamToHeader_1）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：https://owasp.org/www-community/attacks/HTTP_Response_Splitting、`\r`、`\n`、`\r\n`、`0x20`。
   severity: ERROR
   metadata:
     shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')

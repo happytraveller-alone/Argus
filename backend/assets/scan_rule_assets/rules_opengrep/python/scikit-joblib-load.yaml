@@ -1,6 +1,8 @@
 rules:
 - id: scikit-joblib-load
-  message: Scikit `joblib` uses pickle under the hood. Functions reliant on pickle can result in arbitrary code execution. Consider using `skops` instead.
+  message: |
+    检测到不安全反序列化风险（规则：scikit-joblib-load）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：`joblib`、`skops`。
   languages:
   - python
   severity: ERROR

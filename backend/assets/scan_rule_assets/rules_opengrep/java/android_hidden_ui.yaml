@@ -17,7 +17,9 @@ rules:
         $V = View.INVISIBLE;
         ...
         $X.setVisibility($V);
-  message: Hidden sensitive elements in a view can still be accessible through memory inspection. Clear sensitive data before hiding it.
+  message: |
+    检测到敏感界面数据残留风险（规则：android_hidden_ui）。危害：隐藏界面元素并不等于清除敏感数据，攻击者仍可能通过内存检查读取内容。建议：隐藏或销毁视图前清除敏感字段，并避免把敏感值长期保存在
+    UI 对象中。
   languages:
   - java
   severity: ERROR

@@ -42,7 +42,9 @@ rules:
     - pattern: $DICT[$KEY]
     - focus-metavariable: $KEY
   severity: ERROR
-  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability. An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware, scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general, prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set of commands.
+  message: |
+    检测到命令注入风险（规则：subprocess-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`subprocess`。
   metadata:
     category: security
     technology:
@@ -64,7 +66,9 @@ rules:
 - id: subprocess-injection_1
   languages:
   - python
-  message: Detected user input entering a `subprocess` call unsafely. This could result in a command injection vulnerability. An attacker could use this vulnerability to execute arbitrary commands on the host, which allows them to download malware, scan sensitive data, or run any command they wish on the server. Do not let users choose the command to run. In general, prefer to use Python API versions of system commands. If you must use subprocess, use a dictionary to allowlist a set of commands.
+  message: |
+    检测到命令注入风险（规则：subprocess-injection_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`subprocess`。
   metadata:
     category: security
     confidence: HIGH

@@ -16,18 +16,8 @@ rules:
       metavariable: $INFO
       regex: (debug|error|fatal|info|trace|warn)
   message: |
-    The Seam logging API supports an expression language that allows developers to
-    introduce bean properties to log messages. The expression language can also be
-    the source to unwanted code execution. Expressions could be executed by dynamically
-    inserting user-controlled input into the various logging calls.
-
-    Use the [Seam logging API format specifier](https://docs.jboss.org/seam/2.1.2/reference/en-US/html/concepts.html#d0e4244) to ensure values are logged and expressions
-    are not executed dynamically prior to output.
-
-    Example logging call that safely logs the unfiltered values.
-    ```
-    log.info("This is a user controlled input = #0", input);
-    ```
+    检测到代码执行/模板注入风险（规则：java_inject_rule-SeamLogInjection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：https://docs.jboss.org/seam/2.1.2/reference/en-US/html/concepts.html#d0e4244。
   severity: ERROR
   metadata:
     category: security

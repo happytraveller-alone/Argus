@@ -2,7 +2,9 @@ rules:
 - id: v4-csrf-prevention
   languages:
   - javascript
-  message: The Apollo GraphQL server sets the 'csrfPrevention' option to false. This can enable CSRF attacks.
+  message: |
+    检测到CSRF 防护缺失风险（规则：v4-csrf-prevention）。危害：攻击者可能诱导已登录用户发起非预期请求，造成状态变更或敏感操作。建议：为危险请求启用 CSRF
+    token、SameSite Cookie 或等效校验。 保留的关键标识：'csrfPrevention'。
   severity: ERROR
   metadata:
     category: security

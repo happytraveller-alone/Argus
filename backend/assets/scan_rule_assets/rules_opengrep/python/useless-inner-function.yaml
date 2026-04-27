@@ -22,7 +22,9 @@ rules:
   - pattern: |
       def $FF(...):
         ...
-  message: function `$FF` is defined inside a function but never used
+  message: |
+    检测到未使用内部函数缺陷（规则：useless-inner-function）。危害：定义后未使用的内部函数会增加维护成本，并可能表示遗漏了调用或注册逻辑。建议：删除未使用函数，或在需要的位置显式调用/注册它。
+    保留的关键标识：$FF、`$FF`。
   languages:
   - python
   severity: ERROR

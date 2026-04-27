@@ -2,7 +2,9 @@ rules:
 - id: csv-writer-injection
   languages:
   - python
-  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+  message: |
+    检测到CSV 注入风险（规则：csv-writer-injection）。危害：未加引号的 CSV 单元格可能被电子表格软件解释为公式，导致命令执行、数据外带或钓鱼风险。建议：对所有 CSV
+    字段启用安全 quoting，并对公式前缀字符做转义。 保留的关键标识：`csv`、`defusedcsv`。
   metadata:
     category: security
     confidence: MEDIUM
@@ -50,7 +52,9 @@ rules:
 - id: csv-writer-injection_1
   languages:
   - python
-  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+  message: |
+    检测到CSV 注入风险（规则：csv-writer-injection_1）。危害：未加引号的 CSV 单元格可能被电子表格软件解释为公式，导致命令执行、数据外带或钓鱼风险。建议：对所有 CSV
+    字段启用安全 quoting，并对公式前缀字符做转义。 保留的关键标识：`csv`、`defusedcsv`。
   metadata:
     category: security
     confidence: MEDIUM

@@ -17,45 +17,10 @@ rules:
     - pattern-inside: $FUNC(..., $VAR, ...) { ... }
     - pattern: $VAR
   message: |
-    The application executes an argument using a `ScriptEngine`'s `eval` method. This
-    may allow for direct OS commands to be executed as it's possible to pass in strings
-    such as `java.lang.Runtime.getRuntime().exec('/bin/sh ...');`.
-
-    Never pass user-supplied input directly to the `eval` function. If possible hardcode all
-    JavasScript code or use a lookup table to resolve user input to known values. If none of these
-    techniques are possible, use `javax.script.Bindings` to pass input to the script engine.
-
-    Example using `Binding` to safely pass in string values:
-    ```
-    // Get ECMAScript engine
-    ScriptEngine engine = new ScriptEngineManager().getEngineByName("ECMAScript");
-
-    // User input, consisting of first and last name
-    String userFirstName = "John";
-    String userLastName = "Snow";
-
-    // Create bindings to pass into our script, forcing the values to be String.
-    Bindings bindings = engine.createBindings();
-    bindings.put("fname", new String(userFirstName));
-    bindings.put("lname", new String(userLastName));
-
-    // Example script that concatenates a greeting with the user-supplied input first/last name
-    String script = "var greeting='Hello ';" +
-    // fname and lname variables will be resolved by our bindings defined above
-    "greeting += fname + ' ' + lname;" +
-    // prints greeting
-    "greeting";
-
-    try {
-      // Execute the script, passing in the bindings
-      Object bindingsResult = engine.eval(script, bindings);
-      // Work with result
-      // ...
-    } catch (ScriptException e) {
-      // Handle exception
-      e.printStackTrace();
-    }
-    ```
+    检测到命令注入风险（规则：java_script_rule-ScriptInjection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：java.lang.Runtime.getRuntime()、exec('/bin/sh
+    ...')、`ScriptEngine`、`eval`、`java.lang.Runtime.getRuntime().exec('/bin/sh
+    ...');`、`javax.script.Bindings`、`Binding`。
   severity: ERROR
   metadata:
     shortDescription: Improper control of generation of code ('Code Injection')
@@ -83,45 +48,10 @@ rules:
     - pattern-inside: $FUNC(..., $VAR, ...) { ... }
     - pattern: $VAR
   message: |
-    The application executes an argument using a `ScriptEngine`'s `eval` method. This
-    may allow for direct OS commands to be executed as it's possible to pass in strings
-    such as `java.lang.Runtime.getRuntime().exec('/bin/sh ...');`.
-
-    Never pass user-supplied input directly to the `eval` function. If possible hardcode all
-    JavasScript code or use a lookup table to resolve user input to known values. If none of these
-    techniques are possible, use `javax.script.Bindings` to pass input to the script engine.
-
-    Example using `Binding` to safely pass in string values:
-    ```
-    // Get ECMAScript engine
-    ScriptEngine engine = new ScriptEngineManager().getEngineByName("ECMAScript");
-
-    // User input, consisting of first and last name
-    String userFirstName = "John";
-    String userLastName = "Snow";
-
-    // Create bindings to pass into our script, forcing the values to be String.
-    Bindings bindings = engine.createBindings();
-    bindings.put("fname", new String(userFirstName));
-    bindings.put("lname", new String(userLastName));
-
-    // Example script that concatenates a greeting with the user-supplied input first/last name
-    String script = "var greeting='Hello ';" +
-    // fname and lname variables will be resolved by our bindings defined above
-    "greeting += fname + ' ' + lname;" +
-    // prints greeting
-    "greeting";
-
-    try {
-      // Execute the script, passing in the bindings
-      Object bindingsResult = engine.eval(script, bindings);
-      // Work with result
-      // ...
-    } catch (ScriptException e) {
-      // Handle exception
-      e.printStackTrace();
-    }
-    ```
+    检测到命令注入风险（规则：java_script_rule-ScriptInjection_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：java.lang.Runtime.getRuntime()、exec('/bin/sh
+    ...')、`ScriptEngine`、`eval`、`java.lang.Runtime.getRuntime().exec('/bin/sh
+    ...');`、`javax.script.Bindings`、`Binding`。
   severity: ERROR
   metadata:
     shortDescription: Improper control of generation of code ('Code Injection')

@@ -5,8 +5,8 @@ rules:
   - pattern: import SimpleXMLRPCServer
   - pattern: import xmlrpc
   message: |
-    Detected use of xmlrpc. xmlrpc is not inherently safe from vulnerabilities.
-    Use defusedxml.xmlrpc instead.
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：use-defused-xmlrpc）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
   metadata:
     cwe: 'CWE-776: Improper Restriction of Recursive Entity References in DTDs (''XML Entity Expansion'')'
     owasp: 'A4: XML External Entities (XXE)'

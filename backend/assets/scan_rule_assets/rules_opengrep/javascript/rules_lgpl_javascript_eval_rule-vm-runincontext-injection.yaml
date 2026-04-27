@@ -48,7 +48,8 @@ rules:
         ...
         $VM.runInContext($CODE,<... $CONTEXT ...>,...)
   message: |
-    Untrusted user input in `vm.runInContext()` can result in code injection.
+    检测到代码执行/模板注入风险（规则：rules_lgpl_javascript_eval_rule-vm-runincontext-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：vm.runInContext()、`vm.runInContext()`。
   severity: ERROR
   languages:
   - javascript

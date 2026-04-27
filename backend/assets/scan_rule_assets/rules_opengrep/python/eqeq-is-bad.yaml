@@ -1,7 +1,8 @@
 rules:
 - id: eqeq-is-bad
   pattern: $X == $X
-  message: $X == $X is a useless equality check
+  message: |
+    检测到无效等值比较缺陷（规则：eqeq-is-bad）。危害：表达式把同一对象与自身比较，通常表示逻辑错误，会隐藏真实判断条件。建议：检查比较两侧变量，改为真实需要比较的对象。 保留的关键标识：$X。
   languages:
   - python
   severity: ERROR

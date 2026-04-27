@@ -7,7 +7,9 @@ rules:
           ...
           $H.proceed();
         }
-  message: Insecure WebView Implementation. WebView ignores SSL Certificate errors and accept any SSL Certificate. This application is vulnerable to MITM attacks.
+  message: |
+    检测到客户端容器安全配置风险（规则：ignore_ssl_certificate_errors）。危害：WebView/Electron
+    安全配置过宽可能允许调试、明文加载或跨域访问，扩大代码执行和数据窃取风险。建议：关闭危险调试/禁用项，只加载可信 HTTPS 内容并隔离不可信页面。
   languages:
   - java
   severity: ERROR

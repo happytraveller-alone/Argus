@@ -3,17 +3,8 @@ rules:
   languages:
   - java
   message: |
-    Prior to HTML5, Web browsers enforced the Same Origin Policy which ensures that in order for
-    JavaScript to access the contents of a Web page, both the JavaScript and the Web page must
-    originate from the same domain. Without the Same Origin Policy, a malicious website could serve
-    up JavaScript that loads sensitive information from other websites using a client's
-    credentials, cull through it, and communicate it back to the attacker. HTML5 makes it possible
-    for JavaScript to access data across domains if a new HTTP header called
-    Access-Control-Allow-Origin is defined. With this header, a Web server defines which other
-    domains are allowed to access its domain using cross-origin requests. However, caution should
-    be taken when defining the header because an overly permissive CORS policy will allow a
-    malicious application to communicate with the victim application in an inappropriate way,
-    leading to spoofing, data theft, relay and other attacks.
+    检测到CORS 配置不当风险（规则：scala_cors_rule-PermissiveCORSInjection）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
   metadata:
     category: security
     cwe: CWE-942
@@ -37,17 +28,8 @@ rules:
   languages:
   - java
   message: |
-    Prior to HTML5, Web browsers enforced the Same Origin Policy which ensures that in order for
-    JavaScript to access the contents of a Web page, both the JavaScript and the Web page must
-    originate from the same domain. Without the Same Origin Policy, a malicious website could serve
-    up JavaScript that loads sensitive information from other websites using a client's
-    credentials, cull through it, and communicate it back to the attacker. HTML5 makes it possible
-    for JavaScript to access data across domains if a new HTTP header called
-    Access-Control-Allow-Origin is defined. With this header, a Web server defines which other
-    domains are allowed to access its domain using cross-origin requests. However, caution should
-    be taken when defining the header because an overly permissive CORS policy will allow a
-    malicious application to communicate with the victim application in an inappropriate way,
-    leading to spoofing, data theft, relay and other attacks.
+    检测到CORS 配置不当风险（规则：scala_cors_rule-PermissiveCORSInjection_1）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
   metadata:
     category: security
     cwe: CWE-942
