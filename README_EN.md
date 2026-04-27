@@ -31,10 +31,9 @@ The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launc
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
-- `.github/workflows/docker-publish.yml` remains the reusable leaf builder; it defaults to the current repository owner as the GHCR namespace and still accepts `image_namespace` and `package_visibility`.
-- To override the namespace, pass `image_namespace` when calling `.github/workflows/docker-publish.yml`. If it points to a different user or organization, you must also provide `GHCR_USERNAME` and `GHCR_TOKEN`.
-- GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls; when `package_visibility` is not `public`, the workflow skips anonymous pull validation.
-- Human-triggered multi-image publishing now goes only through `.github/workflows/docker-publish-runtime-images.yml`.
+- `.github/workflows/docker-publish.yml` now handles backend, frontend, OpenGrep runner, flow/parser runner, and sandbox runner image builds and publishing in one workflow.
+- GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls.
+- Human-triggered multi-image publishing also goes through `.github/workflows/docker-publish.yml`, where you select the images to build.
 
 ## Supported Commands
 

@@ -1,62 +1,285 @@
-name: Docker Publish Reusable
+name: Docker Publish
 
 on:
-  workflow_call:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docker-publish.yml"
+      - ".dockerignore"
+      - "docker/backend.Dockerfile"
+      - "docker/frontend.Dockerfile"
+      - "docker/opengrep-runner.Dockerfile"
+      - "docker/opengrep-scan.sh"
+      - "docker/flow-parser-runner.Dockerfile"
+      - "docker/flow-parser-runner.requirements.txt"
+      - "docker/sandbox-runner.Dockerfile"
+      - "backend/Cargo.toml"
+      - "backend/Cargo.lock"
+      - "backend/assets/scan_rule_assets/**"
+      - "backend/src/**"
+      - "backend/scripts/**"
+      - "backend/**"
+      - "frontend/**"
+      - "frontend/.dockerignore"
+  workflow_dispatch:
     inputs:
-      image_name:
-        description: "镜像名，不含 registry/namespace/tag"
-        required: true
-        type: string
-      context:
-        description: "docker build context"
-        required: true
-        type: string
-      file:
-        description: "Dockerfile 路径"
-        required: true
-        type: string
-      build_args:
-        description: "多行 build args"
+      build_all:
+        description: "构建全部容器镜像"
         required: false
-        type: string
-        default: ""
-      platforms:
-        description: "发布架构列表"
+        type: boolean
+        default: false
+      build_backend:
+        description: "构建 backend 镜像"
         required: false
-        type: string
-        default: "linux/amd64,linux/arm64"
-      image_namespace:
-        description: "GHCR namespace，留空时默认使用当前仓库 owner"
+        type: boolean
+        default: false
+      build_frontend:
+        description: "构建 frontend 镜像"
         required: false
-        type: string
-        default: ""
-      package_visibility:
-        description: "GHCR package visibility"
+        type: boolean
+        default: false
+      build_opengrep_runner:
+        description: "构建 OpenGrep runner 镜像"
         required: false
-        type: string
-        default: "public"
+        type: boolean
+        default: false
+      build_flow_parser_runner:
+        description: "构建 flow/parser runner 镜像"
+        required: false
+        type: boolean
+        default: false
+      build_sandbox_runner:
+        description: "构建 sandbox-runner 镜像"
+        required: false
+        type: boolean
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GHCR_REGISTRY: ghcr.io
-  Argus_IMAGE_NAMESPACE: ${{ inputs.image_namespace != '' && inputs.image_namespace || github.repository_owner }}
-  GHCR_PACKAGE_VISIBILITY: ${{ inputs.package_visibility }}
+  GHCR_PACKAGE_VISIBILITY: public
   Argus_IMAGE_TAG: latest
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: docker-publish-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-publish:
-    name: 发布 ${{ inputs.image_name }}
+  plan-publish:
+    name: 计算需要发布的容器镜像
     runs-on: ubuntu-latest
 
-    concurrency:
-      group: docker-publish-${{ inputs.image_name }}-${{ github.ref_name }}
-      cancel-in-progress: true
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      selected_count: ${{ steps.plan.outputs.selected_count }}
+      publish_summary_json: ${{ steps.plan.outputs.publish_summary_json }}
 
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
+    steps:
+      - name: 检出代码
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: 检测容器相关变更
+        if: ${{ github.event_name == 'push' }}
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'docker/backend.Dockerfile'
+              - 'backend/**'
+            frontend:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'docker/frontend.Dockerfile'
+              - 'frontend/**'
+              - 'frontend/.dockerignore'
+            opengrep_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'backend/Cargo.toml'
+              - 'backend/Cargo.lock'
+              - 'backend/assets/scan_rule_assets/**'
+              - 'backend/src/**'
+              - 'docker/opengrep-runner.Dockerfile'
+              - 'docker/opengrep-scan.sh'
+            flow_parser_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'docker/flow-parser-runner.Dockerfile'
+              - 'docker/flow-parser-runner.requirements.txt'
+              - 'backend/scripts/**'
+            sandbox_runner:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'docker/sandbox-runner.Dockerfile'
+
+      - name: 生成发布矩阵
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          PUSH_BACKEND: ${{ steps.filter.outputs.backend || 'false' }}
+          PUSH_FRONTEND: ${{ steps.filter.outputs.frontend || 'false' }}
+          PUSH_OPENGREP_RUNNER: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
+          PUSH_FLOW_PARSER_RUNNER: ${{ steps.filter.outputs.flow_parser_runner || 'false' }}
+          PUSH_SANDBOX_RUNNER: ${{ steps.filter.outputs.sandbox_runner || 'false' }}
+          DISPATCH_BUILD_ALL: ${{ inputs.build_all || false }}
+          DISPATCH_BUILD_BACKEND: ${{ inputs.build_backend || false }}
+          DISPATCH_BUILD_FRONTEND: ${{ inputs.build_frontend || false }}
+          DISPATCH_BUILD_OPENGREP_RUNNER: ${{ inputs.build_opengrep_runner || false }}
+          DISPATCH_BUILD_FLOW_PARSER_RUNNER: ${{ inputs.build_flow_parser_runner || false }}
+          DISPATCH_BUILD_SANDBOX_RUNNER: ${{ inputs.build_sandbox_runner || false }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          def is_true(name: str) -> bool:
+              return os.environ.get(name, "").strip().lower() == "true"
+
+          catalog = [
+              {
+                  "key": "backend",
+                  "image_name": "Argus-backend",
+                  "context": ".",
+                  "file": "./docker/backend.Dockerfile",
+                  "platforms": "linux/amd64,linux/arm64",
+                  "build_args": "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library",
+                  "push_env": "PUSH_BACKEND",
+                  "dispatch_env": "DISPATCH_BUILD_BACKEND",
+              },
+              {
+                  "key": "frontend",
+                  "image_name": "Argus-frontend",
+                  "context": "./frontend",
+                  "file": "./docker/frontend.Dockerfile",
+                  "platforms": "linux/amd64,linux/arm64",
+                  "build_args": "",
+                  "push_env": "PUSH_FRONTEND",
+                  "dispatch_env": "DISPATCH_BUILD_FRONTEND",
+              },
+              {
+                  "key": "opengrep_runner",
+                  "image_name": "Argus-opengrep-runner",
+                  "context": ".",
+                  "file": "./docker/opengrep-runner.Dockerfile",
+                  "platforms": "linux/amd64,linux/arm64",
+                  "build_args": "",
+                  "push_env": "PUSH_OPENGREP_RUNNER",
+                  "dispatch_env": "DISPATCH_BUILD_OPENGREP_RUNNER",
+              },
+              {
+                  "key": "flow_parser_runner",
+                  "image_name": "Argus-flow-parser-runner",
+                  "context": ".",
+                  "file": "./docker/flow-parser-runner.Dockerfile",
+                  "platforms": "linux/amd64,linux/arm64",
+                  "build_args": "",
+                  "push_env": "PUSH_FLOW_PARSER_RUNNER",
+                  "dispatch_env": "DISPATCH_BUILD_FLOW_PARSER_RUNNER",
+              },
+              {
+                  "key": "sandbox_runner",
+                  "image_name": "Argus-sandbox-runner",
+                  "context": ".",
+                  "file": "./docker/sandbox-runner.Dockerfile",
+                  "platforms": "linux/amd64,linux/arm64",
+                  "build_args": "",
+                  "push_env": "PUSH_SANDBOX_RUNNER",
+                  "dispatch_env": "DISPATCH_BUILD_SANDBOX_RUNNER",
+              },
+          ]
+
+          event_name = os.environ["EVENT_NAME"]
+          if event_name == "workflow_dispatch":
+              build_all = is_true("DISPATCH_BUILD_ALL")
+              selected = [
+                  item
+                  for item in catalog
+                  if build_all or is_true(item["dispatch_env"])
+              ]
+          else:
+              selected = [
+                  item
+                  for item in catalog
+                  if is_true(item["push_env"])
+              ]
+
+          selected_images = [item["image_name"] for item in selected]
+          published_images = [
+              f"ghcr.io/{os.environ['REPOSITORY_OWNER']}/{image_name}:latest"
+              for image_name in selected_images
+          ]
+          summary = {
+              "schema_version": 1,
+              "channel": "latest",
+              "selected_images": selected_images,
+              "published_images": published_images,
+          }
+
+          matrix = {
+              "include": [
+                  {
+                      key: item[key]
+                      for key in (
+                          "key",
+                          "image_name",
+                          "context",
+                          "file",
+                          "platforms",
+                          "build_args",
+                      )
+                  }
+                  for item in selected
+              ]
+          }
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"selected_count={len(selected)}\n")
+              handle.write(
+                  "matrix="
+                  f"{json.dumps(matrix, separators=(',', ':'))}\n"
+              )
+              handle.write(
+                  "publish_summary_json="
+                  f"{json.dumps(summary, separators=(',', ':'))}\n"
+              )
+          PY
+
+      - name: 输出计划摘要
+        env:
+          SELECTED_COUNT: ${{ steps.plan.outputs.selected_count }}
+          PUBLISH_SUMMARY_JSON: ${{ steps.plan.outputs.publish_summary_json }}
+        run: |
+          echo "## Container publish plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- selected_count: \`${SELECTED_COUNT}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- publish_summary_json: \`${PUBLISH_SUMMARY_JSON}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-images:
+    name: 发布 ${{ matrix.image_name }}
+    needs: plan-publish
+    if: ${{ needs.plan-publish.outputs.selected_count != '0' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan-publish.outputs.matrix) }}
+
+    env:
+      Argus_IMAGE_NAMESPACE: ${{ github.repository_owner }}
 
     steps:
       - name: 检出代码
@@ -91,7 +314,7 @@ jobs:
           syft-version: "v1.18.0"
 
       - name: 设置 QEMU
-        if: contains(inputs.platforms, 'arm64')
+        if: contains(matrix.platforms, 'arm64')
         uses: docker/setup-qemu-action@v4
 
       - name: 设置 Docker Buildx
@@ -101,21 +324,21 @@ jobs:
         id: build-image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.file }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
-          platforms: ${{ inputs.platforms }}
-          tags: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}
-          cache-from: type=gha,scope=${{ inputs.image_name }}-latest
-          cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}-latest
-          build-args: ${{ inputs.build_args }}
+          platforms: ${{ matrix.platforms }}
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ env.Argus_IMAGE_TAG }}
+          cache-from: type=gha,scope=${{ matrix.image_name }}-latest
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}-latest
+          build-args: ${{ matrix.build_args }}
 
       - name: 签名并附加 SBOM
         env:
           DIGEST: ${{ steps.build-image.outputs.digest }}
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ matrix.image_name }}
           TAG: ${{ env.Argus_IMAGE_TAG }}
-          SBOM_PATH: /tmp/${{ inputs.image_name }}.spdx.json
+          SBOM_PATH: /tmp/${{ matrix.image_name }}.spdx.json
         run: |
           cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
           syft "${IMAGE}@${DIGEST}" -o spdx-json --file "${SBOM_PATH}"
@@ -130,7 +353,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           PACKAGE_OWNER: ${{ env.Argus_IMAGE_NAMESPACE }}
-          PACKAGE_NAME: ${{ inputs.image_name }}
+          PACKAGE_NAME: ${{ matrix.image_name }}
         run: |
           set -euo pipefail
 
@@ -173,7 +396,7 @@ jobs:
       - name: 验证 GHCR 匿名拉取
         if: env.GHCR_PACKAGE_VISIBILITY == 'public' && steps.package-visibility.outputs.visibility == 'public'
         env:
-          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ env.Argus_IMAGE_TAG }}
         run: |
           set -euo pipefail
           docker logout ghcr.io || true
@@ -202,5 +425,38 @@ jobs:
         run: |
           echo "## 镜像已推送到 GHCR" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ inputs.image_name }}:${{ env.Argus_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.Argus_IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ env.Argus_IMAGE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- package visibility: \`${{ env.GHCR_PACKAGE_VISIBILITY }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  nothing-to-publish:
+    name: 无需发布
+    needs: plan-publish
+    if: ${{ needs.plan-publish.outputs.selected_count == '0' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 输出跳过说明
+        run: |
+          echo "## 无需发布" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 本次触发没有选中任何需要构建的容器镜像。" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-summary:
+    name: 汇总发布结果
+    needs:
+      - plan-publish
+      - publish-images
+      - nothing-to-publish
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 输出发布摘要
+        env:
+          SELECTED_COUNT: ${{ needs.plan-publish.outputs.selected_count }}
+          PUBLISH_SUMMARY_JSON: ${{ needs.plan-publish.outputs.publish_summary_json }}
+        run: |
+          echo "## Runtime image publish summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- selected_count: \`${SELECTED_COUNT}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- publish_summary_json: \`${PUBLISH_SUMMARY_JSON}\`" >> "$GITHUB_STEP_SUMMARY"
