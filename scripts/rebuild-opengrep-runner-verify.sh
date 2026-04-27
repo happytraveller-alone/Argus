@@ -24,8 +24,10 @@ verify it by scanning a project source tree.
 Target selection, first match wins:
   --project DIR          scan an existing extracted project directory
   --archive FILE         extract and scan a project archive
+                         (.zst/.zstd inputs require the zstd command)
   --uploads-volume NAME  copy the newest imported archive from a Docker volume
                          (default: argus_backend_uploads)
+                         .archive files use adjacent .meta original_filename when present
 
 Options:
   --image NAME           image tag to rebuild and run
@@ -130,7 +132,7 @@ copy_latest_uploaded_archive() {
         set -Eeuo pipefail
         found="$(
           find /uploads -type f \
-            \( -iname "*.archive" -o -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" -o -iname "*.tar.xz" -o -iname "*.txz" -o -iname "*.tar.bz2" -o -iname "*.tbz2" -o -iname "*.tbz" \) \
+            \( -iname "*.archive" -o -iname "*.zip" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tgz" -o -iname "*.tar.xz" -o -iname "*.txz" -o -iname "*.tar.bz2" -o -iname "*.tbz2" -o -iname "*.tbz" -o -iname "*.tar.zst" -o -iname "*.tar.zstd" -o -iname "*.tzst" -o -iname "*.zst" -o -iname "*.zstd" \) \
             -printf "%T@ %p\n" 2>/dev/null \
             | sort -nr \
             | head -n 1 \
@@ -139,6 +141,22 @@ copy_latest_uploaded_archive() {
         [ -n "$found" ] || exit 12
         base="$(basename "$found")"
         cp -- "$found" "/out/$base"
+        meta="${found%.*}.meta"
+        if [ -f "$meta" ]; then
+          python3 - "$meta" "/out/$base.original-name" <<'"'"'PY'"'"'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+original = payload.get("original_filename")
+if isinstance(original, str) and original:
+    with open(sys.argv[2], "w", encoding="utf-8") as output:
+        output.write(original)
+        output.write("\n")
+PY
+        fi
         printf "%s\n" "$base"
       '
   )"
@@ -158,17 +176,22 @@ copy_latest_uploaded_archive() {
 extract_archive() {
   local archive_path="$1"
   local destination_dir="$2"
+  local original_name="${3:-}"
 
   mkdir -p "$destination_dir"
-  python3 - "$archive_path" "$destination_dir" <<'PY'
+  python3 - "$archive_path" "$destination_dir" "$original_name" <<'PY'
+import os
 import pathlib
 import shutil
+import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 
 archive = pathlib.Path(sys.argv[1]).resolve()
 destination = pathlib.Path(sys.argv[2]).resolve()
+logical_name = sys.argv[3] or archive.name
 destination.mkdir(parents=True, exist_ok=True)
 
 def safe_target(name: str) -> pathlib.Path:
@@ -176,6 +199,83 @@ def safe_target(name: str) -> pathlib.Path:
     if target != destination and destination not in target.parents:
         raise SystemExit(f"archive entry escapes destination: {name}")
     return target
+
+
+def strip_suffix(name: str, suffix: str) -> str:
+    return name[: -len(suffix)] if name.lower().endswith(suffix) else name
+
+
+def zstd_magic_seen(path: pathlib.Path) -> bool:
+    with path.open("rb") as handle:
+        return handle.read(4) == b"\x28\xb5\x2f\xfd"
+
+
+def tar_magic_seen(path: pathlib.Path) -> bool:
+    with path.open("rb") as handle:
+        handle.seek(257)
+        return handle.read(5) == b"ustar"
+
+
+def extract_tar_members(bundle: tarfile.TarFile) -> None:
+    for member in bundle:
+        target = safe_target(member.name)
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        if not member.isfile():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = bundle.extractfile(member)
+        if source is None:
+            continue
+        with source, target.open("wb") as output:
+            shutil.copyfileobj(source, output)
+
+
+def extract_zstd_stream() -> None:
+    zstd = shutil.which("zstd")
+    if zstd is None:
+        raise SystemExit("zstd archive support requires the zstd command")
+
+    lower_name = logical_name.lower()
+    decoded_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=".argus-zstd-", dir=destination, delete=False
+        ) as decoded:
+            decoded_path = pathlib.Path(decoded.name)
+            subprocess.run([zstd, "-dc", str(archive)], stdout=decoded, check=True)
+
+        decoded_is_tar = lower_name.endswith(
+            (".tar.zst", ".tar.zstd", ".tzst")
+        ) or tar_magic_seen(decoded_path)
+        if decoded_is_tar:
+            with tarfile.open(decoded_path, mode="r:") as bundle:
+                extract_tar_members(bundle)
+            return
+
+        output_name = logical_name
+        for suffix in (".zstd", ".zst"):
+            output_name = strip_suffix(output_name, suffix)
+        target = safe_target(output_name or "archive")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(decoded_path, target)
+        decoded_path = None
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(f"failed to decompress zstd archive: {archive}") from error
+    except tarfile.TarError as error:
+        raise SystemExit(f"invalid zstd tar archive: {archive}: {error}") from error
+    finally:
+        if decoded_path is not None:
+            decoded_path.unlink(missing_ok=True)
+
+
+lower_name = logical_name.lower()
+if lower_name.endswith((".tar.zst", ".tar.zstd", ".tzst", ".zst", ".zstd")) or (
+    archive.name.lower().endswith(".archive") and zstd_magic_seen(archive)
+):
+    extract_zstd_stream()
+    raise SystemExit(0)
 
 if zipfile.is_zipfile(archive):
     with zipfile.ZipFile(archive) as bundle:
@@ -191,9 +291,7 @@ if zipfile.is_zipfile(archive):
 
 if tarfile.is_tarfile(archive):
     with tarfile.open(archive) as bundle:
-        for member in bundle.getmembers():
-            safe_target(member.name)
-        bundle.extractall(destination)
+        extract_tar_members(bundle)
     raise SystemExit(0)
 
 raise SystemExit(f"unsupported or invalid archive: {archive}")
@@ -388,13 +486,17 @@ if [ -n "$PROJECT_DIR" ]; then
 elif [ -n "$PROJECT_ARCHIVE" ]; then
   [ -f "$PROJECT_ARCHIVE" ] || die "project archive not found: $PROJECT_ARCHIVE"
   log "extracting archive: $PROJECT_ARCHIVE"
-  extract_archive "$PROJECT_ARCHIVE" "$WORKDIR/source"
+  extract_archive "$PROJECT_ARCHIVE" "$WORKDIR/source" "$(basename "$PROJECT_ARCHIVE")"
   SCAN_TARGET="$(pick_scan_root "$WORKDIR/source")"
 else
   log "copying latest imported archive from Docker volume: $UPLOADS_VOLUME"
   UPLOADED_ARCHIVE="$(copy_latest_uploaded_archive "$WORKDIR/uploaded")"
+  UPLOADED_ORIGINAL_NAME=""
+  if [ -f "$UPLOADED_ARCHIVE.original-name" ]; then
+    UPLOADED_ORIGINAL_NAME="$(head -n 1 "$UPLOADED_ARCHIVE.original-name")"
+  fi
   log "extracting uploaded archive: $UPLOADED_ARCHIVE"
-  extract_archive "$UPLOADED_ARCHIVE" "$WORKDIR/source"
+  extract_archive "$UPLOADED_ARCHIVE" "$WORKDIR/source" "$UPLOADED_ORIGINAL_NAME"
   SCAN_TARGET="$(pick_scan_root "$WORKDIR/source")"
 fi
 

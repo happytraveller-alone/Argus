@@ -118,3 +118,31 @@ fn opengrep_rebuild_verify_script_rebuilds_image_and_scans_in_container() {
         "script must not depend on host-specific Docker volume mount paths"
     );
 }
+
+#[test]
+fn opengrep_rebuild_verify_script_supports_zstd_archives() {
+    for suffix in ["*.tar.zst", "*.tar.zstd", "*.tzst", "*.zst", "*.zstd"] {
+        assert!(
+            OPENGREP_REBUILD_VERIFY_SCRIPT.contains(suffix),
+            "script must discover uploaded zstd archive suffix {suffix}"
+        );
+    }
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("zstd archive support requires the zstd command"),
+        "script must fail clearly when zstd support is unavailable"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("original_filename")
+            && OPENGREP_REBUILD_VERIFY_SCRIPT.contains(".original-name"),
+        "script must recover the backend-uploaded .archive original filename from adjacent metadata"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("zstd_magic_seen")
+            && OPENGREP_REBUILD_VERIFY_SCRIPT.contains("tar_magic_seen"),
+        "script must sniff zstd .archive payloads and decoded tar payloads"
+    );
+    assert!(
+        OPENGREP_REBUILD_VERIFY_SCRIPT.contains("os.replace(decoded_path, target)"),
+        "script must keep backend-compatible plain .zst extraction for non-tar payloads"
+    );
+}
