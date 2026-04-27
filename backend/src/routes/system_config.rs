@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 use axum::{
     extract::State,
@@ -48,6 +48,7 @@ pub struct AgentPreflightPayload {
     pub missing_fields: Option<Vec<String>>,
     pub effective_config: LlmQuickConfigSnapshot,
     pub saved_config: Option<LlmQuickConfigSnapshot>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,6 +268,11 @@ pub async fn agent_preflight(
             missing_fields: None,
             effective_config: effective_snapshot,
             saved_config: None,
+            metadata: Some(agent_preflight_metadata(
+                "llm_config",
+                "default_config",
+                None,
+            )),
         }));
     };
 
@@ -288,17 +294,37 @@ pub async fn agent_preflight(
             missing_fields: Some(missing_fields),
             effective_config: effective_snapshot,
             saved_config: Some(saved_snapshot),
+            metadata: Some(agent_preflight_metadata(
+                "llm_config",
+                "missing_fields",
+                None,
+            )),
+        }));
+    }
+
+    let runner_metadata = agentflow_runner_preflight_metadata(state.config.as_ref());
+    if runner_metadata["runner"]["ok"] != true {
+        return Ok(Json(AgentPreflightPayload {
+            ok: false,
+            stage: Some("runner".to_string()),
+            message: "智能审计初始化失败：AgentFlow runner 尚未配置或不可用。".to_string(),
+            reason_code: Some("runner_missing".to_string()),
+            missing_fields: None,
+            effective_config: effective_snapshot,
+            saved_config: Some(saved_snapshot),
+            metadata: Some(runner_metadata),
         }));
     }
 
     Ok(Json(AgentPreflightPayload {
         ok: true,
         stage: None,
-        message: "LLM 配置测试通过。".to_string(),
+        message: "智能审计预检通过。".to_string(),
         reason_code: None,
         missing_fields: None,
         effective_config: effective_snapshot,
         saved_config: Some(saved_snapshot),
+        metadata: Some(runner_metadata),
     }))
 }
 
@@ -385,7 +411,7 @@ fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
         provider,
         model: read_string(llm_config, "llmModel").unwrap_or_default(),
         base_url,
-        api_key,
+        api_key: redact_secret_for_response(&api_key),
     }
 }
 
@@ -401,6 +427,93 @@ fn collect_missing_fields(snapshot: &LlmQuickConfigSnapshot) -> Vec<String> {
         missing.push("llmApiKey".to_string());
     }
     missing
+}
+
+fn redact_secret_for_response(value: &str) -> String {
+    if value.trim().is_empty() {
+        String::new()
+    } else {
+        "***configured***".to_string()
+    }
+}
+
+fn agent_preflight_metadata(stage: &str, reason_code: &str, details: Option<Value>) -> Value {
+    json!({
+        "llm": {
+            "ok": stage != "llm_config",
+            "reason_code": reason_code,
+        },
+        "runner": {
+            "ok": false,
+            "reason_code": "not_checked",
+        },
+        "pipeline": {
+            "ok": false,
+            "reason_code": "not_checked",
+        },
+        "output_dir": {
+            "ok": false,
+            "reason_code": "not_checked",
+        },
+        "resource": {
+            "ok": false,
+            "reason_code": "not_checked",
+        },
+        "details": details.unwrap_or(Value::Null),
+    })
+}
+
+fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
+    let compose_path = Path::new("docker-compose.yml");
+    let pipeline_path = if Path::new("backend/agentflow/pipelines/intelligent_audit.py").exists() {
+        Path::new("backend/agentflow/pipelines/intelligent_audit.py")
+    } else {
+        Path::new("agentflow/pipelines/intelligent_audit.py")
+    };
+    let compose_has_runner = std::fs::read_to_string(compose_path)
+        .map(|content| content.contains("agentflow-runner"))
+        .unwrap_or(false);
+    let runner_command_configured = std::env::var("AGENTFLOW_RUNNER_COMMAND")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let runner_ok = compose_has_runner || runner_command_configured;
+    let pipeline_ok = pipeline_path.exists();
+    let output_dir_ok = config
+        .zip_storage_path
+        .parent()
+        .map(|path| path.exists() || std::fs::create_dir_all(path).is_ok())
+        .unwrap_or(true);
+    let resource_ok =
+        config.runner_preflight_max_concurrency > 0 && config.agent_timeout_seconds > 0;
+
+    json!({
+        "llm": {
+            "ok": true,
+            "reason_code": Value::Null,
+        },
+        "runner": {
+            "ok": runner_ok,
+            "reason_code": if runner_ok { Value::Null } else { json!("runner_missing") },
+            "compose_has_agentflow_runner": compose_has_runner,
+            "runner_command_configured": runner_command_configured,
+        },
+        "pipeline": {
+            "ok": pipeline_ok,
+            "reason_code": if pipeline_ok { Value::Null } else { json!("pipeline_invalid") },
+            "path": pipeline_path.display().to_string(),
+        },
+        "output_dir": {
+            "ok": output_dir_ok,
+            "reason_code": if output_dir_ok { Value::Null } else { json!("output_dir_unwritable") },
+            "path": config.zip_storage_path.display().to_string(),
+        },
+        "resource": {
+            "ok": resource_ok,
+            "reason_code": if resource_ok { Value::Null } else { json!("resource_unavailable") },
+            "max_concurrency": config.runner_preflight_max_concurrency,
+            "agent_timeout_seconds": config.agent_timeout_seconds,
+        },
+    })
 }
 
 fn normalize_provider_for_route(provider: &str) -> String {
