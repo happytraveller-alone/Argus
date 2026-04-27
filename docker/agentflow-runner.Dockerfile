@@ -20,6 +20,8 @@ ARG BACKEND_PYPI_INDEX_FALLBACK=
 ARG BACKEND_PIP_TIMEOUT_SECONDS=300
 ARG BACKEND_PIP_RETRIES=20
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
+ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
+ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_CACHE_DIR=/root/.cache/pip \
@@ -92,6 +94,8 @@ ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG BACKEND_PIP_TIMEOUT_SECONDS=300
 ARG BACKEND_PIP_RETRIES=20
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
+ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
+ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
 
 LABEL org.opencontainers.image.title="Argus AgentFlow runner" \
       org.opencontainers.image.description="Controlled AgentFlow execution image for Argus intelligent audit P1" \
@@ -122,7 +126,7 @@ RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-runtime-apt-lists,targe
       sed -i "s|${BACKEND_APT_MIRROR_PRIMARY}|${BACKEND_APT_MIRROR_FALLBACK}|g; s|${BACKEND_APT_SECURITY_PRIMARY}|${BACKEND_APT_SECURITY_FALLBACK}|g" /etc/apt/sources.list.d/debian.sources; \
       apt-get update; \
     }; \
-    apt-get install -y --no-install-recommends ca-certificates tini; \
+    apt-get install -y --no-install-recommends ca-certificates tini nodejs npm; \
     rm -rf /var/lib/apt/lists/*; \
     useradd --create-home --home-dir /home/agentflow --shell /usr/sbin/nologin --uid 10001 agentflow; \
     mkdir -p /app/backend/agentflow /work/input /work/outputs /work/agentflow-runs /tmp/argus-agentflow-home /licenses/agentflow; \
@@ -138,8 +142,10 @@ COPY backend/agentflow /app/backend/agentflow
 RUN set -eux; \
     python -m pip install --no-index --find-links=/opt/agentflow-wheels ${AGENTFLOW_P1_PYTHON_DEPS}; \
     python -m pip install --no-deps --no-index --find-links=/opt/agentflow-wheels "agentflow==${AGENTFLOW_VERSION}"; \
+    npm install --global --registry "${CODEX_NPM_REGISTRY}" "${CODEX_NPM_PACKAGE}"; \
     chmod +x /usr/local/bin/agentflow-entrypoint /usr/local/bin/argus-agentflow-runner /usr/local/bin/argus-agentflow-runner-adapter; \
     chown -R agentflow:agentflow /app/backend/agentflow /work /tmp/argus-agentflow-home; \
+    codex --version >/dev/null; \
     agentflow --help >/dev/null
 
 WORKDIR /app

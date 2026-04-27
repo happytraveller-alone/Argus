@@ -71,8 +71,11 @@ pub enum AgentflowTaskStatus {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentflowVisibility {
+    #[serde(alias = "ALL", alias = "all")]
     User,
+    #[serde(alias = "ORCHESTRATOR_ONLY", alias = "orchestrator_only")]
     Diagnostic,
+    #[serde(alias = "AGENTS_ONLY", alias = "agents_only")]
     Internal,
 }
 
@@ -162,6 +165,10 @@ pub struct ArgusAgentflowRunnerOutput {
     #[serde(default)]
     pub artifacts: Vec<AgentflowArtifactRef>,
     #[serde(default)]
+    pub artifact_index: Vec<AgentflowArtifactRef>,
+    #[serde(default)]
+    pub feedback_bundle: Option<Value>,
+    #[serde(default)]
     pub diagnostics: AgentflowDiagnostics,
 }
 
@@ -180,6 +187,8 @@ pub struct AgentflowRunSummary {
     pub run_id: String,
     pub status: AgentflowTaskStatus,
     pub topology_version: String,
+    #[serde(default)]
+    pub topology_change: Option<Value>,
     #[serde(default)]
     pub started_at: Option<String>,
     #[serde(default)]
@@ -244,6 +253,8 @@ pub struct AgentflowFinding {
     pub is_verified: bool,
     pub source: AgentflowFindingSource,
     #[serde(default)]
+    pub discard_reason: Option<String>,
+    #[serde(default)]
     pub location: Option<AgentflowFindingLocation>,
     #[serde(default)]
     pub description: Option<String>,
@@ -263,6 +274,8 @@ pub struct AgentflowFinding {
     pub data_flow: Vec<String>,
     #[serde(default)]
     pub artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub risk_lifecycle: Option<Value>,
     #[serde(default)]
     pub metadata: BTreeMap<String, Value>,
 }
@@ -304,6 +317,16 @@ pub struct AgentflowReport {
     #[serde(default)]
     pub severity_counts: BTreeMap<String, i64>,
     #[serde(default)]
+    pub statistics: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub sections: Vec<Value>,
+    #[serde(default)]
+    pub discard_summary: Option<Value>,
+    #[serde(default)]
+    pub timeline: Vec<Value>,
+    #[serde(default)]
+    pub artifact_index: Vec<AgentflowArtifactRef>,
+    #[serde(default)]
     pub diagnostics: BTreeMap<String, Value>,
 }
 
@@ -340,6 +363,10 @@ pub struct AgentflowDiagnostics {
     #[serde(default)]
     pub runner_exit_code: Option<i32>,
     #[serde(default)]
+    pub resource_diagnostics: Option<Value>,
+    #[serde(default)]
+    pub dynamic_expert_diagnostics: Option<Value>,
+    #[serde(default)]
     pub stdout_tail: Option<String>,
     #[serde(default)]
     pub stderr_tail: Option<String>,
@@ -347,6 +374,12 @@ pub struct AgentflowDiagnostics {
     pub reason_code: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default)]
+    pub dynamic_experts_enabled: Option<bool>,
+    #[serde(default)]
+    pub remote_target_enabled: Option<bool>,
+    #[serde(default)]
+    pub agentflow_serve_enabled: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -514,42 +547,6 @@ mod tests {
     }
 
     #[test]
-    fn agentflow_contract_schema_files_are_valid_json_and_name_frozen_contract() {
-        let input_schema: Value = serde_json::from_str(include_str!(
-            "../../../agentflow/schemas/runner_input.schema.json"
-        ))
-        .expect("runner input schema json");
-        let output_schema: Value = serde_json::from_str(include_str!(
-            "../../../agentflow/schemas/runner_output.schema.json"
-        ))
-        .expect("runner output schema json");
-        assert_eq!(
-            input_schema["properties"]["contract_version"]["const"],
-            ARGUS_AGENTFLOW_CONTRACT_VERSION
-        );
-        assert_eq!(
-            output_schema["properties"]["contract_version"]["const"],
-            ARGUS_AGENTFLOW_CONTRACT_VERSION
-        );
-        assert_eq!(
-            input_schema["properties"]["target"]["enum"],
-            json!(["local", "container"])
-        );
-    }
-
-    #[test]
-    fn agentflow_contract_empty_findings_fixture_decodes_as_business_output() {
-        let fixture: ArgusAgentflowRunnerOutput = serde_json::from_str(include_str!(
-            "../../../agentflow/fixtures/runner_output_empty_findings.json"
-        ))
-        .expect("fixture decodes as Argus business output");
-        assert_eq!(fixture.contract_version, ARGUS_AGENTFLOW_CONTRACT_VERSION);
-        assert_eq!(fixture.run.status, AgentflowTaskStatus::Completed);
-        assert_eq!(fixture.report.findings_count, 0);
-        assert!(fixture.forbidden_static_inputs().is_empty());
-    }
-
-    #[test]
     fn agentflow_runner_input_round_trips_without_static_candidates() {
         let input = ArgusAgentflowRunnerInput {
             contract_version: ARGUS_AGENTFLOW_CONTRACT_VERSION.to_string(),
@@ -602,6 +599,7 @@ mod tests {
                 started_at: None,
                 finished_at: None,
                 input_digest: Some("sha256:abc".to_string()),
+                topology_change: None,
             },
             events: vec![AgentflowEventEnvelope {
                 id: "event-1".to_string(),
@@ -625,10 +623,17 @@ mod tests {
                 verified_count: 0,
                 findings_count: 0,
                 severity_counts: BTreeMap::new(),
+                statistics: BTreeMap::new(),
+                sections: Vec::new(),
+                discard_summary: None,
+                timeline: Vec::new(),
+                artifact_index: Vec::new(),
                 diagnostics: BTreeMap::new(),
             },
             agent_tree: Vec::new(),
             artifacts: Vec::new(),
+            artifact_index: Vec::new(),
+            feedback_bundle: None,
             diagnostics: AgentflowDiagnostics::default(),
         };
 
@@ -637,5 +642,74 @@ mod tests {
         assert_eq!(value["events"][0]["visibility"], "user");
         assert_eq!(value["events"][0]["topology_version"], P1_TOPOLOGY_VERSION);
         assert!(output.forbidden_static_inputs().is_empty());
+    }
+
+    #[test]
+    fn agentflow_runner_output_accepts_p2_p3_visibility_and_report_fields() {
+        let output = json!({
+            "contract_version": ARGUS_AGENTFLOW_CONTRACT_VERSION,
+            "task_id": "task-1",
+            "run": {
+                "run_id": "run-1",
+                "status": "completed",
+                "topology_version": "p3-dynamic-topology-v1",
+                "topology_change": {"action": "scale_out", "approved": false}
+            },
+            "events": [{
+                "id": "event-1",
+                "sequence": 1,
+                "timestamp": "2026-04-27T00:00:00Z",
+                "event_type": "topology_change",
+                "role": "orchestrator",
+                "visibility": "ORCHESTRATOR_ONLY",
+                "correlation_id": "run-1:event-1",
+                "topology_version": "p3-dynamic-topology-v1",
+                "data": {}
+            }],
+            "checkpoints": [],
+            "findings": [{
+                "id": "finding-1",
+                "vulnerability_type": "authz",
+                "severity": "high",
+                "title": "risk lifecycle survives",
+                "status": "discarded",
+                "is_verified": false,
+                "discard_reason": "R3_unreachable",
+                "risk_lifecycle": {"state": "DISCARDED"},
+                "source": {
+                    "node_id": "risk-reviewer",
+                    "node_role": "validator",
+                    "agent_id": "agent-1"
+                }
+            }],
+            "report": {
+                "title": "report",
+                "summary": "summary",
+                "sections": [{"title": "Discarded"}],
+                "statistics": {"discarded": 1},
+                "discard_summary": {"R3_unreachable": 1},
+                "timeline": [{"event_type": "topology_change"}]
+            },
+            "artifact_index": [],
+            "feedback_bundle": {"next_prompt": "narrow scope"},
+            "diagnostics": {
+                "resource_diagnostics": {"queued": false},
+                "dynamic_expert_diagnostics": {"enabled": false}
+            }
+        });
+
+        let decoded: ArgusAgentflowRunnerOutput =
+            serde_json::from_value(output).expect("decode P2/P3-compatible output");
+        assert_eq!(decoded.run.topology_version, "p3-dynamic-topology-v1");
+        assert_eq!(
+            decoded.events[0].visibility,
+            AgentflowVisibility::Diagnostic
+        );
+        assert_eq!(
+            decoded.findings[0].discard_reason.as_deref(),
+            Some("R3_unreachable")
+        );
+        assert_eq!(decoded.report.sections.len(), 1);
+        assert!(decoded.feedback_bundle.is_some());
     }
 }

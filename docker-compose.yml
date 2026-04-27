@@ -32,6 +32,8 @@ services:
         BACKEND_PIP_TIMEOUT_SECONDS: ${BACKEND_PIP_TIMEOUT_SECONDS:-300}
         BACKEND_PIP_RETRIES: ${BACKEND_PIP_RETRIES:-20}
         AGENTFLOW_P1_PYTHON_DEPS: ${AGENTFLOW_P1_PYTHON_DEPS:-jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0}
+        CODEX_NPM_PACKAGE: ${CODEX_NPM_PACKAGE:-@openai/codex@latest}
+        CODEX_NPM_REGISTRY: ${CODEX_NPM_REGISTRY:-https://registry.npmjs.org/}
     restart: "no"
     mem_limit: 4g
     cpus: "2.0"
@@ -102,7 +104,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ${POSTGRES_DB:-Argus}
     ports:
-      - "5432:5432"
+      - "${Argus_DB_PORT:-5432}:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
@@ -151,6 +153,8 @@ services:
       AGENT_ENABLED: "true"
       ARGUS_AGENTFLOW_RUNNER_IMAGE: ${ARGUS_AGENTFLOW_RUNNER_IMAGE:-argus/agentflow-runner:1667fa35}
       AGENTFLOW_RUNNER_WORK_VOLUME: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}
+      ARGUS_CODEX_HOST_DIR: ${ARGUS_CODEX_HOST_DIR:-}
+      AGENTFLOW_RUNNER_NETWORK: ${AGENTFLOW_RUNNER_NETWORK:-}
       AGENTFLOW_DEFAULT_RUNNER_ENABLED: ${AGENTFLOW_DEFAULT_RUNNER_ENABLED:-true}
       OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"
       OPENGREP_SCAN_JOBS: "${OPENGREP_SCAN_JOBS:-0}"
@@ -256,7 +260,7 @@ services:
     mem_limit: 256m
     pids_limit: 256
     ports:
-      - "6379:6379"
+      - "${Argus_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:

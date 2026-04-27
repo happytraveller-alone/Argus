@@ -10,7 +10,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - host smoke fallback for Python < 3.11
+    tomllib = None
+
 CONTRACT_VERSION = "argus-agentflow-p1/v1"
+SUPPORTED_CONTRACT_VERSIONS = {
+    CONTRACT_VERSION,
+    "argus-agentflow-p2/v1",
+    "argus-agentflow-p3/v1",
+}
 TOPOLOGY_VERSION = "p1-fixed-dag-v1"
 DEFAULT_PIPELINE = "/app/backend/agentflow/pipelines/intelligent_audit.py"
 DEFAULT_INPUT_PATH = "/work/input/runner_input.json"
@@ -38,6 +48,132 @@ def tail(value: str | bytes | None) -> str:
         text = value
     return text[-TAIL_LIMIT:]
 
+
+SENSITIVE_MARKERS = (
+    "Authorization:",
+    "authorization:",
+    "Cookie:",
+    "cookie:",
+    "apiKey=",
+    "api_key=",
+    "llmApiKey=",
+)
+SENSITIVE_VALUES: list[str] = []
+
+
+def redact_text(value: str | bytes | None) -> str:
+    text = tail(value)
+    for marker in SENSITIVE_MARKERS:
+        pattern = re.compile(rf"({re.escape(marker)}\s*)([^\s&,;]+)")
+        text = pattern.sub(r"\1[REDACTED]", text)
+    text = re.sub(r"(sk-[A-Za-z0-9_\-]{8,})", "[REDACTED_API_KEY]", text)
+    for secret in SENSITIVE_VALUES:
+        if secret:
+            text = text.replace(secret, "[REDACTED_SECRET]")
+    text = text.replace("/var/run/docker.sock", "[REDACTED_DOCKER_SOCKET]")
+    return text
+
+
+def register_secret(value: str | None) -> None:
+    if isinstance(value, str) and len(value.strip()) >= 8:
+        SENSITIVE_VALUES.append(value.strip())
+
+
+def nested_str(mapping: Any, path: list[str]) -> str | None:
+    current = mapping
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    if isinstance(current, str) and current.strip():
+        return current.strip()
+    return None
+
+
+def codex_config_value(config: dict[str, Any], key: str) -> str | None:
+    if key == "base_url":
+        provider = nested_str(config, ["model_provider"]) or "openai"
+        return nested_str(config, ["model_providers", provider, "base_url"]) or nested_str(
+            config, ["model_provider", "base_url"]
+        )
+    return nested_str(config, [key])
+
+
+def parse_codex_config(text: str) -> dict[str, Any]:
+    if tomllib is not None:
+        return tomllib.loads(text)
+
+    parsed: dict[str, Any] = {}
+    current: dict[str, Any] = parsed
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = parsed
+            for part in line.strip("[]").split("."):
+                current = current.setdefault(part, {})
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key and value:
+            current[key] = value
+    return parsed
+
+
+def load_codex_runtime_env(runner_input: dict[str, Any]) -> tuple[dict[str, str], dict[str, Any]]:
+    config_path = Path(os.environ.get("ARGUS_CODEX_CONFIG_FILE", "/run/argus-codex/config.toml"))
+    auth_path = Path(os.environ.get("ARGUS_CODEX_AUTH_FILE", "/run/argus-codex/auth.json"))
+    runtime_env: dict[str, str] = {}
+    diagnostics: dict[str, Any] = {
+        "codex_config_present": config_path.is_file(),
+        "codex_auth_present": auth_path.is_file(),
+        "credential_source": None,
+    }
+
+    config: dict[str, Any] = {}
+    if config_path.is_file():
+        try:
+            config = parse_codex_config(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            diagnostics["codex_config_parse_error"] = True
+
+    auth: dict[str, Any] = {}
+    if auth_path.is_file():
+        try:
+            parsed_auth = json.loads(auth_path.read_text(encoding="utf-8"))
+            if isinstance(parsed_auth, dict):
+                auth = parsed_auth
+        except Exception:
+            diagnostics["codex_auth_parse_error"] = True
+
+    env_api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    auth_api_key = auth.get("OPENAI_API_KEY")
+    if env_api_key:
+        register_secret(env_api_key)
+        diagnostics["credential_source"] = "env:OPENAI_API_KEY"
+    elif isinstance(auth_api_key, str) and auth_api_key.strip():
+        runtime_env["OPENAI_API_KEY"] = auth_api_key.strip()
+        register_secret(auth_api_key)
+        diagnostics["credential_source"] = "codex_auth_json"
+
+    llm = runner_input.get("llm") if isinstance(runner_input.get("llm"), dict) else {}
+    config_model = codex_config_value(config, "model")
+    input_model = llm.get("model") if isinstance(llm.get("model"), str) else None
+    if config_model or input_model:
+        runtime_env.setdefault("ARGUS_AGENTFLOW_MODEL", (config_model or input_model or "").strip())
+        diagnostics["model_source"] = "codex_config" if config_model else "runner_input"
+    provider = codex_config_value(config, "model_provider")
+    if provider:
+        runtime_env.setdefault("ARGUS_AGENTFLOW_PROVIDER", provider)
+    base_url = codex_config_value(config, "base_url")
+    if base_url:
+        runtime_env.setdefault("ARGUS_AGENTFLOW_BASE_URL", base_url)
+        diagnostics["base_url_source"] = "codex_config"
+    return runtime_env, diagnostics
 
 def load_stdin_input() -> tuple[dict[str, Any], str]:
     raw = sys.stdin.read()
@@ -199,7 +335,9 @@ def failure_contract(
     stdout_tail: str = "",
     stderr_tail: str = "",
     input_digest: str | None = None,
+    credential_diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    credential_diagnostics = credential_diagnostics or {}
     return {
         "contract_version": CONTRACT_VERSION,
         "task_id": task_id,
@@ -238,24 +376,43 @@ def failure_contract(
             "findings_count": 0,
             "severity_counts": {},
             "diagnostics": {"reason_code": reason_code},
+            "statistics": {"findings_count": 0, "verified_count": 0},
+            "timeline": [],
+            "artifact_index": [],
         },
         "agent_tree": make_agent_tree(native_record, "failed"),
         "artifacts": [],
+        "artifact_index": [],
+        "feedback_bundle": None,
         "diagnostics": {
             "runner_exit_code": runner_exit_code,
-            "stdout_tail": tail(stdout_tail),
-            "stderr_tail": tail(stderr_tail),
+            "stdout_tail": redact_text(stdout_tail),
+            "stderr_tail": redact_text(stderr_tail),
             "reason_code": reason_code,
             "message": message,
+            "credential_diagnostics": credential_diagnostics,
+            "resource_diagnostics": {"max_concurrency": None, "queued": False},
+            "dynamic_expert_diagnostics": {"enabled": False, "reason": "disabled_in_p1"},
+            "dynamic_experts_enabled": False,
+            "remote_target_enabled": False,
+            "agentflow_serve_enabled": False,
         },
     }
 
 
-def run_command(args: list[str], *, output_path: Path | None = None) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(args, text=True, capture_output=True, check=False)
+def run_command(
+    args: list[str],
+    *,
+    output_path: Path | None = None,
+    env_overlay: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if env_overlay:
+        env.update(env_overlay)
+    result = subprocess.run(args, text=True, capture_output=True, check=False, env=env)
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(result.stdout, encoding="utf-8")
+        output_path.write_text(redact_text(result.stdout), encoding="utf-8")
     return result
 
 
@@ -302,13 +459,61 @@ def iter_node_text(native_record: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def extract_argus_contract(native_record: dict[str, Any]) -> dict[str, Any] | None:
-    if native_record.get("contract_version") == CONTRACT_VERSION:
+    if native_record.get("contract_version") in SUPPORTED_CONTRACT_VERSIONS:
         return native_record
     for _, text in iter_node_text(native_record):
         parsed = parse_json(text)
-        if isinstance(parsed, dict) and parsed.get("contract_version") == CONTRACT_VERSION:
+        if isinstance(parsed, dict) and parsed.get("contract_version") in SUPPORTED_CONTRACT_VERSIONS:
             return parsed
     return None
+
+
+def normalize_visibility(value: Any) -> str:
+    normalized = str(value or "user").strip().upper()
+    if normalized in {"USER", "ALL", ""}:
+        return "user"
+    if normalized in {"DIAGNOSTIC", "ORCHESTRATOR_ONLY"}:
+        return "diagnostic"
+    if normalized in {"INTERNAL", "AGENTS_ONLY"}:
+        return "internal"
+    return "diagnostic"
+
+
+def normalize_event_envelopes(events: Any, topology_version: str) -> list[dict[str, Any]]:
+    normalized_events: list[dict[str, Any]] = []
+    if not isinstance(events, list):
+        return normalized_events
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            continue
+        event = dict(event)
+        event.setdefault("id", f"event-{index + 1}")
+        event.setdefault("sequence", index + 1)
+        event.setdefault("timestamp", now_rfc3339())
+        event.setdefault("event_type", event.get("type") or "agentflow_event")
+        event.setdefault("role", "runner")
+        raw_visibility = event.get("visibility")
+        event["visibility"] = normalize_visibility(raw_visibility)
+        event.setdefault("correlation_id", event.get("id") or f"event-{index + 1}")
+        event.setdefault("topology_version", topology_version)
+        data = event.setdefault("data", {})
+        if isinstance(data, dict) and raw_visibility is not None:
+            data.setdefault("agentflow_visibility", raw_visibility)
+        normalized_events.append(event)
+    return normalized_events
+
+
+def normalize_topology_collection(items: Any, topology_version: str) -> list[dict[str, Any]]:
+    normalized_items: list[dict[str, Any]] = []
+    if not isinstance(items, list):
+        return normalized_items
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        copied = dict(item)
+        copied.setdefault("topology_version", topology_version)
+        normalized_items.append(copied)
+    return normalized_items
 
 
 def normalize_contract(
@@ -319,24 +524,55 @@ def normalize_contract(
     input_digest: str | None,
     stdout_tail: str,
     stderr_tail: str,
+    credential_diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     run_id = run_id_from(native_record, task_id)
+    original_contract_version = str(contract.get("contract_version") or CONTRACT_VERSION)
     contract["contract_version"] = CONTRACT_VERSION
     contract["task_id"] = str(contract.get("task_id") or task_id)
     run = contract.setdefault("run", {})
     if isinstance(run, dict):
         run["run_id"] = str(run.get("run_id") or run_id)
         run["status"] = str(run.get("status") or native_record.get("status") or "completed")
-        run["topology_version"] = TOPOLOGY_VERSION
+        run["topology_version"] = str(run.get("topology_version") or TOPOLOGY_VERSION)
         run.setdefault("started_at", native_record.get("started_at"))
         run.setdefault("finished_at", native_record.get("finished_at"))
         run.setdefault("input_digest", input_digest)
-    contract.setdefault("events", [])
-    contract.setdefault("checkpoints", [])
+        run.setdefault("topology_change", None)
+        topology_version = str(run.get("topology_version") or TOPOLOGY_VERSION)
+    else:
+        topology_version = TOPOLOGY_VERSION
+        contract["run"] = {
+            "run_id": run_id,
+            "status": str(native_record.get("status") or "completed"),
+            "topology_version": topology_version,
+            "started_at": native_record.get("started_at"),
+            "finished_at": native_record.get("finished_at"),
+            "input_digest": input_digest,
+            "topology_change": None,
+        }
+    contract["events"] = normalize_event_envelopes(contract.get("events"), topology_version)
+    contract["checkpoints"] = normalize_topology_collection(contract.get("checkpoints"), topology_version)
     contract.setdefault("findings", [])
-    contract.setdefault(
+    report = contract.setdefault(
         "report",
-        {
+        {},
+    )
+    if isinstance(report, dict):
+        report.setdefault("title", "AgentFlow 智能审计报告")
+        report.setdefault("summary", "AgentFlow 已返回 Argus P1 业务输出。")
+        report.setdefault("markdown", None)
+        report.setdefault("verified_count", 0)
+        report.setdefault("findings_count", len(contract.get("findings") or []))
+        report.setdefault("severity_counts", {})
+        report.setdefault("diagnostics", {})
+        report.setdefault("sections", [])
+        report.setdefault("statistics", {"findings_count": len(contract.get("findings") or [])})
+        report.setdefault("discard_summary", {})
+        report.setdefault("timeline", [])
+        report.setdefault("artifact_index", [])
+    else:
+        contract["report"] = {
             "title": "AgentFlow 智能审计报告",
             "summary": "AgentFlow 已返回 Argus P1 业务输出。",
             "markdown": None,
@@ -344,17 +580,36 @@ def normalize_contract(
             "findings_count": len(contract.get("findings") or []),
             "severity_counts": {},
             "diagnostics": {},
-        },
+            "sections": [],
+            "statistics": {"findings_count": len(contract.get("findings") or [])},
+            "discard_summary": {},
+            "timeline": [],
+            "artifact_index": [],
+        }
+    contract["agent_tree"] = normalize_topology_collection(
+        contract.get("agent_tree") or make_agent_tree(native_record, str(contract["run"].get("status") or "completed")),
+        topology_version,
     )
-    contract.setdefault("agent_tree", make_agent_tree(native_record, str(run.get("status") or "completed")))
-    contract.setdefault("artifacts", [])
+    artifacts = contract.setdefault("artifacts", [])
+    contract.setdefault("artifact_index", artifacts)
+    contract.setdefault("feedback_bundle", None)
     diagnostics = contract.setdefault("diagnostics", {})
     if isinstance(diagnostics, dict):
+        diagnostics.setdefault("compatibility", {})
+        if isinstance(diagnostics["compatibility"], dict):
+            diagnostics["compatibility"].setdefault("original_contract_version", original_contract_version)
+            diagnostics["compatibility"].setdefault("normalized_contract_version", CONTRACT_VERSION)
+        diagnostics.setdefault("credential_diagnostics", credential_diagnostics or {})
         diagnostics.setdefault("runner_exit_code", 0)
-        diagnostics.setdefault("stdout_tail", tail(stdout_tail))
-        diagnostics.setdefault("stderr_tail", tail(stderr_tail))
+        diagnostics.setdefault("stdout_tail", redact_text(stdout_tail))
+        diagnostics.setdefault("stderr_tail", redact_text(stderr_tail))
         diagnostics.setdefault("reason_code", None)
         diagnostics.setdefault("message", None)
+        diagnostics.setdefault("resource_diagnostics", {"max_concurrency": None, "queued": False})
+        diagnostics.setdefault("dynamic_expert_diagnostics", {"enabled": False, "reason": "disabled_in_p1"})
+        diagnostics.setdefault("dynamic_experts_enabled", False)
+        diagnostics.setdefault("remote_target_enabled", False)
+        diagnostics.setdefault("agentflow_serve_enabled", False)
     return contract
 
 
@@ -364,6 +619,7 @@ def main() -> int:
     runner_input, raw_input = load_stdin_input()
     task_id = task_id_from(runner_input)
     task_segment = safe_path_segment(task_id)
+    runtime_env, credential_diagnostics = load_codex_runtime_env(runner_input)
     output_dir = Path(os.environ.get("ARGUS_AGENTFLOW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR)) / task_segment
     runs_dir = str(Path(os.environ.get("AGENTFLOW_RUNS_DIR", DEFAULT_RUNS_DIR)) / task_segment)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -373,6 +629,7 @@ def main() -> int:
     validate_result = run_command(
         ["agentflow", "validate", pipeline_path],
         output_path=output_dir / "pipeline.validate.json",
+        env_overlay=runtime_env,
     )
     if validate_result.returncode != 0:
         contract = failure_contract(
@@ -384,6 +641,7 @@ def main() -> int:
             stdout_tail=validate_result.stdout,
             stderr_tail=validate_result.stderr,
             input_digest=input_digest,
+            credential_diagnostics=credential_diagnostics,
         )
         print(json.dumps(contract, ensure_ascii=False))
         return 0
@@ -391,6 +649,7 @@ def main() -> int:
     run_result = run_command(
         ["agentflow", "run", pipeline_path, "--runs-dir", runs_dir, "--output", "json", *extra_args],
         output_path=output_dir / "agentflow.run.json",
+        env_overlay=runtime_env,
     )
     native_record = parse_json(run_result.stdout)
     if not isinstance(native_record, dict):
@@ -403,6 +662,7 @@ def main() -> int:
             stdout_tail=run_result.stdout,
             stderr_tail=run_result.stderr,
             input_digest=input_digest,
+            credential_diagnostics=credential_diagnostics,
         )
         print(json.dumps(contract, ensure_ascii=False))
         return 0
@@ -419,6 +679,7 @@ def main() -> int:
             stdout_tail=run_result.stdout,
             stderr_tail=run_result.stderr,
             input_digest=input_digest,
+            credential_diagnostics=credential_diagnostics,
         )
         print(json.dumps(contract, ensure_ascii=False))
         return 0
@@ -435,6 +696,7 @@ def main() -> int:
             stdout_tail=run_result.stdout,
             stderr_tail=run_result.stderr,
             input_digest=input_digest,
+            credential_diagnostics=credential_diagnostics,
         )
         print(json.dumps(contract, ensure_ascii=False))
         return 0
@@ -448,6 +710,7 @@ def main() -> int:
                 input_digest=input_digest,
                 stdout_tail=run_result.stdout,
                 stderr_tail=run_result.stderr,
+                credential_diagnostics=credential_diagnostics,
             ),
             ensure_ascii=False,
         )

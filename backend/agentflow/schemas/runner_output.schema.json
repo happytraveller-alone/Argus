@@ -1,172 +1,717 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://argus.local/schemas/agentflow/runner_output.schema.json",
-  "title": "Argus AgentFlow P1 Runner Output",
+  "title": "Argus AgentFlow Runner Output",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "task_id", "run", "events", "checkpoints", "findings", "report"],
+  "required": [
+    "contract_version",
+    "task_id",
+    "run",
+    "events",
+    "checkpoints",
+    "findings",
+    "report"
+  ],
   "properties": {
-    "contract_version": { "const": "argus-agentflow-p1/v1" },
-    "task_id": { "type": "string", "minLength": 1 },
+    "contract_version": {
+      "enum": [
+        "argus-agentflow-p1/v1",
+        "argus-agentflow-p2/v1",
+        "argus-agentflow-p3/v1"
+      ]
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["run_id", "status", "topology_version"],
+      "required": [
+        "run_id",
+        "status",
+        "topology_version"
+      ],
       "properties": {
-        "run_id": { "type": "string", "minLength": 1 },
-        "status": { "enum": ["queued", "running", "completed", "failed", "cancelled"] },
-        "topology_version": { "const": "p1-fixed-dag-v1" },
-        "started_at": { "type": ["string", "null"] },
-        "finished_at": { "type": ["string", "null"] },
-        "input_digest": { "type": ["string", "null"] }
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "topology_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_digest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topology_change": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
       }
     },
-    "events": { "type": "array", "items": { "$ref": "#/$defs/eventEnvelope" } },
-    "checkpoints": { "type": "array", "items": { "$ref": "#/$defs/checkpoint" } },
-    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
-    "report": { "$ref": "#/$defs/report" },
-    "agent_tree": { "type": "array", "items": { "$ref": "#/$defs/agentTreeNode" } },
-    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifactRef" } },
-    "diagnostics": { "$ref": "#/$defs/diagnostics" }
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eventEnvelope"
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkpoint"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "report": {
+      "$ref": "#/$defs/report"
+    },
+    "agent_tree": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/agentTreeNode"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      }
+    },
+    "artifact_index": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      }
+    },
+    "feedback_bundle": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/diagnostics"
+    }
   },
   "$defs": {
     "eventEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "sequence", "timestamp", "event_type", "role", "visibility", "correlation_id", "topology_version"],
+      "required": [
+        "id",
+        "sequence",
+        "timestamp",
+        "event_type",
+        "role",
+        "visibility",
+        "correlation_id",
+        "topology_version"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "sequence": { "type": "integer", "minimum": 0 },
-        "timestamp": { "type": "string", "minLength": 1 },
-        "event_type": { "type": "string", "minLength": 1 },
-        "role": { "type": "string", "minLength": 1 },
-        "visibility": { "enum": ["user", "diagnostic", "internal"] },
-        "correlation_id": { "type": "string", "minLength": 1 },
-        "topology_version": { "const": "p1-fixed-dag-v1" },
-        "node_id": { "type": ["string", "null"] },
-        "message": { "type": ["string", "null"] },
-        "data": { "type": "object" }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visibility": {
+          "enum": [
+            "user",
+            "diagnostic",
+            "internal",
+            "ALL",
+            "ORCHESTRATOR_ONLY",
+            "AGENTS_ONLY"
+          ]
+        },
+        "correlation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "topology_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data": {
+          "type": "object"
+        }
       }
     },
     "checkpoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "agent_id", "agent_name", "agent_type", "role", "status", "checkpoint_type", "topology_version"],
+      "required": [
+        "id",
+        "agent_id",
+        "agent_name",
+        "agent_type",
+        "role",
+        "status",
+        "checkpoint_type",
+        "topology_version"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "agent_id": { "type": "string", "minLength": 1 },
-        "agent_name": { "type": "string", "minLength": 1 },
-        "agent_type": { "type": "string", "minLength": 1 },
-        "role": { "type": "string", "minLength": 1 },
-        "status": { "enum": ["pending", "running", "completed", "failed", "cancelled"] },
-        "checkpoint_type": { "type": "string", "minLength": 1 },
-        "topology_version": { "const": "p1-fixed-dag-v1" },
-        "parent_agent_id": { "type": ["string", "null"] },
-        "iteration": { "type": "integer" },
-        "total_tokens": { "type": "integer" },
-        "tool_calls": { "type": "integer" },
-        "findings_count": { "type": "integer" },
-        "created_at": { "type": ["string", "null"] },
-        "state_data": { "type": "object" },
-        "metadata": { "type": "object" }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agent_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agent_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "checkpoint_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "topology_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_agent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "iteration": {
+          "type": "integer"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "tool_calls": {
+          "type": "integer"
+        },
+        "findings_count": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state_data": {
+          "type": "object"
+        },
+        "metadata": {
+          "type": "object"
+        }
       }
     },
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "vulnerability_type", "severity", "title", "status", "is_verified", "source"],
+      "required": [
+        "id",
+        "vulnerability_type",
+        "severity",
+        "title",
+        "status",
+        "is_verified"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "vulnerability_type": { "type": "string", "minLength": 1 },
-        "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
-        "title": { "type": "string", "minLength": 1 },
-        "status": { "type": "string", "minLength": 1 },
-        "is_verified": { "type": "boolean" },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vulnerability_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_verified": {
+          "type": "boolean"
+        },
         "source": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["node_id", "node_role", "agent_id"],
           "properties": {
-            "node_id": { "type": "string", "minLength": 1 },
-            "node_role": { "type": "string", "minLength": 1 },
-            "agent_id": { "type": "string", "minLength": 1 }
+            "node_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "node_role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "agent_id": {
+              "type": "string",
+              "minLength": 1
+            }
           }
+        },
+        "source_node_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_role": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "location": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
-          "required": ["file_path"],
+          "required": [
+            "file_path"
+          ],
           "properties": {
-            "file_path": { "type": "string", "minLength": 1 },
-            "line_start": { "type": ["integer", "null"] },
-            "line_end": { "type": ["integer", "null"] }
+            "file_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "line_start": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "line_end": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
           }
         },
-        "description": { "type": ["string", "null"] },
-        "evidence": { "type": ["string", "null"] },
-        "impact": { "type": ["string", "null"] },
-        "remediation": { "type": ["string", "null"] },
-        "verification": { "type": ["string", "null"] },
-        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "confidence_history": { "type": "array" },
-        "data_flow": { "type": "array", "items": { "type": "string" } },
-        "artifact_refs": { "type": "array", "items": { "type": "string" } },
-        "metadata": { "type": "object", "not": { "required": ["source_engine"] } }
+        "file_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line_start": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "line_end": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "impact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remediation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confidence_history": {
+          "type": "array"
+        },
+        "data_flow": {
+          "type": "array"
+        },
+        "artifact_refs": {
+          "type": "array"
+        },
+        "metadata": {
+          "type": "object",
+          "not": {
+            "required": [
+              "source_engine"
+            ]
+          }
+        },
+        "risk_lifecycle": {
+          "type": [
+            "object",
+            "array",
+            "null"
+          ]
+        },
+        "discard_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discard_stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discard_reason_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwe_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code_snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "report": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "summary"],
+      "required": [
+        "title",
+        "summary"
+      ],
       "properties": {
-        "title": { "type": "string", "minLength": 1 },
-        "summary": { "type": "string", "minLength": 1 },
-        "markdown": { "type": ["string", "null"] },
-        "verified_count": { "type": "integer" },
-        "findings_count": { "type": "integer" },
-        "severity_counts": { "type": "object", "additionalProperties": { "type": "integer" } },
-        "diagnostics": { "type": "object" }
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "markdown": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sections": {
+          "type": "array"
+        },
+        "verified_count": {
+          "type": "integer"
+        },
+        "findings_count": {
+          "type": "integer"
+        },
+        "severity_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "statistics": {
+          "type": "object"
+        },
+        "discard_summary": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "timeline": {
+          "type": "array"
+        },
+        "artifact_index": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          }
+        },
+        "diagnostics": {
+          "type": "object"
+        }
       }
     },
     "agentTreeNode": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "role", "label", "status", "topology_version"],
+      "required": [
+        "id",
+        "role",
+        "label",
+        "status",
+        "topology_version"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "role": { "type": "string", "minLength": 1 },
-        "label": { "type": "string", "minLength": 1 },
-        "status": { "enum": ["pending", "running", "completed", "failed", "cancelled"] },
-        "topology_version": { "const": "p1-fixed-dag-v1" },
-        "parent_id": { "type": ["string", "null"] },
-        "duration_ms": { "type": ["integer", "null"] },
-        "findings_count": { "type": "integer" },
-        "metadata": { "type": "object" }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "topology_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "findings_count": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "object"
+        }
       }
     },
     "artifactRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "path", "artifact_type", "size", "sha256", "producer_node", "created_at"],
+      "required": [
+        "path"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "path": { "type": "string", "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+" },
-        "artifact_type": { "type": "string", "minLength": 1 },
-        "size": { "type": "integer", "minimum": 0 },
-        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
-        "producer_node": { "type": "string", "minLength": 1 },
-        "created_at": { "type": "string", "minLength": 1 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+"
+        },
+        "artifact_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "producer_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "diagnostics": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
-        "runner_exit_code": { "type": ["integer", "null"] },
-        "stdout_tail": { "type": ["string", "null"] },
-        "stderr_tail": { "type": ["string", "null"] },
-        "reason_code": { "type": ["string", "null"] },
-        "message": { "type": ["string", "null"] }
+        "runner_exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stdout_tail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stderr_tail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_diagnostics": {
+          "type": "object"
+        },
+        "dynamic_expert_diagnostics": {
+          "type": "object"
+        },
+        "dynamic_experts_enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "remote_target_enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "agentflow_serve_enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
       }
     }
   }

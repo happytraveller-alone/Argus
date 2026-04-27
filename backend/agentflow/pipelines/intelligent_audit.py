@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from agentflow import Graph, codex
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = PIPELINE_DIR.parent / "prompts"
+CODEX_MODEL = os.environ.get("ARGUS_AGENTFLOW_MODEL") or None
+CODEX_PROVIDER_NAME = os.environ.get("ARGUS_AGENTFLOW_PROVIDER") or "openai"
+CODEX_PROVIDER_BASE_URL = os.environ.get("ARGUS_AGENTFLOW_BASE_URL") or None
+CODEX_PROVIDER = (
+    {
+        "name": CODEX_PROVIDER_NAME,
+        "base_url": CODEX_PROVIDER_BASE_URL,
+        "api_key_env": "OPENAI_API_KEY",
+        "wire_api": "responses",
+    }
+    if CODEX_PROVIDER_BASE_URL
+    else CODEX_PROVIDER_NAME
+)
 
 
 def prompt(name: str) -> str:
@@ -43,14 +57,16 @@ with Graph(
     env_inter = codex(
         task_id="env-inter",
         description="role=env-inter; topology_version=argus-agentflow-p1-v1",
-        provider="openai",
+        provider=CODEX_PROVIDER,
+        model=CODEX_MODEL,
         prompt=f"{prompt('env_interpreter.md')}\n\n{COMMON_INPUT_CONTRACT}",
     )
 
     vuln_reasoner = codex(
         task_id="vuln-reasoner",
         description="role=vuln-reasoner; topology_version=argus-agentflow-p1-v1",
-        provider="openai",
+        provider=CODEX_PROVIDER,
+        model=CODEX_MODEL,
         prompt=(
             f"{prompt('vuln_reasoner.md')}\n\n{COMMON_INPUT_CONTRACT}\n\n"
             "Environment interpretation:\n{{ nodes.env-inter.output }}"
@@ -60,7 +76,8 @@ with Graph(
     audit_reporter = codex(
         task_id="audit-reporter",
         description="role=audit-reporter; topology_version=argus-agentflow-p1-v1",
-        provider="openai",
+        provider=CODEX_PROVIDER,
+        model=CODEX_MODEL,
         prompt=(
             f"{prompt('audit_reporter.md')}\n\n{COMMON_INPUT_CONTRACT}\n\n"
             "Environment interpretation:\n{{ nodes.env-inter.output }}\n\n"

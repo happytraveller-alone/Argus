@@ -4,6 +4,8 @@ const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-run
 const AGENTFLOW_RUNNER_DOCKERFILE: &str = include_str!("../../docker/agentflow-runner.Dockerfile");
 const AGENTFLOW_RUNNER_SCRIPT: &str = include_str!("../../docker/agentflow-runner.sh");
 const AGENTFLOW_RUNNER_ADAPTER: &str = include_str!("../../docker/agentflow-runner-adapter.py");
+const AGENTFLOW_RUNNER_OUTPUT_SCHEMA: &str =
+    include_str!("../agentflow/schemas/runner_output.schema.json");
 const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
@@ -146,11 +148,41 @@ fn agentflow_runner_emits_argus_contract_instead_of_native_runrecord() {
         "safe_path_segment(task_id)",
         "extract_argus_contract",
         "failure_contract",
+        "redact_text",
+        "dynamic_experts_enabled",
+        "remote_target_enabled",
+        "agentflow_serve_enabled",
+        "SUPPORTED_CONTRACT_VERSIONS",
         "\"runner_output_invalid\"",
     ] {
         assert!(
             AGENTFLOW_RUNNER_ADAPTER.contains(required),
             "agentflow adapter must contain contract marker {required:?}"
+        );
+    }
+}
+
+#[test]
+fn agentflow_runner_output_schema_accepts_p2_p3_observation_fields_without_enabling_them() {
+    for required in [
+        "argus-agentflow-p2/v1",
+        "argus-agentflow-p3/v1",
+        "artifact_index",
+        "feedback_bundle",
+        "risk_lifecycle",
+        "discard_reason",
+        "statistics",
+        "timeline",
+        "topology_change",
+        "resource_diagnostics",
+        "dynamic_expert_diagnostics",
+        "dynamic_experts_enabled",
+        "remote_target_enabled",
+        "agentflow_serve_enabled",
+    ] {
+        assert!(
+            AGENTFLOW_RUNNER_OUTPUT_SCHEMA.contains(required),
+            "runner output schema must accept backward-compatible field {required:?}"
         );
     }
 }

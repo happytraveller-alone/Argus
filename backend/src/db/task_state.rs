@@ -170,6 +170,8 @@ pub struct AgentFindingRecord {
     #[serde(default)]
     pub risk_lifecycle: Option<Value>,
     #[serde(default)]
+    pub discard_reason: Option<String>,
+    #[serde(default)]
     pub confidence_history: Option<Value>,
     #[serde(default)]
     pub data_flow: Option<Value>,

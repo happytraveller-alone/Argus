@@ -4,8 +4,48 @@ use axum::{
 };
 use backend_rust::{app::build_router, config::AppConfig, state::AppState};
 use serde_json::{json, Value};
+use std::{env, fs, sync::LazyLock};
+use tempfile::TempDir;
+use tokio::sync::Mutex;
 use tower::util::ServiceExt;
 use uuid::Uuid;
+
+static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+struct EnvVarGuard {
+    key: String,
+    original: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &str, value: &str) -> Self {
+        let original = env::var(key).ok();
+        env::set_var(key, value);
+        Self {
+            key: key.to_string(),
+            original,
+        }
+    }
+
+    fn remove(key: &str) -> Self {
+        let original = env::var(key).ok();
+        env::remove_var(key);
+        Self {
+            key: key.to_string(),
+            original,
+        }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(original) = &self.original {
+            env::set_var(&self.key, original);
+        } else {
+            env::remove_var(&self.key);
+        }
+    }
+}
 
 #[tokio::test]
 async fn system_config_crud_roundtrip_stays_deuserized() {
@@ -113,6 +153,9 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
 
 #[tokio::test]
 async fn system_config_helper_endpoints_are_available() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let _codex_home_guard = EnvVarGuard::remove("CODEX_HOME");
+    let _codex_host_guard = EnvVarGuard::remove("ARGUS_CODEX_HOST_DIR");
     let state = AppState::from_config(isolated_test_config("system-config-helper"))
         .await
         .expect("state should build");
@@ -163,6 +206,10 @@ async fn system_config_helper_endpoints_are_available() {
 
 #[tokio::test]
 async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let _codex_home_guard = EnvVarGuard::remove("CODEX_HOME");
+    let _codex_host_guard = EnvVarGuard::remove("ARGUS_CODEX_HOST_DIR");
+    let _default_runner_guard = EnvVarGuard::set("AGENTFLOW_DEFAULT_RUNNER_ENABLED", "false");
     let state = AppState::from_config(isolated_test_config("system-config-agent-preflight-runner"))
         .await
         .expect("state should build");
@@ -216,6 +263,76 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     assert_eq!(preflight_json["savedConfig"]["apiKey"], "***configured***");
     assert!(!preflight_json.to_string().contains("sk-agentflow-secret"));
     assert_eq!(preflight_json["metadata"]["runner"]["ok"], false);
+}
+
+#[tokio::test]
+async fn agent_preflight_accepts_codex_host_credentials_without_saved_config() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().expect("temp dir");
+    fs::write(
+        temp_dir.path().join("config.toml"),
+        r#"
+model = "gpt-5.1-codex-max"
+model_provider = "openai"
+
+[model_providers.openai]
+base_url = "https://api.openai.com/v1"
+"#,
+    )
+    .expect("write config");
+    fs::write(
+        temp_dir.path().join("auth.json"),
+        r#"{"OPENAI_API_KEY":"sk-codex-host-secret"}"#,
+    )
+    .expect("write auth");
+    let _codex_home_guard = EnvVarGuard::remove("CODEX_HOME");
+    let _codex_host_guard = EnvVarGuard::set(
+        "ARGUS_CODEX_HOST_DIR",
+        temp_dir.path().to_str().expect("utf8 temp path"),
+    );
+    let _runner_guard = EnvVarGuard::set("AGENTFLOW_RUNNER_COMMAND", "true");
+    let state = AppState::from_config(isolated_test_config("system-config-agent-preflight-codex"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let preflight_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/agent-preflight")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight_response.status(), StatusCode::OK);
+    let preflight_json: Value = serde_json::from_slice(
+        &to_bytes(preflight_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(preflight_json["ok"], true);
+    assert_eq!(preflight_json["savedConfig"], Value::Null);
+    assert_eq!(
+        preflight_json["effectiveConfig"]["model"],
+        "gpt-5.1-codex-max"
+    );
+    assert_eq!(
+        preflight_json["effectiveConfig"]["apiKey"],
+        "***configured***"
+    );
+    assert_eq!(
+        preflight_json["metadata"]["llm"]["credential_source"],
+        "codex_host_dir"
+    );
+    assert_eq!(
+        preflight_json["metadata"]["llm"]["api_key_ref"],
+        "codex_host:auth.json"
+    );
+    assert!(!preflight_json.to_string().contains("sk-codex-host-secret"));
 }
 
 #[tokio::test]

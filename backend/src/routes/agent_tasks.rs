@@ -25,12 +25,13 @@ use crate::{
     error::ApiError,
     routes::skills,
     runtime::agentflow::{
+        codex_config::build_agentflow_llm_config,
         contracts::{ARGUS_AGENTFLOW_CONTRACT_VERSION, P1_TOPOLOGY_VERSION},
         importer::{import_runner_output, sha256_hex},
         preflight::{run_preflight, PreflightInput},
         runner::{run_controlled_command, RunnerCommand},
     },
-    state::{AppState, StoredProject, StoredSystemConfig},
+    state::{AppState, StoredProject},
 };
 
 const DEFAULT_AGENTFLOW_RUNNER_IMAGE: &str = "argus/agentflow-runner:1667fa35";
@@ -390,7 +391,10 @@ async fn start_agent_task(
     let stored_config = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let llm_config = agentflow_llm_config_value(state.config.as_ref(), stored_config);
+    let llm_config = build_agentflow_llm_config(
+        state.config.as_ref(),
+        stored_config.as_ref().map(|stored| &stored.llm_config_json),
+    );
     let runner_command = agentflow_runner_command();
     let output_dir = agentflow_output_dir(&state, &task_id);
     let pipeline_path = agentflow_pipeline_path();
@@ -735,6 +739,7 @@ async fn list_agent_events(
         .events
         .iter()
         .filter(|event| event.sequence > after_sequence)
+        .filter(|event| agent_event_is_user_visible(event))
         .take(limit)
         .map(agent_event_value)
         .collect::<Vec<_>>();
@@ -758,6 +763,7 @@ async fn stream_agent_events(
         .events
         .iter()
         .filter(|event| event.sequence > after_sequence)
+        .filter(|event| agent_event_is_user_visible(event))
         .map(agent_event_value)
         .map(|event| format!("data: {event}\n\n"))
         .collect::<String>();
@@ -2056,10 +2062,18 @@ fn default_agentflow_runner_command() -> String {
         .unwrap_or_else(|| DEFAULT_SCAN_WORKSPACE_VOLUME.to_string());
     let work_volume = env_trimmed("AGENTFLOW_RUNNER_WORK_VOLUME")
         .unwrap_or_else(|| DEFAULT_AGENTFLOW_WORK_VOLUME.to_string());
+    let codex_host_dir = env_trimmed("ARGUS_CODEX_HOST_DIR");
+    let network = env_trimmed("AGENTFLOW_RUNNER_NETWORK").unwrap_or_else(|| {
+        if codex_host_dir.is_some() {
+            "bridge".to_string()
+        } else {
+            "none".to_string()
+        }
+    });
     let container_cli = env_trimmed("CONTAINER_CLI")
         .or_else(|| env_trimmed("BACKEND_DOCKER_BIN"))
         .unwrap_or_else(|| "docker".to_string());
-    [
+    let mut command = vec![
         container_cli,
         "run".to_string(),
         "--rm".to_string(),
@@ -2067,7 +2081,7 @@ fn default_agentflow_runner_command() -> String {
         "--pull".to_string(),
         "never".to_string(),
         "--network".to_string(),
-        "none".to_string(),
+        network,
         "--read-only".to_string(),
         "--security-opt".to_string(),
         "no-new-privileges:true".to_string(),
@@ -2093,13 +2107,31 @@ fn default_agentflow_runner_command() -> String {
         "ARGUS_AGENTFLOW_INPUT_PATH=/work/input/runner_input.json".to_string(),
         "-e".to_string(),
         "HOME=/tmp/argus-agentflow-home".to_string(),
-        image,
-        "argus-agentflow-runner".to_string(),
-    ]
-    .into_iter()
-    .map(|part| shell_quote(&part))
-    .collect::<Vec<_>>()
-    .join(" ")
+    ];
+    if let Some(codex_host_dir) = codex_host_dir {
+        command.extend([
+            "--user".to_string(),
+            // Local Codex credentials are normally 0600 on the host. The bind
+            // mount is read-only, but the runner must run as root to read them.
+            "0:0".to_string(),
+            "--cap-add".to_string(),
+            // The runner still writes /work while using a pre-existing named
+            // volume initialized for the non-root agentflow user.
+            "DAC_OVERRIDE".to_string(),
+            "-v".to_string(),
+            format!("{codex_host_dir}:/run/argus-codex:ro"),
+            "-e".to_string(),
+            "ARGUS_CODEX_CONFIG_FILE=/run/argus-codex/config.toml".to_string(),
+            "-e".to_string(),
+            "ARGUS_CODEX_AUTH_FILE=/run/argus-codex/auth.json".to_string(),
+        ]);
+    }
+    command.extend([image, "argus-agentflow-runner".to_string()]);
+    command
+        .into_iter()
+        .map(|part| shell_quote(&part))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn env_trimmed(key: &str) -> Option<String> {
@@ -2228,26 +2260,6 @@ fn agentflow_output_dir(state: &AppState, task_id: &str) -> PathBuf {
         .join(task_id)
 }
 
-fn agentflow_llm_config_value(config: &AppConfig, stored: Option<StoredSystemConfig>) -> Value {
-    let saved = stored.map(|stored| stored.llm_config_json);
-    let saved_ref = saved.as_ref();
-    json!({
-        "llmProvider": config_value(saved_ref, "llmProvider").unwrap_or_else(|| config.llm_provider.clone()),
-        "llmModel": config_value(saved_ref, "llmModel").unwrap_or_else(|| config.llm_model.clone()),
-        "llmBaseUrl": config_value(saved_ref, "llmBaseUrl").unwrap_or_else(|| config.llm_base_url.clone()),
-        "llmApiKey": config_value(saved_ref, "llmApiKey").unwrap_or_else(|| config.llm_api_key.clone()),
-    })
-}
-
-fn config_value(value: Option<&Value>, key: &str) -> Option<String> {
-    value?
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
 fn build_agentflow_runner_input(
     record: &task_state::AgentTaskRecord,
     project: &StoredProject,
@@ -2316,7 +2328,11 @@ fn build_agentflow_runner_input(
             "api_key_ref": if llm_config.get("llmApiKey").and_then(Value::as_str).unwrap_or("").is_empty() {
                 Value::Null
             } else {
-                Value::String("system_config:llmApiKey".to_string())
+                llm_config
+                    .get("llmApiKeyRef")
+                    .and_then(Value::as_str)
+                    .map(|value| Value::String(value.to_string()))
+                    .unwrap_or_else(|| Value::String("system_config:llmApiKey".to_string()))
             },
         },
         "resource_budget": {
@@ -2331,6 +2347,7 @@ fn build_agentflow_runner_input(
             "serve_enabled": false,
             "remote_target": false,
             "dynamic_experts": false,
+            "credential_source": llm_config.get("credentialSource").and_then(Value::as_str).unwrap_or("app_config"),
         }
     })
 }
@@ -2553,6 +2570,13 @@ fn push_agent_event(
         sequence,
         timestamp: now_rfc3339(),
     });
+}
+
+fn agent_event_is_user_visible(event: &task_state::AgentEventRecord) -> bool {
+    !matches!(
+        event.visibility.as_deref(),
+        Some("internal" | "AGENTS_ONLY" | "agents_only")
+    )
 }
 
 fn push_checkpoint(

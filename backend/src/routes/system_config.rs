@@ -19,6 +19,7 @@ use crate::{
         provider_catalog, provider_catalog_entry_or_fallback, recommend_tokens,
         ProviderCatalogItem as LlmProviderItem,
     },
+    runtime::agentflow::codex_config::build_agentflow_llm_config,
     state::{AppState, StoredSystemConfig},
 };
 
@@ -256,10 +257,13 @@ pub async fn agent_preflight(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let effective = merge_with_defaults(state.config.as_ref(), stored.clone());
-    let effective_snapshot = build_quick_snapshot(&effective.llm_config);
+    let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
+    let effective_llm_config = build_agentflow_llm_config(state.config.as_ref(), saved_llm_config);
+    let effective_snapshot = build_quick_snapshot(&effective_llm_config);
+    let credential_source = read_string(&effective_llm_config, "credentialSource")
+        .unwrap_or_else(|| "app_config".to_string());
 
-    let Some(saved) = stored else {
+    if stored.is_none() && credential_source == "app_config" {
         return Ok(Json(AgentPreflightPayload {
             ok: false,
             stage: Some("llm_config".to_string()),
@@ -268,20 +272,15 @@ pub async fn agent_preflight(
             missing_fields: None,
             effective_config: effective_snapshot,
             saved_config: None,
-            metadata: Some(agent_preflight_metadata(
-                "llm_config",
-                "default_config",
-                None,
+            metadata: Some(annotate_llm_preflight_metadata(
+                agent_preflight_metadata("llm_config", "default_config", None),
+                &effective_llm_config,
             )),
         }));
-    };
+    }
 
-    let saved_payload = SystemConfigPayload {
-        llm_config: saved.llm_config_json,
-        other_config: saved.other_config_json,
-    };
-    let saved_snapshot = build_quick_snapshot(&saved_payload.llm_config);
-    let missing_fields = collect_missing_fields(&saved_snapshot);
+    let saved_snapshot = saved_llm_config.map(build_quick_snapshot);
+    let missing_fields = collect_missing_fields(&effective_snapshot);
     if !missing_fields.is_empty() {
         return Ok(Json(AgentPreflightPayload {
             ok: false,
@@ -293,16 +292,18 @@ pub async fn agent_preflight(
             reason_code: Some("missing_fields".to_string()),
             missing_fields: Some(missing_fields),
             effective_config: effective_snapshot,
-            saved_config: Some(saved_snapshot),
-            metadata: Some(agent_preflight_metadata(
-                "llm_config",
-                "missing_fields",
-                None,
+            saved_config: saved_snapshot,
+            metadata: Some(annotate_llm_preflight_metadata(
+                agent_preflight_metadata("llm_config", "missing_fields", None),
+                &effective_llm_config,
             )),
         }));
     }
 
-    let runner_metadata = agentflow_runner_preflight_metadata(state.config.as_ref());
+    let runner_metadata = annotate_llm_preflight_metadata(
+        agentflow_runner_preflight_metadata(state.config.as_ref()),
+        &effective_llm_config,
+    );
     if runner_metadata["runner"]["ok"] != true {
         return Ok(Json(AgentPreflightPayload {
             ok: false,
@@ -311,7 +312,7 @@ pub async fn agent_preflight(
             reason_code: Some("runner_missing".to_string()),
             missing_fields: None,
             effective_config: effective_snapshot,
-            saved_config: Some(saved_snapshot),
+            saved_config: saved_snapshot,
             metadata: Some(runner_metadata),
         }));
     }
@@ -323,7 +324,7 @@ pub async fn agent_preflight(
         reason_code: None,
         missing_fields: None,
         effective_config: effective_snapshot,
-        saved_config: Some(saved_snapshot),
+        saved_config: saved_snapshot,
         metadata: Some(runner_metadata),
     }))
 }
@@ -463,6 +464,22 @@ fn agent_preflight_metadata(stage: &str, reason_code: &str, details: Option<Valu
     })
 }
 
+fn annotate_llm_preflight_metadata(mut metadata: Value, llm_config: &Value) -> Value {
+    if let Some(llm) = metadata.get_mut("llm").and_then(Value::as_object_mut) {
+        llm.insert(
+            "credential_source".to_string(),
+            Value::String(
+                read_string(llm_config, "credentialSource")
+                    .unwrap_or_else(|| "app_config".to_string()),
+            ),
+        );
+        if let Some(api_key_ref) = read_string(llm_config, "llmApiKeyRef") {
+            llm.insert("api_key_ref".to_string(), Value::String(api_key_ref));
+        }
+    }
+    metadata
+}
+
 fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
     let compose_path = Path::new("docker-compose.yml");
     let pipeline_path = if Path::new("backend/agentflow/pipelines/intelligent_audit.py").exists() {
@@ -476,7 +493,8 @@ fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
     let runner_command_configured = std::env::var("AGENTFLOW_RUNNER_COMMAND")
         .map(|value| !value.trim().is_empty())
         .unwrap_or(false);
-    let runner_ok = compose_has_runner || runner_command_configured;
+    let default_runner_enabled = env_flag_enabled("AGENTFLOW_DEFAULT_RUNNER_ENABLED", true);
+    let runner_ok = compose_has_runner || runner_command_configured || default_runner_enabled;
     let pipeline_ok = pipeline_path.exists();
     let output_dir_ok = config
         .zip_storage_path
@@ -496,6 +514,7 @@ fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
             "reason_code": if runner_ok { Value::Null } else { json!("runner_missing") },
             "compose_has_agentflow_runner": compose_has_runner,
             "runner_command_configured": runner_command_configured,
+            "default_runner_enabled": default_runner_enabled,
         },
         "pipeline": {
             "ok": pipeline_ok,
@@ -514,6 +533,19 @@ fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
             "agent_timeout_seconds": config.agent_timeout_seconds,
         },
     })
+}
+
+fn env_flag_enabled(key: &str, default: bool) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !matches!(
+                normalized.as_str(),
+                "0" | "false" | "no" | "off" | "disabled"
+            )
+        })
+        .unwrap_or(default)
 }
 
 fn normalize_provider_for_route(provider: &str) -> String {

@@ -228,6 +228,7 @@ pub fn validate_relative_artifact_path(path: &str) -> ImportResult<()> {
 
 pub fn import_runner_output(record: &mut AgentTaskRecord, raw_output: &Value) -> ImportResult<()> {
     validate_no_static_candidates(raw_output)?;
+    reject_disabled_runtime_capabilities(raw_output)?;
     reject_native_only_output(raw_output)?;
     let output = sanitize_value(raw_output);
     if is_canonical_runner_output(&output) {
@@ -304,10 +305,10 @@ fn import_canonical_runner_output(
         .get("topology_version")
         .and_then(Value::as_str)
         .unwrap_or(P1_TOPOLOGY_VERSION);
-    if topology_version != P1_TOPOLOGY_VERSION {
+    if topology_version.trim().is_empty() {
         return Err(ImportError::new(
             "runner_output_invalid",
-            format!("runner output topology_version must be `{P1_TOPOLOGY_VERSION}`"),
+            "runner output topology_version must not be empty",
         ));
     }
     let status = run
@@ -386,8 +387,18 @@ fn import_canonical_runner_output(
 }
 
 fn is_canonical_runner_output(output: &Value) -> bool {
-    output.get("contract_version").and_then(Value::as_str) == Some(ARGUS_AGENTFLOW_CONTRACT_VERSION)
+    output
+        .get("contract_version")
+        .and_then(Value::as_str)
+        .is_some_and(is_supported_argus_contract_version)
         && output.get("run").is_some()
+}
+
+fn is_supported_argus_contract_version(value: &str) -> bool {
+    matches!(
+        value,
+        ARGUS_AGENTFLOW_CONTRACT_VERSION | "argus-agentflow-p2/v1" | "argus-agentflow-p3/v1"
+    )
 }
 
 fn reject_native_only_output(output: &Value) -> ImportResult<()> {
@@ -409,6 +420,84 @@ fn reject_native_only_output(output: &Value) -> ImportResult<()> {
         ));
     }
     Ok(())
+}
+
+fn reject_disabled_runtime_capabilities(output: &Value) -> ImportResult<()> {
+    let mut violations = Vec::new();
+    collect_enabled_runtime_capability_violations(output, "$", &mut violations);
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(ImportError::new(
+            "disabled_agentflow_capability",
+            format!(
+                "智能审计默认禁用 remote target、agentflow serve 和动态专家执行：{}",
+                violations.join(", ")
+            ),
+        ))
+    }
+}
+
+fn collect_enabled_runtime_capability_violations(
+    value: &Value,
+    path: &str,
+    violations: &mut Vec<String>,
+) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                let child_path = format!("{path}.{key}");
+                let normalized = normalize_static_gate_token(key);
+                let forbidden_key = matches!(
+                    normalized.as_str(),
+                    "remoteTarget"
+                        | "remotetarget"
+                        | "serveEnabled"
+                        | "serveenabled"
+                        | "agentflowServe"
+                        | "agentflowserve"
+                        | "dynamicExperts"
+                        | "dynamicexperts"
+                        | "dynamicExpertExecution"
+                        | "dynamicexpertexecution"
+                );
+                if forbidden_key && truthy_capability_value(child) {
+                    violations.push(child_path.clone());
+                }
+                if normalized == "target" {
+                    if let Some(target) = child.as_str() {
+                        let target = target.trim().to_ascii_lowercase();
+                        if target != "local" && target != "container" {
+                            violations.push(format!("{child_path}={target}"));
+                        }
+                    }
+                }
+                collect_enabled_runtime_capability_violations(child, &child_path, violations);
+            }
+        }
+        Value::Array(items) => {
+            for (index, child) in items.iter().enumerate() {
+                collect_enabled_runtime_capability_violations(
+                    child,
+                    &format!("{path}[{index}]"),
+                    violations,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+fn truthy_capability_value(value: &Value) -> bool {
+    match value {
+        Value::Bool(value) => *value,
+        Value::Number(value) => value.as_i64().is_some_and(|value| value != 0),
+        Value::String(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on" | "enabled" | "serve" | "remote"
+        ),
+        _ => false,
+    }
 }
 
 fn required_string(value: &Value, key: &'static str) -> ImportResult<String> {
@@ -453,6 +542,10 @@ fn merge_agentflow_scope(
         .unwrap_or_else(|| json!([]));
     let report_snapshot = output.get("report").cloned().unwrap_or(Value::Null);
     let diagnostics = output.get("diagnostics").cloned().unwrap_or(Value::Null);
+    let feedback_bundle = output
+        .get("feedback_bundle")
+        .cloned()
+        .unwrap_or(Value::Null);
     record.runtime = Some("agentflow".to_string());
     record.run_id = Some(run_id.to_string());
     record.topology_version = Some(topology_version.to_string());
@@ -463,6 +556,7 @@ fn merge_agentflow_scope(
         .map(ToString::to_string);
     record.artifact_index = Some(artifact_index.clone());
     record.report_snapshot = Some(report_snapshot.clone());
+    record.feedback_bundle = Some(feedback_bundle.clone());
     record.diagnostics = Some(diagnostics.clone());
 
     let mut scope = record.audit_scope.clone().unwrap_or_else(|| json!({}));
@@ -479,7 +573,11 @@ fn merge_agentflow_scope(
             "input_digest": record.input_digest.clone().map(Value::String).unwrap_or(Value::Null),
             "artifact_index": artifact_index,
             "report_snapshot": report_snapshot,
+            "feedback_bundle": feedback_bundle,
             "diagnostics": diagnostics,
+            "report_statistics": report_snapshot.get("statistics").cloned().unwrap_or(Value::Null),
+            "report_timeline": report_snapshot.get("timeline").cloned().unwrap_or(Value::Null),
+            "topology_change": output.get("run").and_then(|run| run.get("topology_change")).or_else(|| output.get("topology_change")).cloned().unwrap_or(Value::Null),
         }),
     );
     record.audit_scope = Some(scope);
@@ -493,6 +591,19 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                 .or_else(|| event.get("event_type"))
                 .and_then(Value::as_str)
                 .unwrap_or("agentflow_event");
+            let raw_visibility = event.get("visibility").and_then(Value::as_str);
+            let visibility = normalize_agentflow_visibility(raw_visibility);
+            let event_topology_version = event
+                .get("topology_version")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(topology_version);
+            let correlation_id = event
+                .get("correlation_id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
             let phase = event.get("phase").and_then(Value::as_str);
             let message = event.get("message").and_then(Value::as_str);
             let mut metadata = event
@@ -501,16 +612,19 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             if let Some(obj) = metadata.as_object_mut() {
-                obj.insert("topology_version".to_string(), json!(topology_version));
+                obj.insert(
+                    "topology_version".to_string(),
+                    json!(event_topology_version),
+                );
                 obj.insert(
                     "role".to_string(),
                     event.get("role").cloned().unwrap_or(Value::Null),
                 );
-                obj.insert("visibility".to_string(), json!("user"));
-                obj.insert(
-                    "correlation_id".to_string(),
-                    json!(Uuid::new_v4().to_string()),
-                );
+                obj.insert("visibility".to_string(), json!(visibility));
+                if let Some(raw_visibility) = raw_visibility {
+                    obj.insert("agentflow_visibility".to_string(), json!(raw_visibility));
+                }
+                obj.insert("correlation_id".to_string(), json!(correlation_id));
             }
             record.events.push(AgentEventRecord {
                 id: event
@@ -539,12 +653,10 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                 visibility: event
                     .get("visibility")
                     .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                correlation_id: event
-                    .get("correlation_id")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                topology_version: Some(topology_version.to_string()),
+                    .map(|_| visibility.to_string())
+                    .or_else(|| Some(visibility.to_string())),
+                correlation_id: Some(correlation_id),
+                topology_version: Some(event_topology_version.to_string()),
                 source_node_id: event
                     .get("node_id")
                     .and_then(Value::as_str)
@@ -560,6 +672,20 @@ fn import_events(record: &mut AgentTaskRecord, output: &Value, topology_version:
                     .unwrap_or_else(now_rfc3339),
             });
         }
+    }
+}
+
+fn normalize_agentflow_visibility(value: Option<&str>) -> &'static str {
+    match value
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_uppercase()
+        .as_str()
+    {
+        "" | "USER" | "ALL" => "user",
+        "DIAGNOSTIC" | "ORCHESTRATOR_ONLY" => "diagnostic",
+        "INTERNAL" | "AGENTS_ONLY" => "internal",
+        _ => "diagnostic",
     }
 }
 
@@ -826,6 +952,10 @@ fn import_findings(record: &mut AgentTaskRecord, output: &Value) -> ImportResult
                     .map(ToString::to_string),
                 artifact_refs: finding.get("artifact_refs").cloned(),
                 risk_lifecycle: finding.get("risk_lifecycle").cloned(),
+                discard_reason: finding
+                    .get("discard_reason")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
                 confidence_history: finding.get("confidence_history").cloned(),
                 data_flow: finding.get("data_flow").cloned(),
                 impact: finding
