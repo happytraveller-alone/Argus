@@ -83,8 +83,13 @@ export interface AgentTask {
   exclude_patterns: string[] | null;
   target_files: string[] | null;
 
-  // 错误信息
+  // 错误信息 / AgentFlow 报告快照
   error_message: string | null;
+  report?: string | null;
+  runtime_status?: string | null;
+  run_id?: string | null;
+  topology_version?: string | null;
+  artifact_index?: AgentArtifactRef[] | null;
 }
 
 export interface TriggerFlowNode {
@@ -188,6 +193,16 @@ export interface AgentFinding {
   ai_explanation: string | null;
   ai_confidence: number | null;
   confidence?: number | null;
+  impact?: string | null;
+  remediation?: string | null;
+  verification?: string | null;
+  source_node_id?: string | null;
+  source_node_name?: string | null;
+  source_role?: string | null;
+  artifact_refs?: AgentArtifactRef[] | null;
+  data_flow?: unknown;
+  risk_lifecycle?: unknown;
+  confidence_history?: unknown;
 
   created_at: string;
 }
@@ -209,20 +224,55 @@ export interface AgentEvent {
   timestamp: string;
 }
 
+export interface AgentArtifactRef {
+  path: string;
+  type?: string | null;
+  size_bytes?: number | null;
+  sha256?: string | null;
+  producer_node?: string | null;
+  created_at?: string | null;
+}
+
 export interface CreateAgentTaskRequest {
   project_id: string;
   name?: string;
   description?: string;
   audit_scope?: AgentAuditScope;
-  target_vulnerabilities?: string[];
-  // unified mode, backend still accepts legacy values and normalizes them
-  verification_level?: "analysis_with_poc_plan";
-  exclude_patterns?: string[];
-  target_files?: string[];
-  max_iterations?: number;
-  token_budget?: number;
   timeout_seconds?: number;
   use_prompt_skills?: boolean;
+}
+
+type LegacyAgentTaskCreateInput = CreateAgentTaskRequest & Partial<{
+  target_vulnerabilities: unknown;
+  verification_level: unknown;
+  exclude_patterns: unknown;
+  target_files: unknown;
+  max_iterations: unknown;
+  token_budget: unknown;
+}>;
+
+export function buildAgentTaskCreatePayload(
+  data: LegacyAgentTaskCreateInput,
+): CreateAgentTaskRequest {
+  const payload: CreateAgentTaskRequest = {
+    project_id: data.project_id,
+  };
+  if (typeof data.name === "string" && data.name.trim()) {
+    payload.name = data.name;
+  }
+  if (typeof data.description === "string" && data.description.trim()) {
+    payload.description = data.description;
+  }
+  if (data.audit_scope && typeof data.audit_scope === "object") {
+    payload.audit_scope = data.audit_scope;
+  }
+  if (typeof data.timeout_seconds === "number" && Number.isFinite(data.timeout_seconds)) {
+    payload.timeout_seconds = data.timeout_seconds;
+  }
+  if (typeof data.use_prompt_skills === "boolean") {
+    payload.use_prompt_skills = data.use_prompt_skills;
+  }
+  return payload;
 }
 
 export interface AgentAuditScope extends Record<string, unknown> {
@@ -265,8 +315,8 @@ export interface AgentFindingStatusUpdateResponse {
 /**
  * 创建 Agent 扫描任务
  */
-export async function createAgentTask(data: CreateAgentTaskRequest): Promise<AgentTask> {
-  const response = await apiClient.post("/agent-tasks/", data);
+export async function createAgentTask(data: LegacyAgentTaskCreateInput): Promise<AgentTask> {
+  const response = await apiClient.post("/agent-tasks/", buildAgentTaskCreatePayload(data));
   return response.data;
 }
 
@@ -481,7 +531,9 @@ export interface AgentTreeNode {
   parent_agent_id: string | null;
   depth: number;
   task_description: string | null;
-  status: "created" | "running" | "completed" | "failed" | "waiting";
+  status: "created" | "running" | "completed" | "failed" | "waiting" | "cancelled" | string;
+  role?: string | null;
+  heartbeat_at?: string | null;
   result_summary: string | null;
   findings_count: number;
   verified_findings_count: number;
@@ -489,6 +541,9 @@ export interface AgentTreeNode {
   tokens_used: number;
   tool_calls: number;
   duration_ms: number | null;
+  checkpoint_id?: string | null;
+  artifact_refs?: AgentArtifactRef[] | null;
+  metadata?: Record<string, unknown> | null;
   children: AgentTreeNode[];
 }
 
@@ -517,6 +572,7 @@ export interface AgentCheckpoint {
   checkpoint_type: "auto" | "manual" | "error" | "final";
   checkpoint_name: string | null;
   created_at: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CheckpointDetail extends AgentCheckpoint {

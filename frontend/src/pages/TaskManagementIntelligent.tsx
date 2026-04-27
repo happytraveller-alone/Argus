@@ -115,7 +115,7 @@ export default function TaskManagementIntelligent() {
 						onClick={() => setShowCreateIntelligentDialog(true)}
 					>
 						<Plus className="w-3.5 h-3.5 mr-1.5" />
-						新建扫描任务
+						新建智能审计任务
 					</Button>
 				</div>
 			</div>
