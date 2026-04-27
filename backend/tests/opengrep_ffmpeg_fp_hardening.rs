@@ -23,6 +23,7 @@ fn ffmpeg_style_safe_c_idioms_are_not_reported_by_hardened_rules() {
         &fixture_path,
         r#"
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -58,6 +59,10 @@ void safe_uppercase_macro_format(char *name, size_t name_len, int i) {
 
 void unsafe_variable_format(char *buf, const char *fmt, int value) {
     snprintf(buf, 64, fmt, value);
+}
+
+void unsafe_variable_vformat(char *buf, const char *fmt, va_list args) {
+    vsnprintf(buf, 64, fmt, args);
 }
 
 void safe_bulk_copy(void) {
@@ -113,7 +118,7 @@ void safe_bulk_copy(void) {
 
     assert_eq!(
         matched_lines.len(),
-        2,
+        3,
         "expected only the unsafe scan and variable format samples, got {matched_lines:#?}"
     );
     assert!(
@@ -131,11 +136,15 @@ void safe_bulk_copy(void) {
     assert!(
         matched_lines
             .iter()
-            .all(|line| !line.contains("PRId64")
-                && !line.contains("POSTFIX_PATTERN")
-                && !line.contains("sizeof(src)")
-                && !line.contains("\"%d\"")
-                && !line.contains("\"%63")),
+            .any(|line| line == "vsnprintf(buf, 64, fmt, args);"),
+        "variable vsnprintf format should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().all(|line| !line.contains("PRId64")
+            && !line.contains("POSTFIX_PATTERN")
+            && !line.contains("sizeof(src)")
+            && !line.contains("\"%d\"")
+            && !line.contains("\"%63")),
         "safe FFmpeg-style idioms should not be reported: {matched_lines:#?}"
     );
 }

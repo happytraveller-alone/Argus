@@ -32,7 +32,7 @@ rules:
         metavariable: $FMT
         regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
   - patterns:
-    - pattern: vsnprintf($BUF,$SIZE,$FMT)
+    - pattern: vsnprintf($BUF,$SIZE,$FMT,$ARGS)
     - metavariable-regex:
         metavariable: $FMT
         regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
