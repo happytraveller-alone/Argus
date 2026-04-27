@@ -995,6 +995,139 @@ async fn agent_task_start_fails_until_agentflow_runtime_is_configured() {
 }
 
 #[tokio::test]
+async fn create_agent_task_rejects_forbidden_static_candidate_inputs() {
+    let state = AppState::from_config(isolated_test_config("agent-task-forbidden-static-create"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "forbidden-static-candidates",
+                        "audit_scope": {
+                            "targets": [{
+                                "path": "src/main.py",
+                                "source_engine": "bandit"
+                            }]
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::BAD_REQUEST);
+    let error_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(error_json["error"]
+        .as_str()
+        .unwrap()
+        .contains("禁止使用静态扫描任务"));
+    assert!(error_json["error"].as_str().unwrap().contains("source_engine"));
+}
+
+#[tokio::test]
+async fn start_agent_task_fails_existing_scope_with_forbidden_static_input() {
+    let state = AppState::from_config(isolated_test_config("agent-task-forbidden-static-start"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project(&app).await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "historical-forbidden-static",
+                        "max_iterations": 1
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let task_id = create_json["id"].as_str().unwrap().to_string();
+
+    let mut snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+    let record = snapshot.agent_tasks.get_mut(&task_id).expect("task exists");
+    record.audit_scope = Some(json!({
+        "candidate_findings": ["legacy-finding"],
+        "candidate_origin": "static"
+    }));
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("save snapshot");
+
+    let start_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/agent-tasks/{task_id}/start"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(start_response.status(), StatusCode::OK);
+
+    let task_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let task_json: Value = serde_json::from_slice(
+        &to_bytes(task_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(task_json["status"], "failed");
+    assert_eq!(task_json["current_step"], "forbidden static input");
+    assert!(task_json["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("candidate_findings"));
+    assert!(task_json["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["event_type"] == "forbidden_static_input"));
+}
+
+#[tokio::test]
 async fn create_agent_task_snapshots_enabled_prompt_skill_runtime_in_audit_scope() {
     let state = AppState::from_config(isolated_test_config("agent-task-prompt-runtime-enabled"))
         .await
