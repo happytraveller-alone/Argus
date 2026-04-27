@@ -81,7 +81,7 @@ RUN --mount=type=cache,id=argus-agentflow-runtime-apt-lists,target=/var/lib/apt/
     set -eux; \
     sed -i "s|deb.debian.org|${BACKEND_APT_MIRROR_PRIMARY}|g; s|security.debian.org|${BACKEND_APT_SECURITY_PRIMARY}|g" /etc/apt/sources.list.d/debian.sources; \
     apt-get update || { \
-      sed -i "s|${BACKEND_APT_MIRROR_PRIMARY}|${BACKEND_APT_MIRROR_FALLBACK}|g; s|${BACKEND_APT_SECURITY_PRIMARY}|${BACKEND_APPT_SECURITY_FALLBACK:-${BACKEND_APT_SECURITY_FALLBACK}}|g" /etc/apt/sources.list.d/debian.sources; \
+      sed -i "s|${BACKEND_APT_MIRROR_PRIMARY}|${BACKEND_APT_MIRROR_FALLBACK}|g; s|${BACKEND_APT_SECURITY_PRIMARY}|${BACKEND_APT_SECURITY_FALLBACK}|g" /etc/apt/sources.list.d/debian.sources; \
       apt-get update; \
     }; \
     apt-get install -y --no-install-recommends ca-certificates tini; \
