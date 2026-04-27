@@ -26,35 +26,6 @@ async fn create_project(app: &axum::Router) -> String {
     create_project_with_name(app, "task-api-project").await
 }
 
-fn write_agent_toml(dir: &std::path::Path, role: &str, container_name: &str) {
-    let content = format!(
-        r#"id = "{role}"
-role = "{role}"
-image = "Argus/hermes-agent:latest"
-container_name = "{container_name}"
-enabled = true
-dispatch_timeout_seconds = 1
-terminal_cwd = "/scan"
-project_mount = "/scan"
-artifacts_dir = "artifacts"
-runtime_home_dir = "data"
-
-[input_contract]
-fields = ["task_id", "project_id", "correlation_id", "payload"]
-
-[output_contract]
-fields = ["status", "summary", "structured_outputs", "diagnostics"]
-
-[healthcheck]
-command = "hermes --version"
-interval_seconds = 30
-"#
-    );
-    let role_dir = dir.join(role);
-    fs::create_dir_all(&role_dir).unwrap();
-    fs::write(role_dir.join("agent.toml"), content).unwrap();
-}
-
 fn test_zip_bytes() -> Vec<u8> {
     let mut bytes = Vec::new();
     {
@@ -937,24 +908,12 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
 }
 
 #[tokio::test]
-async fn agent_task_start_surfaces_failed_hermes_dispatch() {
-    let _env_lock = ENV_LOCK.lock().await;
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    for role in ["recon", "analysis", "verification", "report"] {
-        write_agent_toml(
-            temp_dir.path(),
-            role,
-            &format!("missing-hermes-{role}-container"),
-        );
-    }
-    let _agents_path = EnvVarGuard::set(
-        "HERMES_AGENTS_BASE_PATH",
-        temp_dir.path().to_str().expect("utf8 temp path"),
-    );
-
-    let state = AppState::from_config(isolated_test_config("agent-task-hermes-failure-surface"))
-        .await
-        .expect("state should build");
+async fn agent_task_start_fails_until_agentflow_runtime_is_configured() {
+    let state = AppState::from_config(isolated_test_config(
+        "agent-task-agentflow-runtime-unconfigured",
+    ))
+    .await
+    .expect("state should build");
     let app = build_router(state);
     let project_id = create_project(&app).await;
 
@@ -968,8 +927,8 @@ async fn agent_task_start_surfaces_failed_hermes_dispatch() {
                 .body(Body::from(
                     json!({
                         "project_id": project_id,
-                        "name": "failing-hermes-dispatch",
-                        "description": "surface hermes dispatch failure",
+                        "name": "agentflow-runtime-unconfigured",
+                        "description": "surface agentflow runtime gap",
                         "max_iterations": 1
                     })
                     .to_string(),
@@ -1019,15 +978,15 @@ async fn agent_task_start_surfaces_failed_hermes_dispatch() {
 
     assert_eq!(task_json["status"], "failed");
     assert_eq!(task_json["current_phase"], "failed");
-    assert_eq!(task_json["current_step"], "hermes dispatch failed");
+    assert_eq!(task_json["current_step"], "agentflow runtime failed");
     assert_eq!(
         task_json["error_message"],
-        "hermes dispatch partially failed, check child agents"
+        "AgentFlow runtime is not configured yet; legacy agent runtime has been retired"
     );
     assert_eq!(task_json["agent_tree"][0]["status"], "failed");
     assert_eq!(
         task_json["agent_tree"][0]["result_summary"],
-        "hermes dispatch partially failed, check child agents"
+        "AgentFlow runtime is not configured yet; legacy agent runtime has been retired"
     );
 }
 

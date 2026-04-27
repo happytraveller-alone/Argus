@@ -206,12 +206,6 @@ prune_release_tree() {
     "$OUTPUT_DIR/backend/uploads" \
     "$OUTPUT_DIR/backend/log" \
     "$OUTPUT_DIR/backend/data" \
-    "$OUTPUT_DIR/backend/agents/recon/data" \
-    "$OUTPUT_DIR/backend/agents/analysis/data" \
-    "$OUTPUT_DIR/backend/agents/verification/data" \
-    "$OUTPUT_DIR/backend/agents/verification/scratch" \
-    "$OUTPUT_DIR/backend/agents/report/data" \
-    "$OUTPUT_DIR/backend/agents/report/output" \
     "$OUTPUT_DIR/frontend/tests" \
     "$OUTPUT_DIR/frontend/docs" \
     "$OUTPUT_DIR/frontend/dist" \

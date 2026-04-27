@@ -76,7 +76,6 @@ services:
     working_dir: /app
     volumes:
       - ./docker/env/backend:/docker/env/backend
-      - ./backend/agents:/app/backend/agents:ro
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/Argus/scans
@@ -138,11 +137,6 @@ services:
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
       DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
       CONTAINER_CLI: ${CONTAINER_CLI:-docker}
-      HERMES_RECON_CONTAINER: hermes-recon
-      HERMES_ANALYSIS_CONTAINER: hermes-analysis
-      HERMES_VERIFICATION_CONTAINER: hermes-verification
-      HERMES_REPORT_CONTAINER: hermes-report
-      HERMES_AGENTS_BASE_PATH: /app/backend/agents
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
