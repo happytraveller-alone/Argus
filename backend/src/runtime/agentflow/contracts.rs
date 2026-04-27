@@ -514,6 +514,42 @@ mod tests {
     }
 
     #[test]
+    fn agentflow_contract_schema_files_are_valid_json_and_name_frozen_contract() {
+        let input_schema: Value = serde_json::from_str(include_str!(
+            "../../../../agentflow/schemas/runner_input.schema.json"
+        ))
+        .expect("runner input schema json");
+        let output_schema: Value = serde_json::from_str(include_str!(
+            "../../../../agentflow/schemas/runner_output.schema.json"
+        ))
+        .expect("runner output schema json");
+        assert_eq!(
+            input_schema["properties"]["contract_version"]["const"],
+            ARGUS_AGENTFLOW_CONTRACT_VERSION
+        );
+        assert_eq!(
+            output_schema["properties"]["contract_version"]["const"],
+            ARGUS_AGENTFLOW_CONTRACT_VERSION
+        );
+        assert_eq!(
+            input_schema["properties"]["target"]["enum"],
+            json!(["local", "container"])
+        );
+    }
+
+    #[test]
+    fn agentflow_contract_empty_findings_fixture_decodes_as_business_output() {
+        let fixture: ArgusAgentflowRunnerOutput = serde_json::from_str(include_str!(
+            "../../../../agentflow/fixtures/runner_output_empty_findings.json"
+        ))
+        .expect("fixture decodes as Argus business output");
+        assert_eq!(fixture.contract_version, ARGUS_AGENTFLOW_CONTRACT_VERSION);
+        assert_eq!(fixture.run.status, AgentflowTaskStatus::Completed);
+        assert_eq!(fixture.report.findings_count, 0);
+        assert!(fixture.forbidden_static_inputs().is_empty());
+    }
+
+    #[test]
     fn agentflow_runner_input_round_trips_without_static_candidates() {
         let input = ArgusAgentflowRunnerInput {
             contract_version: ARGUS_AGENTFLOW_CONTRACT_VERSION.to_string(),
