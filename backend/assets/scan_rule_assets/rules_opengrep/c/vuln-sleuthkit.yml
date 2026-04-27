@@ -1,0 +1,51 @@
+rules:
+- id: vuln-sleuthkit-0c7d5e73
+  pattern: "if (tsk_getu16($FS->endian, $MFT->upd_off) + sizeof(ntfs_upd) > $NTFS->mft_rsize_b) {\n  ...\n}\n"
+  pattern-not: "if (tsk_getu16($FS->endian, $MFT->upd_off) + \n        sizeof(ntfs_upd) + \n        2*(tsk_getu16($FS->endian,\
+    \ $MFT->upd_cnt) - 1) > $NTFS->mft_rsize_b) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential buffer overflow vulnerability due to insufficient boundary checking.
+
+    The original code does not account for the size of the update array entries, which could lead to memory corruption.
+
+    The fix includes additional size calculations for the update array entries. Ensure all relevant size calculations are
+    included in boundary checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sleuthkit/sleuthkit/commit/0c7d5e7333aeb61dace51750b56fcaad55a6359b
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-sleuthkit-8e646f96
+  pattern: '$EXPR > (uintptr_t)($VAR + $LEN)
+
+    '
+  pattern-not: '$EXPR > (uintptr_t)$VAR + $LEN
+
+    '
+  languages:
+  - c
+  message: 'This rule detects a potential vulnerability in pointer arithmetic where the cast to uintptr_t is incorrectly applied
+    to the entire expression. This can lead to incorrect pointer calculations and potential memory corruption. To fix this,
+    ensure that the cast to uintptr_t is applied only to the pointer variable, not the entire expression.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sleuthkit/sleuthkit/commit/8e646f96f5047768d63647844f300de7a5b5fb34
+    category: security
+    cwe:
+    - CWE-704
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/704.html
+    technology:
+    - c

@@ -1,0 +1,275 @@
+rules:
+- id: vuln-suricata-18841a58
+  pattern: "if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL)\n    return htp_list_get($HTTP_STATE->conn->transactions,\
+    \ $TX_ID);\n"
+  pattern-not: "if ($HTTP_STATE != NULL && $HTTP_STATE->conn != NULL && $TX_ID >= $HTTP_STATE->tx_freed)\n    return htp_list_get($HTTP_STATE->conn->transactions,\
+    \ $TX_ID - $HTTP_STATE->tx_freed);\n"
+  languages:
+  - c
+  message: 'This rule detects a vulnerability where transactions are accessed without checking the `tx_freed` offset, which
+    can lead to accessing invalid memory or incorrect transactions. This can cause crashes or security issues if an attacker
+    can manipulate transaction IDs. To fix this, ensure that the `tx_id` is checked against `http_state->tx_freed` before
+    accessing the transaction list.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/OISF/suricata/commit/18841a58da71e735ddf4e52cbfa6989755ecbeb7
+    category: security
+    cwe:
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-suricata-2a2120ec
+  pattern: "static SMTPTransaction *SMTPTransactionCreate(void)\n{\n    ...\n}\n"
+  pattern-not: "static SMTPTransaction *SMTPTransactionCreate(SMTPState *state)\n{\n    if (state->tx_cnt > smtp_config.max_tx)\
+    \ {\n        return NULL;\n    }\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The function SMTPTransactionCreate does not validate the transaction count against the maximum allowed transactions,
+    potentially allowing an unbounded number of transactions. This could lead to resource exhaustion or denial of service.
+    Update the function to accept a state parameter and validate the transaction count against smtp_config.max_tx.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/2a2120ecf10c5b5713ec2bf59469fe57f7b5b747
+    category: security
+    cwe:
+    - CWE-400
+    owasp: A9:2017-Insufficient Logging & Monitoring
+    references:
+    - https://cwe.mitre.org/data/definitions/400.html
+    technology:
+    - c
+- id: vuln-suricata-2f39ba75
+  pattern: "if (!$F->more_frags) {\n    break;\n}\n"
+  pattern-not: "if (!more_frags && $F->offset > prev_offset) {\n    break;\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential vulnerability in packet defragmentation logic. The original code would break the defragmentation
+    process when encountering a fragment marked as the last one, which could lead to incomplete reassembly of packets. This
+    is dangerous as it may result in incorrect packet processing or security bypass. The fix involves continuing the defragmentation
+    process even if a fragment is marked as the last one, as subsequent fragments with the same offset might contain preferred
+    data. Always verify the complete packet payload to ensure proper reassembly.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/2f39ba75f153ba9bdf8eedc2a839cc973dbaea66
+    category: security
+    cwe:
+    - CWE-670
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://tools.ietf.org/html/rfc815
+    technology:
+    - c
+- id: vuln-suricata-4a04f814
+  pattern: 'BuildTestPacket($ID, $OFF, $MF, $CONTENT, $LEN)
+
+    '
+  pattern-not: 'BuildTestPacket($PROTO, $ID, $OFF, $MF, $CONTENT, $LEN)
+
+    '
+  languages:
+  - c
+  message: "Detected a missing protocol parameter in BuildTestPacket function calls. \nThis could lead to incorrect packet\
+    \ handling and potential security vulnerabilities. \nAlways specify the protocol (e.g., IPPROTO_ICMP) when calling BuildTestPacket.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/4a04f814b15762eb446a5ead4d69d021512df6f8
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-suricata-51790d38
+  pattern: "if ($LINE_LEN >= 4 && $FUNC(\"SSH-\", $LINE_PTR, 4) != 0) {\n  ...\n}\n"
+  pattern-not: "if ($LINE_LEN < 4) {\n  ...\n}\nif ($FUNC(\"SSH-\", $LINE_PTR, 4) != 0) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code directly compares the buffer content without first checking if the buffer length is sufficient. This
+    can lead to out-of-bounds memory access if the buffer is shorter than expected. Always verify the buffer length before
+    performing memory comparisons to prevent potential crashes or security vulnerabilities.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/51790d3824bc381e24aaeef20338dd6b8bd4e453
+    category: security
+    cwe:
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-suricata-843d0b7a
+  pattern: "switch ($SSN->state) {\n    case TCP_SYN_SENT:\n        if(StreamTcpPacketStateSynSent($TV, $P, $STT, $SSN, &$STT->pseudo_queue))\
+    \ {\n            goto error;\n        }\n        break;\n    case TCP_SYN_RECV:\n        if(StreamTcpPacketStateSynRecv($TV,\
+    \ $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n        }\n        break;\n    case TCP_ESTABLISHED:\n\
+    \        if(StreamTcpPacketStateEstablished($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n  \
+    \      }\n        break;\n    case TCP_FIN_WAIT1:\n        if(StreamTcpPacketStateFinWait1($TV, $P, $STT, $SSN, &$STT->pseudo_queue))\
+    \ {\n            goto error;\n        }\n        break;\n    case TCP_FIN_WAIT2:\n        if(StreamTcpPacketStateFinWait2($TV,\
+    \ $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n        }\n        break;\n    case TCP_CLOSING:\n\
+    \        if(StreamTcpPacketStateClosing($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n      \
+    \  }\n        break;\n    case TCP_CLOSE_WAIT:\n        if(StreamTcpPacketStateCloseWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue))\
+    \ {\n            goto error;\n        }\n        break;\n    case TCP_LAST_ACK:\n        if(StreamTcpPacketStateLastAck($TV,\
+    \ $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n        }\n        break;\n    case TCP_TIME_WAIT:\n\
+    \        if(StreamTcpPacketStateTimeWait($TV, $P, $STT, $SSN, &$STT->pseudo_queue)) {\n            goto error;\n     \
+    \   }\n        break;\n    case TCP_CLOSED:\n        SCLogDebug(\"packet received on closed state\");\n        break;\n\
+    \    default:\n        SCLogDebug(\"packet received on default state\");\n        break;\n}\n"
+  pattern-not: "if (StreamTcpStateDispatch($TV, $P, $STT, $SSN, &$STT->pseudo_queue, $SSN->state) < 0)\n    goto error;\n\
+    StreamTcpPacketCheckPostRst($SSN, $P);\n"
+  languages:
+  - c
+  message: 'The code uses a switch statement to handle TCP states, which can lead to missed RST packet handling in the CLOSED
+    state. This can allow RST injection attacks. Use the StreamTcpStateDispatch function for consistent state handling and
+    StreamTcpPacketCheckPostRst for RST packet validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/843d0b7a10bb45627f94764a6c5d468a24143345
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-suricata-9ba89a31
+  pattern: "if (SCMemcmp(\"SSH-\", $LINE_PTR, 4) != 0) {\n  ...\n}\n"
+  pattern-not: "if ($LINE_LEN >= 4 && SCMemcmp(\"SSH-\", $LINE_PTR, 4) != 0) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential buffer overflow vulnerability due to missing length check before using SCMemcmp.
+
+    This can lead to undefined behavior if the input is shorter than the compared length.
+
+    Always verify the length of the input before performing memory comparison operations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/9ba89a31efc89ec5cb72326dbcb9166b098f3ea0
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    - https://cwe.mitre.org/data/definitions/787.html
+    technology:
+    - c
+- id: vuln-suricata-b9579fbe
+  pattern: "if (!($CD->flags & DETECT_CONTENT_RELATIVE_NEXT)) {\n  ...\n  goto match;\n}\n...\nif ($DET_CTX->discontinue_matching)\n\
+    \  goto no_match;\n"
+  pattern-not: "if (($CD->flags & (DETECT_CONTENT_DISTANCE|DETECT_CONTENT_WITHIN)) == 0) {\n  ...\n  $DET_CTX->discontinue_matching\
+    \ = 1;\n}\n...\nif (($CD->flags & DETECT_CONTENT_RELATIVE_NEXT) == 0) {\n  ...\n  $DET_CTX->discontinue_matching = 1;\n\
+    \  goto no_match;\n}\n"
+  languages:
+  - c
+  message: 'The original code incorrectly handled the detection of content matches in Suricata, leading to potential false
+    positives or negatives in rule matching. This could allow malicious traffic to bypass detection or cause legitimate traffic
+    to be incorrectly flagged. The issue was fixed by properly handling the discontinue_matching flag and ensuring the correct
+    conditions are checked before continuing or stopping the matching process. To fix this, ensure that the discontinue_matching
+    flag is set appropriately and that the correct conditions are checked before proceeding with match or no-match decisions.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/b9579fbe7dd408200ef03cbe20efddb624b73885
+    category: security
+    cwe:
+    - CWE-670
+    owasp:
+    - 'A09: Security Logging and Monitoring Failures'
+    references:
+    - https://github.com/OISF/suricata/commit/b9579fbe7dd408200ef03cbe20efddb624b73885
+    technology:
+    - c
+- id: vuln-suricata-bb26e621
+  pattern: '$MODULE.PktAcqBreakLoop = NULL;
+
+    '
+  pattern-not: '$MODULE.PktAcqBreakLoop = $FUNC;
+
+    '
+  languages:
+  - c
+  message: 'A NULL assignment to PktAcqBreakLoop can lead to a potential null pointer dereference, causing undefined behavior
+    or crashes. This vulnerability occurs when the function pointer is not properly initialized before being used. The fix
+    involves assigning a valid function pointer to PktAcqBreakLoop, ensuring proper handling of the break loop functionality.
+    Always ensure that function pointers are properly initialized before use.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/bb26e6216e5190d841529c0ecb1292b9a358ed54
+    category: security
+    cwe:
+    - CWE-476
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c
+- id: vuln-suricata-d13bd2ae
+  pattern: 'len += $F->data_len;
+
+    '
+  pattern-not: 'len = MAX(len, $F->offset + $F->data_len);
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves incorrect packet length calculation during defragmentation, which could lead to buffer
+    overflows or incorrect packet reassembly. The issue occurs when the length is incremented by the fragment''s data length
+    without considering the fragment''s offset. This can result in incorrect packet length calculations, potentially leading
+    to security vulnerabilities. The fix is to use MAX(len, frag->offset + frag->data_len) to ensure the packet length is
+    updated to the largest known data offset.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/d13bd2ae217a6d2ceb347f74d27cbfcd37b9bda9
+    category: security
+    cwe:
+    - 'CWE-130: Improper Handling of Length Parameter Inconsistency'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/130.html
+    technology:
+    - c
+- id: vuln-suricata-d8634daf
+  pattern: "if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL) {\n  ...\n}\n"
+  pattern-not: "if ($PROTO == IPPROTO_TCP && $PROTOCTX != NULL &&\n    ($FLAGS & PKT_STREAM_EST)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a missing check for PKT_STREAM_EST in TCP protocol handling. This vulnerability could allow processing
+    of packets that are not part of an established stream, potentially leading to security issues such as bypassing security
+    controls or processing malformed packets. Always verify that the packet is part of an established stream using the PKT_STREAM_EST
+    flag when handling TCP packets.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OISF/suricata/commit/d8634daf74c882356659addb65fb142b738a186b
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://suricata.io/
+    technology:
+    - c

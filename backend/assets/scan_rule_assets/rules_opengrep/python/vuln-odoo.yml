@@ -1,0 +1,106 @@
+rules:
+- id: vuln-odoo-050806b9
+  pattern: "def $FUNC(...):\n  ...\n  self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').write({'is_pinned':\
+    \ True})\n  ...\n"
+  pattern-not: "def $FUNC(...):\n  ...\n  self.filtered(lambda $CHANNEL: $CHANNEL.channel_type == 'chat').mapped('channel_last_seen_partner_ids').sudo().write({'is_pinned':\
+    \ True})\n  ...\n"
+  languages:
+  - python
+  message: Detected unsafe write operation without sudo() in Odoo channel management. This can lead to unauthorized modifications.
+    Always use sudo() for operations that require elevated privileges.
+  severity: ERROR
+  metadata:
+    source-url: github.com/odoo/odoo/commit/050806b936c9707274d9a64e4281f4258aabeeee
+    category: security
+    cwe: CWE-862
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://www.odoo.com/documentation/16.0/developer/reference/backend/security.html#sudo
+    technology:
+    - python
+- id: vuln-odoo-5ac55247
+  pattern: "if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:\n    raise ValidationError(_('Invalid token found!\
+    \ Token partner %s != %s') % ($PAYMENT_TOKEN.partner.name, $PARTNER.name))\n"
+  pattern-not: "if $PAYMENT_TOKEN and $PAYMENT_TOKEN.partner_id != $PARTNER:\n    raise ValidationError(_('Invalid token found!'))\n"
+  languages:
+  - python
+  message: 'Detected a potential information disclosure vulnerability where sensitive partner information is exposed in error
+    messages. This can lead to unauthorized access to sensitive data. The fix removes the detailed error message to prevent
+    information leakage.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/odoo/odoo/commit/5ac55247b576312ea4f1f274c94d955dd23335d1
+    category: security
+    cwe: 'CWE-209: Information Exposure Through an Error Message'
+    owasp: A3:2017-Sensitive Data Exposure
+    technology:
+    - python
+- id: vuln-odoo-a11cb620
+  pattern: '$RES = super($CLASS, $SELF).create($VALS)
+
+    '
+  pattern-not: '$RES = super($CLASS, $SELF).create($VALS)._check_rights()
+
+    '
+  languages:
+  - python
+  message: 'Detected missing access rights check after creating a record. This can lead to unauthorized access or modification
+    of sensitive data. The vulnerability occurs when `super().create()` is called without subsequently verifying the user''s
+    access rights. The fix involves calling `_check_rights()` after record creation to ensure proper access control.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/odoo/odoo/commit/a11cb62053c93eba377039370cc79933b2ea444a
+    category: security
+    cwe: CWE-862
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control
+    technology: python
+- id: vuln-odoo-a1b92ad2
+  pattern: 're.compile(r"^(\w+)\((.*)\)$")
+
+    '
+  pattern-not: 're.compile(r"^([a-zA-Z]\w+)\((.*)\)$")
+
+    '
+  languages:
+  - python
+  message: 'Detected insecure regular expression pattern in onchange_v7. The original pattern allows for potentially unsafe
+    method names that don''t start with a letter. This could lead to security vulnerabilities if untrusted input is processed.
+    Use the fixed pattern that enforces method names to start with a letter.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/odoo/odoo/commit/a1b92ad2b8aa2873e8707ef13660771fd75dba8e
+    category: security
+    cwe: CWE-20
+    owasp: A1:2017-Injection
+    references:
+    - https://docs.python.org/3/library/re.html
+    technology:
+    - python
+- id: vuln-odoo-f166400c
+  pattern: "def $FUNC(...):\n    ...\n    $RESULTS = self.do_query_unaffected_earnings()\n    ...\n"
+  pattern-not: "def $FUNC(...):\n    ...\n    if not (self.env.is_admin() or self.env.user.has_group('account.group_account_user')):\n\
+    \        raise AccessDenied()\n    $RESULTS = self._do_query_unaffected_earnings()\n    ...\n"
+  languages:
+  - python
+  message: 'Detected a missing access control check in a method that queries financial data. This can lead to unauthorized
+    access to sensitive financial information. The fix adds a check to verify if the user is an admin or has the required
+    group permissions before executing the query.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/odoo/odoo/commit/f166400c7ddd1bc571fcad52d18d2371f2c3fd87
+    category: security
+    cwe: CWE-284
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control
+    technology: python

@@ -1,0 +1,40 @@
+rules:
+- id: vuln-tomcat-339b40bc
+  pattern: 'super(null);
+
+    '
+  pattern-not: 'super(SocketBufferHandler.EMPTY);
+
+    '
+  languages:
+  - java
+  message: "Passing null to super() can lead to null pointer exceptions and undefined behavior. \nInstead, use a proper buffer\
+    \ handler like SocketBufferHandler.EMPTY to ensure safe initialization.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/apache/tomcat/commit/339b40bc07bdba9ded565929b9a3448c5a78f015
+    category: security
+    cwe: CWE-476
+    owasp: A9:2017-Using Components with Known Vulnerabilities
+    technology: java
+- id: vuln-tomcat-7046644b
+  pattern: '$POOL.write($FROM, getSocket(), $SELECTOR, $WRITE_TIMEOUT);
+
+    '
+  pattern-not: '$POOL.write($FROM, $SOCKET, $SELECTOR, $WRITE_TIMEOUT);
+
+    '
+  languages:
+  - java
+  message: Potential vulnerability due to unchecked socket state. Always check if the socket is closed before performing operations.
+    Use the socket instance directly after validation.
+  severity: ERROR
+  metadata:
+    source-url: github.com/apache/tomcat/commit/7046644bf361b89afc246b6643e24ce2ae60cacc
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - java

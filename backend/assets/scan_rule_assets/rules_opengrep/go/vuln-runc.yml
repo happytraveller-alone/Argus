@@ -1,0 +1,169 @@
+rules:
+- id: vuln-runc-0d62b950
+  pattern: "utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {\n  if err := mount($SOURCE, $DEST, $PROCFD, \"cgroup2\"\
+    , $FLAGS, $DATA); err != nil {\n    if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EBUSY) {\n      $SRC = $UNIFIEDMOUNTPOINT\n\
+    \      if $CGROUPNS && $CGROUP2PATH != \"\" {\n        $SRC = $CGROUP2PATH\n      }\n      err = mount($SRC, $DEST, $PROCFD,\
+    \ \"\", $FLAGS|unix.MS_BIND, \"\")\n      if $ROOTLESSCGROUPS && errors.Is(err, unix.ENOENT) {\n        err = nil\n  \
+    \    }\n    }\n    return err\n  }\n  return nil\n})\n"
+  pattern-not: "utils.WithProcfd($ROOT, $DEST, func($PROCFD string) error {\n  return mount($SOURCE, $DEST, $PROCFD, \"cgroup2\"\
+    , $FLAGS, $DATA)\n})\n"
+  languages:
+  - go
+  message: 'Detected a vulnerable mount handling pattern in cgroup2 mounting logic. The original code attempts to handle EPERM
+    and EBUSY errors by falling back to a bind mount, but this can lead to incorrect behavior in certain namespaces. The fixed
+    version properly handles these cases by separating the error handling logic and using a more structured approach to fallback
+    mounting. This vulnerability could lead to incorrect container isolation or security bypasses in certain namespace configurations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/0d62b950e60f6980b54fe3bafd9a9c608dc1df17
+    category: security
+    cwe:
+    - CWE-284
+    owasp: 'A6: Security Misconfiguration'
+    references:
+    - https://github.com/opencontainers/runc/issues/2158
+    technology:
+    - go
+- id: vuln-runc-2b221a6a
+  pattern: "if err := setRecAttr($M, $ROOTFS); err != nil {\n  return err\n}\nreturn nil\n"
+  pattern-not: 'return setRecAttr($M, $ROOTFS)
+
+    '
+  languages:
+  - go
+  message: 'The error return value from `setRecAttr` is being ignored, which can lead to silent failures in setting recursive
+    attributes on the root filesystem. This can result in incorrect container configurations and potential security vulnerabilities.
+    To fix this, ensure that the return value of `setRecAttr` is properly handled and returned.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/2b221a6ab7c96dff9dfe7c46766d60a12490cc98
+    category: security
+    cwe:
+    - CWE-252
+    owasp:
+    - A06:2021 - Vulnerable and Outdated Components
+    technology:
+    - go
+- id: vuln-runc-331692ba
+  pattern: "if err := checkMountDestination($ROOTFS, $DEST); err != nil {\n    ...\n}\n"
+  pattern-not: "if err := checkProcMount($ROOTFS, $DEST, $SOURCE); err != nil {\n    ...\n}\n"
+  languages:
+  - go
+  message: 'The use of `checkMountDestination` is unsafe for checking mount destinations, particularly when dealing with `/proc`.
+    This can lead to security vulnerabilities where malicious mounts could bypass safety checks. Replace `checkMountDestination`
+    with `checkProcMount` to ensure proper validation of mount points, especially when dealing with `/proc`.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/331692baa7afdf6c186f8667cb0e6362ea0802b3
+    category: security
+    cwe:
+    - CWE-22
+    - CWE-285
+    owasp:
+    - A1:2017-Injection
+    - A5:2017-Broken Access Control
+    references:
+    - https://github.com/opencontainers/runc/commit/331692baa7afdf6c186f8667cb0e6362ea0802b3
+    technology:
+    - go
+- id: vuln-runc-87819939
+  pattern: "dest, err := securejoin.SecureJoin($ROOTFS, $DESTINATION)\nif err != nil {\n    return err\n}\nif err := os.MkdirAll(dest,\
+    \ 0o755); err != nil {\n    return err\n}\n"
+  pattern-not: "dest, err := createMountpoint($ROOTFS, $MOUNT, $MOUNTFD, $SOURCE)\nif err != nil {\n    return fmt.Errorf(\"\
+    create mount destination for %s mount: %w\", $DESTINATION, err)\n}\n"
+  languages:
+  - go
+  message: "Directly creating mountpoints without proper validation can lead to security vulnerabilities, \nsuch as symlink\
+    \ attacks or rootfs manipulation. Use the `createMountpoint` function instead, \nwhich performs necessary safety checks\
+    \ and validations.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/8781993968fd964ac723ff5f360b6f259e809a3e
+    category: security
+    cwe:
+    - CWE-59
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - go
+- id: vuln-runc-9aef5044
+  pattern: 'fmt.Errorf("Bad label option %q, valid options ''disable, user, role, level, type''", $CON)
+
+    '
+  pattern-not: 'fmt.Errorf("Bad label option %q, valid options ''disable, user, role, level, type, filetype''", $CON)
+
+    '
+  languages:
+  - go
+  message: 'The error message for invalid SELinux label options is missing the ''filetype'' option. This could lead to misconfiguration
+    or security issues when handling SELinux labels. Ensure that all valid options are included in the error message.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/9aef50441511f0e9954d31d5ae84429040032e7c
+    category: security
+    cwe:
+    - 'CWE-209: Information Exposure Through an Error Message'
+    owasp:
+    - 'A6: Security Misconfiguration'
+    technology:
+    - go
+- id: vuln-runc-9c444070
+  pattern: "func prepareBindMount($M *configs.Mount, $ROOTFS string) error {\n  $STAT, $ERR := os.Stat($M.Source)\n  ...\n\
+    }\n"
+  pattern-not: "func prepareBindMount($M *configs.Mount, $ROOTFS string, $MOUNTFD *int) error {\n  $SOURCE := $M.Source\n\
+    \  if $MOUNTFD != nil {\n    $SOURCE = \"/proc/self/fd/\" + strconv.Itoa(*$MOUNTFD)\n  }\n  $STAT, $ERR := os.Stat($SOURCE)\n\
+    \  ...\n}\n"
+  languages:
+  - go
+  message: 'The code directly uses the mount source path without proper handling in user namespaces,
+
+    which can lead to security vulnerabilities when dealing with bind mounts. The fix introduces
+
+    handling via file descriptors (O_PATH) to safely manage mount sources across namespaces.
+
+    Ensure that mount sources are properly handled using file descriptors when working with
+
+    user namespaces to prevent potential security issues.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/9c444070ec7bb83995dbc0185da68284da71c554
+    category: security
+    cwe:
+    - CWE-284
+    owasp: A01:2021 - Broken Access Control
+    technology:
+    - go
+- id: vuln-runc-d04de3a9
+  pattern: '$CAPABILITIES.Inheritable = append($CAPABILITIES.Inheritable, $CAP)
+
+    '
+  pattern-not: '$CAPABILITIES.Inheritable = []
+
+    '
+  languages:
+  - go
+  message: 'Dangerous capability inheritance detected. Appending capabilities to the Inheritable set can lead to privilege
+    escalation vulnerabilities. Capabilities should not be inherited by default as they can be used by child processes to
+    gain elevated privileges. Remove the capability inheritance or explicitly set the Inheritable field to an empty slice.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/opencontainers/runc/commit/d04de3a9b72d7a2455c1885fc75eb36d02cd17b5
+    category: security
+    cwe:
+    - CWE-250
+    owasp:
+    - A01:2021-Broken Access Control
+    technology:
+    - go

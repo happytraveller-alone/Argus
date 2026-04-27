@@ -1,0 +1,183 @@
+rules:
+- id: vuln-phpmyadmin-019c4f25
+  pattern: '"<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, PMA_commonParams.get(''table'')) + "</h3>"
+
+    '
+  pattern-not: '"<h3>" + PMA_sprintf(PMA_messages.strFinishMsg, escapeHtml(PMA_commonParams.get(''table''))) + "</h3>"
+
+    '
+  languages:
+  - javascript
+  message: 'Potential XSS vulnerability detected. The table parameter is not properly sanitized before being included in HTML
+    output. Use escapeHtml() to sanitize user input and prevent XSS attacks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/019c4f25d500ec5db9ba3b84cc961a7e4e850738
+    category: security
+    cwe:
+    - CWE-79
+    owasp:
+    - 'A7: Cross-Site Scripting (XSS)'
+    references:
+    - https://owasp.org/www-community/attacks/xss/
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-0cd293f5
+  pattern: '''DROP VIEW '' + PMA_commonParams.get(''table'')
+
+    '
+  pattern-not: '''DROP VIEW '' + escapeHtml(PMA_commonParams.get(''table''))
+
+    '
+  languages:
+  - javascript
+  message: "Potential XSS vulnerability due to unescaped user input in SQL query. \nThe table name is used directly in a DROP\
+    \ VIEW statement without proper escaping, \nwhich could allow an attacker to inject malicious SQL code. \nAlways sanitize\
+    \ user input using appropriate escaping functions like escapeHtml().\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/0cd293f5e13aa245e4a57b8d373597cc0e421b6f
+    category: security
+    cwe: CWE-89
+    owasp: A1:2017-Injection
+    references:
+    - https://owasp.org/www-community/attacks/SQL_Injection
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-1490533d
+  pattern: 'var $VAR = $STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB;
+
+    '
+  pattern-not: 'var $VAR = escapeHtml($STRING1 + $SELECTOR.val() + $STRING2 + $PARENT_DB);
+
+    '
+  languages:
+  - javascript
+  message: Potential XSS vulnerability due to unescaped user input in string concatenation. Use escapeHtml or similar sanitization
+    functions to prevent XSS attacks.
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/1490533d91e9d3820e78ca4eac7981886eaea2cb
+    category: security
+    cwe:
+    - CWE-79
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://owasp.org/www-community/attacks/xss/
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-24d0eb55
+  pattern: "try {\n    if (top != self) {\n        top.location.href = self.location.href;\n    }\n} catch($E) {\n    alert(\"\
+    Redirecting... (error: \" + $E);\n    top.location.href = self.location.href;\n}\n"
+  pattern-not: "if(self == top) {\n    document.documentElement.style.display = 'block';\n} else {\n    top.location = self.location;\n\
+    }\n"
+  languages:
+  - javascript
+  message: 'Insecure cross-framing protection detected. The vulnerable code attempts to redirect to the same URL when framed,
+    but uses a try-catch block that can expose error details. This can lead to information disclosure or other security issues.
+    Use a simple if-else check to handle framing protection securely.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/24d0eb55203b029f250c77d63f2900ffbe099e8b
+    category: security
+    cwe:
+    - CWE-200
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/www-project-top-ten/
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-4d21b5c0
+  pattern: columnNames.push($(this).text())
+  pattern-not: columnNames.push(escapeHtml($(this).text()))
+  languages:
+  - javascript
+  message: Potential XSS vulnerability due to missing HTML escaping when pushing text to columnNames. Use escapeHtml() to
+    sanitize the input.
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/4d21b5c077db50c2a54b7f569d20f463cc2651f5
+    category: security
+    cwe:
+    - CWE-79
+    owasp:
+    - 'A7: Cross-Site Scripting (XSS)'
+    references:
+    - https://owasp.org/www-community/attacks/xss/
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-50edafc0
+  pattern: '$.getScript(''http://www.phpmyadmin.net/home_page/version.js'', $FUNC)
+
+    '
+  pattern-not: '$.getJSON(''http://www.phpmyadmin.net/home_page/version.json'', {}, $FUNC)
+
+    '
+  languages:
+  - javascript
+  message: 'Dangerous use of `$.getScript` detected. This can lead to remote code execution by loading untrusted JavaScript.
+    Use `$.getJSON` to safely fetch and parse JSON data instead.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/50edafc0884aa15d0a1aa178089ac6a1ad2eb18a
+    category: security
+    cwe: CWE-829
+    owasp: A3:2017-Sensitive Data Exposure
+    references:
+    - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-647c9d12
+  pattern: 'var $VAR = $.sprintf($MSG, $(this).closest(''td'').find(''div'').text());
+
+    '
+  pattern-not: 'var $VAR = $.sprintf($MSG, escapeHtml($(this).closest(''td'').find(''div'').text()));
+
+    '
+  languages:
+  - javascript
+  message: 'Potential XSS vulnerability detected. The code directly uses user input in a sprintf call without proper HTML
+    escaping, which could allow for cross-site scripting attacks. Use escapeHtml() or a similar function to sanitize the input
+    before using it in the sprintf call.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/647c9d12e33a6b64e1c3ff7487f72696bdf2dccb
+    category: security
+    cwe:
+    - CWE-79
+    owasp:
+    - 'A7: Cross-Site Scripting (XSS)'
+    technology:
+    - javascript
+- id: vuln-phpmyadmin-6ea8fad3
+  pattern: 'var $QUESTION = $(''<div/>'').text($CURR_ROW.children(''td'').children(''.drop_sql'').html());
+
+    '
+  pattern-not: 'var $QUESTION = $(''<div/>'').text($CURR_ROW.children(''td'').children(''.drop_sql'').text());
+
+    '
+  languages:
+  - javascript
+  message: "Potential XSS vulnerability due to use of .html() instead of .text(). \nUsing .html() can lead to script injection\
+    \ if the content is not properly sanitized. \nUse .text() to safely extract text content without interpreting HTML tags.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/phpmyadmin/phpmyadmin/commit/6ea8fad3f999bfdf79eb6fe31309592bca54d611
+    category: security
+    cwe: CWE-79
+    owasp: A7:2017-Cross-Site Scripting (XSS)
+    references:
+    - https://owasp.org/www-community/attacks/xss/
+    - https://cwe.mitre.org/data/definitions/79.html
+    technology:
+    - javascript

@@ -1,0 +1,50 @@
+rules:
+- id: vuln-hdf5-1750b4b0
+  pattern: "if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) || (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size)\
+    \ == $ADDR) {\n  ...\n}\n"
+  pattern-not: "if ($FUNC($ADDR, $SIZE, $ACCUM->loc, $ACCUM->size) && (($ADDR + $SIZE) == $ACCUM->loc) || ($ACCUM->loc + $ACCUM->size)\
+    \ == $ADDR) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks for address overlap or equality without ensuring that the addresses are defined. This can lead
+    to undefined behavior if the addresses are not properly initialized. Always check if the addresses are defined using H5F_addr_defined
+    before performing any operations on them.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/HDFGroup/hdf5/commit/1750b4b0af5158009aa2f861c65fb4bf8fc364de
+    category: security
+    cwe:
+    - CWE-457
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-hdf5-302053f9
+  pattern: 'H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF)
+
+    '
+  pattern-not: 'H5O_msg_decode($F, $DXPL_ID, $OPEN_OH, $MSG_ID, $BUF_SIZE, $BUF)
+
+    '
+  languages:
+  - c
+  message: 'The function `H5O_msg_decode` is called without a buffer size parameter, which can lead to buffer overflows or
+    incorrect decoding. This vulnerability can be exploited to cause memory corruption or arbitrary code execution. Always
+    include the buffer size parameter to ensure safe memory operations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/HDFGroup/hdf5/commit/302053f978e38a8d4306a7c1233cdf8fd2ec28dd
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-119
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c

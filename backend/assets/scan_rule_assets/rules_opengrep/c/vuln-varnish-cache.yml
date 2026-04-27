@@ -1,0 +1,129 @@
+rules:
+- id: vuln-varnish-cache-29870c8f
+  pattern: "$RETVAL = htc_request_check_host_hdr($HP);\nif ($RETVAL != 0) {\n    WSP($SP, SLT_Error, \"Duplicated Host header\"\
+    );\n    return ($RETVAL);\n}\n"
+  pattern-not: "int $SEEN_CL = 0;\nif (http_IsHdr(&$HP->hd[$U], H_Content_Length)) {\n    if ($SEEN_CL) {\n        WSP($SP,\
+    \ SLT_Error, \"Duplicated Content-Length header\");\n        return (400);\n    }\n    $SEEN_CL = 1;\n}\n$RETVAL = htc_request_check_hdrs($SP,\
+    \ $HP);\n"
+  languages:
+  - c
+  message: 'The function `htc_request_check_host_hdr` is vulnerable to duplicated Host header issues without checking for
+    duplicated Content-Length headers. This can lead to HTTP request smuggling or other security issues. The fix includes
+    checking for both duplicated Host and Content-Length headers. Update the code to use `htc_request_check_hdrs` and ensure
+    proper header validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/varnishcache/varnish-cache/commit/29870c8fe95e4e8a672f6f28c5fbe692bea09e9c
+    category: security
+    cwe:
+    - CWE-113
+    owasp:
+    - A6:2017-Security Misconfiguration
+    references:
+    - https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration
+    technology:
+    - c
+- id: vuln-varnish-cache-62932b42
+  pattern: "static void\ncnt_vdp(struct req *req, struct boc *boc)\n{\n    ...\n    if (sendbody < 0) {\n        /* Don't\
+    \ touch pass+HEAD C-L */\n        sendbody = 0;\n    } else if (resp_len >= 0 && resp_len == req->resp_len) {\n      \
+    \  /* Reuse C-L header */\n    } else {\n        http_Unset(req->resp, H_Content_Length);\n        if (req->resp_len >=\
+    \ 0 && sendbody)\n            http_PrintfHeader(req->resp,\n                \"Content-Length: %jd\", req->resp_len);\n\
+    \    }\n    ...\n}\n"
+  pattern-not: "static enum req_fsm_nxt\ncnt_transmit(struct worker *wrk, struct req *req)\n{\n    ...\n    if (sendbody <\
+    \ 0) {\n        /* Don't touch pass+HEAD C-L */\n        sendbody = 0;\n    } else if (resp_len >= 0 && resp_len == req->resp_len)\
+    \ {\n        /* Reuse C-L header */\n        http_Unset(req->resp, H_Content_Length);\n        if (req->resp_len >= 0\
+    \ && sendbody)\n            http_PrintfHeader(req->resp,\n                \"Content-Length: %jd\", req->resp_len);\n \
+    \   }\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The function `cnt_vdp` incorrectly handles the Content-Length header in certain cases, which could lead to incorrect
+    HTTP responses. This vulnerability can cause issues with HTTP compliance and potentially lead to security risks such as
+    response smuggling. The issue was fixed by moving the logic to `cnt_transmit` and ensuring proper handling of the Content-Length
+    header. Always ensure that Content-Length headers are correctly set and unset based on the response body and status code.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/varnishcache/varnish-cache/commit/62932b422f311ed1224f14a216169bcdc1b77a2d
+    category: security
+    cwe:
+    - CWE-444
+    owasp:
+    - A6:2017 - Security Misconfiguration
+    references:
+    - https://tools.ietf.org/html/rfc7230#section-3.3.3
+    technology:
+    - c
+- id: vuln-varnish-cache-85e8468b
+  pattern: 'vct_iscrlf(*$VAR)
+
+    '
+  pattern-not: 'vct_iscrlf($VAR)
+
+    '
+  languages:
+  - c
+  message: 'Detected incorrect usage of `vct_iscrlf` with a dereferenced pointer. This can lead to incorrect parsing of HTTP
+    headers, potentially causing security vulnerabilities such as HTTP request smuggling. The function `vct_iscrlf` expects
+    a pointer, not a dereferenced value. Fix by removing the dereference operator (*) when passing the pointer to `vct_iscrlf`.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/varnishcache/varnish-cache/commit/85e8468bec9416bd7e16b0d80cb820ecd2b330c3
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A6: Security Misconfiguration'
+    references:
+    - https://github.com/varnishcache/varnish-cache/commit/85e8468bec9416bd7e16b0d80cb820ecd2b330c3
+    technology:
+    - c
+- id: vuln-varnish-cache-987ba4c4
+  pattern: "for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask; $L++) {\n  ...\n}\n"
+  pattern-not: "for ($L = 0; $L <= $DEPTH && $L * 8 < $AE->mask - 7; $L++) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'This code contains a potential integer overflow vulnerability due to insufficient bounds checking in a loop condition.
+    The condition `l * 8 < ae->mask` may allow `l` to exceed safe bounds, leading to undefined behavior or memory corruption.
+    The fix adds a proper boundary check by subtracting 7 from `ae->mask` to ensure the loop stays within safe limits. To
+    fix this, update the loop condition to include the boundary check as shown in the patched version.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/varnishcache/varnish-cache/commit/987ba4c49facf31978d0e6e395a33f053536feed
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-varnish-cache-fcf5722a
+  pattern: "if ($U < 2 || $U > 19)\n  return(NULL);\nif ($U > 3)\n  $U += $HTTP_ASSO_VALUES[((const uint8_t*)$B)[3]];\nif\
+    \ ($U > 38)\n  return(NULL);\n"
+  pattern-not: "if ($U < GPERF_MIN_WORD_LENGTH || $U > GPERF_MAX_WORD_LENGTH)\n  return (NULL);\n$U += $HTTP_ASSO_VALUES[((const\
+    \ uint8_t *)$B)[$U - 1]] +\n    $HTTP_ASSO_VALUES[((const uint8_t *)$B)[0]];\nif ($U > GPERF_MAX_HASH_VALUE)\n  return\
+    \ (NULL);\n"
+  languages:
+  - c
+  message: 'The code uses hardcoded values for MIN_WORD_LENGTH, MAX_WORD_LENGTH, and MAX_HASH_VALUE instead of using properly
+    defined constants. This can lead to inconsistencies and potential vulnerabilities in hash table operations. Use #define
+    constants (GPERF_MIN_WORD_LENGTH, GPERF_MAX_WORD_LENGTH, GPERF_MAX_HASH_VALUE) to ensure consistent and maintainable hash
+    value calculations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/varnishcache/varnish-cache/commit/fcf5722af75fdbf58dd425dd68d0beaa49bab4f4
+    category: security
+    cwe:
+    - CWE-547
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c

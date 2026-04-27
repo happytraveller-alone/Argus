@@ -300,24 +300,41 @@ mod tests {
             .collect()
     }
 
-    fn language_tokens(content: &str) -> Vec<String> {
-        let mut languages = Vec::new();
+    fn language_blocks(content: &str) -> Vec<Vec<String>> {
+        let mut blocks = Vec::new();
+        let mut current = Vec::new();
         let mut in_languages_block = false;
+        let mut languages_indent = 0usize;
         for line in content.lines() {
+            let indent = line.len().saturating_sub(line.trim_start().len());
             let trimmed = line.trim();
             if trimmed.starts_with("languages:") {
+                if in_languages_block {
+                    blocks.push(current);
+                    current = Vec::new();
+                }
                 in_languages_block = true;
+                languages_indent = indent;
                 continue;
             }
             if in_languages_block {
-                if let Some(lang) = trimmed.strip_prefix("- ") {
-                    languages.push(normalize_language_token(lang));
+                if indent < languages_indent {
+                    blocks.push(current);
+                    current = Vec::new();
+                    in_languages_block = false;
+                } else if let Some(lang) = trimmed.strip_prefix("- ") {
+                    current.push(normalize_language_token(lang));
                 } else {
+                    blocks.push(current);
+                    current = Vec::new();
                     in_languages_block = false;
                 }
             }
         }
-        languages
+        if in_languages_block {
+            blocks.push(current);
+        }
+        blocks
     }
 
     fn normalize_language_token(lang: &str) -> String {
@@ -337,7 +354,7 @@ mod tests {
     #[test]
     fn discovers_only_retained_rule_asset_families() {
         let assets = discover_rule_assets().expect("rule assets should load");
-        assert!(assets.len() > 1000);
+        assert!(assets.len() > 900);
 
         let paths = assets
             .iter()
@@ -385,18 +402,25 @@ mod tests {
                 asset.asset_path
             );
             let directory_language = parts[1];
-            let languages = language_tokens(&asset.content);
-            assert_eq!(
-                languages.len(),
-                1,
-                "expected exactly one language in {}",
+            let language_blocks = language_blocks(&asset.content);
+            assert!(
+                !language_blocks.is_empty(),
+                "expected language metadata in {}",
                 asset.asset_path
             );
-            assert_eq!(
-                languages[0], directory_language,
-                "expected language directory to match rule language in {}",
-                asset.asset_path
-            );
+            for languages in language_blocks {
+                assert_eq!(
+                    languages.len(),
+                    1,
+                    "expected exactly one language per rule in {}",
+                    asset.asset_path
+                );
+                assert_eq!(
+                    languages[0], directory_language,
+                    "expected language directory to match rule language in {}",
+                    asset.asset_path
+                );
+            }
         }
     }
 

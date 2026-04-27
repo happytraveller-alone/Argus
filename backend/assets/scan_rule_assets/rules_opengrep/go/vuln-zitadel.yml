@@ -1,0 +1,115 @@
+rules:
+- id: vuln-zitadel-3c7d1283
+  pattern: '$VIEW.UserByID($USERID, $INSTANCEID)
+
+    '
+  pattern-not: '$VIEW.UserByID($CTX, $USERID, $INSTANCEID)
+
+    '
+  languages:
+  - go
+  message: 'The UserByID function is being called without a context.Context parameter, which can lead to issues with request
+    cancellation, timeouts, and tracing. Always pass a context.Context as the first parameter to ensure proper context propagation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zitadel/zitadel/commit/3c7d12834e32426416235b9e3374be0f4b9380b8
+    category: security
+    cwe:
+    - CWE-703
+    owasp:
+    - A03:2021-Injection
+    technology:
+    - go
+- id: vuln-zitadel-4a262e42
+  pattern: '$VAR.BrowserInfo.ToUserAgent()
+
+    '
+  pattern-not: '$VAR.ToUserAgent()
+
+    '
+  languages:
+  - go
+  message: "Directly accessing BrowserInfo's ToUserAgent method can lead to null pointer dereference if BrowserInfo is nil.\
+    \ \nUse the AuthRequest's ToUserAgent method instead, which safely handles nil BrowserInfo.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/zitadel/zitadel/commit/4a262e42abac2208b02fefaf68ba1a5121649f04
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A9:2021-Security Logging and Monitoring Failures
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - go
+- id: vuln-zitadel-4c26665b
+  pattern: "func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant) error {\n  preConditions\
+    \ := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID)\n  ...\n}\n"
+  pattern-not: "func (c *Commands) checkUserGrantPreCondition(ctx context.Context, usergrant *domain.UserGrant, resourceOwner\
+    \ string) error {\n  preConditions := NewUserGrantPreConditionReadModel(usergrant.UserID, usergrant.ProjectID, usergrant.ProjectGrantID,\
+    \ resourceOwner)\n  ...\n}\n"
+  languages:
+  - go
+  message: 'Missing resource owner validation in user grant pre-condition check. This can lead to incorrect authorization
+    checks, potentially allowing unauthorized access to resources. Ensure the resource owner is validated in the pre-condition
+    check to prevent security issues.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zitadel/zitadel/commit/4c26665b933dd763aa8c2779bce368708f7a7029
+    category: security
+    cwe: 'CWE-284: Improper Access Control'
+    owasp: A01:2021 - Broken Access Control
+    technology: go
+- id: vuln-zitadel-b918603b
+  pattern: "func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER string, $IGNORED ...string) $RETURN_TYPE {\n\
+    \  ...\n}\n"
+  pattern-not: "func InstanceInterceptor($VERIFIER authz.InstanceVerifier, $HEADER, $EXTERNAL_DOMAIN string, $IGNORED ...string)\
+    \ $RETURN_TYPE {\n  ...\n}\n"
+  languages:
+  - go
+  message: 'InstanceInterceptor function is missing the externalDomain parameter, which can lead to security issues in instance
+    verification.
+
+    The externalDomain parameter is crucial for proper origin validation and preventing instance spoofing attacks.
+
+    Update the function signature to include the externalDomain parameter and use it for origin validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zitadel/zitadel/commit/b918603b576d156a08b90917c14c2d019c82ffc6
+    category: security
+    cwe: 'CWE-346: Origin Validation Error'
+    owasp: 'A2: Broken Authentication'
+    technology: go
+- id: vuln-zitadel-d656b3f3
+  pattern: 'return nil, status.Error(codes.PermissionDenied, $ERR.Error())
+
+    '
+  pattern-not: 'return nil, status.Error(codes.NotFound, $ERR.Error())
+
+    '
+  languages:
+  - go
+  message: 'Using PermissionDenied error code for NotFound cases can leak sensitive information
+
+    and provide incorrect error handling. Use NotFound error code instead to properly
+
+    handle missing resources and prevent information disclosure.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zitadel/zitadel/commit/d656b3f3c97d4ba46b97ef5a7ab45aa3989b98e0
+    category: security
+    cwe:
+    - CWE-209
+    - CWE-200
+    owasp: A6:2017-Security Misconfiguration
+    technology:
+    - go

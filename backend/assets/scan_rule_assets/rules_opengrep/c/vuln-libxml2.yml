@@ -1,0 +1,100 @@
+rules:
+- id: vuln-libxml2-1b41ec4e
+  pattern: "if ($DICT != NULL) {\n    if (($ENTITY->$FIELD != NULL) && (!xmlDictOwns($DICT, $ENTITY->$FIELD)))\n        xmlFree((char\
+    \ *) $ENTITY->$FIELD);\n    ...\n} else {\n    if ($ENTITY->$FIELD != NULL)\n        xmlFree((char *) $ENTITY->$FIELD);\n\
+    \    ...\n}\n"
+  pattern-not: "if (($ENTITY->$FIELD != NULL) &&\n    (($DICT == NULL) || (!xmlDictOwns($DICT, $ENTITY->$FIELD))))\n    xmlFree((char\
+    \ *) $ENTITY->$FIELD);\n"
+  languages:
+  - c
+  message: "The code contains a double-check pattern for freeing memory that can lead to inconsistent memory management. \n\
+    The vulnerability arises from the redundant checks for dictionary ownership and NULL pointers, which can cause memory\
+    \ leaks or double-free issues. \nThe fix consolidates the checks into a single condition, ensuring consistent memory management.\
+    \ \nTo fix this, simplify the condition to a single check that covers both the NULL pointer and dictionary ownership cases.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/libxml2/commit/1b41ec4e9433b05bb0376be4725804c54ef1d80b
+    category: security
+    cwe:
+    - 'CWE-415: Double Free'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-libxml2-7ffcd44d
+  pattern: '$CTXT->xsiAssemble = 0;
+
+    '
+  pattern-not: '$CTXT->xsiAssemble = 1;
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential vulnerability where `xsiAssemble` is set to 0, which may lead to improper handling of XML
+    schema instances. This could allow attackers to bypass schema validation or cause unexpected behavior. Ensure `xsiAssemble`
+    is set to 1 to enforce proper schema validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/libxml2/commit/7ffcd44d7e6c46704f8af0321d9314cd26e0e18a
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://www.w3.org/TR/xmlschema-1/
+    technology:
+    - c
+- id: vuln-libxml2-bf227135
+  pattern: "if ($VAR < 0xC0) {\n  ...\n}\n"
+  pattern-not: "if (((cur[0] & 0xC0) != 0xC0) ||\n    ((cur[1] & 0xC0) != 0x80) ||\n    (((cur[0] & 0xE0) == 0xE0) && ((cur[2]\
+    \ & 0xC0) != 0x80)) ||\n    (((cur[0] & 0xF0) == 0xF0) && ((cur[3] & 0xC0) != 0x80)) ||\n    (((cur[0] & 0xF8) == 0xF8)))\
+    \ {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks for invalid UTF-8 sequences by only verifying if the first byte is less than 0xC0, which is insufficient.
+    This can lead to incorrect validation of UTF-8 encoded characters, potentially causing security vulnerabilities such as
+    injection attacks or memory corruption. The fix involves a more comprehensive check that verifies the structure of the
+    UTF-8 sequence according to the UTF-8 encoding rules.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/libxml2/commit/bf22713507fe1fc3a2c4b525cf0a88c2dc87a3a2
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://en.wikipedia.org/wiki/UTF-8
+    technology:
+    - c
+- id: vuln-libxml2-c1ba6f54
+  pattern: 'xmlBufCCat($BUF, "\"");
+
+    ...
+
+    xmlBufCCat($BUF, "\"");
+
+    '
+  pattern-not: 'xmlBufWriteQuotedString($BUF, $ESC);
+
+    '
+  languages:
+  - c
+  message: "The code directly appends unescaped quotes to the buffer, which can lead to injection vulnerabilities. \nThis\
+    \ is dangerous because it can allow attackers to inject malicious content into the output. \nThe fix is to use `xmlBufWriteQuotedString`\
+    \ to properly escape the content.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/libxml2/commit/c1ba6f54d32b707ca6d91cb3257ce9de82876b6f
+    category: security
+    cwe:
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c

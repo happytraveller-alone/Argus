@@ -1,0 +1,343 @@
+rules:
+- id: vuln-vim-249e1b90
+  pattern: "$ACTUAL = get_vim_var_str($VV);\n$EXPECTED = tv_get_string_buf_chk($TV, $BUF);\nif (!pattern_match($EXPECTED,\
+    \ $ACTUAL, $FALSE))\n{\n    $ERROR_FOUND = TRUE;\n    $EXPECTED_STR = $EXPECTED;\n}\n"
+  pattern-not: "$TOFREE = $ACTUAL = vim_strsave(get_vim_var_str($VV));\nif ($ACTUAL != NULL)\n{\n    $TV = &$LIST->lv_u.mat.lv_last->li_tv;\n\
+    \    $EXPECTED = tv_get_string_buf_chk($TV, $BUF);\n    if (!pattern_match($EXPECTED, $ACTUAL, $FALSE))\n    {\n     \
+    \   $ERROR_FOUND = TRUE;\n        $EXPECTED_STR = $EXPECTED;\n    }\n}\nvim_free($TOFREE);\n"
+  languages:
+  - c
+  message: 'Detected a potential use-after-free vulnerability where `get_vim_var_str()` result is passed directly to `pattern_match()`.
+    This is dangerous because `pattern_match()` may free the memory, leading to undefined behavior. The fix involves making
+    a copy of the string before passing it to `pattern_match()` and freeing it afterwards.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/249e1b903a9c0460d618f6dcc59aeb8c03b24b20
+    category: security
+    cwe:
+    - CWE-416
+    owasp: A9:2017-Using Components with Known Vulnerabilities
+    technology:
+    - c
+- id: vuln-vim-2a585c85
+  pattern: "curbuf->b_op_end.col = $COL - 1\n    - mb_head_off($Y_ARRAY[$Y_SIZE - 1], $LEN);\n"
+  pattern-not: "{\n    curbuf->b_op_end.col = $COL - 1;\n    if ($LEN > 0)\n        curbuf->b_op_end.col -= mb_head_off($Y_ARRAY[$Y_SIZE\
+    \ - 1], $LEN);\n}\n"
+  languages:
+  - c
+  message: "Detected a potential vulnerability where `mb_head_off` is used without checking if `len > 0`. \nThis can lead\
+    \ to undefined behavior or crashes when `len` is zero or negative. \nAlways ensure to check the length before performing\
+    \ operations that depend on it.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/2a585c85013be22f59f184d49612074fd9b115d7
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-vim-32acf1f1
+  pattern: "$FUNC($ARG);\n...\nif ($VAR != $SOURCE) {\n    $REG_PREV_SUB = $VAR;\n} else {\n    $REG_PREV_SUB = vim_strsave($VAR);\n\
+    }\n"
+  pattern-not: '$FUNC($ARG);
+
+    ...
+
+    $REG_PREV_SUB = vim_strsave($VAR);
+
+    '
+  languages:
+  - c
+  message: 'The code does not consistently allocate a copy of the string, which can lead to invalid memory access in recursive
+    calls. This vulnerability can cause undefined behavior or crashes. Always allocate a copy of the string to ensure it remains
+    valid across recursive calls.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/32acf1f1a72ebb9d8942b9c9d80023bf1bb668ea
+    category: security
+    cwe:
+    - CWE-119
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-vim-65b60566
+  pattern: 'len2 += MB_CHAR2LEN($VAR);
+
+    '
+  pattern-not: 'len2 += enc_utf8 ? utf_ptr2len(rex.line + col + len2) : MB_CHAR2LEN($VAR);
+
+    '
+  languages:
+  - c
+  message: 'The code uses MB_CHAR2LEN without checking if the encoding is UTF-8, which can lead to incorrect character length
+    calculations and potential security vulnerabilities. Always check the encoding before using MB_CHAR2LEN and use the appropriate
+    function for UTF-8 encoding.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/65b605665997fad54ef39a93199e305af2fe4d7f
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-vim-69082916
+  pattern: '*getnext = TRUE;
+
+    '
+  pattern-not: '*getnext = *p != NL;
+
+    '
+  languages:
+  - c
+  message: 'The assignment `*getnext = TRUE;` is unsafe as it unconditionally sets the value without checking the input. This
+    could lead to unintended behavior or security vulnerabilities. The fix checks if `*p` is not a newline character before
+    setting `*getnext`, ensuring safer operation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/69082916c8b5d321545d60b9f5facad0a2dd5a4e
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-vim-8ecfa2c5
+  pattern: 'if (buflist_findnr($JMP->fmark.fnum) == NULL)
+
+    ...
+
+    if (buflist_getfile($JMP->fmark.fnum, $JMP->fmark.mark.lnum, 0, FALSE) == FAIL)
+
+    ...
+
+    $CURWIN->w_cursor = $JMP->fmark.mark;
+
+    '
+  pattern-not: 'fmark_T $FMARK = $JMP->fmark;
+
+    ...
+
+    if (buflist_findnr($FMARK.fnum) == NULL)
+
+    ...
+
+    if (buflist_getfile($FMARK.fnum, $FMARK.mark.lnum, 0, FALSE) == FAIL)
+
+    ...
+
+    $CURWIN->w_cursor = $FMARK.mark;
+
+    '
+  languages:
+  - c
+  message: 'Direct use of a pointer''s structure field in multiple function calls can lead to use-after-free or invalid memory
+    access if the pointer becomes invalid between calls. This vulnerability occurs when the structure pointed to by `jmp`
+    could be freed or modified by an autocommand or other asynchronous event. To fix this, make a local copy of the structure
+    fields before using them.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/8ecfa2c56b4992c7f067b92488aa9acea5a454ad
+    category: security
+    cwe:
+    - CWE-416
+    - CWE-825
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-vim-91c7cbfe
+  pattern: "if ($EVALARG != NULL && $EVALARG->eval_tofree == NULL)\n  $EVALARG->eval_tofree = $TOFREE;\nelse\n  vim_free($TOFREE);\n"
+  pattern-not: 'free_eval_tofree_later($EVALARG);
+
+    '
+  languages:
+  - c
+  message: 'Direct assignment of memory pointer without proper cleanup can lead to memory leaks or use-after-free vulnerabilities.
+    The pointer should be handled through the dedicated free_eval_tofree_later() function which ensures proper memory management.
+    Use free_eval_tofree_later() instead of direct assignment and free operations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/91c7cbfe31bbef57d5fcf7d76989fc159f73ef15
+    category: security
+    cwe:
+    - 'CWE-416: Use After Free'
+    - 'CWE-401: Improper Release of Memory Before Removing Last Reference'
+    technology:
+    - c
+- id: vuln-vim-94f3192b
+  pattern: "if (*$PTR == NUL)\n{\n    $POS->col = 0;\n}\n"
+  pattern-not: "for ($I = 0; $I < $POS->col; ++$I)\n{\n    if ($PTR[$I] == NUL)\n    {\n        $POS->col = $I;\n        break;\n\
+    \    }\n}\n"
+  languages:
+  - c
+  message: "Detected potential buffer boundary violation by directly comparing pointer value with NUL. \nThis can lead to\
+    \ incorrect position calculations when dealing with empty lines or buffer boundaries. \nThe issue was fixed by adding\
+    \ a loop to check each character up to the column position.\nTo fix, implement a character-by-character check like in\
+    \ the fixed version.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/94f3192b03ed27474db80b4d3a409e107140738b
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp: A1:2017-Injection
+    technology:
+    - c
+- id: vuln-vim-9c23f9bb
+  pattern: 'define_function($EAP, $NAME_ARG)
+
+    '
+  pattern-not: 'define_function($EAP, $NAME_ARG, $LINE_TO_FREE)
+
+    '
+  languages:
+  - c
+  message: 'The function `define_function` is being called without the `line_to_free` parameter, which can lead to memory
+    management issues. This vulnerability can cause use-after-free or double-free errors, potentially leading to crashes or
+    security exploits. Always pass the `line_to_free` parameter to ensure proper memory handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/9c23f9bb5fe435b28245ba8ac65aa0ca6b902c04
+    category: security
+    cwe:
+    - CWE-416
+    - CWE-415
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-vim-a4bc2dd7
+  pattern: 'int $LEN = (int)STRLEN($BUF->bh_curr->b_str);
+
+    '
+  pattern-not: "int $LEN;\nif ($BUF->bh_curr == NULL || $BUF->bh_curr->b_str == NULL)\n    return;\n$LEN = (int)STRLEN($BUF->bh_curr->b_str);\n"
+  languages:
+  - c
+  message: 'Potential NULL pointer dereference in buffer handling. Accessing `bh_curr->b_str` without checking for NULL can
+    lead to crashes or undefined behavior. Always check pointer validity before dereferencing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/a4bc2dd7cccf5a4a9f78b58b6f35a45d17164323
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - c
+- id: vuln-vim-b29f4abc
+  pattern: 'VIM_CLEAR($VAR1);
+
+    VIM_CLEAR($VAR2);
+
+    '
+  pattern-not: "if ($VAR1 != $VAR2)\n    VIM_CLEAR($VAR1);\n$VAR2 = NULL;\n"
+  languages:
+  - c
+  message: 'Detected potential double free vulnerability. The code frees two pointers without checking if they point to the
+    same memory location, which can lead to undefined behavior. To fix this, ensure that the pointers are not the same before
+    freeing them, and set the second pointer to NULL after the check.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/b29f4abcd4b3382fa746edd1d0562b7b48c
+    category: security
+    cwe:
+    - CWE-415
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/415.html
+    technology:
+    - c
+- id: vuln-vim-bd228fd0
+  pattern: 'STRCPY($DEST, "/\\\\");
+
+    STRCPY($DEST + 3, $SRC + 1);
+
+    '
+  pattern-not: 'vim_snprintf((char *)$DEST, $IOSIZE, "/\\\\%s", $SRC + 1);
+
+    '
+  languages:
+  - c
+  message: 'Detected unsafe string concatenation using STRCPY. This can lead to buffer overflows
+
+    if the source string is too long. Use vim_snprintf with proper size checking instead
+
+    to ensure safe string operations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/bd228fd097b41a798f90944b5d1245eddd484142
+    category: security
+    cwe:
+    - CWE-120
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-vim-c3d27ada
+  pattern: "if (!bufref_valid(&bufref)) {\n  ...\n}\n"
+  pattern-not: "if (!bufref_valid(&bufref) || !win_valid_any_tab($WP)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: "This pattern detects a missing window validity check in Vim's spell.c file. \nThe vulnerability occurs when the\
+    \ code fails to verify if the window is still valid \nbefore proceeding with operations, which can lead to use-after-free\
+    \ or invalid memory \naccess when the window is closed. To fix this, ensure that both buffer and window \nvalidity checks\
+    \ are performed using `bufref_valid` and `win_valid_any_tab` respectively.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/vim/vim/commit/c3d27ada14acd02db357f2d16347acc22cb17e93
+    category: security
+    cwe:
+    - CWE-416
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/416.html
+    technology:
+    - c
+- id: vuln-vim-d1ae8366
+  pattern: "if ($REG->y_size == 0) {\n  ...\n}\n"
+  pattern-not: "if ($REG->y_size == 0 || $YCURRENT->y_array == NULL) {\n  ...\n}\n"
+  languages:
+  - c
+  message: "Detected a potential null pointer dereference vulnerability. \nThe code checks if `y_size` is zero but fails to\
+    \ verify if `y_array` is NULL, \nwhich could lead to a null pointer dereference. \nTo fix this, ensure both `y_size` and\
+    \ `y_array` are checked before accessing `y_array`.\n"
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/vim/vim/commit/d1ae8366aff286d41e7f5bc513cc0a1af5130aad
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A8:2017-Insecure Deserialization
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c

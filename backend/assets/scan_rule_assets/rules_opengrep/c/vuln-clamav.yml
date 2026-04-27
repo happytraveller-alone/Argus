@@ -1,0 +1,200 @@
+rules:
+- id: vuln-clamav-26b19809
+  pattern: 'unsigned int max_jmp_loop = 100000;
+
+    '
+  pattern-not: 'unsigned int max_jmp_loop = 100000000;
+
+    '
+  languages:
+  - c
+  message: 'The variable `max_jmp_loop` is set to a low value (100000), which can lead to insufficient loop iteration limits.
+    This can cause the program to terminate prematurely or fail to handle large inputs properly. Increase the value of `max_jmp_loop`
+    to 100000000 to ensure adequate loop iteration limits.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/Cisco-Talos/clamav/commit/26b19809fb3b940cb0fda0422d685fff02a53b5f
+    category: security
+    cwe:
+    - 'CWE-835: Loop with Unreachable Exit Condition (''Infinite Loop'')'
+    owasp:
+    - A12:2021-Security Misconfiguration
+    technology:
+    - c
+- id: vuln-clamav-4842733e
+  pattern: '$VAR = $SZH->items;
+
+    '
+  pattern-not: '$VAR = $SZH->items - 1;
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability arises from directly using the `items` field of a structure without subtracting 1, which can
+    lead to incorrect array indexing and potential out-of-bounds access. This is dangerous because it can cause memory corruption,
+    crashes, or even arbitrary code execution. To fix this, ensure that `items - 1` is used when accessing the array to properly
+    account for zero-based indexing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/4842733eb3f09be61caeed83778bb6679141dbc5
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-clamav-495fce91
+  pattern: "if (!$STR) {\n    $CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;\n}\nelse {\n    $CHECKLEN = cli_strnlen($P1,\
+    \ $CHECKLEN) + 1;\n}\n"
+  pattern-not: '$CHECKLEN = cli_strnlen($P1, $OBJSIZE - 1) + 1;
+
+    '
+  languages:
+  - c
+  message: 'This code contains a vulnerability where the length check for a string is conditionally determined based on the
+    presence of a string pointer. This can lead to inconsistent length calculations, potentially causing buffer overflows
+    or other memory-related issues. The vulnerability was fixed by always using the object size for the length check. To fix
+    this, ensure consistent length calculations are used regardless of the string pointer condition.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/495fce917445063d519f14b0009cee025f817bc3
+    category: security
+    cwe:
+    - CWE-119
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c
+- id: vuln-clamav-96ff19a1
+  pattern: 'int $BACKBYTES, $OLDBACK, $BACKSIZE, $ADDSIZE;
+
+    '
+  pattern-not: 'int $BACKBYTES, $OLDBACK, $ADDSIZE;
+
+    unsigned int $BACKSIZE;
+
+    '
+  languages:
+  - c
+  message: 'The variable ''backsize'' is declared as a signed integer, which can lead to integer overflow vulnerabilities
+    when handling large values. This is dangerous because it can cause incorrect memory allocations or buffer overflows. To
+    fix this, declare ''backsize'' as an unsigned integer to safely handle larger values.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/96ff19a19eba64bdf47f2f12ecdbc5ee331c09e2
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    technology:
+    - c
+- id: vuln-clamav-9a6bb57f
+  pattern: 'if (!$CT && !$PN) $CONTINUE;
+
+    '
+  pattern-not: 'if (!$CT || !$PN) $CONTINUE;
+
+    '
+  languages:
+  - c
+  message: 'The use of ''&&'' instead of ''||'' in the condition can lead to incorrect logic flow, potentially bypassing important
+    checks. This could allow malicious content to be processed incorrectly. Replace ''&&'' with ''||'' to ensure the correct
+    logic is applied.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/9a6bb57f89721db637f4ddb5b233c1c4e23d223a
+    category: security
+    cwe:
+    - CWE-697
+    owasp:
+    - A6:2017-Security Misconfiguration
+    references:
+    - https://cwe.mitre.org/data/definitions/697.html
+    technology:
+    - c
+- id: vuln-clamav-d96a6b8b
+  pattern: "static int $FUNC(xmlTextReaderPtr $READER, long * $VALUE) {\n  ...\n  *$VALUE = atol((const char *)$NUMSTR);\n\
+    \  if (*$VALUE < 0) {\n    ...\n  }\n  ...\n}\n"
+  pattern-not: "static int $FUNC(xmlTextReaderPtr $READER, size_t * $VALUE) {\n  ssize_t $NUMVAL;\n  ...\n  $NUMVAL = atol((const\
+    \ char *)$NUMSTR);\n  if ($NUMVAL < 0) {\n    *$VALUE = $NUMVAL;\n    ...\n  }\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function uses a `long` type to store the result of `atol`, which can lead to integer overflow or incorrect
+    handling of negative values. This can cause unexpected behavior or security vulnerabilities. Use `ssize_t` to store the
+    result of `atol` and check for negative values before assigning to the output parameter.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/d96a6b8bcc7439fa7e3876207aa0a8e79c8451b6
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp:
+    - 'A2: Cryptographic Failures'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    - https://owasp.org/www-project-top-ten/
+    technology:
+    - c
+- id: vuln-clamav-e8e37462
+  pattern: "if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX)) {\n  ...\n}\n"
+  pattern-not: "if (yc_poly_emulator($DECRYPTOR, $CODE, $ECX, $MAX_EMU)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function `yc_poly_emulator` is called without a `max_emu` parameter, which can lead to unbounded emulation
+    and potential security vulnerabilities. This issue was fixed by adding a `max_emu` parameter to limit the emulation length.
+    Always ensure that emulation functions have bounds to prevent excessive resource consumption or out-of-bounds access.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/e8e3746266dd3f82054ca137b81b800e54de6ebd
+    category: security
+    cwe:
+    - CWE-119
+    - CWE-400
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-clamav-fc3794a5
+  pattern: "if ($EXE_SECTION.raw >= $FSIZE) {\n  ...\n  free($SECTION_HDR);\n  free($EXE_SECTIONS);\n  ...\n  return $CLEAN_RETURN;\n\
+    }\n"
+  pattern-not: "if (!CLI_ISCONTAINED(0, $FSIZE, $EXE_SECTION.uraw, $EXE_SECTION.ursz) || $EXE_SECTION.raw >= $FSIZE) {\n \
+    \ ...\n  if ($NSECTIONS == 1) {\n    free($SECTION_HDR);\n    free($EXE_SECTIONS);\n    ...\n    return $CLEAN_RETURN;\n\
+    \  }\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potentially broken PE file section validation vulnerability. The code checks if a section''s raw offset
+    is beyond the file size but does not properly handle the case when the section size is also invalid. This could allow
+    malformed PE files to bypass security checks. The fix includes a more comprehensive validation using CLI_ISCONTAINED and
+    handles section rescanning.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/Cisco-Talos/clamav/commit/fc3794a54d2affe5770c1f876484a871c783e91e
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c

@@ -1,0 +1,59 @@
+rules:
+- id: vuln-nats-server-1e08b67f
+  pattern: "if $REVOCATIONS != nil {\n  if $T, $OK := $REVOCATIONS[$SUBJECT]; $OK && $T <= time.Now().Unix() {\n    return\
+    \ false\n  }\n}\n"
+  pattern-not: "if isRevoked($REVOCATIONS, $SUBJECT, $ISSUED_AT) {\n  return false\n}\n"
+  languages:
+  - go
+  message: "The code directly checks revocation status using `time.Now().Unix()` which can lead to time synchronization issues\
+    \ and incorrect revocation checks. \nThis can allow revoked tokens to be accepted if the server's clock is not synchronized.\
+    \ \nInstead, use the `isRevoked` function which compares against the token's `issuedAt` timestamp to ensure consistent\
+    \ and accurate revocation checks.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/nats-io/nats-server/commit/1e08b67f08e18cd844dce833a265aaa72500a12f
+    category: security
+    cwe:
+    - CWE-335
+    owasp:
+    - A02:2021-Cryptographic Failures
+    references:
+    - https://nats.io/documentation/server/configuration/security/
+    technology:
+    - go
+- id: vuln-nats-server-9ff8bcde
+  pattern: "func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {\n  return $FUNC.Revocations.IsRevoked($PUBKEY, time.Now())\n\
+    }\n"
+  pattern-not: "func ($FUNC *AccountClaims) IsRevoked($PUBKEY string) bool {\n  return true\n}\n"
+  languages:
+  - go
+  message: "The IsRevoked method uses time.Now() to check if a JWT is revoked, which can lead to unstable and unexpected behavior.\
+    \ \nInstead, use IsRevokedAt with the JWT's issue time for a stable response.\nThis vulnerability can cause incorrect\
+    \ revocation checks and security issues.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/nats-io/nats-server/commit/9ff8bcde2e46009e98bd9e88f598af355f62c168
+    category: security
+    cwe: CWE-384
+    owasp: A02:2021 - Cryptographic Failures
+    technology: go
+- id: vuln-nats-server-fa5b7afc
+  pattern: "if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ {\n  ...\n}\n"
+  pattern-not: "if len($TRUSTED_OPERATORS) == 0 && $NUM_ACCOUNTS == 2 && $NO_AUTH_USER == _EMPTY_ && !$OPTS.authBlockDefined\
+    \ {\n  ...\n}\n"
+  languages:
+  - go
+  message: 'Missing check for authBlockDefined in authorization logic. This can lead to unauthorized access when no authorization
+    block is defined. Always check authBlockDefined to ensure proper authorization handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/nats-io/nats-server/commit/fa5b7afcb64e7e887e49afdd032358802b5c4478
+    category: security
+    cwe:
+    - 'CWE-862: Missing Authorization'
+    owasp:
+    - A01:2021 - Broken Access Control
+    technology:
+    - go

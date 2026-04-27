@@ -1,0 +1,84 @@
+rules:
+- id: vuln-h2o-1b2b6d7b
+  pattern: "struct st_delegate_request_deferred_t {\n    h2o_timeout_entry_t _timeout;\n    h2o_req_t *req;\n};\n...\nstruct\
+    \ st_delegate_request_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));\n*args = (struct st_delegate_request_deferred_t){req,\
+    \ current_handler};\nargs->_timeout.cb = on_delegate_request_cb;\nh2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout,\
+    \ &args->_timeout);\n"
+  pattern-not: "struct st_deferred_request_action_t {\n    h2o_timeout_entry_t timeout;\n};\nstruct st_delegate_request_deferred_t\
+    \ {\n    struct st_deferred_request_action_t super;\n};\n...\nstruct st_delegate_request_deferred_t *args =\n    (struct\
+    \ st_delegate_request_deferred_t *)create_deferred_action(req, sizeof(*args), on_delegate_request_cb);\nargs->current_handler\
+    \ = current_handler;\n"
+  languages:
+  - c
+  message: 'Detected unsafe timeout handling in request delegation. The original code directly allocates and links a timeout
+    entry without proper disposal handling, which could lead to resource leaks or use-after-free vulnerabilities. The fix
+    introduces a `create_deferred_action` function that properly handles timeout disposal. Use the fixed version to ensure
+    safe timeout management.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/h2o/h2o/commit/1b2b6d7be65ab12ea71ea1e2d687f370712f0b56
+    category: security
+    cwe:
+    - CWE-416
+    - CWE-772
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://github.com/h2o/h2o/commit/1b2b6d7be65ab12ea71ea1e2d687f370712f0b56
+    technology:
+    - c
+- id: vuln-h2o-1c0808d5
+  pattern: "void $FUNC(h2o_http2_conn_t *$CONN) {\n    ...\n    close_connection($CONN);\n    return;\n    ...\n}\n"
+  pattern-not: "int $FUNC(h2o_http2_conn_t *$CONN) {\n    ...\n    return close_connection($CONN);\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The function `close_connection` is called without checking its return value, which could lead to undefined behavior
+    or resource leaks. The function was changed to return an integer to indicate success or failure, but the calling code
+    does not handle this return value. This could result in ignoring critical errors during connection closure. To fix this,
+    ensure that the return value of `close_connection` is checked and handled appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/h2o/h2o/commit/1c0808d580da09fdec5a9a74ff09e103ea058dd4
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp:
+    - 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-h2o-d67e81d0
+  pattern: "struct st_quicly_pending_path_challenge_t {\n    struct st_quicly_pending_path_challenge_t *next;\n    uint8_t\
+    \ is_response;\n    uint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];\n};\n...\nstruct st_quicly_pending_path_challenge_t\
+    \ *pending;\n...\nif ((pending = malloc(sizeof(struct st_quicly_pending_path_challenge_t))) == NULL)\n    return PTLS_ERROR_NO_MEMORY;\n\
+    ...\n*conn->egress.path_challenge.tail_ref = pending;\nconn->egress.path_challenge.tail_ref = &pending->next;\n...\nwhile\
+    \ (conn->egress.path_challenge.head != NULL) {\n    struct st_quicly_pending_path_challenge_t *pending = conn->egress.path_challenge.head;\n\
+    \    conn->egress.path_challenge.head = pending->next;\n    free(pending);\n}\n"
+  pattern-not: "uint8_t send_;\nuint8_t data[QUICLY_PATH_CHALLENGE_DATA_LEN];\n...\nif ((ret = do_allocate_frame(conn, s,\
+    \ QUICLY_PATH_CHALLENGE_FRAME_CAPACITY, ALLOCATE_FRAME_TYPE_ACK_ELICITING_NO_CC)) != 0)\n    return ret;\n...\ns->dst\
+    \ = quicly_encode_path_challenge_frame(s->dst, is_response, data);\n...\nmemcpy(conn->egress.path_response.data, frame.data,\
+    \ QUICLY_PATH_CHALLENGE_DATA_LEN);\nconn->egress.path_response.send_ = 1;\n"
+  languages:
+  - c
+  message: 'The code uses a linked list to manage path challenges, which can lead to memory management issues and potential
+    memory leaks. The patch simplifies the structure and removes the linked list, reducing complexity and the risk of errors.
+    To fix similar issues, avoid using linked lists for managing dynamic data in performance-critical paths and prefer simpler,
+    more direct memory management.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/h2o/h2o/commit/d67e81d03be12a9d53dc8271af6530f40164cd35
+    category: security
+    cwe:
+    - CWE-401
+    - CWE-772
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/401.html
+    - https://cwe.mitre.org/data/definitions/772.html
+    technology:
+    - c

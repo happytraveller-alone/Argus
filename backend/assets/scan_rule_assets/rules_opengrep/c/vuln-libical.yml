@@ -1,0 +1,72 @@
+rules:
+- id: vuln-libical-04d84749
+  pattern: "if ($PREV_CHAR != '\\\\') {\n  ...\n}\n"
+  pattern-not: "if ($PREV_CHAR && $PREV_CHAR != '\\\\') {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks if a character is not a backslash without first ensuring the character exists. This can lead to
+    undefined behavior if the character is null. Always check if the character exists before performing any operations on
+    it.
+
+    To fix this, ensure the character is not null before comparing it to a backslash.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/libical/libical/commit/04d84749e53db08c71ed0ce8b6ba5c11082743cd
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c
+- id: vuln-libical-6b9438d7
+  pattern: '$STRUCT.$FIELD = $EXPR + $OFFSET;
+
+    '
+  pattern-not: '$STRUCT.$FIELD = icalmemory_tmp_copy($EXPR + $OFFSET);
+
+    '
+  languages:
+  - c
+  message: 'Direct assignment of pointer arithmetic result to a struct field can lead to memory safety issues. This is dangerous
+    because it may result in use-after-free or invalid memory access vulnerabilities. To fix this, use `icalmemory_tmp_copy`
+    to create a safe copy of the string.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libical/libical/commit/6b9438d746cec6e4e632d78c5244f4be6314d1c9
+    category: security
+    cwe:
+    - CWE-119
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c
+- id: vuln-libical-830d9530
+  pattern: "if (comp_kind == ICAL_NO_COMPONENT) {\n    $C = icalcomponent_new(ICAL_XLICINVALID_COMPONENT);\n    insert_error($C,\
+    \ $STR, \"Parse error in component name\", ICAL_XLICERRORTYPE_COMPONENTPARSEERROR);\n}\n"
+  pattern-not: "if (comp_kind == ICAL_NO_COMPONENT) {\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The code creates an invalid component when `comp_kind` is `ICAL_NO_COMPONENT`, which can lead to undefined behavior
+    or crashes. This vulnerability was fixed by removing the creation of the invalid component. To fix this, ensure that no
+    invalid components are created when parsing fails.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/libical/libical/commit/830d9530817516377c2bc3b532798ce2c6b4765a
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c

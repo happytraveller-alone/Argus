@@ -1,0 +1,163 @@
+rules:
+- id: vuln-contiki-ng-280019dc
+  pattern: "if($VAR + $LEN > $MTU) {\n  ...\n}\n"
+  pattern-not: "if($LEN > $MTU - $VAR) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential integer overflow vulnerability in buffer size calculation.
+
+    The original code adds the current index and payload length before comparing to the MTU,
+
+    which could lead to an overflow and bypass the size check.
+
+    To fix, subtract the current index from the MTU before comparing with the payload length.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/280019dce685bd5cfa217880762976980aeecf30
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-contiki-ng-3216ebf5
+  pattern: 'uint8_t $I = $CID - $CONST;
+
+    ...
+
+    return &$ARRAY[$CID - $CONST];
+
+    '
+  pattern-not: 'int16_t $I = $CID - $CONST;
+
+    ...
+
+    return &$ARRAY[$I];
+
+    '
+  languages:
+  - c
+  message: 'The use of uint8_t for array indexing can lead to integer underflow when the result of the subtraction is negative,
+    causing out-of-bounds memory access. This vulnerability can be exploited to read or write arbitrary memory locations.
+    Fix by using a signed integer type like int16_t for the index variable.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/3216ebf59e698b6dc71d0ba3e8052d5d5e09d2bd
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp: A1:2017-Injection
+    technology:
+    - c
+- id: vuln-contiki-ng-6e21dd29
+  pattern: 'char $VARNAME[INDEX_NAME_LENGTH];
+
+    '
+  pattern-not: 'char $VARNAME[INDEX_NAME_LENGTH + 1];
+
+    '
+  languages:
+  - c
+  message: 'Detected a potentially dangerous buffer declaration that does not account for the null terminator.
+
+    This can lead to buffer overflows when the string is used, as the null terminator will be written outside the allocated
+    buffer.
+
+    To fix this, ensure the buffer size includes space for the null terminator by adding +1 to the length.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/6e21dd2955642818a31f5f32c7ae2f78c7f9dd0a
+    category: security
+    cwe:
+    - CWE-120
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-contiki-ng-99a92574
+  pattern: 'uint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $RPL_RH_LEN + $RPL_SRH_LEN + ($I * (16 - $CMPRI));
+
+    '
+  pattern-not: "ptrdiff_t $RH_OFFSET = (uint8_t *)$RH_HEADER - $UIP_BUF;\nsize_t $ADDR_OFFSET = $RPL_RH_LEN + $RPL_SRH_LEN\
+    \ + ($I * (16 - $CMPRI));\nif($RH_OFFSET + $ADDR_OFFSET + 16 - $CMPR > $UIP_BUFSIZE) {\n  LOG_ERR(\"Invalid SRH address\
+    \ pointer\\n\");\n  return 0;\n}\nuint8_t *$ADDR_PTR = ((uint8_t *)$RH_HEADER) + $ADDR_OFFSET;\n"
+  languages:
+  - c
+  message: 'The code calculates a pointer without checking if it exceeds the buffer bounds, leading to potential out-of-bounds
+    memory access. This vulnerability can cause memory corruption, crashes, or even remote code execution. The fix adds bounds
+    checking before calculating the pointer. Always validate buffer boundaries before performing pointer arithmetic.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/99a9257421ca5305ef6a360c02f63561e63ecc60
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-contiki-ng-cde4e983
+  pattern: "if((UIP_TCP_BUF->tcpoffset & 0xf0) > 0x50) {\n  for($C = 0; $C < ((UIP_TCP_BUF->tcpoffset >> 4) - 5) << 2 ;) {\n\
+    \    $OPT = uip_buf[UIP_IPTCPH_LEN + $C];\n    if($OPT == TCP_OPT_END) {\n      break;\n    } else if($OPT == TCP_OPT_NOOP)\
+    \ {\n      ++$C;\n    } else if($OPT == TCP_OPT_MSS &&\n              uip_buf[UIP_IPTCPH_LEN + 1 + $C] == TCP_OPT_MSS_LEN)\
+    \ {\n      $TMP16 = (uip_buf[UIP_IPTCPH_LEN + 2 + $C] << 8) |\n               uip_buf[UIP_IPTCPH_LEN + 3 + $C];\n    \
+    \  $CONN->initialmss = $CONN->mss = $TMP16 > UIP_TCP_MSS ? UIP_TCP_MSS : $TMP16;\n      break;\n    } else {\n      if(uip_buf[UIP_IPTCPH_LEN\
+    \ + 1 + $C] == 0) {\n        break;\n      }\n      $C += uip_buf[UIP_IPTCPH_LEN + 1 + $C];\n    }\n  }\n}\n"
+  pattern-not: 'process_tcp_options($CONN);
+
+    '
+  languages:
+  - c
+  message: 'The code directly processes TCP options without proper bounds checking, which can lead to buffer overflows. The
+    vulnerability arises from insufficient validation of TCP option lengths and offsets. The patch refactors this code into
+    a separate function with proper bounds checking. Always validate TCP option lengths and offsets before processing to prevent
+    potential buffer overflows.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/cde4e98398a2f5b994972c8459342af3ba93b98e
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-contiki-ng-f9bc65ea
+  pattern: 'lvm_register_variable($VALUE, $TYPE);
+
+    lvm_set_variable($P, $VALUE);
+
+    '
+  pattern-not: "if(LVM_ERROR(lvm_register_variable($VALUE, $TYPE)) ||\n   LVM_ERROR(lvm_set_variable($P, $VALUE))) {\n  $RETURN($ERROR);\n\
+    }\n"
+  languages:
+  - c
+  message: 'The code directly calls `lvm_register_variable` and `lvm_set_variable` without checking for errors.
+
+    This can lead to unhandled errors and potential security vulnerabilities.
+
+    Always check the return value of these functions and handle errors appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/contiki-ng/contiki-ng/commit/f9bc65eab2b416152f06590f8b620904bfd1aae2
+    category: security
+    cwe:
+    - CWE-754
+    owasp:
+    - A10:2021 - Server-Side Request Forgery
+    technology:
+    - c

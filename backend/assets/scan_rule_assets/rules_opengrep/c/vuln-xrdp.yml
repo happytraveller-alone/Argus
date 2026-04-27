@@ -1,0 +1,238 @@
+rules:
+- id: vuln-xrdp-35cca701
+  pattern: 'int $SIZE;
+
+    int $TOTAL_SIZE;
+
+    ...
+
+    in_uint16_le($S, $CHAN_ID);
+
+    in_uint16_le($S, $CHAN_FLAGS);
+
+    in_uint16_le($S, $SIZE);
+
+    in_uint32_le($S, $TOTAL_SIZE);
+
+    ...
+
+    $RV = libxrdp_send_to_channel($SESSION, $CHAN_ID, $S->p, $SIZE, $TOTAL_SIZE, $CHAN_FLAGS);
+
+    '
+  pattern-not: "unsigned int $SIZE;\nunsigned int $TOTAL_SIZE;\n...\nif (!s_check_rem_and_log($S, 10, \"Reading channel data\
+    \ header\"))\n{\n    $RV = 1;\n}\nelse\n{\n    in_uint16_le($S, $CHAN_ID);\n    in_uint16_le($S, $CHAN_FLAGS);\n    in_uint16_le($S,\
+    \ $SIZE);\n    in_uint32_le($S, $TOTAL_SIZE);\n    if (!s_check_rem_and_log($S, $SIZE, \"Reading channel data data\"))\n\
+    \    {\n        $RV = 1;\n    }\n    else\n    {\n        $RV = libxrdp_send_to_channel($SESSION, $CHAN_ID, $S->p, $SIZE,\
+    \ $TOTAL_SIZE, $CHAN_FLAGS);\n    }\n}\n"
+  languages:
+  - c
+  message: 'The code reads channel data without proper bounds checking, which could lead to buffer overflows or other memory
+    corruption issues. The vulnerability arises because the size and total_size variables are read directly from the input
+    stream without verifying that the input buffer has enough remaining data. This could allow an attacker to craft malicious
+    input that causes the program to read or write beyond the bounds of the buffer. The fix involves using s_check_rem_and_log
+    to validate that enough data is available before processing it.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/35cca701c753db65d3c05b7ea4fff9bd09e76661
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    - https://cwe.mitre.org/data/definitions/787.html
+    technology:
+    - c
+- id: vuln-xrdp-43cf272b
+  pattern: 'g_sprintf($BUF, $FORMAT, ...)
+
+    '
+  pattern-not: 'g_snprintf($BUF, sizeof($BUF), $FORMAT, ...)
+
+    '
+  languages:
+  - c
+  message: "Detected use of `g_sprintf` which is vulnerable to buffer overflows. \nThis function does not check the length\
+    \ of the destination buffer, \npotentially leading to memory corruption. Use `g_snprintf` instead, \nwhich includes a\
+    \ buffer size parameter to prevent overflows.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/43cf272b1138462c1bdfc48ef7e9142208194382
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-xrdp-4def30ab
+  pattern: "if ($SIZE > $SELF->in_s->size)\n{\n  LOG($LOG_LEVEL_ERROR, \"sesman_data_in: bad message size\");\n  ...\n}\n"
+  pattern-not: "if ($SIZE < $HEADER_SIZE || $SIZE > $SELF->in_s->size)\n{\n  LOG($LOG_LEVEL_ERROR, \"sesman_data_in: bad message\
+    \ size %d\", $SIZE);\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code fails to check if the message size is smaller than the required header size,
+
+    which can lead to buffer underflow vulnerabilities. This can cause undefined behavior
+
+    or crashes. Always verify that the message size is within valid bounds, including
+
+    both minimum and maximum limits.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/4def30ab8ea445cdc06832a44c3ec40a506a0ffa
+    category: security
+    cwe:
+    - 'CWE-129: Improper Validation of Array Index'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/129.html
+    technology:
+    - c
+- id: vuln-xrdp-60864014
+  pattern: 'int $VAR = 0;
+
+    ...
+
+    $VAR = (int)($EXPR);
+
+    '
+  pattern-not: 'unsigned int $VAR = 0;
+
+    ...
+
+    $VAR = $EXPR;
+
+    '
+  languages:
+  - c
+  message: 'The use of signed integers for buffer size calculations can lead to integer overflow or underflow vulnerabilities.
+    This can be exploited by malicious callers to manipulate memory operations beyond the intended buffer boundaries. To fix
+    this, use unsigned integers for buffer size calculations and add checks to ensure the buffer size is reasonable.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/60864014b733c10881c078048560858067fe5d0f
+    category: security
+    cwe:
+    - CWE-190
+    - CWE-191
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    - https://cwe.mitre.org/data/definitions/191.html
+    technology:
+    - c
+- id: vuln-xrdp-6cb54a1c
+  pattern: 'char *$NAME;
+
+    ...
+
+    $NAME = g_new(char, $NAME_BYTES + 1);
+
+    ...
+
+    g_free($NAME);
+
+    '
+  pattern-not: 'char $NAME[1024 + 1];
+
+    ...
+
+    if (($NAME_BYTES < 1) || ($NAME_BYTES > (int)(sizeof($NAME) - 1)))
+
+    '
+  languages:
+  - c
+  message: 'Detected unsafe dynamic memory allocation for a buffer without proper bounds checking.
+
+    This can lead to potential buffer overflows if the input size is not properly validated.
+
+    Instead, use a fixed-size buffer with proper bounds checking to ensure memory safety.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/6cb54a1c26b53617e1c79a0abc96d03c4add1eb8
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-xrdp-a111a0fd
+  pattern: 'auth_start_session($AUTH_INFO, $DISPLAY_NUM);
+
+    '
+  pattern-not: "if (auth_start_session($AUTH_INFO, $DISPLAY_NUM) != 0)\n{\n    return $ERROR_CODE;\n}\n"
+  languages:
+  - c
+  message: "Detected a potentially unsafe call to `auth_start_session` without error handling. \nThis can lead to unlogged\
+    \ failures in session creation, making it difficult to diagnose issues.\nThe fix involves checking the return value of\
+    \ `auth_start_session` and handling errors appropriately.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/a111a0fdfe2421ef600e40708b5f0168594cfb23
+    category: security
+    cwe:
+    - CWE-703
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    technology:
+    - c
+- id: vuln-xrdp-d958d1f0
+  pattern: 'char $BUF[257];
+
+    ...
+
+    $BUF[$SZ] = ''\0'';
+
+    '
+  pattern-not: 'char *$BUF = 0;
+
+    ...
+
+    $BUF = g_new0(char, $SZ);
+
+    $BUF[$SZ] = ''\0'';
+
+    g_free($BUF);
+
+    '
+  languages:
+  - c
+  message: 'Detected use of fixed-size buffer without proper dynamic allocation. This can lead to buffer overflow vulnerabilities
+    if the input size exceeds the buffer capacity. The vulnerability was fixed by replacing the fixed-size buffer with dynamically
+    allocated memory using g_new0 and ensuring proper cleanup with g_free.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/neutrinolabs/xrdp/commit/d958d1f0186968200da32bafc3d9be4a4aa7212d
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-119
+    owasp:
+    - 'A1: Injection'
+    - 'A2: Broken Authentication'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c

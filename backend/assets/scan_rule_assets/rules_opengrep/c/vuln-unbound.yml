@@ -1,0 +1,70 @@
+rules:
+- id: vuln-unbound-ba0f382e
+  pattern: 'delegpt_add_rrset_A($DP, $REGION, $RR, $LAME)
+
+    '
+  pattern-not: 'delegpt_add_rrset_A($DP, $REGION, $RR, $LAME, $ADDITIONS)
+
+    '
+  languages:
+  - c
+  message: 'The function `delegpt_add_rrset_A` is being called without the required `additions` parameter. This can lead to
+    incorrect handling of DNS responses and potential security vulnerabilities. Always include the `additions` parameter to
+    ensure proper processing of DNS records.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/NLnetLabs/unbound/commit/ba0f382eee814e56900a535778d13206b86b6d49
+    category: security
+    cwe: 'CWE-20: Improper Input Validation'
+    owasp: A6:2017 - Security Misconfiguration
+    technology:
+    - c
+- id: vuln-unbound-c3206f45
+  pattern: 'infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW);
+
+    '
+  pattern-not: 'infra_ip_create_ratedata($INFRA, $ADDR, $ADDRLEN, $TIMENOW, $MESH_WAIT);
+
+    '
+  languages:
+  - c
+  message: 'Missing mesh_wait parameter in infra_ip_create_ratedata call. This can lead to incorrect rate limiting behavior
+    and potential security issues. Always include the mesh_wait parameter when calling this function.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/NLnetLabs/unbound/commit/c3206f4568f60c486be6d165b1f2b5b254fea3de
+    category: security
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    owasp: 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-unbound-f6753a0f
+  pattern: 'dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS)
+
+    '
+  pattern-not: 'dns_cache_store($ENV, $QINF, $REP, $A, $B, $C, $D, $FLAGS, $QSTARTTIME)
+
+    '
+  languages:
+  - c
+  message: 'The function `dns_cache_store` is being called without the `qstarttime` parameter, which is used to determine
+    if RRsets of type NS have expired. This can lead to using expired delegation points, potentially causing DNS resolution
+    issues. Always include the `qstarttime` parameter when calling `dns_cache_store` to ensure proper handling of expired
+    RRsets.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/NLnetLabs/unbound/commit/f6753a0f1018133df552347a199e0362fc1dac68
+    category: security
+    cwe:
+    - CWE-664
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    technology:
+    - c

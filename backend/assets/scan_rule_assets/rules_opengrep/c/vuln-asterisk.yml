@@ -1,0 +1,113 @@
+rules:
+- id: vuln-asterisk-424be345
+  pattern: "if (!live_dangerously && !strncasecmp($FILENAME, \"/\", 1) &&\n     strncasecmp($FILENAME, $CONFIG_DIR, strlen($CONFIG_DIR)))\
+    \ {\n  ...\n}\n"
+  pattern-not: "if (live_dangerously) {\n  return 0;\n}\n$STRIPPED_FILENAME = ast_strip(ast_strdupa($FILENAME));\nif ($STRIPPED_FILENAME[0]\
+    \ == '/') {\n  $REAL_PATH = realpath($STRIPPED_FILENAME, NULL);\n} else {\n  if (ast_asprintf(&$PATH, \"%s/%s\", $CONFIG_DIR,\
+    \ $STRIPPED_FILENAME) == -1) {\n    return -1;\n  }\n  $REAL_PATH = realpath($PATH, NULL);\n}\nif (!$REAL_PATH) {\n  return\
+    \ -1;\n}\nif (!ast_begins_with($REAL_PATH, $CONFIG_DIR)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code performs insufficient path validation, allowing access to restricted files.
+
+    This vulnerability occurs because the code only checks if the filename starts with "/"
+
+    and doesn''t match the config directory, without properly resolving and validating the
+
+    full path. This can lead to unauthorized access to sensitive files.
+
+    The fix involves properly resolving the full path using realpath() and validating it
+
+    against the config directory. Always use realpath() to resolve symlinks and validate
+
+    the full path to prevent directory traversal attacks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/asterisk/asterisk/commit/424be345639d75c6cb7d0bd2da5f0f407dbd0bd5
+    category: security
+    cwe:
+    - CWE-22
+    - CWE-73
+    owasp:
+    - A01:2021-Broken Access Control
+    references:
+    - https://cwe.mitre.org/data/definitions/22.html
+    - https://owasp.org/www-project-top-ten/
+    technology:
+    - c
+- id: vuln-asterisk-a1ca0268
+  pattern: 'pj_strcpy2(&((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
+
+    '
+  pattern-not: 'pj_strdup2($POOL, &((pjsip_generic_string_hdr *) $HDR)->hvalue, $VALUE);
+
+    '
+  languages:
+  - c
+  message: "Detected unsafe use of pj_strcpy2 which can lead to buffer overflows. \nThis function does not check the length\
+    \ of the destination buffer, \nmaking it vulnerable to buffer overflow attacks. \nUse pj_strdup2 instead, which allocates\
+    \ memory safely using the provided pool.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/asterisk/asterisk/commit/a1ca0268254374b515fa5992f01340f7717113fa
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A2: Broken Authentication'
+    references:
+    - https://www.owasp.org/index.php/Buffer_Overflow
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-asterisk-da2573a3
+  pattern: "if ($OCTET_CNT > 0) {\n  ...\n  if (($LEN + $OCTET_CNT) > $LIMIT) {\n    return -1;\n  }\n  ...\n}\n"
+  pattern-not: "if (($LEN + $OCTET_CNT) > $LIMIT) {\n  return -1;\n}\n...\n"
+  languages:
+  - c
+  message: 'The vulnerable code checks the buffer length condition only if octet_cnt is greater than 0, which can lead to
+    buffer overflow if the condition is not checked when octet_cnt is 0. This is dangerous because it can allow attackers
+    to write beyond the allocated buffer, potentially leading to memory corruption or code execution. The fix is to move the
+    buffer length check outside the octet_cnt condition to ensure it is always validated.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/asterisk/asterisk/commit/da2573a3779425654543d6ac4c4dd6871ce16720
+    category: security
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input (''Classic Buffer Overflow'')'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-asterisk-faddd99f
+  pattern: "if (!($SESSION->writeperm & $PERMISSION)\n    && (\n        strcasestr($APP, \"system\") ||\n        strcasestr($APP,\
+    \ \"exec\") ||\n        strcasestr($APP, \"agi\") ||\n        strcasestr($APP, \"mixmonitor\") ||\n        strcasestr($APP,\
+    \ \"externalivr\") ||\n        strcasestr($APP, \"originate\") ||\n        (strstr($APPDATA, \"SHELL\") && ($BAD_APPDATA\
+    \ = 1)) ||\n        (strstr($APPDATA, \"EVAL\") && ($BAD_APPDATA = 1))\n    )) {\n    ...\n}\n"
+  pattern-not: "if (!is_originate_app_permitted($APP, $APPDATA, $SESSION->writeperm)) {\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The code directly checks for specific application strings (e.g., "system", "exec", "agi") and appdata strings
+    (e.g., "SHELL", "EVAL") to enforce permissions. This approach is error-prone and hard to maintain. The patch introduces
+    a more robust permission checking mechanism using a structured list of permissions and corresponding search functions.
+    Update the code to use the new permission checking mechanism to avoid security vulnerabilities and improve maintainability.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/asterisk/asterisk/commit/faddd99f2b9408b524e5eb8a01589fe1fa282df2
+    category: security
+    cwe:
+    - CWE-863
+    owasp:
+    - A01:2021-Broken Access Control
+    references:
+    - https://www.asterisk.org
+    technology:
+    - c

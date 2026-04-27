@@ -1,0 +1,115 @@
+rules:
+- id: vuln-opensips-7cab422e
+  pattern: "$NUMBER = $NUMBER * 10 + ($EXPR) - '0';\nif ($NUMBER < 0) {\n  ...\n}\n"
+  pattern-not: "if ($NUMBER > 214748363) {\n  ...\n}\n$NUMBER = $NUMBER * 10 + ($EXPR) - '0';\n"
+  languages:
+  - c
+  message: 'Detected a potential integer overflow vulnerability. The code performs arithmetic operations without proper bounds
+    checking, which can lead to undefined behavior. To fix this, add a check before the arithmetic operation to ensure the
+    value does not exceed safe limits.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OpenSIPS/opensips/commit/7cab422e2fc648f910abba34f3f0dbb3ae171ff5
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    technology:
+    - c
+- id: vuln-opensips-8f87c7c0
+  pattern: 'delete_sdp_line($MSG, $S)
+
+    '
+  pattern-not: 'delete_sdp_line($MSG, $S, $STREAM)
+
+    '
+  languages:
+  - c
+  message: 'The function `delete_sdp_line` is being called without the required `stream` parameter, which is used to safeguard
+    the identification of line boundaries. This could lead to out-of-bounds memory access or incorrect line deletion. Always
+    pass the `stream` parameter to ensure proper boundary checking.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/OpenSIPS/opensips/commit/8f87c7c03da55f9c79bd92e67fa2c94b2a7ce5cf
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-opensips-b2dffe4b
+  pattern: 'uri->host.s="";
+
+    uri->host.len=0;
+
+    '
+  pattern-not: '/* keep the service name as host part */
+
+    '
+  languages:
+  - c
+  message: 'The code sets the host part of a URI to an empty string and length to 0, which can lead to issues in code that
+    expects a valid host part. This was fixed by keeping the service name as the host part instead of setting it to an empty
+    string. To fix this, ensure the host part is properly initialized with a valid value.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OpenSIPS/opensips/commit/b2dffe4b5cd81182c9c8eabb6c96aac96c7acfe3
+    category: security
+    cwe:
+    - 'CWE-170: Improper Null Termination'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-opensips-dd051f8e
+  pattern: "while (*(--$TMP) == ' ') {\n  ...\n}\n"
+  pattern-not: "while ($TMP > $LMP->u.value && *(--$TMP) == ' ') {\n  ...\n}\n"
+  languages:
+  - c
+  message: "Detected a potential out-of-bounds memory access vulnerability. \nThe code decrements a pointer without checking\
+    \ if it remains within valid bounds, which could lead to undefined behavior or memory corruption. \nAlways ensure pointer\
+    \ bounds are checked before dereferencing.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/OpenSIPS/opensips/commit/dd051f8ed5ae3347fb1d556ced3c97822c9d8450
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-opensips-e2f13d37
+  pattern: 'LM_ERR("IP val is not IP <%.*s>\n", $VAL.rs.len, $VAL.rs.s);
+
+    '
+  pattern-not: 'LM_ERR("IP val is not IP <%.*s>\n", $_IP->len, $_IP->s);
+
+    '
+  languages:
+  - c
+  message: 'The code uses incorrect variables in the error logging statement, which can lead to incorrect or misleading error
+    messages. This can make debugging difficult and potentially hide security issues. Ensure that the correct variables are
+    used in error messages to maintain accurate logging.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/OpenSIPS/opensips/commit/e2f13d3747577937152346b031b86639b37bc2b5
+    category: security
+    cwe:
+    - 'CWE-117: Improper Output Neutralization for Logs'
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    technology:
+    - c

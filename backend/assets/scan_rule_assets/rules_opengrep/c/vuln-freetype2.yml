@@ -1,0 +1,189 @@
+rules:
+- id: vuln-freetype2-010e0614
+  pattern: '$STACK = cf2_stack_init($MEMORY, $ERROR);
+
+    '
+  pattern-not: '$STACK = cf2_stack_init($MEMORY, $ERROR, $STACK_SIZE);
+
+    '
+  languages:
+  - c
+  message: 'Detected initialization of a stack without specifying the stack size. This can lead to buffer overflows or underflows
+    due to the lack of size constraints. Always specify the stack size when initializing a stack to ensure proper bounds checking.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/010e0614f2effe058855aacfc3e61c71e1cb5739
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-freetype2-0545ec1c
+  pattern: 'charset->sids[$J] = FT_GET_USHORT();
+
+    '
+  pattern-not: "{\n  FT_UShort $SID = FT_GET_USHORT();\n  if ( $SID < 65000 )\n    charset->sids[$J] = $SID;\n  else\n  {\n\
+    \    FT_ERROR(( \"cff_charset_load: invalid SID value %d set to zero\\n\", $SID ));\n    charset->sids[$J] = 0;\n  }\n\
+    }\n"
+  languages:
+  - c
+  message: 'The vulnerability involves directly assigning a SID (String ID) value from FT_GET_USHORT() to charset->sids without
+    validation. This can lead to the use of invalid SID values, potentially causing undefined behavior or crashes. The fix
+    includes checking if the SID value is within the valid range (less than 65000) and setting it to zero if it''s invalid.
+    To fix this, always validate SID values before assignment.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/0545ec1ca36b27cb928128870a83e5f668980bc5
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://www.adobe.com/content/dam/acom/en/devnet/font/pdfs/5176.CFF.pdf
+    technology:
+    - c
+- id: vuln-freetype2-45a3c76b
+  pattern: '$STREAM->pos + $COUNT > $STREAM->size
+
+    '
+  pattern-not: '$STREAM->size - $STREAM->pos < $COUNT
+
+    '
+  languages:
+  - c
+  message: 'This pattern detects a potential integer overflow vulnerability in stream position calculations.
+
+    The original code adds the position and count directly, which can overflow and lead to incorrect boundary checks.
+
+    The fixed version subtracts the position from the size, which is a safer approach to avoid overflow.
+
+    To fix this, replace the addition-based check with a subtraction-based check.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/45a3c76b547511fa9d97aca34b150a0663257375
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    technology:
+    - c
+- id: vuln-freetype2-77930974
+  pattern: "if ( !$FACE->goto_table( $FACE, $TTAG_CFF, $STREAM, 0 ) )\n  $NUM_INSTANCES = 0;\n"
+  pattern-not: "if ( $FACE->goto_table( $FACE, $TTAG_glyf, $STREAM, 0 ) &&\n     !$FACE->goto_table( $FACE, $TTAG_CFF, $STREAM,\
+    \ 0 ) )\n  $NUM_INSTANCES = 0;\n"
+  languages:
+  - c
+  message: "The vulnerability occurs due to an insufficient check in the CFF table handling code. \nThe original code only\
+    \ checks for the presence of the CFF table without verifying the \nexistence of the 'glyf' table, which could lead to\
+    \ incorrect handling of font instances. \nThis could potentially cause security issues or crashes when processing malformed\
+    \ font files. \nThe fix adds an additional check for the 'glyf' table before proceeding with the CFF table check.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/779309744222a736eba0f1731e8162fce6288d4e
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    technology:
+    - c
+- id: vuln-freetype2-8b281f83
+  pattern: '(void)$FUNC($PARSER, $SIZE, $ARRAY, $COUNT);
+
+    '
+  pattern-not: "$RESULT = $FUNC($PARSER, $SIZE, $ARRAY, $COUNT);\nif ($RESULT < $SIZE)\n  return $ERROR;\n"
+  languages:
+  - c
+  message: 'The function `$FUNC` is called without checking its return value, which can lead to invalid data processing. This
+    vulnerability can cause incorrect handling of font matrices, potentially leading to crashes or undefined behavior. Always
+    check the return value of `$FUNC` to ensure the operation was successful and handle errors appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/8b281f83e8516535756f92dbf90940ac44bd45e1
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    references:
+    - https://cwe.mitre.org/data/definitions/252.html
+    technology:
+    - c
+- id: vuln-freetype2-8d22746c
+  pattern: '$VAR = $MASK->end_point;
+
+    '
+  pattern-not: "$VAR = $MASK->end_point > $GLYPH->num_points\n          ? $GLYPH->num_points\n          : $MASK->end_point;\n"
+  languages:
+  - c
+  message: 'The code directly assigns `mask->end_point` to a variable without checking if it exceeds `glyph->num_points`.
+    This can lead to out-of-bounds access when `mask->end_point` is greater than `glyph->num_points`, potentially causing
+    memory corruption or crashes. To fix this, ensure that `mask->end_point` is clamped to `glyph->num_points` using a ternary
+    operator.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/8d22746c9e5af80ff4304aef440986403a5072e2
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-freetype2-c06da1ad
+  pattern: "$PARSER->root.cursor += $STRING_SIZE + 1;\nif ($PARSER->root.cursor >= $LIMIT) {\n  ...\n}\n"
+  pattern-not: "if ($LIMIT - $PARSER->root.cursor < $STRING_SIZE) {\n  ...\n} else {\n  $PARSER->root.cursor += $STRING_SIZE\
+    \ + 1;\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential integer overflow vulnerability in cursor manipulation.
+
+    The original code increments the cursor without checking if the resulting value exceeds the limit,
+
+    which could lead to buffer overflows or memory corruption.
+
+    To fix this, ensure the cursor increment is validated against the limit before performing the operation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/c06da1ad34663da7b6fc39b030dc3ae185b96557
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-freetype2-cee5d593
+  pattern: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 4;
+  pattern-not: unsigned long $NEWSIZE = $OLDSIZE + ($OLDSIZE >> 1) + 5;
+  languages:
+  - c
+  message: "This pattern detects an integer overflow vulnerability in memory allocation calculations. \nThe original code\
+    \ adds a fixed value of 4, which may lead to insufficient memory allocation. \nThe patch changes this to 5 to prevent\
+    \ potential buffer overflows. \nAlways ensure that memory allocation calculations account for sufficient space to avoid\
+    \ security risks.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/aseprite/freetype2/commit/cee5d593582801f65c5e127d9de9ca24ebcdc747
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c

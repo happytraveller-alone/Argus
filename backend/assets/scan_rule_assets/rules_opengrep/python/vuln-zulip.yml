@@ -1,0 +1,130 @@
+rules:
+- id: vuln-zulip-2d453085
+  pattern: "if $LINK.startswith($PREFIX):\n  ...\n"
+  pattern-not: "if (\n  $LINK.startswith($PREFIX)\n  and urllib.parse.urljoin($PREFIX, $LINK[len($PREFIX):])\n  == $LINK\n\
+    ):\n"
+  languages:
+  - python
+  message: 'Detected potentially unsafe URL prefix check. The original check only verifies if a link starts with a prefix
+    but does not validate the full URL structure, which could lead to security vulnerabilities like path traversal or open
+    redirects. To fix, ensure the full URL is validated using urllib.parse.urljoin.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/2d4530854673d78d2212ec91523135452dbd75fb
+    category: security
+    cwe: CWE-20
+    owasp: A1:2017-Injection
+    references:
+    - https://docs.python.org/3/library/urllib.parse.html#urllib.parse.urljoin
+    technology:
+    - python
+- id: vuln-zulip-3ba8348c
+  pattern: 'get_stream_by_id($STREAM_ID)
+
+    '
+  pattern-not: 'access_stream_by_id($USER_PROFILE, $STREAM_ID, require_active=True)
+
+    '
+  languages:
+  - python
+  message: Detected insecure stream access. Use access_stream_by_id with user_profile and require_active=True to ensure proper
+    authorization checks.
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/3ba8348c51f09d823096228fae223bffc054efd5
+    category: security
+    cwe: CWE-862
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control
+    technology:
+    - python
+- id: vuln-zulip-4235be75
+  pattern: "if $SENDER.bot_type != $SENDER.OUTGOING_WEBHOOK_BOT:\n    ...\n"
+  pattern-not: "if not $SKIP_STREAM_ACCESS_CHECK:\n    ...\nelse:\n    assert $SENDER.bot_type == $SENDER.OUTGOING_WEBHOOK_BOT\n"
+  languages:
+  - python
+  message: 'Detected missing stream access check for outgoing webhook bots. This can allow unauthorized access to streams.
+    Ensure that the stream access check is properly enforced or explicitly bypassed with appropriate security measures.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/4235be759db5e0678ceac88ec19f2b8f8482214a
+    category: security
+    cwe: CWE-285
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://github.com/zulip/zulip/commit/4235be759db5e0678ceac88ec19f2b8f8482214a
+    technology:
+    - python
+- id: vuln-zulip-47913fb0
+  pattern: '($TYPE, $LABEL, $CHECKER, eval, $NAME)
+
+    '
+  pattern-not: '($TYPE, $LABEL, $CHECKER, ast.literal_eval, $NAME)
+
+    '
+  languages:
+  - python
+  message: "Detected unsafe use of `eval()` which can lead to arbitrary code execution. \nReplace `eval()` with `ast.literal_eval()`\
+    \ to safely evaluate literals only.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/47913fb091794830c54eac2927e26bce92cfced1
+    category: security
+    cwe: CWE-94
+    owasp: A03:2021-Injection
+    references:
+    - https://docs.python.org/3/library/functions.html#eval
+    - https://docs.python.org/3/library/ast.html#ast.literal_eval
+    technology:
+    - python
+- id: vuln-zulip-6336322d
+  pattern: "$OLD_CAN_ACCESS_STREAM_USER_IDS = (\n    set($STREAM_SUBSCRIBER_USER_IDS)\n    | set($PREVIOUSLY_SUBSCRIBED_USER_IDS)\n\
+    \    | { $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots() }\n)\n"
+  pattern-not: "$OLD_CAN_ACCESS_STREAM_USER_IDS = set($STREAM_SUBSCRIBER_USER_IDS) | {\n    $USER.id for $USER in $STREAM.realm.get_admin_users_and_bots()\n\
+    }\n"
+  languages:
+  - python
+  message: Potential security issue detected where previously subscribed users are included in the access list for a stream.
+    This could lead to unauthorized access to stream metadata. Ensure that only current subscribers and realm admins have
+    access.
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/6336322d2f9bbccaacfc80cba83a3c62eefd5737
+    category: security
+    cwe: CWE-284
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://github.com/zulip/zulip/commit/6336322d2f9bbccaacfc80cba83a3c62eefd5737
+    technology:
+    - python
+- id: vuln-zulip-6e117546
+  pattern: "if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE.can_forge_sender:\n    ...\n    return\n"
+  pattern-not: "if $FORWARDER_USER_PROFILE is not None and $FORWARDER_USER_PROFILE != $SENDER:\n    if (\n        $FORWARDER_USER_PROFILE.can_forge_sender\n\
+    \        and $FORWARDER_USER_PROFILE.realm_id == $SENDER.realm_id\n        and $SENDER.realm_id == $STREAM.realm_id\n\
+    \    ):\n        return\n    else:\n        raise JsonableError(_(\"User not authorized for this query\"))\n"
+  languages:
+  - python
+  message: 'Detected missing authorization check when using can_forge_sender permission.
+
+    The original code allowed users with can_forge_sender to bypass realm checks,
+
+    potentially enabling unauthorized message forging across realms.
+
+    Fix by ensuring proper realm validation and authorization checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/zulip/zulip/commit/6e11754642a59d83d7a575b78e6c3e988d3b6c93
+    category: security
+    cwe: CWE-285
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://zulip.readthedocs.io/en/stable/subsystems/sending-messages.html#message-sending-security
+    technology:
+    - python

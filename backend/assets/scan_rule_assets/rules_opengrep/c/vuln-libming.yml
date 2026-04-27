@@ -1,0 +1,264 @@
+rules:
+- id: vuln-libming-0aab70a3
+  pattern: 'return $ACT->p.String;
+
+    '
+  pattern-not: "if (!$ACT->p.String)\n{\n    SWF_warn(\"WARNING: Call to getString with PUSH_VARIABLE defining NULL string.\\\
+    n\");\n    break;\n}\n$T=malloc(strlen($ACT->p.String)+1);\nstrcpy($T,$ACT->p.String);\nreturn $T;\n"
+  languages:
+  - c
+  message: 'Directly returning a string pointer without checking for NULL can lead to NULL pointer dereference vulnerabilities.
+    This can cause crashes or undefined behavior. Always check for NULL before dereferencing and allocate a new buffer to
+    safely return the string.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/0aab70a3020dd8b4fad66b20995fc691f24a0317
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c
+- id: vuln-libming-1a1d2704
+  pattern: "char *readBytes(FILE *f, int $SIZE) {\n  ...\n  SWF_warn(\"readBytes: want to read %i < 1 bytes: Handling a 0\\\
+    n\", $SIZE);\n  ...\n  int $I;\n  ...\n}\n"
+  pattern-not: "char *readBytes(FILE *f, unsigned long $SIZE) {\n  ...\n  SWF_warn(\"readBytes: want to read %lu < 1 bytes:\
+    \ Handling a 0\\n\", $SIZE);\n  ...\n  unsigned long $I;\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function `readBytes` uses a signed integer for the size parameter, which can lead to integer overflow or underflow
+    vulnerabilities. This is dangerous because it can cause memory corruption or unexpected behavior when handling large sizes.
+    To fix this, use an unsigned long type for the size parameter and loop variable.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/1a1d2704cb19f2d3299f042bb3a4783c960b0a9a
+    category: security
+    cwe:
+    - CWE-190
+    - CWE-191
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-libming-1d698a4b
+  pattern: '$VAR->Actions[$VAR->numActions-1].SWF_ACTIONRECORD.ActionCode == SWFACTION_JUMP
+
+    '
+  pattern-not: 'OpCode($VAR->Actions, $VAR->numActions-1, $VAR2) == SWFACTION_JUMP
+
+    '
+  languages:
+  - c
+  message: "Direct access to the ActionCode field in SWF_ACTIONRECORD can lead to unsafe operations. \nThe vulnerability arises\
+    \ from not using the OpCode function, which performs necessary bounds checking. \nThis can result in out-of-bounds memory\
+    \ access or undefined behavior. \nAlways use the OpCode function to safely access action codes.\n"
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/libming/libming/commit/1d698a4b1f03d6136bbf2b0171b86985be553454
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-libming-2e5a98a0
+  pattern: '$FLAGS += fgetc($F) << 16;
+
+    $FLAGS += fgetc($F) << 8;
+
+    $FLAGS += fgetc($F);
+
+    '
+  pattern-not: "for ($I = 2; $I >= 0; --$I) {\n  if (($FLAGS_CHAR = fgetc($F)) == EOF) {\n    error(\"truncated file\");\n\
+    \  } else {\n    $FLAGS += $FLAGS_CHAR << ($I * 8);\n  }\n}\n"
+  languages:
+  - c
+  message: 'The code reads bytes from a file without checking for EOF, which can lead to undefined behavior if the file is
+    truncated. This can cause the program to read invalid data or crash. The fix involves checking for EOF after each read
+    operation and handling the error appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/2e5a98a0dbbd9714294007c601e584aa201494ed
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-libming-3120f1cd
+  pattern: 'int $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
+
+    '
+  pattern-not: 'unsigned long $OFF = (&($TREC->GlyphEntries[$I]))->GlyphIndex[0];
+
+    '
+  languages:
+  - c
+  message: 'The use of ''int'' for storing an offset can lead to integer overflow or truncation issues, which may result in
+    memory corruption or incorrect behavior. This is particularly dangerous when dealing with large indices or offsets. The
+    fix involves using ''unsigned long'' to ensure proper handling of large values.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/3120f1cdae0c5232a4fb15e5ce42b8c455b43379
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    technology:
+    - c
+- id: vuln-libming-459fa79d
+  pattern: '$VAR->Password = readBytes($F, $LENGTH);
+
+    '
+  pattern-not: '$VAR->Password = readString($F);
+
+    '
+  languages:
+  - c
+  message: "Detected use of `readBytes` for password handling, which can lead to security vulnerabilities. \nThe function\
+    \ `readBytes` does not properly handle string termination, potentially resulting in buffer overflows or information leaks.\
+    \ \nUse `readString` instead, which ensures proper null-termination of the string.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/459fa79d04dcd240996765727a726e5dc5c38f34
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp:
+    - 'A2: Broken Authentication'
+    technology:
+    - c
+- id: vuln-libming-80ebea95
+  pattern: 'outputSWF_UNKNOWNBLOCK($VAR);
+
+    '
+  pattern-not: 'SWF_error("printing type:  %d (%s) is not implemented", $TYPE, blockName($TYPE));
+
+    '
+  languages:
+  - c
+  message: 'The use of `outputSWF_UNKNOWNBLOCK` without proper error handling can lead to undefined behavior or crashes when
+    processing unknown block types. This vulnerability can be exploited by crafting malicious SWF files to cause denial of
+    service or other unexpected behavior. Replace `outputSWF_UNKNOWNBLOCK` with a proper error handling mechanism like `SWF_error`
+    to safely handle unknown block types.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/80ebea953f0da0a5206bfaf02d5396d292e91a3a
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - A9:2021-Security Misconfiguration
+    references:
+    - https://cwe.mitre.org/data/definitions/20.html
+    technology:
+    - c
+- id: vuln-libming-8dd118ea
+  pattern: "$T = malloc(strlen($VAR) + $N);\nstrcpy($T, $VAR);\nif (strlen($T))\n  return $T;\n"
+  pattern-not: "$T = malloc(strlen($VAR) + $N);\nstrcpyext($T, $VAR);\nif (strlen($VAR))\n  return $T;\n"
+  languages:
+  - c
+  message: "Detected unsafe string copy operation using `strcpy` without proper bounds checking. \nThis can lead to buffer\
+    \ overflow vulnerabilities if the source string is larger than the allocated memory. \nUse `strcpyext` or similar safe\
+    \ string copy functions to ensure proper bounds checking.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/8dd118eac8a3c93c2f42089e7af4d7bb8cefd0b3
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A2: Broken Authentication'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-libming-cff9a3bd
+  pattern: "for($I = 0; $I <= $N; ++$I) {\n  ...\n}\n"
+  pattern-not: "for($I = 0; $I < $N; ++$I) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential off-by-one error in a loop condition. Using `<=` instead of `<` can lead to out-of-bounds
+    access, which may result in memory corruption or undefined behavior. Replace `<=` with `<` to ensure the loop stays within
+    bounds.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/cff9a3bd2c428ad0cd8c8deb538031e11f29a0fe
+    category: security
+    cwe:
+    - CWE-193
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-libming-efc75c28
+  pattern: '$T = malloc(10);
+
+    sprintf($T, "%ld", $VAR);
+
+    '
+  pattern-not: "{\n  char $LENGTH_FINDER[1];\n  int $NEEDED_LENGTH = snprintf($LENGTH_FINDER, 1, \"%ld\", $VAR) + 1;\n  if\
+    \ ($NEEDED_LENGTH <= 0) {\n    $WARN_FUNC(\"WARNING: could not evaluate size of buffer (memory issue ?).\\n\");\n    break;\n\
+    \  }\n  $T = malloc($NEEDED_LENGTH);\n  sprintf($T, \"%ld\", $VAR);\n}\n"
+  languages:
+  - c
+  message: "Detected a potential buffer overflow vulnerability due to unsafe use of `malloc` and `sprintf`. \nThe code allocates\
+    \ a fixed-size buffer without checking the actual size needed for the formatted string, \nwhich can lead to buffer overflow.\
+    \ To fix this, use `snprintf` to calculate the required buffer size \nand allocate memory dynamically based on the result.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/efc75c28e89fe864cf0412d5a5f0b4a451e14509
+    category: security
+    cwe:
+    - CWE-120
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-libming-f42fdb48
+  pattern: 'int $VAR = ($ACTIONS[$INDEX-$OFFSET].$RECORD.$FIELD == $VALUE) ? $TRUE : $FALSE;
+
+    '
+  pattern-not: 'int $VAR = ($FUNC($ACTIONS, $INDEX-$OFFSET, $MAX) == $VALUE) ? $TRUE : $FALSE;
+
+    '
+  languages:
+  - c
+  message: 'Direct access to action records without proper bounds checking can lead to out-of-bounds memory access. This vulnerability
+    can cause crashes, undefined behavior, or potentially exploitable conditions. Use the provided OpCode function to safely
+    access action records with bounds checking.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libming/libming/commit/f42fdb48986f29278907ab11f615b1c5d2f87530
+    category: security
+    cwe:
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c

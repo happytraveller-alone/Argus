@@ -1,0 +1,2088 @@
+rules:
+- id: vuln-qemu-035e69b0
+  pattern: 'assert($VAR1 > $VAR2);
+
+    '
+  pattern-not: "if ($VAR2 >= $VAR1) {\n    return false;\n}\n"
+  languages:
+  - c
+  message: "The use of `assert` for input validation is dangerous as it can be disabled in production builds, leading to potential\
+    \ security vulnerabilities. \nIn this case, the assertion checks if `$VAR1` is greater than `$VAR2`, but if assertions\
+    \ are disabled, the program may continue with invalid data. \nReplace the `assert` with proper error handling, such as\
+    \ an `if` statement that returns an error or handles the invalid condition gracefully.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/035e69b063835a5fd23cacabd63690a3d84532a8
+    category: security
+    cwe:
+    - 'CWE-617: Reachable Assertion'
+    owasp:
+    - 'A9: Security Misconfiguration'
+    references:
+    - https://wiki.sei.cmu.edu/confluence/display/c/EXP33-C.+Do+not+use+assertions+for+input+validation
+    technology:
+    - c
+- id: vuln-qemu-070c4b92
+  pattern: "while (1) {\n  ...\n}\n"
+  pattern-not: "while ($DESCNT++ < $FEC_MAX_DESC) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Infinite loop vulnerability detected in network handling code. This can lead to denial of service (DoS) as the
+    loop lacks a termination condition. The vulnerability was fixed by introducing a counter and a maximum descriptor limit.
+    Add a counter and a termination condition to prevent infinite loops.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/070c4b92b8cd5390889716677a0b92444d6e087a
+    category: security
+    cwe:
+    - CWE-835
+    owasp:
+    - A9:2021-Security Misconfiguration
+    technology:
+    - c
+- id: vuln-qemu-0a794529
+  pattern: "if ($VAR && !g_str_equal($VAR, \"none\")) {\n  if (g_str_equal($VAR, \"passthrough\")) {\n    if ($FUNC(&$BUF))\
+    \ {\n      _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));\n      g_free($BUF);\n    }\n  } else {\n    _FDT(fdt_setprop_string($FDT,\
+    \ $OFFSET, $PROP, $VAR));\n  }\n}\n"
+  pattern-not: "if ($VAR) {\n  _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $VAR));\n} else if ($COND && $FUNC(&$BUF)) {\n\
+    \  _FDT(fdt_setprop_string($FDT, $OFFSET, $PROP, $BUF));\n  g_free($BUF);\n}\n"
+  languages:
+  - c
+  message: "The code contains a vulnerable pattern where host model and serial information \nis passed through without proper\
+    \ validation. This can lead to information \ndisclosure or unexpected behavior. The fix simplifies the logic and removes\
+    \ \nthe \"passthrough\" option, ensuring that only explicitly set values are used.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/0a794529bd1109aeea0c407784b40a2605e808b9
+    category: security
+    cwe:
+    - 'CWE-200: Information Exposure'
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    references:
+    - https://cwe.mitre.org/data/definitions/200.html
+    technology:
+    - c
+- id: vuln-qemu-0db89536
+  pattern: "if ($S->current_req) {\n  ...\n  scsi_req_continue($S->current_req);\n  $S->data_in_ready = false;\n  ...\n}\n"
+  pattern-not: "if (!$S->current_req) {\n  return;\n}\n...\nscsi_req_continue($S->current_req);\n$S->data_in_ready = false;\n\
+    ...\nif (!$S->current_req) {\n  return;\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential null pointer dereference vulnerability. The code accesses `current_req` without checking
+    if it is null after the initial check. This could lead to a crash or undefined behavior if `current_req` becomes null
+    during execution. Ensure that `current_req` is checked before each use to prevent null pointer dereference.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/0db895361b8a82e1114372ff9f4857abea605701
+    category: security
+    cwe:
+    - CWE-476
+    owasp: A9:2021-Security Misconfiguration
+    technology:
+    - c
+- id: vuln-qemu-0e68373c
+  pattern: "if (!num_sge) {\n    ...\n    complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_NO_SGE, ctx);\n}\n"
+  pattern-not: "if (!num_sge || num_sge > MAX_SGE) {\n    ...\n    complete_work(IBV_WC_GENERAL_ERR, VENDOR_ERR_INV_NUM_SGE,\
+    \ ctx);\n}\n"
+  languages:
+  - c
+  message: 'The code checks for zero `num_sge` but fails to check for an upper bound, which could lead to buffer overflows
+    or other undefined behavior. This vulnerability was fixed by adding a check against `MAX_SGE`. To fix this, ensure that
+    `num_sge` is validated against both zero and a maximum allowed value.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/0e68373cc2b3a063ce067bc0cc3edaf370752890
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-1328fe0c
+  pattern: '$NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];
+
+    ...
+
+    $END_ADDR = $ISO_TD.be;
+
+    '
+  pattern-not: "if ($RELATIVE_FRAME_NUMBER < $FRAME_COUNT) {\n    $NEXT = $ISO_TD.offset[$RELATIVE_FRAME_NUMBER + 1];\n} else\
+    \ {\n    $NEXT = $ISO_TD.be;\n}\n...\n$END_ADDR = $NEXT;\n"
+  languages:
+  - c
+  message: 'Detected a potential out-of-bounds array access vulnerability in USB OHCI driver. The code directly accesses `iso_td.offset`
+    without checking if `relative_frame_number + 1` is within bounds. This could lead to memory corruption or crashes. The
+    fix adds bounds checking and uses a fallback value when the index is out of bounds. Always validate array indices before
+    accessing them.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/1328fe0c32d5474604105b8105310e944976b058
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    technology:
+    - c
+- id: vuln-qemu-156a2e4d
+  pattern: 'uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP;
+
+    ...
+
+    return 0;
+
+    '
+  pattern-not: 'uint32_t $I, $LEN, $PID, $DIR, $DEVADDR, $ENDP, $XFERS = 0;
+
+    ...
+
+    $XFERS++;
+
+    return $XFERS ? 0 : -1;
+
+    '
+  languages:
+  - c
+  message: 'The function returns 0 unconditionally without tracking the number of transfers, which can lead to incorrect handling
+    of USB transactions. This could result in data corruption or loss. The fix introduces a counter variable `xfers` to track
+    the number of transfers and returns -1 if no transfers occur, ensuring proper error handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/156a2e4dbffa85997636a7a39ef12da6f1b40254
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp:
+    - A10:2021 - Server-Side Request Forgery
+    references:
+    - https://cwe.mitre.org/data/definitions/252.html
+    technology:
+    - c
+- id: vuln-qemu-1ab95af0
+  pattern: 'return get_drv($FDCTRL, $FDCTRL->cur_drv);
+
+    '
+  pattern-not: "$CUR_DRV = get_drv($FDCTRL, $FDCTRL->cur_drv);\nif (!$CUR_DRV->blk) {\n  $CUR_DRV->blk = blk_create_empty_drive();\n\
+    }\nreturn $CUR_DRV;\n"
+  languages:
+  - c
+  message: 'Potential NULL pointer dereference vulnerability detected. The function returns a pointer from `get_drv` without
+    checking if the returned `blk` field is NULL. This can lead to a NULL dereference when the BlockBackend API is used. To
+    fix this, ensure that the `blk` field is initialized with a valid BlockBackend or create an anonymous one if it is NULL.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/1ab95af033a419e7a64e2d58e67dd96b20af5233
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-2067d39e
+  pattern: "if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {\n    return $RETURN;\n}\n"
+  pattern-not: "if ($ADDR + $SIZE > NVME_CMBSZ_GETSIZE($N->bar.cmbsz)) {\n    return;\n}\n"
+  languages:
+  - c
+  message: "Detected a potential buffer overflow vulnerability due to missing bounds checking. \nThis can lead to memory corruption\
+    \ or unauthorized access to memory regions. \nEnsure proper bounds checking is implemented before accessing memory.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/2067d39e5e53b053bece6fa15711640123c119ed
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-qemu-23910d3f
+  pattern: "struct gpe_regs {\n    uint16_t sts;\n    uint16_t en;\n};\n...\nstruct gpe_regs gpe;\n...\nregister_ioport_write(GPE_BASE,\
+    \ 4, 1, gpe_writeb, s);\nregister_ioport_read(GPE_BASE, 4, 1, gpe_readb, s);\n"
+  pattern-not: "struct ACPIGPE {\n    uint8_t *sts;\n    uint8_t *en;\n    uint32_t blk;\n    uint8_t len;\n};\n...\nACPIGPE\
+    \ gpe;\n...\nacpi_gpe_init(&gpe, GPE_LEN);\nregister_ioport_write(GPE_BASE, GPE_LEN, 1, gpe_writeb, s);\nregister_ioport_read(GPE_BASE,\
+    \ GPE_LEN, 1, gpe_readb, s);\n"
+  languages:
+  - c
+  message: 'The code uses a fixed-size struct for GPE registers, which can lead to buffer overflows or underflows. The vulnerability
+    arises because the struct size is hardcoded and not dynamically allocated based on the actual GPE length. This can be
+    exploited to read or write outside the intended memory bounds. The fix involves using dynamically allocated arrays for
+    GPE status and enable registers, initialized based on the GPE length. Always ensure that memory allocation matches the
+    actual size requirements.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/23910d3f669d46073b403876e30a7314599633af
+    category: security
+    cwe:
+    - CWE-119
+    - CWE-120
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/119.html
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-qemu-26194a58
+  pattern: '$NC->info->receive($NC, $BUF, $SIZE)
+
+    '
+  pattern-not: 'qemu_receive_packet($NC, $BUF, $SIZE)
+
+    '
+  languages:
+  - c
+  message: 'Direct use of network interface''s receive function can lead to security vulnerabilities. Use the safer qemu_receive_packet()
+    function instead, which properly handles packet reception with necessary security checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/26194a58f4eb83c5bdf4061a1628508084450ba1
+    category: security
+    cwe:
+    - CWE-676
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-27461d69
+  pattern: "if (kvmppc_get_host_model(&$VAR)) {\n    _FDT(fdt_setprop_string($FDT, 0, \"host-model\", $VAR));\n    g_free($VAR);\n\
+    }\nif (kvmppc_get_host_serial(&$VAR)) {\n    _FDT(fdt_setprop_string($FDT, 0, \"host-serial\", $VAR));\n    g_free($VAR);\n\
+    }\n"
+  pattern-not: "if ($SPAPR->host_model && !g_str_equal($SPAPR->host_model, \"none\")) {\n    if (g_str_equal($SPAPR->host_model,\
+    \ \"passthrough\")) {\n        if (kvmppc_get_host_model(&$VAR)) {\n            _FDT(fdt_setprop_string($FDT, 0, \"host-model\"\
+    , $VAR));\n            g_free($VAR);\n        }\n    } else {\n        _FDT(fdt_setprop_string($FDT, 0, \"host-model\"\
+    , $SPAPR->host_model));\n    }\n}\nif ($SPAPR->host_serial && !g_str_equal($SPAPR->host_serial, \"none\")) {\n    if (g_str_equal($SPAPR->host_serial,\
+    \ \"passthrough\")) {\n        if (kvmppc_get_host_serial(&$VAR)) {\n            _FDT(fdt_setprop_string($FDT, 0, \"host-serial\"\
+    , $VAR));\n            g_free($VAR);\n        }\n    } else {\n        _FDT(fdt_setprop_string($FDT, 0, \"host-serial\"\
+    , $SPAPR->host_serial));\n    }\n}\n"
+  languages:
+  - c
+  message: 'The code directly uses `kvmppc_get_host_model` and `kvmppc_get_host_serial` without checking if the host model
+    or serial is set to "none" or "passthrough". This can lead to unintended exposure of host information. Always validate
+    the host model and serial before setting them in the device tree.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/27461d69a0f108dea756419251acc3ea65198f1b
+    category: security
+    cwe:
+    - CWE-200
+    owasp: A2:2017-Broken Authentication
+    references:
+    - https://cwe.mitre.org/data/definitions/200.html
+    technology:
+    - c
+- id: vuln-qemu-2f5732e9
+  pattern: "if ($CONFIG_LEN != $VDEV->config_len) {\n    $ERROR_REPORT(...);\n    return -1;\n}\nqemu_get_buffer($F, $VDEV->config,\
+    \ $VDEV->config_len);\n"
+  pattern-not: "qemu_get_buffer($F, $VDEV->config, MIN($CONFIG_LEN, $VDEV->config_len));\nwhile ($CONFIG_LEN > $VDEV->config_len)\
+    \ {\n    qemu_get_byte($F);\n    $CONFIG_LEN--;\n}\n"
+  languages:
+  - c
+  message: 'The code directly uses the device''s config length without validating the incoming config length, which can lead
+    to buffer overflows or underflows. This is dangerous because it can result in memory corruption or information disclosure.
+    The fix involves using MIN to ensure only the valid portion of the config is read and skipping any excess bytes.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/2f5732e9648fcddc8759a8fd25c0b41a38352be6
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-2fdb42d8
+  pattern: 'usb_packet_map($PACKET, $SGL);
+
+    '
+  pattern-not: "if (usb_packet_map($PACKET, $SGL)) {\n  qemu_sglist_destroy($SGL);\n  return -1;\n}\n"
+  languages:
+  - c
+  message: 'Missing error handling for `usb_packet_map` function call. This can lead to resource leaks or undefined behavior
+    if the function fails. Always check the return value of `usb_packet_map` and handle errors appropriately by destroying
+    the scatter-gather list and returning an error code.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/2fdb42d840400d58f2e706ecca82c142b97bcbd6
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp: 'A9: Security Misconfiguration'
+    references:
+    - https://cwe.mitre.org/data/definitions/252.html
+    technology:
+    - c
+- id: vuln-qemu-2fe76055
+  pattern: "for ($I = 0; $I < VIRTIO_GPU_MAX_SCANOUT; $I++) {\n  ...\n}\n"
+  pattern-not: "for ($I = 0; $I < $G->conf.max_outputs; $I++) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code uses a hardcoded constant `VIRTIO_GPU_MAX_SCANOUT` instead of the device''s configured maximum outputs,
+    which could lead to out-of-bounds access. Always use `g->conf.max_outputs` to ensure proper bounds checking.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/2fe760554eb3769d70f608a158474f728ba45ba6
+    category: security
+    cwe:
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-3592fe0c
+  pattern: "if ($S->divider == 0) {\n  ...\n}\n"
+  pattern-not: "if ($S->divider == 0 || $S->divider > $S->baudbase) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks only if the divider is zero, but does not validate if the divider exceeds the baudbase. This can
+    lead to invalid baud rate settings, potentially causing undefined behavior or security vulnerabilities. To fix this, ensure
+    the divider is within the valid range by adding a check for `s->divider > s->baudbase`.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/3592fe0c919cf27a81d8e9f9b4f269553418bb01
+    category: security
+    cwe:
+    - CWE-682
+    technology:
+    - c
+- id: vuln-qemu-362786f1
+  pattern: "if ($PLEN < $CSUM_OFFSET + 2) {\n    return;\n}\n"
+  pattern-not: "if ($PLEN < $CSUM_OFFSET + 2 || 14 + $HLEN + $PLEN > $LENGTH) {\n    return;\n}\n"
+  languages:
+  - c
+  message: 'Insufficient validation of packet length can lead to buffer overflow vulnerabilities.
+
+    The original code only checks if the payload length is sufficient for the checksum offset,
+
+    but fails to verify if the entire packet including headers fits within the buffer.
+
+    This can be exploited by crafting malicious packets that overflow the buffer.
+
+    Fixed by adding a check for the total packet length including headers.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/362786f14a753d8a5256ef97d7c10ed576d6572b
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-36a894ae
+  pattern: const MemTxAttrs $ATTRS = MEMTXATTRS_UNSPECIFIED;
+  pattern-not: const MemTxAttrs $ATTRS = { .memory = true };
+  languages:
+  - c
+  message: "The use of MEMTXATTRS_UNSPECIFIED can lead to undefined behavior or security vulnerabilities \nas it does not\
+    \ explicitly set the memory attributes. This can result in incorrect memory \nhandling, potentially leading to memory\
+    \ corruption or unauthorized access. To fix this, \nexplicitly set the memory attributes using `{ .memory = true }`.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/36a894aeb64a2e02871016da1c37d4a4ca109182
+    category: security
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    technology:
+    - c
+- id: vuln-qemu-37cee017
+  pattern: 'lan9118_receive(qemu_get_queue($NIC), $DATA, $LEN);
+
+    '
+  pattern-not: 'qemu_receive_packet(qemu_get_queue($NIC), $DATA, $LEN);
+
+    '
+  languages:
+  - c
+  message: 'Detected use of deprecated lan9118_receive function instead of qemu_receive_packet.
+
+    This could lead to incorrect packet handling or security vulnerabilities.
+
+    Replace lan9118_receive with qemu_receive_packet for proper packet processing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/37cee01784ff0df13e5209517e1b3594a5e792d1
+    category: security
+    cwe:
+    - 'CWE-1104: Use of Unmaintained Third Party Components'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-3a9163af
+  pattern: "$VAR->state = $STATE;\n$VAR->data_start = $ADDR;\n$VAR->data_offset = 0;\nif ($VAR->data_start + $VAR->blk_len\
+    \ > $VAR->size) {\n    $VAR->card_status |= $ERROR;\n}\n"
+  pattern-not: "if ($ADDR + $VAR->blk_len > $VAR->size) {\n    $VAR->card_status |= $ERROR;\n    return $RET;\n}\n$VAR->state\
+    \ = $STATE;\n$VAR->data_start = $ADDR;\n$VAR->data_offset = 0;\n"
+  languages:
+  - c
+  message: 'Potential out-of-bounds access vulnerability detected. The code checks the bounds after setting the state and
+    data pointers, which could lead to accessing invalid memory if the bounds check fails. This should be fixed by performing
+    the bounds check before setting any state or data pointers and returning early if the check fails.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/3a9163af4e3dd61795a35d47b702e302f98f81d6
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-qemu-3b3b0628
+  pattern: "if ($VAR >= $MAX_SIZE) {\n  error_report(\"Too many write descriptors in indirect table\");\n  exit(1);\n}\n"
+  pattern-not: "if ($VAR == $MAX_SIZE) {\n  error_report(\"virtio: too many write descriptors in indirect table\");\n  exit(1);\n\
+    }\n"
+  languages:
+  - c
+  message: 'The vulnerability involves improper handling of descriptor counts in the virtio implementation, which can lead
+    to buffer overflows or incorrect memory access. The original code did not properly check the number of descriptors, potentially
+    allowing too many descriptors to be processed. This can lead to memory corruption or crashes. The fix ensures that the
+    number of descriptors is correctly validated before processing. Always ensure proper bounds checking when handling descriptor
+    counts in virtio implementations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/3b3b0628217e2726069990ff9942a5d6d9816bd7
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-qemu-4154c7e0
+  pattern: 'return $CORE->mac[$R->dh] == $CORE->mac[$R->dt];
+
+    '
+  pattern-not: "return $CORE->mac[$R->dh] == $CORE->mac[$R->dt] ||\n          $CORE->mac[$R->dt] >= $CORE->mac[$R->dlen] /\
+    \ $E1000_RING_DESC_LEN;\n"
+  languages:
+  - c
+  message: 'Incomplete bounds check in e1000e network device emulation. The code only checks if two MAC addresses are equal
+    but fails to verify if the destination address is within valid bounds. This could lead to out-of-bounds memory access.
+    The fix adds an additional check to ensure the destination address is within the allowed range.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/4154c7e03fa55b4cf52509a83d50d6c09d743b77
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp: A1:2017-Injection
+    technology:
+    - c
+- id: vuln-qemu-4299b90e
+  pattern: "static void cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {\n  ...\n}\n"
+  pattern-not: "static int cirrus_do_copy($TYPE *$VAR, int $DST, int $SRC, int $W, int $H) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function `cirrus_do_copy` was previously declared as `void` and did not return any value, which could lead
+    to undefined behavior or security vulnerabilities when handling invalid parameters. The function should return an integer
+    to indicate success or failure, especially when checking for invalid conditions like zero depth or pitch. Update the function
+    to return an integer and handle error conditions appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/4299b90e9ba9ce5ca9024572804ba751aa1a7e70
+    category: security
+    cwe:
+    - CWE-252
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-4367a20c
+  pattern: '$REQ->req = NULL;
+
+    '
+  pattern-not: '$REQ = NULL;
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential use-after-free vulnerability due to incorrect nullification of a pointer.
+
+    This pattern matches the unsafe practice of only nullifying a pointer''s member instead of the pointer itself,
+
+    which can lead to use-after-free conditions. To fix this, ensure the entire pointer is set to NULL.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/4367a20cc442c56b05611b4224de9a61908f9eac
+    category: security
+    cwe:
+    - CWE-416
+    - CWE-825
+    owasp: A9:2021-Security Logging and Monitoring Failures
+    technology:
+    - c
+- id: vuln-qemu-505597e4
+  pattern: "if (PCI_SLOT($DEV->devfn) == $SLOT) {\n  ...\n}\n"
+  pattern-not: "$INFO = container_of($QDEV->info, PCIDeviceInfo, qdev);\nif (PCI_SLOT($DEV->devfn) == $SLOT && !$INFO->no_hotplug)\
+    \ {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Missing hotplug check in PCI device handling. This vulnerability could allow unauthorized hotplugging of devices,
+    potentially leading to security issues or system instability. The fix adds a check for the ''no_hotplug'' flag in the
+    PCIDeviceInfo structure before allowing the operation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/505597e4476a6bc219d0ec1362b760d71cb4fdca
+    category: security
+    cwe:
+    - CWE-862
+    owasp:
+    - A05:2021-Security Misconfiguration
+    technology:
+    - c
+- id: vuln-qemu-50628d34
+  pattern: "void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {\n    ...\n   \
+    \ $COPY_FUNC($CON, $SRC_X, $SRC_Y, $DST_X, $DST_Y, $W, $H);\n    ...\n}\n"
+  pattern-not: "void $FUNC(QemuConsole *$CON, int $SRC_X, int $SRC_Y, int $DST_X, int $DST_Y, int $W, int $H) {\n    ...\n\
+    \    dpy_gfx_update($CON, $DST_X, $DST_Y, $W, $H);\n    ...\n}\n"
+  languages:
+  - c
+  message: 'Found use of deprecated copy function instead of update function. The copy operation
+
+    can lead to security vulnerabilities if not properly synchronized with display updates.
+
+    Replace with dpy_gfx_update() to ensure proper display synchronization and avoid
+
+    potential race conditions.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/50628d3479e4f9aa97e323506856e394fe7ad7a6
+    category: security
+    cwe:
+    - CWE-362
+    technology:
+    - c
+- id: vuln-qemu-509f57c9
+  pattern: 'pvrdma_ring_free($RING);
+
+    rdma_pci_dma_unmap(PCI_DEVICE($DEV), --$RING->ring_state, TARGET_PAGE_SIZE);
+
+    g_free($RING);
+
+    '
+  pattern-not: 'pvrdma_ring_free($RING);
+
+    rdma_pci_dma_unmap($RING->dev, --$RING->ring_state, TARGET_PAGE_SIZE);
+
+    g_free($RING);
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves incorrect device reference in the `rdma_pci_dma_unmap` function call, which could lead
+    to improper DMA unmapping and potential memory corruption. The issue was fixed by using the correct device reference from
+    the ring structure. Ensure that the correct device reference is passed to `rdma_pci_dma_unmap` to avoid such issues.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/509f57c98e7536905bb4902363d0cba66ce7e089
+    category: security
+    cwe:
+    - CWE-416
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-5311fb80
+  pattern: 'rtl8139_do_receive(qemu_get_queue($NIC), $BUF, $SIZE, $DO_INTERRUPT);
+
+    '
+  pattern-not: 'qemu_receive_packet(qemu_get_queue($NIC), $BUF, $SIZE);
+
+    '
+  languages:
+  - c
+  message: 'Detected use of the vulnerable rtl8139_do_receive function which may lead to improper packet handling. This function
+    has been replaced by qemu_receive_packet to ensure correct packet processing and avoid potential security issues. Replace
+    rtl8139_do_receive with qemu_receive_packet to fix this vulnerability.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/5311fb805a4403bba024e83886fa0e7572265de4
+    category: security
+    cwe:
+    - CWE-119
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-56f101ec
+  pattern: "err = v9fs_co_name_to_path(pdu, &dpath, wnames[name_idx].data, &path);\nif (err < 0) {\n    goto out;\n}\nerr\
+    \ = v9fs_co_lstat(pdu, &path, &stbuf);\nif (err < 0) {\n    goto out;\n}\nstat_to_qid(&stbuf, &qids[name_idx]);\nv9fs_path_copy(&dpath,\
+    \ &path);\n"
+  pattern-not: "if (not_same_qid(&pdu->s->root_qid, &qid) ||\n    strcmp(\"..\", wnames[name_idx].data)) {\n    err = v9fs_co_name_to_path(pdu,\
+    \ &dpath, wnames[name_idx].data,\n                             &path);\n    if (err < 0) {\n        goto out;\n    }\n\
+    \    err = v9fs_co_lstat(pdu, &path, &stbuf);\n    if (err < 0) {\n        goto out;\n    }\n    stat_to_qid(&stbuf, &qid);\n\
+    \    v9fs_path_copy(&dpath, &path);\n    memcpy(&qids[name_idx], &qid, sizeof(qid));\n}\n"
+  languages:
+  - c
+  message: 'The vulnerability arises from directly copying QID (Qualified Identifier) without verifying if it matches the
+    root QID or if the path is "..". This could lead to incorrect directory traversal or access to unintended files. The fix
+    introduces a check using `not_same_qid` and `strcmp` to ensure proper validation before proceeding with operations. This
+    prevents potential security issues related to unauthorized access or directory traversal.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/56f101ecce0eafd09e2daf1c4eeb1377d6959261
+    category: security
+    cwe:
+    - CWE-22
+    - CWE-285
+    owasp: A1:2017-Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/22.html
+    - https://cwe.mitre.org/data/definitions/285.html
+    technology:
+    - c
+- id: vuln-qemu-584acf34
+  pattern: "if ($DST_BITS >= $END ||\n    $DST_BITS + $S->regs.dst_x + ($S->regs.dst_y + $S->regs.dst_height) * $DST_STRIDE\
+    \ >= $END) {\n  ...\n}\n"
+  pattern-not: "if ($DST_BITS >= $END || $DST_BITS + $DST_X + ($DST_Y + $S->regs.dst_height) * $DST_STRIDE >= $END) {\n  ...\n\
+    }\n"
+  languages:
+  - c
+  message: 'The code directly uses `s->regs.dst_x` and `s->regs.dst_y` without considering the direction flags, which could
+    lead to incorrect memory access. This vulnerability can cause memory corruption or out-of-bounds access. The fix involves
+    calculating `dst_x` and `dst_y` based on the direction flags (`DST_X_LEFT_TO_RIGHT` and `DST_Y_TOP_TO_BOTTOM`). Always
+    ensure that coordinates are correctly calculated based on the direction flags before use.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/584acf34cb05f16e13a46d666196a7583d232616
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    - https://cwe.mitre.org/data/definitions/787.html
+    technology:
+    - c
+- id: vuln-qemu-5b66d7ae
+  pattern: 'int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH;
+
+    int32_t max = $ADDR + $BLT_WIDTH;
+
+    if (min < 0 || max > $VRAM_SIZE) { ... }
+
+    '
+  pattern-not: 'int64_t min = $ADDR + ((int64_t)$BLT_HEIGHT - 1) * $PITCH - $BLT_WIDTH;
+
+    if (min < -1 || $ADDR >= $VRAM_SIZE) { ... }
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential integer overflow vulnerability in memory boundary checks.
+
+    The original code fails to account for the full range of possible memory addresses,
+
+    which could lead to out-of-bounds memory access. The fixed version correctly
+
+    calculates the minimum address and checks for valid bounds.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/5b66d7ae89411c01657ebfe76b9a8be346a4b1be
+    category: security
+    cwe:
+    - CWE-190
+    - CWE-787
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-5c4fe018
+  pattern: 'assert($LEN < 4096);
+
+    '
+  pattern-not: 'assert($LEN < NBD_MAX_STRING_SIZE);
+
+    '
+  languages:
+  - c
+  message: "Detected a potentially unsafe assertion that checks if a length is less than 4096. \nThis could lead to buffer\
+    \ overflows or other security issues if the length exceeds the expected limit. \nUse a defined constant like NBD_MAX_STRING_SIZE\
+    \ instead of a hardcoded value to ensure consistency and safety.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/5c4fe018c025740fef4a0a4421e8162db0c3eefd
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-129
+    owasp:
+    - 'A2: Broken Authentication'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/129.html
+    technology:
+    - c
+- id: vuln-qemu-5d971f9e
+  pattern: "if (!mr->ops->valid.accepts) {\n    return true;\n}\n...\n$ACCESS_SIZE_MIN = mr->ops->valid.min_access_size;\n\
+    if (!mr->ops->valid.min_access_size) {\n    $ACCESS_SIZE_MIN = 1;\n}\n$ACCESS_SIZE_MAX = mr->ops->valid.max_access_size;\n\
+    if (!mr->ops->valid.max_access_size) {\n    $ACCESS_SIZE_MAX = 4;\n}\n$ACCESS_SIZE = MAX(MIN(size, $ACCESS_SIZE_MAX),\
+    \ $ACCESS_SIZE_MIN);\nfor ($I = 0; $I < size; $I += $ACCESS_SIZE) {\n    if (!mr->ops->valid.accepts(mr->opaque, addr\
+    \ + $I, $ACCESS_SIZE, is_write, attrs)) {\n        return false;\n    }\n}\n"
+  pattern-not: "if (size > mr->ops->valid.max_access_size\n    || size < mr->ops->valid.min_access_size) {\n    return false;\n\
+    }\n"
+  languages:
+  - c
+  message: 'Found a potential memory access validation vulnerability. The code was not properly validating
+
+    memory access sizes and alignment, which could lead to security issues. The fix ensures proper
+
+    validation of access sizes against minimum and maximum allowed values. Update your code to
+
+    directly validate the size parameter against the min and max access size limits.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/5d971f9e672507210e77d020d89e0e89165c8fc9
+    category: security
+    cwe:
+    - CWE-119
+    owasp: 'A1: Injection'
+    references:
+    - https://git.qemu.org/?p=qemu.git;a=commit;h=5d971f9e672507210e77d020d89e0e89165c8fc9
+    technology:
+    - c
+- id: vuln-qemu-5f5a1318
+  pattern: "if ($ADDR > ($CONFIG_LEN - sizeof($VAL))) {\n  ...\n}\n"
+  pattern-not: "if ($ADDR + sizeof($VAL) > $CONFIG_LEN) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected unsafe bounds check using subtraction. This pattern is vulnerable to integer overflow when $ADDR is large.
+    Use addition-based bounds checking instead, as shown in the pattern-not example, to prevent potential buffer overflows
+    or out-of-bounds memory access.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/5f5a1318653c08e435cfa52f60b6a712815b659d
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp: 'A1: Injection'
+    references:
+    - https://wiki.sei.cmu.edu/confluence/display/c/INT32-C.+Ensure+that+operations+on+signed+integers+do+not+result+in+overflow
+    technology:
+    - c
+- id: vuln-qemu-5fd7fc8d
+  pattern: '$BUFSIZE = $SIZE;
+
+    $BUF = g_malloc($BUFSIZE);
+
+    '
+  pattern-not: "$SURFACE_SIZE = (uint64_t) surface_width($DS) * surface_height($DS) * 4;\nassert($SURFACE_SIZE > 0);\nassert($SURFACE_SIZE\
+    \ < INT_MAX);\nif ($BUFSIZE < $SURFACE_SIZE) {\n  $BUFSIZE = $SURFACE_SIZE;\n  g_free($BUF);\n  $BUF = g_malloc($BUFSIZE);\n\
+    }\n"
+  languages:
+  - c
+  message: "Detected a potential integer overflow vulnerability due to missing bounds checking before memory allocation. \n\
+    The code allocates a buffer without verifying that the size is within safe limits, which could lead to memory corruption\
+    \ or denial of service.\nTo fix this, ensure the size is validated against a maximum limit (e.g., INT_MAX) and resized\
+    \ appropriately before allocation.\n"
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/qemu/qemu/commit/5fd7fc8db92adea953ecf5917168989a28e8871f
+    category: security
+    cwe:
+    - CWE-190
+    owasp: 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-qemu-66ae37d8
+  pattern: '$VAR = g_malloc($SIZE * sizeof(void *))
+
+    '
+  pattern-not: '$VAR = g_malloc0($SIZE * sizeof(void *))
+
+    '
+  languages:
+  - c
+  message: "The use of 'g_malloc' without zeroing the allocated memory can lead to information disclosure vulnerabilities.\
+    \ \nThe patch replaces 'g_malloc' with 'g_malloc0' to ensure the memory is zero-initialized, preventing potential leaks\
+    \ of sensitive data. \nAlways use 'g_malloc0' when allocating memory that may contain sensitive information.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/66ae37d8cc313f89272e711174a846a229bcdbd3
+    category: security
+    cwe:
+    - CWE-200
+    owasp:
+    - A01:2021-Broken Access Control
+    technology:
+    - c
+- id: vuln-qemu-6c219fc8
+  pattern: '$TYPE $PAGE_LEN;
+
+    ...
+
+    $PAGE_LEN = $BUF[3];
+
+    $BUF[$PAGE_LEN + 4] = $VALUE;
+
+    $BUF[3] = ++$PAGE_LEN;
+
+    '
+  pattern-not: "for ($IDX = $EXPR; $IDX > $NUM && $BUF[$IDX - 1] >= $VALUE; $IDX--) {\n  if ($IDX < $BUFLEN) {\n    $BUF[$IDX]\
+    \ = $BUF[$IDX - 1];\n  }\n}\n$BUF[$IDX] = $VALUE;\nstw_be_p($BUF + $NUM, lduw_be_p($BUF + $NUM) + 1);\n"
+  languages:
+  - c
+  message: 'The code directly inserts a value into a buffer without proper bounds checking or sorting, which can lead to buffer
+    overflows or incorrect ordering of VPD pages. This is dangerous because it can cause memory corruption or misinterpretation
+    of device responses. The fix involves using a sorted insertion algorithm to ensure proper ordering and bounds checking.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/6c219fc8a112fc69b29f59ea2c7865717ff6e3e0
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-qemu-6e86d903
+  pattern: "if (($VAR->trnmod & $MASK) &&\n    (!($VAR->trnmod & $BLK_CNT_EN) || $VAR->blkcnt == 0)) {\n    ...\n}\n"
+  pattern-not: "if (!($VAR->trnmod & $BLK_CNT_EN) || !$VAR->blkcnt) {\n    qemu_log_mask(LOG_UNIMP, \"infinite transfer is\
+    \ not supported\\n\");\n    return;\n}\n"
+  languages:
+  - c
+  message: 'The code fails to properly handle infinite transfer conditions in SDHCI controller,
+
+    which could lead to potential security vulnerabilities. The patch adds a check
+
+    to explicitly prevent infinite transfers by verifying block count enablement
+
+    and non-zero block count. To fix this, ensure proper validation of transfer
+
+    parameters before processing data transfers.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/6e86d90352adf6cb08295255220295cf23c4286e
+    category: security
+    cwe:
+    - 'CWE-835: Loop with Unreachable Exit Condition (''Infinite Loop'')'
+    technology:
+    - c
+- id: vuln-qemu-73d963c0
+  pattern: 'qemu_get_be32s($F, &$OPP->nb_cpus);
+
+    ...
+
+    '
+  pattern-not: "qemu_get_be32s($F, &$NB_CPUS);\nif ($OPP->nb_cpus != $NB_CPUS) {\n    return -EINVAL;\n}\nassert($NB_CPUS\
+    \ > 0 && $NB_CPUS <= $MAX_CPU);\nif ($OPP->nb_cpus > $MAX_CPU) {\n    error_set($ERRP, $QERR_PROPERTY_VALUE_OUT_OF_RANGE,\n\
+    \              $TYPE_OPENPIC, \"nb_cpus\", (uint64_t)$OPP->nb_cpus,\n              (uint64_t)0, (uint64_t)$MAX_CPU);\n\
+    \    return;\n}\n"
+  languages:
+  - c
+  message: 'The code directly assigns the number of CPUs to the OpenPIC structure without validation.
+
+    This could lead to incorrect or potentially dangerous behavior if the number of CPUs is out of bounds.
+
+    To fix this, validate the number of CPUs against expected bounds and handle errors appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/73d963c0a75cb99c6aaa3f6f25e427aa0b35a02e
+    category: security
+    cwe:
+    - CWE-20
+    owasp: A9:2017-Using Components with Known Vulnerabilities
+    technology:
+    - c
+- id: vuln-qemu-7564bf77
+  pattern: 'g_assert_not_reached();
+
+    '
+  pattern-not: 'qemu_log_mask(LOG_UNIMP, $MSG, $FUNC, $L3_PROTO);
+
+    '
+  languages:
+  - c
+  message: 'The use of `g_assert_not_reached()` in network handling code can lead to abrupt termination of the program when
+    encountering unsupported offloads. This is dangerous as it can be exploited to cause denial of service. Instead, use `qemu_log_mask()`
+    to log the event and handle it gracefully.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/qemu/qemu/commit/7564bf7701f00214cdc8a678a9f7df765244def1
+    category: security
+    cwe:
+    - 'CWE-248: Uncaught Exception'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-77668e4b
+  pattern: 'len = MIN(fifo8_num_used(&$S->fifo), $ESP_FIFO_SZ);
+
+    '
+  pattern-not: 'len = MIN($S->async_len, $ESP_FIFO_SZ);
+
+    len = MIN(len, fifo8_num_used(&$S->fifo));
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability occurs due to incorrect order of MIN function arguments, which can lead to buffer overflow.
+    The original code uses `fifo8_num_used(&s->fifo)` as the first argument, which may return a larger value than `s->async_len`.
+    This can cause the buffer to be overrun. The fix ensures that `s->async_len` is used as the first argument, followed by
+    `fifo8_num_used(&s->fifo)` to prevent overflow.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/77668e4b9bca03a856c27ba899a2513ddf52bb52
+    category: security
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input (''Classic Buffer Overflow'')'
+    technology:
+    - c
+- id: vuln-qemu-78820803
+  pattern: 'memcpy($VAR.in_sg[0].iov_base, $BUF, $LEN);
+
+    '
+  pattern-not: 'iov_from_buf($VAR.in_sg, $VAR.in_num, 0, $BUF, $LEN);
+
+    '
+  languages:
+  - c
+  message: 'Direct use of `memcpy` with `iov_base` can lead to buffer overflow vulnerabilities if the buffer size is not properly
+    checked. This is dangerous because it can result in memory corruption, potentially allowing for arbitrary code execution
+    or crashes. The fix is to use `iov_from_buf` which properly handles the buffer size and avoids overflow.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/7882080388be5088e72c425b02223c02e6cb4295
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-qemu-7a95434e
+  pattern: "if (!strcmp($NAME, VIRTFS_META_DIR)) {\n  ...\n}\n"
+  pattern-not: "if (local_is_mapped_file_metadata($CTX, $NAME)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Direct comparison of file names with VIRTFS_META_DIR is vulnerable to path traversal attacks. Use the dedicated
+    local_is_mapped_file_metadata() function instead, which provides proper validation and security checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/7a95434e0ca8a037fd8aa1a2e2461f92585eb77b
+    category: security
+    cwe:
+    - CWE-22
+    owasp: A1:2017-Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/22.html
+    technology:
+    - c
+- id: vuln-qemu-7cfcc79b
+  pattern: "if ($BS && !($BS & ~0xff00) && $BS != $S->qdev.blocksize) {\n  ...\n}\n"
+  pattern-not: "if ($BS && !($BS & ~0xfe00) && $BS != $S->qdev.blocksize) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code incorrectly allows a block size of 256, which is below BDRV_SECTOR_SIZE and can lead to handling errors
+    in SCSI commands. This can cause security vulnerabilities or system crashes. The fix is to disallow block sizes of 256
+    by changing the bitmask from ~0xff00 to ~0xfe00.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/7cfcc79b0ab800959716738aff9419f53fc68c9c
+    category: security
+    cwe:
+    - CWE-120
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-7ec54f9e
+  pattern: 'uint8_t buf[$SIZE];
+
+    '
+  pattern-not: 'g_autofree uint8_t *buf = g_malloc($SIZE);
+
+    '
+  languages:
+  - c
+  message: 'Detected a potentially unsafe stack allocation of a variable-length array.
+
+    This can lead to stack overflow vulnerabilities if the size is controlled by an attacker.
+
+    Use dynamic memory allocation with `g_malloc` and `g_autofree` to safely handle variable-sized buffers.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/7ec54f9eb62b5d177e30eb8b1cad795a5f8d8986
+    category: security
+    cwe:
+    - 'CWE-121: Stack-based Buffer Overflow'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-7f61f469
+  pattern: "static int\n$FUNC(...) {\n    ...\n    if (($VAR1 > $MAX) || ($VAR2 > $MAX)) {\n        return -1;\n    }\n  \
+    \  ...\n}\n"
+  pattern-not: "static void\n$FUNC(...) {\n    ...\n    if (!$VAR1\n        || $VAR1 > $MAX\n        || !$VAR2\n        ||\
+    \ $VAR2 > $MAX) {\n    ...\n}\n"
+  languages:
+  - c
+  message: 'The function performs bounds checking on ring buffer sizes but fails to check for zero values, which could lead
+    to division by zero or other undefined behavior. The fix adds checks for zero values and changes the return type to void
+    since the function doesn''t need to return a value. Always validate both upper and lower bounds of critical parameters
+    and consider whether return values are actually needed.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/7f61f4690dd153be98900a2a508b88989e692753
+    category: security
+    cwe:
+    - 'CWE-369: Divide By Zero'
+    owasp: A1:2017-Injection
+    technology:
+    - c
+- id: vuln-qemu-80eecda8
+  pattern: 'return $DEV->dev.config->bConfigurationValue == $VALUE;
+
+    '
+  pattern-not: "return $DEV->dev.config ? \n        $DEV->dev.config->bConfigurationValue == $VALUE : 0;\n"
+  languages:
+  - c
+  message: "Detected a potential null pointer dereference in USB device configuration check. \nThis vulnerability occurs when\
+    \ accessing `bConfigurationValue` without checking if `config` is null, which could lead to a crash or undefined behavior.\
+    \ \nTo fix this, always check if `config` is null before accessing its members.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/80eecda8e5d09c442c24307f340840a5b70ea3b9
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - c
+- id: vuln-qemu-844505b1
+  pattern: "if ($DRIVE_KIND == IDE_CD) {\n    goto abort_cmd;\n}\n"
+  pattern-not: "if (!ide_cmd_permitted($S, $VAL)) {\n    goto abort_cmd;\n}\n"
+  languages:
+  - c
+  message: "The code contains a direct check for drive kind (IDE_CD) which can lead to incorrect command handling. \nThis\
+    \ vulnerability can cause incorrect command execution or denial of service. \nUse the `ide_cmd_permitted` function to\
+    \ properly validate commands based on the drive kind.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/844505b12e722d9ba7060480e766351fc6313501
+    category: security
+    cwe:
+    - CWE-284
+    owasp: 'A2: Broken Authentication'
+    references:
+    - ACS-2 T13/2015-D Table B.2 Command codes
+    technology:
+    - c
+- id: vuln-qemu-87e459a8
+  pattern: "SCSIRequest *$REQ;\n...\n$REQ = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);\nif (!$REQ) {\n  ...\n}\n...\nlen\
+    \ = scsi_req_enqueue($REQ);\n...\nscsi_req_continue($REQ);\n"
+  pattern-not: "$CMD->req = scsi_req_new($DEV, $INDEX, $LUN, $BUF, $CMD);\nif (!$CMD->req) {\n  ...\n}\n...\nlen = scsi_req_enqueue($CMD->req);\n\
+    ...\nscsi_req_continue($CMD->req);\n"
+  languages:
+  - c
+  message: 'Detected potential NULL pointer dereference vulnerability in SCSI request handling.
+
+    The original code creates a SCSIRequest pointer but doesn''t store it in the command structure,
+
+    which could lead to NULL pointer dereference if the request fails.
+
+    The fix stores the request in the command structure and checks it properly.
+
+    Always store and check the request in the command structure to prevent NULL pointer dereference.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/87e459a810d7b1ec1638085b5a80ea3d9b43119a
+    category: security
+    cwe:
+    - CWE-476
+    owasp: A9:2017-Using Components with Known Vulnerabilities
+    technology:
+    - c
+- id: vuln-qemu-8c552542
+  pattern: '$NC->info->receive_iov($NC, $IOV, $IOV_CNT)
+
+    '
+  pattern-not: 'qemu_receive_packet_iov($NC, $IOV, $IOV_CNT)
+
+    '
+  languages:
+  - c
+  message: 'Direct use of `nc->info->receive_iov` can lead to security vulnerabilities due to potential bypass of packet validation
+    and processing. This method should be replaced with `qemu_receive_packet_iov` which ensures proper packet handling and
+    validation. Always use the recommended API to maintain security and consistency in packet processing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/8c552542b81e56ff532dd27ec6e5328954bdda73
+    category: security
+    cwe:
+    - CWE-676
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://www.qemu.org/docs/master/system/net.html
+    technology:
+    - c
+- id: vuln-qemu-926cde5f
+  pattern: 'minlen = ($DMALEN < 32) ? $DMALEN : 32;
+
+    '
+  pattern-not: 'minlen = ($DMALEN < ESP_CMDBUF_SZ) ? $DMALEN : ESP_CMDBUF_SZ;
+
+    '
+  languages:
+  - c
+  message: 'This rule detects the use of a hardcoded buffer size (32) instead of the defined constant ESP_CMDBUF_SZ. This
+    can lead to buffer overflow vulnerabilities if the buffer size is smaller than expected. Always use the defined constant
+    ESP_CMDBUF_SZ to ensure the correct buffer size is used.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/926cde5f3e4d2504ed161ed0cb771ac7cad6fd11
+    category: security
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input (''Classic Buffer Overflow'')'
+    owasp:
+    - 'A2: Broken Authentication'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-qemu-9569f5cb
+  pattern: 'sizeof(uint32_t) * $CURSOR->header.width * $CURSOR->header.height
+
+    '
+  pattern-not: 'sizeof(uint32_t) * $C->width * $C->height
+
+    '
+  languages:
+  - c
+  message: 'Detected potential integer overflow vulnerability due to incorrect size calculation.
+
+    The size calculation uses header fields directly, which can lead to overflow if the
+
+    width and height values are large. Use the correct structure fields to avoid this issue.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/9569f5cb5b4bffa9d3ebc8ba7da1e03830a9a895
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-961c74a8
+  pattern: '$CMD->len = scsi_cdb_length($BUF);
+
+    '
+  pattern-not: "$LEN = scsi_cdb_length($BUF);\nif ($LEN < 0) {\n    return -1;\n}\n$CMD->len = $LEN;\n"
+  languages:
+  - c
+  message: "Direct assignment of scsi_cdb_length result without error checking can lead to security vulnerabilities. \nThe\
+    \ function scsi_cdb_length may return a negative value, which could cause undefined behavior or security issues when used\
+    \ without validation. \nAlways check the return value of scsi_cdb_length before assigning it to cmd->len.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/961c74a841ae6d2ef03f6684c9f74fbdf8f472b1
+    category: security
+    cwe:
+    - CWE-754
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/754.html
+    technology:
+    - c
+- id: vuln-qemu-965eb2fc
+  pattern: 'diff = int128_sub($SECTION->mr->size, int128_make64($ADDR));
+
+    *plen = int128_get64(int128_min(diff, int128_make64(*plen)));
+
+    '
+  pattern-not: "$MR = $SECTION->mr;\nif (memory_region_is_ram($MR)) {\n    diff = int128_sub($MR->size, int128_make64($ADDR));\n\
+    \    *plen = int128_get64(int128_min(diff, int128_make64(*plen)));\n}\n"
+  languages:
+  - c
+  message: 'Detected unsafe memory region size calculation without checking if the region is RAM.
+
+    This can lead to incorrect memory access and potential security vulnerabilities.
+
+    The fix involves checking if the memory region is RAM before performing the calculation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/965eb2fcdfe919ecced6c34803535ad32dc1249c
+    category: security
+    cwe:
+    - CWE-119
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - c
+- id: vuln-qemu-98f93ddd
+  pattern: '$BUF = g_malloc0($SIZE);
+
+    qemu_get_buffer($F, $BUF, $SIZE * $MULTIPLIER);
+
+    g_free($BUF);
+
+    '
+  pattern-not: "for ($I = 0; $I < (int64_t)$SIZE * $MULTIPLIER; ++$I) {\n  qemu_get_byte($F);\n}\n"
+  languages:
+  - c
+  message: 'Potential integer overflow vulnerability in buffer allocation and handling.
+
+    Multiplying $SIZE by $MULTIPLIER without proper size checking can lead to
+
+    integer overflow and buffer overflows. Use 64-bit math or explicit size checks
+
+    when calculating buffer sizes that involve multiplication.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/98f93ddd84800f207889491e0b5d851386b459cf
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-a71c775b
+  pattern: "if ($TYPE == TYPE_DISK && $CMD_BUF[2] == 0xb0) {\n  $MAX_TRANSFER = blk_get_max_transfer($BLK) / $BLOCKSIZE;\n\
+    \  assert($MAX_TRANSFER);\n  stl_be_p(&$BUF[8], $MAX_TRANSFER);\n  stl_be_p(&$BUF[12], MIN_NON_ZERO($MAX_TRANSFER, ldl_be_p(&$BUF[12])));\n\
+    }\n"
+  pattern-not: "if ($TYPE == TYPE_DISK && ($CMD_BUF[1] & 0x01)) {\n  $PAGE = $CMD_BUF[2];\n  if ($PAGE == 0xb0) {\n    $MAX_TRANSFER\
+    \ = blk_get_max_transfer($BLK) / $BLOCKSIZE;\n    assert($MAX_TRANSFER);\n    stl_be_p(&$BUF[8], $MAX_TRANSFER);\n   \
+    \ stl_be_p(&$BUF[12], MIN_NON_ZERO($MAX_TRANSFER, ldl_be_p(&$BUF[12])));\n  }\n}\n"
+  languages:
+  - c
+  message: 'The code directly checks for the VPD Block Limits page (0xb0) without verifying if the EVPD (Enable Vital Product
+    Data) bit is set in the SCSI command. This can lead to incorrect handling of SCSI commands and potential security issues.
+    The fix involves checking the EVPD bit before processing the VPD Block Limits page.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/qemu/qemu/commit/a71c775b24ebc664129eb1d9b4c360590353efd5
+    category: security
+    cwe:
+    - 'CWE-862: Missing Authorization'
+    owasp: A04:2021 - Insecure Design
+    technology:
+    - c
+- id: vuln-qemu-a7b20a8e
+  pattern: "if ($WS->wioc->rawoutput.offset < $MAX_BUFFER) {\n  ...\n}\n"
+  pattern-not: "if ($WS->wioc->encoutput.offset < $MAX_BUFFER) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected use of rawoutput buffer offset check instead of encoutput buffer offset check.
+
+    This vulnerability could lead to incorrect buffer size validation, potentially causing
+
+    buffer overflow or other security issues. The fix involves checking encoutput.offset
+
+    instead of rawoutput.offset to ensure proper buffer size validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/a7b20a8efa28e5f22c26c06cd06c2f12bc863493
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A2: Broken Authentication'
+    technology:
+    - c
+- id: vuln-qemu-a890a2f9
+  pattern: '$DEV->config_len = qemu_get_be32($F);
+
+    '
+  pattern-not: "$CONFIG_LEN = qemu_get_be32($F);\nif ($CONFIG_LEN != $DEV->config_len) {\n    error_report(\"Unexpected config\
+    \ length 0x%x. Expected 0x%zx\",\n                 $CONFIG_LEN, $DEV->config_len);\n    return -1;\n}\n"
+  languages:
+  - c
+  message: 'Detected a direct assignment of a configuration length without validation. This can lead to security vulnerabilities
+    where an attacker could provide a malicious configuration length, potentially causing memory corruption or other undefined
+    behavior. Always validate the configuration length against the expected value before assignment.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/a890a2f9137ac3cf5b607649e66a6f3a5512d8dc
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-a968a380
+  pattern: 'V9fsFidState *$FIDP, $HEAD_FID;
+
+    $HEAD_FID.next = $S->fid_list;
+
+    ...
+
+    $FIDP = &$HEAD_FID;
+
+    '
+  pattern-not: 'V9fsFidState *$FIDP;
+
+    again:
+
+    ...
+
+    goto again;
+
+    '
+  languages:
+  - c
+  message: 'The code initializes a local variable `head_fid` and assigns it to a pointer `fidp`, which can lead to use-after-free
+    or other memory corruption issues when `head_fid` goes out of scope. This is dangerous because it can cause undefined
+    behavior and potentially exploitable vulnerabilities. The fix removes the local variable and uses a `goto` statement to
+    handle the logic safely.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/a968a38005bf2568605cac7f86b9fba7fc089726
+    category: security
+    cwe:
+    - CWE-416
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-ac2071c3
+  pattern: "int $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?\n              $REG_DST_X : $REG_DST_X + 1 - $REG_DST_WIDTH);\n\
+    int $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?\n              $REG_DST_Y : $REG_DST_Y + 1 - $REG_DST_HEIGHT);\n"
+  pattern-not: "unsigned $DST_X = ($REG_DP_CNTL & $DST_X_LEFT_TO_RIGHT ?\n                   $REG_DST_X : $REG_DST_X + 1 -\
+    \ $REG_DST_WIDTH);\nunsigned $DST_Y = ($REG_DP_CNTL & $DST_Y_TOP_TO_BOTTOM ?\n                   $REG_DST_Y : $REG_DST_Y\
+    \ + 1 - $REG_DST_HEIGHT);\n"
+  languages:
+  - c
+  message: 'The use of signed integers for coordinates in display calculations can lead to integer overflow or underflow vulnerabilities.
+    This can result in incorrect memory access or buffer overflows. Use unsigned integers to prevent these issues.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/ac2071c3791b67fc7af78b8ceb320c01ca1b5df7
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-b05b2678
+  pattern: '$VAR = $STRUCT->edid_blob[$STRUCT->reg];
+
+    '
+  pattern-not: '$VAR = $STRUCT->edid_blob[$STRUCT->reg % sizeof($STRUCT->edid_blob)];
+
+    '
+  languages:
+  - c
+  message: 'Detected potential out-of-bounds array access. The array index is not bounded by the array size, which could lead
+    to memory corruption or information disclosure. To fix this, ensure the index is properly bounded using a modulo operation
+    with the array size.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/b05b267840515730dbf6753495d5b7bd8b04ad1c
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-b15a22bb
+  pattern: 'int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
+
+    int $DST_Y = $EXPR2 & 0xFFFF;
+
+    int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
+
+    int $HEIGHT = $EXPR4 & 0xFFFF;
+
+    '
+  pattern-not: 'unsigned int $DST_X = ($EXPR1 >> 16) & 0x01FFF;
+
+    unsigned int $DST_Y = $EXPR2 & 0xFFFF;
+
+    unsigned int $WIDTH = ($EXPR3 >> 16) & 0x1FFF;
+
+    unsigned int $HEIGHT = $EXPR4 & 0xFFFF;
+
+    '
+  languages:
+  - c
+  message: "Use of signed integers for coordinates and dimensions can lead to integer overflow vulnerabilities. \nSwitch to\
+    \ unsigned integers to prevent negative values and overflow issues.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/b15a22bbcbe6a78dc3d88fe3134985e4cdd87de4
+    category: security
+    cwe:
+    - CWE-190
+    owasp: A9:2017 - Using Components with Known Vulnerabilities
+    technology:
+    - c
+- id: vuln-qemu-b263d8f9
+  pattern: "if ($S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {\n  ...\n}\n"
+  pattern-not: "if (!$TIMEOUT && $S->blksize && ($S->cmdreg & $SDHC_CMD_DATA_PRESENT)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Missing timeout check in SDHCI command handling. This vulnerability could
+
+    lead to improper handling of commands when a timeout occurs, potentially
+
+    causing security issues or system instability. The fix adds a timeout check
+
+    to prevent execution of the command when a timeout has occurred.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/b263d8f928001b5cfa2a993ea43b7a5b3a1811e8
+    category: security
+    cwe:
+    - 'CWE-834: Excessive Iteration'
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-b53dd449
+  pattern: 'memory_region_del_subregion($MEM, &$DEV->msix_table_mmio);
+
+    memory_region_del_subregion($MEM, &$DEV->msix_pba_mmio);
+
+    '
+  pattern-not: 'msix_uninit($DEV, $MEM, $MEM);
+
+    '
+  languages:
+  - c
+  message: 'Direct removal of MSI-X table and PBA memory regions without using msix_uninit can lead to resource management
+    issues. This can cause memory leaks or incorrect state management in the QEMU XHCI controller. Use msix_uninit() instead
+    to properly clean up MSI-X resources.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/b53dd4495ced2432a0b652ea895e651d07336f7e
+    category: security
+    cwe:
+    - CWE-401
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://www.qemu.org/docs/master/system/devices/msix.html
+    technology:
+    - c
+- id: vuln-qemu-b5eff355
+  pattern: 'bdrv_file_open($VAR, $FILENAME, $FLAGS | BDRV_O_AUTOGROW)
+
+    '
+  pattern-not: 'bdrv_file_open($VAR, $FILENAME, $FLAGS)
+
+    '
+  languages:
+  - c
+  message: 'The use of BDRV_O_AUTOGROW flag in bdrv_file_open can lead to security vulnerabilities by allowing automatic growth
+    of the block device without proper bounds checking. This can result in potential out-of-bounds access or resource exhaustion.
+    The flag has been removed in the patch to mitigate these risks. Remove the BDRV_O_AUTOGROW flag from bdrv_file_open calls
+    to ensure proper bounds checking and resource management.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/b5eff355460643d09e533024360fe0522f368c07
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    references:
+    - https://lists.gnu.org/archive/html/qemu-devel/2021-11/msg00000.html
+    technology:
+    - c
+- id: vuln-qemu-bedd7e93
+  pattern: "$TYPE $VAR = ...;\n...\nif ($CONDITION) {\n    return $VALUE;\n}\n...\nvirtqueue_fill($Q, $ELEM, $TOTAL, $I++);\n\
+    g_free($ELEM);\n"
+  pattern-not: "$TYPE $VAR = ...;\n...\nif ($CONDITION) {\n    $ERR = $VALUE;\n    goto err;\n}\n...\n$ELEMS[$I] = $ELEM;\n\
+    $LENS[$I] = $TOTAL;\n$I++;\nfor ($J = 0; $J < $I; $J++) {\n    virtqueue_fill($Q, $ELEMS[$J], $LENS[$J], $J);\n    g_free($ELEMS[$J]);\n\
+    }\n"
+  languages:
+  - c
+  message: 'Detected a potential resource leak in virtio-net code. The original code directly returns on certain conditions
+    without properly freeing allocated resources, which can lead to memory leaks. The fixed version uses a goto label to ensure
+    all resources are freed before returning. Always ensure resources are properly freed in all code paths.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/bedd7e93d01961fcb16a97ae45d93acf357e11f6
+    category: security
+    cwe:
+    - CWE-772
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-c689b4f1
+  pattern: 'fopen($PATH, $MODE)
+
+    '
+  pattern-not: 'safe_open_or_create($PATH, $MODE, $ERR)
+
+    '
+  languages:
+  - c
+  message: 'Using `fopen` directly can lead to security vulnerabilities such as TOCTOU (Time-of-Check to Time-of-Use) attacks
+    and improper file permissions. The function `safe_open_or_create` should be used instead to ensure proper file handling,
+    including exclusive file creation and correct permission settings.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/c689b4f1bac352dcfd6ecb9a1d45337de0f1de67
+    category: security
+    cwe:
+    - CWE-367
+    - CWE-362
+    owasp: A01:2021-Broken Access Control
+    references:
+    - https://pubs.opengroup.org/onlinepubs/9699919799/functions/fopen.html
+    technology:
+    - c
+- id: vuln-qemu-d251157a
+  pattern: "if ($READY_PTR != $MGR->consumed_ptr) {\n    ...\n}\n"
+  pattern-not: "if ($READY_PTR != $MGR->consumed_ptr\n    && $READY_PTR - $MGR->consumed_ptr < $RING_SIZE) {\n    ...\n}\n"
+  languages:
+  - c
+  message: "Detected a potential buffer overflow vulnerability due to missing bounds check when comparing ring buffer pointers.\
+    \ \nThis could allow an attacker to read/write beyond the allocated ring buffer, potentially leading to memory corruption\
+    \ or arbitrary code execution. \nAlways validate that the pointer difference is within the valid ring buffer size before\
+    \ accessing elements.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/d251157ac1928191af851d199a9ff255d330bec9
+    category: security
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input (''Classic Buffer Overflow'')'
+    owasp: 'A2: Cryptographic Failures'
+    technology:
+    - c
+- id: vuln-qemu-de0b1bae
+  pattern: "for ($B = 0; $B < 64; $B += 16) {\n  ...\n}\n"
+  pattern-not: "for ($B = 0; $B < 64; $B += 4) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The loop increment in this code uses a step size of 16, which may lead to incorrect processing of data in 4-byte
+    increments. This can cause vulnerabilities in pointer authentication (PAuth) logic, potentially leading to security issues
+    such as improper memory access or authentication bypass. The fix changes the step size to 4 to ensure proper handling
+    of 4-byte data chunks. Always ensure loop increments match the data size being processed.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/de0b1bae6461f67243282555475f88b2384a1eb9
+    category: security
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    owasp:
+    - 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-qemu-e49884a9
+  pattern: "if (++$VAR > $MAX) {\n  ...\n}\n"
+  pattern-not: "if (++$VAR > $MAX || $REENTRANCY_LEVEL > $LIMIT) {\n  ...\n}\n"
+  languages:
+  - c
+  message: "Detected a potential reentrancy vulnerability due to missing reentrancy level check. \nThis can lead to memory\
+    \ corruption, stack overflow, or use-after-free issues. \nTo fix, ensure reentrancy level is checked and limited to prevent\
+    \ infinite loops or excessive recursion.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/e49884a90987744ddb54b2fadc770633eb6a4d62
+    category: security
+    cwe:
+    - CWE-674
+    owasp: A10:2021 - Server-Side Request Forgery
+    references:
+    - https://gitlab.com/qemu-project/qemu/-/issues/1563
+    technology:
+    - c
+- id: vuln-qemu-e4a511f8
+  pattern: 'int128_sub(mr->size, int128_make64($ADDR))
+
+    '
+  pattern-not: 'int128_sub(section->size, int128_make64($ADDR))
+
+    '
+  languages:
+  - c
+  message: 'The code uses `mr->size` instead of `section->size` in the calculation, which can lead to incorrect memory address
+    calculations and potential security vulnerabilities. This could result in memory corruption or unauthorized memory access.
+    Use `section->size` instead to ensure correct memory boundary calculations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/e4a511f8cc6f4a46d409fb5c9f72c38ba45f8d83
+    category: security
+    cwe:
+    - CWE-119
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c
+- id: vuln-qemu-e9077462
+  pattern: '$STRUCT->$ARRAY[$STRUCT->$INDEX - 1]
+
+    '
+  pattern-not: '$POS = $STRUCT->$INDEX - 1;
+
+    $POS %= $LEN;
+
+    $STRUCT->$ARRAY[$POS]
+
+    '
+  languages:
+  - c
+  message: 'Direct array access using an unmodulated index can lead to out-of-bounds access. This is dangerous as it can cause
+    memory corruption or crashes. Always modulate the index by the array length to ensure it stays within bounds.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/e907746266721f305d67bc0718795fedee2e824c
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    - https://cwe.mitre.org/data/definitions/787.html
+    technology:
+    - c
+- id: vuln-qemu-ead315e4
+  pattern: "do {\n    ...\n} while (more_frags);\n"
+  pattern-not: "do {\n    ...\n} while (fragment_len && more_frags);\n"
+  languages:
+  - c
+  message: 'The loop condition checks only the `more_frags` flag without verifying the `fragment_len`. This can lead to infinite
+    loops or incorrect packet processing if `fragment_len` is zero but `more_frags` is still true. Always include both conditions
+    in the loop to ensure proper packet handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/ead315e43ea0c2ca3491209c6c8db8ce3f2bbe05
+    category: security
+    cwe:
+    - 'CWE-835: Loop with Unreachable Exit Condition (''Infinite Loop'')'
+    owasp:
+    - 'A2: Cryptographic Failures'
+    references:
+    - https://cwe.mitre.org/data/definitions/835.html
+    technology:
+    - c
+- id: vuln-qemu-edfe2eb4
+  pattern: '$VAR = $VALUE & 0x3ff;
+
+    '
+  pattern-not: '$VAR = $VALUE & 0xf;
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential integer overflow vulnerability due to incorrect bitmasking.
+
+    The code uses a bitmask of 0x3ff which allows up to 10 bits, but should only allow
+
+    4 bits (0xf). This could lead to out-of-bounds access or incorrect interrupt handling.
+
+    Replace the bitmask with 0xf to properly limit the value.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/edfe2eb4360cde4ed5d95bda7777edcb3510f76a
+    category: security
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - c
+- id: vuln-qemu-f1e2e38e
+  pattern: "if (!$FUNC($ARG1, $ARG2, $ARG3)) {\n  ...\n}\n"
+  pattern-not: "$VAR = $FUNC($ARG1, $ARG2, $ARG3);\nif ($VAR <= 0) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code directly uses the return value of a function in a boolean context without proper error handling.
+
+    This is dangerous because it doesn''t distinguish between different error conditions and successful states.
+
+    The fix is to store the return value in a variable and explicitly check for error conditions.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/f1e2e38ee0136b7710a2caa347049818afd57a1b
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp: A10:2021 - Security Misconfiguration
+    technology:
+    - c
+- id: vuln-qemu-f5aa69bd
+  pattern: 'qemu_ram_ptr_length($MR, $ADDR, $LEN)
+
+    '
+  pattern-not: 'qemu_ram_ptr_length($MR, $ADDR, $LEN, $LOCK)
+
+    '
+  languages:
+  - c
+  message: 'The function `qemu_ram_ptr_length` is being called without the required `lock` parameter, which could lead to
+    unsafe memory access. This vulnerability can result in race conditions or memory corruption. Always pass the appropriate
+    `lock` parameter to ensure safe memory access.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/qemu/qemu/commit/f5aa69bdc3418773f26747ca282c291519626ece
+    category: security
+    cwe:
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization (''Race Condition'')'
+    technology:
+    - c
+- id: vuln-qemu-f6882698
+  pattern: "if ($VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {\n  ...\n}\n"
+  pattern-not: "if (!$VAR || $VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Potential integer underflow vulnerability detected. The condition checks if a value exceeds a maximum limit but
+    does not verify if the value is zero or negative. This could lead to unexpected behavior or security issues. Always validate
+    that the value is positive before comparing it to a maximum limit.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/f68826989cd4d1217797251339579c57b3c0934e
+    category: security
+    cwe:
+    - CWE-191
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-qemu-fa365d7c
+  pattern: "if ($BSEL < 0 || $BSEL > $MAX) {\n    ...\n}\n"
+  pattern-not: "if ($BSEL < 0 || $BSEL >= $MAX) {\n    ...\n}\n"
+  languages:
+  - c
+  message: 'Detected potential off-by-one error in boundary check. Using ''>'' instead of ''>='' can lead to array index out
+    of bounds or incorrect boundary conditions. This vulnerability could cause memory corruption or security issues. Replace
+    ''>'' with ''>='' to properly check the upper bound.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/fa365d7cd11185237471823a5a33d36765454e16
+    category: security
+    cwe:
+    - 'CWE-193: Off-by-one Error'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/193.html
+    technology:
+    - c
+- id: vuln-qemu-fa7505c1
+  pattern: 'esp_fifo_pop_buf(&$S->cmdfifo, NULL, $S->cmdfifo_cdb_offset)
+
+    '
+  pattern-not: 'esp_fifo_pop_buf(&$S->cmdfifo, NULL, MIN($S->cmdfifo_cdb_offset, fifo8_num_used(&$S->cmdfifo)))
+
+    '
+  languages:
+  - c
+  message: 'The code directly uses `cmdfifo_cdb_offset` as the length parameter in `esp_fifo_pop_buf`, which can lead to buffer
+    overflows if the offset exceeds the available data in the FIFO. This vulnerability can be exploited to corrupt memory
+    or cause undefined behavior. The fix is to use `MIN` to ensure the length does not exceed the available data in the FIFO.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/fa7505c154d4d00ad89a747be2eda556643ce00e
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-qemu-fa892e9a
+  pattern: 'int $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
+
+    '
+  pattern-not: 'size_t $DATASIZE = $WIDTH * $HEIGHT * sizeof(uint32_t);
+
+    '
+  languages:
+  - c
+  message: 'Potential integer overflow vulnerability due to using ''int'' instead of ''size_t'' for buffer size calculations.
+
+    This can lead to incorrect memory allocation and potential security issues.
+
+    Always use ''size_t'' for size calculations to avoid integer overflow.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/fa892e9abb728e76afcf27323ab29c57fb0fe7aa
+    category: security
+    cwe:
+    - CWE-190
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    technology:
+    - c
+- id: vuln-qemu-fc3d8e11
+  pattern: '$PR->cmd = $VAL & ~(PORT_CMD_LIST_ON | PORT_CMD_FIS_ON);
+
+    '
+  pattern-not: '$PR->cmd = ($PR->cmd & PORT_CMD_RO_MASK) | ($VAL & ~PORT_CMD_RO_MASK);
+
+    '
+  languages:
+  - c
+  message: 'The code directly modifies the command register without preserving read-only fields, which can lead to unintended
+    behavior or security vulnerabilities. This issue was fixed by masking out read-only fields before applying new values.
+    Always preserve read-only fields when modifying registers to prevent unauthorized changes.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/fc3d8e1138cd0c843d6fd75272633a31be6554ef
+    category: security
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    owasp:
+    - 'A6: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-qemu-fe3c546c
+  pattern: "if ($EXPR1 + $EXPR2 > $LENGTH) {\n  ...\n}\n"
+  pattern-not: "if ($EXPR2 > $LENGTH || $EXPR1 >= $LENGTH || $EXPR1 + $EXPR2 > $LENGTH) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential buffer overflow vulnerability due to insufficient bounds checking.
+
+    The original condition only checks if the sum of two expressions exceeds a length limit,
+
+    but does not verify if either expression individually exceeds the limit. This could lead
+
+    to buffer overflows. The fix adds separate checks for each expression before checking
+
+    their sum. Always validate both individual values and their sum against length limits.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/fe3c546c5ff2a6210f9a4d8561cc64051ca8603e
+    category: security
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input (''Classic Buffer Overflow'')'
+    owasp: 'A1: Injection'
+    technology:
+    - c
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+- id: vuln-qemu-ff0507c2
+  pattern: '$SS = ($VAR1->$VAR2 >= $VAR1->$VAR3) ? $VAR1->$VAR2 : $VAR1->$VAR3;
+
+    '
+  pattern-not: '$SS = MIN($VAR1->$VAR2, $VAR1->$VAR3);
+
+    '
+  languages:
+  - c
+  message: 'The code uses a ternary operator to select the maximum value between two fields, which can lead to incorrect behavior
+    or security issues. Instead, use the MIN macro to ensure the correct value is selected. This vulnerability was fixed in
+    the QEMU commit ff0507c239a246fd7215b31c5658fc6a3ee1e4c5.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/ff0507c239a246fd7215b31c5658fc6a3ee1e4c5
+    category: security
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-qemu-ff589551
+  pattern: "if ($S->ti_size > 0) {\n  ...\n  if (($S->rregs[$REG] & $MASK) == 0) {\n    ...\n    $S->rregs[$FIFO] = 0;\n \
+    \ } else {\n    $S->rregs[$FIFO] = $S->ti_buf[$S->ti_rptr++];\n  }\n}\n"
+  pattern-not: "if (($S->rregs[$REG] & $MASK) == 0) {\n  ...\n  $S->rregs[$FIFO] = 0;\n} else if ($S->ti_rptr < $S->ti_wptr)\
+    \ {\n  $S->rregs[$FIFO] = $S->ti_buf[$S->ti_rptr++];\n}\n"
+  languages:
+  - c
+  message: 'The original code incorrectly checks `ti_size` before handling the PIO data, which can lead to incorrect buffer
+    handling. This could result in data corruption or unexpected behavior. The fix ensures that the PIO data is handled correctly
+    by checking the `rregs` status first and then verifying the buffer pointers.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/ff589551c8e8e9e95e211b9d8daafb4ed39f1aec
+    category: security
+    cwe:
+    - CWE-119
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/119.html
+    technology:
+    - c
+- id: vuln-qemu-ff82911c
+  pattern: 'aio_set_fd_handler($CONTEXT, $FD, ..., nbd_reply_ready, ..., ..., ...)
+
+    '
+  pattern-not: 'aio_set_fd_handler($CONTEXT, $FD, ..., nbd_read_reply_entry, ..., ..., ...)
+
+    '
+  languages:
+  - c
+  message: 'The use of nbd_reply_ready callback in aio_set_fd_handler is vulnerable to race conditions
+
+    and improper synchronization. This can lead to data corruption or crashes when handling
+
+    NBD requests. The issue was fixed by replacing nbd_reply_ready with nbd_read_reply_entry
+
+    which properly handles coroutine synchronization. Use the updated callback function to
+
+    ensure proper synchronization.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/qemu/qemu/commit/ff82911cd3f69f028f2537825c9720ff78bc3f19
+    category: security
+    cwe:
+    - CWE-362
+    - CWE-367
+    owasp: 'A2: Cryptographic Failures'
+    technology:
+    - c

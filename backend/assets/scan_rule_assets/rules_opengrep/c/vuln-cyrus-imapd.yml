@@ -1,0 +1,77 @@
+rules:
+- id: vuln-cyrus-imapd-1ebd8ae4
+  pattern: "unsigned $RET_VAL = 0;\nint $I;\nwhile (*$STRING) {\n  $I = (int) *$STRING;\n  $RET_VAL ^= $I;\n  $RET_VAL <<=\
+    \ 1;\n  $STRING++;\n}\nreturn $RET_VAL;\n"
+  pattern-not: "const unsigned char *$USTR = (const unsigned char *) $STRING;\nunsigned $HASH = 5381;\nint $C;\nif ($SEED)\
+    \ {\n  unsigned $I;\n  for ($I = 0; $I < sizeof $SEED; $I++) {\n    $C = $SEED & 0xff;\n    $HASH = (($HASH << 5) + $HASH)\
+    \ ^ $C;\n    $SEED >>= 8;\n  }\n}\nwhile (($C = *$USTR++))\n  $HASH = (($HASH << 5) + $HASH) ^ $C;\nreturn $HASH;\n"
+  languages:
+  - c
+  message: 'The original strhash function uses a weak hashing algorithm that is vulnerable to collisions and predictability.
+    This can lead to security issues such as hash-based denial of service attacks. The patch introduces a more robust hashing
+    algorithm (djb2) with an optional seed to improve security. Replace the vulnerable hashing implementation with a stronger
+    algorithm like djb2.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/cyrusimap/cyrus-imapd/commit/1ebd8ae4d537c7397a81797c9f050cfa9d1066b8
+    category: security
+    cwe:
+    - CWE-327
+    owasp:
+    - 'A2: Cryptographic Failures'
+    technology:
+    - c
+- id: vuln-cyrus-imapd-5edadcfb
+  pattern: "const char *$BASE;\nif (strchr($PART, '/')) {\n    $BASE = $PART;\n} else {\n    $BASE = $ISARCHIVE ? config_archivepartitiondir($PART)\
+    \ : config_partitiondir($PART);\n}\n"
+  pattern-not: 'const char *$BASE = $ISARCHIVE ? config_archivepartitiondir($PART) : config_partitiondir($PART);
+
+    '
+  languages:
+  - c
+  message: 'The code allows for a path to be directly used as a base directory if it contains a ''/'', which can lead to directory
+    traversal or unauthorized access. This is dangerous because it bypasses the configured partition directories, potentially
+    allowing access to restricted areas. To fix this, ensure that only configured partition names are used by directly calling
+    config_archivepartitiondir or config_partitiondir without the path check.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/cyrusimap/cyrus-imapd/commit/5edadcfb83bf27107578830801817f9e6d0ad941
+    category: security
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path Traversal'')'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/22.html
+    technology:
+    - c
+- id: vuln-cyrus-imapd-f6369560
+  pattern: 'unsigned $VAL = strhash($KEY) % $SIZE;
+
+    '
+  pattern-not: 'unsigned $VAL = strhash_seeded($SEED, $KEY) % $SIZE;
+
+    '
+  languages:
+  - c
+  message: 'The code uses an unseeded hash function, which can lead to predictable hash values and potential hash collision
+    attacks. This vulnerability can be exploited to cause denial of service or other security issues. To fix this, use a seeded
+    hash function like `strhash_seeded` with a properly initialized seed.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/cyrusimap/cyrus-imapd/commit/f63695609c88a3f76129499bb49fb82e8155fb32
+    category: security
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    owasp:
+    - A6:2017-Security Misconfiguration
+    references:
+    - https://cwe.mitre.org/data/definitions/327.html
+    technology:
+    - c

@@ -1,0 +1,314 @@
+rules:
+- id: vuln-tcpreplay-2595c903
+  pattern: "if ($PKTHDR->len < $PKTHDR->caplen) {\n  ...\n}\n"
+  pattern-not: "if (!$PKTHDR->len || $PKTHDR->len < $PKTHDR->caplen) {\n  ...\n}\n"
+  languages:
+  - c
+  message: "Detected a missing check for zero packet length in packet capture handling. \nThis vulnerability could lead to\
+    \ incorrect processing of malformed packets. \nThe fix involves adding a check for zero length before comparing packet\
+    \ length and capture length.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/2595c903b61d9e50b22cbfcc6899f8f11a17bbff
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-tcpreplay-46cf964a
+  pattern: 'packet += l2offset;
+
+    l2len -= l2offset;
+
+    pkt_len -= l2offset;
+
+    '
+  pattern-not: 'packet = data + l2len;
+
+    l2len = ...;
+
+    pkt_len = ...;
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves incorrect pointer arithmetic when adjusting packet data pointers using `l2offset`.
+    This can lead to memory corruption or invalid memory access. The patch removes the use of `l2offset` and directly uses
+    `data + l2len` for pointer adjustments, ensuring correct memory access. To fix this, avoid using `l2offset` for pointer
+    arithmetic and use `data + l2len` instead.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/46cf964a7db636da76abeebf10482acf6f682a87
+    category: security
+    cwe:
+    - CWE-119
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-tcpreplay-58dfef91
+  pattern: "if (!process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {\n  ...\n}\n"
+  pattern-not: "if (!$IP_HDR || !process_xX_by_cidr_ipv4($MODE, $CIDR, $IP_HDR)) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Missing null check for `ip_hdr` before passing it to `process_xX_by_cidr_ipv4`.
+
+    This can lead to a null pointer dereference, causing a crash or undefined behavior.
+
+    Always check for null pointers before dereferencing them.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/58dfef91fa206f29e52fc5f7efeeb334eeaf37c6
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A1:2017-Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c
+- id: vuln-tcpreplay-61db8ada
+  pattern: "if (pkthdr->caplen < (bpf_u_int32)TCPR_IPV6_H) {\n  dbgx($X, \"Packet too short for Unique IP feature: %u\", pkthdr->caplen);\n\
+    \  return;\n}\n"
+  pattern-not: "if (pkthdr->caplen < (bpf_u_int32)(l2_len + sizeof(ipv4_hdr_t))) {\n  dbgx($X, \"IP packet too short for Unique\
+    \ IP feature: %u\", pkthdr->caplen);\n  return -1;\n}\n"
+  languages:
+  - c
+  message: 'This rule detects insufficient packet length checks in network packet processing code. The vulnerability occurs
+    when the code fails to account for the length of the Layer 2 header when validating packet length, potentially leading
+    to buffer overflows or incorrect packet processing. The fix adds proper length checks that include the Layer 2 header
+    length. To fix this issue, always include the Layer 2 header length in packet length validation checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/61db8adae55e246e0bc9442fbe977fff46154970
+    category: security
+    cwe:
+    - CWE-120
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-tcpreplay-682d559d
+  pattern: "if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {\n  ...\n}\n"
+  pattern-not: "if (ntohs($IP_HDR->ip_len) < ($IP_HDR->ip_hl << 2)) {\n  tcpedit_setwarn($TCPEDIT, \"Unable to checksum IPv4\
+    \ packet with invalid length %u\", $IP_HDR->ip_len);\n  return TCPEDIT_WARN;\n}\n"
+  languages:
+  - c
+  message: 'Detected a missing validation check for IPv4 packet length. This vulnerability can lead to processing of packets
+    with invalid lengths, potentially causing memory corruption or other undefined behavior. Ensure proper validation of packet
+    length before processing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/682d559d65fd9826aa53b7c7cfe8e4882bb2c6da
+    category: security
+    cwe:
+    - CWE-120
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    technology:
+    - c
+- id: vuln-tcpreplay-6fb578d2
+  pattern: "if (memcmp($PKTDATA, \"MGC\", 3)) {\n  warnx(\"No Magic Number found: %s (0x%x)\", ...);\n}\n"
+  pattern-not: "if (memcmp($PKTDATA, JUNIPER_PCAP_MAGIC, 3)) {\n  warnx(\"No Magic Number found during protocol lookup: %s\
+    \ (0x%x)\", ...);\n  return 0;\n}\n"
+  languages:
+  - c
+  message: 'The code uses a hardcoded string "MGC" for magic number comparison, which can lead to inconsistent error handling
+    and potential security issues. The fixed version uses a defined constant JUNIPER_PCAP_MAGIC and ensures proper error handling
+    by returning 0 when the magic number is not found. Always use defined constants for such comparisons and ensure consistent
+    error handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/6fb578d20feccffd4bae9f3d0216d1c3507bd805
+    category: security
+    cwe:
+    - CWE-547
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/547.html
+    technology:
+    - c
+- id: vuln-tcpreplay-7b0a2fad
+  pattern: "if ($L2_LEN + $TCPR_IPV4_H > $DATALEN) {\n  ...\n}\n"
+  pattern-not: "if ($L2_LEN < 0 || $L2_LEN + $TCPR_IPV4_H > $DATALEN) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks if the sum of L2 length and IPv4 header size exceeds the data length, but it does not account
+    for cases where L2 length is invalid (e.g., negative). This can lead to incorrect packet processing or security vulnerabilities.
+    Always validate L2 length before performing such checks.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/7b0a2fad69cc89ce8e08c3326db7cdbe5d383a58
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-tcpreplay-abef6239
+  pattern: 'l2_len += 24;
+
+    '
+  pattern-not: "if (datalen >= 5) {\n  l2_len = -1;\n  break;\n}\nif (memcmp(pktdata, \"MGC\", 3))\n  warnx(\"No Magic Number\
+    \ found: %s (0x%x)\",\n       pcap_datalink_val_to_description(datalink), datalink);\nif ((pktdata[3] & 0x80) == 0x80)\
+    \ {\n  l2_len = ntohs(*((uint16_t*)&pktdata[4]));\n  l2_len += 6;\n} else {\n  l2_len = 4; /* no header extensions */\n\
+    }\n"
+  languages:
+  - c
+  message: 'The vulnerability involves an incorrect adjustment of the `l2_len` variable by adding 24 without proper validation
+    of the `datalen` field. This can lead to incorrect packet length calculations and potential memory corruption or out-of-bounds
+    access. The fix includes proper validation of `datalen` and correct handling of `l2_len` based on packet data. Ensure
+    that packet length calculations are validated and handled correctly.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/abef6239160f70dacc7892a046e6584ba303de64
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/120.html
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-tcpreplay-b63f1697
+  pattern: "void fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR) {\n  if (!$IP_HDR->ip_len)\n    $IP_HDR->ip_len\
+    \ = htons((uint16_t)$PKTHDR->len);\n}\n"
+  pattern-not: "int fix_ipv4_length(struct pcap_pkthdr *$PKTHDR, ipv4_hdr_t *$IP_HDR, const size_t $L2LEN) {\n  int $IP_LEN\
+    \ = (int)ntohs($IP_HDR->ip_len);\n  int $IP_LEN_WANT = (int)($PKTHDR->len - $L2LEN);\n\n  if ($PKTHDR->caplen < $L2LEN\
+    \ + sizeof(*$IP_HDR))\n    return -1;\n\n  if ((htons($IP_HDR->ip_off) & (IP_MF | IP_OFFMASK)) == 0 &&\n      $IP_LEN\
+    \ != $IP_LEN_WANT) {\n    $IP_HDR->ip_len = htons($IP_LEN_WANT);\n    return 1;\n  }\n\n  return 0;\n}\n"
+  languages:
+  - c
+  message: 'The original version of `fix_ipv4_length` does not properly validate the IP header length against the packet capture
+    length, which can lead to incorrect IP header length calculations and potential security issues. The fixed version includes
+    proper validation and handling of the IP header length. Use the updated version to ensure correct IP header length calculations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/b63f1697c9eae73c7880882e14f9a0ec9545f19a
+    category: security
+    cwe:
+    - CWE-20
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-tcpreplay-b763db76
+  pattern: "if (!$DATA || $PAYLOAD_LEN <= 0 || $PAYLOAD_LEN > 65535) {\n  ...\n}\n"
+  pattern-not: "if (!$DATA || $PAYLOAD_LEN < (int)sizeof(*$IPV4) || $PAYLOAD_LEN > 0xffff) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected an insecure payload length check in packet processing code. The original check allows for invalid payload
+    lengths that could lead to buffer overflows or incorrect packet handling. The vulnerability occurs when the payload length
+    is not properly validated against the minimum required size for the packet type (e.g., IPv4/IPv6 headers). This could
+    allow processing of malformed packets or insufficient data, potentially leading to crashes or security issues. To fix,
+    ensure payload length checks properly validate against the minimum required size for the specific packet type being processed.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/b763db764f46e7d72f5a8cea13dd917da002c48c
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-129
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    - https://cwe.mitre.org/data/definitions/129.html
+    technology:
+    - c
+- id: vuln-tcpreplay-dae97cba
+  pattern: 'ip_hl = (u_char*)get_layer4_v6($IPV6, $LEN) - (u_char*)$DATA;
+
+    '
+  pattern-not: "$LAYER = (u_char*)get_layer4_v6($IPV6, $LEN);\nif (!$LAYER) {\n  ...\n}\nip_hl = $LAYER - (u_char*)$DATA;\n"
+  languages:
+  - c
+  message: 'Potential null pointer dereference vulnerability detected. The function `get_layer4_v6` may return null, leading
+    to undefined behavior when calculating `ip_hl`. This can cause crashes or security issues. Always check the return value
+    of `get_layer4_v6` before using it.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/dae97cbafc5c06ebbc6b34e76ba614104f1b73e1
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/476.html
+    technology:
+    - c
+- id: vuln-tcpreplay-e2ac765a
+  pattern: 'fix_ipv4_checksums($TC, $PKT, $IP)
+
+    '
+  pattern-not: 'fix_ipv4_checksums($TC, $PKT, $IP, $L2LEN)
+
+    '
+  languages:
+  - c
+  message: 'The function `fix_ipv4_checksums` is called without the `l2len` parameter, which can lead to incorrect checksum
+    calculations due to missing layer 2 length validation. This can result in corrupted packets or security vulnerabilities.
+    Always include the `l2len` parameter to ensure proper packet length validation.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/e2ac765a25e902728b6d4a825358aa536e6668c2
+    category: security
+    cwe:
+    - CWE-120
+    owasp: A9:2021-Security Misconfiguration
+    technology:
+    - c
+- id: vuln-tcpreplay-ff0ece88
+  pattern: "if ((size_t)$LEN < sizeof($ETH_HDR)) {\n    errx(-1, \"packet capture length %d too small to process\", $LEN);\n\
+    \    return NULL;\n}\n"
+  pattern-not: "if ($LEN < (int)sizeof($ETH_HDR)) {\n    goto len_error;\n}\n"
+  languages:
+  - c
+  message: 'The code performs an incorrect size comparison by casting the length to `size_t`, which can lead to integer underflow
+    and bypassing of the length check. This can result in processing packets that are too small, potentially leading to memory
+    corruption or crashes. Always ensure length checks are performed with the correct type to avoid underflow issues.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/appneta/tcpreplay/commit/ff0ece886576663f2fa18f375fed91f0f38fea20
+    category: security
+    cwe:
+    - CWE-190
+    owasp: 'A2: Cryptographic Failures'
+    references:
+    - https://cwe.mitre.org/data/definitions/190.html
+    technology:
+    - c

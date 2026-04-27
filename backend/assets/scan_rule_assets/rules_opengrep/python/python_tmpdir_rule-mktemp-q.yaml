@@ -2,17 +2,35 @@ rules:
 - id: python_tmpdir_rule-mktemp-q
   languages:
   - python
-  message: "The application was found creating temporary files with the insecure `mktemp`\
-    \ method.\nDepending on how the application uses this temporary file, an attacker\
-    \ may be able to create\nsymlinks that point to other files prior to the application\
-    \ creating or writing\nto the target file, leading to unintended files being created\
-    \ or overwritten.\n\nTo remediate this issue consider using `tempfile.TemporaryFile`\
-    \ instead.\n\nExample using `tempfile.TemporaryFile` to write a file:\n```\nimport\
-    \ tempfile\n\n# Open a new temporary file using a context manager\nwith tempfile.TemporaryFile()\
-    \ as fp:\n    # Write some data to the temporary file\n    fp.write(b'Some data')\n\
-    \    # Seek back to beginning of file\n    fp.seek(0)\n    # Read it\n    data\
-    \ = fp.read()\n# File is automatically closed/removed once we exit the with context\n\
-    ```\n\nFor more information on alternative tempfile functions see:\n- https://docs.python.org/3/library/tempfile.html\n"
+  message: "The application was found creating temporary files with the insecure `mktemp` method.\nDepending on how the application\
+    \ uses this temporary file, an attacker may be able to create\nsymlinks that point to other files prior to the application\
+    \ creating or writing\nto the target file, leading to unintended files being created or overwritten.\n\nTo remediate this\
+    \ issue consider using `tempfile.TemporaryFile` instead.\n\nExample using `tempfile.TemporaryFile` to write a file:\n\
+    ```\nimport tempfile\n\n# Open a new temporary file using a context manager\nwith tempfile.TemporaryFile() as fp:\n  \
+    \  # Write some data to the temporary file\n    fp.write(b'Some data')\n    # Seek back to beginning of file\n    fp.seek(0)\n\
+    \    # Read it\n    data = fp.read()\n# File is automatically closed/removed once we exit the with context\n```\n\nFor\
+    \ more information on alternative tempfile functions see:\n- https://docs.python.org/3/library/tempfile.html\n"
+  metadata:
+    cwe: CWE-377
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A01:2021-Broken Access Control
+    shortDescription: Insecure temporary file
+    security-severity: Medium
+  pattern: tempfile.mktemp(...)
+  severity: ERROR
+- id: python_tmpdir_rule-mktemp-q_1
+  languages:
+  - python
+  message: "The application was found creating temporary files with the insecure `mktemp` method.\nDepending on how the application\
+    \ uses this temporary file, an attacker may be able to create\nsymlinks that point to other files prior to the application\
+    \ creating or writing\nto the target file, leading to unintended files being created or overwritten.\n\nTo remediate this\
+    \ issue consider using `tempfile.TemporaryFile` instead.\n\nExample using `tempfile.TemporaryFile` to write a file:\n\
+    ```\nimport tempfile\n\n# Open a new temporary file using a context manager\nwith tempfile.TemporaryFile() as fp:\n  \
+    \  # Write some data to the temporary file\n    fp.write(b'Some data')\n    # Seek back to beginning of file\n    fp.seek(0)\n\
+    \    # Read it\n    data = fp.read()\n# File is automatically closed/removed once we exit the with context\n```\n\nFor\
+    \ more information on alternative tempfile functions see:\n- https://docs.python.org/3/library/tempfile.html\n"
   metadata:
     cwe: CWE-377
     category: security

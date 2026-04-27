@@ -1,0 +1,116 @@
+rules:
+- id: vuln-sqlite-396afe6f
+  pattern: "if( $SUBSRC->nSrc > $X || $ISAGG || IsVirtual($SUBSRC->a[0].pTab) ) {\n  ...\n}\n"
+  pattern-not: "if( $SUBSRC->nSrc > $X                   /* (3a) */\n || $ISAGG                             /* (3b) */\n ||\
+    \ IsVirtual($SUBSRC->a[0].pTab)     /* (3c) */\n || ($P->selFlags & SF_Distinct) != 0    /* (3d) */\n) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The condition in the SQLite query is missing a check for the SF_Distinct flag, which could lead to incorrect query
+    results or security vulnerabilities. This patch adds a check to ensure that the outer query is not DISTINCT, preventing
+    potential issues with query execution. To fix this, ensure that all necessary conditions are included in the if statement,
+    particularly the check for the SF_Distinct flag.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sqlite/sqlite/commit/396afe6f6aa90a31303c183e11b2b2d4b7956b35
+    category: security
+    cwe:
+    - CWE-697
+    owasp:
+    - A03:2021-Injection
+    references:
+    - https://www.sqlite.org/src/info/396afe6f6aa90a31303c183e11b2b2d4b7956b35
+    technology:
+    - c
+- id: vuln-sqlite-78d1d225
+  pattern: "if( sqlite3ExprIsVtabRef($EXPR) ){\n  ...\n}\n"
+  pattern-not: "if( ExprIsVtab($EXPR) ){\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function `sqlite3ExprIsVtabRef` is used to check if an expression references a virtual table, but it does
+    not handle cases where `y.pTab` is null, which can lead to undefined behavior. This vulnerability was fixed by replacing
+    `sqlite3ExprIsVtabRef` with `ExprIsVtab` and adding null checks. To fix this, ensure that all virtual table reference
+    checks include proper null handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sqlite/sqlite/commit/78d1d225d87af40f5bdca57fa72f00b6ffaffa21
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A9:2021-Security Logging and Monitoring Failures
+    technology:
+    - c
+- id: vuln-sqlite-a6c1a71c
+  pattern: "if( $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){\n  ...\n}\n"
+  pattern-not: "if( $PARSE->nErr || $DB->mallocFailed || sqliteProcessJoin($PARSE, $P) ){\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The condition in the if-statement does not check for parse errors (nErr), which could lead to incorrect execution
+    flow when errors occur. This is dangerous because it may cause the program to proceed with invalid or unexpected data.
+    To fix this, ensure that parse errors are checked before other conditions in the if-statement.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sqlite/sqlite/commit/a6c1a71cde082e09750465d5675699062922e387
+    category: security
+    cwe:
+    - 'CWE-391: Unchecked Error Condition'
+    owasp:
+    - A10:2021 - Security Logging and Monitoring Failures
+    technology:
+    - c
+- id: vuln-sqlite-bf48ce49
+  pattern: '$EXPR->op==TK_COLUMN && IsVirtual($EXPR->y.pTab)
+
+    '
+  pattern-not: 'sqlite3ExprIsVtabRef($EXPR)
+
+    '
+  languages:
+  - c
+  message: 'Detected direct usage of column and virtual table checks instead of using the `sqlite3ExprIsVtabRef` function.
+    This can lead to inconsistent checks and potential security vulnerabilities. Always use the provided function `sqlite3ExprIsVtabRef`
+    to ensure consistent and secure handling of virtual table references.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sqlite/sqlite/commit/bf48ce49f7c25e5d4524de9fdc5c0d505218d06d
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://www.sqlite.org/security.html
+    technology:
+    - c
+- id: vuln-sqlite-f39168e4
+  pattern: "if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) ){\n    ...\n}\n"
+  pattern-not: "if( sqlite3ExprIsConstantOrGroupBy($PARSE, $EXPR, $GROUPBY) \n && ExprAlwaysFalse($EXPR)==0\n){\n    ...\n\
+    }\n"
+  languages:
+  - c
+  message: 'The condition check in the SQLite query processing logic is incomplete as it does not verify if the expression
+    is always false. This could lead to incorrect query results or security vulnerabilities if the expression evaluation is
+    not properly constrained. The fix involves adding an additional check using `ExprAlwaysFalse` to ensure the expression
+    is not always false.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/sqlite/sqlite/commit/f39168e468af3b1d6b6d37efdcb081eced6724b2
+    category: security
+    cwe:
+    - CWE-697
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://www.sqlite.org/src/info/f39168e468af3b1d6b6d37efdcb081eced6724b2
+    technology:
+    - c

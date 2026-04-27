@@ -27,34 +27,80 @@ rules:
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterMap();
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
   - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
-  message: "HTTP Response Splitting is a vulnerability where Carriage Return (CR `\\\
-    r`) and Line Feed (LF\n`\\n`)\ncharacters are introduced into an HTTP header from\
-    \ user-supplied input. By injecting the\n`\\r\\n`\ncharacter sequence, an adversary\
-    \ could potentially modify how the response is interpreted by\nthe\nclient or\
-    \ any down stream caching services. This could allow an adversary to poison the\
-    \ cache\ndata or execute Cross-Site Scripting (XSS) attacks.\n\nSome Java application\
-    \ servers such as [Apache Tomcat](https://tomcat.apache.org/) will\nautomatically\
-    \ encode\ncharacters from being set in response headers as a space `0x20` character.\
-    \ If your application\nserver does\nnot automatically provide this functionality,\
-    \ user-supplied input that is used in header keys\nor values must be\nvalidated.\n\
-    \nExample of validating headers to only allow valid characters:\n```\n// throws\
-    \ an IllegalArgumentException if the provided value contains invalid characters\n\
-    public void validateHeader(String value) throws IllegalArgumentException {\n \
-    \   char[] chars = value.toCharArray();\n\n    // iterate over every character\n\
-    \    for (int i = 0; i < chars.length; i++) {\n        char c = chars[i];\n\n\
-    \        // check for any characters below 0x21 as well as: '\"' ',' ';' '\\'\
-    \ and 0x7f.\n        if (c < 0x21 || c == '\"' || c == ',' || c == ';' || c ==\
-    \ '\\\\' || c == 0x7f) {\n            throw new IllegalArgumentException(\"Invalid\
-    \ character in cookie detected:\n{0}\".format(Integer.toString(c)));\n       \
-    \ }\n    }\n}\n```\n\nAlternatively, you could use a string escape package such\
-    \ as\n[Apache Commons Text](https://commons.apache.org/proper/commons-text/) to\
-    \ escape the input:\n```\npublic String escapeValue(String value) {\n  return\
-    \ StringEscapeUtils.escapeJava(value);\n}\n```\n\nFor more information on response\
-    \ splitting attacks see OWASP:\nhttps://owasp.org/www-community/attacks/HTTP_Response_Splitting\n"
+  message: "HTTP Response Splitting is a vulnerability where Carriage Return (CR `\\r`) and Line Feed (LF\n`\\n`)\ncharacters\
+    \ are introduced into an HTTP header from user-supplied input. By injecting the\n`\\r\\n`\ncharacter sequence, an adversary\
+    \ could potentially modify how the response is interpreted by\nthe\nclient or any down stream caching services. This could\
+    \ allow an adversary to poison the cache\ndata or execute Cross-Site Scripting (XSS) attacks.\n\nSome Java application\
+    \ servers such as [Apache Tomcat](https://tomcat.apache.org/) will\nautomatically encode\ncharacters from being set in\
+    \ response headers as a space `0x20` character. If your application\nserver does\nnot automatically provide this functionality,\
+    \ user-supplied input that is used in header keys\nor values must be\nvalidated.\n\nExample of validating headers to only\
+    \ allow valid characters:\n```\n// throws an IllegalArgumentException if the provided value contains invalid characters\n\
+    public void validateHeader(String value) throws IllegalArgumentException {\n    char[] chars = value.toCharArray();\n\n\
+    \    // iterate over every character\n    for (int i = 0; i < chars.length; i++) {\n        char c = chars[i];\n\n   \
+    \     // check for any characters below 0x21 as well as: '\"' ',' ';' '\\' and 0x7f.\n        if (c < 0x21 || c == '\"\
+    ' || c == ',' || c == ';' || c == '\\\\' || c == 0x7f) {\n            throw new IllegalArgumentException(\"Invalid character\
+    \ in cookie detected:\n{0}\".format(Integer.toString(c)));\n        }\n    }\n}\n```\n\nAlternatively, you could use a\
+    \ string escape package such as\n[Apache Commons Text](https://commons.apache.org/proper/commons-text/) to escape the\
+    \ input:\n```\npublic String escapeValue(String value) {\n  return StringEscapeUtils.escapeJava(value);\n}\n```\n\nFor\
+    \ more information on response splitting attacks see OWASP:\nhttps://owasp.org/www-community/attacks/HTTP_Response_Splitting\n"
   severity: ERROR
   metadata:
-    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP
-      Response Splitting')
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
+    category: security
+    cwe: CWE-113
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: High
+- id: java_cookie_rule-RequestParamToHeader_1
+  languages:
+  - java
+  mode: taint
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: '$STR.replaceAll("$INPUT", "...");
+
+        ...
+
+        '
+    - pattern: $STR
+    - metavariable-regex:
+        metavariable: $INPUT
+        regex: .*\[(?=.*\\r)(?=.*\\n).*\]\+
+  - pattern: org.apache.commons.text.StringEscapeUtils.unescapeJava(...);
+  pattern-sinks:
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).addHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).addHeader("$KEY", ...);
+  pattern-sources:
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameter(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterNames();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterValues(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterMap();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
+  message: "HTTP Response Splitting is a vulnerability where Carriage Return (CR `\\r`) and Line Feed (LF\n`\\n`)\ncharacters\
+    \ are introduced into an HTTP header from user-supplied input. By injecting the\n`\\r\\n`\ncharacter sequence, an adversary\
+    \ could potentially modify how the response is interpreted by\nthe\nclient or any down stream caching services. This could\
+    \ allow an adversary to poison the cache\ndata or execute Cross-Site Scripting (XSS) attacks.\n\nSome Java application\
+    \ servers such as [Apache Tomcat](https://tomcat.apache.org/) will\nautomatically encode\ncharacters from being set in\
+    \ response headers as a space `0x20` character. If your application\nserver does\nnot automatically provide this functionality,\
+    \ user-supplied input that is used in header keys\nor values must be\nvalidated.\n\nExample of validating headers to only\
+    \ allow valid characters:\n```\n// throws an IllegalArgumentException if the provided value contains invalid characters\n\
+    public void validateHeader(String value) throws IllegalArgumentException {\n    char[] chars = value.toCharArray();\n\n\
+    \    // iterate over every character\n    for (int i = 0; i < chars.length; i++) {\n        char c = chars[i];\n\n   \
+    \     // check for any characters below 0x21 as well as: '\"' ',' ';' '\\' and 0x7f.\n        if (c < 0x21 || c == '\"\
+    ' || c == ',' || c == ';' || c == '\\\\' || c == 0x7f) {\n            throw new IllegalArgumentException(\"Invalid character\
+    \ in cookie detected:\n{0}\".format(Integer.toString(c)));\n        }\n    }\n}\n```\n\nAlternatively, you could use a\
+    \ string escape package such as\n[Apache Commons Text](https://commons.apache.org/proper/commons-text/) to escape the\
+    \ input:\n```\npublic String escapeValue(String value) {\n  return StringEscapeUtils.escapeJava(value);\n}\n```\n\nFor\
+    \ more information on response splitting attacks see OWASP:\nhttps://owasp.org/www-community/attacks/HTTP_Response_Splitting\n"
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
     category: security
     cwe: CWE-113
     owasp:

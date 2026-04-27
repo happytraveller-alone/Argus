@@ -1,0 +1,85 @@
+rules:
+- id: vuln-vlc-09572892
+  pattern: '$BOX->data.p_rdrf->psz_ref = malloc($LEN + 1);
+
+    '
+  pattern-not: '$BOX->data.p_rdrf->psz_ref = malloc($LEN);
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential off-by-one error in memory allocation. The code allocates memory for a string with an extra
+    byte, which could lead to buffer overflows or memory corruption. The fix involves correctly allocating memory based on
+    the exact length required. Ensure that the allocation size matches the intended data size to avoid security vulnerabilities.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/videolan/vlc/commit/09572892df7e72c0d4e598c0b5e076cf330d8b0a
+    category: security
+    cwe:
+    - CWE-193
+    owasp: A8:2017-Insecure Deserialization
+    references:
+    - https://cwe.mitre.org/data/definitions/193.html
+    technology:
+    - c
+- id: vuln-vlc-20429146
+  pattern: 'char $VAR[len + 1];
+
+    '
+  pattern-not: "char *$VAR = malloc(len + 1);\nif(!$VAR)\n    return $ERR;\nfree($VAR);\n"
+  languages:
+  - c
+  message: "Detected a potentially unsafe stack allocation of a variable-length array (VLA). \nThis can lead to stack overflow\
+    \ if the length is too large. \nInstead, use dynamic memory allocation with proper error checking and cleanup.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/videolan/vlc/commit/204291467724867b79735c0ee3aeb0dbc2200f97
+    category: security
+    cwe:
+    - 'CWE-789: Uncontrolled Memory Allocation'
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-vlc-3a628275
+  pattern: '$BOX->data.p_padb->i_reserved1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_pad2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_reserved2 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_pad1 = calloc( ($COUNT + 1) / 2, sizeof(uint16_t) );
+
+    '
+  pattern-not: '$COUNT = $BOX->data.p_padb->i_sample_count;
+
+    $COUNT = ($COUNT + 1) / 2;
+
+    $BOX->data.p_padb->i_reserved1 = calloc( $COUNT, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_pad2 = calloc( $COUNT, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_reserved2 = calloc( $COUNT, sizeof(uint16_t) );
+
+    $BOX->data.p_padb->i_pad1 = calloc( $COUNT, sizeof(uint16_t) );
+
+    '
+  languages:
+  - c
+  message: 'The code directly uses `(i_sample_count + 1) / 2` in multiple `calloc` calls, which can lead to repeated calculations
+    and potential inconsistencies. This can cause memory allocation issues or incorrect buffer sizes. The fix involves calculating
+    the count once and reusing it, ensuring consistency and reducing redundant computations. Always calculate buffer sizes
+    once and reuse them to avoid potential errors.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/videolan/vlc/commit/3a6282755277ba9321d405c635e50da935d258a6
+    category: security
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c

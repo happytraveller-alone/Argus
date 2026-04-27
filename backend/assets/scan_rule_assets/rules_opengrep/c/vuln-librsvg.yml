@@ -1,0 +1,103 @@
+rules:
+- id: vuln-librsvg-34c95743
+  pattern: '_rsvg_node_init($VAR)
+
+    '
+  pattern-not: '_rsvg_node_init($VAR, $TYPE)
+
+    '
+  languages:
+  - c
+  message: 'The function `_rsvg_node_init` is being called without specifying the node type, which can lead to invalid node
+    initialization and potential security vulnerabilities. Always specify the node type when initializing a node.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/librsvg/commit/34c95743ca692ea0e44778e41a7c0a129363de84
+    category: security
+    cwe:
+    - CWE-665
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-librsvg-40af93e6
+  pattern: 'g_string_append($D, g_ascii_dtostr($BUF, sizeof($BUF), pointlist[$I + 1]));
+
+    '
+  pattern-not: "if ($I + 1 < pointlist_len)\n    $P = pointlist[$I + 1];\nelse\n    $P = pointlist[$I - 1];\ng_string_append($D,\
+    \ g_ascii_dtostr($BUF, sizeof($BUF), $P));\n"
+  languages:
+  - c
+  message: 'Direct access to pointlist array without bounds checking can lead to out-of-bounds access, potentially causing
+    undefined behavior or crashes. This vulnerability occurs when processing SVG files with incomplete coordinate pairs. Always
+    check array bounds before accessing elements to prevent out-of-bounds access.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/librsvg/commit/40af93e6eb1c94b90c3b9a0b87e0840e126bb8df
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-librsvg-c6ddf2ed
+  pattern: "static int\nrsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $NAME)\n{\n    RsvgHandle *$HANDLE;\n\
+    \    gchar *$FILENAME, *$BASE_URI;\n    ...\n    $FILENAME = _rsvg_io_get_file_path ($NAME, rsvg_handle_get_base_uri ($DEFS->ctx));\n\
+    \    data = _rsvg_handle_acquire_data ($DEFS->ctx, $NAME, NULL, &data_len, NULL);\n    ...\n    $BASE_URI = rsvg_get_base_uri_from_filename\
+    \ ($FILENAME);\n    rsvg_handle_set_base_uri ($HANDLE, $BASE_URI);\n    g_free ($BASE_URI);\n    ...\n    g_free ($FILENAME);\n\
+    \    return 0;\n}\n"
+  pattern-not: "static RsvgHandle *\nrsvg_defs_load_extern (const RsvgDefs * $DEFS, const char * $URI)\n{\n    RsvgHandle\
+    \ *$HANDLE = NULL;\n    ...\n    data = _rsvg_handle_acquire_data ($DEFS->ctx, $URI, NULL, &data_len, NULL);\n    ...\n\
+    \    rsvg_handle_set_base_uri ($HANDLE, $URI);\n    ...\n    return $HANDLE;\n}\n"
+  languages:
+  - c
+  message: "The function rsvg_defs_load_extern is vulnerable to URI handling issues. \nThe original version uses a filename\
+    \ derived from the input name, which can lead to \nincorrect or insecure URI resolution. The fix involves directly using\
+    \ the URI parameter \nand properly handling the RsvgHandle object. This vulnerability could lead to \nincorrect resource\
+    \ loading or security issues. \nTo fix this, ensure that URIs are handled directly and consistently throughout \nthe code,\
+    \ and properly manage resource cleanup.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/librsvg/commit/c6ddf2ed4d768fd88adbea2b63f575cd523022ea
+    category: security
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-librsvg-f01aded7
+  pattern: "if ($URI) {\n    if ($HANDLE->priv->base_uri)\n        g_free ($HANDLE->priv->base_uri);\n    $HANDLE->priv->base_uri\
+    \ = $URI;\n}\n"
+  pattern-not: '$FILE = g_file_new_for_uri ($URI ? $URI : "data:");
+
+    rsvg_handle_set_base_gfile ($HANDLE, $FILE);
+
+    g_object_unref ($FILE);
+
+    g_free ($URI);
+
+    '
+  languages:
+  - c
+  message: 'The code directly assigns a URI to a handle without proper validation, which can lead to security vulnerabilities
+    such as URI scheme manipulation. This can allow unauthorized access to resources. The fix involves using `g_file_new_for_uri`
+    to properly handle the URI and ensuring that the URI scheme is validated before processing.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/GNOME/librsvg/commit/f01aded72c38f0e18bc7ff67dee800e380251c8e
+    category: security
+    cwe:
+    - CWE-20
+    owasp: 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/20.html
+    - https://owasp.org/www-project-top-ten/
+    technology:
+    - c

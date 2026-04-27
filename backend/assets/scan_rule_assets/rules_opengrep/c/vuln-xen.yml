@@ -1,0 +1,450 @@
+rules:
+- id: vuln-xen-08aa260d
+  pattern: '(void)page_get_owner_and_reference($PAGE);
+
+    '
+  pattern-not: "$TD = page_get_owner_and_reference($PAGE);\nif ( $TD != $RD || $RD->is_dying )\n{\n    if ( $TD )\n      \
+    \  put_page($PAGE);\n    $PAGE = NULL;\n    $RC = $ERROR_CODE;\n    goto $LABEL;\n}\n"
+  languages:
+  - c
+  message: 'The vulnerability occurs when the return value of `page_get_owner_and_reference` is ignored, which can lead to
+    incorrect handling of page references. This can result in use-after-free or double-free vulnerabilities if the page is
+    later accessed or freed without proper validation. To fix this, always check the return value of `page_get_owner_and_reference`
+    and handle the page reference appropriately, especially when the owning domain is dying.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/08aa260dd172de625ecc2b64b78b1aa68de1f472
+    category: security
+    cwe:
+    - CWE-416
+    - CWE-476
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-xen-136ac884
+  pattern: '$V->evtchn_fifo->control_block = $EXPR;
+
+    ...
+
+    $V->evtchn_fifo->queue[$I].head = &$V->evtchn_fifo->control_block->head[$I];
+
+    '
+  pattern-not: '$CONTROL_BLOCK = $EXPR;
+
+    ...
+
+    $V->evtchn_fifo->queue[$I].head = &$CONTROL_BLOCK->head[$I];
+
+    smp_wmb();
+
+    $V->evtchn_fifo->control_block = $CONTROL_BLOCK;
+
+    '
+  languages:
+  - c
+  message: 'Detected a potential race condition due to incorrect ordering of memory operations.
+
+    The control block is assigned before all queue heads are set, which can lead to inconsistent states.
+
+    The fix requires setting all queue heads first, followed by a memory barrier (smp_wmb()), and then assigning the control
+    block.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/136ac884e621a74b6b6168f474ae751a0ec690ab
+    category: security
+    cwe:
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization (''Race Condition'')'
+    technology:
+    - c
+- id: vuln-xen-1cfbd256
+  pattern: "static int rm_child_entry(struct node *node, size_t off, size_t len)\n{\n    if (!recovery)\n        return off;\n\
+    \n    if (remove_child_entry(NULL, node, off))\n        log(\"check_store: child entry could not be removed from '%s'\"\
+    ,\n            node->name);\n\n    return off - len - 1;\n}\n"
+  pattern-not: "static int check_store_step(const void *ctx, struct connection *conn,\n                            struct\
+    \ node *node, void *arg)\n{\n    struct hashtable *reachable = arg;\n\n    if (hashtable_search(reachable, (void *)node->name))\
+    \ {\n        log(\"check_store: '%s' is duplicated!\", node->name);\n        return recovery ? WALK_TREE_RM_CHILDENTRY\n\
+    \                       : WALK_TREE_SKIP_CHILDREN;\n    }\n\n    if (!remember_string(reachable, node->name))\n      \
+    \  return WALK_TREE_ERROR_STOP;\n\n    return WALK_TREE_OK;\n}\n"
+  languages:
+  - c
+  message: 'The function `rm_child_entry` in Xenstore''s core logic was removed due to potential vulnerabilities in handling
+    child entries. The function did not properly handle error conditions and could lead to inconsistent state in the Xenstore
+    database. The updated version uses a more robust approach with `check_store_step` and `check_store_enoent` functions,
+    which properly handle error conditions and recovery. To fix this issue, ensure that error handling is consistent and that
+    child entries are properly managed using the updated approach.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/xen-project/xen/commit/1cfbd2567b68e3e021a963d6f45f6adfa359c8d4
+    category: security
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    owasp:
+    - 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-xen-30a293fb
+  pattern: '$RET = do_tdb_delete($CONN, $KEY, NULL);
+
+    '
+  pattern-not: '$RET = ($VAR == NO_GENERATION) ? 0 : do_tdb_delete($CONN, $KEY, NULL);
+
+    '
+  languages:
+  - c
+  message: 'The code directly calls `do_tdb_delete` without checking the generation information,
+
+    which can lead to incorrect deletion of nodes in XenStore transactions. This is dangerous
+
+    because it can cause data inconsistency and potential security issues. To fix this, ensure
+
+    that the deletion is only performed if the node''s generation information is valid.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/30a293fba36b438d90b802132d70020e76086058
+    category: security
+    cwe:
+    - CWE-664
+    owasp:
+    - A02:2021 - Cryptographic Failures
+    technology:
+    - c
+- id: vuln-xen-3d963874
+  pattern: "if (cpu_data[smp_processor_id()].pfr64.csv2)\n  return true;\n"
+  pattern-not: "if (cpu_data[smp_processor_id()].pfr64.csv2)\n  return 0;\n"
+  languages:
+  - c
+  message: 'The vulnerability involves an incorrect return value when checking for the presence of the CSV2 feature in the
+    processor. The original code returns `true` when the CSV2 feature is present, which can lead to incorrect handling of
+    the hardened vector installation. This could result in security vulnerabilities due to improper vector handling. The fix
+    involves returning `0` instead of `true` to ensure the correct behavior.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/3d963874461b3001e33f3ff90e285670f04d16c4
+    category: security
+    cwe:
+    - CWE-754
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/754.html
+    technology:
+    - c
+- id: vuln-xen-62e7fb70
+  pattern: "$TYPE $FUNC(...) {\n  ...\n  $PG = alloc_domheap_page(NULL, 0);\n  ...\n  page_suppress_refcounting($PG);\n  ...\n\
+    }\n"
+  pattern-not: "$TYPE $FUNC(...) {\n  ...\n  $PG = alloc_domheap_page($D, MEMF_no_refcount);\n  ...\n  if ( !get_page_and_type($PG,\
+    \ $D, PGT_writable_page) ) {\n    domain_crash($D);\n    return -ENODATA;\n  }\n  ...\n}\n"
+  languages:
+  - c
+  message: "The code allocates a page without proper refcounting, which can lead to use-after-free vulnerabilities. \nThe\
+    \ patch fixes this by using the correct domain parameter and adding proper page type checking. \nAlways ensure pages are\
+    \ properly refcounted and use the correct domain parameter when allocating pages.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/62e7fb702db4adaa9415ac87d95e0f461e32d9ca
+    category: security
+    cwe:
+    - CWE-416
+    owasp: 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-xen-7615e248
+  pattern: '$IOMU->domid_map[$DOMID] = 0;
+
+    '
+  pattern-not: '$IOMU->domid_map[$DOMID] = DOMID_INVALID;
+
+    '
+  languages:
+  - c
+  message: 'Directly setting domid_map to 0 can lead to a race condition with context_set_domain_id(), potentially causing
+    incorrect domain ID handling. This can be exploited to bypass security checks or cause undefined behavior. Update domid_map[]
+    to DOMID_INVALID before updating domid_bitmap[] to avoid this race condition.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/7615e24837074daab396dc2a9718a0a2191dc136
+    category: security
+    cwe:
+    - CWE-362
+    owasp:
+    - A03:2021 - Injection
+    technology:
+    - c
+- id: vuln-xen-7b0d89d5
+  pattern: "$RET = reassign_device_ownership($S, $D, $DEVFN, $PDEV);\nif ( $RET || $D == $DOM_IO )\n    return $RET;\n"
+  pattern-not: "if ( $D == $DOM_IO )\n    return reassign_device_ownership($S, $D, $DEVFN, $PDEV);\n"
+  languages:
+  - c
+  message: 'The original code incorrectly handles the return value of `reassign_device_ownership` when `$D == $DOM_IO`, potentially
+    leading to incorrect error handling and device reassignment failures. This can cause security issues such as improper
+    device isolation or resource leaks. The fix ensures that `reassign_device_ownership` is only called when necessary and
+    its return value is properly handled.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/7b0d89d547d4a7428133d837ef2e69ad474fa3e7
+    category: security
+    cwe:
+    - CWE-703
+    technology:
+    - c
+- id: vuln-xen-8c8a5b39
+  pattern: "static void delete_node_single(struct connection *conn, struct node *node)\n{\n    TDB_DATA key;\n\n    if (access_node(conn,\
+    \ node, NODE_ACCESS_DELETE, &key))\n        return;\n\n    if (do_tdb_delete(conn, &key, &node->acc) != 0) {\n       \
+    \ corrupt(conn, \"Could not delete '%s'\", node->name);\n        return;\n    }\n\n    domain_entry_dec(conn, node);\n\
+    }\n"
+  pattern-not: "static int delnode_sub(const void *ctx, struct connection *conn,\n                      struct node *node,\
+    \ void *arg)\n{\n    const char *root = arg;\n    bool watch_exact;\n    int ret;\n    TDB_DATA key;\n\n    ret = access_node(conn,\
+    \ node, NODE_ACCESS_DELETE, &key);\n    if (ret > 0)\n        return WALK_TREE_SUCCESS_STOP;\n\n    if (!ret && do_tdb_delete(conn,\
+    \ &key, &node->acc))\n        return WALK_TREE_SUCCESS_STOP;\n\n    watch_exact = strcmp(root, node->name);\n    domain_entry_dec(conn,\
+    \ node);\n\n    return WALK_TREE_RM_CHILDENTRY;\n}\n"
+  languages:
+  - c
+  message: 'The `delete_node_single` function in the Xenstore code does not handle errors properly when deleting nodes, which
+    can lead to inconsistent states. The function silently returns on errors without propagating the error code, making it
+    difficult to detect and handle failures correctly. This can result in resource leaks, data corruption, or inconsistent
+    states in the Xenstore tree. The issue was fixed by refactoring the code to properly handle and propagate error codes,
+    ensuring that errors are detected and handled appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/8c8a5b3905d4bd6d2646ddaf00a424bde62289ef
+    category: security
+    cwe:
+    - CWE-703
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    references:
+    - https://cwe.mitre.org/data/definitions/703.html
+    technology:
+    - c
+- id: vuln-xen-af4a5eca
+  pattern: "if ( !paging_mode_log_dirty($D) )\n{\n    $RC = paging_log_dirty_enable($D, $LOG_GLOBAL);\n    if ( $RC )\n  \
+    \      goto $LABEL;\n}\n"
+  pattern-not: 'domain_pause($D);
+
+    p2m_enable_hardware_log_dirty($D);
+
+    domain_unpause($D);
+
+    '
+  languages:
+  - c
+  message: 'The code directly calls paging_log_dirty_enable without proper domain pausing, which can lead to race conditions
+    and inconsistent state. This vulnerability can cause data corruption or security issues in the Xen hypervisor. The fix
+    involves pausing the domain before enabling hardware log dirty and unpausing afterward to ensure atomicity.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/af4a5eca8f8774b4b3e6c684ca416368e90ce453
+    category: security
+    cwe:
+    - 'CWE-367: Time-of-check Time-of-use (TOCTOU) Race Condition'
+    owasp:
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://xenbits.xen.org/docs/unstable/hypercall/
+    technology:
+    - c
+- id: vuln-xen-ba1cff4b
+  pattern: "struct hashtable * $HT = create_hashtable($SIZE, $HASH_FN, $KEYS_EQUAL_FN);\n...\nif (hashtable_search($HT, $CHILDNAME))\
+    \ {\n  log(\"check_store: '%s' is duplicated!\", $CHILDNAME);\n  $I = rm_child_entry($NODE, $I, $CHILDLEN);\n} else {\n\
+    \  if (!remember_string($HT, $CHILDNAME)) {\n    log(\"check_store: ENOMEM\");\n    talloc_free($CHILDNODE);\n    talloc_free($CHILDNAME);\n\
+    \    $RET = ENOMEM;\n    break;\n  }\n  $RET = check_store_($CHILDNAME, $REACHABLE);\n}\n...\nhashtable_destroy($HT, 0);\n"
+  pattern-not: "if (hashtable_search($REACHABLE, $CHILDNAME)) {\n  log(\"check_store: '%s' is duplicated!\", $CHILDNAME);\n\
+    \  $I = rm_child_entry($NODE, $I, $CHILDLEN);\n  goto next;\n}\n...\n$RET = check_store_($CHILDNAME, $REACHABLE);\n"
+  languages:
+  - c
+  message: 'Detected a potential vulnerability in the Xenstore component where child nodes are checked for duplicates using
+    a local hashtable instead of the global reachable hashtable. This could lead to inconsistent state and potential security
+    issues. The fix involves using the global reachable hashtable for consistency checks and removing the local hashtable
+    usage.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/ba1cff4b1be983ea7ec55a994a3adc8b40903800
+    category: security
+    cwe:
+    - CWE-664
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c
+- id: vuln-xen-c17d4913
+  pattern: "if (!$WATCH->node || !$WATCH->token) {\n  ...\n}\n"
+  pattern-not: "if (!$WATCH->node || !$WATCH->token ||\n    domain_memory_add_chk($CONN->id, strlen($VEC[0]) + strlen($VEC[1])))\
+    \ {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code does not check for memory allocation using `domain_memory_add_chk` before processing watch events, which
+    could lead to memory exhaustion or denial of service. This vulnerability was fixed by adding memory checks before processing
+    watch events. Always ensure memory allocation checks are in place when handling potentially large or unbounded data.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/c17d49134aef23c8d017a64e5e36c626779bf863
+    category: security
+    cwe:
+    - CWE-770
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/770.html
+    technology:
+    - c
+- id: vuln-xen-c65ea16d
+  pattern: '$VAR mfn_return;
+
+    ...
+
+    mfn_return = $FUNC($ARG1, $ARG2, $ARG3, $ARG4, 0, NULL, NULL);
+
+    ...
+
+    ASSERT(!p2m_is_valid($T) || $MFN + $I == mfn_x(mfn_return));
+
+    '
+  pattern-not: "for ( $I = 0; $I < (1UL << $ORDER); )\n{\n    unsigned int $CUR_ORDER;\n    mfn_t mfn_return = $FUNC($ARG1,\
+    \ $ARG2, $ARG3, $ARG4, 0, &$CUR_ORDER, NULL);\n    if ( p2m_is_valid($T) && (!mfn_valid(_mfn($MFN)) || $MFN + $I != mfn_x(mfn_return))\
+    \ )\n        return -EILSEQ;\n    $I += (1UL << $CUR_ORDER) - (($GFN + $I) & ((1UL << $CUR_ORDER) - 1));\n}\n"
+  languages:
+  - c
+  message: 'This code contains a potential vulnerability where the validation of memory frame numbers (MFNs) is not properly
+    handled in a loop. The original code only performs an assertion check, which may be optimized out in release builds, leading
+    to potential security issues. The fixed version properly validates MFNs within a loop and returns an error if any inconsistency
+    is detected. To fix this, ensure that MFN validation is performed in a loop and handle errors appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: https://github.com/xen-project/xen/commit/c65ea16dbcafbe4fe21693b18f8c2a3c5d14600e
+    category: security
+    cwe:
+    - CWE-617
+    technology:
+    - c
+- id: vuln-xen-cbc06ee4
+  pattern: "static void $FUNC($TYPE $PARAM) {\n    ...\n    $TAIL($PARAM);\n    BUG();\n}\n"
+  pattern-not: "static void $FUNC(void) {\n    ...\n    reset_stack_and_jump_ind($TAIL);\n}\n"
+  languages:
+  - c
+  message: 'Detected a potentially unsafe function call pattern where a function pointer is called directly without using
+    `reset_stack_and_jump_ind`. This can lead to stack corruption or unexpected behavior. The correct approach is to use `reset_stack_and_jump_ind`
+    to ensure proper stack handling and prevent return from noreturn functions.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/cbc06ee4280371f78f5858cd613c8d1e2a53ecd3
+    category: security
+    cwe:
+    - CWE-119
+    technology:
+    - c
+- id: vuln-xen-e2b7fa75
+  pattern: "static void remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {\n  ...\n  if (write_node($CONN,\
+    \ $NODE, true))\n    corrupt($CONN, \"Can't update parent node '%s'\", $NODE->name);\n  ...\n}\n"
+  pattern-not: "static int remove_child_entry(struct connection *$CONN, struct node *$NODE, size_t $OFFSET) {\n  ...\n  return\
+    \ write_node($CONN, $NODE, true);\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The function `remove_child_entry` previously had a void return type and did not properly handle the return value
+    of `write_node`. This could lead to silent failures when updating parent nodes, potentially causing data corruption or
+    inconsistent states. The fix changes the return type to `int` and ensures the return value is properly checked and handled
+    by the caller.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/e2b7fa7508d7bff94ea72def2bb85c264065b2c0
+    category: security
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    technology:
+    - c
+- id: vuln-xen-fcba6c74
+  pattern: 'TDB_DATA $KEY;
+
+    ...
+
+    $KEY.dptr = (void *)$NODE->name;
+
+    $KEY.dsize = strlen($NODE->name);
+
+    ...
+
+    tdb_delete($TDB_CTX, $KEY);
+
+    '
+  pattern-not: 'tdb_delete($TDB_CTX, $NODE->key);
+
+    '
+  languages:
+  - c
+  message: 'The code directly constructs a TDB_DATA key from node->name, which can lead to incorrect key handling and potential
+    data corruption. Instead, use the node->key directly, which is properly managed and ensures consistency.
+
+    This vulnerability is dangerous because it can result in incorrect data deletion or modification, potentially leading
+    to system instability or security issues.
+
+    Fix: Use node->key directly instead of constructing the key manually.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/fcba6c74e1493a329563208ed1f3014dab54bd47
+    category: security
+    cwe:
+    - 'CWE-664: Improper Control of a Resource Through its Lifetime'
+    owasp:
+    - A9:2017-Insufficient Attack Protection
+    references:
+    - https://xenproject.org/
+    technology:
+    - c
+- id: vuln-xen-fe1e4668
+  pattern: 'unsigned long $END_GFN = 1UL << (DEFAULT_DOMAIN_ADDRESS_WIDTH - PAGE_SHIFT);
+
+    unsigned int $LEVEL = amd_iommu_get_paging_mode($END_GFN);
+
+    '
+  pattern-not: 'unsigned int $LEVEL = hd->arch.amd.paging_mode;
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves calculating the paging mode using a potentially incorrect `end_gfn` value derived from
+    `DEFAULT_DOMAIN_ADDRESS_WIDTH`. This can lead to incorrect memory mapping and potential security issues. The fix uses
+    the correct paging mode stored in `hd->arch.amd.paging_mode`. Always use the correct paging mode value to avoid memory
+    mapping errors.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/xen-project/xen/commit/fe1e4668b373ec4c1e5602e75905a9fa8cc2be3f
+    category: security
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    technology:
+    - c

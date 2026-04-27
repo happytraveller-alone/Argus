@@ -1,0 +1,118 @@
+rules:
+- id: vuln-libreswan-2aecf49d
+  pattern: "if ($SEC_LABEL->len != 0) {\n  ...\n}\n"
+  pattern-not: "if ($SEC_LABEL != NULL && $SEC_LABEL->len > 0) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code checks for a security label''s length without verifying if the label pointer is NULL. This could lead
+    to a NULL pointer dereference vulnerability. Always check if the pointer is NULL before accessing its members.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libreswan/libreswan/commit/2aecf49d1d8fd0e92625bcfad95e0cc996263c57
+    category: security
+    cwe:
+    - CWE-476
+    owasp:
+    - A1:2021-Broken Access Control
+    technology:
+    - c
+- id: vuln-libreswan-7ceef9a7
+  pattern: "for ($NR = 0; $NR < $ISAT_NUM; ) {\n  ...\n  $TS = &$TSS->ts[$NR];\n  ...\n  if ($START_PORT > $END_PORT) {\n\
+    \    ...\n  }\n  ...\n}\n"
+  pattern-not: "for (unsigned $N = 0; $N < $ISAT_NUM; $N++) {\n  ...\n  if ($START_PORT > $END_PORT) {\n    ...\n  }\n  ...\n\
+    }\n"
+  languages:
+  - c
+  message: 'The original code uses a manual counter increment in a for-loop without proper bounds checking, which can lead
+    to array out-of-bounds access. This vulnerability can cause memory corruption or crashes. The fix introduces a proper
+    loop with an unsigned counter and bounds checking using `passert`. Always use proper loop constructs with bounds checking
+    when iterating over arrays.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libreswan/libreswan/commit/7ceef9a79cb14ea1f53bbab7681523994b0ca25e
+    category: security
+    cwe:
+    - CWE-125
+    - CWE-787
+    owasp:
+    - 'A1: Injection'
+    technology:
+    - c
+- id: vuln-libreswan-d64ec242
+  pattern: "if ($ST == NULL ||\n    ($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {\n  ...\n\
+    }\n"
+  pattern-not: "if (($ST->hidden_variables.st_nat_traversal & $NAT_T_WITH_RFC_VALUES) == $LEMPTY) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code contains a null pointer dereference vulnerability. The check for `st == NULL` was removed, which could
+    lead to a crash if `st` is null. This vulnerability occurs in the handling of NAT traversal in IKEv1. To fix this, ensure
+    proper null checks are in place before accessing structure members.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libreswan/libreswan/commit/d64ec2420a21f76d08106a074cbc6b3795810325
+    category: security
+    cwe:
+    - CWE-476
+    owasp: A1:2017-Injection
+    technology:
+    - c
+- id: vuln-libreswan-dcd6050a
+  pattern: "int $TYPE_PROPOSED = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);\nint $TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;\n\
+    if ($TYPE_PROPOSED != $TYPE_MATCHED) {\n  ...\n}\n"
+  pattern-not: "bool $LOCAL_TRANSFORM_TYPE_PRESENT = $LOCAL_TRANSFORMS->transform[0].valid;\nbool $REMOTE_TRANSFORM_TYPE_PRESENT\
+    \ = (($TRANSFORM_TYPES_FOUND & LELEM($TYPE)) != 0);\nif ($LOCAL_TRANSFORM_TYPE_PRESENT != $REMOTE_TRANSFORM_TYPE_PRESENT)\
+    \ {\n  ...\n}\nbool $REMOTE_TRANSFORM_TYPE_MATCHED = $MATCHING_LOCAL_PROPOSAL->matching_transform[$TYPE]->valid;\nif ($LOCAL_TRANSFORM_TYPE_PRESENT\
+    \ != $REMOTE_TRANSFORM_TYPE_MATCHED) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code performs an inconsistent check between proposed and matched transform types, which could lead to security
+    vulnerabilities in the IKEv2 protocol implementation. The original check only compared the proposed and matched states
+    without ensuring that both ends of the communication agree on the presence of the transform. This could allow an attacker
+    to exploit discrepancies in the protocol negotiation. The fix ensures that both local and remote ends agree on the presence
+    and validity of the transform types, providing a more secure protocol implementation. Always ensure that both ends of
+    the communication agree on the presence and validity of transform types in protocol negotiations.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libreswan/libreswan/commit/dcd6050ad8b566ec2d1e424403cf8d2d36925099
+    category: security
+    cwe:
+    - CWE-358
+    owasp: A03:2021 - Injection
+    references:
+    - https://tools.ietf.org/html/rfc7296
+    technology:
+    - c
+- id: vuln-libreswan-f32feb1d
+  pattern: 'change_v1_state(&$IKE->sa, STATE_AGGR_R1);
+
+    '
+  pattern-not: 'change_v1_state(&$IKE->sa, STATE_AGGR_R0);
+
+    '
+  languages:
+  - c
+  message: 'This rule detects a vulnerability in libreswan where the state change to STATE_AGGR_R1 can lead to security issues.
+    The vulnerability allows an attacker to potentially guess the responder''s IKE SPI, which could lead to unauthorized access
+    or other security breaches. The fix involves changing the state to STATE_AGGR_R0 to mitigate this risk.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/libreswan/libreswan/commit/f32feb1dd71e4a69636d9d7efbd1ff441acde9d6
+    category: security
+    cwe:
+    - 'CWE-330: Use of Insufficiently Random Values'
+    owasp:
+    - 'A2: Broken Authentication'
+    references:
+    - https://cwe.mitre.org/data/definitions/330.html
+    technology:
+    - c

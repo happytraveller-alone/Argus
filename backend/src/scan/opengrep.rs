@@ -368,7 +368,7 @@ mod tests {
         let assets = load_rule_assets(&state)
             .await
             .expect("opengrep assets should load");
-        assert!(assets.len() > 2000);
+        assert!(assets.len() > 900);
         assert!(assets
             .iter()
             .any(|asset| asset.asset_path == "rules_opengrep/java/aes_ecb_mode.yaml"));

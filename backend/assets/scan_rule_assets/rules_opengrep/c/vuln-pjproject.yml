@@ -1,0 +1,77 @@
+rules:
+- id: vuln-pjproject-077b465c
+  pattern: "int $CHR = *$SCANNER->curptr;\nif (!$CHR) {\n  ...\n}\n++$SCANNER->curptr;\nif (PJ_SCAN_IS_PROBABLY_SPACE(*$SCANNER->curptr)\
+    \ && $SCANNER->skip_ws) {\n  ...\n}\n"
+  pattern-not: "register char *$S = $SCANNER->curptr;\nint $CHR;\nif ($S >= $SCANNER->end || !*$S) {\n  ...\n}\n$CHR = *$S;\n\
+    ++$S;\n$SCANNER->curptr = $S;\nif (PJ_SCAN_CHECK_EOF($S) && PJ_SCAN_IS_PROBABLY_SPACE(*$S) && $SCANNER->skip_ws) {\n \
+    \ ...\n}\n"
+  languages:
+  - c
+  message: 'The code directly dereferences the scanner pointer without checking if it has reached the end of the buffer. This
+    can lead to out-of-bounds memory access and potential security vulnerabilities. The fix introduces proper bounds checking
+    by comparing the current pointer with the end of the buffer and verifying the character value. Always ensure pointer bounds
+    are checked before dereferencing to prevent memory corruption or crashes.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/pjsip/pjproject/commit/077b465c33f0aec05a49cd2ca456f9a1b112e896
+    category: security
+    cwe:
+    - 'CWE-125: Out-of-bounds Read'
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/125.html
+    technology:
+    - c
+- id: vuln-pjproject-450baca9
+  pattern: "while ($MSG_LEN > 0) {\n  ...\n}\n"
+  pattern-not: "while ($MSG_LEN > 0 && $MSG->attr_count < $ATTR_MAX_CNT) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected a potential buffer overflow vulnerability due to missing bounds check in a while loop.
+
+    This vulnerability occurs when processing STUN messages without verifying the attribute count against the maximum allowed.
+
+    An attacker could exploit this to cause a buffer overflow, potentially leading to arbitrary code execution or a crash.
+
+    To fix this, ensure the loop checks that the attribute count does not exceed the maximum allowed, as shown in the patch.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/pjsip/pjproject/commit/450baca94f475345542c6953832650c390889202
+    category: security
+    cwe:
+    - CWE-120
+    - CWE-125
+    owasp: 'A1: Injection'
+    technology:
+    - c
+- id: vuln-pjproject-db323595
+  pattern: 'pj_hash_set_lower($NULL, $TABLE, $DLG->local.info->tag.ptr, (unsigned)$DLG->local.info->tag.slen, ...)
+
+    '
+  pattern-not: 'pj_hash_set_lower($NULL, $TABLE, $DLG_SET->ht_key.ptr, (unsigned)$DLG_SET->ht_key.slen, ...)
+
+    '
+  languages:
+  - c
+  message: 'Direct use of dialog tag as a hash key without verification can lead to hash table corruption. This vulnerability
+    occurs when the dialog tag is used directly in the hash table operations, which can cause issues if the dialog is unregistered
+    or modified. Instead, use a separate hash key (ht_key) that is managed and verified independently.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/pjsip/pjproject/commit/db3235953baa56d2fb0e276ca510fefca751643f
+    category: security
+    cwe:
+    - CWE-665
+    owasp:
+    - 'A9: Using Components with Known Vulnerabilities'
+    references:
+    - https://cwe.mitre.org/data/definitions/665.html
+    technology:
+    - c

@@ -1,0 +1,256 @@
+rules:
+- id: vuln-bind9-15996f0c
+  pattern: 'INSIST($RC != dns_rcode_noerror && $RC != dns_rcode_nxdomain);
+
+    '
+  pattern-not: 'INSIST($RC != dns_rcode_noerror && $RC != dns_rcode_nxdomain);
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves an incorrect assertion in DNS response code handling.
+
+    The original code incorrectly asserts that the response code (rcode) should not be dns_rcode_noerror or dns_rcode_nxdomain,
+    which could lead to incorrect handling of valid DNS responses. This could cause the server to reject legitimate queries,
+    leading to denial of service or incorrect DNS resolution.
+
+    The fix removes this incorrect assertion, allowing valid response codes to be processed correctly.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/15996f0cb15631b95a801e3e88928494a69ad6ee
+    category: security
+    cwe:
+    - CWE-617
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    references:
+    - https://cwe.mitre.org/data/definitions/617.html
+    technology:
+    - c
+- id: vuln-bind9-2e9d79f1
+  pattern: "if (!deletekey) {\n  ...\n}\n"
+  pattern-not: "if (secure && !deletekey) {\n  ...\n}\n"
+  languages:
+  - c
+  message: "A security check for the 'secure' flag is missing before processing a key. \nThis could allow insecure keys to\
+    \ be processed, potentially leading to security vulnerabilities. \nEnsure the 'secure' flag is checked before proceeding\
+    \ with key operations.\n"
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/2e9d79f169663c9aff5f0dcdc626a2cd2dbb5892
+    category: security
+    cwe:
+    - CWE-284
+    owasp:
+    - A06:2021-Vulnerable and Outdated Components
+    technology:
+    - c
+- id: vuln-bind9-5b2282af
+  pattern: 'return (DST_R_VERIFYFAILURE);
+
+    '
+  pattern-not: 'DST_RET(DST_R_VERIFYFAILURE);
+
+    '
+  languages:
+  - c
+  message: 'Direct return of DST_R_VERIFYFAILURE without using DST_RET macro can lead to inconsistent error handling. This
+    issue was fixed by wrapping the return value in the DST_RET macro to ensure proper error handling and resource cleanup.
+    Always use DST_RET for returning error codes in this context.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/5b2282afff760b1ed3471f6666bdfe8e1d34e590
+    category: security
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    owasp:
+    - A10:2021 - Security Misconfiguration
+    technology:
+    - c
+- id: vuln-bind9-603a0e26
+  pattern: 'dns_resolver_createfetch2($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS,
+    $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
+
+    '
+  pattern-not: 'dns_resolver_createfetch3($RESOLVER, $NAME, $TYPE, $DOMAIN, $NAMESERVERS, $FORWARDERS, $CLIENT, $ID, $OPTIONS,
+    $DEPTH, $TASK, $ACTION, $ARG, $RDATASET, $SIGRDATASET, $FETCHP)
+
+    '
+  languages:
+  - c
+  message: 'The function `dns_resolver_createfetch2` is vulnerable to recursive DNS queries without depth limiting, which
+    could lead to DNS amplification attacks or resource exhaustion. This was fixed by introducing `dns_resolver_createfetch3`
+    which includes a depth parameter to limit recursion. Update to use `dns_resolver_createfetch3` with an appropriate depth
+    limit.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/603a0e2637b35a2da820bc807f69bcf09c682dce
+    category: security
+    cwe:
+    - CWE-400
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://kb.isc.org/docs/cve-2012-1033
+    technology:
+    - c
+- id: vuln-bind9-69c1ee1c
+  pattern: "$RESULT = $FUNC(...);\nif ($RESULT != ISC_R_SUCCESS) {\n  goto error;\n}\n"
+  pattern-not: 'CHECK($FUNC(...));
+
+    '
+  languages:
+  - c
+  message: 'The code directly checks the return value of a function and uses ''goto error'' for error handling. This pattern
+    is error-prone and can lead to inconsistent error handling. The patch introduces a CHECK macro that centralizes error
+    handling, making the code more robust and maintainable. Replace the direct error checks with the CHECK macro to ensure
+    consistent error handling.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/69c1ee1ce9f801aaa082bb3abf5969b46699f70a
+    category: security
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    owasp:
+    - 'A9: Security Misconfiguration'
+    technology:
+    - c
+- id: vuln-bind9-711e8339
+  pattern: "if ($FCTX->totalqueries > DEFAULT_MAX_QUERIES) {\n  ...\n}\n"
+  pattern-not: "if ($FCTX->totalqueries > $FCTX->res->maxqueries) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'Detected use of a hardcoded DEFAULT_MAX_QUERIES limit instead of the configured maxqueries value. This can lead
+    to resource exhaustion attacks as the resolver may allow more queries than intended. Use the configured maxqueries value
+    from the resolver context instead.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/711e833921d3dd67df7515438e152bbfdb2c1249
+    category: security
+    cwe:
+    - CWE-400
+    owasp:
+    - A1:2017-Injection
+    technology:
+    - c
+- id: vuln-bind9-73df5c80
+  pattern: "if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL) {\n  return ($RETURN_VALUE);\n}\nif (BN_cmp($PRIV_KEY1, $PRIV_KEY2)\
+    \ != 0) {\n  return ($RETURN_VALUE);\n}\n"
+  pattern-not: "if ($PRIV_KEY1 == NULL || $PRIV_KEY2 == NULL ||\n    BN_cmp($PRIV_KEY1, $PRIV_KEY2) != 0) {\n  $DST_RET($RETURN_VALUE);\n\
+    }\n"
+  languages:
+  - c
+  message: 'The code contains multiple separate checks for NULL pointers and BN_cmp comparisons,
+
+    which can lead to inconsistent error handling and resource leaks. The vulnerability
+
+    occurs because the function may return prematurely without proper cleanup. This can
+
+    be dangerous as it may leave resources allocated or system state inconsistent. The
+
+    fix combines these checks into a single conditional statement and uses a proper
+
+    error handling mechanism (DST_RET) to ensure consistent cleanup.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/73df5c80538970ee1fbc4fe3348109bdc281e197
+    category: security
+    cwe:
+    - CWE-404
+    owasp:
+    - A9:2021-Security Logging and Monitoring Failures
+    references:
+    - https://wiki.sei.cmu.edu/confluence/display/c/MEM12-C.+Consider+using+a+goto+chain+when+leaving+a+function+on+error+when+using+and+releasing+resources
+    technology:
+    - c
+- id: vuln-bind9-8bd0c12d
+  pattern: 'INSIST((valoptions & DNS_VALIDATOR_DEFER) != 0);
+
+    '
+  pattern-not: 'valoptions |= DNS_VALIDATOR_DEFER;
+
+    else
+
+    valoptions &= ~DNS_VALIDATOR_DEFER;
+
+    '
+  languages:
+  - c
+  message: 'The vulnerability involves incorrect handling of DNS validator options, specifically the DNS_VALIDATOR_DEFER flag.
+    The original code uses an INSIST assertion to check if the flag is set, but it does not properly handle the case where
+    the flag should be toggled. This can lead to improper validation handling and potential manipulation of DNS messages.
+    The fix involves correctly setting or clearing the flag based on the context. Ensure that DNS validator options are properly
+    managed to prevent concurrent manipulation of DNS message structures.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/8bd0c12d53bea6f299e92d20ee0a23b16a7f65bc
+    category: security
+    cwe:
+    - 'CWE-617: Reachable Assertion'
+    owasp:
+    - 'A5: Security Misconfiguration'
+    references:
+    - https://cwe.mitre.org/data/definitions/617.html
+    technology:
+    - c
+- id: vuln-bind9-8d807cc2
+  pattern: '$KEY->key_size = pk11_numbits($DATA, $LEN);
+
+    '
+  pattern-not: "$RET = pk11_numbits($DATA, $LEN, &$BITS);\nif ($RET != ISC_R_SUCCESS) {\n  ...\n}\n$KEY->key_size = $BITS;\n"
+  languages:
+  - c
+  message: 'Direct assignment of pk11_numbits result to key_size without error checking can lead to incorrect key size values.
+    This can cause security vulnerabilities in cryptographic operations. Always check the return value of pk11_numbits and
+    handle errors appropriately.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/8d807cc21655eaa6e6a08afafeec3682c0f3f2ab
+    category: security
+    cwe:
+    - 'CWE-391: Unchecked Error Condition'
+    owasp:
+    - A03:2021 - Cryptographic Failures
+    references:
+    - https://cwe.mitre.org/data/definitions/391.html
+    - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
+    technology:
+    - c
+- id: vuln-bind9-e4cccf96
+  pattern: "if ($MTYPE == dns_ssumatchtype_subdomain) {\n  ...\n}\n"
+  pattern-not: "if ($MTYPE == dns_ssumatchtype_subdomain &&\n    strcasecmp($STR, \"zonesub\") == 0) {\n  ...\n}\n"
+  languages:
+  - c
+  message: 'The code is missing a critical check for the string "zonesub" when the match type is `dns_ssumatchtype_subdomain`.
+    This vulnerability could lead to incorrect handling of subdomain matches, potentially allowing unauthorized access or
+    misconfiguration. To fix this, ensure that the `strcasecmp` check for "zonesub" is included when the match type is `dns_ssumatchtype_subdomain`.
+
+    '
+  severity: ERROR
+  metadata:
+    source-url: github.com/isc-projects/bind9/commit/e4cccf9668c7adee4724a7649ec64685f82c8677
+    category: security
+    cwe:
+    - CWE-20
+    owasp:
+    - 'A1: Injection'
+    references:
+    - https://cwe.mitre.org/data/definitions/20.html
+    technology:
+    - c

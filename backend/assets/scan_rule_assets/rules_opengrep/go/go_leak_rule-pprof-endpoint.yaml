@@ -9,8 +9,38 @@ rules:
     - pattern: http.ListenAndServeTLS(...)
     - pattern: http.Serve(...)
     - pattern: http.ServeTLS(...)
-  message: 'Go has a built in profiling service that is enabled by starting an HTTP
-    server with
+  message: 'Go has a built in profiling service that is enabled by starting an HTTP server with
+
+    `net/http/pprof` imported. The `/debug/pprof` endpoint does not require any
+
+    authentication and can be accessed by anonymous users. This profiling endpoint
+
+    can leak sensitive information and should not be enabled in production.
+
+
+    To remediate this, remove the `net/http/pprof` import from the file.
+
+    '
+  metadata:
+    shortDescription: Active debug code (pprof enabled)
+    cwe: CWE-489
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: Medium
+    category: security
+  severity: ERROR
+- id: go_leak_rule-pprof-endpoint_1
+  languages:
+  - go
+  patterns:
+  - pattern-inside: "import (\n  \"net/http/pprof\"\n)\n...\n"
+  - pattern-either:
+    - pattern: http.ListenAndServe(...)
+    - pattern: http.ListenAndServeTLS(...)
+    - pattern: http.Serve(...)
+    - pattern: http.ServeTLS(...)
+  message: 'Go has a built in profiling service that is enabled by starting an HTTP server with
 
     `net/http/pprof` imported. The `/debug/pprof` endpoint does not require any
 
