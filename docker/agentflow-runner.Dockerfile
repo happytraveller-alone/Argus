@@ -10,8 +10,8 @@ ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
-ARG BACKEND_PYPI_INDEX_PRIMARY=
-ARG BACKEND_PYPI_INDEX_FALLBACK=
+ARG BACKEND_PYPI_INDEX_PRIMARY=https://mirrors.aliyun.com/pypi/simple/
+ARG BACKEND_PYPI_INDEX_FALLBACK=https://pypi.org/simple
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -43,8 +43,7 @@ RUN --mount=type=cache,id=argus-agentflow-pip,target=/root/.cache/pip,sharing=lo
     if [ -n "${BACKEND_PYPI_INDEX_FALLBACK}" ]; then \
       python -m pip config set global.extra-index-url "${BACKEND_PYPI_INDEX_FALLBACK}"; \
     fi; \
-    python -m pip install --upgrade pip; \
-    python -m pip wheel --wheel-dir /opt/agentflow-wheels /opt/agentflow-src
+    python -m pip wheel --timeout 120 --retries 10 --wheel-dir /opt/agentflow-wheels /opt/agentflow-src
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS agentflow-runner
 ARG AGENTFLOW_REPOSITORY
