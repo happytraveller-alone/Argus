@@ -45,7 +45,11 @@ test("TaskActivitiesListTable uses compact table width and column minimums", () 
   assert.match(source, /fillContainerWidth/);
   assert.match(source, /width: 64/);
   assert.match(source, /minWidth: 132/);
-  assert.match(source, /maxWidth: 156/);
+  assert.match(source, /width: 128/);
+  assert.match(source, /maxWidth: 136/);
+  assert.match(source, /minWidth: 192/);
+  assert.match(source, /maxWidth: 240/);
+  assert.match(source, /align: "left"/);
   assert.match(source, /width: 132/);
   assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
 });
@@ -117,8 +121,10 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
   assert.match(markup, /严重 1 \/ 高危 1 \/ 中危 1 \/ 低危 1/);
   assert.match(markup, /严重 0 \/ 高危 2 \/ 中危 3 \/ 低危 5/);
   assert.match(markup, /style="width:100%;min-width:\d+px"/);
-  assert.match(markup, /style="width:156px;min-width:156px;max-width:156px"/);
+  assert.match(markup, /style="width:136px;min-width:136px;max-width:136px"/);
+  assert.match(markup, /style="width:240px;min-width:240px;max-width:240px"/);
   assert.match(markup, /style="width:132px;min-width:132px"/);
+  assert.match(markup, /data-align="left"/);
   assert.match(markup, /class="block truncate text-base text-muted-foreground"/);
   assert.match(markup, /Demo Agent[\s\S]*?">-<\/td>/);
 });

@@ -1643,10 +1643,6 @@ async fn get_static_finding_value(
 }
 
 fn visible_static_finding_count(record: &task_state::StaticTaskRecord) -> i64 {
-    if record.findings.is_empty() {
-        return json_non_negative_i64(&record.extra, "error_count")
-            + json_non_negative_i64(&record.extra, "warning_count");
-    }
     record
         .findings
         .iter()
@@ -1680,14 +1676,6 @@ fn static_finding_display_severity(payload: &Value) -> Option<&'static str> {
         "ERROR" | "WARNING" | "MEDIUM" => Some("LOW"),
         _ => None,
     }
-}
-
-fn json_non_negative_i64(value: &Value, key: &str) -> i64 {
-    value
-        .get(key)
-        .and_then(Value::as_i64)
-        .unwrap_or_default()
-        .max(0)
 }
 
 async fn update_static_finding_status(
@@ -2172,13 +2160,38 @@ fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
 #[cfg(test)]
 mod tests {
     use crate::config::AppConfig;
+    use crate::db::task_state;
 
     use super::{
         build_opengrep_runner_spec, extract_highest_rule_severity, format_opengrep_runner_error,
-        read_opengrep_results_text, OpengrepResourceScheduler, OpengrepRunnerPaths,
-        OpengrepRunnerResources,
+        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
+        OpengrepRunnerPaths, OpengrepRunnerResources,
     };
+    use serde_json::json;
     use std::{sync::mpsc, time::Duration};
+
+    fn static_task_record_with_findings(
+        findings: Vec<task_state::StaticFindingRecord>,
+    ) -> task_state::StaticTaskRecord {
+        task_state::StaticTaskRecord {
+            id: "task-1".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: "project-1".to_string(),
+            name: "static scan".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            total_findings: findings.len() as i64,
+            scan_duration_ms: 42,
+            files_scanned: 1,
+            created_at: "2026-04-27T01:42:09Z".to_string(),
+            extra: json!({
+                "error_count": 9,
+                "warning_count": 8,
+            }),
+            findings,
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn extract_highest_rule_severity_prefers_error_over_warning_and_info() {
@@ -2210,6 +2223,43 @@ rules:
             extract_highest_rule_severity(content),
             Some("WARNING".to_string())
         );
+    }
+
+    #[test]
+    fn static_task_value_counts_only_visible_findings() {
+        let record = static_task_record_with_findings(vec![
+            task_state::StaticFindingRecord {
+                id: "finding-1".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-1",
+                    "severity": "ERROR",
+                }),
+            },
+            task_state::StaticFindingRecord {
+                id: "finding-hidden".to_string(),
+                scan_task_id: "task-1".to_string(),
+                status: "open".to_string(),
+                payload: json!({
+                    "id": "finding-hidden",
+                    "severity": "INFO",
+                }),
+            },
+        ]);
+
+        let value = static_task_value(&record);
+
+        assert_eq!(value["total_findings"], 1);
+    }
+
+    #[test]
+    fn static_task_value_does_not_report_findings_without_detail_payloads() {
+        let record = static_task_record_with_findings(Vec::new());
+
+        let value = static_task_value(&record);
+
+        assert_eq!(value["total_findings"], 0);
     }
 
     #[test]

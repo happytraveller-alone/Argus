@@ -97,12 +97,15 @@ function getColumns(
 			sortingFn: "datetime",
 			meta: createTaskActivitiesTableMeta({
 				label: "创建时间",
-				minWidth: 152,
+				width: 128,
+				maxWidth: 136,
 			}),
 			cell: ({ row }) => (
-				<div className="text-base text-muted-foreground">
-					<div>
-						{formatCreatedAt(row.original.createdAt)}{" "}
+				<div className="text-base leading-tight text-muted-foreground">
+					<div className="truncate" title={formatCreatedAt(row.original.createdAt)}>
+						{formatCreatedAt(row.original.createdAt)}
+					</div>
+					<div className="text-sm text-muted-foreground/80">
 						{getRelativeTime(row.original.createdAt, nowMs)}
 					</div>
 				</div>
@@ -170,8 +173,8 @@ function getColumns(
 			header: "缺陷摘要",
 			meta: createTaskActivitiesTableMeta({
 				label: "缺陷摘要",
-				minWidth: 128,
-				maxWidth: 156,
+				minWidth: 192,
+				maxWidth: 240,
 			}),
 			cell: ({ row }) => {
 				const summary = getDefectSummaryLabel(row.original);
@@ -192,19 +195,22 @@ function getColumns(
 			enableSorting: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "操作",
+				align: "left",
 				width: 132,
 			}),
 			cell: ({ row }) => (
-				<Button
-					asChild
-					size="sm"
-					variant="outline"
-					className="cyber-btn-ghost h-8 px-3"
-				>
-					<Link to={appendReturnTo(row.original.route, currentRoute)}>
-						详情
-					</Link>
-				</Button>
+				<div className="flex justify-start">
+					<Button
+						asChild
+						size="sm"
+						variant="outline"
+						className="cyber-btn-ghost h-8 px-3"
+					>
+						<Link to={appendReturnTo(row.original.route, currentRoute)}>
+							详情
+						</Link>
+					</Button>
+				</div>
 			),
 		},
 	];
