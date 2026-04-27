@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
 ARG AGENTFLOW_REPOSITORY=https://github.com/berabuddies/agentflow.git
 ARG AGENTFLOW_COMMIT=1667fa35ed99e3c1583a7d60cac8e3406cafd3ee
