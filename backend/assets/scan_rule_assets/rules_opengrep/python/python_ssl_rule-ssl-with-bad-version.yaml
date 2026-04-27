@@ -1,0 +1,50 @@
+rules:
+- id: python_ssl_rule-ssl-with-bad-version
+  languages:
+  - python
+  message: "The application was found calling an SSL module with SSL or TLS protocols\
+    \ that have known\ndeficiencies.\nIt is strongly recommended that newer applications\
+    \ use TLS 1.2 or 1.3 and\n`SSLContext.wrap_socket`.\n\nIf using the `pyOpenSSL`\
+    \ module, please note that it has been deprecated and the Python\nCryptographic\
+    \ Authority\nstrongly suggests moving to use the [pyca/cryptography](https://github.com/pyca/cryptography)\n\
+    module instead.\n\nTo remediate this issue for the `ssl` module, create a new\
+    \ TLS context and pass in\n`ssl.PROTOCOL_TLS_CLIENT` for clients or `ssl.PROTOCOL_TLS_SERVER`\
+    \ for servers to the\n`ssl.SSLContext(...)` `protocol=`\nargument. When converting\
+    \ the socket to a TLS socket, use the new `SSLContext.wrap_socket`\nmethod instead.\n\
+    \nExample creating a TLS 1.3 client socket connection by using a newer version\
+    \ of Python\n(3.11.4) and\nthe SSL module:\n```\nimport ssl\nimport socket\n\n\
+    # Create our initial socket\nwith socket.socket(socket.AF_INET, socket.SOCK_STREAM)\
+    \ as sock:\n    # Connect the socket\n    sock.connect(('www.example.org', 443))\n\
+    \n    # Create a new SSLContext with protocol set to ssl.PROTOCOL_TLS_CLIENT\n\
+    \    # This will auto-select the highest grade TLS protocol version (1.3)\n  \
+    \  context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)\n    # Load our\
+    \ a certificates for server certificate authentication\n    context.load_verify_locations('cert.pem')\n\
+    \    # Create our TLS socket, and validate the server hostname matches\n    with\
+    \ context.wrap_socket(sock, server_hostname=\"www.example.org\") as tls_sock:\n\
+    \        # Send some bytes over the socket (HTTP request in this case)\\\n   \
+    \     data = bytes('GET / HTTP/1.1\\r\\nHost: example.org\\r\\n\\r\\n', 'utf-8')\n\
+    \        sent_bytes = tls_sock.send(data)\n        # Validate number of sent bytes\n\
+    \        # ...\n        # Read the response\n        resp = tls_sock.recv()\n\
+    \        # Work with the response\n        # ...\n```\n\nFor more information\
+    \ on the ssl module see:\n- https://docs.python.org/3/library/ssl.html\n\nFor\
+    \ more information on pyca/cryptography and openssl see:\n- https://cryptography.io/en/latest/openssl/\n"
+  metadata:
+    cwe: CWE-326
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    shortDescription: Inadequate Encryption Strength
+    security-severity: Medium
+    category: security
+  patterns:
+  - pattern-either:
+    - pattern: ssl.PROTOCOL_SSLv2
+    - pattern: ssl.PROTOCOL_SSLv3
+    - pattern: ssl.PROTOCOL_TLSv1
+    - pattern: ssl.PROTOCOL_TLSv1_1
+    - pattern: pyOpenSSL.SSL.SSLv2_METHOD
+    - pattern: pyOpenSSL.SSL.SSLv23_METHOD
+    - pattern: pyOpenSSL.SSL.SSLv3_METHOD
+    - pattern: pyOpenSSL.SSL.TLSv1_METHOD
+    - pattern: pyOpenSSL.SSL.TLSv1_1_METHOD
+  severity: ERROR

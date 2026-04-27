@@ -1,0 +1,26 @@
+rules:
+- id: raptor-incorrect-use-of-memset
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://lkml.org/lkml/2009/11/11/336
+    - https://bugs.mysql.com/bug.php?id=23181
+    confidence: HIGH
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-457: Use of Uninitialized Variable'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+  message: The invocation of memset() is easy to get wrong. The second argument is
+    the character and the third argument is the size, but sometimes these arguments
+    are in the wrong order. This results in a no-op.
+  severity: ERROR
+  languages:
+  - c
+  pattern-either:
+  - pattern: memset($_, $_, 0);
+  - pattern: memset($_, $_, '\0');
+  - pattern: memset($_, sizeof(...), $_);
+  - pattern: memset_explicit($_, $_, 0);
+  - pattern: memset_explicit($_, $_, '\0');
+  - pattern: memset_explicit($_, sizeof(...), $_);

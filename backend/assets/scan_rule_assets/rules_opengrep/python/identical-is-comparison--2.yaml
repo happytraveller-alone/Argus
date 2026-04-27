@@ -1,0 +1,11 @@
+rules:
+- id: identical-is-comparison
+  pattern: $S is $S
+  message: Found identical comparison using is. Ensure this is what you intended.
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-704: Incorrect Type Conversion or Cast'

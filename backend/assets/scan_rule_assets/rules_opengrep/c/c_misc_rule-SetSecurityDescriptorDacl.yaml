@@ -1,0 +1,34 @@
+rules:
+- id: c_misc_rule-SetSecurityDescriptorDacl
+  languages:
+  - c
+  message: 'When `SetSecurityDescriptorDacl` is called with a null `pDacl` parameter
+    and the
+
+    `bDaclPresent` flag is `TRUE`, all access to the object is allowed. An attacker
+
+    could set the object to Deny all, which would include even the Administrator user(s).
+
+
+    Either call `SetSecurityDescriptorDacl` with bDaclPresent as `FALSE`, or supply
+    a valid
+
+    non-null `pDacl` parameter value.
+
+
+    For more information please see:
+
+    https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-setsecuritydescriptordacl#remarks
+
+    '
+  metadata:
+    shortDescription: Null ACL when calling SetSecurityDescriptorDacl may allow all
+      access to objects
+    cwe: CWE-732
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: Medium
+    category: security
+  pattern: SetSecurityDescriptorDacl(...)
+  severity: ERROR

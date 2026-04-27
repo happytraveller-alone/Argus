@@ -231,9 +231,7 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .components()
             .next()
             .and_then(|part| part.as_os_str().to_str());
-        if matches!(top, Some("rules_opengrep" | "rules_from_patches"))
-            && seen.insert(relative.clone())
-        {
+        if matches!(top, Some("rules_opengrep")) && seen.insert(relative.clone()) {
             out.push(relative);
         }
     }
@@ -269,7 +267,6 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
 
     match top {
         "rules_opengrep" => Ok(("opengrep", "internal_rule")),
-        "rules_from_patches" => Ok(("opengrep", "patch_rule")),
         _ => Err(anyhow!(
             "unsupported rule asset root: {}",
             relative.display()
@@ -303,6 +300,40 @@ mod tests {
             .collect()
     }
 
+    fn language_tokens(content: &str) -> Vec<String> {
+        let mut languages = Vec::new();
+        let mut in_languages_block = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("languages:") {
+                in_languages_block = true;
+                continue;
+            }
+            if in_languages_block {
+                if let Some(lang) = trimmed.strip_prefix("- ") {
+                    languages.push(normalize_language_token(lang));
+                } else {
+                    in_languages_block = false;
+                }
+            }
+        }
+        languages
+    }
+
+    fn normalize_language_token(lang: &str) -> String {
+        match lang
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_lowercase()
+            .as_str()
+        {
+            "c#" => "csharp".to_string(),
+            "c++" => "cpp".to_string(),
+            other => other.to_string(),
+        }
+    }
+
     #[test]
     fn discovers_only_retained_rule_asset_families() {
         let assets = discover_rule_assets().expect("rule assets should load");
@@ -314,38 +345,59 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(paths
             .iter()
-            .any(|path| path == &"rules_opengrep/aes_ecb_mode.yaml"));
+            .any(|path| path == &"rules_opengrep/java/aes_ecb_mode.yaml"));
         assert!(paths
             .iter()
-            .any(|path| path.starts_with("rules_from_patches/")));
+            .any(|path| path == &"rules_opengrep/c/vim-double-free-b29f4abc.yml"));
 
         let roots = paths
             .iter()
             .filter_map(|path| path.split('/').next())
             .collect::<BTreeSet<_>>();
-        assert_eq!(
-            roots,
-            BTreeSet::from(["rules_from_patches", "rules_opengrep"])
-        );
+        assert_eq!(roots, BTreeSet::from(["rules_opengrep"]));
     }
 
     #[test]
     fn classifies_retained_assets_as_opengrep_sources() {
         let assets = discover_rule_assets().expect("rule assets should load");
 
-        let patch_rule = assets
+        assert!(assets
             .iter()
-            .find(|asset| asset.asset_path.starts_with("rules_from_patches/"))
-            .expect("patch rule asset should exist");
-        assert_eq!(patch_rule.engine, "opengrep");
-        assert_eq!(patch_rule.source_kind, "patch_rule");
+            .all(|asset| asset.asset_path.starts_with("rules_opengrep/")));
+        assert!(assets.iter().all(|asset| asset.engine == "opengrep"));
+        assert!(assets
+            .iter()
+            .all(|asset| asset.source_kind == "internal_rule"));
+    }
 
-        let builtin_rule = assets
+    #[test]
+    fn retained_opengrep_assets_are_language_scoped() {
+        let assets = discover_rule_assets().expect("rule assets should load");
+
+        for asset in assets
             .iter()
-            .find(|asset| asset.asset_path.starts_with("rules_opengrep/"))
-            .expect("builtin rule asset should exist");
-        assert_eq!(builtin_rule.engine, "opengrep");
-        assert_eq!(builtin_rule.source_kind, "internal_rule");
+            .filter(|asset| asset.asset_path.starts_with("rules_opengrep/"))
+        {
+            let parts = asset.asset_path.split('/').collect::<Vec<_>>();
+            assert!(
+                parts.len() >= 3,
+                "expected rules_opengrep/<language>/<file> path, got {}",
+                asset.asset_path
+            );
+            let directory_language = parts[1];
+            let languages = language_tokens(&asset.content);
+            assert_eq!(
+                languages.len(),
+                1,
+                "expected exactly one language in {}",
+                asset.asset_path
+            );
+            assert_eq!(
+                languages[0], directory_language,
+                "expected language directory to match rule language in {}",
+                asset.asset_path
+            );
+        }
     }
 
     #[test]

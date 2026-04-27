@@ -413,7 +413,6 @@ impl ScriptFixture {
         fs::create_dir_all(&fake_bin).expect("mkdir bin");
         fs::create_dir_all(&target_dir).expect("mkdir target");
         fs::create_dir_all(rules_root.join("rules_opengrep")).expect("mkdir builtin rules");
-        fs::create_dir_all(rules_root.join("rules_from_patches")).expect("mkdir patch rules");
 
         let fake_opengrep = fake_bin.join("opengrep");
         fs::write(

@@ -1,0 +1,82 @@
+rules:
+- id: csharp_injection_rule-CommandInjection
+  languages:
+  - csharp
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: '...
+
+          (System.Diagnostics.Process $PROC).Start(...);
+
+          '
+      - pattern-either:
+        - patterns:
+          - pattern: (System.Diagnostics.Process $PROC).StartInfo.FileName = <...$ARG...>;
+          - pattern-not: (System.Diagnostics.Process $PROC).StartInfo.FileName = "...";
+        - patterns:
+          - pattern: (System.Diagnostics.Process $PROC).StartInfo.Arguments = <...$ARG...>;
+          - pattern-not: (System.Diagnostics.Process $PROC).StartInfo.Arguments =
+              "...";
+    - patterns:
+      - pattern: System.Diagnostics.Process.Start($ARG);
+      - pattern-not: System.Diagnostics.Process.Start("...");
+    - patterns:
+      - pattern-not: $PSINFO.Arguments = "...";
+      - pattern-not: $PSINFO.FileName = "...";
+      - pattern-not: new System.Diagnostics.ProcessStartInfo("...");
+      - pattern-not: new System.Diagnostics.ProcessStartInfo();
+      - pattern-either:
+        - pattern: new System.Diagnostics.ProcessStartInfo(...);
+        - pattern: $PSINFO.Arguments = <...$ARG...>;
+        - pattern: $PSINFO.FileName = <...$ARG...>;
+    - patterns:
+      - pattern-inside: 'new System.Diagnostics.ProcessStartInfo{
+
+          ...
+
+          }
+
+          '
+      - pattern-not: Arguments = "..."
+      - pattern-not: FileName = "..."
+      - pattern-either:
+        - pattern: Arguments = ...
+        - pattern: FileName = ...
+  message: "OS command injection is a critical vulnerability that can lead to a full\
+    \ system\ncompromise as it may allow an adversary to pass in arbitrary commands\
+    \ or arguments\nto be executed.\n\nUser input should never be used in constructing\
+    \ commands or command arguments\nto functions which execute OS commands. This\
+    \ includes filenames supplied by\nuser uploads or downloads.\n\nEnsure your application\
+    \ does not:\n\n- Use user-supplied information in the process name to execute.\n\
+    - Use user-supplied information in an OS command execution function which does\n\
+    not escape shell meta-characters.\n- Use user-supplied information in arguments\
+    \ to OS commands.\n\nThe application should have a hardcoded set of arguments\
+    \ that are to be passed\nto OS commands. If filenames are being passed to these\
+    \ functions, it is\nrecommended that a hash of the filename be used instead, or\
+    \ some other unique\nidentifier. It is strongly recommended that a native library\
+    \ that implements\nthe same functionality be used instead of using OS system commands,\
+    \ due to the\nrisk of unknown attacks against third party commands.\n\nWhen specifying\
+    \ the OS command, ensure the application uses the full path\ninformation, otherwise\
+    \ the OS may attempt to look up which process to execute\nand could be vulnerable\
+    \ to untrusted search path vulnerabilities (CWE-426).\n\nExample of safely executing\
+    \ an OS command:\n```\npublic void ExecuteCommand(string userFileData) {\n   \
+    \ // generate a random filename, do not using user input\n    string fileName\
+    \ = \"C:\\\\Temp\\\\\" + Guid.NewGuid();\n    File.WriteAllText(fileName, userFileData);\n\
+    \n    using (Process process = new Process())\n    {\n        // hardcode the\
+    \ full process path\n        ProcessStartInfo processInfo = new ProcessStartInfo(\"\
+    C:\\\\App\\\\FileReader.exe\");\n        // only pass in trust arguments, and\
+    \ never direct user input.\n        processInfo.Arguments = fileName;\n      \
+    \  processInfo.UseShellExecute = false;\n        process.StartInfo = processInfo;\n\
+    \        process.Start();\n    }\n}\n```\n\nFor more information on OS command\
+    \ injection, see OWASP's guide:\nhttps://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html\n"
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of special elements used in an OS command
+      ('OS Command Injection')
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-78
+    security-severity: High

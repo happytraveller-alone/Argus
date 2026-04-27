@@ -1844,20 +1844,9 @@ async fn builtin_opengrep_rules(
         .map_err(internal_error)?;
     Ok(assets
         .into_iter()
-        .filter(|asset| asset.source_kind == "internal_rule" || asset.source_kind == "patch_rule")
+        .filter(|asset| asset.source_kind == "internal_rule")
         .map(|asset| {
-            let fallback_language = asset
-                .asset_path
-                .strip_prefix("rules_from_patches/")
-                .and_then(|path| path.split('/').next())
-                .unwrap_or("generic")
-                .to_string();
-            let language = fallback_language;
-            let source = if asset.source_kind == "patch_rule" {
-                "patch"
-            } else {
-                "internal"
-            };
+            let language = builtin_rule_language(&asset.asset_path);
             task_state::OpengrepRuleRecord {
                 id: asset.asset_path.clone(),
                 name: file_stem(&asset.asset_path),
@@ -1867,7 +1856,7 @@ async fn builtin_opengrep_rules(
                 confidence: Some("MEDIUM".to_string()),
                 description: Some("builtin opengrep rule served by rust backend".to_string()),
                 cwe: None,
-                source: source.to_string(),
+                source: "internal".to_string(),
                 correct: true,
                 is_active: true,
                 created_at: "2026-01-01T00:00:00Z".to_string(),
@@ -1876,6 +1865,15 @@ async fn builtin_opengrep_rules(
             }
         })
         .collect())
+}
+
+fn builtin_rule_language(asset_path: &str) -> String {
+    asset_path
+        .strip_prefix("rules_opengrep/")
+        .and_then(|path| path.split_once('/').map(|(language, _)| language))
+        .filter(|language| !language.trim().is_empty())
+        .unwrap_or("generic")
+        .to_string()
 }
 
 async fn merged_opengrep_rules(

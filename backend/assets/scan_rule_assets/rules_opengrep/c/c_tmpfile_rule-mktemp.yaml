@@ -1,0 +1,39 @@
+rules:
+- id: c_tmpfile_rule-mktemp
+  languages:
+  - c
+  message: 'The `mktemp` function should no longer be used due to multiple flaws.
+    Some implementations
+
+    created random files by using known information like the process ID and a single
+    letter. This
+
+    allows for possible race conditions where an attacker could guess or manipulate
+    these files
+
+    prior to them being used.
+
+
+    Consider using the `mkstemp` function instead, but be aware it also contains possible
+
+    risks. Ensure the process has called the `umask` function with restricted permissions
+    prior
+
+    to calling `mkstemp` and validate the permissions prior to using the file descriptor.
+
+
+    For more information on temporary files please see:
+
+    https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=87152425
+
+    '
+  metadata:
+    shortDescription: Use of deprecated function (mktemp)
+    cwe: CWE-377
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: Medium
+    category: security
+  pattern: mktemp(...)
+  severity: ERROR

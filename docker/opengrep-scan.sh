@@ -17,7 +17,6 @@ self_test() {
   ensure_rules_root
   command -v opengrep >/dev/null
   test -d "$RULES_ROOT/rules_opengrep"
-  test -d "$RULES_ROOT/rules_from_patches"
   opengrep --version >/dev/null
 
   local temp_dir
@@ -68,7 +67,7 @@ self_test() {
 }
 
 ensure_rules_root() {
-  if [ -d "$RULES_ROOT/rules_opengrep" ] && [ -d "$RULES_ROOT/rules_from_patches" ]; then
+  if [ -d "$RULES_ROOT/rules_opengrep" ]; then
     return 0
   fi
 

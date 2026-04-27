@@ -1,0 +1,24 @@
+rules:
+- id: raptor-insecure-api-alloca
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/676
+    - https://cwe.mitre.org/data/definitions/1325
+    - https://nullprogram.com/blog/2019/10/28/
+    - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
+    confidence: HIGH
+    cwe:
+    - 'CWE-676: Use of a Potentially Dangerous Function'
+    - 'CWE-121: Stack-based Buffer Overflow'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-20: Improper Input Validation'
+  message: Use of alloca() is unsafe because it cannot ensure that the pointer  returned
+    points to a valid and usable block of memory. The allocation  made may exceed
+    the bounds of the stack, or even go further into other  objects in memory, and
+    alloca() cannot determine such an error.
+  severity: ERROR
+  languages:
+  - c
+  pattern: alloca(...)

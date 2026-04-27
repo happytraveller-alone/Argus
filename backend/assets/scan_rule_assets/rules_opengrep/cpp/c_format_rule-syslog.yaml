@@ -1,0 +1,37 @@
+rules:
+- id: c_format_rule-syslog
+  languages:
+  - cpp
+  message: 'Format string vulnerabilities allow an attacker to read or in some cases,
+    potentially write
+
+    data to
+
+    and from locations in the processes'' memory. To prevent against format string
+    attacks, do not
+
+    allow
+
+    users or un-validated input to provide the format specification.
+
+    Consider using a constant for the format specification, or strip all format
+
+    specifiers from the input prior to calling the `syslog` function.
+
+
+    For more information please see: https://capec.mitre.org/data/definitions/67.html
+
+    '
+  metadata:
+    shortDescription: Potential format string vulnerability in syslog call
+    cwe: CWE-134
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - patterns:
+    - pattern: syslog($FUNC,...)
+    - pattern-not: syslog($FUNC,"...",...)
+  severity: ERROR

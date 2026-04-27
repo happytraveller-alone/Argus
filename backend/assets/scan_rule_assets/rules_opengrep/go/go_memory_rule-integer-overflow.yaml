@@ -1,0 +1,35 @@
+rules:
+- id: go_memory_rule-integer-overflow
+  languages:
+  - go
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: '$X, ... := strconv.Atoi(...)
+
+          ...
+
+          '
+      - pattern-either:
+        - pattern: int32($X)
+        - pattern: int16($X)
+  message: "Golang's `int` type size depends on the architecture of where the application\
+    \ is running. For\n32-bit systems, `int` is\n32-bit, for 64-bit systems, `int`\
+    \ will be 64-bit. By calling `strconv.Atoi` with a large\nnumber, the integer\
+    \ may overflow\nif the `int` return value is type converted into a smaller type\
+    \ (`int32` or `int16`). This\ncould cause unexpected application\nbehavior depending\
+    \ on how the resultant value is used.\n\nPrior to running any type conversion,\
+    \ check that the value returned from `strconv.Atoi` will\nfit in the resulting\
+    \ integer.\n\nExample of checking the return value before type conversion:\n```\n\
+    bigValue, _ := strconv.Atoi(\"32768\")\nif bigValue > math.MaxInt16 {\n  log.Fatal(\"\
+    value too large to fit in int16\")\n}\nvalue := int16(bigValue)\nfmt.Println(value)\n\
+    ```\n\nFor more information on integer min/max constants see: https://pkg.go.dev/math#pkg-constants\n"
+  metadata:
+    shortDescription: Integer overflow or wraparound
+    cwe: CWE-190
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+    category: security
+  severity: ERROR

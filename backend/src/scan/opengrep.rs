@@ -13,7 +13,7 @@ use crate::{
 };
 
 const OPENGREP_ENGINE: &str = "opengrep";
-const OPENGREP_RULE_SOURCE_KINDS: &[&str] = &["internal_rule", "patch_rule"];
+const OPENGREP_RULE_SOURCE_KINDS: &[&str] = &["internal_rule"];
 
 pub async fn load_rule_assets(state: &AppState) -> Result<Vec<ScanRuleAsset>> {
     scan_rule_assets::load_assets_by_engine(state, OPENGREP_ENGINE, OPENGREP_RULE_SOURCE_KINDS)
@@ -252,9 +252,6 @@ fn relative_rule_path(asset_path: &str) -> PathBuf {
     if let Some(rest) = asset_path.strip_prefix("rules_opengrep/") {
         return PathBuf::from("internal").join(rest);
     }
-    if let Some(rest) = asset_path.strip_prefix("rules_from_patches/") {
-        return PathBuf::from("patch").join(rest);
-    }
     PathBuf::from(asset_path)
 }
 
@@ -267,8 +264,8 @@ fn normalize_language(lang: &str) -> String {
 }
 
 fn extract_language_from_asset_path(asset_path: &str) -> Option<String> {
-    let rest = asset_path.strip_prefix("rules_from_patches/")?;
-    let lang = rest.split('/').next()?;
+    let rest = asset_path.strip_prefix("rules_opengrep/")?;
+    let (lang, _) = rest.split_once('/')?;
     if lang.is_empty() {
         return None;
     }
@@ -300,6 +297,9 @@ fn extract_rule_languages(content: &str) -> BTreeSet<String> {
 
 fn rule_matches_languages(asset: &ScanRuleAsset, project_languages: &BTreeSet<String>) -> bool {
     if let Some(lang) = extract_language_from_asset_path(&asset.asset_path) {
+        if lang == "generic" || lang == "regex" {
+            return true;
+        }
         return project_languages.contains(&lang);
     }
     let rule_langs = extract_rule_languages(&asset.content);
@@ -361,7 +361,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn loads_opengrep_internal_and_patch_rule_assets() {
+    async fn loads_unified_opengrep_internal_rule_assets() {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
@@ -371,13 +371,13 @@ mod tests {
         assert!(assets.len() > 2000);
         assert!(assets
             .iter()
-            .any(|asset| asset.asset_path == "rules_opengrep/aes_ecb_mode.yaml"));
+            .any(|asset| asset.asset_path == "rules_opengrep/java/aes_ecb_mode.yaml"));
         assert!(assets
             .iter()
-            .any(|asset| asset.asset_path.starts_with("rules_from_patches/")));
+            .any(|asset| asset.asset_path == "rules_opengrep/c/vim-double-free-b29f4abc.yml"));
         assert!(assets
             .iter()
-            .all(|asset| asset.source_kind != "patch_artifact"));
+            .all(|asset| asset.source_kind == "internal_rule"));
         assert!(assets.iter().all(|asset| asset.content.lines().all(|line| {
             let Some(value) = line.trim().strip_prefix("severity:") else {
                 return true;
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn materializes_opengrep_rule_directory_with_internal_and_patch_buckets() {
+    async fn materializes_opengrep_rule_directory_with_internal_bucket() {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
@@ -398,10 +398,12 @@ mod tests {
             .expect("materialize should succeed")
             .expect("rules directory should exist");
 
-        let internal_rule = path.join("internal/aes_ecb_mode.yaml");
+        let internal_rule = path.join("internal/java/aes_ecb_mode.yaml");
         assert!(internal_rule.exists());
-        let patch_rules_dir = path.join("patch");
-        assert!(patch_rules_dir.exists());
+        let migrated_patch_rule = path.join("internal/c/vim-double-free-b29f4abc.yml");
+        assert!(migrated_patch_rule.exists());
+        let legacy_patch_rules_dir = path.join("patch");
+        assert!(!legacy_patch_rules_dir.exists());
         let _ = fs::remove_dir_all(&workspace).await;
     }
 
@@ -414,7 +416,7 @@ mod tests {
         let selected = vec![crate::state::ScanRuleAsset {
             engine: "opengrep".to_string(),
             source_kind: "internal_rule".to_string(),
-            asset_path: "rules_opengrep/demo-rule.yaml".to_string(),
+            asset_path: "rules_opengrep/python/demo-rule.yaml".to_string(),
             file_format: "yaml".to_string(),
             sha256: "sha".to_string(),
             content: "rules:\n  - id: demo\n    languages: [python]\n    message: demo\n    severity: ERROR\n    pattern: print($X)\n".to_string(),
@@ -426,7 +428,7 @@ mod tests {
             .expect("materialize selected assets")
             .expect("rules directory should exist");
 
-        let materialized = path.join("internal/demo-rule.yaml");
+        let materialized = path.join("internal/python/demo-rule.yaml");
         assert!(materialized.exists(), "{}", materialized.display());
         let _ = fs::remove_dir_all(&workspace).await;
     }
@@ -482,14 +484,10 @@ mod tests {
     }
 
     #[test]
-    fn extracts_language_from_patch_rule_path() {
+    fn extracts_language_from_rule_asset_path() {
         assert_eq!(
-            extract_language_from_asset_path("rules_from_patches/java/vuln-cxf.yml"),
-            Some("java".to_string())
-        );
-        assert_eq!(
-            extract_language_from_asset_path("rules_from_patches/cpp/vuln-test.yml"),
-            Some("cpp".to_string())
+            extract_language_from_asset_path("rules_opengrep/python/some-rule.yaml"),
+            Some("python".to_string())
         );
         assert_eq!(
             extract_language_from_asset_path("rules_opengrep/some-rule.yaml"),
@@ -550,9 +548,12 @@ mod tests {
         assert!(!java_only.is_empty(), "java rules should not be empty");
         for asset in &java_only {
             if let Some(lang) = extract_language_from_asset_path(&asset.asset_path) {
+                if lang == "generic" || lang == "regex" {
+                    continue;
+                }
                 assert_eq!(
                     lang, "java",
-                    "patch rule should be java: {}",
+                    "language-scoped rule should be java: {}",
                     asset.asset_path
                 );
             }
@@ -583,7 +584,7 @@ mod tests {
             c_rules.iter().any(|a| {
                 extract_language_from_asset_path(&a.asset_path) == Some("cpp".to_string())
             }),
-            "C project should also include cpp patch rules"
+            "C project should also include cpp rules"
         );
     }
 

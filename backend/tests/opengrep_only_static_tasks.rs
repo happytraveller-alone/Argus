@@ -217,19 +217,64 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
         items.iter().all(|item| {
             item.get("is_active").and_then(Value::as_bool) == Some(true)
                 && item.get("severity").and_then(Value::as_str) == Some("ERROR")
+                && item.get("source").and_then(Value::as_str) == Some("internal")
         }),
-        "expected builtin opengrep assets to expose only active ERROR-severity rules"
+        "expected builtin opengrep assets to expose only active internal ERROR-severity rules"
+    );
+    assert!(
+        items.iter().any(|item| {
+            item.get("id").and_then(Value::as_str)
+                == Some("rules_opengrep/c/vim-double-free-b29f4abc.yml")
+        }),
+        "expected migrated patch-derived rule to be served from rules_opengrep"
     );
     let representative_rule = items
         .iter()
         .find(|item| {
-            item.get("id").and_then(Value::as_str)
-                == Some("rules_opengrep/go_blocklist_rule-blocklist-rc4.yaml")
+            item.get("id").and_then(Value::as_str) == Some("rules_opengrep/java/aes_ecb_mode.yaml")
         })
         .expect("expected representative builtin asset to be present");
     assert_eq!(
         representative_rule.get("severity").and_then(Value::as_str),
         Some("ERROR")
+    );
+    assert_eq!(
+        representative_rule.get("language").and_then(Value::as_str),
+        Some("java")
+    );
+
+    let java_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/static-tasks/rules?language=java&limit=5000")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("language-filtered rules request should complete");
+    assert_eq!(java_response.status(), StatusCode::OK);
+    let java_payload: Value = serde_json::from_slice(
+        &to_bytes(java_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let java_items = java_payload["data"]
+        .as_array()
+        .expect("language-filtered rules response should expose data array");
+    assert!(
+        java_items.iter().any(|item| {
+            item.get("id").and_then(Value::as_str) == Some("rules_opengrep/java/aes_ecb_mode.yaml")
+        }),
+        "java language filter should include language-scoped rules_opengrep assets"
+    );
+    assert!(
+        java_items
+            .iter()
+            .all(|item| item.get("language").and_then(Value::as_str) == Some("java")),
+        "java language filter should only return java rules"
     );
 
     let stats_response = app
@@ -258,10 +303,19 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
         stats_payload.get("inactive").and_then(Value::as_u64),
         Some(0)
     );
+    let stats_languages = stats_payload["languages"]
+        .as_array()
+        .expect("stats response should include language metadata");
     assert!(
-        stats_payload["languages"]
-            .as_array()
-            .is_some_and(|languages| !languages.is_empty()),
-        "stats response should include language metadata"
+        stats_languages
+            .iter()
+            .any(|language| language.as_str() == Some("java")),
+        "stats response should include language metadata from rules_opengrep directories"
+    );
+    assert!(
+        stats_languages
+            .iter()
+            .any(|language| language.as_str() == Some("cpp")),
+        "stats response should include split cpp rules"
     );
 }
