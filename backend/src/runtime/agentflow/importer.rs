@@ -137,17 +137,26 @@ pub fn sanitize_value(value: &Value) -> Value {
 pub fn redact_text(text: &str) -> String {
     let mut redacted = text.to_string();
     for marker in ["Authorization:", "authorization:", "Cookie:", "cookie:", "apiKey=", "api_key="] {
-        while let Some(start) = redacted.find(marker) {
-            let value_start = start + marker.len();
-            let value_end = redacted[value_start..]
-                .find(|c: char| c.is_whitespace() || c == '&' || c == ',' || c == ';')
-                .map(|offset| value_start + offset)
-                .unwrap_or(redacted.len());
-            redacted.replace_range(value_start..value_end, " [REDACTED]");
-        }
+        redacted = redact_marker_values(&redacted, marker);
     }
     redacted = redacted.replace("/var/run/docker.sock", "[REDACTED_DOCKER_SOCKET]");
     redacted
+}
+
+fn redact_marker_values(text: &str, marker: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut remaining = text;
+    while let Some(start) = remaining.find(marker) {
+        output.push_str(&remaining[..start + marker.len()]);
+        output.push_str(" [REDACTED]");
+        let value = &remaining[start + marker.len()..];
+        let end = value
+            .find(|c: char| c.is_whitespace() || c == '&' || c == ',' || c == ';')
+            .unwrap_or(value.len());
+        remaining = &value[end..];
+    }
+    output.push_str(remaining);
+    output
 }
 
 pub fn validate_relative_artifact_path(path: &str) -> ImportResult<()> {
