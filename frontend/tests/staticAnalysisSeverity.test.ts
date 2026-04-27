@@ -9,7 +9,7 @@ test("normalizeStaticAnalysisSeverity maps detail-page severity values", () => {
 	assert.equal(normalizeStaticAnalysisSeverity("ERROR"), "LOW");
 	assert.equal(normalizeStaticAnalysisSeverity("WARNING"), "LOW");
 	assert.equal(normalizeStaticAnalysisSeverity("MEDIUM"), "LOW");
+	assert.equal(normalizeStaticAnalysisSeverity("LOW"), "LOW");
 	assert.equal(normalizeStaticAnalysisSeverity("INFO"), null);
-	assert.equal(normalizeStaticAnalysisSeverity("LOW"), null);
 	assert.equal(normalizeStaticAnalysisSeverity(undefined), null);
 });

@@ -130,3 +130,40 @@ test("StaticAnalysisFindingsTable keeps severity and confidence columns non-hide
 	assert.equal(severityColumn?.enableHiding, false);
 	assert.equal(confidenceColumn?.enableHiding, false);
 });
+
+test("StaticAnalysisFindingsTable narrows rule column and fills the page width", async () => {
+	const tableModule = await loadTableModule();
+
+	const columns = tableModule.getColumns({
+		currentRoute: "/static-analysis/task-1",
+		updatingKey: null,
+		onToggleStatus: (_row: UnifiedFindingRow, _target: FindingStatus) => {},
+	});
+	const ruleColumn = columns.find((column) => column.id === "rule");
+	const ruleMeta = ruleColumn?.meta as
+		| {
+				width?: number;
+				minWidth?: number;
+				maxWidth?: number;
+				filterVariant?: string;
+		  }
+		| undefined;
+
+	assert.equal(ruleMeta?.width, 220);
+	assert.equal(ruleMeta?.minWidth, 180);
+	assert.equal(ruleMeta?.maxWidth, 260);
+	assert.equal(ruleMeta?.filterVariant, "text");
+
+	const markup = renderTable(tableModule.default, {
+		rows: [
+			{
+				...openFinding,
+				rule: "vuln-clamav-96ff19a1",
+			},
+		],
+	});
+
+	assert.match(markup, /style="width:100%;min-width:\d+px"/);
+	assert.match(markup, /class="[^"]*truncate[^"]*"/);
+	assert.match(markup, /title="vuln-clamav-96ff19a1"/);
+});

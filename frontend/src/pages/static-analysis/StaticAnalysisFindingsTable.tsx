@@ -117,11 +117,18 @@ export function getColumns(input: {
 			enableHiding: false,
 			meta: {
 				label: "命中规则",
-				minWidth: 320,
+				width: 220,
+				minWidth: 180,
+				maxWidth: 260,
 				filterVariant: "text",
 			},
 			cell: ({ row }) => (
-				<span className="text-sm break-all">{row.original.rule || "-"}</span>
+				<span
+					className="block max-w-full truncate text-sm"
+					title={row.original.rule || undefined}
+				>
+					{row.original.rule || "-"}
+				</span>
 			),
 		},
 		{
@@ -362,6 +369,7 @@ export default function StaticAnalysisFindingsTable({
 			}}
 			className="border border-border rounded-md"
 			tableClassName="min-w-[1400px]"
+			fillContainerWidth
 		/>
 	);
 }

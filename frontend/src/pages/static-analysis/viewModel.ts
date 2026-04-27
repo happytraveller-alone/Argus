@@ -114,6 +114,26 @@ const STATIC_ANALYSIS_TERMINAL_STATUSES = new Set([
   "cancelled",
   "aborted",
 ]);
+const OPENGREP_INTERNAL_RULE_PREFIX = "opengrep-rules.internal.";
+
+function formatStaticAnalysisOpengrepRuleName(value?: string | null): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "-";
+
+  if (normalized.startsWith(OPENGREP_INTERNAL_RULE_PREFIX)) {
+    const scopedRuleName = normalized.slice(OPENGREP_INTERNAL_RULE_PREFIX.length);
+    const languageSeparatorIndex = scopedRuleName.indexOf(".");
+
+    if (
+      languageSeparatorIndex >= 0 &&
+      languageSeparatorIndex < scopedRuleName.length - 1
+    ) {
+      return scopedRuleName.slice(languageSeparatorIndex + 1);
+    }
+  }
+
+  return normalized;
+}
 
 export function decodeStaticAnalysisPathParam(raw: string | undefined): string {
   try {
@@ -507,9 +527,9 @@ export function getStaticAnalysisOpengrepRuleName(
 ): string {
   const rule = (finding.rule || {}) as Record<string, unknown>;
   const byField = String(finding.rule_name || "").trim();
-  if (byField) return byField;
+  if (byField) return formatStaticAnalysisOpengrepRuleName(byField);
   const byCheckId = String(rule.check_id || rule.id || "").trim();
-  if (byCheckId) return byCheckId;
+  if (byCheckId) return formatStaticAnalysisOpengrepRuleName(byCheckId);
   return "-";
 }
 

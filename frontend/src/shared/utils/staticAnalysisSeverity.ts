@@ -8,6 +8,7 @@ export function normalizeStaticAnalysisSeverity(
 		.toUpperCase();
 	if (normalized === "CRITICAL") return "HIGH";
 	if (normalized === "HIGH") return "MEDIUM";
+	if (normalized === "LOW") return "LOW";
 	if (
 		normalized === "ERROR" ||
 		normalized === "WARNING" ||

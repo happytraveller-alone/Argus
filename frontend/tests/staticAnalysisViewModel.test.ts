@@ -26,7 +26,7 @@ test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
       {
         id: "og-hidden",
         scan_task_id: "task-og",
-        severity: "LOW",
+        severity: "INFO",
         confidence: "HIGH",
         file_path: "src/ignored.ts",
         start_line: 4,
@@ -39,9 +39,55 @@ test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.engine, "opengrep");
+  assert.equal(rows[0]?.rule, "auth-rule");
   assert.equal(rows[0]?.filePath, "repo/src/auth.ts");
   assert.equal(rows[0]?.severity, "MEDIUM");
   assert.equal(rows[0]?.confidence, "LOW");
+});
+
+test("buildUnifiedFindingRows keeps backend-normalized low opengrep findings", () => {
+  const rows = buildUnifiedFindingRows({
+    opengrepFindings: [
+      {
+        id: "og-low",
+        scan_task_id: "task-og",
+        severity: "LOW",
+        confidence: "MEDIUM",
+        file_path: "libplist-master/src/base64.c",
+        start_line: 83,
+        status: "open",
+        rule_name: "opengrep-rules.internal.c.vuln-clamav-96ff19a1",
+      },
+    ],
+    opengrepTaskId: "task-og",
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.rule, "vuln-clamav-96ff19a1");
+  assert.equal(rows[0]?.severity, "LOW");
+  assert.equal(rows[0]?.filePath, "libplist-master/src/base64.c");
+});
+
+test("buildUnifiedFindingRows compacts fallback opengrep check identifiers", () => {
+  const rows = buildUnifiedFindingRows({
+    opengrepFindings: [
+      {
+        id: "og-fallback",
+        scan_task_id: "task-og",
+        severity: "HIGH",
+        confidence: "HIGH",
+        file_path: "src/app.py",
+        start_line: 12,
+        status: "open",
+        rule: {
+          check_id: "opengrep-rules.internal.python.vuln-django-debug",
+        },
+      },
+    ],
+    opengrepTaskId: "task-og",
+  });
+
+  assert.equal(rows[0]?.rule, "vuln-django-debug");
 });
 
 test("static analysis finding status helpers expose tri-state labels and tones", () => {
