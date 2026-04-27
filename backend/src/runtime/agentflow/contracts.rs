@@ -19,9 +19,8 @@ pub const FORBIDDEN_STATIC_INPUT_KEYS: &[&str] = &[
     "candidate_findings",
 ];
 
-pub const FORBIDDEN_STATIC_ORIGIN_VALUES: &[&str] = &[
-    "opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd",
-];
+pub const FORBIDDEN_STATIC_ORIGIN_VALUES: &[&str] =
+    &["opengrep", "static", "bandit", "gitleaks", "phpstan", "pmd"];
 
 pub const FORBIDDEN_STATIC_ORIGIN_KEYS: &[&str] = &["candidate_origin", "source_engine"];
 
@@ -105,7 +104,8 @@ pub struct ArgusAgentflowRunnerInput {
 
 impl ArgusAgentflowRunnerInput {
     pub fn forbidden_static_inputs(&self) -> Vec<ForbiddenStaticInput> {
-        let mut findings = forbidden_static_inputs_in_value(&serde_json::to_value(self).unwrap_or(Value::Null));
+        let mut findings =
+            forbidden_static_inputs_in_value(&serde_json::to_value(self).unwrap_or(Value::Null));
         findings.sort();
         findings.dedup();
         findings
@@ -167,7 +167,8 @@ pub struct ArgusAgentflowRunnerOutput {
 
 impl ArgusAgentflowRunnerOutput {
     pub fn forbidden_static_inputs(&self) -> Vec<ForbiddenStaticInput> {
-        let mut findings = forbidden_static_inputs_in_value(&serde_json::to_value(self).unwrap_or(Value::Null));
+        let mut findings =
+            forbidden_static_inputs_in_value(&serde_json::to_value(self).unwrap_or(Value::Null));
         findings.sort();
         findings.dedup();
         findings
@@ -365,7 +366,11 @@ pub fn contains_forbidden_static_input(value: &Value) -> bool {
     !forbidden_static_inputs_in_value(value).is_empty()
 }
 
-fn visit_forbidden_static_inputs(value: &Value, path: &str, findings: &mut Vec<ForbiddenStaticInput>) {
+fn visit_forbidden_static_inputs(
+    value: &Value,
+    path: &str,
+    findings: &mut Vec<ForbiddenStaticInput>,
+) {
     match value {
         Value::Object(map) => {
             for (key, child) in map {
@@ -387,10 +392,9 @@ fn visit_forbidden_static_inputs(value: &Value, path: &str, findings: &mut Vec<F
                 {
                     if let Some(value) = child.as_str() {
                         let normalized_value = normalize_contract_token(value);
-                        if FORBIDDEN_STATIC_ORIGIN_VALUES
-                            .iter()
-                            .any(|forbidden| normalize_contract_token(forbidden) == normalized_value)
-                        {
+                        if FORBIDDEN_STATIC_ORIGIN_VALUES.iter().any(|forbidden| {
+                            normalize_contract_token(forbidden) == normalized_value
+                        }) {
                             findings.push(ForbiddenStaticInput {
                                 path: child_path.clone(),
                                 key: key.clone(),
@@ -419,10 +423,16 @@ fn visit_forbidden_static_inputs(value: &Value, path: &str, findings: &mut Vec<F
 }
 
 fn format_object_path(parent: &str, key: &str) -> String {
-    if key.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+    if key
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
         format!("{parent}.{key}")
     } else {
-        format!("{parent}[{}]", serde_json::to_string(key).unwrap_or_else(|_| "\"?\"".to_string()))
+        format!(
+            "{parent}[{}]",
+            serde_json::to_string(key).unwrap_or_else(|_| "\"?\"".to_string())
+        )
     }
 }
 
@@ -484,15 +494,22 @@ mod tests {
         });
 
         let findings = forbidden_static_inputs_in_value(&payload);
-        assert!(findings.iter().any(|finding| finding.path == "$.audit_scope.nested[0].candidate_finding_ids"));
-        assert!(findings.iter().any(|finding| finding.path == "$.audit_scope.meta.candidate_origin"));
+        assert!(findings
+            .iter()
+            .any(|finding| finding.path == "$.audit_scope.nested[0].candidate_finding_ids"));
+        assert!(findings
+            .iter()
+            .any(|finding| finding.path == "$.audit_scope.meta.candidate_origin"));
     }
 
     #[test]
     fn agentflow_contract_static_gate_covers_all_forbidden_engine_origins() {
         for origin in FORBIDDEN_STATIC_ORIGIN_VALUES {
             let payload = json!({"source_engine": origin});
-            assert!(contains_forbidden_static_input(&payload), "origin {origin} should be rejected");
+            assert!(
+                contains_forbidden_static_input(&payload),
+                "origin {origin} should be rejected"
+            );
         }
     }
 
@@ -532,7 +549,8 @@ mod tests {
         let value = serde_json::to_value(&input).expect("serialize input");
         assert_eq!(value["contract_version"], ARGUS_AGENTFLOW_CONTRACT_VERSION);
         assert!(input.forbidden_static_inputs().is_empty());
-        let decoded: ArgusAgentflowRunnerInput = serde_json::from_value(value).expect("decode input");
+        let decoded: ArgusAgentflowRunnerInput =
+            serde_json::from_value(value).expect("decode input");
         assert_eq!(decoded.topology_version, P1_TOPOLOGY_VERSION);
     }
 
