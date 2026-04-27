@@ -23,7 +23,6 @@ rules:
       $FREE2($PTR);
   - pattern-not: |
       $FREE1($PTR);
-      ...
       $PTR = $_;
       ...
       $FREE2($PTR);
@@ -34,46 +33,3 @@ rules:
       metavariable: $FREE2
       pattern: free
   - focus-metavariable: $FREE2
-- id: double-free_1
-  languages:
-  - c
-  message: Variable '$VAR' was freed twice. This can lead to undefined behavior.
-  metadata:
-    category: security
-    confidence: LOW
-    cwe:
-    - 'CWE-415: Double Free'
-    impact: HIGH
-    likelihood: LOW
-    owasp:
-    - A03:2021 - Injection
-    - A01:2017 - Injection
-    references:
-    - https://cwe.mitre.org/data/definitions/415.html
-    - https://owasp.org/www-community/vulnerabilities/Doubly_freeing_memory
-    subcategory:
-    - vuln
-    technology:
-    - c
-  patterns:
-  - pattern-not: |
-      free($VAR);
-      ...
-      $VAR = NULL;
-      ...
-      free($VAR);
-  - pattern-not: |
-      free($VAR);
-      ...
-      $VAR = malloc(...);
-      ...
-      free($VAR);
-  - pattern-inside: |
-      free($VAR);
-      ...
-      $FREE($VAR);
-  - metavariable-pattern:
-      metavariable: $FREE
-      pattern: free
-  - focus-metavariable: $FREE
-  severity: ERROR

@@ -23,7 +23,6 @@ rules:
       $FREE2($PTR);
   - pattern-not: |
       $FREE1($PTR);
-      ...
       $PTR = $_;
       ...
       $FREE2($PTR);

@@ -11,7 +11,7 @@ fn opengrep_available() -> bool {
 }
 
 #[test]
-fn ffmpeg_style_safe_c_idioms_are_not_reported_by_hardened_rules() {
+fn opengrep_rule_hardening_reports_unproven_risks_and_suppresses_proven_safe_idioms() {
     if !opengrep_available() {
         eprintln!("skipping: opengrep CLI is not available");
         return;
@@ -25,9 +25,16 @@ fn ffmpeg_style_safe_c_idioms_are_not_reported_by_hardened_rules() {
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #define POSTFIX_PATTERN "segment-%d"
+
+wchar_t *av_realloc_array(wchar_t *ptr, size_t count, size_t size);
+char *producer(void);
+void observer(char **out);
+void sink(char *value);
 
 void safe_numeric_scan(const char *buf) {
     int a;
@@ -65,6 +72,105 @@ void unsafe_variable_vformat(char *buf, const char *fmt, va_list args) {
     vsnprintf(buf, 64, fmt, args);
 }
 
+void literal_status_copy_requires_review(void) {
+    char status[32];
+    strcpy(status, "unknown");
+}
+
+void unsafe_literal_overflow(void) {
+    char tiny[4];
+    strcpy(tiny, "this literal is too long");
+}
+
+void unsafe_external_copy(char *dst, const char *src) {
+    strcpy(dst, src);
+}
+
+void safe_wide_copy_after_sized_realloc(wchar_t *path, const wchar_t *name_w) {
+    size_t pathlen = wcslen(path);
+    size_t namelen = wcslen(name_w);
+    size_t pathsize = pathlen + namelen + 2;
+    wchar_t *new_path = av_realloc_array(path, pathsize, sizeof *path);
+    if (!new_path)
+        return;
+    path = new_path;
+    wcscpy(path + pathlen + 1, name_w);
+}
+
+void unsafe_wide_copy_after_unrelated_realloc(wchar_t *path, const wchar_t *name_w, size_t cap) {
+    size_t pathlen = wcslen(path);
+    size_t pathsize = cap + 2;
+    wchar_t *new_path = av_realloc_array(path, pathsize, sizeof *path);
+    if (!new_path)
+        return;
+    path = new_path;
+    wcscpy(path + pathlen + 1, name_w);
+}
+
+void unsafe_wide_copy(wchar_t *dst, const wchar_t *src) {
+    wcscpy(dst, src);
+}
+
+void wide_literal_copy_requires_review(void) {
+    wchar_t label[16];
+    wcscpy(label, L"Capture");
+}
+
+void unsafe_wide_literal_overflow(void) {
+    wchar_t tiny[4];
+    wcscpy(tiny, L"this literal is too long");
+}
+
+void safe_constant_printf_help(void) {
+    printf("tool version %s\n"
+           "usage: tool [options]\n",
+           "1.0");
+}
+
+void unsafe_printf_format(const char *fmt) {
+    printf(fmt);
+}
+
+void unsafe_vfprintf_format(FILE *file, const char *fmt, va_list args) {
+    vfprintf(file, fmt, args);
+}
+
+void safe_reassigned_after_free(char *buf) {
+    free(buf);
+    buf = producer();
+    sink(buf);
+    free(buf);
+}
+
+void unsafe_use_after_free(char *freed) {
+    free(freed);
+    sink(freed);
+}
+
+void unsafe_branch_reassign_after_free(char *maybe, int cond) {
+    free(maybe);
+    if (cond)
+        maybe = producer();
+    sink(maybe);
+}
+
+void unsafe_observed_after_free(char *observed) {
+    free(observed);
+    observer(&observed);
+    sink(observed);
+}
+
+void unsafe_double_free(char *victim) {
+    free(victim);
+    free(victim);
+}
+
+void unsafe_observed_double_free(char *observed) {
+    free(observed);
+    observer(&observed);
+    free(observed);
+}
+
 void safe_bulk_copy(void) {
     int src[8];
     int dst[8];
@@ -86,6 +192,30 @@ void safe_bulk_copy(void) {
         .arg("--config")
         .arg(format!(
             "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/c_format_rule-snprintf-vsnprintf.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/c_format_rule-printf-vprintf.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/c_format_rule-fprintf-vfprintf.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/c_buffer_rule-strcpy.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/c_buffer_rule-lstrcpy-wcscpy.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/double-free.yaml"
+        ))
+        .arg("--config")
+        .arg(format!(
+            "{manifest_dir}/assets/scan_rule_assets/rules_opengrep/c/use-after-free.yaml"
         ))
         .arg("--config")
         .arg(format!(
@@ -118,8 +248,8 @@ void safe_bulk_copy(void) {
 
     assert_eq!(
         matched_lines.len(),
-        3,
-        "expected only the unsafe scan and variable format samples, got {matched_lines:#?}"
+        19,
+        "expected only unsafe or unproven-risk samples, got {matched_lines:#?}"
     );
     assert!(
         matched_lines
@@ -140,9 +270,84 @@ void safe_bulk_copy(void) {
         "variable vsnprintf format should still be reported: {matched_lines:#?}"
     );
     assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == r#"strcpy(status, "unknown");"#),
+        "literal strcpy remains under review without buffer-size proof: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == r#"strcpy(tiny, "this literal is too long");"#),
+        "unsafe literal strcpy should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "strcpy(dst, src);"),
+        "external strcpy should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == "wcscpy(path + pathlen + 1, name_w);"),
+        "unproven wide copy allocation should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "wcscpy(dst, src);"),
+        "external wcscpy should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == r#"wcscpy(label, L"Capture");"#),
+        "literal wcscpy remains under review without buffer-size proof: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == r#"wcscpy(tiny, L"this literal is too long");"#),
+        "unsafe literal wcscpy should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "printf(fmt);"),
+        "variable printf format should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == "vfprintf(file, fmt, args);"),
+        "variable vfprintf format should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "sink(freed);"),
+        "use-after-free should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "sink(maybe);"),
+        "branch-conditional reassignment after free should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "sink(observed);"),
+        "observer call after free should not suppress use-after-free: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines
+            .iter()
+            .any(|line| line == "observer(&observed);"),
+        "observer call after free should remain under review: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "free(victim);"),
+        "double-free should still be reported: {matched_lines:#?}"
+    );
+    assert!(
+        matched_lines.iter().any(|line| line == "free(observed);"),
+        "observer call after free should not suppress double-free: {matched_lines:#?}"
+    );
+    assert!(
         matched_lines.iter().all(|line| !line.contains("PRId64")
             && !line.contains("POSTFIX_PATTERN")
             && !line.contains("sizeof(src)")
+            && !line.contains("printf(\"tool version")
             && !line.contains("\"%d\"")
             && !line.contains("\"%63")),
         "safe FFmpeg-style idioms should not be reported: {matched_lines:#?}"

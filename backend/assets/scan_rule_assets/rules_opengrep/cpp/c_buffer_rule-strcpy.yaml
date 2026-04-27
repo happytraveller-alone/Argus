@@ -21,5 +21,6 @@ rules:
     - A03:2021-Injection
     security-severity: High
     category: security
-  pattern: strcpy(...)
+  patterns:
+  - pattern: strcpy(...)
   severity: ERROR

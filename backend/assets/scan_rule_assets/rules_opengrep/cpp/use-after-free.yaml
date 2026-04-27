@@ -32,4 +32,7 @@ rules:
           patterns:
           - pattern-not: free
   - pattern-inside: free($PTR); ...
-  - pattern-not-inside: "free($PTR);\n...\n$PTR = $_; \n...\n"
+  - pattern-not-inside: |
+      free($PTR);
+      $PTR = $_;
+      ...
