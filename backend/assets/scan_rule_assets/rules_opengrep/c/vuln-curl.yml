@@ -358,10 +358,14 @@ rules:
     technology:
     - c
 - id: vuln-curl-686d54ba
-  pattern: |
-    $FUNC(..., sizeof($BUFFER), ...);
-  pattern-not: |
-    $FUNC(..., sizeof($BUFFER) - 1, ...);
+  patterns:
+  - pattern: |
+      $FUNC($IDNA, $IN, -1, $BUFFER, sizeof($BUFFER), $INFO, $ERR);
+  - pattern-not: |
+      $FUNC($IDNA, $IN, -1, $BUFFER, sizeof($BUFFER) - 1, $INFO, $ERR);
+  - metavariable-regex:
+      metavariable: $FUNC
+      regex: ^(uidna_nameToASCII_UTF8|uidna_nameToUnicodeUTF8)$
   languages:
   - c
   message: |

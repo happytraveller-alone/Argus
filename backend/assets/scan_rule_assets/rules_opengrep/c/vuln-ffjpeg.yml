@@ -1,14 +1,19 @@
 rules:
 - id: vuln-ffjpeg-2ad299a3
-  pattern: |
-    while ($VAR < $END) {
-      ...
-    }
-  pattern-not: |
-    while ($SIZE > 0 && $VAR < $END) {
-      $SIZE -= $EXPR;
-      ...
-    }
+  patterns:
+  - pattern-inside: |
+      static void huffman_decode(...) {
+        ...
+      }
+  - pattern: |
+      while ($VAR < $END) {
+        ...
+      }
+  - pattern-not: |
+      while ($SIZE > 0 && $VAR < $END) {
+        $SIZE -= $EXPR;
+        ...
+      }
   languages:
   - c
   message: |

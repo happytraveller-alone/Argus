@@ -1949,14 +1949,25 @@ rules:
     technology:
     - c
 - id: vuln-qemu-f6882698
-  pattern: |
-    if ($VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {
-      ...
-    }
-  pattern-not: |
-    if (!$VAR || $VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {
-      ...
-    }
+  patterns:
+  - pattern-inside: |
+      pvscsi_ring_init_msg(...) {
+        ...
+      }
+  - pattern: |
+      if ($VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {
+        ...
+      }
+  - pattern-not: |
+      if (!$VAR || $VAR > $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $VAR
+      regex: ^ri->numPages$
+  - metavariable-regex:
+      metavariable: $PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES
+      regex: ^PVSCSI_SETUP_MSG_RING_MAX_NUM_PAGES$
   languages:
   - c
   message: |
@@ -2060,14 +2071,31 @@ rules:
     technology:
     - c
 - id: vuln-qemu-fe3c546c
-  pattern: |
-    if ($EXPR1 + $EXPR2 > $LENGTH) {
-      ...
-    }
-  pattern-not: |
-    if ($EXPR2 > $LENGTH || $EXPR1 >= $LENGTH || $EXPR1 + $EXPR2 > $LENGTH) {
-      ...
-    }
+  patterns:
+  - pattern-either:
+    - pattern-inside: |
+        static int rndis_query_response(...) {
+          ...
+        }
+    - pattern-inside: |
+        static int rndis_set_response(...) {
+          ...
+        }
+    - pattern-inside: |
+        static void usb_net_handle_dataout(...) {
+          ...
+        }
+  - pattern: |
+      if ($EXPR1 + $EXPR2 > $LENGTH) {
+        ...
+      }
+  - pattern-not: |
+      if ($EXPR2 > $LENGTH || $EXPR1 >= $LENGTH || $EXPR1 + $EXPR2 > $LENGTH) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $LENGTH
+      regex: ^(length|len)$
   languages:
   - c
   message: |

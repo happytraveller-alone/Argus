@@ -1,13 +1,17 @@
 rules:
 - id: vuln-contiki-ng-280019dc
-  pattern: |
-    if($VAR + $LEN > $MTU) {
-      ...
-    }
-  pattern-not: |
-    if($LEN > $MTU - $VAR) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if($VAR + $LEN > $MTU) {
+        ...
+      }
+  - pattern-not: |
+      if($LEN > $MTU - $VAR) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $MTU
+      regex: ^UIP_BUFSIZE$
   languages:
   - c
   message: |

@@ -85,14 +85,22 @@ rules:
     technology:
     - c
 - id: vuln-libgd-53110871
-  pattern: |
-    if($VAR == 0) {
-      ...
-    }
-  pattern-not: |
-    if($VAR <= 0) {
-      ...
-    }
+  patterns:
+  - pattern-inside: |
+      static int dynamicGetbuf(...) {
+        ...
+      }
+  - pattern: |
+      if($VAR == 0) {
+        ...
+      }
+  - pattern-not: |
+      if($VAR <= 0) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $VAR
+      regex: ^remain$
   languages:
   - c
   message: |

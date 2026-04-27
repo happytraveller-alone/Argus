@@ -647,8 +647,18 @@ rules:
     technology:
     - c
 - id: vuln-php-src-74555e7c
-  pattern: free($RBUF);
-  pattern-not: efree($RBUF);
+  patterns:
+  - pattern-inside: |
+      mget(...) {
+        ...
+        file_printf($MS, "%s", $RBUF);
+        ...
+      }
+  - pattern: free($RBUF);
+  - pattern-not: efree($RBUF);
+  - metavariable-regex:
+      metavariable: $RBUF
+      regex: ^rbuf$
   languages:
   - c
   message: |

@@ -161,10 +161,21 @@ rules:
     technology:
     - c
 - id: vuln-freetype-e6fda039
-  pattern: |
-    *$VAR += $DELTA;
-  pattern-not: |
-    *$VAR = ADD_INT(*$VAR, $DELTA);
+  patterns:
+  - pattern-inside: |
+      static void tt_hvadvance_adjust(...) {
+        ...
+      }
+  - pattern: |
+      *$VAR += $DELTA;
+  - pattern-not: |
+      *$VAR = ADD_INT(*$VAR, $DELTA);
+  - metavariable-regex:
+      metavariable: $VAR
+      regex: ^avalue$
+  - metavariable-regex:
+      metavariable: $DELTA
+      regex: ^delta$
   languages:
   - c
   message: |

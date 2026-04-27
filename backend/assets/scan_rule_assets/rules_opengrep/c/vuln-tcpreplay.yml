@@ -152,14 +152,21 @@ rules:
     technology:
     - c
 - id: vuln-tcpreplay-7b0a2fad
-  pattern: |
-    if ($L2_LEN + $TCPR_IPV4_H > $DATALEN) {
-      ...
-    }
-  pattern-not: |
-    if ($L2_LEN < 0 || $L2_LEN + $TCPR_IPV4_H > $DATALEN) {
-      ...
-    }
+  patterns:
+  - pattern: |
+      if ($L2_LEN + $TCPR_IPV4_H > $DATALEN) {
+        ...
+      }
+  - pattern-not: |
+      if ($L2_LEN < 0 || $L2_LEN + $TCPR_IPV4_H > $DATALEN) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $TCPR_IPV4_H
+      regex: ^TCPR_IPV4_H$
+  - metavariable-regex:
+      metavariable: $L2_LEN
+      regex: ^l2len$
   languages:
   - c
   message: |

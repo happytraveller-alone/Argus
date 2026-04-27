@@ -407,14 +407,25 @@ rules:
     technology:
     - c
 - id: vuln-radare2-77c47cf8
-  pattern: |
-    if (!$DATA) {
-      ...
-    }
-  pattern-not: |
-    if (!$DATA || $LEN < 2) {
-      ...
-    }
+  patterns:
+  - pattern-inside: |
+      static int sh_op(..., const ut8 *$DATA, int $LEN) {
+        ...
+      }
+  - pattern: |
+      if (!$DATA) {
+        ...
+      }
+  - pattern-not: |
+      if (!$DATA || $LEN < 2) {
+        ...
+      }
+  - metavariable-regex:
+      metavariable: $DATA
+      regex: ^data$
+  - metavariable-regex:
+      metavariable: $LEN
+      regex: ^len$
   languages:
   - c
   message: |
@@ -742,10 +753,14 @@ rules:
     technology:
     - c
 - id: vuln-radare2-f41e9413
-  pattern: |
-    sprintf($BUF, $FMT, ...)
-  pattern-not: |
-    snprintf($BUF, sizeof($BUF), $FMT, ...)
+  patterns:
+  - pattern: |
+      sprintf($BUF, $FMT, ...)
+  - pattern-not: |
+      snprintf($BUF, sizeof($BUF), $FMT, ...)
+  - metavariable-regex:
+      metavariable: $FMT
+      regex: ^".*%s.*"$
   languages:
   - c
   message: |

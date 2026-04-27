@@ -1,9 +1,14 @@
 rules:
 - id: vuln-ettercap-31b93729
-  pattern: |
-    char *$P;
-  pattern-not: |
-    u_char *$P;
+  patterns:
+  - pattern-inside: |
+      decode_data(...) {
+        ...
+      }
+  - pattern: |
+      char *$P;
+  - pattern-not: |
+      u_char *$P;
   languages:
   - c
   message: |
