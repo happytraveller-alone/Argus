@@ -11,6 +11,7 @@ USE CODEX NATIVE SUBAGENTS FOR INDEPENDENT PARALLEL SUBTASKS WHEN THAT IMPROVES 
 You are running with oh-my-codex (OMX), a coordination layer for Codex CLI.
 This AGENTS.md is the top-level operating contract for the workspace.
 Role prompts under `prompts/*.md` are narrower execution surfaces. They must follow this file, not override it.
+When OMX is installed, load the installed prompt/skill/agent surfaces from `./.codex/prompts`, `./.codex/skills`, and `./.codex/agents` (or the project-local `./.codex/...` equivalents when project scope is active).
 
 <guidance_schema_contract>
 Canonical guidance schema for this template is defined in `docs/guidance-schema.md`.
@@ -39,6 +40,13 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 <!-- OMX:GUIDANCE:OPERATING:START -->
 - Default to quality-first, intent-deepening responses; think one more step before replying or asking for clarification, and use as much detail as needed for a strong result without empty verbosity.
 - Proceed automatically on clear, low-risk, reversible next steps; ask only for irreversible, side-effectful, or materially branching actions.
+- AUTO-CONTINUE for clear, already-requested, low-risk, reversible, local edit-test-verify work; keep inspecting, editing, testing, and verifying without permission handoff.
+- ASK only for destructive, irreversible, credential-gated, external-production, or materially scope-changing actions, or when missing authority blocks progress.
+- On AUTO-CONTINUE branches, do not use permission-handoff phrasing; state the next action or evidence-backed result.
+- Keep going unless blocked; finish the current safe branch before asking for confirmation or handoff.
+- Ask only when blocked by missing information, missing authority, or an irreversible/destructive branch.
+- Do not ask or instruct humans to perform ordinary non-destructive, reversible actions; execute those safe reversible OMX/runtime operations and ordinary commands yourself.
+- Treat OMX runtime manipulation, state transitions, and ordinary command execution as agent responsibilities when they are safe and reversible.
 - Treat newer user task updates as local overrides for the active task while preserving earlier non-conflicting instructions.
 - When the user provides newer same-thread evidence (for example logs, stack traces, or test output), treat it as the current source of truth, re-evaluate earlier hypotheses against it, and do not anchor on older evidence unless the user reaffirms it.
 - Persist with tool use when correctness depends on retrieval, inspection, execution, or verification; do not skip prerequisites just because the likely answer seems obvious.
@@ -162,7 +170,7 @@ Rules:
 - Child agents should report recommended handoffs upward.
 - Child agents should finish their assigned role, not recursively orchestrate unless explicitly told to do so.
 - Prefer inheriting the leader model by omitting `spawn_agent.model` unless a task truly requires a different model.
-- Do not hardcode stale frontier-model overrides for Codex native child agents. If an explicit frontier override is necessary, use the current frontier default from `OMX_DEFAULT_FRONTIER_MODEL` / the repo model contract (currently `gpt-5.4`), not older values such as `gpt-5.2`.
+- Do not hardcode stale frontier-model overrides for Codex native child agents. If an explicit frontier override is necessary, use the current frontier default from `OMX_DEFAULT_FRONTIER_MODEL` / the repo model contract (currently `gpt-5.5`), not older values such as `gpt-5.2`.
 - Prefer role-appropriate `reasoning_effort` over explicit `model` overrides when the only goal is to make a child think harder or lighter.
 </child_agent_protocol>
 
@@ -175,11 +183,24 @@ Rules:
 <model_routing>
 Match role to task shape:
 - Low complexity: `explore`, `style-reviewer`, `writer`
+- Research/discovery: `explore` for repo lookup, `researcher` for official docs/reference gathering, `dependency-expert` for SDK/API/package evaluation
 - Standard: `executor`, `debugger`, `test-engineer`
 - High complexity: `architect`, `executor`, `critic`
 
 For Codex native child agents, model routing defaults to inheritance/current repo defaults unless the caller has a concrete reason to override it.
 </model_routing>
+
+<specialist_routing>
+Leader/workflow routing contract:
+<!-- OMX:GUIDANCE:SPECIALIST-ROUTING:START -->
+- Route to `explore` for repo-local file / symbol / pattern / relationship lookup, current implementation discovery, or mapping how this repo currently uses a dependency. `explore` owns facts about this repo, not external docs or dependency recommendations.
+- Route to `researcher` when the main need is official docs, external API behavior, version-aware framework guidance, release-note history, or citation-backed reference gathering. The technology is already chosen; `researcher` answers “how does this chosen thing work?” and is not the default dependency-comparison role.
+- Route to `dependency-expert` when the main need is package / SDK selection or a comparative dependency decision: whether / which package, SDK, or framework to adopt, upgrade, replace, or migrate; candidate comparison; maintenance, license, security, or risk evaluation across options.
+- Use mixed routing deliberately: `explore` -> `researcher` for current local usage plus official-doc confirmation; `explore` -> `dependency-expert` for current dependency usage plus upgrade / replacement / migration evaluation; `researcher` -> `explore` when docs are clear but repo usage or impact still needs confirmation; `dependency-expert` -> `explore` when a dependency decision is clear but the local migration surface still needs mapping.
+- Specialists should report boundary crossings upward instead of silently absorbing adjacent work.
+- When external evidence materially affects the answer, do not keep the leader in the main lane on recall alone; route to the relevant specialist first, then return to planning or execution.
+<!-- OMX:GUIDANCE:SPECIALIST-ROUTING:END -->
+</specialist_routing>
 
 ---
 
@@ -192,50 +213,43 @@ Key roles:
 - `executor` — implementation and refactoring
 - `verifier` — completion evidence and validation
 
+Research/discovery specialists:
+- `explore` — first-stop repository lookup and symbol/file mapping
+- `researcher` — official docs, references, and external fact gathering
+- `dependency-expert` — SDK/API/package evaluation before adopting or changing dependencies
+
 Specialists remain available through the role catalog and native child-agent surfaces when the task clearly benefits from them.
 </agent_catalog>
 
 ---
 
 <keyword_detection>
-When the user message contains a mapped keyword, activate the corresponding skill immediately.
-Do not ask for confirmation.
+Keyword routing is implemented primarily by native `UserPromptSubmit` hooks and the generated keyword registry. Treat hook-injected routing context as authoritative for the current turn, then load the named `SKILL.md` or prompt file as instructed.
 
-Supported workflow triggers include: `ralph`, `autopilot`, `ultrawork`, `ultraqa`, `cleanup`/`refactor`/`deslop`, `analyze`, `plan this`, `deep interview`, `ouroboros`, `ralplan`, `team`/`swarm`, `ecomode`, `cancel`, `tdd`, `fix build`, `code review`, `security review`, and `web-clone`.
-The `deep-interview` skill is the Socratic deep interview workflow and includes the ouroboros trigger family.
+Fallback behavior when hook context is unavailable:
+- Explicit `$name` invocations run left-to-right and override implicit keywords.
+- Bare skill names do not activate skills by themselves; skill-name activation requires explicit `$skill` invocation. Natural-language routing phrases may still map to a workflow when they are not just the bare skill name. Examples: `analyze` / `investigate` → `$analyze` for read-only deep analysis with ranked synthesis, explicit confidence, and concrete file references; `deep interview`, `interview`, `don't assume`, or `ouroboros` → `$deep-interview`; `ralplan` / `consensus plan` → `$ralplan`; `cancel`, `stop`, or `abort` → `$cancel`.
+- Keep the detailed keyword list in `src/hooks/keyword-registry.ts`; do not duplicate that table here.
 
-| Keyword(s) | Skill | Action |
-|-------------|-------|--------|
 Runtime availability gate:
 - Treat `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`/`swarm`, and `ecomode` as **OMX runtime workflows**, not generic prompt aliases.
-- Auto-activate those runtime workflows only when the current session is actually running under OMX CLI/runtime (for example, launched via `omx`, with OMX session overlay/runtime state available, or when the user explicitly asks to run `omx ...` in the shell).
-- In Codex App or plain Codex sessions without OMX runtime, do **not** treat those keywords alone as activation. Explain that they require OMX CLI runtime support, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, or native subagents) unless the user explicitly wants you to launch OMX from the shell.
+- Auto-activate runtime workflows only when the current session is actually running under OMX CLI/runtime (for example, launched via `omx`, with OMX session overlay/runtime state available, or when the user explicitly asks to run `omx ...` in the shell).
+- In Codex App or plain Codex sessions without OMX runtime, do **not** treat those keywords alone as activation. Explain that they require OMX CLI runtime support and are not directly available there, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, or native subagents) unless the user explicitly wants you to launch OMX CLI from shell first.
+- When deep-interview is active in OMX CLI/runtime, ask interview rounds via `omx question`; after launching `omx question` in a background terminal, wait for that terminal to finish and read the JSON answer before continuing; do not substitute `request_user_input` or ad hoc plain-text questioning, and respect Stop-hook blocking while a deep-interview question obligation is pending.
 
-| Keyword(s) | Skill | Action |
-|-------------|-------|--------|
-| "ralph", "don't stop", "must complete", "keep going" | `$ralph` | Runtime-only: read `./.codex/skills/ralph/SKILL.md`, execute persistence loop only inside OMX CLI/runtime |
-| "autopilot", "build me", "I want a" | `$autopilot` | Runtime-only: read `./.codex/skills/autopilot/SKILL.md`, execute autonomous pipeline only inside OMX CLI/runtime |
-| "ultrawork", "ulw", "parallel" | `$ultrawork` | Runtime-only: read `./.codex/skills/ultrawork/SKILL.md`, execute parallel agents only inside OMX CLI/runtime |
-| "ultraqa" | `$ultraqa` | Runtime-only: read `./.codex/skills/ralph/SKILL.md`, run persistent completion and verification loop only inside OMX CLI/runtime (UltraQA compatibility alias) |
-| "analyze", "investigate" | `$analyze` | Read `./.codex/prompts/debugger.md`, run root-cause analysis (analyze compatibility alias) |
-| "plan this", "plan the", "let's plan" | `$plan` | Read `./.codex/skills/plan/SKILL.md`, start planning workflow |
-| "interview", "deep interview", "gather requirements", "interview me", "don't assume", "ouroboros" | `$deep-interview` | Read `./.codex/skills/deep-interview/SKILL.md`, run Ouroboros-inspired Socratic ambiguity-gated interview workflow |
-| "ralplan", "consensus plan" | `$ralplan` | Read `./.codex/skills/ralplan/SKILL.md`, start consensus planning with RALPLAN-DR structured deliberation (short by default, `--deliberate` for high-risk) |
-| "team", "swarm", "coordinated team", "coordinated swarm" | `$team` | Runtime-only: read `./.codex/skills/team/SKILL.md`, start tmux-based team orchestration only inside OMX CLI/runtime (swarm compatibility alias) |
-| "ecomode", "eco", "budget" | `$ecomode` | Runtime-only: read `./.codex/skills/ultrawork/SKILL.md`, execute cost-aware parallel workflow only inside OMX CLI/runtime (ecomode compatibility alias) |
-| "cancel", "stop", "abort" | `$cancel` | Read `./.codex/skills/cancel/SKILL.md`, cancel active modes |
-| "tdd", "test first" | `$tdd` | Read `./.codex/prompts/test-engineer.md`, run test-first workflow (tdd compatibility alias) |
-| "fix build", "type errors" | `$build-fix` | Read `./.codex/prompts/build-fixer.md`, fix build errors with minimal diff (build-fix compatibility alias) |
-| "review code", "code review", "code-review" | `$code-review` | Read `./.codex/skills/code-review/SKILL.md`, run code review |
-| "security review" | `$security-review` | Read `./.codex/skills/security-review/SKILL.md`, run security audit |
-| "web-clone", "clone site", "clone website", "copy webpage" | `$web-clone` | Read `./.codex/skills/web-clone/SKILL.md`, start website cloning pipeline |
+<triage_routing>
+## Triage: advisory prompt-routing context
 
-Detection rules:
-- Keywords are case-insensitive and match anywhere in the user message.
-- Explicit `$name` invocations run left-to-right and override non-explicit keyword resolution.
-- If multiple non-explicit keywords match, use the most specific match.
-- Runtime-only keywords must pass the runtime availability gate before activation.
-- The rest of the user message becomes the task description.
+The keyword detector is the first and deterministic routing surface. Triage runs only when no keyword matches.
+
+When active, triage emits **advisory prompt-routing context** — a developer-context string that the model may follow. It does not activate a skill or workflow by itself. It is a best-effort hint, not a guarantee.
+
+Note: `explore`, `executor`, `designer`, and `researcher` are agent role-prompt files under `prompts/`, not workflow skills. `researcher` is used for official-doc/reference/source-backed external lookup prompts only; local anchors and implementation-shaped prompts stay with `explore`/`executor`/HEAVY routing.
+
+Explicit keywords remain the deterministic control surface when you want explicit, guaranteed routing — use them whenever exact behavior matters.
+
+To opt out per prompt with phrases such as `no workflow`, `just chat`, or `plain answer` — the triage layer will suppress context injection for that prompt.
+</triage_routing>
 
 Ralph / Ralplan execution gate:
 - Enforce **ralplan-first** when ralph is active and planning is not complete.
@@ -247,7 +261,7 @@ Ralph / Ralplan execution gate:
 
 <skills>
 Skills are workflow commands.
-Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `web-clone`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
+Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `visual-ralph`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
 Utilities include `cancel`, `note`, `doctor`, `help`, and `trace`.
 </skills>
 
@@ -288,39 +302,39 @@ Auto-generated by `omx setup` from the current `config.toml` plus OMX model over
 
 | Role | Model | Reasoning Effort | Use Case |
 | --- | --- | --- | --- |
-| Frontier (leader) | `gpt-5.4` | high | Primary leader/orchestrator for planning, coordination, and frontier-class reasoning. |
+| Frontier (leader) | `gpt-5.5` | high | Primary leader/orchestrator for planning, coordination, and frontier-class reasoning. |
 | Spark (explorer/fast) | `gpt-5.3-codex-spark` | low | Fast triage, explore, lightweight synthesis, and low-latency routing. |
-| Standard (subagent default) | `gpt-5.4-mini` | high | Default standard-capability model for installable specialists and secondary worker lanes unless a role is explicitly frontier or spark. |
+| Standard (subagent default) | `gpt-5.5` | high | Default standard-capability model for installable specialists and secondary worker lanes unless a role is explicitly frontier or spark. |
 | `explore` | `gpt-5.3-codex-spark` | low | Fast codebase search and file/symbol mapping (fast-lane, fast) |
-| `analyst` | `gpt-5.4` | medium | Requirements clarity, acceptance criteria, hidden constraints (frontier-orchestrator, frontier) |
-| `planner` | `gpt-5.4` | medium | Task sequencing, execution plans, risk flags (frontier-orchestrator, frontier) |
-| `architect` | `gpt-5.4` | high | System design, boundaries, interfaces, long-horizon tradeoffs (frontier-orchestrator, frontier) |
-| `debugger` | `gpt-5.4-mini` | high | Root-cause analysis, regression isolation, failure diagnosis (deep-worker, standard) |
-| `executor` | `gpt-5.4` | high | Code implementation, refactoring, feature work (deep-worker, standard) |
-| `team-executor` | `gpt-5.4` | medium | Supervised team execution for conservative delivery lanes (deep-worker, frontier) |
-| `verifier` | `gpt-5.4-mini` | high | Completion evidence, claim validation, test adequacy (frontier-orchestrator, standard) |
+| `analyst` | `gpt-5.5` | medium | Requirements clarity, acceptance criteria, hidden constraints (frontier-orchestrator, frontier) |
+| `planner` | `gpt-5.5` | medium | Task sequencing, execution plans, risk flags (frontier-orchestrator, frontier) |
+| `architect` | `gpt-5.5` | high | System design, boundaries, interfaces, long-horizon tradeoffs (frontier-orchestrator, frontier) |
+| `debugger` | `gpt-5.5` | high | Root-cause analysis, regression isolation, failure diagnosis (deep-worker, standard) |
+| `executor` | `gpt-5.5` | medium | Code implementation, refactoring, feature work (deep-worker, standard) |
+| `team-executor` | `gpt-5.5` | medium | Supervised team execution for conservative delivery lanes (deep-worker, frontier) |
+| `verifier` | `gpt-5.5` | high | Completion evidence, claim validation, test adequacy (frontier-orchestrator, standard) |
 | `style-reviewer` | `gpt-5.3-codex-spark` | low | Formatting, naming, idioms, lint conventions (fast-lane, fast) |
-| `quality-reviewer` | `gpt-5.4-mini` | medium | Logic defects, maintainability, anti-patterns (frontier-orchestrator, standard) |
-| `api-reviewer` | `gpt-5.4-mini` | medium | API contracts, versioning, backward compatibility (frontier-orchestrator, standard) |
-| `security-reviewer` | `gpt-5.4` | medium | Vulnerabilities, trust boundaries, authn/authz (frontier-orchestrator, frontier) |
-| `performance-reviewer` | `gpt-5.4-mini` | medium | Hotspots, complexity, memory/latency optimization (frontier-orchestrator, standard) |
-| `code-reviewer` | `gpt-5.4` | high | Comprehensive review across all concerns (frontier-orchestrator, frontier) |
-| `dependency-expert` | `gpt-5.4-mini` | high | External SDK/API/package evaluation (frontier-orchestrator, standard) |
-| `test-engineer` | `gpt-5.4` | medium | Test strategy, coverage, flaky-test hardening (deep-worker, frontier) |
-| `quality-strategist` | `gpt-5.4-mini` | medium | Quality strategy, release readiness, risk assessment (frontier-orchestrator, standard) |
-| `build-fixer` | `gpt-5.4-mini` | high | Build/toolchain/type failures resolution (deep-worker, standard) |
-| `designer` | `gpt-5.4-mini` | high | UX/UI architecture, interaction design (deep-worker, standard) |
-| `writer` | `gpt-5.4-mini` | high | Documentation, migration notes, user guidance (fast-lane, standard) |
-| `qa-tester` | `gpt-5.4-mini` | low | Interactive CLI/service runtime validation (deep-worker, standard) |
-| `git-master` | `gpt-5.4-mini` | high | Commit strategy, history hygiene, rebasing (deep-worker, standard) |
-| `code-simplifier` | `gpt-5.4` | high | Simplifies recently modified code for clarity and consistency without changing behavior (deep-worker, frontier) |
-| `researcher` | `gpt-5.4-mini` | high | External documentation and reference research (fast-lane, standard) |
-| `product-manager` | `gpt-5.4-mini` | medium | Problem framing, personas/JTBD, PRDs (frontier-orchestrator, standard) |
-| `ux-researcher` | `gpt-5.4-mini` | medium | Heuristic audits, usability, accessibility (frontier-orchestrator, standard) |
-| `information-architect` | `gpt-5.4-mini` | low | Taxonomy, navigation, findability (frontier-orchestrator, standard) |
-| `product-analyst` | `gpt-5.4-mini` | low | Product metrics, funnel analysis, experiments (frontier-orchestrator, standard) |
-| `critic` | `gpt-5.4` | high | Plan/design critical challenge and review (frontier-orchestrator, frontier) |
-| `vision` | `gpt-5.4` | low | Image/screenshot/diagram analysis (fast-lane, frontier) |
+| `quality-reviewer` | `gpt-5.5` | medium | Logic defects, maintainability, anti-patterns (frontier-orchestrator, standard) |
+| `api-reviewer` | `gpt-5.5` | medium | API contracts, versioning, backward compatibility (frontier-orchestrator, standard) |
+| `security-reviewer` | `gpt-5.5` | medium | Vulnerabilities, trust boundaries, authn/authz (frontier-orchestrator, frontier) |
+| `performance-reviewer` | `gpt-5.5` | medium | Hotspots, complexity, memory/latency optimization (frontier-orchestrator, standard) |
+| `code-reviewer` | `gpt-5.5` | high | Comprehensive review across all concerns (frontier-orchestrator, frontier) |
+| `dependency-expert` | `gpt-5.5` | high | External SDK/API/package evaluation (frontier-orchestrator, standard) |
+| `test-engineer` | `gpt-5.5` | medium | Test strategy, coverage, flaky-test hardening (deep-worker, frontier) |
+| `quality-strategist` | `gpt-5.5` | medium | Quality strategy, release readiness, risk assessment (frontier-orchestrator, standard) |
+| `build-fixer` | `gpt-5.5` | high | Build/toolchain/type failures resolution (deep-worker, standard) |
+| `designer` | `gpt-5.5` | high | UX/UI architecture, interaction design (deep-worker, standard) |
+| `writer` | `gpt-5.5` | high | Documentation, migration notes, user guidance (fast-lane, standard) |
+| `qa-tester` | `gpt-5.5` | low | Interactive CLI/service runtime validation (deep-worker, standard) |
+| `git-master` | `gpt-5.5` | high | Commit strategy, history hygiene, rebasing (deep-worker, standard) |
+| `code-simplifier` | `gpt-5.5` | high | Simplifies recently modified code for clarity and consistency without changing behavior (deep-worker, frontier) |
+| `researcher` | `gpt-5.5` | high | External documentation and reference research (fast-lane, standard) |
+| `product-manager` | `gpt-5.5` | medium | Problem framing, personas/JTBD, PRDs (frontier-orchestrator, standard) |
+| `ux-researcher` | `gpt-5.5` | medium | Heuristic audits, usability, accessibility (frontier-orchestrator, standard) |
+| `information-architect` | `gpt-5.5` | low | Taxonomy, navigation, findability (frontier-orchestrator, standard) |
+| `product-analyst` | `gpt-5.5` | low | Product metrics, funnel analysis, experiments (frontier-orchestrator, standard) |
+| `critic` | `gpt-5.5` | high | Plan/design critical challenge and review (frontier-orchestrator, frontier) |
+| `vision` | `gpt-5.5` | low | Image/screenshot/diagram analysis (fast-lane, frontier) |
 <!-- OMX:MODELS:END -->
 
 ---
@@ -411,6 +425,8 @@ Do not cancel while recoverable work remains.
 ---
 
 <state_management>
+Hooks own normal skill-active and workflow-state persistence under `.omx/state/`.
+
 OMX persists runtime state under `.omx/`:
 - `.omx/state/` — mode state
 - `.omx/notepad.md` — session notes
@@ -420,138 +436,12 @@ OMX persists runtime state under `.omx/`:
 
 Available MCP groups include state/memory tools, code-intel tools, and trace tools.
 
-Mode lifecycle requirements:
-- Write state on start.
-- Update state on phase or iteration change.
-- Mark inactive with `completed_at` on completion.
-- Clear state on cancel/abort cleanup.
+Agents may use OMX state/MCP tools for explicit lifecycle transitions, recovery, checkpointing, cancellation cleanup, or compaction resilience.
+Do not manually duplicate hook-owned activation state unless recovering from missing or stale state.
 </state_management>
-
----
-
-## Codex Runtime Inspection (audittool_personal)
-
-After dispatching a task via `/codex:rescue --background`, use one of these channels to watch execution live from a terminal without blocking the Claude session.
-
-### Log file path
-
-```
-/home/xyf/.claude/plugins/data/codex-openai-codex/state/audittool_personal-<hash>/jobs/<job-id>.log
-```
-
-One log per tracked job. The companion script streams Codex stdout/stderr into this file as it runs.
-
-### Shell helpers (defined in `~/.bashrc`)
-
-| Command | Purpose |
-| --- | --- |
-| `codex-tail` | `tail -F` the most recent job log (auto-resolves newest `.log`). |
-| `codex-tail-all` | `tail -F` the five newest job logs concurrently (banner-separated). |
-| `codex-logs` | List the 20 newest job logs with mtime, newest first. |
-| `codex-layout [session]` | Launch or attach a 3-pane tmux session: Claude main (top-left), auxiliary shell (bottom-left), Codex live log (right). Default session name `audit`. |
-
-### tmux layout created by `codex-layout`
-
-```
-┌─────────────────────────┬──────────────────┐
-│  Claude Code 主对话     │                  │
-│  (top-left)             │   codex-tail     │
-├─────────────────────────┤   (right pane)   │
-│  git / 测试 / REPL      │                  │
-│  (bottom-left)          │                  │
-└─────────────────────────┴──────────────────┘
-```
-
-Re-running `codex-layout` re-attaches the existing session instead of rebuilding it, so panes/scrollback are preserved across reconnects.
-
-### Polling alternatives (no log path needed)
-
-- `/codex:status` — snapshot of all tracked jobs.
-- `/codex:status <job-id>` — single-job progress.
-- `/codex:result <job-id>` — final stdout for a completed job.
-
-Use these when you're inside the Claude session and just need a checkpoint, not a live stream.
 
 ---
 
 ## Setup
 
-Run `omx setup` to install all components. Run `omx doctor` to verify installation.
-
-
-<claude-mem-context>
-# Memory Context
-
-# [audittool_personal] recent context, 2026-04-26 2:27pm GMT+8
-
-Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
-Format: ID TIME TYPE TITLE
-Fetch details: get_observations([IDs]) | Search: mem-search skill
-
-Stats: 50 obs (23,895t read) | 1,423,951t work | 98% savings
-
-### Apr 24, 2026
-S600 Root Cause Found — 1GB Corrupt YAML File Causes Cargo Test High CPU/Memory (Apr 24, 8:57 AM)
-S637 Learner skill — save Opengrep SIGPIPE/OOM silent failure expertise as reusable project skill (Apr 24, 10:01 AM)
-S640 audittool_personal .gitignore Blocks .omc/skills/ via ".*/" Pattern (Apr 24, 9:16 PM)
-S636 Learner skill — codify Opengrep SIGPIPE/OOM silent failure expertise into a reusable skill file (Apr 24, 9:16 PM)
-S649 Save opengrep expertise skill + post-fix verification of scan task findings via API (Apr 24, 9:22 PM)
-S671 Opengrep Scan Failure — "scanner completion summary was not observed" Error Pattern (Apr 24, 9:33 PM)
-S648 Save opengrep SIGPIPE/OOM expertise as a reusable skill via oh-my-claudecode:skill (Apr 24, 9:33 PM)
-S708 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 24, 10:09 PM)
-### Apr 26, 2026
-S711 Opengrep Silent Failure — "scanner produced no valid results" Root Cause Investigation (Apr 26, 8:16 AM)
-S717 Opengrep Silent Failure — Fix Plan Requested for docker/opengrep-scan.sh (Apr 26, 8:22 AM)
-2104 10:07a 🔵 Stale Ralph State Persists Across Sessions — `omx state clear --all_sessions` Required
-2105 " 🔵 Hermes Worker Contract — Current Live State of Image, Compose, and Rust Dispatch
-2106 10:09a 🔵 New Task Initiated — Remove Hermes Container Build, Keep Submodule
-2115 10:13a ✅ Top Navigation Sidebar — Redundant Section Titles Removed from Submenu Items
-2117 " 🔵 Hermes Image Slimming PRD — Option A/B/C Ladder with Numeric Gates
-2118 " 🔵 Hermes Image Slimming Test Spec — Four Contract-Hardening Gates
-2119 " 🔵 Hermes Dispatch — try_hermes_dispatch Iterates Four Roles Sequentially in Rust
-2120 " ⚖️ Planner Interrupted — User Forced Immediate RALPLAN-DR Output Without Further File Reads
-2116 10:14a 🔵 Top Navigation Dropdown Structure — Redundant DropdownMenuLabel Identified in TopNavigation.tsx
-2121 10:15a 🔵 Blue Focus Glow Audit — Full Surface Map of --shadow-focus and focus:ring Across Frontend
-2124 10:16a ⚖️ RALPLAN-DR Draft — Remove Blue Focus Glow/Halo Across All Frontend Pages
-2127 10:18a ⚖️ Ralplan Approved — Remove Blue Focus Glow via Shared Primitive + Theme Layer First
-2131 10:19a ⚖️ Architect APPROVED — Remove Hermes Container Build, Preserve Submodule
-2126 " ⚖️ RALPLAN-DR Plan Saved — Remove Blue Focus Glow Across All Frontend Pages
-2128 10:21a ⚖️ RALPLAN-DR Completed — Hermes Image Contract Hardening Plan Approved
-2129 " ⚖️ New Ralph Task Spawned — Remove Hermes Container Build, Keep Submodule
-2134 10:26a ⚖️ Architect APPROVED — Remove Hermes Container Build, Keep Submodule (Option A)
-2135 " ✅ PRD and Test Spec Created — Remove Hermes Container Build Keep Submodule
-2136 10:27a ✅ Ralplan Completed — Remove Hermes Container Build State Written as Finished
-2137 10:28a ⚖️ Ralplan Critic Review: APPROVE with Conditions for Blue Focus Glow Removal Plan
-2138 10:29a 🔵 Complete Focus Glow Source Map for audittool_personal Frontend
-2140 10:31a ✅ Hermes Container Build Removal — Ralph Task Initiated
-2141 10:33a ✅ Hermes Container Build Surface Removed — Submodule and Rust Dispatch Preserved
-2142 10:34a ✅ Ralph Task Initiated — Remove Hermes Container Build, Keep Submodule
-2143 10:36a 🔵 Identity Clarification — Kiro Is Not a Claude Agent
-2144 10:38a ✅ Hermes Container Build Surface Removal — PRD and Test Spec Plans Executed via Ralph
-2145 10:39a 🔵 oh-my-codex (OMX) Package Structure and Team Worker Launch Architecture
-2146 " ⚖️ Architect Agent APPROVED — Hermes Container Build Surface Removal
-2148 10:41a ✅ Hermes Container Build Surface Removal — Execute PRD and Test Spec Plans via Ralph
-2149 " 🔵 OMX Team Worker CLI Resolution and Claude Worker Launch Contract
-2150 11:02a 🔵 Blue Focus Glow — Full Codebase Audit Completed
-2161 11:03a ⚖️ Identity Clarification — Kiro Is Not a Claude Agent
-2157 11:14a ⚖️ Blue Focus Glow Removal — Critic Review APPROVED
-2158 11:15a ✅ Blue Focus Glow Removal — Full Diff Verified Across All Affected Files
-2160 11:17a ⚖️ Blue Focus Glow Removal — Ralph STANDARD-tier Verification APPROVED
-2162 11:19a 🔵 Frontend Docker Container — "vite: not found" After pnpm install
-2165 11:24a 🔵 Docker Frontend Container — "vite: not found" After pnpm Install
-2167 11:29a 🔵 Frontend Docker Container — "vite: not found" After pnpm Install
-2168 11:30a ✅ Blue Focus Glow Removal — Full Implementation Staged, Ralph Verification In Progress
-2170 11:31a 🔴 Frontend test:node 7 Failures Fixed — Retired Engine Types and Hardcoded Path Removed
-2175 11:32a 🔵 Docker Frontend Crash Loop — Root Cause Is vite Binary Not on PATH After pnpm Install
-2182 11:37a 🔴 Blue Focus Glow Removal — Browser-Verified, All 463 Tests Pass, Lint Clean
-2185 11:42a ⚖️ Critic Review APPROVED — Blue Focus Glow Removal and Frontend Test-Node Fixes
-2184 " ✅ Ralph Session Complete — Blue Focus Glow Removal and Test Fixes Verified ALLOW
-2186 11:44a ✅ Ralph State Cleared — All Sessions Purged After Successful Completion
-2192 12:12p ✅ Ralph Task — Remove Redundant Section Titles from Sidebar Secondary Menu
-2196 12:20p 🟣 Sidebar Secondary Menu — Remove Redundant Section Titles
-2197 12:21p 🔵 Scan Config Shell Pages — Pending Test Failures for cyber-card and cyber-grid-subtle
-2199 12:22p ✅ Dashboard Layout and Scan Config Shell — Cyber Frame Removal and Task Status Repositioning
-2222 12:34p 🔵 Opengrep Scan Failure — Two Distinct Error Modes Identified
-
-Access 1424k tokens of past work via get_observations([IDs]) or mem-search skill.
-</claude-mem-context>
+Execute `omx setup` to install all components. Execute `omx doctor` to verify installation.

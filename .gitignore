@@ -278,3 +278,8 @@ backend/agents/shared/config.json
 
 .codex
 AGENTS.md
+
+# Argus local intelligent-audit secrets
+.argus-intelligent-audit.env
+!.argus-intelligent-audit.env.example
+
