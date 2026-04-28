@@ -1,13 +1,18 @@
 import { api } from "@/shared/api/database";
 
-type PreflightStage = "llm_config" | "llm_test";
+type PreflightStage = "llm_config" | "llm_test" | "runner";
 export type PreflightMissingField = "llmModel" | "llmBaseUrl" | "llmApiKey";
 export type AgentPreflightReasonCode =
 	| "default_config"
 	| "missing_fields"
 	| "llm_test_failed"
 	| "llm_test_timeout"
-	| "llm_test_exception";
+	| "llm_test_exception"
+	| "llm_test_stale"
+	| "unsupported_provider"
+	| "request_failed"
+	| "empty_response"
+	| "runner_missing";
 
 export interface LlmQuickConfigSnapshot {
 	provider: string;
@@ -24,10 +29,11 @@ export interface AgentPreflightResult {
 	missingFields?: PreflightMissingField[];
 	effectiveConfig: LlmQuickConfigSnapshot;
 	savedConfig?: LlmQuickConfigSnapshot | null;
+	llmTestMetadata?: Record<string, unknown> | null;
 }
 
 const EMPTY_QUICK_CONFIG: LlmQuickConfigSnapshot = {
-	provider: "openai",
+	provider: "openai_compatible",
 	model: "",
 	baseUrl: "",
 	apiKey: "",
@@ -46,6 +52,7 @@ export async function runAgentPreflightCheck(): Promise<AgentPreflightResult> {
 				: undefined,
 			effectiveConfig: result.effectiveConfig || EMPTY_QUICK_CONFIG,
 			savedConfig: result.savedConfig ?? null,
+			llmTestMetadata: result.llmTestMetadata ?? null,
 		};
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "未知错误";
@@ -56,6 +63,7 @@ export async function runAgentPreflightCheck(): Promise<AgentPreflightResult> {
 			message: `智能审计初始化失败：LLM 预检异常（${message}）。`,
 			effectiveConfig: EMPTY_QUICK_CONFIG,
 			savedConfig: null,
+			llmTestMetadata: null,
 		};
 	}
 }

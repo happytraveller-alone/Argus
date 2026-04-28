@@ -222,9 +222,19 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
             id text primary key,
             llm_config_json jsonb not null default '{}'::jsonb,
             other_config_json jsonb not null default '{}'::jsonb,
+            llm_test_metadata_json jsonb not null default '{}'::jsonb,
             created_at timestamptz not null default now(),
             updated_at timestamptz not null default now()
         )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        alter table system_configs
+        add column if not exists llm_test_metadata_json jsonb not null default '{}'::jsonb
         "#,
     )
     .execute(pool)

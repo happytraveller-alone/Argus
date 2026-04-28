@@ -7,6 +7,8 @@ import {
 	type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
 
+const REDACTED_API_KEY = "***configured***";
+
 export interface LlmQuickConfig {
 	provider: string;
 	model: string;
@@ -72,7 +74,7 @@ export function resolveQuickConfigAfterProviderChange(options: {
 	hasManualBaseUrlOverride: boolean;
 }): LlmQuickConfig {
 	const normalizedCurrent = normalizeQuickConfig(options.currentConfig) || {
-		provider: "openai",
+		provider: "openai_compatible",
 		model: "",
 		baseUrl: "",
 		apiKey: "",
@@ -106,6 +108,12 @@ export function invalidateSuccessfulManualTest(options: {
 	return areSameLlmQuickConfig(options.previousConfig, options.nextConfig);
 }
 
+export function hasVerifiedLlmTestMetadata(
+	metadata: Record<string, unknown> | null | undefined,
+): boolean {
+	return typeof metadata?.fingerprint === "string" && metadata.fingerprint.trim() !== "";
+}
+
 export function getLlmQuickGateStatus({
 	providerOptions,
 	currentConfig,
@@ -115,11 +123,15 @@ export function getLlmQuickGateStatus({
 	const missingFields = getLlmQuickConfigMissingFields(currentConfig, providerOptions);
 	const hasUnsavedChanges = !areSameLlmQuickConfig(currentConfig, savedConfig);
 	const hasRequiredFields = missingFields.length === 0;
-	const canTest = hasRequiredFields && !hasUnsavedChanges;
+	const hasRedactedApiKey =
+		normalizeQuickConfig(currentConfig)?.apiKey === REDACTED_API_KEY;
+	const canTest = hasRequiredFields && !hasUnsavedChanges && !hasRedactedApiKey;
 	const testBlockMessage = hasRequiredFields
 		? hasUnsavedChanges
 			? "当前 LLM 配置有未保存改动，请先保存，再手动测试连接。"
-			: ""
+			: hasRedactedApiKey
+				? "如需重新测试连接，请重新填写 API Key。"
+				: ""
 		: "";
 
 	return {

@@ -56,7 +56,7 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
 
     let mut actions = Vec::new();
     if system_config::load_current(state).await?.is_none() {
-        system_config::save_current(state, json!({}), json!({})).await?;
+        system_config::save_current(state, json!({}), json!({}), json!({})).await?;
         actions.push("created default rust system config".to_string());
     } else {
         actions.push("default rust system config already present".to_string());

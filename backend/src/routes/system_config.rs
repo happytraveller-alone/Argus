@@ -15,9 +15,11 @@ use crate::{
     db::system_config,
     error::ApiError,
     llm::{
-        normalize_base_url, normalize_provider_id, parse_custom_headers, provider_api_key_field,
-        provider_catalog, provider_catalog_entry_or_fallback, recommend_tokens,
-        ProviderCatalogItem as LlmProviderItem,
+        build_runtime_config, compute_llm_fingerprint, is_supported_protocol_provider,
+        metadata_matches, normalize_base_url, normalize_provider_id, normalize_stored_llm_config,
+        parse_custom_headers, provider_api_key_field, provider_catalog,
+        provider_catalog_entry_or_fallback, recommend_tokens, sanitize_llm_config_for_save,
+        test_llm_generation, LlmGateError, ProviderCatalogItem as LlmProviderItem,
     },
     runtime::agentflow::codex_config::build_agentflow_llm_config,
     state::{AppState, StoredSystemConfig},
@@ -28,6 +30,8 @@ use crate::{
 pub struct SystemConfigPayload {
     pub llm_config: Value,
     pub other_config: Value,
+    #[serde(default)]
+    pub llm_test_metadata: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +54,7 @@ pub struct AgentPreflightPayload {
     pub effective_config: LlmQuickConfigSnapshot,
     pub saved_config: Option<LlmQuickConfigSnapshot>,
     pub metadata: Option<Value>,
+    pub llm_test_metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +74,7 @@ pub struct LlmTestResponse {
     pub message: String,
     pub model: Option<String>,
     pub response: Option<String>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,13 +138,25 @@ pub async fn put_current(
     Json(payload): Json<SystemConfigPayload>,
 ) -> Result<Json<SystemConfigPayload>, ApiError> {
     let defaults = default_config(state.config.as_ref());
-    let stored = system_config::save_current(
-        &state,
-        merge_json(&defaults.llm_config, &payload.llm_config),
-        merge_json(&defaults.other_config, &payload.other_config),
-    )
-    .await
-    .map_err(internal_error)?;
+    let existing = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?;
+    let next_llm =
+        sanitize_llm_config_for_save(&merge_json(&defaults.llm_config, &payload.llm_config))
+            .map_err(llm_gate_bad_request)?;
+    let next_other = merge_json(&defaults.other_config, &payload.other_config);
+    let next_runtime =
+        build_runtime_config(&next_llm, &next_other).map_err(llm_gate_bad_request)?;
+    let next_fingerprint = compute_llm_fingerprint(&next_runtime);
+    let next_metadata = existing
+        .as_ref()
+        .map(|stored| &stored.llm_test_metadata_json)
+        .filter(|metadata| metadata_matches(metadata, &next_fingerprint))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let stored = system_config::save_current(&state, next_llm, next_other, next_metadata)
+        .await
+        .map_err(internal_error)?;
 
     let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
     sync_python_user_config_mirror(&state, Some(&merged)).await?;
@@ -162,44 +180,100 @@ async fn get_llm_providers() -> Json<LlmProviderCatalogResponse> {
 }
 
 pub async fn test_llm(
+    State(state): State<AppState>,
     Json(request): Json<LlmTestRequest>,
 ) -> Result<Json<LlmTestResponse>, ApiError> {
     let provider = normalize_provider_for_route(&request.provider);
     let model = request.model.unwrap_or_default().trim().to_string();
     let base_url = request.base_url.unwrap_or_default().trim().to_string();
     let api_key = request.api_key.unwrap_or_default().trim().to_string();
-
-    if model.is_empty() {
+    let request_custom_headers_value = request
+        .custom_headers
+        .as_ref()
+        .map(|headers| Value::String(headers.clone()));
+    let request_custom_headers = parse_custom_headers(request_custom_headers_value.as_ref())
+        .map_err(ApiError::BadRequest)?;
+    let stored = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::BadRequest("请先保存 LLM 配置，再执行连接测试。".to_string()))?;
+    let stored_custom_headers =
+        parse_custom_headers(stored.llm_config_json.get("llmCustomHeaders"))
+            .map_err(ApiError::BadRequest)?;
+    if provider != read_string(&stored.llm_config_json, "llmProvider").unwrap_or_default()
+        || model != read_string(&stored.llm_config_json, "llmModel").unwrap_or_default()
+        || normalize_base_url(&base_url)
+            != normalize_base_url(
+                &read_string(&stored.llm_config_json, "llmBaseUrl").unwrap_or_default(),
+            )
+        || api_key != read_string(&stored.llm_config_json, "llmApiKey").unwrap_or_default()
+        || request_custom_headers != stored_custom_headers
+    {
         return Ok(Json(LlmTestResponse {
             success: false,
-            message: "LLM 配置缺失：`model` 必填。".to_string(),
+            message: "当前测试请求与已保存 LLM 配置不一致，请先保存后再测试。".to_string(),
             model: None,
             response: None,
+            metadata: None,
         }));
     }
-    if base_url.is_empty() {
-        return Ok(Json(LlmTestResponse {
-            success: false,
-            message: "LLM 配置缺失：`baseUrl` 必填。".to_string(),
-            model: None,
-            response: None,
-        }));
+    let runtime = match build_runtime_config(&stored.llm_config_json, &stored.other_config_json) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return Ok(Json(LlmTestResponse {
+                success: false,
+                message: error.message,
+                model: None,
+                response: None,
+                metadata: None,
+            }))
+        }
+    };
+    match test_llm_generation(&state.http_client, &runtime).await {
+        Ok(outcome) => {
+            let metadata = outcome.metadata();
+            let stored = system_config::save_current(
+                &state,
+                stored.llm_config_json,
+                stored.other_config_json,
+                metadata.clone(),
+            )
+            .await
+            .map_err(internal_error)?;
+            let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
+            sync_python_user_config_mirror(&state, Some(&merged)).await?;
+            Ok(Json(LlmTestResponse {
+                success: true,
+                message: "连接校验通过".to_string(),
+                model: Some(outcome.model),
+                response: None,
+                metadata: Some(metadata),
+            }))
+        }
+        Err(error) => {
+            let current_fingerprint = compute_llm_fingerprint(&runtime);
+            let metadata = if metadata_matches(&stored.llm_test_metadata_json, &current_fingerprint)
+            {
+                json!({})
+            } else {
+                stored.llm_test_metadata_json
+            };
+            let _ = system_config::save_current(
+                &state,
+                stored.llm_config_json,
+                stored.other_config_json,
+                metadata,
+            )
+            .await;
+            Ok(Json(LlmTestResponse {
+                success: false,
+                message: error.message,
+                model: None,
+                response: None,
+                metadata: None,
+            }))
+        }
     }
-    if provider != "ollama" && api_key.is_empty() {
-        return Ok(Json(LlmTestResponse {
-            success: false,
-            message: format!("LLM 配置缺失：提供商 `{provider}` 必须提供 `apiKey`。"),
-            model: None,
-            response: None,
-        }));
-    }
-
-    Ok(Json(LlmTestResponse {
-        success: true,
-        message: "连接校验通过".to_string(),
-        model: Some(model),
-        response: Some("hello".to_string()),
-    }))
 }
 
 pub async fn fetch_llm_models(
@@ -276,6 +350,7 @@ pub async fn agent_preflight(
                 agent_preflight_metadata("llm_config", "default_config", None),
                 &effective_llm_config,
             )),
+            llm_test_metadata: None,
         }));
     }
 
@@ -297,8 +372,84 @@ pub async fn agent_preflight(
                 agent_preflight_metadata("llm_config", "missing_fields", None),
                 &effective_llm_config,
             )),
+            llm_test_metadata: None,
         }));
     }
+
+    let Some(stored_config) = stored.as_ref() else {
+        return Ok(Json(AgentPreflightPayload {
+            ok: false,
+            stage: Some("llm_config".to_string()),
+            message: "智能审计初始化失败：请先保存并测试专属 LLM 配置。".to_string(),
+            reason_code: Some("default_config".to_string()),
+            missing_fields: None,
+            effective_config: effective_snapshot,
+            saved_config: saved_snapshot,
+            metadata: Some(annotate_llm_preflight_metadata(
+                agent_preflight_metadata("llm_config", "default_config", None),
+                &effective_llm_config,
+            )),
+            llm_test_metadata: None,
+        }));
+    };
+    let runtime = match build_runtime_config(
+        &stored_config.llm_config_json,
+        &stored_config.other_config_json,
+    ) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return Ok(Json(AgentPreflightPayload {
+                ok: false,
+                stage: Some("llm_config".to_string()),
+                message: error.message,
+                reason_code: Some(error.reason_code.to_string()),
+                missing_fields: None,
+                effective_config: effective_snapshot,
+                saved_config: saved_snapshot,
+                metadata: Some(annotate_llm_preflight_metadata(
+                    agent_preflight_metadata("llm_config", error.reason_code, None),
+                    &effective_llm_config,
+                )),
+                llm_test_metadata: None,
+            }))
+        }
+    };
+    let fingerprint = compute_llm_fingerprint(&runtime);
+    if !metadata_matches(&stored_config.llm_test_metadata_json, &fingerprint) {
+        return Ok(Json(AgentPreflightPayload {
+            ok: false,
+            stage: Some("llm_test".to_string()),
+            message: "智能审计初始化失败：LLM 测试证据缺失或已过期，请重新保存并测试。".to_string(),
+            reason_code: Some("llm_test_stale".to_string()),
+            missing_fields: None,
+            effective_config: effective_snapshot,
+            saved_config: saved_snapshot,
+            metadata: Some(annotate_llm_preflight_metadata(
+                agent_preflight_metadata("llm_test", "llm_test_stale", None),
+                &effective_llm_config,
+            )),
+            llm_test_metadata: Some(stored_config.llm_test_metadata_json.clone()),
+        }));
+    }
+    let outcome = match test_llm_generation(&state.http_client, &runtime).await {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Ok(Json(AgentPreflightPayload {
+                ok: false,
+                stage: Some("llm_test".to_string()),
+                message: error.message,
+                reason_code: Some(error.reason_code.to_string()),
+                missing_fields: None,
+                effective_config: effective_snapshot,
+                saved_config: saved_snapshot,
+                metadata: Some(annotate_llm_preflight_metadata(
+                    agent_preflight_metadata("llm_test", error.reason_code, None),
+                    &effective_llm_config,
+                )),
+                llm_test_metadata: Some(stored_config.llm_test_metadata_json.clone()),
+            }))
+        }
+    };
 
     let runner_metadata = annotate_llm_preflight_metadata(
         agentflow_runner_preflight_metadata(state.config.as_ref()),
@@ -314,6 +465,7 @@ pub async fn agent_preflight(
             effective_config: effective_snapshot,
             saved_config: saved_snapshot,
             metadata: Some(runner_metadata),
+            llm_test_metadata: Some(outcome.metadata()),
         }));
     }
 
@@ -326,14 +478,16 @@ pub async fn agent_preflight(
         effective_config: effective_snapshot,
         saved_config: saved_snapshot,
         metadata: Some(runner_metadata),
+        llm_test_metadata: Some(outcome.metadata()),
     }))
 }
 
 pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
     SystemConfigPayload {
         llm_config: json!({
-            "llmProvider": config.llm_provider,
-            "llmApiKey": config.llm_api_key,
+            "llmConfigVersion": crate::llm::LLM_CONFIG_VERSION,
+            "llmProvider": if is_supported_protocol_provider(&config.llm_provider) { config.llm_provider.as_str() } else { "openai_compatible" },
+            "llmApiKey": "",
             "llmModel": config.llm_model,
             "llmBaseUrl": config.llm_base_url,
             "llmTimeout": config.llm_timeout_seconds * 1000,
@@ -345,16 +499,16 @@ pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
             "agentTimeout": config.agent_timeout_seconds,
             "subAgentTimeout": config.sub_agent_timeout_seconds,
             "toolTimeout": config.tool_timeout_seconds,
-            "geminiApiKey": config.gemini_api_key,
-            "openaiApiKey": config.openai_api_key,
-            "claudeApiKey": config.claude_api_key,
-            "qwenApiKey": config.qwen_api_key,
-            "deepseekApiKey": config.deepseek_api_key,
-            "zhipuApiKey": config.zhipu_api_key,
-            "moonshotApiKey": config.moonshot_api_key,
-            "baiduApiKey": config.baidu_api_key,
-            "minimaxApiKey": config.minimax_api_key,
-            "doubaoApiKey": config.doubao_api_key,
+            "geminiApiKey": "",
+            "openaiApiKey": "",
+            "claudeApiKey": "",
+            "qwenApiKey": "",
+            "deepseekApiKey": "",
+            "zhipuApiKey": "",
+            "moonshotApiKey": "",
+            "baiduApiKey": "",
+            "minimaxApiKey": "",
+            "doubaoApiKey": "",
             "ollamaBaseUrl": config.ollama_base_url
         }),
         other_config: json!({
@@ -362,6 +516,7 @@ pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
             "llmConcurrency": config.llm_concurrency,
             "llmGapMs": config.llm_gap_ms
         }),
+        llm_test_metadata: json!({}),
     }
 }
 
@@ -371,10 +526,17 @@ fn merge_with_defaults(
 ) -> SystemConfigPayload {
     let defaults = default_config(config);
     match stored {
-        Some(stored) => SystemConfigPayload {
-            llm_config: merge_json(&defaults.llm_config, &stored.llm_config_json),
-            other_config: merge_json(&defaults.other_config, &stored.other_config_json),
-        },
+        Some(stored) => {
+            let (llm_config, llm_test_metadata, _) = normalize_stored_llm_config(
+                &stored.llm_config_json,
+                &stored.llm_test_metadata_json,
+            );
+            SystemConfigPayload {
+                llm_config: merge_json(&defaults.llm_config, &llm_config),
+                other_config: merge_json(&defaults.other_config, &stored.other_config_json),
+                llm_test_metadata,
+            }
+        }
         None => defaults,
     }
 }
@@ -397,7 +559,7 @@ fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
     let provider = normalize_provider_for_route(
         read_string(llm_config, "llmProvider")
             .as_deref()
-            .unwrap_or("openai"),
+            .unwrap_or("openai_compatible"),
     );
     let base_url = read_string(llm_config, "llmBaseUrl")
         .or_else(|| read_string(llm_config, "ollamaBaseUrl"))
@@ -424,7 +586,7 @@ fn collect_missing_fields(snapshot: &LlmQuickConfigSnapshot) -> Vec<String> {
     if snapshot.base_url.trim().is_empty() {
         missing.push("llmBaseUrl".to_string());
     }
-    if snapshot.provider != "ollama" && snapshot.api_key.trim().is_empty() {
+    if snapshot.api_key.trim().is_empty() {
         missing.push("llmApiKey".to_string());
     }
     missing
@@ -551,7 +713,7 @@ fn env_flag_enabled(key: &str, default: bool) -> bool {
 fn normalize_provider_for_route(provider: &str) -> String {
     let normalized = normalize_provider_id(provider);
     if normalized.is_empty() {
-        "openai".to_string()
+        "openai_compatible".to_string()
     } else {
         normalized
     }
@@ -563,6 +725,10 @@ fn read_string(value: &Value, key: &str) -> Option<String> {
 
 fn internal_error(error: anyhow::Error) -> ApiError {
     ApiError::Internal(error.to_string())
+}
+
+fn llm_gate_bad_request(error: LlmGateError) -> ApiError {
+    ApiError::BadRequest(error.message)
 }
 
 async fn sync_python_user_config_mirror(
@@ -647,18 +813,24 @@ mod tests {
         config.max_analyze_files = 77;
         config.llm_concurrency = 9;
         config.llm_gap_ms = 444;
+        config.llm_api_key = "sk-app-default".to_string();
         config.gemini_api_key = "gemini-secret".to_string();
+        config.openai_api_key = "openai-secret".to_string();
+        config.doubao_api_key = "doubao-secret".to_string();
         config.ollama_base_url = "http://ollama.internal/v1".to_string();
 
         let defaults = default_config(&config);
-        assert_eq!(defaults.llm_config["llmProvider"], "gemini");
+        assert_eq!(defaults.llm_config["llmProvider"], "openai_compatible");
         assert_eq!(defaults.llm_config["llmModel"], "gemini-2.5-pro");
         assert_eq!(defaults.llm_config["llmBaseUrl"], "https://example.test/v1");
         assert_eq!(defaults.llm_config["llmTimeout"], 123_000);
         assert_eq!(defaults.llm_config["agentTimeout"], 456);
         assert_eq!(defaults.llm_config["subAgentTimeout"], 789);
         assert_eq!(defaults.llm_config["toolTimeout"], 42);
-        assert_eq!(defaults.llm_config["geminiApiKey"], "gemini-secret");
+        assert_eq!(defaults.llm_config["llmApiKey"], "");
+        assert_eq!(defaults.llm_config["geminiApiKey"], "");
+        assert_eq!(defaults.llm_config["openaiApiKey"], "");
+        assert_eq!(defaults.llm_config["doubaoApiKey"], "");
         assert_eq!(
             defaults.llm_config["ollamaBaseUrl"],
             "http://ollama.internal/v1"
@@ -680,6 +852,7 @@ mod tests {
             other_config: json!({
                 "llmConcurrency": 3
             }),
+            llm_test_metadata: json!({}),
         };
 
         let (legacy_llm_config, legacy_other_config) =

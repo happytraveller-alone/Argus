@@ -10,39 +10,41 @@ import {
 	parseLlmCustomHeadersInput,
 } from "../src/shared/llm/providerCatalog.ts";
 
-test("normalizeLlmProviderId maps compatibility aliases to stable ids", () => {
-	assert.equal(normalizeLlmProviderId("claude"), "anthropic");
-	assert.equal(normalizeLlmProviderId("openai_compatible"), "custom");
+test("normalizeLlmProviderId preserves protocol provider ids", () => {
+	assert.equal(normalizeLlmProviderId("claude"), "claude");
+	assert.equal(normalizeLlmProviderId("openai_compatible"), "openai_compatible");
 	assert.equal(normalizeLlmProviderId("custom"), "custom");
 });
 
-test("builtin provider catalog exposes the OpenAI compatible entry and Kimi preset", () => {
+test("builtin provider catalog exposes only protocol providers", () => {
 	const customProvider = BUILTIN_LLM_PROVIDERS.find(
-		(provider) => provider.id === "custom",
+		(provider) => provider.id === "openai_compatible",
 	);
-	const moonshotProvider = BUILTIN_LLM_PROVIDERS.find(
-		(provider) => provider.id === "moonshot",
+	const anthropicProvider = BUILTIN_LLM_PROVIDERS.find(
+		(provider) => provider.id === "anthropic_compatible",
 	);
+
+	assert.equal(BUILTIN_LLM_PROVIDERS.length, 2);
 
 	assert.ok(customProvider);
-	assert.equal(customProvider.name, "OpenAI Compatible");
+	assert.equal(customProvider.name, "OpenAI 兼容");
 	assert.equal(customProvider.supportsCustomHeaders, true);
 	assert.ok(customProvider.exampleBaseUrls?.includes("https://api.openai.com/v1"));
-	assert.ok(customProvider.exampleBaseUrls?.includes("https://api.moonshot.cn/v1"));
 	assert.ok(customProvider.exampleBaseUrls?.includes("http://localhost:11434/v1"));
 
-	assert.ok(moonshotProvider);
-	assert.match(moonshotProvider.description, /Kimi/);
+	assert.ok(anthropicProvider);
+	assert.equal(anthropicProvider.fetchStyle, "anthropic_compatible");
 });
 
-test("buildLlmProviderOptions reuses custom for openai_compatible values", () => {
+test("buildLlmProviderOptions does not preserve unknown providers", () => {
 	const providers = buildLlmProviderOptions({
 		backendProviders: BUILTIN_LLM_PROVIDERS,
 		currentProviderId: "openai_compatible",
 	});
 
-	const matchingProviders = providers.filter((provider) => provider.id === "custom");
+	const matchingProviders = providers.filter((provider) => provider.id === "openai_compatible");
 	assert.equal(matchingProviders.length, 1);
+	assert.equal(providers.some((provider) => provider.id === "custom"), false);
 });
 
 test("parseLlmCustomHeadersInput validates JSON object strings", () => {
@@ -87,8 +89,8 @@ test("getLlmCustomHeadersParseErrorMessage only exposes validation errors", () =
 test("getCreateProjectScanProviderLabel highlights the compatibility entry", () => {
 	assert.equal(
 		getCreateProjectScanProviderLabel({
-			id: "custom",
-			name: "OpenAI Compatible",
+			id: "openai_compatible",
+			name: "OpenAI 兼容",
 		}),
 		"OpenAI 兼容",
 	);

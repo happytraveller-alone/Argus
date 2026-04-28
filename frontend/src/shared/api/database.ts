@@ -31,17 +31,23 @@ interface LlmQuickConfigSnapshotPayload {
 
 interface AgentTaskPreflightPayload {
   ok: boolean;
-  stage?: "llm_config" | "llm_test";
+  stage?: "llm_config" | "llm_test" | "runner";
   message: string;
   reasonCode?:
   | "default_config"
   | "missing_fields"
   | "llm_test_failed"
   | "llm_test_timeout"
-  | "llm_test_exception";
+  | "llm_test_exception"
+  | "llm_test_stale"
+  | "unsupported_provider"
+  | "request_failed"
+  | "empty_response"
+  | "runner_missing";
   missingFields?: Array<"llmModel" | "llmBaseUrl" | "llmApiKey">;
   effectiveConfig: LlmQuickConfigSnapshotPayload;
   savedConfig?: LlmQuickConfigSnapshotPayload | null;
+  llmTestMetadata?: Record<string, unknown> | null;
 }
 
 export interface SkillCatalogItemPayload {
@@ -705,7 +711,6 @@ export const api = {
       const res = await apiClient.get('/system-config');
       console.log('[API] getUserConfig 成功:', {
         hasLlmConfig: !!res.data?.llmConfig,
-        hasApiKey: !!res.data?.llmConfig?.llmApiKey,
         provider: res.data?.llmConfig?.llmProvider,
       });
       return res.data;
@@ -856,6 +861,7 @@ export const api = {
     message: string;
     model?: string;
     response?: string;
+    metadata?: Record<string, unknown>;
   }> {
     const res = await apiClient.post('/system-config/test-llm', params);
     return res.data;
@@ -876,7 +882,7 @@ export const api = {
       defaultBaseUrl: string;
       requiresApiKey: boolean;
       supportsModelFetch: boolean;
-      fetchStyle: "openai_compatible" | "anthropic" | "azure_openai" | "native_static";
+      fetchStyle: "openai_compatible" | "anthropic_compatible";
       exampleBaseUrls?: string[];
       supportsCustomHeaders?: boolean;
     }>;

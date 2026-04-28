@@ -13,7 +13,7 @@ async function importOrFail<TModule = Record<string, unknown>>(
 	}
 }
 
-test("provider catalog falls back to built-ins and preserves unknown current provider", async () => {
+test("provider catalog falls back to built-ins and drops unknown current provider", async () => {
 	const providerCatalog = await importOrFail<any>(
 		"../src/shared/llm/providerCatalog.ts",
 	);
@@ -23,13 +23,13 @@ test("provider catalog falls back to built-ins and preserves unknown current pro
 		currentProviderId: "acme-cloud",
 	});
 
-	assert.equal(providerCatalog.normalizeLlmProviderId("Claude"), "anthropic");
-	assert.equal(providerCatalog.normalizeLlmProviderId(""), "openai");
+	assert.equal(providerCatalog.normalizeLlmProviderId("Claude"), "claude");
+	assert.equal(providerCatalog.normalizeLlmProviderId(""), "openai_compatible");
 	assert.equal(
-		options.some((provider: { id: string }) => provider.id === "openai"),
+		options.some((provider: { id: string }) => provider.id === "openai_compatible"),
 		true,
 	);
-	assert.equal(options.at(-1)?.id, "acme-cloud");
+	assert.equal(options.some((provider: { id: string }) => provider.id === "acme-cloud"), false);
 	assert.equal(
 		providerCatalog.getCreateProjectScanProviderLabel(options[0]),
 		"OpenAI 兼容",
@@ -46,43 +46,43 @@ test("provider switching refreshes default model and only refreshes Base URL bef
 
 	const providerOptions = providerCatalog.buildLlmProviderOptions({
 		backendProviders: [],
-		currentProviderId: "openai",
+		currentProviderId: "openai_compatible",
 	});
 
 	const untouchedBaseUrl = llmGate.resolveQuickConfigAfterProviderChange({
 		providerOptions,
 		currentConfig: {
-			provider: "openai",
+			provider: "openai_compatible",
 			model: "gpt-5",
 			baseUrl: "https://api.openai.com/v1",
 			apiKey: "demo-key",
 		},
-		nextProvider: "ollama",
+		nextProvider: "anthropic_compatible",
 		hasManualBaseUrlOverride: false,
 	});
 
 	assert.deepEqual(untouchedBaseUrl, {
-		provider: "ollama",
-		model: "llama3.3-70b",
-		baseUrl: "http://localhost:11434/v1",
+		provider: "anthropic_compatible",
+		model: "claude-sonnet-4.5",
+		baseUrl: "https://api.anthropic.com/v1",
 		apiKey: "demo-key",
 	});
 
 	const manualBaseUrl = llmGate.resolveQuickConfigAfterProviderChange({
 		providerOptions,
 		currentConfig: {
-			provider: "openai",
+			provider: "openai_compatible",
 			model: "gpt-5",
 			baseUrl: "https://gateway.internal/v1",
 			apiKey: "demo-key",
 		},
-		nextProvider: "ollama",
+		nextProvider: "anthropic_compatible",
 		hasManualBaseUrlOverride: true,
 	});
 
 	assert.deepEqual(manualBaseUrl, {
-		provider: "ollama",
-		model: "llama3.3-70b",
+		provider: "anthropic_compatible",
+		model: "claude-sonnet-4.5",
 		baseUrl: "https://gateway.internal/v1",
 		apiKey: "demo-key",
 	});
@@ -161,7 +161,7 @@ test("system provider switch preserves non-empty base URLs and respects explicit
 	);
 });
 
-test("LLM gate marks only required missing fields and exempts ollama API keys", async () => {
+test("LLM gate requires API keys for protocol providers", async () => {
 	const providerCatalog = await importOrFail<any>(
 		"../src/shared/llm/providerCatalog.ts",
 	);
@@ -171,13 +171,13 @@ test("LLM gate marks only required missing fields and exempts ollama API keys", 
 
 	const providerOptions = providerCatalog.buildLlmProviderOptions({
 		backendProviders: [],
-		currentProviderId: "openai",
+		currentProviderId: "openai_compatible",
 	});
 
 	assert.deepEqual(
 		llmGate.getLlmQuickConfigMissingFields(
 			{
-				provider: "openai",
+				provider: "openai_compatible",
 				model: "",
 				baseUrl: "",
 				apiKey: "",
@@ -190,14 +190,14 @@ test("LLM gate marks only required missing fields and exempts ollama API keys", 
 	assert.deepEqual(
 		llmGate.getLlmQuickConfigMissingFields(
 			{
-				provider: "ollama",
-				model: "llama3.1",
-				baseUrl: "http://localhost:11434/v1",
+				provider: "anthropic_compatible",
+				model: "claude-sonnet-4.5",
+				baseUrl: "https://api.anthropic.com/v1",
 				apiKey: "",
 			},
 			providerOptions,
 		),
-		[],
+		["llmApiKey"],
 	);
 });
 
@@ -211,10 +211,10 @@ test("LLM gate stays locked until saved and manually tested, then re-locks after
 
 	const providerOptions = providerCatalog.buildLlmProviderOptions({
 		backendProviders: [],
-		currentProviderId: "openai",
+		currentProviderId: "openai_compatible",
 	});
 	const cleanConfig = {
-		provider: "openai",
+		provider: "openai_compatible",
 		model: "gpt-5",
 		baseUrl: "https://api.openai.com/v1",
 		apiKey: "demo-key",
@@ -284,12 +284,13 @@ test("agent preflight delegates to backend task preflight and does not fall back
 			reasonCode: "default_config",
 			message: "检测到默认配置",
 			effectiveConfig: {
-				provider: "openai",
+				provider: "openai_compatible",
 				model: "gpt-5",
 				baseUrl: "https://api.openai.com/v1",
 				apiKey: "",
 			},
 			savedConfig: null,
+			llmTestMetadata: null,
 		};
 	};
 	database.api.getUserConfig = async () => {
@@ -310,11 +311,12 @@ test("agent preflight delegates to backend task preflight and does not fall back
 		assert.equal(result.reasonCode, "default_config");
 		assert.equal(result.savedConfig, null);
 		assert.deepEqual(result.effectiveConfig, {
-			provider: "openai",
+			provider: "openai_compatible",
 			model: "gpt-5",
 			baseUrl: "https://api.openai.com/v1",
 			apiKey: "",
 		});
+		assert.equal(result.llmTestMetadata, null);
 	} finally {
 		database.api.runAgentTaskPreflight = originalRunAgentTaskPreflight;
 		database.api.getUserConfig = originalGetUserConfig;
@@ -330,7 +332,7 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 	const status = llmGate.getLlmQuickGateStatus({
 		providerOptions: [],
 		currentConfig: {
-			provider: "openai",
+			provider: "openai_compatible",
 			model: "gpt-5",
 			baseUrl: "https://api.openai.com/v1",
 			apiKey: "prefilled-key",
@@ -343,6 +345,44 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 	assert.equal(status.canTest, false);
 	assert.equal(status.canCreate, false);
 	assert.match(status.testBlockMessage, /先保存/);
+});
+
+test("LLM gate allows a verified redacted saved key without exposing it for saves", async () => {
+	const llmGate = await importOrFail<any>(
+		"../src/components/scan/create-project-scan/llmGate.ts",
+	);
+
+	const redactedConfig = {
+		provider: "openai_compatible",
+		model: "gpt-5",
+		baseUrl: "https://api.openai.com/v1",
+		apiKey: "***configured***",
+	};
+	const status = llmGate.getLlmQuickGateStatus({
+		providerOptions: [],
+		currentConfig: redactedConfig,
+		savedConfig: redactedConfig,
+		hasSuccessfulManualTest: true,
+	});
+
+	assert.equal(status.hasUnsavedChanges, false);
+	assert.equal(status.canCreate, true);
+	assert.equal(status.canTest, false);
+	assert.match(status.testBlockMessage, /重新填写 API Key/);
+});
+
+test("LLM gate accepts only test responses carrying metadata fingerprints", async () => {
+	const llmGate = await importOrFail<any>(
+		"../src/components/scan/create-project-scan/llmGate.ts",
+	);
+
+	assert.equal(llmGate.hasVerifiedLlmTestMetadata(null), false);
+	assert.equal(llmGate.hasVerifiedLlmTestMetadata({}), false);
+	assert.equal(llmGate.hasVerifiedLlmTestMetadata({ fingerprint: "" }), false);
+	assert.equal(
+		llmGate.hasVerifiedLlmTestMetadata({ fingerprint: "sha256:abc" }),
+		true,
+	);
 });
 
 test("project pagination slices three cards per page and clamps invalid pages", async () => {

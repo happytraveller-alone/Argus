@@ -6,7 +6,11 @@ use backend_rust::{app::build_router, config::AppConfig, state::AppState};
 use serde_json::{json, Value};
 use std::{env, fs, sync::LazyLock};
 use tempfile::TempDir;
-use tokio::sync::Mutex;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    sync::Mutex,
+};
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
@@ -47,6 +51,31 @@ impl Drop for EnvVarGuard {
     }
 }
 
+async fn spawn_llm_mock_server(body: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock llm server");
+    let address = listener.local_addr().expect("mock llm address");
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buffer = [0_u8; 4096];
+                let _ = stream.read(&mut buffer).await;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{address}/v1")
+}
+
 #[tokio::test]
 async fn system_config_crud_roundtrip_stays_deuserized() {
     let config = isolated_test_config("system-config-crud");
@@ -79,7 +108,7 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
 
     let save_payload = json!({
         "llmConfig": {
-            "llmProvider": "openai",
+            "llmProvider": "openai_compatible",
             "llmApiKey": "sk-test",
             "llmModel": "gpt-5",
             "llmBaseUrl": "https://api.openai.com/v1"
@@ -126,6 +155,10 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     )
     .unwrap();
     assert_eq!(current_json["llmConfig"]["llmApiKey"], "sk-test");
+    assert_eq!(
+        current_json["llmConfig"]["llmConfigVersion"],
+        "intelligent-engine-v1"
+    );
     assert_eq!(current_json["otherConfig"]["llmConcurrency"], 3);
     assert!(current_json.get("id").is_none());
     assert!(current_json.get("user_id").is_none());
@@ -149,6 +182,48 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     )
     .unwrap();
     assert_eq!(delete_json["llmConfig"]["llmApiKey"], "");
+}
+
+#[tokio::test]
+async fn system_config_save_requires_explicit_llm_key_without_promoting_app_default() {
+    let mut config = isolated_test_config("system-config-no-app-key-promotion");
+    config.llm_api_key = "sk-app-fallback-secret".to_string();
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let save_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "llmConfig": {
+                            "llmProvider": "openai_compatible",
+                            "llmModel": "gpt-5",
+                            "llmBaseUrl": "https://api.openai.com/v1"
+                        },
+                        "otherConfig": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(save_response.status(), StatusCode::BAD_REQUEST);
+    let error_json: Value = serde_json::from_slice(
+        &to_bytes(save_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(error_json.to_string().contains("apiKey"));
+    assert!(!error_json.to_string().contains("sk-app-fallback-secret"));
 }
 
 #[tokio::test]
@@ -177,7 +252,7 @@ async fn system_config_helper_endpoints_are_available() {
             .unwrap(),
     )
     .unwrap();
-    assert!(providers_json["providers"].as_array().unwrap().len() >= 3);
+    assert_eq!(providers_json["providers"].as_array().unwrap().len(), 2);
 
     let preflight_response = app
         .oneshot(
@@ -197,7 +272,7 @@ async fn system_config_helper_endpoints_are_available() {
     )
     .unwrap();
     assert_eq!(preflight_json["ok"], false);
-    assert_eq!(preflight_json["reasonCode"], "default_config");
+    assert_eq!(preflight_json["reasonCode"], "missing_fields");
     assert_eq!(
         preflight_json["metadata"]["runner"]["reason_code"],
         "not_checked"
@@ -214,13 +289,15 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
         .await
         .expect("state should build");
     let app = build_router(state);
+    let mock_base_url =
+        spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"pong"}}]}"#).await;
 
     let save_payload = json!({
         "llmConfig": {
-            "llmProvider": "openai",
+            "llmProvider": "openai_compatible",
             "llmApiKey": "sk-agentflow-secret",
             "llmModel": "gpt-5",
-            "llmBaseUrl": "https://api.openai.com/v1"
+            "llmBaseUrl": mock_base_url
         },
         "otherConfig": {}
     });
@@ -238,6 +315,55 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
         .await
         .unwrap();
     assert_eq!(save_response.status(), StatusCode::OK);
+
+    let stale_preflight_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/agent-preflight")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stale_preflight_response.status(), StatusCode::OK);
+    let stale_preflight_json: Value = serde_json::from_slice(
+        &to_bytes(stale_preflight_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(stale_preflight_json["ok"], false);
+    assert_eq!(stale_preflight_json["stage"], "llm_test");
+    assert_eq!(stale_preflight_json["reasonCode"], "llm_test_stale");
+    assert_eq!(
+        stale_preflight_json["savedConfig"]["apiKey"],
+        "***configured***"
+    );
+    assert!(!stale_preflight_json
+        .to_string()
+        .contains("sk-agentflow-secret"));
+
+    let test_payload = json!({
+        "provider": "openai_compatible",
+        "apiKey": "sk-agentflow-secret",
+        "model": "gpt-5",
+        "baseUrl": mock_base_url
+    });
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(test_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
 
     let preflight_response = app
         .oneshot(
@@ -266,7 +392,7 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
 }
 
 #[tokio::test]
-async fn agent_preflight_accepts_codex_host_credentials_without_saved_config() {
+async fn agent_preflight_rejects_codex_host_credentials_without_saved_config() {
     let _env_guard = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().expect("temp dir");
     fs::write(
@@ -314,25 +440,193 @@ base_url = "https://api.openai.com/v1"
     )
     .unwrap();
 
-    assert_eq!(preflight_json["ok"], true);
+    assert_eq!(preflight_json["ok"], false);
+    assert_eq!(preflight_json["reasonCode"], "missing_fields");
     assert_eq!(preflight_json["savedConfig"], Value::Null);
-    assert_eq!(
-        preflight_json["effectiveConfig"]["model"],
-        "gpt-5.1-codex-max"
-    );
-    assert_eq!(
-        preflight_json["effectiveConfig"]["apiKey"],
-        "***configured***"
-    );
-    assert_eq!(
-        preflight_json["metadata"]["llm"]["credential_source"],
-        "codex_host_dir"
-    );
-    assert_eq!(
-        preflight_json["metadata"]["llm"]["api_key_ref"],
-        "codex_host:auth.json"
-    );
+    assert_eq!(preflight_json["effectiveConfig"]["apiKey"], "");
     assert!(!preflight_json.to_string().contains("sk-codex-host-secret"));
+}
+
+#[tokio::test]
+async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata() {
+    let state = AppState::from_config(isolated_test_config("system-config-real-test-openai"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"ok"}}]}"#).await;
+
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai_compatible",
+            "llmApiKey": "sk-real-secret",
+            "llmModel": "gpt-5",
+            "llmBaseUrl": base_url,
+            "llmCustomHeaders": {"X-Trace": "header-secret"}
+        },
+        "otherConfig": {"llmConcurrency": 2, "llmGapMs": 5}
+    });
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-real-secret",
+                        "model": "gpt-5",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
+    let mismatched_payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mismatched_payload["success"], false);
+    assert_eq!(
+        mismatched_payload["message"],
+        "当前测试请求与已保存 LLM 配置不一致，请先保存后再测试。"
+    );
+
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-real-secret",
+                        "model": "gpt-5",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"],
+                        "customHeaders": r#"{"X-Trace":"header-secret"}"#
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["success"], true);
+    assert_eq!(payload["metadata"]["provider"], "openai_compatible");
+    assert!(payload["metadata"]["fingerprint"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
+    assert!(!payload.to_string().contains("sk-real-secret"));
+    assert!(!payload.to_string().contains("header-secret"));
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let current: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        current["llmTestMetadata"]["fingerprint"],
+        payload["metadata"]["fingerprint"]
+    );
+}
+
+#[tokio::test]
+async fn test_llm_rejects_empty_text_response() {
+    let state = AppState::from_config(isolated_test_config("system-config-real-test-empty"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
+
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai_compatible",
+            "llmApiKey": "sk-empty-secret",
+            "llmModel": "gpt-5",
+            "llmBaseUrl": base_url
+        },
+        "otherConfig": {}
+    });
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let test_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-empty-secret",
+                        "model": "gpt-5",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["success"], false);
+    assert!(payload["message"].as_str().unwrap().contains("非空文本"));
 }
 
 #[tokio::test]
@@ -367,41 +661,15 @@ async fn system_config_llm_provider_catalog_matches_rust_registry_semantics() {
         .map(|item| item["id"].as_str().expect("provider id should be a string"))
         .collect();
     assert_eq!(
-        &ordered_ids[..7],
-        &[
-            "custom",
-            "openai",
-            "openrouter",
-            "anthropic",
-            "azure_openai",
-            "moonshot",
-            "ollama",
-        ]
+        ordered_ids,
+        vec!["openai_compatible", "anthropic_compatible"]
     );
-
-    let gemini = providers
-        .iter()
-        .find(|item| item["id"] == "gemini")
-        .expect("gemini provider should exist");
-    assert_eq!(gemini["defaultModel"], "gemini-3-pro");
-    assert!(gemini["models"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|model| model == "veo-3.1"));
-
-    let baidu = providers
-        .iter()
-        .find(|item| item["id"] == "baidu")
-        .expect("baidu provider should exist");
-    assert_eq!(baidu["fetchStyle"], "native_static");
-    assert_eq!(baidu["supportsModelFetch"], false);
 
     let custom = providers
         .iter()
-        .find(|item| item["id"] == "custom")
-        .expect("custom provider should exist");
-    assert_eq!(custom["defaultBaseUrl"], "");
+        .find(|item| item["id"] == "openai_compatible")
+        .expect("openai-compatible provider should exist");
+    assert_eq!(custom["defaultBaseUrl"], "https://api.openai.com/v1");
     assert_eq!(custom["supportsCustomHeaders"], true);
 }
 
@@ -436,14 +704,14 @@ async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module()
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(payload["success"], true);
-    assert_eq!(payload["resolvedProvider"], "custom");
+    assert_eq!(payload["resolvedProvider"], "openai_compatible");
     assert_eq!(payload["defaultModel"], "gpt-5");
     assert_eq!(payload["baseUrlUsed"], "https://gateway.example/v1");
     assert!(payload["models"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|model| model == "gpt-5.1-codex-max"));
+        .any(|model| model == "gpt-5"));
 }
 
 #[tokio::test]
@@ -461,7 +729,7 @@ async fn fetch_llm_models_rejects_non_flat_custom_headers() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "provider": "openai",
+                        "provider": "openai_compatible",
                         "apiKey": "sk-openai",
                         "baseUrl": "https://api.openai.com/v1",
                         "customHeaders": "{\"X-Nested\": {\"bad\": true}}",
@@ -507,14 +775,13 @@ async fn system_config_defaults_follow_app_config() {
     assert_eq!(response.status(), StatusCode::OK);
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(payload["llmConfig"]["llmProvider"], "gemini");
+    assert_eq!(payload["llmConfig"]["llmProvider"], "openai_compatible");
     assert_eq!(payload["llmConfig"]["llmModel"], "gemini-2.5-pro");
     assert_eq!(
         payload["llmConfig"]["llmBaseUrl"],
         "https://example.test/v1"
     );
     assert_eq!(payload["llmConfig"]["llmTimeout"], 123000);
-    assert_eq!(payload["llmConfig"]["geminiApiKey"], "gemini-default-key");
     assert_eq!(payload["otherConfig"]["maxAnalyzeFiles"], 88);
     assert_eq!(payload["otherConfig"]["llmConcurrency"], 5);
     assert_eq!(payload["otherConfig"]["llmGapMs"], 2222);

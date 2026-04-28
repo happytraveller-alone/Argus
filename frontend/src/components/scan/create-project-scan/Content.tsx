@@ -103,6 +103,7 @@ export default function CreateProjectScanDialogContent({
     configEngine,
     setConfigEngine,
     onNavigateToEngineConfig,
+    onNavigateToAdvancedLlmConfig,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -175,6 +176,7 @@ export default function CreateProjectScanDialogContent({
     configEngine: StaticTool | null;
     setConfigEngine: (engine: StaticTool | null) => void;
     onNavigateToEngineConfig: (engine: StaticTool) => void;
+    onNavigateToAdvancedLlmConfig: () => void;
 }) {
     const { t } = useI18n();
     const shouldShowAgentPrecheckHint = mode === "agent";
@@ -634,6 +636,16 @@ export default function CreateProjectScanDialogContent({
                                                     )}
                                             </Badge>
                                         </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="h-8 px-2 text-xs text-amber-100 hover:bg-amber-500/10"
+                                            onClick={onNavigateToAdvancedLlmConfig}
+                                            disabled={creating || quickFixSaving || quickFixTesting}
+                                        >
+                                            <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+                                            高级配置
+                                        </Button>
 
                                         <div className="grid grid-cols-1 gap-3">
                                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)]">
@@ -744,11 +756,7 @@ export default function CreateProjectScanDialogContent({
                                                         )
                                                     }
                                                     placeholder={
-                                                        normalizeCreateProjectScanProvider(
-                                                            llmQuickConfig.provider,
-                                                        ) === "ollama"
-                                                            ? "可选"
-                                                            : "请输入 API Key"
+                                                        "请输入 API Key"
                                                     }
                                                     className={`h-9 cyber-input ${missingFieldClass("llmApiKey")}`}
                                                     disabled={

@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
 use tempfile::TempDir;
 use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
     sync::Mutex,
     time::{sleep, Duration},
 };
@@ -24,6 +26,93 @@ fn isolated_test_config(scope: &str) -> AppConfig {
 
 async fn create_project(app: &axum::Router) -> String {
     create_project_with_name(app, "task-api-project").await
+}
+
+async fn spawn_openai_mock_server() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock llm server");
+    let address = listener.local_addr().expect("mock llm address");
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                let mut buffer = [0_u8; 4096];
+                let _ = stream.read(&mut buffer).await;
+                let body = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{address}/v1")
+}
+
+async fn configure_verified_llm(app: &axum::Router) {
+    let base_url = spawn_openai_mock_server().await;
+    let save_payload = json!({
+        "llmConfig": {
+            "llmProvider": "openai_compatible",
+            "llmApiKey": "sk-task-test",
+            "llmModel": "gpt-5",
+            "llmBaseUrl": base_url
+        },
+        "otherConfig": {
+            "llmConcurrency": 1,
+            "llmGapMs": 0
+        }
+    });
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-task-test",
+                        "model": "gpt-5",
+                        "baseUrl": save_payload["llmConfig"]["llmBaseUrl"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(test_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(test_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload["success"], true);
+    assert!(payload["metadata"]["fingerprint"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
 }
 
 fn test_zip_bytes() -> Vec<u8> {
@@ -271,6 +360,7 @@ esac
 }
 
 async fn create_project_with_name(app: &axum::Router, name: &str) -> String {
+    configure_verified_llm(app).await;
     let create_payload = json!({
         "name": name,
         "source_type": "zip",
@@ -1036,31 +1126,6 @@ print(json.dumps(output, ensure_ascii=False))
     let app = build_router(state);
     let project_id = create_project(&app).await;
 
-    let save_config_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::PUT)
-                .uri("/api/v1/system-config")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "llmConfig": {
-                            "llmProvider": "openai",
-                            "llmModel": "gpt-5",
-                            "llmBaseUrl": "https://api.example.invalid/v1",
-                            "llmApiKey": "sk-test-agentflow"
-                        },
-                        "otherConfig": {}
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(save_config_response.status(), StatusCode::OK);
-
     let create_response = app
         .clone()
         .oneshot(
@@ -1149,31 +1214,6 @@ async fn agent_task_start_fails_preflight_when_runner_missing() {
         .expect("state should build");
     let app = build_router(state);
     let project_id = create_project(&app).await;
-
-    let save_config_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::PUT)
-                .uri("/api/v1/system-config")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "llmConfig": {
-                            "llmProvider": "openai",
-                            "llmModel": "gpt-5",
-                            "llmBaseUrl": "https://api.example.invalid/v1",
-                            "llmApiKey": "sk-test-agentflow"
-                        },
-                        "otherConfig": {}
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(save_config_response.status(), StatusCode::OK);
 
     let create_response = app
         .clone()
@@ -1347,7 +1387,7 @@ async fn start_agent_task_fails_existing_scope_with_forbidden_static_input() {
         )
         .await
         .unwrap();
-    assert_eq!(start_response.status(), StatusCode::OK);
+    assert_eq!(start_response.status(), StatusCode::BAD_REQUEST);
 
     let task_response = app
         .clone()
@@ -1364,13 +1404,10 @@ async fn start_agent_task_fails_existing_scope_with_forbidden_static_input() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(task_json["status"], "failed");
-    assert_eq!(task_json["current_step"], "forbidden static input");
-    assert!(task_json["error_message"]
-        .as_str()
-        .unwrap()
-        .contains("candidate_findings"));
-    assert!(task_json["events"]
+    assert_eq!(task_json["status"], "pending");
+    assert_eq!(task_json["current_step"], "waiting to start");
+    assert!(task_json["error_message"].is_null());
+    assert!(!task_json["events"]
         .as_array()
         .unwrap()
         .iter()

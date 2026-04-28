@@ -8,6 +8,7 @@ use super::{
     importer::validate_no_static_candidates,
     pipeline::{render_p1_pipeline, validate_p1_pipeline},
 };
+use crate::llm::is_supported_protocol_provider;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PreflightCheck {
@@ -74,7 +75,7 @@ fn check_llm_config(config: &Value) -> PreflightCheck {
     let provider = config
         .get("llmProvider")
         .and_then(Value::as_str)
-        .unwrap_or("openai");
+        .unwrap_or_default();
     let model = config
         .get("llmModel")
         .and_then(Value::as_str)
@@ -94,7 +95,10 @@ fn check_llm_config(config: &Value) -> PreflightCheck {
     if base_url.trim().is_empty() {
         missing.push("baseUrl");
     }
-    if provider != "ollama" && api_key.trim().is_empty() {
+    if !is_supported_protocol_provider(provider) {
+        missing.push("provider");
+    }
+    if api_key.trim().is_empty() {
         missing.push("apiKey");
     }
     if missing.is_empty() {
@@ -224,7 +228,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentflow_preflight_reports_runner_missing_without_leaking_api_key() {
-        let llm = json!({"llmProvider": "openai", "llmModel": "gpt-5", "llmBaseUrl": "https://api.example/v1", "llmApiKey": "sk-secret"});
+        let llm = json!({"llmProvider": "openai_compatible", "llmModel": "gpt-5", "llmBaseUrl": "https://api.example/v1", "llmApiKey": "sk-secret"});
         let report = run_preflight(PreflightInput {
             llm_config: &llm,
             runner_command: None,
@@ -241,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn agentflow_preflight_rejects_forbidden_static_scope() {
-        let llm = json!({"llmProvider": "ollama", "llmModel": "llama", "llmBaseUrl": "http://localhost:11434/v1"});
+        let llm = json!({"llmProvider": "openai_compatible", "llmModel": "gpt-5", "llmBaseUrl": "https://api.example/v1", "llmApiKey": "sk-secret"});
         let scope = json!({"candidate_origin": "phpstan"});
         let report = run_preflight(PreflightInput {
             llm_config: &llm,

@@ -33,18 +33,18 @@ test("extractCreateScanTaskApiErrorMessage prefers backend detail", () => {
 });
 
 test("normalizeCreateProjectScanProvider and resolveCreateProjectScanEffectiveApiKey normalize provider config", () => {
-  assert.equal(normalizeCreateProjectScanProvider("Claude"), "anthropic");
-  assert.equal(normalizeCreateProjectScanProvider(""), "openai");
+  assert.equal(normalizeCreateProjectScanProvider("Claude"), "claude");
+  assert.equal(normalizeCreateProjectScanProvider(""), "openai_compatible");
 
   assert.equal(
-    resolveCreateProjectScanEffectiveApiKey("anthropic", {
+    resolveCreateProjectScanEffectiveApiKey("anthropic_compatible", {
       llmApiKey: "",
       claudeApiKey: "claude-key",
     }),
-    "claude-key",
+    "",
   );
   assert.equal(
-    resolveCreateProjectScanEffectiveApiKey("openai", {
+    resolveCreateProjectScanEffectiveApiKey("openai_compatible", {
       llmApiKey: "shared-key",
       openaiApiKey: "provider-key",
     }),

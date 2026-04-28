@@ -14,7 +14,7 @@ pub async fn load_current(state: &AppState) -> Result<Option<StoredSystemConfig>
     if let Some(pool) = &state.db_pool {
         let row = sqlx::query(
             r#"
-            select llm_config_json, other_config_json
+            select llm_config_json, other_config_json, llm_test_metadata_json
             from system_configs
             where id = $1
             "#,
@@ -28,6 +28,9 @@ pub async fn load_current(state: &AppState) -> Result<Option<StoredSystemConfig>
             other_config_json: row
                 .try_get("other_config_json")
                 .unwrap_or_else(|_| json!({})),
+            llm_test_metadata_json: row
+                .try_get("llm_test_metadata_json")
+                .unwrap_or_else(|_| json!({})),
         }));
     }
 
@@ -38,26 +41,30 @@ pub async fn save_current(
     state: &AppState,
     llm_config_json: Value,
     other_config_json: Value,
+    llm_test_metadata_json: Value,
 ) -> Result<StoredSystemConfig> {
     let stored = StoredSystemConfig {
         llm_config_json,
         other_config_json,
+        llm_test_metadata_json,
     };
 
     if let Some(pool) = &state.db_pool {
         sqlx::query(
             r#"
-            insert into system_configs (id, llm_config_json, other_config_json)
-            values ($1, $2, $3)
+            insert into system_configs (id, llm_config_json, other_config_json, llm_test_metadata_json)
+            values ($1, $2, $3, $4)
             on conflict (id) do update
             set llm_config_json = excluded.llm_config_json,
                 other_config_json = excluded.other_config_json,
+                llm_test_metadata_json = excluded.llm_test_metadata_json,
                 updated_at = now()
             "#,
         )
         .bind(SYSTEM_CONFIG_SINGLETON_ID)
         .bind(&stored.llm_config_json)
         .bind(&stored.other_config_json)
+        .bind(&stored.llm_test_metadata_json)
         .execute(pool)
         .await?;
     } else {

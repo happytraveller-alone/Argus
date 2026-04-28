@@ -34,6 +34,7 @@ import {
 } from "@/shared/llm/providerCatalog";
 import {
 	getLlmQuickGateStatus,
+	hasVerifiedLlmTestMetadata,
 	invalidateSuccessfulManualTest,
 	paginateProjectCards,
 	resolveProjectPageAfterSearchChange,
@@ -50,6 +51,8 @@ import {
 } from "./create-project-scan/utils";
 
 export type ScanCreateMode = "static" | "agent";
+
+const REDACTED_API_KEY = "***configured***";
 
 interface CreateProjectScanDialogProps {
 	open: boolean;
@@ -111,10 +114,14 @@ export default function CreateProjectScanDialog({
 
 	const [showLlmQuickFixPanel, setShowLlmQuickFixPanel] = useState(false);
 	const [llmProviderOptions, setLlmProviderOptions] = useState<LLMProviderItem[]>(
-		() => buildLlmProviderOptions({ backendProviders: [], currentProviderId: "openai" }),
+		() =>
+			buildLlmProviderOptions({
+				backendProviders: [],
+				currentProviderId: "openai_compatible",
+			}),
 	);
 	const [llmQuickConfig, setLlmQuickConfig] = useState<LlmQuickConfig>({
-		provider: "openai",
+		provider: "openai_compatible",
 		model: "",
 		baseUrl: "",
 		apiKey: "",
@@ -208,7 +215,10 @@ export default function CreateProjectScanDialog({
 			),
 			model: String(preflightResult.effectiveConfig.model || ""),
 			baseUrl: String(preflightResult.effectiveConfig.baseUrl || ""),
-			apiKey: String(preflightResult.effectiveConfig.apiKey || ""),
+			apiKey:
+				String(preflightResult.effectiveConfig.apiKey || "") === REDACTED_API_KEY
+					? REDACTED_API_KEY
+					: String(preflightResult.effectiveConfig.apiKey || ""),
 		};
 		const savedQuickConfig = preflightResult.savedConfig
 			? {
@@ -217,7 +227,10 @@ export default function CreateProjectScanDialog({
 					),
 					model: String(preflightResult.savedConfig.model || ""),
 					baseUrl: String(preflightResult.savedConfig.baseUrl || ""),
-					apiKey: String(preflightResult.savedConfig.apiKey || ""),
+					apiKey:
+						String(preflightResult.savedConfig.apiKey || "") === REDACTED_API_KEY
+							? REDACTED_API_KEY
+							: String(preflightResult.savedConfig.apiKey || ""),
 				}
 			: null;
 
@@ -225,7 +238,9 @@ export default function CreateProjectScanDialog({
 		setLlmQuickConfig(effectiveQuickConfig);
 		setSavedLlmQuickConfig(savedQuickConfig);
 		setQuickFixBaseUrlTouched(false);
-		setQuickFixManualTestPassed(preflightResult.ok);
+		setQuickFixManualTestPassed(
+			Boolean(preflightResult.ok && preflightResult.llmTestMetadata?.fingerprint),
+		);
 		setQuickFixTestResult(null);
 		setShowLlmQuickFixPanel(!preflightResult.ok);
 		setLastPreflightMessage(preflightResult.message);
@@ -247,10 +262,13 @@ export default function CreateProjectScanDialog({
 		setConfigEngine(null);
 		setShowLlmQuickFixPanel(false);
 		setLlmProviderOptions(
-			buildLlmProviderOptions({ backendProviders: [], currentProviderId: "openai" }),
+			buildLlmProviderOptions({
+				backendProviders: [],
+				currentProviderId: "openai_compatible",
+			}),
 		);
 		setLlmQuickConfig({
-			provider: "openai",
+			provider: "openai_compatible",
 			model: "",
 			baseUrl: "",
 			apiKey: "",
@@ -506,6 +524,9 @@ export default function CreateProjectScanDialog({
 		if (llmGateStatus.missingFields.includes("llmApiKey")) {
 			return { ok: false, message: "请先填写 API Key" };
 		}
+		if (llmQuickConfig.apiKey.trim() === REDACTED_API_KEY) {
+			return { ok: false, message: "请重新填写 API Key" };
+		}
 		return { ok: true };
 	};
 
@@ -515,13 +536,6 @@ export default function CreateProjectScanDialog({
 			const message = validation.message || "请先补全 LLM 必填配置";
 			setLastPreflightMessage(`${message}。`);
 			if (validation.message) toast.error(validation.message);
-			return;
-		}
-
-		if (!llmGateStatus.canTest) {
-			const message = llmGateStatus.testBlockMessage || "请先补全 LLM 必填配置。";
-			setLastPreflightMessage(message);
-			toast.error(message);
 			return;
 		}
 
@@ -536,45 +550,44 @@ export default function CreateProjectScanDialog({
 		setQuickFixTesting(true);
 		setQuickFixTestResult(null);
 		try {
+			const currentUserConfig = await api.getUserConfig();
+			const currentLlmConfig =
+				(currentUserConfig?.llmConfig as Record<string, unknown>) || {};
+			const normalizedQuickConfig: LlmQuickConfig = {
+				provider,
+				model: payload.model,
+				baseUrl: payload.baseUrl,
+				apiKey: payload.apiKey,
+			};
+			const providerKeyField =
+				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
+			const nextLlmConfig: Record<string, unknown> = {
+				...currentLlmConfig,
+				llmProvider: provider,
+				llmModel: normalizedQuickConfig.model,
+				llmBaseUrl: normalizedQuickConfig.baseUrl,
+				llmApiKey: normalizedQuickConfig.apiKey,
+			};
+			if (providerKeyField) {
+				nextLlmConfig[providerKeyField] = normalizedQuickConfig.apiKey;
+			}
+			await api.updateUserConfig({ llmConfig: nextLlmConfig });
+			setLlmQuickConfig(normalizedQuickConfig);
+			setSavedLlmQuickConfig(normalizedQuickConfig);
+			setQuickFixManualTestPassed(false);
+
 			const result = await api.testLLMConnection(payload);
 			setQuickFixTestResult(result);
-			setQuickFixManualTestPassed(Boolean(result.success));
+			setQuickFixManualTestPassed(
+				Boolean(result.success && hasVerifiedLlmTestMetadata(result.metadata)),
+			);
 			setLastPreflightMessage(
-				result.success
+				result.success && hasVerifiedLlmTestMetadata(result.metadata)
 					? "LLM 配置测试通过，现在可以创建任务。"
 					: `LLM 测试失败：${result.message || "未知错误"}`,
 			);
 			if (result.success) {
 				toast.success(`测试成功：${result.model || payload.model}`);
-				// 测试通过后自动保存配置到后端，确保创建任务时使用已验证的配置
-				try {
-					const currentUserConfig = await api.getUserConfig();
-					const currentLlmConfig =
-						(currentUserConfig?.llmConfig as Record<string, unknown>) || {};
-					const normalizedQuickConfig: LlmQuickConfig = {
-						provider,
-						model: payload.model,
-						baseUrl: payload.baseUrl,
-						apiKey: payload.apiKey,
-					};
-					const providerKeyField =
-						CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
-					const nextLlmConfig: Record<string, unknown> = {
-						...currentLlmConfig,
-						llmProvider: provider,
-						llmModel: normalizedQuickConfig.model,
-						llmBaseUrl: normalizedQuickConfig.baseUrl,
-						llmApiKey: normalizedQuickConfig.apiKey,
-					};
-					if (providerKeyField) {
-						nextLlmConfig[providerKeyField] = normalizedQuickConfig.apiKey;
-					}
-					await api.updateUserConfig({ llmConfig: nextLlmConfig });
-					setLlmQuickConfig(normalizedQuickConfig);
-					setSavedLlmQuickConfig(normalizedQuickConfig);
-				} catch (saveError) {
-					console.error("测试通过后自动保存配置失败:", saveError);
-				}
 			} else {
 				toast.error(`测试失败：${result.message || "未知错误"}`);
 			}
@@ -626,7 +639,7 @@ export default function CreateProjectScanDialog({
 			await api.updateUserConfig({ llmConfig: nextLlmConfig });
 			setLlmQuickConfig(normalizedQuickConfig);
 			setSavedLlmQuickConfig(normalizedQuickConfig);
-			setQuickFixManualTestPassed(true);
+			setQuickFixManualTestPassed(false);
 			setQuickFixTestResult(null);
 			setShowLlmQuickFixPanel(true);
 			setLastPreflightMessage(
@@ -838,6 +851,10 @@ export default function CreateProjectScanDialog({
 		onOpenChange(false);
 		navigate(buildScanEngineConfigRoute(engine));
 	};
+	const handleNavigateToAdvancedLlmConfig = () => {
+		onOpenChange(false);
+		navigate("/scan-config/intelligent-engine");
+	};
 	return (
 		<CreateProjectScanDialogContent
 			open={open}
@@ -904,6 +921,7 @@ export default function CreateProjectScanDialog({
 			configEngine={configEngine}
 			setConfigEngine={setConfigEngine}
 			onNavigateToEngineConfig={handleNavigateToEngineConfig}
+			onNavigateToAdvancedLlmConfig={handleNavigateToAdvancedLlmConfig}
 		/>
 	);
 }

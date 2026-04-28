@@ -18,6 +18,9 @@ use time::macros::format_description;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::llm::{
+    build_runtime_config, compute_llm_fingerprint, metadata_matches, test_llm_generation,
+};
 use crate::{
     archive::extract_archive_path_to_directory,
     config::AppConfig,
@@ -146,6 +149,7 @@ pub async fn create_agent_task(
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
     reject_forbidden_static_input(&payload)?;
+    ensure_intelligent_audit_llm_ready(&state).await?;
 
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
@@ -340,11 +344,27 @@ async fn start_agent_task(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let snapshot = task_state::load_snapshot(&state)
+        .await
+        .map_err(internal_error)?;
+    let (project_id, audit_scope_for_preflight) = {
+        let record = snapshot
+            .agent_tasks
+            .get(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        reject_optional_audit_scope(record.audit_scope.as_ref())?;
+        ensure_intelligent_audit_llm_ready(&state).await?;
+        (
+            record.project_id.clone(),
+            record.audit_scope.clone().unwrap_or_else(|| json!({})),
+        )
+    };
+
     let mut snapshot = task_state::load_snapshot(&state)
         .await
         .map_err(internal_error)?;
     let now = now_rfc3339();
-    let (project_id, audit_scope_for_preflight) = {
+    {
         let record = snapshot
             .agent_tasks
             .get_mut(&task_id)
@@ -356,17 +376,6 @@ async fn start_agent_task(
         record.current_step = Some("AgentFlow preflight".to_string());
         record.progress_percentage = 5.0;
         record.total_iterations = record.total_iterations.max(1);
-        if let Err(error) = reject_optional_audit_scope(record.audit_scope.as_ref()) {
-            finalize_agent_task_forbidden_static_input(record, &now, &error.to_string());
-            task_state::save_snapshot(&state, &snapshot)
-                .await
-                .map_err(internal_error)?;
-            return Ok(Json(json!({
-                "message": "agent task failed because forbidden static input was detected",
-                "task_id": task_id,
-                "reason_code": "forbidden_static_input",
-            })));
-        }
         push_agent_event(
             record,
             "phase_start",
@@ -375,10 +384,6 @@ async fn start_agent_task(
             None,
         );
         push_checkpoint(record, "preflight", Some("running"));
-        (
-            record.project_id.clone(),
-            record.audit_scope.clone().unwrap_or_else(|| json!({})),
-        )
     };
     task_state::save_snapshot(&state, &snapshot)
         .await
@@ -1326,6 +1331,7 @@ fn mark_agent_tree_failed(nodes: &mut [Value], summary: &str) {
     }
 }
 
+#[cfg(test)]
 fn finalize_agent_task_forbidden_static_input(
     record: &mut task_state::AgentTaskRecord,
     now: &str,
@@ -2322,7 +2328,7 @@ fn build_agentflow_runner_input(
         },
         "output_dir": output_dir,
         "llm": {
-            "provider": llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai"),
+            "provider": llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai_compatible"),
             "model": llm_config.get("llmModel").and_then(Value::as_str).unwrap_or(""),
             "base_url": llm_config.get("llmBaseUrl").and_then(Value::as_str),
             "api_key_ref": if llm_config.get("llmApiKey").and_then(Value::as_str).unwrap_or("").is_empty() {
@@ -2675,6 +2681,29 @@ fn minimal_pdf_bytes(message: &str) -> Vec<u8> {
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
     ApiError::Internal(error.to_string())
+}
+
+async fn ensure_intelligent_audit_llm_ready(state: &AppState) -> Result<Value, ApiError> {
+    let stored = system_config::load_current(state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::BadRequest(
+                "智能审计启动失败：请先在扫描配置 > 智能引擎中保存并测试 LLM 配置。".to_string(),
+            )
+        })?;
+    let runtime = build_runtime_config(&stored.llm_config_json, &stored.other_config_json)
+        .map_err(|error| ApiError::BadRequest(error.message))?;
+    let fingerprint = compute_llm_fingerprint(&runtime);
+    if !metadata_matches(&stored.llm_test_metadata_json, &fingerprint) {
+        return Err(ApiError::BadRequest(
+            "智能审计启动失败：LLM 测试证据缺失或已过期，请重新保存并测试。".to_string(),
+        ));
+    }
+    let outcome = test_llm_generation(&state.http_client, &runtime)
+        .await
+        .map_err(|error| ApiError::BadRequest(error.message))?;
+    Ok(outcome.metadata())
 }
 
 #[cfg(test)]

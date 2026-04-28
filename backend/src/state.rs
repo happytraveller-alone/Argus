@@ -187,6 +187,12 @@ impl Default for BootstrapReport {
 pub struct StoredSystemConfig {
     pub llm_config_json: serde_json::Value,
     pub other_config_json: serde_json::Value,
+    #[serde(default = "empty_json_object")]
+    pub llm_test_metadata_json: serde_json::Value,
+}
+
+fn empty_json_object() -> serde_json::Value {
+    serde_json::json!({})
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
