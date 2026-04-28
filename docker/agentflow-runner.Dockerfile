@@ -146,7 +146,7 @@ RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-npm,target=/root/.npm,s
     python -m pip install --no-deps --no-index --find-links=/opt/agentflow-wheels "agentflow==${AGENTFLOW_VERSION}"; \
     codex_npm_fetch_timeout_ms="$((CODEX_NPM_INSTALL_TIMEOUT_SECONDS * 1000))"; \
     codex_npm_primary="${CODEX_NPM_REGISTRY_PRIMARY:-}"; \
-    # Resolve Codex npm registry precedence: CODEX_NPM_REGISTRY_PRIMARY > CODEX_NPM_REGISTRY > CODEX_NPM_REGISTRY_DEFAULT. \
+    : "Resolve Codex npm registry precedence: CODEX_NPM_REGISTRY_PRIMARY > CODEX_NPM_REGISTRY > CODEX_NPM_REGISTRY_DEFAULT"; \
     if [ -z "$codex_npm_primary" ]; then \
       codex_npm_primary="${CODEX_NPM_REGISTRY:-}"; \
     fi; \
@@ -158,6 +158,7 @@ RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-npm,target=/root/.npm,s
       echo "Installing ${CODEX_NPM_PACKAGE} from ${codex_npm_registry}"; \
       timeout "${CODEX_NPM_INSTALL_TIMEOUT_SECONDS}" npm install --global \
         --registry "${codex_npm_registry}" \
+        --cache /root/.npm \
         --fetch-timeout "${codex_npm_fetch_timeout_ms}" \
         --fetch-retries 2 \
         --fetch-retry-mintimeout 10000 \

@@ -129,6 +129,7 @@ fn agentflow_runner_emits_argus_contract_instead_of_native_runrecord() {
         "codex_npm_primary=\"${CODEX_NPM_REGISTRY_DEFAULT}\"",
         "Trying fallback Codex npm registry",
         "timeout \"${CODEX_NPM_INSTALL_TIMEOUT_SECONDS}\" npm install --global",
+        "--cache /root/.npm",
         "codex --version >/dev/null",
     ] {
         assert!(

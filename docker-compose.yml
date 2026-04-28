@@ -35,7 +35,11 @@ services:
         BACKEND_PIP_RETRIES: ${BACKEND_PIP_RETRIES:-2}
         AGENTFLOW_P1_PYTHON_DEPS: ${AGENTFLOW_P1_PYTHON_DEPS:-jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0}
         CODEX_NPM_PACKAGE: ${CODEX_NPM_PACKAGE:-@openai/codex@latest}
-        CODEX_NPM_REGISTRY: ${CODEX_NPM_REGISTRY:-https://registry.npmjs.org/}
+        CODEX_NPM_REGISTRY_PRIMARY: ${CODEX_NPM_REGISTRY_PRIMARY:-}
+        CODEX_NPM_REGISTRY: ${CODEX_NPM_REGISTRY:-}
+        CODEX_NPM_REGISTRY_DEFAULT: ${CODEX_NPM_REGISTRY_DEFAULT:-https://registry.npmmirror.com}
+        CODEX_NPM_REGISTRY_FALLBACK: ${CODEX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}
+        CODEX_NPM_INSTALL_TIMEOUT_SECONDS: ${CODEX_NPM_INSTALL_TIMEOUT_SECONDS:-120}
     restart: "no"
     mem_limit: 4g
     cpus: "2.0"
