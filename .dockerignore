@@ -52,3 +52,5 @@ docs
 backend/uploads
 .codex
 .codex.local
+# AgentFlow runner wheelhouse is intentionally included in the Docker context.
+# Generated wheels are ignored by git, not by Docker.

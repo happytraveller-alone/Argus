@@ -4,21 +4,24 @@ ARG AGENTFLOW_COMMIT=1667fa35ed99e3c1583a7d60cac8e3406cafd3ee
 ARG AGENTFLOW_VERSION=0.1.0
 ARG AGENTFLOW_LOCAL_SOURCE=vendor/agentflow-src
 ARG AGENTFLOW_BUILD_CACHE_SCOPE=argus-agentflow
+ARG AGENTFLOW_WHEELHOUSE_DIR=docker/agentflow-wheelhouse
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS agentflow-build
 ARG AGENTFLOW_REPOSITORY
 ARG AGENTFLOW_COMMIT
 ARG AGENTFLOW_LOCAL_SOURCE
 ARG AGENTFLOW_BUILD_CACHE_SCOPE
+ARG AGENTFLOW_WHEELHOUSE_DIR
+ARG AGENTFLOW_USE_LOCAL_WHEELHOUSE=auto
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
-ARG BACKEND_PYPI_INDEX_PRIMARY=https://pypi.org/simple
-ARG BACKEND_PYPI_EXTRA_INDEX_URLS="https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple/"
-ARG BACKEND_PYPI_INDEX_FALLBACK=
-ARG BACKEND_PIP_TIMEOUT_SECONDS=300
-ARG BACKEND_PIP_RETRIES=20
+ARG BACKEND_PYPI_INDEX_PRIMARY=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG BACKEND_PYPI_EXTRA_INDEX_URLS=https://mirrors.aliyun.com/pypi/simple/
+ARG BACKEND_PYPI_INDEX_FALLBACK=https://pypi.org/simple
+ARG BACKEND_PIP_TIMEOUT_SECONDS=45
+ARG BACKEND_PIP_RETRIES=2
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
 ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
 ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
@@ -41,6 +44,7 @@ RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-apt-lists,target=/var/l
     apt-get install -y --no-install-recommends ca-certificates; \
     rm -rf /var/lib/apt/lists/*
 
+COPY ${AGENTFLOW_WHEELHOUSE_DIR}/ /opt/agentflow-local-wheelhouse/
 COPY ${AGENTFLOW_LOCAL_SOURCE}/ /opt/agentflow-src/
 RUN set -eux; \
     test "$(cat /opt/agentflow-src/ARGUS_AGENTFLOW_COMMIT)" = "${AGENTFLOW_COMMIT}"; \
@@ -48,51 +52,40 @@ RUN set -eux; \
     test -f /opt/agentflow-src/pyproject.toml; \
     test -d /opt/agentflow-src/agentflow
 
-RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip,target=/root/.cache/pip,sharing=locked \
+COPY --chmod=755 docker/argus-pip-wheel-group.sh /usr/local/bin/argus-pip-wheel-group
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip-build-backend,target=/root/.cache/pip,sharing=locked \
     set -eux; \
-    pip_index_args=""; \
-    if [ -n "${BACKEND_PYPI_INDEX_PRIMARY}" ]; then \
-      pip_index_args="${pip_index_args} --index-url ${BACKEND_PYPI_INDEX_PRIMARY}"; \
-    fi; \
-    for index_url in ${BACKEND_PYPI_EXTRA_INDEX_URLS} ${BACKEND_PYPI_INDEX_FALLBACK}; do \
-      if [ -n "${index_url}" ]; then \
-        pip_index_args="${pip_index_args} --extra-index-url ${index_url}"; \
-      fi; \
-    done; \
+    argus-pip-wheel-group build-backend /opt/agentflow-build-wheels -- "hatchling>=1.27.0"; \
+    python -m pip install --no-index --find-links=/opt/agentflow-build-wheels "hatchling>=1.27.0"
+
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip-agentflow-wheel,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
+    echo "[agentflow-wheelhouse][local-agentflow-wheel] local-wheelhouse-hit build-backend=installed"; \
     python -m pip wheel \
-      ${pip_index_args} \
-      --timeout "${BACKEND_PIP_TIMEOUT_SECONDS}" \
-      --retries "${BACKEND_PIP_RETRIES}" \
-      --wheel-dir /opt/agentflow-build-wheels \
-      "hatchling>=1.27.0"; \
-    python -m pip install --no-index --find-links=/opt/agentflow-build-wheels "hatchling>=1.27.0"; \
-    python -m pip wheel \
-      ${pip_index_args} \
       --no-build-isolation \
       --no-deps \
       --timeout "${BACKEND_PIP_TIMEOUT_SECONDS}" \
       --retries "${BACKEND_PIP_RETRIES}" \
       --wheel-dir /opt/agentflow-wheels \
-      /opt/agentflow-src; \
-    python -m pip wheel \
-      ${pip_index_args} \
-      --prefer-binary \
-      --timeout "${BACKEND_PIP_TIMEOUT_SECONDS}" \
-      --retries "${BACKEND_PIP_RETRIES}" \
-      --wheel-dir /opt/agentflow-wheels \
-      ${AGENTFLOW_P1_PYTHON_DEPS}
+      /opt/agentflow-src
+
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip-runtime-deps,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
+    argus-pip-wheel-group runtime-deps /opt/agentflow-wheels --prefer-binary -- ${AGENTFLOW_P1_PYTHON_DEPS}
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS agentflow-runner
 ARG AGENTFLOW_REPOSITORY
 ARG AGENTFLOW_COMMIT
 ARG AGENTFLOW_VERSION
 ARG AGENTFLOW_BUILD_CACHE_SCOPE
+ARG AGENTFLOW_WHEELHOUSE_DIR
+ARG AGENTFLOW_USE_LOCAL_WHEELHOUSE=auto
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
-ARG BACKEND_PIP_TIMEOUT_SECONDS=300
-ARG BACKEND_PIP_RETRIES=20
+ARG BACKEND_PIP_TIMEOUT_SECONDS=45
+ARG BACKEND_PIP_RETRIES=2
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
 ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
 ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
