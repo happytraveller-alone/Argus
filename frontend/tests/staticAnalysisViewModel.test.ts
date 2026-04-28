@@ -45,6 +45,41 @@ test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
   assert.equal(rows[0]?.confidence, "LOW");
 });
 
+test("static analysis completion refresh gate only fires once per completed task", () => {
+  assert.equal(
+    viewModel.shouldRefreshStaticAnalysisResultsAfterCompletion({
+      taskId: "task-og",
+      status: "running",
+      refreshedTaskId: null,
+    }),
+    false,
+  );
+  assert.equal(
+    viewModel.shouldRefreshStaticAnalysisResultsAfterCompletion({
+      taskId: "task-og",
+      status: "completed",
+      refreshedTaskId: null,
+    }),
+    true,
+  );
+  assert.equal(
+    viewModel.shouldRefreshStaticAnalysisResultsAfterCompletion({
+      taskId: "task-og",
+      status: "completed",
+      refreshedTaskId: "task-og",
+    }),
+    false,
+  );
+  assert.equal(
+    viewModel.shouldRefreshStaticAnalysisResultsAfterCompletion({
+      taskId: "task-next",
+      status: "completed",
+      refreshedTaskId: "task-og",
+    }),
+    true,
+  );
+});
+
 test("buildUnifiedFindingRows keeps backend-normalized low opengrep findings", () => {
   const rows = buildUnifiedFindingRows({
     opengrepFindings: [

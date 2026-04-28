@@ -17,3 +17,17 @@ test("static analysis 运行中轮询只刷新 task/status，不重复拉取 fin
   assert.doesNotMatch(source, /await loadPhpstanFindings\(true\);/);
   assert.doesNotMatch(source, /await loadPmdFindings\(true\);/);
 });
+
+test("static analysis task completion triggers one silent findings refresh", () => {
+  const source = fs.readFileSync(hookPath, "utf8");
+
+  assert.match(source, /shouldRefreshStaticAnalysisResultsAfterCompletion/);
+  assert.match(
+    source,
+    /await loadOpengrepFindings\(true, nextOpengrepTask\?\.total_findings\);/,
+  );
+  assert.match(
+    source,
+    /opengrepCompletionResultsRefreshRef\.current = opengrepTaskId;/,
+  );
+});

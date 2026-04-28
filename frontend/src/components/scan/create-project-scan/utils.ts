@@ -14,14 +14,28 @@ export const normalizeCreateProjectScanProvider = normalizeLlmProviderId;
 export const resolveCreateProjectScanEffectiveApiKey = resolveEffectiveLlmApiKey;
 
 export function extractCreateProjectScanApiErrorMessage(error: unknown): string {
+	const data = (error as any)?.response?.data;
+	if (data && typeof data.error === "string" && data.error.trim()) {
+		return data.error;
+	}
 	if (error instanceof Error) {
-		const detail = (error as any)?.response?.data?.detail;
+		const detail = data?.detail;
 		if (typeof detail === "string" && detail.trim()) return detail;
 		return error.message || "未知错误";
 	}
-	const detail = (error as any)?.response?.data?.detail;
+	const detail = data?.detail;
 	if (typeof detail === "string" && detail.trim()) return detail;
 	return "未知错误";
+}
+
+export function buildCreateProjectScanSystemConfigUpdate(options: {
+	currentConfig: { otherConfig?: Record<string, unknown> | null } | null | undefined;
+	nextLlmConfig: Record<string, unknown>;
+}) {
+	return {
+		llmConfig: options.nextLlmConfig,
+		otherConfig: options.currentConfig?.otherConfig || {},
+	};
 }
 
 export function isSevereCreateProjectScanRule(rule: OpengrepRule) {

@@ -33,8 +33,9 @@ import {
 import {
 	getLlmQuickGateStatus,
 	hasVerifiedLlmTestMetadata,
-	invalidateSuccessfulManualTest,
+	invalidatePassedAgentPreflight,
 	isRedactedApiKeyPlaceholder,
+	mergeRetainedProjectForRetry,
 	normalizeSecretSource,
 	paginateProjectCards,
 	resolveProjectPageAfterSearchChange,
@@ -44,6 +45,7 @@ import {
 } from "./create-project-scan/llmGate";
 import {
 	CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
+	buildCreateProjectScanSystemConfigUpdate,
 	buildCreateProjectStaticTaskRoute,
 	extractCreateProjectScanApiErrorMessage,
 	isSevereCreateProjectScanRule,
@@ -134,8 +136,7 @@ export default function CreateProjectScanDialog({
 		useState<LlmQuickConfig | null>(null);
 	const [llmQuickInitialized, setLlmQuickInitialized] = useState(false);
 	const [quickFixBaseUrlTouched, setQuickFixBaseUrlTouched] = useState(false);
-	const [quickFixManualTestPassed, setQuickFixManualTestPassed] =
-		useState(false);
+	const [agentPreflightPassed, setAgentPreflightPassed] = useState(false);
 	const [quickFixTesting, setQuickFixTesting] = useState(false);
 	const [quickFixSaving, setQuickFixSaving] = useState(false);
 	const [quickFixPanelOpening, setQuickFixPanelOpening] = useState(false);
@@ -194,13 +195,13 @@ export default function CreateProjectScanDialog({
 				providerOptions: llmProviderOptions,
 				currentConfig: llmQuickConfig,
 				savedConfig: savedLlmQuickConfig,
-				hasSuccessfulManualTest: quickFixManualTestPassed,
+				hasPassedAgentPreflight: agentPreflightPassed,
 			}),
 		[
 			llmProviderOptions,
 			llmQuickConfig,
 			savedLlmQuickConfig,
-			quickFixManualTestPassed,
+			agentPreflightPassed,
 		],
 	);
 
@@ -255,14 +256,18 @@ export default function CreateProjectScanDialog({
 		setLlmQuickConfig(effectiveQuickConfig);
 		setSavedLlmQuickConfig(savedQuickConfig);
 		setQuickFixBaseUrlTouched(false);
-		setQuickFixManualTestPassed(
-			Boolean(
-				preflightResult.ok && preflightResult.llmTestMetadata?.fingerprint,
-			),
+		const hasPassedPreflight = Boolean(
+			preflightResult.ok &&
+				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata),
 		);
+		const nextMessage =
+			preflightResult.ok && !hasPassedPreflight
+				? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
+				: preflightResult.message;
+		setAgentPreflightPassed(hasPassedPreflight);
 		setQuickFixTestResult(null);
-		setShowLlmQuickFixPanel(!preflightResult.ok);
-		setLastPreflightMessage(preflightResult.message);
+		setShowLlmQuickFixPanel(!hasPassedPreflight);
+		setLastPreflightMessage(nextMessage);
 		return preflightResult;
 	};
 
@@ -297,7 +302,7 @@ export default function CreateProjectScanDialog({
 		setSavedLlmQuickConfig(null);
 		setLlmQuickInitialized(false);
 		setQuickFixBaseUrlTouched(false);
-		setQuickFixManualTestPassed(false);
+		setAgentPreflightPassed(false);
 		setQuickFixTestResult(null);
 		setLastPreflightMessage("");
 
@@ -377,7 +382,7 @@ export default function CreateProjectScanDialog({
 		const initializeLlmGate = async () => {
 			setQuickFixPanelOpening(true);
 			setQuickFixTestResult(null);
-			setQuickFixManualTestPassed(false);
+			setAgentPreflightPassed(false);
 			try {
 				const preflightResult = await runAgentPreflightCheck();
 				if (cancelled) return;
@@ -387,7 +392,7 @@ export default function CreateProjectScanDialog({
 				console.error("加载 LLM 任务预检失败:", error);
 				setShowLlmQuickFixPanel(true);
 				setLastPreflightMessage(
-					"加载 LLM 配置失败，请在下方重新补配并测试连接。",
+					"加载 LLM 预检失败，请在下方补配并保存配置后重新预检。",
 				);
 			} finally {
 				if (cancelled) return;
@@ -488,7 +493,7 @@ export default function CreateProjectScanDialog({
 		}
 		setShowLlmQuickFixPanel(true);
 		if (!lastPreflightMessage) {
-			setLastPreflightMessage("请先手动测试连接，测试成功后才能创建任务。");
+			setLastPreflightMessage("请先完成智能审计预检，预检通过后才能创建任务。");
 		}
 	};
 
@@ -503,15 +508,15 @@ export default function CreateProjectScanDialog({
 			hasManualBaseUrlOverride: quickFixBaseUrlTouched,
 		});
 		setLlmQuickConfig(nextConfig);
-		setQuickFixManualTestPassed(
-			invalidateSuccessfulManualTest({
+		setAgentPreflightPassed(
+			invalidatePassedAgentPreflight({
 				previousConfig: llmQuickConfig,
 				nextConfig,
-				hasSuccessfulManualTest: quickFixManualTestPassed,
+				hasPassedAgentPreflight: agentPreflightPassed,
 			}),
 		);
 		setQuickFixTestResult(null);
-		setLastPreflightMessage("配置已修改，请先保存，再手动测试连接。");
+		setLastPreflightMessage("配置已修改，请先保存，再重新预检。");
 	};
 
 	const handleQuickFixConfigChange = (
@@ -523,17 +528,17 @@ export default function CreateProjectScanDialog({
 		}
 		setLlmQuickConfig((previousConfig) => {
 			const nextConfig = { ...previousConfig, [key]: value };
-			setQuickFixManualTestPassed(
-				invalidateSuccessfulManualTest({
+			setAgentPreflightPassed(
+				invalidatePassedAgentPreflight({
 					previousConfig,
 					nextConfig,
-					hasSuccessfulManualTest: quickFixManualTestPassed,
+					hasPassedAgentPreflight: agentPreflightPassed,
 				}),
 			);
 			return nextConfig;
 		});
 		setQuickFixTestResult(null);
-		setLastPreflightMessage("配置已修改，请先保存，再手动测试连接。");
+		setLastPreflightMessage("配置已修改，请先保存，再重新预检。");
 	};
 
 	const validateQuickFixFields = (): { ok: boolean; message?: string } => {
@@ -566,90 +571,45 @@ export default function CreateProjectScanDialog({
 			if (validation.message) toast.error(validation.message);
 			return;
 		}
-
-		const provider = normalizeCreateProjectScanProvider(
-			llmQuickConfig.provider,
-		);
-		const apiKey = isRedactedApiKeyPlaceholder(llmQuickConfig.apiKey)
-			? ""
-			: llmQuickConfig.apiKey.trim();
-		const useSavedApiKey = usesSavedOrImportedSecret(llmQuickConfig) && !apiKey;
-		const secretSource = apiKey
-			? "entered"
-			: normalizeSecretSource(
-					llmQuickConfig.apiKeySource,
-					llmQuickConfig.hasSavedApiKey,
-				);
-		const payload = {
-			provider,
-			apiKey: apiKey || undefined,
-			secretSource,
-			useSavedApiKey,
-			model: llmQuickConfig.model.trim(),
-			baseUrl: llmQuickConfig.baseUrl.trim(),
-		};
+		if (llmGateStatus.hasUnsavedChanges) {
+			const message = "当前 LLM 配置有未保存改动，请先保存配置，再重新预检。";
+			setLastPreflightMessage(message);
+			toast.error(message);
+			return;
+		}
 
 		setQuickFixTesting(true);
 		setQuickFixTestResult(null);
 		try {
-			const currentUserConfig = await api.getUserConfig();
-			const currentLlmConfig = {
-				...((currentUserConfig?.llmConfig as Record<string, unknown>) || {}),
-			};
-			delete currentLlmConfig.llmApiKey;
-			for (const keyField of Object.values(
-				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
-			)) {
-				if (keyField) delete currentLlmConfig[keyField];
-			}
-			const normalizedQuickConfig: LlmQuickConfig = {
-				provider,
-				model: payload.model,
-				baseUrl: payload.baseUrl,
-				apiKey,
-				apiKeySource: secretSource,
-				hasSavedApiKey: llmQuickConfig.hasSavedApiKey,
-			};
-			const providerKeyField =
-				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
-			const nextLlmConfig: Record<string, unknown> = {
-				...currentLlmConfig,
-				llmProvider: provider,
-				llmModel: normalizedQuickConfig.model,
-				llmBaseUrl: normalizedQuickConfig.baseUrl,
-				secretSource,
-				useSavedApiKey,
-				...(apiKey ? { llmApiKey: apiKey } : {}),
-			};
-			if (providerKeyField && apiKey) {
-				nextLlmConfig[providerKeyField] = apiKey;
-			}
-			await api.updateUserConfig({ llmConfig: nextLlmConfig });
-			setLlmQuickConfig(normalizedQuickConfig);
-			setSavedLlmQuickConfig(normalizedQuickConfig);
-			setQuickFixManualTestPassed(false);
-
-			const result = await api.testLLMConnection(payload);
-			setQuickFixTestResult(result);
-			setQuickFixManualTestPassed(
-				Boolean(result.success && hasVerifiedLlmTestMetadata(result.metadata)),
-			);
-			setLastPreflightMessage(
-				result.success && hasVerifiedLlmTestMetadata(result.metadata)
-					? "LLM 配置测试通过，现在可以创建任务。"
-					: `LLM 测试失败：${result.message || "未知错误"}`,
-			);
-			if (result.success) {
-				toast.success(`测试成功：${result.model || payload.model}`);
+			const preflightResult = await runAgentPreflightCheck();
+			await syncGateWithPreflightResult(preflightResult);
+			const success =
+				preflightResult.ok &&
+				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata);
+			const message = success
+				? "智能审计预检通过，现在可以创建任务。"
+				: preflightResult.ok
+					? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
+					: preflightResult.message || "未知错误";
+			setQuickFixTestResult({
+				success,
+				message,
+				model: preflightResult.effectiveConfig.model,
+			});
+			setLastPreflightMessage(message);
+			if (success) {
+				toast.success(
+					`智能审计预检通过：${preflightResult.effectiveConfig.model}`,
+				);
 			} else {
-				toast.error(`测试失败：${result.message || "未知错误"}`);
+				toast.error(`智能审计预检失败：${message}`);
 			}
 		} catch (error) {
 			const message = extractCreateProjectScanApiErrorMessage(error);
 			setQuickFixTestResult({ success: false, message });
-			setQuickFixManualTestPassed(false);
-			setLastPreflightMessage(`LLM 测试失败：${message}`);
-			toast.error(`测试失败：${message}`);
+			setAgentPreflightPassed(false);
+			setLastPreflightMessage(`智能审计预检失败：${message}`);
+			toast.error(`智能审计预检失败：${message}`);
 		} finally {
 			setQuickFixTesting(false);
 		}
@@ -717,23 +677,25 @@ export default function CreateProjectScanDialog({
 				nextLlmConfig[providerKeyField] = apiKey;
 			}
 
-			await api.updateUserConfig({ llmConfig: nextLlmConfig });
+			await api.updateUserConfig(
+				buildCreateProjectScanSystemConfigUpdate({
+					currentConfig,
+					nextLlmConfig,
+				}),
+			);
 			setLlmQuickConfig(normalizedQuickConfig);
 			setSavedLlmQuickConfig(normalizedQuickConfig);
-			setQuickFixManualTestPassed(false);
+			setAgentPreflightPassed(false);
 			setQuickFixTestResult(null);
 			setShowLlmQuickFixPanel(true);
 			setLastPreflightMessage(
-				"LLM 配置已保存，请手动测试连接；测试成功后才能创建任务。",
+				"LLM 配置已保存。请在扫描引擎配置中完成权威连接测试；若已有有效指纹，请在此重新预检。",
 			);
-			toast.success("LLM 配置已保存，请继续测试连接");
+			toast.success("LLM 配置已保存，请重新预检");
 		} catch (error) {
-			setLastPreflightMessage(
-				`保存失败：${extractCreateProjectScanApiErrorMessage(error)}`,
-			);
-			toast.error(
-				`保存失败：${extractCreateProjectScanApiErrorMessage(error)}`,
-			);
+			const message = extractCreateProjectScanApiErrorMessage(error);
+			setLastPreflightMessage(`保存失败：${message}`);
+			toast.error(`保存失败：${message}`);
 		} finally {
 			setQuickFixSaving(false);
 		}
@@ -769,6 +731,24 @@ export default function CreateProjectScanDialog({
 		event.target.value = "";
 	};
 
+	const retainUploadedProjectForAgentRetry = (
+		project: Project,
+		message: string,
+	) => {
+		setProjects((currentProjects) =>
+			mergeRetainedProjectForRetry(currentProjects, project),
+		);
+		setSourceMode("existing");
+		setSelectedProjectId(project.id);
+		setSearchTerm("");
+		setProjectPage(1);
+		setNewProjectName("");
+		setNewProjectFile(null);
+		setLastPreflightMessage(message);
+		setShowLlmQuickFixPanel(true);
+		toast.error(message);
+	};
+
 	const ensureAgentGatePassed = async () => {
 		if (!isLlmMode) return true;
 		if (!llmQuickInitialized || quickFixPanelOpening) {
@@ -778,27 +758,23 @@ export default function CreateProjectScanDialog({
 		}
 		if (llmGateStatus.missingFields.length > 0) {
 			setShowLlmQuickFixPanel(true);
-			setLastPreflightMessage(
-				"LLM 缺少必填配置，请先补全并保存，再手动测试连接。",
-			);
+			setLastPreflightMessage("LLM 缺少必填配置，请先补全并保存，再重新预检。");
 			return false;
 		}
 		if (llmGateStatus.hasUnsavedChanges) {
 			setShowLlmQuickFixPanel(true);
 			setLastPreflightMessage(
-				"当前 LLM 配置有未保存改动，请先保存，再手动测试连接。",
+				"当前 LLM 配置有未保存改动，请先保存，再重新预检。",
 			);
-			return false;
-		}
-		if (!quickFixManualTestPassed) {
-			setShowLlmQuickFixPanel(true);
-			setLastPreflightMessage("请先手动测试连接，测试成功后才能创建任务。");
 			return false;
 		}
 
 		const preflightResult = await runAgentPreflightCheck();
 		await syncGateWithPreflightResult(preflightResult);
-		if (!preflightResult.ok) {
+		if (
+			!preflightResult.ok ||
+			!hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata)
+		) {
 			setShowLlmQuickFixPanel(true);
 			return false;
 		}
@@ -815,6 +791,7 @@ export default function CreateProjectScanDialog({
 				}
 
 				let createdProject: Project | null = null;
+				let uploadSucceeded = false;
 				try {
 					createdProject = await api.createProject({
 						name: newProjectName.trim(),
@@ -832,6 +809,7 @@ export default function CreateProjectScanDialog({
 					if (!uploadResult.success) {
 						throw new Error(uploadResult.message || "压缩包上传失败");
 					}
+					uploadSucceeded = true;
 
 					if (mode === "static") {
 						const result = await createStaticTasksForProject(createdProject);
@@ -852,12 +830,24 @@ export default function CreateProjectScanDialog({
 					}
 
 					if (!(await ensureAgentGatePassed())) {
+						retainUploadedProjectForAgentRetry(
+							createdProject,
+							`项目“${createdProject.name}”已保留，智能审计预检未通过。请修复预检后重试。`,
+						);
 						return;
 					}
 
 					await handleCreateAgentTaskForProject(createdProject, action);
 					return;
 				} catch (error) {
+					if (mode === "agent" && createdProject && uploadSucceeded) {
+						const message = extractCreateProjectScanApiErrorMessage(error);
+						retainUploadedProjectForAgentRetry(
+							createdProject,
+							`项目“${createdProject.name}”已保留，智能审计创建失败：${message}。请修复预检后重试。`,
+						);
+						return;
+					}
 					if (createdProject) {
 						try {
 							await api.deleteProject(createdProject.id);

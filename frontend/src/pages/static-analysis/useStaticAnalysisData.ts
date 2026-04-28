@@ -10,6 +10,7 @@ import {
 } from "@/shared/api/opengrep";
 import type { Engine, FindingStatus, UnifiedFindingRow } from "./viewModel";
 import {
+  shouldRefreshStaticAnalysisResultsAfterCompletion,
   isStaticAnalysisInterruptibleStatus,
   isStaticAnalysisPollableStatus,
 } from "./viewModel";
@@ -71,6 +72,7 @@ export function useStaticAnalysisData({
   const [interrupting, setInterrupting] = useState(false);
 
   const opengrepSilentRefreshRef = useRef(false);
+  const opengrepCompletionResultsRefreshRef = useRef<string | null>(null);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
@@ -135,11 +137,25 @@ export function useStaticAnalysisData({
     if (!opengrepTaskId || opengrepSilentRefreshRef.current) return;
     opengrepSilentRefreshRef.current = true;
     try {
-      await loadOpengrepTask(true);
+      const nextOpengrepTask = await loadOpengrepTask(true);
+      if (
+        shouldRefreshStaticAnalysisResultsAfterCompletion({
+          taskId: opengrepTaskId,
+          status: nextOpengrepTask?.status,
+          refreshedTaskId: opengrepCompletionResultsRefreshRef.current,
+        })
+      ) {
+        opengrepCompletionResultsRefreshRef.current = opengrepTaskId;
+        await loadOpengrepFindings(true, nextOpengrepTask?.total_findings);
+      }
     } finally {
       opengrepSilentRefreshRef.current = false;
     }
-  }, [loadOpengrepTask, opengrepTaskId]);
+  }, [
+    loadOpengrepFindings,
+    loadOpengrepTask,
+    opengrepTaskId,
+  ]);
 
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;

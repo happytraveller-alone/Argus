@@ -258,6 +258,18 @@ export function isStaticAnalysisCompletedStatus(
   return String(status || "").trim().toLowerCase() === "completed";
 }
 
+export function shouldRefreshStaticAnalysisResultsAfterCompletion(options: {
+  taskId: string;
+  status?: string | null;
+  refreshedTaskId?: string | null;
+}): boolean {
+  return Boolean(
+    options.taskId &&
+      isStaticAnalysisCompletedStatus(options.status) &&
+      options.refreshedTaskId !== options.taskId,
+  );
+}
+
 function normalizeStaticAnalysisStatus(status?: string | null): string {
   return String(status || "").trim().toLowerCase();
 }

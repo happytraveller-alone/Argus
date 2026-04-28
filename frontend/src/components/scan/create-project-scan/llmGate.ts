@@ -24,7 +24,7 @@ interface LlmQuickGateStatusInput {
 	providerOptions: LLMProviderItem[];
 	currentConfig: LlmQuickConfig;
 	savedConfig: LlmQuickConfig | null;
-	hasSuccessfulManualTest: boolean;
+	hasPassedAgentPreflight: boolean;
 }
 
 export function isRedactedApiKeyPlaceholder(
@@ -159,12 +159,12 @@ export function resolveQuickConfigAfterProviderChange(options: {
 	};
 }
 
-export function invalidateSuccessfulManualTest(options: {
+export function invalidatePassedAgentPreflight(options: {
 	previousConfig: LlmQuickConfig | null | undefined;
 	nextConfig: LlmQuickConfig | null | undefined;
-	hasSuccessfulManualTest: boolean;
+	hasPassedAgentPreflight: boolean;
 }): boolean {
-	if (!options.hasSuccessfulManualTest) return false;
+	if (!options.hasPassedAgentPreflight) return false;
 	return areSameLlmQuickConfig(options.previousConfig, options.nextConfig);
 }
 
@@ -181,7 +181,7 @@ export function getLlmQuickGateStatus({
 	providerOptions,
 	currentConfig,
 	savedConfig,
-	hasSuccessfulManualTest,
+	hasPassedAgentPreflight,
 }: LlmQuickGateStatusInput) {
 	const missingFields = getLlmQuickConfigMissingFields(
 		currentConfig,
@@ -200,7 +200,7 @@ export function getLlmQuickGateStatus({
 			!shouldRequireApiKey(providerOptions, normalizedConfig?.provider || ""));
 	const testBlockMessage = hasRequiredFields
 		? hasUnsavedChanges
-			? "当前 LLM 配置有未保存改动，请先保存，再手动测试连接。"
+			? "当前 LLM 配置有未保存改动，请先保存，再重新预检。"
 			: ""
 		: "";
 
@@ -210,9 +210,22 @@ export function getLlmQuickGateStatus({
 		canSave: hasRequiredFields,
 		canTest,
 		canCreate:
-			hasRequiredFields && !hasUnsavedChanges && hasSuccessfulManualTest,
+			hasRequiredFields && !hasUnsavedChanges && hasPassedAgentPreflight,
 		testBlockMessage,
 	};
+}
+
+export function mergeRetainedProjectForRetry<TProject extends { id: string }>(
+	projects: TProject[],
+	retainedProject: TProject,
+): TProject[] {
+	const existingIndex = projects.findIndex(
+		(project) => project.id === retainedProject.id,
+	);
+	if (existingIndex === -1) return [retainedProject, ...projects];
+	return projects.map((project, index) =>
+		index === existingIndex ? retainedProject : project,
+	);
 }
 
 export const CREATE_PROJECT_SCAN_PAGE_SIZE = 3;

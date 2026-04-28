@@ -628,7 +628,7 @@ export default function CreateProjectScanDialogContent({
                                                     {lastPreflightMessage ||
                                                         t(
                                                             "task.llmQuickFixDesc",
-                                                            "未通过时可在下方直接补配并测试连接。",
+                                                            "未通过时可在下方补配并保存配置，然后重新预检。",
                                                         )}
                                                 </p>
                                             </div>
@@ -856,8 +856,8 @@ export default function CreateProjectScanDialogContent({
                                                 }`}
                                             >
                                                 {quickFixTestResult.success
-                                                    ? `测试成功：${quickFixTestResult.model || llmQuickConfig.model}`
-                                                    : `测试失败：${quickFixTestResult.message}`}
+                                                    ? `预检通过：${quickFixTestResult.model || llmQuickConfig.model}`
+                                                    : `预检失败：${quickFixTestResult.message}`}
                                             </p>
                                         )}
 
@@ -877,10 +877,10 @@ export default function CreateProjectScanDialogContent({
                                                 {quickFixTesting ? (
                                                     <>
                                                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                                        测试中...
+                                                        预检中...
                                                     </>
                                                 ) : (
-                                                    "测试连接"
+                                                    "重新预检"
                                                 )}
                                             </Button>
                                             <Button

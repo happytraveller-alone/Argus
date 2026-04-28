@@ -9,6 +9,7 @@ import {
 
 const {
   extractCreateProjectScanApiErrorMessage,
+  buildCreateProjectScanSystemConfigUpdate,
   normalizeCreateProjectScanProvider,
   resolveCreateProjectScanEffectiveApiKey,
   buildCreateProjectStaticTaskRoute,
@@ -84,5 +85,47 @@ test("extractCreateProjectScanApiErrorMessage falls back to error.message", () =
   assert.equal(
     extractCreateProjectScanApiErrorMessage(new Error("请求失败")),
     "请求失败",
+  );
+});
+
+test("extractCreateProjectScanApiErrorMessage prefers axum error payloads", () => {
+  assert.equal(
+    extractCreateProjectScanApiErrorMessage({
+      response: { data: { error: "LLM 配置缺失：`apiKey` 必填。" } },
+    }),
+    "LLM 配置缺失：`apiKey` 必填。",
+  );
+});
+
+test("buildCreateProjectScanSystemConfigUpdate preserves otherConfig for system-config PUT", () => {
+  assert.deepEqual(
+    buildCreateProjectScanSystemConfigUpdate({
+      currentConfig: {
+        otherConfig: {
+          maxAnalyzeFiles: 20,
+          llmConcurrency: 1,
+          llmGapMs: 0,
+        },
+      },
+      nextLlmConfig: {
+        llmProvider: "openai_compatible",
+        llmModel: "gpt-5",
+        llmBaseUrl: "https://api.openai.com/v1",
+        llmApiKey: "sk-test",
+      },
+    }),
+    {
+      llmConfig: {
+        llmProvider: "openai_compatible",
+        llmModel: "gpt-5",
+        llmBaseUrl: "https://api.openai.com/v1",
+        llmApiKey: "sk-test",
+      },
+      otherConfig: {
+        maxAnalyzeFiles: 20,
+        llmConcurrency: 1,
+        llmGapMs: 0,
+      },
+    },
   );
 });

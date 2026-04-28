@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 async function importOrFail<TModule = Record<string, unknown>>(
 	relativePath: string,
@@ -206,7 +207,7 @@ test("LLM gate requires API keys for protocol providers", async () => {
 	);
 });
 
-test("LLM gate stays locked until saved and manually tested, then re-locks after edits", async () => {
+test("LLM gate stays locked until saved and agent preflight passes, then re-locks after edits", async () => {
 	const providerCatalog = await importOrFail<any>(
 		"../src/shared/llm/providerCatalog.ts",
 	);
@@ -229,7 +230,7 @@ test("LLM gate stays locked until saved and manually tested, then re-locks after
 		providerOptions,
 		currentConfig: cleanConfig,
 		savedConfig: cleanConfig,
-		hasSuccessfulManualTest: false,
+		hasPassedAgentPreflight: false,
 	});
 	assert.equal(savedButUntested.canTest, true);
 	assert.equal(savedButUntested.canCreate, false);
@@ -238,7 +239,7 @@ test("LLM gate stays locked until saved and manually tested, then re-locks after
 		providerOptions,
 		currentConfig: cleanConfig,
 		savedConfig: cleanConfig,
-		hasSuccessfulManualTest: true,
+		hasPassedAgentPreflight: true,
 	});
 	assert.equal(savedAndTested.canCreate, true);
 
@@ -249,20 +250,20 @@ test("LLM gate stays locked until saved and manually tested, then re-locks after
 			model: "gpt-5-mini",
 		},
 		savedConfig: cleanConfig,
-		hasSuccessfulManualTest: true,
+		hasPassedAgentPreflight: true,
 	});
 	assert.equal(editedAfterSuccess.hasUnsavedChanges, true);
 	assert.equal(editedAfterSuccess.canTest, false);
 	assert.equal(editedAfterSuccess.canCreate, false);
 	assert.match(editedAfterSuccess.testBlockMessage, /先保存/);
 	assert.equal(
-		llmGate.invalidateSuccessfulManualTest({
+		llmGate.invalidatePassedAgentPreflight({
 			previousConfig: cleanConfig,
 			nextConfig: {
 				...cleanConfig,
 				model: "gpt-5-mini",
 			},
-			hasSuccessfulManualTest: true,
+			hasPassedAgentPreflight: true,
 		}),
 		false,
 	);
@@ -329,6 +330,18 @@ test("agent preflight delegates to backend task preflight and does not fall back
 	}
 });
 
+test("dialog uses agent preflight gate while settings page keeps the LLM connection test", async () => {
+	const [dialogSource, systemConfigSource] = await Promise.all([
+		readFile("src/components/scan/CreateProjectScanDialog.tsx", "utf8"),
+		readFile("src/components/system/SystemConfig.tsx", "utf8"),
+	]);
+
+	assert.match(dialogSource, /runAgentPreflightCheck/);
+	assert.doesNotMatch(dialogSource, /\btestLLMConnection\b/);
+	assert.doesNotMatch(dialogSource, /\/system-config\/test-llm/);
+	assert.match(systemConfigSource, /\btestLLMConnection\b/);
+});
+
 test("LLM gate treats prefilled default config as unsaved until the user saves it", async () => {
 	const llmGate = await importOrFail<any>(
 		"../src/components/scan/create-project-scan/llmGate.ts",
@@ -343,7 +356,7 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 			apiKey: "prefilled-key",
 		},
 		savedConfig: null,
-		hasSuccessfulManualTest: false,
+		hasPassedAgentPreflight: false,
 	});
 
 	assert.equal(status.hasUnsavedChanges, true);
@@ -367,7 +380,7 @@ test("LLM gate treats redacted placeholders as inert and requires an explicit sa
 		providerOptions: [],
 		currentConfig: redactedOnlyConfig,
 		savedConfig: redactedOnlyConfig,
-		hasSuccessfulManualTest: true,
+		hasPassedAgentPreflight: true,
 	});
 
 	assert.equal(redactedOnlyStatus.canCreate, false);
@@ -383,7 +396,7 @@ test("LLM gate treats redacted placeholders as inert and requires an explicit sa
 		providerOptions: [],
 		currentConfig: savedSecretConfig,
 		savedConfig: savedSecretConfig,
-		hasSuccessfulManualTest: true,
+		hasPassedAgentPreflight: true,
 	});
 
 	assert.equal(savedSecretStatus.hasUnsavedChanges, false);
@@ -391,7 +404,7 @@ test("LLM gate treats redacted placeholders as inert and requires an explicit sa
 	assert.equal(savedSecretStatus.canCreate, true);
 });
 
-test("LLM gate accepts only test responses carrying metadata fingerprints", async () => {
+test("LLM gate accepts only preflight metadata carrying fingerprints", async () => {
 	const llmGate = await importOrFail<any>(
 		"../src/components/scan/create-project-scan/llmGate.ts",
 	);
@@ -402,6 +415,33 @@ test("LLM gate accepts only test responses carrying metadata fingerprints", asyn
 	assert.equal(
 		llmGate.hasVerifiedLlmTestMetadata({ fingerprint: "sha256:abc" }),
 		true,
+	);
+});
+
+test("retained upload retry state adds or refreshes the uploaded project without duplication", async () => {
+	const llmGate = await importOrFail<any>(
+		"../src/components/scan/create-project-scan/llmGate.ts",
+	);
+
+	const existingProjects = [
+		{ id: "existing-project", name: "Existing Project" },
+		{ id: "retained-project", name: "Old Retained Name" },
+	];
+	const retainedProject = {
+		id: "retained-project",
+		name: "Retained Upload",
+	};
+
+	assert.deepEqual(
+		llmGate.mergeRetainedProjectForRetry(
+			[{ id: "existing-project", name: "Existing Project" }],
+			retainedProject,
+		),
+		[retainedProject, { id: "existing-project", name: "Existing Project" }],
+	);
+	assert.deepEqual(
+		llmGate.mergeRetainedProjectForRetry(existingProjects, retainedProject),
+		[{ id: "existing-project", name: "Existing Project" }, retainedProject],
 	);
 });
 
