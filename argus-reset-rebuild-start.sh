@@ -10,6 +10,8 @@ CONFIG_TEMPLATE_FILE="${CONFIG_FILE}.example"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
 DRY_RUN=false
 WAIT_EXIT=false
+RUN_MODE=default
+SUPPORTED_RUN_MODES="default keep-cache aggressive"
 STUB_DOCKER="${ARGUS_STUB_DOCKER:-false}"
 DOCKER_SYSTEM_PRUNE="${ARGUS_DOCKER_SYSTEM_PRUNE:-true}"
 WAIT_TIMEOUT="${ARGUS_WAIT_TIMEOUT:-120}"
@@ -28,12 +30,31 @@ REQUIRED_CONFIG_KEYS=(
   AGENT_TIMEOUT
 )
 
+print_banner() {
+  cat <<'BANNER'
+  ___
+ / _ |  ARGUS Reset/Rebuild/Start
+/ __ |  Intelligent Audit Runtime
+/_/ |_|  Developer: happytraveller
+
+为保护作者仓库开发成果/专利，未经作者授权不得商用；如需商用请联系作者。
+作者/开发者: happytraveller
+商业联系: 18630897985 | happytraveller@163.com
+BANNER
+}
+
 usage() {
+  print_banner
   cat <<USAGE
 $SCRIPT_NAME - Argus reset/rebuild/start helper
 
 Usage:
-  ./$SCRIPT_NAME [--dry-run] [--wait-exit] [--help]
+  ./$SCRIPT_NAME [--dry-run] [--wait-exit] [--help] -- <mode>
+  ./$SCRIPT_NAME
+  ./$SCRIPT_NAME -- default
+  ./$SCRIPT_NAME -- keep-cache
+  ./$SCRIPT_NAME -- aggressive
+  ./$SCRIPT_NAME --wait-exit -- default
 
 Shell support:
   Run directly from bash, zsh, or another shell as ./$SCRIPT_NAME.
@@ -47,10 +68,21 @@ Configuration:
   docker/env/backend/.env from the validated dedicated config.
   CI=true or non-TTY runs never prompt; missing or placeholder config fails before Docker cleanup.
 
-Destructive Docker cleanup default:
-  By default this script runs: docker system prune -af --volumes
-  WARNING: this can delete unused Docker images, containers, networks, cache, and volumes
-  from other projects on this host. Set ARGUS_DOCKER_SYSTEM_PRUNE=false to skip it.
+Run modes:
+  default      Safe default. Preserve data volumes and Docker image/build cache.
+               No mode and "-- default" are equivalent.
+  keep-cache   Remove this Compose project's managed volumes with
+               docker compose down --volumes --remove-orphans, including runtime
+               and dependency volumes declared by docker-compose.yml, while preserving
+               Docker image/build cache.
+  aggressive   Explicit destructive cleanup. Remove Compose-managed volumes and run
+               docker system prune -af --volumes unless ARGUS_DOCKER_SYSTEM_PRUNE=false.
+               This is the only mode allowed to perform global Docker prune.
+
+Docker cleanup precedence:
+  default and keep-cache never run global Docker prune, even when
+  ARGUS_DOCKER_SYSTEM_PRUNE=true.
+  ARGUS_DOCKER_SYSTEM_PRUNE=false disables only aggressive-mode global Docker prune.
 
 Start modes:
   Default:     docker compose up --build        (foreground; does not auto-exit on readiness)
@@ -404,17 +436,45 @@ require_real_tools() {
 }
 
 compose_down() {
-  log "Stopping/removing this Argus Compose project before global Docker prune."
-  run_compose down --remove-orphans
+  local volume_mode="${1:-preserve-volumes}"
+  log "Stopping/removing this Argus Compose project before mode-specific cleanup."
+  if [[ "$volume_mode" == "delete-volumes" ]]; then
+    run_compose down --volumes --remove-orphans
+  else
+    run_compose down --remove-orphans
+  fi
 }
 
 prune_docker_system() {
   if is_falsey "$DOCKER_SYSTEM_PRUNE"; then
-    log "Skipping docker system prune -af --volumes because ARGUS_DOCKER_SYSTEM_PRUNE=false."
+    log "Skipping global Docker prune because ARGUS_DOCKER_SYSTEM_PRUNE=false."
     return 0
   fi
   log "WARNING: running docker system prune -af --volumes; this can delete unused Docker resources and volumes from other projects."
   run_cmd docker system prune -af --volumes
+}
+
+cleanup_for_run_mode() {
+  case "$RUN_MODE" in
+    default)
+      log "Default mode: preserving data volumes and Docker image/build cache; global Docker prune skipped."
+      compose_down preserve-volumes
+      ;;
+    keep-cache)
+      log "keep-cache mode: removing this Compose project's managed volumes while preserving Docker image/build cache."
+      log "Managed volumes include application, runtime, and dependency volumes declared by docker-compose.yml."
+      compose_down delete-volumes
+      log "Global Docker prune skipped for cache-preserving mode."
+      ;;
+    aggressive)
+      log "WARNING: aggressive mode enabled; Compose-managed volumes and global Docker cache may be removed."
+      compose_down delete-volumes
+      prune_docker_system
+      ;;
+    *)
+      fail "Unsupported run mode reached cleanup dispatcher: $RUN_MODE"
+      ;;
+  esac
 }
 
 compose_up_foreground() {
@@ -464,6 +524,25 @@ start_stack() {
   fi
 }
 
+supported_run_modes() {
+  printf '%s' "$SUPPORTED_RUN_MODES"
+}
+
+is_supported_run_mode() {
+  case "$1" in
+    default|keep-cache|aggressive) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+set_run_mode() {
+  local mode="$1"
+  if ! is_supported_run_mode "$mode"; then
+    fail "Unknown run mode: $mode. Supported run modes: $(supported_run_modes)"
+  fi
+  RUN_MODE="$mode"
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -479,6 +558,19 @@ parse_args() {
         WAIT_EXIT=true
         shift
         ;;
+      --)
+        shift
+        if [[ $# -eq 0 ]]; then
+          RUN_MODE=default
+          return 0
+        fi
+        if [[ $# -gt 1 ]]; then
+          fail "Expected at most one run mode after --. Supported run modes: $(supported_run_modes)"
+        fi
+        set_run_mode "$1"
+        shift
+        return 0
+        ;;
       *)
         fail "Unknown argument: $1"
         ;;
@@ -488,12 +580,13 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  print_banner
   log "Argus reset/rebuild/start beginning. Project: $PROJECT_NAME"
+  log "Run mode: $RUN_MODE"
   require_real_tools
   prepare_config
   materialize_backend_env
-  compose_down
-  prune_docker_system
+  cleanup_for_run_mode
   start_stack
 }
 
