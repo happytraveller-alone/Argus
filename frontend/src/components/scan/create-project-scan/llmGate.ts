@@ -7,13 +7,17 @@ import {
 	type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
 
-const REDACTED_API_KEY = "***configured***";
+export const REDACTED_API_KEY = "***configured***";
+
+export type LlmSecretSource = "saved" | "imported" | "entered" | "none";
 
 export interface LlmQuickConfig {
 	provider: string;
 	model: string;
 	baseUrl: string;
 	apiKey: string;
+	apiKeySource?: LlmSecretSource;
+	hasSavedApiKey?: boolean;
 }
 
 interface LlmQuickGateStatusInput {
@@ -23,13 +27,59 @@ interface LlmQuickGateStatusInput {
 	hasSuccessfulManualTest: boolean;
 }
 
-function normalizeQuickConfig(config: LlmQuickConfig | null | undefined): LlmQuickConfig | null {
+export function isRedactedApiKeyPlaceholder(
+	value: string | null | undefined,
+): boolean {
+	return String(value || "").trim() === REDACTED_API_KEY;
+}
+
+export function normalizeSecretSource(
+	value: unknown,
+	hasSavedApiKey?: boolean,
+): LlmSecretSource {
+	const normalized = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (
+		normalized === "imported" ||
+		normalized === "saved" ||
+		normalized === "entered"
+	) {
+		return normalized;
+	}
+	return hasSavedApiKey ? "saved" : "none";
+}
+
+export function usesSavedOrImportedSecret(
+	config: LlmQuickConfig | null | undefined,
+): boolean {
+	if (!config) return false;
+	const source = normalizeSecretSource(
+		config.apiKeySource,
+		config.hasSavedApiKey,
+	);
+	return Boolean(
+		config.hasSavedApiKey && (source === "saved" || source === "imported"),
+	);
+}
+
+function normalizeQuickConfig(
+	config: LlmQuickConfig | null | undefined,
+): LlmQuickConfig | null {
 	if (!config) return null;
+	const rawApiKey = String(config.apiKey || "").trim();
+	const hasSavedApiKey = Boolean(config.hasSavedApiKey);
+	const apiKeySource = normalizeSecretSource(
+		config.apiKeySource,
+		hasSavedApiKey,
+	);
 	return {
 		provider: normalizeLlmProviderId(config.provider),
 		model: String(config.model || "").trim(),
 		baseUrl: String(config.baseUrl || "").trim(),
-		apiKey: String(config.apiKey || "").trim(),
+		apiKey: isRedactedApiKeyPlaceholder(rawApiKey) ? "" : rawApiKey,
+		apiKeySource,
+		hasSavedApiKey,
 	};
 }
 
@@ -45,7 +95,9 @@ export function areSameLlmQuickConfig(
 		normalizedLeft.provider === normalizedRight.provider &&
 		normalizedLeft.model === normalizedRight.model &&
 		normalizedLeft.baseUrl === normalizedRight.baseUrl &&
-		normalizedLeft.apiKey === normalizedRight.apiKey
+		normalizedLeft.apiKey === normalizedRight.apiKey &&
+		normalizedLeft.apiKeySource === normalizedRight.apiKeySource &&
+		normalizedLeft.hasSavedApiKey === normalizedRight.hasSavedApiKey
 	);
 }
 
@@ -58,11 +110,13 @@ export function getLlmQuickConfigMissingFields(
 	const missingFields: PreflightMissingField[] = [];
 	if (!normalizedConfig.model) missingFields.push("llmModel");
 	if (!normalizedConfig.baseUrl) missingFields.push("llmBaseUrl");
-	if (
-		shouldRequireApiKey(providerOptions, normalizedConfig.provider) &&
-		!normalizedConfig.apiKey
-	) {
-		missingFields.push("llmApiKey");
+	if (shouldRequireApiKey(providerOptions, normalizedConfig.provider)) {
+		const hasExecutableEnteredKey = Boolean(normalizedConfig.apiKey);
+		const hasSelectedServerSideKey =
+			usesSavedOrImportedSecret(normalizedConfig);
+		if (!hasExecutableEnteredKey && !hasSelectedServerSideKey) {
+			missingFields.push("llmApiKey");
+		}
 	}
 	return missingFields;
 }
@@ -96,6 +150,12 @@ export function resolveQuickConfigAfterProviderChange(options: {
 				? normalizedCurrent.baseUrl
 				: defaultBaseUrl || normalizedCurrent.baseUrl,
 		apiKey: normalizedCurrent.apiKey,
+		...(normalizedCurrent.apiKeySource !== "none"
+			? { apiKeySource: normalizedCurrent.apiKeySource }
+			: {}),
+		...(normalizedCurrent.hasSavedApiKey
+			? { hasSavedApiKey: normalizedCurrent.hasSavedApiKey }
+			: {}),
 	};
 }
 
@@ -111,7 +171,10 @@ export function invalidateSuccessfulManualTest(options: {
 export function hasVerifiedLlmTestMetadata(
 	metadata: Record<string, unknown> | null | undefined,
 ): boolean {
-	return typeof metadata?.fingerprint === "string" && metadata.fingerprint.trim() !== "";
+	return (
+		typeof metadata?.fingerprint === "string" &&
+		metadata.fingerprint.trim() !== ""
+	);
 }
 
 export function getLlmQuickGateStatus({
@@ -120,18 +183,25 @@ export function getLlmQuickGateStatus({
 	savedConfig,
 	hasSuccessfulManualTest,
 }: LlmQuickGateStatusInput) {
-	const missingFields = getLlmQuickConfigMissingFields(currentConfig, providerOptions);
+	const missingFields = getLlmQuickConfigMissingFields(
+		currentConfig,
+		providerOptions,
+	);
 	const hasUnsavedChanges = !areSameLlmQuickConfig(currentConfig, savedConfig);
 	const hasRequiredFields = missingFields.length === 0;
-	const hasRedactedApiKey =
-		normalizeQuickConfig(currentConfig)?.apiKey === REDACTED_API_KEY;
-	const canTest = hasRequiredFields && !hasUnsavedChanges && !hasRedactedApiKey;
+	const normalizedConfig = normalizeQuickConfig(currentConfig);
+	const hasSelectedServerSideKey = usesSavedOrImportedSecret(normalizedConfig);
+	const hasEnteredKey = Boolean(normalizedConfig?.apiKey);
+	const canTest =
+		hasRequiredFields &&
+		!hasUnsavedChanges &&
+		(hasEnteredKey ||
+			hasSelectedServerSideKey ||
+			!shouldRequireApiKey(providerOptions, normalizedConfig?.provider || ""));
 	const testBlockMessage = hasRequiredFields
 		? hasUnsavedChanges
 			? "当前 LLM 配置有未保存改动，请先保存，再手动测试连接。"
-			: hasRedactedApiKey
-				? "如需重新测试连接，请重新填写 API Key。"
-				: ""
+			: ""
 		: "";
 
 	return {
@@ -139,7 +209,8 @@ export function getLlmQuickGateStatus({
 		hasUnsavedChanges,
 		canSave: hasRequiredFields,
 		canTest,
-		canCreate: hasRequiredFields && !hasUnsavedChanges && hasSuccessfulManualTest,
+		canCreate:
+			hasRequiredFields && !hasUnsavedChanges && hasSuccessfulManualTest,
 		testBlockMessage,
 	};
 }

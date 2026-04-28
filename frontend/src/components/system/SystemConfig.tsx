@@ -130,9 +130,13 @@ const recommendTokensFromStaticRules = (modelName: string): number | null => {
 	return null;
 };
 
+type LlmSecretSource = "saved" | "imported" | "entered" | "none";
+
 interface SystemConfigData {
 	llmProvider: string;
 	llmApiKey: string;
+	llmApiKeySource: LlmSecretSource;
+	hasSavedApiKey: boolean;
 	llmModel: string;
 	llmBaseUrl: string;
 	llmCustomHeaders: string;
@@ -161,8 +165,13 @@ export interface SystemConfigSharedDraftState {
 	llmProvidersFromBackend: LLMProviderItem[];
 	setLlmProvidersFromBackend: Dispatch<SetStateAction<LLMProviderItem[]>>;
 	fetchedModelsByProvider: Record<string, string[]>;
-	setFetchedModelsByProvider: Dispatch<SetStateAction<Record<string, string[]>>>;
-	fetchedModelMetadataByProvider: Record<string, Record<string, LLMModelMetadata>>;
+	setFetchedModelsByProvider: Dispatch<
+		SetStateAction<Record<string, string[]>>
+	>;
+	fetchedModelMetadataByProvider: Record<
+		string,
+		Record<string, LLMModelMetadata>
+	>;
 	setFetchedModelMetadataByProvider: Dispatch<
 		SetStateAction<Record<string, Record<string, LLMModelMetadata>>>
 	>;
@@ -207,8 +216,10 @@ type AdvancedConfigItemId =
 	| "llmGapMs";
 
 const DEFAULT_CONFIG: SystemConfigData = {
-	llmProvider: "openai",
+	llmProvider: "openai_compatible",
 	llmApiKey: "",
+	llmApiKeySource: "none",
+	hasSavedApiKey: false,
 	llmModel: "",
 	llmBaseUrl: "",
 	llmCustomHeaders: "",
@@ -225,24 +236,72 @@ const DEFAULT_CONFIG: SystemConfigData = {
 	llmGapMs: 3000,
 };
 
+const REDACTED_API_KEY_PLACEHOLDER = "***configured***";
+
+function normalizeSystemSecretSource(
+	value: unknown,
+	hasSavedApiKey: boolean,
+): LlmSecretSource {
+	const normalized = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (
+		normalized === "saved" ||
+		normalized === "imported" ||
+		normalized === "entered"
+	) {
+		return normalized;
+	}
+	return hasSavedApiKey ? "saved" : "none";
+}
+
+function isRedactedApiKeyPlaceholder(value: unknown): boolean {
+	return String(value || "").trim() === REDACTED_API_KEY_PLACEHOLDER;
+}
+
+function hasServerSideApiKeyReference(
+	config: SystemConfigData | null | undefined,
+): boolean {
+	if (!config?.hasSavedApiKey) return false;
+	return (
+		config.llmApiKeySource === "saved" || config.llmApiKeySource === "imported"
+	);
+}
+
 function buildSystemConfigDataFromBackendConfig(
 	backendConfig:
 		| {
 				llmConfig?: Record<string, unknown>;
 				otherConfig?: Record<string, unknown>;
-			}
+				hasSavedApiKey?: boolean;
+				secretSource?: LlmSecretSource | string;
+		  }
 		| null
 		| undefined,
 ): SystemConfigData {
 	const llmConfig = (backendConfig?.llmConfig ?? {}) as Record<string, unknown>;
-	const otherConfig = (backendConfig?.otherConfig ?? {}) as Record<string, unknown>;
+	const otherConfig = (backendConfig?.otherConfig ?? {}) as Record<
+		string,
+		unknown
+	>;
 	const normalizedProvider = normalizeLlmProviderId(
 		typeof llmConfig.llmProvider === "string" ? llmConfig.llmProvider : "",
 	);
+	const hasSavedApiKey = Boolean(
+		llmConfig.hasSavedApiKey ?? backendConfig?.hasSavedApiKey,
+	);
+	const secretSource = normalizeSystemSecretSource(
+		llmConfig.secretSource ?? backendConfig?.secretSource,
+		hasSavedApiKey,
+	);
+	const rawApiKey =
+		typeof llmConfig.llmApiKey === "string" ? llmConfig.llmApiKey : "";
 
 	return {
 		llmProvider: normalizedProvider || DEFAULT_CONFIG.llmProvider,
-		llmApiKey: typeof llmConfig.llmApiKey === "string" ? llmConfig.llmApiKey : "",
+		llmApiKey: isRedactedApiKeyPlaceholder(rawApiKey) ? "" : rawApiKey,
+		llmApiKeySource: secretSource,
+		hasSavedApiKey,
 		llmModel: typeof llmConfig.llmModel === "string" ? llmConfig.llmModel : "",
 		llmBaseUrl:
 			typeof llmConfig.llmBaseUrl === "string" ? llmConfig.llmBaseUrl : "",
@@ -297,9 +356,9 @@ function buildSystemConfigDataFromBackendConfig(
 	};
 }
 
-export function useSystemConfigDraftState(
-	options?: { enabled?: boolean },
-): SystemConfigSharedDraftState {
+export function useSystemConfigDraftState(options?: {
+	enabled?: boolean;
+}): SystemConfigSharedDraftState {
 	const enabled = options?.enabled ?? true;
 	const [config, setConfig] = useState<SystemConfigData | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -698,9 +757,8 @@ export function SystemConfig({
 	const [fetchingModels, setFetchingModels] = useState(false);
 	const [llmDropdownPanelStyle, setLlmDropdownPanelStyle] =
 		useState<CSSProperties | null>(null);
-	const [onlineModelStatsBySignature, setOnlineModelStatsBySignature] = useState<
-		Record<string, LlmModelStatsCounts>
-	>({});
+	const [onlineModelStatsBySignature, setOnlineModelStatsBySignature] =
+		useState<Record<string, LlmModelStatsCounts>>({});
 	const [modelStatsFetchStateBySignature, setModelStatsFetchStateBySignature] =
 		useState<Record<string, LlmModelStatsFetchState>>({});
 	const [llmTestResult, setLlmTestResult] = useState<{
@@ -729,7 +787,10 @@ export function SystemConfig({
 			const rect = anchor.getBoundingClientRect();
 			const viewportHeight = window.innerHeight;
 			const top = rect.bottom + 6;
-			const panelHeight = Math.max(220, Math.min(340, viewportHeight - top - 12));
+			const panelHeight = Math.max(
+				220,
+				Math.min(340, viewportHeight - top - 12),
+			);
 			setLlmDropdownPanelStyle({
 				position: "fixed",
 				left: rect.left,
@@ -914,6 +975,8 @@ export function SystemConfig({
 	type StrictLlmInputs = {
 		providerId: string;
 		apiKey: string;
+		secretSource: LlmSecretSource;
+		useSavedApiKey: boolean;
 		model: string;
 		baseUrl: string;
 		customHeaders: string;
@@ -927,8 +990,10 @@ export function SystemConfig({
 		if (!config) {
 			return {
 				ok: false,
-				providerId: "openai",
+				providerId: "openai_compatible",
 				apiKey: "",
+				secretSource: "none",
+				useSavedApiKey: false,
 				model: "",
 				baseUrl: "",
 				customHeaders: "",
@@ -936,15 +1001,24 @@ export function SystemConfig({
 		}
 		const providerId = normalizeLlmProviderId(config.llmProvider);
 		const apiKey = String(config.llmApiKey || "").trim();
+		const selectedSecretSource = normalizeSystemSecretSource(
+			config.llmApiKeySource,
+			config.hasSavedApiKey,
+		);
+		const useSavedApiKey =
+			config.hasSavedApiKey &&
+			(selectedSecretSource === "saved" || selectedSecretSource === "imported");
+		const effectiveSecretSource: LlmSecretSource = apiKey
+			? "entered"
+			: selectedSecretSource;
 		const model = String(config.llmModel || "").trim();
 		const baseUrl = String(config.llmBaseUrl || "").trim();
 		const parsedCustomHeaders = parseLlmCustomHeadersInput(
 			config.llmCustomHeaders,
 		);
 		if (!parsedCustomHeaders.ok) {
-			const parseErrorMessage = getLlmCustomHeadersParseErrorMessage(
-				parsedCustomHeaders,
-			);
+			const parseErrorMessage =
+				getLlmCustomHeadersParseErrorMessage(parsedCustomHeaders);
 			toast.error(
 				`无法${source === "save" ? "保存" : "测试"}：${parseErrorMessage || "自定义请求头格式不正确"}`,
 			);
@@ -952,6 +1026,8 @@ export function SystemConfig({
 				ok: false,
 				providerId,
 				apiKey,
+				secretSource: effectiveSecretSource,
+				useSavedApiKey,
 				model,
 				baseUrl,
 				customHeaders: "",
@@ -966,6 +1042,8 @@ export function SystemConfig({
 				ok: false,
 				providerId,
 				apiKey,
+				secretSource: effectiveSecretSource,
+				useSavedApiKey,
 				model,
 				baseUrl,
 				customHeaders: parsedCustomHeaders.normalizedText,
@@ -979,12 +1057,14 @@ export function SystemConfig({
 				ok: false,
 				providerId,
 				apiKey,
+				secretSource: effectiveSecretSource,
+				useSavedApiKey,
 				model,
 				baseUrl,
 				customHeaders: parsedCustomHeaders.normalizedText,
 			};
 		}
-		if (shouldRequireApiKey(providerId) && !apiKey) {
+		if (shouldRequireApiKey(providerId) && !apiKey && !useSavedApiKey) {
 			toast.error(
 				`无法${source === "save" ? "保存" : "测试"}：当前提供商必须配置 API Key`,
 			);
@@ -992,6 +1072,8 @@ export function SystemConfig({
 				ok: false,
 				providerId,
 				apiKey,
+				secretSource: effectiveSecretSource,
+				useSavedApiKey,
 				model,
 				baseUrl,
 				customHeaders: parsedCustomHeaders.normalizedText,
@@ -1001,6 +1083,8 @@ export function SystemConfig({
 			ok: true,
 			providerId,
 			apiKey,
+			secretSource: effectiveSecretSource,
+			useSavedApiKey,
 			model,
 			baseUrl,
 			customHeaders: parsedCustomHeaders.normalizedText,
@@ -1064,9 +1148,8 @@ export function SystemConfig({
 
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) {
-			const parseErrorMessage = getLlmCustomHeadersParseErrorMessage(
-				parsedCustomHeaders,
-			);
+			const parseErrorMessage =
+				getLlmCustomHeadersParseErrorMessage(parsedCustomHeaders);
 			setModelStatsFetchStateBySignature((prev) => ({
 				...prev,
 				[signature]: "failed",
@@ -1218,7 +1301,9 @@ export function SystemConfig({
 		const providerId = normalizeLlmProviderId(config.llmProvider);
 		const baseUrl = String(config.llmBaseUrl || "").trim();
 		const apiKey = String(config.llmApiKey || "").trim();
-		const parsedCustomHeaders = parseLlmCustomHeadersInput(config.llmCustomHeaders);
+		const parsedCustomHeaders = parseLlmCustomHeadersInput(
+			config.llmCustomHeaders,
+		);
 		const requiresApiKey = shouldRequireApiKey(providerId);
 		const providerInfo = getProviderInfo(providerId);
 		if (!providerId || !baseUrl) return;
@@ -1263,7 +1348,9 @@ export function SystemConfig({
 			const savedConfig = await api.updateUserConfig({
 				llmConfig: {
 					llmProvider: validated.providerId,
-					llmApiKey: validated.apiKey,
+					secretSource: validated.secretSource,
+					useSavedApiKey: validated.useSavedApiKey,
+					...(validated.apiKey ? { llmApiKey: validated.apiKey } : {}),
 					llmModel: validated.model,
 					llmBaseUrl: validated.baseUrl,
 					llmCustomHeaders: validated.customHeaders,
@@ -1336,7 +1423,9 @@ export function SystemConfig({
 		try {
 			const result = await api.testLLMConnection({
 				provider: validated.providerId,
-				apiKey: validated.apiKey,
+				apiKey: validated.apiKey || undefined,
+				secretSource: validated.secretSource,
+				useSavedApiKey: validated.useSavedApiKey,
 				model: validated.model,
 				baseUrl: validated.baseUrl,
 				customHeaders: validated.customHeaders,
@@ -1354,7 +1443,6 @@ export function SystemConfig({
 			return { success: false, message };
 		}
 	};
-
 
 	const handleSaveAndTestLLM = async () => {
 		if (!config) return;
@@ -1374,7 +1462,9 @@ export function SystemConfig({
 		}
 	};
 
-	const normalizedProviderId = normalizeLlmProviderId(config?.llmProvider || "");
+	const normalizedProviderId = normalizeLlmProviderId(
+		config?.llmProvider || "",
+	);
 	const selectedProviderInfo = getProviderInfo(normalizedProviderId);
 	const currentModelName = config
 		? resolveCurrentModelName(normalizedProviderId, config.llmModel)
@@ -1459,7 +1549,8 @@ export function SystemConfig({
 
 	const isConfigured =
 		(!shouldRequireApiKey(config.llmProvider) ||
-			config.llmApiKey.trim() !== "") &&
+			config.llmApiKey.trim() !== "" ||
+			hasServerSideApiKeyReference(config)) &&
 		hasModelConfigured &&
 		hasBaseUrlConfigured;
 
@@ -1494,18 +1585,18 @@ export function SystemConfig({
 					</TabsList>
 				)}
 
-					{sections.includes("llm") && (
-						<TabsContent
-							value="llm"
-							className={compactLayout ? "space-y-4" : "space-y-6"}
+				{sections.includes("llm") && (
+					<TabsContent
+						value="llm"
+						className={compactLayout ? "space-y-4" : "space-y-6"}
+					>
+						<div
+							className={cn(
+								"cyber-card !overflow-visible",
+								compactLayout ? "p-4 space-y-4" : "p-6 space-y-6",
+								cardClassName,
+							)}
 						>
-							<div
-								className={cn(
-									"cyber-card !overflow-visible",
-									compactLayout ? "p-4 space-y-4" : "p-6 space-y-6",
-									cardClassName,
-								)}
-							>
 							{showLlmSummaryCards ? (
 								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 									<div className="cyber-card p-4">
@@ -1522,14 +1613,14 @@ export function SystemConfig({
 										</div>
 									</div>
 
-										<div className="cyber-card p-4">
-											<div className="flex items-center justify-between">
-												<div>
-													<p className="stat-label">当前采用模型</p>
-													<p className="stat-value text-2xl break-all">
-														{currentModelName || "--"}
-													</p>
-												</div>
+									<div className="cyber-card p-4">
+										<div className="flex items-center justify-between">
+											<div>
+												<p className="stat-label">当前采用模型</p>
+												<p className="stat-value text-2xl break-all">
+													{currentModelName || "--"}
+												</p>
+											</div>
 											<div className="stat-icon text-sky-400">
 												<Brain className="w-6 h-6" />
 											</div>
@@ -1639,17 +1730,69 @@ export function SystemConfig({
 													)}
 												</Button>
 											</Label>
-											
+
+											{config.hasSavedApiKey ? (
+												<div className="flex flex-wrap items-center gap-2 rounded border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">
+													<span>
+														已保存/导入密钥可用，前端不会显示或提交占位符。
+													</span>
+													<Button
+														type="button"
+														variant={
+															config.llmApiKeySource === "imported" ||
+															config.llmApiKeySource === "saved"
+																? "default"
+																: "outline"
+														}
+														className="h-7 px-2 text-xs"
+														onClick={() => {
+															updateConfig("llmApiKey", "");
+															updateConfig(
+																"llmApiKeySource",
+																config.llmApiKeySource === "imported"
+																	? "imported"
+																	: "saved",
+															);
+														}}
+													>
+														使用已保存/导入密钥
+													</Button>
+													<Button
+														type="button"
+														variant={
+															config.llmApiKeySource === "entered"
+																? "default"
+																: "outline"
+														}
+														className="h-7 px-2 text-xs"
+														onClick={() =>
+															updateConfig("llmApiKeySource", "entered")
+														}
+													>
+														重新输入密钥
+													</Button>
+												</div>
+											) : null}
 											<div className="flex gap-2">
 												<Input
 													type={showApiKey ? "text" : "password"}
 													value={config.llmApiKey}
-													onChange={(event) =>
-														updateConfig("llmApiKey", event.target.value)
-													}
+													onChange={(event) => {
+														updateConfig("llmApiKey", event.target.value);
+														updateConfig(
+															"llmApiKeySource",
+															event.target.value.trim()
+																? "entered"
+																: config.hasSavedApiKey
+																	? "saved"
+																	: "none",
+														);
+													}}
 													placeholder={
 														shouldRequireApiKey(config.llmProvider)
-															? "输入你的 API Key"
+															? config.hasSavedApiKey
+																? "留空并选择已保存/导入密钥，或重新输入 API Key"
+																: "输入你的 API Key"
 															: "该提供商无需 API Key"
 													}
 													className={cn(
@@ -1658,7 +1801,6 @@ export function SystemConfig({
 													)}
 													disabled={!shouldRequireApiKey(config.llmProvider)}
 												/>
-												
 											</div>
 										</div>
 
@@ -1667,30 +1809,30 @@ export function SystemConfig({
 												模型
 												<span className="text-rose-400 ml-1">*</span>
 												<Button
-																type="button"
-																variant="outline"
-																className="h-4 cyber-btn-ghost text-xs"
-																onClick={handleFetchModels}
-																disabled={
-																	fetchingModels ||
-																	!config.llmProvider ||
-																	!config.llmBaseUrl.trim() ||
-																	(shouldRequireApiKey(config.llmProvider) &&
-																		!config.llmApiKey.trim())
-																}
-															>
-																{fetchingModels ? (
-																	<>
-																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
-																		拉取中...
-																	</>
-																) : (
-																	<>
-																		<Zap className="w-3 h-3 mr-1" />
-																		一键获取模型
-																	</>
-																)}
-															</Button>
+													type="button"
+													variant="outline"
+													className="h-4 cyber-btn-ghost text-xs"
+													onClick={handleFetchModels}
+													disabled={
+														fetchingModels ||
+														!config.llmProvider ||
+														!config.llmBaseUrl.trim() ||
+														(shouldRequireApiKey(config.llmProvider) &&
+															!config.llmApiKey.trim())
+													}
+												>
+													{fetchingModels ? (
+														<>
+															<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+															拉取中...
+														</>
+													) : (
+														<>
+															<Zap className="w-3 h-3 mr-1" />
+															一键获取模型
+														</>
+													)}
+												</Button>
 											</Label>
 											{(() => {
 												const providerId = config.llmProvider;
@@ -1705,7 +1847,9 @@ export function SystemConfig({
 												const selectableModels = models
 													.filter((model) => {
 														if (!normalizedQuery) return true;
-														return model.toLowerCase().includes(normalizedQuery);
+														return model
+															.toLowerCase()
+															.includes(normalizedQuery);
 													})
 													.sort((a, b) => {
 														const aStarts = normalizedQuery
@@ -1730,7 +1874,10 @@ export function SystemConfig({
 																	<Input
 																		value={currentModel}
 																		onChange={(event) =>
-																			updateConfig("llmModel", event.target.value)
+																			updateConfig(
+																				"llmModel",
+																				event.target.value,
+																			)
 																		}
 																		onFocus={() => setLlmModelPopoverOpen(true)}
 																		placeholder={`请输入模型名称，例如：${defaultModel}`}
@@ -1739,8 +1886,8 @@ export function SystemConfig({
 																			compactLayout ? "h-10" : "h-12",
 																		)}
 																	/>
-																	{llmModelPopoverOpen ? (
-																		llmDropdownPanelStyle
+																	{llmModelPopoverOpen
+																		? llmDropdownPanelStyle
 																			? createPortal(
 																					<div
 																						ref={llmModelDropdownPanelRef}
@@ -1753,13 +1900,17 @@ export function SystemConfig({
 																								className="h-10 border-0 border-b border-border/60 rounded-none"
 																							/>
 																							<CommandList className="flex-1 overflow-y-auto custom-scrollbar">
-																								<CommandEmpty>未找到匹配模型</CommandEmpty>
+																								<CommandEmpty>
+																									未找到匹配模型
+																								</CommandEmpty>
 																								<CommandGroup>
 																									{defaultModel ? (
 																										<CommandItem
 																											value={`默认模型 ${defaultModel}`}
 																											onSelect={() =>
-																												handleLlmModelSelect(defaultModel)
+																												handleLlmModelSelect(
+																													defaultModel,
+																												)
 																											}
 																											className="font-mono"
 																										>
@@ -1775,28 +1926,33 @@ export function SystemConfig({
 																											默认（{defaultModel}）
 																										</CommandItem>
 																									) : null}
-																									{selectableModels.map((model) => (
-																										<CommandItem
-																											key={model}
-																											value={model}
-																											onSelect={() =>
-																												handleLlmModelSelect(model)
-																											}
-																											className="font-mono"
-																										>
-																											<Check
-																												className={cn(
-																													"mr-2 h-4 w-4",
-																													normalizedCurrentModel === model
-																														? "opacity-100"
-																														: "opacity-0",
-																												)}
-																											/>
-																											<span className="truncate">
-																												{model}
-																											</span>
-																										</CommandItem>
-																									))}
+																									{selectableModels.map(
+																										(model) => (
+																											<CommandItem
+																												key={model}
+																												value={model}
+																												onSelect={() =>
+																													handleLlmModelSelect(
+																														model,
+																													)
+																												}
+																												className="font-mono"
+																											>
+																												<Check
+																													className={cn(
+																														"mr-2 h-4 w-4",
+																														normalizedCurrentModel ===
+																															model
+																															? "opacity-100"
+																															: "opacity-0",
+																													)}
+																												/>
+																												<span className="truncate">
+																													{model}
+																												</span>
+																											</CommandItem>
+																										),
+																									)}
 																								</CommandGroup>
 																							</CommandList>
 																						</Command>
@@ -1804,7 +1960,7 @@ export function SystemConfig({
 																					document.body,
 																				)
 																			: null
-																	) : null}
+																		: null}
 																</div>
 																<Button
 																	variant="outline"
@@ -1824,7 +1980,6 @@ export function SystemConfig({
 																</Button>
 															</div>
 														</div>
-														
 													</div>
 												);
 											})()}
@@ -1979,7 +2134,6 @@ export function SystemConfig({
 						</div>
 					</TabsContent>
 				)}
-
 			</Tabs>
 
 			{hasChanges && !advancedOpen && showFloatingSaveButton && (

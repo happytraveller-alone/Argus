@@ -88,7 +88,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "changethis_in_production_to_a_long_random_string".to_string()),
             algorithm: env::var("ALGORITHM").unwrap_or_else(|_| "HS256".to_string()),
             access_token_expire_minutes: parse_i64_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24 * 8),
-            llm_provider: env::var("LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string()),
+            llm_provider: env::var("LLM_PROVIDER")
+                .unwrap_or_else(|_| "openai_compatible".to_string()),
             llm_api_key: env::var("LLM_API_KEY").unwrap_or_default(),
             llm_model: env::var("LLM_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
             llm_base_url: env::var("LLM_BASE_URL")
@@ -157,7 +158,7 @@ impl AppConfig {
             secret_key: "changethis_in_production_to_a_long_random_string".to_string(),
             algorithm: "HS256".to_string(),
             access_token_expire_minutes: 60 * 24 * 8,
-            llm_provider: "openai".to_string(),
+            llm_provider: "openai_compatible".to_string(),
             llm_api_key: String::new(),
             llm_model: "gpt-5".to_string(),
             llm_base_url: "https://api.openai.com/v1".to_string(),

@@ -18,7 +18,9 @@ export interface LlmQuickConfigSnapshot {
 	provider: string;
 	model: string;
 	baseUrl: string;
-	apiKey: string;
+	apiKey?: string;
+	hasSavedApiKey?: boolean;
+	secretSource?: "saved" | "imported" | "entered" | "none";
 }
 
 export interface AgentPreflightResult {

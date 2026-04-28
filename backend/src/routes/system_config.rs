@@ -1,7 +1,8 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, env, path::Path};
 
 use axum::{
     extract::State,
+    http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
@@ -34,6 +35,25 @@ pub struct SystemConfigPayload {
     pub llm_test_metadata: Value,
 }
 
+const IMPORT_TOKEN_ENV: &str = "ARGUS_RESET_IMPORT_TOKEN";
+const IMPORT_TOKEN_HEADER: &str = "x-argus-reset-import-token";
+const REDACTED_SECRET_PLACEHOLDER: &str = "***configured***";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEnvResponse {
+    pub success: bool,
+    pub message: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub base_url: Option<String>,
+    pub has_saved_api_key: bool,
+    pub secret_source: String,
+    pub reason_code: Option<String>,
+    pub stage: Option<String>,
+    pub metadata: Option<Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmQuickConfigSnapshot {
@@ -41,6 +61,8 @@ pub struct LlmQuickConfigSnapshot {
     pub model: String,
     pub base_url: String,
     pub api_key: String,
+    pub has_saved_api_key: bool,
+    pub secret_source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +87,7 @@ pub struct LlmTestRequest {
     pub model: Option<String>,
     pub base_url: Option<String>,
     pub custom_headers: Option<String>,
+    pub secret_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,12 +139,13 @@ pub fn router() -> Router<AppState> {
         )
         .route("/llm-providers", get(get_llm_providers))
         .route("/test-llm", post(test_llm))
+        .route("/import-env", post(import_env))
         .route("/fetch-llm-models", post(fetch_llm_models))
         .route("/agent-preflight", post(agent_preflight))
 }
 
 pub async fn get_defaults(State(state): State<AppState>) -> Json<SystemConfigPayload> {
-    Json(default_config(state.config.as_ref()))
+    Json(public_payload(default_config(state.config.as_ref())))
 }
 
 pub async fn get_current(
@@ -130,7 +154,10 @@ pub async fn get_current(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    Ok(Json(merge_with_defaults(state.config.as_ref(), stored)))
+    Ok(Json(public_payload(merge_with_defaults(
+        state.config.as_ref(),
+        stored,
+    ))))
 }
 
 pub async fn put_current(
@@ -141,9 +168,14 @@ pub async fn put_current(
     let existing = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let next_llm =
-        sanitize_llm_config_for_save(&merge_json(&defaults.llm_config, &payload.llm_config))
-            .map_err(llm_gate_bad_request)?;
+    let merged_input_llm = merge_json(&defaults.llm_config, &payload.llm_config);
+    let next_llm_input = resolve_llm_secret_for_save(
+        &merged_input_llm,
+        existing.as_ref().map(|stored| &stored.llm_config_json),
+        "saved",
+    )
+    .map_err(llm_gate_bad_request)?;
+    let next_llm = sanitize_llm_config_for_save(&next_llm_input).map_err(llm_gate_bad_request)?;
     let next_other = merge_json(&defaults.other_config, &payload.other_config);
     let next_runtime =
         build_runtime_config(&next_llm, &next_other).map_err(llm_gate_bad_request)?;
@@ -160,7 +192,7 @@ pub async fn put_current(
 
     let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
     sync_python_user_config_mirror(&state, Some(&merged)).await?;
-    Ok(Json(merged))
+    Ok(Json(public_payload(merged)))
 }
 
 pub async fn delete_current(
@@ -170,7 +202,7 @@ pub async fn delete_current(
         .await
         .map_err(internal_error)?;
     sync_python_user_config_mirror(&state, None).await?;
-    Ok(Json(default_config(state.config.as_ref())))
+    Ok(Json(public_payload(default_config(state.config.as_ref()))))
 }
 
 async fn get_llm_providers() -> Json<LlmProviderCatalogResponse> {
@@ -184,9 +216,13 @@ pub async fn test_llm(
     Json(request): Json<LlmTestRequest>,
 ) -> Result<Json<LlmTestResponse>, ApiError> {
     let provider = normalize_provider_for_route(&request.provider);
-    let model = request.model.unwrap_or_default().trim().to_string();
-    let base_url = request.base_url.unwrap_or_default().trim().to_string();
-    let api_key = request.api_key.unwrap_or_default().trim().to_string();
+    let model = request.model.clone().unwrap_or_default().trim().to_string();
+    let base_url = request
+        .base_url
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let request_custom_headers_value = request
         .custom_headers
         .as_ref()
@@ -197,6 +233,7 @@ pub async fn test_llm(
         .await
         .map_err(internal_error)?
         .ok_or_else(|| ApiError::BadRequest("请先保存 LLM 配置，再执行连接测试。".to_string()))?;
+    let api_key = resolve_test_api_key(&request, &stored.llm_config_json)?;
     let stored_custom_headers =
         parse_custom_headers(stored.llm_config_json.get("llmCustomHeaders"))
             .map_err(ApiError::BadRequest)?;
@@ -272,6 +309,62 @@ pub async fn test_llm(
                 response: None,
                 metadata: None,
             }))
+        }
+    }
+}
+
+pub async fn import_env(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ImportEnvResponse>, ApiError> {
+    verify_import_token(&headers)?;
+    let defaults = default_config(state.config.as_ref());
+    let imported_llm = import_llm_config_from_env(&defaults.llm_config)?;
+    let imported_other = merge_json(&defaults.other_config, &json!({}));
+    let runtime =
+        build_runtime_config(&imported_llm, &imported_other).map_err(llm_gate_bad_request)?;
+
+    match test_llm_generation(&state.http_client, &runtime).await {
+        Ok(outcome) => {
+            let metadata = outcome.metadata();
+            let stored = system_config::save_current(
+                &state,
+                mark_imported_system_config(&imported_llm),
+                imported_other,
+                metadata.clone(),
+            )
+            .await
+            .map_err(internal_error)?;
+            let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
+            sync_python_user_config_mirror(&state, Some(&merged)).await?;
+            Ok(Json(import_response(
+                true,
+                "已从 .argus-intelligent-audit.env 导入并完成 LLM 测试。",
+                &imported_llm,
+                Some(metadata),
+                None,
+                None,
+            )))
+        }
+        Err(error) => {
+            let stored = system_config::save_current(
+                &state,
+                mark_imported_system_config(&imported_llm),
+                imported_other,
+                json!({}),
+            )
+            .await
+            .map_err(internal_error)?;
+            let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
+            sync_python_user_config_mirror(&state, Some(&merged)).await?;
+            Ok(Json(import_response(
+                false,
+                &error.message,
+                &imported_llm,
+                None,
+                Some(error.reason_code.to_string()),
+                Some("llm_test".to_string()),
+            )))
         }
     }
 }
@@ -555,6 +648,299 @@ fn merge_json(defaults: &Value, overrides: &Value) -> Value {
     }
 }
 
+fn public_payload(mut payload: SystemConfigPayload) -> SystemConfigPayload {
+    payload.llm_config = redact_llm_config_for_response(&payload.llm_config);
+    payload
+}
+
+fn redact_llm_config_for_response(llm_config: &Value) -> Value {
+    let mut redacted = match llm_config {
+        Value::Object(map) => Value::Object(map.clone()),
+        _ => llm_config.clone(),
+    };
+    let has_saved_api_key = read_string(llm_config, "llmApiKey")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    if let Some(map) = redacted.as_object_mut() {
+        for key in [
+            "llmApiKey",
+            "openaiApiKey",
+            "claudeApiKey",
+            "geminiApiKey",
+            "qwenApiKey",
+            "deepseekApiKey",
+            "zhipuApiKey",
+            "moonshotApiKey",
+            "baiduApiKey",
+            "minimaxApiKey",
+            "doubaoApiKey",
+        ] {
+            if map.contains_key(key) {
+                map.insert(key.to_string(), Value::String(String::new()));
+            }
+        }
+        map.insert("hasSavedApiKey".to_string(), Value::Bool(has_saved_api_key));
+        let secret_source = read_string(llm_config, "secretSource")
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| {
+                if has_saved_api_key {
+                    "saved".to_string()
+                } else {
+                    "none".to_string()
+                }
+            });
+        map.insert("secretSource".to_string(), Value::String(secret_source));
+    }
+    redacted
+}
+
+fn resolve_llm_secret_for_save(
+    llm_config: &Value,
+    existing_llm_config: Option<&Value>,
+    default_secret_source: &str,
+) -> Result<Value, LlmGateError> {
+    let mut resolved = match llm_config {
+        Value::Object(map) => Value::Object(map.clone()),
+        _ => llm_config.clone(),
+    };
+    let api_key = read_string(&resolved, "llmApiKey").unwrap_or_default();
+    if api_key.trim() == REDACTED_SECRET_PLACEHOLDER {
+        return Err(LlmGateError::new(
+            "redacted_secret_placeholder",
+            "请明确选择使用已保存密钥或重新输入密钥，不能提交脱敏占位符。",
+        ));
+    }
+    let requested_source = read_string(&resolved, "secretSource").unwrap_or_default();
+    let wants_saved_secret = matches!(
+        requested_source.as_str(),
+        "saved" | "imported" | "use_saved" | "use_imported"
+    );
+    if api_key.trim().is_empty() && wants_saved_secret {
+        let existing_key = existing_llm_config
+            .and_then(|value| read_string(value, "llmApiKey"))
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                LlmGateError::new(
+                    "missing_saved_secret",
+                    "当前没有可复用的已保存 LLM 密钥，请重新输入密钥。",
+                )
+            })?;
+        if let Some(map) = resolved.as_object_mut() {
+            map.insert("llmApiKey".to_string(), Value::String(existing_key));
+            map.insert(
+                "secretSource".to_string(),
+                Value::String(
+                    if requested_source == "imported" || requested_source == "use_imported" {
+                        "imported".to_string()
+                    } else {
+                        "saved".to_string()
+                    },
+                ),
+            );
+        }
+    } else if !api_key.trim().is_empty() {
+        if let Some(map) = resolved.as_object_mut() {
+            map.insert(
+                "secretSource".to_string(),
+                Value::String(default_secret_source.to_string()),
+            );
+            map.insert(
+                "credentialSource".to_string(),
+                Value::String("system_config".to_string()),
+            );
+            map.insert(
+                "llmApiKeyRef".to_string(),
+                Value::String("system_config:llmApiKey".to_string()),
+            );
+        }
+    }
+    Ok(resolved)
+}
+
+fn resolve_test_api_key(
+    request: &LlmTestRequest,
+    stored_llm_config: &Value,
+) -> Result<String, ApiError> {
+    let api_key = request
+        .api_key
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if api_key == REDACTED_SECRET_PLACEHOLDER {
+        return Err(ApiError::BadRequest(
+            "不能使用脱敏占位符测试 LLM，请选择使用已保存密钥或重新输入密钥。".to_string(),
+        ));
+    }
+    let secret_source = request.secret_source.clone().unwrap_or_default();
+    if api_key.is_empty()
+        && matches!(
+            secret_source.as_str(),
+            "saved" | "imported" | "use_saved" | "use_imported"
+        )
+    {
+        return read_string(stored_llm_config, "llmApiKey")
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| ApiError::BadRequest("当前没有可复用的已保存 LLM 密钥。".to_string()));
+    }
+    Ok(api_key)
+}
+
+fn verify_import_token(headers: &HeaderMap) -> Result<(), ApiError> {
+    let expected = env::var(IMPORT_TOKEN_ENV).unwrap_or_default();
+    if expected.trim().is_empty() {
+        return Err(ApiError::BadRequest(
+            "重置导入令牌未配置，拒绝导入 LLM 环境配置。".to_string(),
+        ));
+    }
+    let supplied = headers
+        .get(IMPORT_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if supplied.trim().is_empty() || supplied != expected {
+        return Err(ApiError::BadRequest(
+            "重置导入令牌无效，拒绝导入 LLM 环境配置。".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn import_llm_config_from_env(default_llm_config: &Value) -> Result<Value, ApiError> {
+    let provider = env_required("LLM_PROVIDER")?;
+    let provider = normalize_provider_id(&provider);
+    if !is_supported_protocol_provider(&provider) {
+        return Err(ApiError::BadRequest(
+            "LLM_PROVIDER 必须是 openai_compatible 或 anthropic_compatible。".to_string(),
+        ));
+    }
+    let api_key = env_required("LLM_API_KEY")?;
+    if api_key == REDACTED_SECRET_PLACEHOLDER {
+        return Err(ApiError::BadRequest(
+            "LLM_API_KEY 不能是脱敏占位符。".to_string(),
+        ));
+    }
+    let model = env_required("LLM_MODEL")?;
+    let base_url = env_required("LLM_BASE_URL")?;
+    let mut overrides = json!({
+        "llmConfigVersion": crate::llm::LLM_CONFIG_VERSION,
+        "llmProvider": provider,
+        "llmApiKey": api_key,
+        "llmModel": model,
+        "llmBaseUrl": base_url,
+        "secretSource": "imported",
+        "credentialSource": "system_config",
+        "llmApiKeyRef": "system_config:llmApiKey",
+    });
+    if let Some(map) = overrides.as_object_mut() {
+        if let Some(value) = env_optional("LLM_TIMEOUT")
+            .and_then(|value| parse_i64_env_value("LLM_TIMEOUT", &value).ok())
+        {
+            map.insert(
+                "llmTimeout".to_string(),
+                Value::Number((value * 1000).into()),
+            );
+        }
+        if let Some(value) =
+            env_optional("LLM_TEMPERATURE").and_then(|value| parse_f64_json_value(&value))
+        {
+            map.insert("llmTemperature".to_string(), value);
+        }
+        if let Some(value) = env_optional("LLM_MAX_TOKENS")
+            .and_then(|value| parse_i64_env_value("LLM_MAX_TOKENS", &value).ok())
+        {
+            map.insert("llmMaxTokens".to_string(), Value::Number(value.into()));
+        }
+        if let Some(value) = env_optional("LLM_FIRST_TOKEN_TIMEOUT")
+            .and_then(|value| parse_i64_env_value("LLM_FIRST_TOKEN_TIMEOUT", &value).ok())
+        {
+            map.insert(
+                "llmFirstTokenTimeout".to_string(),
+                Value::Number(value.into()),
+            );
+        }
+        if let Some(value) = env_optional("LLM_STREAM_TIMEOUT")
+            .and_then(|value| parse_i64_env_value("LLM_STREAM_TIMEOUT", &value).ok())
+        {
+            map.insert("llmStreamTimeout".to_string(), Value::Number(value.into()));
+        }
+        if let Some(value) = env_optional("AGENT_TIMEOUT")
+            .or_else(|| env_optional("AGENT_TIMEOUT_SECONDS"))
+            .and_then(|value| parse_i64_env_value("AGENT_TIMEOUT", &value).ok())
+        {
+            map.insert("agentTimeout".to_string(), Value::Number(value.into()));
+        }
+        if let Some(value) = env_optional("LLM_CUSTOM_HEADERS") {
+            map.insert("llmCustomHeaders".to_string(), Value::String(value));
+        }
+    }
+    let merged = merge_json(default_llm_config, &overrides);
+    sanitize_llm_config_for_save(&merged).map_err(llm_gate_bad_request)
+}
+
+fn env_required(key: &str) -> Result<String, ApiError> {
+    env_optional(key).ok_or_else(|| ApiError::BadRequest(format!("{key} 未配置。")))
+}
+
+fn env_optional(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_i64_env_value(key: &str, value: &str) -> Result<i64, ApiError> {
+    value
+        .parse::<i64>()
+        .map_err(|_| ApiError::BadRequest(format!("{key} 必须是整数。")))
+}
+
+fn parse_f64_json_value(value: &str) -> Option<Value> {
+    serde_json::Number::from_f64(value.parse::<f64>().ok()?).map(Value::Number)
+}
+
+fn mark_imported_system_config(llm_config: &Value) -> Value {
+    let mut marked = llm_config.clone();
+    if let Some(map) = marked.as_object_mut() {
+        map.insert(
+            "secretSource".to_string(),
+            Value::String("imported".to_string()),
+        );
+        map.insert(
+            "credentialSource".to_string(),
+            Value::String("system_config".to_string()),
+        );
+        map.insert(
+            "llmApiKeyRef".to_string(),
+            Value::String("system_config:llmApiKey".to_string()),
+        );
+    }
+    marked
+}
+
+fn import_response(
+    success: bool,
+    message: &str,
+    llm_config: &Value,
+    metadata: Option<Value>,
+    reason_code: Option<String>,
+    stage: Option<String>,
+) -> ImportEnvResponse {
+    ImportEnvResponse {
+        success,
+        message: message.to_string(),
+        provider: read_string(llm_config, "llmProvider"),
+        model: read_string(llm_config, "llmModel"),
+        base_url: read_string(llm_config, "llmBaseUrl"),
+        has_saved_api_key: read_string(llm_config, "llmApiKey")
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        secret_source: "imported".to_string(),
+        reason_code,
+        stage,
+        metadata,
+    }
+}
+
 fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
     let provider = normalize_provider_for_route(
         read_string(llm_config, "llmProvider")
@@ -564,17 +950,29 @@ fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
     let base_url = read_string(llm_config, "llmBaseUrl")
         .or_else(|| read_string(llm_config, "ollamaBaseUrl"))
         .unwrap_or_default();
-    let api_key = read_string(llm_config, "llmApiKey")
+    let has_saved_api_key = read_string(llm_config, "llmApiKey")
         .or_else(|| {
             provider_api_key_field(&provider).and_then(|field| read_string(llm_config, field))
         })
-        .unwrap_or_default();
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let secret_source = read_string(llm_config, "secretSource")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| {
+            if has_saved_api_key {
+                "saved".to_string()
+            } else {
+                "none".to_string()
+            }
+        });
 
     LlmQuickConfigSnapshot {
         provider,
         model: read_string(llm_config, "llmModel").unwrap_or_default(),
         base_url,
-        api_key: redact_secret_for_response(&api_key),
+        api_key: String::new(),
+        has_saved_api_key,
+        secret_source,
     }
 }
 
@@ -586,18 +984,10 @@ fn collect_missing_fields(snapshot: &LlmQuickConfigSnapshot) -> Vec<String> {
     if snapshot.base_url.trim().is_empty() {
         missing.push("llmBaseUrl".to_string());
     }
-    if snapshot.api_key.trim().is_empty() {
+    if snapshot.api_key.trim().is_empty() && !snapshot.has_saved_api_key {
         missing.push("llmApiKey".to_string());
     }
     missing
-}
-
-fn redact_secret_for_response(value: &str) -> String {
-    if value.trim().is_empty() {
-        String::new()
-    } else {
-        "***configured***".to_string()
-    }
 }
 
 fn agent_preflight_metadata(stage: &str, reason_code: &str, details: Option<Value>) -> Value {

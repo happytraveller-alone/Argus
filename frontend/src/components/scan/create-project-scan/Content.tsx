@@ -38,12 +38,15 @@ import {
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
 import { normalizeCreateProjectScanProvider } from "./utils";
+import { isRedactedApiKeyPlaceholder, normalizeSecretSource, type LlmSecretSource } from "./llmGate";
 
 type LlmQuickConfig = {
     provider: string;
     model: string;
     baseUrl: string;
     apiKey: string;
+    apiKeySource?: LlmSecretSource;
+    hasSavedApiKey?: boolean;
 };
 
 export default function CreateProjectScanDialogContent({
@@ -180,6 +183,14 @@ export default function CreateProjectScanDialogContent({
 }) {
     const { t } = useI18n();
     const shouldShowAgentPrecheckHint = mode === "agent";
+    const selectedSecretSource = normalizeSecretSource(
+        llmQuickConfig.apiKeySource,
+        llmQuickConfig.hasSavedApiKey,
+    );
+    const usingSavedSecret =
+        Boolean(llmQuickConfig.hasSavedApiKey) &&
+        (selectedSecretSource === "saved" || selectedSecretSource === "imported") &&
+        !String(llmQuickConfig.apiKey || "").trim();
     const staticEngineItems: Array<{
         key: StaticTool;
         title: string;
@@ -744,19 +755,81 @@ export default function CreateProjectScanDialogContent({
                                                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                                                     Token
                                                 </p>
+                                                {llmQuickConfig.hasSavedApiKey ? (
+                                                    <div className="flex flex-wrap items-center gap-2 rounded border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100">
+                                                        <span>
+                                                            后端已有保存/导入密钥；占位符只用于显示，绝不作为密钥提交。
+                                                        </span>
+                                                        <Button
+                                                            type="button"
+                                                            variant={usingSavedSecret ? "default" : "outline"}
+                                                            className="h-7 px-2 text-xs"
+                                                            onClick={() => {
+                                                                handleQuickFixConfigChange("apiKey", "");
+                                                                handleQuickFixConfigChange(
+                                                                    "apiKeySource",
+                                                                    selectedSecretSource === "imported"
+                                                                        ? "imported"
+                                                                        : "saved",
+                                                                );
+                                                            }}
+                                                            disabled={
+                                                                creating ||
+                                                                quickFixSaving ||
+                                                                quickFixTesting
+                                                            }
+                                                        >
+                                                            使用已保存/导入密钥
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant={selectedSecretSource === "entered" ? "default" : "outline"}
+                                                            className="h-7 px-2 text-xs"
+                                                            onClick={() =>
+                                                                handleQuickFixConfigChange(
+                                                                    "apiKeySource",
+                                                                    "entered",
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                creating ||
+                                                                quickFixSaving ||
+                                                                quickFixTesting
+                                                            }
+                                                        >
+                                                            重新输入密钥
+                                                        </Button>
+                                                    </div>
+                                                ) : null}
                                                 <Input
                                                     type="password"
                                                     value={
-                                                        llmQuickConfig.apiKey
+                                                        isRedactedApiKeyPlaceholder(
+                                                            llmQuickConfig.apiKey,
+                                                        )
+                                                            ? ""
+                                                            : llmQuickConfig.apiKey
                                                     }
-                                                    onChange={(event) =>
+                                                    onChange={(event) => {
                                                         handleQuickFixConfigChange(
                                                             "apiKey",
                                                             event.target.value,
-                                                        )
-                                                    }
+                                                        );
+                                                        handleQuickFixConfigChange(
+                                                            "apiKeySource",
+                                                            event.target.value.trim()
+                                                                ? "entered"
+                                                                : llmQuickConfig.hasSavedApiKey
+                                                                    ? selectedSecretSource === "imported"
+                                                                        ? "imported"
+                                                                        : "saved"
+                                                                    : "none",
+                                                        );
+                                                    }}
                                                     placeholder={
-                                                        "请输入 API Key"
+                                                        llmQuickConfig.hasSavedApiKey
+                                                            ? "留空并使用已保存/导入密钥，或重新输入 API Key"
+                                                            : "请输入 API Key"
                                                     }
                                                     className={`h-9 cyber-input ${missingFieldClass("llmApiKey")}`}
                                                     disabled={

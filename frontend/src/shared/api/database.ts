@@ -12,6 +12,8 @@ import type {
 
 type ConfigObject = Record<string, unknown>;
 
+export type LlmSecretSourcePayload = "saved" | "imported" | "entered" | "none";
+
 interface DefaultConfigPayload {
   llmConfig: ConfigObject;
   otherConfig: ConfigObject;
@@ -20,13 +22,17 @@ interface DefaultConfigPayload {
 interface UserConfigPayload {
   llmConfig: ConfigObject;
   otherConfig: ConfigObject;
+  hasSavedApiKey?: boolean;
+  secretSource?: LlmSecretSourcePayload;
 }
 
 interface LlmQuickConfigSnapshotPayload {
   provider: string;
   model: string;
   baseUrl: string;
-  apiKey: string;
+  apiKey?: string;
+  hasSavedApiKey?: boolean;
+  secretSource?: LlmSecretSourcePayload;
 }
 
 interface AgentTaskPreflightPayload {
@@ -852,10 +858,12 @@ export const api = {
 
   async testLLMConnection(params: {
     provider: string;
-    apiKey: string;
+    apiKey?: string;
     model?: string;
     baseUrl?: string;
     customHeaders?: string;
+    secretSource?: LlmSecretSourcePayload;
+    useSavedApiKey?: boolean;
   }): Promise<{
     success: boolean;
     message: string;

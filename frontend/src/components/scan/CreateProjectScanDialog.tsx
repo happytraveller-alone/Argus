@@ -17,9 +17,7 @@ import {
 } from "@/shared/api/opengrep";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
-import {
-	INTELLIGENT_TASK_NAME_MARKER,
-} from "@/features/tasks/services/taskActivities";
+import { INTELLIGENT_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 import {
 	appendStaticScanBatchMarker,
@@ -36,10 +34,13 @@ import {
 	getLlmQuickGateStatus,
 	hasVerifiedLlmTestMetadata,
 	invalidateSuccessfulManualTest,
+	isRedactedApiKeyPlaceholder,
+	normalizeSecretSource,
 	paginateProjectCards,
 	resolveProjectPageAfterSearchChange,
 	resolveQuickConfigAfterProviderChange,
 	type LlmQuickConfig,
+	usesSavedOrImportedSecret,
 } from "./create-project-scan/llmGate";
 import {
 	CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
@@ -51,8 +52,6 @@ import {
 } from "./create-project-scan/utils";
 
 export type ScanCreateMode = "static" | "agent";
-
-const REDACTED_API_KEY = "***configured***";
 
 interface CreateProjectScanDialogProps {
 	open: boolean;
@@ -102,7 +101,9 @@ export default function CreateProjectScanDialog({
 	const [creating, setCreating] = useState(false);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [projectPage, setProjectPage] = useState(1);
-	const [sourceMode, setSourceMode] = useState<"existing" | "upload">("existing");
+	const [sourceMode, setSourceMode] = useState<"existing" | "upload">(
+		"existing",
+	);
 	const [selectedProjectId, setSelectedProjectId] = useState("");
 	const [newProjectName, setNewProjectName] = useState("");
 	const [newProjectFile, setNewProjectFile] = useState<File | null>(null);
@@ -113,24 +114,28 @@ export default function CreateProjectScanDialog({
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
 
 	const [showLlmQuickFixPanel, setShowLlmQuickFixPanel] = useState(false);
-	const [llmProviderOptions, setLlmProviderOptions] = useState<LLMProviderItem[]>(
-		() =>
-			buildLlmProviderOptions({
-				backendProviders: [],
-				currentProviderId: "openai_compatible",
-			}),
+	const [llmProviderOptions, setLlmProviderOptions] = useState<
+		LLMProviderItem[]
+	>(() =>
+		buildLlmProviderOptions({
+			backendProviders: [],
+			currentProviderId: "openai_compatible",
+		}),
 	);
 	const [llmQuickConfig, setLlmQuickConfig] = useState<LlmQuickConfig>({
 		provider: "openai_compatible",
 		model: "",
 		baseUrl: "",
 		apiKey: "",
+		apiKeySource: "none",
+		hasSavedApiKey: false,
 	});
 	const [savedLlmQuickConfig, setSavedLlmQuickConfig] =
 		useState<LlmQuickConfig | null>(null);
 	const [llmQuickInitialized, setLlmQuickInitialized] = useState(false);
 	const [quickFixBaseUrlTouched, setQuickFixBaseUrlTouched] = useState(false);
-	const [quickFixManualTestPassed, setQuickFixManualTestPassed] = useState(false);
+	const [quickFixManualTestPassed, setQuickFixManualTestPassed] =
+		useState(false);
 	const [quickFixTesting, setQuickFixTesting] = useState(false);
 	const [quickFixSaving, setQuickFixSaving] = useState(false);
 	const [quickFixPanelOpening, setQuickFixPanelOpening] = useState(false);
@@ -143,7 +148,8 @@ export default function CreateProjectScanDialog({
 	const previousSearchTermRef = useRef("");
 
 	const activeProjects = useMemo(
-		() => projects.filter((project) => project.is_active && isZipProject(project)),
+		() =>
+			projects.filter((project) => project.is_active && isZipProject(project)),
 		[projects],
 	);
 
@@ -190,7 +196,12 @@ export default function CreateProjectScanDialog({
 				savedConfig: savedLlmQuickConfig,
 				hasSuccessfulManualTest: quickFixManualTestPassed,
 			}),
-		[llmProviderOptions, llmQuickConfig, savedLlmQuickConfig, quickFixManualTestPassed],
+		[
+			llmProviderOptions,
+			llmQuickConfig,
+			savedLlmQuickConfig,
+			quickFixManualTestPassed,
+		],
 	);
 
 	const loadLlmProviderOptions = async (currentProviderId: string) => {
@@ -203,35 +214,41 @@ export default function CreateProjectScanDialog({
 		});
 	};
 
+	const buildQuickConfigFromSnapshot = (snapshot: {
+		provider?: string;
+		model?: string;
+		baseUrl?: string;
+		apiKey?: string;
+		hasSavedApiKey?: boolean;
+		secretSource?: string;
+	}): LlmQuickConfig => {
+		const rawApiKey = String(snapshot.apiKey || "").trim();
+		const hasSavedApiKey = Boolean(snapshot.hasSavedApiKey);
+		const apiKeySource = normalizeSecretSource(
+			snapshot.secretSource,
+			hasSavedApiKey,
+		);
+		return {
+			provider: normalizeCreateProjectScanProvider(snapshot.provider || ""),
+			model: String(snapshot.model || ""),
+			baseUrl: String(snapshot.baseUrl || ""),
+			apiKey: isRedactedApiKeyPlaceholder(rawApiKey) ? "" : rawApiKey,
+			apiKeySource,
+			hasSavedApiKey,
+		};
+	};
+
 	const syncGateWithPreflightResult = async (
 		preflightResult: AgentPreflightResult,
 	) => {
 		const providerOptions = await loadLlmProviderOptions(
 			preflightResult.effectiveConfig.provider,
 		);
-		const effectiveQuickConfig: LlmQuickConfig = {
-			provider: normalizeCreateProjectScanProvider(
-				preflightResult.effectiveConfig.provider,
-			),
-			model: String(preflightResult.effectiveConfig.model || ""),
-			baseUrl: String(preflightResult.effectiveConfig.baseUrl || ""),
-			apiKey:
-				String(preflightResult.effectiveConfig.apiKey || "") === REDACTED_API_KEY
-					? REDACTED_API_KEY
-					: String(preflightResult.effectiveConfig.apiKey || ""),
-		};
+		const effectiveQuickConfig = buildQuickConfigFromSnapshot(
+			preflightResult.effectiveConfig,
+		);
 		const savedQuickConfig = preflightResult.savedConfig
-			? {
-					provider: normalizeCreateProjectScanProvider(
-						preflightResult.savedConfig.provider,
-					),
-					model: String(preflightResult.savedConfig.model || ""),
-					baseUrl: String(preflightResult.savedConfig.baseUrl || ""),
-					apiKey:
-						String(preflightResult.savedConfig.apiKey || "") === REDACTED_API_KEY
-							? REDACTED_API_KEY
-							: String(preflightResult.savedConfig.apiKey || ""),
-				}
+			? buildQuickConfigFromSnapshot(preflightResult.savedConfig)
 			: null;
 
 		setLlmProviderOptions(providerOptions);
@@ -239,7 +256,9 @@ export default function CreateProjectScanDialog({
 		setSavedLlmQuickConfig(savedQuickConfig);
 		setQuickFixBaseUrlTouched(false);
 		setQuickFixManualTestPassed(
-			Boolean(preflightResult.ok && preflightResult.llmTestMetadata?.fingerprint),
+			Boolean(
+				preflightResult.ok && preflightResult.llmTestMetadata?.fingerprint,
+			),
 		);
 		setQuickFixTestResult(null);
 		setShowLlmQuickFixPanel(!preflightResult.ok);
@@ -272,6 +291,8 @@ export default function CreateProjectScanDialog({
 			model: "",
 			baseUrl: "",
 			apiKey: "",
+			apiKeySource: "none",
+			hasSavedApiKey: false,
 		});
 		setSavedLlmQuickConfig(null);
 		setLlmQuickInitialized(false);
@@ -365,7 +386,9 @@ export default function CreateProjectScanDialog({
 				if (cancelled) return;
 				console.error("加载 LLM 任务预检失败:", error);
 				setShowLlmQuickFixPanel(true);
-				setLastPreflightMessage("加载 LLM 配置失败，请在下方重新补配并测试连接。");
+				setLastPreflightMessage(
+					"加载 LLM 配置失败，请在下方重新补配并测试连接。",
+				);
 			} finally {
 				if (cancelled) return;
 				setLlmQuickInitialized(true);
@@ -449,9 +472,7 @@ export default function CreateProjectScanDialog({
 		return { primaryTaskId, params };
 	};
 
-	const buildAgentTaskPayload = (
-		project: Project,
-	) => ({
+	const buildAgentTaskPayload = (project: Project) => ({
 		project_id: project.id,
 		name: `智能审计-${project.name}`,
 		description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
@@ -471,9 +492,8 @@ export default function CreateProjectScanDialog({
 		}
 	};
 
-	const createAgentTaskForProject = async (
-		project: Project,
-	) => createAgentTask(buildAgentTaskPayload(project));
+	const createAgentTaskForProject = async (project: Project) =>
+		createAgentTask(buildAgentTaskPayload(project));
 
 	const handleQuickFixProviderChange = (nextProvider: string) => {
 		const nextConfig = resolveQuickConfigAfterProviderChange({
@@ -494,19 +514,24 @@ export default function CreateProjectScanDialog({
 		setLastPreflightMessage("配置已修改，请先保存，再手动测试连接。");
 	};
 
-	const handleQuickFixConfigChange = (key: keyof LlmQuickConfig, value: string) => {
-		const nextConfig = { ...llmQuickConfig, [key]: value };
-		setLlmQuickConfig(nextConfig);
+	const handleQuickFixConfigChange = (
+		key: keyof LlmQuickConfig,
+		value: string,
+	) => {
 		if (key === "baseUrl") {
 			setQuickFixBaseUrlTouched(true);
 		}
-		setQuickFixManualTestPassed(
-			invalidateSuccessfulManualTest({
-				previousConfig: llmQuickConfig,
-				nextConfig,
-				hasSuccessfulManualTest: quickFixManualTestPassed,
-			}),
-		);
+		setLlmQuickConfig((previousConfig) => {
+			const nextConfig = { ...previousConfig, [key]: value };
+			setQuickFixManualTestPassed(
+				invalidateSuccessfulManualTest({
+					previousConfig,
+					nextConfig,
+					hasSuccessfulManualTest: quickFixManualTestPassed,
+				}),
+			);
+			return nextConfig;
+		});
 		setQuickFixTestResult(null);
 		setLastPreflightMessage("配置已修改，请先保存，再手动测试连接。");
 	};
@@ -524,8 +549,11 @@ export default function CreateProjectScanDialog({
 		if (llmGateStatus.missingFields.includes("llmApiKey")) {
 			return { ok: false, message: "请先填写 API Key" };
 		}
-		if (llmQuickConfig.apiKey.trim() === REDACTED_API_KEY) {
-			return { ok: false, message: "请重新填写 API Key" };
+		if (isRedactedApiKeyPlaceholder(llmQuickConfig.apiKey)) {
+			return {
+				ok: false,
+				message: "Redacted API Key 占位符不能作为真实密钥提交",
+			};
 		}
 		return { ok: true };
 	};
@@ -539,10 +567,24 @@ export default function CreateProjectScanDialog({
 			return;
 		}
 
-		const provider = normalizeCreateProjectScanProvider(llmQuickConfig.provider);
+		const provider = normalizeCreateProjectScanProvider(
+			llmQuickConfig.provider,
+		);
+		const apiKey = isRedactedApiKeyPlaceholder(llmQuickConfig.apiKey)
+			? ""
+			: llmQuickConfig.apiKey.trim();
+		const useSavedApiKey = usesSavedOrImportedSecret(llmQuickConfig) && !apiKey;
+		const secretSource = apiKey
+			? "entered"
+			: normalizeSecretSource(
+					llmQuickConfig.apiKeySource,
+					llmQuickConfig.hasSavedApiKey,
+				);
 		const payload = {
 			provider,
-			apiKey: llmQuickConfig.apiKey.trim(),
+			apiKey: apiKey || undefined,
+			secretSource,
+			useSavedApiKey,
 			model: llmQuickConfig.model.trim(),
 			baseUrl: llmQuickConfig.baseUrl.trim(),
 		};
@@ -551,13 +593,22 @@ export default function CreateProjectScanDialog({
 		setQuickFixTestResult(null);
 		try {
 			const currentUserConfig = await api.getUserConfig();
-			const currentLlmConfig =
-				(currentUserConfig?.llmConfig as Record<string, unknown>) || {};
+			const currentLlmConfig = {
+				...((currentUserConfig?.llmConfig as Record<string, unknown>) || {}),
+			};
+			delete currentLlmConfig.llmApiKey;
+			for (const keyField of Object.values(
+				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
+			)) {
+				if (keyField) delete currentLlmConfig[keyField];
+			}
 			const normalizedQuickConfig: LlmQuickConfig = {
 				provider,
 				model: payload.model,
 				baseUrl: payload.baseUrl,
-				apiKey: payload.apiKey,
+				apiKey,
+				apiKeySource: secretSource,
+				hasSavedApiKey: llmQuickConfig.hasSavedApiKey,
 			};
 			const providerKeyField =
 				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
@@ -566,10 +617,12 @@ export default function CreateProjectScanDialog({
 				llmProvider: provider,
 				llmModel: normalizedQuickConfig.model,
 				llmBaseUrl: normalizedQuickConfig.baseUrl,
-				llmApiKey: normalizedQuickConfig.apiKey,
+				secretSource,
+				useSavedApiKey,
+				...(apiKey ? { llmApiKey: apiKey } : {}),
 			};
-			if (providerKeyField) {
-				nextLlmConfig[providerKeyField] = normalizedQuickConfig.apiKey;
+			if (providerKeyField && apiKey) {
+				nextLlmConfig[providerKeyField] = apiKey;
 			}
 			await api.updateUserConfig({ llmConfig: nextLlmConfig });
 			setLlmQuickConfig(normalizedQuickConfig);
@@ -612,16 +665,42 @@ export default function CreateProjectScanDialog({
 		setQuickFixSaving(true);
 		try {
 			const currentConfig = await api.getUserConfig();
-			const currentLlmConfig =
-				(currentConfig?.llmConfig as Record<string, unknown>) || {};
-			const provider = normalizeCreateProjectScanProvider(llmQuickConfig.provider);
+			const currentLlmConfig = {
+				...((currentConfig?.llmConfig as Record<string, unknown>) || {}),
+			};
+			delete currentLlmConfig.llmApiKey;
+			for (const keyField of Object.values(
+				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
+			)) {
+				if (keyField) delete currentLlmConfig[keyField];
+			}
+			const provider = normalizeCreateProjectScanProvider(
+				llmQuickConfig.provider,
+			);
 			const normalizedQuickConfig: LlmQuickConfig = {
 				provider,
 				model: llmQuickConfig.model.trim(),
 				baseUrl: llmQuickConfig.baseUrl.trim(),
-				apiKey: llmQuickConfig.apiKey.trim(),
+				apiKey: isRedactedApiKeyPlaceholder(llmQuickConfig.apiKey)
+					? ""
+					: llmQuickConfig.apiKey.trim(),
+				apiKeySource: llmQuickConfig.apiKey.trim()
+					? "entered"
+					: normalizeSecretSource(
+							llmQuickConfig.apiKeySource,
+							llmQuickConfig.hasSavedApiKey,
+						),
+				hasSavedApiKey: llmQuickConfig.hasSavedApiKey,
 			};
 			const apiKey = normalizedQuickConfig.apiKey;
+			const useSavedApiKey =
+				usesSavedOrImportedSecret(normalizedQuickConfig) && !apiKey;
+			const secretSource = apiKey
+				? "entered"
+				: normalizeSecretSource(
+						normalizedQuickConfig.apiKeySource,
+						normalizedQuickConfig.hasSavedApiKey,
+					);
 			const providerKeyField =
 				CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
 
@@ -630,9 +709,11 @@ export default function CreateProjectScanDialog({
 				llmProvider: provider,
 				llmModel: normalizedQuickConfig.model,
 				llmBaseUrl: normalizedQuickConfig.baseUrl,
-				llmApiKey: apiKey,
+				secretSource,
+				useSavedApiKey,
+				...(apiKey ? { llmApiKey: apiKey } : {}),
 			};
-			if (providerKeyField) {
+			if (providerKeyField && apiKey) {
 				nextLlmConfig[providerKeyField] = apiKey;
 			}
 
@@ -697,12 +778,16 @@ export default function CreateProjectScanDialog({
 		}
 		if (llmGateStatus.missingFields.length > 0) {
 			setShowLlmQuickFixPanel(true);
-			setLastPreflightMessage("LLM 缺少必填配置，请先补全并保存，再手动测试连接。");
+			setLastPreflightMessage(
+				"LLM 缺少必填配置，请先补全并保存，再手动测试连接。",
+			);
 			return false;
 		}
 		if (llmGateStatus.hasUnsavedChanges) {
 			setShowLlmQuickFixPanel(true);
-			setLastPreflightMessage("当前 LLM 配置有未保存改动，请先保存，再手动测试连接。");
+			setLastPreflightMessage(
+				"当前 LLM 配置有未保存改动，请先保存，再手动测试连接。",
+			);
 			return false;
 		}
 		if (!quickFixManualTestPassed) {
@@ -740,7 +825,10 @@ export default function CreateProjectScanDialog({
 						programming_languages: [],
 					} as any);
 
-					const uploadResult = await uploadZipFile(createdProject.id, newProjectFile);
+					const uploadResult = await uploadZipFile(
+						createdProject.id,
+						newProjectFile,
+					);
 					if (!uploadResult.success) {
 						throw new Error(uploadResult.message || "压缩包上传失败");
 					}
@@ -836,7 +924,9 @@ export default function CreateProjectScanDialog({
 		} catch (error) {
 			const message = extractCreateProjectScanApiErrorMessage(error);
 			const failureText =
-				mode === "agent" ? `智能审计创建失败：${message}` : `创建失败: ${message}`;
+				mode === "agent"
+					? `智能审计创建失败：${message}`
+					: `创建失败: ${message}`;
 			toast.error(failureText);
 		} finally {
 			setCreating(false);
@@ -844,9 +934,9 @@ export default function CreateProjectScanDialog({
 	};
 
 	const missingFieldClass = (field: PreflightMissingField) =>
-			llmGateStatus.missingFields.includes(field)
-				? "border-rose-500/60 focus-visible:border-rose-500/70"
-				: "";
+		llmGateStatus.missingFields.includes(field)
+			? "border-rose-500/60 focus-visible:border-rose-500/70"
+			: "";
 	const handleNavigateToEngineConfig = (engine: StaticTool) => {
 		onOpenChange(false);
 		navigate(buildScanEngineConfigRoute(engine));
@@ -867,18 +957,18 @@ export default function CreateProjectScanDialog({
 			lockMode={lockMode}
 			mode={mode}
 			setMode={setMode}
-				loadingProjects={loadingProjects}
-				lockProjectSelection={lockProjectSelection}
-				searchTerm={searchTerm}
-				setSearchTerm={setSearchTerm}
-				filteredProjects={filteredProjects}
-				visibleProjects={paginatedProjects.items}
-				projectPage={paginatedProjects.currentPage}
-				projectTotalPages={paginatedProjects.totalPages}
-				setProjectPage={setProjectPage}
-				selectedProject={selectedProject}
-				selectedProjectId={selectedProjectId}
-				setSelectedProjectId={setSelectedProjectId}
+			loadingProjects={loadingProjects}
+			lockProjectSelection={lockProjectSelection}
+			searchTerm={searchTerm}
+			setSearchTerm={setSearchTerm}
+			filteredProjects={filteredProjects}
+			visibleProjects={paginatedProjects.items}
+			projectPage={paginatedProjects.currentPage}
+			projectTotalPages={paginatedProjects.totalPages}
+			setProjectPage={setProjectPage}
+			selectedProject={selectedProject}
+			selectedProjectId={selectedProjectId}
+			setSelectedProjectId={setSelectedProjectId}
 			newProjectName={newProjectName}
 			setNewProjectName={setNewProjectName}
 			newProjectFile={newProjectFile}
@@ -898,19 +988,19 @@ export default function CreateProjectScanDialog({
 			showLlmQuickFixPanel={showLlmQuickFixPanel}
 			openLlmQuickFixPanelManual={openLlmQuickFixPanelManual}
 			quickFixSaving={quickFixSaving}
-				quickFixTesting={quickFixTesting}
-				quickFixPanelOpening={quickFixPanelOpening}
-				lastPreflightMessage={lastPreflightMessage}
-				llmProviderOptions={llmProviderOptions}
-				llmQuickConfig={llmQuickConfig}
-				missingFieldClass={missingFieldClass}
-				handleQuickFixProviderChange={handleQuickFixProviderChange}
-				handleQuickFixConfigChange={handleQuickFixConfigChange}
-				quickFixTestResult={quickFixTestResult}
-				disableQuickFixTest={quickFixPanelOpening}
-				llmTestBlockedMessage={llmGateStatus.testBlockMessage}
-				handleQuickFixTest={handleQuickFixTest}
-				handleQuickFixSave={handleQuickFixSave}
+			quickFixTesting={quickFixTesting}
+			quickFixPanelOpening={quickFixPanelOpening}
+			lastPreflightMessage={lastPreflightMessage}
+			llmProviderOptions={llmProviderOptions}
+			llmQuickConfig={llmQuickConfig}
+			missingFieldClass={missingFieldClass}
+			handleQuickFixProviderChange={handleQuickFixProviderChange}
+			handleQuickFixConfigChange={handleQuickFixConfigChange}
+			quickFixTestResult={quickFixTestResult}
+			disableQuickFixTest={quickFixPanelOpening}
+			llmTestBlockedMessage={llmGateStatus.testBlockMessage}
+			handleQuickFixTest={handleQuickFixTest}
+			handleQuickFixSave={handleQuickFixSave}
 			showReturnButton={showReturnButton}
 			onReturn={onReturn}
 			primaryCreateLabel={primaryCreateLabel}

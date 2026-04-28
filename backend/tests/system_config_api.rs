@@ -154,7 +154,10 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current_json["llmConfig"]["llmApiKey"], "sk-test");
+    assert_eq!(current_json["llmConfig"]["llmApiKey"], "");
+    assert_eq!(current_json["llmConfig"]["hasSavedApiKey"], true);
+    assert_eq!(current_json["llmConfig"]["secretSource"], "saved");
+    assert!(!current_json.to_string().contains("sk-test"));
     assert_eq!(
         current_json["llmConfig"]["llmConfigVersion"],
         "intelligent-engine-v1"
@@ -337,17 +340,16 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     assert_eq!(stale_preflight_json["ok"], false);
     assert_eq!(stale_preflight_json["stage"], "llm_test");
     assert_eq!(stale_preflight_json["reasonCode"], "llm_test_stale");
-    assert_eq!(
-        stale_preflight_json["savedConfig"]["apiKey"],
-        "***configured***"
-    );
+    assert_eq!(stale_preflight_json["savedConfig"]["apiKey"], "");
+    assert_eq!(stale_preflight_json["savedConfig"]["hasSavedApiKey"], true);
+    assert_eq!(stale_preflight_json["savedConfig"]["secretSource"], "saved");
     assert!(!stale_preflight_json
         .to_string()
         .contains("sk-agentflow-secret"));
 
     let test_payload = json!({
         "provider": "openai_compatible",
-        "apiKey": "sk-agentflow-secret",
+        "secretSource": "saved",
         "model": "gpt-5",
         "baseUrl": mock_base_url
     });
@@ -386,7 +388,9 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     assert_eq!(preflight_json["ok"], false);
     assert_eq!(preflight_json["stage"], "runner");
     assert_eq!(preflight_json["reasonCode"], "runner_missing");
-    assert_eq!(preflight_json["savedConfig"]["apiKey"], "***configured***");
+    assert_eq!(preflight_json["savedConfig"]["apiKey"], "");
+    assert_eq!(preflight_json["savedConfig"]["hasSavedApiKey"], true);
+    assert_eq!(preflight_json["savedConfig"]["secretSource"], "saved");
     assert!(!preflight_json.to_string().contains("sk-agentflow-secret"));
     assert_eq!(preflight_json["metadata"]["runner"]["ok"], false);
 }
@@ -522,7 +526,7 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
                 .body(Body::from(
                     json!({
                         "provider": "openai_compatible",
-                        "apiKey": "sk-real-secret",
+                        "secretSource": "saved",
                         "model": "gpt-5",
                         "baseUrl": save_payload["llmConfig"]["llmBaseUrl"],
                         "customHeaders": r#"{"X-Trace":"header-secret"}"#
@@ -563,10 +567,127 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
             .unwrap(),
     )
     .unwrap();
+    assert_eq!(current["llmConfig"]["llmApiKey"], "");
+    assert_eq!(current["llmConfig"]["hasSavedApiKey"], true);
+    assert!(!current.to_string().contains("sk-real-secret"));
     assert_eq!(
         current["llmTestMetadata"]["fingerprint"],
         payload["metadata"]["fingerprint"]
     );
+}
+
+#[tokio::test]
+async fn import_env_requires_token_and_saves_verified_redacted_system_config() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let mock_base_url =
+        spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"import ok"}}]}"#).await;
+    let _token = EnvVarGuard::set("ARGUS_RESET_IMPORT_TOKEN", "token-123");
+    let _provider = EnvVarGuard::set("LLM_PROVIDER", "openai_compatible");
+    let _api_key = EnvVarGuard::set("LLM_API_KEY", "sk-import-secret");
+    let _model = EnvVarGuard::set("LLM_MODEL", "gpt-5");
+    let _base_url = EnvVarGuard::set("LLM_BASE_URL", &mock_base_url);
+
+    let state = AppState::from_config(isolated_test_config("system-config-import-env"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let missing_token_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/import-env")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_token_response.status(), StatusCode::BAD_REQUEST);
+
+    let import_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/import-env")
+                .header("x-argus-reset-import-token", "token-123")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(import_response.status(), StatusCode::OK);
+    let import_payload: Value = serde_json::from_slice(
+        &to_bytes(import_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(import_payload["success"], true);
+    assert_eq!(import_payload["provider"], "openai_compatible");
+    assert_eq!(import_payload["hasSavedApiKey"], true);
+    assert_eq!(import_payload["secretSource"], "imported");
+    assert!(import_payload["metadata"]["fingerprint"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
+    assert!(!import_payload.to_string().contains("sk-import-secret"));
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let current: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(current["llmConfig"]["llmApiKey"], "");
+    assert_eq!(current["llmConfig"]["hasSavedApiKey"], true);
+    assert_eq!(current["llmConfig"]["secretSource"], "imported");
+    assert_eq!(
+        current["llmTestMetadata"]["fingerprint"],
+        import_payload["metadata"]["fingerprint"]
+    );
+    assert!(!current.to_string().contains("sk-import-secret"));
+}
+
+#[tokio::test]
+async fn import_env_rejects_legacy_provider_aliases() {
+    let _env_guard = ENV_LOCK.lock().await;
+    let _token = EnvVarGuard::set("ARGUS_RESET_IMPORT_TOKEN", "token-legacy");
+    let _provider = EnvVarGuard::set("LLM_PROVIDER", "openai");
+    let _api_key = EnvVarGuard::set("LLM_API_KEY", "sk-legacy-secret");
+    let _model = EnvVarGuard::set("LLM_MODEL", "gpt-5");
+    let _base_url = EnvVarGuard::set("LLM_BASE_URL", "https://api.openai.com/v1");
+
+    let state = AppState::from_config(isolated_test_config("system-config-import-legacy"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/import-env")
+                .header("x-argus-reset-import-token", "token-legacy")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(payload.to_string().contains("openai_compatible"));
+    assert!(!payload.to_string().contains("sk-legacy-secret"));
 }
 
 #[tokio::test]

@@ -4,7 +4,6 @@ set -Eeuo pipefail
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
-BACKEND_ENV_FILE="$ROOT_DIR/docker/env/backend/.env"
 CONFIG_FILE="${ARGUS_INTELLIGENT_AUDIT_ENV:-$ROOT_DIR/.argus-intelligent-audit.env}"
 CONFIG_TEMPLATE_FILE="${CONFIG_FILE}.example"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
@@ -17,6 +16,10 @@ DOCKER_SYSTEM_PRUNE="${ARGUS_DOCKER_SYSTEM_PRUNE:-true}"
 WAIT_TIMEOUT="${ARGUS_WAIT_TIMEOUT:-120}"
 WAIT_INTERVAL="${ARGUS_WAIT_INTERVAL:-2}"
 FRONTEND_PORT="${Argus_FRONTEND_PORT:-13000}"
+BACKEND_PORT="${Argus_BACKEND_PORT:-18000}"
+BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
+BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
+ARGUS_RESET_IMPORT_TOKEN=""
 CACHE_SCOPE="argus-agentflow-$(date +%s)"
 
 REQUIRED_CONFIG_KEYS=(
@@ -64,8 +67,8 @@ Configuration:
   ARGUS_INTELLIGENT_AUDIT_ENV  Path to dedicated config file.
                                 Default: $ROOT_DIR/.argus-intelligent-audit.env
   Interactive TTY runs copy/use the example config, prompt for required LLM values,
-  auto-generate SECRET_KEY, hide LLM_API_KEY input, then fully overwrite
-  docker/env/backend/.env from the validated dedicated config.
+  auto-generate SECRET_KEY, hide LLM_API_KEY input, then write the
+  dedicated config used directly by Compose/backend.
   CI=true or non-TTY runs never prompt; missing or placeholder config fails before Docker cleanup.
 
 Run modes:
@@ -85,14 +88,15 @@ Docker cleanup precedence:
   ARGUS_DOCKER_SYSTEM_PRUNE=false disables only aggressive-mode global Docker prune.
 
 Start modes:
-  Default:     docker compose up --build        (foreground; does not auto-exit on readiness)
-  --wait-exit: docker compose up -d --build, poll http://127.0.0.1:$FRONTEND_PORT, then exit
+  Default:     docker compose up -d --build, poll backend, import LLM env, then docker compose logs -f
+               Ctrl-C/SIGTERM stops the Compose stack before exiting.
+  --wait-exit: docker compose up -d --build, poll backend, import LLM env, poll http://127.0.0.1:$FRONTEND_PORT, then exit
 
 Ports:
   Argus_FRONTEND_PORT           Frontend host port. Default: 13000
 
 Test / verification:
-  --dry-run                     Preview commands and skip backend env mutation.
+  --dry-run                     Preview commands and skip Docker/curl execution.
   ARGUS_STUB_DOCKER=true        Print Docker/curl/env commands instead of running them.
   ARGUS_TEST_INTERACTIVE=true   Test-only: allow scripted interactive config without a TTY.
   ARGUS_TEST_SECRET_KEY=value   Test-only: deterministic generated SECRET_KEY.
@@ -122,12 +126,21 @@ is_falsey() {
   esac
 }
 
+redact_arg_for_log() {
+  local arg="$1"
+  if [[ -n "${ARGUS_RESET_IMPORT_TOKEN:-}" ]]; then
+    arg="${arg//${ARGUS_RESET_IMPORT_TOKEN}/<redacted-import-token>}"
+  fi
+  printf '%s' "$arg"
+}
+
 quote_cmd() {
   local quoted=()
-  local arg
+  local arg redacted
   for arg in "$@"; do
-    printf -v arg '%q' "$arg"
-    quoted+=("$arg")
+    redacted="$(redact_arg_for_log "$arg")"
+    printf -v redacted '%q' "$redacted"
+    quoted+=("$redacted")
   done
   printf '%s' "${quoted[*]}"
 }
@@ -155,8 +168,8 @@ write_config_template() {
   cat > "$target" <<'TEMPLATE'
 # Argus intelligent-audit / AgentFlow backend environment
 # This file is the baseline for argus-reset-rebuild-start.sh interactive setup.
-# The generated .argus-intelligent-audit.env fully overwrites docker/env/backend/.env
-# after validation.
+# Compose injects this file directly into the backend runtime. The reset script
+# never copies it to docker/env/backend/.env as LLM authority.
 
 # Security: generated automatically by argus-reset-rebuild-start.sh in interactive mode.
 SECRET_KEY=REPLACE_ME_WITH_RANDOM_SECRET
@@ -164,7 +177,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=11520
 
 # LLM / intelligent-audit required configuration.
-LLM_PROVIDER=openai
+LLM_PROVIDER=openai_compatible
 LLM_API_KEY=REPLACE_ME_WITH_REAL_API_KEY
 LLM_MODEL=REPLACE_ME_WITH_MODEL
 LLM_BASE_URL=https://api.openai.com/v1
@@ -263,6 +276,16 @@ validate_config() {
       printf '[argus-reset] ERROR: required config key %s is missing or placeholder-valued\n' "$key" >&2
       missing=1
     else
+      if [[ "$key" == "LLM_PROVIDER" ]]; then
+        case "$value" in
+          openai_compatible|anthropic_compatible) ;;
+          *)
+            printf '[argus-reset] ERROR: LLM_PROVIDER must be canonical: openai_compatible or anthropic_compatible (got %s)\n' "$value" >&2
+            missing=1
+            continue
+            ;;
+        esac
+      fi
       if is_secret_key_name "$key"; then
         log "Config key $key is configured (redacted)."
       else
@@ -287,6 +310,21 @@ generate_secret_key() {
     return 0
   fi
   fail "Unable to generate SECRET_KEY: openssl or /dev/urandom+od is required"
+}
+
+
+generate_import_token() {
+  if [[ -n "${ARGUS_TEST_IMPORT_TOKEN:-}" ]]; then
+    ARGUS_RESET_IMPORT_TOKEN="$ARGUS_TEST_IMPORT_TOKEN"
+  elif command -v openssl >/dev/null 2>&1; then
+    ARGUS_RESET_IMPORT_TOKEN="$(openssl rand -hex 32)"
+  elif command -v od >/dev/null 2>&1 && [[ -r /dev/urandom ]]; then
+    ARGUS_RESET_IMPORT_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  else
+    fail "Unable to generate ARGUS_RESET_IMPORT_TOKEN: openssl or /dev/urandom+od is required"
+  fi
+  [[ -n "$ARGUS_RESET_IMPORT_TOKEN" ]] || fail "Generated ARGUS_RESET_IMPORT_TOKEN is empty"
+  log "Generated per-run ARGUS_RESET_IMPORT_TOKEN (redacted)."
 }
 
 interactive_config_allowed() {
@@ -410,17 +448,6 @@ prepare_config() {
   validate_config
 }
 
-materialize_backend_env() {
-  mkdir -p "$(dirname "$BACKEND_ENV_FILE")"
-  if "$DRY_RUN"; then
-    printf '[dry-run] cp %s %s\n' "$(printf '%q' "$CONFIG_FILE")" "$(printf '%q' "$BACKEND_ENV_FILE")"
-  else
-    cp "$CONFIG_FILE" "$BACKEND_ENV_FILE"
-    chmod 600 "$BACKEND_ENV_FILE" 2>/dev/null || true
-    log "Fully overwrote docker/env/backend/.env from dedicated config."
-  fi
-}
-
 require_real_tools() {
   [[ -f "$COMPOSE_FILE" ]] || fail "docker-compose.yml not found at repo root: $COMPOSE_FILE"
   if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
@@ -430,9 +457,7 @@ require_real_tools() {
   command -v docker >/dev/null 2>&1 || fail "docker CLI not found"
   docker compose version >/dev/null || fail "docker compose plugin is not available"
   docker info >/dev/null || fail "Docker daemon is not reachable"
-  if "$WAIT_EXIT"; then
-    command -v curl >/dev/null 2>&1 || fail "curl not found"
-  fi
+  command -v curl >/dev/null 2>&1 || fail "curl not found"
 }
 
 compose_down() {
@@ -477,10 +502,80 @@ cleanup_for_run_mode() {
   esac
 }
 
-compose_up_foreground() {
-  log "Starting Argus in foreground with fresh AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE"
-  log "Default foreground mode does not auto-exit after readiness; use --wait-exit for detached readiness polling."
-  run_cmd env "AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE" docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up --build
+compose_up_detached() {
+  log "Starting Argus detached with fresh AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE"
+  run_cmd env \
+    "AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE" \
+    "ARGUS_INTELLIGENT_AUDIT_ENV=$CONFIG_FILE" \
+    "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
+    docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
+}
+
+wait_for_backend() {
+  if "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    log "Stub/dry-run: checking backend readiness once at $BACKEND_HEALTH_URL."
+    run_cmd curl -fsS "$BACKEND_HEALTH_URL"
+    return 0
+  fi
+
+  local start now elapsed
+  start="$(date +%s)"
+  log "Waiting up to ${WAIT_TIMEOUT}s for backend readiness: $BACKEND_HEALTH_URL"
+  while true; do
+    if curl -fsS "$BACKEND_HEALTH_URL" >/dev/null; then
+      log "Backend is reachable: $BACKEND_HEALTH_URL"
+      return 0
+    fi
+    now="$(date +%s)"
+    elapsed=$((now - start))
+    if (( elapsed >= WAIT_TIMEOUT )); then
+      fail "Backend did not become reachable within ${WAIT_TIMEOUT}s: $BACKEND_HEALTH_URL"
+    fi
+    sleep "$WAIT_INTERVAL"
+  done
+}
+
+import_backend_env() {
+  log "Importing dedicated LLM config into backend system-config via protected reset endpoint."
+  local response
+  if [[ -n "${ARGUS_TEST_IMPORT_RESPONSE:-}" ]]; then
+    response="$ARGUS_TEST_IMPORT_RESPONSE"
+    printf '%s
+' "$response"
+  elif "$DRY_RUN" || is_truthy "$STUB_DOCKER"; then
+    run_cmd curl -fsS -X POST -H "X-Argus-Reset-Import-Token: $ARGUS_RESET_IMPORT_TOKEN" "$BACKEND_IMPORT_URL"
+    return 0
+  elif response="$(curl -fsS -X POST -H "X-Argus-Reset-Import-Token: $ARGUS_RESET_IMPORT_TOKEN" "$BACKEND_IMPORT_URL")"; then
+    printf '%s
+' "$response"
+  else
+    log "WARNING: backend LLM env import/test failed; Argus remains running, but intelligent create/start must stay disabled until system-config has a current successful fingerprint."
+    return 0
+  fi
+
+  if printf '%s' "$response" | grep -Eq '"success"[[:space:]]*:[[:space:]]*false'; then
+    log "WARNING: backend LLM env import/test returned failure; Argus remains running, but intelligent create/start must stay disabled until system-config has a current successful fingerprint."
+    return 0
+  fi
+  log "Backend LLM env import/test succeeded; response was sanitized by backend."
+}
+
+follow_foreground_logs() {
+  log "Following Compose logs in foreground. Ctrl-C/SIGTERM stops the Compose stack before exiting."
+  _argus_stop_on_signal() {
+    log "Signal received; stopping Argus Compose project before exit."
+    run_compose down --remove-orphans
+    exit 130
+  }
+  trap _argus_stop_on_signal INT TERM
+  local logs_rc=0
+  if run_compose logs -f; then
+    logs_rc=0
+  else
+    logs_rc=$?
+  fi
+  trap - INT TERM
+  return "$logs_rc"
 }
 
 wait_for_frontend() {
@@ -508,19 +603,16 @@ wait_for_frontend() {
   done
 }
 
-compose_up_wait_exit() {
-  log "Starting Argus detached with fresh AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE"
-  run_cmd env "AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE" docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
-  wait_for_frontend
-}
-
 start_stack() {
+  compose_up_detached
+  wait_for_backend
+  import_backend_env
   if "$WAIT_EXIT"; then
-    compose_up_wait_exit
+    wait_for_frontend
     log "Complete. Frontend: http://127.0.0.1:$FRONTEND_PORT"
   else
-    compose_up_foreground
-    log "Compose foreground command exited. Frontend port: $FRONTEND_PORT"
+    follow_foreground_logs
+    log "Compose foreground log-follow exited. Frontend port: $FRONTEND_PORT"
   fi
 }
 
@@ -585,7 +677,7 @@ main() {
   log "Run mode: $RUN_MODE"
   require_real_tools
   prepare_config
-  materialize_backend_env
+  generate_import_token
   cleanup_for_run_mode
   start_stack
 }

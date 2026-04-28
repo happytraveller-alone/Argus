@@ -26,10 +26,15 @@ test("provider catalog falls back to built-ins and drops unknown current provide
 	assert.equal(providerCatalog.normalizeLlmProviderId("Claude"), "claude");
 	assert.equal(providerCatalog.normalizeLlmProviderId(""), "openai_compatible");
 	assert.equal(
-		options.some((provider: { id: string }) => provider.id === "openai_compatible"),
+		options.some(
+			(provider: { id: string }) => provider.id === "openai_compatible",
+		),
 		true,
 	);
-	assert.equal(options.some((provider: { id: string }) => provider.id === "acme-cloud"), false);
+	assert.equal(
+		options.some((provider: { id: string }) => provider.id === "acme-cloud"),
+		false,
+	);
 	assert.equal(
 		providerCatalog.getCreateProjectScanProviderLabel(options[0]),
 		"OpenAI 兼容",
@@ -347,28 +352,43 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 	assert.match(status.testBlockMessage, /先保存/);
 });
 
-test("LLM gate allows a verified redacted saved key without exposing it for saves", async () => {
+test("LLM gate treats redacted placeholders as inert and requires an explicit saved/imported source", async () => {
 	const llmGate = await importOrFail<any>(
 		"../src/components/scan/create-project-scan/llmGate.ts",
 	);
 
-	const redactedConfig = {
+	const redactedOnlyConfig = {
 		provider: "openai_compatible",
 		model: "gpt-5",
 		baseUrl: "https://api.openai.com/v1",
 		apiKey: "***configured***",
 	};
-	const status = llmGate.getLlmQuickGateStatus({
+	const redactedOnlyStatus = llmGate.getLlmQuickGateStatus({
 		providerOptions: [],
-		currentConfig: redactedConfig,
-		savedConfig: redactedConfig,
+		currentConfig: redactedOnlyConfig,
+		savedConfig: redactedOnlyConfig,
 		hasSuccessfulManualTest: true,
 	});
 
-	assert.equal(status.hasUnsavedChanges, false);
-	assert.equal(status.canCreate, true);
-	assert.equal(status.canTest, false);
-	assert.match(status.testBlockMessage, /重新填写 API Key/);
+	assert.equal(redactedOnlyStatus.canCreate, false);
+	assert.deepEqual(redactedOnlyStatus.missingFields, ["llmApiKey"]);
+
+	const savedSecretConfig = {
+		...redactedOnlyConfig,
+		apiKey: "",
+		hasSavedApiKey: true,
+		apiKeySource: "imported",
+	};
+	const savedSecretStatus = llmGate.getLlmQuickGateStatus({
+		providerOptions: [],
+		currentConfig: savedSecretConfig,
+		savedConfig: savedSecretConfig,
+		hasSuccessfulManualTest: true,
+	});
+
+	assert.equal(savedSecretStatus.hasUnsavedChanges, false);
+	assert.equal(savedSecretStatus.canTest, true);
+	assert.equal(savedSecretStatus.canCreate, true);
 });
 
 test("LLM gate accepts only test responses carrying metadata fingerprints", async () => {
