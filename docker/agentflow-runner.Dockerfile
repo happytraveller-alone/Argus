@@ -24,7 +24,11 @@ ARG BACKEND_PIP_TIMEOUT_SECONDS=45
 ARG BACKEND_PIP_RETRIES=2
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
 ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
-ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
+ARG CODEX_NPM_REGISTRY_PRIMARY=
+ARG CODEX_NPM_REGISTRY=
+ARG CODEX_NPM_REGISTRY_DEFAULT=https://registry.npmmirror.com
+ARG CODEX_NPM_REGISTRY_FALLBACK=https://registry.npmjs.org/
+ARG CODEX_NPM_INSTALL_TIMEOUT_SECONDS=120
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_CACHE_DIR=/root/.cache/pip \
@@ -53,7 +57,7 @@ RUN set -eux; \
     test -d /opt/agentflow-src/agentflow
 
 COPY --chmod=755 docker/argus-pip-wheel-group.sh /usr/local/bin/argus-pip-wheel-group
-RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip-build-backend,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip,target=/root/.cache/pip,sharing=locked \
     set -eux; \
     argus-pip-wheel-group build-backend /opt/agentflow-build-wheels -- "hatchling>=1.27.0"; \
     python -m pip install --no-index --find-links=/opt/agentflow-build-wheels "hatchling>=1.27.0"
@@ -88,7 +92,11 @@ ARG BACKEND_PIP_TIMEOUT_SECONDS=45
 ARG BACKEND_PIP_RETRIES=2
 ARG AGENTFLOW_P1_PYTHON_DEPS="jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0"
 ARG CODEX_NPM_PACKAGE="@openai/codex@latest"
-ARG CODEX_NPM_REGISTRY="https://registry.npmjs.org/"
+ARG CODEX_NPM_REGISTRY_PRIMARY=
+ARG CODEX_NPM_REGISTRY=
+ARG CODEX_NPM_REGISTRY_DEFAULT=https://registry.npmmirror.com
+ARG CODEX_NPM_REGISTRY_FALLBACK=https://registry.npmjs.org/
+ARG CODEX_NPM_INSTALL_TIMEOUT_SECONDS=120
 
 LABEL org.opencontainers.image.title="Argus AgentFlow runner" \
       org.opencontainers.image.description="Controlled AgentFlow execution image for Argus intelligent audit P1" \
@@ -132,10 +140,34 @@ COPY docker/agentflow-entrypoint.sh /usr/local/bin/agentflow-entrypoint
 COPY docker/agentflow-runner.sh /usr/local/bin/argus-agentflow-runner
 COPY docker/agentflow-runner-adapter.py /usr/local/bin/argus-agentflow-runner-adapter
 COPY backend/agentflow /app/backend/agentflow
-RUN set -eux; \
+RUN --mount=type=cache,id=${AGENTFLOW_BUILD_CACHE_SCOPE}-npm,target=/root/.npm,sharing=locked \
+    set -eux; \
     python -m pip install --no-index --find-links=/opt/agentflow-wheels ${AGENTFLOW_P1_PYTHON_DEPS}; \
     python -m pip install --no-deps --no-index --find-links=/opt/agentflow-wheels "agentflow==${AGENTFLOW_VERSION}"; \
-    npm install --global --registry "${CODEX_NPM_REGISTRY}" "${CODEX_NPM_PACKAGE}"; \
+    codex_npm_fetch_timeout_ms="$((CODEX_NPM_INSTALL_TIMEOUT_SECONDS * 1000))"; \
+    codex_npm_primary="${CODEX_NPM_REGISTRY_PRIMARY:-}"; \
+    # Resolve Codex npm registry precedence: CODEX_NPM_REGISTRY_PRIMARY > CODEX_NPM_REGISTRY > CODEX_NPM_REGISTRY_DEFAULT. \
+    if [ -z "$codex_npm_primary" ]; then \
+      codex_npm_primary="${CODEX_NPM_REGISTRY:-}"; \
+    fi; \
+    if [ -z "$codex_npm_primary" ]; then \
+      codex_npm_primary="${CODEX_NPM_REGISTRY_DEFAULT}"; \
+    fi; \
+    install_codex_npm() { \
+      codex_npm_registry="$1"; \
+      echo "Installing ${CODEX_NPM_PACKAGE} from ${codex_npm_registry}"; \
+      timeout "${CODEX_NPM_INSTALL_TIMEOUT_SECONDS}" npm install --global \
+        --registry "${codex_npm_registry}" \
+        --fetch-timeout "${codex_npm_fetch_timeout_ms}" \
+        --fetch-retries 2 \
+        --fetch-retry-mintimeout 10000 \
+        --fetch-retry-maxtimeout 30000 \
+        "${CODEX_NPM_PACKAGE}"; \
+    }; \
+    if ! install_codex_npm "$codex_npm_primary"; then \
+      echo "Trying fallback Codex npm registry ${CODEX_NPM_REGISTRY_FALLBACK} after primary registry failure" >&2; \
+      install_codex_npm "${CODEX_NPM_REGISTRY_FALLBACK}"; \
+    fi; \
     chmod +x /usr/local/bin/agentflow-entrypoint /usr/local/bin/argus-agentflow-runner /usr/local/bin/argus-agentflow-runner-adapter; \
     chown -R agentflow:agentflow /app/backend/agentflow /work /tmp/argus-agentflow-home; \
     codex --version >/dev/null; \

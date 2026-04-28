@@ -419,10 +419,10 @@ function buildAgentMarkdownNarrativeSections(
     finding.remediation || finding.suggestion || sections.get("修复建议") || "",
   ).trim();
   const verification = String(
-    finding.verification || finding.verification_evidence || sections.get("验证结论") || "",
+    finding.verification || sections.get("验证结论") || "",
   ).trim();
 
-  return [
+  const narrativeSections = [
     buildNarrativeSection({
       id: `agent:${finding.id}:root-cause`,
       title: "根因说明",
@@ -430,28 +430,43 @@ function buildAgentMarkdownNarrativeSections(
       content: sections.get("根因解释"),
       emptyBody: MISSING_MARKDOWN_SECTION,
     }),
-    buildNarrativeSection({
-      id: `agent:${finding.id}:impact`,
-      title: "影响分析",
-      emphasis: "secondary",
-      content: impact,
-      emptyBody: MISSING_MARKDOWN_SECTION,
-    }),
-    buildNarrativeSection({
-      id: `agent:${finding.id}:remediation`,
-      title: "修复建议",
-      emphasis: "success",
-      content: remediation,
-      emptyBody: MISSING_MARKDOWN_SECTION,
-    }),
-    buildNarrativeSection({
-      id: `agent:${finding.id}:verification`,
-      title: "验证结论",
-      emphasis: "neutral",
-      content: verification,
-      emptyBody: MISSING_MARKDOWN_SECTION,
-    }),
   ];
+
+  if (impact) {
+    narrativeSections.push(
+      buildNarrativeSection({
+        id: `agent:${finding.id}:impact`,
+        title: "影响分析",
+        emphasis: "secondary",
+        content: impact,
+        emptyBody: MISSING_MARKDOWN_SECTION,
+      }),
+    );
+  }
+  if (remediation) {
+    narrativeSections.push(
+      buildNarrativeSection({
+        id: `agent:${finding.id}:remediation`,
+        title: "修复建议",
+        emphasis: "success",
+        content: remediation,
+        emptyBody: MISSING_MARKDOWN_SECTION,
+      }),
+    );
+  }
+  if (verification) {
+    narrativeSections.push(
+      buildNarrativeSection({
+        id: `agent:${finding.id}:verification`,
+        title: "验证结论",
+        emphasis: "neutral",
+        content: verification,
+        emptyBody: MISSING_MARKDOWN_SECTION,
+      }),
+    );
+  }
+
+  return narrativeSections;
 }
 
 function buildAgentFlowSourceItems(finding: AgentFinding): FindingDetailTrackingItem[] {
@@ -885,6 +900,7 @@ export function buildAgentFindingDetailModel(params: {
     }),
     ...buildAgentFlowSourceItems(finding),
   ];
+  const overviewTrackingItems = trackingItems.filter((item) => item.label !== "来源");
   const codeSections = buildFindingDetailCodeSections(buildAgentFindingCodeViews(finding));
 
   if (isFalsePositive) {
@@ -922,7 +938,7 @@ export function buildAgentFindingDetailModel(params: {
             summaryStats,
           }),
         ],
-        trackingItems,
+        trackingItems: overviewTrackingItems,
       }),
       codeSections,
       codeBrowserTarget: buildCodeBrowserTarget({
@@ -957,7 +973,7 @@ export function buildAgentFindingDetailModel(params: {
         headlineTitle: typeDisplay.tooltip,
         summaryStats,
       }),
-      trackingItems,
+      trackingItems: overviewTrackingItems,
     }),
     codeSections,
     codeBrowserTarget: buildCodeBrowserTarget({

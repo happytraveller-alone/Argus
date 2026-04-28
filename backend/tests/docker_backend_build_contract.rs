@@ -115,6 +115,40 @@ fn agentflow_runner_emits_argus_contract_instead_of_native_runrecord() {
             .contains("id=${AGENTFLOW_BUILD_CACHE_SCOPE}-pip,target=/root/.cache/pip"),
         "agentflow runner pip cache mount must be scoped by build arg so a rebuild can avoid stale cache mounts"
     );
+    for required in [
+        "ARG CODEX_NPM_PACKAGE=\"@openai/codex@latest\"",
+        "ARG CODEX_NPM_REGISTRY_PRIMARY=",
+        "ARG CODEX_NPM_REGISTRY=",
+        "ARG CODEX_NPM_REGISTRY_DEFAULT=https://registry.npmmirror.com",
+        "ARG CODEX_NPM_REGISTRY_FALLBACK=https://registry.npmjs.org/",
+        "ARG CODEX_NPM_INSTALL_TIMEOUT_SECONDS=120",
+        "id=${AGENTFLOW_BUILD_CACHE_SCOPE}-npm,target=/root/.npm",
+        "CODEX_NPM_REGISTRY_PRIMARY > CODEX_NPM_REGISTRY > CODEX_NPM_REGISTRY_DEFAULT",
+        "codex_npm_primary=\"${CODEX_NPM_REGISTRY_PRIMARY:-}\"",
+        "codex_npm_primary=\"${CODEX_NPM_REGISTRY:-}\"",
+        "codex_npm_primary=\"${CODEX_NPM_REGISTRY_DEFAULT}\"",
+        "Trying fallback Codex npm registry",
+        "timeout \"${CODEX_NPM_INSTALL_TIMEOUT_SECONDS}\" npm install --global",
+        "codex --version >/dev/null",
+    ] {
+        assert!(
+            AGENTFLOW_RUNNER_DOCKERFILE.contains(required),
+            "agentflow runner Dockerfile must contain npm mirror/fallback contract marker {required:?}"
+        );
+    }
+    for required in [
+        "CODEX_NPM_PACKAGE: ${CODEX_NPM_PACKAGE:-@openai/codex@latest}",
+        "CODEX_NPM_REGISTRY_PRIMARY: ${CODEX_NPM_REGISTRY_PRIMARY:-}",
+        "CODEX_NPM_REGISTRY: ${CODEX_NPM_REGISTRY:-}",
+        "CODEX_NPM_REGISTRY_DEFAULT: ${CODEX_NPM_REGISTRY_DEFAULT:-https://registry.npmmirror.com}",
+        "CODEX_NPM_REGISTRY_FALLBACK: ${CODEX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}",
+        "CODEX_NPM_INSTALL_TIMEOUT_SECONDS: ${CODEX_NPM_INSTALL_TIMEOUT_SECONDS:-120}",
+    ] {
+        assert!(
+            ROOT_COMPOSE.contains(required),
+            "root compose must pass AgentFlow Codex npm build arg {required:?}"
+        );
+    }
     assert!(
         AGENTFLOW_RUNNER_DOCKERFILE.contains("COPY docker/agentflow-runner-adapter.py"),
         "agentflow runner image must package the Argus output adapter"
