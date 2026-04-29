@@ -127,8 +127,14 @@ test("buildUnifiedFindingRows compacts fallback opengrep check identifiers", () 
 
 test("static analysis finding status helpers expose tri-state labels and tones", () => {
   assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("open"), "待验证");
-  assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("verified"), "确报");
-  assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("false_positive"), "误报");
+	assert.equal(
+		viewModel.getStaticAnalysisFindingStatusLabel("verified"),
+		"确报",
+	);
+	assert.equal(
+		viewModel.getStaticAnalysisFindingStatusLabel("false_positive"),
+		"误报",
+	);
 
   assert.match(
     viewModel.getStaticAnalysisFindingStatusBadgeClass("open"),
@@ -588,4 +594,33 @@ test("buildStaticAnalysisTaskStatusSummary uses a generic fallback when a failed
       message: "任务已失败，请查看后端日志获取更多信息。",
     },
   ]);
+});
+
+test("buildStaticAnalysisHeaderSummary prefers resolved project name over project id fallback", () => {
+	const summary = viewModel.buildStaticAnalysisHeaderSummary({
+		opengrepTask: {
+			id: "og-1",
+			project_id: "project-uuid-1",
+			project_name: "Resolved Project Name",
+			status: "completed",
+			created_at: "2026-03-12T07:00:00.000Z",
+			updated_at: "2026-03-12T07:01:00.000Z",
+			total_findings: 2,
+			error_count: 0,
+			warning_count: 0,
+			scan_duration_ms: 1000,
+			files_scanned: 1,
+			lines_scanned: 10,
+			name: "Opengrep",
+			target_path: ".",
+		} as any,
+		gitleaksTask: null,
+		banditTask: null,
+		phpstanTask: null,
+		pmdTask: null,
+		enabledEngines: ["opengrep"],
+		fallbackProjectName: "project-uuid-1",
+	});
+
+	assert.equal(summary.projectName, "Resolved Project Name");
 });

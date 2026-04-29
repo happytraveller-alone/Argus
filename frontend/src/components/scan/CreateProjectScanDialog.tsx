@@ -516,7 +516,7 @@ export default function CreateProjectScanDialog({
 			}),
 		);
 		setQuickFixTestResult(null);
-		setLastPreflightMessage("配置已修改，请先保存，再重新预检。");
+		setLastPreflightMessage("配置已修改，请点击重新预检，系统将先保存配置。");
 	};
 
 	const handleQuickFixConfigChange = (
@@ -538,7 +538,7 @@ export default function CreateProjectScanDialog({
 			return nextConfig;
 		});
 		setQuickFixTestResult(null);
-		setLastPreflightMessage("配置已修改，请先保存，再重新预检。");
+		setLastPreflightMessage("配置已修改，请点击重新预检，系统将先保存配置。");
 	};
 
 	const validateQuickFixFields = (): { ok: boolean; message?: string } => {
@@ -563,65 +563,7 @@ export default function CreateProjectScanDialog({
 		return { ok: true };
 	};
 
-	const handleQuickFixTest = async () => {
-		const validation = validateQuickFixFields();
-		if (!validation.ok) {
-			const message = validation.message || "请先补全 LLM 必填配置";
-			setLastPreflightMessage(`${message}。`);
-			if (validation.message) toast.error(validation.message);
-			return;
-		}
-		if (llmGateStatus.hasUnsavedChanges) {
-			const message = "当前 LLM 配置有未保存改动，请先保存配置，再重新预检。";
-			setLastPreflightMessage(message);
-			toast.error(message);
-			return;
-		}
-
-		setQuickFixTesting(true);
-		setQuickFixTestResult(null);
-		try {
-			const preflightResult = await runAgentPreflightCheck();
-			await syncGateWithPreflightResult(preflightResult);
-			const success =
-				preflightResult.ok &&
-				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata);
-			const message = success
-				? "智能审计预检通过，现在可以创建任务。"
-				: preflightResult.ok
-					? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
-					: preflightResult.message || "未知错误";
-			setQuickFixTestResult({
-				success,
-				message,
-				model: preflightResult.effectiveConfig.model,
-			});
-			setLastPreflightMessage(message);
-			if (success) {
-				toast.success(
-					`智能审计预检通过：${preflightResult.effectiveConfig.model}`,
-				);
-			} else {
-				toast.error(`智能审计预检失败：${message}`);
-			}
-		} catch (error) {
-			const message = extractCreateProjectScanApiErrorMessage(error);
-			setQuickFixTestResult({ success: false, message });
-			setAgentPreflightPassed(false);
-			setLastPreflightMessage(`智能审计预检失败：${message}`);
-			toast.error(`智能审计预检失败：${message}`);
-		} finally {
-			setQuickFixTesting(false);
-		}
-	};
-
-	const handleQuickFixSave = async () => {
-		const validation = validateQuickFixFields();
-		if (!validation.ok) {
-			if (validation.message) toast.error(validation.message);
-			return;
-		}
-
+	const persistQuickFixConfig = async (): Promise<LlmQuickConfig> => {
 		setQuickFixSaving(true);
 		try {
 			const currentConfig = await api.getUserConfig();
@@ -688,16 +630,59 @@ export default function CreateProjectScanDialog({
 			setAgentPreflightPassed(false);
 			setQuickFixTestResult(null);
 			setShowLlmQuickFixPanel(true);
-			setLastPreflightMessage(
-				"LLM 配置已保存。请在扫描引擎配置中完成权威连接测试；若已有有效指纹，请在此重新预检。",
-			);
-			toast.success("LLM 配置已保存，请重新预检");
-		} catch (error) {
-			const message = extractCreateProjectScanApiErrorMessage(error);
-			setLastPreflightMessage(`保存失败：${message}`);
-			toast.error(`保存失败：${message}`);
+			return normalizedQuickConfig;
 		} finally {
 			setQuickFixSaving(false);
+		}
+	};
+
+	const handleQuickFixTest = async () => {
+		const validation = validateQuickFixFields();
+		if (!validation.ok) {
+			const message = validation.message || "请先补全 LLM 必填配置";
+			setLastPreflightMessage(`${message}。`);
+			if (validation.message) toast.error(validation.message);
+			return;
+		}
+
+		setQuickFixTesting(true);
+		setQuickFixTestResult(null);
+		try {
+			if (llmGateStatus.hasUnsavedChanges) {
+				setLastPreflightMessage("配置已修改，正在保存并重新预检。");
+				await persistQuickFixConfig();
+			}
+			const preflightResult = await runAgentPreflightCheck();
+			await syncGateWithPreflightResult(preflightResult);
+			const success =
+				preflightResult.ok &&
+				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata);
+			const message = success
+				? "智能审计预检通过，现在可以创建任务。"
+				: preflightResult.ok
+					? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
+					: preflightResult.message || "未知错误";
+			setQuickFixTestResult({
+				success,
+				message,
+				model: preflightResult.effectiveConfig.model,
+			});
+			setLastPreflightMessage(message);
+			if (success) {
+				toast.success(
+					`智能审计预检通过：${preflightResult.effectiveConfig.model}`,
+			);
+			} else {
+				toast.error(`智能审计预检失败：${message}`);
+			}
+		} catch (error) {
+			const message = extractCreateProjectScanApiErrorMessage(error);
+			setQuickFixTestResult({ success: false, message });
+			setAgentPreflightPassed(false);
+			setLastPreflightMessage(`智能审计预检失败：${message}`);
+			toast.error(`智能审计预检失败：${message}`);
+		} finally {
+			setQuickFixTesting(false);
 		}
 	};
 
@@ -990,7 +975,6 @@ export default function CreateProjectScanDialog({
 			disableQuickFixTest={quickFixPanelOpening}
 			llmTestBlockedMessage={llmGateStatus.testBlockMessage}
 			handleQuickFixTest={handleQuickFixTest}
-			handleQuickFixSave={handleQuickFixSave}
 			showReturnButton={showReturnButton}
 			onReturn={onReturn}
 			primaryCreateLabel={primaryCreateLabel}

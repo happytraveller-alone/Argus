@@ -38,6 +38,7 @@ function createSnapshotFixture() {
 		summary: {
 			total_projects: 12,
 			current_effective_findings: 48,
+			current_verified_vulnerability_total: 16,
 			current_verified_findings: 21,
 			total_model_tokens: 1482360,
 			false_positive_rate: 0.12,
@@ -279,6 +280,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 
 	assert.match(markup, /项目总数/);
 	assert.match(markup, /累计发现漏洞总数/);
+	assert.match(markup, />16</);
 	assert.match(markup, /AI验证漏洞总数/);
 	assert.match(markup, /累计执行扫描/);
 	assert.match(markup, /累计消耗词元/);
@@ -293,6 +295,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
 	assert.match(markup, /查看近一段时间当日新增漏洞发现与来源构成的波动/);
+	assert.match(markup, /truncate whitespace-nowrap text-\[11px\]/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /Alpha Gateway/);
@@ -307,6 +310,27 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
 	assert.doesNotMatch(markup, /排行榜/);
 	assert.doesNotMatch(markup, /等待中/);
+});
+
+test("DashboardCommandCenter cumulative vulnerability card uses the verified-only backend total", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.summary.current_effective_findings = 999;
+	snapshot.summary.current_verified_vulnerability_total = 17;
+
+	assert.equal(module.getDashboardVerifiedCumulativeFindingTotal(snapshot), 17);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot,
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+	assert.match(markup, /累计发现漏洞总数[\s\S]*>17</);
+	assert.doesNotMatch(markup, /累计发现漏洞总数[\s\S]*>999</);
 });
 
 test("DashboardCommandCenter builds trend rows with new daily metrics and share buckets", async () => {
@@ -397,7 +421,29 @@ test("DashboardCommandCenter builds two audit-type task status sections", async 
 		intelligent: 2,
 	};
 
-	assert.deepEqual(module.buildAuditTypeTaskStatusSections(snapshot).map(({ key, label, total, completed, running, anomaly, tasksRoute }: any) => ({ key, label, total, completed, running, anomaly, tasksRoute })), [
+	assert.deepEqual(
+		module
+			.buildAuditTypeTaskStatusSections(snapshot)
+			.map(
+				({
+					key,
+					label,
+					total,
+					completed,
+					running,
+					anomaly,
+					tasksRoute,
+				}: any) => ({
+					key,
+					label,
+					total,
+					completed,
+					running,
+					anomaly,
+					tasksRoute,
+				}),
+			),
+		[
 		{
 			key: "intelligent",
 			label: "智能审计",
@@ -416,7 +462,8 @@ test("DashboardCommandCenter builds two audit-type task status sections", async 
 			anomaly: 2,
 			tasksRoute: "/tasks/static",
 		},
-	]);
+		],
+	);
 });
 
 test("DashboardCommandCenter renders two audit-type task status sections", async () => {
@@ -503,9 +550,9 @@ test("DashboardCommandCenter recent task cards show the latest three tasks in on
 	];
 
 	assert.deepEqual(
-		module.getRecentTaskCards(snapshot.recent_tasks).map(
-			(task: { task_id: string }) => task.task_id,
-		),
+		module
+			.getRecentTaskCards(snapshot.recent_tasks)
+			.map((task: { task_id: string }) => task.task_id),
 		["at-1", "at-2", "og-1"],
 	);
 
@@ -553,12 +600,30 @@ test("DashboardCommandCenter maps recent task badge classes to cyber badge tones
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
 
-	assert.equal(module.getRecentTaskTypeBadgeClassName("智能审计"), "cyber-badge-primary");
-	assert.equal(module.getRecentTaskTypeBadgeClassName("静态审计"), "cyber-badge-info");
-	assert.equal(module.getRecentTaskProgressBadgeClassName("completed"), "cyber-badge-success");
-	assert.equal(module.getRecentTaskProgressBadgeClassName("running"), "cyber-badge-info");
-	assert.equal(module.getRecentTaskProgressBadgeClassName("cancelled"), "cyber-badge-warning");
-	assert.equal(module.getRecentTaskProgressBadgeClassName("failed"), "cyber-badge-danger");
+	assert.equal(
+		module.getRecentTaskTypeBadgeClassName("智能审计"),
+		"cyber-badge-primary",
+	);
+	assert.equal(
+		module.getRecentTaskTypeBadgeClassName("静态审计"),
+		"cyber-badge-info",
+	);
+	assert.equal(
+		module.getRecentTaskProgressBadgeClassName("completed"),
+		"cyber-badge-success",
+	);
+	assert.equal(
+		module.getRecentTaskProgressBadgeClassName("running"),
+		"cyber-badge-info",
+	);
+	assert.equal(
+		module.getRecentTaskProgressBadgeClassName("cancelled"),
+		"cyber-badge-warning",
+	);
+	assert.equal(
+		module.getRecentTaskProgressBadgeClassName("failed"),
+		"cyber-badge-danger",
+	);
 });
 
 test("DashboardCommandCenter shows an empty state when no recent tasks are available", async () => {
@@ -643,8 +708,13 @@ test("DashboardCommandCenter uses compact chart spacing constants", async () => 
 	);
 	assert.equal(
 		module.DASHBOARD_MAIN_GRID_CLASSNAME,
-		"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,24rem)] xl:min-h-0 xl:flex-1",
+		"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1",
 	);
+	assert.equal(
+		module.DASHBOARD_CHART_AREA_GRID_CLASSNAME,
+		"grid min-w-0 gap-4 xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]",
+	);
+	assert.equal(module.DASHBOARD_VIEW_RAIL_LIST_CLASSNAME, "grid gap-2");
 });
 
 test("DashboardCommandCenter uses a two-column sidebar and chart layout", async () => {
@@ -662,20 +732,18 @@ test("DashboardCommandCenter uses a two-column sidebar and chart layout", async 
 
 	assert.match(
 		markup,
-		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,24rem\)\]/,
+		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/,
 	);
-	assert.doesNotMatch(
+	assert.match(
 		markup,
-		/xl:grid-cols-\[260px_minmax\(0,1fr\)_340px\]/,
+		/xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/,
 	);
+	assert.doesNotMatch(markup, /xl:grid-cols-\[260px_minmax\(0,1fr\)_340px\]/);
 	assert.doesNotMatch(
 		markup,
 		/xl:grid-cols-\[calc\(\(100%-4rem\)\/5\)_minmax\(0,1fr\)_calc\(\(100%-4rem\)\/5\)\]/,
 	);
-	assert.match(
-		markup,
-		/lg:grid-cols-5/,
-	);
+	assert.match(markup, /lg:grid-cols-5/);
 });
 
 test("estimateHorizontalStatsYAxisWidth shrinks short labels while keeping long labels readable", async () => {
@@ -734,7 +802,8 @@ test("vulnerability-types view uses 5-step x-axis ticks", async () => {
 		domain: [0, "auto"],
 		ticks: undefined,
 	});
-	assert.deepEqual(module.getHorizontalStatsXAxisProps("vulnerability-types", [
+	assert.deepEqual(
+		module.getHorizontalStatsXAxisProps("vulnerability-types", [
 		{
 			label: "CWE-89",
 			meta: "SQL 注入",
@@ -755,7 +824,9 @@ test("vulnerability-types view uses 5-step x-axis ticks", async () => {
 			low: 0,
 			tone: "high",
 		},
-	]).ticks, [0, 5, 10, 15]);
+		]).ticks,
+		[0, 5, 10, 15],
+	);
 });
 
 test("formatCumulativeDuration formats scan durations with zh units", async () => {
@@ -793,7 +864,8 @@ test("recent task title formatter strips the scan type prefix and preserves bare
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
-	const [agentTask, intelligentTask, staticTask] = createSnapshotFixture().recent_tasks;
+	const [agentTask, intelligentTask, staticTask] =
+		createSnapshotFixture().recent_tasks;
 
 	assert.equal(module.getRecentTaskProjectTitle(agentTask), "Alpha Gateway");
 	assert.equal(module.getRecentTaskProjectTitle(intelligentTask), "Beta API");
@@ -833,6 +905,9 @@ test("recent task cards use a fixed three-item limit", async () => {
 
 	assert.equal(module.DASHBOARD_RECENT_TASKS_LIMIT, 3);
 	assert.deepEqual(module.getRecentTaskCards([]), []);
-	assert.deepEqual(module.getRecentTaskCards(tasks.slice(0, 1)), tasks.slice(0, 1));
+	assert.deepEqual(
+		module.getRecentTaskCards(tasks.slice(0, 1)),
+		tasks.slice(0, 1),
+	);
 	assert.deepEqual(module.getRecentTaskCards(tasks), tasks.slice(0, 3));
 });

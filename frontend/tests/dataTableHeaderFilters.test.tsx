@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -26,7 +27,15 @@ test("DataTable 将所有列筛选收入口头并避免 detached toolbar 列筛�
 
   const markup = renderToStaticMarkup(
     createElement(dataTableModule.DataTable, {
-      data: [{ id: "r1", name: "Bandit builtin", source: "builtin", status: "enabled", score: 8 }],
+			data: [
+				{
+					id: "r1",
+					name: "Bandit builtin",
+					source: "builtin",
+					status: "enabled",
+					score: 8,
+				},
+			],
       columns: [
         {
           accessorKey: "name",
@@ -79,6 +88,8 @@ test("DataTable 将所有列筛选收入口头并避免 detached toolbar 列筛�
   assert.match(markup, /aria-label="筛选启用状态"/);
   assert.match(markup, /aria-label="筛选风险分"/);
   assert.match(markup, /data-data-table-header-control="true"/);
+	assert.doesNotMatch(markup, /border-border\/50 bg-background\/35/);
+	assert.doesNotMatch(markup, /border-sky-500\/30 bg-sky-500\/10/);
   assert.doesNotMatch(markup, /placeholder="筛选规则名称"/);
   assert.doesNotMatch(markup, /<label[^>]*>规则名称<\/label>/);
   assert.doesNotMatch(markup, /选择规则来源/);
@@ -119,4 +130,18 @@ test("DataTable 列头筛选在默认筛选存在时显示高亮标记", async (
 
   assert.match(markup, /aria-label="筛选删除状态"/);
   assert.match(markup, /data-filter-active="true"/);
+	assert.match(markup, /font-bold text-primary/);
+});
+
+test("DataTable 列头控件用图标和文字状态表达排序筛选，不保留外框类", () => {
+	const source = readFileSync(
+		"src/components/data-table/DataTableColumnHeader.tsx",
+		"utf8",
+	);
+
+	assert.match(source, /data-data-table-header-control="true"/);
+	assert.match(source, /sortState\s*\?\s*"font-bold text-primary"/);
+	assert.match(source, /active && "font-bold text-primary/);
+	assert.doesNotMatch(source, /border border-border\/50 bg-background\/35/);
+	assert.doesNotMatch(source, /border border-sky-500\/30 bg-sky-500\/10/);
 });

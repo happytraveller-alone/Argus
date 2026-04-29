@@ -194,13 +194,12 @@ export function getLlmQuickGateStatus({
 	const hasEnteredKey = Boolean(normalizedConfig?.apiKey);
 	const canTest =
 		hasRequiredFields &&
-		!hasUnsavedChanges &&
 		(hasEnteredKey ||
 			hasSelectedServerSideKey ||
 			!shouldRequireApiKey(providerOptions, normalizedConfig?.provider || ""));
 	const testBlockMessage = hasRequiredFields
 		? hasUnsavedChanges
-			? "当前 LLM 配置有未保存改动，请先保存，再重新预检。"
+			? "当前 LLM 配置有未保存改动；重新预检将先保存配置。"
 			: ""
 		: "";
 

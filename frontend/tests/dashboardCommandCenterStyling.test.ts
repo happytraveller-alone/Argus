@@ -67,10 +67,11 @@ test("DashboardCommandCenter places the view switcher before chart and status be
 	const statusIndex = source.indexOf("<TaskStatusPanel snapshot={snapshot} />");
 
 	assert.ok(previewIndex >= 0);
-	assert.ok(viewIndex > previewIndex);
-	assert.ok(gridIndex > viewIndex);
-	assert.ok(statusIndex > gridIndex);
-	assert.match(source, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,24rem\)\]/);
+	assert.ok(gridIndex > previewIndex);
+	assert.ok(viewIndex > gridIndex);
+	assert.ok(statusIndex > viewIndex);
+	assert.match(source, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/);
+	assert.match(source, /xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/);
 });
 
 test("DashboardCommandCenter task status uses two audit-type sections", () => {
@@ -91,7 +92,7 @@ test("DashboardCommandCenter recent tasks render three full-card links in one ro
 
 	assert.match(
 		source,
-		/const RECENT_TASK_CARD_CLASSNAME =\s*"min-w-\[16rem\] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition/,
+		/const RECENT_TASK_CARD_CLASSNAME =\s*"min-w-0 rounded-sm border border-border bg-card px-3 py-2\.5 text-xs text-card-foreground shadow-sm transition/,
 	);
 	assert.match(source, /const recentTasks = getRecentTaskCards\(section\.recentTasks\);/);
 	assert.match(source, /<a[\s\S]*className=\{RECENT_TASK_CARD_CLASSNAME\}/);
@@ -99,7 +100,7 @@ test("DashboardCommandCenter recent tasks render three full-card links in one ro
 	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{typeBadgeClassName\}`\}>/);
 	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{progressBadgeClassName\}`\}>/);
 	assert.match(source, /getRecentTaskTypeBadgeClassName\(task\.task_type\)/);
-	assert.match(source, /getRecentTaskProgressBadgeClassName\(task\.status\)/);
+	assert.match(source, /getRecentTaskProgressBadgeClassName\(\s*task\.status,\s*\)/s);
 	assert.match(source, /<ChevronRight className="mt-0\.5 h-4 w-4 shrink-0 text-muted-foreground" \/>/);
 	assert.doesNotMatch(
 		source,

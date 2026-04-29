@@ -253,9 +253,9 @@ test("LLM gate stays locked until saved and agent preflight passes, then re-lock
 		hasPassedAgentPreflight: true,
 	});
 	assert.equal(editedAfterSuccess.hasUnsavedChanges, true);
-	assert.equal(editedAfterSuccess.canTest, false);
+	assert.equal(editedAfterSuccess.canTest, true);
 	assert.equal(editedAfterSuccess.canCreate, false);
-	assert.match(editedAfterSuccess.testBlockMessage, /先保存/);
+	assert.match(editedAfterSuccess.testBlockMessage, /重新预检将先保存配置/);
 	assert.equal(
 		llmGate.invalidatePassedAgentPreflight({
 			previousConfig: cleanConfig,
@@ -360,9 +360,46 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 	});
 
 	assert.equal(status.hasUnsavedChanges, true);
-	assert.equal(status.canTest, false);
+	assert.equal(status.canTest, true);
 	assert.equal(status.canCreate, false);
-	assert.match(status.testBlockMessage, /先保存/);
+	assert.match(status.testBlockMessage, /重新预检将先保存配置/);
+});
+
+test("create dialog retry preflight owns save plus preflight and does not render a separate quick-fix save button", async () => {
+	const [dialogSource, contentSource] = await Promise.all([
+		readFile("src/components/scan/CreateProjectScanDialog.tsx", "utf8"),
+		readFile("src/components/scan/create-project-scan/Content.tsx", "utf8"),
+	]);
+
+	assert.match(dialogSource, /const persistQuickFixConfig = async/);
+	assert.match(
+		dialogSource,
+		/if \(llmGateStatus\.hasUnsavedChanges\) \{\s*setLastPreflightMessage\("配置已修改，正在保存并重新预检。"\);\s*await persistQuickFixConfig\(\);/s,
+	);
+	assert.match(
+		dialogSource,
+		/const preflightResult = await runAgentPreflightCheck\(\);/,
+	);
+	assert.doesNotMatch(contentSource, /handleQuickFixSave/);
+	assert.doesNotMatch(contentSource, /onClick=\{handleQuickFixSave\}/);
+	assert.doesNotMatch(contentSource, />\s*保存配置\s*</);
+	assert.match(contentSource, /保存并预检中/);
+	assert.match(contentSource, /\"重新预检\"/);
+});
+
+test("manual preflight path does not auto-create intelligent audit tasks", async () => {
+	const dialogSource = await readFile(
+		"src/components/scan/CreateProjectScanDialog.tsx",
+		"utf8",
+	);
+	const quickFixTestBody = dialogSource.match(
+		/const handleQuickFixTest = async \(\) => \{(?<body>[\s\S]*?)\n\t\};/,
+	)?.groups?.body;
+
+	assert.ok(quickFixTestBody, "handleQuickFixTest body should be present");
+	assert.match(quickFixTestBody, /runAgentPreflightCheck/);
+	assert.doesNotMatch(quickFixTestBody, /createAgentTaskForProject/);
+	assert.doesNotMatch(quickFixTestBody, /handleCreateAgentTaskForProject/);
 });
 
 test("LLM gate treats redacted placeholders as inert and requires an explicit saved/imported source", async () => {

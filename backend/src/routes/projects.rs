@@ -768,12 +768,10 @@ pub async fn get_dashboard_snapshot(
         .await
         .map_err(internal_error)?;
     let task_status = build_dashboard_task_status(&task_snapshot);
+    let intelligent_verified_findings = dashboard_intelligent_verified_findings(&task_snapshot);
+    let verified_cumulative_findings = dashboard_verified_cumulative_findings(&task_snapshot);
     let recent_task_limit = query.top_n.unwrap_or(10).clamp(1, 50);
-    let all_recent_tasks = build_dashboard_recent_tasks(
-        &task_snapshot,
-        &project_names,
-        50,
-    );
+    let all_recent_tasks = build_dashboard_recent_tasks(&task_snapshot, &project_names, 50);
     let recent_tasks = all_recent_tasks
         .iter()
         .take(recent_task_limit)
@@ -801,8 +799,9 @@ pub async fn get_dashboard_snapshot(
         "cwe_distribution": [],
         "summary": {
             "total_projects": total_projects,
-            "current_effective_findings": 0,
-            "current_verified_findings": 0,
+            "current_effective_findings": verified_cumulative_findings,
+            "current_verified_vulnerability_total": verified_cumulative_findings,
+            "current_verified_findings": intelligent_verified_findings,
             "total_model_tokens": 0,
             "false_positive_rate": 0.0,
             "scan_success_rate": 0.0,
@@ -817,8 +816,8 @@ pub async fn get_dashboard_snapshot(
         "daily_activity": [],
         "verification_funnel": {
             "raw_findings": 0,
-            "effective_findings": 0,
-            "verified_findings": 0,
+            "effective_findings": verified_cumulative_findings,
+            "verified_findings": verified_cumulative_findings,
             "false_positive_count": 0
         },
         "task_status_breakdown": {
@@ -850,6 +849,103 @@ pub async fn get_dashboard_snapshot(
         "static_engine_rule_totals": [],
         "language_loc_distribution": []
     })))
+}
+
+fn dashboard_verified_cumulative_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
+    dashboard_static_verified_medium_plus_findings(snapshot)
+        + dashboard_intelligent_verified_findings(snapshot)
+}
+
+fn dashboard_intelligent_verified_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
+    snapshot
+        .agent_tasks
+        .values()
+        .map(agent_verified_dashboard_count)
+        .sum()
+}
+
+fn agent_verified_dashboard_count(record: &task_state::AgentTaskRecord) -> i64 {
+    let severity_total = non_negative_i64(record.verified_critical_count)
+        + non_negative_i64(record.verified_high_count)
+        + non_negative_i64(record.verified_medium_count)
+        + non_negative_i64(record.verified_low_count);
+    if severity_total > 0 {
+        return severity_total;
+    }
+    if record.verified_count > 0 {
+        return non_negative_i64(record.verified_count);
+    }
+    record
+        .findings
+        .iter()
+        .filter(|finding| {
+            let status = finding.status.trim().to_ascii_lowercase();
+            (finding.is_verified || status == "verified")
+                && status != "false_positive"
+                && status != "hidden"
+                && status != "deleted"
+        })
+        .count() as i64
+}
+
+fn dashboard_static_verified_medium_plus_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
+    snapshot
+        .static_tasks
+        .values()
+        .flat_map(|record| record.findings.iter())
+        .filter(|finding| is_static_dashboard_verified_medium_plus_finding(finding))
+        .count() as i64
+}
+
+fn is_static_dashboard_verified_medium_plus_finding(
+    finding: &task_state::StaticFindingRecord,
+) -> bool {
+    let status = finding.status.trim().to_ascii_lowercase();
+    if status != "verified" {
+        return false;
+    }
+    if payload_flag_true(
+        &finding.payload,
+        &[
+            "hidden",
+            "is_hidden",
+            "deleted",
+            "is_deleted",
+            "false_positive",
+            "is_false_positive",
+        ],
+    ) {
+        return false;
+    }
+    let payload_status = finding
+        .payload
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    if payload_status == "false_positive"
+        || payload_status == "hidden"
+        || payload_status == "deleted"
+    {
+        return false;
+    }
+    matches!(
+        finding
+            .payload
+            .get("severity")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_uppercase()
+            .as_str(),
+        "CRITICAL" | "HIGH" | "MEDIUM"
+    )
+}
+
+fn payload_flag_true(payload: &Value, keys: &[&str]) -> bool {
+    keys.iter()
+        .any(|key| payload.get(*key).and_then(Value::as_bool).unwrap_or(false))
 }
 
 #[derive(Debug, Clone, Copy, Default)]

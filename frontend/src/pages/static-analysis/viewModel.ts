@@ -623,12 +623,12 @@ export function buildStaticAnalysisHeaderSummary(input: {
     toStaticAnalysisSafeMetric(pmdTask?.total_findings);
   const projectName =
     String(
-      input.fallbackProjectName ||
-        input.opengrepTask?.project_name ||
+      input.opengrepTask?.project_name ||
         input.gitleaksTask?.project_name ||
         input.banditTask?.project_name ||
         input.phpstanTask?.project_name ||
         pmdTask?.project_name ||
+        input.fallbackProjectName ||
         "-",
     ).trim() || "-";
 

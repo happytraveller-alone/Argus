@@ -99,12 +99,18 @@ const DASHBOARD_VIEW_COLUMNS: AppColumnDef<DashboardViewMeta, unknown>[] = [
 	{ accessorKey: "description", header: "说明", meta: { label: "说明" } },
 ];
 
-const DASHBOARD_STATUS_SECTION_COLUMNS: AppColumnDef<AuditTypeTaskStatusSection, unknown>[] = [
+const DASHBOARD_STATUS_SECTION_COLUMNS: AppColumnDef<
+	AuditTypeTaskStatusSection,
+	unknown
+>[] = [
 	{ accessorKey: "label", header: "审计类型", meta: { label: "审计类型" } },
 	{ accessorKey: "total", header: "总执行", meta: { label: "总执行" } },
 ];
 
-const DASHBOARD_RECENT_TASK_COLUMNS: AppColumnDef<DashboardRecentTaskItem, unknown>[] = [
+const DASHBOARD_RECENT_TASK_COLUMNS: AppColumnDef<
+	DashboardRecentTaskItem,
+	unknown
+>[] = [
 	{ accessorKey: "title", header: "任务", meta: { label: "任务" } },
 	{ accessorKey: "status", header: "状态", meta: { label: "状态" } },
 ];
@@ -214,7 +220,12 @@ export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 export const TOP_STATS_GRID_CLASSNAME =
 	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
-	"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,24rem)] xl:min-h-0 xl:flex-1";
+	"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1";
+export const DASHBOARD_CHART_AREA_GRID_CLASSNAME =
+	"grid min-w-0 gap-4 xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]";
+export const DASHBOARD_VIEW_RAIL_CLASSNAME =
+	"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm xl:min-h-0";
+export const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME = "grid gap-2";
 export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";
@@ -227,7 +238,7 @@ const DASHBOARD_META_LABEL_CLASSNAME =
 const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
 const RECENT_TASK_CARD_CLASSNAME =
-	"min-w-[16rem] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition hover:border-border/80 hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
+	"min-w-0 rounded-sm border border-border bg-card px-3 py-2.5 text-xs text-card-foreground shadow-sm transition hover:border-border/80 hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
 const DASHBOARD_TOOLTIP_STYLE = {
 	backgroundColor: "hsl(var(--card))",
 	borderColor: "hsl(var(--border))",
@@ -316,6 +327,19 @@ export function getHorizontalStatsXAxisProps(
 
 function formatNumber(value: number | null | undefined) {
 	return Math.max(Number(value || 0), 0).toLocaleString("zh-CN");
+}
+
+export function getDashboardVerifiedCumulativeFindingTotal(
+	snapshot: DashboardSnapshotResponse,
+) {
+	return Math.max(
+		Number(
+			snapshot.summary.current_verified_vulnerability_total ??
+				snapshot.summary.current_effective_findings ??
+				0,
+		),
+		0,
+	);
 }
 
 export function formatHorizontalStatsTooltipValue(
@@ -563,7 +587,9 @@ export function normalizeRecentTaskTypeLabel(
 export function normalizeRecentTaskStatusLabel(
 	status: string | null | undefined,
 ): "完成" | "进行" | "中断" | "异常" {
-	const normalized = String(status || "").trim().toLowerCase();
+	const normalized = String(status || "")
+		.trim()
+		.toLowerCase();
 	if (normalized === "completed" || normalized === "success") {
 		return "完成";
 	}
@@ -619,14 +645,23 @@ export function buildAuditTypeTaskStatusSections(
 	snapshot: DashboardSnapshotResponse,
 ): AuditTypeTaskStatusSection[] {
 	const byType = snapshot.task_status_by_scan_type;
-	return ([
-		{ key: "intelligent" as const, label: "智能审计" as const, tasksRoute: "/tasks/intelligent" },
-		{ key: "static" as const, label: "静态审计" as const, tasksRoute: "/tasks/static" },
-	]).map((section) => {
+	return [
+		{
+			key: "intelligent" as const,
+			label: "智能审计" as const,
+			tasksRoute: "/tasks/intelligent",
+		},
+		{
+			key: "static" as const,
+			label: "静态审计" as const,
+			tasksRoute: "/tasks/static",
+		},
+	].map((section) => {
 		const key = section.key;
 		const completed = byType.completed[key];
 		const running = byType.pending[key] + byType.running[key];
-		const anomaly = byType.failed[key] + byType.interrupted[key] + byType.cancelled[key];
+		const anomaly =
+			byType.failed[key] + byType.interrupted[key] + byType.cancelled[key];
 		return {
 			...section,
 			completed,
@@ -657,7 +692,10 @@ function AuditTypeBreakdownTooltipContent({
 					["进行中", section.running],
 					["异常", section.anomaly],
 				].map(([label, value]) => (
-					<div key={label} className="flex items-center justify-between gap-6 text-sm">
+					<div
+						key={label}
+						className="flex items-center justify-between gap-6 text-sm"
+					>
 						<span className="text-muted-foreground">{label}</span>
 						<span className="font-semibold tabular-nums text-foreground">
 							{formatNumber(Number(value))}
@@ -681,7 +719,7 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 		{ label: "项目总数", value: formatNumber(snapshot.summary.total_projects) },
 		{
 			label: "累计发现漏洞总数",
-			value: formatNumber(snapshot.summary.current_effective_findings),
+			value: formatNumber(getDashboardVerifiedCumulativeFindingTotal(snapshot)),
 		},
 		{
 			label: "AI验证漏洞总数",
@@ -739,9 +777,9 @@ function ViewSidebar({
 			renderMode={({ rows }) => (
 				<nav
 					aria-label="漏洞态势视图切换"
-					className={`${DASHBOARD_PANEL_CLASSNAME} p-3`}
+					className={DASHBOARD_VIEW_RAIL_CLASSNAME}
 				>
-					<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+					<div className={DASHBOARD_VIEW_RAIL_LIST_CLASSNAME}>
 						{rows.map((view) => {
 							const active = view.id === activeView;
 							return (
@@ -750,14 +788,14 @@ function ViewSidebar({
 									type="button"
 									aria-pressed={active}
 									onClick={() => onChange(view.id)}
-									className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${
+									className={`group flex w-full items-start gap-2 rounded-sm border px-2 py-2 text-left transition duration-200 ${
 										active
 											? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
 											: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
 									}`}
 								>
 									<div
-										className={`mt-0.5 rounded-sm p-2 ${
+										className={`mt-0.5 rounded-sm p-1.5 ${
 											active
 												? "bg-primary/10 text-primary"
 												: "bg-muted/70 text-muted-foreground"
@@ -788,7 +826,7 @@ function ViewSidebar({
 												}`}
 											/>
 										</div>
-										<p className="mt-1 text-xs leading-5 text-muted-foreground">
+										<p className="mt-1 truncate whitespace-nowrap text-[11px] leading-4 text-muted-foreground">
 											{view.description}
 										</p>
 									</div>
@@ -829,9 +867,14 @@ function TaskStatusPanel({
 					<div className="grid min-h-0 flex-1 grid-rows-2 gap-0 divide-y divide-border/70">
 						{rows.map((section) => {
 							const recentTasks = getRecentTaskCards(section.recentTasks);
-							const hasMore = section.recentTasks.length > DASHBOARD_RECENT_TASKS_LIMIT;
+							const hasMore =
+								section.recentTasks.length > DASHBOARD_RECENT_TASKS_LIMIT;
 							return (
-								<div key={section.key} data-audit-type-section={section.key} className="min-h-0 py-4 first:pt-0 last:pb-0">
+								<div
+									key={section.key}
+									data-audit-type-section={section.key}
+									className="min-h-0 py-4 first:pt-0 last:pb-0"
+								>
 									<div className="mb-3 flex items-center justify-between gap-3">
 										<div className="flex items-center gap-2">
 											<h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
@@ -878,7 +921,10 @@ function TaskStatusPanel({
 														<RecentTaskCard key={task.task_id} task={task} />
 													))}
 													{hasMore ? (
-														<a href={section.tasksRoute} className="rounded-sm border border-dashed border-border px-3 py-2 text-center text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+														<a
+															href={section.tasksRoute}
+															className="rounded-sm border border-dashed border-border px-3 py-2 text-center text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+														>
 															...
 														</a>
 													) : null}
@@ -901,7 +947,9 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 	const statusLabel = normalizeRecentTaskStatusLabel(task.status);
 	const typeLabel = normalizeRecentTaskTypeLabel(task.task_type);
 	const typeBadgeClassName = getRecentTaskTypeBadgeClassName(task.task_type);
-	const progressBadgeClassName = getRecentTaskProgressBadgeClassName(task.status);
+	const progressBadgeClassName = getRecentTaskProgressBadgeClassName(
+		task.status,
+	);
 	return (
 		<a
 			href={task.detail_path || "/tasks/static"}
@@ -1283,9 +1331,12 @@ export default function DashboardCommandCenter({
 		<div className="px-1 pb-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
 			<div className="space-y-6 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:space-y-4">
 				<PreviewHeader snapshot={snapshot} />
-				<ViewSidebar activeView={activeView} onChange={setActiveView} />
 				<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>
-					<section className={`${DASHBOARD_PANEL_CLASSNAME} p-5 xl:min-h-0`}>
+					<div className={DASHBOARD_CHART_AREA_GRID_CLASSNAME}>
+						<ViewSidebar activeView={activeView} onChange={setActiveView} />
+						<section
+							className={`${DASHBOARD_PANEL_CLASSNAME} min-w-0 p-5 xl:min-h-0`}
+						>
 						{activeView === "trend" ? (
 							<TrendPanel snapshot={snapshot} />
 						) : (
@@ -1299,6 +1350,7 @@ export default function DashboardCommandCenter({
 							/>
 						)}
 					</section>
+					</div>
 					<TaskStatusPanel snapshot={snapshot} />
 				</div>
 			</div>

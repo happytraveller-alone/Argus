@@ -95,7 +95,6 @@ export default function CreateProjectScanDialogContent({
     disableQuickFixTest,
     llmTestBlockedMessage,
     handleQuickFixTest,
-    handleQuickFixSave,
     showReturnButton,
     onReturn,
     primaryCreateLabel,
@@ -168,7 +167,6 @@ export default function CreateProjectScanDialogContent({
     disableQuickFixTest: boolean;
     llmTestBlockedMessage: string;
     handleQuickFixTest: () => void | Promise<void>;
-    handleQuickFixSave: () => void | Promise<void>;
     showReturnButton: boolean;
     onReturn?: () => void;
     primaryCreateLabel: string;
@@ -628,7 +626,7 @@ export default function CreateProjectScanDialogContent({
                                                     {lastPreflightMessage ||
                                                         t(
                                                             "task.llmQuickFixDesc",
-                                                            "未通过时可在下方补配并保存配置，然后重新预检。",
+                                                            "未通过时可在下方补配；重新预检会自动保存后再检查。",
                                                         )}
                                                 </p>
                                             </div>
@@ -874,32 +872,13 @@ export default function CreateProjectScanDialogContent({
                                                     disableQuickFixTest
                                                 }
                                             >
-                                                {quickFixTesting ? (
+                                                {quickFixSaving || quickFixTesting ? (
                                                     <>
                                                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                                        预检中...
+                                                        {quickFixSaving ? "保存并预检中..." : "预检中..."}
                                                     </>
                                                 ) : (
                                                     "重新预检"
-                                                )}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                className="cyber-btn-primary h-9"
-                                                onClick={handleQuickFixSave}
-                                                disabled={
-                                                    creating ||
-                                                    quickFixSaving ||
-                                                    quickFixTesting
-                                                }
-                                            >
-                                                {quickFixSaving ? (
-                                                    <>
-                                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                                        保存中...
-                                                    </>
-                                                ) : (
-                                                    "保存配置"
                                                 )}
                                             </Button>
                                         </div>

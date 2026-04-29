@@ -68,9 +68,11 @@ function HeaderFilterTrigger({
       aria-label={`筛选${title}`}
       data-filter-active={active ? "true" : undefined}
       className={cn(
-        "h-8 w-8 shrink-0 px-0 !whitespace-nowrap text-foreground/60 hover:bg-muted/70 hover:text-foreground",
-        weakHighlight &&
-          "border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/15 hover:text-sky-200",
+        "h-8 w-8 shrink-0 px-0 !whitespace-nowrap bg-transparent text-foreground/60 hover:bg-transparent hover:text-foreground",
+        active && "font-bold text-primary hover:text-primary",
+        !active &&
+          weakHighlight &&
+          "font-semibold text-sky-300 hover:text-sky-200",
       )}
     >
       <ListFilter className="h-4 w-4" />
@@ -100,7 +102,11 @@ function HeaderTextFilter<TData, TValue>({
           weakHighlight={showWeakHighlight}
         />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-3 p-3" portal={false}>
+      <PopoverContent
+        align="start"
+        className="w-72 space-y-3 p-3"
+        portal={false}
+      >
         <div className="space-y-1.5">
           <Label className="font-mono text-xs font-bold uppercase text-muted-foreground">
             {title}
@@ -108,7 +114,9 @@ function HeaderTextFilter<TData, TValue>({
           <Input
             value={String(currentValue ?? "")}
             onChange={(event) => column.setFilterValue(event.target.value)}
-            placeholder={column.columnDef.meta?.filterPlaceholder || `筛选${title}`}
+            placeholder={
+              column.columnDef.meta?.filterPlaceholder || `筛选${title}`
+            }
             className="cyber-input h-9"
           />
         </div>
@@ -143,7 +151,9 @@ function HeaderNumberRangeFilter<TData, TValue>({
   showWeakHighlight: boolean;
 }) {
   const rangeValue =
-    currentValue && typeof currentValue === "object" && !Array.isArray(currentValue)
+    currentValue &&
+    typeof currentValue === "object" &&
+    !Array.isArray(currentValue)
       ? (currentValue as DataTableNumberRangeValue)
       : {};
 
@@ -156,7 +166,11 @@ function HeaderNumberRangeFilter<TData, TValue>({
           weakHighlight={showWeakHighlight}
         />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-3 p-3" portal={false}>
+      <PopoverContent
+        align="start"
+        className="w-72 space-y-3 p-3"
+        portal={false}
+      >
         <div className="space-y-2">
           <Label className="font-mono text-xs font-bold uppercase text-muted-foreground">
             {title}
@@ -236,7 +250,9 @@ function HeaderOptionFilter<TData, TValue>({
         {filterVariant === "multi-select" ? (
           <>
             {filterOptions.map((option) => {
-              const selectedValues = Array.isArray(currentValue) ? currentValue : [];
+              const selectedValues = Array.isArray(currentValue)
+                ? currentValue
+                : [];
               return (
                 <DropdownMenuCheckboxItem
                   key={option.value}
@@ -259,7 +275,9 @@ function HeaderOptionFilter<TData, TValue>({
         ) : (
           <DropdownMenuRadioGroup
             value={
-              currentValue === undefined || currentValue === null || currentValue === ""
+              currentValue === undefined ||
+              currentValue === null ||
+              currentValue === ""
                 ? "__all__"
                 : String(currentValue)
             }
@@ -307,13 +325,19 @@ export function DataTableColumnHeader<TData, TValue>({
   const currentFilterValue = column.getFilterValue() as DataTableFilterValue;
   const filterActive = isFilterActive(currentFilterValue);
   const showWeakHighlight = filterActive || defaultFilterValue !== undefined;
-  const canFilterInHeader = filterPlacement === "header" && Boolean(filterVariant);
+  const canFilterInHeader =
+    filterPlacement === "header" && Boolean(filterVariant);
   const canSort = column.getCanSort();
+  const sortState = column.getIsSorted();
 
   if (!canSort && !canFilterInHeader) {
     return (
       <span
-        className={cn("inline-flex items-center", headerContentClassName, className)}
+        className={cn(
+          "inline-flex items-center",
+          headerContentClassName,
+          className,
+        )}
       >
         {title}
       </span>
@@ -324,7 +348,7 @@ export function DataTableColumnHeader<TData, TValue>({
     <div
       data-data-table-header-control="true"
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm border border-border/50 bg-background/35 px-1 py-0.5 whitespace-nowrap",
+        "inline-flex items-center gap-1 whitespace-nowrap bg-transparent",
         className,
       )}
     >
@@ -334,13 +358,16 @@ export function DataTableColumnHeader<TData, TValue>({
           variant="ghost"
           size="sm"
           className={cn(
-            "h-8 gap-1 px-2 font-mono text-xs uppercase tracking-[0.16em] text-foreground/80 !whitespace-nowrap hover:bg-muted/70",
+            "h-8 gap-1 bg-transparent px-2 font-mono text-xs uppercase tracking-[0.16em] !whitespace-nowrap hover:bg-transparent hover:text-foreground",
+            sortState
+              ? "font-bold text-primary"
+              : "font-medium text-foreground/80",
             headerContentClassName,
           )}
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          onClick={() => column.toggleSorting(sortState === "asc")}
         >
           <span className="whitespace-nowrap">{title}</span>
-          <SortIcon state={column.getIsSorted()} />
+          <SortIcon state={sortState} />
         </Button>
       ) : (
         <span

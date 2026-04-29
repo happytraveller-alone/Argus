@@ -154,6 +154,7 @@ export interface DashboardCweDistributionItem {
 export interface DashboardSummaryItem {
   total_projects: number;
   current_effective_findings: number;
+  current_verified_vulnerability_total?: number;
   current_verified_findings: number;
   total_model_tokens: number;
   false_positive_rate: number;

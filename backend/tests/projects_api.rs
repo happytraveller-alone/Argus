@@ -440,6 +440,110 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
 }
 
 #[tokio::test]
+async fn dashboard_snapshot_counts_cumulative_vulnerabilities_from_verified_only_findings() {
+    let config = isolated_test_config("projects-dashboard-verified-cumulative");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_named(&app, "Verified Dashboard").await;
+
+    let mut snapshot = task_state::load_snapshot(&state)
+        .await
+        .expect("snapshot should load");
+    snapshot.static_tasks.insert(
+        "static-verified".to_string(),
+        task_state::StaticTaskRecord {
+            id: "static-verified".to_string(),
+            engine: "opengrep".to_string(),
+            project_id: project_id.clone(),
+            name: "static verified".to_string(),
+            status: "completed".to_string(),
+            target_path: ".".to_string(),
+            created_at: "2026-04-24T12:00:00Z".to_string(),
+            extra: json!({}),
+            findings: vec![
+                task_state::StaticFindingRecord {
+                    id: "static-medium".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"severity": "MEDIUM"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-high".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"severity": "HIGH"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-low-excluded".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"severity": "LOW"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-open-excluded".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "open".to_string(),
+                    payload: json!({"severity": "CRITICAL"}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-hidden-excluded".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"severity": "CRITICAL", "hidden": true}),
+                },
+                task_state::StaticFindingRecord {
+                    id: "static-false-positive-flag-excluded".to_string(),
+                    scan_task_id: "static-verified".to_string(),
+                    status: "verified".to_string(),
+                    payload: json!({"severity": "HIGH", "is_false_positive": true}),
+                },
+            ],
+            ..Default::default()
+        },
+    );
+    snapshot.agent_tasks.insert(
+        "agent-verified".to_string(),
+        task_state::AgentTaskRecord {
+            id: "agent-verified".to_string(),
+            project_id: project_id.clone(),
+            task_type: "agent_audit".to_string(),
+            status: "completed".to_string(),
+            verified_high_count: 2,
+            verified_low_count: 1,
+            findings_count: 5,
+            created_at: "2026-04-24T11:00:00Z".to_string(),
+            completed_at: Some("2026-04-24T11:05:00Z".to_string()),
+            ..Default::default()
+        },
+    );
+    task_state::save_snapshot(&state, &snapshot)
+        .await
+        .expect("snapshot should save");
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/projects/dashboard-snapshot")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    assert_eq!(
+        payload["summary"]["current_verified_vulnerability_total"],
+        5
+    );
+    assert_eq!(payload["summary"]["current_effective_findings"], 5);
+    assert_eq!(payload["summary"]["current_verified_findings"], 3);
+    assert_eq!(payload["verification_funnel"]["verified_findings"], 5);
+}
+
+#[tokio::test]
 async fn project_management_metrics_include_cumulative_opengrep_findings() {
     let state = AppState::from_config(isolated_test_config("projects-static-metrics"))
         .await

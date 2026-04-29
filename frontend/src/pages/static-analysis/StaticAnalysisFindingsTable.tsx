@@ -133,7 +133,16 @@ export function getColumns(input: {
 		},
 		{
 			id: "location",
-			accessorFn: (row) => `${row.filePath}${row.line ? `:${row.line}` : ""}`,
+			accessorFn: (row) =>
+				[
+					row.filePath,
+					row.line ? `:${row.line}` : "",
+					row.rule,
+					getEngineLabel(row.engine),
+					getStaticAnalysisFindingStatusLabel(row.status),
+					getStaticAnalysisSeverityLabel(row.severity),
+					getStaticAnalysisConfidenceLabel(row.confidence),
+				].join(" "),
 			header: "命中位置",
 			enableSorting: false,
 			enableHiding: false,
@@ -353,11 +362,10 @@ export default function StaticAnalysisFindingsTable({
 			}}
 			toolbar={{
 				searchPlaceholder: "搜索规则、位置或状态",
-				showGlobalSearch: false,
-				// showColumnVisibility: false,
+				showGlobalSearch: true,
+				showColumnVisibility: false,
 				showDensityToggle: false,
 				showReset: false,
-				// filters: [],
 			}}
 			pagination={{
 				enabled: true,

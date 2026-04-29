@@ -63,6 +63,7 @@ function renderTable(
 	Table: StaticAnalysisFindingsTable["default"],
 	overrides: Partial<{
 		rows: UnifiedFindingRow[];
+		state: DataTableQueryState;
 		updatingKey: string | null;
 	}> = {},
 ) {
@@ -88,6 +89,7 @@ test("StaticAnalysisFindingsTable renders tri-state status copy and truthiness a
 	const tableModule = await loadTableModule();
 	const markup = renderTable(tableModule.default);
 
+	assert.match(markup, /placeholder="搜索规则、位置或状态"/);
 	assert.match(markup, /漏洞状态/);
 	assert.match(markup, /待验证/);
 	assert.match(markup, /判真/);
@@ -96,6 +98,39 @@ test("StaticAnalysisFindingsTable renders tri-state status copy and truthiness a
 	assert.doesNotMatch(markup, /处理状态/);
 	assert.doesNotMatch(markup, /修复/);
 	assert.doesNotMatch(markup, />验证</);
+});
+
+test("StaticAnalysisFindingsTable top search filters visible main row fields only", async () => {
+	const tableModule = await loadTableModule();
+	const hiddenOnlyFinding = {
+		...verifiedFinding,
+		key: "hidden-only",
+		id: "finding-hidden",
+		rule: "safe-rule",
+		filePath: "src/safe.ts",
+		status: "open",
+		rawJsonOnlyNeedle: "hidden-needle",
+	} as UnifiedFindingRow & { rawJsonOnlyNeedle: string };
+
+	const visibleMatchMarkup = renderTable(tableModule.default, {
+		rows: [openFinding, hiddenOnlyFinding],
+		state: {
+			...tableState,
+			globalFilter: "src/app.py",
+		},
+	});
+	assert.match(visibleMatchMarkup, /src\/app.py/);
+	assert.doesNotMatch(visibleMatchMarkup, /src\/safe.ts/);
+
+	const hiddenOnlyMarkup = renderTable(tableModule.default, {
+		rows: [hiddenOnlyFinding],
+		state: {
+			...tableState,
+			globalFilter: "hidden-needle",
+		},
+	});
+	assert.match(hiddenOnlyMarkup, /暂无符合条件的漏洞/);
+	assert.doesNotMatch(hiddenOnlyMarkup, /src\/safe.ts/);
 });
 
 test("StaticAnalysisFindingsTable only disables status actions for the updating row", async () => {

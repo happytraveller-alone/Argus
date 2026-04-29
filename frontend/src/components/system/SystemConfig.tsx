@@ -876,9 +876,12 @@ export function SystemConfig({
 	};
 
 	const getModelsForProvider = (providerId: string): string[] => {
-		const fetchedModels = fetchedModelsByProvider[providerId];
-		if (Array.isArray(fetchedModels) && fetchedModels.length > 0)
-			return fetchedModels;
+		if (
+			Object.prototype.hasOwnProperty.call(fetchedModelsByProvider, providerId)
+		) {
+			const fetchedModels = fetchedModelsByProvider[providerId];
+			return Array.isArray(fetchedModels) ? fetchedModels : [];
+		}
 		const backend = getProviderInfo(providerId);
 		return Array.isArray(backend?.models) ? backend.models : [];
 	};
@@ -1199,14 +1202,14 @@ export function SystemConfig({
 			const normalizedModels = Array.isArray(result.models)
 				? [
 						...new Set(
-							result.models.filter((m) => typeof m === "string" && m.trim()),
+							result.models
+								.map((model) =>
+									typeof model === "string" ? model.trim() : "",
+								)
+								.filter(Boolean),
 						),
 					]
 				: [];
-			setFetchedModelsByProvider((prev) => ({
-				...prev,
-				[providerId]: normalizedModels,
-			}));
 			const normalizedMetadata: Record<string, LLMModelMetadata> = {};
 			const rawMetadata = result.modelMetadata;
 			if (rawMetadata && typeof rawMetadata === "object") {
@@ -1229,11 +1232,15 @@ export function SystemConfig({
 					};
 				}
 			}
-			setFetchedModelMetadataByProvider((prev) => ({
-				...prev,
-				[providerId]: normalizedMetadata,
-			}));
-			if (result.source === "online") {
+			if (result.success) {
+				setFetchedModelsByProvider((prev) => ({
+					...prev,
+					[providerId]: normalizedModels,
+				}));
+				setFetchedModelMetadataByProvider((prev) => ({
+					...prev,
+					[providerId]: normalizedMetadata,
+				}));
 				setOnlineModelStatsBySignature((prev) => ({
 					...prev,
 					[signature]: {
@@ -1245,13 +1252,37 @@ export function SystemConfig({
 					...prev,
 					[signature]: "online",
 				}));
+				const preferredFetchedModel =
+					String(result.defaultModel || "").trim() || normalizedModels[0] || "";
+				if (
+					trigger === "manual" &&
+					normalizedModels.length > 0 &&
+					preferredFetchedModel
+				) {
+					setConfig((prev) => {
+						if (!prev) return prev;
+						if (normalizeLlmProviderId(prev.llmProvider) !== providerId) return prev;
+						if (String(prev.llmModel || "").trim() === preferredFetchedModel) {
+							return prev;
+						}
+						llmModelTouchedRef.current = true;
+						setHasChanges(true);
+						return {
+							...prev,
+							llmModel: preferredFetchedModel,
+						};
+					});
+				}
 			} else {
 				setModelStatsFetchStateBySignature((prev) => ({
 					...prev,
 					[signature]: "failed",
 				}));
 			}
-			const latestModel = String(latestConfig.llmModel || "").trim();
+			const latestModel =
+				trigger === "manual" && result.success && normalizedModels.length > 0
+					? String(result.defaultModel || "").trim() || normalizedModels[0] || ""
+					: String(latestConfig.llmModel || "").trim();
 			const effectiveModel =
 				resolveCurrentModelName(providerId, latestModel) ||
 				result.defaultModel ||
@@ -1263,13 +1294,19 @@ export function SystemConfig({
 			if (!silent) {
 				if (result.success) {
 					const currentModel = String(latestConfig.llmModel || "").trim();
-					const hasCurrentModel = Boolean(currentModel);
-					const matched = hasCurrentModel
-						? normalizedModels.includes(currentModel)
+					const selectedModel =
+						trigger === "manual" && normalizedModels.length > 0
+							? String(result.defaultModel || "").trim() ||
+								normalizedModels[0] ||
+								currentModel
+							: currentModel;
+					const hasSelectedModel = Boolean(selectedModel);
+					const matched = hasSelectedModel
+						? normalizedModels.includes(selectedModel)
 						: false;
-					if (hasCurrentModel && matched) {
-						toast.success("模型列表已更新，当前输入已匹配可选项");
-					} else if (hasCurrentModel) {
+					if (hasSelectedModel && matched) {
+						toast.success(`模型列表已更新，已选择 ${selectedModel}`);
+					} else if (hasSelectedModel) {
 						toast.success("模型列表已更新，当前输入可继续作为自定义模型");
 					} else {
 						toast.success(result.message || "模型列表已更新");
@@ -1508,6 +1545,9 @@ export function SystemConfig({
 		? Object.keys(getModelMetadataForProvider(normalizedProviderId)).length
 		: 0;
 	const statsBaseUrl = String(config?.llmBaseUrl || "").trim();
+	const statsParsedCustomHeaders = config
+		? parseLlmCustomHeadersInput(config.llmCustomHeaders)
+		: null;
 	const statsRequiresApiKey = shouldRequireApiKey(normalizedProviderId);
 	const statsHasSavedOrEnteredKey = config
 		? Boolean(config.llmApiKey.trim()) || hasServerSideApiKeyReference(config)
@@ -1518,11 +1558,12 @@ export function SystemConfig({
 			supportsModelFetch &&
 			normalizedProviderId !== "custom" &&
 			statsBaseUrl &&
+			Boolean(statsParsedCustomHeaders?.ok) &&
 			(!statsRequiresApiKey || statsHasSavedOrEnteredKey) &&
 			!hasChanges,
 	);
 	const currentStatsSignature = shouldPreferOnlineStats
-		? `${normalizedProviderId}|${statsBaseUrl}|saved-config`
+		? `${normalizedProviderId}|${statsBaseUrl}|saved-config|${statsParsedCustomHeaders?.ok ? statsParsedCustomHeaders.normalizedText : "invalid"}`
 		: null;
 	const preferredModelStats = resolvePreferredModelStats({
 		shouldPreferOnlineStats,
