@@ -27,6 +27,13 @@ By default, Compose publishes the frontend on host port `13000` and the backend 
 
 The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.
 
+## Repo-local Codex / OMX
+
+- The repo-local Codex configuration lives at `.codex/config.toml`; start Codex/OMX for this project with `CODEX_HOME=$PWD/.codex` so the session does not fall back to the global `~/.codex`.
+- On first use, bootstrap auth with `CODEX_HOME=$PWD/.codex codex login`, or manually copy `~/.codex/auth.json` to `.codex/auth.json` after accepting the risk.
+- Project-level agent instructions are centralized in `AGENTS.md`; repo-local skills load from `.codex/skills/`. Use `neat-freak` at milestone end to reconcile project docs and agent knowledge.
+- `.gitignore` ignores `.codex/`; reinstall a local skill or change version-control policy deliberately if another environment must reuse it.
+
 ## GHCR Image Naming
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.

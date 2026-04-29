@@ -60,7 +60,9 @@ test("DashboardCommandCenter summary card descriptions use enlarged label text",
 test("DashboardCommandCenter places the view switcher before chart and status beside chart", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 	const previewIndex = source.indexOf("<PreviewHeader snapshot={snapshot} />");
-	const viewIndex = source.indexOf("<ViewSidebar activeView={activeView} onChange={setActiveView} />");
+	const viewIndex = source.indexOf(
+		"<ViewSidebar activeView={activeView} onChange={setActiveView} />",
+	);
 	const gridIndex = source.indexOf(
 		"<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>",
 	);
@@ -70,16 +72,28 @@ test("DashboardCommandCenter places the view switcher before chart and status be
 	assert.ok(gridIndex > previewIndex);
 	assert.ok(viewIndex > gridIndex);
 	assert.ok(statusIndex > viewIndex);
-	assert.match(source, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/);
 	assert.match(
 		source,
-		/const DASHBOARD_CHART_AREA_GRID_CLASSNAME =\s*"grid min-w-0 gap-4 xl:min-h-0"/,
+		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/,
+	);
+	assert.match(
+		source,
+		/const DASHBOARD_CHART_AREA_GRID_CLASSNAME =\s*"grid min-w-0 content-start gap-2 xl:min-h-0"/,
 	);
 	assert.match(
 		source,
 		/const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME =\s*"grid gap-2 sm:grid-cols-2 xl:grid-cols-5"/,
 	);
-	assert.doesNotMatch(source, /xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/);
+	assert.match(
+		source,
+		/const DASHBOARD_VIEW_RAIL_CLASSNAME =\s*"rounded-sm border border-border bg-card p-1\.5 text-card-foreground shadow-sm"/,
+	);
+	assert.doesNotMatch(source, /\{view\.description\}/);
+	assert.doesNotMatch(source, /text-\[11px\] leading-4 text-muted-foreground/);
+	assert.doesNotMatch(
+		source,
+		/xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/,
+	);
 });
 
 test("DashboardCommandCenter task status uses two audit-type sections", () => {
@@ -102,14 +116,32 @@ test("DashboardCommandCenter recent tasks render three full-card links in one ro
 		source,
 		/const RECENT_TASK_CARD_CLASSNAME =\s*"min-w-0 rounded-sm border border-border bg-card px-3 py-2\.5 text-xs text-card-foreground shadow-sm transition/,
 	);
-	assert.match(source, /const recentTasks = getRecentTaskCards\(section\.recentTasks\);/);
+	assert.match(
+		source,
+		/const recentTasks = getRecentTaskCards\(section\.recentTasks\);/,
+	);
 	assert.match(source, /<a[\s\S]*className=\{RECENT_TASK_CARD_CLASSNAME\}/);
-	assert.match(source, /<Badge className="cyber-badge cyber-badge-muted min-w-0 max-w-full flex-1 truncate normal-case tracking-normal">/);
-	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{typeBadgeClassName\}`\}>/);
-	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{progressBadgeClassName\}`\}>/);
+	assert.match(
+		source,
+		/<Badge className="cyber-badge cyber-badge-muted min-w-0 max-w-full flex-1 truncate normal-case tracking-normal">/,
+	);
+	assert.match(
+		source,
+		/<Badge className=\{`cyber-badge shrink-0 \$\{typeBadgeClassName\}`\}>/,
+	);
+	assert.match(
+		source,
+		/<Badge className=\{`cyber-badge shrink-0 \$\{progressBadgeClassName\}`\}>/,
+	);
 	assert.match(source, /getRecentTaskTypeBadgeClassName\(task\.task_type\)/);
-	assert.match(source, /getRecentTaskProgressBadgeClassName\(\s*task\.status,\s*\)/s);
-	assert.match(source, /<ChevronRight className="mt-0\.5 h-4 w-4 shrink-0 text-muted-foreground" \/>/);
+	assert.match(
+		source,
+		/getRecentTaskProgressBadgeClassName\(\s*task\.status,\s*\)/s,
+	);
+	assert.match(
+		source,
+		/<ChevronRight className="mt-0\.5 h-4 w-4 shrink-0 text-muted-foreground" \/>/,
+	);
 	assert.doesNotMatch(
 		source,
 		/href=\{task\.detail_path \|\| "\/tasks\/static"\}[\s\S]*<Eye/,
@@ -122,7 +154,10 @@ test("DashboardCommandCenter recent tasks live inside each audit-type section", 
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
 	assert.match(source, /data-audit-type-section=\{section\.key\}/);
-	assert.match(source, /const recentTasks = getRecentTaskCards\(section\.recentTasks\);/);
+	assert.match(
+		source,
+		/const recentTasks = getRecentTaskCards\(section\.recentTasks\);/,
+	);
 	assert.match(source, /href=\{section\.tasksRoute\}/);
 });
 

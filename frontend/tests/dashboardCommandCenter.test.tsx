@@ -294,8 +294,8 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /查看近一段时间当日新增漏洞发现与来源构成的波动/);
-	assert.match(markup, /truncate whitespace-nowrap text-\[11px\]/);
+	assert.match(markup, /查看近一段时间当日新增漏洞发现与静态、智能来源构成的波动/);
+	assert.doesNotMatch(markup, /truncate whitespace-nowrap text-\[11px\]/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /Alpha Gateway/);
@@ -708,15 +708,15 @@ test("DashboardCommandCenter uses compact chart spacing constants", async () => 
 	);
 	assert.equal(
 		module.DASHBOARD_MAIN_GRID_CLASSNAME,
-		"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1",
+		"grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1",
 	);
 	assert.equal(
 		module.DASHBOARD_CHART_AREA_GRID_CLASSNAME,
-		"grid min-w-0 gap-4 xl:min-h-0",
+		"grid min-w-0 content-start gap-2 xl:min-h-0",
 	);
 	assert.equal(
 		module.DASHBOARD_VIEW_RAIL_CLASSNAME,
-		"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm",
+		"rounded-sm border border-border bg-card p-1.5 text-card-foreground shadow-sm",
 	);
 	assert.equal(
 		module.DASHBOARD_VIEW_RAIL_LIST_CLASSNAME,
@@ -743,7 +743,7 @@ test("DashboardCommandCenter keeps task sidebar right while chart rail sits abov
 	);
 	assert.match(
 		markup,
-		/grid min-w-0 gap-4 xl:min-h-0/,
+		/grid min-w-0 content-start gap-2 xl:min-h-0/,
 	);
 	assert.match(markup, /sm:grid-cols-2 xl:grid-cols-5/);
 	assert.doesNotMatch(

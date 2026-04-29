@@ -59,6 +59,7 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Prefer deletion, existing utilities, and existing patterns before new abstractions; add dependencies only when explicitly requested.
 - Keep diffs small, reviewable, and reversible.
 - Verify with lint, typecheck, tests, and static analysis after changes; final reports include changed files, simplifications, and remaining risks.
+- After every code modification task, run the `$neat-freak` skill once to reconcile project docs and agent knowledge. If a user writes `$neat-break`, treat it as this `$neat-freak` post-change cleanup directive unless a separate `neat-break` skill exists.
 
 <lore_commit_protocol>
 ## Lore Commit Protocol

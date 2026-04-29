@@ -69,13 +69,14 @@ function HeaderFilterTrigger({
       data-filter-active={active ? "true" : undefined}
       data-data-table-filter-trigger="true"
       className={cn(
-        "h-8 w-8 shrink-0 rounded-l-none px-0 !whitespace-nowrap bg-transparent text-foreground/60 hover:bg-transparent hover:text-foreground",
-        active && "font-bold text-primary hover:text-primary",
+        "h-8 w-8 shrink-0 rounded-l-none border-l border-border/70 px-0 !whitespace-nowrap bg-transparent text-foreground/60 hover:bg-muted/55 hover:text-foreground",
+        active && "font-bold text-primary hover:bg-primary/10 hover:text-primary",
         !active &&
           weakHighlight &&
-          "font-semibold text-sky-300 hover:text-sky-200",
+          "font-semibold text-sky-300 hover:bg-sky-500/10 hover:text-sky-200",
       )}
       onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
     >
       <ListFilter className="h-4 w-4" />
@@ -351,7 +352,7 @@ export function DataTableColumnHeader<TData, TValue>({
     <div
       data-data-table-header-control="true"
       className={cn(
-        "inline-flex h-8 items-center gap-0 overflow-hidden whitespace-nowrap rounded-sm bg-transparent",
+        "inline-flex h-8 items-center gap-0 overflow-hidden whitespace-nowrap rounded-sm border border-border/70 bg-background/45 shadow-sm transition-colors hover:border-border",
         className,
       )}
     >
@@ -361,7 +362,7 @@ export function DataTableColumnHeader<TData, TValue>({
           variant="ghost"
           size="sm"
           className={cn(
-            "h-8 gap-1 rounded-r-none bg-transparent px-2 font-mono text-xs uppercase tracking-[0.16em] !whitespace-nowrap hover:bg-transparent hover:text-foreground",
+            "h-8 gap-1 rounded-r-none bg-transparent px-2 font-mono text-xs uppercase tracking-[0.16em] !whitespace-nowrap hover:bg-muted/55 hover:text-foreground",
             sortState
               ? "font-bold text-primary"
               : "font-medium text-foreground/80",
@@ -375,7 +376,7 @@ export function DataTableColumnHeader<TData, TValue>({
       ) : (
         <span
           className={cn(
-            "px-2 font-mono text-xs font-medium uppercase tracking-[0.16em] text-foreground/80",
+            "inline-flex h-8 items-center px-2 font-mono text-xs font-medium uppercase tracking-[0.16em] text-foreground/80",
             headerContentClassName,
           )}
         >

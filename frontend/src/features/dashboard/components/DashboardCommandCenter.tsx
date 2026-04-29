@@ -220,11 +220,11 @@ export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 export const TOP_STATS_GRID_CLASSNAME =
 	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
-	"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1";
+	"grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1";
 export const DASHBOARD_CHART_AREA_GRID_CLASSNAME =
-	"grid min-w-0 gap-4 xl:min-h-0";
+	"grid min-w-0 content-start gap-2 xl:min-h-0";
 export const DASHBOARD_VIEW_RAIL_CLASSNAME =
-	"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm";
+	"rounded-sm border border-border bg-card p-1.5 text-card-foreground shadow-sm";
 export const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME =
 	"grid gap-2 sm:grid-cols-2 xl:grid-cols-5";
 export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
@@ -827,9 +827,6 @@ function ViewSidebar({
 												}`}
 											/>
 										</div>
-										<p className="mt-1 truncate whitespace-nowrap text-[11px] leading-4 text-muted-foreground">
-											{view.description}
-										</p>
 									</div>
 								</button>
 							);
@@ -1176,8 +1173,8 @@ function HorizontalStatsChart({
 		: [{ label: "总数", tone: primaryTone }];
 
 	return (
-		<div className="space-y-5">
-			<div className="flex flex-col gap-2">
+		<div className="space-y-3">
+			<div className="flex flex-col gap-1.5">
 				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>{title}</h3>
 				<p className={DASHBOARD_PANEL_DESCRIPTION_CLASSNAME}>{description}</p>
 			</div>
@@ -1330,13 +1327,13 @@ export default function DashboardCommandCenter({
 
 	return (
 		<div className="px-1 pb-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
-			<div className="space-y-6 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:space-y-4">
+			<div className="space-y-3 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:space-y-3">
 				<PreviewHeader snapshot={snapshot} />
 				<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>
 					<div className={DASHBOARD_CHART_AREA_GRID_CLASSNAME}>
 						<ViewSidebar activeView={activeView} onChange={setActiveView} />
 						<section
-							className={`${DASHBOARD_PANEL_CLASSNAME} min-w-0 p-5 xl:min-h-0`}
+							className={`${DASHBOARD_PANEL_CLASSNAME} min-w-0 p-4 xl:min-h-0`}
 						>
 						{activeView === "trend" ? (
 							<TrendPanel snapshot={snapshot} />

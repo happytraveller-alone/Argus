@@ -42,8 +42,16 @@ interface TaskActivitiesListTableProps {
 	cancelDisabledReason?: string | null;
 }
 
-const TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME = "text-sm";
+const TASK_ACTIVITIES_TABLE_HEADER_CELL_CLASSNAME =
+	"border-b-2 border-border/95 bg-muted/75 text-center font-mono text-[14px] font-semibold uppercase tracking-[0.18em] text-foreground/80";
+const TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME = "text-[14px]";
+const TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME =
+	"border-b-2 border-border/95 text-center";
 const TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME = "text-sm";
+const TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME =
+	"cyber-btn-ghost h-8 px-2.5";
+const TASK_ACTIVITIES_TABLE_CANCEL_BUTTON_CLASSNAME =
+	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100";
 const DEFECT_SUMMARY_ITEMS = [
 	{ key: "critical", label: "严重" },
 	{ key: "high", label: "高危" },
@@ -55,7 +63,9 @@ function createTaskActivitiesTableMeta(
 	meta: AppColumnDef<TaskActivityItem, unknown>["meta"],
 ) {
 	return {
+		headerClassName: TASK_ACTIVITIES_TABLE_HEADER_CELL_CLASSNAME,
 		headerContentClassName: TASK_ACTIVITIES_TABLE_HEADER_CONTENT_CLASSNAME,
+		cellClassName: TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME,
 		...meta,
 	};
 }
@@ -110,6 +120,7 @@ function getColumns(input: {
 				label: "项目",
 				minWidth: 132,
 				filterVariant: "text",
+				cellClassName: `${TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME} text-left`,
 			}),
 			cell: ({ row }) => (
 				<span
@@ -130,7 +141,7 @@ function getColumns(input: {
 				maxWidth: 136,
 			}),
 			cell: ({ row }) => (
-				<div className="text-base leading-tight text-muted-foreground">
+				<div className="text-center text-sm leading-tight text-muted-foreground">
 					<div className="truncate" title={formatCreatedAt(row.original.createdAt)}>
 						{formatCreatedAt(row.original.createdAt)}
 					</div>
@@ -183,7 +194,7 @@ function getColumns(input: {
 				const progress = getTaskProgressPercent(row.original, input.nowMs);
 
 				return (
-					<div className="flex items-center">
+					<div className="flex items-center justify-center">
 						<Badge
 							className={`${getTaskStatusBadgeClassName(
 								row.original.status,
@@ -228,19 +239,19 @@ function getColumns(input: {
 			enableSorting: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "操作",
-				align: "left",
+				align: "center",
 				width: 176,
 			}),
 			cell: ({ row }) => {
 				const canCancel = isTaskActivityCancellable(row.original);
 				const cancelling = input.cancellingActivityId === row.original.id;
 				return (
-					<div className="flex justify-start gap-2">
+					<div className="flex flex-wrap items-center justify-center gap-2 text-[16px]">
 						<Button
 							asChild
-							size="sm"
+							size="lg"
 							variant="outline"
-							className="cyber-btn-ghost h-8 px-3"
+							className={TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME}
 						>
 							<Link to={appendReturnTo(row.original.route, input.currentRoute)}>
 								详情
@@ -249,9 +260,9 @@ function getColumns(input: {
 						{canCancel ? (
 							<Button
 								type="button"
-								size="sm"
+								size="lg"
 								variant="outline"
-								className="cyber-btn-outline h-8 border-rose-500/40 px-3 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+								className={TASK_ACTIVITIES_TABLE_CANCEL_BUTTON_CLASSNAME}
 								disabled={Boolean(input.cancelDisabledReason) || cancelling}
 								title={input.cancelDisabledReason || "中止任务"}
 								onClick={() => input.onRequestCancel(row.original)}

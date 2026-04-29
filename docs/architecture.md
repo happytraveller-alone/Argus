@@ -1,421 +1,235 @@
-# AuditTool / Argus 开发者架构指南
+# Argus 开发者架构指南
 
-> 2026-04-18 更新：当前产品扫描模式已收口为静态审计与智能审计。历史兼容字段与迁移背景请以 `plan/rust_full_takeover/` 下的文档为准。
+> 2026-04-30 更新：本仓库当前是 slim-source 形态，运行主线为 Rust/Axum backend、React/Vite frontend、Opengrep 静态审计、AgentFlow 智能审计。历史 Python/FastAPI、Bandit/Gitleaks/PHPStan/PMD/YASA 等链路若仍出现在归档或兼容测试中，按退役背景处理，不作为新功能入口。
 
-> 这份文档不是接口清单，也不是目录罗列。它的目标只有一个：让第一次接手这个项目的开发者，能在最短时间内看懂系统主线，并知道应该从哪里开始读代码。
+这份文档面向第一次接手 Argus 的开发者：先建立系统主线，再告诉你从哪些文件开始读代码。接口字段逐项说明、数据库逐表说明和未来规划不放在这里。
 
 ## 阅读定位
 
-- **文档类型**：以 Explanation 为主，兼顾入门阶段最常用的 Reference 索引。
-- **目标读者**：第一次接手 AuditTool / Argus 的前端、后端或全栈开发者。
-- **阅读目标**：快速建立系统主线，理解两类扫描模式的边界，并知道该从哪些代码入口开始定位问题。
-- **建议搭配**：如果你接下来主要改智能审计，再继续阅读 [agentic_scan_core/README.md](./agentic_scan_core/README.md)。
-- **术语入口**：如果你对 `Project`、`AgentTask`、bootstrap、finding 这些词还不熟，先看 [glossary.md](./glossary.md)。
-- **本文不覆盖**：接口字段逐项解释、数据库逐表说明、未来规划设计。
+- **文档类型**：以架构解释为主，兼顾高频代码入口索引。
+- **目标读者**：第一次接手 Argus 的前端、后端或全栈开发者。
+- **建议顺序**：先读“系统主线”，再读“请求如何流动”，最后按“常见开发任务定位”进入代码。
+- **术语入口**：如果 `Project`、`AgentTask`、`AgentFinding`、AgentFlow、Opengrep 这些词还不熟，先看 [glossary.md](./glossary.md)。
 
-## 建议阅读方式
+## 系统主线
 
-按下面的顺序阅读，最容易形成稳定心智模型：
+Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
-1. 先看“这个系统是什么”和“两类扫描任务”，建立产品级边界。
-2. 再看“核心运行模型”和“请求怎么流动”，理解对象关系与执行主线。
-3. 最后按“代码从哪里读”和“常见开发任务怎么定位”回到具体文件。
+当前运行时由这些部分组成：
 
-## 先看懂系统
+- **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
+- **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
+- **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`。
+- **Runner**：Docker runner 负责隔离执行 Opengrep 和 AgentFlow；Compose 服务在 `docker-compose.yml`。
+- **LLM 配置**：智能审计依赖系统配置和 `.argus-intelligent-audit.env` 启动导入链路。
 
-### 这个系统是什么
+如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计或智能审计，并把结果汇总回前端。**
 
-AuditTool 是一个面向代码仓库安全扫描的平台。仓库名叫 `AuditTool`，代码和历史文档里仍大量保留 `Argus` 这个名字，两者指向的是同一个系统。
+## 两类审计模式
 
-从实现上看，它是一个标准的前后端分离应用：
+### 静态审计
 
-- 前端：React + Vite 单页应用
-- 后端：FastAPI 单体服务
-- 数据层：PostgreSQL
-- 运行期辅助能力：Redis、Docker sandbox、LLM、可选 RAG
+当前可运行的静态审计主线是 **Opengrep-only**。
 
-如果只记一句话，可以这样理解它：
+- 后端路由：`backend/src/routes/static_tasks.rs`
+- 前端 API：`frontend/src/shared/api/opengrep.ts`
+- 前端结果页：`frontend/src/pages/StaticAnalysis.tsx`
+- 任务管理聚合：`frontend/src/features/tasks/services/taskActivities.ts`
+- Runner 脚本：`docker/opengrep-scan.sh`
+- Runner 镜像：`docker/opengrep-runner.Dockerfile`
 
-**它是一个以 `Project` 为中心，把两类扫描任务统一组织起来的安全扫描工作台。**
+历史 Bandit、Gitleaks、PHPStan、PMD 等前端 API 文件仍可能存在，用于迁移、防回归或退役路由测试；不要把它们当作新增静态引擎的当前入口。`backend/tests/opengrep_only_static_tasks.rs` 明确锁定非 Opengrep 静态路由不再由 Rust gateway 拥有。
 
-### 先记住两类扫描任务
+### 智能审计
 
-当前产品视角下，系统只有两类主任务：
+智能审计由 `AgentTask` 主导，并通过 AgentFlow runner 执行。
 
-#### 1. 静态审计
+- 后端路由：`backend/src/routes/agent_tasks.rs`
+- 后端 runtime：`backend/src/runtime/agentflow/`
+- Runner pipeline：`backend/agentflow/pipelines/intelligent_audit.py`
+- Runner 镜像：`docker/agentflow-runner.Dockerfile`
+- 前端 API：`frontend/src/shared/api/agentTasks.ts`
+- 前端详情页：`frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
+- 实时流消费：`frontend/src/shared/api/agentStream.ts`
 
-静态审计是多引擎任务的统一产品视图。  
-它负责快速给出规则命中、密钥泄露、语言级静态分析结果。
+智能审计创建前必须经过 LLM / runner 预检。创建弹窗走 `frontend/src/components/scan/CreateProjectScanDialog.tsx`，预检接口封装在 `frontend/src/shared/api/agentPreflight.ts` 与 `frontend/src/components/scan/create-project-scan/llmGate.ts`。
 
-当前静态引擎包括：
+## 核心对象
 
-- Opengrep
-- Gitleaks
-- Bandit
-- PHPStan
-- YASA
+### `Project`
 
-这些引擎在后端是多套并列任务模型，但在前端会被聚合成一类“静态审计”体验。
+`Project` 是系统中心对象：项目元数据、ZIP 归档、文件浏览、静态任务、智能任务和聚合统计都挂在它下面。
 
-#### 2. 智能审计
+关键入口：
 
-智能审计由 `AgentTask` 主导。  
-它不是简单跑一遍规则，而是让 Agent 做文件侦察、漏洞分析、验证和报告生成。
+- 后端路由与文件操作：`backend/src/routes/projects.rs`
+- 后端存储：`backend/src/db/projects.rs`
+- 前端 API：`frontend/src/shared/api/database.ts`
+- 前端项目页：`frontend/src/pages/Projects.tsx`
+- 项目表格：`frontend/src/pages/projects/components/ProjectsTable.tsx`
 
-如果你看到：
+### 静态审计任务与 finding
 
-- `AgentTask`
-- `AgentEvent`
-- `AgentFinding`
-- SSE 实时流
+Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把它们展示成“静态审计”。
 
-它们基本都属于智能审计主链路。
+关键入口：
 
-## 核心运行模型
+- `backend/src/routes/static_tasks.rs`
+- `backend/src/scan/opengrep.rs`
+- `frontend/src/shared/api/opengrep.ts`
+- `frontend/src/pages/static-analysis/`
+- `frontend/src/features/tasks/components/TaskActivitiesListTable.tsx`
 
-### `Project` 是整个系统的中心
+### `AgentTask` / `AgentEvent` / `AgentFinding`
 
-后端模型入口：`backend/app/models/project.py`
+智能审计的核心对象分别对应：任务、运行事件、最终漏洞发现。
 
-系统里几乎所有能力都围绕 `Project` 展开。你可以把它理解成“一个待扫描代码仓库的工作空间”。
+关键入口：
 
-`Project` 负责承接：
+- 路由和业务编排：`backend/src/routes/agent_tasks.rs`
+- 持久化状态：`backend/src/db/task_state.rs`
+- AgentFlow 输出导入：`backend/src/runtime/agentflow/importer.rs`
+- 前端契约：`frontend/src/shared/api/agentTasks.ts`
+- 前端事件流：`frontend/src/shared/api/agentStream.ts`
+- 智能详情页：`frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
 
-- 项目来源信息：远程仓库或 ZIP 包
-- 项目成员与归属
-- 代码文件与压缩包归档
-- 两类扫描任务
-- 项目级统计与结果聚合
+## 请求如何流动
 
-所以你在定位任何功能时，都可以先问自己一句：
+### 创建项目
 
-**这个功能是不是挂在某个项目之下？**
+1. 前端在 `frontend/src/shared/api/database.ts` 调用 `/api/v1/projects` 或 `/api/v1/projects/{id}/zip`。
+2. 后端 `backend/src/routes/projects.rs` 保存项目元数据与 ZIP 归档。
+3. 文件树、代码浏览、审计任务都基于这份项目归档继续展开。
 
-大多数时候答案都是“是”。
+### 创建静态审计
 
-### 智能审计的核心对象
+1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx`，静态模式当前只创建 Opengrep 任务。
+2. 前端调用 `frontend/src/shared/api/opengrep.ts`。
+3. 后端 `backend/src/routes/static_tasks.rs` 创建任务并调度 `docker/opengrep-scan.sh`。
+4. 结果回到 `StaticAnalysis` 详情页和任务管理页。
 
-如果你要理解智能审计，只需要先看四个对象：
+### 创建智能审计
 
-- `AgentTask`
-  - 一次智能审计任务
-- `AgentEvent`
-  - 任务运行过程中的实时事件
-- `AgentFinding`
-  - Agent 最终沉淀的漏洞发现
-- `AgentTreeNode`
-  - Agent 树与子 Agent 关系
+1. 前端入口仍是 `CreateProjectScanDialog.tsx`。
+2. 弹窗打开、手动重试、点击创建前都应走 agent preflight，而不是直接把系统设置页的 LLM test 当创建门禁。
+3. 创建成功后前端调用 `createAgentTask`，路由到 `/agent-audit/{taskId}`。
+4. 后端 `backend/src/routes/agent_tasks.rs` 创建 `AgentTask`，再启动 AgentFlow runner。
+5. AgentFlow 输出经 `backend/src/runtime/agentflow/importer.rs` 导入为事件、finding、计数和报告。
+6. 前端详情页通过 REST + SSE 展示运行过程与最终结果。
 
-它们定义在：`backend/app/models/agent_task.py`
+### 系统配置与 LLM 预检
 
-这套模型解释了为什么智能审计页面不仅能展示结果，还能展示：
+- 启动导入源：`.argus-intelligent-audit.env`。
+- 后端配置路由：`backend/src/routes/system_config.rs`。
+- 后端 LLM 测试与 fingerprint：`backend/src/llm/tester.rs`。
+- 前端系统配置页：`frontend/src/components/system/SystemConfig.tsx`。
+- 创建弹窗预检：`frontend/src/components/scan/create-project-scan/llmGate.ts`。
 
-- 当前阶段
-- 实时日志
-- 工具调用
-- 验证状态
-- 报告内容
+约定：设置页可以使用 `/system-config/test-llm` 做连接测试；智能审计创建门禁使用 `/system-config/agent-preflight`。
 
-### 静态审计的核心对象
+## 前端 UI 共享边界
 
-静态审计不是一个总模型，而是多套引擎模型并列存在。
+这些组件属于跨页面共享 UI，修改时要按共享组件处理，不能只补单页：
 
-最重要的模型文件是：
+- `frontend/src/components/data-table/DataTable.tsx`
+- `frontend/src/components/data-table/DataTableColumnHeader.tsx`
+- `frontend/src/features/tasks/components/TaskActivitiesListTable.tsx`
+- `frontend/src/features/dashboard/components/DashboardCommandCenter.tsx`
+- `frontend/src/pages/AgentAudit/components/Header.tsx`
 
-- `backend/app/models/opengrep.py`
-- `backend/app/models/gitleaks.py`
-- `backend/app/models/bandit.py`
-- `backend/app/models/phpstan.py`
-- `backend/app/models/yasa.py`
+2026-04-29 的表格/仪表盘/智能详情 UI 修复锁定了这些边界：
 
-共同特点很简单：
+- DataTable 表头筛选触发器必须在共享表头控件内，并且不能用 `preventDefault()` 阻断 Radix Popover / Dropdown 打开。
+- Dashboard 图表选择栏属于图表区顶部；右侧任务状态边栏必须继续作为主 grid 的兄弟列存在。
+- 智能审计详情标签属于标题行，放在“智能审计详情”右侧；动作按钮仍在右侧按钮组。
+- 静态/智能任务管理页共用 `TaskActivitiesListTable`，表格视觉对齐项目管理表格时不得改变详情路由、取消行为、过滤或分页语义。
 
-- 每个引擎都有自己的 task
-- 每个引擎都有自己的 finding
-- 都挂在 `Project` 下
+相关回归测试：
 
-产品层把它们视作“一类静态审计”，代码层则保留各引擎自己的执行和存储边界。
-
-### 实时事件为什么重要
-
-智能审计的“过程可见”并不是页面自己拼出来的，而是后端专门维护了一套事件流。
-
-关键实现入口：
-
-- 后端事件管理：`backend/app/services/agent/event_manager.py`
-- 前端流式消费：`frontend/src/shared/api/agentStream.ts`
-
-如果你遇到这些问题：
-
-- 为什么页面上能实时刷出 Agent 思考过程？
-- 为什么工具调用能逐条展示？
-- 为什么任务结束后还能回看完整过程？
-
-答案基本都在这条链路里。
-
----
-
-## 请求怎么流动
-
-### 从创建项目到可扫描项目
-
-创建项目的入口主要在：
-
-- 后端：`backend/app/api/v1/endpoints/projects.py`
-- 前端：`frontend/src/shared/api/database.ts`
-
-如果项目来自 ZIP：
-
-1. 前端创建 `Project`
-2. 后端保存项目元数据
-3. 压缩包进入上传存储
-4. 后续文件树、文件内容、静态审计、智能审计都基于这份归档
-
-所以“项目上传”不是附属功能，而是后续扫描能力成立的前提。
-
-### 静态审计怎么创建
-
-前端入口：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
-
-创建静态审计时，前端会按勾选的引擎分别调用静态接口，例如：
-
-- Opengrep
-- Gitleaks
-- Bandit
-- PHPStan
-- YASA
-
-后端总入口在：
-
-- `backend/app/api/v1/endpoints/static_tasks.py`
-
-你可以把这个文件理解成静态审计的“总装配层”：
-
-- 对外提供统一前缀
-- 对内把请求分发到各引擎实现
-
-### 智能审计怎么创建
-
-前端入口仍然是：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
-
-当模式是“智能审计”时，前端会直接创建一个 `AgentTask`。
-
-后端主执行入口是：
-
-- `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-
-这里会完成：
-
-1. 准备项目根目录
-2. 校验 LLM 配置
-3. 初始化工具、沙箱和运行时
-4. 启动 Agent 工作流
-5. 持续写入事件和发现
-
-### 智能审计创建后的关键入口
-
-当前产品只暴露单一的智能审计创建入口，因此创建后的定位重点是：
-
-- 前端创建逻辑：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
-- 后端执行入口：`backend/app/api/v1/endpoints/agent_tasks_execution.py`
-
-如果你是在排查历史兼容字段、旧种子注入链路或 Python 旧 runtime 的迁移细节，再回到 `plan/rust_full_takeover/` 和相关归档文档。
-
-### 结果如何回到前端
-
-前端结果展示主要分两类：
-
-#### 静态审计结果
-
-- 页面：`/static-analysis/:taskId`
-- 聚合逻辑：`frontend/src/features/tasks/services/taskActivities.ts`
-
-#### 智能审计结果
-
-- 页面：`/agent-audit/:taskId`
-- 契约：`frontend/src/shared/api/agentTasks.ts`
-- 实时流：`frontend/src/shared/api/agentStream.ts`
-
-你可以把它理解成：
-
-- 静态审计更偏“任务结果列表”
-- 智能审计更偏“任务执行过程 + 结果回放”
-
----
+- `frontend/tests/dataTableHeaderFilters.test.tsx`
+- `frontend/tests/dashboardCommandCenter.test.tsx`
+- `frontend/tests/dashboardCommandCenterStyling.test.ts`
+- `frontend/tests/agentAuditHeader.test.tsx`
+- `frontend/tests/agentAuditTaskDetailHomeCards.test.ts`
+- `frontend/tests/taskActivitiesListTable.test.tsx`
 
 ## 代码从哪里读
 
-### 后端先看这几个入口
+### 后端优先入口
 
-如果你刚接手后端，不要一开始就扎进大量 services。建议按这个顺序读：
+1. `backend/src/main.rs`：启动流程、bootstrap 与监听。
+2. `backend/src/app.rs`：Axum router 组装。
+3. `backend/src/routes/mod.rs`：Rust gateway 当前拥有的 API 域。
+4. `backend/src/routes/projects.rs`：项目与 ZIP 文件入口。
+5. `backend/src/routes/static_tasks.rs`：Opengrep 静态审计入口。
+6. `backend/src/routes/agent_tasks.rs`：智能审计任务、事件、finding、报告入口。
+7. `backend/src/routes/system_config.rs`：系统配置、LLM 测试、agent preflight。
 
-#### 1. `backend/app/main.py`
+### 前端优先入口
 
-先看系统怎么启动。  
-它会告诉你这个服务除了起 FastAPI 之外，还依赖哪些运行期假设，比如：
+1. `frontend/src/app/routes.tsx`：页面和导航边界。
+2. `frontend/src/components/scan/CreateProjectScanDialog.tsx`：两种审计模式的创建入口。
+3. `frontend/src/shared/api/database.ts`：项目、系统配置等通用 API。
+4. `frontend/src/shared/api/opengrep.ts`：静态审计 API。
+5. `frontend/src/shared/api/agentTasks.ts`：智能审计 API。
+6. `frontend/src/features/tasks/services/taskActivities.ts`：任务管理聚合口径。
+7. `frontend/src/pages/AgentAudit/TaskDetailPage.tsx`：智能审计详情页主编排。
 
-- 数据库迁移检查
-- 默认初始化
-- 中断任务恢复
-- Docker / Redis / Agent 环境检查
+## 常见开发任务定位
 
-#### 2. `backend/app/api/v1/api.py`
+### 改扫描创建入口
 
-再看后端暴露了哪些主业务域。  
-这一步的作用不是记接口，而是建立系统边界感。
-
-#### 3. `backend/app/api/v1/endpoints/projects.py`
-
-再看项目聚合入口。  
-因为这个项目里，大多数能力最终都落回 `Project`。
-
-#### 4. `backend/app/api/v1/endpoints/static_tasks.py`
-
-如果你关心静态审计，从这里切入。  
-它能帮助你快速理解静态引擎是如何被统一组织起来的。
-
-#### 5. `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-
-如果你关心智能审计，从这里切入。
-它是任务真正执行起来的地方。
-
-#### 6. `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
-
-如果你要追历史兼容或旧种子注入链路，从这里切入。
-这类代码主要用于理解迁移背景，而不是当前产品模式。
-
-### 前端先看这几个入口
-
-如果你刚接手前端，建议按这个顺序读：
-
-#### 1. `frontend/src/app/routes.tsx`
-
-先搞清楚系统有哪些页面，以及它们在产品上的分组方式。
-
-#### 2. `frontend/src/components/scan/CreateProjectScanDialog.tsx`
-
-这是最值得优先阅读的前端入口。  
-它把静态审计与智能审计如何映射到后端能力，讲得最直白。
-
-#### 3. `frontend/src/pages/ProjectDetail.tsx`
-
-如果你想理解“为什么项目页能把不同结果汇总在一起”，看这里。
-
-#### 4. `frontend/src/shared/api/agentTasks.ts`
-
-如果你想理解智能审计的前后端契约，看这里。
-
-#### 5. `frontend/src/features/tasks/services/taskActivities.ts`
-
-如果你想理解前端是怎么把多种任务统一成一个产品视图的，看这里。
-
-这层很关键，因为它体现的是“产品视角下的聚合口径”，而不只是后端原始结构。
-
----
-
-## 常见开发任务怎么定位
-
-### 如果你要改扫描创建入口
-
-优先看：
+优先读：
 
 - `frontend/src/components/scan/CreateProjectScanDialog.tsx`
+- `frontend/src/components/scan/create-project-scan/`
+- `frontend/src/shared/api/opengrep.ts`
+- `frontend/src/shared/api/agentTasks.ts`
+- `frontend/src/shared/api/agentPreflight.ts`
 
-这是两种扫描模式的统一入口。
-大多数“为什么创建逻辑不一样”的问题，都是从这里开始。
+### 改静态审计
 
-### 如果你要改智能审计创建或初始种子行为
+优先读：
 
-优先看：
-
-- `frontend/src/components/scan/CreateProjectScanDialog.tsx`
-- `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-
-原因很简单：
-
-- 前端决定任务如何创建
-- execution 决定任务如何真正运行
-
-如果你需要追历史兼容链路，再补读 `backend/app/api/v1/endpoints/agent_tasks_bootstrap.py` 和迁移文档。
-
-### 如果你要改智能审计运行过程
-
-优先看：
-
-- `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-- `backend/app/services/agent/agents/`
-- `backend/app/services/agent/workflow/`
-- `backend/app/services/agent/tools/`
-
-如果你只改页面展示，不必立刻深入所有 Agent 实现；先看事件和契约通常更快。
-
-### 如果你要改 Agent 实时流
-
-优先看：
-
-- `backend/app/services/agent/event_manager.py`
-- `frontend/src/shared/api/agentStream.ts`
-
-一个管事件生产和广播，一个管事件消费和重连，基本就是完整链路。
-
-### 如果你要改静态审计聚合展示
-
-优先看：
-
-- `frontend/src/features/tasks/services/taskActivities.ts`
-- `frontend/src/pages/TaskManagementStatic.tsx`
+- `backend/src/routes/static_tasks.rs`
+- `backend/src/scan/opengrep.rs`
+- `docker/opengrep-scan.sh`
+- `frontend/src/shared/api/opengrep.ts`
 - `frontend/src/pages/StaticAnalysis.tsx`
 
-原因是静态审计在后端是多引擎并列，在前端才被聚合成统一体验。
+### 改智能审计运行过程
 
-### 如果你要新增或修改静态引擎
+优先读：
 
-优先看：
+- `backend/src/routes/agent_tasks.rs`
+- `backend/src/runtime/agentflow/`
+- `backend/agentflow/pipelines/intelligent_audit.py`
+- `docker/agentflow-runner.sh`
+- `frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
 
-- `backend/app/api/v1/endpoints/static_tasks.py`
-- 对应的 `backend/app/api/v1/endpoints/static_tasks_<engine>.py`
-- 对应的 `backend/app/models/<engine>.py`
-- 对应的 `frontend/src/shared/api/<engine>.ts`
+### 改 Agent 实时流或回放
 
-这条路径基本就是一条完整的“从后端执行到前端接入”的链路。
+优先读：
 
----
+- `backend/src/routes/agent_tasks.rs` 中的 events / stream 路由
+- `backend/src/db/task_state.rs`
+- `frontend/src/shared/api/agentStream.ts`
+- `frontend/src/pages/AgentAudit/hooks/`
 
-## 一组最值得记住的代码锚点
+### 改表格或列表 UI
 
-如果你只想保留最少但最有用的定位点，记住下面这些就够了：
+优先读：
 
-- 后端启动入口：`backend/app/main.py`
-- 后端 API 总入口：`backend/app/api/v1/api.py`
-- 智能审计执行入口：`backend/app/api/v1/endpoints/agent_tasks_execution.py`
-- 历史兼容 / 种子注入入口：`backend/app/api/v1/endpoints/agent_tasks_bootstrap.py`
-- 静态审计聚合入口：`backend/app/api/v1/endpoints/static_tasks.py`
-- 前端扫描创建入口：`frontend/src/components/scan/CreateProjectScanDialog.tsx`
-- 前端任务聚合入口：`frontend/src/features/tasks/services/taskActivities.ts`
+- `frontend/src/components/data-table/`
+- `frontend/src/pages/projects/components/ProjectsTable.tsx`
+- `frontend/src/features/tasks/components/TaskActivitiesListTable.tsx`
+- 对应的 `frontend/tests/*Table*.test.*`
 
-这几个文件合起来，基本就能覆盖你第一次接手项目时最常见的理解路径。
+共享 DataTable 改动会影响多处页面；先写或更新源级/组件级回归测试，再改样式或事件处理。
 
-## 继续阅读
+## 退役与兼容边界
 
-- 想继续看智能审计主线：读 [agentic_scan_core/workflow_overview.md](./agentic_scan_core/workflow_overview.md)。
-- 想继续看智能体职责和工具边界：读 [agentic_scan_core/agent_tools.md](./agentic_scan_core/agent_tools.md)。
-- 想统一术语理解：回看 [glossary.md](./glossary.md)。
-
----
-
-## 附录：已退役链路说明
-
-旧的早期审计链路已经从运行时代码中移除：
-
-- `AuditTask` / `AuditIssue`
-- `/api/v1/tasks/*`
-- `/api/v1/scan/*`
-
-当前系统只保留两类有效扫描模式：
-
-- 静态审计
-- 智能审计
-
-如果你在迁移历史、基线 schema 快照或专项清理文档里看到旧名称，把它们视为历史记录，而不是可继续接入的主流程。
-
----
+- 旧 Python/FastAPI backend 不是当前运行主线。
+- 非 Opengrep 静态引擎路由不应重新接入当前 Rust gateway，除非先有新的计划和迁移说明。
+- 智能审计禁止把静态扫描任务或静态 finding 候选作为 P1 输入；相关防线在 `backend/src/routes/agent_tasks.rs`。
+- 归档文档、历史测试和旧前端 API 文件可能保留旧名词；新增代码和新文档应优先使用当前主线术语。
