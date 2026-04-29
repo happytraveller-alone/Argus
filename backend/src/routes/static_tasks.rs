@@ -668,7 +668,7 @@ async fn create_opengrep_task(
         })
         .unwrap_or_default();
 
-    let record = task_state::StaticTaskRecord {
+    let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
         engine: "opengrep".to_string(),
         project_id: project_id.clone(),
@@ -708,10 +708,13 @@ async fn create_opengrep_task(
     let project = projects::get_project_while_locked(&state, &project_id)
         .await
         .map_err(internal_error)?;
-    if project.is_none() {
+    let Some(project) = project else {
         return Err(ApiError::NotFound(format!(
             "project not found: {project_id}"
         )));
+    };
+    if let Some(extra) = record.extra.as_object_mut() {
+        extra.insert("project_name".to_string(), Value::String(project.name.clone()));
     }
     let mut snapshot = task_state::load_snapshot_unlocked(&state)
         .await

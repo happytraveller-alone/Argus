@@ -20,6 +20,7 @@ export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
 export interface StaticAnalysisProgressTaskLike {
   id: string;
   project_id: string;
+  project_name?: string | null;
   status: string;
   created_at: string;
   updated_at?: string | null;
@@ -65,6 +66,43 @@ export interface StaticAnalysisTaskStatusSummary {
   progressHint: string;
   engineStatuses: StaticAnalysisEngineStatus[];
   failureReasons: StaticAnalysisFailureReason[];
+}
+
+export interface StaticAnalysisHeaderSummary {
+  projectName: string;
+  statusLabel: string;
+  progressPercent: number;
+  durationLabel: string;
+  totalFindings: number;
+  aggregateStatus: StaticAnalysisAggregateStatus | "pending";
+}
+
+function isStaticAnalysisBootstrapPending(input: {
+  opengrepTask: StaticAnalysisSummaryTaskLike | null;
+  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
+  banditTask: StaticAnalysisSummaryTaskLike | null;
+  phpstanTask: StaticAnalysisSummaryTaskLike | null;
+  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  enabledEngines: Engine[];
+  loadingInitial?: boolean;
+}): boolean {
+  const pmdTask = input.pmdTask ?? null;
+  const tasksByEngine: Record<Engine, StaticAnalysisSummaryTaskLike | null> = {
+    opengrep: input.opengrepTask,
+    gitleaks: input.gitleaksTask,
+    bandit: input.banditTask,
+    phpstan: input.phpstanTask,
+    pmd: pmdTask,
+  };
+  const hasAnyLoadedTask = Object.values(tasksByEngine).some(Boolean);
+  const loadedEnabledEngineCount = input.enabledEngines.filter((engine) =>
+    Boolean(tasksByEngine[engine]),
+  ).length;
+  return Boolean(
+    input.loadingInitial &&
+      input.enabledEngines.length > 0 &&
+      (!hasAnyLoadedTask || loadedEnabledEngineCount < input.enabledEngines.length),
+  );
 }
 
 export type UnifiedFindingRow = {
@@ -531,6 +569,76 @@ export function buildStaticAnalysisProgressSummary(input: {
       },
       input.nowMs,
     ),
+  };
+}
+
+export function buildStaticAnalysisHeaderSummary(input: {
+  opengrepTask: StaticAnalysisSummaryTaskLike | null;
+  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
+  banditTask: StaticAnalysisSummaryTaskLike | null;
+  phpstanTask: StaticAnalysisSummaryTaskLike | null;
+  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  enabledEngines: Engine[];
+  loadingInitial?: boolean;
+  nowMs?: number;
+  fallbackProjectName?: string | null;
+}): StaticAnalysisHeaderSummary {
+  const pmdTask = input.pmdTask ?? null;
+  const isBootstrapping = isStaticAnalysisBootstrapPending(input);
+  const statusSummary = isBootstrapping
+    ? {
+        aggregateStatus: "pending" as const,
+        aggregateLabel: getTaskDisplayStatusSummary("pending").statusLabel,
+      }
+    : buildStaticAnalysisTaskStatusSummary({
+        opengrepTask: input.opengrepTask,
+        gitleaksTask: input.gitleaksTask,
+        banditTask: input.banditTask,
+        phpstanTask: input.phpstanTask,
+        pmdTask,
+      });
+  const progressSummary = isBootstrapping
+    ? { progressPercent: 0 }
+    : buildStaticAnalysisProgressSummary({
+        opengrepTask: input.opengrepTask,
+        gitleaksTask: input.gitleaksTask,
+        banditTask: input.banditTask,
+        phpstanTask: input.phpstanTask,
+        pmdTask,
+        nowMs: input.nowMs,
+      });
+  const totalScanDurationMs = getStaticAnalysisTotalDisplayDurationMs({
+    opengrepTask: input.opengrepTask,
+    gitleaksTask: input.gitleaksTask,
+    banditTask: input.banditTask,
+    phpstanTask: input.phpstanTask,
+    pmdTask,
+    nowMs: input.nowMs,
+  });
+  const totalFindings =
+    toStaticAnalysisSafeMetric(input.opengrepTask?.total_findings) +
+    toStaticAnalysisSafeMetric(input.gitleaksTask?.total_findings) +
+    toStaticAnalysisSafeMetric(input.banditTask?.total_findings) +
+    toStaticAnalysisSafeMetric(input.phpstanTask?.total_findings) +
+    toStaticAnalysisSafeMetric(pmdTask?.total_findings);
+  const projectName =
+    String(
+      input.fallbackProjectName ||
+        input.opengrepTask?.project_name ||
+        input.gitleaksTask?.project_name ||
+        input.banditTask?.project_name ||
+        input.phpstanTask?.project_name ||
+        pmdTask?.project_name ||
+        "-",
+    ).trim() || "-";
+
+  return {
+    projectName,
+    statusLabel: statusSummary.aggregateLabel,
+    progressPercent: progressSummary.progressPercent,
+    durationLabel: formatStaticAnalysisDuration(totalScanDurationMs),
+    totalFindings,
+    aggregateStatus: statusSummary.aggregateStatus,
   };
 }
 

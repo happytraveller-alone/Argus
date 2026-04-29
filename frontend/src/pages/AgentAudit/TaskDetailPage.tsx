@@ -5,21 +5,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  Terminal,
   Bot,
   Zap,
   Loader2,
-  ArrowDown,
-  Download,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useAgentStream } from "@/hooks/useAgentStream";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
@@ -42,8 +33,6 @@ import {
 // Local imports
 import {
   Header,
-  LogEntry,
-  StatsPanel,
   AuditDetailDialog,
   AgentErrorBoundary,
   RealtimeFindingsPanel,
@@ -51,8 +40,6 @@ import {
 import ReportExportDialog from "./components/ReportExportDialog";
 import { useAgentAuditState } from "./hooks";
 import {
-  EVENT_LOG_GRID_TEMPLATE,
-  EVENT_LOG_TABLE_MIN_WIDTH_PX,
   POLLING_INTERVALS,
   TASK_PHASE_LABELS,
 } from "./constants";
@@ -93,19 +80,16 @@ import {
   resolveAgentAuditBackTarget,
   resolveAgentAuditDetailTitle,
   buildStatsSummary,
+  formatDurationMs,
+  formatTokenValue,
   buildAgentAuditTaskFindingCountersPatch,
   createTokenUsageAccumulator,
   isFalsePositiveFinding,
+  summarizeAgentAuditFindings,
   readAgentAuditFindingsPagination,
   writeAgentAuditFindingsPagination,
 } from "./detailViewModel";
 import { getTerminalStatusTransitionPolicy } from "./terminalStatePolicy";
-import {
-  getTaskAutoScroll,
-  persistTaskAutoScroll,
-  PROGRAMMATIC_SCROLL_GUARD_MS,
-  shouldDisableAutoScrollOnScroll,
-} from "./autoScrollState";
 import {
   buildAgentFindingDetailNavigation,
   buildAgentFindingDetailRoute,
@@ -132,14 +116,6 @@ const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
 const TERMINAL_RECOVERY_RETRY_INTERVAL_MS = 1500;
 const TERMINAL_RECOVERY_DEBOUNCE_MS = 30_000;
 const STREAM_SELF_HEAL_RETRY_MS = 4000;
-const LOG_VIEWPORT_DEFAULT_HEIGHT_PX = 200;
-const LOG_VIEWPORT_MIN_HEIGHT_PX = 96;
-const FINDINGS_PANEL_MIN_HEIGHT_PX = 320;
-const DETAIL_CONTENT_GAP_PX = 12;
-const LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 24;
-const SMALL_SCREEN_SPLIT_BREAKPOINT_PX = 1536;
-const SMALL_SCREEN_SPLIT_HEIGHT_BREAKPOINT_PX = 900;
-
 const TERMINAL_STATUSES = new Set([
   "completed",
   "failed",
@@ -156,18 +132,6 @@ const PROGRESS_PATTERNS: { pattern: RegExp; key: string }[] = [
   { pattern: /扫描进度[:：]?\s*\d+/, key: "scan_progress" },
   { pattern: /分析进度[:：]?\s*\d+/, key: "analyze_progress" },
 ];
-
-const LOG_TYPE_LABELS: Record<string, string> = {
-  thinking: "思考",
-  tool: "工具",
-  phase: "阶段",
-  finding: "漏洞",
-  dispatch: "调度",
-  info: "信息",
-  error: "错误",
-  user: "用户",
-  progress: "进度",
-};
 
 function limitRealtimeFindings(
   items: RealtimeMergedFindingItem[],
@@ -513,24 +477,6 @@ function isRetryingTimeoutWarning(
   return retryClass === "timeout_error" && retryable && !terminal;
 }
 
-function toSafeFilename(value: string): string {
-  const text = String(value || "").trim();
-  if (!text) return "task";
-  return text.replace(/[^\w.-]+/g, "_").slice(0, 60) || "task";
-}
-
-function downloadTextFile(content: string, filename: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 function toSafeNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -669,9 +615,7 @@ function AgentAuditPageContent() {
     findings,
     logs,
     isLoading,
-    isAutoScroll,
     treeNodes,
-    filteredLogs,
     isRunning,
     setTask,
     setFindings,
@@ -680,7 +624,6 @@ function AgentAuditPageContent() {
     removeLog,
     selectAgent,
     setLoading,
-    setAutoScroll,
     setCurrentAgentName,
     getCurrentAgentName,
     setCurrentThinkingId,
@@ -688,15 +631,6 @@ function AgentAuditPageContent() {
     dispatch,
     reset,
   } = useAgentAuditState();
-
-  // Local state
-  const isCompactViewport = useCallback(() => {
-    if (typeof window === "undefined") return false;
-    return (
-      window.innerWidth < SMALL_SCREEN_SPLIT_BREAKPOINT_PX ||
-      window.innerHeight < SMALL_SCREEN_SPLIT_HEIGHT_BREAKPOINT_PX
-    );
-  }, []);
 
   const [showSplash, setShowSplash] = useState(!taskId);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -717,7 +651,7 @@ function AgentAuditPageContent() {
     id: string;
   } | null>(null);
   const [terminalFailureReason, setTerminalFailureReason] = useState<string | null>(null);
-  const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
+  const [, setHighlightedLogId] = useState<string | null>(null);
   const [, setHighlightedFindingId] = useState<string | null>(null);
   const [, setHighlightedAgentId] = useState<string | null>(null);
 
@@ -727,23 +661,10 @@ function AgentAuditPageContent() {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState(() => createTokenUsageAccumulator());
   const [statsNow, setStatsNow] = useState(() => new Date());
-  const [isEventLogsVisible, setIsEventLogsVisible] = useState(true);
-  const [isSmallScreenSplit, setIsSmallScreenSplit] = useState<boolean>(() => {
-    return isCompactViewport();
-  });
-  const [logViewportHeight, setLogViewportHeight] = useState(
-    LOG_VIEWPORT_DEFAULT_HEIGHT_PX,
-  );
   const verifiedFindingsManuallyClearedRef = useRef(false);
 
   const detailContentRef = useRef<HTMLDivElement | null>(null);
   const failedReasonRef = useRef<HTMLDivElement | null>(null);
-  const statsSectionRef = useRef<HTMLDivElement | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const logsContainerRef = useRef<HTMLDivElement | null>(null);
-  const eventLogsSectionRef = useRef<HTMLDivElement | null>(null);
-  const eventLogsChromeHeightRef = useRef(0);
-  const hasInitializedLogViewportRef = useRef(false);
   const findingsContainerRef = useRef<HTMLDivElement | null>(null);
   const agentContainerRef = useRef<HTMLDivElement | null>(null);
   const logsRef = useRef(logs);
@@ -755,7 +676,6 @@ function AgentAuditPageContent() {
     null,
   );
   const highlightClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollGuardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAgentTreeRefreshTime = useRef<number>(0);
   const previousTaskIdRef = useRef<string | undefined>(undefined);
   const disconnectStreamRef = useRef<(() => void) | null>(null);
@@ -771,7 +691,6 @@ function AgentAuditPageContent() {
   const taskStartedAtRef = useRef<string | null>(null);
   const currentLogPhaseLabelRef = useRef<string | null>(null);
   const userCancelSeenRef = useRef(false);
-  const ignoreScrollUntilRef = useRef(0);
   const lastStreamSelfHealAttemptRef = useRef(0);
   const terminalRecoveryStateRef = useRef<TerminalRecoveryState>({
     active: false,
@@ -802,124 +721,6 @@ function AgentAuditPageContent() {
     [failedReason],
   );
 
-  const syncEventLogsLayout = useCallback(() => {
-    const detailContent = detailContentRef.current;
-    const statsSection = statsSectionRef.current;
-    if (!detailContent || !statsSection) {
-      return;
-    }
-
-    const detailContentHeight = detailContent.clientHeight;
-    const statsHeight = statsSection.offsetHeight;
-    const hasFailedReason = Boolean(failedReason);
-    const failedHeight = hasFailedReason ? (failedReasonRef.current?.offsetHeight ?? 0) : 0;
-    const logsSection = eventLogsSectionRef.current;
-
-    if (logsSection) {
-      const measuredChromeHeight = logsSection.offsetHeight - logViewportHeight;
-      if (Number.isFinite(measuredChromeHeight) && measuredChromeHeight > 0) {
-        eventLogsChromeHeightRef.current = measuredChromeHeight;
-      }
-    }
-
-    const eventLogsChromeHeight = eventLogsChromeHeightRef.current;
-    const fixedSectionCount = 1 + (hasFailedReason ? 1 : 0);
-    const gapCountWithLogs = fixedSectionCount + 1;
-
-    if (isSmallScreenSplit) {
-      const availablePanelsHeight =
-        detailContentHeight -
-        statsHeight -
-        failedHeight -
-        gapCountWithLogs * DETAIL_CONTENT_GAP_PX;
-      if (!Number.isFinite(availablePanelsHeight) || availablePanelsHeight <= 0) {
-        return;
-      }
-      const panelHeight = Math.max(
-        LOG_VIEWPORT_MIN_HEIGHT_PX,
-        Math.floor(availablePanelsHeight / 2),
-      );
-      const nextLogViewportHeight = Math.max(
-        LOG_VIEWPORT_MIN_HEIGHT_PX,
-        panelHeight - eventLogsChromeHeight,
-      );
-      setIsEventLogsVisible(true);
-      setLogViewportHeight((currentHeight) =>
-        currentHeight === nextLogViewportHeight ? currentHeight : nextLogViewportHeight,
-      );
-      return;
-    }
-
-    const maxLogViewportHeight =
-      detailContentHeight -
-      statsHeight -
-      failedHeight -
-      eventLogsChromeHeight -
-      gapCountWithLogs * DETAIL_CONTENT_GAP_PX -
-      FINDINGS_PANEL_MIN_HEIGHT_PX;
-
-    if (!Number.isFinite(maxLogViewportHeight)) {
-      return;
-    }
-
-    if (maxLogViewportHeight < LOG_VIEWPORT_MIN_HEIGHT_PX) {
-      setIsEventLogsVisible((current) => (current ? false : current));
-      return;
-    }
-
-    const nextLogViewportHeight = Math.min(
-      LOG_VIEWPORT_DEFAULT_HEIGHT_PX,
-      Math.floor(maxLogViewportHeight),
-    );
-    setIsEventLogsVisible((current) => (current ? current : true));
-    setLogViewportHeight((currentHeight) =>
-      currentHeight === nextLogViewportHeight ? currentHeight : nextLogViewportHeight,
-    );
-  }, [failedReason, isSmallScreenSplit, logViewportHeight]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleResize = () => {
-      setIsSmallScreenSplit(isCompactViewport());
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [isCompactViewport]);
-
-  useEffect(() => {
-    if (isSmallScreenSplit) {
-      setIsEventLogsVisible(true);
-    }
-  }, [isSmallScreenSplit]);
-
-  useEffect(() => {
-    syncEventLogsLayout();
-  }, [syncEventLogsLayout]);
-
-  useEffect(() => {
-    if (typeof ResizeObserver === "undefined" || !detailContentRef.current) {
-      syncEventLogsLayout();
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      syncEventLogsLayout();
-    });
-    observer.observe(detailContentRef.current);
-    if (failedReasonRef.current) {
-      observer.observe(failedReasonRef.current);
-    }
-    if (statsSectionRef.current) {
-      observer.observe(statsSectionRef.current);
-    }
-    if (eventLogsSectionRef.current) {
-      observer.observe(eventLogsSectionRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [failedReason, isEventLogsVisible, isLoading, showSplash, syncEventLogsLayout, task?.id]);
-
   const statsSummary = useMemo(
     () =>
       task
@@ -932,6 +733,19 @@ function AgentAuditPageContent() {
         : null,
     [statsNow, task, tokenUsage, visibleManagedFindings],
   );
+  const headerMetricTags = useMemo(() => {
+    if (!statsSummary) return [];
+    const verifiedCount = visibleManagedFindings.length
+      ? summarizeAgentAuditFindings(visibleManagedFindings).verifiedCount
+      : Math.max(Number(task?.verified_count ?? 0), 0);
+    return [
+      String(projectName || "-"),
+      `${statsSummary.progressPercent.toFixed(0)}%`,
+      formatDurationMs(statsSummary.durationMs),
+      `词元 ${formatTokenValue(statsSummary.tokensTotal)}`,
+      `已验证漏洞 ${verifiedCount.toLocaleString()}`,
+    ];
+  }, [projectName, statsSummary, task?.verified_count, visibleManagedFindings]);
   const selectedLogItem = useMemo(
     () =>
       detailDialog?.type === "log"
@@ -1142,9 +956,6 @@ function AgentAuditPageContent() {
       selectAgent(null);
 
       requestAnimationFrame(() => {
-        if (logsContainerRef.current) {
-          logsContainerRef.current.scrollTop = state.logsScrollTop;
-        }
         if (findingsContainerRef.current) {
           findingsContainerRef.current.scrollTop = state.findingsScrollTop;
         }
@@ -1163,9 +974,7 @@ function AgentAuditPageContent() {
 
         const anchor = document.getElementById(state.anchorId);
         const container =
-          state.detailType === "log"
-            ? logsContainerRef.current
-            : state.detailType === "finding"
+          state.detailType === "finding"
               ? findingsContainerRef.current
               : agentContainerRef.current;
         if (anchor && container) {
@@ -1198,7 +1007,7 @@ function AgentAuditPageContent() {
         detailId: detail.id,
         anchorId: detail.anchorId,
         activeTab: activeMainTab,
-        logsScrollTop: logsContainerRef.current?.scrollTop ?? 0,
+        logsScrollTop: 0,
         findingsScrollTop: findingsContainerRef.current?.scrollTop ?? 0,
         agentScrollTop: agentContainerRef.current?.scrollTop ?? 0,
         filters: findingsFilters,
@@ -1362,7 +1171,6 @@ function AgentAuditPageContent() {
       // 2. 重置所有状态
       reset();
       setShowSplash(!taskId);
-      hasInitializedLogViewportRef.current = false;
 
       // 2.1 重置 realtime 面板
       setRealtimeFindings([]);
@@ -1405,9 +1213,8 @@ function AgentAuditPageContent() {
       };
       terminalBoundarySequenceRef.current = null;
     }
-    setAutoScroll(getTaskAutoScroll(taskId || null));
     previousTaskIdRef.current = taskId;
-  }, [taskId, reset, setAutoScroll]);
+  }, [taskId, reset]);
 
   useEffect(() => {
     return () => {
@@ -1418,10 +1225,6 @@ function AgentAuditPageContent() {
       if (highlightClearTimerRef.current) {
         clearTimeout(highlightClearTimerRef.current);
         highlightClearTimerRef.current = null;
-      }
-      if (scrollGuardTimeoutRef.current) {
-        clearTimeout(scrollGuardTimeoutRef.current);
-        scrollGuardTimeoutRef.current = null;
       }
       if (disconnectStreamRef.current) {
         disconnectStreamRef.current();
@@ -3271,70 +3074,6 @@ function AgentAuditPageContent() {
     task?.status,
   ]);
 
-  const markProgrammaticScroll = useCallback(() => {
-    ignoreScrollUntilRef.current = Math.max(
-      ignoreScrollUntilRef.current,
-      Date.now() + PROGRAMMATIC_SCROLL_GUARD_MS,
-    );
-  }, []);
-
-  const scrollLogsToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const container = logsContainerRef.current;
-    if (!container) return;
-    markProgrammaticScroll();
-    container.scrollTo({ top: container.scrollHeight, behavior });
-    if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        markProgrammaticScroll();
-      });
-      if (scrollGuardTimeoutRef.current) {
-        clearTimeout(scrollGuardTimeoutRef.current);
-      }
-      scrollGuardTimeoutRef.current = window.setTimeout(() => {
-        markProgrammaticScroll();
-        scrollGuardTimeoutRef.current = null;
-      }, 120) as unknown as ReturnType<typeof setTimeout>;
-    }
-  }, [markProgrammaticScroll]);
-
-  const handleLogsScroll = useCallback(() => {
-    const container = logsContainerRef.current;
-    if (!container || !isAutoScroll) return;
-    const distanceToBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isProgrammaticScroll = Date.now() < ignoreScrollUntilRef.current;
-    if (
-      !shouldDisableAutoScrollOnScroll({
-        isAutoScrollEnabled: isAutoScroll,
-        isProgrammaticScroll,
-        distanceToBottom,
-        thresholdPx: LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX,
-      })
-    ) {
-      return;
-    }
-    setAutoScroll(false);
-    if (taskId) {
-      persistTaskAutoScroll(taskId, false);
-    }
-  }, [isAutoScroll, setAutoScroll, taskId]);
-
-  // Default viewport: show latest logs (about 3 visible rows) when opening a task.
-  useEffect(() => {
-    if (!taskId || hasInitializedLogViewportRef.current) return;
-    if (filteredLogs.length === 0) return;
-    requestAnimationFrame(() => {
-      scrollLogsToBottom("auto");
-      hasInitializedLogViewportRef.current = true;
-    });
-  }, [filteredLogs.length, scrollLogsToBottom, taskId]);
-
-  // Auto scroll while stream keeps appending logs.
-  useEffect(() => {
-    if (!isAutoScroll) return;
-    scrollLogsToBottom("smooth");
-  }, [filteredLogs.length, isAutoScroll, scrollLogsToBottom]);
-
   // ============ Handlers ============
 
   const handleCancel = async () => {
@@ -3374,94 +3113,6 @@ function AgentAuditPageContent() {
     if (!task) return;
     setShowExportDialog(true);
   };
-
-  const handleExportLogs = useCallback(
-    (format: "json" | "markdown") => {
-      if (!task) {
-        toast.error("任务信息未加载，无法导出");
-        return;
-      }
-      const date = new Date();
-      const ymd = date.toISOString().slice(0, 10);
-      const taskName = toSafeFilename(task.name || task.id.slice(0, 8));
-      const base = `agent_audit_logs_${taskName}_${ymd}`;
-
-      if (format === "json") {
-        const payload = {
-          meta: {
-            task_id: task.id,
-            task_name: task.name,
-            project_id: task.project_id,
-            exported_at: date.toISOString(),
-            status: task.status,
-            current_phase: task.current_phase,
-            current_step: task.current_step,
-          },
-          logs,
-        };
-        downloadTextFile(
-          JSON.stringify(payload, null, 2),
-          `${base}.json`,
-          "application/json",
-        );
-        toast.success("活动日志已导出为 JSON");
-        return;
-      }
-
-      const lines: string[] = [];
-      lines.push(`# 智能审计活动日志`);
-      lines.push(`- task_id: ${task.id}`);
-      lines.push(`- task_name: ${task.name || "-"}`);
-      lines.push(`- project_id: ${task.project_id}`);
-      lines.push(`- status: ${task.status}`);
-      lines.push(`- phase: ${task.current_phase || "-"}`);
-      lines.push(`- step: ${task.current_step || "-"}`);
-      lines.push(`- exported_at: ${date.toISOString()}`);
-      lines.push("");
-
-      for (const item of logs) {
-        const typeLabel = LOG_TYPE_LABELS[item.type] || item.type;
-        const agentLabel = item.agentName ? `【${item.agentName}】` : "";
-        lines.push(`## [${item.time}] [${typeLabel}] ${agentLabel} ${item.title}`);
-        if (item.tool?.name) {
-          lines.push(
-            `- tool: ${item.tool.name} (${item.tool.status || "-"})` +
-            (item.tool.duration ? `, ${item.tool.duration}ms` : ""),
-          );
-        }
-        if (item.content) {
-          lines.push("");
-          lines.push("```text");
-          lines.push(item.content);
-          lines.push("```");
-        }
-        if (item.detail) {
-          lines.push("");
-          lines.push("```json");
-          lines.push(JSON.stringify(item.detail, null, 2));
-          lines.push("```");
-        }
-        lines.push("");
-      }
-
-      downloadTextFile(lines.join("\n"), `${base}.md`, "text/markdown");
-      toast.success("活动日志已导出为 Markdown");
-    },
-    [logs, task],
-  );
-
-  const handleToggleAutoScroll = useCallback(() => {
-    const nextEnabled = !isAutoScroll;
-    setAutoScroll(nextEnabled);
-    if (taskId) {
-      persistTaskAutoScroll(taskId, nextEnabled);
-    }
-    if (nextEnabled) {
-      requestAnimationFrame(() => {
-        scrollLogsToBottom("smooth");
-      });
-    }
-  }, [isAutoScroll, scrollLogsToBottom, setAutoScroll, taskId]);
 
   // ============ Render ============
 
@@ -3599,6 +3250,7 @@ function AgentAuditPageContent() {
         isCancelling={isCancelling}
         phaseLabel={currentPhaseLabel}
         phaseHint={phaseHint}
+        metricTags={headerMetricTags}
         onBack={handleBack}
         onCancel={handleCancel}
         onExport={handleExportReport}
@@ -3621,152 +3273,8 @@ function AgentAuditPageContent() {
             </div>
           )}
 
-          {/* Full-width stats row */}
-          <div ref={statsSectionRef} className="flex-shrink-0">
-            <div
-              ref={agentContainerRef}
-              className="overflow-x-auto custom-scrollbar"
-            >
-              <StatsPanel summary={statsSummary} projectName={projectName} />
-            </div>
-          </div>
-
-          <div className="grid flex-shrink-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-            <div className="rounded-xl border border-border/70 bg-card/60 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">AgentFlow 节点 DAG</div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    动态节点、角色、心跳和产物引用来自 Argus API 快照，不依赖固定节点数量。
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[11px]">
-                  {treeNodes.length} 个节点
-                </Badge>
-              </div>
-              {agentDiagnosticsError ? (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
-                  {agentDiagnosticsError}
-                </div>
-              ) : treeNodes.length === 0 ? (
-                <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                  暂无 AgentFlow 节点快照，运行事件到达后会自动刷新。
-                </div>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
-                  {treeNodes.map((node) => (
-                    <button
-                      key={node.agent_id}
-                      type="button"
-                      onClick={() =>
-                        openDetailDialog({
-                          type: "agent",
-                          id: node.agent_id,
-                          anchorId: `agent-node-${node.agent_id}`,
-                        })
-                      }
-                      className="rounded-lg border border-border/70 bg-background/70 p-3 text-left transition hover:border-primary/50 hover:bg-primary/5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-xs font-semibold text-foreground">
-                            {node.agent_name || node.agent_id}
-                          </div>
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            {node.role || node.agent_type || "agent"}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="shrink-0 text-[10px]">
-                          {node.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
-                        <span>漏洞 {node.findings_count ?? 0}</span>
-                        <span>Token {node.tokens_used ?? 0}</span>
-                        <span>{formatAgentDuration(node.duration_ms)}</span>
-                      </div>
-                      {node.heartbeat_at ? (
-                        <div className="mt-2 truncate text-[10px] text-muted-foreground">
-                          heartbeat {node.heartbeat_at}
-                        </div>
-                      ) : null}
-                      {node.result_summary ? (
-                        <div className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">
-                          {node.result_summary}
-                        </div>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-card/60 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">运行诊断</div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    Checkpoint、报告摘要和 artifact 引用
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[11px]">
-                  {agentCheckpoints.length} checkpoints
-                </Badge>
-              </div>
-              {task?.report ? (
-                <div className="mb-3 rounded-md border border-border/70 bg-background/70 p-3">
-                  <div className="text-[11px] font-semibold text-muted-foreground">报告摘要</div>
-                  <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-foreground">
-                    {task.report}
-                  </div>
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                {agentCheckpoints.slice(0, 4).map((checkpoint) => (
-                  <div key={checkpoint.id} className="rounded-md border border-border/70 bg-background/70 p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-medium text-foreground">
-                        {checkpoint.checkpoint_name || checkpoint.checkpoint_type}
-                      </span>
-                      <span className="text-[10px] uppercase text-muted-foreground">
-                        {checkpoint.status}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      {checkpoint.agent_name} · iter {checkpoint.iteration} · tokens {checkpoint.total_tokens}
-                    </div>
-                  </div>
-                ))}
-                {agentCheckpoints.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-                    暂无 checkpoint 快照。
-                  </div>
-                ) : null}
-              </div>
-              {agentArtifactRefs.length > 0 ? (
-                <div className="mt-3 rounded-md border border-border/70 bg-background/70 p-3">
-                  <div className="mb-2 text-[11px] font-semibold text-muted-foreground">Artifact 引用</div>
-                  <div className="space-y-1">
-                    {agentArtifactRefs.map((artifact, index) => (
-                      <div key={`${artifact.path}:${index}`} className="truncate text-[11px] font-mono text-muted-foreground">
-                        {artifact.type || "artifact"}: {artifact.path}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Full-width findings panel (expanded) */}
-          <div
-            className={
-              isSmallScreenSplit
-                ? "min-h-0 flex-[1_1_0%] overflow-hidden"
-                : "min-h-0 flex-1 overflow-hidden"
-            }
-          >
-            <div className="h-full">
+          <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-2">
+            <div className="min-h-0 overflow-hidden rounded-xl bg-card/50">
               <RealtimeFindingsPanel
                 taskId={task?.id || ""}
                 items={visibleManagedFindings}
@@ -3789,141 +3297,166 @@ function AgentAuditPageContent() {
                 }
               />
             </div>
-          </div>
 
-          {/* Bottom: Full-width event logs */}
-          {(isSmallScreenSplit || isEventLogsVisible) ? (
-            <div
-              ref={eventLogsSectionRef}
-              className={
-                isSmallScreenSplit
-                  ? "min-h-0 flex-[1_1_0%] overflow-hidden rounded-xl bg-card/50 flex flex-col"
-                  : "flex-shrink-0 overflow-hidden rounded-xl bg-card/50"
-              }
+            <Tabs
+              defaultValue="nodes"
+              className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/60 p-3"
             >
-              <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Terminal className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold">事件日志</span>
-                  {isConnected ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                    >
-                      已连接
-                    </Badge>
-                  ) : null}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>导出日志</span>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleExportLogs("json")}>
-                        导出为 JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
-                        导出为 Markdown
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
-                        当前为全部导出
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <button
-                    onClick={handleToggleAutoScroll}
-                    className={
-                      isAutoScroll
-                        ? "flex items-center gap-2 rounded-md border border-primary/50 bg-primary/15 px-3 py-1.5 text-xs text-primary"
-                        : "flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }
-                  >
-                    <ArrowDown className="w-3.5 h-3.5" />
-                    <span>自动滚动</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className={isSmallScreenSplit ? "pt-2 min-h-0 flex-1" : "pt-2"}>
-                <div
-                  className={
-                    isSmallScreenSplit
-                      ? "overflow-x-auto custom-scrollbar h-full"
-                      : "overflow-x-auto custom-scrollbar"
-                  }
-                >
-                  <div
-                    style={{ minWidth: `${EVENT_LOG_TABLE_MIN_WIDTH_PX}px` }}
-                    className={isSmallScreenSplit ? "h-full min-h-0 flex flex-col" : undefined}
-                  >
-                    <div
-                      className="grid items-center gap-3 border-b border-border/60 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80"
-                      style={{ gridTemplateColumns: EVENT_LOG_GRID_TEMPLATE }}
-                    >
-                      <span>时间戳</span>
-                      <span>类型标签</span>
-                      <span>事件概况</span>
-                      <span>操作</span>
-                    </div>
-                    <div
-                      ref={logsContainerRef}
-                      onScroll={handleLogsScroll}
-                      className="overflow-y-auto custom-scrollbar-dark"
-                      style={isSmallScreenSplit ? { height: "100%", minHeight: 0 } : { height: logViewportHeight, transition: "height 150ms" }}
-                    >
-                      {filteredLogs.length === 0 ? (
-                        <div className="flex h-full items-center justify-center px-3">
-                          <div className="text-center text-muted-foreground">
-                            {isRunning ? (
-                              <div className="flex flex-col items-center gap-3">
-                                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                <span className="text-sm font-mono tracking-wide">
-                                  等待活动日志...
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-sm font-mono tracking-wide">
-                                暂无活动日志
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-border/60 px-3">
-                          {filteredLogs.map((item) => (
-                            <LogEntry
-                              key={item.id}
-                              item={item}
-                              anchorId={`log-item-${item.id}`}
-                              highlighted={highlightedLogId === item.id}
-                              onOpenDetail={() =>
-                                openDetailDialog({
-                                  type: "log",
-                                  id: item.id,
-                                  anchorId: `log-item-${item.id}`,
-                                })
-                              }
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <div ref={logEndRef} />
-                    </div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">运行详情</div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    AgentFlow 节点和运行诊断以标签页呈现，左侧保留 50% 漏洞列表。
                   </div>
                 </div>
+                <TabsList className="h-8 shrink-0 border border-border bg-background/60 p-1">
+                  <TabsTrigger value="nodes" className="h-6 px-3 text-xs">
+                    节点展示
+                  </TabsTrigger>
+                  <TabsTrigger value="diagnostics" className="h-6 px-3 text-xs">
+                    运行诊断
+                  </TabsTrigger>
+                </TabsList>
               </div>
-            </div>
-          ) : null}
+
+              <TabsContent value="nodes" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                <div className="flex h-full min-h-0 flex-col rounded-lg border border-border/70 bg-background/50 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">AgentFlow 节点 DAG</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        动态节点、角色、心跳和产物引用来自 Argus API 快照，不依赖固定节点数量。
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[11px]">
+                      {treeNodes.length} 个节点
+                    </Badge>
+                  </div>
+                  <div
+                    ref={agentContainerRef}
+                    className="min-h-0 flex-1 overflow-y-auto pr-1 custom-scrollbar"
+                  >
+                    {agentDiagnosticsError ? (
+                      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
+                        {agentDiagnosticsError}
+                      </div>
+                    ) : treeNodes.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                        暂无 AgentFlow 节点快照，运行事件到达后会自动刷新。
+                      </div>
+                    ) : (
+                      <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                        {treeNodes.map((node) => (
+                          <button
+                            id={`agent-node-${node.agent_id}`}
+                            key={node.agent_id}
+                            type="button"
+                            onClick={() =>
+                              openDetailDialog({
+                                type: "agent",
+                                id: node.agent_id,
+                                anchorId: `agent-node-${node.agent_id}`,
+                              })
+                            }
+                            className="rounded-lg border border-border/70 bg-background/70 p-3 text-left transition hover:border-primary/50 hover:bg-primary/5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-semibold text-foreground">
+                                  {node.agent_name || node.agent_id}
+                                </div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  {node.role || node.agent_type || "agent"}
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                {node.status}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+                              <span>漏洞 {node.findings_count ?? 0}</span>
+                              <span>Token {node.tokens_used ?? 0}</span>
+                              <span>{formatAgentDuration(node.duration_ms)}</span>
+                            </div>
+                            {node.heartbeat_at ? (
+                              <div className="mt-2 truncate text-[10px] text-muted-foreground">
+                                heartbeat {node.heartbeat_at}
+                              </div>
+                            ) : null}
+                            {node.result_summary ? (
+                              <div className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">
+                                {node.result_summary}
+                              </div>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="diagnostics" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                <div className="flex h-full min-h-0 flex-col rounded-lg border border-border/70 bg-background/50 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">运行诊断</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        Checkpoint、报告摘要和 artifact 引用
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[11px]">
+                      {agentCheckpoints.length} checkpoints
+                    </Badge>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                    {task?.report ? (
+                      <div className="mb-3 rounded-md border border-border/70 bg-background/70 p-3">
+                        <div className="text-[11px] font-semibold text-muted-foreground">报告摘要</div>
+                        <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-foreground">
+                          {task.report}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="space-y-2">
+                      {agentCheckpoints.slice(0, 4).map((checkpoint) => (
+                        <div key={checkpoint.id} className="rounded-md border border-border/70 bg-background/70 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-medium text-foreground">
+                              {checkpoint.checkpoint_name || checkpoint.checkpoint_type}
+                            </span>
+                            <span className="text-[10px] uppercase text-muted-foreground">
+                              {checkpoint.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {checkpoint.agent_name} · iter {checkpoint.iteration} · tokens {checkpoint.total_tokens}
+                          </div>
+                        </div>
+                      ))}
+                      {agentCheckpoints.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                          暂无 checkpoint 快照。
+                        </div>
+                      ) : null}
+                    </div>
+                    {agentArtifactRefs.length > 0 ? (
+                      <div className="mt-3 rounded-md border border-border/70 bg-background/70 p-3">
+                        <div className="mb-2 text-[11px] font-semibold text-muted-foreground">Artifact 引用</div>
+                        <div className="space-y-1">
+                          {agentArtifactRefs.map((artifact, index) => (
+                            <div key={`${artifact.path}:${index}`} className="truncate text-[11px] font-mono text-muted-foreground">
+                              {artifact.type || "artifact"}: {artifact.path}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
           </div>
         </div>
       {/* Export dialog */}

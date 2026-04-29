@@ -10,7 +10,11 @@ import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesL
 import TaskManagementSummaryCards from "@/features/tasks/components/TaskManagementSummaryCards";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
-import { filterActivitiesByKind } from "@/features/tasks/services/taskActivities";
+import { interruptOpengrepScanTask } from "@/shared/api/opengrep";
+import {
+	filterActivitiesByKind,
+	type TaskActivityItem,
+} from "@/features/tasks/services/taskActivities";
 
 const CreateProjectScanDialog = lazy(
 	() => import("@/components/scan/CreateProjectScanDialog"),
@@ -24,6 +28,7 @@ export default function TaskManagementStatic() {
 	});
 	const [keyword, setKeyword] = useState("");
 	const [showCreateStaticDialog, setShowCreateStaticDialog] = useState(false);
+	const [cancellingActivityId, setCancellingActivityId] = useState<string | null>(null);
 	const [searchParams, setSearchParams] = useSearchParams();
 	const errorRef = useRef<string | null>(null);
 	const autoOpenHandledRef = useRef(false);
@@ -66,6 +71,23 @@ export default function TaskManagementStatic() {
 		() => filterActivitiesByKind(activities, "rule_scan", keyword),
 		[activities, keyword],
 	);
+	const handleCancelActivity = async (activity: TaskActivityItem) => {
+		if (activity.cancelTarget?.mode !== "static") {
+			toast.error("当前静态任务缺少可中止目标");
+			return;
+		}
+		setCancellingActivityId(activity.id);
+		try {
+			await interruptOpengrepScanTask(activity.cancelTarget.taskId);
+			toast.success("已提交静态任务中止请求");
+			await refresh();
+		} catch (error) {
+			toast.error(`中止任务失败：${error instanceof Error ? error.message : "未知错误"}`);
+		} finally {
+			setCancellingActivityId(null);
+		}
+	};
+
 	const stats = useMemo(() => {
 		return staticActivities.reduce(
 			(acc, activity) => {
@@ -123,6 +145,8 @@ export default function TaskManagementStatic() {
 					loading={loading}
 					nowMs={nowMs}
 					emptyText="暂无静态审计任务"
+					onCancelActivity={handleCancelActivity}
+					cancellingActivityId={cancellingActivityId}
 				/>
 			</DeferredSection>
 

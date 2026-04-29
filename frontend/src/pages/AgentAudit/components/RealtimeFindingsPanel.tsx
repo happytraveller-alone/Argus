@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import {
 	useCallback,
 	useEffect,
@@ -18,14 +18,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
+import type { AppColumnDef } from "@/components/data-table/types";
 import {
 	AGENT_AUDIT_FINDINGS_PAGE_SIZE,
 	calculateResponsiveFindingsPageSize,
@@ -34,11 +28,11 @@ import {
 	getAgentAuditFindingStatusBadgeClass,
 	getAgentAuditFindingStatusLabel,
 	type AgentAuditFindingDisplayStatus,
+	type FindingTableRow,
 	resolveAgentAuditPaginationTransition,
 	shouldSyncFindingPageFromTableState,
 	shouldResetFindingPage,
 } from "../detailViewModel";
-import { FINDINGS_TABLE_MIN_WIDTH_PX } from "../constants";
 import type {
 	FindingsFiltersChangeOptions,
 	FindingsViewFilters,
@@ -267,10 +261,9 @@ export default function RealtimeFindingsPanel(props: {
 				filters: props.filters,
 				page,
 				pageSize,
-			}),
+		}),
 		[page, pageSize, props.filters, props.items],
 	);
-	const hasNoRows = tableState.rows.length === 0;
 	const emptyStateMessage = props.isRunning
 		? getEmptyStateMessage(props.currentPhase)
 		: props.items.length === 0
@@ -326,6 +319,207 @@ export default function RealtimeFindingsPanel(props: {
 		return "详情";
 	}
 
+	const findingColumns = useMemo<AppColumnDef<FindingTableRow>[]>(
+		() => {
+			const columns: AppColumnDef<FindingTableRow>[] = [
+				{
+					id: "order",
+					header: "序号",
+					cell: ({ row }) => (
+						<span className="font-mono text-xs text-muted-foreground">
+							{(tableState.pageStart + row.index + 1).toLocaleString()}
+						</span>
+					),
+					meta: {
+						label: "序号",
+						width: 72,
+						minWidth: 72,
+						plainHeader: false,
+					},
+				},
+				{
+					id: "typeLabel",
+					accessorKey: "typeLabel",
+					header: "漏洞类型",
+					cell: ({ row }) => (
+						<div
+							className="truncate text-sm font-medium text-foreground"
+							title={row.original.typeTooltip || row.original.typeLabel}
+						>
+							{row.original.typeLabel}
+						</div>
+					),
+					meta: {
+						label: "漏洞类型",
+						minWidth: 220,
+					},
+				},
+				{
+					id: "severity",
+					accessorKey: "severity",
+					header: "漏洞危害",
+					cell: ({ row }) => (
+						<Badge
+							variant="outline"
+							className={`text-[11px] ${getSeverityBadgeClass(row.original.severity)}`}
+						>
+							{row.original.severityLabel}
+						</Badge>
+					),
+					meta: {
+						label: "漏洞危害",
+						width: 120,
+						minWidth: 120,
+						dataNoI18n: true,
+					},
+				},
+			];
+
+			if (tableState.hasVisibleConfidence) {
+				columns.push({
+					id: "confidence",
+					accessorKey: "confidenceScore",
+					header: "置信度",
+					cell: ({ row }) =>
+						row.original.confidenceLabel ? (
+							<Badge
+								variant="outline"
+								className={`text-[11px] ${getConfidenceBadgeClass(row.original.confidenceLabel)}`}
+							>
+								{row.original.confidenceLabel}
+							</Badge>
+						) : null,
+					meta: {
+						label: "置信度",
+						width: 110,
+						minWidth: 110,
+					},
+				});
+			}
+
+			columns.push(
+				{
+					id: "status",
+					accessorKey: "statusValue",
+					header: "漏洞状态",
+					cell: ({ row }) => {
+						const findingItem = row.original.raw as RealtimeMergedFindingItem;
+						const statusValue =
+							props.getDisplayStatus?.(findingItem) ??
+							row.original.statusValue ??
+							getAgentAuditFindingDisplayStatus(findingItem);
+						return (
+							<Badge
+								variant="outline"
+								className={`text-[11px] ${getAgentAuditFindingStatusBadgeClass(
+									statusValue,
+								)}`}
+							>
+								{getAgentAuditFindingStatusLabel(statusValue)}
+							</Badge>
+						);
+					},
+					meta: {
+						label: "漏洞状态",
+						align: "center",
+						width: 120,
+						minWidth: 120,
+					},
+				},
+				{
+					id: "actions",
+					header: "操作",
+					cell: ({ row }) => {
+						const findingItem = row.original.raw as RealtimeMergedFindingItem;
+						const statusValue =
+							props.getDisplayStatus?.(findingItem) ??
+							row.original.statusValue ??
+							getAgentAuditFindingDisplayStatus(findingItem);
+						const rowUpdatePrefix = `${findingItem.id}:`;
+						const rowStatusUpdating = Boolean(
+							props.updatingKey?.startsWith(rowUpdatePrefix),
+						);
+						const verifyUpdating =
+							props.updatingKey === `${findingItem.id}:verified`;
+						const falsePositiveUpdating =
+							props.updatingKey === `${findingItem.id}:false_positive`;
+
+						return (
+							<div className="flex flex-wrap items-center justify-center gap-1.5">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="cyber-btn-ghost h-8 px-3"
+									onClick={() => props.onOpenDetail(findingItem)}
+								>
+									{getActionLabel(findingItem)}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className={
+										statusValue === "verified"
+											? ACTIVE_TRUE_BUTTON_CLASS
+											: IDLE_TRUE_BUTTON_CLASS
+									}
+									disabled={rowStatusUpdating}
+									aria-pressed={statusValue === "verified"}
+									onClick={() => props.onToggleStatus?.(findingItem, "verified")}
+								>
+									{verifyUpdating ? (
+										<Loader2 className="h-3 w-3 animate-spin" />
+									) : (
+										"判真"
+									)}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className={
+										statusValue === "false_positive"
+											? ACTIVE_FALSE_BUTTON_CLASS
+											: IDLE_FALSE_BUTTON_CLASS
+									}
+									disabled={rowStatusUpdating}
+									aria-pressed={statusValue === "false_positive"}
+									onClick={() =>
+										props.onToggleStatus?.(findingItem, "false_positive")
+									}
+								>
+									{falsePositiveUpdating ? (
+										<Loader2 className="h-3 w-3 animate-spin" />
+									) : (
+										"判假"
+									)}
+								</Button>
+							</div>
+						);
+					},
+					meta: {
+						label: "操作",
+						align: "center",
+						width: 280,
+						minWidth: 280,
+						hideable: false,
+					},
+				},
+			);
+
+			return columns;
+		},
+		[
+			props.getDisplayStatus,
+			props.onOpenDetail,
+			props.onToggleStatus,
+			props.updatingKey,
+			tableState.hasVisibleConfidence,
+			tableState.pageStart,
+		],
+	);
+
 	return (
 		<div className="rounded-xl bg-card/50" style={{ height: "100%" }}>
 			<div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -374,164 +568,18 @@ export default function RealtimeFindingsPanel(props: {
 
 				<div className="min-h-0 flex-1 px-4 py-3">
 					<div ref={syncViewportRef} className="h-full">
-						{hasNoRows ? (
-							<div className="flex h-full items-center justify-center text-muted-foreground">
-								<div className="flex flex-col items-center gap-3 px-6 text-center">
-									<AlertTriangle className="h-5 w-5 opacity-60" />
-									<span className="text-sm">{emptyStateMessage}</span>
-								</div>
-							</div>
-						) : (
-							<Table
-								containerClassName="h-full overflow-x-auto overflow-y-hidden rounded-sm border border-border"
-								className="caption-bottom text-base font-mono"
-								style={{ minWidth: `${FINDINGS_TABLE_MIN_WIDTH_PX}px` }}
-							>
-								<TableHeader className="bg-transparent">
-									<TableRow className="border-b border-border/60 hover:bg-transparent">
-										<TableHead className="w-[72px]">序号</TableHead>
-										<TableHead className="w-auto">漏洞类型</TableHead>
-										<TableHead className="w-[120px]" data-no-i18n="true">
-											漏洞危害
-										</TableHead>
-										{tableState.hasVisibleConfidence ? (
-											<TableHead className="w-[110px]">置信度</TableHead>
-										) : null}
-										<TableHead className="w-[120px] text-center">
-											漏洞状态
-										</TableHead>
-										<TableHead className="w-[280px] text-center">
-											操作
-										</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{tableState.rows.map((row, index) => {
-										const findingItem = row.raw as RealtimeMergedFindingItem;
-										const statusValue =
-											props.getDisplayStatus?.(findingItem) ??
-											row.statusValue ??
-											getAgentAuditFindingDisplayStatus(findingItem);
-										const rowUpdatePrefix = `${findingItem.id}:`;
-										const rowStatusUpdating = Boolean(
-											props.updatingKey?.startsWith(rowUpdatePrefix),
-										);
-										const verifyUpdating =
-											props.updatingKey === `${findingItem.id}:verified`;
-										const falsePositiveUpdating =
-											props.updatingKey === `${findingItem.id}:false_positive`;
-
-										return (
-											<TableRow
-												key={row.id}
-												id={`finding-item-${row.id}`}
-												className="border-b border-border/40 last:border-b-0"
-											>
-												<TableCell className="py-3 font-mono text-xs text-muted-foreground">
-													{(tableState.pageStart + index + 1).toLocaleString()}
-												</TableCell>
-												<TableCell className="py-3 align-top">
-													<div
-														className="truncate text-sm font-medium text-foreground"
-														title={row.typeTooltip || row.typeLabel}
-													>
-														{row.typeLabel}
-													</div>
-												</TableCell>
-												<TableCell className="py-3">
-													<Badge
-														variant="outline"
-														className={`text-[11px] ${getSeverityBadgeClass(row.severity)}`}
-													>
-														{row.severityLabel}
-													</Badge>
-												</TableCell>
-												{tableState.hasVisibleConfidence ? (
-													<TableCell className="py-3">
-														{row.confidenceLabel ? (
-															<Badge
-																variant="outline"
-																className={`text-[11px] ${getConfidenceBadgeClass(row.confidenceLabel)}`}
-															>
-																{row.confidenceLabel}
-															</Badge>
-														) : null}
-													</TableCell>
-												) : null}
-												<TableCell className="py-3 text-center">
-													<Badge
-														variant="outline"
-														className={`text-[11px] ${getAgentAuditFindingStatusBadgeClass(
-															statusValue,
-														)}`}
-													>
-														{getAgentAuditFindingStatusLabel(statusValue)}
-													</Badge>
-												</TableCell>
-												<TableCell className="py-3 text-center">
-													<div className="flex items-center justify-center gap-1.5 flex-wrap">
-														<Button
-															type="button"
-															size="sm"
-															variant="outline"
-															className="cyber-btn-ghost h-8 px-3"
-															onClick={() => props.onOpenDetail(findingItem)}
-														>
-															{getActionLabel(findingItem)}
-														</Button>
-														<Button
-															type="button"
-															size="sm"
-															variant="outline"
-															className={
-																statusValue === "verified"
-																	? ACTIVE_TRUE_BUTTON_CLASS
-																	: IDLE_TRUE_BUTTON_CLASS
-															}
-															disabled={rowStatusUpdating}
-															aria-pressed={statusValue === "verified"}
-															onClick={() =>
-																props.onToggleStatus?.(findingItem, "verified")
-															}
-														>
-															{verifyUpdating ? (
-																<Loader2 className="w-3 h-3 animate-spin" />
-															) : (
-																"判真"
-															)}
-														</Button>
-														<Button
-															type="button"
-															size="sm"
-															variant="outline"
-															className={
-																statusValue === "false_positive"
-																	? ACTIVE_FALSE_BUTTON_CLASS
-																	: IDLE_FALSE_BUTTON_CLASS
-															}
-															disabled={rowStatusUpdating}
-															aria-pressed={statusValue === "false_positive"}
-															onClick={() =>
-																props.onToggleStatus?.(
-																	findingItem,
-																	"false_positive",
-																)
-															}
-														>
-															{falsePositiveUpdating ? (
-																<Loader2 className="w-3 h-3 animate-spin" />
-															) : (
-																"判假"
-															)}
-														</Button>
-													</div>
-												</TableCell>
-											</TableRow>
-										);
-									})}
-								</TableBody>
-							</Table>
-						)}
+						<DataTable
+							data={tableState.rows}
+							columns={findingColumns}
+							getRowId={(row) => row.id}
+							toolbar={false}
+							pagination={false}
+							emptyState={{ title: emptyStateMessage }}
+							className="h-full border-border bg-background/20"
+							containerClassName="h-full overflow-x-auto overflow-y-hidden"
+							tableContainerClassName="h-full overflow-x-auto overflow-y-hidden rounded-sm border border-border"
+							tableClassName="min-w-[980px] caption-bottom text-base font-mono"
+						/>
 					</div>
 				</div>
 

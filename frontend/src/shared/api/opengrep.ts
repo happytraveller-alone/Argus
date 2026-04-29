@@ -335,6 +335,7 @@ export async function updateOpengrepRule(
 export interface OpengrepScanTask {
     id: string;
     project_id: string;
+    project_name?: string | null;
     name: string;
     status: string;
     target_path: string;

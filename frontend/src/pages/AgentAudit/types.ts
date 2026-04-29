@@ -184,6 +184,7 @@ export interface HeaderProps {
   isCancelling: boolean;
   phaseLabel?: string | null;
   phaseHint?: string | null;
+  metricTags?: string[];
   onBack: () => void;
   onCancel: () => void;
   onExport: () => void;

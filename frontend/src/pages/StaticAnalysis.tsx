@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   areDataTableQueryStatesEqual,
@@ -24,15 +25,17 @@ import {
   useDataTableUrlState,
 } from "@/components/data-table";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
-import StaticAnalysisSummaryCards from "./static-analysis/StaticAnalysisSummaryCards";
 import {
   createStaticAnalysisInitialTableState,
   resolveStaticAnalysisTableState,
 } from "./static-analysis/tableState";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
+import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import {
+  buildStaticAnalysisHeaderSummary,
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
+  isStaticAnalysisPollableStatus,
   type Engine,
 } from "./static-analysis/viewModel";
 
@@ -114,6 +117,36 @@ export default function StaticAnalysis() {
     return engines;
   }, [opengrepTaskId]);
 
+  const shouldTickClock = useMemo(
+    () => [opengrepTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
+    [opengrepTask],
+  );
+  const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
+  const headerSummary = useMemo(
+    () =>
+      buildStaticAnalysisHeaderSummary({
+        opengrepTask,
+        gitleaksTask: null,
+        banditTask: null,
+        phpstanTask: null,
+        pmdTask: null,
+        enabledEngines,
+        loadingInitial,
+        nowMs,
+        fallbackProjectName: opengrepTask?.project_id || "-",
+      }),
+    [enabledEngines, loadingInitial, nowMs, opengrepTask],
+  );
+  const headerTags = useMemo(
+    () => [
+      headerSummary.projectName,
+      `${Math.round(headerSummary.progressPercent)}%`,
+      headerSummary.durationLabel,
+      `发现漏洞 ${headerSummary.totalFindings.toLocaleString()}`,
+    ],
+    [headerSummary],
+  );
+
   useEffect(() => {
     syncStateToUrl(tableState);
   }, [syncStateToUrl, tableState]);
@@ -160,10 +193,21 @@ export default function StaticAnalysis() {
   return (
     <div className="space-y-5 p-6 bg-background min-h-screen">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
             静态审计详情
           </h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="静态审计概要标签">
+            {headerTags.map((tag, index) => (
+              <Badge
+                key={`${index}:${tag}`}
+                className="cyber-badge cyber-badge-info max-w-[18rem] truncate normal-case tracking-normal"
+                title={tag}
+              >
+                {tag}
+              </Badge>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {canInterruptOpengrep ? (
@@ -194,17 +238,7 @@ export default function StaticAnalysis() {
         </div>
       </div>
 
-      <StaticAnalysisSummaryCards
-        opengrepTask={opengrepTask}
-        gitleaksTask={null}
-        banditTask={null}
-        phpstanTask={null}
-        pmdTask={null}
-        enabledEngines={enabledEngines}
-        loadingInitial={loadingInitial}
-      />
-
-        <StaticAnalysisFindingsTable
+      <StaticAnalysisFindingsTable
           currentRoute={currentRoute}
           loadingInitial={loadingInitial}
           rows={unifiedRows}

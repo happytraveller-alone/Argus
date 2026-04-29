@@ -42,6 +42,11 @@ import {
 } from "@/components/ui/command";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
 	AlertCircle,
 	Brain,
 	Check,
@@ -53,6 +58,7 @@ import {
 	RotateCcw,
 	Save,
 	Settings,
+	Trash2,
 	Zap,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -1034,10 +1040,8 @@ export function SystemConfig({
 			};
 		}
 
-		if (!model) {
-			toast.error(
-				`无法${source === "save" ? "保存" : "测试"}：请先填写模型（llmModel）`,
-			);
+		if (!model && source === "test") {
+			toast.error("无法测试：请先填写模型（llmModel）");
 			return {
 				ok: false,
 				providerId,
@@ -1137,15 +1141,20 @@ export function SystemConfig({
 		const silent = Boolean(options?.silent);
 		const providerId = normalizeLlmProviderId(configSnapshot.llmProvider);
 		const baseUrl = String(configSnapshot.llmBaseUrl || "").trim();
-		const apiKey = String(configSnapshot.llmApiKey || "").trim();
 		const parsedCustomHeaders = parseLlmCustomHeadersInput(
 			configSnapshot.llmCustomHeaders,
 		);
 		const requiresApiKey = shouldRequireApiKey(providerId);
-		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}|${
+		const hasSavedOrEnteredKey =
+			Boolean(configSnapshot.llmApiKey.trim()) || hasServerSideApiKeyReference(configSnapshot);
+		const signature = `${providerId}|${baseUrl}|saved-config|${
 			parsedCustomHeaders.ok ? parsedCustomHeaders.normalizedText : "invalid"
 		}`;
 
+		if (trigger === "manual" && hasChanges) {
+			if (!silent) toast.error("请先保存配置，再一键获取模型");
+			return;
+		}
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) {
 			const parseErrorMessage =
@@ -1159,9 +1168,9 @@ export function SystemConfig({
 			}
 			return;
 		}
-		if (requiresApiKey && !apiKey) {
+		if (requiresApiKey && !hasSavedOrEnteredKey) {
 			if (!silent) {
-				toast.error("当前提供商需要 API Key，无法拉取模型");
+				toast.error("当前提供商需要先保存 API Key，无法拉取模型");
 			}
 			return;
 		}
@@ -1176,23 +1185,15 @@ export function SystemConfig({
 		}));
 		setFetchingModels(true);
 		try {
-			const result = await api.fetchLLMModels({
-				provider: providerId,
-				apiKey,
-				baseUrl,
-				customHeaders: parsedCustomHeaders.normalizedText,
-			});
+			const result = await api.fetchLLMModels({});
 			const latestConfig = latestConfigRef.current;
 			if (!latestConfig) return;
 			const latestProviderId = normalizeLlmProviderId(latestConfig.llmProvider);
 			const latestBaseUrl = String(latestConfig.llmBaseUrl || "").trim();
-			const latestApiKey = String(latestConfig.llmApiKey || "").trim();
 			const latestParsedCustomHeaders = parseLlmCustomHeadersInput(
 				latestConfig.llmCustomHeaders,
 			);
-			const latestSignature = `${latestProviderId}|${latestBaseUrl}|${
-				shouldRequireApiKey(latestProviderId) ? latestApiKey : ""
-			}|${latestParsedCustomHeaders.ok ? latestParsedCustomHeaders.normalizedText : "invalid"}`;
+			const latestSignature = `${latestProviderId}|${latestBaseUrl}|saved-config|${latestParsedCustomHeaders.ok ? latestParsedCustomHeaders.normalizedText : "invalid"}`;
 			if (latestSignature !== signature) return;
 
 			const normalizedModels = Array.isArray(result.models)
@@ -1300,17 +1301,18 @@ export function SystemConfig({
 		if (!config) return;
 		const providerId = normalizeLlmProviderId(config.llmProvider);
 		const baseUrl = String(config.llmBaseUrl || "").trim();
-		const apiKey = String(config.llmApiKey || "").trim();
 		const parsedCustomHeaders = parseLlmCustomHeadersInput(
 			config.llmCustomHeaders,
 		);
 		const requiresApiKey = shouldRequireApiKey(providerId);
 		const providerInfo = getProviderInfo(providerId);
+		const hasSavedOrEnteredKey = Boolean(config.llmApiKey.trim()) || hasServerSideApiKeyReference(config);
+		if (hasChanges) return;
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) return;
 		if (!providerInfo?.supportsModelFetch) return;
-		if (requiresApiKey && !apiKey) return;
-		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}|${parsedCustomHeaders.normalizedText}`;
+		if (requiresApiKey && !hasSavedOrEnteredKey) return;
+		const signature = `${providerId}|${baseUrl}|saved-config|${parsedCustomHeaders.normalizedText}`;
 		if (autoFetchSignatureRef.current === signature) return;
 		setModelStatsFetchStateBySignature((prev) => ({
 			...prev,
@@ -1325,7 +1327,10 @@ export function SystemConfig({
 		config?.llmProvider,
 		config?.llmBaseUrl,
 		config?.llmApiKey,
+		config?.hasSavedApiKey,
+		config?.llmApiKeySource,
 		config?.llmCustomHeaders,
+		hasChanges,
 		llmProvidersFromBackend,
 	]);
 
@@ -1418,6 +1423,33 @@ export function SystemConfig({
 		}
 	};
 
+	const handleClearLlmApiKey = () => {
+		if (!config) return;
+		const hasAnyKeyState =
+			Boolean(config.llmApiKey.trim()) || config.hasSavedApiKey;
+		if (!hasAnyKeyState) return;
+		if (
+			!window.confirm(
+				"确定要清除当前 LLM 密钥状态吗？保存前需要重新输入 API Key。",
+			)
+		) {
+			return;
+		}
+		setConfig((prev) =>
+			prev
+				? {
+						...prev,
+						llmApiKey: "",
+						llmApiKeySource: "none",
+						hasSavedApiKey: false,
+					}
+				: prev,
+		);
+		setHasChanges(true);
+		setLlmTestResult(null);
+		toast.info("已清除密钥状态，请重新输入并保存。");
+	};
+
 	const runLlmConnectionTest = async (validated: StrictLlmInputs) => {
 		setLlmTestResult(null);
 		try {
@@ -1476,18 +1508,21 @@ export function SystemConfig({
 		? Object.keys(getModelMetadataForProvider(normalizedProviderId)).length
 		: 0;
 	const statsBaseUrl = String(config?.llmBaseUrl || "").trim();
-	const statsApiKey = String(config?.llmApiKey || "").trim();
 	const statsRequiresApiKey = shouldRequireApiKey(normalizedProviderId);
+	const statsHasSavedOrEnteredKey = config
+		? Boolean(config.llmApiKey.trim()) || hasServerSideApiKeyReference(config)
+		: false;
 	const supportsModelFetch = Boolean(selectedProviderInfo?.supportsModelFetch);
 	const shouldPreferOnlineStats = Boolean(
 		config &&
 			supportsModelFetch &&
 			normalizedProviderId !== "custom" &&
 			statsBaseUrl &&
-			(!statsRequiresApiKey || statsApiKey),
+			(!statsRequiresApiKey || statsHasSavedOrEnteredKey) &&
+			!hasChanges,
 	);
 	const currentStatsSignature = shouldPreferOnlineStats
-		? `${normalizedProviderId}|${statsBaseUrl}|${statsRequiresApiKey ? statsApiKey : ""}`
+		? `${normalizedProviderId}|${statsBaseUrl}|saved-config`
 		: null;
 	const preferredModelStats = resolvePreferredModelStats({
 		shouldPreferOnlineStats,
@@ -1546,6 +1581,15 @@ export function SystemConfig({
 	const hasModelConfigured = String(config.llmModel || "").trim().length > 0;
 	const hasBaseUrlConfigured =
 		String(config.llmBaseUrl || "").trim().length > 0;
+	const llmKeyStatusText = !shouldRequireApiKey(config.llmProvider)
+		? "无需密钥"
+		: config.llmApiKey.trim()
+			? "需保存密钥"
+			: config.hasSavedApiKey
+				? config.llmApiKeySource === "imported"
+					? "已导入密钥"
+					: "已保存密钥"
+				: "需输入密钥";
 
 	const isConfigured =
 		(!shouldRequireApiKey(config.llmProvider) ||
@@ -1707,72 +1751,89 @@ export function SystemConfig({
 										</div>
 
 										<div className="space-y-2 min-w-0">
-											<Label className="text-base font-bold text-muted-foreground uppercase">
-												密钥
-												{shouldRequireApiKey(config.llmProvider) ? (
-													<span className="text-rose-400 ml-1">*</span>
-												) : null}
-												<Button
-													variant="outline"
-													size="icon"
-													onClick={() => setShowApiKey((prev) => !prev)}
-													className={cn(
-														"cyber-btn-ghost shrink-0",
-														compactLayout ? "h-4 w-10" : "h-12 w-12",
-													)}
-													disabled={!shouldRequireApiKey(config.llmProvider)}
-													type="button"
-												>
-													{showApiKey ? (
-														<EyeOff className="h-4 w-4" />
-													) : (
-														<Eye className="h-4 w-4" />
-													)}
-												</Button>
-											</Label>
-
-											{config.hasSavedApiKey ? (
-												<div className="flex flex-wrap items-center gap-2 rounded border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">
-													<span>
-														已保存/导入密钥可用，前端不会显示或提交占位符。
+											<div className="flex items-center justify-between gap-2">
+												<Label className="text-base font-bold text-muted-foreground uppercase">
+													密钥
+													{shouldRequireApiKey(config.llmProvider) ? (
+														<span className="text-rose-400 ml-1">*</span>
+													) : null}
+													<span className="ml-2 text-xs font-medium normal-case tracking-normal text-emerald-300">
+														{llmKeyStatusText}
 													</span>
-													<Button
-														type="button"
-														variant={
-															config.llmApiKeySource === "imported" ||
-															config.llmApiKeySource === "saved"
-																? "default"
-																: "outline"
-														}
-														className="h-7 px-2 text-xs"
-														onClick={() => {
-															updateConfig("llmApiKey", "");
-															updateConfig(
-																"llmApiKeySource",
-																config.llmApiKeySource === "imported"
-																	? "imported"
-																	: "saved",
-															);
-														}}
-													>
-														使用已保存/导入密钥
-													</Button>
-													<Button
-														type="button"
-														variant={
-															config.llmApiKeySource === "entered"
-																? "default"
-																: "outline"
-														}
-														className="h-7 px-2 text-xs"
-														onClick={() =>
-															updateConfig("llmApiKeySource", "entered")
-														}
-													>
-														重新输入密钥
-													</Button>
+												</Label>
+												<div className="flex items-center gap-1">
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																variant="outline"
+																size="icon"
+																aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
+																onClick={() => setShowApiKey((prev) => !prev)}
+																className="cyber-btn-ghost h-8 w-8 shrink-0"
+																disabled={!shouldRequireApiKey(config.llmProvider)}
+																type="button"
+															>
+																{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent>{showApiKey ? "隐藏 API Key" : "显示 API Key"}</TooltipContent>
+													</Tooltip>
+													{config.hasSavedApiKey ? (
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	type="button"
+																	variant="outline"
+																	aria-label="使用已保存密钥"
+																	className="cyber-btn-ghost h-8 w-8"
+																	onClick={() => {
+																		updateConfig("llmApiKey", "");
+																		updateConfig(
+																			"llmApiKeySource",
+																			config.llmApiKeySource === "imported" ? "imported" : "saved",
+																		);
+																	}}
+																>
+																	<Check className="h-4 w-4" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent>使用已保存密钥</TooltipContent>
+														</Tooltip>
+													) : null}
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="outline"
+																aria-label="重新输入密钥"
+																className="cyber-btn-ghost h-8 w-8"
+																onClick={() => updateConfig("llmApiKeySource", "entered")}
+															>
+																<RotateCcw className="h-4 w-4" />
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent>重新输入密钥</TooltipContent>
+													</Tooltip>
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="outline"
+																aria-label="清除密钥"
+																className="cyber-btn-ghost h-8 w-8 border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
+																onClick={handleClearLlmApiKey}
+																disabled={
+																	!shouldRequireApiKey(config.llmProvider) ||
+																	(!config.llmApiKey.trim() && !config.hasSavedApiKey)
+																}
+															>
+																<Trash2 className="h-4 w-4" />
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent>清除密钥</TooltipContent>
+													</Tooltip>
 												</div>
-											) : null}
+											</div>
 											<div className="flex gap-2">
 												<Input
 													type={showApiKey ? "text" : "password"}
@@ -1815,10 +1876,12 @@ export function SystemConfig({
 													onClick={handleFetchModels}
 													disabled={
 														fetchingModels ||
+														hasChanges ||
 														!config.llmProvider ||
 														!config.llmBaseUrl.trim() ||
 														(shouldRequireApiKey(config.llmProvider) &&
-															!config.llmApiKey.trim())
+															!config.llmApiKey.trim() &&
+															!hasServerSideApiKeyReference(config))
 													}
 												>
 													{fetchingModels ? (

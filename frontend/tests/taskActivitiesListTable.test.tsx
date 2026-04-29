@@ -62,7 +62,7 @@ test("TaskActivitiesListTable aligns project, duration and defect body text with
 test("TaskActivitiesListTable uses compact table width and column minimums", () => {
   const source = readFileSync(taskActivitiesListTablePath, "utf8");
 
-  assert.match(source, /tableClassName="min-w-\[760px\]"/);
+  assert.match(source, /tableClassName="min-w-\[820px\]"/);
   assert.match(source, /fillContainerWidth/);
   assert.match(source, /width: 64/);
   assert.match(source, /minWidth: 132/);
@@ -71,7 +71,7 @@ test("TaskActivitiesListTable uses compact table width and column minimums", () 
   assert.match(source, /minWidth: 192/);
   assert.match(source, /maxWidth: 240/);
   assert.match(source, /align: "left"/);
-  assert.match(source, /width: 132/);
+  assert.match(source, /width: 176/);
   assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
 });
 
@@ -165,7 +165,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
   assert.match(markup, /style="width:100%;min-width:\d+px"/);
   assert.match(markup, /style="width:136px;min-width:136px;max-width:136px"/);
   assert.match(markup, /style="width:240px;min-width:240px;max-width:240px"/);
-  assert.match(markup, /style="width:132px;min-width:132px"/);
+  assert.match(markup, /style="width:176px;min-width:176px"/);
   assert.match(markup, /data-align="left"/);
   assert.match(markup, /class="text-sm font-medium text-foreground"/);
   assert.match(markup, /class="text-sm font-mono text-foreground"/);
@@ -221,4 +221,56 @@ test("TaskActivitiesListTable merges running progress into the status column", a
     /Demo Running[\s\S]*?<span data-slot="badge"[\s\S]*?<span>任务运行中<\/span>[\s\S]*?<span class="rounded-\[2px\][\s\S]*?>51%<\/span>/,
   );
   assert.doesNotMatch(markup, /Demo Completed[\s\S]*?任务完成[\s\S]*?100%/);
+});
+
+
+test("TaskActivitiesListTable shows row-level cancel only for cancellable tasks", async () => {
+  const tableModule = await import(
+    "../src/features/tasks/components/TaskActivitiesListTable.tsx"
+  );
+
+  const markup = renderToStaticMarkup(
+    createElement(
+      SsrRouter,
+      {},
+      createElement(tableModule.default, {
+        activities: [
+          {
+            id: "agent-running",
+            projectName: "Running Agent",
+            kind: "intelligent_audit",
+            sourceMode: "intelligent",
+            status: "running",
+            createdAt: "2026-03-13T12:00:00.000Z",
+            startedAt: "2026-03-13T12:01:00.000Z",
+            completedAt: null,
+            route: "/agent-audit/agent-running",
+            cancelTarget: { mode: "intelligent", taskId: "agent-running" },
+          },
+          {
+            id: "static-completed",
+            projectName: "Completed Static",
+            kind: "rule_scan",
+            sourceMode: "static",
+            status: "completed",
+            createdAt: "2026-03-13T11:00:00.000Z",
+            startedAt: "2026-03-13T11:01:00.000Z",
+            completedAt: "2026-03-13T11:05:00.000Z",
+            route: "/static-analysis/static-completed",
+            cancelTarget: { mode: "static", engine: "opengrep", taskId: "static-completed" },
+          },
+        ],
+        loading: false,
+        nowMs: Date.parse("2026-03-13T12:05:00.000Z"),
+      }),
+    ),
+  );
+
+  assert.match(markup, /Running Agent[\s\S]*?详情[\s\S]*?中止/);
+  assert.doesNotMatch(markup, /Completed Static[\s\S]*?中止/);
+
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+  assert.match(source, /<AlertDialog/);
+  assert.match(source, /确认中止任务/);
+  assert.match(source, /onCancelActivity/);
 });

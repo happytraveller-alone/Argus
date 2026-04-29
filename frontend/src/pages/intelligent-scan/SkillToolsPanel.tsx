@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table/DataTable";
+import type { AppColumnDef } from "@/components/data-table/types";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,6 +25,7 @@ import {
   buildExternalToolListState,
   buildExternalToolResources,
   buildExternalToolRows,
+  type ExternalToolRow,
   type ExternalToolStatusFilter,
   type ExternalToolTypeFilter,
 } from "./externalToolsViewModel";
@@ -362,6 +365,132 @@ export default function SkillToolsPanel({
     }
   };
 
+  const toolColumns = useMemo<AppColumnDef<ExternalToolRow>[]>(
+    () => [
+      {
+        id: "order",
+        header: "序号",
+        cell: ({ row }) => (
+          <span className="font-mono text-sm text-muted-foreground">
+            {String(listState.startIndex + row.index + 1).padStart(2, "0")}
+          </span>
+        ),
+        meta: {
+          label: "序号",
+          width: 72,
+          minWidth: 72,
+        },
+      },
+      {
+        id: "name",
+        accessorKey: "name",
+        header: "名称",
+        cell: ({ row }) => (
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-foreground">
+              {row.original.name}
+            </div>
+            {row.original.agent_label ? (
+              <div className="text-xs text-muted-foreground">
+                {row.original.scope ? `${scopeLabel(row.original.scope)} · ` : ""}
+                {row.original.agent_label}
+              </div>
+            ) : null}
+          </div>
+        ),
+        meta: {
+          label: "名称",
+          minWidth: 220,
+        },
+      },
+      {
+        id: "type",
+        accessorKey: "typeLabel",
+        header: "类型",
+        cell: ({ row }) => (
+          <Badge variant="outline" className="text-[10px] uppercase">
+            {row.original.typeLabel}
+          </Badge>
+        ),
+        meta: {
+          label: "类型",
+          width: 150,
+          minWidth: 150,
+        },
+      },
+      {
+        id: "capabilities",
+        header: "执行功能",
+        cell: ({ row }) => (
+          <div
+            className="max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap text-sm leading-6 text-foreground/90"
+            title={row.original.capabilities.join("; ")}
+          >
+            {row.original.capabilities.join("; ")}
+          </div>
+        ),
+        meta: {
+          label: "执行功能",
+          minWidth: 280,
+        },
+      },
+      {
+        id: "status",
+        accessorKey: "status_label",
+        header: "状态",
+        cell: ({ row }) => (
+          <Badge variant={row.original.is_enabled ? "default" : "secondary"}>
+            {row.original.status_label}
+          </Badge>
+        ),
+        meta: {
+          label: "状态",
+          width: 120,
+          minWidth: 120,
+        },
+      },
+      {
+        id: "actions",
+        header: "操作",
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-2">
+            {row.original.tool_type !== "skill" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cyber-btn-ghost h-8 px-3"
+                onClick={() => void handleTogglePromptRow(row.original)}
+              >
+                {row.original.is_enabled ? "停用" : "启用"}
+              </Button>
+            ) : null}
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="cyber-btn-ghost h-8 px-3"
+            >
+              <Link
+                to={`/scan-config/external-tools/${row.original.tool_type}/${encodeURIComponent(row.original.tool_id)}${detailSearch}`}
+              >
+                详情
+              </Link>
+            </Button>
+          </div>
+        ),
+        meta: {
+          label: "操作",
+          align: "right",
+          width: 160,
+          minWidth: 160,
+          hideable: false,
+        },
+      },
+    ],
+    [detailSearch, handleTogglePromptRow, listState.startIndex],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_180px_180px_auto] xl:items-end">
@@ -431,118 +560,21 @@ export default function SkillToolsPanel({
       </div>
 
       <div ref={tableViewportRef} className="flex min-h-[20rem] flex-1 flex-col">
-        <div className="overflow-x-auto rounded-sm border border-border/50 bg-background/20">
-          <table className="min-w-[980px] w-full border-collapse">
-            <thead>
-              <tr className="border-b border-border/50 bg-background/60 text-left">
-                <th className="px-4 py-3 text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  序号
-                </th>
-                <th className="px-4 py-3 text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  名称
-                </th>
-                <th className="px-4 py-3 text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  类型
-                </th>
-                <th className="px-4 py-3 text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  执行功能
-                </th>
-                <th className="px-4 py-3 text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  状态
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-mono uppercase tracking-[0.24em] text-muted-foreground">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {listState.pageRows.length ? (
-                listState.pageRows.map((row, index) => {
-                  const order = listState.startIndex + index + 1;
-                  return (
-                    <tr
-                      key={`${row.tool_type}:${row.tool_id}`}
-                      className="border-b border-border/30 align-top transition-colors duration-150 hover:bg-background/40"
-                    >
-                      <td className="px-4 py-4 text-sm font-mono text-muted-foreground">
-                        {String(order).padStart(2, "0")}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="space-y-1">
-                          <div className="text-sm font-semibold text-foreground">
-                            {row.name}
-                          </div>
-                          {row.agent_label ? (
-                            <div className="text-xs text-muted-foreground">
-                              {row.scope ? `${scopeLabel(row.scope)} · ` : ""}
-                              {row.agent_label}
-                            </div>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge variant="outline" className="text-[10px] uppercase">
-                          {row.typeLabel}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div
-                          className="max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap text-sm leading-6 text-foreground/90"
-                          title={row.capabilities.join("; ")}
-                        >
-                          {row.capabilities.join("; ")}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge variant={row.is_enabled ? "default" : "secondary"}>
-                          {row.status_label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          {row.tool_type !== "skill" ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="cyber-btn-ghost h-8 px-3"
-                              onClick={() => void handleTogglePromptRow(row)}
-                            >
-                              {row.is_enabled ? "停用" : "启用"}
-                            </Button>
-                          ) : null}
-                          <Button
-                            asChild
-                            size="sm"
-                            variant="outline"
-                            className="cyber-btn-ghost h-8 px-3"
-                          >
-                            <Link
-                              to={`/scan-config/external-tools/${row.tool_type}/${encodeURIComponent(row.tool_id)}${detailSearch}`}
-                            >
-                              详情
-                            </Link>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center text-sm text-muted-foreground"
-                  >
-                    {loading
-                      ? "加载外部工具中..."
-                      : "未找到匹配的外部工具，尝试更换搜索词或筛选条件。"}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          data={listState.pageRows}
+          columns={toolColumns}
+          getRowId={(row) => `${row.tool_type}:${row.tool_id}`}
+          toolbar={false}
+          pagination={false}
+          loading={loading}
+          emptyState={{
+            title: "未找到匹配的外部工具",
+            description: "尝试更换搜索词或筛选条件。",
+          }}
+          className="min-h-full border-border/50 bg-background/20"
+          containerClassName="overflow-x-auto"
+          tableClassName="min-w-[980px] w-full border-collapse"
+        />
       </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">

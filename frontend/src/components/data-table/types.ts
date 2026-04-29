@@ -7,6 +7,7 @@ import type {
   RowSelectionState,
   SortingState,
   Table,
+  Row,
 } from "@tanstack/react-table";
 import type { ReactNode } from "react";
 
@@ -61,6 +62,7 @@ export interface DataTableColumnMeta<TData = unknown, TValue = unknown> {
   headerClassName?: string;
   headerContentClassName?: string;
   cellClassName?: string;
+  dataNoI18n?: boolean;
   filterPlaceholder?: string;
   _row?: TData;
   _value?: TValue;
@@ -128,6 +130,10 @@ export interface DataTableSummaryContext<TData> {
   totalCount: number;
 }
 
+export interface DataTableRenderModeContext<TData> extends DataTableSummaryContext<TData> {
+  rowModels: Row<TData>[];
+}
+
 export interface DataTablePaginationConfig<TData> {
   enabled?: boolean;
   manual?: boolean;
@@ -155,6 +161,7 @@ export interface DataTableProps<TData> {
   toolbar?: false | DataTableToolbarConfig<TData>;
   selection?: DataTableSelectionConfig<TData>;
   summary?: ReactNode | ((context: DataTableSummaryContext<TData>) => ReactNode);
+  renderMode?: (context: DataTableRenderModeContext<TData>) => ReactNode;
   pagination?: false | DataTablePaginationConfig<TData>;
   className?: string;
   tableClassName?: string;

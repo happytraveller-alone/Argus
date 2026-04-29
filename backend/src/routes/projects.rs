@@ -768,11 +768,29 @@ pub async fn get_dashboard_snapshot(
         .await
         .map_err(internal_error)?;
     let task_status = build_dashboard_task_status(&task_snapshot);
-    let recent_tasks = build_dashboard_recent_tasks(
+    let recent_task_limit = query.top_n.unwrap_or(10).clamp(1, 50);
+    let all_recent_tasks = build_dashboard_recent_tasks(
         &task_snapshot,
         &project_names,
-        query.top_n.unwrap_or(10).clamp(1, 50),
+        50,
     );
+    let recent_tasks = all_recent_tasks
+        .iter()
+        .take(recent_task_limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let recent_intelligent_tasks = all_recent_tasks
+        .iter()
+        .filter(|task| task.task_type == "智能审计")
+        .take(recent_task_limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let recent_static_tasks = all_recent_tasks
+        .iter()
+        .filter(|task| task.task_type == "静态审计")
+        .take(recent_task_limit)
+        .cloned()
+        .collect::<Vec<_>>();
     Ok(Json(json!({
         "generated_at": now_rfc3339(),
         "total_scan_duration_ms": 0,
@@ -823,6 +841,10 @@ pub async fn get_dashboard_snapshot(
         "project_hotspots": [],
         "language_risk": [],
         "recent_tasks": recent_tasks,
+        "recent_tasks_by_scan_type": {
+            "intelligent": recent_intelligent_tasks,
+            "static": recent_static_tasks
+        },
         "project_risk_distribution": [],
         "verified_vulnerability_types": [],
         "static_engine_rule_totals": [],

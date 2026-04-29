@@ -900,11 +900,11 @@ export const api = {
   },
 
   async fetchLLMModels(params: {
-    provider: string;
-    apiKey: string;
+    provider?: string;
+    apiKey?: string;
     baseUrl?: string;
     customHeaders?: string;
-  }): Promise<{
+  } = {}): Promise<{
     success: boolean;
     message: string;
     provider: string;

@@ -92,3 +92,20 @@ test("StaticAnalysisSummaryCards source keeps summary cards trimmed and tag-only
   assert.doesNotMatch(source, /涉及文件/);
   assert.doesNotMatch(source, /totalFilesScanned/);
 });
+
+test("StaticAnalysis detail renders header tags instead of standalone summary-card row", async () => {
+  const source = await readFile(
+    new URL("../src/pages/StaticAnalysis.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /aria-label="静态审计概要标签"/);
+  assert.match(source, /headerSummary\.projectName/);
+  assert.match(source, /`\$\{Math\.round\(headerSummary\.progressPercent\)\}%`/);
+  assert.match(source, /headerSummary\.durationLabel/);
+  assert.match(source, /`发现漏洞 \$\{headerSummary\.totalFindings\.toLocaleString\(\)\}`/);
+  assert.doesNotMatch(source, /<StaticAnalysisSummaryCards/);
+  assert.doesNotMatch(source, /项目 \$\{headerSummary\.projectName/);
+  assert.doesNotMatch(source, /headerSummary\.statusLabel\} \$\{Math\.round\(headerSummary\.progressPercent\)\}%/);
+  assert.doesNotMatch(source, /扫描时间 \$\{headerSummary\.durationLabel/);
+});

@@ -103,7 +103,6 @@ pub fn sanitize_llm_config_for_save(llm_config: &Value) -> Result<Value, LlmGate
             "LLM 配置仅支持 OpenAI-compatible 或 Anthropic-compatible 协议。",
         ));
     }
-    validate_required_text(llm_config, "llmModel", "model")?;
     validate_required_text(llm_config, "llmBaseUrl", "baseUrl")?;
     validate_required_text(llm_config, "llmApiKey", "apiKey")?;
     normalized_custom_headers(llm_config.get("llmCustomHeaders"))?;

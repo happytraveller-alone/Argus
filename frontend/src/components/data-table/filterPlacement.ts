@@ -6,8 +6,14 @@ import type {
 
 export function isHeaderDataTableFilterVariant(
   variant?: DataTableFilterVariant,
-): variant is "select" | "multi-select" | "boolean" {
-  return variant === "select" || variant === "multi-select" || variant === "boolean";
+): variant is "text" | "select" | "multi-select" | "boolean" | "number-range" {
+  return (
+    variant === "text" ||
+    variant === "select" ||
+    variant === "multi-select" ||
+    variant === "boolean" ||
+    variant === "number-range"
+  );
 }
 
 export function resolveDataTableFilterPlacement(
@@ -18,5 +24,5 @@ export function resolveDataTableFilterPlacement(
   if (meta?.filterPlacement && meta.filterPlacement !== "auto") {
     return meta.filterPlacement;
   }
-  return isHeaderDataTableFilterVariant(variant) ? "header" : "toolbar";
+  return isHeaderDataTableFilterVariant(variant) ? "header" : "none";
 }

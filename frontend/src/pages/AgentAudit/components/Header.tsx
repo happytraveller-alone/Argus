@@ -10,6 +10,7 @@ import {
 	Download,
 	Loader2,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { HeaderProps } from "../types";
 
@@ -21,6 +22,7 @@ export function Header({
 	onBack,
 	onCancel,
 	onExport,
+	metricTags = [],
 }: HeaderProps) {
 	return (
 		<header className="relative flex-shrink-0 overflow-hidden border-b border-border/50 bg-card/80 px-6 py-4 backdrop-blur-md">
@@ -35,6 +37,16 @@ export function Header({
 				</div>
 
 				<div className="flex items-center gap-2 flex-wrap">
+					{metricTags.map((tag, index) => (
+						<Badge
+							key={`${index}-${tag}`}
+							variant="outline"
+							className="h-8 max-w-[220px] truncate border-primary/30 bg-primary/10 px-2.5 text-xs font-medium text-primary"
+						>
+							{tag}
+						</Badge>
+					))}
+
 					{isRunning && (
 						<Button
 							variant="outline"

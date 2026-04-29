@@ -283,6 +283,11 @@ export interface DashboardLanguageLocItem {
   project_count: number;
 }
 
+export interface DashboardRecentTasksByScanTypeItem {
+  intelligent: DashboardRecentTaskItem[];
+  static: DashboardRecentTaskItem[];
+}
+
 export interface DashboardSnapshotResponse {
   generated_at: string;
   total_scan_duration_ms: number;
@@ -300,6 +305,7 @@ export interface DashboardSnapshotResponse {
   project_hotspots: DashboardProjectHotspotItem[];
   language_risk: DashboardLanguageRiskItem[];
   recent_tasks: DashboardRecentTaskItem[];
+  recent_tasks_by_scan_type?: DashboardRecentTasksByScanTypeItem;
   project_risk_distribution: DashboardProjectRiskDistributionItem[];
   verified_vulnerability_types: DashboardVerifiedVulnerabilityTypeItem[];
   static_engine_rule_totals: DashboardStaticEngineRuleTotalItem[];

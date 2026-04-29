@@ -57,44 +57,33 @@ test("DashboardCommandCenter summary card descriptions use enlarged label text",
 	);
 });
 
-test("DashboardCommandCenter places task status between summary cards and charts", () => {
+test("DashboardCommandCenter places the view switcher before chart and status beside chart", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 	const previewIndex = source.indexOf("<PreviewHeader snapshot={snapshot} />");
-	const statusIndex = source.indexOf("<TaskStatusPanel snapshot={snapshot} />");
+	const viewIndex = source.indexOf("<ViewSidebar activeView={activeView} onChange={setActiveView} />");
 	const gridIndex = source.indexOf(
 		"<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>",
 	);
+	const statusIndex = source.indexOf("<TaskStatusPanel snapshot={snapshot} />");
 
 	assert.ok(previewIndex >= 0);
-	assert.ok(statusIndex > previewIndex);
-	assert.ok(gridIndex > statusIndex);
-	assert.doesNotMatch(
-		source,
-		/lg:col-start-2[\s\S]*<TaskStatusPanel snapshot=\{snapshot\} \/>/,
-	);
+	assert.ok(viewIndex > previewIndex);
+	assert.ok(gridIndex > viewIndex);
+	assert.ok(statusIndex > gridIndex);
+	assert.match(source, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,24rem\)\]/);
 });
 
-test("DashboardCommandCenter task status uses four compact statistic cards", () => {
+test("DashboardCommandCenter task status uses two audit-type sections", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
-	assert.match(
-		source,
-		/const TASK_STATUS_CARD_GRID_CLASSNAME =\s*"mt-3 grid grid-cols-4 gap-3 overflow-x-auto"/,
-	);
-	assert.match(
-		source,
-		/const TASK_STATUS_CARD_CLASSNAME =\s*"min-w-\[8\.5rem\] rounded-sm border border-border\/70 bg-background\/70 px-4 py-3 text-left transition/,
-	);
-	assert.match(source, /label: "已完成任务"/);
-	assert.match(source, /label: "进行中任务"/);
-	assert.match(source, /label: "报错任务"/);
-	assert.match(source, /label: "中断任务"/);
-	assert.match(source, /buildTaskStatusCards\(snapshot\)/);
-	assert.doesNotMatch(
-		source,
-		/className="h-3 rounded-full bg-muted\/70"/,
-	);
-	assert.doesNotMatch(source, /暂无任务状态数据/);
+	assert.match(source, /buildAuditTypeTaskStatusSections\(snapshot\)/);
+	assert.match(source, /label: "智能审计"/);
+	assert.match(source, /label: "静态审计"/);
+	assert.match(source, /\["已完成", section\.completed\]/);
+	assert.match(source, /\["进行中", section\.running\]/);
+	assert.match(source, /\["异常", section\.anomaly\]/);
+	assert.doesNotMatch(source, /label: "已完成任务"/);
+	assert.doesNotMatch(source, /TASK_STATUS_CARD_GRID_CLASSNAME/);
 });
 
 test("DashboardCommandCenter recent tasks render three full-card links in one row", () => {
@@ -102,13 +91,9 @@ test("DashboardCommandCenter recent tasks render three full-card links in one ro
 
 	assert.match(
 		source,
-		/const RECENT_TASK_CARD_GRID_CLASSNAME =\s*"mt-4 grid grid-cols-3 gap-3 overflow-x-auto"/,
-	);
-	assert.match(
-		source,
 		/const RECENT_TASK_CARD_CLASSNAME =\s*"min-w-\[16rem\] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition/,
 	);
-	assert.match(source, /const recentTasks = getRecentTaskCards\(snapshot\.recent_tasks\);/);
+	assert.match(source, /const recentTasks = getRecentTaskCards\(section\.recentTasks\);/);
 	assert.match(source, /<a[\s\S]*className=\{RECENT_TASK_CARD_CLASSNAME\}/);
 	assert.match(source, /<Badge className="cyber-badge cyber-badge-muted min-w-0 max-w-full flex-1 truncate normal-case tracking-normal">/);
 	assert.match(source, /<Badge className=\{`cyber-badge shrink-0 \$\{typeBadgeClassName\}`\}>/);
@@ -124,13 +109,12 @@ test("DashboardCommandCenter recent tasks render three full-card links in one ro
 	assert.doesNotMatch(source, /h-2 rounded-full bg-muted\/70/);
 });
 
-test("DashboardCommandCenter recent tasks section adds top spacing away from task status", () => {
+test("DashboardCommandCenter recent tasks live inside each audit-type section", () => {
 	const source = readFileSync(dashboardCommandCenterPath, "utf8");
 
-	assert.match(
-		source,
-		/<div className="mt-8 flex items-start justify-between gap-6">[\s\S]*<h2 className=\{DASHBOARD_PANEL_TITLE_CLASSNAME\}>最近任务<\/h2>/,
-	);
+	assert.match(source, /data-audit-type-section=\{section\.key\}/);
+	assert.match(source, /const recentTasks = getRecentTaskCards\(section\.recentTasks\);/);
+	assert.match(source, /href=\{section\.tasksRoute\}/);
 });
 
 test("DashboardCommandCenter recent tasks remove divider and pagination controls", () => {

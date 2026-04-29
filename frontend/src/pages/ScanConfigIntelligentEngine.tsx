@@ -1,3 +1,4 @@
+import { DataTable, type AppColumnDef } from "@/components/data-table";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import type {
@@ -28,6 +29,24 @@ const ENGINE_SUMMARY_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
 const ENGINE_SUMMARY_CARD_VALUE_CLASSNAME =
 	"min-w-0 break-all text-right text-xl font-semibold tabular-nums text-foreground";
+
+type EngineSummaryCardRow = {
+	label: string;
+	value: string;
+};
+
+const ENGINE_SUMMARY_COLUMNS: AppColumnDef<EngineSummaryCardRow, unknown>[] = [
+	{
+		accessorKey: "label",
+		header: "指标",
+		meta: { label: "指标" },
+	},
+	{
+		accessorKey: "value",
+		header: "数值",
+		meta: { label: "数值" },
+	},
+];
 
 export default function ScanConfigIntelligentEngine() {
 	const sharedDraftState = useSystemConfigDraftState();
@@ -72,18 +91,27 @@ export default function ScanConfigIntelligentEngine() {
 	return (
 		<div className="min-h-screen bg-background p-6">
 			<div className="space-y-5 max-w-[1680px] mx-auto">
-				<div className={ENGINE_SUMMARY_GRID_CLASSNAME}>
-					{summaryCards.map((item) => (
-						<div key={item.label} className={ENGINE_SUMMARY_CARD_CLASSNAME}>
-							<div className={ENGINE_SUMMARY_CARD_LABEL_CLASSNAME}>
-								{item.label}
-							</div>
-							<div className={ENGINE_SUMMARY_CARD_VALUE_CLASSNAME}>
-								{item.value}
-							</div>
+				<DataTable
+					data={summaryCards}
+					columns={ENGINE_SUMMARY_COLUMNS}
+					toolbar={false}
+					pagination={false}
+					className="border-0 bg-transparent shadow-none"
+					renderMode={({ rows }) => (
+						<div className={ENGINE_SUMMARY_GRID_CLASSNAME}>
+							{rows.map((item) => (
+								<div key={item.label} className={ENGINE_SUMMARY_CARD_CLASSNAME}>
+									<div className={ENGINE_SUMMARY_CARD_LABEL_CLASSNAME}>
+										{item.label}
+									</div>
+									<div className={ENGINE_SUMMARY_CARD_VALUE_CLASSNAME}>
+										{item.value}
+									</div>
+								</div>
+							))}
 						</div>
-					))}
-				</div>
+					)}
+				/>
 
 				<div className="space-y-4">
 					<div className="mb-0 flex items-center gap-3 border-b border-border pb-3">

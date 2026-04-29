@@ -5,6 +5,7 @@ import {
 	Boxes,
 	Bug,
 	ChevronRight,
+	Info,
 	ListOrdered,
 } from "lucide-react";
 import {
@@ -25,6 +26,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type AppColumnDef } from "@/components/data-table";
 import type {
 	DashboardDailyActivityItem,
 	DashboardLanguageLocItem,
@@ -71,13 +73,41 @@ interface DashboardViewMeta {
 	yAxisLabel: string;
 }
 
-interface TaskStatusRow {
-	key: "completed" | "running" | "failed" | "interrupted";
+interface DashboardMetricRow {
 	label: string;
-	value: number;
-	tone: Tone;
-	scanTypeBreakdown: DashboardTaskStatusScanTypeBreakdown;
+	value: string;
 }
+
+interface AuditTypeTaskStatusSection {
+	key: "intelligent" | "static";
+	label: "智能审计" | "静态审计";
+	total: number;
+	completed: number;
+	running: number;
+	anomaly: number;
+	recentTasks: DashboardRecentTaskItem[];
+	tasksRoute: string;
+}
+
+const DASHBOARD_METRIC_COLUMNS: AppColumnDef<DashboardMetricRow, unknown>[] = [
+	{ accessorKey: "label", header: "指标", meta: { label: "指标" } },
+	{ accessorKey: "value", header: "数值", meta: { label: "数值" } },
+];
+
+const DASHBOARD_VIEW_COLUMNS: AppColumnDef<DashboardViewMeta, unknown>[] = [
+	{ accessorKey: "label", header: "视图", meta: { label: "视图" } },
+	{ accessorKey: "description", header: "说明", meta: { label: "说明" } },
+];
+
+const DASHBOARD_STATUS_SECTION_COLUMNS: AppColumnDef<AuditTypeTaskStatusSection, unknown>[] = [
+	{ accessorKey: "label", header: "审计类型", meta: { label: "审计类型" } },
+	{ accessorKey: "total", header: "总执行", meta: { label: "总执行" } },
+];
+
+const DASHBOARD_RECENT_TASK_COLUMNS: AppColumnDef<DashboardRecentTaskItem, unknown>[] = [
+	{ accessorKey: "title", header: "任务", meta: { label: "任务" } },
+	{ accessorKey: "status", header: "状态", meta: { label: "状态" } },
+];
 
 type TaskStatusTooltipItem = {
 	label: string;
@@ -184,7 +214,7 @@ export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 export const TOP_STATS_GRID_CLASSNAME =
 	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5";
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
-	"grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:min-h-0 xl:flex-1";
+	"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,24rem)] xl:min-h-0 xl:flex-1";
 export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";
@@ -196,12 +226,6 @@ const DASHBOARD_META_LABEL_CLASSNAME =
 	"text-left text-xs uppercase tracking-[0.18em] text-muted-foreground";
 const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
 	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
-const TASK_STATUS_CARD_GRID_CLASSNAME =
-	"mt-3 grid grid-cols-4 gap-3 overflow-x-auto";
-const TASK_STATUS_CARD_CLASSNAME =
-	"min-w-[8.5rem] rounded-sm border border-border/70 bg-background/70 px-4 py-3 text-left transition hover:border-border hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
-const RECENT_TASK_CARD_GRID_CLASSNAME =
-	"mt-4 grid grid-cols-3 gap-3 overflow-x-auto";
 const RECENT_TASK_CARD_CLASSNAME =
 	"min-w-[16rem] rounded-sm border border-border bg-card px-4 py-4 text-card-foreground shadow-sm transition hover:border-border/80 hover:bg-muted/30 focus-visible:border-foreground/50 focus-visible:bg-muted/40 focus-visible:outline focus-visible:outline-1 focus-visible:outline-foreground/55 focus-visible:outline-offset-2";
 const DASHBOARD_TOOLTIP_STYLE = {
@@ -501,65 +525,6 @@ function buildRowsForView(
 	return [];
 }
 
-function combineScanTypeBreakdowns(
-	...items: DashboardTaskStatusScanTypeBreakdown[]
-): DashboardTaskStatusScanTypeBreakdown {
-	return items.reduce(
-		(total, item) => ({
-			static: total.static + Math.max(Number(item.static || 0), 0),
-			intelligent:
-				total.intelligent + Math.max(Number(item.intelligent || 0), 0),
-		}),
-		{ static: 0, intelligent: 0 },
-	);
-}
-
-export function buildTaskStatusCards(snapshot: DashboardSnapshotResponse) {
-	const breakdown = snapshot.task_status_breakdown;
-	const scanTypeBreakdown = snapshot.task_status_by_scan_type;
-
-	return [
-		{
-			key: "completed" as const,
-			label: "已完成任务",
-			value: breakdown.completed,
-			tone: "low" as Tone,
-			scanTypeBreakdown: scanTypeBreakdown.completed,
-		},
-		{
-			key: "running" as const,
-			label: "进行中任务",
-			value: breakdown.running + breakdown.pending,
-			tone: "neutral" as Tone,
-			scanTypeBreakdown: combineScanTypeBreakdowns(
-				scanTypeBreakdown.running,
-				scanTypeBreakdown.pending,
-			),
-		},
-		{
-			key: "failed" as const,
-			label: "报错任务",
-			value: breakdown.failed,
-			tone: "critical" as Tone,
-			scanTypeBreakdown: scanTypeBreakdown.failed,
-		},
-		{
-			key: "interrupted" as const,
-			label: "中断任务",
-			value: breakdown.interrupted + breakdown.cancelled,
-			tone: "high" as Tone,
-			scanTypeBreakdown: combineScanTypeBreakdowns(
-				scanTypeBreakdown.interrupted,
-				scanTypeBreakdown.cancelled,
-			),
-		},
-	] satisfies TaskStatusRow[];
-}
-
-function buildTaskStatusTooltipAriaLabel(row: TaskStatusRow) {
-	return `查看${row.label}状态下的扫描类型细分`;
-}
-
 export function buildTaskStatusTooltipItems(
 	breakdown: DashboardTaskStatusScanTypeBreakdown,
 ): TaskStatusTooltipItem[] {
@@ -567,42 +532,6 @@ export function buildTaskStatusTooltipItems(
 		{ label: "静态审计", value: breakdown.static },
 		{ label: "智能审计", value: breakdown.intelligent },
 	];
-}
-
-function TaskStatusTooltipContent({ row }: { row: TaskStatusRow }) {
-	const items = buildTaskStatusTooltipItems(row.scanTypeBreakdown);
-
-	return (
-		<div className="space-y-3">
-			<div>
-				<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-					任务状态
-				</p>
-				<p className="mt-1 font-semibold text-foreground">{row.label}</p>
-			</div>
-			<div className="space-y-2">
-				{items.map((item) => (
-					<div
-						key={item.label}
-						className="flex items-center justify-between gap-6 text-sm"
-					>
-						<span className="text-muted-foreground">{item.label}</span>
-						<span className="font-semibold tabular-nums text-foreground">
-							{formatNumber(item.value)}
-						</span>
-					</div>
-				))}
-			</div>
-			<div className="border-t border-border pt-2">
-				<div className="flex items-center justify-between gap-6 text-sm">
-					<span className="text-muted-foreground">合计</span>
-					<span className="font-semibold tabular-nums text-foreground">
-						{formatNumber(row.value)}
-					</span>
-				</div>
-			</div>
-		</div>
-	);
 }
 
 export function getRecentTaskProjectTitle(
@@ -674,6 +603,72 @@ export function getRecentTaskCards(tasks: DashboardRecentTaskItem[]) {
 	return tasks.slice(0, DASHBOARD_RECENT_TASKS_LIMIT);
 }
 
+function getRecentTasksForSection(
+	snapshot: DashboardSnapshotResponse,
+	key: "intelligent" | "static",
+): DashboardRecentTaskItem[] {
+	const byType = snapshot.recent_tasks_by_scan_type?.[key];
+	if (Array.isArray(byType)) return byType;
+	const label = key === "intelligent" ? "智能审计" : "静态审计";
+	return snapshot.recent_tasks.filter(
+		(task) => normalizeRecentTaskTypeLabel(task.task_type) === label,
+	);
+}
+
+export function buildAuditTypeTaskStatusSections(
+	snapshot: DashboardSnapshotResponse,
+): AuditTypeTaskStatusSection[] {
+	const byType = snapshot.task_status_by_scan_type;
+	return ([
+		{ key: "intelligent" as const, label: "智能审计" as const, tasksRoute: "/tasks/intelligent" },
+		{ key: "static" as const, label: "静态审计" as const, tasksRoute: "/tasks/static" },
+	]).map((section) => {
+		const key = section.key;
+		const completed = byType.completed[key];
+		const running = byType.pending[key] + byType.running[key];
+		const anomaly = byType.failed[key] + byType.interrupted[key] + byType.cancelled[key];
+		return {
+			...section,
+			completed,
+			running,
+			anomaly,
+			total: completed + running + anomaly,
+			recentTasks: getRecentTasksForSection(snapshot, key),
+		};
+	});
+}
+
+function AuditTypeBreakdownTooltipContent({
+	section,
+}: {
+	section: AuditTypeTaskStatusSection;
+}) {
+	return (
+		<div className="space-y-3">
+			<div>
+				<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+					{section.label}
+				</p>
+				<p className="mt-1 font-semibold text-foreground">任务状态细分</p>
+			</div>
+			<div className="space-y-2">
+				{[
+					["已完成", section.completed],
+					["进行中", section.running],
+					["异常", section.anomaly],
+				].map(([label, value]) => (
+					<div key={label} className="flex items-center justify-between gap-6 text-sm">
+						<span className="text-muted-foreground">{label}</span>
+						<span className="font-semibold tabular-nums text-foreground">
+							{formatNumber(Number(value))}
+						</span>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
 function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	const totalTasks =
 		snapshot.task_status_breakdown.pending +
@@ -682,7 +677,7 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 		snapshot.task_status_breakdown.failed +
 		snapshot.task_status_breakdown.interrupted +
 		snapshot.task_status_breakdown.cancelled;
-	const cards = [
+	const cards: DashboardMetricRow[] = [
 		{ label: "项目总数", value: formatNumber(snapshot.summary.total_projects) },
 		{
 			label: "累计发现漏洞总数",
@@ -700,21 +695,30 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	];
 
 	return (
-		<div className={TOP_STATS_GRID_CLASSNAME}>
-			{cards.map((item) => (
-				<div
-					key={item.label}
-					className={`${DASHBOARD_PANEL_CLASSNAME} flex items-center justify-between gap-3 px-3 py-3`}
-				>
-					<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
-						{item.label}
-					</div>
-					<div className="text-right text-xl font-semibold tabular-nums text-foreground">
-						{item.value}
-					</div>
+		<DataTable
+			data={cards}
+			columns={DASHBOARD_METRIC_COLUMNS}
+			toolbar={false}
+			pagination={false}
+			className="border-0 bg-transparent shadow-none"
+			renderMode={({ rows }) => (
+				<div className={TOP_STATS_GRID_CLASSNAME}>
+					{rows.map((item) => (
+						<div
+							key={item.label}
+							className={`${DASHBOARD_PANEL_CLASSNAME} flex items-center justify-between gap-3 px-3 py-3`}
+						>
+							<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
+								{item.label}
+							</div>
+							<div className="text-right text-xl font-semibold tabular-nums text-foreground">
+								{item.value}
+							</div>
+						</div>
+					))}
 				</div>
-			))}
-		</div>
+			)}
+		/>
 	);
 }
 
@@ -726,66 +730,75 @@ function ViewSidebar({
 	onChange: (view: DashboardViewId) => void;
 }) {
 	return (
-		<nav
-			aria-label="漏洞态势视图切换"
-			className={`${DASHBOARD_PANEL_CLASSNAME} p-3`}
-		>
-			<div className="space-y-2">
-				{VIEW_ITEMS.map((view) => {
-					const active = view.id === activeView;
-					return (
-						<button
-							key={view.id}
-							type="button"
-							aria-pressed={active}
-							onClick={() => onChange(view.id)}
-							className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${
-								active
-									? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
-									: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
-							}`}
-						>
-							<div
-								className={`mt-0.5 rounded-sm p-2 ${
-									active
-										? "bg-primary/10 text-primary"
-										: "bg-muted/70 text-muted-foreground"
-								}`}
-							>
-								{view.id === "trend" ? (
-									<Activity className="h-4 w-4" />
-								) : view.id === "project-risk" ? (
-									<ListOrdered className="h-4 w-4" />
-								) : view.id === "language-risk" ? (
-									<Boxes className="h-4 w-4" />
-								) : view.id === "language-lines" ? (
-									<BarChart3 className="h-4 w-4" />
-								) : (
-									<Bug className="h-4 w-4" />
-								)}
-							</div>
-							<div className="min-w-0 flex-1">
-								<div className="flex items-center justify-between gap-3">
-									<span className="font-bold tracking-[0.02em]">
-										{view.label}
-									</span>
-									<ChevronRight
-										className={`h-4 w-4 transition ${
+		<DataTable
+			data={VIEW_ITEMS}
+			columns={DASHBOARD_VIEW_COLUMNS}
+			toolbar={false}
+			pagination={false}
+			className="border-0 bg-transparent shadow-none"
+			renderMode={({ rows }) => (
+				<nav
+					aria-label="漏洞态势视图切换"
+					className={`${DASHBOARD_PANEL_CLASSNAME} p-3`}
+				>
+					<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+						{rows.map((view) => {
+							const active = view.id === activeView;
+							return (
+								<button
+									key={view.id}
+									type="button"
+									aria-pressed={active}
+									onClick={() => onChange(view.id)}
+									className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${
+										active
+											? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
+											: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
+									}`}
+								>
+									<div
+										className={`mt-0.5 rounded-sm p-2 ${
 											active
-												? "translate-x-0 text-primary"
-												: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
+												? "bg-primary/10 text-primary"
+												: "bg-muted/70 text-muted-foreground"
 										}`}
-									/>
-								</div>
-								<p className="mt-1 text-xs leading-5 text-muted-foreground">
-									{view.description}
-								</p>
-							</div>
-						</button>
-					);
-				})}
-			</div>
-		</nav>
+									>
+										{view.id === "trend" ? (
+											<Activity className="h-4 w-4" />
+										) : view.id === "project-risk" ? (
+											<ListOrdered className="h-4 w-4" />
+										) : view.id === "language-risk" ? (
+											<Boxes className="h-4 w-4" />
+										) : view.id === "language-lines" ? (
+											<BarChart3 className="h-4 w-4" />
+										) : (
+											<Bug className="h-4 w-4" />
+										)}
+									</div>
+									<div className="min-w-0 flex-1">
+										<div className="flex items-center justify-between gap-3">
+											<span className="font-bold tracking-[0.02em]">
+												{view.label}
+											</span>
+											<ChevronRight
+												className={`h-4 w-4 transition ${
+													active
+														? "translate-x-0 text-primary"
+														: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
+												}`}
+											/>
+										</div>
+										<p className="mt-1 text-xs leading-5 text-muted-foreground">
+											{view.description}
+										</p>
+									</div>
+								</button>
+							);
+						})}
+					</div>
+				</nav>
+			)}
+		/>
 	);
 }
 
@@ -794,8 +807,7 @@ function TaskStatusPanel({
 }: {
 	snapshot: DashboardSnapshotResponse;
 }) {
-	const statusCards = buildTaskStatusCards(snapshot);
-	const recentTasks = getRecentTaskCards(snapshot.recent_tasks);
+	const sections = buildAuditTypeTaskStatusSections(snapshot);
 
 	return (
 		<section
@@ -807,67 +819,79 @@ function TaskStatusPanel({
 					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>任务状态</h2>
 				</div>
 			</div>
-			<div className={TASK_STATUS_CARD_GRID_CLASSNAME}>
-				{statusCards.map((item) => {
-					const tone = TONE_STYLES[item.tone];
-					return (
-						<UiTooltip key={item.key}>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									aria-label={buildTaskStatusTooltipAriaLabel(item)}
-									className={TASK_STATUS_CARD_CLASSNAME}
-								>
-									<div className="flex items-start justify-between gap-3">
-										<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
-											{item.label}
+			<DataTable
+				data={sections}
+				columns={DASHBOARD_STATUS_SECTION_COLUMNS}
+				toolbar={false}
+				pagination={false}
+				className="mt-4 border-0 bg-transparent shadow-none"
+				renderMode={({ rows }) => (
+					<div className="grid min-h-0 flex-1 grid-rows-2 gap-0 divide-y divide-border/70">
+						{rows.map((section) => {
+							const recentTasks = getRecentTaskCards(section.recentTasks);
+							const hasMore = section.recentTasks.length > DASHBOARD_RECENT_TASKS_LIMIT;
+							return (
+								<div key={section.key} data-audit-type-section={section.key} className="min-h-0 py-4 first:pt-0 last:pb-0">
+									<div className="mb-3 flex items-center justify-between gap-3">
+										<div className="flex items-center gap-2">
+											<h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
+												{section.label}
+											</h3>
+											<UiTooltip>
+												<TooltipTrigger asChild>
+													<button
+														type="button"
+														aria-label={`查看${section.label}任务状态细分`}
+														className="rounded-full border border-border/70 p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+													>
+														<Info className="h-3.5 w-3.5" />
+													</button>
+												</TooltipTrigger>
+												<TooltipContent
+													side="top"
+													align="start"
+													sideOffset={6}
+													className="w-[15rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
+												>
+													<AuditTypeBreakdownTooltipContent section={section} />
+												</TooltipContent>
+											</UiTooltip>
 										</div>
-										<div
-											className={`text-right text-xl font-semibold tabular-nums ${tone.text}`}
-										>
-											{formatNumber(item.value)}
+										<div className="text-right text-xl font-semibold tabular-nums text-foreground">
+											{formatNumber(section.total)}
 										</div>
 									</div>
-									<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-										<span>
-											静态 {formatNumber(item.scanTypeBreakdown.static)}
-										</span>
-										<span>
-											智能 {formatNumber(item.scanTypeBreakdown.intelligent)}
-										</span>
-									</div>
-								</button>
-							</TooltipTrigger>
-							<TooltipContent
-								side="top"
-								align="start"
-								sideOffset={6}
-								className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
-							>
-								<TaskStatusTooltipContent row={item} />
-							</TooltipContent>
-						</UiTooltip>
-					);
-				})}
-			</div>
-			<div className="mt-8 flex items-start justify-between gap-6">
-				<div>
-					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>最近任务</h2>
-				</div>
-			</div>
-			<div className="mt-1 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
-				{recentTasks.length === 0 ? (
-					<p className="rounded-sm border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
-						暂无最近任务
-					</p>
-				) : (
-					<div className={RECENT_TASK_CARD_GRID_CLASSNAME}>
-						{recentTasks.map((task) => (
-							<RecentTaskCard key={task.task_id} task={task} />
-						))}
+									<DataTable
+										data={recentTasks}
+										columns={DASHBOARD_RECENT_TASK_COLUMNS}
+										toolbar={false}
+										pagination={false}
+										className="border-0 bg-transparent shadow-none"
+										renderMode={({ rows: taskRows }) =>
+											taskRows.length === 0 ? (
+												<p className="rounded-sm border border-dashed border-border bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+													暂无最近任务
+												</p>
+											) : (
+												<div className="grid gap-2">
+													{taskRows.map((task) => (
+														<RecentTaskCard key={task.task_id} task={task} />
+													))}
+													{hasMore ? (
+														<a href={section.tasksRoute} className="rounded-sm border border-dashed border-border px-3 py-2 text-center text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+															...
+														</a>
+													) : null}
+												</div>
+											)
+										}
+									/>
+								</div>
+							);
+						})}
 					</div>
 				)}
-			</div>
+			/>
 		</section>
 	);
 }
@@ -1259,9 +1283,8 @@ export default function DashboardCommandCenter({
 		<div className="px-1 pb-1 text-foreground xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
 			<div className="space-y-6 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col xl:space-y-4">
 				<PreviewHeader snapshot={snapshot} />
-				<TaskStatusPanel snapshot={snapshot} />
+				<ViewSidebar activeView={activeView} onChange={setActiveView} />
 				<div className={DASHBOARD_MAIN_GRID_CLASSNAME}>
-					<ViewSidebar activeView={activeView} onChange={setActiveView} />
 					<section className={`${DASHBOARD_PANEL_CLASSNAME} p-5 xl:min-h-0`}>
 						{activeView === "trend" ? (
 							<TrendPanel snapshot={snapshot} />
@@ -1276,6 +1299,7 @@ export default function DashboardCommandCenter({
 							/>
 						)}
 					</section>
+					<TaskStatusPanel snapshot={snapshot} />
 				</div>
 			</div>
 		</div>

@@ -19,14 +19,14 @@ async function importOrFail<TModule = Record<string, unknown>>(
   }
 }
 
-test("DataTable 将枚举筛选收入口头并仅在 toolbar 保留文本筛选", async () => {
+test("DataTable 将所有列筛选收入口头并避免 detached toolbar 列筛选", async () => {
   const dataTableModule = await importOrFail<any>(
     "../src/components/data-table/index.ts",
   );
 
   const markup = renderToStaticMarkup(
     createElement(dataTableModule.DataTable, {
-      data: [{ id: "r1", name: "Bandit builtin", source: "builtin", status: "enabled" }],
+      data: [{ id: "r1", name: "Bandit builtin", source: "builtin", status: "enabled", score: 8 }],
       columns: [
         {
           accessorKey: "name",
@@ -57,6 +57,14 @@ test("DataTable 将枚举筛选收入口头并仅在 toolbar 保留文本筛选"
             ],
           },
         },
+        {
+          accessorKey: "score",
+          header: "风险分",
+          meta: {
+            label: "风险分",
+            filterVariant: "number-range",
+          },
+        },
       ],
       toolbar: {
         searchPlaceholder: "搜索规则",
@@ -66,9 +74,13 @@ test("DataTable 将枚举筛选收入口头并仅在 toolbar 保留文本筛选"
   );
 
   assert.match(markup, /placeholder="搜索规则"/);
-  assert.match(markup, /placeholder="筛选规则名称"/);
+  assert.match(markup, /aria-label="筛选规则名称"/);
   assert.match(markup, /aria-label="筛选规则来源"/);
   assert.match(markup, /aria-label="筛选启用状态"/);
+  assert.match(markup, /aria-label="筛选风险分"/);
+  assert.match(markup, /data-data-table-header-control="true"/);
+  assert.doesNotMatch(markup, /placeholder="筛选规则名称"/);
+  assert.doesNotMatch(markup, /<label[^>]*>规则名称<\/label>/);
   assert.doesNotMatch(markup, /选择规则来源/);
   assert.doesNotMatch(markup, /选择启用状态/);
 });

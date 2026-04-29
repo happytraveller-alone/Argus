@@ -10,7 +10,11 @@ import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesL
 import TaskManagementSummaryCards from "@/features/tasks/components/TaskManagementSummaryCards";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
-import { filterIntelligentActivities } from "@/features/tasks/services/taskActivities";
+import { cancelAgentTask } from "@/shared/api/agentTasks";
+import {
+	filterIntelligentActivities,
+	type TaskActivityItem,
+} from "@/features/tasks/services/taskActivities";
 
 const CreateProjectScanDialog = lazy(
 	() => import("@/components/scan/CreateProjectScanDialog"),
@@ -23,6 +27,7 @@ export default function TaskManagementIntelligent() {
 	const [keyword, setKeyword] = useState("");
 	const [showCreateIntelligentDialog, setShowCreateIntelligentDialog] =
 		useState(false);
+	const [cancellingActivityId, setCancellingActivityId] = useState<string | null>(null);
 	const [searchParams, setSearchParams] = useSearchParams();
 	const errorRef = useRef<string | null>(null);
 	const autoOpenHandledRef = useRef(false);
@@ -68,6 +73,23 @@ export default function TaskManagementIntelligent() {
 			activity.projectName.toLowerCase().includes(normalizedKeyword),
 		);
 	}, [intelligentActivities, normalizedKeyword]);
+
+	const handleCancelActivity = async (activity: TaskActivityItem) => {
+		if (activity.cancelTarget?.mode !== "intelligent") {
+			toast.error("当前智能任务缺少可中止目标");
+			return;
+		}
+		setCancellingActivityId(activity.id);
+		try {
+			await cancelAgentTask(activity.cancelTarget.taskId);
+			toast.success("已提交智能任务中止请求");
+			await refresh();
+		} catch (error) {
+			toast.error(`中止任务失败：${error instanceof Error ? error.message : "未知错误"}`);
+		} finally {
+			setCancellingActivityId(null);
+		}
+	};
 
 	const stats = useMemo(() => {
 		return intelligentActivities.reduce(
@@ -125,6 +147,8 @@ export default function TaskManagementIntelligent() {
 					loading={loading}
 					nowMs={nowMs}
 					emptyText="暂无智能审计任务"
+					onCancelActivity={handleCancelActivity}
+					cancellingActivityId={cancellingActivityId}
 				/>
 			</DeferredSection>
 

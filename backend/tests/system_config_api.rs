@@ -795,11 +795,100 @@ async fn system_config_llm_provider_catalog_matches_rust_registry_semantics() {
 }
 
 #[tokio::test]
-async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module() {
-    let state = AppState::from_config(isolated_test_config("system-config-fetch-models"))
+async fn system_config_save_allows_empty_model_but_preflight_stays_strict() {
+    let state = AppState::from_config(isolated_test_config("system-config-empty-model-save"))
         .await
         .expect("state should build");
     let app = build_router(state);
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "llmConfig": {
+                            "llmProvider": "openai_compatible",
+                            "llmApiKey": "sk-empty-model",
+                            "llmModel": "",
+                            "llmBaseUrl": "https://gateway.example/v1",
+                            "llmCustomHeaders": {"X-Trace": "saved"}
+                        },
+                        "otherConfig": {"llmConcurrency": 2, "llmGapMs": 5}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let save_payload: Value =
+        serde_json::from_slice(&to_bytes(save_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(save_payload["llmConfig"]["llmModel"], "");
+    assert_eq!(save_payload["llmConfig"]["hasSavedApiKey"], true);
+    assert!(!save_payload.to_string().contains("sk-empty-model"));
+
+    let preflight_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/agent-preflight")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight_response.status(), StatusCode::OK);
+    let preflight_payload: Value =
+        serde_json::from_slice(&to_bytes(preflight_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(preflight_payload["ok"], false);
+    assert_eq!(preflight_payload["reasonCode"], "missing_fields");
+    assert_eq!(
+        preflight_payload["missingFields"],
+        Value::Array(vec![Value::String("llmModel".to_string())])
+    );
+    assert_eq!(preflight_payload["savedConfig"]["hasSavedApiKey"], true);
+}
+
+#[tokio::test]
+async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
+    let state = AppState::from_config(isolated_test_config("system-config-fetch-models-saved"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "llmConfig": {
+                            "llmProvider": "openai_compatible",
+                            "llmApiKey": "sk-saved-fetch-models",
+                            "llmModel": "",
+                            "llmBaseUrl": "https://gateway.example/v1/chat/completions?foo=bar#frag",
+                            "llmCustomHeaders": {"X-Trace": "saved"}
+                        },
+                        "otherConfig": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
 
     let response = app
         .oneshot(
@@ -809,10 +898,10 @@ async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module()
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "provider": "openai_compatible",
-                        "apiKey": "sk-custom",
-                        "baseUrl": "https://gateway.example/v1/chat/completions?foo=bar#frag",
-                        "customHeaders": "{\" Authorization \": 123, \"\": \"skip\", \"X-Trace\": null}",
+                        "provider": "anthropic_compatible",
+                        "apiKey": "sk-unsaved-draft",
+                        "baseUrl": "https://draft.example/v1",
+                        "customHeaders": "{\"X-Nested\":{\"bad\":true}}",
                     })
                     .to_string(),
                 ))
@@ -828,6 +917,8 @@ async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module()
     assert_eq!(payload["resolvedProvider"], "openai_compatible");
     assert_eq!(payload["defaultModel"], "gpt-5");
     assert_eq!(payload["baseUrlUsed"], "https://gateway.example/v1");
+    assert!(!payload.to_string().contains("sk-saved-fetch-models"));
+    assert!(!payload.to_string().contains("sk-unsaved-draft"));
     assert!(payload["models"]
         .as_array()
         .unwrap()
@@ -836,8 +927,8 @@ async fn fetch_llm_models_normalizes_provider_and_base_url_via_registry_module()
 }
 
 #[tokio::test]
-async fn fetch_llm_models_rejects_non_flat_custom_headers() {
-    let state = AppState::from_config(isolated_test_config("system-config-fetch-models-errors"))
+async fn fetch_llm_models_without_saved_config_still_returns_catalog_fallback() {
+    let state = AppState::from_config(isolated_test_config("system-config-fetch-models-fallback"))
         .await
         .expect("state should build");
     let app = build_router(state);
@@ -851,8 +942,8 @@ async fn fetch_llm_models_rejects_non_flat_custom_headers() {
                 .body(Body::from(
                     json!({
                         "provider": "openai_compatible",
-                        "apiKey": "sk-openai",
-                        "baseUrl": "https://api.openai.com/v1",
+                        "apiKey": "sk-unsaved-openai",
+                        "baseUrl": "https://ignored.example/v1",
                         "customHeaders": "{\"X-Nested\": {\"bad\": true}}",
                     })
                     .to_string(),
@@ -861,11 +952,14 @@ async fn fetch_llm_models_rejects_non_flat_custom_headers() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::OK);
 
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(payload["error"], "llmCustomHeaders 必须是扁平的 JSON 对象");
+    assert_eq!(payload["success"], true);
+    assert_eq!(payload["resolvedProvider"], "openai_compatible");
+    assert_eq!(payload["baseUrlUsed"], "https://api.openai.com/v1");
+    assert!(!payload.to_string().contains("sk-unsaved-openai"));
 }
 
 #[tokio::test]

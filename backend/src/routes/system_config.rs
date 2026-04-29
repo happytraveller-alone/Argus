@@ -103,7 +103,9 @@ pub struct LlmTestResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchModelsRequest {
+    #[serde(default)]
     pub provider: String,
+    #[serde(default)]
     pub api_key: String,
     pub base_url: Option<String>,
     pub custom_headers: Option<Value>,
@@ -177,15 +179,18 @@ pub async fn put_current(
     .map_err(llm_gate_bad_request)?;
     let next_llm = sanitize_llm_config_for_save(&next_llm_input).map_err(llm_gate_bad_request)?;
     let next_other = merge_json(&defaults.other_config, &payload.other_config);
-    let next_runtime =
-        build_runtime_config(&next_llm, &next_other).map_err(llm_gate_bad_request)?;
-    let next_fingerprint = compute_llm_fingerprint(&next_runtime);
-    let next_metadata = existing
-        .as_ref()
-        .map(|stored| &stored.llm_test_metadata_json)
-        .filter(|metadata| metadata_matches(metadata, &next_fingerprint))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let next_metadata = match build_runtime_config(&next_llm, &next_other) {
+        Ok(next_runtime) => {
+            let next_fingerprint = compute_llm_fingerprint(&next_runtime);
+            existing
+                .as_ref()
+                .map(|stored| &stored.llm_test_metadata_json)
+                .filter(|metadata| metadata_matches(metadata, &next_fingerprint))
+                .cloned()
+                .unwrap_or_else(|| json!({}))
+        }
+        Err(_) => json!({}),
+    };
     let stored = system_config::save_current(&state, next_llm, next_other, next_metadata)
         .await
         .map_err(internal_error)?;
@@ -370,15 +375,24 @@ pub async fn import_env(
 }
 
 pub async fn fetch_llm_models(
+    State(state): State<AppState>,
     Json(request): Json<FetchModelsRequest>,
 ) -> Result<Json<FetchModelsResponse>, ApiError> {
-    let provider = normalize_provider_for_route(&request.provider);
+    let stored = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?;
+    let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
+    let effective_llm_config = build_agentflow_llm_config(state.config.as_ref(), saved_llm_config);
+    let saved_provider = read_string(&effective_llm_config, "llmProvider").unwrap_or_default();
+    let provider = normalize_provider_for_route(if saved_provider.trim().is_empty() {
+        &request.provider
+    } else {
+        &saved_provider
+    });
     let provider_item = provider_catalog_entry_or_fallback(&provider);
-    parse_custom_headers(request.custom_headers.as_ref()).map_err(ApiError::BadRequest)?;
-    let base_url_used = request
-        .base_url
-        .as_deref()
-        .map(normalize_base_url)
+    parse_custom_headers(effective_llm_config.get("llmCustomHeaders")).map_err(ApiError::BadRequest)?;
+    let saved_base_url = read_string(&effective_llm_config, "llmBaseUrl").unwrap_or_default();
+    let base_url_used = Some(normalize_base_url(&saved_base_url))
         .filter(|value| !value.is_empty())
         .or_else(|| {
             if provider_item.default_base_url.is_empty() {
@@ -406,8 +420,8 @@ pub async fn fetch_llm_models(
 
     Ok(Json(FetchModelsResponse {
         success: true,
-        message: format!("已返回 {} 个内置模型", provider_item.models.len()),
-        provider: request.provider,
+        message: format!("已返回 {} 个已保存配置可用模型", provider_item.models.len()),
+        provider: saved_provider,
         resolved_provider: provider.clone(),
         models: provider_item.models,
         default_model: provider_item.default_model,

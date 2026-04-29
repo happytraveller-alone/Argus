@@ -26,6 +26,9 @@ export {
 
 export type TaskActivityKind = "rule_scan" | "intelligent_audit";
 export type TaskActivitySourceMode = "static" | "intelligent";
+export type TaskActivityCancelTarget =
+	| { mode: "intelligent"; taskId: string }
+	| { mode: "static"; engine: "opengrep"; taskId: string };
 
 export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
@@ -56,6 +59,7 @@ export interface TaskActivityItem {
 	completedAt?: string | null;
 	durationMs?: number | null;
 	route: string;
+	cancelTarget?: TaskActivityCancelTarget;
 }
 
 function normalizeTaskName(name: string | null | undefined): string {
@@ -106,6 +110,24 @@ function mapProjectNames(projects: Project[]) {
 
 function normalizeStatus(status: string | null | undefined): string {
 	return String(status || "").trim().toLowerCase();
+}
+
+const CANCELLABLE_TASK_STATUSES = new Set([
+	"running",
+	"pending",
+	"created",
+	"waiting",
+	"queued",
+	"in_progress",
+	"processing",
+]);
+
+export function isTaskActivityCancellable(
+	activity: Pick<TaskActivityItem, "status" | "cancelTarget">,
+): boolean {
+	return Boolean(
+		activity.cancelTarget && CANCELLABLE_TASK_STATUSES.has(normalizeStatus(activity.status)),
+	);
 }
 
 function toNonNegativeInt(value: unknown): number {
@@ -301,6 +323,7 @@ function toRuleScanActivities(
 			completedAt,
 			durationMs,
 			route: `/static-analysis/${primaryTask.id}?${params.toString()}`,
+			cancelTarget: { mode: "static", engine: "opengrep", taskId: primaryTask.id },
 		};
 		return item;
 	})
@@ -326,6 +349,7 @@ function toAgentActivities(
 		startedAt: task.started_at,
 		completedAt: task.completed_at,
 		route: `/agent-audit/${task.id}?muteToast=1`,
+		cancelTarget: { mode: "intelligent", taskId: task.id },
 	}));
 }
 

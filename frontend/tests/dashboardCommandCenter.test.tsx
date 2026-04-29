@@ -298,8 +298,9 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /Alpha Gateway/);
 	assert.match(markup, /Beta API/);
 	assert.match(markup, /Gamma Portal/);
-	assert.doesNotMatch(markup, /Delta PHP/);
-	assert.match(markup, /查看已完成任务状态下的扫描类型细分/);
+	assert.match(markup, /Delta PHP/);
+	assert.match(markup, /查看智能审计任务状态细分/);
+	assert.match(markup, /查看静态审计任务状态细分/);
 	assert.doesNotMatch(markup, /静态审计 · Echo Console/);
 	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
 	assert.doesNotMatch(markup, /共 \d+ 条/);
@@ -366,7 +367,7 @@ test("task status tooltip items preserve subtype counts, including zero values",
 	);
 });
 
-test("DashboardCommandCenter builds four task status statistic cards", async () => {
+test("DashboardCommandCenter builds two audit-type task status sections", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
@@ -396,51 +397,33 @@ test("DashboardCommandCenter builds four task status statistic cards", async () 
 		intelligent: 2,
 	};
 
-	assert.deepEqual(module.buildTaskStatusCards(snapshot), [
+	assert.deepEqual(module.buildAuditTypeTaskStatusSections(snapshot).map(({ key, label, total, completed, running, anomaly, tasksRoute }: any) => ({ key, label, total, completed, running, anomaly, tasksRoute })), [
 		{
-			key: "completed",
-			label: "已完成任务",
-			value: 12,
-			tone: "low",
-			scanTypeBreakdown: { static: 10, intelligent: 2 },
+			key: "intelligent",
+			label: "智能审计",
+			total: 7,
+			completed: 2,
+			running: 3,
+			anomaly: 2,
+			tasksRoute: "/tasks/intelligent",
 		},
 		{
-			key: "running",
-			label: "进行中任务",
-			value: 5,
-			tone: "neutral",
-			scanTypeBreakdown: { static: 2, intelligent: 3 },
-		},
-		{
-			key: "failed",
-			label: "报错任务",
-			value: 1,
-			tone: "critical",
-			scanTypeBreakdown: { static: 1, intelligent: 0 },
-		},
-		{
-			key: "interrupted",
-			label: "中断任务",
-			value: 3,
-			tone: "high",
-			scanTypeBreakdown: { static: 1, intelligent: 2 },
+			key: "static",
+			label: "静态审计",
+			total: 14,
+			completed: 10,
+			running: 2,
+			anomaly: 2,
+			tasksRoute: "/tasks/static",
 		},
 	]);
 });
 
-test("DashboardCommandCenter renders all task status statistic cards", async () => {
+test("DashboardCommandCenter renders two audit-type task status sections", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
 	const snapshot = createSnapshotFixture();
-	snapshot.task_status_breakdown = {
-		pending: 0,
-		running: 0,
-		completed: 0,
-		failed: 0,
-		interrupted: 0,
-		cancelled: 0,
-	};
 	snapshot.task_status_by_scan_type = {
 		pending: { static: 0, intelligent: 0 },
 		running: { static: 0, intelligent: 0 },
@@ -458,15 +441,11 @@ test("DashboardCommandCenter renders all task status statistic cards", async () 
 		}),
 	);
 
-	assert.match(markup, /已完成任务/);
-	assert.match(markup, /进行中任务/);
-	assert.match(markup, /报错任务/);
-	assert.match(markup, /中断任务/);
-	assert.match(markup, /查看已完成任务状态下的扫描类型细分/);
-	assert.match(markup, /查看进行中任务状态下的扫描类型细分/);
-	assert.match(markup, /静态 0/);
-	assert.match(markup, /智能 0/);
-	assert.doesNotMatch(markup, /暂无任务状态数据/);
+	assert.match(markup, /智能审计/);
+	assert.match(markup, /静态审计/);
+	assert.match(markup, /查看智能审计任务状态细分/);
+	assert.match(markup, /查看静态审计任务状态细分/);
+	assert.doesNotMatch(markup, /已完成任务/);
 });
 
 test("DashboardCommandCenter recent static task uses the provided aggregated detail path", async () => {
@@ -551,8 +530,8 @@ test("DashboardCommandCenter recent task cards show the latest three tasks in on
 	assert.match(markup, /cyber-badge shrink-0 cyber-badge-primary/);
 	assert.match(markup, /cyber-badge shrink-0 cyber-badge-info/);
 	assert.match(markup, /cyber-badge shrink-0 cyber-badge-danger/);
-	assert.doesNotMatch(markup, /Delta PHP/);
-	assert.doesNotMatch(markup, /Echo Console/);
+	assert.match(markup, /Delta PHP/);
+	assert.match(markup, /Echo Console/);
 	assert.doesNotMatch(markup, /h-2 rounded-full bg-muted\/70/);
 });
 
@@ -629,7 +608,7 @@ test("DashboardCommandCenter keeps task status tooltip counts visible even when 
 		}),
 	);
 
-	assert.match(markup, /查看进行中任务状态下的扫描类型细分/);
+	assert.match(markup, /查看智能审计任务状态细分/);
 });
 
 test("DashboardCommandCenter uses compact chart spacing constants", async () => {
@@ -664,7 +643,7 @@ test("DashboardCommandCenter uses compact chart spacing constants", async () => 
 	);
 	assert.equal(
 		module.DASHBOARD_MAIN_GRID_CLASSNAME,
-		"grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:min-h-0 xl:flex-1",
+		"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,24rem)] xl:min-h-0 xl:flex-1",
 	);
 });
 
@@ -683,7 +662,7 @@ test("DashboardCommandCenter uses a two-column sidebar and chart layout", async 
 
 	assert.match(
 		markup,
-		/lg:grid-cols-\[15rem_minmax\(0,1fr\)\]/,
+		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,24rem\)\]/,
 	);
 	assert.doesNotMatch(
 		markup,

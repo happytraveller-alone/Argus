@@ -314,6 +314,7 @@ export function DataTable<TData extends RowData>({
   toolbar,
   selection,
   summary,
+  renderMode,
   pagination,
   className,
   tableClassName,
@@ -496,6 +497,10 @@ export function DataTable<TData extends RowData>({
     filteredCount,
     totalCount,
   };
+  const renderModeContext = {
+    ...summaryContext,
+    rowModels: visibleRows,
+  };
   const bodyColSpan = table.getVisibleLeafColumns().length;
 
   return (
@@ -519,6 +524,11 @@ export function DataTable<TData extends RowData>({
         selection={selection}
         filteredCount={filteredCount}
       />
+      {renderMode ? (
+        <div className={cn("min-w-0", containerClassName)}>
+          {renderMode(renderModeContext)}
+        </div>
+      ) : (
       <DataTableScrollContainer className={containerClassName}>
         <Table
           className={cn(enableColumnResizing && "table-fixed", tableClassName)}
@@ -570,6 +580,7 @@ export function DataTable<TData extends RowData>({
                       colSpan={header.colSpan > 1 ? header.colSpan : undefined}
                       data-align={meta?.align}
                       data-sticky={meta?.sticky}
+                      data-no-i18n={meta?.dataNoI18n ? "true" : undefined}
                       onClick={
                         shouldRenderPlainSortableHeader
                           ? () =>
@@ -716,6 +727,7 @@ export function DataTable<TData extends RowData>({
           </TableBody>
         </Table>
       </DataTableScrollContainer>
+      )}
       <DataTablePagination
         table={table}
         config={pagination}
