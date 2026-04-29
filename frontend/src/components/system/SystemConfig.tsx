@@ -52,8 +52,6 @@ import {
 	Check,
 	CheckCircle2,
 	ChevronsUpDown,
-	Eye,
-	EyeOff,
 	Loader2,
 	RotateCcw,
 	Save,
@@ -272,6 +270,37 @@ function hasServerSideApiKeyReference(
 	return (
 		config.llmApiKeySource === "saved" || config.llmApiKeySource === "imported"
 	);
+}
+
+function buildRedactedHeaderRevision(normalizedHeaders: string): string {
+	const input = normalizedHeaders.trim();
+	if (!input) return "headers:none";
+	let hash = 0x811c9dc5;
+	for (let index = 0; index < input.length; index += 1) {
+		hash ^= input.charCodeAt(index);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return `headers:${(hash >>> 0).toString(36)}`;
+}
+
+function resolveModelFetchCredentialSource(
+	config: SystemConfigData,
+): "draft-config" | "saved-config" | "none" {
+	if (config.llmApiKey.trim()) return "draft-config";
+	if (hasServerSideApiKeyReference(config)) return "saved-config";
+	return "none";
+}
+
+function buildModelFetchSignature(input: {
+	providerId: string;
+	baseUrl: string;
+	credentialSource: "draft-config" | "saved-config" | "none";
+	parsedCustomHeaders: ReturnType<typeof parseLlmCustomHeadersInput>;
+}): string {
+	const headerRevision = input.parsedCustomHeaders.ok
+		? buildRedactedHeaderRevision(input.parsedCustomHeaders.normalizedText)
+		: "headers:invalid";
+	return `${input.providerId}|${input.baseUrl}|${input.credentialSource}|${headerRevision}`;
 }
 
 function buildSystemConfigDataFromBackendConfig(
@@ -753,7 +782,6 @@ export function SystemConfig({
 		setFetchedModelMetadataByProvider,
 		reloadConfig,
 	} = sharedDraftState ?? internalDraftState;
-	const [showApiKey, setShowApiKey] = useState(false);
 	const [llmModelPopoverOpen, setLlmModelPopoverOpen] = useState(false);
 	const [savingLLM, setSavingLLM] = useState(false);
 	const [testingLLM, setTestingLLM] = useState(false);
@@ -875,11 +903,25 @@ export function SystemConfig({
 		return resolveDefaultBaseUrlForProvider(llmProviderOptions, providerId);
 	};
 
+	const getCurrentModelFetchSignature = (providerId: string): string | null => {
+		if (!config) return null;
+		const normalizedProvider = normalizeLlmProviderId(config.llmProvider);
+		if (normalizedProvider !== providerId) return null;
+		return buildModelFetchSignature({
+			providerId,
+			baseUrl: String(config.llmBaseUrl || "").trim(),
+			credentialSource: resolveModelFetchCredentialSource(config),
+			parsedCustomHeaders: parseLlmCustomHeadersInput(config.llmCustomHeaders),
+		});
+	};
+
 	const getModelsForProvider = (providerId: string): string[] => {
+		const signature = getCurrentModelFetchSignature(providerId);
 		if (
-			Object.prototype.hasOwnProperty.call(fetchedModelsByProvider, providerId)
+			signature &&
+			Object.prototype.hasOwnProperty.call(fetchedModelsByProvider, signature)
 		) {
-			const fetchedModels = fetchedModelsByProvider[providerId];
+			const fetchedModels = fetchedModelsByProvider[signature];
 			return Array.isArray(fetchedModels) ? fetchedModels : [];
 		}
 		const backend = getProviderInfo(providerId);
@@ -889,7 +931,8 @@ export function SystemConfig({
 	const getModelMetadataForProvider = (
 		providerId: string,
 	): Record<string, LLMModelMetadata> => {
-		const fetched = fetchedModelMetadataByProvider[providerId];
+		const signature = getCurrentModelFetchSignature(providerId);
+		const fetched = signature ? fetchedModelMetadataByProvider[signature] : null;
 		if (fetched && typeof fetched === "object") return fetched;
 		return {};
 	};
@@ -1148,16 +1191,17 @@ export function SystemConfig({
 			configSnapshot.llmCustomHeaders,
 		);
 		const requiresApiKey = shouldRequireApiKey(providerId);
-		const hasSavedOrEnteredKey =
-			Boolean(configSnapshot.llmApiKey.trim()) || hasServerSideApiKeyReference(configSnapshot);
-		const signature = `${providerId}|${baseUrl}|saved-config|${
-			parsedCustomHeaders.ok ? parsedCustomHeaders.normalizedText : "invalid"
-		}`;
+		const draftApiKey = configSnapshot.llmApiKey.trim();
+		const credentialSource = resolveModelFetchCredentialSource(configSnapshot);
+		const hasFetchKey =
+			Boolean(draftApiKey) || credentialSource === "saved-config";
+		const signature = buildModelFetchSignature({
+			providerId,
+			baseUrl,
+			credentialSource,
+			parsedCustomHeaders,
+		});
 
-		if (trigger === "manual" && hasChanges) {
-			if (!silent) toast.error("请先保存配置，再一键获取模型");
-			return;
-		}
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) {
 			const parseErrorMessage =
@@ -1171,9 +1215,9 @@ export function SystemConfig({
 			}
 			return;
 		}
-		if (requiresApiKey && !hasSavedOrEnteredKey) {
+		if (requiresApiKey && !hasFetchKey) {
 			if (!silent) {
-				toast.error("当前提供商需要先保存 API Key，无法拉取模型");
+				toast.error("当前提供商需要 API Key，无法拉取模型");
 			}
 			return;
 		}
@@ -1188,7 +1232,12 @@ export function SystemConfig({
 		}));
 		setFetchingModels(true);
 		try {
-			const result = await api.fetchLLMModels({});
+			const result = await api.fetchLLMModels({
+				provider: providerId,
+				baseUrl,
+				customHeaders: parsedCustomHeaders.normalizedText || undefined,
+				...(draftApiKey ? { apiKey: draftApiKey } : {}),
+			});
 			const latestConfig = latestConfigRef.current;
 			if (!latestConfig) return;
 			const latestProviderId = normalizeLlmProviderId(latestConfig.llmProvider);
@@ -1196,7 +1245,12 @@ export function SystemConfig({
 			const latestParsedCustomHeaders = parseLlmCustomHeadersInput(
 				latestConfig.llmCustomHeaders,
 			);
-			const latestSignature = `${latestProviderId}|${latestBaseUrl}|saved-config|${latestParsedCustomHeaders.ok ? latestParsedCustomHeaders.normalizedText : "invalid"}`;
+			const latestSignature = buildModelFetchSignature({
+				providerId: latestProviderId,
+				baseUrl: latestBaseUrl,
+				credentialSource: resolveModelFetchCredentialSource(latestConfig),
+				parsedCustomHeaders: latestParsedCustomHeaders,
+			});
 			if (latestSignature !== signature) return;
 
 			const normalizedModels = Array.isArray(result.models)
@@ -1235,11 +1289,11 @@ export function SystemConfig({
 			if (result.success) {
 				setFetchedModelsByProvider((prev) => ({
 					...prev,
-					[providerId]: normalizedModels,
+					[signature]: normalizedModels,
 				}));
 				setFetchedModelMetadataByProvider((prev) => ({
 					...prev,
-					[providerId]: normalizedMetadata,
+					[signature]: normalizedMetadata,
 				}));
 				setOnlineModelStatsBySignature((prev) => ({
 					...prev,
@@ -1343,13 +1397,19 @@ export function SystemConfig({
 		);
 		const requiresApiKey = shouldRequireApiKey(providerId);
 		const providerInfo = getProviderInfo(providerId);
-		const hasSavedOrEnteredKey = Boolean(config.llmApiKey.trim()) || hasServerSideApiKeyReference(config);
-		if (hasChanges) return;
+		const credentialSource = resolveModelFetchCredentialSource(config);
+		const hasFetchKey =
+			Boolean(config.llmApiKey.trim()) || credentialSource === "saved-config";
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) return;
 		if (!providerInfo?.supportsModelFetch) return;
-		if (requiresApiKey && !hasSavedOrEnteredKey) return;
-		const signature = `${providerId}|${baseUrl}|saved-config|${parsedCustomHeaders.normalizedText}`;
+		if (requiresApiKey && !hasFetchKey) return;
+		const signature = buildModelFetchSignature({
+			providerId,
+			baseUrl,
+			credentialSource,
+			parsedCustomHeaders,
+		});
 		if (autoFetchSignatureRef.current === signature) return;
 		setModelStatsFetchStateBySignature((prev) => ({
 			...prev,
@@ -1549,8 +1609,11 @@ export function SystemConfig({
 		? parseLlmCustomHeadersInput(config.llmCustomHeaders)
 		: null;
 	const statsRequiresApiKey = shouldRequireApiKey(normalizedProviderId);
-	const statsHasSavedOrEnteredKey = config
-		? Boolean(config.llmApiKey.trim()) || hasServerSideApiKeyReference(config)
+	const statsCredentialSource = config
+		? resolveModelFetchCredentialSource(config)
+		: "none";
+	const statsHasFetchKey = config
+		? Boolean(config.llmApiKey.trim()) || statsCredentialSource === "saved-config"
 		: false;
 	const supportsModelFetch = Boolean(selectedProviderInfo?.supportsModelFetch);
 	const shouldPreferOnlineStats = Boolean(
@@ -1559,12 +1622,17 @@ export function SystemConfig({
 			normalizedProviderId !== "custom" &&
 			statsBaseUrl &&
 			Boolean(statsParsedCustomHeaders?.ok) &&
-			(!statsRequiresApiKey || statsHasSavedOrEnteredKey) &&
-			!hasChanges,
+			(!statsRequiresApiKey || statsHasFetchKey),
 	);
-	const currentStatsSignature = shouldPreferOnlineStats
-		? `${normalizedProviderId}|${statsBaseUrl}|saved-config|${statsParsedCustomHeaders?.ok ? statsParsedCustomHeaders.normalizedText : "invalid"}`
-		: null;
+	const currentStatsSignature =
+		shouldPreferOnlineStats && statsParsedCustomHeaders
+			? buildModelFetchSignature({
+					providerId: normalizedProviderId,
+					baseUrl: statsBaseUrl,
+					credentialSource: statsCredentialSource,
+					parsedCustomHeaders: statsParsedCustomHeaders,
+				})
+			: null;
 	const preferredModelStats = resolvePreferredModelStats({
 		shouldPreferOnlineStats,
 		staticStats: {
@@ -1803,22 +1871,6 @@ export function SystemConfig({
 													</span>
 												</Label>
 												<div className="flex items-center gap-1">
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																variant="outline"
-																size="icon"
-																aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
-																onClick={() => setShowApiKey((prev) => !prev)}
-																className="cyber-btn-ghost h-8 w-8 shrink-0"
-																disabled={!shouldRequireApiKey(config.llmProvider)}
-																type="button"
-															>
-																{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent>{showApiKey ? "隐藏 API Key" : "显示 API Key"}</TooltipContent>
-													</Tooltip>
 													{config.hasSavedApiKey ? (
 														<Tooltip>
 															<TooltipTrigger asChild>
@@ -1877,7 +1929,7 @@ export function SystemConfig({
 											</div>
 											<div className="flex gap-2">
 												<Input
-													type={showApiKey ? "text" : "password"}
+													type="password"
 													value={config.llmApiKey}
 													onChange={(event) => {
 														updateConfig("llmApiKey", event.target.value);
@@ -1917,7 +1969,6 @@ export function SystemConfig({
 													onClick={handleFetchModels}
 													disabled={
 														fetchingModels ||
-														hasChanges ||
 														!config.llmProvider ||
 														!config.llmBaseUrl.trim() ||
 														(shouldRequireApiKey(config.llmProvider) &&

@@ -858,11 +858,83 @@ async fn system_config_save_allows_empty_model_but_preflight_stays_strict() {
 }
 
 #[tokio::test]
-async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
+async fn fetch_llm_models_uses_draft_request_for_online_discovery_without_persisting_secrets() {
+    let state = AppState::from_config(isolated_test_config("system-config-fetch-models-draft"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let mock_base_url = spawn_llm_mock_server(
+        r#"{"data":[{"id":"z-draft-model"},{"id":"a-draft-model"}]}"#,
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/fetch-llm-models")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "provider": "openai_compatible",
+                        "apiKey": "sk-unsaved-draft-models",
+                        "baseUrl": mock_base_url,
+                        "customHeaders": {"X-Draft-Secret": "draft-header-secret"},
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let payload_text = payload.to_string();
+    assert_eq!(payload["success"], true);
+    assert_eq!(payload["source"], "online");
+    assert_eq!(payload["resolvedProvider"], "openai_compatible");
+    assert_eq!(payload["baseUrlUsed"], mock_base_url);
+    assert_eq!(payload["defaultModel"], "a-draft-model");
+    assert!(payload["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|model| model == "z-draft-model"));
+    assert!(!payload_text.contains("sk-unsaved-draft-models"));
+    assert!(!payload_text.contains("draft-header-secret"));
+    assert!(!payload_text.contains("X-Draft-Secret"));
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(current_response.status(), StatusCode::OK);
+    let current_payload: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let current_text = current_payload.to_string();
+    assert!(!current_text.contains("sk-unsaved-draft-models"));
+    assert!(!current_text.contains("draft-header-secret"));
+}
+
+#[tokio::test]
+async fn fetch_llm_models_saved_path_omits_draft_key_but_draft_base_url_takes_precedence() {
     let state = AppState::from_config(isolated_test_config("system-config-fetch-models-saved"))
         .await
         .expect("state should build");
     let app = build_router(state);
+    let saved_base_url = spawn_llm_mock_server(r#"{"data":[{"id":"saved-model"}]}"#).await;
+    let draft_base_url = spawn_llm_mock_server(r#"{"data":[{"id":"draft-base-model"}]}"#).await;
 
     let save_response = app
         .clone()
@@ -877,7 +949,7 @@ async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
                             "llmProvider": "openai_compatible",
                             "llmApiKey": "sk-saved-fetch-models",
                             "llmModel": "",
-                            "llmBaseUrl": "https://gateway.example/v1/chat/completions?foo=bar#frag",
+                            "llmBaseUrl": saved_base_url,
                             "llmCustomHeaders": {"X-Trace": "saved"}
                         },
                         "otherConfig": {}
@@ -891,6 +963,7 @@ async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
     assert_eq!(save_response.status(), StatusCode::OK);
 
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method(Method::POST)
@@ -898,10 +971,9 @@ async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "provider": "anthropic_compatible",
-                        "apiKey": "sk-unsaved-draft",
-                        "baseUrl": "https://draft.example/v1",
-                        "customHeaders": "{\"X-Nested\":{\"bad\":true}}",
+                        "provider": "openai_compatible",
+                        "baseUrl": draft_base_url,
+                        "customHeaders": {"X-Draft-Trace": "draft-value"}
                     })
                     .to_string(),
                 ))
@@ -913,21 +985,39 @@ async fn fetch_llm_models_uses_saved_config_and_ignores_request_draft() {
 
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let payload_text = payload.to_string();
     assert_eq!(payload["success"], true);
-    assert_eq!(payload["resolvedProvider"], "openai_compatible");
-    assert_eq!(payload["defaultModel"], "gpt-5");
-    assert_eq!(payload["baseUrlUsed"], "https://gateway.example/v1");
-    assert!(!payload.to_string().contains("sk-saved-fetch-models"));
-    assert!(!payload.to_string().contains("sk-unsaved-draft"));
+    assert_eq!(payload["source"], "online");
+    assert_eq!(payload["baseUrlUsed"], draft_base_url);
     assert!(payload["models"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|model| model == "gpt-5"));
+        .any(|model| model == "draft-base-model"));
+    assert!(!payload_text.contains("sk-saved-fetch-models"));
+    assert!(!payload_text.contains("draft-value"));
+    assert!(!payload_text.contains("X-Draft-Trace"));
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let current_payload: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(current_payload["llmConfig"]["llmBaseUrl"], saved_base_url);
+    assert_ne!(current_payload["llmConfig"]["llmBaseUrl"], draft_base_url);
 }
 
 #[tokio::test]
-async fn fetch_llm_models_without_saved_config_still_returns_catalog_fallback() {
+async fn fetch_llm_models_failure_falls_back_to_static_catalog_without_secret_echo() {
     let state = AppState::from_config(isolated_test_config("system-config-fetch-models-fallback"))
         .await
         .expect("state should build");
@@ -943,8 +1033,8 @@ async fn fetch_llm_models_without_saved_config_still_returns_catalog_fallback() 
                     json!({
                         "provider": "openai_compatible",
                         "apiKey": "sk-unsaved-openai",
-                        "baseUrl": "https://ignored.example/v1",
-                        "customHeaders": "{\"X-Nested\": {\"bad\": true}}",
+                        "baseUrl": "http://127.0.0.1:9/v1",
+                        "customHeaders": {"X-Fallback-Secret": "fallback-header-secret"},
                     })
                     .to_string(),
                 ))
@@ -956,10 +1046,19 @@ async fn fetch_llm_models_without_saved_config_still_returns_catalog_fallback() 
 
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let payload_text = payload.to_string();
     assert_eq!(payload["success"], true);
+    assert_eq!(payload["source"], "fallback_static");
     assert_eq!(payload["resolvedProvider"], "openai_compatible");
-    assert_eq!(payload["baseUrlUsed"], "https://api.openai.com/v1");
-    assert!(!payload.to_string().contains("sk-unsaved-openai"));
+    assert_eq!(payload["baseUrlUsed"], "http://127.0.0.1:9/v1");
+    assert!(payload["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|model| model == "gpt-5"));
+    assert!(!payload_text.contains("sk-unsaved-openai"));
+    assert!(!payload_text.contains("fallback-header-secret"));
+    assert!(!payload_text.contains("X-Fallback-Secret"));
 }
 
 #[tokio::test]

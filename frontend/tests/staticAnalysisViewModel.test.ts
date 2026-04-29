@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import * as viewModel from "../src/pages/static-analysis/viewModel.ts";
 import {
@@ -9,6 +10,11 @@ import {
   buildUnifiedFindingRows,
   formatStaticAnalysisDuration,
 } from "../src/pages/static-analysis/viewModel.ts";
+
+const staticAnalysisPageSource = readFileSync(
+	"src/pages/StaticAnalysis.tsx",
+	"utf8",
+);
 
 test("buildUnifiedFindingRows normalizes opengrep rows only", () => {
   const rows = buildUnifiedFindingRows({
@@ -623,4 +629,52 @@ test("buildStaticAnalysisHeaderSummary prefers resolved project name over projec
 	});
 
 	assert.equal(summary.projectName, "Resolved Project Name");
+});
+
+test("resolveStaticAnalysisProjectNameFallback applies task, lookup, id fallback order", () => {
+	assert.equal(
+		viewModel.resolveStaticAnalysisProjectNameFallback({
+			taskProjectName: "Task Project",
+			resolvedProjectName: "Lookup Project",
+			projectId: "project-uuid-1",
+		}),
+		"Task Project",
+	);
+	assert.equal(
+		viewModel.resolveStaticAnalysisProjectNameFallback({
+			taskProjectName: null,
+			resolvedProjectName: "Lookup Project",
+			projectId: "project-uuid-1",
+		}),
+		"Lookup Project",
+	);
+	assert.equal(
+		viewModel.resolveStaticAnalysisProjectNameFallback({
+			taskProjectName: "",
+			resolvedProjectName: "",
+			projectId: "project-uuid-1",
+		}),
+		"project-uuid-1",
+	);
+	assert.equal(
+		viewModel.resolveStaticAnalysisProjectNameFallback({
+			taskProjectName: null,
+			resolvedProjectName: null,
+			projectId: null,
+		}),
+		"-",
+	);
+});
+
+test("StaticAnalysis page performs cancellable display-only project lookup for id fallback", () => {
+	assert.match(staticAnalysisPageSource, /api as databaseApi/);
+	assert.match(
+		staticAnalysisPageSource,
+		/databaseApi\.getProjectById\(opengrepProjectId\)/,
+	);
+	assert.match(staticAnalysisPageSource, /let cancelled = false/);
+	assert.match(staticAnalysisPageSource, /if \(cancelled\) return/);
+	assert.match(staticAnalysisPageSource, /current\?\.projectId === opengrepProjectId/);
+	assert.match(staticAnalysisPageSource, /opengrepProjectName/);
+	assert.match(staticAnalysisPageSource, /fallbackProjectName/);
 });

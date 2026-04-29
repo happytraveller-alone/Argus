@@ -24,6 +24,7 @@ import {
   type DataTableQueryState,
   useDataTableUrlState,
 } from "@/components/data-table";
+import { api as databaseApi } from "@/shared/api/database";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
   createStaticAnalysisInitialTableState,
@@ -36,6 +37,7 @@ import {
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
   isStaticAnalysisPollableStatus,
+  resolveStaticAnalysisProjectNameFallback,
   type Engine,
 } from "./static-analysis/viewModel";
 
@@ -75,6 +77,10 @@ export default function StaticAnalysis() {
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
   );
+  const [resolvedProjectName, setResolvedProjectName] = useState<{
+    projectId: string;
+    name: string;
+  } | null>(null);
   const resolvedUrlState = useMemo<DataTableQueryState>(
     () => resolveStaticAnalysisTableState(initialState),
     [initialState],
@@ -122,6 +128,20 @@ export default function StaticAnalysis() {
     [opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
+  const opengrepProjectId = String(opengrepTask?.project_id || "").trim();
+  const opengrepProjectName = String(opengrepTask?.project_name || "").trim();
+  const fallbackProjectName = useMemo(
+    () =>
+      resolveStaticAnalysisProjectNameFallback({
+        taskProjectName: opengrepProjectName,
+        resolvedProjectName:
+          resolvedProjectName?.projectId === opengrepProjectId
+            ? resolvedProjectName.name
+            : null,
+        projectId: opengrepProjectId,
+      }),
+    [opengrepProjectId, opengrepProjectName, resolvedProjectName],
+  );
   const headerSummary = useMemo(
     () =>
       buildStaticAnalysisHeaderSummary({
@@ -133,9 +153,9 @@ export default function StaticAnalysis() {
         enabledEngines,
         loadingInitial,
         nowMs,
-        fallbackProjectName: opengrepTask?.project_id || "-",
+        fallbackProjectName,
       }),
-    [enabledEngines, loadingInitial, nowMs, opengrepTask],
+    [enabledEngines, fallbackProjectName, loadingInitial, nowMs, opengrepTask],
   );
   const headerTags = useMemo(
     () => [
@@ -156,6 +176,28 @@ export default function StaticAnalysis() {
       areDataTableQueryStatesEqual(current, resolvedUrlState) ? current : resolvedUrlState,
     );
   }, [resolvedUrlState]);
+
+  useEffect(() => {
+    if (!opengrepProjectId || opengrepProjectName) {
+      setResolvedProjectName(null);
+      return;
+    }
+
+    let cancelled = false;
+    setResolvedProjectName((current) =>
+      current?.projectId === opengrepProjectId ? current : null,
+    );
+
+    void databaseApi.getProjectById(opengrepProjectId).then((project) => {
+      if (cancelled) return;
+      const name = String(project?.name || "").trim();
+      setResolvedProjectName(name ? { projectId: opengrepProjectId, name } : null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [opengrepProjectId, opengrepProjectName]);
 
   useEffect(() => {
     if (!usesPathTaskIdFallback) return;

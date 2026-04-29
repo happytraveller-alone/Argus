@@ -222,10 +222,11 @@ export const TOP_STATS_GRID_CLASSNAME =
 export const DASHBOARD_MAIN_GRID_CLASSNAME =
 	"grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,28rem)] xl:min-h-0 xl:flex-1";
 export const DASHBOARD_CHART_AREA_GRID_CLASSNAME =
-	"grid min-w-0 gap-4 xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]";
+	"grid min-w-0 gap-4 xl:min-h-0";
 export const DASHBOARD_VIEW_RAIL_CLASSNAME =
-	"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm xl:min-h-0";
-export const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME = "grid gap-2";
+	"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm";
+export const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME =
+	"grid gap-2 sm:grid-cols-2 xl:grid-cols-5";
 export const DASHBOARD_RECENT_TASKS_LIMIT = 3;
 const DASHBOARD_PANEL_CLASSNAME =
 	"rounded-sm border border-border bg-card text-card-foreground shadow-sm";

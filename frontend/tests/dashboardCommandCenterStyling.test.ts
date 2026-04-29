@@ -71,7 +71,15 @@ test("DashboardCommandCenter places the view switcher before chart and status be
 	assert.ok(viewIndex > gridIndex);
 	assert.ok(statusIndex > viewIndex);
 	assert.match(source, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(360px,28rem\)\]/);
-	assert.match(source, /xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/);
+	assert.match(
+		source,
+		/const DASHBOARD_CHART_AREA_GRID_CLASSNAME =\s*"grid min-w-0 gap-4 xl:min-h-0"/,
+	);
+	assert.match(
+		source,
+		/const DASHBOARD_VIEW_RAIL_LIST_CLASSNAME =\s*"grid gap-2 sm:grid-cols-2 xl:grid-cols-5"/,
+	);
+	assert.doesNotMatch(source, /xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/);
 });
 
 test("DashboardCommandCenter task status uses two audit-type sections", () => {

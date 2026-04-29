@@ -316,6 +316,8 @@ export default function TaskActivitiesListTable({
 						title: emptyText,
 					}}
 					toolbar={false}
+					className="flex h-full min-h-0 flex-col"
+					containerClassName="min-h-0 flex-1 overflow-auto"
 					pagination={{
 						enabled: true,
 						pageSizeOptions: [10, 20, 50],

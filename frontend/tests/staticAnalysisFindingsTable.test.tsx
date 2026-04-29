@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React, { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { DataTableQueryState } from "../src/components/data-table/index.ts";
 import type {
@@ -10,6 +11,11 @@ import type {
 import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
+
+const dataTableColumnHeaderSource = readFileSync(
+	"src/components/data-table/DataTableColumnHeader.tsx",
+	"utf8",
+);
 
 const tableState: DataTableQueryState = {
 	globalFilter: "",
@@ -201,4 +207,19 @@ test("StaticAnalysisFindingsTable narrows rule column and fills the page width",
 	assert.match(markup, /style="width:100%;min-width:\d+px"/);
 	assert.match(markup, /class="[^"]*truncate[^"]*"/);
 	assert.match(markup, /title="vuln-clamav-96ff19a1"/);
+});
+
+test("StaticAnalysisFindingsTable headers inherit the shared 序号 typography baseline", async () => {
+	const tableModule = await loadTableModule();
+	const markup = renderTable(tableModule.default);
+
+	assert.match(markup, /序号/);
+	assert.match(
+		markup,
+		/font-mono text-xs font-medium uppercase tracking-\[0\.16em\] text-foreground\/80/,
+	);
+	assert.match(
+		dataTableColumnHeaderSource,
+		/inline-flex items-center font-mono text-xs font-medium uppercase tracking-\[0\.16em\] text-foreground\/80/,
+	);
 });

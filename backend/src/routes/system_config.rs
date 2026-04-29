@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, path::Path};
+use std::{collections::BTreeMap, env, path::Path, time::Duration};
 
 use axum::{
     extract::State,
@@ -384,25 +384,182 @@ pub async fn fetch_llm_models(
     let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
     let effective_llm_config = build_agentflow_llm_config(state.config.as_ref(), saved_llm_config);
     let saved_provider = read_string(&effective_llm_config, "llmProvider").unwrap_or_default();
-    let provider = normalize_provider_for_route(if saved_provider.trim().is_empty() {
-        &request.provider
-    } else {
+    let requested_provider = request.provider.trim();
+    let provider = normalize_provider_for_route(if requested_provider.is_empty() {
         &saved_provider
+    } else {
+        requested_provider
     });
     let provider_item = provider_catalog_entry_or_fallback(&provider);
-    parse_custom_headers(effective_llm_config.get("llmCustomHeaders")).map_err(ApiError::BadRequest)?;
+    let custom_headers = if request.custom_headers.is_some() {
+        parse_custom_headers(request.custom_headers.as_ref()).map_err(ApiError::BadRequest)?
+    } else {
+        parse_custom_headers(effective_llm_config.get("llmCustomHeaders"))
+            .map_err(ApiError::BadRequest)?
+    };
+    let requested_base_url = request.base_url.as_deref().unwrap_or_default().trim();
     let saved_base_url = read_string(&effective_llm_config, "llmBaseUrl").unwrap_or_default();
-    let base_url_used = Some(normalize_base_url(&saved_base_url))
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            if provider_item.default_base_url.is_empty() {
-                None
-            } else {
-                Some(provider_item.default_base_url.clone())
-            }
-        });
+    let base_url_used = Some(normalize_base_url(if requested_base_url.is_empty() {
+        &saved_base_url
+    } else {
+        requested_base_url
+    }))
+    .filter(|value| !value.is_empty())
+    .or_else(|| {
+        if provider_item.default_base_url.is_empty() {
+            None
+        } else {
+            Some(provider_item.default_base_url.clone())
+        }
+    });
+    let request_api_key = request.api_key.trim().to_string();
+    let saved_api_key = read_string(&effective_llm_config, "llmApiKey").unwrap_or_default();
+    let api_key = if request_api_key.is_empty() {
+        saved_api_key.trim().to_string()
+    } else {
+        request_api_key
+    };
 
-    let model_metadata = provider_item
+    if provider_item.supports_model_fetch && provider_item.fetch_style == "openai_compatible" {
+        if let Some(base_url) = base_url_used.as_deref() {
+            if !provider_item.requires_api_key || !api_key.trim().is_empty() {
+                if let Ok(online) = fetch_openai_compatible_models(
+                    &state,
+                    base_url,
+                    &api_key,
+                    &custom_headers,
+                    &provider_item,
+                )
+                .await
+                {
+                    return Ok(Json(online));
+                }
+            }
+        }
+    }
+
+    let model_metadata = static_model_metadata(&provider_item);
+    Ok(Json(FetchModelsResponse {
+        success: true,
+        message: format!("已返回 {} 个静态模型目录", provider_item.models.len()),
+        provider: provider.clone(),
+        resolved_provider: provider.clone(),
+        models: provider_item.models,
+        default_model: provider_item.default_model,
+        source: "fallback_static".to_string(),
+        base_url_used,
+        model_metadata,
+        token_recommendation_source: "static_mapping".to_string(),
+    }))
+}
+
+async fn fetch_openai_compatible_models(
+    state: &AppState,
+    base_url: &str,
+    api_key: &str,
+    custom_headers: &BTreeMap<String, String>,
+    provider_item: &LlmProviderItem,
+) -> Result<FetchModelsResponse, String> {
+    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let mut headers = reqwest::header::HeaderMap::new();
+    for (name, value) in custom_headers {
+        let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+            .map_err(|_| "invalid header name".to_string())?;
+        let header_value = reqwest::header::HeaderValue::from_str(value)
+            .map_err(|_| "invalid header value".to_string())?;
+        headers.insert(header_name, header_value);
+    }
+    if provider_item.requires_api_key {
+        let header_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {api_key}"))
+            .map_err(|_| "invalid api key".to_string())?;
+        headers.insert(reqwest::header::AUTHORIZATION, header_value);
+    }
+
+    let response = state
+        .http_client
+        .get(url)
+        .headers(headers)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("upstream status {}", response.status()));
+    }
+    let payload: Value = response.json().await.map_err(|error| error.to_string())?;
+    let mut models = normalize_models_response(&payload);
+    if models.is_empty() {
+        return Err("empty model list".to_string());
+    }
+    models.sort();
+    models.dedup();
+    let default_model = models
+        .first()
+        .cloned()
+        .unwrap_or_else(|| provider_item.default_model.clone());
+    let model_metadata = models
+        .iter()
+        .map(|model| {
+            (
+                model.clone(),
+                json!({
+                    "contextWindow": Value::Null,
+                    "maxOutputTokens": Value::Null,
+                    "recommendedMaxTokens": recommend_tokens(model),
+                    "source": "online",
+                }),
+            )
+        })
+        .collect();
+    Ok(FetchModelsResponse {
+        success: true,
+        message: format!("已在线获取 {} 个可用模型", models.len()),
+        provider: provider_item.id.clone(),
+        resolved_provider: provider_item.id.clone(),
+        models,
+        default_model,
+        source: "online".to_string(),
+        base_url_used: Some(base_url.to_string()),
+        model_metadata,
+        token_recommendation_source: "online_mapping".to_string(),
+    })
+}
+
+fn normalize_models_response(payload: &Value) -> Vec<String> {
+    if let Some(items) = payload.get("data").and_then(Value::as_array) {
+        return items
+            .iter()
+            .filter_map(|item| {
+                item.get("id")
+                    .and_then(Value::as_str)
+                    .or_else(|| item.as_str())
+                    .map(str::trim)
+                    .filter(|model| !model.is_empty())
+                    .map(ToString::to_string)
+            })
+            .collect();
+    }
+    if let Some(items) = payload.get("models").and_then(Value::as_array) {
+        return items
+            .iter()
+            .filter_map(|item| item.as_str().map(str::trim))
+            .filter(|model| !model.is_empty())
+            .map(ToString::to_string)
+            .collect();
+    }
+    if let Some(items) = payload.as_array() {
+        return items
+            .iter()
+            .filter_map(|item| item.as_str().map(str::trim))
+            .filter(|model| !model.is_empty())
+            .map(ToString::to_string)
+            .collect();
+    }
+    Vec::new()
+}
+
+fn static_model_metadata(provider_item: &LlmProviderItem) -> BTreeMap<String, Value> {
+    provider_item
         .models
         .iter()
         .map(|model| {
@@ -416,20 +573,7 @@ pub async fn fetch_llm_models(
                 }),
             )
         })
-        .collect();
-
-    Ok(Json(FetchModelsResponse {
-        success: true,
-        message: format!("已返回 {} 个已保存配置可用模型", provider_item.models.len()),
-        provider: saved_provider,
-        resolved_provider: provider.clone(),
-        models: provider_item.models,
-        default_model: provider_item.default_model,
-        source: "fallback_static".to_string(),
-        base_url_used,
-        model_metadata,
-        token_recommendation_source: "static_mapping".to_string(),
-    }))
+        .collect()
 }
 
 pub async fn agent_preflight(

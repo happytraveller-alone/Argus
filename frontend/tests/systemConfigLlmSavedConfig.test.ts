@@ -12,31 +12,35 @@ const databaseApiPath = path.resolve(
 	"src/shared/api/database.ts",
 );
 
-test("SystemConfig fetches models through saved backend config only", () => {
+test("SystemConfig fetches models from complete draft config without save-first guard", () => {
   const source = readFileSync(systemConfigPath, "utf8");
   const databaseSource = readFileSync(databaseApiPath, "utf8");
 
-  assert.match(source, /api\.fetchLLMModels\(\{\}\)/);
-  assert.doesNotMatch(source, /api\.fetchLLMModels\(\{[^}]*apiKey/s);
-  assert.match(source, /请先保存配置，再一键获取模型/);
-  assert.match(source, /disabled=\{\s*fetchingModels \|\|\s*hasChanges/s);
-  assert.match(source, /saved-config/);
+  assert.match(source, /api\.fetchLLMModels\(\{[\s\S]*provider: providerId,[\s\S]*baseUrl,[\s\S]*customHeaders: parsedCustomHeaders\.normalizedText \|\| undefined,[\s\S]*\.\.\.\(draftApiKey \? \{ apiKey: draftApiKey \} : \{\}\),[\s\S]*\}\)/);
+  assert.doesNotMatch(source, /api\.fetchLLMModels\(\{\}\)/);
+  assert.doesNotMatch(source, /请先保存配置，再一键获取模型/);
+  assert.doesNotMatch(source, /fetchingModels \|\|\s*hasChanges \|\|/);
+  assert.match(source, /resolveModelFetchCredentialSource/);
+  assert.match(source, /"draft-config"/);
+  assert.match(source, /"saved-config"/);
 	assert.match(
 		databaseSource,
 		/async fetchLLMModels\(params: \{\s*provider\?: string;/,
 	);
-  assert.match(databaseSource, /\} = \{\}\): Promise<\{/);
+  assert.match(databaseSource, /apiKey\?: string;/);
+  assert.match(databaseSource, /baseUrl\?: string;/);
 });
 
-test("SystemConfig model fetch updates selector source, count cache, and selected model deterministically", () => {
+test("SystemConfig model fetch caches by non-secret request signature and updates selector deterministically", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
 
-	assert.match(source, /result\.models\s*\n\s*\.map\(\(model\) =>/);
-	assert.match(source, /setFetchedModelsByProvider\(\(prev\) => \(\{/);
-	assert.match(
-		source,
-		/Object\.prototype\.hasOwnProperty\.call\(fetchedModelsByProvider, providerId\)/,
-	);
+	assert.match(source, /function buildRedactedHeaderRevision\(normalizedHeaders: string\)/);
+	assert.match(source, /return `headers:\$\{\(hash >>> 0\)\.toString\(36\)\}`/);
+	assert.match(source, /function buildModelFetchSignature/);
+	assert.match(source, /credentialSource: resolveModelFetchCredentialSource\(config\)/);
+	assert.doesNotMatch(source, /`\$\{providerId\}\|\$\{baseUrl\}\|saved-config\|\$\{parsedCustomHeaders\.normalizedText\}`/);
+	assert.match(source, /setFetchedModelsByProvider\(\(prev\) => \(\{[\s\S]*\[signature\]: normalizedModels/s);
+	assert.match(source, /Object\.prototype\.hasOwnProperty\.call\(fetchedModelsByProvider, signature\)/);
 	assert.match(source, /availableModelCount: normalizedModels\.length/);
 	assert.match(
 		source,
@@ -51,12 +55,14 @@ test("SystemConfig model fetch updates selector source, count cache, and selecte
 		source,
 		/setModelStatsFetchStateBySignature\(\(prev\) => \(\{\s*\.\.\.prev,\s*\[signature\]: "failed"/s,
 	);
-	assert.match(source, /\|saved-config\|\$\{statsParsedCustomHeaders\?\.ok/);
 });
 
-test("SystemConfig key UI uses compact status text and confirmed destructive clear", () => {
+test("SystemConfig key UI is password-only and keeps compact saved/reset/clear actions", () => {
   const source = readFileSync(systemConfigPath, "utf8");
 
+  assert.doesNotMatch(source, /Eye,|EyeOff,|showApiKey|显示 API Key|隐藏 API Key/);
+  assert.match(source, /<Input\s*\n\s*type="password"/);
+  assert.doesNotMatch(source, /type=\{[^}]*"text"/);
   assert.match(source, /const llmKeyStatusText =/);
   assert.match(source, /需保存密钥/);
   assert.match(source, /已导入密钥/);

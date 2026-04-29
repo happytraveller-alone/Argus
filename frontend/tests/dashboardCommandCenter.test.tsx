@@ -712,12 +712,19 @@ test("DashboardCommandCenter uses compact chart spacing constants", async () => 
 	);
 	assert.equal(
 		module.DASHBOARD_CHART_AREA_GRID_CLASSNAME,
-		"grid min-w-0 gap-4 xl:grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)]",
+		"grid min-w-0 gap-4 xl:min-h-0",
 	);
-	assert.equal(module.DASHBOARD_VIEW_RAIL_LIST_CLASSNAME, "grid gap-2");
+	assert.equal(
+		module.DASHBOARD_VIEW_RAIL_CLASSNAME,
+		"rounded-sm border border-border bg-card p-2 text-card-foreground shadow-sm",
+	);
+	assert.equal(
+		module.DASHBOARD_VIEW_RAIL_LIST_CLASSNAME,
+		"grid gap-2 sm:grid-cols-2 xl:grid-cols-5",
+	);
 });
 
-test("DashboardCommandCenter uses a two-column sidebar and chart layout", async () => {
+test("DashboardCommandCenter keeps task sidebar right while chart rail sits above chart", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
@@ -736,6 +743,11 @@ test("DashboardCommandCenter uses a two-column sidebar and chart layout", async 
 	);
 	assert.match(
 		markup,
+		/grid min-w-0 gap-4 xl:min-h-0/,
+	);
+	assert.match(markup, /sm:grid-cols-2 xl:grid-cols-5/);
+	assert.doesNotMatch(
+		markup,
 		/xl:grid-cols-\[minmax\(11rem,14rem\)_minmax\(0,1fr\)\]/,
 	);
 	assert.doesNotMatch(markup, /xl:grid-cols-\[260px_minmax\(0,1fr\)_340px\]/);
@@ -743,7 +755,7 @@ test("DashboardCommandCenter uses a two-column sidebar and chart layout", async 
 		markup,
 		/xl:grid-cols-\[calc\(\(100%-4rem\)\/5\)_minmax\(0,1fr\)_calc\(\(100%-4rem\)\/5\)\]/,
 	);
-	assert.match(markup, /lg:grid-cols-5/);
+	assert.match(markup, /xl:grid-cols-5/);
 });
 
 test("estimateHorizontalStatsYAxisWidth shrinks short labels while keeping long labels readable", async () => {

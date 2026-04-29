@@ -75,6 +75,50 @@ test("TaskActivitiesListTable uses compact table width and column minimums", () 
   assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
 });
 
+test("TaskActivitiesListTable locks ten-row pagination and scrollable task table chrome", async () => {
+  const source = readFileSync(taskActivitiesListTablePath, "utf8");
+
+  assert.match(source, /pageSize = 10/);
+  assert.match(source, /pageSizeOptions: \[10, 20, 50\]/);
+  assert.match(source, /className="flex h-full min-h-0 flex-col"/);
+  assert.match(source, /containerClassName="min-h-0 flex-1 overflow-auto"/);
+  assert.match(source, /tableClassName="min-w-\[820px\]"/);
+
+  const tableModule = await import(
+    "../src/features/tasks/components/TaskActivitiesListTable.tsx"
+  );
+  const activities = Array.from({ length: 12 }, (_, index) => ({
+    id: `task-${index + 1}`,
+    projectName: `Paged Task ${index + 1}`,
+    kind: "rule_scan" as const,
+    sourceMode: "static" as const,
+    status: "completed" as const,
+    createdAt: "2026-03-13T10:00:00.000Z",
+    startedAt: "2026-03-13T10:01:00.000Z",
+    completedAt: "2026-03-13T10:05:00.000Z",
+    route: `/static-analysis/task-${index + 1}`,
+  }));
+
+  const markup = renderToStaticMarkup(
+    createElement(
+      SsrRouter,
+      {},
+      createElement(tableModule.default, {
+        activities,
+        loading: false,
+        nowMs: Date.parse("2026-03-13T12:05:00.000Z"),
+      }),
+    ),
+  );
+
+  assert.match(markup, /共 12 条/);
+  assert.match(markup, /Paged Task 1/);
+  assert.match(markup, /Paged Task 10/);
+  assert.doesNotMatch(markup, /Paged Task 11/);
+  assert.doesNotMatch(markup, /Paged Task 12/);
+  assert.match(markup, /min-w-\[820px\]/);
+});
+
 test("TaskActivitiesListTable renders severity summaries for agent tasks and keeps static summaries", async () => {
   const tableModule = await import(
     "../src/features/tasks/components/TaskActivitiesListTable.tsx"

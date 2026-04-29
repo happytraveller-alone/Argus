@@ -77,6 +77,21 @@ export interface StaticAnalysisHeaderSummary {
   aggregateStatus: StaticAnalysisAggregateStatus | "pending";
 }
 
+export function resolveStaticAnalysisProjectNameFallback(input: {
+  taskProjectName?: string | null;
+  resolvedProjectName?: string | null;
+  projectId?: string | null;
+}): string {
+  return (
+    String(
+      input.taskProjectName ||
+        input.resolvedProjectName ||
+        input.projectId ||
+        "-",
+    ).trim() || "-"
+  );
+}
+
 function isStaticAnalysisBootstrapPending(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
   gitleaksTask: StaticAnalysisSummaryTaskLike | null;

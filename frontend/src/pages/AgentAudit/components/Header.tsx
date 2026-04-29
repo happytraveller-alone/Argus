@@ -29,24 +29,31 @@ export function Header({
 			<div className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 			<div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
 
-			<div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
-				<div>
+			<div className="relative z-10 flex items-start justify-between gap-3 flex-wrap">
+				<div className="min-w-0 flex-1 basis-[320px] space-y-2">
 					<h1 className="text-2xl font-bold tracking-wider text-foreground">
 						{title}
 					</h1>
+					{metricTags.length > 0 ? (
+						<div
+							className="flex min-w-0 flex-wrap items-center gap-2"
+							aria-label="智能审计概要标签"
+						>
+							{metricTags.map((tag, index) => (
+								<Badge
+									key={`${index}-${tag}`}
+									variant="outline"
+									className="h-9 max-w-[260px] truncate border-primary/30 bg-primary/10 px-3 text-sm font-semibold text-primary"
+									title={tag}
+								>
+									{tag}
+								</Badge>
+							))}
+						</div>
+					) : null}
 				</div>
 
 				<div className="flex items-center gap-2 flex-wrap">
-					{metricTags.map((tag, index) => (
-						<Badge
-							key={`${index}-${tag}`}
-							variant="outline"
-							className="h-8 max-w-[220px] truncate border-primary/30 bg-primary/10 px-2.5 text-xs font-medium text-primary"
-						>
-							{tag}
-						</Badge>
-					))}
-
 					{isRunning && (
 						<Button
 							variant="outline"
