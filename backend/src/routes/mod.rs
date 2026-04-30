@@ -1,5 +1,6 @@
 pub mod agent_tasks;
 pub mod agent_test;
+pub mod llm_config_set;
 pub mod projects;
 pub mod search;
 pub mod skills;

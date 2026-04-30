@@ -9,6 +9,7 @@ pub use providers::{
 };
 pub use tester::{
     build_runtime_config, compute_llm_fingerprint, empty_protocol_llm_config, metadata_matches,
-    normalize_stored_llm_config, sanitize_llm_config_for_save, test_llm_generation, LlmGateError,
-    LlmRealTestOutcome, RuntimeLlmConfig, LLM_CONFIG_VERSION, LLM_TEST_SCHEMA_VERSION,
+    normalize_stored_llm_config, runtime_headers, sanitize_llm_config_for_save,
+    test_llm_generation, LlmGateError, LlmRealTestOutcome, RuntimeLlmConfig,
+    LLM_CONFIG_VERSION, LLM_TEST_SCHEMA_VERSION,
 };

@@ -29,9 +29,31 @@ export function extractCreateProjectScanApiErrorMessage(error: unknown): string 
 }
 
 export function buildCreateProjectScanSystemConfigUpdate(options: {
-	currentConfig: { otherConfig?: Record<string, unknown> | null } | null | undefined;
+	currentConfig: { llmConfig?: Record<string, unknown> | null; otherConfig?: Record<string, unknown> | null } | null | undefined;
 	nextLlmConfig: Record<string, unknown>;
 }) {
+	const currentLlmConfig = options.currentConfig?.llmConfig || {};
+	if (Array.isArray((currentLlmConfig as { rows?: unknown }).rows)) {
+		const rows = ((currentLlmConfig as { rows: Array<Record<string, unknown>> }).rows || []).map((row, index) => {
+			if (index !== 0) return row;
+			const nextApiKey = typeof options.nextLlmConfig.llmApiKey === "string" ? String(options.nextLlmConfig.llmApiKey).trim() : "";
+			return {
+				...row,
+				provider: options.nextLlmConfig.llmProvider,
+				model: options.nextLlmConfig.llmModel,
+				baseUrl: options.nextLlmConfig.llmBaseUrl,
+				secretSource: options.nextLlmConfig.secretSource,
+				...(nextApiKey ? { apiKey: nextApiKey, hasApiKey: true } : {}),
+			};
+		});
+		return {
+			llmConfig: {
+				...currentLlmConfig,
+				rows,
+			},
+			otherConfig: options.currentConfig?.otherConfig || {},
+		};
+	}
 	return {
 		llmConfig: options.nextLlmConfig,
 		otherConfig: options.currentConfig?.otherConfig || {},

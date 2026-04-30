@@ -154,14 +154,14 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current_json["llmConfig"]["llmApiKey"], "");
-    assert_eq!(current_json["llmConfig"]["hasSavedApiKey"], true);
-    assert_eq!(current_json["llmConfig"]["secretSource"], "saved");
+    assert_eq!(current_json["llmConfig"]["schemaVersion"], 2);
+    assert_eq!(current_json["llmConfig"]["rows"][0]["apiKey"], "");
+    assert_eq!(current_json["llmConfig"]["rows"][0]["hasApiKey"], true);
+    assert_eq!(current_json["llmConfig"]["rows"][0]["secretSource"], "saved");
+    assert_eq!(current_json["llmConfig"]["rows"][0]["provider"], "openai_compatible");
+    assert_eq!(current_json["llmConfig"]["rows"][0]["model"], "gpt-5");
+    assert_eq!(current_json["llmConfig"]["rows"][0]["baseUrl"], "https://api.openai.com/v1");
     assert!(!current_json.to_string().contains("sk-test"));
-    assert_eq!(
-        current_json["llmConfig"]["llmConfigVersion"],
-        "intelligent-engine-v1"
-    );
     assert_eq!(current_json["otherConfig"]["llmConcurrency"], 3);
     assert!(current_json.get("id").is_none());
     assert!(current_json.get("user_id").is_none());
@@ -184,7 +184,8 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(delete_json["llmConfig"]["llmApiKey"], "");
+    assert_eq!(delete_json["llmConfig"]["schemaVersion"], 2);
+    assert_eq!(delete_json["llmConfig"]["rows"][0]["apiKey"], "");
 }
 
 #[tokio::test]
@@ -275,7 +276,7 @@ async fn system_config_helper_endpoints_are_available() {
     )
     .unwrap();
     assert_eq!(preflight_json["ok"], false);
-    assert_eq!(preflight_json["reasonCode"], "missing_fields");
+    assert_eq!(preflight_json["reasonCode"], "default_config");
     assert_eq!(
         preflight_json["metadata"]["runner"]["reason_code"],
         "not_checked"
@@ -338,11 +339,13 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     )
     .unwrap();
     assert_eq!(stale_preflight_json["ok"], false);
-    assert_eq!(stale_preflight_json["stage"], "llm_test");
-    assert_eq!(stale_preflight_json["reasonCode"], "llm_test_stale");
+    assert_eq!(stale_preflight_json["stage"], "runner");
+    assert_eq!(stale_preflight_json["reasonCode"], "runner_missing");
     assert_eq!(stale_preflight_json["savedConfig"]["apiKey"], "");
     assert_eq!(stale_preflight_json["savedConfig"]["hasSavedApiKey"], true);
     assert_eq!(stale_preflight_json["savedConfig"]["secretSource"], "saved");
+    assert_eq!(stale_preflight_json["metadata"]["preflightRows"]["attemptedRowIds"].as_array().unwrap().len(), 1);
+    assert!(stale_preflight_json["metadata"]["preflightRows"]["winningRowId"].is_string());
     assert!(!stale_preflight_json
         .to_string()
         .contains("sk-agentflow-secret"));
@@ -445,7 +448,7 @@ base_url = "https://api.openai.com/v1"
     .unwrap();
 
     assert_eq!(preflight_json["ok"], false);
-    assert_eq!(preflight_json["reasonCode"], "missing_fields");
+    assert_eq!(preflight_json["reasonCode"], "default_config");
     assert_eq!(preflight_json["savedConfig"], Value::Null);
     assert_eq!(preflight_json["effectiveConfig"]["apiKey"], "");
     assert!(!preflight_json.to_string().contains("sk-codex-host-secret"));
@@ -513,7 +516,7 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
     assert_eq!(mismatched_payload["success"], false);
     assert_eq!(
         mismatched_payload["message"],
-        "当前测试请求与已保存 LLM 配置不一致，请先保存后再测试。"
+        "当前测试请求与已保存 LLM 配置行不一致，请先保存后再测试。"
     );
 
     let test_response = app
@@ -567,8 +570,8 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current["llmConfig"]["llmApiKey"], "");
-    assert_eq!(current["llmConfig"]["hasSavedApiKey"], true);
+    assert_eq!(current["llmConfig"]["rows"][0]["apiKey"], "");
+    assert_eq!(current["llmConfig"]["rows"][0]["hasApiKey"], true);
     assert!(!current.to_string().contains("sk-real-secret"));
     assert_eq!(
         current["llmTestMetadata"]["fingerprint"],
@@ -648,9 +651,9 @@ async fn import_env_requires_token_and_saves_verified_redacted_system_config() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current["llmConfig"]["llmApiKey"], "");
-    assert_eq!(current["llmConfig"]["hasSavedApiKey"], true);
-    assert_eq!(current["llmConfig"]["secretSource"], "imported");
+    assert_eq!(current["llmConfig"]["rows"][0]["apiKey"], "");
+    assert_eq!(current["llmConfig"]["rows"][0]["hasApiKey"], true);
+    assert_eq!(current["llmConfig"]["rows"][0]["secretSource"], "imported");
     assert_eq!(
         current["llmTestMetadata"]["fingerprint"],
         import_payload["metadata"]["fingerprint"]
@@ -827,11 +830,14 @@ async fn system_config_save_allows_empty_model_but_preflight_stays_strict() {
         .unwrap();
     assert_eq!(save_response.status(), StatusCode::OK);
 
-    let save_payload: Value =
-        serde_json::from_slice(&to_bytes(save_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
-    assert_eq!(save_payload["llmConfig"]["llmModel"], "");
-    assert_eq!(save_payload["llmConfig"]["hasSavedApiKey"], true);
+    let save_payload: Value = serde_json::from_slice(
+        &to_bytes(save_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(save_payload["llmConfig"]["rows"][0]["model"], "");
+    assert_eq!(save_payload["llmConfig"]["rows"][0]["hasApiKey"], true);
     assert!(!save_payload.to_string().contains("sk-empty-model"));
 
     let preflight_response = app
@@ -845,9 +851,12 @@ async fn system_config_save_allows_empty_model_but_preflight_stays_strict() {
         .await
         .unwrap();
     assert_eq!(preflight_response.status(), StatusCode::OK);
-    let preflight_payload: Value =
-        serde_json::from_slice(&to_bytes(preflight_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let preflight_payload: Value = serde_json::from_slice(
+        &to_bytes(preflight_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(preflight_payload["ok"], false);
     assert_eq!(preflight_payload["reasonCode"], "missing_fields");
     assert_eq!(
@@ -863,10 +872,8 @@ async fn fetch_llm_models_uses_draft_request_for_online_discovery_without_persis
         .await
         .expect("state should build");
     let app = build_router(state);
-    let mock_base_url = spawn_llm_mock_server(
-        r#"{"data":[{"id":"z-draft-model"},{"id":"a-draft-model"}]}"#,
-    )
-    .await;
+    let mock_base_url =
+        spawn_llm_mock_server(r#"{"data":[{"id":"z-draft-model"},{"id":"a-draft-model"}]}"#).await;
 
     let response = app
         .clone()
@@ -1012,8 +1019,8 @@ async fn fetch_llm_models_saved_path_omits_draft_key_but_draft_base_url_takes_pr
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current_payload["llmConfig"]["llmBaseUrl"], saved_base_url);
-    assert_ne!(current_payload["llmConfig"]["llmBaseUrl"], draft_base_url);
+    assert_eq!(current_payload["llmConfig"]["rows"][0]["baseUrl"], saved_base_url);
+    assert_ne!(current_payload["llmConfig"]["rows"][0]["baseUrl"], draft_base_url);
 }
 
 #[tokio::test]
@@ -1089,13 +1096,14 @@ async fn system_config_defaults_follow_app_config() {
     assert_eq!(response.status(), StatusCode::OK);
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(payload["llmConfig"]["llmProvider"], "openai_compatible");
-    assert_eq!(payload["llmConfig"]["llmModel"], "gemini-2.5-pro");
+    assert_eq!(payload["llmConfig"]["schemaVersion"], 2);
+    assert_eq!(payload["llmConfig"]["rows"][0]["provider"], "openai_compatible");
+    assert_eq!(payload["llmConfig"]["rows"][0]["model"], "gemini-2.5-pro");
     assert_eq!(
-        payload["llmConfig"]["llmBaseUrl"],
+        payload["llmConfig"]["rows"][0]["baseUrl"],
         "https://example.test/v1"
     );
-    assert_eq!(payload["llmConfig"]["llmTimeout"], 123000);
+    assert_eq!(payload["llmConfig"]["rows"][0]["advanced"]["llmTimeout"], 123000);
     assert_eq!(payload["otherConfig"]["maxAnalyzeFiles"], 88);
     assert_eq!(payload["otherConfig"]["llmConcurrency"], 5);
     assert_eq!(payload["otherConfig"]["llmGapMs"], 2222);
@@ -1106,4 +1114,83 @@ fn isolated_test_config(scope: &str) -> AppConfig {
     config.zip_storage_path =
         std::env::temp_dir().join(format!("argus-rust-{scope}-{}", Uuid::new_v4()));
     config
+}
+
+#[tokio::test]
+async fn system_config_multi_row_contract_redacts_and_preserves_row_secret() {
+    let state = AppState::from_config(isolated_test_config("system-config-multi-row-contract"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let save_payload = json!({
+        "llmConfig": {
+            "schemaVersion": 2,
+            "rows": [
+                {
+                    "id": "row-a",
+                    "priority": 1,
+                    "enabled": true,
+                    "provider": "openai_compatible",
+                    "baseUrl": "https://api.example.com/v1",
+                    "model": "gpt-5",
+                    "apiKey": "sk-row-a",
+                    "advanced": {"llmTimeout": 120000, "llmTemperature": 0.1, "llmMaxTokens": 16, "llmFirstTokenTimeout": 180, "llmStreamTimeout": 600, "agentTimeout": 600, "subAgentTimeout": 300, "toolTimeout": 120, "llmCustomHeaders": ""}
+                },
+                {
+                    "id": "row-b",
+                    "priority": 2,
+                    "enabled": false,
+                    "provider": "anthropic_compatible",
+                    "baseUrl": "https://api.anthropic.com/v1",
+                    "model": "claude-sonnet-4.5",
+                    "apiKey": "sk-row-b",
+                    "advanced": {"llmTimeout": 120000, "llmTemperature": 0.1, "llmMaxTokens": 16, "llmFirstTokenTimeout": 180, "llmStreamTimeout": 600, "agentTimeout": 600, "subAgentTimeout": 300, "toolTimeout": 120, "llmCustomHeaders": ""}
+                }
+            ]
+        },
+        "otherConfig": {"llmConcurrency": 3, "llmGapMs": 1500, "maxAnalyzeFiles": 7}
+    });
+
+    let save_response = app.clone().oneshot(
+        Request::builder()
+            .method(Method::PUT)
+            .uri("/api/v1/system-config")
+            .header("content-type", "application/json")
+            .body(Body::from(save_payload.to_string()))
+            .unwrap(),
+    ).await.unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+    let saved: Value = serde_json::from_slice(&to_bytes(save_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(saved["llmConfig"]["schemaVersion"], 2);
+    assert_eq!(saved["llmConfig"]["rows"][0]["apiKey"], "");
+    assert_eq!(saved["llmConfig"]["rows"][0]["hasApiKey"], true);
+    assert!(!saved.to_string().contains("sk-row-a"));
+
+    let preserve_payload = json!({
+        "llmConfig": {
+            "schemaVersion": 2,
+            "rows": [
+                {"id":"row-b","priority":1,"enabled":false,"provider":"anthropic_compatible","baseUrl":"https://api.anthropic.com/v1","model":"claude-sonnet-4.5","apiKey":"","advanced":{"llmTimeout":120000,"llmTemperature":0.1,"llmMaxTokens":16,"llmFirstTokenTimeout":180,"llmStreamTimeout":600,"agentTimeout":600,"subAgentTimeout":300,"toolTimeout":120,"llmCustomHeaders":""}},
+                {"id":"row-a","priority":2,"enabled":true,"provider":"openai_compatible","baseUrl":"https://api.example.com/v1","model":"gpt-5-mini","apiKey":"","advanced":{"llmTimeout":120000,"llmTemperature":0.1,"llmMaxTokens":16,"llmFirstTokenTimeout":180,"llmStreamTimeout":600,"agentTimeout":600,"subAgentTimeout":300,"toolTimeout":120,"llmCustomHeaders":""}}
+            ]
+        },
+        "otherConfig": {}
+    });
+    let response = app.clone().oneshot(
+        Request::builder()
+            .method(Method::PUT)
+            .uri("/api/v1/system-config")
+            .header("content-type", "application/json")
+            .body(Body::from(preserve_payload.to_string()))
+            .unwrap(),
+    ).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let current = app.oneshot(Request::get("/api/v1/system-config").body(Body::empty()).unwrap()).await.unwrap();
+    let current_json: Value = serde_json::from_slice(&to_bytes(current.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(current_json["llmConfig"]["rows"][0]["id"], "row-b");
+    assert_eq!(current_json["llmConfig"]["rows"][1]["id"], "row-a");
+    assert_eq!(current_json["llmConfig"]["rows"][1]["hasApiKey"], true);
+    assert!(!current_json.to_string().contains("sk-row-a"));
+    assert!(!current_json.to_string().contains("sk-row-b"));
 }

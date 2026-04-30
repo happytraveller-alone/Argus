@@ -51,14 +51,15 @@ const ENGINE_SUMMARY_COLUMNS: AppColumnDef<EngineSummaryCardRow, unknown>[] = [
 export default function ScanConfigIntelligentEngine() {
 	const sharedDraftState = useSystemConfigDraftState();
 	const summaryConfig = sharedDraftState.config;
+	const summaryActiveRow = summaryConfig?.llmConfig.rows.find((row) => row.id === summaryConfig.llmConfig.latestPreflightRun.winningRowId) || summaryConfig?.llmConfig.rows.find((row) => row.enabled) || summaryConfig?.llmConfig.rows[0];
 	const [summaryState, setSummaryState] = useState<LlmSummaryState | null>(
 		null,
 	);
 	const summary: LlmSummaryState = {
 		providerLabel:
-			summaryState?.providerLabel || summaryConfig?.llmProvider || "--",
+			summaryState?.providerLabel || summaryActiveRow?.provider || "--",
 		currentModelName:
-			summaryState?.currentModelName || summaryConfig?.llmModel || "--",
+			summaryState?.currentModelName || summaryActiveRow?.model || "--",
 		availableModelCount: summaryState?.availableModelCount ?? 0,
 		availableModelMetadataCount: summaryState?.availableModelMetadataCount ?? 0,
 		supportsModelFetch: summaryState?.supportsModelFetch || false,

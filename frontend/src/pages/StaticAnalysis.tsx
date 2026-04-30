@@ -4,9 +4,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Ban,
+  Copy,
   Loader2,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +20,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +35,7 @@ import {
   useDataTableUrlState,
 } from "@/components/data-table";
 import { api as databaseApi } from "@/shared/api/database";
+import { apiClient } from "@/shared/api/serverClient";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
   createStaticAnalysisInitialTableState,
@@ -104,6 +115,26 @@ export default function StaticAnalysis() {
     hasEnabledEngine,
     opengrepTaskId,
   });
+
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<{ analysis: string; model: string } | null>(null);
+  const [showAiDialog, setShowAiDialog] = useState(false);
+
+  const handleAiAnalysis = async () => {
+    if (!opengrepTaskId) return;
+    setAiAnalyzing(true);
+    try {
+      const response = await apiClient.post(`/static-tasks/tasks/${opengrepTaskId}/ai-analysis`);
+      setAiResult(response.data);
+      setShowAiDialog(true);
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error || error?.message || "AI 研判请求失败";
+      toast.error(message);
+    } finally {
+      setAiAnalyzing(false);
+    }
+  };
 
   const unifiedRows = useMemo(
     () =>
@@ -265,6 +296,19 @@ export default function StaticAnalysis() {
           <Button
             variant="outline"
             className="cyber-btn-outline h-8"
+            onClick={() => void handleAiAnalysis()}
+            disabled={aiAnalyzing || loadingInitial || isStaticAnalysisPollableStatus(opengrepTask?.status)}
+          >
+            {aiAnalyzing ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            AI 研判
+          </Button>
+          <Button
+            variant="outline"
+            className="cyber-btn-outline h-8"
             onClick={() => void refreshAll(false)}
             disabled={loadingInitial || loadingTask || loadingFindings}
           >
@@ -325,6 +369,46 @@ export default function StaticAnalysis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
+        <DialogContent className="cyber-dialog border-border max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-mono">AI 规则研判分析</DialogTitle>
+            {aiResult?.model && (
+              <Badge className="cyber-badge cyber-badge-info w-fit mt-1">
+                模型: {aiResult.model}
+              </Badge>
+            )}
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <pre className="whitespace-pre-wrap text-sm font-mono text-foreground leading-relaxed">
+              {aiResult?.analysis || ""}
+            </pre>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => {
+                if (aiResult?.analysis) {
+                  navigator.clipboard.writeText(aiResult.analysis);
+                  toast.success("已复制到剪贴板");
+                }
+              }}
+            >
+              <Copy className="w-3.5 h-3.5 mr-1.5" />
+              复制
+            </Button>
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => setShowAiDialog(false)}
+            >
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

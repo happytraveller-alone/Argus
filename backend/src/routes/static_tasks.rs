@@ -21,7 +21,7 @@ use crate::{
         collect_relative_paths_from_directory, extract_archive_path_to_directory,
         read_file_lines_from_archive_path,
     },
-    db::{projects, task_state},
+    db::{projects, system_config, task_state},
     error::ApiError,
     llm_rule,
     runtime::runner::{self, RunnerSpec},
@@ -66,6 +66,7 @@ pub fn router() -> Router<AppState> {
             "/tasks/{task_id}",
             get(get_opengrep_task).delete(delete_opengrep_task),
         )
+        .route("/tasks/{task_id}/ai-analysis", post(ai_analysis))
         .route("/tasks/{task_id}/interrupt", post(interrupt_opengrep_task))
         .route("/tasks/{task_id}/progress", get(get_opengrep_progress))
         .route("/tasks/{task_id}/findings", get(list_opengrep_findings))
@@ -2233,6 +2234,190 @@ fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+async fn ai_analysis(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = load_task_snapshot(&state).await?;
+    let record = snapshot
+        .static_tasks
+        .get(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+
+    if record.findings.is_empty() {
+        return Err(ApiError::BadRequest(
+            "当前扫描暂无发现，无需 AI 研判".to_string(),
+        ));
+    }
+
+    let stored_config = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::BadRequest(
+                "请先配置智能审计 LLM".to_string(),
+            )
+        })?;
+    let selected = crate::routes::llm_config_set::selected_enabled_runtime(
+        &stored_config.llm_config_json,
+        &stored_config.other_config_json,
+        state.config.as_ref(),
+    )
+    .map_err(|error| ApiError::BadRequest(error.message))?;
+
+    let mut rule_summary: BTreeMap<String, (usize, BTreeMap<String, usize>, Vec<String>)> =
+        BTreeMap::new();
+    for finding in &record.findings {
+        let rule = finding
+            .payload
+            .get("rule")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let severity = finding
+            .payload
+            .get("severity")
+            .and_then(Value::as_str)
+            .unwrap_or("UNKNOWN");
+        let file = finding
+            .payload
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let line = finding
+            .payload
+            .get("line")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+
+        let entry = rule_summary
+            .entry(rule.to_string())
+            .or_insert_with(|| (0, BTreeMap::new(), Vec::new()));
+        entry.0 += 1;
+        *entry.1.entry(severity.to_string()).or_insert(0) += 1;
+        if entry.2.len() < 3 {
+            entry
+                .2
+                .push(format!("{file}:{line}"));
+        }
+    }
+
+    let mut prompt_lines = vec![
+        "你是一位安全扫描规则分析专家。请根据以下静态扫描结果，分析当前扫描规则的问题点，并给出优化建议。".to_string(),
+        String::new(),
+        format!("## 扫描结果摘要（共 {} 条发现，{} 条规则命中）", record.findings.len(), rule_summary.len()),
+        String::new(),
+    ];
+    for (rule, (count, severities, samples)) in &rule_summary {
+        let severity_str: Vec<String> = severities
+            .iter()
+            .map(|(sev, cnt)| format!("{sev}:{cnt}"))
+            .collect();
+        prompt_lines.push(format!(
+            "- **{rule}**: 命中 {count} 次, 严重度分布: [{}], 示例位置: {}",
+            severity_str.join(", "),
+            samples.join(", ")
+        ));
+    }
+    prompt_lines.extend([
+        String::new(),
+        "## 请分析以下方面：".to_string(),
+        "1. 规则误报率分析：哪些规则可能存在高误报率".to_string(),
+        "2. 规则覆盖度分析：是否存在重叠或遗漏".to_string(),
+        "3. 规则优化建议：具体的优化方向和步骤".to_string(),
+        "4. 优先级建议：哪些规则应该优先优化".to_string(),
+    ]);
+    let prompt = prompt_lines.join("\n");
+
+    let runtime = &selected.runtime;
+    let headers = crate::llm::runtime_headers(runtime)
+        .map_err(|error| ApiError::Internal(error.message))?;
+    let (url, body) = match runtime.provider.as_str() {
+        "openai_compatible" => {
+            let url = format!(
+                "{}/chat/completions",
+                runtime.base_url.trim_end_matches('/')
+            );
+            let body = json!({
+                "model": runtime.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": runtime.llm_max_tokens,
+                "temperature": runtime.llm_temperature,
+                "stream": false
+            });
+            (url, body)
+        }
+        "anthropic_compatible" => {
+            let url = format!("{}/messages", runtime.base_url.trim_end_matches('/'));
+            let body = json!({
+                "model": runtime.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": runtime.llm_max_tokens
+            });
+            (url, body)
+        }
+        _ => {
+            return Err(ApiError::Internal(
+                "不支持的 LLM 协议".to_string(),
+            ));
+        }
+    };
+
+    let response = state
+        .http_client
+        .post(&url)
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| ApiError::Internal(format!("LLM 请求失败：{error}")))?;
+
+    let status = response.status();
+    let response_json: Value = response
+        .json()
+        .await
+        .map_err(|error| ApiError::Internal(format!("LLM 响应解析失败：{error}")))?;
+
+    if !status.is_success() {
+        let error_msg = response_json
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown error");
+        return Err(ApiError::Internal(format!(
+            "LLM 调用失败 ({status}): {error_msg}"
+        )));
+    }
+
+    let analysis = match runtime.provider.as_str() {
+        "openai_compatible" => response_json
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        "anthropic_compatible" => response_json
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find_map(|item| item.get("text").and_then(Value::as_str))
+            })
+            .unwrap_or("")
+            .to_string(),
+        _ => String::new(),
+    };
+
+    let tokens_used = response_json
+        .pointer("/usage/total_tokens")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+
+    Ok(Json(json!({
+        "analysis": analysis,
+        "model": runtime.model,
+        "tokens_used": tokens_used,
+    })))
 }
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {

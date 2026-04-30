@@ -343,7 +343,7 @@ async fn parse_json_response(
         })
 }
 
-fn runtime_headers(runtime: &RuntimeLlmConfig) -> Result<HeaderMap, LlmGateError> {
+pub fn runtime_headers(runtime: &RuntimeLlmConfig) -> Result<HeaderMap, LlmGateError> {
     let mut headers = HeaderMap::new();
     for (name, value) in &runtime.custom_headers {
         let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| {

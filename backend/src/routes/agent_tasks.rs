@@ -18,9 +18,7 @@ use time::macros::format_description;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::llm::{
-    build_runtime_config, compute_llm_fingerprint, metadata_matches, test_llm_generation,
-};
+use crate::llm::test_llm_generation;
 use crate::{
     archive::extract_archive_path_to_directory,
     config::AppConfig,
@@ -459,13 +457,11 @@ async fn start_agent_task_core(
                 "preflight": preflight,
             })),
         );
+        let response = agent_task_value(record);
         task_state::save_snapshot(&state, &snapshot)
             .await
             .map_err(internal_error)?;
-        return Err(ApiError::Internal(format!(
-            "agent task preflight failed: {}",
-            preflight.message
-        )));
+        return Ok(Json(response));
     }
 
     let prepared_workspace = if runner_command
@@ -492,13 +488,11 @@ async fn start_agent_task_core(
                         }
                     })),
                 );
+                let response = agent_task_value(record);
                 task_state::save_snapshot(&state, &snapshot)
                     .await
                     .map_err(internal_error)?;
-                return Err(ApiError::Internal(format!(
-                    "agent task workspace preparation failed: {}",
-                    error.message
-                )));
+                return Ok(Json(response));
             }
         }
     } else {
@@ -578,12 +572,11 @@ async fn start_agent_task_core(
             "AgentFlow runner 未配置，无法启动智能审计任务",
             None,
         );
+        let response = agent_task_value(record);
         task_state::save_snapshot(&state, &snapshot)
             .await
             .map_err(internal_error)?;
-        return Err(ApiError::Internal(
-            "agent task failed: AgentFlow runner is not configured".to_string(),
-        ));
+        return Ok(Json(response));
     };
     let outcome = run_controlled_command(RunnerCommand {
         program: "sh".to_string(),
@@ -2701,17 +2694,37 @@ async fn ensure_intelligent_audit_llm_ready(state: &AppState) -> Result<Value, A
                 "智能审计启动失败：请先在扫描配置 > 智能引擎中保存并测试 LLM 配置。".to_string(),
             )
         })?;
-    let runtime = build_runtime_config(&stored.llm_config_json, &stored.other_config_json)
-        .map_err(|error| ApiError::BadRequest(error.message))?;
-    let fingerprint = compute_llm_fingerprint(&runtime);
-    if !metadata_matches(&stored.llm_test_metadata_json, &fingerprint) {
-        return Err(ApiError::BadRequest(
-            "智能审计启动失败：LLM 测试证据缺失或已过期，请重新保存并测试。".to_string(),
-        ));
-    }
-    let outcome = test_llm_generation(&state.http_client, &runtime)
+    let selected = crate::routes::llm_config_set::selected_enabled_runtime(
+        &stored.llm_config_json,
+        &stored.other_config_json,
+        state.config.as_ref(),
+    )
+    .map_err(|error| ApiError::BadRequest(error.message))?;
+    let outcome = test_llm_generation(&state.http_client, &selected.runtime)
         .await
         .map_err(|error| ApiError::BadRequest(error.message))?;
+    let mut envelope = crate::routes::llm_config_set::mark_row_preflight(
+        &stored.llm_config_json,
+        &selected.row_id,
+        "passed",
+        None,
+        Some("启动前预检通过"),
+        Some(&outcome.fingerprint),
+    );
+    envelope = crate::routes::llm_config_set::set_latest_preflight_run(
+        &envelope,
+        vec![selected.row_id.clone()],
+        Some(selected.row_id),
+        Some(outcome.fingerprint.clone()),
+    );
+    let _ = system_config::save_current(
+        state,
+        envelope,
+        stored.other_config_json,
+        outcome.metadata(),
+    )
+    .await
+    .map_err(internal_error)?;
     Ok(outcome.metadata())
 }
 

@@ -715,17 +715,8 @@ export const api = {
   async getUserConfig(): Promise<UserConfigPayload | null> {
     try {
       const res = await apiClient.get('/system-config');
-      console.log('[API] getUserConfig 成功:', {
-        hasLlmConfig: !!res.data?.llmConfig,
-        provider: res.data?.llmConfig?.llmProvider,
-      });
       return res.data;
-    } catch (error: unknown) {
-      const apiError = error as {
-        response?: { status?: number };
-        message?: string;
-      };
-      console.error('[API] getUserConfig 失败:', apiError?.response?.status, apiError?.message);
+    } catch {
       return null;
     }
   },
@@ -857,6 +848,7 @@ export const api = {
   },
 
   async testLLMConnection(params: {
+    rowId?: string;
     provider: string;
     apiKey?: string;
     model?: string;
@@ -900,6 +892,7 @@ export const api = {
   },
 
   async fetchLLMModels(params: {
+    rowId?: string;
     provider?: string;
     apiKey?: string;
     baseUrl?: string;

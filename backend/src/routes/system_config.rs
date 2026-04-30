@@ -17,11 +17,12 @@ use crate::{
     error::ApiError,
     llm::{
         build_runtime_config, compute_llm_fingerprint, is_supported_protocol_provider,
-        metadata_matches, normalize_base_url, normalize_provider_id, normalize_stored_llm_config,
-        parse_custom_headers, provider_api_key_field, provider_catalog,
-        provider_catalog_entry_or_fallback, recommend_tokens, sanitize_llm_config_for_save,
-        test_llm_generation, LlmGateError, ProviderCatalogItem as LlmProviderItem,
+        normalize_base_url, normalize_provider_id, parse_custom_headers, provider_api_key_field,
+        provider_catalog, provider_catalog_entry_or_fallback, recommend_tokens,
+        sanitize_llm_config_for_save, test_llm_generation, LlmGateError,
+        ProviderCatalogItem as LlmProviderItem,
     },
+    routes::llm_config_set,
     runtime::agentflow::codex_config::build_agentflow_llm_config,
     state::{AppState, StoredSystemConfig},
 };
@@ -37,7 +38,7 @@ pub struct SystemConfigPayload {
 
 const IMPORT_TOKEN_ENV: &str = "ARGUS_RESET_IMPORT_TOKEN";
 const IMPORT_TOKEN_HEADER: &str = "x-argus-reset-import-token";
-const REDACTED_SECRET_PLACEHOLDER: &str = "***configured***";
+const REDACTED_SECRET_PLACEHOLDER: &str = llm_config_set::REDACTED_SECRET_PLACEHOLDER;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,6 +83,7 @@ pub struct AgentPreflightPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmTestRequest {
+    pub row_id: Option<String>,
     pub provider: String,
     pub api_key: Option<String>,
     pub model: Option<String>,
@@ -103,6 +105,7 @@ pub struct LlmTestResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchModelsRequest {
+    pub row_id: Option<String>,
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
@@ -147,7 +150,10 @@ pub fn router() -> Router<AppState> {
 }
 
 pub async fn get_defaults(State(state): State<AppState>) -> Json<SystemConfigPayload> {
-    Json(public_payload(default_config(state.config.as_ref())))
+    Json(public_payload(
+        default_config(state.config.as_ref()),
+        state.config.as_ref(),
+    ))
 }
 
 pub async fn get_current(
@@ -156,10 +162,10 @@ pub async fn get_current(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    Ok(Json(public_payload(merge_with_defaults(
+    Ok(Json(public_payload(
+        merge_with_defaults(state.config.as_ref(), stored),
         state.config.as_ref(),
-        stored,
-    ))))
+    )))
 }
 
 pub async fn put_current(
@@ -170,34 +176,20 @@ pub async fn put_current(
     let existing = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let merged_input_llm = merge_json(&defaults.llm_config, &payload.llm_config);
-    let next_llm_input = resolve_llm_secret_for_save(
-        &merged_input_llm,
+    let next_llm = llm_config_set::normalize_for_save(
+        &payload.llm_config,
         existing.as_ref().map(|stored| &stored.llm_config_json),
-        "saved",
+        state.config.as_ref(),
     )
     .map_err(llm_gate_bad_request)?;
-    let next_llm = sanitize_llm_config_for_save(&next_llm_input).map_err(llm_gate_bad_request)?;
     let next_other = merge_json(&defaults.other_config, &payload.other_config);
-    let next_metadata = match build_runtime_config(&next_llm, &next_other) {
-        Ok(next_runtime) => {
-            let next_fingerprint = compute_llm_fingerprint(&next_runtime);
-            existing
-                .as_ref()
-                .map(|stored| &stored.llm_test_metadata_json)
-                .filter(|metadata| metadata_matches(metadata, &next_fingerprint))
-                .cloned()
-                .unwrap_or_else(|| json!({}))
-        }
-        Err(_) => json!({}),
-    };
-    let stored = system_config::save_current(&state, next_llm, next_other, next_metadata)
+    let stored = system_config::save_current(&state, next_llm, next_other, json!({}))
         .await
         .map_err(internal_error)?;
 
     let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
     sync_python_user_config_mirror(&state, Some(&merged)).await?;
-    Ok(Json(public_payload(merged)))
+    Ok(Json(public_payload(merged, state.config.as_ref())))
 }
 
 pub async fn delete_current(
@@ -207,7 +199,10 @@ pub async fn delete_current(
         .await
         .map_err(internal_error)?;
     sync_python_user_config_mirror(&state, None).await?;
-    Ok(Json(public_payload(default_config(state.config.as_ref()))))
+    Ok(Json(public_payload(
+        default_config(state.config.as_ref()),
+        state.config.as_ref(),
+    )))
 }
 
 async fn get_llm_providers() -> Json<LlmProviderCatalogResponse> {
@@ -220,46 +215,59 @@ pub async fn test_llm(
     State(state): State<AppState>,
     Json(request): Json<LlmTestRequest>,
 ) -> Result<Json<LlmTestResponse>, ApiError> {
+    let stored = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::BadRequest("请先保存 LLM 配置，再执行连接测试。".to_string()))?;
+    let (envelope, _) =
+        llm_config_set::normalize_envelope(&stored.llm_config_json, state.config.as_ref());
+    let rows = envelope
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let provider = normalize_provider_for_route(&request.provider);
     let model = request.model.clone().unwrap_or_default().trim().to_string();
-    let base_url = request
-        .base_url
-        .clone()
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let base_url = normalize_base_url(&request.base_url.clone().unwrap_or_default());
     let request_custom_headers_value = request
         .custom_headers
         .as_ref()
         .map(|headers| Value::String(headers.clone()));
     let request_custom_headers = parse_custom_headers(request_custom_headers_value.as_ref())
         .map_err(ApiError::BadRequest)?;
-    let stored = system_config::load_current(&state)
-        .await
-        .map_err(internal_error)?
-        .ok_or_else(|| ApiError::BadRequest("请先保存 LLM 配置，再执行连接测试。".to_string()))?;
-    let api_key = resolve_test_api_key(&request, &stored.llm_config_json)?;
-    let stored_custom_headers =
-        parse_custom_headers(stored.llm_config_json.get("llmCustomHeaders"))
-            .map_err(ApiError::BadRequest)?;
-    if provider != read_string(&stored.llm_config_json, "llmProvider").unwrap_or_default()
-        || model != read_string(&stored.llm_config_json, "llmModel").unwrap_or_default()
-        || normalize_base_url(&base_url)
-            != normalize_base_url(
-                &read_string(&stored.llm_config_json, "llmBaseUrl").unwrap_or_default(),
-            )
-        || api_key != read_string(&stored.llm_config_json, "llmApiKey").unwrap_or_default()
-        || request_custom_headers != stored_custom_headers
-    {
+
+    let selected_row = rows.into_iter().find(|row| {
+        if let Some(row_id) = request.row_id.as_deref() {
+            if read_string(row, "id").as_deref() != Some(row_id) {
+                return false;
+            }
+        }
+        let row_config = llm_config_set::row_to_legacy_config(row);
+        let row_headers =
+            parse_custom_headers(row_config.get("llmCustomHeaders")).unwrap_or_default();
+        read_string(&row_config, "llmProvider").unwrap_or_default() == provider
+            && read_string(&row_config, "llmModel").unwrap_or_default() == model
+            && normalize_base_url(&read_string(&row_config, "llmBaseUrl").unwrap_or_default())
+                == base_url
+            && row_headers == request_custom_headers
+    });
+    let Some(row) = selected_row else {
         return Ok(Json(LlmTestResponse {
             success: false,
-            message: "当前测试请求与已保存 LLM 配置不一致，请先保存后再测试。".to_string(),
+            message: "当前测试请求与已保存 LLM 配置行不一致，请先保存后再测试。".to_string(),
             model: None,
             response: None,
             metadata: None,
         }));
+    };
+    let mut row_config = llm_config_set::row_to_legacy_config(&row);
+    let api_key = resolve_test_api_key(&request, &row_config)?;
+    if api_key != read_string(&row_config, "llmApiKey").unwrap_or_default() {
+        if let Some(map) = row_config.as_object_mut() {
+            map.insert("llmApiKey".to_string(), Value::String(api_key));
+        }
     }
-    let runtime = match build_runtime_config(&stored.llm_config_json, &stored.other_config_json) {
+    let runtime = match build_runtime_config(&row_config, &stored.other_config_json) {
         Ok(runtime) => runtime,
         Err(error) => {
             return Ok(Json(LlmTestResponse {
@@ -271,12 +279,27 @@ pub async fn test_llm(
             }))
         }
     };
+    let row_id = read_string(&row, "id").unwrap_or_default();
     match test_llm_generation(&state.http_client, &runtime).await {
         Ok(outcome) => {
             let metadata = outcome.metadata();
+            let mut next_envelope = llm_config_set::mark_row_preflight(
+                &envelope,
+                &row_id,
+                "passed",
+                None,
+                Some("连接校验通过"),
+                Some(&outcome.fingerprint),
+            );
+            next_envelope = llm_config_set::set_latest_preflight_run(
+                &next_envelope,
+                vec![row_id.clone()],
+                Some(row_id),
+                Some(outcome.fingerprint.clone()),
+            );
             let stored = system_config::save_current(
                 &state,
-                stored.llm_config_json,
+                next_envelope,
                 stored.other_config_json,
                 metadata.clone(),
             )
@@ -293,18 +316,20 @@ pub async fn test_llm(
             }))
         }
         Err(error) => {
-            let current_fingerprint = compute_llm_fingerprint(&runtime);
-            let metadata = if metadata_matches(&stored.llm_test_metadata_json, &current_fingerprint)
-            {
-                json!({})
-            } else {
-                stored.llm_test_metadata_json
-            };
+            let category = llm_config_set::classify_fallback(&error);
+            let next_envelope = llm_config_set::mark_row_preflight(
+                &envelope,
+                &row_id,
+                "failed",
+                Some(category.reason_code()),
+                Some(&error.message),
+                Some(&compute_llm_fingerprint(&runtime)),
+            );
             let _ = system_config::save_current(
                 &state,
-                stored.llm_config_json,
+                next_envelope,
                 stored.other_config_json,
-                metadata,
+                json!({}),
             )
             .await;
             Ok(Json(LlmTestResponse {
@@ -312,7 +337,7 @@ pub async fn test_llm(
                 message: error.message,
                 model: None,
                 response: None,
-                metadata: None,
+                metadata: Some(json!({"reasonCode": category.reason_code()})),
             }))
         }
     }
@@ -324,7 +349,8 @@ pub async fn import_env(
 ) -> Result<Json<ImportEnvResponse>, ApiError> {
     verify_import_token(&headers)?;
     let defaults = default_config(state.config.as_ref());
-    let imported_llm = import_llm_config_from_env(&defaults.llm_config)?;
+    let imported_llm =
+        import_llm_config_from_env(&llm_config_set::legacy_defaults(state.config.as_ref()))?;
     let imported_other = merge_json(&defaults.other_config, &json!({}));
     let runtime =
         build_runtime_config(&imported_llm, &imported_other).map_err(llm_gate_bad_request)?;
@@ -332,9 +358,33 @@ pub async fn import_env(
     match test_llm_generation(&state.http_client, &runtime).await {
         Ok(outcome) => {
             let metadata = outcome.metadata();
+            let mut imported_envelope = llm_config_set::normalize_for_save(
+                &mark_imported_system_config(&imported_llm),
+                None,
+                state.config.as_ref(),
+            )
+            .map_err(llm_gate_bad_request)?;
+            let imported_row_id = imported_envelope["rows"][0]["id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            imported_envelope = llm_config_set::mark_row_preflight(
+                &imported_envelope,
+                &imported_row_id,
+                "passed",
+                None,
+                Some("导入后连接校验通过"),
+                Some(&outcome.fingerprint),
+            );
+            imported_envelope = llm_config_set::set_latest_preflight_run(
+                &imported_envelope,
+                vec![imported_row_id.clone()],
+                Some(imported_row_id),
+                Some(outcome.fingerprint.clone()),
+            );
             let stored = system_config::save_current(
                 &state,
-                mark_imported_system_config(&imported_llm),
+                imported_envelope,
                 imported_other,
                 metadata.clone(),
             )
@@ -352,14 +402,16 @@ pub async fn import_env(
             )))
         }
         Err(error) => {
-            let stored = system_config::save_current(
-                &state,
-                mark_imported_system_config(&imported_llm),
-                imported_other,
-                json!({}),
+            let imported_envelope = llm_config_set::normalize_for_save(
+                &mark_imported_system_config(&imported_llm),
+                None,
+                state.config.as_ref(),
             )
-            .await
-            .map_err(internal_error)?;
+            .map_err(llm_gate_bad_request)?;
+            let stored =
+                system_config::save_current(&state, imported_envelope, imported_other, json!({}))
+                    .await
+                    .map_err(internal_error)?;
             let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
             sync_python_user_config_mirror(&state, Some(&merged)).await?;
             Ok(Json(import_response(
@@ -582,186 +634,241 @@ pub async fn agent_preflight(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
-    let effective_llm_config = build_agentflow_llm_config(state.config.as_ref(), saved_llm_config);
-    let effective_snapshot = build_quick_snapshot(&effective_llm_config);
-    let credential_source = read_string(&effective_llm_config, "credentialSource")
-        .unwrap_or_else(|| "app_config".to_string());
-
-    if stored.is_none() && credential_source == "app_config" {
+    let Some(stored_config) = stored.as_ref() else {
+        let defaults = llm_config_set::default_envelope(state.config.as_ref());
+        let row = defaults
+            .get("rows")
+            .and_then(Value::as_array)
+            .and_then(|rows| rows.first())
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        let snapshot: LlmQuickConfigSnapshot =
+            serde_json::from_value(llm_config_set::quick_snapshot(&row)).unwrap_or_else(|_| {
+                build_quick_snapshot(&llm_config_set::row_to_legacy_config(&row))
+            });
         return Ok(Json(AgentPreflightPayload {
             ok: false,
             stage: Some("llm_config".to_string()),
             message: "检测到当前仍在使用默认 LLM 配置，请先保存并测试专属 LLM 配置。".to_string(),
             reason_code: Some("default_config".to_string()),
             missing_fields: None,
-            effective_config: effective_snapshot,
+            effective_config: snapshot,
             saved_config: None,
-            metadata: Some(annotate_llm_preflight_metadata(
-                agent_preflight_metadata("llm_config", "default_config", None),
-                &effective_llm_config,
-            )),
-            llm_test_metadata: None,
-        }));
-    }
-
-    let saved_snapshot = saved_llm_config.map(build_quick_snapshot);
-    let missing_fields = collect_missing_fields(&effective_snapshot);
-    if !missing_fields.is_empty() {
-        return Ok(Json(AgentPreflightPayload {
-            ok: false,
-            stage: Some("llm_config".to_string()),
-            message: format!(
-                "智能审计初始化失败：LLM 缺少必填配置 {}，请先补全并保存。",
-                missing_fields.join("、")
-            ),
-            reason_code: Some("missing_fields".to_string()),
-            missing_fields: Some(missing_fields),
-            effective_config: effective_snapshot,
-            saved_config: saved_snapshot,
-            metadata: Some(annotate_llm_preflight_metadata(
-                agent_preflight_metadata("llm_config", "missing_fields", None),
-                &effective_llm_config,
-            )),
-            llm_test_metadata: None,
-        }));
-    }
-
-    let Some(stored_config) = stored.as_ref() else {
-        return Ok(Json(AgentPreflightPayload {
-            ok: false,
-            stage: Some("llm_config".to_string()),
-            message: "智能审计初始化失败：请先保存并测试专属 LLM 配置。".to_string(),
-            reason_code: Some("default_config".to_string()),
-            missing_fields: None,
-            effective_config: effective_snapshot,
-            saved_config: saved_snapshot,
-            metadata: Some(annotate_llm_preflight_metadata(
-                agent_preflight_metadata("llm_config", "default_config", None),
-                &effective_llm_config,
+            metadata: Some(agent_preflight_metadata(
+                "llm_config",
+                "default_config",
+                None,
             )),
             llm_test_metadata: None,
         }));
     };
-    let runtime = match build_runtime_config(
-        &stored_config.llm_config_json,
-        &stored_config.other_config_json,
-    ) {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            return Ok(Json(AgentPreflightPayload {
-                ok: false,
-                stage: Some("llm_config".to_string()),
-                message: error.message,
-                reason_code: Some(error.reason_code.to_string()),
-                missing_fields: None,
-                effective_config: effective_snapshot,
-                saved_config: saved_snapshot,
-                metadata: Some(annotate_llm_preflight_metadata(
-                    agent_preflight_metadata("llm_config", error.reason_code, None),
-                    &effective_llm_config,
-                )),
-                llm_test_metadata: None,
-            }))
+
+    let (mut envelope, _) =
+        llm_config_set::normalize_envelope(&stored_config.llm_config_json, state.config.as_ref());
+    let rows = envelope
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut attempted_row_ids = Vec::new();
+    let mut first_snapshot: Option<LlmQuickConfigSnapshot> = None;
+    let mut first_saved_snapshot: Option<LlmQuickConfigSnapshot> = None;
+    let mut last_failure: Option<(String, String, String, Option<Vec<String>>)> = None;
+
+    for row in rows
+        .iter()
+        .filter(|row| row.get("enabled").and_then(Value::as_bool).unwrap_or(true))
+    {
+        let row_id = read_string(row, "id").unwrap_or_default();
+        let snapshot: LlmQuickConfigSnapshot =
+            serde_json::from_value(llm_config_set::quick_snapshot(row)).unwrap_or_else(|_| {
+                build_quick_snapshot(&llm_config_set::row_to_legacy_config(row))
+            });
+        if first_snapshot.is_none() {
+            first_snapshot = Some(snapshot.clone());
+            first_saved_snapshot = Some(snapshot.clone());
         }
-    };
-    let fingerprint = compute_llm_fingerprint(&runtime);
-    if !metadata_matches(&stored_config.llm_test_metadata_json, &fingerprint) {
-        return Ok(Json(AgentPreflightPayload {
-            ok: false,
-            stage: Some("llm_test".to_string()),
-            message: "智能审计初始化失败：LLM 测试证据缺失或已过期，请重新保存并测试。".to_string(),
-            reason_code: Some("llm_test_stale".to_string()),
-            missing_fields: None,
-            effective_config: effective_snapshot,
-            saved_config: saved_snapshot,
-            metadata: Some(annotate_llm_preflight_metadata(
-                agent_preflight_metadata("llm_test", "llm_test_stale", None),
-                &effective_llm_config,
-            )),
-            llm_test_metadata: Some(stored_config.llm_test_metadata_json.clone()),
-        }));
-    }
-    let outcome = match test_llm_generation(&state.http_client, &runtime).await {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            return Ok(Json(AgentPreflightPayload {
-                ok: false,
-                stage: Some("llm_test".to_string()),
-                message: error.message,
-                reason_code: Some(error.reason_code.to_string()),
-                missing_fields: None,
-                effective_config: effective_snapshot,
-                saved_config: saved_snapshot,
-                metadata: Some(annotate_llm_preflight_metadata(
-                    agent_preflight_metadata("llm_test", error.reason_code, None),
-                    &effective_llm_config,
-                )),
-                llm_test_metadata: Some(stored_config.llm_test_metadata_json.clone()),
-            }))
+        attempted_row_ids.push(row_id.clone());
+        let missing_fields = llm_config_set::missing_fields_for_row(row);
+        if !missing_fields.is_empty() {
+            envelope = llm_config_set::mark_row_preflight(
+                &envelope,
+                &row_id,
+                "failed",
+                Some("missing_fields"),
+                Some("配置行缺少必填字段"),
+                None,
+            );
+            last_failure = Some((
+                "llm_config".to_string(),
+                "missing_fields".to_string(),
+                format!(
+                    "智能审计初始化失败：LLM 缺少必填配置 {}，请先补全并保存。",
+                    missing_fields.join("、")
+                ),
+                Some(missing_fields),
+            ));
+            continue;
         }
-    };
-
-    let runner_metadata = annotate_llm_preflight_metadata(
-        agentflow_runner_preflight_metadata(state.config.as_ref()),
-        &effective_llm_config,
-    );
-    if runner_metadata["runner"]["ok"] != true {
-        return Ok(Json(AgentPreflightPayload {
-            ok: false,
-            stage: Some("runner".to_string()),
-            message: "智能审计初始化失败：AgentFlow runner 尚未配置或不可用。".to_string(),
-            reason_code: Some("runner_missing".to_string()),
-            missing_fields: None,
-            effective_config: effective_snapshot,
-            saved_config: saved_snapshot,
-            metadata: Some(runner_metadata),
-            llm_test_metadata: Some(outcome.metadata()),
-        }));
+        let runtime_config = llm_config_set::row_to_legacy_config(row);
+        let runtime = match build_runtime_config(&runtime_config, &stored_config.other_config_json)
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&error.message),
+                    None,
+                );
+                last_failure = Some((
+                    "llm_config".to_string(),
+                    category.reason_code().to_string(),
+                    error.message,
+                    None,
+                ));
+                if category.is_fallback_eligible() {
+                    continue;
+                }
+                break;
+            }
+        };
+        let fingerprint = compute_llm_fingerprint(&runtime);
+        match test_llm_generation(&state.http_client, &runtime).await {
+            Ok(outcome) => {
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "passed",
+                    None,
+                    Some("预检通过"),
+                    Some(&outcome.fingerprint),
+                );
+                envelope = llm_config_set::set_latest_preflight_run(
+                    &envelope,
+                    attempted_row_ids.clone(),
+                    Some(row_id.clone()),
+                    Some(outcome.fingerprint.clone()),
+                );
+                let stored = system_config::save_current(
+                    &state,
+                    envelope.clone(),
+                    stored_config.other_config_json.clone(),
+                    outcome.metadata(),
+                )
+                .await
+                .map_err(internal_error)?;
+                let selected_snapshot: LlmQuickConfigSnapshot =
+                    serde_json::from_value(llm_config_set::quick_snapshot(row))
+                        .unwrap_or_else(|_| build_quick_snapshot(&runtime_config));
+                let runner_metadata = annotate_llm_preflight_metadata(
+                    add_preflight_attempt_metadata(
+                        agentflow_runner_preflight_metadata(state.config.as_ref()),
+                        &attempted_row_ids,
+                        Some(&row_id),
+                        Some(&outcome.fingerprint),
+                    ),
+                    &runtime_config,
+                );
+                if runner_metadata["runner"]["ok"] != true {
+                    return Ok(Json(AgentPreflightPayload {
+                        ok: false,
+                        stage: Some("runner".to_string()),
+                        message: "智能审计初始化失败：AgentFlow runner 尚未配置或不可用。"
+                            .to_string(),
+                        reason_code: Some("runner_missing".to_string()),
+                        missing_fields: None,
+                        effective_config: selected_snapshot.clone(),
+                        saved_config: Some(selected_snapshot),
+                        metadata: Some(runner_metadata),
+                        llm_test_metadata: Some(stored.llm_test_metadata_json),
+                    }));
+                }
+                return Ok(Json(AgentPreflightPayload {
+                    ok: true,
+                    stage: None,
+                    message: "智能审计预检通过。".to_string(),
+                    reason_code: None,
+                    missing_fields: None,
+                    effective_config: selected_snapshot.clone(),
+                    saved_config: Some(selected_snapshot),
+                    metadata: Some(runner_metadata),
+                    llm_test_metadata: Some(stored.llm_test_metadata_json),
+                }));
+            }
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&error.message),
+                    Some(&fingerprint),
+                );
+                last_failure = Some((
+                    "llm_test".to_string(),
+                    category.reason_code().to_string(),
+                    error.message,
+                    None,
+                ));
+                if category.is_fallback_eligible() {
+                    continue;
+                }
+                break;
+            }
+        }
     }
 
+    envelope =
+        llm_config_set::set_latest_preflight_run(&envelope, attempted_row_ids.clone(), None, None);
+    let _ = system_config::save_current(
+        &state,
+        envelope,
+        stored_config.other_config_json.clone(),
+        json!({}),
+    )
+    .await;
+    let (stage, reason, message, missing_fields) = last_failure.unwrap_or_else(|| {
+        (
+            "llm_config".to_string(),
+            "missing_fields".to_string(),
+            "没有可用于预检的已启用 LLM 配置行。".to_string(),
+            None,
+        )
+    });
+    let effective = first_snapshot.unwrap_or_else(|| LlmQuickConfigSnapshot {
+        provider: "openai_compatible".to_string(),
+        model: String::new(),
+        base_url: String::new(),
+        api_key: String::new(),
+        has_saved_api_key: false,
+        secret_source: "none".to_string(),
+    });
     Ok(Json(AgentPreflightPayload {
-        ok: true,
-        stage: None,
-        message: "智能审计预检通过。".to_string(),
-        reason_code: None,
-        missing_fields: None,
-        effective_config: effective_snapshot,
-        saved_config: saved_snapshot,
-        metadata: Some(runner_metadata),
-        llm_test_metadata: Some(outcome.metadata()),
+        ok: false,
+        stage: Some(stage.clone()),
+        message,
+        reason_code: Some(reason.clone()),
+        missing_fields,
+        effective_config: effective,
+        saved_config: first_saved_snapshot,
+        metadata: Some(add_preflight_attempt_metadata(
+            agent_preflight_metadata(&stage, &reason, None),
+            &attempted_row_ids,
+            None,
+            None,
+        )),
+        llm_test_metadata: None,
     }))
 }
 
 pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
     SystemConfigPayload {
-        llm_config: json!({
-            "llmConfigVersion": crate::llm::LLM_CONFIG_VERSION,
-            "llmProvider": if is_supported_protocol_provider(&config.llm_provider) { config.llm_provider.as_str() } else { "openai_compatible" },
-            "llmApiKey": "",
-            "llmModel": config.llm_model,
-            "llmBaseUrl": config.llm_base_url,
-            "llmTimeout": config.llm_timeout_seconds * 1000,
-            "llmTemperature": config.llm_temperature,
-            "llmMaxTokens": config.llm_max_tokens,
-            "llmCustomHeaders": "",
-            "llmFirstTokenTimeout": config.llm_first_token_timeout_seconds,
-            "llmStreamTimeout": config.llm_stream_timeout_seconds,
-            "agentTimeout": config.agent_timeout_seconds,
-            "subAgentTimeout": config.sub_agent_timeout_seconds,
-            "toolTimeout": config.tool_timeout_seconds,
-            "geminiApiKey": "",
-            "openaiApiKey": "",
-            "claudeApiKey": "",
-            "qwenApiKey": "",
-            "deepseekApiKey": "",
-            "zhipuApiKey": "",
-            "moonshotApiKey": "",
-            "baiduApiKey": "",
-            "minimaxApiKey": "",
-            "doubaoApiKey": "",
-            "ollamaBaseUrl": config.ollama_base_url
-        }),
+        llm_config: llm_config_set::default_envelope(config),
         other_config: json!({
             "maxAnalyzeFiles": config.max_analyze_files,
             "llmConcurrency": config.llm_concurrency,
@@ -778,14 +885,12 @@ fn merge_with_defaults(
     let defaults = default_config(config);
     match stored {
         Some(stored) => {
-            let (llm_config, llm_test_metadata, _) = normalize_stored_llm_config(
-                &stored.llm_config_json,
-                &stored.llm_test_metadata_json,
-            );
+            let (llm_config, _) =
+                llm_config_set::normalize_envelope(&stored.llm_config_json, config);
             SystemConfigPayload {
-                llm_config: merge_json(&defaults.llm_config, &llm_config),
+                llm_config,
                 other_config: merge_json(&defaults.other_config, &stored.other_config_json),
-                llm_test_metadata,
+                llm_test_metadata: stored.llm_test_metadata_json,
             }
         }
         None => defaults,
@@ -806,113 +911,9 @@ fn merge_json(defaults: &Value, overrides: &Value) -> Value {
     }
 }
 
-fn public_payload(mut payload: SystemConfigPayload) -> SystemConfigPayload {
-    payload.llm_config = redact_llm_config_for_response(&payload.llm_config);
+fn public_payload(mut payload: SystemConfigPayload, config: &AppConfig) -> SystemConfigPayload {
+    payload.llm_config = llm_config_set::public_envelope(&payload.llm_config, config);
     payload
-}
-
-fn redact_llm_config_for_response(llm_config: &Value) -> Value {
-    let mut redacted = match llm_config {
-        Value::Object(map) => Value::Object(map.clone()),
-        _ => llm_config.clone(),
-    };
-    let has_saved_api_key = read_string(llm_config, "llmApiKey")
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    if let Some(map) = redacted.as_object_mut() {
-        for key in [
-            "llmApiKey",
-            "openaiApiKey",
-            "claudeApiKey",
-            "geminiApiKey",
-            "qwenApiKey",
-            "deepseekApiKey",
-            "zhipuApiKey",
-            "moonshotApiKey",
-            "baiduApiKey",
-            "minimaxApiKey",
-            "doubaoApiKey",
-        ] {
-            if map.contains_key(key) {
-                map.insert(key.to_string(), Value::String(String::new()));
-            }
-        }
-        map.insert("hasSavedApiKey".to_string(), Value::Bool(has_saved_api_key));
-        let secret_source = read_string(llm_config, "secretSource")
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| {
-                if has_saved_api_key {
-                    "saved".to_string()
-                } else {
-                    "none".to_string()
-                }
-            });
-        map.insert("secretSource".to_string(), Value::String(secret_source));
-    }
-    redacted
-}
-
-fn resolve_llm_secret_for_save(
-    llm_config: &Value,
-    existing_llm_config: Option<&Value>,
-    default_secret_source: &str,
-) -> Result<Value, LlmGateError> {
-    let mut resolved = match llm_config {
-        Value::Object(map) => Value::Object(map.clone()),
-        _ => llm_config.clone(),
-    };
-    let api_key = read_string(&resolved, "llmApiKey").unwrap_or_default();
-    if api_key.trim() == REDACTED_SECRET_PLACEHOLDER {
-        return Err(LlmGateError::new(
-            "redacted_secret_placeholder",
-            "请明确选择使用已保存密钥或重新输入密钥，不能提交脱敏占位符。",
-        ));
-    }
-    let requested_source = read_string(&resolved, "secretSource").unwrap_or_default();
-    let wants_saved_secret = matches!(
-        requested_source.as_str(),
-        "saved" | "imported" | "use_saved" | "use_imported"
-    );
-    if api_key.trim().is_empty() && wants_saved_secret {
-        let existing_key = existing_llm_config
-            .and_then(|value| read_string(value, "llmApiKey"))
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                LlmGateError::new(
-                    "missing_saved_secret",
-                    "当前没有可复用的已保存 LLM 密钥，请重新输入密钥。",
-                )
-            })?;
-        if let Some(map) = resolved.as_object_mut() {
-            map.insert("llmApiKey".to_string(), Value::String(existing_key));
-            map.insert(
-                "secretSource".to_string(),
-                Value::String(
-                    if requested_source == "imported" || requested_source == "use_imported" {
-                        "imported".to_string()
-                    } else {
-                        "saved".to_string()
-                    },
-                ),
-            );
-        }
-    } else if !api_key.trim().is_empty() {
-        if let Some(map) = resolved.as_object_mut() {
-            map.insert(
-                "secretSource".to_string(),
-                Value::String(default_secret_source.to_string()),
-            );
-            map.insert(
-                "credentialSource".to_string(),
-                Value::String("system_config".to_string()),
-            );
-            map.insert(
-                "llmApiKeyRef".to_string(),
-                Value::String("system_config:llmApiKey".to_string()),
-            );
-        }
-    }
-    Ok(resolved)
 }
 
 fn resolve_test_api_key(
@@ -1134,20 +1135,6 @@ fn build_quick_snapshot(llm_config: &Value) -> LlmQuickConfigSnapshot {
     }
 }
 
-fn collect_missing_fields(snapshot: &LlmQuickConfigSnapshot) -> Vec<String> {
-    let mut missing = Vec::new();
-    if snapshot.model.trim().is_empty() {
-        missing.push("llmModel".to_string());
-    }
-    if snapshot.base_url.trim().is_empty() {
-        missing.push("llmBaseUrl".to_string());
-    }
-    if snapshot.api_key.trim().is_empty() && !snapshot.has_saved_api_key {
-        missing.push("llmApiKey".to_string());
-    }
-    missing
-}
-
 fn agent_preflight_metadata(stage: &str, reason_code: &str, details: Option<Value>) -> Value {
     json!({
         "llm": {
@@ -1186,6 +1173,25 @@ fn annotate_llm_preflight_metadata(mut metadata: Value, llm_config: &Value) -> V
         if let Some(api_key_ref) = read_string(llm_config, "llmApiKeyRef") {
             llm.insert("api_key_ref".to_string(), Value::String(api_key_ref));
         }
+    }
+    metadata
+}
+
+fn add_preflight_attempt_metadata(
+    mut metadata: Value,
+    attempted_row_ids: &[String],
+    winning_row_id: Option<&str>,
+    winning_fingerprint: Option<&str>,
+) -> Value {
+    if let Some(map) = metadata.as_object_mut() {
+        map.insert(
+            "preflightRows".to_string(),
+            json!({
+                "attemptedRowIds": attempted_row_ids,
+                "winningRowId": winning_row_id,
+                "winningFingerprint": winning_fingerprint,
+            }),
+        );
     }
     metadata
 }
@@ -1368,21 +1374,16 @@ mod tests {
         config.ollama_base_url = "http://ollama.internal/v1".to_string();
 
         let defaults = default_config(&config);
-        assert_eq!(defaults.llm_config["llmProvider"], "openai_compatible");
-        assert_eq!(defaults.llm_config["llmModel"], "gemini-2.5-pro");
-        assert_eq!(defaults.llm_config["llmBaseUrl"], "https://example.test/v1");
-        assert_eq!(defaults.llm_config["llmTimeout"], 123_000);
-        assert_eq!(defaults.llm_config["agentTimeout"], 456);
-        assert_eq!(defaults.llm_config["subAgentTimeout"], 789);
-        assert_eq!(defaults.llm_config["toolTimeout"], 42);
-        assert_eq!(defaults.llm_config["llmApiKey"], "");
-        assert_eq!(defaults.llm_config["geminiApiKey"], "");
-        assert_eq!(defaults.llm_config["openaiApiKey"], "");
-        assert_eq!(defaults.llm_config["doubaoApiKey"], "");
-        assert_eq!(
-            defaults.llm_config["ollamaBaseUrl"],
-            "http://ollama.internal/v1"
-        );
+        assert_eq!(defaults.llm_config["schemaVersion"], 2);
+        let row = &defaults.llm_config["rows"][0];
+        assert_eq!(row["provider"], "openai_compatible");
+        assert_eq!(row["model"], "gemini-2.5-pro");
+        assert_eq!(row["baseUrl"], "https://example.test/v1");
+        assert_eq!(row["advanced"]["llmTimeout"], 123_000);
+        assert_eq!(row["advanced"]["agentTimeout"], 456);
+        assert_eq!(row["advanced"]["subAgentTimeout"], 789);
+        assert_eq!(row["advanced"]["toolTimeout"], 42);
+        assert_eq!(row["apiKey"], "");
         assert_eq!(defaults.other_config["maxAnalyzeFiles"], 77);
         assert_eq!(defaults.other_config["llmConcurrency"], 9);
         assert_eq!(defaults.other_config["llmGapMs"], 444);
