@@ -1,0 +1,56 @@
+rules:
+- id: v3-bad-cors
+  languages:
+  - javascript
+  message: |
+    检测到CORS 配置不当风险（规则：v3-bad-cors）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF 影响。建议：限制允许的 Origin，并避免反射任意来源。
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-942: Permissive Cross-domain Policy with Untrusted Domains'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: HIGH
+    impact: HIGH
+    technology:
+    - graphql
+    - apollo-graphql-server
+    description: Bad CORS policy
+    references:
+    - https://www.apollographql.com/docs/apollo-server/v3/security/cors#configuring-cors-options-for-apollo-server
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        { origin: $BAD_CORS_ORIGIN }
+    - metavariable-pattern:
+        metavariable: $BAD_CORS_ORIGIN
+        pattern-either:
+        - pattern: |
+            true
+        - patterns:
+          - pattern-either:
+            - pattern: |
+                $CORS_SINGLE_ORIGIN
+            - pattern: |
+                [..., $CORS_SINGLE_ORIGIN, ...]
+          - metavariable-pattern:
+              metavariable: $CORS_SINGLE_ORIGIN
+              pattern-either:
+              - pattern-regex: ^/.*[^\\]\..*/$
+              - pattern-regex: ^/.*[^$]/$
+              - pattern: |
+                  'null'
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $X = require('apollo-server');
+          ...
+      - pattern-inside: |
+          import 'apollo-server';
+          ...
+    - pattern: |
+        new ApolloServer({..., cors: $CORS_ORIGIN, ...})
+    - focus-metavariable: $CORS_ORIGIN

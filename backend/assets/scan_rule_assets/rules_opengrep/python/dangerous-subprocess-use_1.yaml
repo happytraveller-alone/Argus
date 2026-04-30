@@ -1,0 +1,47 @@
+rules:
+- id: dangerous-subprocess-use_1
+  languages:
+  - python
+  message: |
+    检测到命令注入风险（规则：dangerous-subprocess-use_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：shlex.split()、'shlex.split()'、`event`、`shell`、`shell=True`、`shell=False`。
+  metadata:
+    asvs:
+      control_id: 5.3.8 OS Command Injection
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v53-output-encoding-and-injection-prevention-requirements
+      section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://docs.python.org/3/library/subprocess.html
+    - https://docs.python.org/3/library/shlex.html
+    subcategory:
+    - vuln
+    technology:
+    - python
+    - aws-lambda
+  mode: taint
+  pattern-sanitizers:
+  - pattern: shlex.split(...)
+  - pattern: pipes.quote(...)
+  - pattern: shlex.quote(...)
+  pattern-sinks:
+  - patterns:
+    - pattern: subprocess.$FUNC(..., shell=True, ...)
+  pattern-sources:
+  - patterns:
+    - pattern: event
+    - pattern-inside: |
+        def $HANDLER(event, context):
+          ...
+  severity: ERROR

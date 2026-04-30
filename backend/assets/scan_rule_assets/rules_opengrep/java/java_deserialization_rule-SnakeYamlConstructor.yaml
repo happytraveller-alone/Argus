@@ -1,0 +1,28 @@
+rules:
+- id: java_deserialization_rule-SnakeYamlConstructor
+  languages:
+  - java
+  patterns:
+  - pattern: |
+      $Y = new org.yaml.snakeyaml.Yaml();
+      ...
+      $Y.load(...);
+  message: |
+    检测到不安全反序列化风险（规则：java_deserialization_rule-SnakeYamlConstructor）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：https://github.com/google/security-research/security/advisories/GHSA-mjmj-j48q-9wg2、org.yaml.snakeyaml.Yaml()、Yaml()。
+  metadata:
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    category: security
+    shortDescription: Deserialization of untrusted data
+    security-severity: HIGH
+    references:
+    - https://securitylab.github.com/research/swagger-yaml-parser-vulnerability/#snakeyaml-deserialization-vulnerability
+    technology:
+    - snakeyaml
+    likelihood: LOW
+    impact: HIGH
+    confidence: LOW
+  severity: ERROR

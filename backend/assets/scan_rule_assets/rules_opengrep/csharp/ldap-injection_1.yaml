@@ -1,0 +1,42 @@
+rules:
+- id: ldap-injection_1
+  languages:
+  - csharp
+  message: LDAP queries are constructed dynamically on user-controlled input. This vulnerability in code could lead to an arbitrary LDAP query execution.
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-90: Improper Neutralization of Special Elements used in an LDAP Query (''LDAP Injection'')'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection/
+    - https://cwe.mitre.org/data/definitions/90
+    - https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html#safe-c-sharp-net-tba-example
+    subcategory:
+    - vuln
+    technology:
+    - .net
+  mode: taint
+  options:
+    taint_unify_mvars: true
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: Regex.Replace($INPUT, ...)
+    - pattern: $ENCODER.LdapFilterEncode($INPUT)
+    - pattern: $ENCODER.LdapDistinguishedNameEncode($INPUT)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $S.Filter = ... + $INPUT + ...
+      - pattern: $S.Filter = String.Format(...,$INPUT)
+      - pattern: $S.Filter = String.Concat(...,$INPUT)
+  pattern-sources:
+  - patterns:
+    - focus-metavariable: $INPUT
+    - pattern-inside: $T $M(...,$INPUT,...) {...}
+  severity: ERROR

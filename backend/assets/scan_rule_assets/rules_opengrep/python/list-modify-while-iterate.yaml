@@ -1,0 +1,30 @@
+rules:
+- id: list-modify-while-iterate
+  patterns:
+  - pattern-either:
+    - pattern: |
+        for $ELEMENT in $LIST:
+          ...
+          $LIST.pop(...)
+    - pattern: |
+        for $ELEMENT in $LIST:
+          ...
+          $LIST.push(...)
+    - pattern: |
+        for $ELEMENT in $LIST:
+          ...
+          $LIST.append(...)
+    - pattern: |
+        for $ELEMENT in $LIST:
+          ...
+          $LIST.extend(...)
+  message: |
+    检测到迭代期间修改列表缺陷（规则：list-modify-while-iterate）。危害：遍历列表时同时修改列表可能跳过元素、重复处理或触发运行时错误。建议：遍历副本、收集待修改项，或改用新的结果列表。
+    保留的关键标识：$LIST、`$LIST`。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-672: Modification of collection during iteration'
+    - 'CWE-835: Loop with Unreachable Exit Condition'

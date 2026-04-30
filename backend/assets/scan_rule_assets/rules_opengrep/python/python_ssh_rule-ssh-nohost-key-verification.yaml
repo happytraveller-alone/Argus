@@ -1,0 +1,49 @@
+rules:
+- id: python_ssh_rule-ssh-nohost-key-verification
+  languages:
+  - python
+  message: |
+    检测到TLS/证书或主机校验配置不当风险（规则：python_ssh_rule-ssh-nohost-key-verification）。危害：跳过证书、主机密钥校验或使用弱 TLS
+    配置会使连接暴露于中间人攻击，导致数据被窃听或篡改。建议：启用证书链、主机名或主机密钥校验，禁用过时协议和弱加密套件。
+    保留的关键标识：https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy、set_missing_host_key_policy(...)、`set_missing_host_key_policy(...)`、`load_system_host_keys`、`load_host_keys`、`paramiko`、`RejectPolicy`、`set_missing_host_key_policy`。
+  metadata:
+    cwe: CWE-322
+    category: security
+    owasp:
+    - A5:2017-Broken Access Control
+    - A07:2021-Identification and Authentication Failures
+    shortDescription: Key exchange without entity authentication
+    security-severity: Medium
+  patterns:
+  - pattern-inside: |
+      $CLIENT = paramiko.client.SSHClient(...)
+      ...
+      $CLIENT.set_missing_host_key_policy(...)
+  - pattern-either:
+    - pattern: paramiko.client.AutoAddPolicy
+    - pattern: paramiko.client.WarningPolicy
+  severity: ERROR
+- id: python_ssh_rule-ssh-nohost-key-verification_1
+  languages:
+  - python
+  message: |
+    检测到TLS/证书或主机校验配置不当风险（规则：python_ssh_rule-ssh-nohost-key-verification_1）。危害：跳过证书、主机密钥校验或使用弱 TLS
+    配置会使连接暴露于中间人攻击，导致数据被窃听或篡改。建议：启用证书链、主机名或主机密钥校验，禁用过时协议和弱加密套件。
+    保留的关键标识：https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.SSHClient.set_missing_host_key_policy、set_missing_host_key_policy(...)、`set_missing_host_key_policy(...)`、`load_system_host_keys`、`load_host_keys`、`paramiko`、`RejectPolicy`、`set_missing_host_key_policy`。
+  metadata:
+    cwe: CWE-322
+    category: security
+    owasp:
+    - A5:2017-Broken Access Control
+    - A07:2021-Identification and Authentication Failures
+    shortDescription: Key exchange without entity authentication
+    security-severity: Medium
+  patterns:
+  - pattern-inside: |
+      $CLIENT = paramiko.client.SSHClient(...)
+      ...
+      $CLIENT.set_missing_host_key_policy(...)
+  - pattern-either:
+    - pattern: paramiko.client.AutoAddPolicy
+    - pattern: paramiko.client.WarningPolicy
+  severity: ERROR

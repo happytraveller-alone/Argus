@@ -1,0 +1,19 @@
+rules:
+- id: return-in-init
+  patterns:
+  - pattern-inside: |
+      class A(...):
+          ...
+          def __init__(...):
+              ...
+  - pattern: return ...
+  message: |
+    检测到Python 构造函数逻辑缺陷（规则：return-in-init）。危害：`__init__` 中出现 `yield` 会让构造流程变成生成器语义，导致对象初始化不符合预期。建议：不要在
+    `__init__` 中使用 `yield`；将生成逻辑移到普通生成器函数。 保留的关键标识：`return`。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-391: Unchecked Error Condition'

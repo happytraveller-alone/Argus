@@ -1,0 +1,49 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-eval-require
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        function ($REQ, $RES, ...) {...}
+    - focus-metavariable: $REQ
+  pattern-sinks:
+  - patterns:
+    - pattern: |
+        require($REQ, ...)
+    - focus-metavariable: $REQ
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: "if($VALIDATION){\n...\nrequire($REQ, ...) \n...\n} \n"
+      - pattern: |
+          $A = $VALIDATION
+          ...
+          if($A){
+          ...
+          require($REQ, ...)
+          ...
+          }
+    - metavariable-pattern:
+        metavariable: $VALIDATION
+        pattern-either:
+        - pattern: "$AL.includes(...)  \n"
+        - pattern: |
+            $AL.indexOf(...) !== -1
+        - pattern: |
+            $AL.find(...) !== undefined
+        - pattern: |
+            $ALS.has(...)
+  message: |
+    检测到代码执行/模板注入风险（规则：rules_lgpl_javascript_eval_rule-eval-require）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：require()。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    cwe: CWE-706
+    shortDescription: Use of incorrectly-resolved name or reference
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL

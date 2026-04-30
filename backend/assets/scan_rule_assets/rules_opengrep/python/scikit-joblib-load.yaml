@@ -1,0 +1,24 @@
+rules:
+- id: scikit-joblib-load
+  message: |
+    检测到不安全反序列化风险（规则：scikit-joblib-load）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：`joblib`、`skops`。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: HIGH
+    technology:
+    - scikit
+    description: Potential arbitrary code execution from `SciKit.Joblib` functions reliant on pickling
+    references:
+    - https://scikit-learn.org/stable/model_persistence.html
+  patterns:
+  - pattern: joblib.load(...)
+  - pattern-not: joblib.load("...")

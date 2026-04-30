@@ -1,0 +1,35 @@
+rules:
+- id: python_tmpdir_rule-mktemp-q
+  languages:
+  - python
+  message: |
+    检测到临时文件使用不安全风险（规则：python_tmpdir_rule-mktemp-q）。危害：可预测或未同步的临时文件可能被抢占、覆盖或读取，造成信息泄露或文件篡改。建议：使用安全的临时文件创建
+    API，并在使用前正确刷新/关闭。
+    保留的关键标识：https://docs.python.org/3/library/tempfile.html、`mktemp`、`tempfile.TemporaryFile`。
+  metadata:
+    cwe: CWE-377
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A01:2021-Broken Access Control
+    shortDescription: Insecure temporary file
+    security-severity: Medium
+  pattern: tempfile.mktemp(...)
+  severity: ERROR
+- id: python_tmpdir_rule-mktemp-q_1
+  languages:
+  - python
+  message: |
+    检测到临时文件使用不安全风险（规则：python_tmpdir_rule-mktemp-q_1）。危害：可预测或未同步的临时文件可能被抢占、覆盖或读取，造成信息泄露或文件篡改。建议：使用安全的临时文件创建
+    API，并在使用前正确刷新/关闭。
+    保留的关键标识：https://docs.python.org/3/library/tempfile.html、`mktemp`、`tempfile.TemporaryFile`。
+  metadata:
+    cwe: CWE-377
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A01:2021-Broken Access Control
+    shortDescription: Insecure temporary file
+    security-severity: Medium
+  pattern: tempfile.mktemp(...)
+  severity: ERROR

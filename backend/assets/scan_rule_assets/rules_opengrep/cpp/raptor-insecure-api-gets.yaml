@@ -1,0 +1,21 @@
+rules:
+- id: raptor-insecure-api-gets
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/242
+    - https://cwe.mitre.org/data/definitions/120
+    confidence: HIGH
+    cwe:
+    - 'CWE-242: Use of Inherently Dangerous Function'
+    - 'CWE-120: Buffer Copy without Checking Size of Input'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-121: Stack-based Buffer Overflow'
+    - 'CWE-20: Improper Input Validation'
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-insecure-api-gets）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。 保留的关键标识：gets()。
+  severity: ERROR
+  languages:
+  - cpp
+  pattern: gets(...)

@@ -1,0 +1,88 @@
+rules:
+- id: express-libxml-noent
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：express-libxml-noent）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识：`noent`、`true`、`false`。
+  options:
+    interfile: true
+  metadata:
+    interfile: true
+    references:
+    - https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+    technology:
+    - express
+    category: security
+    cwe:
+    - 'CWE-611: Improper Restriction of XML External Entity Reference'
+    owasp:
+    - A04:2017 - XML External Entities (XXE)
+    - A05:2021 - Security Misconfiguration
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: HIGH
+    impact: HIGH
+    confidence: HIGH
+  languages:
+  - javascript
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
+      - patterns:
+        - pattern-either:
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: ^(get|post|put|head|delete|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+      - pattern: $REQ.files.$ANYTHING.data.toString('utf8')
+      - pattern: $REQ.files.$ANYTHING['data'].toString('utf8')
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
+          {...}
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+      - pattern: files.$ANYTHING.data.toString('utf8')
+      - pattern: files.$ANYTHING['data'].toString('utf8')
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern-inside: |
+            $XML = require('$IMPORT')
+            ...
+        - pattern-inside: |
+            import $XML from '$IMPORT'
+              ...
+        - pattern-inside: |
+            import * as $XML from '$IMPORT'
+            ...
+      - metavariable-regex:
+          metavariable: $IMPORT
+          regex: ^(libxmljs|libxmljs2)$
+      - pattern-inside: $XML.$FUNC($QUERY, {...,noent:true,...})
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ^(parseXmlString|parseXml)$
+      - focus-metavariable: $QUERY

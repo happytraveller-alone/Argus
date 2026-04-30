@@ -1,0 +1,113 @@
+rules:
+- id: java_ssrf_rule-SSRF
+  languages:
+  - java
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：java_ssrf_rule-SSRF）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：https://site/goto?key=1`、https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html、`https://site/goto?key=1`。
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          import java.net.*;
+          ...
+      - pattern-inside: |
+          import java.net.URL;
+          ...
+      - pattern-inside: |
+          import java.net.URI;
+          ...
+    - pattern: new $TYPE(...). ... .$FUNC
+    - pattern-not: new $TYPE("..."). ... .$FUNC
+    - metavariable-pattern:
+        metavariable: $FUNC
+        pattern-either:
+        - pattern: connect
+        - pattern: GetContent
+        - pattern: openConnection
+        - pattern: openStream
+        - pattern: getContent
+    - metavariable-pattern:
+        metavariable: $TYPE
+        pattern-either:
+        - pattern: URL
+        - pattern: java.net.URL
+        - pattern: URI
+        - pattern: java.net.URI
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          import java.net.*;
+          ...
+      - pattern-inside: |
+          import java.net.InetSocketAddress;
+          ...
+    - pattern: |
+        new InetSocketAddress(..., $PORT)
+    - pattern-not: |
+        new InetSocketAddress("...", $PORT)
+  metadata:
+    shortDescription: Server-Side Request Forgery (SSRF)
+    category: security
+    cwe: CWE-918
+    owasp:
+    - A1:2017-Injection
+    - A10:2021-Server-Side Request Forgery
+    security-severity: Medium
+  severity: ERROR
+- id: java_ssrf_rule-SSRF_1
+  languages:
+  - java
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：java_ssrf_rule-SSRF_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：https://site/goto?key=1`、https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html、`https://site/goto?key=1`。
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          import java.net.*;
+          ...
+      - pattern-inside: |
+          import java.net.URL;
+          ...
+      - pattern-inside: |
+          import java.net.URI;
+          ...
+    - pattern: new $TYPE(...). ... .$FUNC
+    - pattern-not: new $TYPE("..."). ... .$FUNC
+    - metavariable-pattern:
+        metavariable: $FUNC
+        pattern-either:
+        - pattern: connect
+        - pattern: GetContent
+        - pattern: openConnection
+        - pattern: openStream
+        - pattern: getContent
+    - metavariable-pattern:
+        metavariable: $TYPE
+        pattern-either:
+        - pattern: URL
+        - pattern: java.net.URL
+        - pattern: URI
+        - pattern: java.net.URI
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          import java.net.*;
+          ...
+      - pattern-inside: |
+          import java.net.InetSocketAddress;
+          ...
+    - pattern: |
+        new InetSocketAddress(..., $PORT)
+    - pattern-not: |
+        new InetSocketAddress("...", $PORT)
+  metadata:
+    shortDescription: Server-Side Request Forgery (SSRF)
+    category: security
+    cwe: CWE-918
+    owasp:
+    - A1:2017-Injection
+    - A10:2021-Server-Side Request Forgery
+    security-severity: Medium
+  severity: ERROR

@@ -1,0 +1,25 @@
+rules:
+- id: raptor-insecure-api-sprintf-vsprintf
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/676
+    - https://cwe.mitre.org/data/definitions/120
+    - https://cwe.mitre.org/data/definitions/787
+    - https://g.co/kgs/PCHQjJ
+    confidence: HIGH
+    cwe:
+    - 'CWE-134: Use of Externally-Controlled Format String'
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-insecure-api-sprintf-vsprintf）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+  severity: ERROR
+  languages:
+  - c
+  patterns:
+  - pattern-either:
+    - pattern: sprintf($_, $FMT, ...)
+    - pattern: vsprintf($_, $FMT, ...)
+  - metavariable-regex:
+      metavariable: $FMT
+      regex: (".*%l?s.*"|".*%S.*"|[a-zA-Z_][a-zA-Z0-9_]*)

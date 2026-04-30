@@ -1,0 +1,32 @@
+{
+  "contract_version": "argus-agentflow-p1/v1",
+  "task_id": "agentflow-p1-static-origin-rejected",
+  "status": "completed",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "import.rejected",
+      "phase": "import",
+      "message": "拒绝导入来自静态引擎来源的候选漏洞",
+      "timestamp": "2026-04-27T10:20:00Z"
+    }
+  ],
+  "findings": [
+    {
+      "id": "rejected-static-001",
+      "source": {
+        "kind": "static_engine",
+        "engine": "static_engine_fixture"
+      },
+      "source_origin": "static_engine_fixture",
+      "vulnerability_type": "SQL Injection",
+      "severity": "high",
+      "title": "该候选必须被 AgentFlow 导入器拒绝",
+      "file_path": "src/orders/repository.ts",
+      "line_start": 42,
+      "status": "pending",
+      "is_verified": false
+    }
+  ],
+  "native_artifacts": []
+}

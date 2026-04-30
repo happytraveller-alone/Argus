@@ -1,0 +1,83 @@
+rules:
+- id: java_cookie_rule-RequestParamToHeader
+  languages:
+  - java
+  mode: taint
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: |
+        $STR.replaceAll("$INPUT", "...");
+        ...
+    - pattern: $STR
+    - metavariable-regex:
+        metavariable: $INPUT
+        regex: .*\[(?=.*\\r)(?=.*\\n).*\]\+
+  - pattern: org.apache.commons.text.StringEscapeUtils.unescapeJava(...);
+  pattern-sinks:
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).addHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).addHeader("$KEY", ...);
+  pattern-sources:
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameter(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterNames();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterValues(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterMap();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
+  message: |
+    检测到HTTP/邮件头注入风险（规则：java_cookie_rule-RequestParamToHeader）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：https://owasp.org/www-community/attacks/HTTP_Response_Splitting、`\r`、`\n`、`\r\n`、`0x20`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
+    category: security
+    cwe: CWE-113
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: High
+- id: java_cookie_rule-RequestParamToHeader_1
+  languages:
+  - java
+  mode: taint
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: |
+        $STR.replaceAll("$INPUT", "...");
+        ...
+    - pattern: $STR
+    - metavariable-regex:
+        metavariable: $INPUT
+        regex: .*\[(?=.*\\r)(?=.*\\n).*\]\+
+  - pattern: org.apache.commons.text.StringEscapeUtils.unescapeJava(...);
+  pattern-sinks:
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponse $RES).addHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).setHeader("$KEY", ...);
+  - pattern: ($X.servlet.http.HttpServletResponseWrapper $WRP).addHeader("$KEY", ...);
+  pattern-sources:
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameter(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterNames();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterValues(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getParameterMap();
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getHeader(...);
+  - pattern: ($X.servlet.http.HttpServletRequest $REQ).getPathInfo();
+  message: |
+    检测到HTTP/邮件头注入风险（规则：java_cookie_rule-RequestParamToHeader_1）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：https://owasp.org/www-community/attacks/HTTP_Response_Splitting、`\r`、`\n`、`\r\n`、`0x20`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP Response Splitting')
+    category: security
+    cwe: CWE-113
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: High

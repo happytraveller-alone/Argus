@@ -1,0 +1,77 @@
+rules:
+- id: java_cors_rule-PermissiveCORSInjection
+  languages:
+  - java
+  mode: taint
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  - pattern: (HttpServletRequest $REQ).getHeader(...)
+  - pattern: (HttpServletRequest $REQ).getPathInfo()
+  - pattern: (HttpServletRequest $REQ).getQueryString()
+  - pattern: (HttpServletRequest $REQ).getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getSession().getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getServletContext().getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getParameterValues(...)
+  - pattern: (HttpServletRequest $REQ).getParameterNames()
+  - pattern: (HttpServletRequest $REQ).getParameterMap()
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: (HttpServletResponse $RES).setHeader("$HEADER", ...)
+      - pattern: (HttpServletResponse $RES).addHeader("$HEADER", ...)
+    - metavariable-regex:
+        metavariable: $HEADER
+        regex: (?i)(Access-Control-Allow-Origin)
+  message: |
+    检测到CORS 配置不当风险（规则：java_cors_rule-PermissiveCORSInjection）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
+    保留的关键标识：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin、`Access-Control-Allow-Origin`、`HttpServletResponse.setHeader`、`HttpServletResponse.addHeader`。
+  severity: ERROR
+  metadata:
+    shortDescription: Permissive cross-domain policy with untrusted domains
+    cwe: CWE-942
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: Low
+- id: java_cors_rule-PermissiveCORSInjection_1
+  languages:
+  - java
+  mode: taint
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  - pattern: (HttpServletRequest $REQ).getHeader(...)
+  - pattern: (HttpServletRequest $REQ).getPathInfo()
+  - pattern: (HttpServletRequest $REQ).getQueryString()
+  - pattern: (HttpServletRequest $REQ).getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getSession().getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getServletContext().getAttribute(...)
+  - pattern: (HttpServletRequest $REQ).getParameterValues(...)
+  - pattern: (HttpServletRequest $REQ).getParameterNames()
+  - pattern: (HttpServletRequest $REQ).getParameterMap()
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: (HttpServletResponse $RES).setHeader("$HEADER", ...)
+      - pattern: (HttpServletResponse $RES).addHeader("$HEADER", ...)
+    - metavariable-regex:
+        metavariable: $HEADER
+        regex: (?i)(Access-Control-Allow-Origin)
+  message: |
+    检测到CORS 配置不当风险（规则：java_cors_rule-PermissiveCORSInjection_1）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
+    保留的关键标识：https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin、`Access-Control-Allow-Origin`、`HttpServletResponse.setHeader`、`HttpServletResponse.addHeader`。
+  severity: ERROR
+  metadata:
+    shortDescription: Permissive cross-domain policy with untrusted domains
+    cwe: CWE-942
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: Low

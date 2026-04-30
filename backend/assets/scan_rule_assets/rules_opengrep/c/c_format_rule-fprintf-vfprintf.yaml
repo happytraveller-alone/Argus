@@ -1,0 +1,32 @@
+rules:
+- id: c_format_rule-fprintf-vfprintf
+  languages:
+  - c
+  message: |
+    检测到格式化字符串风险（规则：c_format_rule-fprintf-vfprintf）。危害：用户可控格式串可能泄露内存、破坏内存或导致进程崩溃。建议：使用固定格式字符串，把用户输入作为普通参数传入。
+    保留的关键标识：https://linux.die.net/man/3/fprintf、https://owasp.org/www-community/attacks/Format_string_attack、`fprintf`。
+  metadata:
+    shortDescription: Potential format string vulnerability
+    cwe: CWE-134
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - patterns:
+    - pattern: fprintf($FD, $FMT, ...)
+    - pattern-not: fprintf($FD, "...", ...)
+  - patterns:
+    - pattern: vfprintf($FMT, $ARGS, ...)
+    - pattern-not: vfprintf("...", $ARGS, ...)
+  - patterns:
+    - pattern: _ftprintf($FD, $FMT, ...)
+    - pattern-not: _ftprintf($FD, "...", ...)
+  - patterns:
+    - pattern: fwprintf($FD, $FMT, ...)
+    - pattern-not: fwprintf($FD, "...", ...)
+  - patterns:
+    - pattern: fvwprintf($FD, $FMT, ...)
+    - pattern-not: fvwprintf($FD, "...", ...)
+  severity: ERROR

@@ -1,0 +1,39 @@
+rules:
+- id: msgpack-numpy
+  message: |
+    检测到不安全反序列化风险（规则：msgpack-numpy）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: HIGH
+    technology:
+    - numpy
+    description: Potential arbitrary code execution from functions reliant on pickling
+    references:
+    - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
+  pattern-either:
+  - patterns:
+    - pattern: msgpack.$FN(...)
+    - metavariable-regex:
+        metavariable: $FN
+        regex: (loads?|dumps?|packb?|unpackb?)
+    - pattern-inside: |
+        msgpack_numpy.patch()
+        ...
+  - patterns:
+    - pattern: msgpack.$FN(..., object_hook=msgpack_numpy.decode, ...)
+    - metavariable-regex:
+        metavariable: $FN
+        regex: unpackb?
+  - patterns:
+    - pattern: msgpack.$FN(..., default=msgpack_numpy.encode, ...)
+    - metavariable-regex:
+        metavariable: $FN
+        regex: packb?

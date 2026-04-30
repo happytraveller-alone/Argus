@@ -1,0 +1,44 @@
+rules:
+- id: java_inject_rule-DangerousGroovyShell
+  languages:
+  - java
+  patterns:
+  - pattern-either:
+    - pattern: |
+        (groovy.lang.GroovyShell $SHELL).parse(...)
+    - pattern: |
+        (groovy.lang.GroovyShell $SHELL).evaluate(...)
+    - pattern: |
+        (groovy.lang.GroovyClassLoader $SHELL).parseClass(...)
+  - pattern-not: |
+      $SHELL.parse("...",...)
+  - pattern-not: |
+      $SHELL.evaluate("...",...)
+  - pattern-not: |
+      $SHELL.parseClass("...",...)
+  - pattern-not-inside: |
+      if($ALLOWLIST.contains($INPUT)){
+        ...
+      }
+  message: |
+    检测到代码执行/模板注入风险（规则：java_inject_rule-DangerousGroovyShell）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。
+    保留的关键标识：`groovy.lang.GroovyShell`、`groovy.lang.GroovyClassLoader`、`parse`、`evaluate`、`parseClass`。
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#GROOVY_SHELL
+    technology:
+    - groovy
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    cwe2022-top25: 'true'
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - Code Injection
+  severity: ERROR

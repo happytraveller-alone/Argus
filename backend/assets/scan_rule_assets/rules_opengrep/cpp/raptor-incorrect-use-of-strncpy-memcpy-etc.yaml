@@ -1,0 +1,48 @@
+rules:
+- id: raptor-incorrect-use-of-strncpy-memcpy-etc
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/806
+    - https://github.com/0xdea/advisories/blob/master/2020-07-solaris-whodo-w.txt
+    - https://dustri.org/b/playing-with-weggli.html
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-806: Buffer Access Using Size of Source Buffer'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-125: Out-of-bounds Read'
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：raptor-incorrect-use-of-strncpy-memcpy-etc）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+  severity: ERROR
+  languages:
+  - cpp
+  pattern-either:
+  - patterns:
+    - pattern: $FUN($_, $SRC, $LEN)
+    - pattern-not: $FUN($_, "...", $LEN)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: strncpy
+        - pattern: stpncpy
+        - pattern: strlcpy
+        - pattern: strscpy
+    - pattern-either:
+      - pattern-inside: |
+          $_ $SRC[$LEN];
+          ...
+      - pattern-inside: |
+          $_ $SRC[$LEN] = $_;
+          ...
+  - patterns:
+    - pattern: $FUN($_, $SRC, <... $SRC ...>)
+    - pattern-not: $FUN($_, "...", <... $SRC ...>)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: strncpy
+        - pattern: stpncpy
+        - pattern: strlcpy
+        - pattern: strscpy

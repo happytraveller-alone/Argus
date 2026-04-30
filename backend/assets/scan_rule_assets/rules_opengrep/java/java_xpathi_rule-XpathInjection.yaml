@@ -1,0 +1,62 @@
+rules:
+- id: java_xpathi_rule-XpathInjection
+  languages:
+  - java
+  message: |
+    检测到XPath 注入风险（规则：java_xpathi_rule-XpathInjection）。危害：攻击者可能改变 XPath 查询逻辑，读取或匹配非预期 XML 数据。建议：对 XPath
+    参数进行转义或使用安全的参数化查询方式。 保留的关键标识：https://owasp.org/www-community/attacks/XPATH_Injection、`XPath`。
+  metadata:
+    shortDescription: Improper neutralization of data within XPath expressions ('XPath Injection')
+    category: security
+    cwe: CWE-643
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: |
+        (HttpServletRequest $REQ).$FUNC(...)
+    - patterns:
+      - pattern-inside: |
+          $FUNC(..., $VAR, ...) {
+          ...
+          }
+      - pattern: $VAR
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          (javax.xml.xpath.XPath $XP). ... .evaluate($EXP, ...);
+      - pattern: $EXP
+    - patterns:
+      - pattern-inside: |
+          (javax.xml.xpath.XPath $XP). ... .compile($EXP, ...);
+      - pattern: $EXP
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: $MAP.getOrDefault($VAR,"...");
+    - pattern: $VAR
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          if($VALIDATION){
+          ...
+          }
+      - patterns:
+        - pattern-inside: |
+            $A = $VALIDATION;
+            ...
+        - pattern: |
+            if($A){
+              ...
+            }
+    - metavariable-pattern:
+        metavariable: $VALIDATION
+        pattern-either:
+        - pattern: |
+            $AL.contains(...)
+        - pattern: |
+            $AL.equals(...)
+  severity: ERROR

@@ -1,0 +1,18 @@
+rules:
+- id: c_buffer_rule-strcpy
+  languages:
+  - c
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcpy）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。 保留的关键标识：https://linux.die.net/man/3/strncpy、`strcpy`、`strncpy`。
+  metadata:
+    shortDescription: Insecure string processing function (strcpy)
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  patterns:
+  - pattern: strcpy(...)
+  severity: ERROR

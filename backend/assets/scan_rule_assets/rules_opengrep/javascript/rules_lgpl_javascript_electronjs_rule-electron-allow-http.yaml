@@ -1,0 +1,22 @@
+rules:
+- id: rules_lgpl_javascript_electronjs_rule-electron-allow-http
+  patterns:
+  - pattern-either:
+    - pattern: |
+        new BrowserWindow({webPreferences: {allowRunningInsecureContent: true}})
+    - pattern: |
+        var $X = {webPreferences: {allowRunningInsecureContent: true}};
+  message: |
+    检测到客户端容器安全配置风险（规则：rules_lgpl_javascript_electronjs_rule-electron-allow-http）。危害：WebView/Electron
+    安全配置过宽可能允许调试、明文加载或跨域访问，扩大代码执行和数据窃取风险。建议：关闭危险调试/禁用项，只加载可信 HTTPS 内容并隔离不可信页面。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    cwe: CWE-319
+    shortDescription: Cleartext Transmission of Sensitive Information
+    security-severity: CRITICAL
+    category: security

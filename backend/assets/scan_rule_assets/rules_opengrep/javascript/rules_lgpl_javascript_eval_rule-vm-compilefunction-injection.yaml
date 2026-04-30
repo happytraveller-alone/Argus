@@ -1,0 +1,95 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-vm-compilefunction-injection
+  patterns:
+  - pattern-inside: |
+      require('vm')
+      ...
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: |
+        $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $REQ.$QUERY.$FOO ...>},...)
+    - pattern: |
+        $CONTEXT = <... $REQ.$QUERY.$FOO ...>; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$QUERY.$FOO} ...>; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$QUERY.$FOO ...>}; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $VAR = <... $REQ.$QUERY.$FOO ...>; ... $CONTEXT = {$NAME: <... $VAR ...>}; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $OPTS = {parsingContext: <... $REQ.$QUERY.$FOO ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $CONTEXT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$QUERY.$FOO ...>};
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $VAR = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $CONTEXT = {$NAME: <... $VAR ...>};
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $REQ.$BODY ...>},...)
+    - pattern: |
+        $CONTEXT = <... $REQ.$BODY ...>; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$BODY} ...>; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$BODY ...>}; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $VAR = <... $REQ.$BODY ...>; ... $CONTEXT = {$NAME: <... $VAR ...>}; ... $VM.compileFunction($CODE,$PARAMS,{parsingContext: <... $CONTEXT ...>},...)
+    - pattern: |
+        $OPTS = {parsingContext: <... $REQ.$BODY ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $CONTEXT = <... $REQ.$BODY ...>;
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$BODY ...>};
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+    - pattern: |
+        $VAR = <... $REQ.$BODY ...>;
+        ...
+        $CONTEXT = {$NAME: <... $VAR ...>};
+        ...
+        $OPTS = {parsingContext: <... $CONTEXT ...>};
+        ...
+        $VM.compileFunction($CODE,$PARAMS,$OPTS,...)
+  message: |
+    检测到代码执行/模板注入风险（规则：rules_lgpl_javascript_eval_rule-vm-compilefunction-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：vm.compileFunction()、`vm.compileFunction()`。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    cwe: CWE-94
+    shortDescription: Improper control of generation of code (Code Injection)
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL

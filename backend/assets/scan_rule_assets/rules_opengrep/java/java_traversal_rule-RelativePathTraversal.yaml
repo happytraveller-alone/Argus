@@ -1,0 +1,69 @@
+rules:
+- id: java_traversal_rule-RelativePathTraversal
+  languages:
+  - java
+  message: |
+    检测到路径穿越/不安全解包风险（规则：java_traversal_rule-RelativePathTraversal）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+    保留的关键标识：org.apache.commons.io.FilenameUtils.getName(...)、`org.apache.commons.io.FilenameUtils.getName(...)`。
+  options:
+    interfile: true
+  severity: ERROR
+  metadata:
+    cwe: CWE-23
+    shortDescription: Relative Path Traversal
+    owasp:
+    - A01:2021-Broken Access Control
+    - A5:2017-Broken Access Control
+    references:
+    - https://owasp.org/www-community/attacks/Path_Traversal
+    category: security
+    security-severity: CRITICAL
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
+    - metavariable-regex:
+        metavariable: $TYPE
+        regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
+    - metavariable-regex:
+        metavariable: $REQ
+        regex: (RequestBody|PathVariable|RequestParam|RequestHeader|CookieValue|ModelAttribute)
+    - focus-metavariable: $SOURCE
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: new File(...)
+      - pattern: new java.io.File(...)
+      - pattern: new FileReader(...)
+      - pattern: new java.io.FileReader(...)
+      - pattern: new FileInputStream(...)
+      - pattern: new java.io.FileInputStream(...)
+      - pattern: (Paths $PATHS).get(...)
+      - patterns:
+        - pattern: |
+            $CLASS.$FUNC(...)
+        - metavariable-regex:
+            metavariable: $FUNC
+            regex: ^(getResourceAsStream|getResource)$
+      - patterns:
+        - pattern-either:
+          - pattern: new ClassPathResource($FILE, ...)
+          - pattern: ResourceUtils.getFile($FILE, ...)
+          - pattern: new FileOutputStream($FILE, ...)
+          - pattern: new java.io.FileOutputStream($FILE, ...)
+          - pattern: new StreamSource($FILE, ...)
+          - pattern: new javax.xml.transform.StreamSource($FILE, ...)
+          - pattern: FileUtils.openOutputStream($FILE, ...)
+        - focus-metavariable: $FILE
+  pattern-sanitizers:
+  - pattern: org.apache.commons.io.FilenameUtils.getName(...)

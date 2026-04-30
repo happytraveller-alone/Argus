@@ -1,0 +1,51 @@
+rules:
+- id: zip_shutil_unsafe_unpacking
+  languages:
+  - python
+  severity: ERROR
+  message: |
+    检测到路径穿越/不安全解包风险（规则：zip_shutil_unsafe_unpacking）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+  patterns:
+  - pattern-either:
+    - pattern: shutil.copyfileobj($SOURCE, $DESTINATION)
+  - pattern-inside: |
+      import zipfile
+      ...
+  - pattern-either:
+    - pattern-inside: |
+        with zipfile.ZipFile($FILE, ...) as $FD:
+          ...
+    - pattern-inside: |
+        $FD = zipfile.ZipFile($FILE, ...)
+        ...
+  - pattern-either:
+    - pattern-inside: |
+        $FILELIST = $FD.namelist()
+        ...
+        for $FILENAME in $FILELIST:
+          ...
+    - pattern-inside: |
+        for $FILENAME in $FD.namelist():
+          ...
+  - pattern-either:
+    - pattern-inside: |
+        with open($FILENAME, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |
+        $DESTINATION = open($FILENAME, ...)
+        ...
+    - pattern-inside: |
+        $DESTINATION_PATH = os.path.join(..., $FILENAME)
+        ...
+        with open($DESTINATION_PATH, ...) as $DESTINATION:
+          ...
+    - pattern-inside: |-
+        $DESTINATION_PATH = os.path.join(..., $FILENAME)
+        ...
+        $DESTINATION = open($DESTINATION_PATH, ...)
+        ...
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-73: External Control of File Name or Path'

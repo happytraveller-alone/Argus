@@ -1,0 +1,65 @@
+rules:
+- id: python_deserialization_rule-yaml-load
+  languages:
+  - python
+  message: |
+    检测到不安全反序列化风险（规则：python_deserialization_rule-yaml-load）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html、safe_load()、yaml.load()、`yaml`、`safe_load()`、`yaml.load()`、`Loader`、`yaml.SafeLoader`、`safe_load`。
+  patterns:
+  - pattern-inside: |
+      import yaml
+      ...
+  - pattern-not-inside: |
+      from ruamel.yaml import YAML
+      ...
+  - pattern-either:
+    - pattern: yaml.unsafe_load(...)
+    - pattern: yaml.$LD(..., Loader=yaml.$LOADER, ...)
+    - pattern: yaml.$LD($DATA)
+  - metavariable-regex:
+      metavariable: $LOADER
+      regex: (Loader|UnsafeLoader|CLoader|FullLoader)
+  - metavariable-regex:
+      metavariable: $LD
+      regex: (load|load_all)
+  metadata:
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    category: security
+    shortDescription: Deserialization of untrusted data
+    security-severity: High
+  severity: ERROR
+- id: python_deserialization_rule-yaml-load_1
+  languages:
+  - python
+  message: |
+    检测到不安全反序列化风险（规则：python_deserialization_rule-yaml-load_1）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html、safe_load()、yaml.load()、`yaml`、`safe_load()`、`yaml.load()`、`Loader`、`yaml.SafeLoader`、`safe_load`。
+  patterns:
+  - pattern-inside: |
+      import yaml
+      ...
+  - pattern-not-inside: |
+      from ruamel.yaml import YAML
+      ...
+  - pattern-either:
+    - pattern: yaml.unsafe_load(...)
+    - pattern: yaml.$LD(..., Loader=yaml.$LOADER, ...)
+    - pattern: yaml.$LD($DATA)
+  - metavariable-regex:
+      metavariable: $LOADER
+      regex: (Loader|UnsafeLoader|CLoader|FullLoader)
+  - metavariable-regex:
+      metavariable: $LD
+      regex: (load|load_all)
+  metadata:
+    cwe: CWE-502
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    category: security
+    shortDescription: Deserialization of untrusted data
+    security-severity: High
+  severity: ERROR

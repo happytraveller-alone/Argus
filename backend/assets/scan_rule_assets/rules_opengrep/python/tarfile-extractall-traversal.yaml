@@ -1,0 +1,44 @@
+rules:
+- id: tarfile-extractall-traversal
+  message: |
+    检测到路径穿越/不安全解包风险（规则：tarfile-extractall-traversal）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+    保留的关键标识：$PATH、extractall()、tarfile.open($PATH)、`tarfile.open($PATH).extractall()`。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path Traversal'')'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: MEDIUM
+    technology:
+    - --no-technology--
+    description: Potential path traversal in call to `extractall` for a `tarfile`
+    references:
+    - https://docs.python.org/3/library/tarfile.html#tarfile.TarFile.extractall
+  patterns:
+  - pattern-either:
+    - pattern: |
+        with tarfile.open(...) as $TAR:
+            ...
+            $TAR.extractall(...)
+    - pattern: |
+        tarfile.open(...).extractall(...)
+    - pattern: |
+        $TAR = tarfile.open(...)
+        ...
+        $TAR.extractall(...)
+  - pattern-not: |
+      with tarfile.open(...) as $TAR:
+          ...
+          $TAR.extractall(..., members=$MEMBERS, ...)
+  - pattern-not: |
+      tarfile.open(...).extractall(..., members=$MEMBERS, ...)
+  - pattern-not: |
+      $TAR = tarfile.open(...)
+      ...
+      $TAR.extractall(..., members=$MEMBERS, ...)

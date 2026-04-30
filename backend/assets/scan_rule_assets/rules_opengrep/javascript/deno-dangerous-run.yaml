@@ -1,0 +1,45 @@
+rules:
+- id: deno-dangerous-run
+  message: |
+    检测到命令注入风险（规则：deno-dangerous-run）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：Deno.run()。
+  metadata:
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    category: security
+    technology:
+    - deno
+    references:
+    - https://deno.land/manual/examples/subprocess#simple-example
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: HIGH
+    confidence: MEDIUM
+  languages:
+  - javascript
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: function ... (..., $ARG,...) {...}
+    - focus-metavariable: $ARG
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          Deno.run({cmd: [$INPUT,...]},...)
+      - pattern: |
+          Deno.run({cmd: ["=~/(sh|bash|ksh|csh|tcsh|zsh)/","-c",$INPUT,...]},...)
+      - patterns:
+        - pattern: |
+            Deno.run({cmd: [$CMD,"-c",$INPUT,...]},...)
+        - pattern-inside: |
+            $CMD = "=~/(sh|bash|ksh|csh|tcsh|zsh)/"
+            ...
+    - focus-metavariable: $INPUT

@@ -1,0 +1,18 @@
+rules:
+- id: c_misc_rule-SetSecurityDescriptorDacl
+  languages:
+  - cpp
+  message: |
+    检测到权限/访问控制缺陷（规则：c_misc_rule-SetSecurityDescriptorDacl）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。
+    保留的关键标识：https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-setsecuritydescriptordacl#remarks、`SetSecurityDescriptorDacl`、`pDacl`、`bDaclPresent`、`TRUE`、`FALSE`。
+  metadata:
+    shortDescription: Null ACL when calling SetSecurityDescriptorDacl may allow all access to objects
+    cwe: CWE-732
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: Medium
+    category: security
+  pattern: SetSecurityDescriptorDacl(...)
+  severity: ERROR

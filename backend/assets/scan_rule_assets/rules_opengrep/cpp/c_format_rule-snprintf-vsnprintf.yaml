@@ -1,0 +1,42 @@
+rules:
+- id: c_format_rule-snprintf-vsnprintf
+  languages:
+  - cpp
+  message: |
+    检测到格式化字符串风险（规则：c_format_rule-snprintf-vsnprintf）。危害：用户可控格式串可能泄露内存、破坏内存或导致进程崩溃。建议：使用固定格式字符串，把用户输入作为普通参数传入。
+    保留的关键标识：https://linux.die.net/man/3/snprintf、https://owasp.org/www-community/attacks/Format_string_attack、`snprintf`。
+  metadata:
+    shortDescription: Potential format string vulnerability
+    cwe: CWE-134
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - patterns:
+    - pattern: snprintf($BUF,$SIZE,$FMT,...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
+  - patterns:
+    - pattern: vsnprintf($BUF,$SIZE,$FMT,$ARGS)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
+  - patterns:
+    - pattern: _snprintf($BUF,$SIZE,$FMT,...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
+  - patterns:
+    - pattern: _sntprintf($VAR,$FMT,...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
+  - patterns:
+    - pattern: _vsntprintf($VAR,$FMT,...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
+  severity: ERROR

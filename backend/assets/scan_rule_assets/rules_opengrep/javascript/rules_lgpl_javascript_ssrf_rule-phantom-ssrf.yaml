@@ -1,0 +1,76 @@
+rules:
+- id: rules_lgpl_javascript_ssrf_rule-phantom-ssrf
+  patterns:
+  - pattern-inside: |
+      require('phantom')
+      ...
+  - pattern-either:
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: $PAGE.open(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PAGE.setContent(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PAGE.open(<... $REQ.$BODY ...>,...)
+    - pattern: $PAGE.setContent(<... $REQ.$BODY ...>,...)
+    - pattern: $PAGE.openUrl(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PAGE.openUrl(<... $REQ.$BODY ...>,...)
+    - pattern: $PAGE.evaluateJavaScript(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PAGE.evaluateJavaScript(<... $REQ.$BODY ...>,...)
+    - pattern: $PAGE.property("content",<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PAGE.property("content",<... $REQ.$BODY ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PAGE.open(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PAGE.open(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PAGE.setContent(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PAGE.setContent(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PAGE.openUrl(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PAGE.openUrl(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PAGE.evaluateJavaScript(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PAGE.evaluateJavaScript(<... $INPUT ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PAGE.property("content",<... $INPUT ...>,...)
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PAGE.property("content",<... $INPUT ...>,...)
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：rules_lgpl_javascript_ssrf_rule-phantom-ssrf）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`phantom`。
+  metadata:
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-918
+    shortDescription: Server-side request forgery (SSRF)
+    security-severity: CRITICAL
+    category: security
+  severity: ERROR
+  languages:
+  - javascript

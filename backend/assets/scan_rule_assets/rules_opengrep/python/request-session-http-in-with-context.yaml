@@ -1,0 +1,29 @@
+rules:
+- id: request-session-http-in-with-context
+  patterns:
+  - pattern-inside: |
+      with requests.Session(...) as $SESSION:
+        ...
+  - pattern-either:
+    - pattern: $SESSION.$W("=~/[Hh][Tt][Tt][Pp]://.*/", ...)
+    - pattern: $SESSION.request($METHOD, "=~/[Hh][Tt][Tt][Pp]://.*/", ...)
+    - patterns:
+      - pattern-inside: |
+          $URL =  "=~/[Hh][Tt][Tt][Pp]://.*/"
+          ...
+      - pattern-either:
+        - pattern: $SESSION.$W($URL, ...)
+        - pattern: $SESSION.request($METHOD, $URL, ...)
+  fix-regex:
+    regex: '[Hh][Tt][Tt][Pp]://'
+    replacement: https://
+    count: 1
+  message: |
+    检测到不安全明文通信风险（规则：request-session-http-in-with-context）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS
+    等加密通道并校验证书。 保留的关键标识：http://'、https://'、'http://'、'https://'。
+  metadata:
+    owasp: 'A3: Sensitive Data Exposure'
+    cwe: 'CWE-319: Cleartext Transmission of Sensitive Information'
+  languages:
+  - python
+  severity: ERROR

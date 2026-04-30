@@ -1,0 +1,15 @@
+rules:
+- id: xmlinputfactory-external-entities-enabled
+  severity: ERROR
+  metadata:
+    cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
+    owasp: 'A4: XML External Entities (XXE)'
+    references:
+    - https://www.blackhat.com/docs/us-15/materials/us-15-Wang-FileCry-The-New-Age-Of-XXE-java-wp.pdf
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：xmlinputfactory-external-entities-enabled）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识："javax.xml.stream.isSupportingExternalEntities"。
+  pattern: $XMLFACTORY.setProperty("javax.xml.stream.isSupportingExternalEntities", true);
+  languages:
+  - java

@@ -1,0 +1,26 @@
+rules:
+- id: python_django_rule-django-raw-used
+  message: |
+    检测到SQL 注入风险（规则：python_django_rule-django-raw-used）。危害：未受信任输入可能改变 SQL
+    语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全 API，避免拼接原始 SQL。
+    保留的关键标识：https://docs.djangoproject.com/en/5.0/ref/models/querysets/、https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html、raw()、Entry.objects.filter(date=2006)、`gt`、`lt`、`raw()`、`Entry.objects.filter(date=2006)`、`params`。
+  metadata:
+    cwe: CWE-89
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    category: security
+    shortDescription: Improper neutralization of special elements used in an SQL Command ('SQL Injection')
+    security-severity: High
+  languages:
+  - python
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $PARAM
+    - pattern-inside: "def $VIEW(...,$PARAM,...):\n  ...\n  return ...    \n"
+  pattern-sinks:
+  - patterns:
+    - pattern: $QUERY
+    - pattern-inside: $MODEL.objects.raw($QUERY, ... )

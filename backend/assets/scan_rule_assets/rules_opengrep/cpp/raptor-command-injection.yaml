@@ -1,0 +1,27 @@
+rules:
+- id: raptor-command-injection
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/676
+    - https://cwe.mitre.org/data/definitions/78
+    - https://cwe.mitre.org/data/definitions/88
+    - https://g.co/kgs/PCHQjJ
+    - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+    confidence: HIGH
+    cwe:
+    - 'CWE-78: OS Command Injection'
+    - 'CWE-77: Improper Neutralization of Special Elements used in a Command'
+    - 'CWE-88: Argument Injection or Modification'
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    - 'CWE-20: Improper Input Validation'
+  message: |
+    检测到命令注入风险（规则：raptor-command-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+  severity: ERROR
+  languages:
+  - cpp
+  patterns:
+  - pattern-either:
+    - pattern: system(...)
+    - pattern: popen(...)
+  - pattern-not: $_("...", ...)

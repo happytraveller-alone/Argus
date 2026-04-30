@@ -1,0 +1,16 @@
+rules:
+- id: c_misc_rule-getpass
+  languages:
+  - cpp
+  message: |
+    检测到硬编码凭据风险（规则：c_misc_rule-getpass）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+  metadata:
+    shortDescription: Use of obsolete function
+    cwe: CWE-477
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    - A06:2021-Vulnerable and Outdated Components
+    security-severity: Low
+    category: security
+  pattern: getpass(...)
+  severity: ERROR

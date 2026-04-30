@@ -1,0 +1,27 @@
+rules:
+- id: v3-csrf-prevention
+  languages:
+  - javascript
+  message: |
+    检测到CSRF 防护缺失风险（规则：v3-csrf-prevention）。危害：攻击者可能诱导已登录用户发起非预期请求，造成状态变更或敏感操作。建议：为危险请求启用 CSRF
+    token、SameSite Cookie 或等效校验。 保留的关键标识：'csrfPrevention'、'false'。
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-352: Cross-Site Request Forgery (CSRF)'
+    subcategory:
+    - vuln
+    confidence: HIGH
+    likelihood: MEDIUM
+    impact: MEDIUM
+    technology:
+    - graphql
+    - apollo-graphql-server
+    - apollo-graphql-server-v3
+    description: Lack of CSRF prevention
+    references:
+    - https://www.apollographql.com/docs/apollo-server/v3/security/cors/#preventing-cross-site-request-forgery-csrf
+  patterns:
+  - pattern: new ApolloServer({...})
+  - pattern-not: |
+      new ApolloServer({..., csrfPrevention: true, ...})

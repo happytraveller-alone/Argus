@@ -1,0 +1,77 @@
+rules:
+- id: python_exec_rule-subprocess-popen-shell-true
+  languages:
+  - python
+  patterns:
+  - patterns:
+    - pattern-not-inside: |
+        ...
+        $ARG = '...'.format('...')
+        ...
+    - pattern: subprocess.$FUNC($ARG, ...)
+    - pattern-not: subprocess.$FUNC('...', ...)
+    - pattern-not: subprocess.$FUNC('...' % '...', ...)
+    - pattern-not: subprocess.$FUNC('...'.format('...'), ...)
+  - pattern-either:
+    - pattern: subprocess.$FUNC(..., shell=True, ...)
+    - pattern: subprocess.$FUNC(..., shell=[$V, ...], ...)
+    - pattern: 'subprocess.$FUNC(..., shell={$K: $V, ...}, ...)'
+    - patterns:
+      - pattern: subprocess.$FUNC(..., shell=$INTVAL, ...)
+      - pattern-not: subprocess.$FUNC(..., shell=0, ...)
+      - metavariable-regex:
+          metavariable: $INTVAL
+          regex: ^[0-9]+$
+    - patterns:
+      - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
+      - pattern-not: subprocess.$FUNC(..., shell='', ...)
+  message: |
+    检测到命令注入风险（规则：python_exec_rule-subprocess-popen-shell-true）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：$FUNC、`subprocess`、`$FUNC`、`shell=True`、`shell=False`。
+  metadata:
+    cwe: CWE-78
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    shortDescription: Improper neutralization of special elements used in an OS Command ('OS Command Injection')
+    security-severity: High
+    category: security
+  severity: ERROR
+- id: python_exec_rule-subprocess-popen-shell-true_1
+  languages:
+  - python
+  patterns:
+  - patterns:
+    - pattern-not-inside: |
+        ...
+        $ARG = '...'.format('...')
+        ...
+    - pattern: subprocess.$FUNC($ARG, ...)
+    - pattern-not: subprocess.$FUNC('...', ...)
+    - pattern-not: subprocess.$FUNC('...' % '...', ...)
+    - pattern-not: subprocess.$FUNC('...'.format('...'), ...)
+  - pattern-either:
+    - pattern: subprocess.$FUNC(..., shell=True, ...)
+    - pattern: subprocess.$FUNC(..., shell=[$V, ...], ...)
+    - pattern: 'subprocess.$FUNC(..., shell={$K: $V, ...}, ...)'
+    - patterns:
+      - pattern: subprocess.$FUNC(..., shell=$INTVAL, ...)
+      - pattern-not: subprocess.$FUNC(..., shell=0, ...)
+      - metavariable-regex:
+          metavariable: $INTVAL
+          regex: ^[0-9]+$
+    - patterns:
+      - pattern: subprocess.$FUNC(..., shell='$STRVAL', ...)
+      - pattern-not: subprocess.$FUNC(..., shell='', ...)
+  message: |
+    检测到命令注入风险（规则：python_exec_rule-subprocess-popen-shell-true_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：$FUNC、`subprocess`、`$FUNC`、`shell=True`、`shell=False`。
+  metadata:
+    cwe: CWE-78
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    shortDescription: Improper neutralization of special elements used in an OS Command ('OS Command Injection')
+    security-severity: High
+    category: security
+  severity: ERROR

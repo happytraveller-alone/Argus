@@ -1,0 +1,24 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-serializetojs-deserialize
+  patterns:
+  - pattern-either:
+    - pattern: |
+        require('serialize-to-js').deserialize(...)
+    - pattern-inside: |
+        $MOD = require('serialize-to-js')
+        ...
+    - pattern-inside: |
+        import $MOD from 'serialize-to-js'
+        ...
+  - pattern: |
+      $MOD.deserialize(...)
+  message: |
+    检测到不安全反序列化风险（规则：rules_lgpl_javascript_eval_rule-serializetojs-deserialize）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：unserialize()、deserialize()、'unserialize()'、'deserialize()'。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp: A8:2017-Insecure Deserialization
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    security-severity: CRITICAL

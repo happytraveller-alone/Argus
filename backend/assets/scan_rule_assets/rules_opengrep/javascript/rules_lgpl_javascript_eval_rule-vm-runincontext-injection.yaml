@@ -1,0 +1,63 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-vm-runincontext-injection
+  patterns:
+  - pattern-inside: |
+      require('vm')
+      ...
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: |
+        $CONTEXT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$QUERY.$FOO} ...>;
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$QUERY.$FOO ...>};
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $VAR = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $CONTEXT = {$NAME: <... $VAR ...>};
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $CONTEXT = <... $REQ.$BODY ...>;
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $CONTEXT = <... {$NAME:$REQ.$BODY} ...>;
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $CONTEXT = {$NAME: <... $REQ.$BODY ...>};
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+    - pattern: |
+        $VAR = <... $REQ.$BODY ...>;
+        ...
+        $CONTEXT = {$NAME: <... $VAR ...>};
+        ...
+        $VM.runInContext($CODE,<... $CONTEXT ...>,...)
+  message: |
+    检测到代码执行/模板注入风险（规则：rules_lgpl_javascript_eval_rule-vm-runincontext-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：vm.runInContext()、`vm.runInContext()`。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    cwe: CWE-94
+    shortDescription: Improper control of generation of code (Code Injection)
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL

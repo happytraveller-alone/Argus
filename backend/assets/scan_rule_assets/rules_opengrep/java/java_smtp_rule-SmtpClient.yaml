@@ -1,0 +1,104 @@
+rules:
+- id: java_smtp_rule-SmtpClient
+  languages:
+  - java
+  message: |
+    检测到不安全明文通信风险（规则：java_smtp_rule-SmtpClient）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS 等加密通道并校验证书。
+    保留的关键标识：`MimeMessage`、`\r\n`。
+  patterns:
+  - pattern-inside: |
+      $M = new MimeMessage(...);
+      ...
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: $M.setSubject($VAR)
+        - pattern: $M.addHeader($ARG, $VAR)
+        - pattern: $M.addHeader($VAR, $ARG)
+        - pattern: $M.setDescription($VAR)
+        - pattern: $M.setDisposition($VAR)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: ^[a-zA-Z_$][a-zA-Z0-9_$]*$
+    - patterns:
+      - pattern-either:
+        - pattern: $M.setSubject($OBJ.$GETTER(...))
+        - pattern: $M.setSubject($OBJ.$GETTER(...) + ...)
+        - pattern: $M.setSubject(... + $OBJ.$GETTER(...))
+        - pattern: $M.setSubject(... + $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($ARG, $OBJ.$GETTER(...))
+        - pattern: $M.addHeader($ARG, $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($ARG, ... + $OBJ.$GETTER(...))
+        - pattern: $M.addHeader($ARG, ... + $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($OBJ.$GETTER(...), $ARG)
+        - pattern: $M.addHeader($OBJ.$GETTER(...) + ..., $ARG)
+        - pattern: $M.addHeader(... + $OBJ.$GETTER(...), $ARG)
+        - pattern: $M.addHeader(... + $OBJ.$GETTER(...) + ..., $ARG)
+        - pattern: $M.setDescription($OBJ.$GETTER(...))
+        - pattern: $M.setDisposition($OBJ.$GETTER(...) + ...)
+        - pattern: $M.setDisposition(... + $OBJ.$GETTER(...))
+        - pattern: $M.setDisposition(... + $OBJ.$GETTER(...) + ...)
+      - metavariable-regex:
+          metavariable: $GETTER
+          regex: ^get
+  metadata:
+    shortDescription: Improper neutralization of special elements used in a command
+    category: security
+    cwe: CWE-77
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Low
+  severity: ERROR
+- id: java_smtp_rule-SmtpClient_1
+  languages:
+  - java
+  message: |
+    检测到HTTP/邮件头注入风险（规则：java_smtp_rule-SmtpClient_1）。危害：攻击者可能插入额外 HTTP
+    或邮件头，改变消息语义，造成缓存投毒、重定向、伪造收件人或会话风险。建议：过滤 CR/LF 等控制字符，并使用框架或邮件库提供的安全头设置 API。
+    保留的关键标识：`MimeMessage`、`\r\n`。
+  patterns:
+  - pattern-inside: |
+      $M = new MimeMessage(...);
+      ...
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: $M.setSubject($VAR)
+        - pattern: $M.addHeader($ARG, $VAR)
+        - pattern: $M.addHeader($VAR, $ARG)
+        - pattern: $M.setDescription($VAR)
+        - pattern: $M.setDisposition($VAR)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: ^[a-zA-Z_$][a-zA-Z0-9_$]*$
+    - patterns:
+      - pattern-either:
+        - pattern: $M.setSubject($OBJ.$GETTER(...))
+        - pattern: $M.setSubject($OBJ.$GETTER(...) + ...)
+        - pattern: $M.setSubject(... + $OBJ.$GETTER(...))
+        - pattern: $M.setSubject(... + $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($ARG, $OBJ.$GETTER(...))
+        - pattern: $M.addHeader($ARG, $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($ARG, ... + $OBJ.$GETTER(...))
+        - pattern: $M.addHeader($ARG, ... + $OBJ.$GETTER(...) + ...)
+        - pattern: $M.addHeader($OBJ.$GETTER(...), $ARG)
+        - pattern: $M.addHeader($OBJ.$GETTER(...) + ..., $ARG)
+        - pattern: $M.addHeader(... + $OBJ.$GETTER(...), $ARG)
+        - pattern: $M.addHeader(... + $OBJ.$GETTER(...) + ..., $ARG)
+        - pattern: $M.setDescription($OBJ.$GETTER(...))
+        - pattern: $M.setDisposition($OBJ.$GETTER(...) + ...)
+        - pattern: $M.setDisposition(... + $OBJ.$GETTER(...))
+        - pattern: $M.setDisposition(... + $OBJ.$GETTER(...) + ...)
+      - metavariable-regex:
+          metavariable: $GETTER
+          regex: ^get
+  metadata:
+    shortDescription: Improper neutralization of special elements used in a command
+    category: security
+    cwe: CWE-77
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Low
+  severity: ERROR

@@ -1,0 +1,51 @@
+rules:
+- id: pyramid-direct-use-of-response
+  message: |
+    检测到跨站脚本（XSS）风险（规则：pyramid-direct-use-of-response）。危害：未可信数据进入页面脚本或 DOM
+    可能执行恶意脚本，窃取凭据或劫持用户操作。建议：对输出做上下文编码，避免把用户输入直接写入可执行上下文。 保留的关键标识：'Response'。
+  metadata:
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site Scripting'')'
+    owasp:
+    - A07:2017 - Cross-Site Scripting (XSS)
+    - A03:2021 - Injection
+    category: security
+    technology:
+    - pyramid
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: MEDIUM
+    confidence: MEDIUM
+  languages:
+  - python
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        @pyramid.view.view_config( ... )
+        def $VIEW($REQ):
+          ...
+    - pattern: $REQ.$ANYTHING
+    - pattern-not: $REQ.dbsession
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          pyramid.request.Response.text($SINK)
+      - pattern: |
+          pyramid.request.Response($SINK)
+      - pattern: |
+          $REQ.response.body = $SINK
+      - pattern: |
+          $REQ.response.text = $SINK
+      - pattern: |
+          $REQ.response.ubody = $SINK
+      - pattern: |
+          $REQ.response.unicode_body = $SINK
+    - pattern: $SINK

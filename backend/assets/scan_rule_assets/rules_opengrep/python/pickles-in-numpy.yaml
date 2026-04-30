@@ -1,0 +1,35 @@
+rules:
+- id: pickles-in-numpy
+  message: |
+    检测到不安全反序列化风险（规则：pickles-in-numpy）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: HIGH
+    technology:
+    - numpy
+    description: Potential arbitrary code execution from `NumPy` functions reliant on pickling
+    references:
+    - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
+  patterns:
+  - pattern: numpy.load(..., allow_pickle=$VALUE, ...)
+  - pattern-not: numpy.load("...", ...)
+  - pattern-not: numpy.load(..., file="...", ...)
+  - metavariable-pattern:
+      metavariable: $VALUE
+      patterns:
+      - pattern-not: |
+          False
+      - pattern-not: |
+          []
+      - pattern-not: |
+          None
+      - pattern-not: |
+          ""

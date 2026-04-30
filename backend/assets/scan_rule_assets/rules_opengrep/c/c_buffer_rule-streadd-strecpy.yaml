@@ -1,0 +1,20 @@
+rules:
+- id: c_buffer_rule-streadd-strecpy
+  languages:
+  - c
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-streadd-strecpy）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+    保留的关键标识：https://docs.oracle.com/cd/E18752_01/html/816-5172/streadd-3gen.html、`strecpy`、`streadd`。
+  metadata:
+    shortDescription: Insecure string processing functions
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - pattern: streadd(...)
+  - pattern: strecpy(...)
+  severity: ERROR

@@ -1,0 +1,79 @@
+rules:
+- id: java_endpoint_rule-UnvalidatedRedirect
+  languages:
+  - java
+  message: |
+    检测到开放重定向风险（规则：java_endpoint_rule-UnvalidatedRedirect）。危害：攻击者可能把用户重定向到钓鱼站点或恶意页面，破坏登录和授权流程。建议：只允许跳转到可信域名或使用服务端固定路径映射。
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: |
+        $URL = ($X.servlet.http.HttpServletRequest $REQ).$M(...);
+    - metavariable-regex:
+        metavariable: $M
+        regex: (getParameter|getCookies|getHeader|getHeaders|getHeaderNames|getPathInfo|getPathTranslated|getContextPath|getQueryString|getRemoteUser|getRequestedSessionId|getRequestURI|getRequestURL|getServletPath|getParts|getPart|getReader)
+  pattern-sinks:
+  - pattern-either:
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: |
+        if ($SAFE.contains($URL)){
+          ...
+        }
+    - pattern-either:
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  metadata:
+    category: security
+    cwe: CWE-601
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    shortDescription: URL redirection to untrusted site ('Open Redirect')
+    security-severity: Info
+  severity: ERROR
+- id: java_endpoint_rule-UnvalidatedRedirect_1
+  languages:
+  - java
+  message: |
+    检测到开放重定向风险（规则：java_endpoint_rule-UnvalidatedRedirect_1）。危害：攻击者可能把用户重定向到钓鱼站点或恶意页面，破坏登录和授权流程。建议：只允许跳转到可信域名或使用服务端固定路径映射。
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: |
+        $URL = ($X.servlet.http.HttpServletRequest $REQ).$M(...);
+    - metavariable-regex:
+        metavariable: $M
+        regex: (getParameter|getCookies|getHeader|getHeaders|getHeaderNames|getPathInfo|getPathTranslated|getContextPath|getQueryString|getRemoteUser|getRequestedSessionId|getRequestURI|getRequestURL|getServletPath|getParts|getPart|getReader)
+  pattern-sinks:
+  - pattern-either:
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: |
+        if ($SAFE.contains($URL)){
+          ...
+        }
+    - pattern-either:
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  metadata:
+    category: security
+    cwe: CWE-601
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    shortDescription: URL redirection to untrusted site ('Open Redirect')
+    security-severity: Info
+  severity: ERROR

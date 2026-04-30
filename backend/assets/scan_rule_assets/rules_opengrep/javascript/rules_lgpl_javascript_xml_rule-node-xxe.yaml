@@ -1,0 +1,111 @@
+rules:
+- id: rules_lgpl_javascript_xml_rule-node-xxe
+  patterns:
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: |
+        $LIBXML.parseXmlString(..., <... $REQ.$QUERY.$VAR.$FILE ...>, ...)
+    - pattern: |
+        $LIBXML.parseXmlString(..., <... $REQ.$QUERY.$VAR ...>, ...)
+    - pattern: |
+        $LIBXML.parseXmlString(..., <... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY.$VAR.$FILE ...>; ... $LIBXML.parseXmlString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY.$VAR ...>; ... $LIBXML.parseXmlString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY ...>; ... $LIBXML.parseXmlString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $LIBXML.parseXml(..., <... $REQ.$QUERY.$VAR.$FILE ...>, ...)
+    - pattern: |
+        $LIBXML.parseXml(..., <... $REQ.$QUERY.$VAR ...>, ...)
+    - pattern: |
+        $LIBXML.parseXml(..., <... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY.$VAR.$FILE ...>; ... $LIBXML.parseXml(..., <... $FOO ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY.$VAR ...>; ... $LIBXML.parseXml(..., <... $FOO ...>, ...)
+    - pattern: |
+        $FOO = <... $REQ.$QUERY ...>;
+        ...
+        $LIBXML.parseXml(..., <... $FOO ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $PARSER.parseString(..., <... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $PARSER.parseString(..., <... $REQ.$QUERY.$BAR ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $PARSER.parseString(..., <... $REQ.$QUERY.$BAR.$FILE ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $PARSER.push(..., <... $REQ.$QUERY ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $PARSER.push(..., <... $REQ.$QUERY.$FOO ...> , ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $PARSER.push(..., <... $REQ.$QUERY.$FOO.$FILE ...> , ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $FOO = <... $REQ.$QUERY ...>;
+        ...
+        $PARSER.parseString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $FOO = <... $REQ.$QUERY.$BAR ...>;
+        ...
+        $PARSER.parseString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxParser()
+        ...
+        $FOO = <... $REQ.$QUERY.$BAR.$FILE ...>;
+        ...
+        $PARSER.parseString(..., <... $FOO ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $FOO = <... $REQ.$QUERY ...>;
+        ...
+        $PARSER.push(..., <... $FOO ...>, ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $FOO = <... $REQ.$QUERY.$BAR ...>;
+        ...
+        $PARSER.push(..., <... $FOO ...> , ...)
+    - pattern: |
+        $PARSER = new libxmljs.SaxPushParser()
+        ...
+        $FOO = <... $REQ.$QUERY.$BAR.$FILE ...>;
+        ...
+        $PARSER.push(..., <... $FOO ...> , ...)
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：rules_lgpl_javascript_xml_rule-node-xxe）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp:
+    - A4:2017-XML External Entities (XXE)
+    - A05:2021-Security Misconfiguration
+    cwe: CWE-611
+    shortDescription: Improper restriction of XML external entity reference
+    security-severity: CRITICAL
+    category: security

@@ -1,0 +1,55 @@
+rules:
+- id: java_inject_rule-HttpParameterPollution
+  languages:
+  - java
+  mode: taint
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  pattern-sanitizers:
+  - pattern: java.net.URLEncoder.encode(...)
+  - pattern: com.google.common.net.UrlEscapers.urlPathSegmentEscaper().escape(...)
+  pattern-sinks:
+  - pattern: new org.apache.http.client.methods.HttpGet(...)
+  - pattern: new org.apache.commons.httpclient.methods.GetMethod(...)
+  - pattern: (org.apache.commons.httpclient.methods.GetMethod $GM).setQueryString(...)
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：java_inject_rule-HttpParameterPollution）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html、https://en.wikipedia.org/wiki/HTTP_parameter_pollution。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of argument delimiters in a command ('Argument Injection')
+    category: security
+    cwe: CWE-88
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: Medium
+- id: java_inject_rule-HttpParameterPollution_1
+  languages:
+  - java
+  mode: taint
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  pattern-sanitizers:
+  - pattern: java.net.URLEncoder.encode(...)
+  - pattern: com.google.common.net.UrlEscapers.urlPathSegmentEscaper().escape(...)
+  pattern-sinks:
+  - pattern: new org.apache.http.client.methods.HttpGet(...)
+  - pattern: new org.apache.commons.httpclient.methods.GetMethod(...)
+  - pattern: (org.apache.commons.httpclient.methods.GetMethod $GM).setQueryString(...)
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：java_inject_rule-HttpParameterPollution_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html、https://en.wikipedia.org/wiki/HTTP_parameter_pollution。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of argument delimiters in a command ('Argument Injection')
+    category: security
+    cwe: CWE-88
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - java
+    security-severity: Medium

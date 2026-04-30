@@ -1,0 +1,64 @@
+rules:
+- id: node_zip_unsafe_unpacking
+  languages:
+  - javascript
+  severity: ERROR
+  message: |
+    检测到路径穿越/不安全解包风险（规则：node_zip_unsafe_unpacking）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+  patterns:
+  - pattern-either:
+    - pattern-inside: |
+        $NODEZIP = require('node-zip')
+        ...
+    - pattern-inside: |
+        import $NODEZIP from 'node-zip'
+        ...
+  - pattern-either:
+    - pattern-inside: |
+        $ZIP = $NODEZIP($DATA)
+        ...
+    - pattern-inside: |
+        $ZIP = new $NODEZIP($DATA, ...)
+        ...
+    - pattern-inside: |
+        $ZIP = new $NODEZIP($DATA)
+        ...
+  - pattern-either:
+    - pattern-inside: |
+        $FILES = $ZIP.files
+        ...
+        for ($FILE in $FILES) { ... }
+    - pattern-inside: |
+        for ($FILE in $ZIP.files) { ... }
+    - pattern-inside: |
+        $FILES = $ZIP.files
+        ...
+        Object.keys($FILES).forEach(($FILE) => { ... })
+    - pattern-inside: |
+        Object.keys($ZIP.files).forEach(($FILE) => { ... })
+  - pattern-either:
+    - pattern-either:
+      - pattern: $FS.createWriteStream(<... $FILE ...>, ...)
+      - pattern: $FS.writeFileSync(<... $FILE ...>, ..., ...)
+      - pattern: $FS.writeFileAsync(<... $FILE ...>, ..., ...)
+    - patterns:
+      - pattern-either:
+        - pattern: $FS.createWriteStream(<... $PATH ...>, ...)
+        - pattern: $FS.writeFileSync(<... $PATH ...>, ..., ...)
+        - pattern: $FS.writeFileAsync(<... $PATH ...>, ..., ...)
+      - pattern-not-inside: |
+          $PATH = path.join(..., path.basename(<... $FILE ...>))
+          ...
+      - pattern-either:
+        - pattern-inside: |
+            $PATH = path.join(..., <... $FILE ...>)
+            ...
+        - pattern-inside: |-
+            $PATH = <... $FILE ...>
+            ...
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-20: Improper Input Validation'

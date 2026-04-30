@@ -1,0 +1,68 @@
+rules:
+- id: jwt-none-alg
+  message: |
+    检测到JWT
+    验证/密钥配置风险（规则：jwt-none-alg）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
+    保留的关键标识：'none'、'HS256'。
+  metadata:
+    cwe: 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    owasp: 'A2: Broken Authentication'
+    source-rule-url: https://r2c.dev/blog/2020/hardcoded-secrets-unverified-tokens-and-other-common-jwt-mistakes/
+  languages:
+  - javascript
+  severity: ERROR
+  patterns:
+  - pattern-either:
+    - pattern: |
+        var $JOSE = require("jose");
+        ...
+        var { JWK, JWT } = $JOSE;
+        ...
+        var $T = JWT.verify($P, JWK.None,...);
+    - pattern: |
+        var $JOSE = require("jose");
+        ...
+        var { JWK, JWT } = $JOSE;
+        ...
+        $T = JWT.verify($P, JWK.None,...);
+    - pattern: |
+        var $JOSE = require("jose");
+        ...
+        var { JWK, JWT } = $JOSE;
+        ...
+        JWT.verify($P, JWK.None,...);
+- id: jwt-none-alg_1
+  languages:
+  - javascript
+  message: |
+    检测到JWT
+    验证/密钥配置风险（规则：jwt-none-alg_1）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
+    保留的关键标识：'none'、'HS256'。
+  metadata:
+    asvs:
+      control_id: 3.5.3 Insecue Stateless Session Tokens
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x12-V3-Session-management.md#v35-token-based-session-management
+      section: 'V3: Session Management Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A03:2017 - Sensitive Data Exposure
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+    source-rule-url: https://semgrep.dev/blog/2020/hardcoded-secrets-unverified-tokens-and-other-common-jwt-mistakes/
+    subcategory:
+    - vuln
+    technology:
+    - jwt
+  patterns:
+  - pattern-inside: |
+      $JWT = require("jsonwebtoken");
+      ...
+  - pattern: $JWT.verify($P, $X, {algorithms:[...,'none',...]},...)
+  severity: ERROR

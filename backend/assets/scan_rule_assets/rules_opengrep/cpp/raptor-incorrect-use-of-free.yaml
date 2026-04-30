@@ -1,0 +1,58 @@
+rules:
+- id: raptor-incorrect-use-of-free
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/590
+    - https://github.com/shellphish/how2heap/blob/master/glibc_2.23/house_of_spirit.c
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-590: Free of Memory not on the Heap'
+    - 'CWE-416: Use After Free'
+  message: |
+    检测到错误释放内存风险（规则：raptor-incorrect-use-of-free）。危害：释放非堆内存或生命周期不匹配的指针可能破坏内存管理状态并导致崩溃。建议：只释放由匹配分配函数返回的堆内存，并保持分配/释放成对。
+    保留的关键标识：free()、malloc()、calloc()、realloc()。
+  severity: ERROR
+  languages:
+  - cpp
+  pattern-either:
+  - patterns:
+    - pattern: free($PTR)
+    - pattern-either:
+      - pattern-inside: |
+          $_ $PTR[$_];
+          ...
+      - pattern-inside: |
+          $_ $PTR[$_] = $_;
+          ...
+      - pattern-inside: |
+          $_ $ARR[$_];
+          ...
+          $PTR = $ARR;
+          ...
+      - pattern-inside: |
+          $_ $ARR[$_] = $_;
+          ...
+          $PTR = $ARR;
+          ...
+  - patterns:
+    - pattern: free(&$VAR)
+    - pattern-either:
+      - pattern-inside: |
+          $_ $VAR;
+          ...
+      - pattern-inside: |
+          $_ $VAR = $_;
+          ...
+      - pattern-inside: |
+          $_ $VAR[$_];
+          ...
+      - pattern-inside: |
+          $_ $VAR[$_] = $_;
+          ...
+      - pattern-inside: |
+          $_ * $VAR;
+          ...
+      - pattern-inside: |
+          $_ * $VAR = $_;
+          ...

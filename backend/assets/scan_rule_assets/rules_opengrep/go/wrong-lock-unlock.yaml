@@ -1,0 +1,26 @@
+rules:
+- id: wrong-lock-unlock
+  patterns:
+  - pattern-either:
+    - pattern: |
+        $M.Lock()
+        defer $M.RUnlock()
+    - pattern: |
+        $M.RLock()
+        defer $M.Unlock()
+    - pattern: |
+        $M.Lock()
+        defer $M.Lock()
+    - pattern: |
+        $M.RLock()
+        defer $M.RLock()
+  message: Wrong lock/unlock pair?
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-667: Improper Locking'
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'
+    - 'CWE-400: Uncontrolled Resource Consumption'

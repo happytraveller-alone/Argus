@@ -1,0 +1,253 @@
+rules:
+- id: ssrf-injection-urllib_1
+  languages:
+  - python
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：ssrf-injection-urllib_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery (SSRF)'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    references:
+    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    subcategory:
+    - vuln
+    technology:
+    - django
+  patterns:
+  - pattern-inside: |
+      def $FUNC(...):
+        ...
+  - pattern-either:
+    - pattern: urllib.request.urlopen(..., $S.format(..., request.$W.get(...), ...), ...)
+    - pattern: urllib.request.urlopen(..., $S % request.$W.get(...), ...)
+    - pattern: urllib.request.urlopen(..., f"...{request.$W.get(...)}...", ...)
+    - pattern: urllib.request.urlopen(..., request.$W.get(...), ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        urllib.request.urlopen(..., $DATA, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        $INTERM = $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        urllib.request.urlopen(..., $STR.format(..., $DATA, ...), ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        $INTERM = $STR.format(..., $DATA, ...)
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        urllib.request.urlopen(..., $STR % $DATA, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        $INTERM = $STR % $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        urllib.request.urlopen(..., f"...{$DATA}...", ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        $INTERM = f"...{$DATA}..."
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        urllib.request.urlopen(..., $STR + $DATA, ...)
+    - pattern: |
+        $DATA = request.$W.get(...)
+        ...
+        $INTERM = $STR + $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: $A = urllib.request.urlopen(..., request.$W.get(...), ...)
+    - pattern: return urllib.request.urlopen(..., request.$W.get(...), ...)
+    - pattern: urllib.request.urlopen(..., $S.format(..., request.$W(...), ...), ...)
+    - pattern: urllib.request.urlopen(..., $S % request.$W(...), ...)
+    - pattern: urllib.request.urlopen(..., f"...{request.$W(...)}...", ...)
+    - pattern: urllib.request.urlopen(..., request.$W(...), ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        urllib.request.urlopen(..., $DATA, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        $INTERM = $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        urllib.request.urlopen(..., $STR.format(..., $DATA, ...), ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        $INTERM = $STR.format(..., $DATA, ...)
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        urllib.request.urlopen(..., $STR % $DATA, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        $INTERM = $STR % $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        urllib.request.urlopen(..., f"...{$DATA}...", ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        $INTERM = f"...{$DATA}..."
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        urllib.request.urlopen(..., $STR + $DATA, ...)
+    - pattern: |
+        $DATA = request.$W(...)
+        ...
+        $INTERM = $STR + $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: $A = urllib.request.urlopen(..., request.$W(...), ...)
+    - pattern: return urllib.request.urlopen(..., request.$W(...), ...)
+    - pattern: urllib.request.urlopen(..., $S.format(..., request.$W[...], ...), ...)
+    - pattern: urllib.request.urlopen(..., $S % request.$W[...], ...)
+    - pattern: urllib.request.urlopen(..., f"...{request.$W[...]}...", ...)
+    - pattern: urllib.request.urlopen(..., request.$W[...], ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        urllib.request.urlopen(..., $DATA, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        $INTERM = $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        urllib.request.urlopen(..., $STR.format(..., $DATA, ...), ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        $INTERM = $STR.format(..., $DATA, ...)
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        urllib.request.urlopen(..., $STR % $DATA, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        $INTERM = $STR % $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        urllib.request.urlopen(..., f"...{$DATA}...", ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        $INTERM = f"...{$DATA}..."
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        urllib.request.urlopen(..., $STR + $DATA, ...)
+    - pattern: |
+        $DATA = request.$W[...]
+        ...
+        $INTERM = $STR + $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: $A = urllib.request.urlopen(..., request.$W[...], ...)
+    - pattern: return urllib.request.urlopen(..., request.$W[...], ...)
+    - pattern: urllib.request.urlopen(..., $S.format(..., request.$W, ...), ...)
+    - pattern: urllib.request.urlopen(..., $S % request.$W, ...)
+    - pattern: urllib.request.urlopen(..., f"...{request.$W}...", ...)
+    - pattern: urllib.request.urlopen(..., request.$W, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        urllib.request.urlopen(..., $DATA, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        $INTERM = $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        urllib.request.urlopen(..., $STR.format(..., $DATA, ...), ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        $INTERM = $STR.format(..., $DATA, ...)
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        urllib.request.urlopen(..., $STR % $DATA, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        $INTERM = $STR % $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        urllib.request.urlopen(..., f"...{$DATA}...", ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        $INTERM = f"...{$DATA}..."
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        urllib.request.urlopen(..., $STR + $DATA, ...)
+    - pattern: |
+        $DATA = request.$W
+        ...
+        $INTERM = $STR + $DATA
+        ...
+        urllib.request.urlopen(..., $INTERM, ...)
+    - pattern: $A = urllib.request.urlopen(..., request.$W, ...)
+    - pattern: return urllib.request.urlopen(..., request.$W, ...)
+  severity: ERROR

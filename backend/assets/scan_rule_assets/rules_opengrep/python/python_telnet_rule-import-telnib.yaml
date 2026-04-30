@@ -1,0 +1,35 @@
+rules:
+- id: python_telnet_rule-import-telnib
+  languages:
+  - python
+  message: |
+    检测到不安全明文通信风险（规则：python_telnet_rule-import-telnib）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS
+    等加密通道并校验证书。 保留的关键标识：https://www.paramiko.org/、`paramiko`。
+  metadata:
+    cwe: CWE-319
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    shortDescription: Cleartext transmission of sensitive information
+    security-severity: Medium
+  patterns:
+  - pattern: import telnetlib
+  severity: ERROR
+- id: python_telnet_rule-import-telnib_1
+  languages:
+  - python
+  message: |
+    检测到不安全明文通信风险（规则：python_telnet_rule-import-telnib_1）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS
+    等加密通道并校验证书。 保留的关键标识：https://www.paramiko.org/、`paramiko`。
+  metadata:
+    cwe: CWE-319
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    shortDescription: Cleartext transmission of sensitive information
+    security-severity: Medium
+  patterns:
+  - pattern: import telnetlib
+  severity: ERROR

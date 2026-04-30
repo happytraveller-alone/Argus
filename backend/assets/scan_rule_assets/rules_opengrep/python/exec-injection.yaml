@@ -1,0 +1,112 @@
+rules:
+- id: exec-injection
+  languages:
+  - python
+  severity: ERROR
+  message: |
+    检测到代码执行/模板注入风险（规则：exec-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：'exec'。
+  metadata:
+    cwe: 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (''Eval Injection'')'
+    owasp: 'A1: Injection'
+    references:
+    - https://owasp.org/www-community/attacks/Code_Injection
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+      - pattern-either:
+        - pattern: exec(..., <... $ROUTEVAR ...>, ...)
+        - pattern: |
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            exec(..., <... $INTERM ...>, ...)
+    - patterns:
+      - pattern-either:
+        - pattern: exec(..., <... flask.request.$W.get(...) ...>, ...)
+        - pattern: exec(..., <... flask.request.$W[...] ...>, ...)
+        - pattern: exec(..., <... flask.request.$W(...) ...>, ...)
+        - pattern: exec(..., <... flask.request.$W ...>, ...)
+    - patterns:
+      - pattern-either:
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W.get(...) ...>\n... \n"
+          - pattern: exec(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W[...] ...>\n... \n"
+          - pattern: exec(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W(...) ...>\n... \n"
+          - pattern: exec(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W ...>\n... \n"
+          - pattern: exec(..., <... $INTERM ...>, ...)
+- id: exec-injection_1
+  languages:
+  - python
+  message: |
+    检测到代码执行/模板注入风险（规则：exec-injection_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (''Eval Injection'')'
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://nedbatchelder.com/blog/201206/exec_really_is_dangerous.html
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  pattern-either:
+  - patterns:
+    - pattern: exec(...)
+    - pattern-either:
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+            exec(..., <... $ROUTEVAR ...>, ...)
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            exec(..., <... $INTERM ...>, ...)
+  - pattern: exec(..., <... flask.request.$W.get(...) ...>, ...)
+  - pattern: exec(..., <... flask.request.$W[...] ...>, ...)
+  - pattern: exec(..., <... flask.request.$W(...) ...>, ...)
+  - pattern: exec(..., <... flask.request.$W ...>, ...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W.get(...) ...>
+        ...
+        exec(..., <... $INTERM ...>, ...)
+    - pattern: exec(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W[...] ...>
+        ...
+        exec(..., <... $INTERM ...>, ...)
+    - pattern: exec(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W(...) ...>
+        ...
+        exec(..., <... $INTERM ...>, ...)
+    - pattern: exec(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W ...>
+        ...
+        exec(..., <... $INTERM ...>, ...)
+    - pattern: exec(...)
+  severity: ERROR

@@ -1,0 +1,19 @@
+rules:
+- id: sprintf-mail-address
+  pattern-either:
+  - pattern: fmt.Sprintf(`"%s" <%s>`, $NAME, $EMAIL)
+  - pattern: fmt.Sprintf(`"%s"<%s>`, $NAME, $EMAIL)
+  - pattern: fmt.Sprintf("\"%s\"<%s>", $NAME, $EMAIL)
+  - pattern: fmt.Sprintf("\"%s\" <%s>", $NAME, $EMAIL)
+  - pattern: fmt.Sprintf("%s<%s>", $NAME, $EMAIL)
+  - pattern: fmt.Sprintf("%s <%s>", $NAME, $EMAIL)
+  message: use net/mail Address.String() instead of fmt.Sprintf()
+  fix: (&mail.Address{Name:$NAME, Address:$EMAIL}).String()
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-93: Improper Neutralization of CRLF Sequences'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    - 'CWE-20: Improper Input Validation'

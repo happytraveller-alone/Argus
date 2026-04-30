@@ -1,0 +1,100 @@
+rules:
+- id: java_endpoint_rule-ManuallyConstructedURLs
+  languages:
+  - java
+  severity: ERROR
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：java_endpoint_rule-ManuallyConstructedURLs）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+  options:
+    interfile: true
+  metadata:
+    security-severity: CRITICAL
+    cwe: CWE-918
+    owasp:
+    - A1:2017-Injection
+    - A10:2021-Server-Side Request Forgery
+    shortDescription: Detect manually constructed URLs
+    references:
+    - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    category: security
+    technology:
+    - java
+    - spring
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+    interfile: true
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - Server-Side Request Forgery (SSRF)
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
+    - metavariable-regex:
+        metavariable: $TYPE
+        regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
+    - metavariable-regex:
+        metavariable: $REQ
+        regex: (RequestBody|PathVariable|RequestParam|RequestHeader|CookieValue|ModelAttribute)
+    - focus-metavariable: $SOURCE
+  pattern-sinks:
+  - pattern-either:
+    - pattern: new URL($ONEARG)
+    - patterns:
+      - pattern-either:
+        - pattern: |
+            "$URLSTR" + ...
+        - pattern: |
+            "$URLSTR".concat(...)
+        - patterns:
+          - pattern-inside: |
+              StringBuilder $SB = new StringBuilder("$URLSTR");
+              ...
+          - pattern: $SB.append(...)
+        - patterns:
+          - pattern-inside: |
+              $VAR = "$URLSTR";
+              ...
+          - pattern: $VAR += ...
+        - patterns:
+          - pattern: String.format("$URLSTR", ...)
+          - pattern-not: String.format("$URLSTR", "...", ...)
+        - patterns:
+          - pattern-inside: |
+              String $VAR = "$URLSTR";
+              ...
+          - pattern: String.format($VAR, ...)
+      - metavariable-regex:
+          metavariable: $URLSTR
+          regex: http(s?)://%(v|s|q).*
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: "if($VALIDATION){\n  ...\n  new URL($ONEARG);\n  ...\n} \n"
+      - pattern: |
+          $A = $VALIDATION;
+          ...
+          if($A){
+            ...
+            new URL($ONEARG);
+            ...
+          }
+    - metavariable-pattern:
+        metavariable: $VALIDATION
+        pattern-either:
+        - pattern: "$AL.contains(...)  \n"
+        - pattern: |
+            $AL.indexOf(...) != -1

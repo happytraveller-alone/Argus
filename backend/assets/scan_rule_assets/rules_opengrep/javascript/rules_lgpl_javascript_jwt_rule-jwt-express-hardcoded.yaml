@@ -1,0 +1,38 @@
+rules:
+- id: rules_lgpl_javascript_jwt_rule-jwt-express-hardcoded
+  patterns:
+  - pattern-either:
+    - pattern-inside: |
+        import { ..., $JWT,... } from 'express-jwt';
+        ...
+    - pattern-inside: |
+        var {..., expressjwt: $JWT,... } = require('express-jwt');
+        ...
+  - pattern-either:
+    - pattern: $JWT(<...{...,secret:"...",...}...>)
+    - patterns:
+      - pattern-inside: |
+          $OPTS = <... {secret: "..."} ...>;
+          ...
+      - pattern: $JWT(<... $OPTS ...>,...)
+    - patterns:
+      - pattern-inside: |
+          $OPTS = <... {secret: "..."} ...>;
+          ...
+          $OPTS2 = <... $OPTS ...>;
+          ...
+      - pattern: $JWT(<... $OPTS2 ...>,...)
+  message: |
+    检测到JWT
+    验证/密钥配置风险（规则：rules_lgpl_javascript_jwt_rule-jwt-express-hardcoded）。危害：令牌可能被伪造、绕过签名校验，或因硬编码密钥泄露导致身份冒用。建议：强制校验签名和算法，使用安全随机密钥并通过配置/密钥管理系统加载。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    cwe: CWE-522
+    shortDescription: Insufficiently protected credentials
+    security-severity: CRITICAL
+    category: security

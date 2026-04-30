@@ -1,0 +1,141 @@
+rules:
+- id: express-expat-xxe
+  message: |
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：express-expat-xxe）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+  metadata:
+    owasp: 'A4: XML External Entities (XXE)'
+    cwe: 'CWE-611: Improper Restriction of XML External Entity Reference'
+  severity: ERROR
+  languages:
+  - javascript
+  patterns:
+  - pattern-inside: |
+      ...
+      require('node-expat');
+      ...
+  - pattern-inside: |
+      ...
+      require('express');
+      ...
+  - pattern-either:
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern-inside: |
+        ...
+        $PARSER = new $EXPAT.Parser(...);
+        ...
+    - pattern-inside: |
+        ...
+        $PARSER = new Parser(...);
+        ...
+  - pattern-either:
+    - pattern: $PARSER.parse(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PARSER.parse(<... $REQ.$BODY ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PARSER.parse(<... $INPUT ...>,...);
+    - pattern: |
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PARSER.parse(<... $INPUT ...>,...);
+    - pattern: $PARSER.write(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $PARSER.write(<... $REQ.$BODY ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $PARSER.write(<... $INPUT ...>,...);
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $PARSER.write(<... $INPUT ...>,...);
+- id: express-expat-xxe_1
+  languages:
+  - javascript
+  message: |
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：express-expat-xxe_1）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+  metadata:
+    asvs:
+      control_id: 5.5.2 Insecue XML Deserialization
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v55-deserialization-prevention
+      section: V5 Validation, Sanitization and Encoding
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-611: Improper Restriction of XML External Entity Reference'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    interfile: true
+    likelihood: MEDIUM
+    owasp:
+    - A04:2017 - XML External Entities (XXE)
+    - A05:2021 - Security Misconfiguration
+    references:
+    - https://github.com/astro/node-expat
+    subcategory:
+    - vuln
+    technology:
+    - express
+  mode: taint
+  options:
+    interfile: true
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $XML = require('node-expat')
+          ...
+      - pattern-inside: |
+          import $XML from 'node-expat'
+          ...
+      - pattern-inside: |
+          import * as $XML from 'node-expat'
+          ...
+    - pattern-either:
+      - pattern-inside: |
+          $PARSER = new $XML.Parser(...);
+          ...
+    - pattern-either:
+      - pattern: $PARSER.parse($QUERY)
+      - pattern: $PARSER.write($QUERY)
+    - focus-metavariable: $QUERY
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
+      - patterns:
+        - pattern-either:
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: ^(get|post|put|head|delete|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
+          {...}
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+  severity: ERROR

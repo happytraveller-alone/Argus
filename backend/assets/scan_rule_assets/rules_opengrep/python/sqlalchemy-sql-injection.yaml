@@ -1,0 +1,57 @@
+rules:
+- id: sqlalchemy-sql-injection
+  message: |
+    检测到SQL 注入风险（规则：sqlalchemy-sql-injection）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM
+    的安全 API，避免拼接原始 SQL。 保留的关键标识："bindparams"。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://docs.sqlalchemy.org/en/14/tutorial/data_select.html#tutorial-selecting-data
+    technology:
+    - pyramid
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: HIGH
+    confidence: MEDIUM
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        from pyramid.view import view_config
+        ...
+        @view_config( ... )
+        def $VIEW($REQ):
+          ...
+    - pattern: $REQ.$ANYTHING
+    - pattern-not: $REQ.dbsession
+  pattern-sinks:
+  - patterns:
+    - pattern-inside: |
+        $QUERY = $REQ.dbsession.query(...)
+        ...
+    - pattern-either:
+      - pattern: |
+          $QUERY.$SQLFUNC("...".$FORMATFUNC(..., $SINK, ...))
+      - pattern: |
+          $QUERY.join(...).$SQLFUNC("...".$FORMATFUNC(..., $SINK, ...))
+    - pattern: $SINK
+    - metavariable-regex:
+        metavariable: $SQLFUNC
+        regex: (group_by|order_by|distinct|having|filter)
+    - metavariable-regex:
+        metavariable: $FORMATFUNC
+        regex: (?!bindparams)
+  fix-regex:
+    regex: format
+    replacement: bindparams

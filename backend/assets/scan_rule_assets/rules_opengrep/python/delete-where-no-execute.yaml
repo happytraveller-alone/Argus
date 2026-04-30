@@ -1,0 +1,17 @@
+rules:
+- id: delete-where-no-execute
+  patterns:
+  - pattern: $X.delete().where(...)
+  - pattern-not-inside: $X.delete().where(...).execute()
+  - pattern-not-inside: $C.execute(...)
+  message: |
+    检测到SQL 注入风险（规则：delete-where-no-execute）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全
+    API，避免拼接原始 SQL。 保留的关键标识：delete()、where(...)、filter(...)。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-840: Business Logic Errors'
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-665: Improper Initialization'

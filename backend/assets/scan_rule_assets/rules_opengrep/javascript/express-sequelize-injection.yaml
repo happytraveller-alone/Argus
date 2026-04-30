@@ -1,0 +1,77 @@
+rules:
+- id: express-sequelize-injection
+  message: |
+    检测到SQL 注入风险（规则：express-sequelize-injection）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM
+    的安全 API，避免拼接原始 SQL。
+  options:
+    interfile: true
+  metadata:
+    interfile: true
+    references:
+    - https://sequelize.org/docs/v6/core-concepts/raw-queries/#replacements
+    category: security
+    technology:
+    - express
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: HIGH
+    impact: HIGH
+    confidence: HIGH
+  languages:
+  - javascript
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
+      - patterns:
+        - pattern-either:
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: ^(get|post|put|head|delete|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+      - pattern: $REQ.files.$ANYTHING.data.toString('utf8')
+      - pattern: $REQ.files.$ANYTHING['data'].toString('utf8')
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
+          {...}
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+      - pattern: files.$ANYTHING.data.toString('utf8')
+      - pattern: files.$ANYTHING['data'].toString('utf8')
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: sequelize.query($QUERY,...)
+        - pattern: $DB.sequelize.query($QUERY,...)
+      - focus-metavariable: $QUERY
+  pattern-sanitizers:
+  - pattern-either:
+    - pattern: parseInt(...)
+    - pattern: $FUNC. ... .hash(...)

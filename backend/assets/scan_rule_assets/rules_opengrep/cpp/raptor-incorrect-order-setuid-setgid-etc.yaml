@@ -1,0 +1,79 @@
+rules:
+- id: raptor-incorrect-order-setuid-setgid-etc
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/696
+    - https://www.usenix.org/legacy/events/sec02/full_papers/chen/chen.pdf
+    - https://g.co/kgs/PCHQjJ
+    - https://github.com/struct/mms
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-696: Incorrect Behavior Order'
+    - 'CWE-269: Improper Privilege Management'
+    - 'CWE-284: Improper Access Control'
+  message: |
+    检测到权限/访问控制缺陷（规则：raptor-incorrect-order-setuid-setgid-etc）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。 保留的关键标识：gid()、uid()、seteuid()、setuid()、set(e)。
+  severity: ERROR
+  languages:
+  - cpp
+  pattern-either:
+  - patterns:
+    - pattern: |
+        setuid(...);
+        ...
+        setgid(...);
+    - pattern-not: |
+        setuid(0);
+        ...
+        setgid(...);
+  - patterns:
+    - pattern: |
+        seteuid(...);
+        ...
+        setegid(...);
+    - pattern-not: |
+        seteuid(0);
+        ...
+        setegid(...);
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        setegid(...);
+  - patterns:
+    - pattern: |
+        seteuid(...);
+        ...
+        setuid(...);
+    - pattern-not: |
+        seteuid(0);
+        ...
+        setuid(...);
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        setuid(...);
+  - patterns:
+    - pattern: |
+        seteuid(...);
+        ...
+        seteuid(...);
+    - pattern-not: |
+        seteuid(0);
+        ...
+        seteuid(...);
+    - pattern-not: |
+        seteuid(...);
+        ...
+        seteuid(0);
+    - pattern-not-inside: |
+        seteuid(...);
+        ...
+        seteuid(0);
+        ...
+        seteuid(...);

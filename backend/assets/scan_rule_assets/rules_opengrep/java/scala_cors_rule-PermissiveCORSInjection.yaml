@@ -1,0 +1,51 @@
+rules:
+- id: scala_cors_rule-PermissiveCORSInjection
+  languages:
+  - java
+  message: |
+    检测到CORS 配置不当风险（规则：scala_cors_rule-PermissiveCORSInjection）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
+  metadata:
+    category: security
+    cwe: CWE-942
+    shortDescription: Permissive Cross-domain Policy with Untrusted Domains
+    technology:
+    - java
+    security-severity: Low
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: (HttpServletResponse $RES).setHeader("$HEADER", ...)
+      - pattern: (HttpServletResponse $RES).addHeader("$HEADER", ...)
+    - metavariable-regex:
+        metavariable: $HEADER
+        regex: (?i)(Access-Control-Allow-Origin)
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  severity: ERROR
+- id: scala_cors_rule-PermissiveCORSInjection_1
+  languages:
+  - java
+  message: |
+    检测到CORS 配置不当风险（规则：scala_cors_rule-PermissiveCORSInjection_1）。危害：过宽的跨域策略可能允许恶意站点读取受保护接口响应或扩大 CSRF
+    影响。建议：限制允许的 Origin，并避免反射任意来源。
+  metadata:
+    category: security
+    cwe: CWE-942
+    shortDescription: Permissive Cross-domain Policy with Untrusted Domains
+    technology:
+    - java
+    security-severity: Low
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: (HttpServletResponse $RES).setHeader("$HEADER", ...)
+      - pattern: (HttpServletResponse $RES).addHeader("$HEADER", ...)
+    - metavariable-regex:
+        metavariable: $HEADER
+        regex: (?i)(Access-Control-Allow-Origin)
+  pattern-sources:
+  - pattern: (HttpServletRequest $REQ).getParameter(...)
+  severity: ERROR

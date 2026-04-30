@@ -1,0 +1,36 @@
+rules:
+- id: pyramid-csrf-origin-check-disabled-globally
+  patterns:
+  - pattern-inside: |
+      $CONFIG.set_default_csrf_options(..., check_origin=$CHECK_ORIGIN, ...)
+  - pattern: $CHECK_ORIGIN
+  - metavariable-comparison:
+      metavariable: $CHECK_ORIGIN
+      comparison: $CHECK_ORIGIN == False
+  message: |
+    检测到CSRF
+    防护缺失风险（规则：pyramid-csrf-origin-check-disabled-globally）。危害：攻击者可能诱导已登录用户发起非预期请求，造成状态变更或敏感操作。建议：为危险请求启用
+    CSRF token、SameSite Cookie 或等效校验。
+    保留的关键标识：pyramid.config.Configurator.set_default_csrf_options(check_origin=True)。
+  languages:
+  - python
+  severity: ERROR
+  fix: |
+    True
+  metadata:
+    cwe:
+    - 'CWE-352: Cross-Site Request Forgery (CSRF)'
+    owasp:
+    - A01:2021 - Broken Access Control
+    category: security
+    technology:
+    - pyramid
+    references:
+    - https://owasp.org/Top10/A01_2021-Broken_Access_Control
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: LOW
+    confidence: MEDIUM

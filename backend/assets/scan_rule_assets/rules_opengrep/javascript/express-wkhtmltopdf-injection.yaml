@@ -1,0 +1,100 @@
+rules:
+- id: express-wkhtmltopdf-injection
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：express-wkhtmltopdf-injection）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`phantom`。
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
+  severity: ERROR
+  languages:
+  - javascript
+  patterns:
+  - pattern-inside: |
+      ...
+      $WK = require('wkhtmltopdf');
+      ...
+  - pattern-inside: |
+      ...
+      require('express');
+      ...
+  - pattern-either:
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: $WK(<... $REQ.$QUERY.$FOO ...>,...)
+    - pattern: $WK(<... $REQ.$BODY ...>,...)
+    - pattern: |
+        $INPUT = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $WK(<... $INPUT ...>,...);
+    - pattern: |-
+        $INPUT = <... $REQ.$BODY ...>;
+        ...
+        $WK(<... $INPUT ...>,...);
+- id: express-wkhtmltopdf-injection_1
+  languages:
+  - javascript
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：express-wkhtmltopdf-injection_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+    保留的关键标识：`wkhtmltopdf`。
+  metadata:
+    category: security
+    confidence: LOW
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery (SSRF)'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: MEDIUM
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    references:
+    - https://www.npmjs.com/package/wkhtmltopdf
+    subcategory:
+    - vuln
+    technology:
+    - express
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern-inside: |
+        $WK = require('wkhtmltopdf');
+        ...
+    - pattern: $WK($SINK,...)
+    - focus-metavariable: $SINK
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
+      - patterns:
+        - pattern-either:
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
+          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: ^(get|post|put|head|delete|options)$
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
+          {...}
+      - pattern-inside: |
+          ({ $REQ }: Request,$RES: Response) => {...}
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+  severity: ERROR

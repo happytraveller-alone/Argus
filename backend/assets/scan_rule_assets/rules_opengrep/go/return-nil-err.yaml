@@ -1,0 +1,20 @@
+rules:
+- id: return-nil-err
+  patterns:
+  - pattern-either:
+    - pattern: |
+        if err == nil {
+                return err
+        }
+    - pattern: |
+        if err == nil {
+                return ..., err
+        }
+  message: return nil err instead of nil value
+  languages:
+  - go
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-253: Incorrect Check for Function Return Value'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'

@@ -1,0 +1,21 @@
+rules:
+- id: string-is-comparison
+  patterns:
+  - pattern-not: $S is None
+  - pattern-not: type($X) is $T
+  - pattern-not: $S is True
+  - pattern-not: $S is False
+  - pattern-not: $S is ""
+  - pattern-either:
+    - pattern: $S is "..."
+    - pattern: '"..." is $S'
+  message: |
+    检测到对象身份比较缺陷（规则：string-is-comparison）。危害：把值比较写成对象身份比较会导致结果依赖解释器对象复用，产生不稳定或错误的判断。建议：比较字符串、数字等值语义对象时使用
+    `==`，仅在判断同一对象时使用 `is`。
+    保留的关键标识：https://github.com/satwikkansal/wtfpython#-how-not-to-use-is-operator"、'is'。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-480: Use of Incorrect Operator'

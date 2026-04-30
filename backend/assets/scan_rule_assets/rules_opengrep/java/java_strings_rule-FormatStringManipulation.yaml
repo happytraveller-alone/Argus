@@ -1,0 +1,103 @@
+rules:
+- id: java_strings_rule-FormatStringManipulation
+  languages:
+  - java
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          String $INPUT = (HttpServletRequest $REQ).getParameter(...);
+          ...
+      - pattern-inside: |
+          String $FORMAT_STR = ... + $INPUT;
+          ...
+    - patterns:
+      - pattern-inside: |
+          String $INPUT = (HttpServletRequest $REQ).getParameter(...);
+          ...
+      - pattern-inside: |
+          String $FORMAT_STR = ... + $INPUT + ...;
+          ...
+    - pattern-inside: |
+        String $FORMAT_STR = ... + (HttpServletRequest $REQ).getParameter(...) + ...;
+        ...
+    - pattern-inside: |
+        String $FORMAT_STR = ... + (HttpServletRequest $REQ).getParameter(...);
+        ...
+  - pattern-either:
+    - pattern: String.format($FORMAT_STR, ...);
+    - pattern: String.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.util.Formatter $F).format($FORMAT_STR, ...);
+    - pattern: (java.util.Formatter $F).format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).printf($FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).printf(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).format($FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: System.out.printf($FORMAT_STR, ...);
+    - pattern: System.out.printf(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: System.out.format($FORMAT_STR, ...);
+    - pattern: System.out.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+  message: |
+    检测到硬编码凭据风险（规则：java_strings_rule-FormatStringManipulation）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：`String.format`。
+  metadata:
+    shortDescription: Use of externally-controlled format string
+    cwe: CWE-134
+    category: security
+    confidence: HIGH
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  severity: ERROR
+- id: java_strings_rule-FormatStringManipulation_1
+  languages:
+  - java
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          String $INPUT = (HttpServletRequest $REQ).getParameter(...);
+          ...
+      - pattern-inside: |
+          String $FORMAT_STR = ... + $INPUT;
+          ...
+    - patterns:
+      - pattern-inside: |
+          String $INPUT = (HttpServletRequest $REQ).getParameter(...);
+          ...
+      - pattern-inside: |
+          String $FORMAT_STR = ... + $INPUT + ...;
+          ...
+    - pattern-inside: |
+        String $FORMAT_STR = ... + (HttpServletRequest $REQ).getParameter(...) + ...;
+        ...
+    - pattern-inside: |
+        String $FORMAT_STR = ... + (HttpServletRequest $REQ).getParameter(...);
+        ...
+  - pattern-either:
+    - pattern: String.format($FORMAT_STR, ...);
+    - pattern: String.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.util.Formatter $F).format($FORMAT_STR, ...);
+    - pattern: (java.util.Formatter $F).format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).printf($FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).printf(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).format($FORMAT_STR, ...);
+    - pattern: (java.io.PrintStream $F).format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: System.out.printf($FORMAT_STR, ...);
+    - pattern: System.out.printf(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+    - pattern: System.out.format($FORMAT_STR, ...);
+    - pattern: System.out.format(java.util.Locale.$LOCALE, $FORMAT_STR, ...);
+  message: |
+    检测到硬编码凭据风险（规则：java_strings_rule-FormatStringManipulation_1）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：`String.format`。
+  metadata:
+    shortDescription: Use of externally-controlled format string
+    cwe: CWE-134
+    category: security
+    confidence: HIGH
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  severity: ERROR

@@ -1,0 +1,64 @@
+rules:
+- id: vm-runincontext-injection
+  message: |
+    检测到命令注入风险（规则：vm-runincontext-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`vm`。
+  metadata:
+    owasp:
+    - A03:2021 - Injection
+    cwe:
+    - 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'
+    category: security
+    technology:
+    - javascript
+    - aws-lambda
+    cwe2022-top25: true
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: MEDIUM
+    confidence: MEDIUM
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+  languages:
+  - javascript
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $EVENT
+    - pattern-either:
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          require('vm');
+          ...
+      - pattern-inside: |
+          import 'vm'
+          ...
+    - pattern-either:
+      - pattern: $VM.runInContext($X,...)
+      - pattern: $VM.runInNewContext($X,...)
+      - pattern: $VM.runInThisContext($X,...)
+      - pattern: $VM.compileFunction($X,...)
+      - pattern: new $VM.Script($X,...)
+      - pattern: new $VM.SourceTextModule($X,...)
+      - pattern: runInContext($X,...)
+      - pattern: runInNewContext($X,...)
+      - pattern: runInThisContext($X,...)
+      - pattern: compileFunction($X,...)
+      - pattern: new Script($X,...)
+      - pattern: new SourceTextModule($X,...)

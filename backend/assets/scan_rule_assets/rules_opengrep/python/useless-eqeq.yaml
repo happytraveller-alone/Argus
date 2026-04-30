@@ -1,0 +1,27 @@
+rules:
+- id: useless-eqeq
+  patterns:
+  - pattern-not-inside: |
+      def __eq__(...):
+          ...
+  - pattern-not-inside: |
+      def __cmp__(...):
+          ...
+  - pattern-not-inside: assert(...)
+  - pattern-not-inside: assert ...
+  - pattern-not-inside: assert ..., ...
+  - pattern-not-inside: assertTrue(...)
+  - pattern-not-inside: assertFalse(...)
+  - pattern-either:
+    - pattern: $X == $X
+    - pattern: $X != $X
+  - pattern-not: 1 == 1
+  message: |
+    检测到数值转换异常风险（规则：useless-eqeq）。危害：用户输入可生成 NaN 等特殊值，导致比较、排序或权限判断出现非预期行为。建议：在类型转换前拒绝特殊数值字符串并显式校验范围。
+    保留的关键标识：$X、math.isnan($X)、cmath.isnan($X)、`$X == $X`、`$X != $X`、`math.isnan($X)`、`cmath.isnan($X)`。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'

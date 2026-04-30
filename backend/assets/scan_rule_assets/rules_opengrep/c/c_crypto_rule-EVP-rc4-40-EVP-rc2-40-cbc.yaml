@@ -1,0 +1,22 @@
+rules:
+- id: c_crypto_rule-EVP-rc4-40-EVP-rc2-40-cbc
+  languages:
+  - c
+  message: |
+    检测到弱加密/加密参数错误风险（规则：c_crypto_rule-EVP-rc4-40-EVP-rc2-40-cbc）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
+    保留的关键标识：https://libsodium.gitbook.io/doc/secret-key_cryptography/secretstream、`crypto_secretstream_xchacha20poly1305`。
+  metadata:
+    shortDescription: Insecure stream cipher (RC4)
+    cwe: CWE-327
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: Medium
+    category: security
+  pattern-either:
+  - pattern: EVP_rc4_40(...)
+  - pattern: EVP_rc2_40_cbc(...)
+  - pattern: EVP_rc2_64_cbc(...)
+  severity: ERROR

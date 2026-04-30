@@ -1,0 +1,144 @@
+rules:
+- id: java_inject_rule-SqlInjection
+  languages:
+  - java
+  options:
+    taint_assume_safe_booleans: true
+    taint_assume_safe_numbers: true
+  message: |
+    检测到SQL 注入风险（规则：java_inject_rule-SqlInjection）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或
+    ORM 的安全 API，避免拼接原始 SQL。
+    保留的关键标识：https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html、`gt`、`lt`、`PreparedStatement`。
+  mode: taint
+  pattern-sources:
+  - pattern: (javax.servlet.http.HttpServletRequest $R).$METHOD(...)
+  - pattern: (java.util.Scanner $S).$METHOD(...)
+  - pattern: (java.util.stream.Stream).$METHOD(...)
+  - pattern: (java.util.StringJoiner $SJ).toString(...)
+  - pattern: (java.sql.ResultSet.getString $R).$METHOD(...)
+  - pattern: (java.lang.System $S).getProperty(...)
+  - pattern: (java.lang.System $S).getenv(...)
+  - pattern: (java.lang.StringBuilder $SB).toString(...)
+  - pattern: (java.io.FileInputStream $F).read(...)
+  - pattern: (java.io.FileReader $F).read(...)
+  - pattern: (java.net.Socket $S).getInputStream(...)
+  - pattern: (java.net.Socket $S).getOutputStream(...)
+  - pattern: (java.net.DatagramSocket $S).receive(...)
+  - pattern: (java.net.DatagramSocket $S).getInputStream(...)
+  - pattern: java.nio.file.Files.readAllBytes(...)
+  - pattern: java.nio.file.Files.readAllLines(...)
+  - pattern: java.nio.file.Files.lines(...)
+  - pattern: java.nio.file.Files.newBufferedReader(...)
+  - pattern: org.apache.commons.io.IOUtils.toString(...)
+  - pattern: org.apache.commons.io.IOUtils.readLines(...)
+  - pattern: org.apache.commons.io.IOUtils.toByteArray(...)
+  - pattern: (com.fasterxml.jackson.databind.ObjectMapper $OM).readValue(...)
+  - pattern: (com.fasterxml.jackson.databind.ObjectMapper $OM).treeToValue(...)
+  - pattern: $CLASS.$METHOD(..., (javax.servlet.http.HttpServletRequest $R), ...)
+  - pattern: $FUNC(..., (javax.servlet.http.HttpServletRequest $R), ...)
+  - patterns:
+    - pattern-inside: $FUNC(..., String $X, ...) { ... }
+    - focus-metavariable: $X
+  pattern-propagators:
+  - pattern: $LIST.add($X)
+    from: $X
+    to: $LIST
+  - pattern: $MAP.put(..., $X)
+    from: $X
+    to: $MAP
+  - pattern: $STR.concat($X)
+    from: $X
+    to: $STR
+  - pattern: $STR = String.format(..., $X, ...)
+    from: $X
+    to: $STR
+  - pattern: $STR = String.join(..., $X, ...)
+    from: $X
+    to: $STR
+  - pattern: $SB.append($X)
+    from: $X
+    to: $SB
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: (javax.jdo.PersistenceManager $PM).newQuery($ARG)
+      - pattern: (javax.jdo.PersistenceManager $PM).newQuery(..., $ARG)
+      - pattern: (javax.jdo.Query $Q).setFilter($ARG)
+      - pattern: (javax.jdo.Query $Q).setGrouping($ARG)
+      - pattern: org.hibernate.criterion.Restrictions.sqlRestriction($ARG, ...)
+      - pattern: (org.hibernate.Session $S).createQuery((String $ARG), ...)
+      - pattern: (org.hibernate.Session $S).createSQLQuery($ARG, ...)
+      - pattern: (org.hibernate.Session $S).connection().prepareStatement($ARG)
+      - pattern: (java.sql.Statement $S).executeQuery($ARG, ...)
+      - pattern: (java.sql.Statement $S).execute($ARG, ...)
+      - pattern: (java.sql.Statement $S).executeUpdate($ARG, ...)
+      - pattern: (java.sql.Statement $S).executeLargeUpdate($ARG, ...)
+      - pattern: (java.sql.Statement $S).addBatch($ARG, ...)
+      - pattern: (java.sql.PreparedStatement $S).executeQuery($ARG, ...)
+      - pattern: (java.sql.PreparedStatement $S).execute($ARG, ...)
+      - pattern: (java.sql.PreparedStatement $S).executeUpdate($ARG, ...)
+      - pattern: (java.sql.PreparedStatement $S).executeLargeUpdate($ARG, ...)
+      - pattern: (java.sql.PreparedStatement $S).addBatch($ARG, ...)
+      - pattern: (java.sql.Connection $S).prepareCall($ARG, ...)
+      - pattern: (java.sql.Connection $S).prepareStatement($ARG, ...)
+      - pattern: (java.sql.Connection $S).nativeSQL($ARG, ...)
+      - pattern: new org.springframework.jdbc.core.PreparedStatementCreatorFactory($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.PreparedStatementCreatorFactory $F).newPreparedStatementCreator($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).batchUpdate($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).execute($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).query($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForList($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForMap($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForObject($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForObject($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForRowSet($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForInt($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).queryForLong($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcOperations $O).update($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).batchUpdate($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).execute($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).query($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForList($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForMap($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForObject($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForRowSet($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForInt($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).queryForLong($ARG, ...)
+      - pattern: (org.springframework.jdbc.core.JdbcTemplate $O).update($ARG, ...)
+      - pattern: (io.vertx.sqlclient.SqlClient $O).query($ARG, ...)
+      - pattern: (io.vertx.sqlclient.SqlClient $O).preparedQuery($ARG, ...)
+      - pattern: (io.vertx.sqlclient.SqlConnection $O).prepare($ARG, ...)
+      - pattern: (org.apache.turbine.om.peer.BasePeer $O).executeQuery($ARG, ...)
+      - pattern: org.apache.torque.util.BasePeer.executeQuery($ARG, ...)
+      - pattern: org.apache.torque.util.BasePeer.executeStatement($ARG, ...)
+      - pattern: (javax.persistence.EntityManager $O).createQuery($ARG, ...)
+      - pattern: (javax.persistence.EntityManager $O).createNativeQuery($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).createQuery($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).createScript($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).createUpdate($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).execute($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).prepareBatch($ARG, ...)
+      - pattern: (org.jdbi.v3.core.Handle $H).select($ARG, ...)
+      - pattern: new org.jdbi.v3.core.statement.Script($H, $ARG)
+      - pattern: new org.jdbi.v3.core.statement.Update($H, $ARG)
+      - pattern: new org.jdbi.v3.core.statement.PreparedBatch($H, $ARG)
+    - focus-metavariable: $ARG
+  - patterns:
+    - pattern: (java.sql.Connection $S).createStatement(...).$SQLFUNC($ARG, ...)
+    - pattern-not: (java.sql.Connection $S).createStatement(...).$SQLFUNC("...")
+    - metavariable-regex:
+        metavariable: $SQLFUNC
+        regex: execute|executeQuery|createQuery|query|addBatch|nativeSQL|create|prepare
+  pattern-sanitizers:
+  - pattern: (CriteriaBuilder $CB).$ANY(...)
+  metadata:
+    shortDescription: Improper neutralization of special elements used in an SQL command ('SQL Injection')
+    category: security
+    cwe: CWE-89
+    technology:
+    - java
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+  severity: ERROR

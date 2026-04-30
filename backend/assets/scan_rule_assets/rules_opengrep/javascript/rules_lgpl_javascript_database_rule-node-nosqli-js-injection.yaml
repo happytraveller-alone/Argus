@@ -1,0 +1,63 @@
+rules:
+- id: rules_lgpl_javascript_database_rule-node-nosqli-js-injection
+  patterns:
+  - pattern-either:
+    - pattern: |
+        $OBJ.$FUNC({$where: <... $REQ.$FOO.$BAR ...>}, ...)
+    - pattern: |
+        $OBJ.$FUNC({$where: <... $REQ.$QUERY ...>}, ...)
+    - pattern: |
+        $NSQL = <... $REQ.$QUERY.$...>;
+        ...
+        $OBJ.$FUNC({$where: <... $NSQL ...>}, ...)
+    - pattern: |
+        $NSQL = <... $REQ.$QUERY ...>;
+        ...
+        $OBJ.$FUNC({$where: <... $NSQL ...>}, ...)
+    - pattern: |
+        $INP = $REQ.$FOO.$BAR;
+        ...
+        $QRY = {$where: <... $INP ...>};
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+    - pattern: |
+        $INP = $REQ.$FOO;
+        ...
+        $QRY = {$where: <... $INP ...>};
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+    - pattern: |
+        $QRY["$where"] = <... $REQ.$FOO ...>;
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+    - pattern: |
+        $QRY["$where"] = <... $REQ.$FOO.$BAR ...>;
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+    - pattern: |
+        $INP = $REQ.$FOO;
+        ...
+        $QRY["$where"] = <... $INP ...>;
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+    - pattern: |
+        $INP = $REQ.$FOO.$BAR;
+        ...
+        $QRY["$where"] = <... $INP ...>;
+        ...
+        $OBJ.$FUNC(<... $QRY ...>, ...)
+  message: |
+    检测到NoSQL
+    注入风险（规则：rules_lgpl_javascript_database_rule-node-nosqli-js-injection）。危害：攻击者可能构造查询条件绕过授权、扩大查询范围或篡改数据操作。建议：对查询对象和操作符做白名单校验，避免把用户输入直接作为查询结构。
+    保留的关键标识：$where。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-943
+    shortDescription: Improper neutralization of special elements in data query logic
+    security-severity: CRITICAL
+    category: security

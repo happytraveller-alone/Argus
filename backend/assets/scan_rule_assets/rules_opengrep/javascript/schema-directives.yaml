@@ -1,0 +1,25 @@
+rules:
+- id: schema-directives
+  message: |
+    检测到权限/访问控制缺陷（规则：schema-directives）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关 API
+    的返回值，在失败时停止敏感操作并按最小权限原则设计流程。 保留的关键标识：'schemaDirectives'。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-686: Function Call With Incorrect Argument Type'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: HIGH
+    technology:
+    - graphql
+    - apollo-graphql-server
+    description: Use of outdated ApolloServer option 'schemaDirectives'
+    references:
+    - https://www.apollographql.com/docs/apollo-server/schema/directives/#custom-directives
+  pattern-either:
+  - pattern: |
+      new ApolloServer({..., schemaDirectives: ..., ...})

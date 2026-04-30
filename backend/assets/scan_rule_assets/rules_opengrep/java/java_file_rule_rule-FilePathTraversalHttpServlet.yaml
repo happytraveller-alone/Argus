@@ -1,0 +1,60 @@
+rules:
+- id: java_file_rule_rule-FilePathTraversalHttpServlet
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    security-severity: CRITICAL
+    shortDescription: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')
+    cwe: CWE-22
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#PATH_TRAVERSAL_IN
+    references:
+    - https://www.owasp.org/index.php/Path_Traversal
+    category: security
+    technology:
+    - java
+    cwe2022-top25: true
+    cwe2021-top25: true
+    impact: MEDIUM
+    confidence: MEDIUM
+    license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    vulnerability_class:
+    - Path Traversal
+  message: |
+    检测到路径穿越/不安全解包风险（规则：java_file_rule_rule-FilePathTraversalHttpServlet）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+    保留的关键标识：org.apache.commons.io.FilenameUtils.getName(...)、FilenameUtils.getName(...)。
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          (HttpServletRequest $REQ)
+      - patterns:
+        - pattern-inside: |
+            (javax.servlet.http.Cookie[] $COOKIES) = (HttpServletRequest $REQ).getCookies(...); ...
+            for (javax.servlet.http.Cookie $COOKIE: $COOKIES) {
+              ...
+            }
+        - pattern: |
+            $COOKIE.getValue(...)
+      - patterns:
+        - pattern-inside: |
+            $TYPE[] $VALS = (HttpServletRequest $REQ).$GETFUNC(...);
+            ...
+        - pattern: |
+            $PARAM = $VALS[$INDEX];
+  pattern-sanitizers:
+  - pattern: org.apache.commons.io.FilenameUtils.getName(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          (java.io.File $FILE) = ...
+      - pattern: |
+          (java.io.FileOutputStream $FOS) = ...
+      - pattern: |
+          new java.io.FileInputStream(...)

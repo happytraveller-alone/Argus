@@ -1,0 +1,92 @@
+rules:
+- id: formatted-sql-string_1
+  languages:
+  - java
+  message: |
+    检测到SQL 注入风险（规则：formatted-sql-string_1）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全
+    API，避免拼接原始 SQL。 保留的关键标识：'connection.prepareStatement'。
+  metadata:
+    asvs:
+      control_id: 5.3.5 Injection
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v53-output-encoding-and-injection-prevention-requirements
+      section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+    - https://docs.oracle.com/javase/tutorial/jdbc/basics/prepared.html#create_ps
+    - https://software-security.sans.org/developer-how-to/fix-sql-injection-in-java-using-prepared-callable-statement
+    source-rule-url: https://find-sec-bugs.github.io/bugs.htm#SQL_INJECTION
+    subcategory:
+    - vuln
+    technology:
+    - java
+  mode: taint
+  options:
+    taint_assume_safe_booleans: true
+    taint_assume_safe_numbers: true
+  pattern-propagators:
+  - from: $X
+    pattern: (StringBuffer $S).append($X)
+    to: $S
+  - from: $X
+    pattern: (StringBuilder $S).append($X)
+    to: $S
+  pattern-sanitizers:
+  - patterns:
+    - pattern: (CriteriaBuilder $CB).$ANY(...)
+  pattern-sinks:
+  - patterns:
+    - pattern-not: $S.$SQLFUNC(<... "=~/.*TABLE *$/" ...>)
+    - pattern-not: $S.$SQLFUNC(<... "=~/.*TABLE %s$/" ...>)
+    - pattern-either:
+      - pattern: (Statement $S).$SQLFUNC(...)
+      - pattern: (PreparedStatement $P).$SQLFUNC(...)
+      - pattern: (Connection $C).createStatement(...).$SQLFUNC(...)
+      - pattern: (Connection $C).prepareStatement(...).$SQLFUNC(...)
+      - pattern: (EntityManager $EM).$SQLFUNC(...)
+    - metavariable-regex:
+        metavariable: $SQLFUNC
+        regex: execute|executeQuery|createQuery|query|addBatch|nativeSQL|create|prepare
+    requires: CONCAT
+  pattern-sources:
+  - label: INPUT
+    patterns:
+    - pattern-either:
+      - pattern: |
+          (HttpServletRequest $REQ)
+      - patterns:
+        - pattern-inside: |
+            $ANNOT $FUNC (..., $INPUT, ...) {
+              ...
+            }
+        - pattern: (String $INPUT)
+        - focus-metavariable: $INPUT
+  - label: CONCAT
+    patterns:
+    - pattern-either:
+      - pattern: $X + $INPUT
+      - pattern: $X += $INPUT
+      - pattern: String.format(..., $INPUT, ...)
+      - pattern: String.join(..., $INPUT, ...)
+      - pattern: (String $STR).concat($INPUT)
+      - pattern: $INPUT.concat(...)
+      - patterns:
+        - pattern-either:
+          - pattern: $STRB.append($INPUT)
+          - pattern: new $STRB(..., $INPUT, ...)
+        - metavariable-type:
+            metavariable: $STRB
+            type: StringBuilder
+    requires: INPUT
+  severity: ERROR

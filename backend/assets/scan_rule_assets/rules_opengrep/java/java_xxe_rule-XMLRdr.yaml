@@ -1,0 +1,51 @@
+rules:
+- id: java_xxe_rule-XMLRdr
+  languages:
+  - java
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：java_xxe_rule-XMLRdr）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+    保留的关键标识：https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html、https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java。
+  patterns:
+  - pattern-inside: |
+      $R = XMLReaderFactory.createXMLReader();
+      ...
+  - pattern-not-inside: |
+      $R.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      ...
+  - pattern: $R.parse(...);
+  metadata:
+    shortDescription: Improper restriction of XML external entity reference ('XXE')
+    category: security
+    cwe: CWE-611
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  severity: ERROR
+- id: java_xxe_rule-XMLRdr_1
+  languages:
+  - java
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：java_xxe_rule-XMLRdr_1）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。
+    保留的关键标识：https://docs.oracle.com/javase/9/docs/api/javax/xml/parsers/SAXParserFactory.html、https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java。
+  patterns:
+  - pattern-inside: |
+      $R = XMLReaderFactory.createXMLReader();
+      ...
+  - pattern-not-inside: |
+      $R.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      ...
+  - pattern: $R.parse(...);
+  metadata:
+    shortDescription: Improper restriction of XML external entity reference ('XXE')
+    category: security
+    cwe: CWE-611
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  severity: ERROR

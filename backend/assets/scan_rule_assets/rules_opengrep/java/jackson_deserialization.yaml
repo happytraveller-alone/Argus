@@ -1,0 +1,18 @@
+rules:
+- id: jackson_deserialization
+  patterns:
+  - pattern-either:
+    - pattern: |
+        import com.fasterxml.jackson.databind.ObjectMapper;
+        ...
+        $Z.enableDefaultTyping();
+  message: |
+    检测到不安全反序列化风险（规则：jackson_deserialization）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    cwe: cwe-502
+    owasp-mobile: m1
+    masvs: platform-8
+    reference: https://github.com/MobSF/owasp-mstg/blob/master/Document/0x05h-Testing-Platform-Interaction.md#testing-object-persistence-mstg-platform-8

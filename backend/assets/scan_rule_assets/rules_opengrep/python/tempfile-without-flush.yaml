@@ -1,0 +1,35 @@
+rules:
+- id: tempfile-without-flush
+  patterns:
+  - pattern-not: |
+      $F = tempfile.NamedTemporaryFile(...)
+      ...
+      $F.write(...)
+      ...
+      $F.flush()
+      ...
+      $F.name
+  - pattern-not: |
+      $F = tempfile.NamedTemporaryFile(...)
+      ...
+      $F.write(...)
+      ...
+      $F.close()
+      ...
+      $F.name
+  - pattern: |
+      $F = tempfile.NamedTemporaryFile(...)
+      ...
+      $F.name
+  message: |
+    检测到竞态条件/TOCTOU
+    风险（规则：tempfile-without-flush）。危害：检查和使用之间的状态变化可能被攻击者利用，导致权限绕过或操作错误目标。建议：避免先检查后使用的分离流程，使用原子操作或基于文件描述符的安全
+    API。 保留的关键标识：$F、flush()、close()。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-772: Missing Release of Resource'

@@ -1,0 +1,115 @@
+rules:
+- id: ssrf-requests
+  languages:
+  - python
+  severity: ERROR
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：ssrf-requests）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+  metadata:
+    cwe: 'CWE-918: Server-Side Request Forgery (SSRF)'
+    owasp: 'A1: Injection'
+    references:
+    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $ROUTE_FUNC(..., $ROUTEVAR, ...):
+            ...
+      - pattern-either:
+        - pattern: requests.$FUNC(..., <... $ROUTEVAR ...>, ...)
+        - pattern: |
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            requests.$FUNC(..., <... $INTERM ...>, ...)
+    - patterns:
+      - pattern-either:
+        - pattern: requests.$FUNC(..., <... flask.request.$W.get(...) ...>, ...)
+        - pattern: requests.$FUNC(..., <... flask.request.$W[...] ...>, ...)
+        - pattern: requests.$FUNC(..., <... flask.request.$W(...) ...>, ...)
+        - pattern: requests.$FUNC(..., <... flask.request.$W ...>, ...)
+    - patterns:
+      - pattern-either:
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W.get(...) ...>\n... \n"
+          - pattern: requests.$FUNC(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W[...] ...>\n... \n"
+          - pattern: requests.$FUNC(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W(...) ...>\n... \n"
+          - pattern: requests.$FUNC(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W ...>\n... \n"
+          - pattern: requests.$FUNC(..., <... $INTERM ...>, ...)
+- id: ssrf-requests_1
+  languages:
+  - python
+  message: |
+    检测到服务端请求伪造（SSRF）风险（规则：ssrf-requests_1）。危害：攻击者可能诱导服务端访问内网、云元数据或受保护资源，造成信息泄露或横向探测。建议：对协议、主机和端口做白名单校验，并禁止转发敏感响应。
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery (SSRF)'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A10:2021 - Server-Side Request Forgery (SSRF)
+    references:
+    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  pattern-either:
+  - patterns:
+    - pattern: requests.$FUNC(...)
+    - pattern-either:
+      - pattern-inside: |
+          @$APP.$ROUTE_METHOD($ROUTE, ...)
+          def $ROUTE_FUNC(..., $ROUTEVAR, ...):
+            ...
+            requests.$FUNC(..., <... $ROUTEVAR ...>, ...)
+      - pattern-inside: |
+          @$APP.$ROUTE_METHOD($ROUTE, ...)
+          def $ROUTE_FUNC(..., $ROUTEVAR, ...):
+            ...
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            requests.$FUNC(..., <... $INTERM ...>, ...)
+    - metavariable-regex:
+        metavariable: $ROUTE_METHOD
+        regex: ^(route|get|post|put|delete|patch)$
+  - pattern: requests.$FUNC(..., <... flask.request.$W.get(...) ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W[...] ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W(...) ...>, ...)
+  - pattern: requests.$FUNC(..., <... flask.request.$W ...>, ...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W.get(...) ...>
+        ...
+        requests.$FUNC(<... $INTERM ...>, ...)
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W[...] ...>
+        ...
+        requests.$FUNC(<... $INTERM ...>, ...)
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W(...) ...>
+        ...
+        requests.$FUNC(<... $INTERM ...>, ...)
+    - pattern: requests.$FUNC(...)
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W ...>
+        ...
+        requests.$FUNC(<... $INTERM ...>, ...)
+    - pattern: requests.$FUNC(...)
+  severity: ERROR

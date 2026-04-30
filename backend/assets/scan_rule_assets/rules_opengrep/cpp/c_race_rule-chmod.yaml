@@ -1,0 +1,19 @@
+rules:
+- id: c_race_rule-chmod
+  languages:
+  - cpp
+  message: |
+    检测到竞态条件/TOCTOU
+    风险（规则：c_race_rule-chmod）。危害：检查和使用之间的状态变化可能被攻击者利用，导致权限绕过或操作错误目标。建议：避免先检查后使用的分离流程，使用原子操作或基于文件描述符的安全
+    API。
+    保留的关键标识：https://wiki.sei.cmu.edu/confluence/display/c/FIO01-C.+Be+careful+using+functions+that+use+file+names+for+identification、`chmod`、`fchmod`。
+  metadata:
+    shortDescription: Potential time of check time of use vulnerability (chmod)
+    cwe: CWE-362
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: Medium
+    category: security
+  pattern: chmod(...)
+  severity: ERROR

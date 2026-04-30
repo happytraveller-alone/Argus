@@ -1,0 +1,24 @@
+rules:
+- id: c_access_rule-RpcImpersonateClient-ImpersonateLoggedOnUser
+  languages:
+  - cpp
+  message: |
+    检测到权限/访问控制缺陷（规则：c_access_rule-RpcImpersonateClient-ImpersonateLoggedOnUser）。危害：权限切换、降权或访问控制检查失败后继续执行，可能让代码以过高权限运行或绕过授权边界。建议：检查权限相关
+    API 的返回值，在失败时停止敏感操作并按最小权限原则设计流程。
+  metadata:
+    shortDescription: Ensure return values are checked when attempting to drop privileges
+    cwe: CWE-250
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: High
+    category: security
+  pattern-either:
+  - pattern: RpcImpersonateClient(...)
+  - pattern: ImpersonateLoggedOnUser(...)
+  - pattern: CoImpersonateClient(...)
+  - pattern: ImpersonateNamedPipeClient(...)
+  - pattern: ImpersonateDdeClientWindow(...)
+  - pattern: ImpersonateSecurityContext(...)
+  - pattern: SetThreadToken(...)
+  severity: ERROR

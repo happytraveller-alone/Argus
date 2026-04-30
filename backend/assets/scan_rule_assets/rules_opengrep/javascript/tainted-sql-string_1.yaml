@@ -1,0 +1,66 @@
+rules:
+- id: tainted-sql-string_1
+  languages:
+  - javascript
+  message: |
+    检测到SQL 注入风险（规则：tainted-sql-string_1）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或 ORM 的安全
+    API，避免拼接原始 SQL。
+  metadata:
+    category: security
+    confidence: LOW
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/www-community/attacks/SQL_Injection
+    subcategory:
+    - vuln
+    technology:
+    - express
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-either:
+          - pattern-inside: |
+              "$SQLSTR" + $EXPR
+          - pattern-inside: |
+              "$SQLSTR".concat($EXPR)
+          - pattern: util.format($SQLSTR, $EXPR)
+          - pattern: |
+              `$SQLSTR${$EXPR}...`
+        - metavariable-regex:
+            metavariable: $SQLSTR
+            regex: .*\b(?i)(select|delete|insert|create|update\s+.+\sset|alter|drop)\b.*
+    - focus-metavariable: $EXPR
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... (...,$REQ, ...) {...}
+    - pattern-either:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.cookies
+      - pattern: $REQ.headers
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          (...,{ $REQ }: Request,...) => {...}
+      - pattern-inside: |
+          (...,{ $REQ }: $EXPRESS.Request,...) => {...}
+    - focus-metavariable: $REQ
+    - pattern-either:
+      - pattern: params
+      - pattern: query
+      - pattern: cookies
+      - pattern: headers
+      - pattern: body
+  severity: ERROR

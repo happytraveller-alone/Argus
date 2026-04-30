@@ -1,0 +1,63 @@
+rules:
+- id: java_script_rule-ScriptInjection
+  languages:
+  - java
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: (javax.script.ScriptEngine $ENGINE).eval($ARG, ...);
+    - pattern-not: (javax.script.ScriptEngine $ENGINE).eval("...");
+    - pattern-not: (javax.script.ScriptEngine $ENGINE).eval("...", (javax.script.Bindings $BINDING));
+  - patterns:
+    - pattern-either:
+      - pattern: (javax.script.Invocable $INVC).invokeFunction(..., $ARG)
+      - pattern: (javax.script.Invocable $INVC).invokeMethod(..., $ARG)
+  pattern-sources:
+  - patterns:
+    - pattern-inside: $FUNC(..., $VAR, ...) { ... }
+    - pattern: $VAR
+  message: |
+    检测到命令注入风险（规则：java_script_rule-ScriptInjection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：java.lang.Runtime.getRuntime()、exec('/bin/sh
+    ...')、`ScriptEngine`、`eval`、`java.lang.Runtime.getRuntime().exec('/bin/sh
+    ...');`、`javax.script.Bindings`、`Binding`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+- id: java_script_rule-ScriptInjection_1
+  languages:
+  - java
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - pattern: (javax.script.ScriptEngine $ENGINE).eval($ARG, ...);
+    - pattern-not: (javax.script.ScriptEngine $ENGINE).eval("...");
+    - pattern-not: (javax.script.ScriptEngine $ENGINE).eval("...", (javax.script.Bindings $BINDING));
+  - patterns:
+    - pattern-either:
+      - pattern: (javax.script.Invocable $INVC).invokeFunction(..., $ARG)
+      - pattern: (javax.script.Invocable $INVC).invokeMethod(..., $ARG)
+  pattern-sources:
+  - patterns:
+    - pattern-inside: $FUNC(..., $VAR, ...) { ... }
+    - pattern: $VAR
+  message: |
+    检测到命令注入风险（规则：java_script_rule-ScriptInjection_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：java.lang.Runtime.getRuntime()、exec('/bin/sh
+    ...')、`ScriptEngine`、`eval`、`java.lang.Runtime.getRuntime().exec('/bin/sh
+    ...');`、`javax.script.Bindings`、`Binding`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High

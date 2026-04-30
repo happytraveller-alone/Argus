@@ -1,0 +1,55 @@
+rules:
+- id: java_script_rule-SpringSpelExpressionParser
+  languages:
+  - java
+  patterns:
+  - pattern: ($PARSER $P).$METHOD($ARG);
+  - pattern-not: ($PARSER $P).$METHOD("...");
+  - metavariable-pattern:
+      metavariable: $PARSER
+      pattern-either:
+      - pattern: org.springframework.expression.spel.standard.SpelExpressionParser
+      - pattern: org.springframework.expression.ExpressionParser
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (parseExpression|parseRaw)
+  message: |
+    检测到代码执行/模板注入风险（规则：java_script_rule-SpringSpelExpressionParser）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。
+    保留的关键标识：https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html、`SpelExpressionParser.parseExpression`、`parseExpression`、`parseRaw`、`SimpleEvaluationContext`、`getValue`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language Injection')
+    category: security
+    cwe: CWE-917
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+- id: java_script_rule-SpringSpelExpressionParser_1
+  languages:
+  - java
+  patterns:
+  - pattern: ($PARSER $P).$METHOD($ARG);
+  - pattern-not: ($PARSER $P).$METHOD("...");
+  - metavariable-pattern:
+      metavariable: $PARSER
+      pattern-either:
+      - pattern: org.springframework.expression.spel.standard.SpelExpressionParser
+      - pattern: org.springframework.expression.ExpressionParser
+  - metavariable-regex:
+      metavariable: $METHOD
+      regex: (parseExpression|parseRaw)
+  message: |
+    检测到代码执行/模板注入风险（规则：java_script_rule-SpringSpelExpressionParser_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。
+    保留的关键标识：https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/spel/support/SimpleEvaluationContext.html、`SpelExpressionParser.parseExpression`、`parseExpression`、`parseRaw`、`SimpleEvaluationContext`、`getValue`。
+  severity: ERROR
+  metadata:
+    shortDescription: Improper neutralization of special elements used in an expression language statement ('Expression Language Injection')
+    category: security
+    cwe: CWE-917
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High

@@ -1,0 +1,51 @@
+rules:
+- id: find-sql-string-concatenation
+  message: |
+    检测到SQL 注入风险（规则：find-sql-string-concatenation）。危害：未受信任输入可能改变 SQL 语义，导致数据泄露、篡改或越权查询。建议：使用参数化查询、绑定变量或
+    ORM 的安全 API，避免拼接原始 SQL。 保留的关键标识：$METHOD、$X。
+  languages:
+  - java
+  severity: ERROR
+  pattern-either:
+  - pattern: |
+      $RETURN $METHOD(...,String $X,...){
+        ...
+        Session $SESSION = ...;
+        ...
+        String $QUERY = ... + $X + ...;
+        ...
+        PreparedStatement $PS = $SESSION.connection().prepareStatement($QUERY);
+        ...
+        ResultSet $RESULT = $PS.executeQuery();
+        ...
+      }
+  - pattern: |
+      $RETURN $METHOD(...,String $X,...){
+        ...
+        String $QUERY = ... + $X + ...;
+        ...
+        Session $SESSION = ...;
+        ...
+        PreparedStatement $PS = $SESSION.connection().prepareStatement($QUERY);
+        ...
+        ResultSet $RESULT = $PS.executeQuery();
+        ...
+      }
+  metadata:
+    category: security
+    technology:
+    - jboss
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command (''SQL Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: HIGH

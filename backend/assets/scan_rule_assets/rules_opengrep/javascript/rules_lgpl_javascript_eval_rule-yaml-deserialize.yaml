@@ -1,0 +1,28 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-yaml-deserialize
+  patterns:
+  - pattern-either:
+    - pattern: |
+        require('js-yaml').load(...)
+    - pattern-inside: |
+        $MOD = require('js-yaml')
+        ...
+    - pattern-inside: |
+        import $MOD from 'js-yaml'
+        ...
+  - pattern: |
+      $MOD.load(...)
+  message: |
+    检测到不安全反序列化风险（规则：rules_lgpl_javascript_eval_rule-yaml-deserialize）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+    保留的关键标识：yaml.load()、'yaml.load()'。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp:
+    - A8:2017-Insecure Deserialization
+    - A08:2021-Software and Data Integrity Failures
+    cwe: CWE-502
+    shortDescription: Deserialization of Untrusted Data
+    security-severity: CRITICAL
+    category: security

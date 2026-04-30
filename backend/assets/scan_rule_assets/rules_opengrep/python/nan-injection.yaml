@@ -1,0 +1,84 @@
+rules:
+- id: nan-injection
+  message: |
+    检测到数值转换异常风险（规则：nan-injection）。危害：用户输入可生成 NaN 等特殊值，导致比较、排序或权限判断出现非预期行为。建议：在类型转换前拒绝特殊数值字符串并显式校验范围。
+    保留的关键标识：bool()、float()、complex()、'nan'。
+  languages:
+  - python
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        def $FUNC(request, ...):
+          ...
+    - pattern-either:
+      - pattern: request.$PROPERTY.get(...)
+      - pattern: request.$PROPERTY[...]
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: float(...)
+      - pattern: bool(...)
+      - pattern: complex(...)
+    - pattern-not-inside: |
+        if $COND:
+          ...
+        ...
+  pattern-sanitizers:
+  - pattern: $ANYTHING(...)
+    not_conflicting: true
+  metadata:
+    references:
+    - https://discuss.python.org/t/nan-breaks-min-max-and-sorting-functions-a-solution/2868
+    - https://blog.bitdiscovery.com/2021/12/python-nan-injection/
+    category: security
+    cwe:
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    technology:
+    - django
+    subcategory:
+    - vuln
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+- id: nan-injection_1
+  languages:
+  - python
+  message: |
+    检测到数值转换异常风险（规则：nan-injection_1）。危害：用户输入可生成 NaN 等特殊值，导致比较、排序或权限判断出现非预期行为。建议：在类型转换前拒绝特殊数值字符串并显式校验范围。
+    保留的关键标识：bool()、float()、complex()、'nan'。
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    impact: MEDIUM
+    likelihood: MEDIUM
+    references:
+    - https://discuss.python.org/t/nan-breaks-min-max-and-sorting-functions-a-solution/2868
+    - https://blog.bitdiscovery.com/2021/12/python-nan-injection/
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  mode: taint
+  pattern-sanitizers:
+  - not_conflicting: true
+    pattern: $ANYTHING(...)
+  pattern-sinks:
+  - pattern-either:
+    - pattern: float(...)
+    - pattern: bool(...)
+    - pattern: complex(...)
+  pattern-sources:
+  - pattern-either:
+    - pattern: flask.request.$SOMETHING.get(...)
+    - pattern: flask.request.$SOMETHING[...]
+    - patterns:
+      - pattern-inside: |
+          @$APP.route(...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+      - pattern: $ROUTEVAR
+  severity: ERROR

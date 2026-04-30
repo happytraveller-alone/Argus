@@ -1,0 +1,19 @@
+rules:
+- id: unquoted-csv-writer
+  patterns:
+  - pattern-not: csv.writer(..., quoting=csv.QUOTE_ALL, ...)
+  - pattern: csv.writer(...)
+  message: |
+    检测到CSV 注入风险（规则：unquoted-csv-writer）。危害：未加引号的 CSV 单元格可能被电子表格软件解释为公式，导致命令执行、数据外带或钓鱼风险。建议：对所有 CSV
+    字段启用安全 quoting，并对公式前缀字符做转义。
+  metadata:
+    cwe: 'CWE-1236: Improper Neutralization of Formula Elements in a CSV File'
+    owasp: 'A1: Injection'
+    references:
+    - https://affinity-it-security.com/how-to-prevent-csv-injection/
+  fix-regex:
+    regex: (.*)\)
+    replacement: \1, quoting=csv.QUOTE_ALL)
+  languages:
+  - python
+  severity: ERROR

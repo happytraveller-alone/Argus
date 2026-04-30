@@ -1,0 +1,99 @@
+rules:
+- id: open-never-closed
+  patterns:
+  - pattern-not-inside: |
+      $F = open(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = io.open(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = tarfile.open(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = ZipFile.open(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.TemporaryFile(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.NamedTemporaryFile(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.SpooledTemporaryFile(...)
+      ...
+      $F.close()
+  - pattern-not-inside: |
+      $F = open(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = io.open(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = tarfile.open(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = ZipFile.open(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.TemporaryFile(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.NamedTemporaryFile(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-not-inside: |
+      $F = tempfile.SpooledTemporaryFile(...)
+      ...
+      try:
+          ...
+      finally:
+          $F.close()
+  - pattern-either:
+    - pattern: $F = open(...)
+    - pattern: $F = io.open(...)
+    - pattern: $F = tarfile.open(...)
+    - pattern: $F = ZipFile.open(...)
+    - pattern: $F = tempfile.TemporaryFile(...)
+    - pattern: $F = tempfile.NamedTemporaryFile(...)
+    - pattern: $F = tempfile.SpooledTemporaryFile(...)
+  message: |
+    检测到文件资源泄漏风险（规则：open-never-closed）。危害：文件对象未关闭会泄漏文件描述符，并可能导致数据未刷新或后续文件操作失败。建议：使用 `with` 上下文管理器或确保在
+    `finally` 中关闭文件。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-404: Improper Resource Shutdown or Release'
+    - 'CWE-400: Uncontrolled Resource Consumption'

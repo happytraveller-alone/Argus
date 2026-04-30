@@ -1,0 +1,20 @@
+rules:
+- id: c_misc_rule-cuserid
+  languages:
+  - c
+  message: |
+    检测到废弃 C 身份 API/缓冲区风险（规则：c_misc_rule-cuserid）。危害：`cuserid()`
+    行为在不同系统上不一致，且非空缓冲区过小时可能造成溢出，导致身份判断错误或内存破坏。建议：改用 `getpwuid(geteuid())` 等语义明确的 API，并保证调用方提供的缓冲区边界安全。
+    保留的关键标识：https://linux.die.net/man/3/getpwuid、cuserid()、geteuid()、getpwuid(geteuid()、`cuserid()`、`L_cuserid`、`getpwuid(geteuid())`。
+  metadata:
+    shortDescription: Usage of deprecated function (cuserid)
+    cwe: CWE-120
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    - A06:2021-Vulnerable and Outdated Components
+    security-severity: Low
+    category: security
+  patterns:
+  - pattern: cuserid($BUFFER)
+  - pattern-not: cuserid(NULL)
+  severity: ERROR

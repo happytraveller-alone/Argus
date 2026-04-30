@@ -1,0 +1,57 @@
+rules:
+- id: c_buffer_rule-fscanf-sscanf
+  languages:
+  - c
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-fscanf-sscanf）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+  metadata:
+    shortDescription: sscanf() functions may allow format string based overflows
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - patterns:
+    - pattern: fscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: sscanf($INPUT, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: vsscanf($INPUT, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: vfscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: _ftscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: fwscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: vfwscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  - patterns:
+    - pattern: vswscanf($INPUT, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: 'L?"(?:[^"\\]|\\.)*%(\[[^\]]+\]|s)'
+  severity: ERROR

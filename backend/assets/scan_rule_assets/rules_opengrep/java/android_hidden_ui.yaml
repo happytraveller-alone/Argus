@@ -1,0 +1,30 @@
+rules:
+- id: android_hidden_ui
+  patterns:
+  - metavariable-regex:
+      metavariable: $X
+      regex: (?i).*(password|passwd|pwd|token|secret|credential|credit|card|ssn|pin|key|auth).*
+  - pattern-either:
+    - pattern: |
+        $X.setVisibility(View.GONE);
+    - pattern: |
+        $V = View.GONE;
+        ...
+        $X.setVisibility($V);
+    - pattern: |
+        $X.setVisibility(View.INVISIBLE);
+    - pattern: |
+        $V = View.INVISIBLE;
+        ...
+        $X.setVisibility($V);
+  message: |
+    检测到敏感界面数据残留风险（规则：android_hidden_ui）。危害：隐藏界面元素并不等于清除敏感数据，攻击者仍可能通过内存检查读取内容。建议：隐藏或销毁视图前清除敏感字段，并避免把敏感值长期保存在
+    UI 对象中。
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    cwe: cwe-919
+    owasp-mobile: m1
+    masvs: storage-7
+    reference: https://github.com/MobSF/owasp-mstg/blob/master/Document/0x05d-Testing-Data-Storage.md#checking-for-sensitive-data-disclosure-through-the-user-interface-mstg-storage-7

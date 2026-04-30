@@ -1,0 +1,156 @@
+rules:
+- id: express-sandbox-code-injection
+  message: |
+    检测到代码执行/模板注入风险（规则：express-sandbox-code-injection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`sandbox`。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-94: Improper Control of Generation of Code (Code Injection)'
+  patterns:
+  - pattern-inside: |
+      ...
+      $SANDBOX = require('sandbox');
+      ...
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $REQ.$QUERY.$FOO ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        new $SANDBOX(...).run(<... $REQ.$QUERY.$FOO ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        new $SANDBOX(...).run(<... $CODE ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $REQ.$BODY ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        new $SANDBOX(...).run(<... $REQ.$BODY ...>,...);
+    - pattern: |-
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        new $SANDBOX(...).run(<... $CODE ...>,...);
+- id: express-sandbox-code-injection_1
+  message: |
+    检测到代码执行/模板注入风险（规则：express-sandbox-code-injection_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`sandbox`。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'
+  patterns:
+  - pattern-inside: |
+      ...
+      $SANDBOX = require('sandbox');
+      ...
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: $S.run(<... $REQ.$QUERY.$FOO ...>,...);
+- id: express-sandbox-code-injection_2
+  message: |
+    检测到代码执行/模板注入风险（规则：express-sandbox-code-injection_2）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`sandbox`。
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-94: Improper Control of Generation of Code (Code Injection)'
+  patterns:
+  - pattern-inside: |
+      ...
+      $SANDBOX = require('sandbox');
+      ...
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $REQ.$QUERY.$FOO ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        new $SANDBOX(...).run(<... $REQ.$QUERY.$FOO ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$QUERY.$FOO ...>;
+        ...
+        new $SANDBOX(...).run(<... $CODE ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $REQ.$BODY ...>,...);
+    - pattern: |
+        $S = new $SANDBOX(...);
+        ...
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        $S = new $SANDBOX(...);
+        ...
+        $S.run(<... $CODE ...>,...);
+    - pattern: |
+        new $SANDBOX(...).run(<... $REQ.$BODY ...>,...);
+    - pattern: |-
+        $CODE = <... $REQ.$BODY ...>;
+        ...
+        new $SANDBOX(...).run(<... $CODE ...>,...);

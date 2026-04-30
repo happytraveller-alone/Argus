@@ -1,0 +1,37 @@
+rules:
+- id: c_buffer_rule-strcpyA-strcpyW
+  languages:
+  - cpp
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcpyA-strcpyW）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+    保留的关键标识：`StrCpy`、`StringCbCopy`、`StringCbCopyEx`、`StringCbCopyN`、`StringCbCopyNEx`、`StringCchCopy`、`StringCchCopyEx`、`StringCchCopyN`、`StringCchCopyNEx`。
+  metadata:
+    shortDescription: Insecure string processing function
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - pattern: strcpyA(...)
+  - pattern: strcpyW(...)
+  - pattern: StrCpy(...)
+  - pattern: StrCpyA(...)
+  - pattern: lstrcpyA(...)
+  - pattern: lstrcpyW(...)
+  - pattern: _tccpy(...)
+  - pattern: _mbccpy(...)
+  - pattern: _ftcscpy(...)
+  - pattern: _mbsncpy(...)
+  - pattern: StrCpyN(...)
+  - pattern: StrCpyNA(...)
+  - pattern: StrCpyNW(...)
+  - pattern: StrNCpy(...)
+  - pattern: strcpynA(...)
+  - pattern: StrNCpyA(...)
+  - pattern: StrNCpyW(...)
+  - pattern: lstrcpynA(...)
+  - pattern: lstrcpynW(...)
+  severity: ERROR

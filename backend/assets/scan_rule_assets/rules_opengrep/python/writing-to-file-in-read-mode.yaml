@@ -1,0 +1,28 @@
+rules:
+- id: writing-to-file-in-read-mode
+  message: |
+    检测到文件打开模式错误缺陷（规则：writing-to-file-in-read-mode）。危害：以只读模式打开的文件被写入会触发运行时错误，导致数据写入失败。建议：根据用途使用写入、追加或读写模式打开文件。
+    保留的关键标识：$FD、'$FD'。
+  patterns:
+  - pattern-either:
+    - pattern-inside: |
+        $FD = open($NAME, "r", ...)
+        ...
+    - pattern-inside: |
+        $FD = open($NAME, "rb", ...)
+        ...
+    - pattern-inside: |
+        with open($NAME, "r", ...) as $FD:
+          ...
+    - pattern-inside: |
+        with open($NAME, "rb", ...) as $FD:
+          ...
+  - pattern: $FD.write(...)
+  severity: ERROR
+  languages:
+  - python
+  metadata:
+    cwe:
+    - 'CWE-248: Uncaught Exception'
+    - 'CWE-391: Unchecked Error Condition'
+    - 'CWE-703: Improper Check or Handling of Exceptional Condition'

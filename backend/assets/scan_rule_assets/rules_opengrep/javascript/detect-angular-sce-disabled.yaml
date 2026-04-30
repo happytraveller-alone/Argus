@@ -1,0 +1,17 @@
+rules:
+- id: detect-angular-sce-disabled
+  pattern: |
+    $sceProvider.enabled(false);
+  message: |
+    检测到跨站脚本（XSS）风险（规则：detect-angular-sce-disabled）。危害：未可信数据进入页面脚本或 DOM
+    可能执行恶意脚本，窃取凭据或劫持用户操作。建议：对输出做上下文编码，避免把用户输入直接写入可执行上下文。 保留的关键标识：$sceProvider。
+  languages:
+  - javascript
+  metadata:
+    references:
+    - https://docs.angularjs.org/api/ng/service/$sce
+    - https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20170727_AngularJS.pdf
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+  severity: ERROR

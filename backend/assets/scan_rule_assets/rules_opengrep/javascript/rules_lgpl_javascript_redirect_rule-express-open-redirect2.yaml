@@ -1,0 +1,78 @@
+rules:
+- id: rules_lgpl_javascript_redirect_rule-express-open-redirect2
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        function ($REQ, $RES, ...) {...}
+    - focus-metavariable: $REQ
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern-not: |
+          $RES.$METHOD("=~/location/i", "=~/http(s)?:\/\/.*\//" + ...)
+      - pattern-not-inside: |
+          $VAR = "=~/http(s)?:\/\/.*\//" + ...;
+          ...
+      - pattern: |
+          $RES.$METHOD("=~/location/i", $VAR)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (header|set|append|setHeader)
+    - patterns:
+      - pattern-not-inside: |
+          $V = "=~/http(s)?:\/\/.*\//" + ...;
+          ...
+      - pattern-not:
+          patterns:
+          - pattern: "$RES.writeHead(..., { \n    ..., \n    location: $V,\n    ...\n})\n"
+          - metavariable-pattern:
+              metavariable: $V
+              patterns:
+              - pattern: |
+                  "=~/http(s)?:\/\/.*\//" + ...
+      - pattern: "$RES.writeHead(..., { \n            ..., \n            location: $V,\n            ...\n        })\n"
+      - focus-metavariable: $V
+    - patterns:
+      - pattern-not: |
+          $RES.location("=~/http(s)?:\/\/.*\//" + ...)
+      - pattern-not-inside: |
+          $VAR = "=~/http(s)?:\/\/.*\//" + ...;
+          ...
+      - pattern: |
+          $RES.location($VAR)
+  pattern-sanitizers:
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: "if($VALIDATION){\n  ...\n} \n"
+        - pattern: |
+            $A = $VALIDATION
+            ...
+            if($A){
+              ...
+            }
+      - metavariable-pattern:
+          metavariable: $VALIDATION
+          pattern-either:
+          - pattern: "$AL.includes(...)  \n"
+          - pattern: |
+              $AL.indexOf(...) !== -1
+          - pattern: |
+              $AL.find(...) !== undefined
+          - pattern: |
+              $ALS.has(...)
+  message: |
+    检测到开放重定向风险（规则：rules_lgpl_javascript_redirect_rule-express-open-redirect2）。危害：攻击者可能把用户重定向到钓鱼站点或恶意页面，破坏登录和授权流程。建议：只允许跳转到可信域名或使用服务端固定路径映射。
+    保留的关键标识：redirect()、`redirect()`。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    shortDescription: URL redirection to untrusted site 'open redirect'
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-601
+    security-severity: CRITICAL

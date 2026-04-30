@@ -1,0 +1,29 @@
+rules:
+- id: xmlinputfactory_xxe
+  patterns:
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...) {
+        ...
+        $XMLFACTORY.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+        ...
+      }
+  - pattern-not-inside: |
+      $RETURNTYPE $METHOD(...) {
+        ...
+        $XMLFACTORY.setProperty(java.xml.stream.XMLFactoryInput.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        ...
+      }
+  - pattern-either:
+    - pattern: $XMLFACTORY = $W.newFactory(...);
+    - pattern: $XMLFACTORY = new XMLInputFactory(...);
+  message: |
+    检测到XML 外部实体（XXE）/实体扩展风险（规则：xmlinputfactory_xxe）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识："javax.xml.stream.isSupportingExternalEntities"。
+  severity: ERROR
+  languages:
+  - java
+  metadata:
+    cwe: cwe-611
+    owasp-mobile: m8
+    masvs: platform-2
+    reference: https://github.com/MobSF/owasp-mstg/blob/master/Document/0x04h-Testing-Code-Quality.md#injection-flaws-mstg-arch-2-and-mstg-platform-2

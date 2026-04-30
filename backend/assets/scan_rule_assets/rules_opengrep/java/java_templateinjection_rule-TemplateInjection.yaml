@@ -1,0 +1,77 @@
+rules:
+- id: java_templateinjection_rule-TemplateInjection
+  languages:
+  - java
+  message: |
+    检测到代码执行/模板注入风险（规则：java_templateinjection_rule-TemplateInjection）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`evaluate`、`VelocityContext`。
+  pattern-either:
+  - patterns:
+    - pattern: org.apache.velocity.app.Velocity.evaluate(..., $VAR)
+    - pattern-not: org.apache.velocity.app.Velocity.evaluate(..., "...")
+  - patterns:
+    - pattern-not-inside: |
+        $C = (freemarker.template.Configuration $CFG).getTemplate("...");
+        ...
+    - pattern-inside: |
+        $C = (freemarker.template.Configuration $CFG).getTemplate($IN);
+        ...
+    - pattern: $C.process(...)
+  - patterns:
+    - pattern-inside: |
+        import com.mitchellbosecke.pebble.PebbleEngine;
+        ...
+    - pattern-inside: |
+        $C = $T.getTemplate($IN);
+        ...
+    - pattern-not-inside: |
+        $C = $T.getTemplate("...");
+        ...
+    - pattern: $C.evaluate(...)
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+  severity: ERROR
+- id: java_templateinjection_rule-TemplateInjection_1
+  languages:
+  - java
+  message: |
+    检测到代码执行/模板注入风险（规则：java_templateinjection_rule-TemplateInjection_1）。危害：未受信任内容可能被当作代码、模块名或模板表达式执行，导致任意代码执行或敏感数据泄露。建议：不要执行用户可控代码；使用沙箱白名单、禁用动态执行或改用安全模板
+    API。 保留的关键标识：`evaluate`、`VelocityContext`。
+  pattern-either:
+  - patterns:
+    - pattern: org.apache.velocity.app.Velocity.evaluate(..., $VAR)
+    - pattern-not: org.apache.velocity.app.Velocity.evaluate(..., "...")
+  - patterns:
+    - pattern-not-inside: |
+        $C = (freemarker.template.Configuration $CFG).getTemplate("...");
+        ...
+    - pattern-inside: |
+        $C = (freemarker.template.Configuration $CFG).getTemplate($IN);
+        ...
+    - pattern: $C.process(...)
+  - patterns:
+    - pattern-inside: |
+        import com.mitchellbosecke.pebble.PebbleEngine;
+        ...
+    - pattern-inside: |
+        $C = $T.getTemplate($IN);
+        ...
+    - pattern-not-inside: |
+        $C = $T.getTemplate("...");
+        ...
+    - pattern: $C.evaluate(...)
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+  severity: ERROR

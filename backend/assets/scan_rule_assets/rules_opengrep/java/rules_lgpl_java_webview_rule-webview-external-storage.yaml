@@ -1,0 +1,32 @@
+rules:
+- id: rules_lgpl_java_webview_rule-webview-external-storage
+  patterns:
+  - pattern-either:
+    - pattern: |
+        $X = <... $E.getExternalStorageDirectory() ...>;
+        ...
+        $WV.loadUrl(<... $X ...>);
+    - pattern: |
+        $WV.loadUrl(<... $E.getExternalStorageDirectory().$F() ...>);
+    - pattern: |
+        $X = <... Environment.getExternalStorageDirectory().$F() ...>;
+        ...
+        $WV.loadUrl(<... $X ...>);
+    - pattern: |
+        $X = <... $E.getExternalFilesDir(...) ...>;
+        ...
+        $WV.loadUrl(<... $X ...>);
+  message: |
+    检测到硬编码凭据风险（规则：rules_lgpl_java_webview_rule-webview-external-storage）。危害：密钥或口令进入源码后容易泄露，导致认证绕过、会话伪造或横向访问。建议：改用环境变量、密钥管理服务或安全配置注入。
+    保留的关键标识：setAllowFileAccess()、setAllowContentAccess()、loadUrl()。
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: CWE-749
+    shortDescription: Exposed dangerous method or function
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL

@@ -1,0 +1,100 @@
+rules:
+- id: tainted-system-command
+  languages:
+  - java
+  severity: ERROR
+  mode: taint
+  pattern-propagators:
+  - pattern: (StringBuilder $STRB).append($INPUT)
+    from: $INPUT
+    to: $STRB
+    label: CONCAT
+    requires: INPUT
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ(...) $TYPE $SOURCE,...) {
+            ...
+          }
+      - pattern-inside: |
+          $METHODNAME(..., @$REQ $TYPE $SOURCE,...) {
+            ...
+          }
+    - metavariable-regex:
+        metavariable: $TYPE
+        regex: ^(?!(Integer|Long|Float|Double|Char|Boolean|int|long|float|double|char|boolean))
+    - metavariable-regex:
+        metavariable: $REQ
+        regex: (RequestBody|PathVariable|RequestParam|RequestHeader|CookieValue|ModelAttribute)
+    - focus-metavariable: $SOURCE
+    label: INPUT
+  - patterns:
+    - pattern-either:
+      - pattern: $X + $SOURCE
+      - pattern: $SOURCE + $Y
+      - pattern: String.format("...", ..., $SOURCE, ...)
+      - pattern: String.join("...", ..., $SOURCE, ...)
+      - pattern: (String $STR).concat($SOURCE)
+      - pattern: $SOURCE.concat(...)
+      - pattern: $X += $SOURCE
+      - pattern: $SOURCE += $X
+    label: CONCAT
+    requires: INPUT
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          (Process $P) = new Process(...);
+      - pattern: |
+          (ProcessBuilder $PB).command(...);
+      - patterns:
+        - pattern-either:
+          - pattern: |
+              (Runtime $R).$EXEC(...);
+          - pattern: |
+              Runtime.getRuntime(...).$EXEC(...);
+        - metavariable-regex:
+            metavariable: $EXEC
+            regex: (exec|loadLibrary|load)
+      - patterns:
+        - pattern: |
+            (ProcessBuilder $PB).command(...).$ADD(...);
+        - metavariable-regex:
+            metavariable: $ADD
+            regex: (add|addAll)
+      - patterns:
+        - pattern-either:
+          - patterns:
+            - pattern-inside: |
+                $BUILDER = new ProcessBuilder(...);
+                ...
+            - pattern: $BUILDER.start(...)
+          - pattern: |
+              new ProcessBuilder(...). ... .start(...);
+    requires: CONCAT
+  message: |
+    检测到命令注入风险（规则：tainted-system-command）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：ProcessBuilder("ls", "-al", targetDirectory)、"ls"、`new ProcessBuilder("ls", "-al",
+    targetDirectory)`。
+  metadata:
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    category: security
+    technology:
+    - java
+    - spring
+    confidence: HIGH
+    references:
+    - https://www.stackhawk.com/blog/command-injection-java/
+    - https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+    - https://github.com/github/codeql/blob/main/java/ql/src/Security/CWE/CWE-078/ExecUnescaped.java
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: HIGH
+    impact: HIGH

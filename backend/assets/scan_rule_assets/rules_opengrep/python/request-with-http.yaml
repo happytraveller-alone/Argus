@@ -1,0 +1,44 @@
+rules:
+- id: request-with-http
+  patterns:
+  - pattern-either:
+    - pattern: requests.$W("=~/[Hh][Tt][Tt][Pp]:\/\/.*/", ...)
+    - pattern: |
+        $URL = "=~/[Hh][Tt][Tt][Pp]:\/\/.*/"
+        ...
+        requests.$W($URL, ...)
+    - pattern: |
+        def $FUNC(..., $URL = "=~/^[Hh][Tt][Tt][Pp]://.*/", ...):
+          ...
+          requests.$W($URL, ...)
+    - pattern: requests.request($METHOD, "=~/[Hh][Tt][Tt][Pp]:\/\/.*/", ...)
+    - pattern: |
+        $URL = "=~/[Hh][Tt][Tt][Pp]:\/\/.*/"
+        ...
+        requests.request($METHOD, $URL, ...)
+    - pattern: |
+        def $FUNC(..., $URL = "=~/^[Hh][Tt][Tt][Pp]://.*/", ...):
+          ...
+          requests.request($METHOD, $URL, ...)
+    - pattern: requests.Request($METHOD, "=~/[Hh][Tt][Tt][Pp]:\/\/.*/", ...)
+    - pattern: |
+        $URL = "=~/[Hh][Tt][Tt][Pp]:\/\/.*/"
+        ...
+        requests.Request($METHOD, $URL, ...)
+    - pattern: |
+        def $FUNC(..., $URL = "=~/^[Hh][Tt][Tt][Pp]://.*/", ...):
+          ...
+          requests.Request($METHOD, $URL, ...)
+  fix-regex:
+    regex: '[Hh][Tt][Tt][Pp]://'
+    replacement: https://
+    count: 1
+  message: |
+    检测到不安全明文通信风险（规则：request-with-http）。危害：明文协议可能被窃听或篡改，导致凭据和业务数据泄露。建议：改用 TLS/HTTPS 等加密通道并校验证书。
+    保留的关键标识：http://'、https://'、'http://'、'https://'。
+  metadata:
+    owasp: 'A3: Sensitive Data Exposure'
+    cwe: 'CWE-319: Cleartext Transmission of Sensitive Information'
+  languages:
+  - python
+  severity: ERROR

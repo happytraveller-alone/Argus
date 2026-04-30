@@ -1,0 +1,146 @@
+rules:
+- id: subprocess-injection
+  languages:
+  - python
+  mode: taint
+  options:
+    symbolic_propagation: true
+  pattern-sources:
+  - patterns:
+    - pattern-inside: |
+        def $FUNC(..., $REQUEST, ...):
+          ...
+    - focus-metavariable: $REQUEST
+    - metavariable-pattern:
+        metavariable: $REQUEST
+        patterns:
+        - pattern: request
+        - pattern-not-inside: request.build_absolute_uri
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern: subprocess.$FUNC(...)
+        - pattern-not: subprocess.$FUNC("...", ...)
+        - pattern-not: subprocess.$FUNC(["...", ...], ...)
+        - pattern-not-inside: |
+            $CMD = ["...", ...]
+            ...
+            subprocess.$FUNC($CMD, ...)
+      - patterns:
+        - pattern: subprocess.$FUNC(["$SHELL", "-c", ...], ...)
+        - metavariable-regex:
+            metavariable: $SHELL
+            regex: ^(sh|bash|ksh|csh|tcsh|zsh)$
+      - patterns:
+        - pattern: subprocess.$FUNC(["$INTERPRETER", ...], ...)
+        - metavariable-regex:
+            metavariable: $INTERPRETER
+            regex: ^(python|python\d)$
+  pattern-sanitizers:
+  - patterns:
+    - pattern: $DICT[$KEY]
+    - focus-metavariable: $KEY
+  severity: ERROR
+  message: |
+    检测到命令注入风险（规则：subprocess-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`subprocess`。
+  metadata:
+    category: security
+    technology:
+    - flask
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    references:
+    - https://semgrep.dev/docs/cheat-sheets/python-command-injection/
+    confidence: HIGH
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: HIGH
+- id: subprocess-injection_1
+  languages:
+  - python
+  message: |
+    检测到命令注入风险（规则：subprocess-injection_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`subprocess`。
+  metadata:
+    category: security
+    confidence: HIGH
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://semgrep.dev/docs/cheat-sheets/python-command-injection/
+    subcategory:
+    - vuln
+    technology:
+    - flask
+  mode: taint
+  options:
+    symbolic_propagation: true
+  pattern-sanitizers:
+  - patterns:
+    - pattern: $DICT[$KEY]
+    - focus-metavariable: $KEY
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern: subprocess.$FUNC(...)
+        - pattern-not: subprocess.$FUNC("...", ...)
+        - pattern-not: subprocess.$FUNC(["...", ...], ...)
+        - pattern-not-inside: |
+            $CMD = ["...", ...]
+            ...
+            subprocess.$FUNC($CMD, ...)
+      - patterns:
+        - pattern: subprocess.$FUNC(["$SHELL", "-c", ...], ...)
+        - metavariable-regex:
+            metavariable: $SHELL
+            regex: ^(sh|bash|ksh|csh|tcsh|zsh)$
+      - patterns:
+        - pattern: subprocess.$FUNC(["$INTERPRETER", ...], ...)
+        - metavariable-regex:
+            metavariable: $INTERPRETER
+            regex: ^(python|python\d)$
+  pattern-sources:
+  - pattern-either:
+    - patterns:
+      - pattern-either:
+        - pattern: flask.request.form.get(...)
+        - pattern: flask.request.form[...]
+        - pattern: flask.request.args.get(...)
+        - pattern: flask.request.args[...]
+        - pattern: flask.request.values.get(...)
+        - pattern: flask.request.values[...]
+        - pattern: flask.request.cookies.get(...)
+        - pattern: flask.request.cookies[...]
+        - pattern: flask.request.stream
+        - pattern: flask.request.headers.get(...)
+        - pattern: flask.request.headers[...]
+        - pattern: flask.request.data
+        - pattern: flask.request.full_path
+        - pattern: flask.request.url
+        - pattern: flask.request.json
+        - pattern: flask.request.get_json()
+        - pattern: flask.request.view_args.get(...)
+        - pattern: flask.request.view_args[...]
+    - patterns:
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+      - focus-metavariable: $ROUTEVAR
+  severity: ERROR

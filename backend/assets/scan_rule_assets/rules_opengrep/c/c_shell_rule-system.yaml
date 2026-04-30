@@ -1,0 +1,17 @@
+rules:
+- id: c_shell_rule-system
+  languages:
+  - c
+  message: |
+    检测到命令注入风险（规则：c_shell_rule-system）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=87152177。
+  metadata:
+    shortDescription: Potential for OS command injection
+    cwe: CWE-78
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern: system(...)
+  severity: ERROR

@@ -1,0 +1,54 @@
+rules:
+- id: rules_lgpl_javascript_xml_rule-node-xpath-injection
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          function ($REQ, $RES, ...) {...}
+      - pattern: |
+          function $FUNC($REQ, $RES, ...) {...}
+    - focus-metavariable: $REQ
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $XPATH = require('xpath')
+          ...
+      - pattern-inside: |
+          import { $XPATH } from 'xpath'
+          ...
+      - pattern-inside: |
+          import { $K as $XPATH } from 'xpath'
+          ...
+    - pattern: "$XPATH.parse($REQ, ...)    \n"
+    - focus-metavariable: $REQ
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: "if($VALIDATION){\n...\n$XPATH.parse($REQ, ...) \n...\n} \n"
+      - pattern: "$A = $VALIDATION\n...\nif($A){\n...\n$XPATH.parse($REQ, ...) \n...\n}\n"
+    - metavariable-pattern:
+        metavariable: $VALIDATION
+        pattern-either:
+        - pattern: "$AL.includes(...)  \n"
+        - pattern: |
+            $AL.indexOf(...) !== -1
+        - pattern: |
+            $AL.find(...) !== undefined
+        - pattern: |
+            $ALS.has(...)
+  message: |
+    检测到XPath 注入风险（规则：rules_lgpl_javascript_xml_rule-node-xpath-injection）。危害：攻击者可能改变 XPath 查询逻辑，读取或匹配非预期
+    XML 数据。建议：对 XPath 参数进行转义或使用安全的参数化查询方式。 保留的关键标识：xpath.parse()、`xpath.parse()`。
+  languages:
+  - javascript
+  severity: ERROR
+  metadata:
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-643
+    shortDescription: Improper neutralization of data within XPath expressions (XPath Injection)
+    security-severity: CRITICAL
+    category: security

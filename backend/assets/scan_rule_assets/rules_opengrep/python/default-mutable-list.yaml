@@ -1,0 +1,210 @@
+rules:
+- id: default-mutable-list
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: |
+          def $F(..., $D=[], ...):
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = []
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [...]
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list(...)
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.deepcopy($D)
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.copy($D)
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list.copy($D)
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D[:]
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [... for ... in ...]
+            ...
+            $D.append(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D or []
+            ...
+            $D.append(...)
+      - pattern-not-inside: |
+          def $A(...):
+            ...
+            def $F(..., $D=[], ...):
+              ...
+              $D.append(...)
+    - patterns:
+      - pattern: |
+          def $F(..., $D=[], ...):
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = []
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [...]
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list(...)
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.deepcopy($D)
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.copy($D)
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list.copy($D)
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D[:]
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [... for ... in ...]
+            ...
+            $D.extend(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D or []
+            ...
+            $D.extend(...)
+      - pattern-not-inside: |
+          def $A(...):
+            ...
+            def $F(..., $D=[], ...):
+              ...
+              $D.extend(...)
+    - patterns:
+      - pattern: |
+          def $F(..., $D=[], ...):
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = []
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [...]
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list(...)
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.deepcopy($D)
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = copy.copy($D)
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = list.copy($D)
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D[:]
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = [... for ... in ...]
+            ...
+            $D.insert(...)
+      - pattern-not: |
+          def $F(..., $D=[], ...):
+            ...
+            $D = $D or []
+            ...
+            $D.insert(...)
+      - pattern-not-inside: |
+          def $A(...):
+            ...
+            def $F(..., $D=[], ...):
+              ...
+              $D.insert(...)
+  message: |
+    检测到Python 可变默认参数缺陷（规则：default-mutable-list）。危害：可变默认参数会在多次函数调用之间共享状态，导致数据串扰和难以复现的逻辑错误。建议：使用 `None`
+    作为默认值，并在函数体内创建新的列表或字典。 保留的关键标识：$F、$D。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-200: Exposure of Sensitive Information'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'

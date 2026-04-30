@@ -1,0 +1,60 @@
+rules:
+- id: admzip_unsafe_unpacking
+  languages:
+  - javascript
+  severity: ERROR
+  message: |
+    检测到路径穿越/不安全解包风险（规则：admzip_unsafe_unpacking）。危害：归档条目、路径输入或服务端视图路径可能访问/写入目标目录之外，造成敏感文件泄露、任意文件覆盖或恶意内容植入。建议：规范化路径并校验其仍位于目标目录内，拒绝绝对路径和
+    `..` 路径段，避免把用户输入直接作为视图或文件路径。
+  patterns:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $ADMZIP = require('adm-zip')
+          ...
+      - pattern-inside: |
+          import $ADMZIP from 'adm-zip'
+          ...
+    - pattern-inside: |
+        $ZIP = new $ADMZIP($FILENAME)
+        ...
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $ENTRIES = $ZIP.getEntries()
+          ...
+          $ENTRIES.forEach(...)
+      - pattern-inside: |
+          $ZIP.getEntries().forEach(...)
+      - pattern-inside: |
+          $ENTRIES = $ZIP.getEntries()
+          ...
+          for ($ENTRY of $ENTRIES) (...)
+      - pattern-inside: |
+          for ($ENTRY of $ZIP.getEntries()) (...)
+    - pattern-either:
+      - pattern-either:
+        - pattern: $FS.createWriteStream(<... $ENTRY.entryName ...>, ...);
+        - pattern: $FS.writeFileSync(<... $ENTRY.entryName ...>, ..., ...)
+        - pattern: $FS.writeFileAsync(<... $ENTRY.entryName ...>, ..., ...)
+      - patterns:
+        - pattern-either:
+          - pattern: $FS.createWriteStream(<... $PATH ...>, ...)
+          - pattern: $FS.writeFileSync(<... $PATH ...>, ..., ...)
+          - pattern: $FS.writeFileAsync(<... $PATH ...>, ..., ...)
+        - pattern-not-inside: |
+            $PATH = path.join(..., path.basename(<... $ENTRY.entryName ...>))
+            ...
+        - pattern-either:
+          - pattern-inside: |
+              $PATH = path.join(..., <... $ENTRY.entryName ...>)
+              ...
+          - pattern-inside: |
+              $PATH = path.join(<... $ENTRY.entryName ...>, ...)
+              ...
+          - pattern-inside: $PATH = <... $ENTRY.entryName ...>
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-23: Relative Path Traversal'
+    - 'CWE-73: External Control of File Name or Pathname'

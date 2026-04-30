@@ -1,0 +1,15 @@
+rules:
+- id: subprocess-shell-true
+  pattern: subprocess.$FUNC(..., shell=True, ...)
+  message: |
+    检测到命令注入风险（规则：subprocess-shell-true）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：$FUNC、'$FUNC'。
+  metadata:
+    owasp: 'A1: Injection'
+    cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    references:
+    - https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
+    - https://docs.python.org/3/library/subprocess.html
+  languages:
+  - python
+  severity: ERROR

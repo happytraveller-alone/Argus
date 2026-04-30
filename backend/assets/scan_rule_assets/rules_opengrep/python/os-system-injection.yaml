@@ -1,0 +1,46 @@
+rules:
+- id: os-system-injection
+  languages:
+  - python
+  severity: ERROR
+  message: |
+    检测到命令注入风险（规则：os-system-injection）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：'subprocess'。
+  metadata:
+    cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    owasp: 'A1: Injection'
+    references:
+    - https://owasp.org/www-community/attacks/Command_Injection
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: |
+          @$APP.route($ROUTE, ...)
+          def $FUNC(..., $ROUTEVAR, ...):
+            ...
+      - pattern-either:
+        - pattern: os.system(..., <... $ROUTEVAR ...>, ...)
+        - pattern: |
+            $INTERM = <... $ROUTEVAR ...>
+            ...
+            os.system(..., <... $INTERM ...>, ...)
+    - patterns:
+      - pattern-either:
+        - pattern: os.system(..., <... flask.request.$W.get(...) ...>, ...)
+        - pattern: os.system(..., <... flask.request.$W[...] ...>, ...)
+        - pattern: os.system(..., <... flask.request.$W(...) ...>, ...)
+        - pattern: os.system(..., <... flask.request.$W ...>, ...)
+    - patterns:
+      - pattern-either:
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W.get(...) ...>\n... \n"
+          - pattern: os.system(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W[...] ...>\n... \n"
+          - pattern: os.system(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W(...) ...>\n... \n"
+          - pattern: os.system(..., <... $INTERM ...>, ...)
+        - patterns:
+          - pattern-inside: "$INTERM = <... flask.request.$W ...>\n... \n"
+          - pattern: os.system(..., <... $INTERM ...>, ...)

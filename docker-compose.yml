@@ -1,0 +1,157 @@
+services:
+  db:
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-Argus}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    networks:
+      - argus-network
+
+  backend:
+    image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-backend:${Argus_IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./docker/env/backend:/docker/env/backend
+      - backend_uploads:/app/uploads
+      - backend_runtime_data:/app/data/runtime
+      - scan_workspace:/tmp/Argus/scans
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    ports:
+      - "${Argus_BACKEND_PORT:-18000}:8000"
+    env_file:
+      - path: ./docker/env/backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
+      ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
+      REDIS_URL: redis://redis:6379/0
+      GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}
+      Argus_IMAGE_NAMESPACE: ${Argus_IMAGE_NAMESPACE:-happytraveller-alone}
+      Argus_IMAGE_TAG: ${Argus_IMAGE_TAG:-latest}
+      RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
+      AGENT_ENABLED: "true"
+      OPENGREP_SCAN_JOBS: "${OPENGREP_SCAN_JOBS:-0}"
+      OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
+      OPENGREP_RUNNER_MEMORY_LIMIT_MB: "${OPENGREP_RUNNER_MEMORY_LIMIT_MB:-2048}"
+      OPENGREP_RUNNER_CPU_LIMIT: "${OPENGREP_RUNNER_CPU_LIMIT:-0}"
+      OPENGREP_AVAILABLE_CORES: "${OPENGREP_AVAILABLE_CORES:-}"
+      SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/Argus/scans}
+      SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
+      RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
+      RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"
+      RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
+      RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
+      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+      BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+      BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+      BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+      BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
+      BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
+      BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-opengrep-runner:${Argus_IMAGE_TAG:-latest}}
+      GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
+      GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
+      GIT_MIRROR_PREFIXES: ${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}
+      GIT_MIRROR_HOSTS: ${GIT_MIRROR_HOSTS:-github.com}
+      GIT_MIRROR_ALLOW_AUTH_URL: ${GIT_MIRROR_ALLOW_AUTH_URL:-false}
+      GIT_MIRROR_FALLBACK_TO_ORIGIN: ${GIT_MIRROR_FALLBACK_TO_ORIGIN:-false}
+      XDG_DATA_HOME: /app/data/runtime/xdg-data
+      XDG_CACHE_HOME: /app/data/runtime/xdg-cache
+      XDG_CONFIG_HOME: /app/data/runtime/xdg-config
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST:-unix:///var/run/docker.sock}
+      CONTAINER_CLI: ${CONTAINER_CLI:-docker}
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      NO_PROXY: "*"
+    healthcheck:
+      test:
+        - "CMD"
+        - "curl"
+        - "-fsS"
+        - "http://127.0.0.1:8000/health"
+      interval: 5s
+      timeout: 5s
+      start_period: 180s
+      retries: 120
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - argus-network
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${Argus_IMAGE_NAMESPACE:-happytraveller-alone}/argus-frontend:${Argus_IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    ports:
+      - "${Argus_FRONTEND_PORT:-13000}:80"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      NO_PROXY: "*"
+      VITE_API_BASE_URL: /api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: "none"
+    networks:
+      - argus-network
+
+  redis:
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - argus-network
+
+  adminer:
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
+    restart: unless-stopped
+    profiles: [ "tools" ]
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - argus-network
+
+networks:
+  argus-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_uploads:
+  backend_runtime_data:
+  scan_workspace:
+    name: ${SCAN_WORKSPACE_VOLUME:-Argus_scan_workspace}
+  redis_data:

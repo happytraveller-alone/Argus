@@ -1,0 +1,62 @@
+rules:
+- id: detect-child-process_1
+  languages:
+  - javascript
+  message: |
+    检测到命令注入风险（规则：detect-child-process_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+  metadata:
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: HIGH
+    likelihood: MEDIUM
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    subcategory:
+    - vuln
+    technology:
+    - javascript
+    - aws-lambda
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $CMD
+    - pattern-either:
+      - pattern: exec($CMD,...)
+      - pattern: execSync($CMD,...)
+      - pattern: spawn($CMD,...)
+      - pattern: spawnSync($CMD,...)
+      - pattern: $CP.exec($CMD,...)
+      - pattern: $CP.execSync($CMD,...)
+      - pattern: $CP.spawn($CMD,...)
+      - pattern: $CP.spawnSync($CMD,...)
+    - pattern-either:
+      - pattern-inside: |
+          require('child_process')
+          ...
+      - pattern-inside: |
+          import 'child_process'
+          ...
+  pattern-sources:
+  - patterns:
+    - pattern: $EVENT
+    - pattern-either:
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+  severity: ERROR

@@ -1,0 +1,20 @@
+rules:
+- id: ignore_ssl_certificate_errors
+  patterns:
+  - pattern-either:
+    - pattern: |
+        $RET onReceivedSslError(WebView $W, SslErrorHandler $H, SslError $E) {
+          ...
+          $H.proceed();
+        }
+  message: |
+    检测到客户端容器安全配置风险（规则：ignore_ssl_certificate_errors）。危害：WebView/Electron
+    安全配置过宽可能允许调试、明文加载或跨域访问，扩大代码执行和数据窃取风险。建议：关闭危险调试/禁用项，只加载可信 HTTPS 内容并隔离不可信页面。
+  languages:
+  - java
+  severity: ERROR
+  metadata:
+    cwe: cwe-295
+    owasp-mobile: m3
+    masvs: network-3
+    reference: https://github.com/MobSF/owasp-mstg/blob/master/Document/0x05g-Testing-Network-Communication.md#webview-server-certificate-verification

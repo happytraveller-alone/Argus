@@ -1,0 +1,68 @@
+rules:
+- id: dynamodb-request-object
+  message: |
+    检测到NoSQL
+    注入风险（规则：dynamodb-request-object）。危害：攻击者可能构造查询条件绕过授权、扩大查询范围或篡改数据操作。建议：对查询对象和操作符做白名单校验，避免把用户输入直接作为查询结构。
+    保留的关键标识：$EVENT、`$EVENT`。
+  metadata:
+    cwe:
+    - 'CWE-943: Improper Neutralization of Special Elements in Data Query Logic'
+    owasp:
+    - A01:2017 - Injection
+    category: security
+    technology:
+    - javascript
+    - aws-lambda
+    - dynamodb
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: HIGH
+    confidence: MEDIUM
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+  languages:
+  - javascript
+  severity: ERROR
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: $EVENT
+    - pattern-either:
+      - pattern-inside: |
+          exports.handler = function ($EVENT, ...) {
+            ...
+          }
+      - pattern-inside: |
+          function $FUNC ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+      - pattern-inside: |
+          $FUNC = function ($EVENT, ...) {...}
+          ...
+          exports.handler = $FUNC
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $SINK
+    - pattern: |
+        $DC.$METHOD($SINK, ...)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: (query|send|scan|delete|put|transactWrite|update|batchExecuteStatement|executeStatement|executeTransaction|transactWriteItems)
+    - pattern-either:
+      - pattern-inside: |
+          $DC = new $AWS.DocumentClient(...);
+          ...
+      - pattern-inside: |
+          $DC = new $AWS.DynamoDB(...);
+          ...
+      - pattern-inside: |
+          $DC = new DynamoDBClient(...);
+          ...
+      - pattern-inside: |
+          $DC = DynamoDBDocumentClient.from(...);
+          ...
+  pattern-sanitizers:
+  - patterns:
+    - pattern: |
+        {...}

@@ -1,0 +1,33 @@
+rules:
+- id: use-defused-xml-parse
+  metadata:
+    owasp:
+    - A04:2017 - XML External Entities (XXE)
+    - A05:2021 - Security Misconfiguration
+    cwe:
+    - 'CWE-611: Improper Restriction of XML External Entity Reference'
+    references:
+    - https://docs.python.org/3/library/xml.html
+    - https://github.com/tiran/defusedxml
+    - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+    category: security
+    technology:
+    - python
+    cwe2022-top25: true
+    cwe2021-top25: true
+    subcategory:
+    - vuln
+    likelihood: LOW
+    impact: MEDIUM
+    confidence: MEDIUM
+  message: |
+    检测到XML
+    外部实体（XXE）/实体扩展风险（规则：use-defused-xml-parse）。危害：攻击者可能读取服务器本地文件、发起内网请求，或通过实体扩展造成资源耗尽。建议：禁用外部实体和危险的
+    DOCTYPE/实体扩展能力，并只解析可信 XML。 保留的关键标识：`xml`、`defusedxml`。
+  languages:
+  - python
+  severity: ERROR
+  patterns:
+  - pattern: xml.etree.ElementTree.parse($...ARGS)
+  - pattern-not: xml.etree.ElementTree.parse("...")
+  fix: defusedxml.etree.ElementTree.parse($...ARGS)

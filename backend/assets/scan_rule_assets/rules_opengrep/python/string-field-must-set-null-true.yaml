@@ -1,0 +1,21 @@
+rules:
+- id: string-field-must-set-null-true
+  patterns:
+  - pattern-inside: |
+      class $M(...):
+        ...
+  - pattern-not: $F = django.db.models.CharField(..., unique=True, blank=True, null=True, ...)
+  - pattern-not: $F = django.db.models.TextField(..., unique=True, blank=True, null=True, ...)
+  - pattern-either:
+    - pattern: $F = django.db.models.CharField(..., unique=True, blank=True, ...)
+    - pattern: $F = django.db.models.TextField(..., unique=True, blank=True, ...)
+  message: |
+    检测到数据模型约束缺陷（规则：string-field-must-set-null-true）。危害：唯一字段同时允许空白但不允许 NULL 时，多个空值可能触发唯一约束冲突。建议：按框架要求配置
+    NULL/blank 行为，或显式处理空值。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'

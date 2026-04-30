@@ -1,0 +1,48 @@
+rules:
+- id: dangerous-system-call_1
+  languages:
+  - python
+  message: |
+    检测到命令注入风险（规则：dangerous-system-call_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：'subprocess'、`os`、`event`。
+  metadata:
+    asvs:
+      control_id: 5.2.4 Dyanmic Code Execution Features
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements
+      section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    source-rule-url: https://bandit.readthedocs.io/en/latest/plugins/b605_start_process_with_a_shell.html
+    subcategory:
+    - vuln
+    technology:
+    - python
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $CMD
+    - pattern-either:
+      - pattern: os.system($CMD,...)
+      - pattern: os.popen($CMD,...)
+      - pattern: os.popen2($CMD,...)
+      - pattern: os.popen3($CMD,...)
+      - pattern: os.popen4($CMD,...)
+  pattern-sources:
+  - patterns:
+    - pattern: event
+    - pattern-inside: |
+        def $HANDLER(event, context):
+          ...
+  severity: ERROR

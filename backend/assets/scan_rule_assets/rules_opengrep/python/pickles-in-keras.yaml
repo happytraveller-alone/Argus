@@ -1,0 +1,34 @@
+rules:
+- id: pickles-in-keras
+  message: |
+    检测到不安全反序列化风险（规则：pickles-in-keras）。危害：恶意序列化数据可能触发对象构造、代码执行或业务状态篡改。建议：只反序列化可信数据，使用安全加载函数或限制可反序列化类型。
+  languages:
+  - python
+  severity: ERROR
+  metadata:
+    category: security
+    cwe: 'CWE-502: Deserialization of Untrusted Data'
+    subcategory:
+    - vuln
+    confidence: MEDIUM
+    likelihood: MEDIUM
+    impact: HIGH
+    technology:
+    - keras
+    description: Potential arbitrary code execution from Keras' load_model function
+    references:
+    - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: keras.models.load_model(...)
+      - pattern-not: keras.models.load_model("...", ...)
+    - patterns:
+      - pattern: tensorflow.keras.models.load_model(...)
+      - pattern-not: tensorflow.keras.models.load_model("...", ...)
+    - patterns:
+      - pattern: keras.saving.load_model(...)
+      - pattern-not: keras.saving.load_model("...", ...)
+    - patterns:
+      - pattern: tensorflow.keras.saving.load_model(...)
+      - pattern-not: tensorflow.keras.saving.load_model("...", ...)

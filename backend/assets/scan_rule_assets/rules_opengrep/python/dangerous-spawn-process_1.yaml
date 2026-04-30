@@ -1,0 +1,65 @@
+rules:
+- id: dangerous-spawn-process_1
+  languages:
+  - python
+  message: |
+    检测到命令注入风险（规则：dangerous-spawn-process_1）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
+    保留的关键标识：`os`、`event`。
+  metadata:
+    asvs:
+      control_id: 5.3.8 OS Command Injection
+      control_url: https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v53-output-encoding-and-injection-prevention-requirements
+      section: 'V5: Validation, Sanitization and Encoding Verification Requirements'
+      version: '4'
+    category: security
+    confidence: MEDIUM
+    cwe:
+    - 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    cwe2021-top25: true
+    cwe2022-top25: true
+    impact: MEDIUM
+    likelihood: HIGH
+    owasp:
+    - A01:2017 - Injection
+    - A03:2021 - Injection
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    source-rule-url: https://bandit.readthedocs.io/en/latest/plugins/b605_start_process_with_a_shell.html
+    subcategory:
+    - vuln
+    technology:
+    - python
+    - aws-lambda
+  mode: taint
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $CMD
+    - pattern-either:
+      - patterns:
+        - pattern: os.$METHOD($MODE, $CMD, ...)
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: (spawnl|spawnle|spawnlp|spawnlpe|spawnv|spawnve|spawnvp|spawnvp|spawnvpe|posix_spawn|posix_spawnp|startfile)
+      - patterns:
+        - pattern-inside: os.$METHOD($MODE, $BASH, ["-c", $CMD,...],...)
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: (spawnv|spawnve|spawnvp|spawnvp|spawnvpe|posix_spawn|posix_spawnp)
+        - metavariable-regex:
+            metavariable: $BASH
+            regex: (.*)(sh|bash|ksh|csh|tcsh|zsh)
+      - patterns:
+        - pattern-inside: os.$METHOD($MODE, $BASH, "-c", $CMD,...)
+        - metavariable-regex:
+            metavariable: $METHOD
+            regex: (spawnl|spawnle|spawnlp|spawnlpe)
+        - metavariable-regex:
+            metavariable: $BASH
+            regex: (.*)(sh|bash|ksh|csh|tcsh|zsh)
+  pattern-sources:
+  - patterns:
+    - pattern: event
+    - pattern-inside: |
+        def $HANDLER(event, context):
+          ...
+  severity: ERROR

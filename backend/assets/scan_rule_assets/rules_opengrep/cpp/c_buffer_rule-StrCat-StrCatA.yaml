@@ -1,0 +1,40 @@
+rules:
+- id: c_buffer_rule-StrCat-StrCatA
+  languages:
+  - cpp
+  message: |
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-StrCat-StrCatA）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
+    API，并以目标缓冲区大小作为边界。
+    保留的关键标识：https://learn.microsoft.com/en-us/windows/win32/api/strsafe/、`StrCat`、`StringCbCat`、`StringCbCatEx`、`StringCbCatN`、`StringCbCatNEx`、`StringCchCat`、`StringCchCatEx`、`StringCchCatN`、`StringCchCatNEx`。
+  metadata:
+    shortDescription: Insecure string processing function
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - pattern: StrCatA(...)
+  - pattern: StrCatW(...)
+  - pattern: strcatA(...)
+  - pattern: StrcatW(...)
+  - pattern: lstrcatA(...)
+  - pattern: lstrcatW(...)
+  - pattern: strCatBuff(...)
+  - pattern: StrCatBuffA(...)
+  - pattern: StrCatBuffW(...)
+  - pattern: StrCatChainW(...)
+  - pattern: _tccat(...)
+  - pattern: _mbccat(...)
+  - pattern: _ftcscat(...)
+  - pattern: StrCatN(...)
+  - pattern: StrCatNA(...)
+  - pattern: StrCatNW(...)
+  - pattern: StrNCat(...)
+  - pattern: StrNCatA(...)
+  - pattern: StrNCatW(...)
+  - pattern: lstrncat(...)
+  - pattern: lstrcatnA(...)
+  - pattern: lstrcatnW(...)
+  severity: ERROR

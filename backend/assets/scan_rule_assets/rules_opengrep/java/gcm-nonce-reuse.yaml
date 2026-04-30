@@ -1,0 +1,31 @@
+rules:
+- id: gcm-nonce-reuse
+  metadata:
+    functional-categories:
+    - crypto::search::randomness::javax.crypto
+    cwe:
+    - 'CWE-323: Reusing a Nonce, Key Pair in Encryption'
+    category: security
+    source-rule-url: https://www.youtube.com/watch?v=r1awgAl90wM
+    technology:
+    - java
+    owasp:
+    - A02:2021 - Cryptographic Failures
+    references:
+    - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+    subcategory:
+    - vuln
+    likelihood: MEDIUM
+    impact: MEDIUM
+    confidence: HIGH
+  languages:
+  - java
+  message: |
+    检测到弱加密/加密参数错误风险（规则：gcm-nonce-reuse）。危害：过时算法、重复
+    nonce/IV、弱密钥长度或缺少认证校验会削弱机密性和完整性，可能导致明文恢复或数据篡改。建议：使用现代算法和正确参数，例如 AES-GCM/ChaCha20-Poly1305，保证
+    nonce/IV 唯一，使用足够密钥长度并完成认证校验。
+  patterns:
+  - pattern-either:
+    - pattern: new GCMParameterSpec(..., "...".getBytes(...), ...);
+    - pattern: byte[] $NONCE = "...".getBytes(...); ... new GCMParameterSpec(..., $NONCE, ...);
+  severity: ERROR
