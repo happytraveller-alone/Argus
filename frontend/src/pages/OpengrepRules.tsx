@@ -1599,6 +1599,7 @@ export default function OpengrepRules({
 								pageSizeOptions: [10, 20, 50, 100],
 							}}
 							enableColumnResizing
+							fillContainerWidth
 							tableClassName="w-full"
 							getRowId={(row) => row.id}
 						/>

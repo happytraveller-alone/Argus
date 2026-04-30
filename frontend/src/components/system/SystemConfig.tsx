@@ -36,7 +36,7 @@ import {
 	ArrowDown,
 	ArrowUp,
 	CheckCircle2,
-	Edit3,
+
 	Loader2,
 	Plus,
 	RotateCcw,
@@ -355,61 +355,66 @@ function RowConfigDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent aria-describedby={undefined} className="!w-[min(92vw,980px)] !max-w-none max-h-[88vh] overflow-y-auto cyber-dialog border border-border rounded-lg">
-				<DialogHeader>
-					<DialogTitle className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
+			<DialogContent aria-describedby={undefined} className="!w-[min(92vw,980px)] !max-w-none max-h-[88vh] flex flex-col p-0 gap-0 cyber-dialog border border-border rounded-lg">
+				<DialogHeader className="px-8 pt-6 pb-4 border-b border-border flex-shrink-0">
+					<DialogTitle className="font-mono text-lg font-bold uppercase tracking-wider text-foreground">
 						{mode === "create" ? "新增模型配置" : "编辑模型配置"}
 					</DialogTitle>
 				</DialogHeader>
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<div className="space-y-2">
-						<Label>模型供应商</Label>
-						<Select value={draft.provider} onValueChange={(provider) => update("provider", normalizeLlmProviderId(provider))}>
-							<SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger>
-							<SelectContent className="cyber-dialog border-border">
-								{providerOptions.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>)}
-							</SelectContent>
-						</Select>
+				<div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+					<div className="space-y-4">
+						<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">基本配置</h3>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div className="space-y-2">
+								<Label className="font-mono text-xs font-bold uppercase text-muted-foreground">模型供应商</Label>
+								<Select value={draft.provider} onValueChange={(provider) => update("provider", normalizeLlmProviderId(provider))}>
+									<SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger>
+									<SelectContent className="cyber-dialog border-border">
+										{providerOptions.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>)}
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-2">
+								<Label className="font-mono text-xs font-bold uppercase text-muted-foreground">状态</Label>
+								<Select value={draft.enabled ? "enabled" : "disabled"} onValueChange={(value) => update("enabled", value === "enabled")}>
+									<SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger>
+									<SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-2 md:col-span-2">
+								<Label className="font-mono text-xs font-bold uppercase text-muted-foreground">地址</Label>
+								<Input className="cyber-input h-10" value={draft.baseUrl} onChange={(event) => update("baseUrl", event.target.value)} placeholder={resolveDefaultBaseUrlForProvider(providerOptions, draft.provider)} />
+							</div>
+							<div className="space-y-2">
+								<Label className="font-mono text-xs font-bold uppercase text-muted-foreground">模型</Label>
+								<Input className="cyber-input h-10" value={draft.model} onChange={(event) => update("model", event.target.value)} placeholder={resolveDefaultModelForProvider(providerOptions, draft.provider)} />
+							</div>
+							<div className="space-y-2">
+								<Label className="font-mono text-xs font-bold uppercase text-muted-foreground">API Key{draft.hasApiKey ? <span className="ml-2 normal-case tracking-normal text-emerald-300">已保存密钥，留空将保留</span> : null}</Label>
+								<Input type="password" className="cyber-input h-10" value={draft.apiKey} onChange={(event) => update("apiKey", event.target.value)} placeholder={draft.hasApiKey ? "留空保留已保存密钥，输入则替换" : "输入 API Key"} />
+							</div>
+						</div>
 					</div>
-					<div className="space-y-2">
-						<Label>状态</Label>
-						<Select value={draft.enabled ? "enabled" : "disabled"} onValueChange={(value) => update("enabled", value === "enabled")}>
-							<SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger>
-							<SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent>
-						</Select>
-					</div>
-					<div className="space-y-2 md:col-span-2">
-						<Label>地址</Label>
-						<Input className="cyber-input" value={draft.baseUrl} onChange={(event) => update("baseUrl", event.target.value)} placeholder={resolveDefaultBaseUrlForProvider(providerOptions, draft.provider)} />
-					</div>
-					<div className="space-y-2">
-						<Label>模型</Label>
-						<Input className="cyber-input" value={draft.model} onChange={(event) => update("model", event.target.value)} placeholder={resolveDefaultModelForProvider(providerOptions, draft.provider)} />
-					</div>
-					<div className="space-y-2">
-						<Label>API Key（默认不可见）{draft.hasApiKey ? <span className="ml-2 text-xs text-emerald-300">已保存密钥，留空将保留</span> : null}</Label>
-						<Input type="password" className="cyber-input" value={draft.apiKey} onChange={(event) => update("apiKey", event.target.value)} placeholder={draft.hasApiKey ? "留空保留已保存密钥，输入则替换" : "输入 API Key"} />
+					<div className="space-y-4">
+						<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2 flex items-center gap-2"><Settings className="h-4 w-4" /> 高级配置</h3>
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+							<label className="space-y-1.5 md:col-span-3"><span className="font-mono text-xs font-bold uppercase text-muted-foreground">自定义请求头 (JSON)</span><Textarea className="cyber-input min-h-24 font-mono" value={draft.advanced.llmCustomHeaders} onChange={(e) => updateAdvanced("llmCustomHeaders", e.target.value)} /></label>
+							{([
+								["llmTimeout", "请求超时 (毫秒)"],
+								["llmTemperature", "温度"],
+								["llmMaxTokens", "最大 Tokens"],
+								["llmFirstTokenTimeout", "首 Token 超时 (秒)"],
+								["llmStreamTimeout", "流式超时 (秒)"],
+								["agentTimeout", "Agent 总超时 (秒)"],
+								["subAgentTimeout", "子 Agent 超时 (秒)"],
+								["toolTimeout", "工具超时 (秒)"],
+							] as Array<[keyof LlmAdvancedConfig, string]>).map(([key, label]) => (
+								<label key={key} className="space-y-1.5"><span className="font-mono text-xs font-bold uppercase text-muted-foreground">{label}</span><Input type="number" className="cyber-input h-10" value={draft.advanced[key] as number} onChange={(e) => updateAdvanced(key, Number(e.target.value) as never)} /></label>
+							))}
+						</div>
 					</div>
 				</div>
-				<div className="border-t border-border pt-4 mt-4">
-					<div className="mb-3 flex items-center gap-2 text-sm font-mono font-bold uppercase"><Settings className="h-4 w-4" /> 高级配置</div>
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-						<label className="space-y-1 md:col-span-3"><span className="text-xs text-muted-foreground">自定义请求头 (JSON)</span><Textarea className="cyber-input min-h-24 font-mono" value={draft.advanced.llmCustomHeaders} onChange={(e) => updateAdvanced("llmCustomHeaders", e.target.value)} /></label>
-						{([
-							["llmTimeout", "请求超时 (毫秒)"],
-							["llmTemperature", "温度"],
-							["llmMaxTokens", "最大 Tokens"],
-							["llmFirstTokenTimeout", "首 Token 超时 (秒)"],
-							["llmStreamTimeout", "流式超时 (秒)"],
-							["agentTimeout", "Agent 总超时 (秒)"],
-							["subAgentTimeout", "子 Agent 超时 (秒)"],
-							["toolTimeout", "工具超时 (秒)"],
-						] as Array<[keyof LlmAdvancedConfig, string]>).map(([key, label]) => (
-							<label key={key} className="space-y-1"><span className="text-xs text-muted-foreground">{label}</span><Input type="number" className="cyber-input" value={draft.advanced[key] as number} onChange={(e) => updateAdvanced(key, Number(e.target.value) as never)} /></label>
-						))}
-					</div>
-				</div>
-				<div className="flex justify-end gap-2 pt-4">
+				<div className="flex-shrink-0 flex justify-end gap-3 px-8 py-4 bg-muted border-t border-border">
 					<Button variant="outline" className="cyber-btn-ghost" onClick={() => onOpenChange(false)}>取消</Button>
 					<Button className="cyber-btn-primary" onClick={() => onSave({ ...draft, apiKey: draft.apiKey.trim(), hasApiKey: draft.hasApiKey || draft.apiKey.trim().length > 0, secretSource: draft.apiKey.trim() ? "saved" : draft.secretSource })}>保存</Button>
 				</div>
@@ -546,6 +551,12 @@ export function SystemConfig({
 		if (row) await runLlmConnectionTest(row);
 	};
 
+	const handleSaveAndTestRow = async (targetRow: LlmConfigRow) => {
+		const saved = await persistConfig();
+		const savedRow = saved?.llmConfig.rows.find((r) => r.id === targetRow.id);
+		if (savedRow) await runLlmConnectionTest(savedRow);
+	};
+
 	const openCreateDialog = () => {
 		setDialogMode("create");
 		setEditingRow(createEmptyRow(providerOptions, rows.length + 1));
@@ -616,22 +627,35 @@ export function SystemConfig({
 								</div>
 							</div>
 								<div className="overflow-x-auto rounded-lg border border-border">
-									<table className="w-full table-auto text-base">
+									<table className="w-full table-fixed text-base">
+										<colgroup>
+											<col className="w-16" />
+											<col className="w-[150px]" />
+											<col />
+											<col className="w-[200px]" />
+											<col className="w-[200px]" />
+											<col className="w-[320px]" />
+										</colgroup>
 										<thead>
 											<tr className="border-b border-border/70 bg-muted/40 text-sm font-bold uppercase tracking-[0.12em] text-muted-foreground">
-												{["序号", "模型供应商", "地址", "模型", "状态", "操作"].map((column) => <th key={column} className="px-3 py-2 text-left font-bold whitespace-nowrap">{column}</th>)}
+												<th className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">序号</th>
+												<th className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型供应商</th>
+												<th className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">地址</th>
+												<th className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型</th>
+												<th className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">状态</th>
+												<th className="px-3 py-2 text-center font-bold whitespace-nowrap">操作</th>
 											</tr>
 										</thead>
 										<tbody>
 											{rows.map((row) => {
 												const status = rowStatusText(row, config.llmConfig.latestPreflightRun.winningRowId);
 												return <tr key={row.id} className="border-b border-border/70">
-													<td className="px-3 py-3 font-mono text-base whitespace-nowrap">{row.priority}</td>
-													<td className="px-3 py-3 text-base whitespace-nowrap">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</td>
-													<td className="px-3 py-3 font-mono text-base break-all" title={row.baseUrl}>{row.baseUrl || "--"}</td>
-													<td className="px-3 py-3 font-mono text-base whitespace-nowrap" title={row.model}>{row.model || "--"}</td>
-													<td className="px-3 py-3"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></td>
-													<td className="px-3 py-3"><div className="flex flex-nowrap gap-1"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}><Edit3 className="h-3 w-3 mr-1" />编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></td>
+													<td className="px-3 py-3 font-mono text-base whitespace-nowrap border-r border-border/30">{row.priority}</td>
+													<td className="px-3 py-3 text-base whitespace-nowrap border-r border-border/30">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</td>
+													<td className="px-3 py-3 font-mono text-base break-all border-r border-border/30" title={row.baseUrl}>{row.baseUrl || "--"}</td>
+													<td className="px-3 py-3 font-mono text-base whitespace-nowrap border-r border-border/30" title={row.model}>{row.model || "--"}</td>
+													<td className="px-3 py-3 border-r border-border/30"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></td>
+													<td className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}><Zap className="h-3 w-3 mr-1" />验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></td>
 												</tr>;
 											})}
 										</tbody>

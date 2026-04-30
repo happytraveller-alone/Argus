@@ -553,12 +553,13 @@ export function DataTable<TData extends RowData>({
           containerClassName={tableContainerClassName}
           style={{
             width: enableColumnResizing
-              ? table.getTotalSize()
+              ? (fillContainerWidth ? "100%" : table.getTotalSize())
               : fillContainerWidth
                 ? "100%"
                 : autoTableWidth,
-            minWidth:
-              !enableColumnResizing && fillContainerWidth
+            minWidth: enableColumnResizing
+              ? table.getTotalSize()
+              : fillContainerWidth
                 ? autoTableWidth
                 : undefined,
           }}

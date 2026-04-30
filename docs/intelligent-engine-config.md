@@ -125,9 +125,11 @@ Fallback 只允许这些原因继续尝试下一行：
 
 系统设置页入口：`frontend/src/components/system/SystemConfig.tsx`。
 
-表格使用原生 HTML `<table>` 配合 `table-auto w-full`，列宽由浏览器根据各列最长内容自动计算并撑满容器宽度。列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含新增、编辑、删除、上移、下移。新增和编辑使用同一配置弹窗，弹窗包含基础字段和高级字段，API key 输入默认不可见。
+表格使用原生 HTML `<table>` 配合 `table-fixed` 和 `<colgroup>` 显式列宽（序号 64px、模型供应商 150px、地址自适应、模型 200px、状态 200px、操作 320px），确保表格总宽度撑满容器。列间有竖向分割线（`border-r border-border/30`），"操作"列表头居中。列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含验证、编辑、禁用/启用、删除、上移、下移；验证按钮自动保存当前行配置并执行连接测试。新增和编辑使用同一配置弹窗，弹窗采用 flex 列布局（固定头部 + 可滚动内容区 + 固定底栏），分为"基本配置"和"高级配置"两个区域，API key 输入默认不可见。
 
-智能引擎独立配置页 `frontend/src/pages/ScanConfigIntelligentEngine.tsx` 嵌入 `SystemConfig`（仅 LLM 区），表格上方显示"保存并验证"和"新增配置"按钮，表格下方显示"保存并测试"、"保存"和"重置"按钮。
+智能引擎独立配置页 `frontend/src/pages/ScanConfigIntelligentEngine.tsx` 嵌入 `SystemConfig`（仅 LLM 区），表格上方显示可用/异常计数、"保存并验证"和"新增配置"按钮，表格下方显示"保存并测试"、"保存"和"重置"按钮。
+
+扫描引擎配置页 `frontend/src/pages/ScanConfigEngines.tsx` 嵌入 `OpengrepRules`，其 `DataTable` 使用 `enableColumnResizing` + `fillContainerWidth` 确保表格撑满容器宽度。
 
 智能审计创建弹窗入口：`frontend/src/components/scan/CreateProjectScanDialog.tsx`。该弹窗不得新增 provider/model 选择控件；它只消费 agent preflight 的结果。
 
