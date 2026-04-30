@@ -36,9 +36,11 @@ test("intelligent engine page delegates summary rendering to SystemConfig table 
 
 	assert.match(source, /<SystemConfig/);
 	assert.match(source, /visibleSections=\{\["llm"\]\}/);
-	assert.match(source, /cardClassName="cyber-card-flat"/);
+	assert.match(source, /cardClassName="cyber-card-flat !bg-transparent !border-0 !shadow-none !p-0"/);
 	assert.match(source, /showLlmSummaryCards=\{false\}/);
+	assert.match(source, /showInlineSaveButtons=\{false\}/);
 	assert.match(source, /onLlmSummaryChange=\{setSummaryState\}/);
+	assert.doesNotMatch(source, /max-w-\[1680px\]/);
 	assert.doesNotMatch(source, /ENGINE_SUMMARY_CARD_CLASSNAME/);
 	assert.doesNotMatch(source, /text-2xl/);
 	assert.doesNotMatch(source, /h-14 w-14/);

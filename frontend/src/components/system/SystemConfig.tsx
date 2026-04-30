@@ -147,6 +147,7 @@ interface SystemConfigProps {
 	showLlmSummaryCards?: boolean;
 	llmSummaryOnly?: boolean;
 	showFloatingSaveButton?: boolean;
+	showInlineSaveButtons?: boolean;
 	compactLayout?: boolean;
 	cardClassName?: string;
 	sharedDraftState?: SystemConfigSharedDraftState;
@@ -434,6 +435,7 @@ export function SystemConfig({
 	showLlmSummaryCards = true,
 	llmSummaryOnly = false,
 	showFloatingSaveButton = true,
+	showInlineSaveButtons = true,
 	compactLayout = false,
 	cardClassName,
 	sharedDraftState,
@@ -597,28 +599,45 @@ export function SystemConfig({
 						<div className={cn("cyber-card !overflow-visible", compactLayout ? "p-4 space-y-4" : "p-6 space-y-6", cardClassName)}>
 							{showLlmSummaryCards ? <div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><div className="cyber-card p-4"><p className="stat-label">模型提供商</p><p className="stat-value text-2xl break-all">{activeProviderInfo?.name || activeRow?.provider || "--"}</p></div><div className="cyber-card p-4"><p className="stat-label">当前采用模型</p><p className="stat-value text-2xl break-all">{activeRow?.model || "--"}</p></div><div className="cyber-card p-4"><p className="stat-label">支持模型数量</p><p className="stat-value text-2xl break-all">{availableModelCount}</p></div></div> : null}
 							{!llmSummaryOnly ? <>
-								<div className="flex justify-end"><Button onClick={openCreateDialog} className="cyber-btn-primary h-9"><Plus className="h-4 w-4 mr-2" />新增</Button></div>
+								<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									{(() => {
+										const availableCount = rows.filter((r) => r.enabled && r.hasApiKey && r.preflight.status === "passed").length;
+										const abnormalCount = rows.length - availableCount;
+										return <>
+											<span className="rounded border border-emerald-500/40 text-emerald-300 px-2.5 py-1 text-sm font-medium">可用 {availableCount}</span>
+											<span className="rounded border border-rose-500/40 text-rose-300 px-2.5 py-1 text-sm font-medium">异常 {abnormalCount}</span>
+										</>;
+									})()}
+								</div>
+								<div className="flex items-center gap-2">
+									<Button onClick={handleSaveAndTest} disabled={savingLLM || testingLLM || !isConfigured} className="cyber-btn-primary h-9">{savingLLM || testingLLM ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />验证中...</> : <><Save className="h-4 w-4 mr-2" />保存并验证</>}</Button>
+									<Button onClick={openCreateDialog} className="cyber-btn-primary h-9"><Plus className="h-4 w-4 mr-2" />新增配置</Button>
+								</div>
+							</div>
 								<div className="overflow-x-auto rounded-lg border border-border">
-									<div role="table" className="w-full text-sm">
-										<div role="rowgroup">
-											<div role="row" className="grid grid-cols-[64px_150px_1fr_200px_minmax(200px,1fr)_280px] border-b border-border/70 bg-muted/40 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-												{["序号", "模型供应商", "地址", "模型", "状态", "操作"].map((column) => <div key={column} role="columnheader" className="px-3 py-2">{column}</div>)}
-											</div>
+									<table className="w-full table-auto text-base">
+										<thead>
+											<tr className="border-b border-border/70 bg-muted/40 text-sm font-bold uppercase tracking-[0.12em] text-muted-foreground">
+												{["序号", "模型供应商", "地址", "模型", "状态", "操作"].map((column) => <th key={column} className="px-3 py-2 text-left font-bold whitespace-nowrap">{column}</th>)}
+											</tr>
+										</thead>
+										<tbody>
 											{rows.map((row) => {
 												const status = rowStatusText(row, config.llmConfig.latestPreflightRun.winningRowId);
-												return <div role="row" key={row.id} className="grid grid-cols-[64px_150px_1fr_200px_minmax(200px,1fr)_280px] border-b border-border/70">
-													<div role="cell" className="px-3 py-3 font-mono text-sm">{row.priority}</div>
-													<div role="cell" className="px-3 py-3 text-sm">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</div>
-													<div role="cell" className="px-3 py-3 truncate font-mono text-sm" title={row.baseUrl}>{row.baseUrl || "--"}</div>
-													<div role="cell" className="px-3 py-3 truncate font-mono text-sm" title={row.model}>{row.model || "--"}</div>
-													<div role="cell" className="px-3 py-3"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></div>
-													<div role="cell" className="px-3 py-3"><div className="flex flex-nowrap gap-1"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}><Edit3 className="h-3 w-3 mr-1" />编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></div>
-												</div>;
+												return <tr key={row.id} className="border-b border-border/70">
+													<td className="px-3 py-3 font-mono text-base whitespace-nowrap">{row.priority}</td>
+													<td className="px-3 py-3 text-base whitespace-nowrap">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</td>
+													<td className="px-3 py-3 font-mono text-base break-all" title={row.baseUrl}>{row.baseUrl || "--"}</td>
+													<td className="px-3 py-3 font-mono text-base whitespace-nowrap" title={row.model}>{row.model || "--"}</td>
+													<td className="px-3 py-3"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></td>
+													<td className="px-3 py-3"><div className="flex flex-nowrap gap-1"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}><Edit3 className="h-3 w-3 mr-1" />编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></td>
+												</tr>;
 											})}
-										</div>
-									</div>
+										</tbody>
+									</table>
 								</div>
-								<div className="pt-4 border-t border-border border-dashed flex justify-end flex-wrap gap-2"><Button onClick={handleSaveAndTest} disabled={savingLLM || testingLLM || !isConfigured} className="cyber-btn-primary h-10">{savingLLM || testingLLM ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存并测试中...</> : <><Save className="w-4 h-4 mr-2" />保存并测试</>}</Button><Button onClick={persistConfig} disabled={savingLLM} variant="outline" className="cyber-btn-ghost h-10"><Save className="w-4 h-4 mr-2" />保存</Button><Button onClick={async () => { if (!window.confirm("确定要重置为默认配置吗？")) return; await api.deleteUserConfig(); await reloadConfig(); setHasChanges(false); }} disabled={savingLLM || testingLLM} variant="ghost" className="cyber-btn-ghost h-10"><RotateCcw className="w-4 h-4 mr-2" />重置</Button></div>
+								{showInlineSaveButtons && <div className="pt-4 border-t border-border border-dashed flex justify-end flex-wrap gap-2"><Button onClick={handleSaveAndTest} disabled={savingLLM || testingLLM || !isConfigured} className="cyber-btn-primary h-10">{savingLLM || testingLLM ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />保存并测试中...</> : <><Save className="w-4 h-4 mr-2" />保存并测试</>}</Button><Button onClick={persistConfig} disabled={savingLLM} variant="outline" className="cyber-btn-ghost h-10"><Save className="w-4 h-4 mr-2" />保存</Button><Button onClick={async () => { if (!window.confirm("确定要重置为默认配置吗？")) return; await api.deleteUserConfig(); await reloadConfig(); setHasChanges(false); }} disabled={savingLLM || testingLLM} variant="ghost" className="cyber-btn-ghost h-10"><RotateCcw className="w-4 h-4 mr-2" />重置</Button></div>}
 								{llmTestResult && <div className={`p-3 rounded-lg ${llmTestResult.success ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-rose-500/10 border border-rose-500/30"}`}><div className="flex items-center gap-2 text-sm">{llmTestResult.success ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertCircle className="h-4 w-4 text-rose-400" />}<span>{llmTestResult.message}</span></div></div>}
 							</> : null}
 						</div>

@@ -19,6 +19,22 @@ test("SystemConfig renders required multi-provider table columns and actions", (
 	assert.doesNotMatch(source, /runtime-health|运行时健康/);
 });
 
+test("SystemConfig uses updated grid columns and enlarged fonts", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	assert.match(source, /grid-cols-\[auto_auto_1fr_auto_minmax\(120px,auto\)_auto\]/);
+	assert.match(source, /role="table" className="w-full text-base"/);
+	assert.match(source, /showInlineSaveButtons/);
+});
+
+test("SystemConfig renders LLM summary badges with available and abnormal counts", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	assert.match(source, /可用/);
+	assert.match(source, /异常/);
+	assert.match(source, /border-emerald-500\/40 text-emerald-300/);
+	assert.match(source, /border-rose-500\/40 text-rose-300/);
+	assert.match(source, /新增配置/);
+});
+
 test("SystemConfig edit dialog masks keys and preserves blank saved secrets", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
 	assert.match(source, /type="password"/);

@@ -193,26 +193,37 @@ pub fn selected_enabled_runtime(
         .get("rows")
         .and_then(Value::as_array)
         .ok_or_else(|| LlmGateError::new("invalid_config", "LLM 配置行格式无效。"))?;
-    for row in rows.iter().filter(|row| row_enabled(row)) {
+    let enabled_rows: Vec<_> = rows.iter().filter(|row| row_enabled(row)).collect();
+    if enabled_rows.is_empty() {
+        return Err(LlmGateError::new(
+            "missing_fields",
+            "没有已启用的 LLM 配置行，请在智能引擎设置中添加并启用至少一个 LLM 配置。",
+        ));
+    }
+    let mut last_error: Option<LlmGateError> = None;
+    for row in &enabled_rows {
         let runtime_config = row_to_legacy_config(row);
         match build_runtime_config(&runtime_config, other_config) {
             Ok(runtime) => {
                 let fingerprint = compute_llm_fingerprint(&runtime);
                 return Ok(SelectedLlmRow {
                     row_id: read_string(row, "id"),
-                    row: row.clone(),
+                    row: (*row).clone(),
                     runtime_config,
                     runtime,
                     fingerprint,
                 });
             }
-            Err(_) => continue,
+            Err(error) => {
+                last_error = Some(error);
+                continue;
+            }
         }
     }
-    Err(LlmGateError::new(
-        "missing_fields",
-        "没有可用于预检的已启用 LLM 配置行。",
-    ))
+    let detail = last_error
+        .map(|e| format!("已启用 {} 行均无法加载：{}", enabled_rows.len(), e.message))
+        .unwrap_or_else(|| "没有可用的已启用 LLM 配置行。".to_string());
+    Err(LlmGateError::new("missing_fields", &detail))
 }
 
 pub fn row_to_legacy_config(row: &Value) -> Value {

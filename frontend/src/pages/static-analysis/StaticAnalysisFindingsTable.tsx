@@ -118,9 +118,7 @@ export function getColumns(input: {
 			meta: {
 				label: "命中规则",
 				align: "left",
-				width: 220,
 				minWidth: 180,
-				maxWidth: 260,
 				filterVariant: "text",
 			},
 			cell: ({ row }) => (
@@ -378,7 +376,6 @@ export default function StaticAnalysisFindingsTable({
 					} / ${Math.max(1, table.getPageCount())} 页`,
 			}}
 			className="border border-border rounded-md"
-			tableClassName="min-w-[1400px]"
 			fillContainerWidth
 		/>
 	);

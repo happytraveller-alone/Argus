@@ -25,19 +25,18 @@ export default function ScanConfigIntelligentEngine() {
 
 	return (
 		<div className="min-h-screen bg-background p-6">
-			<div className="max-w-[1680px] mx-auto">
-				<SystemConfig
-					visibleSections={["llm"]}
-					defaultSection="llm"
-					mergedView={false}
-					cardClassName="cyber-card-flat"
-					showLlmSummaryCards={false}
-					showFloatingSaveButton={false}
-					compactLayout
-					sharedDraftState={sharedDraftState}
-					onLlmSummaryChange={setSummaryState}
-				/>
-			</div>
+			<SystemConfig
+				visibleSections={["llm"]}
+				defaultSection="llm"
+				mergedView={false}
+				cardClassName="cyber-card-flat !bg-transparent !border-0 !shadow-none !p-0"
+				showLlmSummaryCards={false}
+				showFloatingSaveButton={false}
+				showInlineSaveButtons
+				compactLayout
+				sharedDraftState={sharedDraftState}
+				onLlmSummaryChange={setSummaryState}
+			/>
 		</div>
 	);
 }

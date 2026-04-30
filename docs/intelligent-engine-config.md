@@ -86,7 +86,7 @@ Compose 会通过 `ARGUS_INTELLIGENT_AUDIT_ENV` 指定的 env file（默认 `./.
 }
 ```
 
-后端 helper `backend/src/routes/llm_config_set.rs` 负责旧单配置迁移、行优先级归一、row-id 密钥保留、公开脱敏、fallback 分类和 row 到 runtime config 的转换。路由层不要绕过 helper 直接拼写或修改 LLM row JSON。
+后端 helper `backend/src/routes/llm_config_set.rs` 负责旧单配置迁移、行优先级归一、row-id 密钥保留、公开脱敏、fallback 分类和 row 到 runtime config 的转换。`selected_enabled_runtime` 在所有已启用行均加载失败时会返回包含最后一条失败原因的详细错误消息（例如 "已启用 2 行均无法加载：LLM 配置缺失：`apiKey` 必填。"），而非泛化提示。路由层不要绕过 helper 直接拼写或修改 LLM row JSON。
 
 ### POST `/api/v1/system-config/test-llm`
 
@@ -125,7 +125,9 @@ Fallback 只允许这些原因继续尝试下一行：
 
 系统设置页入口：`frontend/src/components/system/SystemConfig.tsx`。
 
-表格列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含新增、编辑、删除、上移、下移。新增和编辑使用同一配置弹窗，弹窗包含基础字段和高级字段，API key 输入默认不可见。
+表格使用原生 HTML `<table>` 配合 `table-auto w-full`，列宽由浏览器根据各列最长内容自动计算并撑满容器宽度。列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含新增、编辑、删除、上移、下移。新增和编辑使用同一配置弹窗，弹窗包含基础字段和高级字段，API key 输入默认不可见。
+
+智能引擎独立配置页 `frontend/src/pages/ScanConfigIntelligentEngine.tsx` 嵌入 `SystemConfig`（仅 LLM 区），表格上方显示"保存并验证"和"新增配置"按钮，表格下方显示"保存并测试"、"保存"和"重置"按钮。
 
 智能审计创建弹窗入口：`frontend/src/components/scan/CreateProjectScanDialog.tsx`。该弹窗不得新增 provider/model 选择控件；它只消费 agent preflight 的结果。
 

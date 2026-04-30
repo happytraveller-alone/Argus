@@ -11,7 +11,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
@@ -67,6 +67,9 @@ pub fn router() -> Router<AppState> {
             get(get_opengrep_task).delete(delete_opengrep_task),
         )
         .route("/tasks/{task_id}/ai-analysis", post(ai_analysis))
+        .route("/tasks/{task_id}/ai-analyze-code", post(ai_analyze_code))
+        .route("/tasks/{task_id}/ai-evaluate-rules", post(ai_evaluate_rules))
+        .route("/tasks/{task_id}/ai-suggest-fixes", post(ai_suggest_fixes))
         .route("/tasks/{task_id}/interrupt", post(interrupt_opengrep_task))
         .route("/tasks/{task_id}/progress", get(get_opengrep_progress))
         .route("/tasks/{task_id}/findings", get(list_opengrep_findings))
@@ -2272,7 +2275,7 @@ async fn ai_analysis(
     for finding in &record.findings {
         let rule = finding
             .payload
-            .get("rule")
+            .get("rule_name")
             .and_then(Value::as_str)
             .unwrap_or("unknown");
         let severity = finding
@@ -2282,7 +2285,7 @@ async fn ai_analysis(
             .unwrap_or("UNKNOWN");
         let file = finding
             .payload
-            .get("path")
+            .get("file_path")
             .and_then(Value::as_str)
             .unwrap_or("");
         let line = finding
@@ -2417,6 +2420,291 @@ async fn ai_analysis(
         "analysis": analysis,
         "model": runtime.model,
         "tokens_used": tokens_used,
+    })))
+}
+
+async fn call_llm_json(
+    state: &AppState,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<(String, String), ApiError> {
+    let stored_config = system_config::load_current(state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::BadRequest("请先配置智能审计 LLM".to_string()))?;
+    let selected = crate::routes::llm_config_set::selected_enabled_runtime(
+        &stored_config.llm_config_json,
+        &stored_config.other_config_json,
+        state.config.as_ref(),
+    )
+    .map_err(|error| ApiError::BadRequest(error.message))?;
+
+    let runtime = &selected.runtime;
+    let headers = crate::llm::runtime_headers(runtime)
+        .map_err(|error| ApiError::Internal(error.message))?;
+    let (url, body) = match runtime.provider.as_str() {
+        "openai_compatible" => {
+            let url = format!("{}/chat/completions", runtime.base_url.trim_end_matches('/'));
+            let body = json!({
+                "model": runtime.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "max_tokens": runtime.llm_max_tokens,
+                "temperature": runtime.llm_temperature,
+                "stream": false
+            });
+            (url, body)
+        }
+        "anthropic_compatible" => {
+            let url = format!("{}/messages", runtime.base_url.trim_end_matches('/'));
+            let body = json!({
+                "model": runtime.model,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+                "max_tokens": runtime.llm_max_tokens
+            });
+            (url, body)
+        }
+        _ => return Err(ApiError::Internal("不支持的 LLM 协议".to_string())),
+    };
+
+    let response = state.http_client.post(&url).headers(headers).json(&body).send().await
+        .map_err(|error| ApiError::Internal(format!("LLM 请求失败：{error}")))?;
+    let status = response.status();
+    let response_json: Value = response.json().await
+        .map_err(|error| ApiError::Internal(format!("LLM 响应解析失败：{error}")))?;
+
+    if !status.is_success() {
+        let error_msg = response_json.pointer("/error/message").and_then(Value::as_str).unwrap_or("unknown error");
+        return Err(ApiError::Internal(format!("LLM 调用失败 ({status}): {error_msg}")));
+    }
+
+    let content = match runtime.provider.as_str() {
+        "openai_compatible" => response_json.pointer("/choices/0/message/content").and_then(Value::as_str).unwrap_or("").to_string(),
+        "anthropic_compatible" => response_json.get("content").and_then(Value::as_array)
+            .and_then(|items| items.iter().find_map(|item| item.get("text").and_then(Value::as_str)))
+            .unwrap_or("").to_string(),
+        _ => String::new(),
+    };
+
+    Ok((content, runtime.model.clone()))
+}
+
+#[derive(Serialize)]
+struct EnrichedRuleFinding {
+    rule_name: String,
+    severity: String,
+    hit_count: usize,
+    description: String,
+    cwe: Vec<String>,
+    pattern_yaml: String,
+    code_examples: Vec<CodeExample>,
+}
+
+#[derive(Serialize)]
+struct CodeExample {
+    file_path: String,
+    start_line: i64,
+    code_snippet: String,
+}
+
+fn extract_top_rules(
+    findings: &[task_state::StaticFindingRecord],
+    opengrep_rules: &BTreeMap<String, task_state::OpengrepRuleRecord>,
+    top_n: usize,
+    max_examples: usize,
+) -> Vec<EnrichedRuleFinding> {
+    let mut grouped: BTreeMap<String, Vec<&task_state::StaticFindingRecord>> = BTreeMap::new();
+    for finding in findings {
+        let rule = finding.payload.get("rule_name").and_then(Value::as_str).unwrap_or("unknown");
+        grouped.entry(rule.to_string()).or_default().push(finding);
+    }
+
+    let mut sorted: Vec<_> = grouped.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    sorted.truncate(top_n);
+
+    sorted.into_iter().map(|(rule_name, findings_for_rule)| {
+        let rule_record = opengrep_rules.get(&rule_name);
+        let severity = findings_for_rule.first()
+            .and_then(|f| f.payload.get("severity").and_then(Value::as_str))
+            .unwrap_or("UNKNOWN").to_string();
+        let description = rule_record.and_then(|r| r.description.as_deref()).unwrap_or("").to_string();
+        let cwe = rule_record.and_then(|r| r.cwe.clone()).unwrap_or_default();
+        let pattern_yaml = rule_record.map(|r| r.pattern_yaml.clone()).unwrap_or_default();
+
+        let code_examples: Vec<CodeExample> = findings_for_rule.iter().take(max_examples).map(|f| {
+            CodeExample {
+                file_path: f.payload.get("file_path").and_then(Value::as_str).unwrap_or("").to_string(),
+                start_line: f.payload.get("start_line").and_then(Value::as_i64).unwrap_or(0),
+                code_snippet: f.payload.get("code_snippet").and_then(Value::as_str).unwrap_or("").to_string(),
+            }
+        }).collect();
+
+        EnrichedRuleFinding {
+            rule_name,
+            severity,
+            hit_count: findings_for_rule.len(),
+            description,
+            cwe,
+            pattern_yaml,
+            code_examples,
+        }
+    }).collect()
+}
+
+async fn ai_analyze_code(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = load_task_snapshot(&state).await?;
+    let record = snapshot.static_tasks.get(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+    if record.findings.is_empty() {
+        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+    }
+
+    let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
+    let data_json = serde_json::to_string_pretty(&enriched).unwrap_or_default();
+
+    let system_prompt = "你是一位安全代码分析专家。请分析以下静态扫描命中的代码片段，对每条规则的每个代码示例做路径分析和代码功能总结。请严格以 JSON 格式返回结果。";
+    let user_prompt = format!(
+        "以下是按规则分组的 Top 5 命中规则及其代码片段：\n\n{data_json}\n\n\
+        请对每条规则的每个代码片段进行分析：\n\
+        1. 分析代码所属文件路径的模块/功能归属\n\
+        2. 分析代码片段本身的功能和上下文含义\n\
+        3. 给出该代码片段的简短总结\n\n\
+        请严格按以下 JSON 格式返回：\n\
+        ```json\n\
+        {{\"rules\": [{{\n\
+          \"ruleName\": \"规则ID\",\n\
+          \"findings\": [{{\n\
+            \"filePath\": \"文件路径\",\n\
+            \"codeSummary\": \"代码功能总结\"\n\
+          }}]\n\
+        }}]}}\n\
+        ```"
+    );
+
+    let (content, model) = call_llm_json(&state, system_prompt, &user_prompt).await?;
+    Ok(Json(json!({
+        "step": 1,
+        "stepName": "代码分析",
+        "result": content,
+        "model": model,
+    })))
+}
+
+async fn ai_evaluate_rules(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Json(input): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = load_task_snapshot(&state).await?;
+    let record = snapshot.static_tasks.get(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+    if record.findings.is_empty() {
+        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+    }
+
+    let step1_result = input.get("step1Result").and_then(Value::as_str).unwrap_or("");
+    let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
+
+    let mut rule_context = String::new();
+    for rule in &enriched {
+        rule_context.push_str(&format!(
+            "\n### 规则: {}\n- 严重度: {}\n- 命中次数: {}\n- 说明: {}\n- CWE: {}\n- 规则模式:\n```yaml\n{}\n```\n",
+            rule.rule_name, rule.severity, rule.hit_count,
+            rule.description, rule.cwe.join(", "), rule.pattern_yaml
+        ));
+    }
+
+    let system_prompt = "你是一位安全扫描规则评估专家。请结合代码分析结果和规则定义，评估每条规则的合理性。请严格以 JSON 格式返回结果。";
+    let user_prompt = format!(
+        "## 第一步代码分析结果：\n{step1_result}\n\n\
+        ## 规则详情：\n{rule_context}\n\n\
+        请对每条规则进行评估：\n\
+        1. 结合代码分析，判断规则命中是否合理\n\
+        2. 分析规则是否存在误报倾向\n\
+        3. 评估规则设计的不合理之处\n\n\
+        请严格按以下 JSON 格式返回：\n\
+        ```json\n\
+        {{\"rules\": [{{\n\
+          \"ruleName\": \"规则ID\",\n\
+          \"severity\": \"严重度\",\n\
+          \"hitCount\": 0,\n\
+          \"problem\": \"规则存在的问题描述\",\n\
+          \"reasonAnalysis\": \"合理性分析\"\n\
+        }}]}}\n\
+        ```"
+    );
+
+    let (content, model) = call_llm_json(&state, system_prompt, &user_prompt).await?;
+    Ok(Json(json!({
+        "step": 2,
+        "stepName": "规则评估",
+        "result": content,
+        "model": model,
+    })))
+}
+
+async fn ai_suggest_fixes(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Json(input): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = load_task_snapshot(&state).await?;
+    let record = snapshot.static_tasks.get(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+    if record.findings.is_empty() {
+        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+    }
+
+    let step1_result = input.get("step1Result").and_then(Value::as_str).unwrap_or("");
+    let step2_result = input.get("step2Result").and_then(Value::as_str).unwrap_or("");
+    let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
+
+    let mut code_examples_json = String::new();
+    for rule in &enriched {
+        for ex in &rule.code_examples {
+            code_examples_json.push_str(&format!(
+                "- 规则 `{}` 在 `{}:{}`: ```{}```\n",
+                rule.rule_name, ex.file_path, ex.start_line, ex.code_snippet
+            ));
+        }
+    }
+
+    let system_prompt = "你是一位安全扫描规则优化专家。请基于代码分析和规则评估结果，给出每条规则的修复建议和优先级。请严格以 JSON 格式返回结果。";
+    let user_prompt = format!(
+        "## 第一步代码分析结果：\n{step1_result}\n\n\
+        ## 第二步规则评估结果：\n{step2_result}\n\n\
+        ## 命中代码示例：\n{code_examples_json}\n\n\
+        请对每条规则给出修复建议：\n\
+        1. 结合代码分析和规则评估，给出具体的修复方向\n\
+        2. 评估修复优先级（high/medium/low）\n\
+        3. 给出代码层面的修改建议\n\n\
+        请严格按以下 JSON 格式返回：\n\
+        ```json\n\
+        {{\"rules\": [{{\n\
+          \"ruleName\": \"规则ID\",\n\
+          \"severity\": \"严重度\",\n\
+          \"hitCount\": 0,\n\
+          \"problem\": \"问题描述\",\n\
+          \"codeExamples\": [{{\"file\": \"文件路径\", \"code\": \"代码片段\"}}],\n\
+          \"suggestion\": \"修复建议\",\n\
+          \"priority\": \"high|medium|low\"\n\
+        }}]}}\n\
+        ```"
+    );
+
+    let (content, model) = call_llm_json(&state, system_prompt, &user_prompt).await?;
+    Ok(Json(json!({
+        "step": 3,
+        "stepName": "修复建议",
+        "result": content,
+        "model": model,
     })))
 }
 
