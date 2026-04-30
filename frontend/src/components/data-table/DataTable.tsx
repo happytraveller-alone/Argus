@@ -7,6 +7,8 @@ import {
   flexRender,
   functionalUpdate,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -90,8 +92,22 @@ function buildColumnWithDefaults<TData extends RowData>(
   column: AppColumnDef<TData, unknown>,
 ): ColumnDef<TData, unknown> {
   const childColumns = (column as AppColumnWithChildren<TData>).columns;
+  const hasAccessor = Boolean(
+    (column as any).accessorFn || (column as any).accessorKey,
+  );
+  const needsAutoFilter =
+    hasAccessor &&
+    !column.meta?.filterVariant &&
+    !column.meta?.plainHeader &&
+    column.enableColumnFilter !== false;
+  const resolvedMeta = needsAutoFilter
+    ? { ...column.meta, filterVariant: "multi-select" as const }
+    : column.meta;
+  const resolvedColumn = needsAutoFilter
+    ? { ...column, meta: resolvedMeta }
+    : column;
   return {
-    ...column,
+    ...resolvedColumn,
     ...(childColumns
       ? {
           columns: childColumns.map((childColumn) =>
@@ -99,10 +115,10 @@ function buildColumnWithDefaults<TData extends RowData>(
           ),
         }
       : {}),
-    filterFn: resolveFilterFn(column),
-    size: resolvePixelSize(column.meta?.width) ?? column.size,
-    minSize: resolvePixelSize(column.meta?.minWidth) ?? column.minSize,
-    enableResizing: column.meta?.enableResizing ?? column.enableResizing,
+    filterFn: resolveFilterFn(resolvedColumn),
+    size: resolvePixelSize(resolvedMeta?.width) ?? column.size,
+    minSize: resolvePixelSize(resolvedMeta?.minWidth) ?? column.minSize,
+    enableResizing: resolvedMeta?.enableResizing ?? column.enableResizing,
   } as ColumnDef<TData, unknown>;
 }
 
@@ -426,6 +442,8 @@ export function DataTable<TData extends RowData>({
       })),
     globalFilterFn: tanstackTextIncludesFilter,
     getCoreRowModel: getCoreRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -591,7 +609,6 @@ export function DataTable<TData extends RowData>({
                       }
                       className={cn(
                         "relative",
-                        "bg-muted/40",
                         shouldRenderPlainSortableHeader &&
                           "cursor-pointer select-none",
                         meta?.align === "center" && "text-center",

@@ -237,7 +237,15 @@ function HeaderOptionFilter<TData, TValue>({
   showWeakHighlight: boolean;
 }) {
   const filterVariant = column.columnDef.meta?.filterVariant;
-  const filterOptions = column.columnDef.meta?.filterOptions || [];
+  const staticOptions = column.columnDef.meta?.filterOptions;
+  const facetedValues = column.getFacetedUniqueValues();
+  const filterOptions =
+    staticOptions && staticOptions.length > 0
+      ? staticOptions
+      : Array.from(facetedValues.keys())
+          .filter((v) => v !== undefined && v !== null && v !== "")
+          .sort()
+          .map((v) => ({ label: String(v), value: String(v) }));
 
   return (
     <DropdownMenu>
@@ -352,7 +360,7 @@ export function DataTableColumnHeader<TData, TValue>({
     <div
       data-data-table-header-control="true"
       className={cn(
-        "inline-flex h-8 items-center gap-0 overflow-hidden whitespace-nowrap rounded-sm border border-border/70 bg-background/45 shadow-sm transition-colors hover:border-border",
+        "inline-flex h-8 items-center gap-0 overflow-hidden whitespace-nowrap rounded-sm border border-border/70 bg-transparent shadow-sm transition-colors hover:border-border",
         className,
       )}
     >

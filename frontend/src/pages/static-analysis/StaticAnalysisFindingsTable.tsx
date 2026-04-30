@@ -117,6 +117,7 @@ export function getColumns(input: {
 			enableHiding: false,
 			meta: {
 				label: "命中规则",
+				align: "left",
 				width: 220,
 				minWidth: 180,
 				maxWidth: 260,
@@ -148,6 +149,7 @@ export function getColumns(input: {
 			enableHiding: false,
 			meta: {
 				label: "命中位置",
+				align: "left",
 				minWidth: 350,
 			},
 			cell: ({ row }) => (
