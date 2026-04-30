@@ -284,6 +284,77 @@ def make_checkpoint(
     }
 
 
+def _truncate_output(value: Any, max_bytes: int = 2048) -> str:
+    text = str(value) if value is not None else ""
+    return text[:max_bytes]
+
+
+_current_thinking_node: str | None = None
+
+
+def emit_stream_event(
+    *,
+    event_type: str,
+    node_id: str | None = None,
+    role: str = "runner",
+    sequence: int,
+    message: str = "",
+    data: dict[str, Any] | None = None,
+) -> None:
+    event: dict[str, Any] = {
+        "stream": True,
+        "type": event_type,
+        "node_id": node_id,
+        "role": role or role_for_node(node_id),
+        "sequence": sequence,
+        "timestamp": now_rfc3339(),
+        "message": message,
+    }
+    if data:
+        event.update(data)
+    print(json.dumps(event, ensure_ascii=False), flush=True)
+
+
+def parse_agentflow_trace_line(line: str) -> list[dict[str, Any]]:
+    global _current_thinking_node
+    stripped = line.strip()
+    if not stripped:
+        return []
+    try:
+        data = json.loads(stripped)
+        if not isinstance(data, dict):
+            return []
+        kind = data.get("type") or data.get("kind") or ""
+        node_id = data.get("node_id")
+        role = data.get("role")
+
+        if kind in ("assistant_delta", "thinking_delta"):
+            events: list[dict[str, Any]] = []
+            if node_id != _current_thinking_node:
+                _current_thinking_node = node_id
+                events.append({"type": "thinking_start", "node_id": node_id, "role": role})
+            events.append({"type": "thinking_token", "token": data.get("content", ""), "node_id": node_id, "role": role})
+            return events
+        if kind in ("assistant_message", "thinking_complete"):
+            _current_thinking_node = None
+            return [{"type": "thinking_end", "accumulated": data.get("content", ""), "node_id": node_id, "role": role}]
+        if kind == "tool_call":
+            return [{"type": "tool_call", "tool_name": data.get("name", ""), "tool_input": data.get("input", {}), "node_id": node_id, "role": role}]
+        if kind in ("command_output", "tool_result"):
+            return [{"type": "tool_result", "tool_name": data.get("name", ""), "tool_output": _truncate_output(data.get("output", "")), "tool_duration_ms": data.get("duration_ms"), "node_id": node_id, "role": role}]
+        if kind == "item_started":
+            return [{"type": "node_start", "node_id": node_id, "role": role}]
+        if kind == "item_completed":
+            return [{"type": "node_end", "node_id": node_id, "role": role, "status": data.get("status", "completed")}]
+        if len(stripped) > 10:
+            return [{"type": "info", "message": stripped[:500]}]
+        return []
+    except json.JSONDecodeError:
+        if len(stripped) > 10:
+            return [{"type": "info", "message": stripped[:500]}]
+        return []
+
+
 def make_agent_tree(native_record: dict[str, Any] | None, fallback_status: str) -> list[dict[str, Any]]:
     nodes = native_record.get("nodes", {}) if native_record else {}
     if not isinstance(nodes, dict) or not nodes:
@@ -646,21 +717,85 @@ def main() -> int:
         print(json.dumps(contract, ensure_ascii=False))
         return 0
 
-    run_result = run_command(
-        ["agentflow", "run", pipeline_path, "--runs-dir", runs_dir, "--output", "json", *extra_args],
-        output_path=output_dir / "agentflow.run.json",
-        env_overlay=runtime_env,
-    )
-    native_record = parse_json(run_result.stdout)
+    # --- Streaming execution (replaces batch subprocess.run) ---
+    agentflow_args = ["agentflow", "run", pipeline_path, "--runs-dir", runs_dir, "--output", "json", *extra_args]
+    run_env = os.environ.copy()
+    run_env["PYTHONUNBUFFERED"] = "1"
+    if runtime_env:
+        run_env.update(runtime_env)
+
+    sequence_counter = 0
+    collected_stdout_lines: list[str] = []
+
+    def next_seq() -> int:
+        nonlocal sequence_counter
+        sequence_counter += 1
+        return sequence_counter
+
+    emit_stream_event(event_type="node_start", node_id="agentflow-runner", role="runner", sequence=next_seq(), message="AgentFlow runner starting")
+
+    try:
+        proc = subprocess.Popen(
+            agentflow_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=run_env,
+        )
+    except OSError as exc:
+        contract = failure_contract(
+            task_id=task_id,
+            run_id=run_id_from(None, task_id),
+            reason_code="runner_missing",
+            message=f"AgentFlow runner 启动失败: {exc}",
+            input_digest=input_digest,
+            credential_diagnostics=credential_diagnostics,
+        )
+        print(json.dumps(contract, ensure_ascii=False))
+        return 0
+
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        line = raw_line.rstrip("\n\r")
+        if not line:
+            continue
+        collected_stdout_lines.append(line)
+
+        parsed_events = parse_agentflow_trace_line(line)
+        for parsed in parsed_events:
+            event_type = parsed.pop("type", "info")
+            emit_stream_event(
+                event_type=event_type,
+                node_id=parsed.get("node_id"),
+                role=parsed.get("role") or "runner",
+                sequence=next_seq(),
+                message=parsed.get("message", ""),
+                data={k: v for k, v in parsed.items() if k not in ("node_id", "role", "message") and v is not None},
+            )
+
+    stderr_output = proc.stderr.read() if proc.stderr else ""
+    proc.wait()
+    run_exit_code = proc.returncode
+    stdout_full = "\n".join(collected_stdout_lines)
+
+    emit_stream_event(event_type="node_end", node_id="agentflow-runner", role="runner", sequence=next_seq(), message=f"AgentFlow runner finished (exit={run_exit_code})", data={"exit_code": run_exit_code})
+
+    # Restore diagnostic file write (R2 Fix 4)
+    diag_path = output_dir / "agentflow.run.json"
+    diag_path.parent.mkdir(parents=True, exist_ok=True)
+    diag_path.write_text(redact_text(stdout_full), encoding="utf-8")
+
+    # Parse native record from collected stdout
+    native_record = parse_json(stdout_full)
     if not isinstance(native_record, dict):
         contract = failure_contract(
             task_id=task_id,
             run_id=run_id_from(None, task_id),
             reason_code="runner_output_invalid",
             message="AgentFlow runner 未输出可解析的原生 JSON",
-            runner_exit_code=run_result.returncode,
-            stdout_tail=run_result.stdout,
-            stderr_tail=run_result.stderr,
+            runner_exit_code=run_exit_code,
+            stdout_tail=stdout_full,
+            stderr_tail=stderr_output,
             input_digest=input_digest,
             credential_diagnostics=credential_diagnostics,
         )
@@ -668,16 +803,16 @@ def main() -> int:
         return 0
 
     run_id = run_id_from(native_record, task_id)
-    if run_result.returncode != 0:
+    if run_exit_code != 0:
         contract = failure_contract(
             task_id=task_id,
             run_id=run_id,
             reason_code="runner_failed",
             message="AgentFlow runner 返回非零退出码",
             native_record=native_record,
-            runner_exit_code=run_result.returncode,
-            stdout_tail=run_result.stdout,
-            stderr_tail=run_result.stderr,
+            runner_exit_code=run_exit_code,
+            stdout_tail=stdout_full,
+            stderr_tail=stderr_output,
             input_digest=input_digest,
             credential_diagnostics=credential_diagnostics,
         )
@@ -692,29 +827,30 @@ def main() -> int:
             reason_code="runner_output_invalid",
             message="AgentFlow 报告节点未输出 Argus P1 JSON 合同",
             native_record=native_record,
-            runner_exit_code=run_result.returncode,
-            stdout_tail=run_result.stdout,
-            stderr_tail=run_result.stderr,
+            runner_exit_code=run_exit_code,
+            stdout_tail=stdout_full,
+            stderr_tail=stderr_output,
             input_digest=input_digest,
             credential_diagnostics=credential_diagnostics,
         )
         print(json.dumps(contract, ensure_ascii=False))
         return 0
 
-    print(
-        json.dumps(
-            normalize_contract(
-                contract,
-                task_id=task_id,
-                native_record=native_record,
-                input_digest=input_digest,
-                stdout_tail=run_result.stdout,
-                stderr_tail=run_result.stderr,
-                credential_diagnostics=credential_diagnostics,
-            ),
-            ensure_ascii=False,
-        )
+    final_output = normalize_contract(
+        contract,
+        task_id=task_id,
+        native_record=native_record,
+        input_digest=input_digest,
+        stdout_tail=stdout_full,
+        stderr_tail=stderr_output,
+        credential_diagnostics=credential_diagnostics,
     )
+
+    # Contract safety net: write to file in case stdout line is missed (R2 Fix 8)
+    contract_path = output_dir / "contract.json"
+    contract_path.write_text(json.dumps(final_output, ensure_ascii=False), encoding="utf-8")
+
+    print(json.dumps(final_output, ensure_ascii=False))
     return 0
 
 

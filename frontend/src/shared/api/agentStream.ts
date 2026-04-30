@@ -467,14 +467,14 @@ export class AgentStreamHandler {
       // 节点
       case 'node_start':
         this.options.onNodeStart?.(
-          event.metadata?.node as string || 'unknown',
+          (event as any).node_id || event.metadata?.node as string || 'unknown',
           event.phase || ''
         );
         break;
 
       case 'node_end':
         this.options.onNodeEnd?.(
-          event.metadata?.node as string || 'unknown',
+          (event as any).node_id || event.metadata?.node as string || 'unknown',
           event.metadata?.summary as Record<string, unknown> || {}
         );
         break;

@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     env,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use axum::{
@@ -31,7 +32,8 @@ use crate::{
         importer::{import_runner_output, sha256_hex},
         pipeline_path::resolve_agentflow_pipeline_path,
         preflight::{run_preflight, PreflightInput},
-        runner::{run_controlled_command, RunnerCommand},
+        runner::{run_controlled_command, run_streaming_command, RunnerCommand},
+        streaming::{self, StreamingEvent},
     },
     state::{AppState, StoredProject},
 };
@@ -578,14 +580,82 @@ async fn start_agent_task_core(state: AppState, task_id: String) -> Result<Json<
             .map_err(internal_error)?;
         return Ok(Json(response));
     };
-    let outcome = run_controlled_command(RunnerCommand {
-        program: "sh".to_string(),
-        args: vec!["-c".to_string(), runner_command.command],
-        cwd: None,
-        timeout_seconds: state.config.agent_timeout_seconds.max(1) as u64,
-        stdin_json: Some(runner_input.clone()),
-    })
+    // Create broadcast channel for streaming events
+    let event_tx = {
+        let mut channels = state.task_event_channels.lock().await;
+        streaming::get_or_create_channel(&mut channels, &task_id)
+    };
+
+    // Spawn incremental persistence task
+    let persist_tx = {
+        let (ptx, prx) = tokio::sync::mpsc::channel::<StreamingEvent>(256);
+        let persist_state = state.clone();
+        let persist_task_id = task_id.clone();
+        let mut persist_rx = prx;
+        tokio::spawn(async move {
+            let mut buffer: Vec<StreamingEvent> = Vec::new();
+            let mut interval = tokio::time::interval(Duration::from_secs(2));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    event = persist_rx.recv() => {
+                        match event {
+                            Some(ev) if streaming::should_persist_event(&ev.event_type) => {
+                                buffer.push(ev);
+                                if buffer.len() >= 10 {
+                                    flush_streaming_events(&persist_state, &persist_task_id, &mut buffer).await;
+                                }
+                            }
+                            Some(_) => {}
+                            None => {
+                                if !buffer.is_empty() {
+                                    flush_streaming_events(&persist_state, &persist_task_id, &mut buffer).await;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    _ = interval.tick() => {
+                        if !buffer.is_empty() {
+                            flush_streaming_events(&persist_state, &persist_task_id, &mut buffer).await;
+                        }
+                    }
+                }
+            }
+        });
+        ptx
+    };
+
+    // Forward broadcast events to persistence channel
+    let mut persist_sub = event_tx.subscribe();
+    let persist_fwd_tx = persist_tx.clone();
+    let persist_fwd = tokio::spawn(async move {
+        while let Ok(event) = persist_sub.recv().await {
+            if persist_fwd_tx.send(event).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let outcome = run_streaming_command(
+        RunnerCommand {
+            program: "sh".to_string(),
+            args: vec!["-c".to_string(), runner_command.command],
+            cwd: None,
+            timeout_seconds: state.config.agent_timeout_seconds.max(1) as u64,
+            stdin_json: Some(runner_input.clone()),
+        },
+        event_tx.clone(),
+    )
     .await;
+
+    // Clean up streaming infrastructure
+    drop(persist_tx);
+    persist_fwd.abort();
+    {
+        let mut channels = state.task_event_channels.lock().await;
+        streaming::remove_channel(&mut channels, &task_id);
+    }
 
     let mut snapshot = task_state::load_snapshot(&state)
         .await
@@ -771,15 +841,87 @@ async fn stream_agent_events(
         .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
     let after_sequence = query.after_sequence.unwrap_or(0);
-    let payload = record
+    let is_terminal = matches!(
+        record.status.as_str(),
+        "completed" | "failed" | "cancelled"
+    );
+
+    // Replay stored events
+    let mut replay_payload = record
         .events
         .iter()
         .filter(|event| event.sequence > after_sequence)
         .filter(|event| agent_event_is_user_visible(event))
         .map(agent_event_value)
-        .map(|event| format!("data: {event}\n\n"))
+        .map(|event| format!("event: {}\ndata: {event}\n\n", event.get("type").and_then(Value::as_str).unwrap_or("info")))
         .collect::<String>();
-    Ok(event_stream_response(payload))
+
+    // For terminal tasks, return one-shot snapshot (existing behavior)
+    if is_terminal {
+        return Ok(event_stream_response(replay_payload));
+    }
+
+    // For running tasks, try to subscribe to broadcast channel for live push
+    let maybe_rx = {
+        let channels = state.task_event_channels.lock().await;
+        channels.get(&task_id).map(|tx| tx.subscribe())
+    };
+
+    let Some(mut rx) = maybe_rx else {
+        return Ok(event_stream_response(replay_payload));
+    };
+
+    // Long-lived SSE: replay stored events, then push live events from broadcast
+    let stream = async_stream::stream! {
+        // Send replayed stored events
+        if !replay_payload.is_empty() {
+            yield Ok::<String, std::convert::Infallible>(std::mem::take(&mut replay_payload));
+        }
+
+        // Push live events from broadcast channel
+        let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(15));
+        heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                result = rx.recv() => {
+                    match result {
+                        Ok(event) => {
+                            let value = serde_json::to_value(&event).unwrap_or(Value::Null);
+                            let event_type = &event.event_type;
+                            let line = format!("event: {event_type}\ndata: {value}\n\n");
+                            yield Ok(line);
+                            if matches!(event_type.as_str(), "task_complete" | "task_error" | "task_cancel" | "task_end") {
+                                break;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            continue;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            break;
+                        }
+                    }
+                }
+                _ = heartbeat_interval.tick() => {
+                    yield Ok("event: heartbeat\ndata: {}\n\n".to_string());
+                }
+            }
+        }
+    };
+
+    let body = Body::from_stream(stream);
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream"),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache"),
+    );
+    Ok(response)
 }
 
 async fn list_agent_findings(
@@ -1399,6 +1541,42 @@ fn finalize_agent_task_failed(record: &mut task_state::AgentTaskRecord, now: &st
         Some(json!({"error": error})),
     );
     push_checkpoint(record, "final", Some("failed"));
+}
+
+async fn flush_streaming_events(
+    state: &AppState,
+    task_id: &str,
+    buffer: &mut Vec<StreamingEvent>,
+) {
+    let events = std::mem::take(buffer);
+    if events.is_empty() {
+        return;
+    }
+    let result: Result<(), anyhow::Error> = async {
+        let _guard = state.file_store_lock.lock().await;
+        let mut snapshot = task_state::load_snapshot_unlocked(state).await?;
+        if let Some(record) = snapshot.agent_tasks.get_mut(task_id) {
+            for event in &events {
+                task_state::append_streaming_event(record, event);
+            }
+            if let Some(last_node) = events
+                .iter()
+                .rev()
+                .find(|e| e.event_type == "node_start")
+            {
+                record.current_step = Some(format!(
+                    "Running: {}",
+                    last_node.node_id.as_deref().unwrap_or("agent")
+                ));
+            }
+        }
+        task_state::save_snapshot_unlocked(state, &snapshot).await?;
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        eprintln!("[incremental-persist] task {task_id}: {error}");
+    }
 }
 
 fn finalize_agent_task_agentflow_failure(

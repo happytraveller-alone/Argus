@@ -20,3 +20,5 @@ export { default as RealtimeVerifiedReportPanel } from "./RealtimeVerifiedReport
 export { default as FindingCodeWindow } from "./FindingCodeWindow";
 export { default as ToolEvidencePreview } from "./ToolEvidencePreview";
 export { default as ToolEvidenceDetail } from "./ToolEvidenceDetail";
+export { default as ThinkingTimeline } from "./ThinkingTimeline";
+export type { ThinkingBlock } from "./ThinkingTimeline";

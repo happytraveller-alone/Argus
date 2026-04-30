@@ -38,6 +38,8 @@ import {
   RealtimeFindingsPanel,
 } from "./components";
 import ReportExportDialog from "./components/ReportExportDialog";
+import ThinkingTimeline from "./components/ThinkingTimeline";
+import type { ThinkingBlock } from "./components/ThinkingTimeline";
 import { useAgentAuditState } from "./hooks";
 import {
   POLLING_INTERVALS,
@@ -3312,6 +3314,9 @@ function AgentAuditPageContent() {
                   <TabsTrigger value="nodes" className="h-6 px-3 text-xs">
                     节点展示
                   </TabsTrigger>
+                  <TabsTrigger value="thinking" className="h-6 px-3 text-xs">
+                    思考过程
+                  </TabsTrigger>
                   <TabsTrigger value="diagnostics" className="h-6 px-3 text-xs">
                     运行诊断
                   </TabsTrigger>
@@ -3392,6 +3397,17 @@ function AgentAuditPageContent() {
                       </div>
                     )}
                   </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="thinking" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                <div className="flex h-full min-h-0 flex-col rounded-lg border border-border/70 bg-background/50 p-3">
+                  <ThinkingTimeline
+                    blocks={[] as ThinkingBlock[]}
+                    currentToken=""
+                    currentNodeId={null}
+                    isThinking={false}
+                  />
                 </div>
               </TabsContent>
 

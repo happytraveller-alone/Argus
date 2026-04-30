@@ -378,6 +378,42 @@ pub(crate) async fn save_snapshot_unlocked(
     Ok(())
 }
 
+pub fn append_streaming_event(
+    record: &mut AgentTaskRecord,
+    event: &crate::runtime::agentflow::streaming::StreamingEvent,
+) {
+    let sequence = record.events.len() as i64 + 1;
+    record.events.push(AgentEventRecord {
+        id: format!("{}-stream-{}", record.id, sequence),
+        task_id: record.id.clone(),
+        event_type: event.event_type.clone(),
+        phase: None,
+        message: if event.message.is_empty() {
+            None
+        } else {
+            Some(event.message.clone())
+        },
+        tool_name: event.tool_name.clone(),
+        tool_input: event.tool_input.clone(),
+        tool_output: event.tool_output.clone(),
+        tool_duration_ms: event.tool_duration_ms,
+        finding_id: None,
+        tokens_used: None,
+        metadata: Some(serde_json::json!({
+            "node": event.node_id.clone().unwrap_or_default(),
+            "role": event.role,
+            "topology_version": record.topology_version.clone().unwrap_or_default(),
+        })),
+        role: Some(event.role.clone()),
+        visibility: Some("user".to_string()),
+        correlation_id: None,
+        topology_version: record.topology_version.clone(),
+        source_node_id: event.node_id.clone(),
+        sequence,
+        timestamp: event.timestamp.clone(),
+    });
+}
+
 fn task_state_file_path(state: &AppState) -> PathBuf {
     state.config.zip_storage_path.join(TASK_STATE_FILE_NAME)
 }

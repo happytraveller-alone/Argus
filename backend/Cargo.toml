@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0"
+async-stream = "0.3"
 axum = { version = "0.8", features = ["macros", "multipart"] }
 base64 = "0.22"
 bzip2 = "0.5"
