@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, env, path::Path, time::Duration};
 
 use axum::{
+    body::Bytes,
     extract::State,
     http::HeaderMap,
     routing::{get, post},
@@ -102,6 +103,32 @@ pub struct LlmTestResponse {
     pub metadata: Option<Value>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmBatchTestRowOutcome {
+    pub row_id: String,
+    pub priority: i64,
+    pub status: String,
+    pub reason_code: Option<String>,
+    pub message: String,
+    pub checked_at: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmBatchTestResponse {
+    pub success: bool,
+    pub message: String,
+    pub reason_code: String,
+    pub rows: Vec<LlmBatchTestRowOutcome>,
+    pub attempted_row_ids: Vec<String>,
+    pub skipped_row_ids: Vec<String>,
+    pub missing_field_row_ids: Vec<String>,
+    pub failed_row_ids: Vec<String>,
+    pub passed_row_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchModelsRequest {
@@ -144,6 +171,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/llm-providers", get(get_llm_providers))
         .route("/test-llm", post(test_llm))
+        .route("/test-llm/batch", post(test_llm_batch))
         .route("/import-env", post(import_env))
         .route("/fetch-llm-models", post(fetch_llm_models))
         .route("/agent-preflight", post(agent_preflight))
@@ -341,6 +369,207 @@ pub async fn test_llm(
             }))
         }
     }
+}
+
+pub async fn test_llm_batch(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<LlmBatchTestResponse>, ApiError> {
+    reject_batch_config_payload(&body)?;
+    let stored = system_config::load_current(&state)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| {
+            ApiError::BadRequest("请先保存 LLM 配置，再执行批量连接测试。".to_string())
+        })?;
+    let (mut envelope, _) =
+        llm_config_set::normalize_envelope(&stored.llm_config_json, state.config.as_ref());
+    let rows = envelope
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut outcomes = Vec::new();
+    let mut attempted_row_ids = Vec::new();
+    let mut skipped_row_ids = Vec::new();
+    let mut missing_field_row_ids = Vec::new();
+    let mut failed_row_ids = Vec::new();
+    let mut passed_row_ids = Vec::new();
+    let mut last_success_metadata = json!({});
+
+    for row in rows.iter() {
+        let row_id = read_string(row, "id").unwrap_or_default();
+        let priority = row.get("priority").and_then(Value::as_i64).unwrap_or(0);
+        let model = read_string(row, "model").filter(|value| !value.trim().is_empty());
+        if !row.get("enabled").and_then(Value::as_bool).unwrap_or(true) {
+            skipped_row_ids.push(row_id.clone());
+            outcomes.push(LlmBatchTestRowOutcome {
+                row_id,
+                priority,
+                status: "skipped_disabled".to_string(),
+                reason_code: Some("skipped_disabled".to_string()),
+                message: "配置行已禁用，本次批量验证跳过。".to_string(),
+                checked_at: None,
+                model,
+            });
+            continue;
+        }
+
+        let missing_fields = llm_config_set::missing_fields_for_row(row);
+        if !missing_fields.is_empty() {
+            envelope = llm_config_set::mark_row_preflight(
+                &envelope,
+                &row_id,
+                "missing_fields",
+                Some("missing_fields"),
+                Some(&format!(
+                    "配置行缺少必填字段：{}",
+                    missing_fields.join("、")
+                )),
+                None,
+            );
+            missing_field_row_ids.push(row_id.clone());
+            outcomes.push(LlmBatchTestRowOutcome {
+                checked_at: read_row_preflight_checked_at(&envelope, &row_id),
+                row_id,
+                priority,
+                status: "missing_fields".to_string(),
+                reason_code: Some("missing_fields".to_string()),
+                message: format!("配置行缺少必填字段：{}", missing_fields.join("、")),
+                model,
+            });
+            continue;
+        }
+
+        attempted_row_ids.push(row_id.clone());
+        let runtime_config = llm_config_set::row_to_legacy_config(row);
+        let runtime = match build_runtime_config(&runtime_config, &stored.other_config_json) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&error.message),
+                    None,
+                );
+                failed_row_ids.push(row_id.clone());
+                outcomes.push(LlmBatchTestRowOutcome {
+                    row_id,
+                    priority,
+                    status: "failed".to_string(),
+                    reason_code: Some(category.reason_code().to_string()),
+                    message: error.message,
+                    checked_at: None,
+                    model,
+                });
+                if let Some(last) = outcomes.last_mut() {
+                    last.checked_at = read_row_preflight_checked_at(&envelope, &last.row_id);
+                }
+                continue;
+            }
+        };
+
+        match test_llm_generation(&state.http_client, &runtime).await {
+            Ok(outcome) => {
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "passed",
+                    None,
+                    Some("连接校验通过"),
+                    Some(&outcome.fingerprint),
+                );
+                last_success_metadata = outcome.metadata();
+                passed_row_ids.push(row_id.clone());
+                outcomes.push(LlmBatchTestRowOutcome {
+                    row_id,
+                    priority,
+                    status: "passed".to_string(),
+                    reason_code: None,
+                    message: "连接校验通过".to_string(),
+                    checked_at: None,
+                    model: Some(outcome.model),
+                });
+                if let Some(last) = outcomes.last_mut() {
+                    last.checked_at = read_row_preflight_checked_at(&envelope, &last.row_id);
+                }
+            }
+            Err(error) => {
+                let category = llm_config_set::classify_fallback(&error);
+                envelope = llm_config_set::mark_row_preflight(
+                    &envelope,
+                    &row_id,
+                    "failed",
+                    Some(category.reason_code()),
+                    Some(&error.message),
+                    Some(&compute_llm_fingerprint(&runtime)),
+                );
+                failed_row_ids.push(row_id.clone());
+                outcomes.push(LlmBatchTestRowOutcome {
+                    row_id,
+                    priority,
+                    status: "failed".to_string(),
+                    reason_code: Some(category.reason_code().to_string()),
+                    message: error.message,
+                    checked_at: None,
+                    model,
+                });
+                if let Some(last) = outcomes.last_mut() {
+                    last.checked_at = read_row_preflight_checked_at(&envelope, &last.row_id);
+                }
+            }
+        }
+    }
+
+    envelope =
+        llm_config_set::set_latest_preflight_run(&envelope, attempted_row_ids.clone(), None, None);
+    let stored = system_config::save_current(
+        &state,
+        envelope,
+        stored.other_config_json,
+        last_success_metadata,
+    )
+    .await
+    .map_err(internal_error)?;
+    let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
+    sync_python_user_config_mirror(&state, Some(&merged)).await?;
+
+    let enabled_problem_count = missing_field_row_ids.len() + failed_row_ids.len();
+    let reason_code = if attempted_row_ids.is_empty() {
+        "no_eligible_rows"
+    } else if enabled_problem_count > 0 {
+        "row_validation_failed"
+    } else {
+        "all_rows_passed"
+    };
+    let success = reason_code == "all_rows_passed";
+    let message = match reason_code {
+        "all_rows_passed" => format!("批量验证通过：{} 行可用。", passed_row_ids.len()),
+        "no_eligible_rows" => "没有可执行实时验证的已启用完整配置行。".to_string(),
+        _ => format!(
+            "批量验证完成：{} 行通过，{} 行失败，{} 行字段不完整，{} 行跳过。",
+            passed_row_ids.len(),
+            failed_row_ids.len(),
+            missing_field_row_ids.len(),
+            skipped_row_ids.len()
+        ),
+    };
+
+    Ok(Json(LlmBatchTestResponse {
+        success,
+        message,
+        reason_code: reason_code.to_string(),
+        rows: outcomes,
+        attempted_row_ids,
+        skipped_row_ids,
+        missing_field_row_ids,
+        failed_row_ids,
+        passed_row_ids,
+    }))
 }
 
 pub async fn import_env(
@@ -914,6 +1143,34 @@ fn merge_json(defaults: &Value, overrides: &Value) -> Value {
 fn public_payload(mut payload: SystemConfigPayload, config: &AppConfig) -> SystemConfigPayload {
     payload.llm_config = llm_config_set::public_envelope(&payload.llm_config, config);
     payload
+}
+
+fn reject_batch_config_payload(body: &Bytes) -> Result<(), ApiError> {
+    if body.is_empty() {
+        return Ok(());
+    }
+    let value: Value = serde_json::from_slice(body)
+        .map_err(|_| ApiError::BadRequest("批量验证请求体必须为空或空 JSON 对象。".to_string()))?;
+    match value {
+        Value::Object(map) if map.is_empty() => Ok(()),
+        _ => Err(ApiError::BadRequest(
+            "批量验证只使用已保存配置，不接受请求体中的 LLM 配置。".to_string(),
+        )),
+    }
+}
+
+fn read_row_preflight_checked_at(envelope: &Value, row_id: &str) -> Option<String> {
+    envelope
+        .get("rows")
+        .and_then(Value::as_array)
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| read_string(row, "id").as_deref() == Some(row_id))
+        })
+        .and_then(|row| row.get("preflight"))
+        .and_then(|preflight| preflight.get("checkedAt"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 fn resolve_test_api_key(

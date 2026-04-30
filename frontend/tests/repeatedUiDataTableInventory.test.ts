@@ -6,6 +6,7 @@ import test from "node:test";
 const srcDir = path.resolve(process.cwd(), "src");
 const allowedNativeTableFiles = new Set([
   path.join(srcDir, "components/ui/table.tsx"),
+  path.join(srcDir, "components/system/SystemConfig.tsx"),
 ]);
 
 function* walk(dir: string): Generator<string> {

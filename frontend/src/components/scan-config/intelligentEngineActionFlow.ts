@@ -12,3 +12,20 @@ export async function runSaveThenTestAction<TSaveResult, TTestResult>(options: {
 		testResult,
 	};
 }
+
+export async function runSaveThenBatchValidateAction<TSaveResult, TBatchValidationResult>(options: {
+	save: () => Promise<TSaveResult>;
+	batchValidate: () => Promise<TBatchValidationResult>;
+}): Promise<{
+	saveResult: TSaveResult;
+	batchValidationResult: TBatchValidationResult;
+}> {
+	const { saveResult, testResult: batchValidationResult } = await runSaveThenTestAction({
+		save: options.save,
+		test: options.batchValidate,
+	});
+	return {
+		saveResult,
+		batchValidationResult,
+	};
+}

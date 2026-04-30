@@ -60,3 +60,51 @@ test("save-then-test flow does not test when save fails", async () => {
 
 	assert.deepEqual(calls, ["save"]);
 });
+
+test("save-then-batch-validate flow saves first, then batch validates, and returns both results", async () => {
+	const helpers = await importOrFail<any>(
+		"../src/components/scan-config/intelligentEngineActionFlow.ts",
+	);
+	const calls: string[] = [];
+
+	const result = await helpers.runSaveThenBatchValidateAction({
+		save: async () => {
+			calls.push("save");
+			return { saved: true };
+		},
+		batchValidate: async () => {
+			calls.push("batchValidate");
+			return { success: false, reasonCode: "row_validation_failed" };
+		},
+	});
+
+	assert.deepEqual(calls, ["save", "batchValidate"]);
+	assert.deepEqual(result, {
+		saveResult: { saved: true },
+		batchValidationResult: { success: false, reasonCode: "row_validation_failed" },
+	});
+});
+
+test("save-then-batch-validate flow does not validate when save fails", async () => {
+	const helpers = await importOrFail<any>(
+		"../src/components/scan-config/intelligentEngineActionFlow.ts",
+	);
+	const calls: string[] = [];
+	const saveError = new Error("save failed");
+
+	await assert.rejects(
+		helpers.runSaveThenBatchValidateAction({
+			save: async () => {
+				calls.push("save");
+				throw saveError;
+			},
+			batchValidate: async () => {
+				calls.push("batchValidate");
+				return { success: true };
+			},
+		}),
+		saveError,
+	);
+
+	assert.deepEqual(calls, ["save"]);
+});

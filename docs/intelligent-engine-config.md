@@ -92,6 +92,19 @@ Compose 会通过 `ARGUS_INTELLIGENT_AUDIT_ENV` 指定的 env file（默认 `./.
 
 系统设置页连接测试接口。请求可以带 `rowId`，表示测试指定配置行；测试成功或失败会更新该行 `preflight` 元数据和 `latestPreflightRun`。
 
+### POST `/api/v1/system-config/test-llm/batch`
+
+系统设置页顶部"保存并验证"的批量验证接口。该接口是 saved-config-only：请求体必须为空或 `{}`，后端只读取已保存的 `system-config`，不接受调用方传入的临时 LLM 配置。
+
+批量验证行为：
+
+- 按 `priority` 遍历所有 rows。
+- 禁用行返回 `skipped_disabled`，不覆盖该行已有 `preflight`。
+- 启用但缺少必填字段的行持久化 `missing_fields`、原因和时间戳。
+- 启用且字段完整的行执行真实 LLM 测试；单行失败不会阻断后续行。
+- 至少一行实际测试且所有启用行都通过时返回 `reasonCode: "all_rows_passed"`；没有可实时测试行时返回 `reasonCode: "no_eligible_rows"`。
+- 响应包含 `rows`、`attemptedRowIds`、`skippedRowIds`、`missingFieldRowIds`、`failedRowIds`、`passedRowIds`，但不得包含明文 API key、自定义 header secret 或 raw runtime config。
+
 ### POST `/api/v1/system-config/fetch-llm-models`
 
 模型列表发现接口。请求可以带 `rowId`，后端会以该行保存的 provider/base URL/key 为基础，并允许请求里的 draft provider/base URL/key 覆盖用于本次发现；响应不得回显明文密钥。
@@ -125,9 +138,9 @@ Fallback 只允许这些原因继续尝试下一行：
 
 系统设置页入口：`frontend/src/components/system/SystemConfig.tsx`。
 
-表格使用原生 HTML `<table>` 配合 `table-fixed` 和 `<colgroup>` 显式列宽（序号 64px、模型供应商 150px、地址自适应、模型 200px、状态 200px、操作 320px），确保表格总宽度撑满容器。列间有竖向分割线（`border-r border-border/30`），"操作"列表头居中。列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含验证、编辑、禁用/启用、删除、上移、下移；验证按钮自动保存当前行配置并执行连接测试。新增和编辑使用同一配置弹窗，弹窗采用 flex 列布局（固定头部 + 可滚动内容区 + 固定底栏），分为"基本配置"和"高级配置"两个区域，API key 输入默认不可见。
+表格使用共享 `Table` primitives 配合 `table-fixed` 显式列宽（序号、模型供应商、地址、模型、状态、操作），确保表格总宽度撑满容器。列间有竖向分割线（`border-r border-border/30`），"操作"列表头居中。列顺序固定为：序号、模型供应商、地址、模型、状态、操作。操作区包含验证、编辑、禁用/启用、删除、上移、下移；删除动作只显示文字，不渲染 trash/delete 图标。单行"验证"自动保存当前行配置并执行 `/system-config/test-llm` 诊断；顶部"保存并验证"先保存，再调用 `/system-config/test-llm/batch` 批量验证所有启用且字段完整的已保存行，随后重新加载后端配置作为状态列来源。新增和编辑使用同一配置弹窗，弹窗采用 flex 列布局（固定头部 + 可滚动内容区 + 固定底栏），分为"基本配置"和"高级配置"两个区域，API key 输入默认不可见。
 
-智能引擎独立配置页 `frontend/src/pages/ScanConfigIntelligentEngine.tsx` 嵌入 `SystemConfig`（仅 LLM 区），表格上方显示可用/异常计数、"保存并验证"和"新增配置"按钮，表格下方显示"保存并测试"、"保存"和"重置"按钮。
+智能引擎独立配置页 `frontend/src/pages/ScanConfigIntelligentEngine.tsx` 嵌入 `SystemConfig`（仅 LLM 区），表格上方显示可用/异常计数、"保存并验证"和"新增配置"按钮；该页不渲染底部"保存并测试"、"保存"和"重置"按钮。其他复用 `SystemConfig` 的页面可继续通过 `showInlineSaveButtons` 控制底部按钮。
 
 扫描引擎配置页 `frontend/src/pages/ScanConfigEngines.tsx` 嵌入 `OpengrepRules`，其 `DataTable` 使用 `enableColumnResizing` + `fillContainerWidth` 确保表格撑满容器宽度。
 

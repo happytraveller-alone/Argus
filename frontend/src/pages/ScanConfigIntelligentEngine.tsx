@@ -32,7 +32,7 @@ export default function ScanConfigIntelligentEngine() {
 				cardClassName="cyber-card-flat !bg-transparent !border-0 !shadow-none !p-0"
 				showLlmSummaryCards={false}
 				showFloatingSaveButton={false}
-				showInlineSaveButtons
+				showInlineSaveButtons={false}
 				compactLayout
 				sharedDraftState={sharedDraftState}
 				onLlmSummaryChange={setSummaryState}

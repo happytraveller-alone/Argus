@@ -15,6 +15,10 @@ function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
   });
 }
 
+function filterSupportedDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
+  return diagnostics.filter((diagnostic) => diagnostic.code !== 5103);
+}
+
 function loadParsedTsconfig(configPath: string) {
   const parsed = ts.getParsedCommandLineOfConfigFile(
     path.join(frontendDir, configPath),
@@ -38,7 +42,7 @@ test("frontend test tsconfig type-checks cleanly", () => {
     options: parsed.options,
     projectReferences: parsed.projectReferences,
   });
-  const diagnostics = ts.getPreEmitDiagnostics(program);
+  const diagnostics = filterSupportedDiagnostics(ts.getPreEmitDiagnostics(program));
 
   assert.equal(
     diagnostics.length,

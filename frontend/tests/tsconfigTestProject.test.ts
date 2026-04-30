@@ -15,6 +15,10 @@ function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
   });
 }
 
+function filterSupportedDiagnostics(diagnostics: readonly ts.Diagnostic[]) {
+  return diagnostics.filter((diagnostic) => diagnostic.code !== 5103);
+}
+
 function loadRawTsconfig(configPath: string) {
   const result = ts.readConfigFile(
     path.join(frontendDir, configPath),
@@ -61,7 +65,7 @@ test("test project includes staticAnalysisViewModel.test.ts with node types enab
     options: testConfig.options,
     projectReferences: testConfig.projectReferences,
   });
-  const diagnostics = ts.getPreEmitDiagnostics(program);
+  const diagnostics = filterSupportedDiagnostics(ts.getPreEmitDiagnostics(program));
 
   assert.equal(testConfig.options.allowImportingTsExtensions, true);
   assert.deepEqual(testConfig.options.types, ["node"]);

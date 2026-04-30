@@ -21,8 +21,8 @@ test("SystemConfig renders required multi-provider table columns and actions", (
 
 test("SystemConfig uses updated grid columns and enlarged fonts", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
-	assert.match(source, /grid-cols-\[auto_auto_1fr_auto_minmax\(120px,auto\)_auto\]/);
-	assert.match(source, /role="table" className="w-full text-base"/);
+	assert.match(source, /<Table className="table-fixed text-base"/);
+	assert.match(source, /TableHead className="w-16/);
 	assert.match(source, /showInlineSaveButtons/);
 });
 
@@ -49,4 +49,33 @@ test("database API accepts row-aware LLM calls", () => {
 	const source = readFileSync(databaseApiPath, "utf8");
 	assert.match(source, /rowId\?: string;[\s\S]*provider: string;/);
 	assert.match(source, /rowId\?: string;[\s\S]*provider\?: string;/);
+});
+
+test("SystemConfig uses global saved-config batch validation while preserving row diagnostics", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	const databaseSource = readFileSync(databaseApiPath, "utf8");
+	assert.match(source, /runSaveThenBatchValidateAction/);
+	assert.match(source, /batchTestLLMConnections/);
+	assert.match(source, /await reloadConfig\(\)/);
+	assert.match(source, /保存并验证/);
+	assert.match(source, /批量验证中/);
+	assert.match(source, /handleSaveAndTestRow/);
+	assert.match(source, /testLLMConnection/);
+	assert.match(databaseSource, /batchTestLLMConnections/);
+	assert.match(databaseSource, /\/system-config\/test-llm\/batch/);
+});
+
+test("SystemConfig delete action is text-only without Trash2 icon", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	assert.doesNotMatch(source, /\bTrash2\b/);
+	assert.match(source, />删除<\/Button>/);
+});
+
+test("SystemConfig status text covers persisted batch validation states and timestamps", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	assert.match(source, /missing_fields/);
+	assert.match(source, /字段不完整/);
+	assert.match(source, /checkedAt/);
+	assert.match(source, /上次验证/);
+	assert.match(source, /禁用/);
 });

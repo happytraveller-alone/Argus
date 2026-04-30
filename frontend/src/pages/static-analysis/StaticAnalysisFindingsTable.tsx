@@ -118,7 +118,9 @@ export function getColumns(input: {
 			meta: {
 				label: "命中规则",
 				align: "left",
+				width: 220,
 				minWidth: 180,
+				maxWidth: 260,
 				filterVariant: "text",
 			},
 			cell: ({ row }) => (

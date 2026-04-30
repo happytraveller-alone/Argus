@@ -157,10 +157,19 @@ async fn system_config_crud_roundtrip_stays_deuserized() {
     assert_eq!(current_json["llmConfig"]["schemaVersion"], 2);
     assert_eq!(current_json["llmConfig"]["rows"][0]["apiKey"], "");
     assert_eq!(current_json["llmConfig"]["rows"][0]["hasApiKey"], true);
-    assert_eq!(current_json["llmConfig"]["rows"][0]["secretSource"], "saved");
-    assert_eq!(current_json["llmConfig"]["rows"][0]["provider"], "openai_compatible");
+    assert_eq!(
+        current_json["llmConfig"]["rows"][0]["secretSource"],
+        "saved"
+    );
+    assert_eq!(
+        current_json["llmConfig"]["rows"][0]["provider"],
+        "openai_compatible"
+    );
     assert_eq!(current_json["llmConfig"]["rows"][0]["model"], "gpt-5");
-    assert_eq!(current_json["llmConfig"]["rows"][0]["baseUrl"], "https://api.openai.com/v1");
+    assert_eq!(
+        current_json["llmConfig"]["rows"][0]["baseUrl"],
+        "https://api.openai.com/v1"
+    );
     assert!(!current_json.to_string().contains("sk-test"));
     assert_eq!(current_json["otherConfig"]["llmConcurrency"], 3);
     assert!(current_json.get("id").is_none());
@@ -344,7 +353,13 @@ async fn agent_preflight_redacts_credentials_and_reports_runner_stage() {
     assert_eq!(stale_preflight_json["savedConfig"]["apiKey"], "");
     assert_eq!(stale_preflight_json["savedConfig"]["hasSavedApiKey"], true);
     assert_eq!(stale_preflight_json["savedConfig"]["secretSource"], "saved");
-    assert_eq!(stale_preflight_json["metadata"]["preflightRows"]["attemptedRowIds"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        stale_preflight_json["metadata"]["preflightRows"]["attemptedRowIds"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(stale_preflight_json["metadata"]["preflightRows"]["winningRowId"].is_string());
     assert!(!stale_preflight_json
         .to_string()
@@ -577,6 +592,295 @@ async fn test_llm_runs_real_openai_compatible_generation_and_persists_metadata()
         current["llmTestMetadata"]["fingerprint"],
         payload["metadata"]["fingerprint"]
     );
+}
+
+#[tokio::test]
+async fn test_llm_batch_validates_saved_rows_and_persists_each_status_without_secrets() {
+    let state = AppState::from_config(isolated_test_config("system-config-batch-validate"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let fail_base_url = spawn_llm_mock_server(r#"{"choices":[{"message":{"content":""}}]}"#).await;
+    let pass_base_url =
+        spawn_llm_mock_server(r#"{"choices":[{"message":{"content":"ok"}}]}"#).await;
+
+    let save_payload = json!({
+        "llmConfig": {
+            "schemaVersion": 2,
+            "rows": [
+                {
+                    "id": "row-disabled",
+                    "priority": 1,
+                    "enabled": false,
+                    "provider": "openai_compatible",
+                    "baseUrl": pass_base_url,
+                    "model": "gpt-disabled",
+                    "apiKey": "sk-disabled-secret",
+                    "advanced": {"llmCustomHeaders": {"X-Disabled-Secret": "disabled-header-secret"}},
+                    "preflight": {
+                        "status": "passed",
+                        "reasonCode": null,
+                        "message": "keep old disabled preflight",
+                        "checkedAt": "2026-01-01T00:00:00Z",
+                        "fingerprint": "sha256:old-disabled"
+                    }
+                },
+                {
+                    "id": "row-missing",
+                    "priority": 2,
+                    "enabled": true,
+                    "provider": "openai_compatible",
+                    "baseUrl": pass_base_url,
+                    "model": "",
+                    "apiKey": "sk-missing-secret",
+                    "advanced": {"llmCustomHeaders": {"X-Missing-Secret": "missing-header-secret"}}
+                },
+                {
+                    "id": "row-fails",
+                    "priority": 3,
+                    "enabled": true,
+                    "provider": "openai_compatible",
+                    "baseUrl": fail_base_url,
+                    "model": "gpt-fails",
+                    "apiKey": "sk-fails-secret",
+                    "advanced": {"llmCustomHeaders": {"X-Fails-Secret": "fails-header-secret"}}
+                },
+                {
+                    "id": "row-passes",
+                    "priority": 4,
+                    "enabled": true,
+                    "provider": "openai_compatible",
+                    "baseUrl": pass_base_url,
+                    "model": "gpt-passes",
+                    "apiKey": "sk-passes-secret",
+                    "advanced": {"llmCustomHeaders": {"X-Passes-Secret": "passes-header-secret"}}
+                }
+            ],
+            "latestPreflightRun": {
+                "runId": null,
+                "checkedAt": null,
+                "attemptedRowIds": [],
+                "winningRowId": null,
+                "winningFingerprint": null
+            },
+            "migration": {"status": "not_needed", "message": null, "sourceSchemaVersion": null}
+        },
+        "otherConfig": {"llmConcurrency": 2, "llmGapMs": 5}
+    });
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let rejected_payload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm/batch")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"llmConfig": {"rows": []}}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_payload_response.status(), StatusCode::BAD_REQUEST);
+
+    let batch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm/batch")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(batch_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(batch_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let payload_text = payload.to_string();
+
+    assert_eq!(payload["success"], false);
+    assert_eq!(payload["reasonCode"], "row_validation_failed");
+    assert_eq!(
+        payload["attemptedRowIds"],
+        json!(["row-fails", "row-passes"])
+    );
+    assert_eq!(payload["skippedRowIds"], json!(["row-disabled"]));
+    assert_eq!(payload["missingFieldRowIds"], json!(["row-missing"]));
+    assert_eq!(payload["failedRowIds"], json!(["row-fails"]));
+    assert_eq!(payload["passedRowIds"], json!(["row-passes"]));
+    let row_statuses: Vec<_> = payload["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            (
+                row["rowId"].as_str().unwrap(),
+                row["status"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        row_statuses,
+        vec![
+            ("row-disabled", "skipped_disabled"),
+            ("row-missing", "missing_fields"),
+            ("row-fails", "failed"),
+            ("row-passes", "passed"),
+        ]
+    );
+    for secret in [
+        "sk-disabled-secret",
+        "sk-missing-secret",
+        "sk-fails-secret",
+        "sk-passes-secret",
+        "disabled-header-secret",
+        "missing-header-secret",
+        "fails-header-secret",
+        "passes-header-secret",
+        "X-Disabled-Secret",
+        "X-Missing-Secret",
+        "X-Fails-Secret",
+        "X-Passes-Secret",
+    ] {
+        assert!(
+            !payload_text.contains(secret),
+            "batch response leaked {secret}"
+        );
+    }
+
+    let current_response = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(current_response.status(), StatusCode::OK);
+    let current: Value = serde_json::from_slice(
+        &to_bytes(current_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let rows = current["llmConfig"]["rows"].as_array().unwrap();
+    let find = |row_id: &str| rows.iter().find(|row| row["id"] == row_id).unwrap();
+    assert_eq!(find("row-disabled")["preflight"]["status"], "passed");
+    assert_eq!(
+        find("row-disabled")["preflight"]["message"],
+        "keep old disabled preflight"
+    );
+    assert_eq!(find("row-missing")["preflight"]["status"], "missing_fields");
+    assert_eq!(
+        find("row-missing")["preflight"]["reasonCode"],
+        "missing_fields"
+    );
+    assert_eq!(find("row-fails")["preflight"]["status"], "failed");
+    assert_eq!(find("row-passes")["preflight"]["status"], "passed");
+    assert_eq!(
+        current["llmConfig"]["latestPreflightRun"]["attemptedRowIds"],
+        json!(["row-fails", "row-passes"])
+    );
+    assert_eq!(
+        current["llmConfig"]["latestPreflightRun"]["winningRowId"],
+        Value::Null
+    );
+    assert!(!current.to_string().contains("sk-passes-secret"));
+}
+
+#[tokio::test]
+async fn test_llm_batch_reports_no_eligible_rows_for_disabled_or_missing_only_config() {
+    let state = AppState::from_config(isolated_test_config("system-config-batch-no-eligible"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let save_payload = json!({
+        "llmConfig": {
+            "schemaVersion": 2,
+            "rows": [
+                {
+                    "id": "row-disabled",
+                    "priority": 1,
+                    "enabled": false,
+                    "provider": "openai_compatible",
+                    "baseUrl": "https://disabled.example/v1",
+                    "model": "gpt-disabled",
+                    "apiKey": "sk-disabled-secret"
+                },
+                {
+                    "id": "row-missing",
+                    "priority": 2,
+                    "enabled": true,
+                    "provider": "openai_compatible",
+                    "baseUrl": "https://missing.example/v1",
+                    "model": "",
+                    "apiKey": "sk-missing-secret"
+                }
+            ],
+            "latestPreflightRun": {"runId": null, "checkedAt": null, "attemptedRowIds": [], "winningRowId": null, "winningFingerprint": null},
+            "migration": {"status": "not_needed", "message": null, "sourceSchemaVersion": null}
+        },
+        "otherConfig": {}
+    });
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let batch_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/system-config/test-llm/batch")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(batch_response.status(), StatusCode::OK);
+    let payload: Value = serde_json::from_slice(
+        &to_bytes(batch_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(payload["success"], false);
+    assert_eq!(payload["reasonCode"], "no_eligible_rows");
+    assert_eq!(payload["attemptedRowIds"], json!([]));
+    assert_eq!(payload["skippedRowIds"], json!(["row-disabled"]));
+    assert_eq!(payload["missingFieldRowIds"], json!(["row-missing"]));
+    assert_eq!(payload["failedRowIds"], json!([]));
+    assert_eq!(payload["passedRowIds"], json!([]));
 }
 
 #[tokio::test]
@@ -1019,8 +1323,14 @@ async fn fetch_llm_models_saved_path_omits_draft_key_but_draft_base_url_takes_pr
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(current_payload["llmConfig"]["rows"][0]["baseUrl"], saved_base_url);
-    assert_ne!(current_payload["llmConfig"]["rows"][0]["baseUrl"], draft_base_url);
+    assert_eq!(
+        current_payload["llmConfig"]["rows"][0]["baseUrl"],
+        saved_base_url
+    );
+    assert_ne!(
+        current_payload["llmConfig"]["rows"][0]["baseUrl"],
+        draft_base_url
+    );
 }
 
 #[tokio::test]
@@ -1097,13 +1407,19 @@ async fn system_config_defaults_follow_app_config() {
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(payload["llmConfig"]["schemaVersion"], 2);
-    assert_eq!(payload["llmConfig"]["rows"][0]["provider"], "openai_compatible");
+    assert_eq!(
+        payload["llmConfig"]["rows"][0]["provider"],
+        "openai_compatible"
+    );
     assert_eq!(payload["llmConfig"]["rows"][0]["model"], "gemini-2.5-pro");
     assert_eq!(
         payload["llmConfig"]["rows"][0]["baseUrl"],
         "https://example.test/v1"
     );
-    assert_eq!(payload["llmConfig"]["rows"][0]["advanced"]["llmTimeout"], 123000);
+    assert_eq!(
+        payload["llmConfig"]["rows"][0]["advanced"]["llmTimeout"],
+        123000
+    );
     assert_eq!(payload["otherConfig"]["maxAnalyzeFiles"], 88);
     assert_eq!(payload["otherConfig"]["llmConcurrency"], 5);
     assert_eq!(payload["otherConfig"]["llmGapMs"], 2222);
@@ -1152,16 +1468,25 @@ async fn system_config_multi_row_contract_redacts_and_preserves_row_secret() {
         "otherConfig": {"llmConcurrency": 3, "llmGapMs": 1500, "maxAnalyzeFiles": 7}
     });
 
-    let save_response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::PUT)
-            .uri("/api/v1/system-config")
-            .header("content-type", "application/json")
-            .body(Body::from(save_payload.to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(save_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(save_response.status(), StatusCode::OK);
-    let saved: Value = serde_json::from_slice(&to_bytes(save_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let saved: Value = serde_json::from_slice(
+        &to_bytes(save_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(saved["llmConfig"]["schemaVersion"], 2);
     assert_eq!(saved["llmConfig"]["rows"][0]["apiKey"], "");
     assert_eq!(saved["llmConfig"]["rows"][0]["hasApiKey"], true);
@@ -1177,17 +1502,29 @@ async fn system_config_multi_row_contract_redacts_and_preserves_row_secret() {
         },
         "otherConfig": {}
     });
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::PUT)
-            .uri("/api/v1/system-config")
-            .header("content-type", "application/json")
-            .body(Body::from(preserve_payload.to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/system-config")
+                .header("content-type", "application/json")
+                .body(Body::from(preserve_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    let current = app.oneshot(Request::get("/api/v1/system-config").body(Body::empty()).unwrap()).await.unwrap();
-    let current_json: Value = serde_json::from_slice(&to_bytes(current.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let current = app
+        .oneshot(
+            Request::get("/api/v1/system-config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let current_json: Value =
+        serde_json::from_slice(&to_bytes(current.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(current_json["llmConfig"]["rows"][0]["id"], "row-b");
     assert_eq!(current_json["llmConfig"]["rows"][1]["id"], "row-a");
     assert_eq!(current_json["llmConfig"]["rows"][1]["hasApiKey"], true);

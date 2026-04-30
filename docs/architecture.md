@@ -129,7 +129,7 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 `llmConfig` 当前是 breaking schema v2 envelope：`schemaVersion: 2`、`rows[]`、`latestPreflightRun`、`migration`。每一行代表一个 provider/model 配置，包含稳定 `id`、`priority`、`enabled`、`provider`、`baseUrl`、`model`、`hasApiKey`、行级高级参数、模型可用性和 latest preflight 状态。公开 GET、test、preflight 和错误响应不得返回明文 `apiKey`；编辑时空 API key 表示按稳定 row id 保留原密钥，只有显式新值才替换。
 
-约定：设置页可以使用 `/system-config/test-llm` 做连接测试，并可传 `rowId` 测指定配置行；智能审计创建门禁使用 `/system-config/agent-preflight`。Agent preflight 按优先级尝试已启用行，只有 connectivity、auth、model_unavailable 类失败会继续 fallback；quota/rate-limit、无效配置、异常响应和任务启动后的运行期 LLM 失败不会触发行切换。`latestPreflightRun` 记录 attempted rows、winning row 和 winning fingerprint，前端创建弹窗 UI 不增加 provider/model 选择器。详见 [intelligent-engine-config.md](./intelligent-engine-config.md)。
+约定：设置页可以使用 `/system-config/test-llm` 做单行连接测试，并可传 `rowId` 测指定配置行；设置页顶部"保存并验证"使用 saved-config-only 的 `/system-config/test-llm/batch`，保存后批量验证所有启用且字段完整的配置行，禁用行跳过且不覆盖旧状态，字段不完整行持久化 `missing_fields`。智能审计创建门禁使用 `/system-config/agent-preflight`。Agent preflight 按优先级尝试已启用行，只有 connectivity、auth、model_unavailable 类失败会继续 fallback；quota/rate-limit、无效配置、异常响应和任务启动后的运行期 LLM 失败不会触发行切换。`latestPreflightRun` 记录 attempted rows、winning row 和 winning fingerprint，前端创建弹窗 UI 不增加 provider/model 选择器。详见 [intelligent-engine-config.md](./intelligent-engine-config.md)。
 
 ## 前端 UI 共享边界
 

@@ -56,6 +56,27 @@ interface AgentTaskPreflightPayload {
   llmTestMetadata?: Record<string, unknown> | null;
 }
 
+export interface LlmBatchTestRowOutcomePayload {
+  rowId: string;
+  priority: number;
+  status: "passed" | "failed" | "missing_fields" | "skipped_disabled" | string;
+  reasonCode?: string | null;
+  message: string;
+  checkedAt?: string | null;
+  model?: string | null;
+}
+export interface LlmBatchTestResponsePayload {
+  success: boolean;
+  message: string;
+  reasonCode: "all_rows_passed" | "row_validation_failed" | "no_eligible_rows" | string;
+  rows: LlmBatchTestRowOutcomePayload[];
+  attemptedRowIds: string[];
+  skippedRowIds: string[];
+  missingFieldRowIds: string[];
+  failedRowIds: string[];
+  passedRowIds: string[];
+}
+
 export interface SkillCatalogItemPayload {
   skill_id: string;
   name: string;
@@ -864,6 +885,11 @@ export const api = {
     metadata?: Record<string, unknown>;
   }> {
     const res = await apiClient.post('/system-config/test-llm', params);
+    return res.data;
+  },
+
+  async batchTestLLMConnections(): Promise<LlmBatchTestResponsePayload> {
+    const res = await apiClient.post('/system-config/test-llm/batch');
     return res.data;
   },
 
