@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 CONFIG_FILE="${ARGUS_INTELLIGENT_AUDIT_ENV:-$ROOT_DIR/.argus-intelligent-audit.env}"
 CONFIG_TEMPLATE_FILE="${CONFIG_FILE}.example"
@@ -60,8 +60,8 @@ Usage:
   ./$SCRIPT_NAME --wait-exit -- default
 
 Shell support:
-  Run directly from bash, zsh, or another shell as ./$SCRIPT_NAME.
-  The implementation uses this file's Bash shebang; running "zsh $SCRIPT_NAME" is not supported.
+  Compatible with both bash and zsh. Run as ./$SCRIPT_NAME or via
+  bash $SCRIPT_NAME / zsh $SCRIPT_NAME.
 
 Configuration:
   ARGUS_INTELLIGENT_AUDIT_ENV  Path to dedicated config file.
@@ -139,7 +139,7 @@ quote_cmd() {
   local arg redacted
   for arg in "$@"; do
     redacted="$(redact_arg_for_log "$arg")"
-    printf -v redacted '%q' "$redacted"
+    redacted="$(printf '%q' "$redacted")"
     quoted+=("$redacted")
   done
   printf '%s' "${quoted[*]}"
@@ -257,7 +257,8 @@ is_secret_key_name() {
 
 is_placeholder_value() {
   local value="$(trim_value "$1")"
-  local lower="${value,,}"
+  local lower
+  lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
   [[ -z "$value" ]] && return 0
   case "$lower" in
     todo|tbd|replace_me|changeme|change_me|placeholder|dummy|example) return 0 ;;
@@ -399,10 +400,13 @@ write_generated_config() {
   done
 
   while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^([[:space:]]*)([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-      key="${BASH_REMATCH[2]}"
-      if [[ -v "replacements[$key]" ]]; then
-        printf '%s%s=%s\n' "${BASH_REMATCH[1]}" "$key" "${replacements[$key]}"
+    local stripped leading_ws
+    stripped="${line#"${line%%[![:space:]]*}"}"
+    leading_ws="${line%"$stripped"}"
+    if [[ "$stripped" == [A-Za-z_]*=* ]]; then
+      key="${stripped%%=*}"
+      if [[ -n "${replacements[$key]+x}" ]]; then
+        printf '%s%s=%s\n' "$leading_ws" "$key" "${replacements[$key]}"
         continue
       fi
     fi
