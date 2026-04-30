@@ -138,6 +138,12 @@ pub struct AgentflowLlmConfig {
     pub base_url: Option<String>,
     #[serde(default)]
     pub api_key_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire_api: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -569,6 +575,9 @@ mod tests {
                 model: "configured-model".to_string(),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 api_key_ref: Some("system_config:llm.apiKey".to_string()),
+                agent_kind: None,
+                wire_api: None,
+                api_key_env: None,
             },
             resource_budget: AgentflowResourceBudget {
                 max_cpu_cores: 2.0,
@@ -642,6 +651,68 @@ mod tests {
         assert_eq!(value["events"][0]["visibility"], "user");
         assert_eq!(value["events"][0]["topology_version"], P1_TOPOLOGY_VERSION);
         assert!(output.forbidden_static_inputs().is_empty());
+    }
+
+    #[test]
+    fn agentflow_runner_input_round_trip_preserves_new_fields() {
+        let config = AgentflowLlmConfig {
+            provider: "anthropic_compatible".to_string(),
+            model: "claude-opus-4-5".to_string(),
+            base_url: None,
+            api_key_ref: None,
+            agent_kind: Some("claude".into()),
+            wire_api: Some("messages".into()),
+            api_key_env: Some("ANTHROPIC_API_KEY".into()),
+        };
+
+        let json_str = serde_json::to_string(&config).expect("serialize AgentflowLlmConfig");
+        assert!(
+            json_str.contains("\"agent_kind\":\"claude\""),
+            "JSON must contain agent_kind:claude, got: {json_str}"
+        );
+        assert!(
+            json_str.contains("\"wire_api\":\"messages\""),
+            "JSON must contain wire_api:messages, got: {json_str}"
+        );
+        assert!(
+            json_str.contains("\"api_key_env\":\"ANTHROPIC_API_KEY\""),
+            "JSON must contain api_key_env:ANTHROPIC_API_KEY, got: {json_str}"
+        );
+
+        let decoded: AgentflowLlmConfig =
+            serde_json::from_str(&json_str).expect("deserialize AgentflowLlmConfig");
+        assert_eq!(decoded, config);
+    }
+
+    #[test]
+    fn agentflow_runner_input_legacy_struct_serializes_without_new_fields() {
+        let config = AgentflowLlmConfig {
+            provider: "openai_compatible".to_string(),
+            model: "gpt-4o".to_string(),
+            base_url: Some("https://example.invalid/v1".to_string()),
+            api_key_ref: Some("system_config:llmApiKey".to_string()),
+            agent_kind: None,
+            wire_api: None,
+            api_key_env: None,
+        };
+
+        let json_str = serde_json::to_string(&config).expect("serialize legacy AgentflowLlmConfig");
+        assert!(
+            !json_str.contains("agent_kind"),
+            "legacy JSON must NOT contain agent_kind, got: {json_str}"
+        );
+        assert!(
+            !json_str.contains("wire_api"),
+            "legacy JSON must NOT contain wire_api, got: {json_str}"
+        );
+        assert!(
+            !json_str.contains("api_key_env"),
+            "legacy JSON must NOT contain api_key_env, got: {json_str}"
+        );
+
+        let decoded: AgentflowLlmConfig =
+            serde_json::from_str(&json_str).expect("deserialize legacy AgentflowLlmConfig");
+        assert_eq!(decoded, config);
     }
 
     #[test]

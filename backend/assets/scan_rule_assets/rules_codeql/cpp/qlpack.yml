@@ -1,0 +1,4 @@
+name: argus/cpp-security
+version: 0.0.1
+libraryPathDependencies:
+  - codeql/cpp-all

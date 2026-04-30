@@ -98,6 +98,29 @@ services:
     networks:
       - argus-network
 
+  codeql-runner:
+    image: ${SCANNER_CODEQL_IMAGE:-Argus/codeql-runner-local:latest}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/codeql-runner.Dockerfile
+      args:
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        CODEQL_BUNDLE_VERSION: ${CODEQL_BUNDLE_VERSION:-2.20.5}
+        CODEQL_BUNDLE_ARCH: ${CODEQL_BUNDLE_ARCH:-linux64}
+    restart: "no"
+    mem_limit: 8g
+    pids_limit: 1024
+    command:
+      - "codeql-scan"
+      - "--self-test"
+    networks:
+      - argus-network
+
   db:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
     restart: unless-stopped
@@ -185,6 +208,15 @@ services:
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
+      SCANNER_CODEQL_IMAGE: ${SCANNER_CODEQL_IMAGE:-Argus/codeql-runner-local:latest}
+      CODEQL_LLM_ALLOW_SOURCE_SNIPPETS: "${CODEQL_LLM_ALLOW_SOURCE_SNIPPETS:-true}"
+      CODEQL_ALLOW_NETWORK_DURING_BUILD: "${CODEQL_ALLOW_NETWORK_DURING_BUILD:-true}"
+      CODEQL_MAX_BUILD_INFERENCE_ROUNDS: "${CODEQL_MAX_BUILD_INFERENCE_ROUNDS:-3}"
+      CODEQL_RAM_MB: "${CODEQL_RAM_MB:-6144}"
+      CODEQL_THREADS: "${CODEQL_THREADS:-0}"
+      CODEQL_RUNNER_CPU_LIMIT: "${CODEQL_RUNNER_CPU_LIMIT:-0}"
+      CODEQL_RUNNER_MEMORY_LIMIT_MB: "${CODEQL_RUNNER_MEMORY_LIMIT_MB:-8192}"
+      CODEQL_SCAN_TIMEOUT_SECONDS: "${CODEQL_SCAN_TIMEOUT_SECONDS:-0}"
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
       GIT_MIRROR_PREFIXES: ${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}
@@ -215,6 +247,8 @@ services:
       agentflow-runner:
         condition: service_completed_successfully
       opengrep-runner:
+        condition: service_completed_successfully
+      codeql-runner:
         condition: service_completed_successfully
       db:
         condition: service_healthy

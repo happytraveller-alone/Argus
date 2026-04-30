@@ -1,0 +1,4 @@
+name: argus/python-security
+version: 0.0.1
+libraryPathDependencies:
+  - codeql/python-all

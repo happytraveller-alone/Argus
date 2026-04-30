@@ -609,6 +609,8 @@ fn preserve_row_secrets(
                 row["hasApiKey"] = Value::Bool(false);
             } else if read_string(row, "provider") == "openai_compatible"
                 || read_string(row, "provider") == "anthropic_compatible"
+                || read_string(row, "provider") == "kimi_compatible"
+                || read_string(row, "provider") == "pi_compatible"
             {
                 return Err(LlmGateError::new(
                     "missing_fields",

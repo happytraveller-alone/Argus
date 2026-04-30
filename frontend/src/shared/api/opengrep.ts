@@ -332,8 +332,11 @@ export async function updateOpengrepRule(
     return response.data;
 }
 
+export type StaticScanEngine = "opengrep" | "codeql";
+
 export interface OpengrepScanTask {
     id: string;
+    engine?: StaticScanEngine;
     project_id: string;
     project_name?: string | null;
     name: string;
@@ -376,6 +379,7 @@ export interface OpengrepScanProgress {
 export interface OpengrepFinding {
     id: string;
     scan_task_id: string;
+    engine?: StaticScanEngine;
     rule: Record<string, any>;
     rule_name?: string | null;
     cwe?: string[] | null;
@@ -430,10 +434,29 @@ export async function createOpengrepScanTask(params: {
     return response.data;
 }
 
+export async function createCodeqlScanTask(params: {
+    project_id: string;
+    name?: string;
+    target_path?: string;
+    languages?: string[];
+    build_mode?: "none" | "autobuild" | "manual";
+    allow_network?: boolean;
+}): Promise<OpengrepScanTask> {
+    const response = await apiClient.post(`/static-tasks/codeql/tasks`, params);
+    return response.data;
+}
+
 export async function getOpengrepScanTask(
     taskId: string,
 ): Promise<OpengrepScanTask> {
     const response = await apiClient.get(`/static-tasks/tasks/${taskId}`);
+    return response.data;
+}
+
+export async function getCodeqlScanTask(
+    taskId: string,
+): Promise<OpengrepScanTask> {
+    const response = await apiClient.get(`/static-tasks/codeql/tasks/${taskId}`);
     return response.data;
 }
 
@@ -454,14 +477,26 @@ export async function getOpengrepScanProgress(
     return response.data;
 }
 
-export async function getOpengrepScanFindings(params: {
-    taskId: string;
+export async function getCodeqlScanProgress(
+    taskId: string,
+    includeLogs: boolean = false,
+): Promise<OpengrepScanProgress> {
+    const response = await apiClient.get(
+        `/static-tasks/codeql/tasks/${taskId}/progress`,
+        {
+            params: { include_logs: includeLogs },
+        },
+    );
+    return response.data;
+}
+
+function staticFindingsQuery(params: {
     severity?: string;
     confidence?: string;
     status?: string;
     skip?: number;
     limit?: number;
-}): Promise<OpengrepFinding[]> {
+}): string {
     const searchParams = new URLSearchParams();
     if (params.severity) searchParams.set("severity", params.severity);
     if (params.confidence) searchParams.set("confidence", params.confidence);
@@ -470,9 +505,39 @@ export async function getOpengrepScanFindings(params: {
         searchParams.set("skip", String(params.skip));
     if (params.limit !== undefined)
         searchParams.set("limit", String(params.limit));
-    const query = searchParams.toString();
+    return searchParams.toString();
+}
+
+export async function getOpengrepScanFindings(params: {
+    taskId: string;
+    severity?: string;
+    confidence?: string;
+    status?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepFinding[]> {
+    const query = staticFindingsQuery(params);
     const response = await apiClient.get(
         `/static-tasks/tasks/${params.taskId}/findings${query ? `?${query}` : ""}`,
+    );
+    const findings = Array.isArray(response.data) ? response.data : [];
+    return findings.map((item) => ({
+        ...item,
+        confidence: normalizeConfidence(item?.confidence),
+    }));
+}
+
+export async function getCodeqlScanFindings(params: {
+    taskId: string;
+    severity?: string;
+    confidence?: string;
+    status?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepFinding[]> {
+    const query = staticFindingsQuery(params);
+    const response = await apiClient.get(
+        `/static-tasks/codeql/tasks/${params.taskId}/findings${query ? `?${query}` : ""}`,
     );
     const findings = Array.isArray(response.data) ? response.data : [];
     return findings.map((item) => ({
@@ -512,11 +577,45 @@ export async function getOpengrepFindingContext(params: {
     return response.data;
 }
 
-export async function getOpengrepScanTasks(params?: {
-    projectId?: string;
-    skip?: number;
-    limit?: number;
-}): Promise<OpengrepScanTask[]> {
+export async function getCodeqlScanFinding(params: {
+    taskId: string;
+    findingId: string;
+}): Promise<OpengrepFinding> {
+    const response = await apiClient.get(
+        `/static-tasks/codeql/tasks/${params.taskId}/findings/${params.findingId}`,
+    );
+    return {
+        ...response.data,
+        confidence: normalizeConfidence(response.data?.confidence),
+    };
+}
+
+export async function getCodeqlFindingContext(params: {
+    taskId: string;
+    findingId: string;
+    before?: number;
+    after?: number;
+}): Promise<OpengrepFindingContext> {
+    const response = await apiClient.get(
+        `/static-tasks/codeql/tasks/${params.taskId}/findings/${params.findingId}/context`,
+        {
+            params: {
+                before: params.before ?? 5,
+                after: params.after ?? 5,
+            },
+        },
+    );
+    return response.data;
+}
+
+export async function getStaticScanTasks(
+    engine: StaticScanEngine,
+    params?: {
+        projectId?: string;
+        skip?: number;
+        limit?: number;
+    },
+): Promise<OpengrepScanTask[]> {
     const searchParams = new URLSearchParams();
     if (params?.projectId) searchParams.set("project_id", params.projectId);
     if (params?.skip !== undefined)
@@ -524,10 +623,28 @@ export async function getOpengrepScanTasks(params?: {
     if (params?.limit !== undefined)
         searchParams.set("limit", String(params.limit));
     const query = searchParams.toString();
+    const basePath =
+        engine === "codeql" ? "/static-tasks/codeql/tasks" : "/static-tasks/tasks";
     const response = await apiClient.get(
-        `/static-tasks/tasks${query ? `?${query}` : ""}`,
+        `${basePath}${query ? `?${query}` : ""}`,
     );
     return response.data;
+}
+
+export async function getOpengrepScanTasks(params?: {
+    projectId?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepScanTask[]> {
+    return getStaticScanTasks("opengrep", params);
+}
+
+export async function getCodeqlScanTasks(params?: {
+    projectId?: string;
+    skip?: number;
+    limit?: number;
+}): Promise<OpengrepScanTask[]> {
+    return getStaticScanTasks("codeql", params);
 }
 
 export async function updateOpengrepFindingStatus(params: {
@@ -536,6 +653,18 @@ export async function updateOpengrepFindingStatus(params: {
 }): Promise<{ message: string; finding_id: string; status: string }> {
     const response = await apiClient.post(
         `/static-tasks/findings/${params.findingId}/status`,
+        undefined,
+        { params: { status: params.status } },
+    );
+    return response.data;
+}
+
+export async function updateCodeqlFindingStatus(params: {
+    findingId: string;
+    status: "open" | "verified" | "false_positive";
+}): Promise<{ message: string; finding_id: string; status: string }> {
+    const response = await apiClient.post(
+        `/static-tasks/codeql/findings/${params.findingId}/status`,
         undefined,
         { params: { status: params.status } },
     );

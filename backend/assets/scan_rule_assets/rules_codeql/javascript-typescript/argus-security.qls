@@ -1,0 +1,2 @@
+- description: Argus minimal javascript-typescript CodeQL security suite
+- queries: ./queries

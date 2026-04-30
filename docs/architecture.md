@@ -1,6 +1,10 @@
 # Argus 开发者架构指南
 
 > 2026-04-30 更新：本仓库当前是 slim-source 形态，运行主线为 Rust/Axum backend、React/Vite frontend、Opengrep 静态审计、AgentFlow 智能审计。历史 Python/FastAPI、Bandit/Gitleaks/PHPStan/PMD/YASA 等链路若仍出现在归档或兼容测试中，按退役背景处理，不作为新功能入口。
+>
+> 2026-04-30 实施补充：CodeQL 隔离扫描已进入基础实施阶段：后端已有 `engine="codeql"` 静态任务骨架、`rules_codeql` 查询资产发现、独立 `codeql-runner` 镜像/脚本和 SARIF 解析基础。它仍不是首版完成；五类语言端到端全绿前只能称为里程碑基础能力。
+>
+> 2026-04-30 CodeQL 计划 strict-zero 更新：该计划已经明确为五类语言（JavaScript/TypeScript、Python、Java、C/C++、Go）端到端全绿才算首版完成；LLM 候选构建命令可在 CodeQL runner 沙箱内自动执行；runner 可联网并允许必要源码片段/构建文件/日志进入 LLM；build plan 运行时真源只在数据库。
 
 这份文档面向第一次接手 Argus 的开发者：先建立系统主线，再告诉你从哪些文件开始读代码。接口字段逐项说明、数据库逐表说明和未来规划不放在这里。
 
@@ -20,7 +24,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 - **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
 - **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`。
-- **Runner**：Docker runner 负责隔离执行 Opengrep 和 AgentFlow；Compose 服务在 `docker-compose.yml`。
+- **Runner**：Docker runner 负责隔离执行 Opengrep、CodeQL 和 AgentFlow；Compose 服务在 `docker-compose.yml`。
 - **LLM 配置**：智能审计依赖系统配置和 `.argus-intelligent-audit.env` 启动导入链路；系统配置中的 `llmConfig` 是 schemaVersion 2 的多行 provider 配置表。
 
 如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计或智能审计，并把结果汇总回前端。**
@@ -29,16 +33,18 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 ### 静态审计
 
-当前可运行的静态审计主线是 **Opengrep-only**。
+当前稳定静态审计主线仍是 **Opengrep**。CodeQL 隔离扫描已有基础骨架：`StaticTaskRecord.engine` 可分流 `codeql`，查询资产位于 `backend/assets/scan_rule_assets/rules_codeql`，runner 使用 `docker/codeql-runner.Dockerfile` + `docker/codeql-scan.sh`，SARIF 解析映射到现有静态 finding 形态。CodeQL 五类语言端到端全绿前，不得标记为首版完成。
 
 - 后端路由：`backend/src/routes/static_tasks.rs`
 - 前端 API：`frontend/src/shared/api/opengrep.ts`
 - 前端结果页：`frontend/src/pages/StaticAnalysis.tsx`
 - 任务管理聚合：`frontend/src/features/tasks/services/taskActivities.ts`
-- Runner 脚本：`docker/opengrep-scan.sh`
-- Runner 镜像：`docker/opengrep-runner.Dockerfile`
+- Opengrep runner 脚本：`docker/opengrep-scan.sh`
+- Opengrep runner 镜像：`docker/opengrep-runner.Dockerfile`
+- CodeQL runner 脚本：`docker/codeql-scan.sh`
+- CodeQL runner 镜像：`docker/codeql-runner.Dockerfile`
 
-历史 Bandit、Gitleaks、PHPStan、PMD 等前端 API 文件仍可能存在，用于迁移、防回归或退役路由测试；不要把它们当作新增静态引擎的当前入口。`backend/tests/opengrep_only_static_tasks.rs` 明确锁定非 Opengrep 静态路由不再由 Rust gateway 拥有。
+历史 Bandit、Gitleaks、PHPStan、PMD 等前端 API 文件仍可能存在，用于迁移、防回归或退役路由测试；不要把它们当作新增静态引擎的当前入口。`backend/tests/opengrep_only_static_tasks.rs` 明确锁定这些退役静态路由不再由 Rust gateway 拥有。CodeQL 是新的隔离例外：它按 `StaticTaskRecord.engine="codeql"`、`rules_codeql`、独立 `codeql-runner` 和 SARIF 到 `StaticFindingRecord` 映射推进，不复活旧多引擎路由。
 
 ### 智能审计
 
@@ -105,9 +111,9 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 ### 创建静态审计
 
-1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx`，静态模式当前只创建 Opengrep 任务。
+1. 前端入口是 `frontend/src/components/scan/CreateProjectScanDialog.tsx`，静态模式默认仍创建 Opengrep 任务。CodeQL 基础 API 已存在于 `frontend/src/shared/api/opengrep.ts`（CodeQL wrappers）和 `SCAN_ENGINE_TABS`，但产品 UI 全量切换仍需后续里程碑验证。
 2. 前端调用 `frontend/src/shared/api/opengrep.ts`。
-3. 后端 `backend/src/routes/static_tasks.rs` 创建任务并调度 `docker/opengrep-scan.sh`。
+3. 后端 `backend/src/routes/static_tasks.rs` 创建任务：默认 Opengrep 调度 `docker/opengrep-scan.sh`；`engine="codeql"` 基础路径调度 `docker/codeql-scan.sh`。
 4. 结果回到 `StaticAnalysis` 详情页和任务管理页。
 
 ### 创建智能审计

@@ -1,0 +1,2 @@
+- description: Argus minimal go CodeQL security suite
+- queries: ./queries

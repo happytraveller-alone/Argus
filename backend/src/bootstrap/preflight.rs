@@ -186,12 +186,20 @@ fn ensure_runner_image(image: &str) -> Result<()> {
 async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>, Vec<PathBuf>)> {
     let config = &state.config;
     let mut cleanup_dirs = Vec::new();
-    let mut specs = vec![RunnerPreflightSpec {
-        name: "opengrep",
-        image: config.scanner_opengrep_image.clone(),
-        command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-        mounts: Vec::new(),
-    }];
+    let mut specs = vec![
+        RunnerPreflightSpec {
+            name: "opengrep",
+            image: config.scanner_opengrep_image.clone(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            mounts: Vec::new(),
+        },
+        RunnerPreflightSpec {
+            name: "codeql",
+            image: config.scanner_codeql_image.clone(),
+            command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
+            mounts: Vec::new(),
+        },
+    ];
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
         if let Some((workspace_dir, command, mounts)) =
@@ -225,14 +233,14 @@ mod tests {
     use super::{configured_specs, docker_run_args, RunnerPreflightSpec};
 
     #[tokio::test]
-    async fn configured_specs_only_include_opengrep_preflight() {
+    async fn configured_specs_include_static_runner_preflights() {
         let config = AppConfig::for_tests();
         let state = AppState::from_config(config)
             .await
             .expect("state should build");
         let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
         let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
-        assert_eq!(names, vec!["opengrep"]);
+        assert_eq!(names, vec!["opengrep", "codeql"]);
 
         let opengrep = specs
             .iter()
@@ -240,6 +248,13 @@ mod tests {
             .expect("opengrep spec should exist");
         assert_eq!(opengrep.command, vec!["opengrep-scan", "--self-test"]);
         assert!(opengrep.mounts.is_empty());
+
+        let codeql = specs
+            .iter()
+            .find(|spec| spec.name == "codeql")
+            .expect("codeql spec should exist");
+        assert_eq!(codeql.command, vec!["codeql-scan", "--self-test"]);
+        assert!(codeql.mounts.is_empty());
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;

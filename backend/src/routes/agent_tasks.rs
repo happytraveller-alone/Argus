@@ -2510,6 +2510,9 @@ fn build_agentflow_runner_input(
                     .map(|value| Value::String(value.to_string()))
                     .unwrap_or_else(|| Value::String("system_config:llmApiKey".to_string()))
             },
+            "agent_kind": derive_agent_kind(llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai_compatible")),
+            "wire_api": derive_wire_api(llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai_compatible")),
+            "api_key_env": derive_api_key_env(llm_config.get("llmProvider").and_then(Value::as_str).unwrap_or("openai_compatible")),
         },
         "resource_budget": {
             "max_cpu_cores": 2.0,
@@ -2526,6 +2529,31 @@ fn build_agentflow_runner_input(
             "credential_source": llm_config.get("credentialSource").and_then(Value::as_str).unwrap_or("app_config"),
         }
     })
+}
+
+fn derive_agent_kind(provider: &str) -> &'static str {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "anthropic_compatible" | "anthropic" => "claude",
+        "kimi_compatible" => "kimi",
+        "pi_compatible" => "pi",
+        _ => "codex",
+    }
+}
+
+fn derive_wire_api(provider: &str) -> &'static str {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "anthropic_compatible" | "anthropic" => "messages",
+        _ => "responses",
+    }
+}
+
+fn derive_api_key_env(provider: &str) -> &'static str {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "anthropic_compatible" | "anthropic" => "ANTHROPIC_API_KEY",
+        "kimi_compatible" => "KIMI_API_KEY",
+        "pi_compatible" => "PI_API_KEY",
+        _ => "OPENAI_API_KEY",
+    }
 }
 
 fn scope_string_array(scope: Option<&Value>, key: &str) -> Option<Vec<String>> {

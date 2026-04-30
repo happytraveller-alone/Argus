@@ -2407,6 +2407,14 @@ async fn static_task_findings_route_honors_skip_and_limit() {
             updated_at: None,
             extra: json!({}),
             progress: task_state::StaticTaskProgressRecord::default(),
+            ai_analysis_status: None,
+            ai_analysis_step: None,
+            ai_analysis_step_name: None,
+            ai_analysis_result: None,
+            ai_analysis_error: None,
+            ai_analysis_model: None,
+            ai_analysis_started_at: None,
+            ai_analysis_completed_at: None,
             findings: vec![
                 task_state::StaticFindingRecord {
                     id: "finding-1".to_string(),
@@ -2477,6 +2485,14 @@ async fn static_task_findings_route_downgrades_and_hides_invalid_severity() {
             updated_at: None,
             extra: json!({}),
             progress: task_state::StaticTaskProgressRecord::default(),
+            ai_analysis_status: None,
+            ai_analysis_step: None,
+            ai_analysis_step_name: None,
+            ai_analysis_result: None,
+            ai_analysis_error: None,
+            ai_analysis_model: None,
+            ai_analysis_started_at: None,
+            ai_analysis_completed_at: None,
             findings: vec![
                 task_state::StaticFindingRecord {
                     id: "finding-critical".to_string(),

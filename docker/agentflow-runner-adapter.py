@@ -34,6 +34,42 @@ ROLE_BY_NODE = {
     "audit-reporter": "audit-reporter",
 }
 
+PROVIDER_DISPATCH = {
+    "openai_compatible": {
+        "agent_kind": "codex",
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url_env": "OPENAI_BASE_URL",
+        "wire_api": "responses",
+    },
+    "anthropic_compatible": {
+        "agent_kind": "claude",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url_env": "ANTHROPIC_BASE_URL",
+        "wire_api": "messages",
+    },
+    "kimi_compatible": {
+        # CRITICAL-1 fix: vendor agentflow's KimiAdapter reads KIMI_API_KEY
+        # (vendor/agentflow-src/agentflow/agents/kimi.py:65 + cli.py:1207).
+        # The dispatch body also writes MOONSHOT_API_KEY for forward-compat.
+        "agent_kind": "kimi",
+        "api_key_env": "KIMI_API_KEY",
+        "base_url_env": "KIMI_BASE_URL",
+        "wire_api": "responses",
+    },
+    "pi_compatible": {
+        "agent_kind": "pi",
+        "api_key_env": "PI_API_KEY",
+        "base_url_env": "PI_BASE_URL",
+        "wire_api": "responses",
+    },
+}
+
+# Legacy alias mapping
+LEGACY_PROVIDER_ALIASES = {
+    "openai": "openai_compatible",
+    "anthropic": "anthropic_compatible",
+}
+
 
 def now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -124,55 +160,126 @@ def parse_codex_config(text: str) -> dict[str, Any]:
     return parsed
 
 
-def load_codex_runtime_env(runner_input: dict[str, Any]) -> tuple[dict[str, str], dict[str, Any]]:
-    config_path = Path(os.environ.get("ARGUS_CODEX_CONFIG_FILE", "/run/argus-codex/config.toml"))
-    auth_path = Path(os.environ.get("ARGUS_CODEX_AUTH_FILE", "/run/argus-codex/auth.json"))
+def load_provider_runtime_env(runner_input: dict[str, Any]) -> tuple[dict[str, str], dict[str, Any]]:
+    llm_block = runner_input.get("llm", {}) if isinstance(runner_input.get("llm"), dict) else {}
+    raw_provider = llm_block.get("provider", "openai_compatible")
+    provider = LEGACY_PROVIDER_ALIASES.get(raw_provider, raw_provider)
+    dispatch = PROVIDER_DISPATCH.get(provider)
+
     runtime_env: dict[str, str] = {}
-    diagnostics: dict[str, Any] = {
-        "codex_config_present": config_path.is_file(),
-        "codex_auth_present": auth_path.is_file(),
-        "credential_source": None,
-    }
+    diagnostics: dict[str, Any] = {"credential_source": None}
 
-    config: dict[str, Any] = {}
-    if config_path.is_file():
-        try:
-            config = parse_codex_config(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            diagnostics["codex_config_parse_error"] = True
+    # Source the API key: env LLM_API_KEY first, then legacy provider-specific env, then auth.json (codex only).
+    llm_api_key = os.environ.get("LLM_API_KEY", "").strip()
 
-    auth: dict[str, Any] = {}
-    if auth_path.is_file():
-        try:
-            parsed_auth = json.loads(auth_path.read_text(encoding="utf-8"))
-            if isinstance(parsed_auth, dict):
-                auth = parsed_auth
-        except Exception:
-            diagnostics["codex_auth_parse_error"] = True
+    if dispatch is None:
+        diagnostics["unsupported_provider"] = raw_provider
+        return runtime_env, diagnostics
 
-    env_api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    auth_api_key = auth.get("OPENAI_API_KEY")
-    if env_api_key:
-        register_secret(env_api_key)
-        diagnostics["credential_source"] = "env:OPENAI_API_KEY"
-    elif isinstance(auth_api_key, str) and auth_api_key.strip():
-        runtime_env["OPENAI_API_KEY"] = auth_api_key.strip()
-        register_secret(auth_api_key)
-        diagnostics["credential_source"] = "codex_auth_json"
+    target_api_key_env = dispatch["api_key_env"]
 
-    llm = runner_input.get("llm") if isinstance(runner_input.get("llm"), dict) else {}
-    config_model = codex_config_value(config, "model")
-    input_model = llm.get("model") if isinstance(llm.get("model"), str) else None
-    if config_model or input_model:
-        runtime_env.setdefault("ARGUS_AGENTFLOW_MODEL", (config_model or input_model or "").strip())
-        diagnostics["model_source"] = "codex_config" if config_model else "runner_input"
-    provider = codex_config_value(config, "model_provider")
-    if provider:
-        runtime_env.setdefault("ARGUS_AGENTFLOW_PROVIDER", provider)
-    base_url = codex_config_value(config, "base_url")
-    if base_url:
-        runtime_env.setdefault("ARGUS_AGENTFLOW_BASE_URL", base_url)
-        diagnostics["base_url_source"] = "codex_config"
+    if provider == "openai_compatible":
+        # Preserve existing codex behavior: direct env var, then LLM_API_KEY, then auth.json fallback.
+        config_path = Path(os.environ.get("ARGUS_CODEX_CONFIG_FILE", "/run/argus-codex/config.toml"))
+        auth_path = Path(os.environ.get("ARGUS_CODEX_AUTH_FILE", "/run/argus-codex/auth.json"))
+        diagnostics["codex_config_present"] = config_path.is_file()
+        diagnostics["codex_auth_present"] = auth_path.is_file()
+
+        config: dict[str, Any] = {}
+        if config_path.is_file():
+            try:
+                config = parse_codex_config(config_path.read_text(encoding="utf-8"))
+            except Exception:
+                diagnostics["codex_config_parse_error"] = True
+
+        auth: dict[str, Any] = {}
+        if auth_path.is_file():
+            try:
+                parsed_auth = json.loads(auth_path.read_text(encoding="utf-8"))
+                if isinstance(parsed_auth, dict):
+                    auth = parsed_auth
+            except Exception:
+                diagnostics["codex_auth_parse_error"] = True
+
+        # HIGH-2 fix: codex auth.json must take precedence over LLM_API_KEY when
+        # OPENAI_API_KEY direct-env is unset. Order: direct env -> auth.json -> LLM_API_KEY.
+        direct_env_key = os.environ.get(target_api_key_env, "").strip()
+        auth_api_key_raw = auth.get("OPENAI_API_KEY")
+        auth_api_key = auth_api_key_raw.strip() if isinstance(auth_api_key_raw, str) else ""
+
+        if direct_env_key:
+            runtime_env[target_api_key_env] = direct_env_key
+            register_secret(direct_env_key)
+            diagnostics["credential_source"] = "env:OPENAI_API_KEY"
+        elif auth_api_key:
+            runtime_env[target_api_key_env] = auth_api_key
+            register_secret(auth_api_key)
+            diagnostics["credential_source"] = "codex_auth_json"
+        elif llm_api_key:
+            runtime_env[target_api_key_env] = llm_api_key
+            register_secret(llm_api_key)
+            diagnostics["credential_source"] = "llm_api_key"
+
+        # Codex config.toml model/provider/base_url pass-through (preserved verbatim)
+        config_model = codex_config_value(config, "model")
+        input_model = llm_block.get("model") if isinstance(llm_block.get("model"), str) else None
+        if config_model or input_model:
+            runtime_env.setdefault("ARGUS_AGENTFLOW_MODEL", (config_model or input_model or "").strip())
+            diagnostics["model_source"] = "codex_config" if config_model else "runner_input"
+        config_provider = codex_config_value(config, "model_provider")
+        if config_provider:
+            runtime_env.setdefault("ARGUS_AGENTFLOW_PROVIDER", config_provider)
+        base_url_config = codex_config_value(config, "base_url")
+        if base_url_config:
+            runtime_env.setdefault("ARGUS_AGENTFLOW_BASE_URL", base_url_config)
+            diagnostics["base_url_source"] = "codex_config"
+
+        # T2.5: cross-provider key-shape WARN — openai-compatible with sk-ant- key
+        if llm_api_key.startswith("sk-ant-"):
+            warnings = diagnostics.setdefault("warnings", [])
+            warnings.append(
+                "OPENAI_API_KEY appears to be an Anthropic-shaped key (sk-ant- prefix); confirm LLM_API_KEY matches LLM_PROVIDER"
+            )
+    else:
+        # New path for claude / kimi / pi: use LLM_API_KEY directly.
+        if llm_api_key:
+            runtime_env[target_api_key_env] = llm_api_key
+            register_secret(llm_api_key)
+            diagnostics["credential_source"] = "llm_api_key"
+            # CRITICAL-1 fix: vendor's KimiAdapter reads KIMI_API_KEY; resolve_provider
+            # returns name="moonshot". Write BOTH env vars so whichever the kimi binary
+            # or its underlying API client (Moonshot) reads is set.
+            if provider == "kimi_compatible":
+                runtime_env["MOONSHOT_API_KEY"] = llm_api_key
+            # T2.5: cross-provider key-shape WARN
+            if provider == "anthropic_compatible" and not llm_api_key.startswith("sk-ant-"):
+                warnings = diagnostics.setdefault("warnings", [])
+                warnings.append(
+                    "ANTHROPIC_API_KEY may be a non-Anthropic key shape (expected 'sk-ant-' prefix); confirm LLM_API_KEY matches LLM_PROVIDER"
+                )
+            # kimi/pi key shapes vary by vendor; skip the heuristic check intentionally (Plan T2.5).
+        else:
+            diagnostics["credential_source"] = "missing"
+
+    # MEDIUM-5 fix: propagate LLM_BASE_URL to the dispatched provider's base_url env var
+    # so the vendor agent (kimi reads KIMI_BASE_URL, claude reads ANTHROPIC_BASE_URL,
+    # etc.) sees the operator's configured endpoint rather than its baked-in default.
+    llm_base_url = (
+        os.environ.get("LLM_BASE_URL", "").strip()
+        or (llm_block.get("base_url") if isinstance(llm_block.get("base_url"), str) else "").strip()
+    )
+    target_base_url_env = dispatch.get("base_url_env")
+    if llm_base_url and target_base_url_env:
+        runtime_env[target_base_url_env] = llm_base_url
+
+    # Pass-through env: ARGUS_AGENTFLOW_PROVIDER / _MODEL / _BASE_URL / _AGENT
+    runtime_env.setdefault("ARGUS_AGENTFLOW_PROVIDER", provider)
+    runtime_env["ARGUS_AGENTFLOW_AGENT"] = dispatch["agent_kind"]
+    if llm_block.get("model") and "ARGUS_AGENTFLOW_MODEL" not in runtime_env:
+        runtime_env["ARGUS_AGENTFLOW_MODEL"] = llm_block["model"]
+    if llm_block.get("base_url") and "ARGUS_AGENTFLOW_BASE_URL" not in runtime_env:
+        runtime_env["ARGUS_AGENTFLOW_BASE_URL"] = llm_block["base_url"]
+
     return runtime_env, diagnostics
 
 def load_stdin_input() -> tuple[dict[str, Any], str]:
@@ -690,7 +797,7 @@ def main() -> int:
     runner_input, raw_input = load_stdin_input()
     task_id = task_id_from(runner_input)
     task_segment = safe_path_segment(task_id)
-    runtime_env, credential_diagnostics = load_codex_runtime_env(runner_input)
+    runtime_env, credential_diagnostics = load_provider_runtime_env(runner_input)
     output_dir = Path(os.environ.get("ARGUS_AGENTFLOW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR)) / task_segment
     runs_dir = str(Path(os.environ.get("AGENTFLOW_RUNS_DIR", DEFAULT_RUNS_DIR)) / task_segment)
     output_dir.mkdir(parents=True, exist_ok=True)

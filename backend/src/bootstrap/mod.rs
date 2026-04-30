@@ -307,6 +307,39 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
 
     sqlx::query(
         r#"
+        create table if not exists rust_codeql_build_plans (
+            id uuid primary key,
+            project_id uuid not null references rust_projects(id) on delete cascade,
+            language text not null,
+            target_path text not null default '.',
+            source_fingerprint text not null,
+            dependency_fingerprint text not null,
+            build_mode text not null,
+            commands_json jsonb not null default '[]'::jsonb,
+            working_directory text not null default '.',
+            query_suite text,
+            status text not null default 'candidate',
+            llm_model text,
+            evidence_json jsonb not null default '{}'::jsonb,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_codeql_build_plans_lookup
+            on rust_codeql_build_plans (project_id, language, target_path, status)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         create table if not exists rust_prompt_skills (
             owner_id text not null,
             id text not null,

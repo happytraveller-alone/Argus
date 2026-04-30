@@ -176,6 +176,17 @@ class ClaudeTraceParser(BaseTraceParser):
         elif event_type in {"tool_use", "tool_result"}:
             title = f"{event_type.replace('_', ' ').title()}"
             events.append(self.emit(event_type, title, text, payload))
+        elif event_type == "content_block_delta":
+            delta = payload.get("delta") or {}
+            delta_type = delta.get("type") if isinstance(delta, dict) else None
+            if delta_type == "text_delta":
+                delta_text = delta.get("text", "") if isinstance(delta, dict) else ""
+                if delta_text:
+                    events.append(self.emit("assistant_delta", "Assistant delta", delta_text, payload))
+            elif delta_type == "thinking_delta":
+                delta_text = delta.get("thinking", "") if isinstance(delta, dict) else ""
+                if delta_text:
+                    events.append(self.emit("thinking_delta", "Thinking delta", delta_text, payload))
         else:
             events.append(self.emit("event", str(event_type), text, payload))
         return events

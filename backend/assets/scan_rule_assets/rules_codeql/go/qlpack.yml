@@ -1,0 +1,4 @@
+name: argus/go-security
+version: 0.0.1
+libraryPathDependencies:
+  - codeql/go-all

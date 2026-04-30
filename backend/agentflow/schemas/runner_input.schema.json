@@ -46,7 +46,17 @@
         "provider": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
         "base_url": { "type": ["string", "null"] },
-        "api_key_ref": { "type": ["string", "null"] }
+        "api_key_ref": { "type": ["string", "null"] },
+        "agent_kind": {
+          "type": "string",
+          "enum": ["codex", "claude", "kimi", "pi"],
+          "default": "codex"
+        },
+        "wire_api": {
+          "type": "string",
+          "enum": ["responses", "messages"]
+        },
+        "api_key_env": { "type": "string" }
       }
     },
     "resource_budget": {

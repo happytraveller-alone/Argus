@@ -270,7 +270,7 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
             .components()
             .next()
             .and_then(|part| part.as_os_str().to_str());
-        if matches!(top, Some("rules_opengrep")) && seen.insert(relative.clone()) {
+        if matches!(top, Some("rules_opengrep" | "rules_codeql")) && seen.insert(relative.clone()) {
             out.push(relative);
         }
     }
@@ -306,6 +306,7 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
 
     match top {
         "rules_opengrep" => Ok(("opengrep", "internal_rule")),
+        "rules_codeql" => Ok(("codeql", "internal_query_pack")),
         _ => Err(anyhow!(
             "unsupported rule asset root: {}",
             relative.display()
@@ -407,7 +408,8 @@ mod tests {
             .iter()
             .filter_map(|path| path.split('/').next())
             .collect::<BTreeSet<_>>();
-        assert_eq!(roots, BTreeSet::from(["rules_opengrep"]));
+        assert!(roots.contains("rules_opengrep"));
+        assert!(roots.contains("rules_codeql"));
     }
 
     #[test]
@@ -416,11 +418,12 @@ mod tests {
 
         assert!(assets
             .iter()
-            .all(|asset| asset.asset_path.starts_with("rules_opengrep/")));
-        assert!(assets.iter().all(|asset| asset.engine == "opengrep"));
+            .filter(|asset| asset.asset_path.starts_with("rules_opengrep/"))
+            .all(|asset| asset.engine == "opengrep" && asset.source_kind == "internal_rule"));
         assert!(assets
             .iter()
-            .all(|asset| asset.source_kind == "internal_rule"));
+            .filter(|asset| asset.asset_path.starts_with("rules_codeql/"))
+            .all(|asset| asset.engine == "codeql" && asset.source_kind == "internal_query_pack"));
     }
 
     #[test]
@@ -464,7 +467,10 @@ mod tests {
     fn retained_assets_only_contain_error_rules() {
         let assets = discover_rule_assets().expect("rule assets should load");
 
-        for asset in assets {
+        for asset in assets
+            .into_iter()
+            .filter(|asset| asset.engine == "opengrep")
+        {
             let severities = severity_tokens(&asset.content);
             assert!(
                 !severities.is_empty(),

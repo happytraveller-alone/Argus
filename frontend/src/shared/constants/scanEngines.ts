@@ -1,5 +1,6 @@
 export const SCAN_ENGINE_TABS = [
   "opengrep",
+  "codeql",
   "gitleaks",
   "bandit",
   "phpstan",
@@ -15,6 +16,10 @@ export const SCAN_ENGINE_SELECTOR_OPTIONS = [
     label: "opengrep",
     value: "opengrep" as const,
   },
+  {
+    label: "CodeQL",
+    value: "codeql" as const,
+  },
 ];
 
 export function isScanEngineTab(value: string): value is ScanEngineTab {
@@ -25,6 +30,8 @@ export function getScanEngineDisplayName(value: ScanEngineTab): string {
   switch (value) {
     case "opengrep":
       return "Opengrep";
+    case "codeql":
+      return "CodeQL";
     case "gitleaks":
       return "Gitleaks";
     case "bandit":

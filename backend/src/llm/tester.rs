@@ -228,6 +228,12 @@ pub async fn test_llm_generation(
     let text = match runtime.provider.as_str() {
         "openai_compatible" => test_openai_compatible(client, runtime).await?,
         "anthropic_compatible" => test_anthropic_compatible(client, runtime).await?,
+        "kimi_compatible" | "pi_compatible" => {
+            return Err(LlmGateError::new(
+                "unsupported_provider",
+                "kimi/pi 协议仅支持 CLI 模式，不支持通过 HTTP 路径进行测试。",
+            ))
+        }
         _ => {
             return Err(LlmGateError::new(
                 "unsupported_provider",

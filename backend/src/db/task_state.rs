@@ -9,12 +9,16 @@ use crate::state::AppState;
 
 const TASK_STATE_FILE_NAME: &str = "rust-task-state.json";
 
+const MAX_TASK_EVENTS: usize = 2000;
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct TaskStateSnapshot {
     pub agent_tasks: BTreeMap<String, AgentTaskRecord>,
     pub static_tasks: BTreeMap<String, StaticTaskRecord>,
     pub opengrep_rules: BTreeMap<String, OpengrepRuleRecord>,
     pub phpstan_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
+    #[serde(default)]
+    pub codeql_build_plans: BTreeMap<String, CodeqlBuildPlanRecord>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -305,6 +309,26 @@ pub struct RuleOverrideRecord {
     pub patch: Value,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CodeqlBuildPlanRecord {
+    pub id: String,
+    pub project_id: String,
+    pub language: String,
+    pub target_path: String,
+    pub source_fingerprint: String,
+    pub dependency_fingerprint: String,
+    pub build_mode: String,
+    pub commands: Vec<String>,
+    pub working_directory: String,
+    pub query_suite: Option<String>,
+    pub status: String,
+    pub llm_model: Option<String>,
+    pub evidence_json: Value,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
 pub async fn load_snapshot(state: &AppState) -> Result<TaskStateSnapshot> {
     let _guard = state.file_store_lock.lock().await;
     load_snapshot_unlocked(state).await
@@ -378,6 +402,26 @@ pub(crate) async fn save_snapshot_unlocked(
     Ok(())
 }
 
+const TERMINAL_EVENT_TYPES: &[&str] = &[
+    "task_start",
+    "task_complete",
+    "runner_failed",
+    "runner_started",
+];
+
+fn cap_events(events: &mut Vec<AgentEventRecord>) {
+    if events.len() <= MAX_TASK_EVENTS {
+        return;
+    }
+    // Find the first non-terminal event from the front and remove it.
+    if let Some(pos) = events
+        .iter()
+        .position(|e| !TERMINAL_EVENT_TYPES.contains(&e.event_type.as_str()))
+    {
+        events.remove(pos);
+    }
+}
+
 pub fn append_streaming_event(
     record: &mut AgentTaskRecord,
     event: &crate::runtime::agentflow::streaming::StreamingEvent,
@@ -412,6 +456,7 @@ pub fn append_streaming_event(
         sequence,
         timestamp: event.timestamp.clone(),
     });
+    cap_events(&mut record.events);
 }
 
 fn task_state_file_path(state: &AppState) -> PathBuf {
@@ -425,7 +470,7 @@ async fn ensure_file_storage_root(state: &AppState) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentEventRecord, AgentFindingRecord, AgentTaskRecord};
+    use super::{cap_events, AgentEventRecord, AgentFindingRecord, AgentTaskRecord};
     use serde_json::json;
 
     #[test]
@@ -482,5 +527,66 @@ mod tests {
         .expect("finding view fields should deserialize");
         assert_eq!(finding.source_role.as_deref(), Some("vuln-reasoner"));
         assert_eq!(finding.impact.as_deref(), Some("database disclosure"));
+    }
+
+    fn make_event(event_type: &str, idx: usize) -> AgentEventRecord {
+        AgentEventRecord {
+            id: format!("evt-{}", idx),
+            task_id: "task-1".to_string(),
+            event_type: event_type.to_string(),
+            sequence: idx as i64,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn cap_events_drops_oldest_non_terminal() {
+        let mut events: Vec<AgentEventRecord> = Vec::new();
+
+        // Push 3000 events: first a task_start terminal, then mix of non-terminals,
+        // with task_complete terminal at the very end.
+        events.push(make_event("task_start", 0));
+        for i in 1..2999 {
+            events.push(make_event("node_output", i));
+        }
+        events.push(make_event("task_complete", 2999));
+
+        // Run cap_events once for each push (simulate the per-push cap)
+        // Actually, since cap_events only drops one per call, we need to call it
+        // repeatedly to trim 3000 down toward 2000. But the production code calls
+        // cap_events after each push. Simulate that here to match production behavior:
+        // rebuild with correct per-push behavior.
+        let mut events2: Vec<AgentEventRecord> = Vec::new();
+        for i in 0..3000usize {
+            let etype = match i {
+                0 => "task_start",
+                2999 => "task_complete",
+                _ => "node_output",
+            };
+            events2.push(make_event(etype, i));
+            cap_events(&mut events2);
+        }
+
+        // After per-push capping, length must not exceed MAX_TASK_EVENTS (2000)
+        assert!(
+            events2.len() <= 2000,
+            "events length {} exceeds 2000",
+            events2.len()
+        );
+
+        // Terminal events must be retained
+        let has_task_start = events2.iter().any(|e| e.event_type == "task_start");
+        let has_task_complete = events2.iter().any(|e| e.event_type == "task_complete");
+        assert!(has_task_start, "task_start terminal must be retained");
+        assert!(has_task_complete, "task_complete terminal must be retained");
+
+        // Verify the unused `events` Vec (built naively) also has correct length
+        // once we simulate cap on the whole slice — this tests bulk behavior too.
+        while events.len() > 2000 {
+            cap_events(&mut events);
+        }
+        assert!(events.len() <= 2000);
+        assert!(events.iter().any(|e| e.event_type == "task_start"));
+        assert!(events.iter().any(|e| e.event_type == "task_complete"));
     }
 }

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     env,
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -25,7 +25,7 @@ use crate::{
     error::ApiError,
     llm_rule,
     runtime::runner::{self, RunnerSpec},
-    scan::{opengrep, scope_filters},
+    scan::{codeql, opengrep, scope_filters},
     state::AppState,
 };
 
@@ -58,9 +58,35 @@ pub fn router() -> Router<AppState> {
                 .patch(update_opengrep_rule)
                 .delete(delete_opengrep_rule),
         )
+        .route("/tasks", get(list_opengrep_tasks).post(create_static_task))
         .route(
-            "/tasks",
-            get(list_opengrep_tasks).post(create_opengrep_task),
+            "/codeql/tasks",
+            get(list_codeql_tasks).post(create_codeql_task),
+        )
+        .route(
+            "/codeql/tasks/{task_id}",
+            get(get_codeql_task).delete(delete_codeql_task),
+        )
+        .route(
+            "/codeql/tasks/{task_id}/interrupt",
+            post(interrupt_codeql_task),
+        )
+        .route("/codeql/tasks/{task_id}/progress", get(get_codeql_progress))
+        .route(
+            "/codeql/tasks/{task_id}/findings",
+            get(list_codeql_findings),
+        )
+        .route(
+            "/codeql/tasks/{task_id}/findings/{finding_id}/context",
+            get(get_codeql_finding_context),
+        )
+        .route(
+            "/codeql/tasks/{task_id}/findings/{finding_id}",
+            get(get_codeql_finding),
+        )
+        .route(
+            "/codeql/findings/{finding_id}/status",
+            post(update_codeql_finding_status),
         )
         .route(
             "/tasks/{task_id}",
@@ -68,10 +94,19 @@ pub fn router() -> Router<AppState> {
         )
         .route("/tasks/{task_id}/ai-analysis", post(ai_analysis))
         .route("/tasks/{task_id}/ai-analyze-code", post(ai_analyze_code))
-        .route("/tasks/{task_id}/ai-evaluate-rules", post(ai_evaluate_rules))
+        .route(
+            "/tasks/{task_id}/ai-evaluate-rules",
+            post(ai_evaluate_rules),
+        )
         .route("/tasks/{task_id}/ai-suggest-fixes", post(ai_suggest_fixes))
-        .route("/tasks/{task_id}/ai-analysis/start", post(ai_analysis_start))
-        .route("/tasks/{task_id}/ai-analysis/status", get(ai_analysis_status))
+        .route(
+            "/tasks/{task_id}/ai-analysis/start",
+            post(ai_analysis_start),
+        )
+        .route(
+            "/tasks/{task_id}/ai-analysis/status",
+            get(ai_analysis_status),
+        )
         .route("/tasks/{task_id}/interrupt", post(interrupt_opengrep_task))
         .route("/tasks/{task_id}/progress", get(get_opengrep_progress))
         .route("/tasks/{task_id}/findings", get(list_opengrep_findings))
@@ -655,9 +690,28 @@ async fn batch_update_opengrep_rules(
     })))
 }
 
-async fn create_opengrep_task(
+async fn create_static_task(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let engine = optional_string(&payload, "engine").unwrap_or_else(|| "opengrep".to_string());
+    if engine.eq_ignore_ascii_case("codeql") {
+        return create_static_task_for_engine(state, payload, "codeql").await;
+    }
+    create_static_task_for_engine(state, payload, "opengrep").await
+}
+
+async fn create_codeql_task(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    create_static_task_for_engine(state, payload, "codeql").await
+}
+
+async fn create_static_task_for_engine(
+    state: AppState,
+    payload: Value,
+    engine: &str,
 ) -> Result<Json<Value>, ApiError> {
     let project_id = required_string(&payload, "project_id")?;
 
@@ -676,9 +730,9 @@ async fn create_opengrep_task(
 
     let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
-        engine: "opengrep".to_string(),
+        engine: engine.to_string(),
         project_id: project_id.clone(),
-        name: optional_string(&payload, "name").unwrap_or_else(|| "opengrep-task".to_string()),
+        name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine}-task")),
         status: "running".to_string(),
         target_path: target_path.clone(),
         total_findings: 0,
@@ -688,21 +742,23 @@ async fn create_opengrep_task(
         created_at: now.clone(),
         updated_at: Some(now.clone()),
         extra: json!({
+            "engine": engine,
             "error_count": 0,
             "warning_count": 0,
             "high_confidence_count": 0,
             "lines_scanned": 0,
+            "first_version_complete": false,
         }),
         progress: task_state::StaticTaskProgressRecord {
             progress: 0.0,
             current_stage: Some("initializing".to_string()),
-            message: Some("preparing opengrep scan".to_string()),
+            message: Some(format!("preparing {engine} scan")),
             started_at: Some(now.clone()),
             updated_at: Some(now.clone()),
             logs: vec![task_state::StaticTaskProgressLogRecord {
                 timestamp: now,
                 stage: "initializing".to_string(),
-                message: "opengrep scan task created".to_string(),
+                message: format!("{engine} scan task created"),
                 progress: 0.0,
                 level: "info".to_string(),
             }],
@@ -728,7 +784,10 @@ async fn create_opengrep_task(
         )));
     };
     if let Some(extra) = record.extra.as_object_mut() {
-        extra.insert("project_name".to_string(), Value::String(project.name.clone()));
+        extra.insert(
+            "project_name".to_string(),
+            Value::String(project.name.clone()),
+        );
     }
     let mut snapshot = task_state::load_snapshot_unlocked(&state)
         .await
@@ -744,8 +803,13 @@ async fn create_opengrep_task(
 
     let bg_state = state.clone();
     let bg_task_id = task_id.clone();
+    let engine_for_task = engine.to_string();
     tokio::spawn(async move {
-        run_opengrep_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+        if engine_for_task == "codeql" {
+            run_codeql_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+        } else {
+            run_opengrep_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+        }
     });
 
     Ok(Json(response))
@@ -779,12 +843,49 @@ async fn interrupt_opengrep_task(
     interrupt_static_task(&state, "opengrep", &task_id).await
 }
 
+async fn list_codeql_tasks(
+    State(state): State<AppState>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Vec<Value>>, ApiError> {
+    list_static_tasks(&state, "codeql", query).await
+}
+
+async fn get_codeql_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_task(&state, "codeql", &task_id).await
+}
+
+async fn delete_codeql_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    delete_static_task(&state, "codeql", &task_id).await
+}
+
+async fn interrupt_codeql_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    interrupt_static_task(&state, "codeql", &task_id).await
+}
+
 async fn get_opengrep_progress(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
     Query(query): Query<ProgressQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let record = find_static_task(&state, "opengrep", &task_id).await?;
+    get_static_progress(&state, "opengrep", &task_id, query).await
+}
+
+async fn get_static_progress(
+    state: &AppState,
+    engine: &str,
+    task_id: &str,
+    query: ProgressQuery,
+) -> Result<Json<Value>, ApiError> {
+    let record = find_static_task(state, engine, task_id).await?;
     let logs = if query.include_logs.unwrap_or(false) {
         record
             .progress
@@ -805,6 +906,7 @@ async fn get_opengrep_progress(
     };
     Ok(Json(json!({
         "task_id": record.id,
+        "engine": record.engine,
         "status": record.status,
         "progress": record.progress.progress,
         "current_stage": record.progress.current_stage,
@@ -823,6 +925,44 @@ async fn list_opengrep_findings(
     list_static_findings(&state, "opengrep", &task_id, &query).await
 }
 
+async fn get_codeql_progress(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<ProgressQuery>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_progress(&state, "codeql", &task_id, query).await
+}
+
+async fn list_codeql_findings(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<Vec<Value>>, ApiError> {
+    list_static_findings(&state, "codeql", &task_id, &query).await
+}
+
+async fn get_codeql_finding(
+    State(state): State<AppState>,
+    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_finding(&state, "codeql", &task_id, &finding_id).await
+}
+
+async fn get_codeql_finding_context(
+    State(state): State<AppState>,
+    AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    get_static_finding_context(&state, "codeql", &task_id, &finding_id).await
+}
+
+async fn update_codeql_finding_status(
+    State(state): State<AppState>,
+    AxumPath(finding_id): AxumPath<String>,
+    Query(query): Query<StatusQuery>,
+) -> Result<Json<Value>, ApiError> {
+    update_static_finding_status(&state, "codeql", &finding_id, &query.status).await
+}
+
 async fn get_opengrep_finding(
     State(state): State<AppState>,
     AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
@@ -834,8 +974,17 @@ async fn get_opengrep_finding_context(
     State(state): State<AppState>,
     AxumPath((task_id, finding_id)): AxumPath<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    let task = find_static_task(&state, "opengrep", &task_id).await?;
-    let finding = get_static_finding_value(&state, "opengrep", &task_id, &finding_id).await?;
+    get_static_finding_context(&state, "opengrep", &task_id, &finding_id).await
+}
+
+async fn get_static_finding_context(
+    state: &AppState,
+    engine: &str,
+    task_id: &str,
+    finding_id: &str,
+) -> Result<Json<Value>, ApiError> {
+    let task = find_static_task(state, engine, task_id).await?;
+    let finding = get_static_finding_value(state, engine, task_id, finding_id).await?;
 
     let file_path = finding
         .get("resolved_file_path")
@@ -857,7 +1006,7 @@ async fn get_opengrep_finding_context(
     let range_end = end_line + context_after;
 
     let (archive_path, archive_name) =
-        resolve_project_archive_input(&state, &task.project_id).await?;
+        resolve_project_archive_input(state, &task.project_id).await?;
 
     let file_path_owned = file_path.to_string();
     let lines_result = tokio::task::spawn_blocking(move || {
@@ -970,6 +1119,223 @@ async fn run_opengrep_scan(
         let elapsed_ms = started_at.elapsed().as_millis() as i64;
         let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
     }
+}
+
+async fn run_codeql_scan(
+    state: AppState,
+    task_id: String,
+    project_id: String,
+    target_path: String,
+    _rule_ids: Vec<String>,
+) {
+    let started_at = std::time::Instant::now();
+    if let Err(error) = run_codeql_scan_inner(&state, &task_id, &project_id, &target_path).await {
+        let elapsed_ms = started_at.elapsed().as_millis() as i64;
+        let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
+    }
+}
+
+async fn run_codeql_scan_inner(
+    state: &AppState,
+    task_id: &str,
+    project_id: &str,
+    _target_path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let started_at = std::time::Instant::now();
+
+    update_scan_progress(
+        state,
+        task_id,
+        5.0,
+        "extracting",
+        "locating project archive for CodeQL",
+    )
+    .await;
+    let (archive_path, archive_name) = resolve_project_archive_input(state, project_id).await?;
+
+    let workspace_root = scan_workspace_root();
+    let workspace_dir = workspace_root
+        .join("codeql-runtime")
+        .join(Uuid::new_v4().to_string());
+    let source_dir = workspace_dir.join("source");
+    let output_dir = workspace_dir.join("output");
+    let build_plan_dir = workspace_dir.join("build-plan");
+    tokio::fs::create_dir_all(&source_dir).await?;
+    tokio::fs::create_dir_all(&output_dir).await?;
+    tokio::fs::create_dir_all(&build_plan_dir).await?;
+
+    let source_dir_clone = source_dir.clone();
+    let archive_path_clone = archive_path.clone();
+    let archive_name_clone = archive_name.clone();
+    let files_extracted = tokio::task::spawn_blocking(
+        move || -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+            extract_archive_path_to_directory(
+                &archive_path_clone,
+                &archive_name_clone,
+                &source_dir_clone,
+            )
+            .map_err(|error| error.into())
+        },
+    )
+    .await??;
+    let known_paths = collect_relative_paths_from_directory(&source_dir)?;
+    let files_scanned = known_paths.len();
+
+    update_scan_progress(
+        state,
+        task_id,
+        25.0,
+        "preparing_queries",
+        "materializing CodeQL query assets",
+    )
+    .await;
+    let project_languages = match projects::get_project(state, project_id).await {
+        Ok(Some(project)) => {
+            serde_json::from_str::<Vec<String>>(&project.programming_languages_json)
+                .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+    let codeql_languages = normalize_codeql_task_languages(&project_languages);
+    let primary_language = codeql_languages
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "javascript-typescript".to_string());
+    let Some(query_dir) =
+        codeql::materialize_query_directory_for_languages(state, &workspace_dir, &codeql_languages)
+            .await?
+    else {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err("no CodeQL query assets available for scan".into());
+    };
+
+    let query_container_path = workspace_container_path(&workspace_dir, &query_dir)?;
+    let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
+    let summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
+    let events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
+    let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
+    let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
+    let build_plan_rel_path = "build-plan/build-plan.json".to_string();
+
+    let seed_plan = json!({
+        "language": primary_language,
+        "build_mode": default_codeql_build_mode(&primary_language),
+        "commands": [],
+        "working_directory": ".",
+        "allow_network": state.config.codeql_allow_network_during_build,
+        "max_inference_rounds": state.config.codeql_max_build_inference_rounds,
+        "llm_allow_source_snippets": state.config.codeql_llm_allow_source_snippets,
+        "status": "candidate"
+    });
+    tokio::fs::write(
+        workspace_dir.join(&build_plan_rel_path),
+        serde_json::to_vec_pretty(&seed_plan)?,
+    )
+    .await?;
+
+    update_scan_progress(
+        state,
+        task_id,
+        40.0,
+        "database_create",
+        "running CodeQL database create/analyze runner",
+    )
+    .await;
+    let spec = build_codeql_runner_spec(
+        &state.config,
+        &workspace_dir,
+        CodeqlRunnerPaths {
+            container_source_dir: "/scan/source",
+            query_container_path: &query_container_path,
+            database_container_path: "/scan/output/codeql-db",
+            sarif_container_path: &format!("/scan/{sarif_rel_path}"),
+            summary_rel_path: &summary_rel_path,
+            summary_container_path: &format!("/scan/{summary_rel_path}"),
+            events_container_path: &format!("/scan/{events_rel_path}"),
+            build_plan_container_path: &format!("/scan/{build_plan_rel_path}"),
+            stdout_rel_path: &stdout_rel_path,
+            stderr_rel_path: &stderr_rel_path,
+            language: &primary_language,
+        },
+    );
+
+    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+    record_codeql_events(state, task_id, &workspace_dir.join(&events_rel_path)).await;
+    if !runner_result.success {
+        let error_msg =
+            format_codeql_runner_error(&runner_result, Some(&workspace_dir.join(&events_rel_path)))
+                .await;
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err(format!("CodeQL scan failed: {error_msg}").into());
+    }
+
+    update_scan_progress(
+        state,
+        task_id,
+        75.0,
+        "parsing_sarif",
+        "parsing CodeQL SARIF results",
+    )
+    .await;
+    let sarif_path = workspace_dir.join(&sarif_rel_path);
+    let sarif_text = tokio::fs::read_to_string(&sarif_path)
+        .await
+        .map_err(|error| format!("missing CodeQL SARIF output: {error}"))?;
+    let findings = codeql::parse_sarif_output(
+        &sarif_text,
+        task_id,
+        source_dir.to_str(),
+        Some(&known_paths),
+    );
+
+    update_scan_progress(state, task_id, 90.0, "finalizing", "saving CodeQL findings").await;
+    let elapsed_ms = started_at.elapsed().as_millis() as i64;
+    let now = now_rfc3339();
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "completed".to_string();
+        record.total_findings = findings.len() as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.files_scanned = files_scanned as i64;
+        record.updated_at = Some(now.clone());
+        record.extra = json!({
+            "engine": "codeql",
+            "language": primary_language,
+            "languages": codeql_languages,
+            "files_extracted": files_extracted,
+            "lines_scanned": 0,
+            "build_plan_source": "workspace_seed_pending_db_verification",
+            "first_version_complete": false,
+        });
+        let mut logs = record.progress.logs.clone();
+        logs.push(task_state::StaticTaskProgressLogRecord {
+            timestamp: now.clone(),
+            stage: "completed".to_string(),
+            message: format!(
+                "CodeQL scan completed: {} findings, {} files scanned",
+                findings.len(),
+                files_scanned
+            ),
+            progress: 100.0,
+            level: "info".to_string(),
+        });
+        record.progress = task_state::StaticTaskProgressRecord {
+            progress: 100.0,
+            current_stage: Some("completed".to_string()),
+            message: Some(format!(
+                "CodeQL scan completed: {} findings in {}ms",
+                findings.len(),
+                elapsed_ms
+            )),
+            started_at: record.progress.started_at.clone(),
+            updated_at: Some(now),
+            logs,
+        };
+        record.findings = findings;
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+    Ok(())
 }
 
 async fn run_opengrep_scan_inner(
@@ -1251,6 +1617,132 @@ async fn run_opengrep_scan_inner(
     let _ = task_state::save_snapshot(state, &snapshot).await;
     let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
     Ok(())
+}
+
+struct CodeqlRunnerPaths<'a> {
+    container_source_dir: &'a str,
+    query_container_path: &'a str,
+    database_container_path: &'a str,
+    sarif_container_path: &'a str,
+    summary_rel_path: &'a str,
+    summary_container_path: &'a str,
+    events_container_path: &'a str,
+    build_plan_container_path: &'a str,
+    stdout_rel_path: &'a str,
+    stderr_rel_path: &'a str,
+    language: &'a str,
+}
+
+fn build_codeql_runner_spec(
+    config: &crate::config::AppConfig,
+    workspace_dir: &std::path::Path,
+    paths: CodeqlRunnerPaths<'_>,
+) -> RunnerSpec {
+    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
+        Some(config.codeql_runner_cpu_limit)
+    } else {
+        None
+    };
+    RunnerSpec {
+        scanner_type: "codeql".to_string(),
+        image: config.scanner_codeql_image.clone(),
+        workspace_dir: workspace_dir.display().to_string(),
+        command: codeql::build_scan_command(&codeql::ScanCommandArgs {
+            source_dir: paths.container_source_dir,
+            queries_dir: paths.query_container_path,
+            database_dir: paths.database_container_path,
+            sarif_path: paths.sarif_container_path,
+            summary_path: paths.summary_container_path,
+            events_path: paths.events_container_path,
+            build_plan_path: Some(paths.build_plan_container_path),
+            language: paths.language,
+            threads: config.codeql_threads,
+            ram_mb: config.codeql_ram_mb,
+            allow_network: config.codeql_allow_network_during_build,
+        }),
+        timeout_seconds: config.codeql_scan_timeout_seconds,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
+        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
+        completion_summary_path: Some(paths.summary_rel_path.to_string()),
+        workspace_root_override: None,
+        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        cpu_limit,
+        pids_limit: Some(1024),
+    }
+}
+
+fn normalize_codeql_task_languages(project_languages: &[String]) -> Vec<String> {
+    let mut languages = project_languages
+        .iter()
+        .map(|language| codeql::normalize_language(language))
+        .filter(|language| {
+            matches!(
+                language.as_str(),
+                "javascript-typescript" | "python" | "java" | "cpp" | "go"
+            )
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if languages.is_empty() {
+        languages.push("javascript-typescript".to_string());
+    }
+    languages
+}
+
+fn default_codeql_build_mode(language: &str) -> &'static str {
+    match codeql::normalize_language(language).as_str() {
+        "javascript-typescript" | "python" => "none",
+        _ => "autobuild",
+    }
+}
+
+async fn record_codeql_events(state: &AppState, task_id: &str, events_path: &std::path::Path) {
+    let Ok(events_text) = tokio::fs::read_to_string(events_path).await else {
+        return;
+    };
+    for line in events_text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(200)
+    {
+        let event =
+            serde_json::from_str::<Value>(line).unwrap_or_else(|_| json!({ "message": line }));
+        let stage = event
+            .get("stage")
+            .and_then(Value::as_str)
+            .unwrap_or("codeql_event");
+        let message = event
+            .get("message")
+            .and_then(Value::as_str)
+            .or_else(|| event.get("event").and_then(Value::as_str))
+            .unwrap_or("CodeQL runner event");
+        update_scan_progress(state, task_id, 55.0, stage, message).await;
+    }
+}
+
+async fn format_codeql_runner_error(
+    result: &runner::RunnerResult,
+    events_path: Option<&std::path::Path>,
+) -> String {
+    let mut parts = vec![result
+        .error
+        .clone()
+        .unwrap_or_else(|| format!("CodeQL runner exited with code {}", result.exit_code))];
+    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
+        parts.push(format!("stdout={stdout_excerpt}"));
+    }
+    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
+        parts.push(format!("stderr={stderr_excerpt}"));
+    }
+    if let Some(events_excerpt) = read_text_excerpt(events_path).await {
+        parts.push(format!("events={events_excerpt}"));
+    }
+    parts.join("; ")
 }
 
 async fn read_opengrep_results_text(results_path: &std::path::Path) -> Result<String, String> {
@@ -1983,6 +2475,7 @@ fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
         &mut value,
         &json!({
         "id": record.id,
+        "engine": record.engine,
         "project_id": record.project_id,
         "name": record.name,
         "status": record.status,
@@ -2269,11 +2762,7 @@ async fn ai_analysis(
     let stored_config = system_config::load_current(&state)
         .await
         .map_err(internal_error)?
-        .ok_or_else(|| {
-            ApiError::BadRequest(
-                "请先配置智能审计 LLM".to_string(),
-            )
-        })?;
+        .ok_or_else(|| ApiError::BadRequest("请先配置智能审计 LLM".to_string()))?;
     let selected = crate::routes::llm_config_set::selected_enabled_runtime(
         &stored_config.llm_config_json,
         &stored_config.other_config_json,
@@ -2311,9 +2800,7 @@ async fn ai_analysis(
         entry.0 += 1;
         *entry.1.entry(severity.to_string()).or_insert(0) += 1;
         if entry.2.len() < 3 {
-            entry
-                .2
-                .push(format!("{file}:{line}"));
+            entry.2.push(format!("{file}:{line}"));
         }
     }
 
@@ -2345,8 +2832,8 @@ async fn ai_analysis(
     let prompt = prompt_lines.join("\n");
 
     let runtime = &selected.runtime;
-    let headers = crate::llm::runtime_headers(runtime)
-        .map_err(|error| ApiError::Internal(error.message))?;
+    let headers =
+        crate::llm::runtime_headers(runtime).map_err(|error| ApiError::Internal(error.message))?;
     let (url, body) = match runtime.provider.as_str() {
         "openai_compatible" => {
             let url = format!(
@@ -2371,10 +2858,13 @@ async fn ai_analysis(
             });
             (url, body)
         }
-        _ => {
+        "kimi_compatible" | "pi_compatible" => {
             return Err(ApiError::Internal(
-                "不支持的 LLM 协议".to_string(),
+                "kimi/pi 协议仅支持 CLI 模式，不支持通过 HTTP 静态任务路径调用。".to_string(),
             ));
+        }
+        _ => {
+            return Err(ApiError::Internal("不支持的 LLM 协议".to_string()));
         }
     };
 
@@ -2451,11 +2941,14 @@ async fn call_llm_json(
     .map_err(|error| ApiError::BadRequest(error.message))?;
 
     let runtime = &selected.runtime;
-    let headers = crate::llm::runtime_headers(runtime)
-        .map_err(|error| ApiError::Internal(error.message))?;
+    let headers =
+        crate::llm::runtime_headers(runtime).map_err(|error| ApiError::Internal(error.message))?;
     let (url, body) = match runtime.provider.as_str() {
         "openai_compatible" => {
-            let url = format!("{}/chat/completions", runtime.base_url.trim_end_matches('/'));
+            let url = format!(
+                "{}/chat/completions",
+                runtime.base_url.trim_end_matches('/')
+            );
             let body = json!({
                 "model": runtime.model,
                 "messages": [
@@ -2478,25 +2971,54 @@ async fn call_llm_json(
             });
             (url, body)
         }
+        "kimi_compatible" | "pi_compatible" => {
+            return Err(ApiError::Internal(
+                "kimi/pi 协议仅支持 CLI 模式，不支持通过 HTTP 静态任务路径调用。".to_string(),
+            ));
+        }
         _ => return Err(ApiError::Internal("不支持的 LLM 协议".to_string())),
     };
 
-    let response = state.http_client.post(&url).headers(headers).json(&body).send().await
+    let response = state
+        .http_client
+        .post(&url)
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
         .map_err(|error| ApiError::Internal(format!("LLM 请求失败：{error}")))?;
     let status = response.status();
-    let response_json: Value = response.json().await
+    let response_json: Value = response
+        .json()
+        .await
         .map_err(|error| ApiError::Internal(format!("LLM 响应解析失败：{error}")))?;
 
     if !status.is_success() {
-        let error_msg = response_json.pointer("/error/message").and_then(Value::as_str).unwrap_or("unknown error");
-        return Err(ApiError::Internal(format!("LLM 调用失败 ({status}): {error_msg}")));
+        let error_msg = response_json
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown error");
+        return Err(ApiError::Internal(format!(
+            "LLM 调用失败 ({status}): {error_msg}"
+        )));
     }
 
     let content = match runtime.provider.as_str() {
-        "openai_compatible" => response_json.pointer("/choices/0/message/content").and_then(Value::as_str).unwrap_or("").to_string(),
-        "anthropic_compatible" => response_json.get("content").and_then(Value::as_array)
-            .and_then(|items| items.iter().find_map(|item| item.get("text").and_then(Value::as_str)))
-            .unwrap_or("").to_string(),
+        "openai_compatible" => response_json
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        "anthropic_compatible" => response_json
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find_map(|item| item.get("text").and_then(Value::as_str))
+            })
+            .unwrap_or("")
+            .to_string(),
         _ => String::new(),
     };
 
@@ -2529,7 +3051,11 @@ fn extract_top_rules(
 ) -> Vec<EnrichedRuleFinding> {
     let mut grouped: BTreeMap<String, Vec<&task_state::StaticFindingRecord>> = BTreeMap::new();
     for finding in findings {
-        let rule = finding.payload.get("rule_name").and_then(Value::as_str).unwrap_or("unknown");
+        let rule = finding
+            .payload
+            .get("rule_name")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
         grouped.entry(rule.to_string()).or_default().push(finding);
     }
 
@@ -2537,33 +3063,59 @@ fn extract_top_rules(
     sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
     sorted.truncate(top_n);
 
-    sorted.into_iter().map(|(rule_name, findings_for_rule)| {
-        let rule_record = opengrep_rules.get(&rule_name);
-        let severity = findings_for_rule.first()
-            .and_then(|f| f.payload.get("severity").and_then(Value::as_str))
-            .unwrap_or("UNKNOWN").to_string();
-        let description = rule_record.and_then(|r| r.description.as_deref()).unwrap_or("").to_string();
-        let cwe = rule_record.and_then(|r| r.cwe.clone()).unwrap_or_default();
-        let pattern_yaml = rule_record.map(|r| r.pattern_yaml.clone()).unwrap_or_default();
+    sorted
+        .into_iter()
+        .map(|(rule_name, findings_for_rule)| {
+            let rule_record = opengrep_rules.get(&rule_name);
+            let severity = findings_for_rule
+                .first()
+                .and_then(|f| f.payload.get("severity").and_then(Value::as_str))
+                .unwrap_or("UNKNOWN")
+                .to_string();
+            let description = rule_record
+                .and_then(|r| r.description.as_deref())
+                .unwrap_or("")
+                .to_string();
+            let cwe = rule_record.and_then(|r| r.cwe.clone()).unwrap_or_default();
+            let pattern_yaml = rule_record
+                .map(|r| r.pattern_yaml.clone())
+                .unwrap_or_default();
 
-        let code_examples: Vec<CodeExample> = findings_for_rule.iter().take(max_examples).map(|f| {
-            CodeExample {
-                file_path: f.payload.get("file_path").and_then(Value::as_str).unwrap_or("").to_string(),
-                start_line: f.payload.get("start_line").and_then(Value::as_i64).unwrap_or(0),
-                code_snippet: f.payload.get("code_snippet").and_then(Value::as_str).unwrap_or("").to_string(),
+            let code_examples: Vec<CodeExample> = findings_for_rule
+                .iter()
+                .take(max_examples)
+                .map(|f| CodeExample {
+                    file_path: f
+                        .payload
+                        .get("file_path")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    start_line: f
+                        .payload
+                        .get("start_line")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0),
+                    code_snippet: f
+                        .payload
+                        .get("code_snippet")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                })
+                .collect();
+
+            EnrichedRuleFinding {
+                rule_name,
+                severity,
+                hit_count: findings_for_rule.len(),
+                description,
+                cwe,
+                pattern_yaml,
+                code_examples,
             }
-        }).collect();
-
-        EnrichedRuleFinding {
-            rule_name,
-            severity,
-            hit_count: findings_for_rule.len(),
-            description,
-            cwe,
-            pattern_yaml,
-            code_examples,
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 async fn ai_analyze_code(
@@ -2571,10 +3123,14 @@ async fn ai_analyze_code(
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = load_task_snapshot(&state).await?;
-    let record = snapshot.static_tasks.get(&task_id)
+    let record = snapshot
+        .static_tasks
+        .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
     if record.findings.is_empty() {
-        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+        return Err(ApiError::BadRequest(
+            "当前扫描暂无发现，无需分析".to_string(),
+        ));
     }
 
     let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
@@ -2614,13 +3170,20 @@ async fn ai_evaluate_rules(
     Json(input): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = load_task_snapshot(&state).await?;
-    let record = snapshot.static_tasks.get(&task_id)
+    let record = snapshot
+        .static_tasks
+        .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
     if record.findings.is_empty() {
-        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+        return Err(ApiError::BadRequest(
+            "当前扫描暂无发现，无需分析".to_string(),
+        ));
     }
 
-    let step1_result = input.get("step1Result").and_then(Value::as_str).unwrap_or("");
+    let step1_result = input
+        .get("step1Result")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
 
     let mut rule_context = String::new();
@@ -2667,14 +3230,24 @@ async fn ai_suggest_fixes(
     Json(input): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = load_task_snapshot(&state).await?;
-    let record = snapshot.static_tasks.get(&task_id)
+    let record = snapshot
+        .static_tasks
+        .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
     if record.findings.is_empty() {
-        return Err(ApiError::BadRequest("当前扫描暂无发现，无需分析".to_string()));
+        return Err(ApiError::BadRequest(
+            "当前扫描暂无发现，无需分析".to_string(),
+        ));
     }
 
-    let step1_result = input.get("step1Result").and_then(Value::as_str).unwrap_or("");
-    let step2_result = input.get("step2Result").and_then(Value::as_str).unwrap_or("");
+    let step1_result = input
+        .get("step1Result")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let step2_result = input
+        .get("step2Result")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
 
     let mut code_examples_json = String::new();
@@ -2725,14 +3298,20 @@ async fn ai_analysis_start(
 ) -> Result<Json<Value>, ApiError> {
     {
         let snapshot = load_task_snapshot(&state).await?;
-        let record = snapshot.static_tasks.get(&task_id)
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
             .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
 
         if record.status != "completed" {
-            return Err(ApiError::BadRequest("仅已完成的扫描任务可触发 AI 分析".to_string()));
+            return Err(ApiError::BadRequest(
+                "仅已完成的扫描任务可触发 AI 分析".to_string(),
+            ));
         }
         if record.findings.is_empty() {
-            return Err(ApiError::BadRequest("当前扫描暂无发现，无需 AI 分析".to_string()));
+            return Err(ApiError::BadRequest(
+                "当前扫描暂无发现，无需 AI 分析".to_string(),
+            ));
         }
         if record.ai_analysis_status.as_deref() == Some("analyzing") {
             return Err(ApiError::BadRequest("AI 分析任务正在执行中".to_string()));
@@ -2742,7 +3321,9 @@ async fn ai_analysis_start(
     let now = now_rfc3339();
     {
         let _guard = state.file_store_lock.lock().await;
-        let mut snapshot = task_state::load_snapshot_unlocked(&state).await.map_err(internal_error)?;
+        let mut snapshot = task_state::load_snapshot_unlocked(&state)
+            .await
+            .map_err(internal_error)?;
         if let Some(record) = snapshot.static_tasks.get_mut(&task_id) {
             record.ai_analysis_status = Some("analyzing".to_string());
             record.ai_analysis_step = Some(1);
@@ -2753,7 +3334,9 @@ async fn ai_analysis_start(
             record.ai_analysis_started_at = Some(now.clone());
             record.ai_analysis_completed_at = None;
         }
-        task_state::save_snapshot_unlocked(&state, &snapshot).await.map_err(internal_error)?;
+        task_state::save_snapshot_unlocked(&state, &snapshot)
+            .await
+            .map_err(internal_error)?;
     }
 
     let bg_state = state.clone();
@@ -2762,7 +3345,9 @@ async fn ai_analysis_start(
         run_ai_analysis_background(bg_state, bg_task_id).await;
     });
 
-    Ok(Json(json!({ "message": "AI 分析任务已启动", "task_id": task_id })))
+    Ok(Json(
+        json!({ "message": "AI 分析任务已启动", "task_id": task_id }),
+    ))
 }
 
 async fn run_ai_analysis_background(state: AppState, task_id: String) {
@@ -2934,10 +3519,15 @@ async fn ai_analysis_status(
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = load_task_snapshot(&state).await?;
-    let record = snapshot.static_tasks.get(&task_id)
+    let record = snapshot
+        .static_tasks
+        .get(&task_id)
         .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
 
-    let status = record.ai_analysis_status.as_deref().unwrap_or("not_started");
+    let status = record
+        .ai_analysis_status
+        .as_deref()
+        .unwrap_or("not_started");
     let mut response = json!({
         "status": status,
         "current_step": record.ai_analysis_step,

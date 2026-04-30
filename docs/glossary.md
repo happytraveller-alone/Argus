@@ -16,9 +16,17 @@
 
 ### 静态审计
 
-- **是什么**：当前由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。
-- **不是什么**：Bandit/Gitleaks/PHPStan/PMD/YASA 等历史多引擎集合；这些名称若仍出现，多为退役兼容、防回归测试或旧前端 API 残留。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。2026-04-30 CodeQL 隔离扫描已有基础骨架，但五类语言端到端全绿前仍不是首版完成能力。
+- **不是什么**：Bandit/Gitleaks/PHPStan/PMD/YASA 等历史多引擎集合；这些名称若仍出现，多为退役兼容、防回归测试或旧前端 API 残留。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
+
+
+### CodeQL 隔离扫描计划
+
+- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。
+- **不是什么**：Opengrep runner 的增强阶段，也不是旧 Bandit/Gitleaks/PHPStan/PMD 多引擎路由复活。当前基础实现不等于首版完成；五类语言未全绿前只能称为里程碑。
+- **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`。
+- **strict-zero 决策**：五类语言全绿才算首版完成；LLM 候选命令可在 CodeQL runner 沙箱内自动执行；runner 可联网并允许必要源码片段/构建文件/日志进入 LLM；build plan、指纹和证据只以数据库为运行时真源。
 
 ### 智能审计
 
@@ -106,6 +114,7 @@
 
 - **是什么**：本仓库内的 Codex/OMX 配置和 skills 目录，通常配合 `CODEX_HOME=$PWD/.codex` 使用。
 - **不是什么**：全局 `~/.codex` 的替代品；`.codex/` 当前被 `.gitignore` 忽略，跨环境复用 skill 需要重新安装或显式调整版本控制策略。
+- **MCP 注意**：claude-mem `mcp-search` 通过 `.codex/local-bin/claude-mem-mcp-search` 解析真实插件目录，并由 `.codex/config.toml` 的本地 `mcp-search` 覆盖引用；Codex MCP 配置里的 `args` 不会展开 `${CLAUDE_PLUGIN_ROOT}`。
 
 ## 阅读路线建议
 
