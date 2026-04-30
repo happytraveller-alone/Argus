@@ -6,7 +6,7 @@ import { DataTable } from "@/components/data-table";
 import type { AppColumnDef } from "@/components/data-table";
 import type { ProjectSeverityBreakdown } from "@/features/projects/services/projectCardPreview";
 import type { ProjectsPageRowViewModel } from "../types";
-import { PROJECT_ACTION_BTN_SUBTLE } from "../constants";
+
 
 interface ProjectsTableProps {
   rows: ProjectsPageRowViewModel[];
@@ -248,6 +248,26 @@ function buildColumns(
 ): AppColumnDef<ProjectsPageRowViewModel, unknown>[] {
   return [
     {
+      id: "rowNumber",
+      header: "序号",
+      enableSorting: false,
+      enableColumnFilter: false,
+      meta: {
+        label: "序号",
+        align: "center",
+        width: 64,
+        headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
+        headerContentClassName: HEADER_CONTENT_CLASSNAME,
+        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
+      },
+      cell: ({ row, table }) => {
+        const pageRowIndex = table
+          .getRowModel()
+          .rows.findIndex((r) => r.id === row.id);
+        return pageRowIndex + 1;
+      },
+    },
+    {
       accessorKey: "name",
       header: "项目名称",
       meta: {
@@ -326,6 +346,7 @@ function buildColumns(
       id: "vulnerabilities",
       accessorFn: (row) => row.vulnerabilityStats.total,
       header: "发现潜在漏洞",
+      enableColumnFilter: false,
       meta: {
         label: "发现漏洞",
         minWidth: 120,
@@ -348,6 +369,7 @@ function buildColumns(
       id: "aiVerified",
       accessorFn: (row) => row.aiVerifiedStats.total,
       header: "AI验证漏洞",
+      enableColumnFilter: false,
       meta: {
         label: "AI验证",
         minWidth: 115,
@@ -383,8 +405,8 @@ function buildColumns(
           <Button
             asChild
             size="lg"
-            variant="outline"
-            className="cyber-btn-ghost h-8 px-2.5"
+            variant="ghost"
+            className="h-8 px-2.5"
           >
             <Link to={row.original.detailPath} state={row.original.detailState}>
               查看详情
@@ -394,8 +416,8 @@ function buildColumns(
             <Button
               asChild
               size="lg"
-              variant="outline"
-              className="cyber-btn-ghost h-8 px-2.5 hover:bg-sky-500/10 hover:text-sky-200 hover:border-sky-500/30"
+              variant="ghost"
+              className="h-8 px-2.5 hover:bg-sky-500/10 hover:text-sky-200"
             >
               <Link
                 to={row.original.actions.browseCodePath}
@@ -407,8 +429,8 @@ function buildColumns(
           ) : (
             <Button
               size="sm"
-              variant="outline"
-              className="cyber-btn-ghost h-8 px-2.5"
+              variant="ghost"
+              className="h-8 px-2.5"
               disabled
               title={row.original.actions.browseCodeDisabledReason ?? undefined}
               aria-label={`代码浏览 ${row.original.name}（${row.original.actions.browseCodeDisabledReason ?? "暂不可用"}）`}
@@ -418,7 +440,8 @@ function buildColumns(
           )}
           <Button
             size="lg"
-            className={`${PROJECT_ACTION_BTN_SUBTLE} h-8 px-2.5`}
+            variant="ghost"
+            className="h-8 px-2.5 text-sky-100 hover:bg-sky-500/12 hover:text-sky-100"
             onClick={() => onCreateScan(row.original.id)}
             disabled={!row.original.actions.canCreateScan}
           >
@@ -426,8 +449,8 @@ function buildColumns(
           </Button>
           <Button
             size="lg"
-            variant="outline"
-            className="cyber-btn-ghost h-8 px-2.5 border-rose-500/35 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100"
+            variant="ghost"
+            className="h-8 px-2.5 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
             onClick={() =>
               onDeleteProject(row.original.id, row.original.name)
             }

@@ -7,7 +7,7 @@ import DeferredSection from "@/components/performance/DeferredSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesListTable";
-import TaskManagementSummaryCards from "@/features/tasks/components/TaskManagementSummaryCards";
+import { Badge } from "@/components/ui/badge";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import { cancelAgentTask } from "@/shared/api/agentTasks";
@@ -101,22 +101,18 @@ export default function TaskManagementIntelligent() {
 				if (activity.status === "running" || activity.status === "pending") {
 					acc.running += 1;
 				}
+				if (activity.status === "failed") {
+					acc.failed += 1;
+				}
 				return acc;
 			},
-			{ total: 0, completed: 0, running: 0 },
+			{ total: 0, completed: 0, running: 0, failed: 0 },
 		);
 	}, [intelligentActivities]);
 
 	return (
 		<div className="relative flex h-screen flex-col gap-6 overflow-hidden bg-background p-6 font-mono">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-
-			<TaskManagementSummaryCards
-				taskLabel="智能审计任务"
-				total={stats.total}
-				completed={stats.completed}
-				running={stats.running}
-			/>
 
 			<div className="flex flex-nowrap items-center justify-between gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-3">
@@ -128,6 +124,17 @@ export default function TaskManagementIntelligent() {
 							placeholder="搜索项目名"
 							className="h-9 pl-9 font-mono"
 						/>
+					</div>
+					<div className="flex items-center gap-2">
+						<Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 gap-1.5">
+							已完成 <span className="font-semibold tabular-nums">{stats.completed}</span>
+						</Badge>
+						<Badge className="border-sky-500/30 bg-sky-500/10 text-sky-300 gap-1.5">
+							进行中 <span className="font-semibold tabular-nums">{stats.running}</span>
+						</Badge>
+						<Badge className="border-rose-500/30 bg-rose-500/10 text-rose-300 gap-1.5">
+							异常 <span className="font-semibold tabular-nums">{stats.failed}</span>
+						</Badge>
 					</div>
 				</div>
 				<div className="flex shrink-0 items-center gap-3">

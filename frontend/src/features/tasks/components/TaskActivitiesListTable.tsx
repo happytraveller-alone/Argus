@@ -120,7 +120,7 @@ function getColumns(input: {
 				label: "项目",
 				minWidth: 132,
 				filterVariant: "text",
-				cellClassName: `${TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME} text-left`,
+				cellClassName: TASK_ACTIVITIES_TABLE_BODY_CELL_CLASSNAME,
 			}),
 			cell: ({ row }) => (
 				<span
@@ -134,6 +134,7 @@ function getColumns(input: {
 			id: "createdAt",
 			accessorFn: (row) => row.createdAt,
 			header: "创建时间",
+			enableColumnFilter: false,
 			sortingFn: "datetime",
 			meta: createTaskActivitiesTableMeta({
 				label: "创建时间",
@@ -155,6 +156,7 @@ function getColumns(input: {
 			id: "duration",
 			accessorFn: (row) => getActivityDurationLabel(row, input.nowMs),
 			header: "用时",
+			enableColumnFilter: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "用时",
 				width: 88,
@@ -215,6 +217,7 @@ function getColumns(input: {
 			id: "defects",
 			accessorFn: (row) => getDefectSummaryLabel(row),
 			header: "缺陷摘要",
+			enableColumnFilter: false,
 			meta: createTaskActivitiesTableMeta({
 				label: "缺陷摘要",
 				minWidth: 192,

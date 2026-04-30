@@ -13,9 +13,9 @@ test("DataManagement page only exposes transfer-oriented content", async () => {
 	const markup = renderToStaticMarkup(createElement(DataManagementPage));
 
 	assert.match(markup, /数据管理/);
-	assert.match(markup, /导出项目迁移包/);
-	assert.match(markup, /导入项目迁移包/);
-	assert.match(markup, /cyber-card-flat/);
+	assert.match(markup, /导出迁移包/);
+	assert.match(markup, /导入迁移包/);
+	assert.match(markup, /rounded-lg border border-border bg-card/);
 	assert.doesNotMatch(markup, /Agent 单体测试/);
 	assert.doesNotMatch(markup, /Agent 测试/);
 	assert.doesNotMatch(markup, /Recon/);

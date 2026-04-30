@@ -9,7 +9,9 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { api, type ProjectImportResponse } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
 
@@ -163,278 +165,218 @@ export default function DataManagementPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background font-mono">
+    <div className="relative flex min-h-screen flex-col gap-6 bg-background p-6 font-mono">
       <div className="pointer-events-none absolute inset-0 cyber-grid-subtle" />
 
-      <div className="relative z-10 flex flex-1 flex-col gap-6 p-6">
-        <div className="flex items-center gap-3">
-          <DatabaseBackup className="h-6 w-6 text-primary" />
-          <h1 className="text-lg font-bold tracking-tight">数据管理</h1>
-        </div>
+      <div className="relative z-10 flex items-center gap-3">
+        <DatabaseBackup className="h-5 w-5 text-primary" />
+        <h1 className="text-lg font-bold tracking-tight text-foreground">数据管理</h1>
+      </div>
 
-        <div className="cyber-card cyber-card-flat flex flex-1 flex-col p-4">
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <section className="rounded border border-border/40 bg-background/70 p-4">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <FileArchive className="h-4 w-4 text-cyan-400" />
-                  导出项目迁移包
-                </h2>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => void loadProjects()}
-                  disabled={loadingProjects}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loadingProjects ? "animate-spin" : ""}`} />
-                  刷新项目
-                </Button>
-              </div>
+      <div className="relative z-10 grid flex-1 gap-6 xl:grid-cols-[1.4fr_1fr]">
+          <div className="rounded-lg border border-border bg-card p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Download className="h-4 w-4 text-cyan-400" />
+                导出迁移包
+              </h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 text-xs text-muted-foreground"
+                onClick={() => void loadProjects()}
+                disabled={loadingProjects}
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingProjects ? "animate-spin" : ""}`} />
+                刷新
+              </Button>
+            </div>
 
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                  value={projectFilter}
-                  onChange={(event) => setProjectFilter(event.target.value)}
-                  placeholder="按项目名称或描述过滤"
-                  className="cyber-input h-9 w-full min-w-0 rounded-sm border border-input bg-background px-4 py-2 text-sm text-foreground outline-none transition-[border-color,background-color] focus:border-primary/70 focus:bg-muted/20"
+            <div className="mb-3 flex items-center gap-3">
+              <Input
+                value={projectFilter}
+                onChange={(event) => setProjectFilter(event.target.value)}
+                placeholder="搜索项目"
+                className="h-8 text-sm"
+              />
+              <Label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <Checkbox
+                  checked={includeArchives}
+                  onCheckedChange={(checked) => setIncludeArchives(checked === true)}
                 />
-                <Label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={includeArchives}
-                    onCheckedChange={(checked) => setIncludeArchives(checked === true)}
-                  />
-                  包含 ZIP 源码归档
-                </Label>
-              </div>
+                含源码
+              </Label>
+            </div>
 
-              <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <Label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={allVisibleSelected}
-                    onCheckedChange={(checked) => toggleSelectVisible(checked === true)}
-                  />
-                  全选当前筛选结果
-                </Label>
-                <span>共 {projects.length} 个项目</span>
-                <span>当前筛选 {visibleProjects.length} 个</span>
-                <span>已选择 {selectedProjectIds.length} 个</span>
-              </div>
+            <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
+              <Label className="flex items-center gap-1.5">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(checked) => toggleSelectVisible(checked === true)}
+                />
+                全选
+              </Label>
+              <span>共 {projects.length}</span>
+              <span>筛选 {visibleProjects.length}</span>
+              <Badge variant="outline" className="text-[11px]">
+                已选 {selectedProjectIds.length}
+              </Badge>
+            </div>
 
-              <div className="max-h-[24rem] space-y-2 overflow-y-auto rounded border border-border/30 bg-muted/10 p-2">
-                {loadingProjects ? (
-                  <div className="rounded border border-dashed border-border/40 px-3 py-8 text-center text-xs text-muted-foreground">
-                    正在加载项目列表...
-                  </div>
-                ) : visibleProjects.length === 0 ? (
-                  <div className="rounded border border-dashed border-border/40 px-3 py-8 text-center text-xs text-muted-foreground">
-                    没有匹配的项目
-                  </div>
-                ) : (
-                  visibleProjects.map((project) => {
-                    const checked = selectedProjectIds.includes(project.id);
-                    return (
-                      <label
-                        key={project.id}
-                        className="flex cursor-pointer items-start gap-3 rounded border border-border/30 bg-background/80 px-3 py-2 transition-colors hover:border-cyan-500/40"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(next) => toggleProject(project.id, next === true)}
-                          className="mt-0.5"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="truncate text-sm font-medium text-foreground">
-                              {project.name}
-                            </span>
-                            <span className="shrink-0 rounded border border-border/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {project.source_type || "zip"}
-                            </span>
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {project.description || "无项目描述"}
-                          </p>
-                        </div>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
+            <div className="max-h-[22rem] space-y-1.5 overflow-y-auto rounded-md border border-border/40 bg-muted/5 p-2">
+              {loadingProjects ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  加载中...
+                </div>
+              ) : visibleProjects.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  没有匹配的项目
+                </div>
+              ) : (
+                visibleProjects.map((project) => {
+                  const checked = selectedProjectIds.includes(project.id);
+                  return (
+                    <label
+                      key={project.id}
+                      className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/30 ${checked ? "bg-muted/20" : ""}`}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(next) => toggleProject(project.id, next === true)}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                        {project.name}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {project.source_type || "zip"}
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
 
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  className="gap-2"
-                  disabled={exporting || loadingProjects || selectedProjectIds.length === 0}
-                  onClick={() => void handleExport("selected")}
-                >
-                  <Download className="h-4 w-4" />
-                  {exporting ? "导出中..." : "导出选中项目"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={exporting || loadingProjects || projects.length === 0}
-                  onClick={() => void handleExport("all")}
-                >
-                  <DatabaseBackup className="h-4 w-4" />
-                  {exporting ? "导出中..." : "导出全部项目"}
-                </Button>
-              </div>
-            </section>
+            <div className="mt-4 flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                disabled={exporting || loadingProjects || selectedProjectIds.length === 0}
+                onClick={() => void handleExport("selected")}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {exporting ? "导出中..." : "导出选中"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={exporting || loadingProjects || projects.length === 0}
+                onClick={() => void handleExport("all")}
+              >
+                <DatabaseBackup className="h-3.5 w-3.5" />
+                {exporting ? "导出中..." : "导出全部"}
+              </Button>
+            </div>
+          </div>
 
-            <section className="rounded border border-border/40 bg-background/70 p-4">
-              <div className="mb-4">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Upload className="h-4 w-4 text-cyan-400" />
-                  导入项目迁移包
-                </h2>
-              </div>
+          <div className="flex flex-col gap-6">
+            <div className="rounded-lg border border-border bg-card p-5">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Upload className="h-4 w-4 text-cyan-400" />
+                导入迁移包
+              </h2>
 
               <div className="space-y-3">
-                <div className="rounded border border-dashed border-border/40 bg-muted/10 p-3">
-                  <Label htmlFor="project-transfer-bundle" className="text-xs text-muted-foreground">
-                    选择迁移包文件
-                  </Label>
-                  <div className="mt-2 space-y-2">
-                    <input
-                      id="project-transfer-bundle"
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".zip,application/zip"
-                      className="sr-only"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] || null;
-                        setSelectedBundle(file);
-                      }}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <FileArchive className="h-4 w-4" />
-                        选择 ZIP 文件
-                      </Button>
-                      {selectedBundle ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="px-3 text-xs text-muted-foreground"
-                          onClick={() => {
-                            setSelectedBundle(null);
-                            if (fileInputRef.current) {
-                              fileInputRef.current.value = "";
-                            }
-                          }}
-                        >
-                          清除选择
-                        </Button>
-                      ) : null}
-                    </div>
-
-
-                  </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setSelectedBundle(file);
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileArchive className="h-3.5 w-3.5" />
+                    选择文件
+                  </Button>
+                  {selectedBundle ? (
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                      {selectedBundle.name}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">未选择文件</span>
+                  )}
                 </div>
-
                 <Button
                   type="button"
-                  className="w-full gap-2"
+                  size="sm"
+                  className="w-full gap-1.5"
                   disabled={importing || !selectedBundle}
                   onClick={() => void handleImport()}
                 >
-                  <Upload className="h-4 w-4" />
+                  <Upload className="h-3.5 w-3.5" />
                   {importing ? "导入中..." : "开始导入"}
                 </Button>
               </div>
-            </section>
-          </div>
-
-          {importSummary ? (
-            <div className="mt-4 rounded border border-border/40 bg-background/70 p-4">
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <h2 className="text-sm font-semibold text-foreground">最近一次导入结果</h2>
-                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-300">
-                  成功 {importSummary.imported_projects.length}
-                </span>
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-300">
-                  跳过 {importSummary.skipped_projects.length}
-                </span>
-                <span className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-300">
-                  失败 {importSummary.failed_projects.length}
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-3">
-                <div className="rounded border border-border/30 bg-muted/10 p-3">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    成功导入
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    {importSummary.imported_projects.length === 0 ? (
-                      <p className="text-muted-foreground">无成功导入项目</p>
-                    ) : (
-                      importSummary.imported_projects.map((item) => (
-                        <div key={`${item.source_project_id}-${item.project_id}`} className="rounded border border-border/20 px-2 py-1.5">
-                          <p className="font-medium text-foreground">{item.name || item.source_project_id}</p>
-                          <p className="text-muted-foreground">目标项目 ID: {item.project_id}</p>
-                          {item.reason ? (
-                            <p className="text-muted-foreground">说明: {formatReason(item.reason)}</p>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded border border-border/30 bg-muted/10 p-3">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    已跳过
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    {importSummary.skipped_projects.length === 0 ? (
-                      <p className="text-muted-foreground">无跳过项目</p>
-                    ) : (
-                      importSummary.skipped_projects.map((item) => (
-                        <div key={`${item.source_project_id}-${item.reason || "skip"}`} className="rounded border border-border/20 px-2 py-1.5">
-                          <p className="font-medium text-foreground">{item.name || item.source_project_id}</p>
-                          <p className="text-muted-foreground">原因: {formatReason(item.reason)}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded border border-border/30 bg-muted/10 p-3">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    失败与警告
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    {importSummary.failed_projects.map((item) => (
-                      <div key={`${item.source_project_id}-${item.reason || "failed"}`} className="rounded border border-rose-500/20 px-2 py-1.5">
-                        <p className="font-medium text-foreground">{item.name || item.source_project_id}</p>
-                        <p className="text-muted-foreground">原因: {item.reason || "未知错误"}</p>
-                      </div>
-                    ))}
-                    {importSummary.warnings.map((warning) => (
-                      <div key={warning} className="rounded border border-amber-500/20 px-2 py-1.5 text-muted-foreground">
-                        {warning}
-                      </div>
-                    ))}
-                    {importSummary.failed_projects.length === 0 && importSummary.warnings.length === 0 ? (
-                      <p className="text-muted-foreground">无失败或警告</p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
             </div>
-          ) : null}
-        </div>
+
+            {importSummary ? (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold text-foreground">导入结果</h2>
+                  <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                    成功 {importSummary.imported_projects.length}
+                  </Badge>
+                  <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-300">
+                    跳过 {importSummary.skipped_projects.length}
+                  </Badge>
+                  <Badge className="border-rose-500/30 bg-rose-500/10 text-rose-300">
+                    失败 {importSummary.failed_projects.length}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {importSummary.imported_projects.map((item) => (
+                    <div key={`${item.source_project_id}-${item.project_id}`} className="flex items-center gap-2 rounded-md bg-emerald-500/5 px-3 py-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                      <span className="font-medium text-foreground">{item.name || item.source_project_id}</span>
+                    </div>
+                  ))}
+                  {importSummary.skipped_projects.map((item) => (
+                    <div key={`${item.source_project_id}-${item.reason || "skip"}`} className="flex items-center gap-2 rounded-md bg-amber-500/5 px-3 py-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                      <span className="text-foreground">{item.name || item.source_project_id}</span>
+                      <span className="text-muted-foreground">{formatReason(item.reason)}</span>
+                    </div>
+                  ))}
+                  {importSummary.failed_projects.map((item) => (
+                    <div key={`${item.source_project_id}-${item.reason || "failed"}`} className="flex items-center gap-2 rounded-md bg-rose-500/5 px-3 py-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                      <span className="text-foreground">{item.name || item.source_project_id}</span>
+                      <span className="text-muted-foreground">{item.reason || "未知错误"}</span>
+                    </div>
+                  ))}
+                  {importSummary.warnings.map((warning) => (
+                    <div key={warning} className="rounded-md bg-amber-500/5 px-3 py-2 text-muted-foreground">
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
       </div>
     </div>
   );

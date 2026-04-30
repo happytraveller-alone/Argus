@@ -110,7 +110,7 @@ test("ProjectsTable renders hover metric popovers without nested trigger frames"
 	assert.match(markup, />0</);
 	assert.match(markup, /仅 ZIP 类型项目支持代码浏览/);
 	assert.match(markup, /指标同步中\.\.\./);
-	assert.doesNotMatch(markup, /序号/);
+	assert.match(markup, /序号/);
 	assert.doesNotMatch(markup, /全选当前页/);
 	assert.doesNotMatch(markup, /选择项目/);
 	assert.match(markup, /<thead[\s\S]*?<\/thead>/);

@@ -39,14 +39,15 @@ test("task management summary cards follow the dashboard compact card contract",
 	assert.doesNotMatch(source, /text-\[clamp/);
 });
 
-test("static and intelligent task pages share the dashboard-style summary cards", () => {
+test("static and intelligent task pages use inline status badges instead of summary cards", () => {
 	for (const taskPagePath of [staticTaskPagePath, intelligentTaskPagePath]) {
 		const source = readFileSync(taskPagePath, "utf8");
 
-		assert.match(source, /TaskManagementSummaryCards/);
-		assert.doesNotMatch(source, /cyber-card p-4/);
-		assert.doesNotMatch(source, /fontSize: "1\.5rem"/);
-		assert.doesNotMatch(source, /text-\[clamp\(1\.25rem,2\.6vw,2rem\)\]/);
+		assert.doesNotMatch(source, /TaskManagementSummaryCards/);
+		assert.match(source, /stats\.completed/);
+		assert.match(source, /stats\.running/);
+		assert.match(source, /stats\.failed/);
+		assert.match(source, /Badge/);
 	}
 });
 
