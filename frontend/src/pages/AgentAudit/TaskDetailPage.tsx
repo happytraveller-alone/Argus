@@ -2941,8 +2941,7 @@ function AgentAuditPageContent() {
 
   // Stream connection -  在历史事件加载完成后连接
   useEffect(() => {
-    // 等待历史事件加载完成，且任务正在运行
-    if (!taskId || !task?.status || task.status !== "running") return;
+    if (!taskId || !task?.status || (task.status !== "running" && task.status !== "pending")) return;
 
     //  使用 state 变量确保在历史事件加载完成后才连接
     if (!historicalEventsLoaded) return;
@@ -2980,7 +2979,7 @@ function AgentAuditPageContent() {
   ]);
 
   useEffect(() => {
-    if (!taskId || task?.status !== "running") return;
+    if (!taskId || (task?.status !== "running" && task?.status !== "pending")) return;
     if (!historicalEventsLoaded) return;
     if (!hasConnectedRef.current) return;
     if (isConnected) return;
@@ -2990,7 +2989,7 @@ function AgentAuditPageContent() {
       ? 0
       : STREAM_SELF_HEAL_RETRY_MS - elapsed;
     const timer = setTimeout(() => {
-      if (taskStatusRef.current !== "running") return;
+      if (taskStatusRef.current !== "running" && taskStatusRef.current !== "pending") return;
       lastStreamSelfHealAttemptRef.current = Date.now();
       console.warn("[AgentAudit] stream_self_heal_reconnect", {
         taskId,

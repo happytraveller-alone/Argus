@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { api } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
 import { isZipProject } from "@/shared/utils/projectUtils";
-import { createAgentTask } from "@/shared/api/agentTasks";
+import { createAgentTask, startAgentTask } from "@/shared/api/agentTasks";
 import {
 	runAgentPreflightCheck,
 	type AgentPreflightResult,
@@ -691,6 +691,7 @@ export default function CreateProjectScanDialog({
 		action: "primary" | "secondary",
 	) => {
 		const agentTask = await createAgentTaskForProject(project);
+		startAgentTask(agentTask.id).catch(console.error);
 		onOpenChange(false);
 		onTaskCreated?.();
 		toast.success("智能审计任务已创建");

@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/api/database";
-import { createAgentTask } from "@/shared/api/agentTasks";
+import { createAgentTask, startAgentTask } from "@/shared/api/agentTasks";
 import {
 	createOpengrepScanTask,
 	getAllOpengrepRules,
@@ -378,6 +378,7 @@ export default function CreateScanTaskDialog({
 							use_prompt_skills: true,
 							verification_level: "analysis_with_poc_plan",
 						});
+						startAgentTask(agentTask.id).catch(console.error);
 
 						onOpenChange(false);
 						onTaskCreated();
@@ -428,6 +429,7 @@ export default function CreateScanTaskDialog({
 					use_prompt_skills: true,
 					verification_level: "analysis_with_poc_plan",
 				});
+				startAgentTask(agentTask.id).catch(console.error);
 
 				onOpenChange(false);
 				onTaskCreated();

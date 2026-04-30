@@ -13,6 +13,8 @@ pub enum ApiError {
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
+    Conflict(String),
+    #[error("{0}")]
     Upstream(String),
     #[error("{0}")]
     Internal(String),
@@ -28,6 +30,7 @@ impl ApiError {
         match self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Upstream(_) => StatusCode::BAD_GATEWAY,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }

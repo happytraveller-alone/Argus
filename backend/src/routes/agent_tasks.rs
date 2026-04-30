@@ -290,6 +290,15 @@ pub async fn create_agent_task(
     task_state::save_snapshot_unlocked(&state, &snapshot)
         .await
         .map_err(internal_error)?;
+
+    let spawn_state = state.clone();
+    let spawn_task_id = task_id.clone();
+    tokio::spawn(async move {
+        if let Err(error) = start_agent_task_core(spawn_state, spawn_task_id.clone()).await {
+            eprintln!("[auto-start] task {spawn_task_id} failed: {error}");
+        }
+    });
+
     Ok(Json(agent_task_value(&record)))
 }
 
@@ -344,6 +353,13 @@ async fn start_agent_task(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
+    start_agent_task_core(state, task_id).await
+}
+
+async fn start_agent_task_core(
+    state: AppState,
+    task_id: String,
+) -> Result<Json<Value>, ApiError> {
     let snapshot = task_state::load_snapshot(&state)
         .await
         .map_err(internal_error)?;
@@ -352,6 +368,12 @@ async fn start_agent_task(
             .agent_tasks
             .get(&task_id)
             .ok_or_else(|| ApiError::NotFound(format!("agent task not found: {task_id}")))?;
+        if record.status != "pending" {
+            return Err(ApiError::Conflict(format!(
+                "task {} cannot be started: current status is '{}'",
+                task_id, record.status
+            )));
+        }
         reject_optional_audit_scope(record.audit_scope.as_ref())?;
         ensure_intelligent_audit_llm_ready(&state).await?;
         (
@@ -440,13 +462,10 @@ async fn start_agent_task(
         task_state::save_snapshot(&state, &snapshot)
             .await
             .map_err(internal_error)?;
-        return Ok(Json(json!({
-            "message": "agent task failed during AgentFlow preflight",
-            "task_id": task_id,
-            "reason_code": snapshot.agent_tasks.get(&task_id).and_then(|record| {
-                record.diagnostics.as_ref()?.get("reason_code")?.as_str()
-            }).unwrap_or("preflight_failed"),
-        })));
+        return Err(ApiError::Internal(format!(
+            "agent task preflight failed: {}",
+            preflight.message
+        )));
     }
 
     let prepared_workspace = if runner_command
@@ -476,11 +495,10 @@ async fn start_agent_task(
                 task_state::save_snapshot(&state, &snapshot)
                     .await
                     .map_err(internal_error)?;
-                return Ok(Json(json!({
-                    "message": "agent task failed while preparing AgentFlow workspace",
-                    "task_id": task_id,
-                    "reason_code": error.reason_code,
-                })));
+                return Err(ApiError::Internal(format!(
+                    "agent task workspace preparation failed: {}",
+                    error.message
+                )));
             }
         }
     } else {
@@ -563,11 +581,9 @@ async fn start_agent_task(
         task_state::save_snapshot(&state, &snapshot)
             .await
             .map_err(internal_error)?;
-        return Ok(Json(json!({
-            "message": "agent task failed because AgentFlow runner is missing",
-            "task_id": task_id,
-            "reason_code": "runner_missing",
-        })));
+        return Err(ApiError::Internal(
+            "agent task failed: AgentFlow runner is not configured".to_string(),
+        ));
     };
     let outcome = run_controlled_command(RunnerCommand {
         program: "sh".to_string(),
@@ -625,11 +641,9 @@ async fn start_agent_task(
                 if let Some(workspace) = &prepared_workspace {
                     let _ = tokio::fs::remove_dir_all(&workspace.workspace_dir).await;
                 }
-                return Ok(Json(json!({
-                    "message": "agent task failed because AgentFlow runner output was invalid",
-                    "task_id": task_id,
-                    "reason_code": "runner_output_invalid",
-                })));
+                return Err(ApiError::Internal(
+                    "agent task failed: AgentFlow runner output was invalid".to_string(),
+                ));
             };
             match import_runner_output(record, &output_json) {
                 Ok(()) => {
@@ -2069,13 +2083,8 @@ fn default_agentflow_runner_command() -> String {
     let work_volume = env_trimmed("AGENTFLOW_RUNNER_WORK_VOLUME")
         .unwrap_or_else(|| DEFAULT_AGENTFLOW_WORK_VOLUME.to_string());
     let codex_host_dir = env_trimmed("ARGUS_CODEX_HOST_DIR");
-    let network = env_trimmed("AGENTFLOW_RUNNER_NETWORK").unwrap_or_else(|| {
-        if codex_host_dir.is_some() {
-            "bridge".to_string()
-        } else {
-            "none".to_string()
-        }
-    });
+    let network = env_trimmed("AGENTFLOW_RUNNER_NETWORK")
+        .unwrap_or_else(|| "bridge".to_string());
     let container_cli = env_trimmed("CONTAINER_CLI")
         .or_else(|| env_trimmed("BACKEND_DOCKER_BIN"))
         .unwrap_or_else(|| "docker".to_string());
