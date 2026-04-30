@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { Column } from "@tanstack/react-table";
 import {
   ArrowDown,
@@ -51,38 +52,46 @@ function normalizeNumberInput(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function HeaderFilterTrigger({
-  title,
-  active,
-  weakHighlight,
-}: {
-  title: string;
-  active: boolean;
-  weakHighlight: boolean;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      aria-label={`筛选${title}`}
-      data-filter-active={active ? "true" : undefined}
-      data-data-table-filter-trigger="true"
-      className={cn(
-        "h-8 w-8 shrink-0 rounded-l-none border-l border-border/70 px-0 !whitespace-nowrap bg-transparent text-foreground/60 hover:bg-muted/55 hover:text-foreground",
-        active && "font-bold text-primary hover:bg-primary/10 hover:text-primary",
-        !active &&
-          weakHighlight &&
-          "font-semibold text-sky-300 hover:bg-sky-500/10 hover:text-sky-200",
-      )}
-      onClick={(event) => event.stopPropagation()}
-      onPointerDown={(event) => event.stopPropagation()}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <ListFilter className="h-4 w-4" />
-    </Button>
-  );
-}
+const HeaderFilterTrigger = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentPropsWithoutRef<"button"> & {
+    title: string;
+    active: boolean;
+    weakHighlight: boolean;
+  }
+>(({ title, active, weakHighlight, ...props }, ref) => (
+  <Button
+    ref={ref}
+    type="button"
+    variant="ghost"
+    size="sm"
+    aria-label={`筛选${title}`}
+    data-filter-active={active ? "true" : undefined}
+    data-data-table-filter-trigger="true"
+    className={cn(
+      "h-8 w-8 shrink-0 rounded-l-none border-l border-border/70 px-0 !whitespace-nowrap bg-transparent text-foreground/60 hover:bg-muted/55 hover:text-foreground",
+      active && "font-bold text-primary hover:bg-primary/10 hover:text-primary",
+      !active &&
+        weakHighlight &&
+        "font-semibold text-sky-300 hover:bg-sky-500/10 hover:text-sky-200",
+    )}
+    {...props}
+    onClick={(event) => {
+      props.onClick?.(event);
+      event.stopPropagation();
+    }}
+    onPointerDown={(event) => {
+      props.onPointerDown?.(event);
+      event.stopPropagation();
+    }}
+    onMouseDown={(event) => {
+      props.onMouseDown?.(event);
+      event.stopPropagation();
+    }}
+  >
+    <ListFilter className="h-4 w-4" />
+  </Button>
+));
 
 function HeaderTextFilter<TData, TValue>({
   column,
