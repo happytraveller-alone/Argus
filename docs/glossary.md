@@ -55,7 +55,7 @@
 
 - **是什么**：执行智能审计 pipeline 的隔离 runner，Compose 服务名是 `agentflow-runner`。
 - **不是什么**：前端页面的一部分，也不是后端进程内直接执行的普通函数。
-- **主要入口**：`docker/agentflow-runner.Dockerfile`、`docker/agentflow-runner.sh`、`backend/agentflow/pipelines/intelligent_audit.py`。
+- **主要入口**：`docker/agentflow-runner.Dockerfile`、`docker/agentflow-runner.sh`、`backend/agentflow/pipelines/intelligent_audit.py`。后端预检也会通过 `backend/src/runtime/agentflow/pipeline_path.rs` 解析同一 pipeline，并要求后端镜像内存在 `/app/backend/agentflow/pipelines/intelligent_audit.py`。
 
 ### Opengrep runner
 

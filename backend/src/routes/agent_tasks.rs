@@ -29,6 +29,7 @@ use crate::{
         codex_config::build_agentflow_llm_config,
         contracts::{ARGUS_AGENTFLOW_CONTRACT_VERSION, P1_TOPOLOGY_VERSION},
         importer::{import_runner_output, sha256_hex},
+        pipeline_path::resolve_agentflow_pipeline_path,
         preflight::{run_preflight, PreflightInput},
         runner::{run_controlled_command, RunnerCommand},
     },
@@ -354,10 +355,7 @@ async fn start_agent_task(
     start_agent_task_core(state, task_id).await
 }
 
-async fn start_agent_task_core(
-    state: AppState,
-    task_id: String,
-) -> Result<Json<Value>, ApiError> {
+async fn start_agent_task_core(state: AppState, task_id: String) -> Result<Json<Value>, ApiError> {
     let snapshot = task_state::load_snapshot(&state)
         .await
         .map_err(internal_error)?;
@@ -422,7 +420,8 @@ async fn start_agent_task_core(
     );
     let runner_command = agentflow_runner_command();
     let output_dir = agentflow_output_dir(&state, &task_id);
-    let pipeline_path = agentflow_pipeline_path();
+    let pipeline_resolution = resolve_agentflow_pipeline_path();
+    let pipeline_path = pipeline_resolution.path.clone();
     let preflight = run_preflight(PreflightInput {
         llm_config: &llm_config,
         audit_scope: Some(&audit_scope_for_preflight),
@@ -430,6 +429,7 @@ async fn start_agent_task_core(
             .as_ref()
             .map(|command| command.command.as_str()),
         pipeline_path: Some(&pipeline_path),
+        pipeline_candidate_paths: Some(&pipeline_resolution.candidates),
         output_dir: Some(&output_dir),
         max_parallel_nodes: state.config.runner_preflight_max_concurrency,
     })
@@ -2076,8 +2076,7 @@ fn default_agentflow_runner_command() -> String {
     let work_volume = env_trimmed("AGENTFLOW_RUNNER_WORK_VOLUME")
         .unwrap_or_else(|| DEFAULT_AGENTFLOW_WORK_VOLUME.to_string());
     let codex_host_dir = env_trimmed("ARGUS_CODEX_HOST_DIR");
-    let network = env_trimmed("AGENTFLOW_RUNNER_NETWORK")
-        .unwrap_or_else(|| "bridge".to_string());
+    let network = env_trimmed("AGENTFLOW_RUNNER_NETWORK").unwrap_or_else(|| "bridge".to_string());
     let container_cli = env_trimmed("CONTAINER_CLI")
         .or_else(|| env_trimmed("BACKEND_DOCKER_BIN"))
         .unwrap_or_else(|| "docker".to_string());
@@ -2248,15 +2247,6 @@ fn safe_path_segment(value: &str) -> String {
         Uuid::new_v4().to_string()
     } else {
         segment
-    }
-}
-
-fn agentflow_pipeline_path() -> PathBuf {
-    let project_path = PathBuf::from("backend/agentflow/pipelines/intelligent_audit.py");
-    if project_path.exists() {
-        project_path
-    } else {
-        PathBuf::from("agentflow/pipelines/intelligent_audit.py")
     }
 }
 

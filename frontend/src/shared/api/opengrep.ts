@@ -577,6 +577,41 @@ export const SUPPORTED_LANGUAGES = [
     { value: "kotlin", label: "Kotlin" },
 ];
 
+export interface AiAnalysisStatusResponse {
+    status: "not_started" | "analyzing" | "completed" | "failed";
+    current_step: number | null;
+    step_name: string | null;
+    model: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    result?: {
+        rules: Array<{
+            ruleName: string;
+            severity: string;
+            hitCount: number;
+            problem: string;
+            codeExamples?: Array<{ file: string; code: string }>;
+            suggestion: string;
+            priority: string;
+        }>;
+    };
+    error?: string | null;
+}
+
+export async function triggerAiAnalysis(
+    taskId: string,
+): Promise<{ message: string; task_id: string }> {
+    const response = await apiClient.post(`/static-tasks/tasks/${taskId}/ai-analysis/start`);
+    return response.data;
+}
+
+export async function getAiAnalysisStatus(
+    taskId: string,
+): Promise<AiAnalysisStatusResponse> {
+    const response = await apiClient.get(`/static-tasks/tasks/${taskId}/ai-analysis/status`);
+    return response.data;
+}
+
 export const RULE_SOURCES = [
     { value: "internal", label: "内置规则" },
     { value: "patch", label: "补丁生成" },

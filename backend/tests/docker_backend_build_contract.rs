@@ -10,6 +10,8 @@ const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
 const RELEASE_BACKEND_DOCKERFILE: &str =
     include_str!("../../scripts/release-templates/backend.Dockerfile");
+const AGENT_TASKS_ROUTE: &str = include_str!("../src/routes/agent_tasks.rs");
+const SYSTEM_CONFIG_ROUTE: &str = include_str!("../src/routes/system_config.rs");
 
 #[test]
 fn compose_passes_backend_cargo_network_build_args() {
@@ -77,6 +79,53 @@ fn backend_dockerfile_locks_cargo_cache_mounts_for_multi_platform_builds() {
         assert!(
             BACKEND_DOCKERFILE.contains(mount),
             "docker/backend.Dockerfile must lock Cargo cache mount {mount} so concurrent buildx platforms cannot corrupt shared cache state"
+        );
+    }
+}
+
+#[test]
+fn backend_runtime_images_package_agentflow_pipeline_assets() {
+    for (name, dockerfile) in [
+        ("docker/backend.Dockerfile", BACKEND_DOCKERFILE),
+        (
+            "scripts/release-templates/backend.Dockerfile",
+            RELEASE_BACKEND_DOCKERFILE,
+        ),
+    ] {
+        assert!(
+            dockerfile.contains("COPY backend/agentflow /app/backend/agentflow"),
+            "{name} must package backend/agentflow so backend preflight can see /app/backend/agentflow/pipelines/intelligent_audit.py"
+        );
+    }
+    assert!(
+        AGENTFLOW_RUNNER_DOCKERFILE.contains("COPY backend/agentflow /app/backend/agentflow"),
+        "agentflow runner image must preserve the same packaged pipeline path"
+    );
+    assert!(
+        AGENTFLOW_RUNNER_ADAPTER.contains(
+            "DEFAULT_PIPELINE = \"/app/backend/agentflow/pipelines/intelligent_audit.py\""
+        ),
+        "agentflow runner adapter must keep the packaged pipeline default"
+    );
+}
+
+#[test]
+fn backend_agentflow_preflight_routes_share_pipeline_resolver() {
+    for (name, source) in [
+        ("backend/src/routes/agent_tasks.rs", AGENT_TASKS_ROUTE),
+        ("backend/src/routes/system_config.rs", SYSTEM_CONFIG_ROUTE),
+    ] {
+        assert!(
+            source.contains("resolve_agentflow_pipeline_path"),
+            "{name} must use the shared AgentFlow pipeline resolver"
+        );
+        assert!(
+            !source.contains("Path::new(\"backend/agentflow/pipelines/intelligent_audit.py\")"),
+            "{name} must not reintroduce duplicated source-path fallback logic"
+        );
+        assert!(
+            !source.contains("PathBuf::from(\"agentflow/pipelines/intelligent_audit.py\")"),
+            "{name} must not fall back to the known-missing repo-root path"
         );
     }
 }

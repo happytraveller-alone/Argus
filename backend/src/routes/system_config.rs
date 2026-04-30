@@ -24,7 +24,10 @@ use crate::{
         ProviderCatalogItem as LlmProviderItem,
     },
     routes::llm_config_set,
-    runtime::agentflow::codex_config::build_agentflow_llm_config,
+    runtime::agentflow::{
+        codex_config::build_agentflow_llm_config,
+        pipeline_path::{display_candidates, resolve_agentflow_pipeline_path},
+    },
     state::{AppState, StoredSystemConfig},
 };
 
@@ -1455,11 +1458,7 @@ fn add_preflight_attempt_metadata(
 
 fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
     let compose_path = Path::new("docker-compose.yml");
-    let pipeline_path = if Path::new("backend/agentflow/pipelines/intelligent_audit.py").exists() {
-        Path::new("backend/agentflow/pipelines/intelligent_audit.py")
-    } else {
-        Path::new("agentflow/pipelines/intelligent_audit.py")
-    };
+    let pipeline_resolution = resolve_agentflow_pipeline_path();
     let compose_has_runner = std::fs::read_to_string(compose_path)
         .map(|content| content.contains("agentflow-runner"))
         .unwrap_or(false);
@@ -1468,7 +1467,8 @@ fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
         .unwrap_or(false);
     let default_runner_enabled = env_flag_enabled("AGENTFLOW_DEFAULT_RUNNER_ENABLED", true);
     let runner_ok = compose_has_runner || runner_command_configured || default_runner_enabled;
-    let pipeline_ok = pipeline_path.exists();
+    let pipeline_ok = pipeline_resolution.exists;
+    let pipeline_candidates = display_candidates(&pipeline_resolution.candidates);
     let output_dir_ok = config
         .zip_storage_path
         .parent()
@@ -1492,7 +1492,8 @@ fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
         "pipeline": {
             "ok": pipeline_ok,
             "reason_code": if pipeline_ok { Value::Null } else { json!("pipeline_invalid") },
-            "path": pipeline_path.display().to_string(),
+            "path": pipeline_resolution.path.display().to_string(),
+            "checked_candidates": pipeline_candidates,
         },
         "output_dir": {
             "ok": output_dir_ok,
@@ -1607,7 +1608,9 @@ fn prepare_legacy_user_config_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::{default_config, prepare_legacy_user_config_payload};
+    use super::{
+        agentflow_runner_preflight_metadata, default_config, prepare_legacy_user_config_payload,
+    };
     use crate::{config::AppConfig, core::encryption::decrypt_sensitive_string};
     use serde_json::json;
 
@@ -1688,5 +1691,37 @@ mod tests {
         )
         .expect("encrypted mirror field should decrypt");
         assert_eq!(decrypted, "sk-test-openai");
+    }
+
+    #[test]
+    fn agentflow_preflight_metadata_reports_shared_pipeline_candidates() {
+        let metadata = agentflow_runner_preflight_metadata(&AppConfig::for_tests());
+        let pipeline = &metadata["pipeline"];
+        let candidates = pipeline["checked_candidates"]
+            .as_array()
+            .expect("checked candidates should be reported");
+
+        assert_eq!(pipeline["ok"], true);
+        assert!(
+            pipeline["path"]
+                .as_str()
+                .unwrap_or_default()
+                .ends_with("agentflow/pipelines/intelligent_audit.py"),
+            "metadata should expose the selected shared resolver path: {pipeline:?}"
+        );
+        assert!(
+            candidates.iter().any(|path| path
+                .as_str()
+                .unwrap_or_default()
+                .contains("backend/agentflow/pipelines/intelligent_audit.py")),
+            "source checkout candidate should be reported: {candidates:?}"
+        );
+        assert!(
+            candidates.iter().any(|path| path
+                .as_str()
+                .unwrap_or_default()
+                .contains("/app/backend/agentflow/pipelines/intelligent_audit.py")),
+            "packaged runtime candidate should be reported: {candidates:?}"
+        );
     }
 }

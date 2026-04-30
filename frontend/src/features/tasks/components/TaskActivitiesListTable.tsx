@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -243,11 +243,13 @@ function getColumns(input: {
 			meta: createTaskActivitiesTableMeta({
 				label: "操作",
 				align: "center",
-				width: 176,
+				width: 260,
 			}),
 			cell: ({ row }) => {
 				const canCancel = isTaskActivityCancellable(row.original);
 				const cancelling = input.cancellingActivityId === row.original.id;
+				const isCompletedScan = row.original.kind === "rule_scan" && row.original.status === "completed";
+				const scanTaskId = row.original.cancelTarget?.mode === "static" ? row.original.cancelTarget.taskId : null;
 				return (
 					<div className="flex flex-wrap items-center justify-center gap-2 text-[16px]">
 						<Button
@@ -260,6 +262,19 @@ function getColumns(input: {
 								详情
 							</Link>
 						</Button>
+						{isCompletedScan && scanTaskId ? (
+							<Button
+								asChild
+								size="lg"
+								variant="outline"
+								className={TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME}
+							>
+								<Link to={`/static-analysis/${scanTaskId}/ai-result`}>
+									<Sparkles className="mr-1 h-3 w-3" />
+									结果分析
+								</Link>
+							</Button>
+						) : null}
 						{canCancel ? (
 							<Button
 								type="button"

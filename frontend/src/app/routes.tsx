@@ -15,6 +15,7 @@ const AgentAuditTaskDetail = lazy(
 );
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const StaticAnalysis = lazy(() => import("@/pages/StaticAnalysis"));
+const AiAnalysisResult = lazy(() => import("@/pages/static-analysis/AiAnalysisResult"));
 const StaticFindingDetail = lazy(() => import("@/pages/StaticFindingDetail"));
 const FindingDetail = lazy(() => import("@/pages/FindingDetail"));
 const ScanConfigEngines = lazy(() => import("@/pages/ScanConfigEngines"));
@@ -202,6 +203,14 @@ const routes: RouteConfig[] = [
 		element: <StaticAnalysis />,
 		visible: false,
 		navVisible: false,
+	},
+	{
+		name: "AI研判分析结果",
+		path: "/static-analysis/:taskId/ai-result",
+		element: <AiAnalysisResult />,
+		visible: false,
+		navVisible: false,
+		navParentPath: "/tasks/static",
 	},
 	{
 		name: "统一漏洞详情",

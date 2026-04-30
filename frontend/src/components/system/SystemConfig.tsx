@@ -432,15 +432,16 @@ function RowConfigDialog({
 }
 
 const rowStatusText = (row: LlmConfigRow, latestWinningRowId?: string | null) => {
-	const parts = [row.enabled ? "启用" : "禁用", row.hasApiKey ? "密钥已配置" : "缺少密钥", `优先级 ${row.priority}`];
-	if (row.preflight.status === "passed") parts.push("上次验证通过");
-	if (row.preflight.status === "missing_fields" || row.preflight.reasonCode === "missing_fields") parts.push("字段不完整");
-	else if (row.preflight.status === "failed" || row.preflight.reasonCode) parts.push(`上次失败: ${row.preflight.reasonCode || row.preflight.status}`);
-	if (row.preflight.message) parts.push(row.preflight.message);
-	if (row.preflight.checkedAt) parts.push(`上次验证 ${row.preflight.checkedAt}`);
-	if (latestWinningRowId === row.id) parts.push("当前预检命中");
-	if (row.modelStatus.available === true) parts.push("模型列表可用");
-	if (row.modelStatus.available === false) parts.push("模型列表不可用");
+	const parts = [row.enabled ? "启用" : "禁用"];
+	if (!row.hasApiKey) parts.push("缺少密钥");
+	if (row.preflight.status === "passed") {
+		parts.push("预检通过");
+	} else if (row.preflight.status === "missing_fields" || row.preflight.reasonCode === "missing_fields") {
+		parts.push("字段不完整");
+	} else if (row.preflight.status === "failed" || row.preflight.reasonCode) {
+		parts.push("预检不通过");
+	}
+	if (latestWinningRowId === row.id) parts.push("当前命中");
 	return parts;
 };
 
@@ -656,10 +657,10 @@ export function SystemConfig({
 										<TableHeader>
 											<TableRow className="border-b border-border/70 bg-muted/40 text-sm font-bold uppercase tracking-[0.12em] text-muted-foreground">
 												<TableHead className="w-16 px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">序号</TableHead>
-												<TableHead className="w-[150px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型供应商</TableHead>
-												<TableHead className="px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">地址</TableHead>
+												<TableHead className="w-[120px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型供应商</TableHead>
+												<TableHead className="w-[200px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">地址</TableHead>
 												<TableHead className="w-[200px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">模型</TableHead>
-												<TableHead className="w-[200px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">状态</TableHead>
+												<TableHead className="w-[240px] px-3 py-2 text-left font-bold whitespace-nowrap border-r border-border/30">状态</TableHead>
 												<TableHead className="w-[320px] px-3 py-2 text-center font-bold whitespace-nowrap">操作</TableHead>
 											</TableRow>
 										</TableHeader>
@@ -668,11 +669,11 @@ export function SystemConfig({
 												const status = rowStatusText(row, config.llmConfig.latestPreflightRun.winningRowId);
 												return <TableRow key={row.id} className="border-b border-border/70">
 													<TableCell className="px-3 py-3 text-left font-mono text-base whitespace-nowrap border-r border-border/30">{row.priority}</TableCell>
-													<TableCell className="px-3 py-3 text-left text-base whitespace-nowrap border-r border-border/30">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</TableCell>
+													<TableCell className="px-3 py-3 text-left text-base whitespace-nowrap border-r border-border/30">{(getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider).replace(" 兼容", "")}</TableCell>
 													<TableCell className="px-3 py-3 text-left font-mono text-base break-all border-r border-border/30" title={row.baseUrl}>{row.baseUrl || "--"}</TableCell>
 													<TableCell className="px-3 py-3 text-left font-mono text-base whitespace-nowrap border-r border-border/30" title={row.model}>{row.model || "--"}</TableCell>
 													<TableCell className="px-3 py-3 text-left border-r border-border/30"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs whitespace-nowrap", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></TableCell>
-													<TableCell className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}><Zap className="h-3 w-3 mr-1" />验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}>删除</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></TableCell>
+													<TableCell className="px-3 py-3"><div className="flex flex-nowrap gap-1 justify-center"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={savingLLM || testingLLM} onClick={() => handleSaveAndTestRow(row)}>验证</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}>编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}>删除</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></TableCell>
 												</TableRow>;
 											})}
 										</TableBody>

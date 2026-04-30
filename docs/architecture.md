@@ -46,7 +46,9 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 - 后端路由：`backend/src/routes/agent_tasks.rs`
 - 后端 runtime：`backend/src/runtime/agentflow/`
+- 后端 pipeline 解析：`backend/src/runtime/agentflow/pipeline_path.rs`
 - Runner pipeline：`backend/agentflow/pipelines/intelligent_audit.py`
+- 后端镜像：`docker/backend.Dockerfile` 会打包 `backend/agentflow` 到 `/app/backend/agentflow`，供后端预检在容器内验证 pipeline 文件存在。
 - Runner 镜像：`docker/agentflow-runner.Dockerfile`
 - 前端 API：`frontend/src/shared/api/agentTasks.ts`
 - 前端详情页：`frontend/src/pages/AgentAudit/TaskDetailPage.tsx`

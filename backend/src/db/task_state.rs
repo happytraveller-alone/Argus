@@ -222,6 +222,22 @@ pub struct StaticTaskRecord {
     pub extra: Value,
     pub progress: StaticTaskProgressRecord,
     pub findings: Vec<StaticFindingRecord>,
+    #[serde(default)]
+    pub ai_analysis_status: Option<String>,
+    #[serde(default)]
+    pub ai_analysis_step: Option<i32>,
+    #[serde(default)]
+    pub ai_analysis_step_name: Option<String>,
+    #[serde(default)]
+    pub ai_analysis_result: Option<Value>,
+    #[serde(default)]
+    pub ai_analysis_error: Option<String>,
+    #[serde(default)]
+    pub ai_analysis_model: Option<String>,
+    #[serde(default)]
+    pub ai_analysis_started_at: Option<String>,
+    #[serde(default)]
+    pub ai_analysis_completed_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

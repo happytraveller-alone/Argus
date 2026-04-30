@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -35,6 +35,7 @@ pub struct PreflightInput<'a> {
     pub audit_scope: Option<&'a Value>,
     pub runner_command: Option<&'a str>,
     pub pipeline_path: Option<&'a Path>,
+    pub pipeline_candidate_paths: Option<&'a [PathBuf]>,
     pub output_dir: Option<&'a Path>,
     pub max_parallel_nodes: usize,
 }
@@ -49,7 +50,7 @@ pub async fn run_preflight(input: PreflightInput<'_>) -> PreflightReport {
         });
     }
     checks.push(check_runner_command(input.runner_command));
-    checks.push(check_pipeline(input.pipeline_path).await);
+    checks.push(check_pipeline(input.pipeline_path, input.pipeline_candidate_paths).await);
     checks.push(check_output_dir(input.output_dir).await);
     checks.push(check_resource_budget(input.max_parallel_nodes));
 
@@ -132,16 +133,37 @@ fn check_runner_command(command: Option<&str>) -> PreflightCheck {
     }
 }
 
-async fn check_pipeline(path: Option<&Path>) -> PreflightCheck {
+async fn check_pipeline(
+    path: Option<&Path>,
+    candidate_paths: Option<&[PathBuf]>,
+) -> PreflightCheck {
     if let Err(error) = validate_p1_pipeline(&render_p1_pipeline()) {
         return fail("pipeline", error.reason_code, error.message);
     }
     if let Some(path) = path {
         if fs::metadata(path).await.is_err() {
-            return fail(
+            let checked_candidates = candidate_paths
+                .map(|paths| {
+                    paths
+                        .iter()
+                        .map(|candidate| candidate.display().to_string())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec![path.display().to_string()]);
+            let message = if checked_candidates.is_empty() {
+                format!("AgentFlow pipeline 文件不存在：{}", path.display())
+            } else {
+                format!(
+                    "AgentFlow pipeline 文件不存在：{}；已检查候选路径：{}",
+                    path.display(),
+                    checked_candidates.join("、")
+                )
+            };
+            return fail_with_metadata(
                 "pipeline",
                 "pipeline_invalid",
-                format!("AgentFlow pipeline 文件不存在：{}", path.display()),
+                message,
+                json!({"checked_candidates": checked_candidates}),
             );
         }
     }
@@ -222,6 +244,21 @@ fn fail(name: &str, reason_code: &str, message: impl Into<String>) -> PreflightC
     }
 }
 
+fn fail_with_metadata(
+    name: &str,
+    reason_code: &str,
+    message: impl Into<String>,
+    metadata: Value,
+) -> PreflightCheck {
+    PreflightCheck {
+        name: name.to_string(),
+        ok: false,
+        reason_code: Some(reason_code.to_string()),
+        message: message.into(),
+        metadata: Some(metadata),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,6 +297,62 @@ mod tests {
         assert_eq!(
             report.reason_code.as_deref(),
             Some("forbidden_static_input")
+        );
+    }
+
+    #[tokio::test]
+    async fn agentflow_preflight_reports_all_checked_pipeline_candidates() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let missing_primary = temp_dir
+            .path()
+            .join("backend/agentflow/pipelines/intelligent_audit.py");
+        let packaged_candidate = temp_dir
+            .path()
+            .join("app/backend/agentflow/pipelines/intelligent_audit.py");
+        let backend_cwd_candidate = temp_dir
+            .path()
+            .join("agentflow/pipelines/intelligent_audit.py");
+        let candidates = vec![
+            missing_primary.clone(),
+            packaged_candidate.clone(),
+            backend_cwd_candidate.clone(),
+        ];
+        let llm = json!({"llmProvider": "openai_compatible", "llmModel": "gpt-5", "llmBaseUrl": "https://api.example/v1", "llmApiKey": "sk-secret"});
+
+        let report = run_preflight(PreflightInput {
+            llm_config: &llm,
+            runner_command: Some("agentflow"),
+            pipeline_path: Some(&missing_primary),
+            pipeline_candidate_paths: Some(&candidates),
+            output_dir: Some(temp_dir.path()),
+            max_parallel_nodes: 1,
+            ..Default::default()
+        })
+        .await;
+
+        assert!(!report.ok);
+        assert_eq!(report.reason_code.as_deref(), Some("pipeline_invalid"));
+        assert!(report.message.contains("已检查候选路径"));
+        for candidate in &candidates {
+            assert!(
+                report.message.contains(&candidate.display().to_string()),
+                "missing candidate from diagnostic: {}",
+                candidate.display()
+            );
+        }
+        let pipeline_check = report
+            .checks
+            .iter()
+            .find(|check| check.name == "pipeline")
+            .expect("pipeline check should exist");
+        assert_eq!(
+            pipeline_check
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("checked_candidates"))
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(candidates.len())
         );
     }
 }

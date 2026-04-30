@@ -70,6 +70,8 @@ pub fn router() -> Router<AppState> {
         .route("/tasks/{task_id}/ai-analyze-code", post(ai_analyze_code))
         .route("/tasks/{task_id}/ai-evaluate-rules", post(ai_evaluate_rules))
         .route("/tasks/{task_id}/ai-suggest-fixes", post(ai_suggest_fixes))
+        .route("/tasks/{task_id}/ai-analysis/start", post(ai_analysis_start))
+        .route("/tasks/{task_id}/ai-analysis/status", get(ai_analysis_status))
         .route("/tasks/{task_id}/interrupt", post(interrupt_opengrep_task))
         .route("/tasks/{task_id}/progress", get(get_opengrep_progress))
         .route("/tasks/{task_id}/findings", get(list_opengrep_findings))
@@ -706,6 +708,14 @@ async fn create_opengrep_task(
             }],
         },
         findings: Vec::new(),
+        ai_analysis_status: None,
+        ai_analysis_step: None,
+        ai_analysis_step_name: None,
+        ai_analysis_result: None,
+        ai_analysis_error: None,
+        ai_analysis_model: None,
+        ai_analysis_started_at: None,
+        ai_analysis_completed_at: None,
     };
 
     let _guard = state.file_store_lock.lock().await;
@@ -1987,6 +1997,7 @@ fn static_task_value(record: &task_state::StaticTaskRecord) -> Value {
         "error_message": record.error_message,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
+        "ai_analysis_status": record.ai_analysis_status,
         }),
     );
     value
@@ -2706,6 +2717,246 @@ async fn ai_suggest_fixes(
         "result": content,
         "model": model,
     })))
+}
+
+async fn ai_analysis_start(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    {
+        let snapshot = load_task_snapshot(&state).await?;
+        let record = snapshot.static_tasks.get(&task_id)
+            .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+
+        if record.status != "completed" {
+            return Err(ApiError::BadRequest("仅已完成的扫描任务可触发 AI 分析".to_string()));
+        }
+        if record.findings.is_empty() {
+            return Err(ApiError::BadRequest("当前扫描暂无发现，无需 AI 分析".to_string()));
+        }
+        if record.ai_analysis_status.as_deref() == Some("analyzing") {
+            return Err(ApiError::BadRequest("AI 分析任务正在执行中".to_string()));
+        }
+    }
+
+    let now = now_rfc3339();
+    {
+        let _guard = state.file_store_lock.lock().await;
+        let mut snapshot = task_state::load_snapshot_unlocked(&state).await.map_err(internal_error)?;
+        if let Some(record) = snapshot.static_tasks.get_mut(&task_id) {
+            record.ai_analysis_status = Some("analyzing".to_string());
+            record.ai_analysis_step = Some(1);
+            record.ai_analysis_step_name = Some("代码分析".to_string());
+            record.ai_analysis_result = None;
+            record.ai_analysis_error = None;
+            record.ai_analysis_model = None;
+            record.ai_analysis_started_at = Some(now.clone());
+            record.ai_analysis_completed_at = None;
+        }
+        task_state::save_snapshot_unlocked(&state, &snapshot).await.map_err(internal_error)?;
+    }
+
+    let bg_state = state.clone();
+    let bg_task_id = task_id.clone();
+    tokio::spawn(async move {
+        run_ai_analysis_background(bg_state, bg_task_id).await;
+    });
+
+    Ok(Json(json!({ "message": "AI 分析任务已启动", "task_id": task_id })))
+}
+
+async fn run_ai_analysis_background(state: AppState, task_id: String) {
+    let update_ai_state = |state: &AppState, task_id: &str, step: i32, step_name: &str| {
+        let state = state.clone();
+        let task_id = task_id.to_string();
+        let step_name = step_name.to_string();
+        async move {
+            let _guard = state.file_store_lock.lock().await;
+            let mut snapshot = match task_state::load_snapshot_unlocked(&state).await {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            if let Some(record) = snapshot.static_tasks.get_mut(&task_id) {
+                record.ai_analysis_step = Some(step);
+                record.ai_analysis_step_name = Some(step_name);
+            }
+            let _ = task_state::save_snapshot_unlocked(&state, &snapshot).await;
+        }
+    };
+
+    let result: Result<(Value, String), String> = async {
+        // Step 1: Code analysis
+        let snapshot = task_state::load_snapshot(&state).await.map_err(|e| e.to_string())?;
+        let record = snapshot.static_tasks.get(&task_id)
+            .ok_or_else(|| format!("task not found: {task_id}"))?;
+        let enriched = extract_top_rules(&record.findings, &snapshot.opengrep_rules, 5, 3);
+        let data_json = serde_json::to_string_pretty(&enriched).unwrap_or_default();
+
+        let step1_system = "你是一位安全代码分析专家。请分析以下静态扫描命中的代码片段，对每条规则的每个代码示例做路径分析和代码功能总结。请严格以 JSON 格式返回结果。";
+        let step1_user = format!(
+            "以下是按规则分组的 Top 5 命中规则及其代码片段：\n\n{data_json}\n\n\
+            请对每条规则的每个代码片段进行分析：\n\
+            1. 分析代码所属文件路径的模块/功能归属\n\
+            2. 分析代码片段本身的功能和上下文含义\n\
+            3. 给出该代码片段的简短总结\n\n\
+            请严格按以下 JSON 格式返回：\n\
+            ```json\n\
+            {{\"rules\": [{{\n\
+              \"ruleName\": \"规则ID\",\n\
+              \"findings\": [{{\n\
+                \"filePath\": \"文件路径\",\n\
+                \"codeSummary\": \"代码功能总结\"\n\
+              }}]\n\
+            }}]}}\n\
+            ```"
+        );
+        let (step1_text, _model) = call_llm_json(&state, step1_system, &step1_user).await
+            .map_err(|e| format!("Step 1 失败: {e}"))?;
+
+        // Step 2: Rule evaluation
+        update_ai_state(&state, &task_id, 2, "规则评估").await;
+
+        let mut rule_context = String::new();
+        for rule in &enriched {
+            rule_context.push_str(&format!(
+                "\n### 规则: {}\n- 严重度: {}\n- 命中次数: {}\n- 说明: {}\n- CWE: {}\n- 规则模式:\n```yaml\n{}\n```\n",
+                rule.rule_name, rule.severity, rule.hit_count,
+                rule.description, rule.cwe.join(", "), rule.pattern_yaml
+            ));
+        }
+
+        let step2_system = "你是一位安全扫描规则评估专家。请结合代码分析结果和规则定义，评估每条规则的合理性。请严格以 JSON 格式返回结果。";
+        let step2_user = format!(
+            "## 第一步代码分析结果：\n{step1_text}\n\n\
+            ## 规则详情：\n{rule_context}\n\n\
+            请对每条规则进行评估：\n\
+            1. 结合代码分析，判断规则命中是否合理\n\
+            2. 分析规则是否存在误报倾向\n\
+            3. 评估规则设计的不合理之处\n\n\
+            请严格按以下 JSON 格式返回：\n\
+            ```json\n\
+            {{\"rules\": [{{\n\
+              \"ruleName\": \"规则ID\",\n\
+              \"severity\": \"严重度\",\n\
+              \"hitCount\": 0,\n\
+              \"problem\": \"规则存在的问题描述\",\n\
+              \"reasonAnalysis\": \"合理性分析\"\n\
+            }}]}}\n\
+            ```"
+        );
+        let (step2_text, _model) = call_llm_json(&state, step2_system, &step2_user).await
+            .map_err(|e| format!("Step 2 失败: {e}"))?;
+
+        // Step 3: Fix suggestions
+        update_ai_state(&state, &task_id, 3, "修复建议").await;
+
+        let mut code_examples_json = String::new();
+        for rule in &enriched {
+            for ex in &rule.code_examples {
+                code_examples_json.push_str(&format!(
+                    "- 规则 `{}` 在 `{}:{}`: ```{}```\n",
+                    rule.rule_name, ex.file_path, ex.start_line, ex.code_snippet
+                ));
+            }
+        }
+
+        let step3_system = "你是一位安全扫描规则优化专家。请基于代码分析和规则评估结果，给出每条规则的修复建议和优先级。请严格以 JSON 格式返回结果。";
+        let step3_user = format!(
+            "## 第一步代码分析结果：\n{step1_text}\n\n\
+            ## 第二步规则评估结果：\n{step2_text}\n\n\
+            ## 命中代码示例：\n{code_examples_json}\n\n\
+            请对每条规则给出修复建议：\n\
+            1. 结合代码分析和规则评估，给出具体的修复方向\n\
+            2. 评估修复优先级（high/medium/low）\n\
+            3. 给出代码层面的修改建议\n\n\
+            请严格按以下 JSON 格式返回：\n\
+            ```json\n\
+            {{\"rules\": [{{\n\
+              \"ruleName\": \"规则ID\",\n\
+              \"severity\": \"严重度\",\n\
+              \"hitCount\": 0,\n\
+              \"problem\": \"问题描述\",\n\
+              \"codeExamples\": [{{\"file\": \"文件路径\", \"code\": \"代码片段\"}}],\n\
+              \"suggestion\": \"修复建议\",\n\
+              \"priority\": \"high|medium|low\"\n\
+            }}]}}\n\
+            ```"
+        );
+        let (step3_text, model) = call_llm_json(&state, step3_system, &step3_user).await
+            .map_err(|e| format!("Step 3 失败: {e}"))?;
+
+        let parsed: Value = (|| {
+            let json_match = step3_text.find("```json")
+                .and_then(|start| {
+                    let content_start = start + 7;
+                    step3_text[content_start..].find("```").map(|end| &step3_text[content_start..content_start + end])
+                })
+                .or_else(|| {
+                    let trimmed = step3_text.trim();
+                    if trimmed.starts_with('{') { Some(trimmed) } else { None }
+                });
+            json_match.and_then(|s| serde_json::from_str(s).ok())
+        })()
+        .unwrap_or_else(|| json!({ "rules": [], "raw": step3_text }));
+
+        Ok((parsed, model))
+    }.await;
+
+    let now = now_rfc3339();
+    let _guard = state.file_store_lock.lock().await;
+    let mut snapshot = match task_state::load_snapshot_unlocked(&state).await {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    if let Some(record) = snapshot.static_tasks.get_mut(&task_id) {
+        match result {
+            Ok((parsed, model)) => {
+                record.ai_analysis_status = Some("completed".to_string());
+                record.ai_analysis_step = Some(3);
+                record.ai_analysis_step_name = Some("修复建议".to_string());
+                record.ai_analysis_result = Some(parsed);
+                record.ai_analysis_model = Some(model);
+                record.ai_analysis_error = None;
+                record.ai_analysis_completed_at = Some(now);
+            }
+            Err(error_msg) => {
+                record.ai_analysis_status = Some("failed".to_string());
+                record.ai_analysis_error = Some(error_msg);
+                record.ai_analysis_completed_at = Some(now);
+            }
+        }
+    }
+    let _ = task_state::save_snapshot_unlocked(&state, &snapshot).await;
+}
+
+async fn ai_analysis_status(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = load_task_snapshot(&state).await?;
+    let record = snapshot.static_tasks.get(&task_id)
+        .ok_or_else(|| ApiError::NotFound(format!("static task not found: {task_id}")))?;
+
+    let status = record.ai_analysis_status.as_deref().unwrap_or("not_started");
+    let mut response = json!({
+        "status": status,
+        "current_step": record.ai_analysis_step,
+        "step_name": record.ai_analysis_step_name,
+        "model": record.ai_analysis_model,
+        "started_at": record.ai_analysis_started_at,
+        "completed_at": record.ai_analysis_completed_at,
+    });
+
+    if status == "completed" {
+        if let Some(result) = &record.ai_analysis_result {
+            response["result"] = result.clone();
+        }
+    }
+    if status == "failed" {
+        response["error"] = json!(record.ai_analysis_error);
+    }
+
+    Ok(Json(response))
 }
 
 fn internal_error<E: std::fmt::Display>(error: E) -> ApiError {
