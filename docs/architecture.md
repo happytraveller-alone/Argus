@@ -21,7 +21,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
 - **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`。
 - **Runner**：Docker runner 负责隔离执行 Opengrep 和 AgentFlow；Compose 服务在 `docker-compose.yml`。
-- **LLM 配置**：智能审计依赖系统配置和 `.argus-intelligent-audit.env` 启动导入链路。
+- **LLM 配置**：智能审计依赖系统配置和 `.argus-intelligent-audit.env` 启动导入链路；系统配置中的 `llmConfig` 是 schemaVersion 2 的多行 provider 配置表。
 
 如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计或智能审计，并把结果汇总回前端。**
 
@@ -121,11 +121,15 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 - 启动导入源：`.argus-intelligent-audit.env`。
 - 后端配置路由：`backend/src/routes/system_config.rs`。
+- 多行 LLM 配置 helper：`backend/src/routes/llm_config_set.rs`，集中处理 schema v2 envelope、旧单配置迁移、行号归一、密钥保留/脱敏、fallback 分类和 preflight 元数据。
 - 后端 LLM 测试与 fingerprint：`backend/src/llm/tester.rs`。
+- AgentFlow 运行时配置选择：`backend/src/runtime/agentflow/codex_config.rs`。
 - 前端系统配置页：`frontend/src/components/system/SystemConfig.tsx`。
 - 创建弹窗预检：`frontend/src/components/scan/create-project-scan/llmGate.ts`。
 
-约定：设置页可以使用 `/system-config/test-llm` 做连接测试；智能审计创建门禁使用 `/system-config/agent-preflight`。
+`llmConfig` 当前是 breaking schema v2 envelope：`schemaVersion: 2`、`rows[]`、`latestPreflightRun`、`migration`。每一行代表一个 provider/model 配置，包含稳定 `id`、`priority`、`enabled`、`provider`、`baseUrl`、`model`、`hasApiKey`、行级高级参数、模型可用性和 latest preflight 状态。公开 GET、test、preflight 和错误响应不得返回明文 `apiKey`；编辑时空 API key 表示按稳定 row id 保留原密钥，只有显式新值才替换。
+
+约定：设置页可以使用 `/system-config/test-llm` 做连接测试，并可传 `rowId` 测指定配置行；智能审计创建门禁使用 `/system-config/agent-preflight`。Agent preflight 按优先级尝试已启用行，只有 connectivity、auth、model_unavailable 类失败会继续 fallback；quota/rate-limit、无效配置、异常响应和任务启动后的运行期 LLM 失败不会触发行切换。`latestPreflightRun` 记录 attempted rows、winning row 和 winning fingerprint，前端创建弹窗 UI 不增加 provider/model 选择器。详见 [intelligent-engine-config.md](./intelligent-engine-config.md)。
 
 ## 前端 UI 共享边界
 
@@ -164,6 +168,7 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 5. `backend/src/routes/static_tasks.rs`：Opengrep 静态审计入口。
 6. `backend/src/routes/agent_tasks.rs`：智能审计任务、事件、finding、报告入口。
 7. `backend/src/routes/system_config.rs`：系统配置、LLM 测试、agent preflight。
+8. `backend/src/routes/llm_config_set.rs`：多 provider LLM 配置 envelope、迁移、脱敏、fallback 和 row runtime 转换。
 
 ### 前端优先入口
 

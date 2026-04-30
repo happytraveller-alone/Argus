@@ -49,7 +49,6 @@ import {
 	createDefaultDataTableState,
 	DataTable,
 	type DataTableQueryState,
-	type DataTableSelectionContext,
 } from "@/components/data-table";
 import {
 	getOpengrepRulesPage,
@@ -65,7 +64,6 @@ import {
 	uploadPatchArchive,
 	uploadPatchDirectory,
 	updateOpengrepRule,
-	batchUpdateOpengrepRules,
 	type OpengrepRulesQueryParams,
 	RULE_SOURCES,
 	ACTIVE_STATUS,
@@ -76,7 +74,6 @@ import {
 	formatCweDisplayLabel,
 	resolveCweDisplay,
 } from "@/shared/security/cweCatalog";
-import { useI18n } from "@/shared/i18n";
 import {
 	SCAN_ENGINE_SELECTOR_OPTIONS,
 	type ScanEngineTab,
@@ -113,16 +110,8 @@ const EMPTY_RULE_STATS: RuleStats = {
 	vulnerabilityTypeCount: null,
 };
 
-const RULE_STATS_GRID_CLASSNAME =
-	"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 relative z-10";
-const RULE_STATS_CARD_CLASSNAME =
-	"rounded-sm border border-border bg-card text-card-foreground shadow-sm flex min-w-0 items-center justify-between gap-3 px-3 py-3";
-const RULE_STATS_CARD_LABEL_CLASSNAME =
-	"text-sm uppercase tracking-[0.12em] text-muted-foreground";
-const RULE_STATS_CARD_VALUE_CLASSNAME =
-	"text-right text-xl font-semibold tabular-nums text-foreground";
-const OPENGREP_RULE_TABLE_HEADER_CLASSNAME = "text-sm tracking-[0.12em]";
-const OPENGREP_RULE_TABLE_CELL_CLASSNAME = "text-sm";
+const OPENGREP_RULE_TABLE_HEADER_CLASSNAME = "text-xs tracking-[0.12em]";
+const OPENGREP_RULE_TABLE_CELL_CLASSNAME = "text-xs";
 
 function createRuleTableMeta(
 	meta: AppColumnDef<OpengrepRule, unknown>["meta"],
@@ -184,26 +173,6 @@ function buildRuleListQuery(
 	};
 }
 
-function buildSelectionSummary({
-	selectedCount,
-	filteredCount,
-}: DataTableSelectionContext<OpengrepRule>) {
-	if (selectedCount > 0) {
-		return (
-			<>
-				已选择 <span className="font-bold text-primary">{selectedCount}</span>{" "}
-				条规则
-			</>
-		);
-	}
-	return (
-		<>
-			将对全部 <span className="font-bold text-primary">{filteredCount}</span>{" "}
-			条规则进行操作
-		</>
-	);
-}
-
 function createInitialTableState(globalFilter = ""): DataTableQueryState {
 	return createDefaultDataTableState({
 		globalFilter,
@@ -226,7 +195,6 @@ export default function OpengrepRules({
 		toast.info("gitleaks 规则管理暂未接入");
 	};
 
-	const { t } = useI18n();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [rules, setRules] = useState<OpengrepRule[]>([]);
@@ -252,7 +220,6 @@ export default function OpengrepRules({
 	const [showGenericDialog, setShowGenericDialog] = useState(false);
 	const [showEventDialog, setShowEventDialog] = useState(false);
 	const [generatingRule, setGeneratingRule] = useState(false);
-	const [batchOperating, setBatchOperating] = useState(false);
 	const [pendingDeleteRule, setPendingDeleteRule] = useState<{
 		id: string;
 		name: string;
@@ -1136,48 +1103,6 @@ export default function OpengrepRules({
 		await loadGeneratingRules();
 	};
 
-	const handleBatchUpdateRules = async (
-		selectedRows: OpengrepRule[],
-		isActive: boolean,
-	) => {
-		if (isGitleaksEngine) {
-			showGitleaksNotReady();
-			return;
-		}
-		if (selectedRows.length === 0 && pageTotal === 0) {
-			toast.error("当前没有可操作的规则");
-			return;
-		}
-
-		try {
-			setBatchOperating(true);
-			const query = buildRuleListQuery(tableState);
-			const result = await batchUpdateOpengrepRules({
-				...(selectedRows.length > 0
-					? {
-							rule_ids: selectedRows.map((row) => row.id),
-						}
-					: {
-							...query,
-							...(activeFilter === "true"
-								? { current_is_active: true }
-								: activeFilter === "false"
-									? { current_is_active: false }
-									: { current_is_active: !isActive }),
-						}),
-				is_active: isActive,
-			});
-			toast.success(result.message);
-			setTableState((current) => ({ ...current, rowSelection: {} }));
-			await refreshRulesPageAndStats();
-		} catch (error) {
-			console.error("Batch operation failed:", error);
-			toast.error("批量操作失败");
-		} finally {
-			setBatchOperating(false);
-		}
-	};
-
 	const isHighlightedRule = (rule: OpengrepRule) => {
 		if (!highlightRuleKeyword) return false;
 		const keyword = highlightRuleKeyword.toLowerCase();
@@ -1276,6 +1201,7 @@ export default function OpengrepRules({
 				accessorFn: (row) => [row.name, row.id].filter(Boolean).join(" "),
 				header: "规则名称",
 				enableSorting: false,
+				size: 400,
 				meta: createRuleTableMeta({
 					label: "规则名称",
 					width: 220,
@@ -1481,20 +1407,6 @@ export default function OpengrepRules({
 		],
 		[availableLanguages, confidenceOptions, highlightRuleKeyword],
 	);
-	const ruleStatsCards = [
-		{
-			label: "规则数量",
-			value: formatRuleStatValue(ruleStats.total),
-		},
-		{
-			label: "覆盖语言",
-			value: formatRuleStatValue(ruleStats.languageCount),
-		},
-		{
-			label: "覆盖漏洞类型",
-			value: formatRuleStatValue(ruleStats.vulnerabilityTypeCount),
-		},
-	];
 
 	return (
 		<div
@@ -1529,18 +1441,56 @@ export default function OpengrepRules({
 						</div>
 					)}
 
-					{/* Stats Cards */}
-					<div className={RULE_STATS_GRID_CLASSNAME}>
-						{ruleStatsCards.map((item) => (
-							<div key={item.label} className={RULE_STATS_CARD_CLASSNAME}>
-								<div className={RULE_STATS_CARD_LABEL_CLASSNAME}>
-									{item.label}
+					{/* Search + Stats Badges + Engine Selector */}
+					<div className="flex flex-nowrap items-center justify-between gap-3 relative z-10">
+						<div className="flex min-w-0 flex-1 items-center gap-3">
+							{showEngineSelector && (
+								<div className="min-w-[150px]">
+									<Select
+										value={engineValue}
+										onValueChange={(value) => {
+											if (isScanEngineTab(value)) {
+												onEngineChange?.(value);
+											}
+										}}
+									>
+										<SelectTrigger className="cyber-input h-9 min-w-[150px]">
+											<SelectValue placeholder="选择引擎" />
+										</SelectTrigger>
+										<SelectContent className="cyber-dialog border-border">
+											{SCAN_ENGINE_SELECTOR_OPTIONS.filter(
+												(option) => option.value === "opengrep",
+											).map((option) => (
+												<SelectItem key={option.value} value={option.value}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								</div>
-								<div className={RULE_STATS_CARD_VALUE_CLASSNAME}>
-									{item.value}
-								</div>
+							)}
+							<div className="relative w-full max-w-sm">
+								<Input
+									value={tableState.globalFilter}
+									onChange={(e) =>
+										setTableState((current) => ({
+											...current,
+											globalFilter: e.target.value,
+										}))
+									}
+									placeholder="搜索规则名称或ID..."
+									className="cyber-input h-9 font-mono"
+								/>
 							</div>
-						))}
+							<div className="flex items-center gap-2">
+								<Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 gap-1.5">
+									规则数量 <span className="font-semibold tabular-nums">{formatRuleStatValue(ruleStats.total)}</span>
+								</Badge>
+								<Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 gap-1.5">
+									支持语言 <span className="font-semibold tabular-nums">{formatRuleStatValue(ruleStats.languageCount)}</span>
+								</Badge>
+							</div>
+						</div>
 					</div>
 
 					<div className="cyber-card cyber-card-flat relative z-10 overflow-hidden">
@@ -1641,87 +1591,7 @@ export default function OpengrepRules({
 										? "调整筛选条件尝试"
 										: "暂无规则数据",
 							}}
-							toolbar={{
-								searchPlaceholder: t(
-									"opengrep.searchPlaceholder",
-									"搜索规则名称或ID...",
-								),
-								leadingActions: showEngineSelector ? (
-									<div className="min-w-[150px]">
-										<Select
-											value={engineValue}
-											onValueChange={(value) => {
-												if (isScanEngineTab(value)) {
-													onEngineChange?.(value);
-												}
-											}}
-										>
-											<SelectTrigger className="cyber-input h-10 min-w-[150px]">
-												<SelectValue placeholder="选择引擎" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												{SCAN_ENGINE_SELECTOR_OPTIONS.filter(
-													(option) => option.value === "opengrep",
-												).map((option) => (
-													<SelectItem key={option.value} value={option.value}>
-														{option.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-								) : undefined,
-								trailingActions: (
-									<Button
-										onClick={() => {
-											if (isGitleaksEngine) {
-												showGitleaksNotReady();
-												return;
-											}
-											setShowRuleTypeDialog(true);
-										}}
-										className="cyber-btn-primary h-9"
-									>
-										新建规则
-									</Button>
-								),
-								showGlobalSearch: false,
-								showColumnVisibility: false,
-								showDensityToggle: false,
-								showReset: false,
-							}}
-							selection={
-								!loading && pageTotal > 0
-									? {
-											enableRowSelection: true,
-											summary: buildSelectionSummary,
-											actions: ({ selectedRows }) => {
-												return (
-													<>
-														<Button
-															onClick={() =>
-																void handleBatchUpdateRules(selectedRows, true)
-															}
-															disabled={batchOperating}
-															className="cyber-btn-primary h-8 text-sm"
-														>
-															{batchOperating ? "处理中..." : "批量启用"}
-														</Button>
-														<Button
-															onClick={() =>
-																void handleBatchUpdateRules(selectedRows, false)
-															}
-															disabled={batchOperating}
-															className="cyber-btn-outline h-8 text-sm"
-														>
-															{batchOperating ? "处理中..." : "批量禁用"}
-														</Button>
-													</>
-												);
-											},
-										}
-									: undefined
-							}
+							toolbar={false}
 							pagination={{
 								enabled: true,
 								manual: true,
@@ -1729,7 +1599,7 @@ export default function OpengrepRules({
 								pageSizeOptions: [10, 20, 50, 100],
 							}}
 							enableColumnResizing
-							tableClassName="min-w-[1120px]"
+							tableClassName="w-full"
 							getRowId={(row) => row.id}
 						/>
 					</div>

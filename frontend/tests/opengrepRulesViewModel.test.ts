@@ -20,7 +20,7 @@ test("OpengrepRules renders unified table layout shell", () => {
   );
 
   assert.match(markup, /规则数量/);
-  assert.match(markup, /覆盖语言/);
+  assert.match(markup, /支持语言/);
   assert.match(markup, /规则名称/);
   assert.match(markup, /规则来源/);
   assert.match(markup, /语言/);

@@ -14,48 +14,33 @@ const intelligentEnginePath = path.join(
 	"src/pages/ScanConfigIntelligentEngine.tsx",
 );
 
-test("scan engine rule stats use dashboard compact summary card tokens", () => {
+test("scan engine rule stats render as compact inline badges above the table", () => {
 	const source = readFileSync(opengrepRulesPath, "utf8");
 	const statsSection = source.slice(
-		source.indexOf("const RULE_STATS_GRID_CLASSNAME"),
-		source.indexOf("<div className=\"cyber-card relative z-10 overflow-hidden\">"),
+		source.indexOf("{/* Search + Stats Badges + Engine Selector */}"),
+		source.indexOf('<div className="cyber-card cyber-card-flat relative z-10 overflow-hidden">'),
 	);
 
-	assert.match(
-		source,
-		/const RULE_STATS_CARD_CLASSNAME =\s*"rounded-sm border border-border bg-card text-card-foreground shadow-sm flex min-w-0 items-center justify-between gap-3 px-3 py-3"/,
-	);
-	assert.match(
-		source,
-		/const RULE_STATS_CARD_LABEL_CLASSNAME =\s*"text-sm uppercase tracking-\[0\.12em\] text-muted-foreground"/,
-	);
-	assert.match(
-		source,
-		/const RULE_STATS_CARD_VALUE_CLASSNAME =\s*"text-right text-xl font-semibold tabular-nums text-foreground"/,
-	);
+	assert.match(statsSection, /规则数量/);
+	assert.match(statsSection, /支持语言/);
+	assert.match(statsSection, /border-cyan-500\/30 bg-cyan-500\/10 text-cyan-300/);
+	assert.match(statsSection, /border-emerald-500\/30 bg-emerald-500\/10 text-emerald-300/);
 	assert.doesNotMatch(statsSection, /cyber-card p-4/);
 	assert.doesNotMatch(statsSection, /stat-icon/);
 	assert.doesNotMatch(statsSection, /stat-value/);
 	assert.match(source, /cyber-card cyber-card-flat relative z-10 overflow-hidden/);
 });
 
-test("intelligent engine summary cards mirror dashboard card typography", () => {
+test("intelligent engine page delegates summary rendering to SystemConfig table view", () => {
 	const source = readFileSync(intelligentEnginePath, "utf8");
 
-	assert.match(
-		source,
-		/const ENGINE_SUMMARY_CARD_CLASSNAME =\s*"rounded-sm border border-border bg-card text-card-foreground shadow-sm flex min-w-0 items-center justify-between gap-3 px-3 py-3"/,
-	);
-	assert.match(
-		source,
-		/const ENGINE_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-sm uppercase tracking-\[0\.12em\] text-muted-foreground"/,
-	);
-	assert.match(
-		source,
-		/const ENGINE_SUMMARY_CARD_VALUE_CLASSNAME =\s*"min-w-0 break-all text-right text-xl font-semibold tabular-nums text-foreground"/,
-	);
+	assert.match(source, /<SystemConfig/);
+	assert.match(source, /visibleSections=\{\["llm"\]\}/);
+	assert.match(source, /cardClassName="cyber-card-flat"/);
+	assert.match(source, /showLlmSummaryCards=\{false\}/);
+	assert.match(source, /onLlmSummaryChange=\{setSummaryState\}/);
+	assert.doesNotMatch(source, /ENGINE_SUMMARY_CARD_CLASSNAME/);
 	assert.doesNotMatch(source, /text-2xl/);
 	assert.doesNotMatch(source, /h-14 w-14/);
 	assert.doesNotMatch(source, /from "lucide-react";[\s\S]*Brain/);
-	assert.match(source, /cardClassName="cyber-card-flat"/);
 });

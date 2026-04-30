@@ -14,20 +14,20 @@ docker compose up --build
 
 ## 启动前准备
 
-1. 复制后端环境文件：
+1. 复制智能审计专用环境文件：
 
 ```bash
-cp docker/env/backend/env.example docker/env/backend/.env
+cp .argus-intelligent-audit.env.example .argus-intelligent-audit.env
 ```
 
 2. 至少填写这些配置：
-   `LLM_API_KEY`、`LLM_PROVIDER`、`LLM_MODEL`
+   `LLM_API_KEY`、`LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL`。Compose 默认通过 `.argus-intelligent-audit.env` 注入 backend；也可以用 `ARGUS_INTELLIGENT_AUDIT_ENV=/path/to/env` 指向其他文件。
 
 3. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
-后端会把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。
+后端会把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。智能引擎系统设置页使用多 provider 配置表；启动环境只作为导入源，页面/API 不写回 `.argus-intelligent-audit.env`。详见 `docs/intelligent-engine-config.md`。
 
 ## Repo-local Codex / OMX
 

@@ -8,7 +8,9 @@ const databaseApiPath = path.resolve(process.cwd(), "src/shared/api/database.ts"
 
 test("SystemConfig renders required multi-provider table columns and actions", () => {
 	const source = readFileSync(systemConfigPath, "utf8");
-	assert.match(source, /\["序号", "模型供应商", "地址", "模型", "状态", "操作"\]/);
+	for (const column of ["序号", "模型供应商", "地址", "模型", "状态", "操作"]) {
+		assert.match(source, new RegExp(column));
+	}
 	assert.match(source, /openCreateDialog/);
 	assert.match(source, /openEditDialog/);
 	assert.match(source, /deleteRow/);

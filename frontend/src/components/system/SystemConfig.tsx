@@ -596,22 +596,23 @@ export function SystemConfig({
 					<TabsContent value="llm" className={compactLayout ? "space-y-4" : "space-y-6"}>
 						<div className={cn("cyber-card !overflow-visible", compactLayout ? "p-4 space-y-4" : "p-6 space-y-6", cardClassName)}>
 							{showLlmSummaryCards ? <div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><div className="cyber-card p-4"><p className="stat-label">模型提供商</p><p className="stat-value text-2xl break-all">{activeProviderInfo?.name || activeRow?.provider || "--"}</p></div><div className="cyber-card p-4"><p className="stat-label">当前采用模型</p><p className="stat-value text-2xl break-all">{activeRow?.model || "--"}</p></div><div className="cyber-card p-4"><p className="stat-label">支持模型数量</p><p className="stat-value text-2xl break-all">{availableModelCount}</p></div></div> : null}
-							{config.llmConfig.migration.message ? <div className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">{config.llmConfig.migration.message}</div> : null}
 							{!llmSummaryOnly ? <>
-								<div className="flex justify-between gap-3 flex-wrap"><div><div className="text-sm font-mono font-bold uppercase">多模型供应商配置</div><div className="text-xs text-muted-foreground">按序号从上到下进行预检；仅 connectivity/auth/model-unavailable 失败会尝试下一行。</div></div><Button onClick={openCreateDialog} className="cyber-btn-primary h-10"><Plus className="h-4 w-4 mr-2" />新增</Button></div>
+								<div className="flex justify-end"><Button onClick={openCreateDialog} className="cyber-btn-primary h-9"><Plus className="h-4 w-4 mr-2" />新增</Button></div>
 								<div className="overflow-x-auto rounded-lg border border-border">
-									<div role="table" className="w-full min-w-[920px] text-sm">
-										<div role="rowgroup" className="bg-muted/60 text-muted-foreground"><div role="row" className="grid grid-cols-[64px_150px_260px_220px_minmax(260px,1fr)_260px]">{["序号", "模型供应商", "地址", "模型", "状态", "操作"].map((label) => <div role="columnheader" key={label} className="px-3 py-3 text-left font-mono text-xs uppercase tracking-[0.12em]">{label}</div>)}</div></div>
+									<div role="table" className="w-full text-sm">
 										<div role="rowgroup">
+											<div role="row" className="grid grid-cols-[64px_150px_1fr_200px_minmax(200px,1fr)_280px] border-b border-border/70 bg-muted/40 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+												{["序号", "模型供应商", "地址", "模型", "状态", "操作"].map((column) => <div key={column} role="columnheader" className="px-3 py-2">{column}</div>)}
+											</div>
 											{rows.map((row) => {
 												const status = rowStatusText(row, config.llmConfig.latestPreflightRun.winningRowId);
-												return <div role="row" key={row.id} className="grid grid-cols-[64px_150px_260px_220px_minmax(260px,1fr)_260px] border-t border-border/70">
-													<div role="cell" className="px-3 py-3 font-mono">{row.priority}</div>
-													<div role="cell" className="px-3 py-3">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</div>
-													<div role="cell" className="px-3 py-3 max-w-[260px] truncate font-mono text-xs" title={row.baseUrl}>{row.baseUrl || "--"}</div>
-													<div role="cell" className="px-3 py-3 max-w-[220px] truncate font-mono text-xs" title={row.model}>{row.model || "--"}</div>
-													<div role="cell" className="px-3 py-3"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-[11px]", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></div>
-													<div role="cell" className="px-3 py-3"><div className="flex flex-wrap gap-1"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}><Edit3 className="h-3 w-3 mr-1" />编辑</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3 mr-1" />删除</Button></div></div>
+												return <div role="row" key={row.id} className="grid grid-cols-[64px_150px_1fr_200px_minmax(200px,1fr)_280px] border-b border-border/70">
+													<div role="cell" className="px-3 py-3 font-mono text-sm">{row.priority}</div>
+													<div role="cell" className="px-3 py-3 text-sm">{getLlmProviderInfo(providerOptions, row.provider)?.name || row.provider}</div>
+													<div role="cell" className="px-3 py-3 truncate font-mono text-sm" title={row.baseUrl}>{row.baseUrl || "--"}</div>
+													<div role="cell" className="px-3 py-3 truncate font-mono text-sm" title={row.model}>{row.model || "--"}</div>
+													<div role="cell" className="px-3 py-3"><div className="flex flex-wrap gap-1">{status.map((item) => <span key={item} className={cn("rounded border px-2 py-0.5 text-xs", item.includes("失败") || item.includes("缺少") ? "border-rose-500/40 text-rose-300" : item.includes("通过") || item.includes("命中") || item.includes("已配置") ? "border-emerald-500/40 text-emerald-300" : "border-border text-muted-foreground")}>{item}</span>)}</div></div>
+													<div role="cell" className="px-3 py-3"><div className="flex flex-nowrap gap-1"><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" onClick={() => openEditDialog(row)}><Edit3 className="h-3 w-3 mr-1" />编辑</Button><Button type="button" variant="outline" size="sm" className={cn("cyber-btn-ghost h-8", row.enabled ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300")} onClick={() => updateRows(rows.map((r) => r.id === row.id ? { ...r, enabled: !r.enabled } : r))}>{row.enabled ? "禁用" : "启用"}</Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8 border-rose-500/40 text-rose-300" onClick={() => deleteRow(row)}><Trash2 className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === 1} onClick={() => moveRow(row, -1)}><ArrowUp className="h-3 w-3" /></Button><Button type="button" variant="outline" size="sm" className="cyber-btn-ghost h-8" disabled={row.priority === rows.length} onClick={() => moveRow(row, 1)}><ArrowDown className="h-3 w-3" /></Button></div></div>
 												</div>;
 											})}
 										</div>

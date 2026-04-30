@@ -32,7 +32,6 @@ import {
 } from "@/shared/llm/providerCatalog";
 import {
 	getLlmQuickGateStatus,
-	hasVerifiedLlmTestMetadata,
 	invalidatePassedAgentPreflight,
 	isRedactedApiKeyPlaceholder,
 	mergeRetainedProjectForRetry,
@@ -256,14 +255,8 @@ export default function CreateProjectScanDialog({
 		setLlmQuickConfig(effectiveQuickConfig);
 		setSavedLlmQuickConfig(savedQuickConfig);
 		setQuickFixBaseUrlTouched(false);
-		const hasPassedPreflight = Boolean(
-			preflightResult.ok &&
-				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata),
-		);
-		const nextMessage =
-			preflightResult.ok && !hasPassedPreflight
-				? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
-				: preflightResult.message;
+		const hasPassedPreflight = Boolean(preflightResult.ok);
+		const nextMessage = preflightResult.message;
 		setAgentPreflightPassed(hasPassedPreflight);
 		setQuickFixTestResult(null);
 		setShowLlmQuickFixPanel(!hasPassedPreflight);
@@ -654,14 +647,10 @@ export default function CreateProjectScanDialog({
 			}
 			const preflightResult = await runAgentPreflightCheck();
 			await syncGateWithPreflightResult(preflightResult);
-			const success =
-				preflightResult.ok &&
-				hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata);
+			const success = Boolean(preflightResult.ok);
 			const message = success
 				? "智能审计预检通过，现在可以创建任务。"
-				: preflightResult.ok
-					? "智能审计预检证据不完整：缺少有效 LLM 指纹，请先在扫描引擎配置中完成连接测试后重试。"
-					: preflightResult.message || "未知错误";
+				: preflightResult.message || "未知错误";
 			setQuickFixTestResult({
 				success,
 				message,
@@ -757,10 +746,7 @@ export default function CreateProjectScanDialog({
 
 		const preflightResult = await runAgentPreflightCheck();
 		await syncGateWithPreflightResult(preflightResult);
-		if (
-			!preflightResult.ok ||
-			!hasVerifiedLlmTestMetadata(preflightResult.llmTestMetadata)
-		) {
+		if (!preflightResult.ok) {
 			setShowLlmQuickFixPanel(true);
 			return false;
 		}

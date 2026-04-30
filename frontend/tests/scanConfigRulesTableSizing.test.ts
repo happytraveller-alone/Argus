@@ -14,9 +14,10 @@ test("scan config rules table opts into column resizing with compressed defaults
 	const source = readFileSync(opengrepRulesPath, "utf8");
 
 	assert.match(source, /enableColumnResizing/);
-	assert.match(source, /tableClassName="min-w-\[1120px\]"/);
-	assert.match(source, /const OPENGREP_RULE_TABLE_HEADER_CLASSNAME = "text-sm tracking-\[0\.12em\]"/);
-	assert.match(source, /const OPENGREP_RULE_TABLE_CELL_CLASSNAME = "text-sm"/);
+	assert.match(source, /toolbar={false}/);
+	assert.match(source, /tableClassName="w-full"/);
+	assert.match(source, /const OPENGREP_RULE_TABLE_HEADER_CLASSNAME = "text-xs tracking-\[0\.12em\]"/);
+	assert.match(source, /const OPENGREP_RULE_TABLE_CELL_CLASSNAME = "text-xs"/);
 	assert.match(
 		source,
 		/id: "ruleName"[\s\S]*width: 220,[\s\S]*minWidth: 180,[\s\S]*filterVariant: "text"/,

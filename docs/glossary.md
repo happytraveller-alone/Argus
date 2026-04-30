@@ -65,9 +65,15 @@
 
 ### agent preflight
 
-- **是什么**：智能审计创建前的真实预检，检查保存的 LLM 配置、fingerprint、runner readiness 等条件。
-- **不是什么**：系统设置页的普通 LLM 连通性测试；创建智能审计时不能只用 `/system-config/test-llm` 代替。
-- **主要入口**：`backend/src/routes/system_config.rs`、`frontend/src/shared/api/agentPreflight.ts`、`frontend/src/components/scan/create-project-scan/llmGate.ts`。
+- **是什么**：智能审计创建前的真实预检，检查保存的多行 LLM 配置、winning-row fingerprint、runner readiness 等条件，并可在 preflight 阶段按优先级 fallback 到下一条启用配置。
+- **不是什么**：系统设置页的普通 LLM 连通性测试；创建智能审计时不能只用 `/system-config/test-llm` 代替，也不能在任务启动后因为运行期 LLM 失败自动切换 provider。
+- **主要入口**：`backend/src/routes/system_config.rs`、`backend/src/routes/llm_config_set.rs`、`frontend/src/shared/api/agentPreflight.ts`、`frontend/src/components/scan/create-project-scan/llmGate.ts`。
+
+### LLM config set
+
+- **是什么**：系统配置中的 schema v2 多 provider 配置表，公开形态是 `schemaVersion: 2`、`rows[]`、`latestPreflightRun`、`migration`；每行有稳定 id、priority、enabled、provider、baseUrl、model、密钥存在状态、高级参数和 latest preflight 状态。
+- **不是什么**：旧版单对象 `llmConfig` 响应，也不是前端本地状态；后端 helper 负责迁移、归一、密钥保留/脱敏和 fallback 分类。
+- **维护提示**：公开响应只能暴露 `hasApiKey` 等元数据，不能返回明文 API key；编辑时空 key 表示按 row id 保留旧密钥。
 
 ## 前端 UI 术语
 
