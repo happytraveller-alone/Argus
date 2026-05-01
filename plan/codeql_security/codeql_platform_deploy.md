@@ -156,7 +156,7 @@ RUN set -eux; \
 RUN set -eux; \
     mkdir -p ${CODEQL_DIST_DIR} /scan; \
     BUNDLE="codeql-bundle-${CODEQL_BUNDLE_ARCH}.tar.zst"; \
-    URL_BASE="https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_BUNDLE_VERSION}"; \
+    URL_BASE="https://v6.gh-proxy.org/https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_BUNDLE_VERSION}"; \
     curl -fL "${URL_BASE}/${BUNDLE}" -o /tmp/codeql-bundle.tar.zst; \
     tar --use-compress-program=unzstd -xf /tmp/codeql-bundle.tar.zst -C ${CODEQL_DIST_DIR}; \
     rm -f /tmp/codeql-bundle.tar.zst; \
