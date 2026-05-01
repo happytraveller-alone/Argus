@@ -70,6 +70,32 @@ pub struct ScanCommandArgs<'a> {
     pub allow_network: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct CompileSandboxCommandArgs<'a> {
+    pub source_dir: &'a str,
+    pub summary_path: &'a str,
+    pub events_path: &'a str,
+    pub plan_path: &'a str,
+    pub evidence_dir: &'a str,
+    pub language: &'a str,
+    pub allow_network: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompileSandboxPlan {
+    pub language: String,
+    pub target_path: String,
+    pub build_mode: String,
+    pub commands: Vec<String>,
+    pub working_directory: String,
+    pub allow_network: bool,
+    pub query_suite: Option<String>,
+    pub source_fingerprint: String,
+    pub dependency_fingerprint: String,
+    pub status: String,
+    pub evidence_json: Value,
+}
+
 pub async fn load_query_assets(state: &AppState) -> Result<Vec<ScanRuleAsset>> {
     scan_rule_assets::load_assets_by_engine(state, CODEQL_ENGINE, CODEQL_QUERY_SOURCE_KINDS).await
 }
@@ -156,6 +182,215 @@ pub fn build_scan_command(args: &ScanCommandArgs<'_>) -> Vec<String> {
         command.push("--allow-network".to_string());
     }
     command
+}
+
+pub fn build_compile_sandbox_command(args: &CompileSandboxCommandArgs<'_>) -> Vec<String> {
+    let mut command = vec![
+        "codeql-compile-sandbox".to_string(),
+        "--source".to_string(),
+        args.source_dir.to_string(),
+        "--summary".to_string(),
+        args.summary_path.to_string(),
+        "--events".to_string(),
+        args.events_path.to_string(),
+        "--plan".to_string(),
+        args.plan_path.to_string(),
+        "--evidence".to_string(),
+        args.evidence_dir.to_string(),
+        "--language".to_string(),
+        normalize_language(args.language),
+    ];
+    if args.allow_network {
+        command.push("--allow-network".to_string());
+    }
+    command
+}
+
+pub fn parse_compile_sandbox_plan(plan_text: &str) -> Result<CompileSandboxPlan> {
+    let payload = serde_json::from_str::<Value>(plan_text)?;
+    let language = normalize_language(
+        payload
+            .get("language")
+            .and_then(Value::as_str)
+            .unwrap_or("cpp"),
+    );
+    let commands = payload
+        .get("commands")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let build_mode = payload
+        .get("build_mode")
+        .and_then(Value::as_str)
+        .unwrap_or("manual")
+        .to_string();
+    let working_directory = normalize_relative_target(
+        payload
+            .get("working_directory")
+            .and_then(Value::as_str)
+            .unwrap_or("."),
+    );
+    if build_mode == "manual" {
+        if commands.is_empty() {
+            anyhow::bail!("manual compile sandbox plan requires at least one command");
+        }
+        for command in &commands {
+            let validation = validate_build_command(command, &working_directory);
+            if !validation.valid {
+                anyhow::bail!(
+                    "compile sandbox plan command rejected: {}",
+                    validation
+                        .reason
+                        .unwrap_or_else(|| "invalid command".to_string())
+                );
+            }
+        }
+    }
+    Ok(CompileSandboxPlan {
+        language,
+        target_path: normalize_relative_target(
+            payload
+                .get("target_path")
+                .and_then(Value::as_str)
+                .unwrap_or("."),
+        ),
+        build_mode,
+        commands,
+        working_directory,
+        allow_network: payload
+            .get("allow_network")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        query_suite: payload
+            .get("query_suite")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        source_fingerprint: payload
+            .get("source_fingerprint")
+            .and_then(Value::as_str)
+            .unwrap_or("sha256:unknown-source")
+            .to_string(),
+        dependency_fingerprint: payload
+            .get("dependency_fingerprint")
+            .and_then(Value::as_str)
+            .unwrap_or("sha256:unknown-deps")
+            .to_string(),
+        status: payload
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("accepted")
+            .to_string(),
+        evidence_json: payload
+            .get("evidence_json")
+            .cloned()
+            .or_else(|| payload.get("evidence").cloned())
+            .unwrap_or_else(|| json!({})),
+    })
+}
+
+pub fn compile_sandbox_plan_to_build_plan(plan: &CompileSandboxPlan) -> CodeqlBuildPlan {
+    CodeqlBuildPlan {
+        language: plan.language.clone(),
+        target_path: plan.target_path.clone(),
+        build_mode: match plan.build_mode.as_str() {
+            "none" => CodeqlBuildMode::None,
+            "autobuild" => CodeqlBuildMode::Autobuild,
+            _ => CodeqlBuildMode::Manual,
+        },
+        commands: plan.commands.clone(),
+        working_directory: plan.working_directory.clone(),
+        allow_network: plan.allow_network,
+        query_suite: plan.query_suite.clone(),
+        source_fingerprint: plan.source_fingerprint.clone(),
+        dependency_fingerprint: plan.dependency_fingerprint.clone(),
+    }
+}
+
+pub fn build_plan_json_from_compile_plan(plan: &CompileSandboxPlan) -> Value {
+    json!({
+        "language": plan.language,
+        "target_path": plan.target_path,
+        "build_mode": plan.build_mode,
+        "commands": plan.commands,
+        "working_directory": plan.working_directory,
+        "allow_network": plan.allow_network,
+        "query_suite": plan.query_suite,
+        "source_fingerprint": plan.source_fingerprint,
+        "dependency_fingerprint": plan.dependency_fingerprint,
+        "status": "accepted",
+        "evidence_role": "evidence_only",
+    })
+}
+
+pub fn build_plan_json_from_record(record: &task_state::CodeqlBuildPlanRecord) -> Value {
+    json!({
+        "language": record.language.clone(),
+        "target_path": record.target_path.clone(),
+        "build_mode": record.build_mode.clone(),
+        "commands": record.commands.clone(),
+        "working_directory": record.working_directory.clone(),
+        "allow_network": record
+            .evidence_json
+            .get("allow_network")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        "query_suite": record.query_suite.clone(),
+        "source_fingerprint": record.source_fingerprint.clone(),
+        "dependency_fingerprint": record.dependency_fingerprint.clone(),
+        "status": record.status.clone(),
+        "evidence_role": "evidence_only",
+        "evidence_index": record.evidence_json.clone(),
+    })
+}
+
+pub fn build_plan_record_from_compile_plan(
+    id: String,
+    project_id: String,
+    plan: &CompileSandboxPlan,
+    now: String,
+) -> task_state::CodeqlBuildPlanRecord {
+    let build_plan = compile_sandbox_plan_to_build_plan(plan);
+    task_state::CodeqlBuildPlanRecord {
+        id,
+        project_id,
+        language: plan.language.clone(),
+        target_path: plan.target_path.clone(),
+        source_fingerprint: plan.source_fingerprint.clone(),
+        dependency_fingerprint: plan.dependency_fingerprint.clone(),
+        build_mode: plan.build_mode.clone(),
+        commands: plan.commands.clone(),
+        working_directory: plan.working_directory.clone(),
+        query_suite: plan.query_suite.clone(),
+        status: "accepted".to_string(),
+        llm_model: None,
+        evidence_json: json!({
+            "role": "evidence_only",
+            "source": "compile_sandbox",
+            "fingerprint": build_plan_fingerprint(&build_plan),
+            "allow_network": plan.allow_network,
+            "artifact_missing": false,
+            "details": plan.evidence_json,
+        }),
+        created_at: now,
+        updated_at: None,
+    }
+}
+
+pub fn compile_sandbox_evidence_is_truth(evidence_json: &Value) -> bool {
+    evidence_json
+        .get("role")
+        .and_then(Value::as_str)
+        .is_some_and(|role| role == "truth")
+        || evidence_json
+            .get("artifacts_role")
+            .and_then(Value::as_str)
+            .is_some_and(|role| role == "truth")
 }
 
 pub fn parse_sarif_output(
@@ -569,6 +804,124 @@ mod tests {
         assert_eq!(payload["file_path"], "src/app main.ts");
         assert_eq!(payload["severity"], "HIGH");
         assert_eq!(payload["cwe"][0], "CWE-089");
+    }
+
+    #[test]
+    fn builds_compile_sandbox_command_for_cpp_only_recipe_discovery() {
+        let command = build_compile_sandbox_command(&CompileSandboxCommandArgs {
+            source_dir: "/scan/source",
+            summary_path: "/scan/output/compile-summary.json",
+            events_path: "/scan/output/compile-events.jsonl",
+            plan_path: "/scan/build-plan/compile-sandbox-plan.json",
+            evidence_dir: "/scan/evidence",
+            language: "C++",
+            allow_network: true,
+        });
+        assert_eq!(command[0], "codeql-compile-sandbox");
+        assert!(command.contains(&"cpp".to_string()));
+        assert!(command.contains(&"--plan".to_string()));
+        assert!(command.contains(&"/scan/build-plan/compile-sandbox-plan.json".to_string()));
+        assert!(command.contains(&"--allow-network".to_string()));
+    }
+
+    #[test]
+    fn compile_sandbox_plan_becomes_db_backed_build_plan_without_evidence_truth() {
+        let plan = parse_compile_sandbox_plan(
+            r#"{
+              "language":"cpp",
+              "target_path":".",
+              "build_mode":"manual",
+              "commands":["make -j2"],
+              "working_directory":".",
+              "allow_network":false,
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps",
+              "status":"accepted",
+              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/stdout.txt"}
+            }"#,
+        )
+        .expect("compile sandbox plan should parse");
+
+        assert_eq!(plan.language, "cpp");
+        assert!(!compile_sandbox_evidence_is_truth(&plan.evidence_json));
+        let build_plan = build_plan_json_from_compile_plan(&plan);
+        assert_eq!(build_plan["build_mode"], "manual");
+        assert_eq!(build_plan["commands"][0], "make -j2");
+        assert_eq!(build_plan["evidence_role"], "evidence_only");
+        let record = build_plan_record_from_compile_plan(
+            "plan-1".to_string(),
+            "project-1".to_string(),
+            &plan,
+            "2026-05-01T00:00:00Z".to_string(),
+        );
+        assert_eq!(record.status, "accepted");
+        assert_eq!(record.evidence_json["role"], "evidence_only");
+        assert!(record.evidence_json["fingerprint"]
+            .as_str()
+            .expect("fingerprint")
+            .starts_with("sha256:"));
+    }
+
+    #[test]
+    fn db_build_plan_json_survives_missing_evidence_artifacts() {
+        let plan = parse_compile_sandbox_plan(
+            r#"{
+              "language":"cpp",
+              "target_path":".",
+              "build_mode":"manual",
+              "commands":["make -j2"],
+              "working_directory":".",
+              "allow_network":false,
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps",
+              "status":"accepted",
+              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/deleted-stdout.txt"}
+            }"#,
+        )
+        .expect("compile sandbox plan should parse");
+        let mut record = build_plan_record_from_compile_plan(
+            "plan-1".to_string(),
+            "project-1".to_string(),
+            &plan,
+            "2026-05-01T00:00:00Z".to_string(),
+        );
+        record.evidence_json["artifact_missing"] = json!(true);
+
+        let replay_plan = build_plan_json_from_record(&record);
+
+        assert_eq!(replay_plan["commands"], json!(["make -j2"]));
+        assert_eq!(replay_plan["source_fingerprint"], "sha256:source");
+        assert_eq!(replay_plan["dependency_fingerprint"], "sha256:deps");
+        assert_eq!(replay_plan["evidence_index"]["artifact_missing"], true);
+    }
+
+    #[test]
+    fn compile_sandbox_plan_rejects_unvalidated_commands() {
+        let error = parse_compile_sandbox_plan(
+            r#"{
+              "language":"cpp",
+              "build_mode":"manual",
+              "commands":["docker run -v /:/host alpine"],
+              "working_directory":".",
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps"
+            }"#,
+        )
+        .expect_err("dangerous compile command must be rejected")
+        .to_string();
+
+        assert!(error.contains("denied token"), "{error}");
+    }
+
+    #[test]
+    fn compile_sandbox_evidence_truth_marker_is_detected() {
+        assert!(compile_sandbox_evidence_is_truth(&json!({"role":"truth"})));
+        assert!(compile_sandbox_evidence_is_truth(
+            &json!({"artifacts_role":"truth"})
+        ));
+        assert!(!compile_sandbox_evidence_is_truth(
+            &json!({"artifacts_role":"evidence_only"})
+        ));
     }
 
     #[test]

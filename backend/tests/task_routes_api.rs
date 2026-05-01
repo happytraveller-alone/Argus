@@ -2,7 +2,13 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
+use backend_rust::{
+    app::build_router,
+    bootstrap,
+    config::AppConfig,
+    db::{codeql_build_plans, task_state},
+    state::AppState,
+};
 use serde_json::{json, Value};
 use std::{env, fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf, sync::LazyLock};
 use tempfile::TempDir;
@@ -22,6 +28,27 @@ fn isolated_test_config(scope: &str) -> AppConfig {
     config.zip_storage_path =
         std::env::temp_dir().join(format!("argus-rust-{scope}-{}", Uuid::new_v4()));
     config
+}
+
+fn optional_db_test_config(scope: &str) -> Option<AppConfig> {
+    let database_url = std::env::var("RUST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
+    let mut config = isolated_test_config(scope);
+    config.rust_database_url = Some(database_url);
+    Some(config)
+}
+
+fn require_db_test_config(scope: &str) -> Option<AppConfig> {
+    match optional_db_test_config(scope) {
+        Some(config) => Some(config),
+        None => {
+            eprintln!(
+                "skipping DB-backed CodeQL build-plan assertion without RUST_DATABASE_URL/DATABASE_URL"
+            );
+            None
+        }
+    }
 }
 
 async fn create_project(app: &axum::Router) -> String {
@@ -246,6 +273,129 @@ impl Drop for EnvVarGuard {
             env::remove_var(&self.key);
         }
     }
+}
+
+fn fake_codeql_compile_task_docker(temp_dir: &TempDir) -> PathBuf {
+    let script_path = temp_dir.path().join("fake-codeql-compile-task-docker.sh");
+    let script = r#"#!/bin/sh
+set -eu
+log_file="${FAKE_DOCKER_LOG:?}"
+state_dir="${FAKE_TASK_DOCKER_STATE_DIR:?}"
+cmd="${1:-}"
+shift || true
+printf '%s|%s
+' "$cmd" "$*" >> "$log_file"
+case "$cmd" in
+  create)
+    summary_path=""
+    events_path=""
+    plan_path=""
+    sarif_path=""
+    image_seen=""
+    prev=""
+    for arg in "$@"; do
+      case "$prev" in
+        summary) summary_path="$arg"; prev="" ;;
+        events) events_path="$arg"; prev="" ;;
+        plan) plan_path="$arg"; prev="" ;;
+        sarif) sarif_path="$arg"; prev="" ;;
+        *)
+          case "$arg" in
+            --summary) prev="summary" ;;
+            --events) prev="events" ;;
+            --plan|--build-plan) prev="plan" ;;
+            --sarif) prev="sarif" ;;
+            Argus/codeql-runner:test) image_seen="$arg" ;;
+          esac
+          ;;
+      esac
+    done
+    count_file="$state_dir/create_count"
+    count="$(cat "$count_file" 2>/dev/null || printf '0')"
+    count=$((count + 1))
+    printf '%s' "$count" > "$count_file"
+    if [ "$count" = "1" ]; then
+      printf '%s' "$summary_path" > "$state_dir/compile_summary_path"
+      printf '%s' "$events_path" > "$state_dir/compile_events_path"
+      printf '%s' "$plan_path" > "$state_dir/compile_plan_path"
+      printf 'compile-container
+'
+    else
+      printf '%s' "$summary_path" > "$state_dir/codeql_summary_path"
+      printf '%s' "$events_path" > "$state_dir/codeql_events_path"
+      printf '%s' "$sarif_path" > "$state_dir/sarif_path"
+      printf '%s' "$plan_path" > "$state_dir/codeql_build_plan_path"
+      printf 'codeql-container
+'
+    fi
+    ;;
+  start)
+    container_id="${1:-}"
+    if [ "$container_id" = "compile-container" ]; then
+      summary_path="$(cat "$state_dir/compile_summary_path")"
+      events_path="$(cat "$state_dir/compile_events_path")"
+      plan_path="$(cat "$state_dir/compile_plan_path")"
+      mkdir -p "$(dirname "$summary_path")" "$(dirname "$events_path")" "$(dirname "$plan_path")"
+      printf '%s
+' '{"ts":"2026-05-01T00:00:00Z","stage":"compile_sandbox","event":"command_exit","message":"compile command completed","exit_code":0}' > "$events_path"
+      printf '%s
+' '{"status":"compile_completed","language":"cpp","commands":["make -j2"],"evidence_json":{"artifacts_role":"evidence_only"}}' > "$summary_path"
+      printf '%s
+' '{"language":"cpp","target_path":".","build_mode":"manual","commands":["make -j2"],"working_directory":".","allow_network":false,"source_fingerprint":"sha256:source","dependency_fingerprint":"sha256:deps","status":"accepted","evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/stdout.txt"}}' > "$plan_path"
+    else
+      summary_path="$(cat "$state_dir/codeql_summary_path")"
+      events_path="$(cat "$state_dir/codeql_events_path")"
+      sarif_path="$(cat "$state_dir/sarif_path")"
+      build_plan_path="$(cat "$state_dir/codeql_build_plan_path")"
+      mkdir -p "$(dirname "$summary_path")" "$(dirname "$events_path")" "$(dirname "$sarif_path")"
+      cp "$build_plan_path" "$state_dir/replayed-build-plan.json"
+      printf '%s
+' '{"ts":"2026-05-01T00:00:01Z","stage":"database_create","event":"completed","message":"CodeQL database created"}' > "$events_path"
+      printf '%s
+' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","rules":[]}},"results":[]}]}' > "$sarif_path"
+      printf '%s
+' '{"status":"scan_completed","engine":"codeql"}' > "$summary_path"
+    fi
+    ;;
+  wait)
+    printf '0
+'
+    ;;
+  logs)
+    if [ "${1:-}" = "--stdout" ]; then
+      printf '%s
+' "${FAKE_TASK_STDOUT:-codeql fake stdout}"
+    else
+      printf '%s
+' "${FAKE_TASK_STDERR:-codeql fake stderr}"
+    fi
+    ;;
+  rm)
+    ;;
+  *)
+    ;;
+esac
+"#;
+    fs::write(&script_path, script).expect("write fake codeql docker");
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
+fn cpp_test_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        writer.start_file("Makefile", options).unwrap();
+        writer.write_all(b"all:\n\tcc src/main.c -o app\n").unwrap();
+        writer.start_file("src/main.c", options).unwrap();
+        writer.write_all(b"int main(void) { return 0; }\n").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
 }
 
 fn fake_opengrep_task_docker(temp_dir: &TempDir) -> PathBuf {
@@ -3635,4 +3785,238 @@ async fn business_logic_analysis_snapshot_uses_supplied_risk_point() {
         queue_snapshot["data"]["bl_recon"]["peek"][0]["file_path"],
         "src/checkout.rs"
     );
+}
+
+#[tokio::test]
+async fn codeql_compile_sandbox_persists_plan_to_postgres_when_configured() {
+    let Some(config) = require_db_test_config("codeql-cpp-compile-sandbox-db") else {
+        return;
+    };
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_codeql_compile_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    bootstrap::run(&state)
+        .await
+        .expect("startup bootstrap should create CodeQL build plan schema");
+    assert!(state.db_pool.is_some(), "test requires DB-backed state");
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "codeql cpp db truth project").await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        cpp_test_zip_bytes(),
+    )
+    .expect("write cpp project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/codeql/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codeql cpp db truth task",
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    let plan_id = final_status.extra["build_plan_record_id"]
+        .as_str()
+        .expect("build plan id");
+    let db_record = codeql_build_plans::load_build_plan_by_id(&state, plan_id)
+        .await
+        .expect("DB-backed CodeQL build plan lookup should succeed")
+        .expect("compile sandbox plan persisted in rust_codeql_build_plans");
+    assert_eq!(db_record.project_id, project_id);
+    assert_eq!(db_record.language, "cpp");
+    assert_eq!(db_record.status, "accepted");
+    assert_eq!(db_record.commands, vec!["make -j2"]);
+    assert_eq!(db_record.evidence_json["role"], "evidence_only");
+
+    let replayed = fs::read_to_string(fake_state_dir.join("replayed-build-plan.json"))
+        .expect("CodeQL runner should receive DB-backed replay build plan");
+    assert!(replayed.contains("make -j2"), "{replayed}");
+    assert!(replayed.contains("evidence_only"), "{replayed}");
+}
+
+#[tokio::test]
+async fn codeql_task_runs_cpp_compile_sandbox_before_replay_and_persists_db_truth() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_log = temp_dir.path().join("docker.log");
+    let fake_docker = fake_codeql_compile_task_docker(&temp_dir);
+    let fake_state_dir = temp_dir.path().join("docker-state");
+    let scan_root = temp_dir.path().join("scan-root");
+    fs::create_dir_all(&fake_state_dir).expect("mkdir state dir");
+    fs::create_dir_all(&scan_root).expect("mkdir scan root");
+
+    let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+    let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+    let _docker_state = EnvVarGuard::set(
+        "FAKE_TASK_DOCKER_STATE_DIR",
+        fake_state_dir.to_str().unwrap(),
+    );
+    let _workspace_root = EnvVarGuard::set("SCAN_WORKSPACE_ROOT", scan_root.to_str().unwrap());
+    let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+    let state = AppState::from_config(
+        optional_db_test_config("codeql-cpp-compile-sandbox")
+            .unwrap_or_else(|| isolated_test_config("codeql-cpp-compile-sandbox")),
+    )
+    .await
+    .expect("state should build");
+    if state.db_pool.is_some() {
+        bootstrap::run(&state)
+            .await
+            .expect("startup bootstrap should create CodeQL build plan schema");
+    }
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "codeql cpp project").await;
+    fs::create_dir_all(&*state.config.zip_storage_path).expect("mkdir zip root");
+    fs::write(
+        state
+            .config
+            .zip_storage_path
+            .join(format!("{project_id}.zip")),
+        cpp_test_zip_bytes(),
+    )
+    .expect("write cpp project zip");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/codeql/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "codeql cpp compile sandbox task",
+                        "target_path": "."
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let task_id = payload["id"].as_str().expect("task id").to_string();
+
+    let final_status = loop {
+        let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+        let record = snapshot
+            .static_tasks
+            .get(&task_id)
+            .expect("static task record should exist");
+        if record.status == "completed" || record.status == "failed" {
+            break record.clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(final_status.status, "completed", "{final_status:?}");
+    assert_eq!(final_status.engine, "codeql");
+    assert_eq!(final_status.extra["language"], "cpp");
+    assert_eq!(
+        final_status.extra["build_plan_source"],
+        "compile_sandbox_db_truth"
+    );
+    assert_eq!(
+        final_status.extra["compile_sandbox"]["evidence_role"],
+        "evidence_only"
+    );
+
+    let snapshot = task_state::load_snapshot(&state).await.expect("snapshot");
+    let plan_id = final_status.extra["build_plan_record_id"]
+        .as_str()
+        .expect("build plan id");
+    let persisted = if state.db_pool.is_some() {
+        let db_record = codeql_build_plans::load_build_plan_by_id(&state, plan_id)
+            .await
+            .expect("DB-backed CodeQL build plan lookup should succeed")
+            .expect("compile sandbox plan persisted in rust_codeql_build_plans");
+        let snapshot_record = snapshot
+            .codeql_build_plans
+            .get(plan_id)
+            .expect("compile sandbox plan projected into task-state status cache");
+        assert_eq!(snapshot_record.evidence_json, db_record.evidence_json);
+        db_record
+    } else {
+        snapshot
+            .codeql_build_plans
+            .get(plan_id)
+            .expect("compile sandbox plan persisted in task-state fallback truth")
+            .clone()
+    };
+    assert_eq!(persisted.language, "cpp");
+    assert_eq!(persisted.status, "accepted");
+    assert_eq!(persisted.commands, vec!["make -j2"]);
+    assert_eq!(persisted.evidence_json["role"], "evidence_only");
+
+    let replayed = fs::read_to_string(fake_state_dir.join("replayed-build-plan.json"))
+        .expect("CodeQL runner should receive replay build plan");
+    assert!(replayed.contains("make -j2"), "{replayed}");
+    assert!(replayed.contains("evidence_only"), "{replayed}");
+
+    let logged = fs::read_to_string(&fake_log).expect("docker log");
+    let create_count = logged
+        .lines()
+        .filter(|line| line.starts_with("create|"))
+        .count();
+    assert_eq!(
+        create_count, 2,
+        "compile sandbox then CodeQL runner expected\n{logged}"
+    );
+    assert!(logged.contains("codeql-compile-sandbox"), "{logged}");
+    assert!(logged.contains("codeql-scan"), "{logged}");
 }

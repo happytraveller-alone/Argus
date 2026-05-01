@@ -16,7 +16,7 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。2026-04-30 CodeQL 隔离扫描已有基础骨架，但五类语言端到端全绿前仍不是首版完成能力。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。2026-05-01 CodeQL 隔离扫描已有基础骨架，并新增 C/C++ compile-sandbox 闭环切片；完整五语言 CodeQL 仍不是首版完成能力。
 - **不是什么**：Bandit/Gitleaks/PHPStan/PMD/YASA 等历史多引擎集合；这些名称若仍出现，多为退役兼容、防回归测试或旧前端 API 残留。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
@@ -24,9 +24,15 @@
 ### CodeQL 隔离扫描计划
 
 - **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。
-- **不是什么**：Opengrep runner 的增强阶段，也不是旧 Bandit/Gitleaks/PHPStan/PMD 多引擎路由复活。当前基础实现不等于首版完成；五类语言未全绿前只能称为里程碑。
-- **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`。
-- **strict-zero 决策**：五类语言全绿才算首版完成；LLM 候选命令可在 CodeQL runner 沙箱内自动执行；runner 可联网并允许必要源码片段/构建文件/日志进入 LLM；build plan、指纹和证据只以数据库为运行时真源。
+- **不是什么**：Opengrep runner 的增强阶段，也不是旧 Bandit/Gitleaks/PHPStan/PMD 多引擎路由复活。当前 C/C++ compile-sandbox 切片不等于完整五语言首版。
+- **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`、`.omx/specs/deep-interview-codeql-compile-sandbox.md`。
+- **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 compile-sandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
+
+### CodeQL compile sandbox
+
+- **是什么**：2026-05-01 新增的 CodeQL C/C++ 建库前置沙箱。它运行 `docker/codeql-compile-sandbox.sh`，在隔离 runner 内探索 C/C++ build command，验证命令安全边界，输出 events/summary/plan/evidence，并把 accepted build plan 持久化为 DB/task-state 真源。随后 `docker/codeql-scan.sh` 在 `codeql database create` 阶段重放该命令。真实 CodeQL CLI 会按 argv 拆分 `--command`，因此持久化命令必须避免 shell-only 复合语法；Makefile 自动路径固定为 `make -B -j2`，CMake 路径先 configure 后重放 `cmake --build ...`。
+- **不是什么**：通用 CI/CD 构建平台，也不是把完整 build artifacts 直接喂给 CodeQL 的捷径；artifacts/evidence/cache 只能用于诊断和缓存信号。
+- **主要入口**：`backend/src/scan/codeql.rs`、`backend/src/routes/static_tasks.rs`、`backend/src/db/codeql_build_plans.rs`、`docker/codeql-compile-sandbox.sh`、`docker/test-codeql-diagnostics.sh`、`SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE`。
 
 ### 智能审计
 

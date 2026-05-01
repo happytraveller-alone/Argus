@@ -28,13 +28,16 @@ write_event() {
 write_summary() {
   local status="$1"
   local reason="${2:-}"
+  local category="${3:-}"
   mkdir -p "$(dirname "$summary_path")"
-  python3 - "$summary_path" "$status" "$reason" <<'PY'
+  python3 - "$summary_path" "$status" "$reason" "$category" <<'PY'
 import json, sys, time
-path, status, reason = sys.argv[1:4]
+path, status, reason, category = sys.argv[1:5]
 payload = {"status": status, "engine": "codeql", "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 if reason:
     payload["reason"] = reason
+if category:
+    payload["diagnostic_category"] = category
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, separators=(",", ":"))
     handle.write("\n")
@@ -115,7 +118,7 @@ write_event "extracting" "input_ready" "CodeQL source and query inputs resolved"
 
 if ! command -v codeql >/dev/null; then
   write_event "failed" "codeql_unavailable" "CodeQL CLI is not installed in this runner image"
-  write_summary "scan_failed" "CodeQL CLI unavailable"
+  write_summary "scan_failed" "CodeQL CLI unavailable" "dependency_setup_failure"
   exit 127
 fi
 
@@ -181,11 +184,13 @@ denied_tokens = [
     "aws_secret",
     "github_token",
     "argus_reset_import_token",
+    "sh -c",
+    "bash -c",
 ]
 for token in denied_tokens:
     if token in lowered:
         raise SystemExit(f"denied token in build command: {token}")
-denied_patterns = ["../", "> /", ">/", " 2>/", " >/", "rm -rf /", "mkfs", ":(){"]
+denied_patterns = ["../", "> /", ">/", " 2>/", " >/", "rm -rf /", "mkfs", ":(){", "||", ";", "$(", "${", "|"]
 for pattern in denied_patterns:
     if pattern in lowered:
         raise SystemExit(f"unsafe filesystem pattern in build command: {pattern}")
@@ -198,12 +203,17 @@ case "$build_mode" in
   manual)
     if [ -z "$manual_command" ]; then
       write_event "database_create" "failed" "manual build mode requires a command"
-      write_summary "scan_failed" "manual build mode requires a command"
+      write_summary "scan_failed" "manual build mode requires a command" "validator_rejection"
       exit 1
     fi
     if ! validation_error="$(validate_manual_build_command "$manual_command" "$working_directory" 2>&1)"; then
       write_event "database_create" "failed" "manual build command rejected: $validation_error"
-      write_summary "scan_failed" "manual build command rejected"
+      write_summary "scan_failed" "manual build command rejected" "validator_rejection"
+      exit 1
+    fi
+    if [ "$working_directory" != "." ]; then
+      write_event "database_create" "failed" "non-root working_directory is not supported by CodeQL argv-compatible replay"
+      write_summary "scan_failed" "non-root working_directory is not supported" "validator_rejection"
       exit 1
     fi
     create_cmd+=(--command "$manual_command")
@@ -222,7 +232,7 @@ status=$?
 set -e
 if [ "$status" -ne 0 ]; then
   write_event "database_create" "command_exit" "database create failed with exit_code=$status"
-  write_summary "scan_failed" "database create failed"
+  write_summary "scan_failed" "database create failed" "codeql_capture_failure"
   exit "$status"
 fi
 write_event "database_create" "completed" "CodeQL database created"
@@ -235,7 +245,7 @@ status=$?
 set -e
 if [ "$status" -ne 0 ]; then
   write_event "database_analyze" "command_exit" "database analyze failed with exit_code=$status"
-  write_summary "scan_failed" "database analyze failed"
+  write_summary "scan_failed" "database analyze failed" "codeql_analyze_failure"
   exit "$status"
 fi
 write_event "database_analyze" "completed" "CodeQL SARIF generated"

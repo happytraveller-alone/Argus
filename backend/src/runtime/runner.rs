@@ -44,6 +44,8 @@ pub struct RunnerSpec {
     pub cpu_limit: Option<f64>,
     #[serde(default)]
     pub pids_limit: Option<u64>,
+    #[serde(default)]
+    pub network_disabled: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -548,6 +550,10 @@ pub fn execute(spec: RunnerSpec) -> RunnerResult {
             create_args.push("--pids-limit".to_string());
             create_args.push(limit.to_string());
         }
+        if spec.network_disabled {
+            create_args.push("--network".to_string());
+            create_args.push("none".to_string());
+        }
         for (key, value) in &runner_environment {
             create_args.push("-e".to_string());
             create_args.push(format!("{key}={value}"));
@@ -952,6 +958,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -979,6 +986,50 @@ esac
         assert!(runner_meta.contains("\"exit_code\": 0"));
         assert!(runner_meta.contains("\"stdout_path\": null"));
         assert!(runner_meta.contains("\"stderr_path\": null"));
+    }
+
+    #[test]
+    fn execute_can_disable_container_network() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("codeql-compile-sandbox/task-network");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "codeql-compile-sandbox".to_string(),
+            image: "Argus/codeql-runner-local:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec![
+                "codeql-compile-sandbox".to_string(),
+                "--self-test".to_string(),
+            ],
+            timeout_seconds: 0,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: true,
+        });
+
+        assert!(result.success);
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("--network none"), "{logged}");
     }
 
     #[test]
@@ -1021,6 +1072,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(!result.success);
@@ -1075,6 +1127,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -1132,6 +1185,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(!result.success);
@@ -1175,6 +1229,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -1221,6 +1276,7 @@ esac
             memory_swap_limit_mb: Some(500),
             cpu_limit: Some(1.5),
             pids_limit: Some(256),
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -1269,6 +1325,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -1325,6 +1382,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(result.success);
@@ -1419,6 +1477,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(!result.success);
@@ -1486,6 +1545,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(!result.success);
@@ -1537,6 +1597,7 @@ esac
             memory_swap_limit_mb: None,
             cpu_limit: None,
             pids_limit: None,
+            network_disabled: false,
         });
 
         assert!(!result.success);

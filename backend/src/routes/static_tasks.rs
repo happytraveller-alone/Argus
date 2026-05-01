@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     env,
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -21,7 +21,7 @@ use crate::{
         collect_relative_paths_from_directory, extract_archive_path_to_directory,
         read_file_lines_from_archive_path,
     },
-    db::{projects, system_config, task_state},
+    db::{codeql_build_plans, projects, system_config, task_state},
     error::ApiError,
     llm_rule,
     runtime::runner::{self, RunnerSpec},
@@ -1160,9 +1160,11 @@ async fn run_codeql_scan_inner(
     let source_dir = workspace_dir.join("source");
     let output_dir = workspace_dir.join("output");
     let build_plan_dir = workspace_dir.join("build-plan");
+    let evidence_dir = workspace_dir.join("evidence");
     tokio::fs::create_dir_all(&source_dir).await?;
     tokio::fs::create_dir_all(&output_dir).await?;
     tokio::fs::create_dir_all(&build_plan_dir).await?;
+    tokio::fs::create_dir_all(&evidence_dir).await?;
 
     let source_dir_clone = source_dir.clone();
     let archive_path_clone = archive_path.clone();
@@ -1184,7 +1186,7 @@ async fn run_codeql_scan_inner(
     update_scan_progress(
         state,
         task_id,
-        25.0,
+        20.0,
         "preparing_queries",
         "materializing CodeQL query assets",
     )
@@ -1200,7 +1202,7 @@ async fn run_codeql_scan_inner(
     let primary_language = codeql_languages
         .first()
         .cloned()
-        .unwrap_or_else(|| "javascript-typescript".to_string());
+        .unwrap_or_else(|| "cpp".to_string());
     let Some(query_dir) =
         codeql::materialize_query_directory_for_languages(state, &workspace_dir, &codeql_languages)
             .await?
@@ -1211,34 +1213,102 @@ async fn run_codeql_scan_inner(
 
     let query_container_path = workspace_container_path(&workspace_dir, &query_dir)?;
     let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
-    let summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
-    let events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
+    let codeql_summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
+    let codeql_events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
+    let compile_summary_rel_path = format!("output/compile-summary-{}.json", Uuid::new_v4());
+    let compile_events_rel_path = format!("output/compile-events-{}.jsonl", Uuid::new_v4());
     let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
     let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
+    let compile_stdout_rel_path = format!("output/compile-stdout-{}.txt", Uuid::new_v4());
+    let compile_stderr_rel_path = format!("output/compile-stderr-{}.txt", Uuid::new_v4());
     let build_plan_rel_path = "build-plan/build-plan.json".to_string();
+    let compile_plan_rel_path = "build-plan/compile-sandbox-plan.json".to_string();
 
-    let seed_plan = json!({
-        "language": primary_language,
-        "build_mode": default_codeql_build_mode(&primary_language),
-        "commands": [],
-        "working_directory": ".",
-        "allow_network": state.config.codeql_allow_network_during_build,
-        "max_inference_rounds": state.config.codeql_max_build_inference_rounds,
-        "llm_allow_source_snippets": state.config.codeql_llm_allow_source_snippets,
-        "status": "candidate"
-    });
+    update_scan_progress(
+        state,
+        task_id,
+        30.0,
+        "compile_sandbox",
+        "running C/C++ compile sandbox to discover a DB-backed build recipe",
+    )
+    .await;
+    let compile_spec = build_codeql_compile_sandbox_runner_spec(
+        &state.config,
+        &workspace_dir,
+        CodeqlCompileSandboxPaths {
+            container_source_dir: "/scan/source",
+            summary_rel_path: &compile_summary_rel_path,
+            summary_container_path: &format!("/scan/{compile_summary_rel_path}"),
+            events_container_path: &format!("/scan/{compile_events_rel_path}"),
+            plan_container_path: &format!("/scan/{compile_plan_rel_path}"),
+            evidence_container_dir: "/scan/evidence",
+            stdout_rel_path: &compile_stdout_rel_path,
+            stderr_rel_path: &compile_stderr_rel_path,
+            language: &primary_language,
+        },
+    );
+    let compile_result = tokio::task::spawn_blocking(move || runner::execute(compile_spec)).await?;
+    record_codeql_events(
+        state,
+        task_id,
+        &workspace_dir.join(&compile_events_rel_path),
+        38.0,
+    )
+    .await;
+    if !compile_result.success {
+        let error_msg = format_codeql_runner_error(
+            &compile_result,
+            Some(&workspace_dir.join(&compile_events_rel_path)),
+        )
+        .await;
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err(format!("CodeQL compile sandbox failed: {error_msg}").into());
+    }
+
+    let compile_plan_text = tokio::fs::read_to_string(workspace_dir.join(&compile_plan_rel_path))
+        .await
+        .map_err(|error| format!("missing compile sandbox build plan output: {error}"))?;
+    let compile_plan = codeql::parse_compile_sandbox_plan(&compile_plan_text)
+        .map_err(|error| format!("invalid compile sandbox build plan: {error}"))?;
+    if codeql::compile_sandbox_evidence_is_truth(&compile_plan.evidence_json) {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Err("compile sandbox evidence cannot be marked as runtime truth".into());
+    }
+    let accepted_build_plan = codeql::build_plan_json_from_compile_plan(&compile_plan);
     tokio::fs::write(
         workspace_dir.join(&build_plan_rel_path),
-        serde_json::to_vec_pretty(&seed_plan)?,
+        serde_json::to_vec_pretty(&accepted_build_plan)?,
+    )
+    .await?;
+    let now_for_plan = now_rfc3339();
+    let build_plan_record = codeql::build_plan_record_from_compile_plan(
+        Uuid::new_v4().to_string(),
+        project_id.to_string(),
+        &compile_plan,
+        now_for_plan,
+    );
+    let build_plan_record_id = build_plan_record.id.clone();
+    let build_plan_fingerprint = build_plan_record
+        .evidence_json
+        .get("fingerprint")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let runtime_build_plan_record =
+        persist_codeql_build_plan_record(state, build_plan_record).await?;
+    let runtime_build_plan_json = codeql::build_plan_json_from_record(&runtime_build_plan_record);
+    tokio::fs::write(
+        workspace_dir.join(&build_plan_rel_path),
+        serde_json::to_vec_pretty(&runtime_build_plan_json)?,
     )
     .await?;
 
     update_scan_progress(
         state,
         task_id,
-        40.0,
+        50.0,
         "database_create",
-        "running CodeQL database create/analyze runner",
+        "running CodeQL database create/analyze runner with compile sandbox recipe",
     )
     .await;
     let spec = build_codeql_runner_spec(
@@ -1249,9 +1319,9 @@ async fn run_codeql_scan_inner(
             query_container_path: &query_container_path,
             database_container_path: "/scan/output/codeql-db",
             sarif_container_path: &format!("/scan/{sarif_rel_path}"),
-            summary_rel_path: &summary_rel_path,
-            summary_container_path: &format!("/scan/{summary_rel_path}"),
-            events_container_path: &format!("/scan/{events_rel_path}"),
+            summary_rel_path: &codeql_summary_rel_path,
+            summary_container_path: &format!("/scan/{codeql_summary_rel_path}"),
+            events_container_path: &format!("/scan/{codeql_events_rel_path}"),
             build_plan_container_path: &format!("/scan/{build_plan_rel_path}"),
             stdout_rel_path: &stdout_rel_path,
             stderr_rel_path: &stderr_rel_path,
@@ -1260,11 +1330,19 @@ async fn run_codeql_scan_inner(
     );
 
     let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
-    record_codeql_events(state, task_id, &workspace_dir.join(&events_rel_path)).await;
+    record_codeql_events(
+        state,
+        task_id,
+        &workspace_dir.join(&codeql_events_rel_path),
+        62.0,
+    )
+    .await;
     if !runner_result.success {
-        let error_msg =
-            format_codeql_runner_error(&runner_result, Some(&workspace_dir.join(&events_rel_path)))
-                .await;
+        let error_msg = format_codeql_runner_error(
+            &runner_result,
+            Some(&workspace_dir.join(&codeql_events_rel_path)),
+        )
+        .await;
         let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
         return Err(format!("CodeQL scan failed: {error_msg}").into());
     }
@@ -1304,7 +1382,17 @@ async fn run_codeql_scan_inner(
             "languages": codeql_languages,
             "files_extracted": files_extracted,
             "lines_scanned": 0,
-            "build_plan_source": "workspace_seed_pending_db_verification",
+            "build_plan_source": "compile_sandbox_db_truth",
+            "build_plan_record_id": build_plan_record_id,
+            "build_plan_fingerprint": build_plan_fingerprint,
+            "compile_sandbox": {
+                "status": "completed",
+                "language_scope": "cpp_only",
+                "completion_scope": "cpp_slice_only_other_languages_deferred",
+                "evidence_role": "evidence_only",
+                "events_path": compile_events_rel_path,
+                "summary_path": compile_summary_rel_path,
+            },
             "first_version_complete": false,
         });
         let mut logs = record.progress.logs.clone();
@@ -1312,7 +1400,7 @@ async fn run_codeql_scan_inner(
             timestamp: now.clone(),
             stage: "completed".to_string(),
             message: format!(
-                "CodeQL scan completed: {} findings, {} files scanned",
+                "CodeQL C/C++ compile-sandbox scan completed: {} findings, {} files scanned",
                 findings.len(),
                 files_scanned
             ),
@@ -1323,7 +1411,7 @@ async fn run_codeql_scan_inner(
             progress: 100.0,
             current_stage: Some("completed".to_string()),
             message: Some(format!(
-                "CodeQL scan completed: {} findings in {}ms",
+                "CodeQL C/C++ compile-sandbox scan completed: {} findings in {}ms",
                 findings.len(),
                 elapsed_ms
             )),
@@ -1333,9 +1421,198 @@ async fn run_codeql_scan_inner(
         };
         record.findings = findings;
     }
-    task_state::save_snapshot(state, &snapshot).await?;
+    let _ = task_state::save_snapshot(state, &snapshot).await;
     let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
     Ok(())
+}
+
+async fn persist_codeql_build_plan_record(
+    state: &AppState,
+    record: task_state::CodeqlBuildPlanRecord,
+) -> Result<task_state::CodeqlBuildPlanRecord, Box<dyn std::error::Error + Send + Sync>> {
+    let runtime_truth = codeql_build_plans::upsert_accepted_build_plan(state, &record)
+        .await?
+        .unwrap_or_else(|| record.clone());
+
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    snapshot
+        .codeql_build_plans
+        .insert(runtime_truth.id.clone(), runtime_truth.clone());
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(runtime_truth)
+}
+
+struct CodeqlCompileSandboxPaths<'a> {
+    container_source_dir: &'a str,
+    summary_rel_path: &'a str,
+    summary_container_path: &'a str,
+    events_container_path: &'a str,
+    plan_container_path: &'a str,
+    evidence_container_dir: &'a str,
+    stdout_rel_path: &'a str,
+    stderr_rel_path: &'a str,
+    language: &'a str,
+}
+
+struct CodeqlRunnerPaths<'a> {
+    container_source_dir: &'a str,
+    query_container_path: &'a str,
+    database_container_path: &'a str,
+    sarif_container_path: &'a str,
+    summary_rel_path: &'a str,
+    summary_container_path: &'a str,
+    events_container_path: &'a str,
+    build_plan_container_path: &'a str,
+    stdout_rel_path: &'a str,
+    stderr_rel_path: &'a str,
+    language: &'a str,
+}
+
+fn build_codeql_compile_sandbox_runner_spec(
+    config: &crate::config::AppConfig,
+    workspace_dir: &std::path::Path,
+    paths: CodeqlCompileSandboxPaths<'_>,
+) -> RunnerSpec {
+    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
+        Some(config.codeql_runner_cpu_limit)
+    } else {
+        None
+    };
+    RunnerSpec {
+        scanner_type: "codeql-compile-sandbox".to_string(),
+        image: config.scanner_codeql_compile_sandbox_image.clone(),
+        workspace_dir: workspace_dir.display().to_string(),
+        command: codeql::build_compile_sandbox_command(&codeql::CompileSandboxCommandArgs {
+            source_dir: paths.container_source_dir,
+            summary_path: paths.summary_container_path,
+            events_path: paths.events_container_path,
+            plan_path: paths.plan_container_path,
+            evidence_dir: paths.evidence_container_dir,
+            language: paths.language,
+            allow_network: config.codeql_allow_network_during_build,
+        }),
+        timeout_seconds: config.codeql_scan_timeout_seconds,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
+        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
+        completion_summary_path: Some(paths.summary_rel_path.to_string()),
+        workspace_root_override: None,
+        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        cpu_limit,
+        pids_limit: Some(1024),
+        network_disabled: !config.codeql_allow_network_during_build,
+    }
+}
+
+fn build_codeql_runner_spec(
+    config: &crate::config::AppConfig,
+    workspace_dir: &std::path::Path,
+    paths: CodeqlRunnerPaths<'_>,
+) -> RunnerSpec {
+    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
+        Some(config.codeql_runner_cpu_limit)
+    } else {
+        None
+    };
+    RunnerSpec {
+        scanner_type: "codeql".to_string(),
+        image: config.scanner_codeql_image.clone(),
+        workspace_dir: workspace_dir.display().to_string(),
+        command: codeql::build_scan_command(&codeql::ScanCommandArgs {
+            source_dir: paths.container_source_dir,
+            queries_dir: paths.query_container_path,
+            database_dir: paths.database_container_path,
+            sarif_path: paths.sarif_container_path,
+            summary_path: paths.summary_container_path,
+            events_path: paths.events_container_path,
+            build_plan_path: Some(paths.build_plan_container_path),
+            language: paths.language,
+            threads: config.codeql_threads,
+            ram_mb: config.codeql_ram_mb,
+            allow_network: config.codeql_allow_network_during_build,
+        }),
+        timeout_seconds: config.codeql_scan_timeout_seconds,
+        env: BTreeMap::new(),
+        expected_exit_codes: vec![0],
+        artifact_paths: Vec::new(),
+        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
+        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
+        completion_summary_path: Some(paths.summary_rel_path.to_string()),
+        workspace_root_override: None,
+        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
+        cpu_limit,
+        pids_limit: Some(1024),
+        network_disabled: !config.codeql_allow_network_during_build,
+    }
+}
+
+fn normalize_codeql_task_languages(project_languages: &[String]) -> Vec<String> {
+    let has_cpp = project_languages
+        .iter()
+        .map(|language| codeql::normalize_language(language))
+        .any(|language| language == "cpp");
+    // Current compile-sandbox slice is intentionally C/C++ only. Other CodeQL
+    // languages remain future milestones and must not block this closed loop.
+    let mut languages = Vec::new();
+    if has_cpp || project_languages.is_empty() {
+        languages.push("cpp".to_string());
+    } else {
+        languages.push("cpp".to_string());
+    }
+    languages
+}
+
+async fn record_codeql_events(
+    state: &AppState,
+    task_id: &str,
+    events_path: &std::path::Path,
+    progress: f64,
+) {
+    let Ok(events_text) = tokio::fs::read_to_string(events_path).await else {
+        return;
+    };
+    for line in events_text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(200)
+    {
+        let event =
+            serde_json::from_str::<Value>(line).unwrap_or_else(|_| json!({ "message": line }));
+        let stage = event
+            .get("stage")
+            .and_then(Value::as_str)
+            .unwrap_or("codeql_event");
+        let message = event
+            .get("message")
+            .and_then(Value::as_str)
+            .or_else(|| event.get("event").and_then(Value::as_str))
+            .unwrap_or("CodeQL runner event");
+        update_scan_progress(state, task_id, progress, stage, message).await;
+    }
+}
+
+async fn format_codeql_runner_error(
+    result: &runner::RunnerResult,
+    events_path: Option<&std::path::Path>,
+) -> String {
+    let mut parts = vec![result
+        .error
+        .clone()
+        .unwrap_or_else(|| format!("CodeQL runner exited with code {}", result.exit_code))];
+    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
+        parts.push(format!("stdout={stdout_excerpt}"));
+    }
+    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
+        parts.push(format!("stderr={stderr_excerpt}"));
+    }
+    if let Some(events_excerpt) = read_text_excerpt(events_path).await {
+        parts.push(format!("events={events_excerpt}"));
+    }
+    parts.join("; ")
 }
 
 async fn run_opengrep_scan_inner(
@@ -1619,132 +1896,6 @@ async fn run_opengrep_scan_inner(
     Ok(())
 }
 
-struct CodeqlRunnerPaths<'a> {
-    container_source_dir: &'a str,
-    query_container_path: &'a str,
-    database_container_path: &'a str,
-    sarif_container_path: &'a str,
-    summary_rel_path: &'a str,
-    summary_container_path: &'a str,
-    events_container_path: &'a str,
-    build_plan_container_path: &'a str,
-    stdout_rel_path: &'a str,
-    stderr_rel_path: &'a str,
-    language: &'a str,
-}
-
-fn build_codeql_runner_spec(
-    config: &crate::config::AppConfig,
-    workspace_dir: &std::path::Path,
-    paths: CodeqlRunnerPaths<'_>,
-) -> RunnerSpec {
-    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
-        Some(config.codeql_runner_cpu_limit)
-    } else {
-        None
-    };
-    RunnerSpec {
-        scanner_type: "codeql".to_string(),
-        image: config.scanner_codeql_image.clone(),
-        workspace_dir: workspace_dir.display().to_string(),
-        command: codeql::build_scan_command(&codeql::ScanCommandArgs {
-            source_dir: paths.container_source_dir,
-            queries_dir: paths.query_container_path,
-            database_dir: paths.database_container_path,
-            sarif_path: paths.sarif_container_path,
-            summary_path: paths.summary_container_path,
-            events_path: paths.events_container_path,
-            build_plan_path: Some(paths.build_plan_container_path),
-            language: paths.language,
-            threads: config.codeql_threads,
-            ram_mb: config.codeql_ram_mb,
-            allow_network: config.codeql_allow_network_during_build,
-        }),
-        timeout_seconds: config.codeql_scan_timeout_seconds,
-        env: BTreeMap::new(),
-        expected_exit_codes: vec![0],
-        artifact_paths: Vec::new(),
-        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
-        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
-        completion_summary_path: Some(paths.summary_rel_path.to_string()),
-        workspace_root_override: None,
-        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        cpu_limit,
-        pids_limit: Some(1024),
-    }
-}
-
-fn normalize_codeql_task_languages(project_languages: &[String]) -> Vec<String> {
-    let mut languages = project_languages
-        .iter()
-        .map(|language| codeql::normalize_language(language))
-        .filter(|language| {
-            matches!(
-                language.as_str(),
-                "javascript-typescript" | "python" | "java" | "cpp" | "go"
-            )
-        })
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    if languages.is_empty() {
-        languages.push("javascript-typescript".to_string());
-    }
-    languages
-}
-
-fn default_codeql_build_mode(language: &str) -> &'static str {
-    match codeql::normalize_language(language).as_str() {
-        "javascript-typescript" | "python" => "none",
-        _ => "autobuild",
-    }
-}
-
-async fn record_codeql_events(state: &AppState, task_id: &str, events_path: &std::path::Path) {
-    let Ok(events_text) = tokio::fs::read_to_string(events_path).await else {
-        return;
-    };
-    for line in events_text
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .take(200)
-    {
-        let event =
-            serde_json::from_str::<Value>(line).unwrap_or_else(|_| json!({ "message": line }));
-        let stage = event
-            .get("stage")
-            .and_then(Value::as_str)
-            .unwrap_or("codeql_event");
-        let message = event
-            .get("message")
-            .and_then(Value::as_str)
-            .or_else(|| event.get("event").and_then(Value::as_str))
-            .unwrap_or("CodeQL runner event");
-        update_scan_progress(state, task_id, 55.0, stage, message).await;
-    }
-}
-
-async fn format_codeql_runner_error(
-    result: &runner::RunnerResult,
-    events_path: Option<&std::path::Path>,
-) -> String {
-    let mut parts = vec![result
-        .error
-        .clone()
-        .unwrap_or_else(|| format!("CodeQL runner exited with code {}", result.exit_code))];
-    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
-        parts.push(format!("stdout={stdout_excerpt}"));
-    }
-    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
-        parts.push(format!("stderr={stderr_excerpt}"));
-    }
-    if let Some(events_excerpt) = read_text_excerpt(events_path).await {
-        parts.push(format!("events={events_excerpt}"));
-    }
-    parts.join("; ")
-}
-
 async fn read_opengrep_results_text(results_path: &std::path::Path) -> Result<String, String> {
     tokio::fs::read_to_string(results_path)
         .await
@@ -1830,6 +1981,7 @@ fn build_opengrep_runner_spec(
         memory_swap_limit_mb: Some(config.opengrep_runner_memory_limit_mb),
         cpu_limit: Some(resources.cpu_limit),
         pids_limit: Some(config.opengrep_runner_pids_limit),
+        network_disabled: false,
     }
 }
 
@@ -3559,9 +3711,11 @@ mod tests {
     use crate::db::task_state;
 
     use super::{
-        build_opengrep_runner_spec, extract_highest_rule_severity, format_opengrep_runner_error,
-        read_opengrep_results_text, static_task_value, OpengrepResourceScheduler,
-        OpengrepRunnerPaths, OpengrepRunnerResources,
+        build_codeql_compile_sandbox_runner_spec, build_opengrep_runner_spec,
+        extract_highest_rule_severity, format_opengrep_runner_error,
+        normalize_codeql_task_languages, read_opengrep_results_text, static_task_value,
+        CodeqlCompileSandboxPaths, OpengrepResourceScheduler, OpengrepRunnerPaths,
+        OpengrepRunnerResources,
     };
     use serde_json::json;
     use std::{sync::mpsc, time::Duration};
@@ -3733,6 +3887,77 @@ rules:
 
         assert_eq!(value["total_findings"], 1);
         assert_eq!(value["error_count"], 9);
+    }
+
+    #[test]
+    fn builds_codeql_compile_sandbox_runner_spec_with_cpp_recipe_outputs() {
+        let mut config = AppConfig::for_tests();
+        config.codeql_allow_network_during_build = false;
+        let spec = build_codeql_compile_sandbox_runner_spec(
+            &config,
+            std::path::Path::new("/tmp/codeql-runtime"),
+            CodeqlCompileSandboxPaths {
+                container_source_dir: "/scan/source",
+                summary_rel_path: "output/compile-summary.json",
+                summary_container_path: "/scan/output/compile-summary.json",
+                events_container_path: "/scan/output/compile-events.jsonl",
+                plan_container_path: "/scan/build-plan/compile-sandbox-plan.json",
+                evidence_container_dir: "/scan/evidence",
+                stdout_rel_path: "output/compile-stdout.txt",
+                stderr_rel_path: "output/compile-stderr.txt",
+                language: "cpp",
+            },
+        );
+
+        assert_eq!(spec.scanner_type, "codeql-compile-sandbox");
+        assert_eq!(spec.image, config.scanner_codeql_compile_sandbox_image);
+        assert_eq!(
+            spec.command,
+            crate::scan::codeql::build_compile_sandbox_command(
+                &crate::scan::codeql::CompileSandboxCommandArgs {
+                    source_dir: "/scan/source",
+                    summary_path: "/scan/output/compile-summary.json",
+                    events_path: "/scan/output/compile-events.jsonl",
+                    plan_path: "/scan/build-plan/compile-sandbox-plan.json",
+                    evidence_dir: "/scan/evidence",
+                    language: "cpp",
+                    allow_network: false,
+                }
+            )
+        );
+        assert_eq!(
+            spec.completion_summary_path.as_deref(),
+            Some("output/compile-summary.json")
+        );
+        assert_eq!(
+            spec.capture_stdout_path.as_deref(),
+            Some("output/compile-stdout.txt")
+        );
+        assert_eq!(
+            spec.capture_stderr_path.as_deref(),
+            Some("output/compile-stderr.txt")
+        );
+        assert!(
+            spec.network_disabled,
+            "compile sandbox must receive Docker-level network isolation when build network is disabled"
+        );
+    }
+
+    #[test]
+    fn codeql_language_scope_is_cpp_only_for_current_compile_sandbox_slice() {
+        assert_eq!(normalize_codeql_task_languages(&[]), vec!["cpp"]);
+        assert_eq!(
+            normalize_codeql_task_languages(&[
+                "python".to_string(),
+                "java".to_string(),
+                "go".to_string()
+            ]),
+            vec!["cpp"]
+        );
+        assert_eq!(
+            normalize_codeql_task_languages(&["C++".to_string()]),
+            vec!["cpp"]
+        );
     }
 
     #[test]

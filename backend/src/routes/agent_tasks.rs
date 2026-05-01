@@ -32,7 +32,7 @@ use crate::{
         importer::{import_runner_output, sha256_hex},
         pipeline_path::resolve_agentflow_pipeline_path,
         preflight::{run_preflight, PreflightInput},
-        runner::{run_controlled_command, run_streaming_command, RunnerCommand},
+        runner::{run_streaming_command, RunnerCommand},
         streaming::{self, StreamingEvent},
     },
     state::{AppState, StoredProject},

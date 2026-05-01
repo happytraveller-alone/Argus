@@ -53,7 +53,10 @@ RUN set -eux; \
     codeql resolve languages
 
 COPY docker/codeql-scan.sh /usr/local/bin/codeql-scan
-RUN chmod +x /usr/local/bin/codeql-scan && codeql-scan --self-test
+COPY docker/codeql-compile-sandbox.sh /usr/local/bin/codeql-compile-sandbox
+RUN chmod +x /usr/local/bin/codeql-scan /usr/local/bin/codeql-compile-sandbox \
+    && codeql-scan --self-test \
+    && codeql-compile-sandbox --self-test
 
 WORKDIR /scan
 CMD ["codeql-scan", "--self-test"]
