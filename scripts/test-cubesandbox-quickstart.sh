@@ -44,7 +44,7 @@ assert_not_contains "$SCRIPT" "toolbox_run"
 assert_not_contains "$SCRIPT" "toolbox"
 assert_not_contains "$SCRIPT" "--toolbox"
 assert_contains "$SCRIPT" "https://v6.gh-proxy.org/"
-assert_contains "$SCRIPT" "https://docker.m.daocloud.io"
+assert_contains "$SCRIPT" "https://m.daocloud.io/docker.io"
 assert_contains "$SCRIPT" "m.daocloud.io/docker.io"
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox.git'
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/'

@@ -107,7 +107,7 @@
 ### 4.3 Dockerfile 参考模板
 
 ```dockerfile
-ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org

@@ -17,7 +17,7 @@ services:
       context: .
       dockerfile: docker/opengrep-runner.Dockerfile
       args:
-        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
         BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -45,7 +45,7 @@ services:
       context: .
       dockerfile: docker/codeql-runner.Dockerfile
       args:
-        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
         BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -62,7 +62,7 @@ services:
       - argus-network
 
   db:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/postgres:18.3-alpine3.23
     restart: unless-stopped
     mem_limit: 1g
     pids_limit: 512
@@ -89,9 +89,9 @@ services:
       dockerfile: docker/backend.Dockerfile
       target: runtime-plain
       args:
-        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        UV_IMAGE: ${UV_IMAGE:-docker.m.daocloud.io/library/ghcr.io/astral-sh/uv:0.7}
-        DOCKER_CLI_IMAGE: ${DOCKER_CLI_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
+        UV_IMAGE: ${UV_IMAGE:-m.daocloud.io/docker.io/library/ghcr.io/astral-sh/uv:0.7}
+        DOCKER_CLI_IMAGE: ${DOCKER_CLI_IMAGE:-m.daocloud.io/docker.io/library/docker:27-cli}
         BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -135,7 +135,7 @@ services:
       RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
       RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS:-1800}"
       RUNNER_PREFLIGHT_BUILD_CONTEXT: /opt/backend-build-context
-      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
       BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -194,7 +194,7 @@ services:
       dockerfile: ../docker/frontend.Dockerfile
       target: dev
       args:
-        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
         PNPM_VERSION: ${PNPM_VERSION:-10.11.0}
         WEAK_NETWORK: ${WEAK_NETWORK:-false}
@@ -226,7 +226,7 @@ services:
       - argus-network
 
   redis:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23
     restart: unless-stopped
     mem_limit: 256m
     pids_limit: 256
@@ -243,7 +243,7 @@ services:
       - argus-network
 
   adminer:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/adminer:latest
     restart: unless-stopped
     profiles: [ "tools" ]
     ports:

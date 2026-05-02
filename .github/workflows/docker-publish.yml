@@ -146,7 +146,7 @@ jobs:
                   "context": ".",
                   "file": "./docker/backend.Dockerfile",
                   "platforms": "linux/amd64,linux/arm64",
-                  "build_args": "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library",
+                  "build_args": "DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library",
                   "outputs": "",
                   "push_env": "PUSH_BACKEND",
                   "dispatch_env": "DISPATCH_BUILD_BACKEND",

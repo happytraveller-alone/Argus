@@ -1,6 +1,6 @@
 services:
   db:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:18.3-alpine3.23
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/postgres:18.3-alpine3.23
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql
@@ -53,7 +53,7 @@ services:
       RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"
       RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
       RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
-      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}
       BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -119,7 +119,7 @@ services:
       - argus-network
 
   redis:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:8.6.2-alpine3.23
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/redis:8.6.2-alpine3.23
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -134,7 +134,7 @@ services:
       - argus-network
 
   adminer:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-m.daocloud.io/docker.io/library}/adminer:latest
     restart: unless-stopped
     profiles: [ "tools" ]
     ports:

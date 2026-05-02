@@ -2,7 +2,7 @@
 # Argus Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================
 
-ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:22-slim AS pnpm-base
 
 WORKDIR /app

@@ -1,4 +1,4 @@
-ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+ARG DOCKERHUB_LIBRARY_MIRROR=m.daocloud.io/docker.io/library
 ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
 ARG BACKEND_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
 ARG BACKEND_CARGO_HTTP_TIMEOUT_SECONDS=30
@@ -17,16 +17,16 @@ RUN apt-get update \
 RUN set -eux; \
   mkdir -p /usr/local/cargo; \
   if [ -n "${BACKEND_CARGO_REGISTRY}" ]; then \
-    { \
-      echo '[source.crates-io]'; \
-      echo 'replace-with = "argus-cargo-mirror"'; \
-      echo; \
-      echo '[source.argus-cargo-mirror]'; \
-      printf 'registry = "%s"\n' "${BACKEND_CARGO_REGISTRY}"; \
-      echo; \
-      echo '[net]'; \
-      echo 'git-fetch-with-cli = true'; \
-    } > /usr/local/cargo/config.toml; \
+  { \
+  echo '[source.crates-io]'; \
+  echo 'replace-with = "argus-cargo-mirror"'; \
+  echo; \
+  echo '[source.argus-cargo-mirror]'; \
+  printf 'registry = "%s"\n' "${BACKEND_CARGO_REGISTRY}"; \
+  echo; \
+  echo '[net]'; \
+  echo 'git-fetch-with-cli = true'; \
+  } > /usr/local/cargo/config.toml; \
   fi
 
 COPY backend/Cargo.toml backend/Cargo.lock ./

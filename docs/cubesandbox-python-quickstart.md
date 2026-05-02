@@ -123,7 +123,7 @@ The helper writes `/etc/docker/daemon.json` with:
 ```json
 {
   "registry-mirrors": [
-    "https://docker.m.daocloud.io"
+    "https://m.daocloud.io/docker.io"
   ]
 }
 ```
