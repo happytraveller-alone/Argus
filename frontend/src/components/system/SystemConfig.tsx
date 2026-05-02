@@ -71,7 +71,7 @@ import {
 } from "@/components/system/llmModelStatsSummary";
 import { parseLlmCustomHeadersInput } from "@/shared/llm/providerCatalog";
 
-type ConfigSection = "llm" | "analysis";
+type ConfigSection = "llm" | "analysis" | "cubesandbox";
 type LlmSecretSource = "saved" | "imported" | "entered" | "none";
 type DialogMode = "create" | "edit";
 
@@ -129,8 +129,26 @@ interface LlmConfigEnvelope {
 	};
 }
 
+interface CubeSandboxConfigData {
+	enabled: boolean;
+	apiBaseUrl: string;
+	dataPlaneBaseUrl: string;
+	templateId: string;
+	helperPath: string;
+	workDir: string;
+	autoStart: boolean;
+	autoInstall: boolean;
+	helperTimeoutSeconds: number;
+	executionTimeoutSeconds: number;
+	sandboxCleanupTimeoutSeconds: number;
+	stdoutLimitBytes: number;
+	stderrLimitBytes: number;
+}
+
 interface SystemConfigData {
 	llmConfig: LlmConfigEnvelope;
+	rawOtherConfig: Record<string, unknown>;
+	cubeSandbox: CubeSandboxConfigData;
 	maxAnalyzeFiles: number;
 	llmConcurrency: number;
 	llmGapMs: number;
@@ -197,6 +215,22 @@ const DEFAULT_CONFIG: SystemConfigData = {
 		},
 		migration: { status: "not_needed", message: null, sourceSchemaVersion: null },
 	},
+	rawOtherConfig: {},
+	cubeSandbox: {
+		enabled: false,
+		apiBaseUrl: "http://127.0.0.1:23000",
+		dataPlaneBaseUrl: "https://127.0.0.1:21443",
+		templateId: "",
+		helperPath: "scripts/cubesandbox-quickstart.sh",
+		workDir: ".cubesandbox",
+		autoStart: true,
+		autoInstall: false,
+		helperTimeoutSeconds: 600,
+		executionTimeoutSeconds: 120,
+		sandboxCleanupTimeoutSeconds: 30,
+		stdoutLimitBytes: 65536,
+		stderrLimitBytes: 65536,
+	},
 	maxAnalyzeFiles: 0,
 	llmConcurrency: 1,
 	llmGapMs: 3000,
@@ -214,6 +248,31 @@ const normalizeSecretSource = (value: unknown, hasKey: boolean): LlmSecretSource
 
 const normalizeNumber = (value: unknown, fallback: number) =>
 	typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const normalizeBoolean = (value: unknown, fallback: boolean) =>
+	typeof value === "boolean" ? value : fallback;
+
+const normalizeString = (value: unknown, fallback: string) =>
+	typeof value === "string" ? value : fallback;
+
+const normalizeCubeSandboxConfig = (raw: unknown): CubeSandboxConfigData => {
+	const value = (raw || {}) as Record<string, unknown>;
+	return {
+		enabled: normalizeBoolean(value.enabled, DEFAULT_CONFIG.cubeSandbox.enabled),
+		apiBaseUrl: normalizeString(value.apiBaseUrl, DEFAULT_CONFIG.cubeSandbox.apiBaseUrl),
+		dataPlaneBaseUrl: normalizeString(value.dataPlaneBaseUrl, DEFAULT_CONFIG.cubeSandbox.dataPlaneBaseUrl),
+		templateId: normalizeString(value.templateId, DEFAULT_CONFIG.cubeSandbox.templateId),
+		helperPath: normalizeString(value.helperPath, DEFAULT_CONFIG.cubeSandbox.helperPath),
+		workDir: normalizeString(value.workDir, DEFAULT_CONFIG.cubeSandbox.workDir),
+		autoStart: normalizeBoolean(value.autoStart, DEFAULT_CONFIG.cubeSandbox.autoStart),
+		autoInstall: normalizeBoolean(value.autoInstall, DEFAULT_CONFIG.cubeSandbox.autoInstall),
+		helperTimeoutSeconds: normalizeNumber(value.helperTimeoutSeconds, DEFAULT_CONFIG.cubeSandbox.helperTimeoutSeconds),
+		executionTimeoutSeconds: normalizeNumber(value.executionTimeoutSeconds, DEFAULT_CONFIG.cubeSandbox.executionTimeoutSeconds),
+		sandboxCleanupTimeoutSeconds: normalizeNumber(value.sandboxCleanupTimeoutSeconds, DEFAULT_CONFIG.cubeSandbox.sandboxCleanupTimeoutSeconds),
+		stdoutLimitBytes: normalizeNumber(value.stdoutLimitBytes, DEFAULT_CONFIG.cubeSandbox.stdoutLimitBytes),
+		stderrLimitBytes: normalizeNumber(value.stderrLimitBytes, DEFAULT_CONFIG.cubeSandbox.stderrLimitBytes),
+	};
+};
 
 const normalizeRow = (raw: Record<string, unknown>, index: number): LlmConfigRow => {
 	const advanced = (raw.advanced || {}) as Record<string, unknown>;
@@ -303,6 +362,8 @@ function buildSystemConfigDataFromBackendConfig(
 				sourceSchemaVersion: normalizeNumber((rawLlm.migration as Record<string, unknown> | undefined)?.sourceSchemaVersion, 2),
 			},
 		},
+		rawOtherConfig: otherConfig,
+		cubeSandbox: normalizeCubeSandboxConfig(otherConfig.cubeSandbox),
 		maxAnalyzeFiles: normalizeNumber(otherConfig.maxAnalyzeFiles, DEFAULT_CONFIG.maxAnalyzeFiles),
 		llmConcurrency: normalizeNumber(otherConfig.llmConcurrency, DEFAULT_CONFIG.llmConcurrency),
 		llmGapMs: normalizeNumber(otherConfig.llmGapMs, DEFAULT_CONFIG.llmGapMs),
@@ -457,7 +518,7 @@ const formatCheckedAt = (value: string) => {
 };
 
 export function SystemConfig({
-	visibleSections = ["llm", "analysis"],
+	visibleSections = ["llm", "analysis", "cubesandbox"],
 	defaultSection = "llm",
 	mergedView = false,
 	showLlmSummaryCards = true,
@@ -528,7 +589,7 @@ export function SystemConfig({
 		try {
 			const savedConfig = await api.updateUserConfig({
 				llmConfig: { ...config.llmConfig, rows: config.llmConfig.rows.map((row) => ({ ...row, apiKey: row.apiKey.trim() })) },
-				otherConfig: { maxAnalyzeFiles: config.maxAnalyzeFiles, llmConcurrency: config.llmConcurrency, llmGapMs: config.llmGapMs },
+				otherConfig: { ...config.rawOtherConfig, cubeSandbox: config.cubeSandbox, maxAnalyzeFiles: config.maxAnalyzeFiles, llmConcurrency: config.llmConcurrency, llmGapMs: config.llmGapMs },
 			});
 			const nextConfig = buildSystemConfigDataFromBackendConfig(savedConfig);
 			setConfig(nextConfig);
@@ -640,6 +701,7 @@ export function SystemConfig({
 					<TabsList className={`grid w-full ${tabsGridClass} bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6`}>
 						{sections.includes("llm") && <TabsTrigger value="llm" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Zap className="w-3 h-3" /> LLM 配置</TabsTrigger>}
 						{sections.includes("analysis") && <TabsTrigger value="analysis" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Settings className="w-3 h-3" /> 分析参数</TabsTrigger>}
+						{sections.includes("cubesandbox") && <TabsTrigger value="cubesandbox" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"><Settings className="w-3 h-3" /> CubeSandbox</TabsTrigger>}
 					</TabsList>
 				)}
 				{sections.includes("llm") && (
@@ -699,6 +761,34 @@ export function SystemConfig({
 				)}
 				{!mergedView && sections.includes("analysis") && (
 					<TabsContent value="analysis" className="space-y-6"><div className="cyber-card p-6 space-y-6"><div className="grid grid-cols-1 md:grid-cols-3 gap-6">{([["maxAnalyzeFiles", "最大分析文件数"], ["llmConcurrency", "LLM 并发数"], ["llmGapMs", "请求间隔 (毫秒)"]] as Array<[keyof Pick<SystemConfigData, "maxAnalyzeFiles" | "llmConcurrency" | "llmGapMs">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input type="number" value={config[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, [key]: Number(event.target.value) } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}</div></div></TabsContent>
+				)}
+				{!mergedView && sections.includes("cubesandbox") && (
+					<TabsContent value="cubesandbox" className="space-y-6">
+						<div className="cyber-card p-6 space-y-6">
+							<div className="space-y-1">
+								<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground">CubeSandbox 运行时</h3>
+								<p className="text-xs text-muted-foreground">保存到 otherConfig.cubeSandbox；CUBESANDBOX_DATA_PLANE_BASE_URL 只作为默认种子。</p>
+							</div>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<label className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">启用</span><Select value={config.cubeSandbox.enabled ? "enabled" : "disabled"} onValueChange={(value) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, enabled: value === "enabled" } } : prev); setHasChanges(true); }}><SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent></Select></label>
+								<label className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">自动启动 VM</span><Select value={config.cubeSandbox.autoStart ? "enabled" : "disabled"} onValueChange={(value) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, autoStart: value === "enabled" } } : prev); setHasChanges(true); }}><SelectTrigger className="cyber-input h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="enabled">启用</SelectItem><SelectItem value="disabled">禁用</SelectItem></SelectContent></Select></label>
+								{([
+									["apiBaseUrl", "CubeAPI 控制面地址"],
+									["dataPlaneBaseUrl", "CubeProxy/envd 数据面地址"],
+									["templateId", "模板 ID"],
+									["helperPath", "生命周期 Helper"],
+									["workDir", "工作目录"],
+								] as Array<[keyof Pick<CubeSandboxConfigData, "apiBaseUrl" | "dataPlaneBaseUrl" | "templateId" | "helperPath" | "workDir">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input value={config.cubeSandbox[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, [key]: event.target.value } } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}
+								{([
+									["helperTimeoutSeconds", "Helper 超时 (秒)"],
+									["executionTimeoutSeconds", "执行超时 (秒)"],
+									["sandboxCleanupTimeoutSeconds", "清理超时 (秒)"],
+									["stdoutLimitBytes", "stdout 上限 (字节)"],
+									["stderrLimitBytes", "stderr 上限 (字节)"],
+								] as Array<[keyof Pick<CubeSandboxConfigData, "helperTimeoutSeconds" | "executionTimeoutSeconds" | "sandboxCleanupTimeoutSeconds" | "stdoutLimitBytes" | "stderrLimitBytes">, string]>).map(([key, label]) => <label key={key} className="space-y-2"><span className="text-xs font-bold text-muted-foreground uppercase">{label}</span><Input type="number" value={config.cubeSandbox[key]} onChange={(event) => { setConfig((prev) => prev ? { ...prev, cubeSandbox: { ...prev.cubeSandbox, [key]: Number(event.target.value) } } : prev); setHasChanges(true); }} className="h-10 cyber-input" /></label>)}
+							</div>
+						</div>
+					</TabsContent>
 				)}
 			</Tabs>
 			{hasChanges && !dialogOpen && showFloatingSaveButton && <div className="fixed bottom-6 right-6 cyber-card p-4 z-50"><Button onClick={persistConfig} className="cyber-btn-primary h-12"><Save className="w-4 h-4 mr-2" /> 保存所有更改</Button></div>}

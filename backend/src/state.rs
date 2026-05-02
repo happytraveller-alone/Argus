@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{config::AppConfig, project_file_cache::ProjectFileCache};
+use crate::{
+    config::AppConfig, project_file_cache::ProjectFileCache,
+    runtime::cubesandbox::task::CubeSandboxTaskManager,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum BootstrapStatus {
@@ -240,6 +243,7 @@ pub struct AppState {
     pub file_store_lock: Arc<Mutex<()>>,
     pub project_file_cache: Arc<Mutex<ProjectFileCache>>,
     pub bootstrap: Arc<RwLock<BootstrapReport>>,
+    pub cube_sandbox_task_manager: Arc<CubeSandboxTaskManager>,
 }
 
 impl AppState {
@@ -261,6 +265,7 @@ impl AppState {
             db_pool,
             file_store_lock: Arc::new(Mutex::new(())),
             project_file_cache: Arc::new(Mutex::new(ProjectFileCache::new())),
+            cube_sandbox_task_manager: Arc::new(CubeSandboxTaskManager::new()),
             bootstrap: Arc::new(RwLock::new(BootstrapReport {
                 overall: BootstrapStatus::NotRun.as_str().to_string(),
                 file_store: FileStoreBootstrapStatus::default(),

@@ -63,6 +63,19 @@ pub struct AppConfig {
     pub opengrep_runner_cpu_limit: f64,
     pub opengrep_runner_cpu_limit_explicit: bool,
     pub opengrep_runner_pids_limit: u64,
+    pub cubesandbox_enabled: bool,
+    pub cubesandbox_api_base_url: String,
+    pub cubesandbox_data_plane_base_url: String,
+    pub cubesandbox_template_id: String,
+    pub cubesandbox_helper_path: String,
+    pub cubesandbox_work_dir: String,
+    pub cubesandbox_auto_start: bool,
+    pub cubesandbox_auto_install: bool,
+    pub cubesandbox_helper_timeout_seconds: u64,
+    pub cubesandbox_execution_timeout_seconds: u64,
+    pub cubesandbox_cleanup_timeout_seconds: u64,
+    pub cubesandbox_stdout_limit_bytes: usize,
+    pub cubesandbox_stderr_limit_bytes: usize,
 }
 
 impl AppConfig {
@@ -169,6 +182,38 @@ impl AppConfig {
                 .unwrap_or(0.0),
             opengrep_runner_cpu_limit_explicit: opengrep_runner_cpu_limit_env.is_some(),
             opengrep_runner_pids_limit: parse_u64_env("OPENGREP_RUNNER_PIDS_LIMIT", 512),
+            cubesandbox_enabled: parse_bool_env("CUBESANDBOX_ENABLED", false),
+            cubesandbox_api_base_url: env::var("CUBESANDBOX_API_BASE_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:23000".to_string()),
+            cubesandbox_data_plane_base_url: env::var("CUBESANDBOX_DATA_PLANE_BASE_URL")
+                .unwrap_or_else(|_| "https://127.0.0.1:21443".to_string()),
+            cubesandbox_template_id: env::var("CUBESANDBOX_TEMPLATE_ID").unwrap_or_default(),
+            cubesandbox_helper_path: env::var("CUBESANDBOX_HELPER_PATH")
+                .unwrap_or_else(|_| "scripts/cubesandbox-quickstart.sh".to_string()),
+            cubesandbox_work_dir: env::var("CUBESANDBOX_WORK_DIR")
+                .unwrap_or_else(|_| ".cubesandbox".to_string()),
+            cubesandbox_auto_start: parse_bool_env("CUBESANDBOX_AUTO_START", true),
+            cubesandbox_auto_install: parse_bool_env("CUBESANDBOX_AUTO_INSTALL", false),
+            cubesandbox_helper_timeout_seconds: parse_u64_env(
+                "CUBESANDBOX_HELPER_TIMEOUT_SECONDS",
+                600,
+            ),
+            cubesandbox_execution_timeout_seconds: parse_u64_env(
+                "CUBESANDBOX_EXECUTION_TIMEOUT_SECONDS",
+                120,
+            ),
+            cubesandbox_cleanup_timeout_seconds: parse_u64_env(
+                "CUBESANDBOX_SANDBOX_CLEANUP_TIMEOUT_SECONDS",
+                30,
+            ),
+            cubesandbox_stdout_limit_bytes: parse_usize_env(
+                "CUBESANDBOX_STDOUT_LIMIT_BYTES",
+                65_536,
+            ),
+            cubesandbox_stderr_limit_bytes: parse_usize_env(
+                "CUBESANDBOX_STDERR_LIMIT_BYTES",
+                65_536,
+            ),
         })
     }
 
@@ -239,6 +284,19 @@ impl AppConfig {
             opengrep_runner_cpu_limit: 8.0,
             opengrep_runner_cpu_limit_explicit: true,
             opengrep_runner_pids_limit: 512,
+            cubesandbox_enabled: false,
+            cubesandbox_api_base_url: "http://127.0.0.1:23000".to_string(),
+            cubesandbox_data_plane_base_url: "https://127.0.0.1:21443".to_string(),
+            cubesandbox_template_id: String::new(),
+            cubesandbox_helper_path: "scripts/cubesandbox-quickstart.sh".to_string(),
+            cubesandbox_work_dir: ".cubesandbox".to_string(),
+            cubesandbox_auto_start: true,
+            cubesandbox_auto_install: false,
+            cubesandbox_helper_timeout_seconds: 600,
+            cubesandbox_execution_timeout_seconds: 120,
+            cubesandbox_cleanup_timeout_seconds: 30,
+            cubesandbox_stdout_limit_bytes: 65_536,
+            cubesandbox_stderr_limit_bytes: 65_536,
         }
     }
 }

@@ -79,3 +79,13 @@ test("SystemConfig status text covers persisted batch validation states and time
 	assert.match(source, /上次验证/);
 	assert.match(source, /禁用/);
 });
+
+test("SystemConfig preserves raw otherConfig while saving CubeSandbox settings", () => {
+	const source = readFileSync(systemConfigPath, "utf8");
+	assert.match(source, /rawOtherConfig/);
+	assert.match(source, /cubeSandbox/);
+	assert.match(source, /dataPlaneBaseUrl/);
+	assert.match(source, /\.\.\.config\.rawOtherConfig/);
+	assert.match(source, /CubeSandbox 运行时/);
+	assert.match(source, /CUBESANDBOX_DATA_PLANE_BASE_URL/);
+});

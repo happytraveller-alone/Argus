@@ -9,7 +9,9 @@ use anyhow::{anyhow, Result};
 use sqlx::PgPool;
 use tokio::time::timeout;
 
-use crate::state::{AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus};
+use crate::state::{
+    AppState, BootstrapReport, BootstrapStatus, DatabaseBootstrapStatus, RecoveryTaskStatus,
+};
 
 const REQUIRED_RUST_TABLES: &[&str] = &[
     "system_configs",
@@ -102,6 +104,23 @@ async fn build_report(state: &AppState) -> BootstrapReport {
     };
     if report.recovery.status == BootstrapStatus::Error.as_str() {
         report.overall = BootstrapStatus::Degraded.as_str().to_string();
+    }
+    match state
+        .cube_sandbox_task_manager
+        .reconcile_orphans(state)
+        .await
+    {
+        Ok(()) => report.recovery.tasks.push(RecoveryTaskStatus {
+            name: "cubesandbox_tasks".to_string(),
+            table_present: true,
+            recovered: 0,
+        }),
+        Err(error) => {
+            report.overall = BootstrapStatus::Degraded.as_str().to_string();
+            report.recovery.status = BootstrapStatus::Degraded.as_str().to_string();
+            report.recovery.error =
+                Some(format!("CubeSandbox orphan reconciliation failed: {error}"));
+        }
     }
 
     report.preflight = match preflight::run(state).await {

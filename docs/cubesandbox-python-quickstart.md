@@ -174,7 +174,49 @@ CUBE_PYTHON_CODE="print(sum(range(10)))" \
 scripts/cubesandbox-quickstart.sh python-smoke
 ```
 
-## 7. Verify C/C++ Compilation in CubeSandbox
+## 7. Run Python Through Argus
+
+Argus also exposes a Rust-owned CubeSandbox task API. The helper remains the
+bounded lifecycle adapter, but backend execution does not call
+`python-smoke`: it checks/starts CubeSandbox through the allowlisted helper
+commands, creates a sandbox through CubeAPI, runs Python through the envd data
+plane, records normalized output, and deletes the sandbox.
+
+Runtime defaults are seeded from `env.example`, then saved
+`system_config.otherConfig.cubeSandbox` becomes the source of truth:
+
+```text
+CUBESANDBOX_ENABLED=false
+CUBESANDBOX_API_BASE_URL=http://127.0.0.1:23000
+CUBESANDBOX_DATA_PLANE_BASE_URL=https://127.0.0.1:21443
+CUBESANDBOX_TEMPLATE_ID=
+CUBESANDBOX_HELPER_PATH=scripts/cubesandbox-quickstart.sh
+CUBESANDBOX_WORK_DIR=.cubesandbox
+CUBESANDBOX_AUTO_START=true
+CUBESANDBOX_AUTO_INSTALL=false
+```
+
+In the System Config page, enable CubeSandbox and save the `templateId`
+created above. Then submit a Python task:
+
+```bash
+curl -sS -X POST http://localhost:18000/api/v1/cubesandbox-tasks \
+  -H 'content-type: application/json' \
+  -d '{"code":"print(sum(range(10)))"}'
+```
+
+Poll the returned task:
+
+```bash
+curl -sS http://localhost:18000/api/v1/cubesandbox-tasks/<task_id>
+```
+
+A successful smoke ends with `status="completed"`, `stdout` containing `45`,
+and `cleanupStatus="completed"`. `DELETE /api/v1/cubesandbox-tasks/<task_id>`
+is accepted only after the task is terminal; use
+`POST /api/v1/cubesandbox-tasks/<task_id>/interrupt` for a non-terminal task.
+
+## 8. Verify C/C++ Compilation in CubeSandbox
 
 The upstream `sandbox-code` image currently includes `gcc` and `g++`. Verify
 that the template can compile and run both C and C++ programs:
@@ -190,7 +232,7 @@ C_OK:42
 CPP_OK:10
 ```
 
-## 8. Build a CMake/Make/CodeQL C++ Template
+## 9. Build a CMake/Make/CodeQL C++ Template
 
 The base Python template does not include `cmake` or `codeql`. Build a local
 CodeQL C++ image inside the CubeSandbox VM, push it to the VM-local registry,
