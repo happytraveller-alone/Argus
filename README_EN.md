@@ -29,6 +29,10 @@ The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/doc
 - Project-level agent instructions are centralized in `AGENTS.md`; repo-local skills load from `.codex/skills/`. Use `neat-freak` at milestone end to reconcile project docs and agent knowledge.
 - `.gitignore` ignores `.codex/`; reinstall a local skill or change version-control policy deliberately if another environment must reuse it.
 
+## CubeSandbox Python Smoke
+
+CubeSandbox needs WSL2-native KVM/QEMU and runs its E2B-compatible API inside a separate development VM; it is not part of the default Argus compose path and no longer runs QEMU through a Docker helper container. Use `scripts/cubesandbox-quickstart.sh` through [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) to configure CubeSandbox and run Python, C, and C++ smokes. The helper forwards the CubeSandbox API to `127.0.0.1:23000` by default so it does not collide with Argus frontend port `13000`; GitHub URLs default to the `https://v6.gh-proxy.org/https://github.com/...` mirror.
+
 ## GHCR Image Naming
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.

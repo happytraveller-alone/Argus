@@ -31,6 +31,10 @@
 - 项目级 agent 指令由 `AGENTS.md` 统一承载；repo-local skills 从 `.codex/skills/` 加载。里程碑收尾可使用 `neat-freak` 同步项目文档与 agent 知识。
 - `.gitignore` 会忽略 `.codex/`；如果需要让其他环境复用某个本地 skill，请重新安装该 skill 或显式调整版本控制策略。
 
+## CubeSandbox Python 试运行
+
+CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++ smoke。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像。
+
 ## GHCR 镜像命名
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。

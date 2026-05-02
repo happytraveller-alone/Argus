@@ -204,6 +204,7 @@ skills/
 
 # Agent integration - session logs and generated docs
 .claude/
+.cubesandbox/
 
 .playwright-cli/
 frontend/.*/
