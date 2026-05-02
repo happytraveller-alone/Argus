@@ -101,7 +101,7 @@ flowchart TD
 
 - **Purpose**: Docker runner images, wheelhouse preparation, reset/rebuild/start scripts, release packaging.
 - **Entry points**: `docker/opengrep-scan.sh:182`, `docker/argus-pip-wheel-group.sh:1`, `scripts/prepare-agentflow-wheelhouse.sh:1`, `docker/agentflow-runner.Dockerfile:1`.
-- **Core files**: `docker/`, `scripts/`, `.github/workflows/docker-publish.yml`, `argus-reset-rebuild-start.sh`.
+- **Core files**: `docker/`, `scripts/`, `.github/workflows/docker-publish.yml`, `argus-bootstrap.sh`.
 - **Boundary**: Operational build/runtime tooling; application domain logic should stay in backend/frontend.
 
 ## Confidence and known gaps

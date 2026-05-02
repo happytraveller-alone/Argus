@@ -4,6 +4,8 @@ set -Eeuo pipefail
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+LLM_CONFIG_VALIDATOR="$ROOT_DIR/scripts/validate-llm-config.sh"
+ARGUS_INTELLIGENT_AUDIT_ENV="${ARGUS_INTELLIGENT_AUDIT_ENV:-$ROOT_DIR/.argus-intelligent-audit.env}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
 DRY_RUN=false
 WAIT_EXIT=false
@@ -22,8 +24,8 @@ ARGUS_RESET_IMPORT_TOKEN=""
 print_banner() {
   cat <<'BANNER'
   ___
- / _ |  ARGUS Reset/Rebuild/Start
-/ __ |  Intelligent Audit Runtime
+ / _ |  ARGUS Bootstrap
+/ __ |  Environment + LLM Runtime
 /_/ |_|  Developer: happytraveller
 
 为保护作者仓库开发成果/专利，未经作者授权不得商用；如需商用请联系作者。
@@ -35,7 +37,7 @@ BANNER
 usage() {
   print_banner
   cat <<USAGE
-$SCRIPT_NAME - Argus reset/rebuild/start helper
+$SCRIPT_NAME - Argus bootstrap helper
 
 Usage:
   ./$SCRIPT_NAME [--dry-run] [--wait-exit] [--help] -- <mode>
@@ -76,18 +78,101 @@ Ports:
 Test / verification:
   --dry-run                     Preview commands and skip Docker/curl execution.
   ARGUS_STUB_DOCKER=true        Print Docker/curl/env commands instead of running them.
+  scripts/validate-llm-config.sh --env-file <path>
+                                Validate the LLM env file without starting Docker.
   ARGUS_TEST_INTERACTIVE=true   Test-only: allow scripted interactive config without a TTY.
   ARGUS_TEST_SECRET_KEY=value   Test-only: deterministic generated SECRET_KEY.
 USAGE
 }
 
 log() {
-  printf '[argus-reset] %s\n' "$*"
+  printf '[argus-bootstrap] %s\n' "$*"
 }
 
 fail() {
-  printf '[argus-reset] ERROR: %s\n' "$*" >&2
+  printf '[argus-bootstrap] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+quote_cmd() {
+  local quoted=()
+  local arg
+  for arg in "$@"; do
+    printf -v arg '%q' "$arg"
+    quoted+=("$arg")
+  done
+  redact_arg_for_log "${quoted[*]}"
+}
+
+prompt_config_value() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local value
+  if [[ -n "$default_value" ]]; then
+    printf '%s [%s]: ' "$prompt" "$default_value" >&2
+  else
+    printf '%s: ' "$prompt" >&2
+  fi
+  IFS= read -r value
+  if [[ -z "$value" ]]; then
+    value="$default_value"
+  fi
+  printf '%s' "$value"
+}
+
+generate_secret_key() {
+  if [[ -n "${ARGUS_TEST_SECRET_KEY:-}" ]]; then
+    printf '%s' "$ARGUS_TEST_SECRET_KEY"
+  elif command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v od >/dev/null 2>&1 && [[ -r /dev/urandom ]]; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+  else
+    fail "Unable to generate SECRET_KEY: openssl or /dev/urandom+od is required"
+  fi
+}
+
+can_prompt_for_config() {
+  [[ "${ARGUS_TEST_INTERACTIVE:-false}" == "true" ]] || [[ -t 0 ]]
+}
+
+ensure_llm_env_file() {
+  if [[ -f "$ARGUS_INTELLIGENT_AUDIT_ENV" ]]; then
+    return 0
+  fi
+  if ! can_prompt_for_config; then
+    return 0
+  fi
+
+  log "LLM env file is missing; creating $ARGUS_INTELLIGENT_AUDIT_ENV interactively."
+  local provider api_key model base_url secret_key
+  provider="$(prompt_config_value "LLM_PROVIDER" "openai_compatible")"
+  api_key="$(prompt_config_value "LLM_API_KEY")"
+  model="$(prompt_config_value "LLM_MODEL" "gpt-5")"
+  base_url="$(prompt_config_value "LLM_BASE_URL" "https://api.openai.com/v1")"
+  secret_key="$(generate_secret_key)"
+
+  cat > "$ARGUS_INTELLIGENT_AUDIT_ENV" <<ENV
+SECRET_KEY=$secret_key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=11520
+LLM_PROVIDER=$provider
+LLM_API_KEY=$api_key
+LLM_MODEL=$model
+LLM_BASE_URL=$base_url
+LLM_TIMEOUT=150
+LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=4096
+AGENT_ENABLED=true
+AGENT_MAX_ITERATIONS=5
+AGENT_TIMEOUT=1800
+ENABLE_PARALLEL_ANALYSIS=true
+ENABLE_PARALLEL_VERIFICATION=true
+ANALYSIS_MAX_WORKERS=5
+VERIFICATION_MAX_WORKERS=3
+ENV
+  chmod 600 "$ARGUS_INTELLIGENT_AUDIT_ENV" 2>/dev/null || true
+  log "Created LLM env file with redacted secrets."
 }
 
 is_truthy() {
@@ -127,6 +212,12 @@ run_cmd() {
 run_compose() {
   local cmd=(docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" "$@")
   run_cmd "${cmd[@]}"
+}
+
+validate_llm_config() {
+  [[ -x "$LLM_CONFIG_VALIDATOR" ]] || fail "LLM config validator is missing or not executable: $LLM_CONFIG_VALIDATOR"
+  ensure_llm_env_file
+  "$LLM_CONFIG_VALIDATOR" --env-file "$ARGUS_INTELLIGENT_AUDIT_ENV"
 }
 
 generate_import_token() {
@@ -200,6 +291,7 @@ cleanup_for_run_mode() {
 compose_up_detached() {
   log "Starting Argus detached"
   run_cmd env \
+    "ARGUS_INTELLIGENT_AUDIT_ENV=$ARGUS_INTELLIGENT_AUDIT_ENV" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
 }
@@ -242,13 +334,11 @@ import_backend_env() {
     printf '%s
 ' "$response"
   else
-    log "WARNING: backend LLM env import/test failed; Argus remains running, but intelligent create/start must stay disabled until system-config has a current successful fingerprint."
-    return 0
+    fail "backend LLM env import/test failed. 请重新配置 $ARGUS_INTELLIGENT_AUDIT_ENV 后再运行 bootstrap。"
   fi
 
   if printf '%s' "$response" | grep -Eq '"success"[[:space:]]*:[[:space:]]*false'; then
-    log "WARNING: backend LLM env import/test returned failure; Argus remains running, but intelligent create/start must stay disabled until system-config has a current successful fingerprint."
-    return 0
+    fail "backend LLM env import/test returned failure. 请重新配置 $ARGUS_INTELLIGENT_AUDIT_ENV 后再运行 bootstrap。"
   fi
   log "Backend LLM env import/test succeeded; response was sanitized by backend."
 }
@@ -366,8 +456,9 @@ parse_args() {
 main() {
   parse_args "$@"
   print_banner
-  log "Argus reset/rebuild/start beginning. Project: $PROJECT_NAME"
+  log "Argus bootstrap beginning. Project: $PROJECT_NAME"
   log "Run mode: $RUN_MODE"
+  validate_llm_config
   require_real_tools
   generate_import_token
   cleanup_for_run_mode

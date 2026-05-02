@@ -2,7 +2,7 @@
 
 **Status**: Accepted  
 **Date**: 2026-05-01  
-**Current tree note**: 2026-05-02 reconciliation removed vendored AgentFlow source from `vendor/`; compatibility/schema/fixture assets still remain outside `vendor/`.
+**Current tree note**: 2026-05-02 reconciliation — `vendor/agentflow-src/` deletion committed (commit 3b0ce36a, 7776f4bf) but not yet pushed; compatibility/schema/fixture assets remain in `backend/agentflow/` and test surfaces.
 **Deciders**: Development team
 
 ## Context
@@ -42,7 +42,7 @@ As of 2026-05-02 in this checkout:
 - `backend/src/runtime/mod.rs` does not export `runtime/agentflow`.
 - `docker-compose.yml` does not define an `agentflow-runner` service.
 - `frontend/src/app/routes.tsx` renders `InDevelopmentPlaceholder` for `/agent-audit/:taskId`.
-- `vendor/agentflow-src/` no longer exists.
+- `vendor/agentflow-src/` deletion committed (3b0ce36a, 7776f4bf) awaiting push.
 - `backend/agentflow/`, AgentFlow fixture/tests, and some compatibility fields/tests still exist.
 - `frontend/src/shared/api/agentTasks.ts` and `frontend/src/pages/AgentAudit/components/*` exist as frontend compatibility shims for active pages that still import old AgentAudit helpers.
 - `/api/v1/system-config/agent-preflight` still exists and checks LLM configuration plus runner readiness; it is not an AgentTask creation/execution API.
@@ -76,7 +76,7 @@ The current tree reflects these completed pieces:
 1. Frontend stubbing with `<InDevelopmentPlaceholder />` component
 2. Backend Rust route/runtime unmounting for the old AgentTask execution path
 3. Compose mainline removal of `agentflow-runner`
-4. Vendor retirement: `vendor/agentflow-src/` and related vendor patch assets are removed
+4. Vendor retirement: `vendor/agentflow-src/` deletion committed (3b0ce36a, 7776f4bf) awaiting push
 5. Documentation reconciliation to mark residual assets as transition/compatibility surfaces
 
 Known residual surfaces:

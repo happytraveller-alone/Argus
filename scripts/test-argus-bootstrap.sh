@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT_SRC="$ROOT_DIR/argus-reset-rebuild-start.sh"
+SCRIPT_SRC="$ROOT_DIR/argus-bootstrap.sh"
+VALIDATOR_SRC="$ROOT_DIR/scripts/validate-llm-config.sh"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -49,9 +50,11 @@ line_no() {
 new_fixture() {
   local name="$1"
   local dir="$TMP_ROOT/$name"
-  mkdir -p "$dir/docker/env/backend"
-  cp "$SCRIPT_SRC" "$dir/argus-reset-rebuild-start.sh"
-  chmod +x "$dir/argus-reset-rebuild-start.sh"
+  mkdir -p "$dir/docker/env/backend" "$dir/scripts"
+  cp "$SCRIPT_SRC" "$dir/argus-bootstrap.sh"
+  cp "$VALIDATOR_SRC" "$dir/scripts/validate-llm-config.sh"
+  chmod +x "$dir/argus-bootstrap.sh"
+  chmod +x "$dir/scripts/validate-llm-config.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
 services:
   opengrep-runner:
@@ -127,9 +130,9 @@ ENV
 # Help documents the new operator contract and author/commercial notice.
 help_dir="$(new_fixture help)"
 help_out="$help_dir/help.out"
-( cd "$help_dir" && ./argus-reset-rebuild-start.sh --help ) >"$help_out" 2>&1
+( cd "$help_dir" && ./argus-bootstrap.sh --help ) >"$help_out" 2>&1
 assert_banner_contact "$help_out"
-assert_contains "$help_out" "./argus-reset-rebuild-start.sh [--dry-run] [--wait-exit] [--help] -- <mode>"
+assert_contains "$help_out" "./argus-bootstrap.sh [--dry-run] [--wait-exit] [--help] -- <mode>"
 assert_contains "$help_out" "Run modes:"
 assert_contains "$help_out" "default"
 assert_contains "$help_out" "keep-cache"
@@ -141,12 +144,20 @@ assert_contains "$help_out" "docker system prune -af --volumes"
 assert_contains "$help_out" "docker compose up -d --build"
 assert_contains "$help_out" "--wait-exit"
 assert_contains "$help_out" "ARGUS_STUB_DOCKER=true"
+assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
+
+# Standalone validator accepts valid LLM env and rejects missing/placeholder values.
+validator_dir="$(new_fixture validator)"
+write_valid_config "$validator_dir"
+validator_out="$validator_dir/validator.out"
+( cd "$validator_dir" && ./scripts/validate-llm-config.sh --env-file ./.argus-intelligent-audit.env ) >"$validator_out" 2>&1
+assert_contains "$validator_out" "LLM env config is valid"
 
 # Parser rejects invalid post-separator modes before config or Docker work.
 invalid_dir="$(new_fixture invalid-mode)"
 invalid_out="$invalid_dir/invalid-mode.out"
 set +e
-( cd "$invalid_dir" && ./argus-reset-rebuild-start.sh -- banana ) >"$invalid_out" 2>&1
+( cd "$invalid_dir" && ./argus-bootstrap.sh -- banana ) >"$invalid_out" 2>&1
 invalid_rc=$?
 set -e
 [[ "$invalid_rc" -ne 0 ]] || fail "Unknown mode should fail"
@@ -157,7 +168,7 @@ assert_not_contains "$invalid_out" "docker compose"
 extra_dir="$(new_fixture extra-mode)"
 extra_out="$extra_dir/extra-mode.out"
 set +e
-( cd "$extra_dir" && ./argus-reset-rebuild-start.sh -- default extra ) >"$extra_out" 2>&1
+( cd "$extra_dir" && ./argus-bootstrap.sh -- default extra ) >"$extra_out" 2>&1
 extra_rc=$?
 set -e
 [[ "$extra_rc" -ne 0 ]] || fail "Multiple post-separator tokens should fail"
@@ -167,7 +178,7 @@ assert_not_contains "$extra_out" "docker compose"
 flag_after_dir="$(new_fixture flag-after)"
 flag_after_out="$flag_after_dir/flag-after.out"
 set +e
-( cd "$flag_after_dir" && ./argus-reset-rebuild-start.sh -- --wait-exit ) >"$flag_after_out" 2>&1
+( cd "$flag_after_dir" && ./argus-bootstrap.sh -- --wait-exit ) >"$flag_after_out" 2>&1
 flag_after_rc=$?
 set -e
 [[ "$flag_after_rc" -ne 0 ]] || fail "Flag after separator should be treated as invalid mode"
@@ -178,7 +189,7 @@ assert_not_contains "$flag_after_out" "docker compose"
 missing_dir="$(new_fixture missing)"
 missing_out="$missing_dir/missing.out"
 set +e
-( cd "$missing_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-reset-rebuild-start.sh ) >"$missing_out" 2>&1
+( cd "$missing_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_out" 2>&1
 missing_rc=$?
 set -e
 [[ "$missing_rc" -ne 0 ]] || fail "Missing config should fail in CI/non-TTY"
@@ -201,7 +212,7 @@ AGENT_TIMEOUT=1800
 ENV
 placeholder_out="$placeholder_dir/placeholder.out"
 set +e
-( cd "$placeholder_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-reset-rebuild-start.sh ) >"$placeholder_out" 2>&1
+( cd "$placeholder_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$placeholder_out" 2>&1
 placeholder_rc=$?
 set -e
 [[ "$placeholder_rc" -ne 0 ]] || fail "Placeholder config should fail"
@@ -215,7 +226,7 @@ grep -v '^LLM_MODEL=' "$missing_key_dir/.argus-intelligent-audit.env" > "$missin
 mv "$missing_key_dir/.argus-intelligent-audit.env.tmp" "$missing_key_dir/.argus-intelligent-audit.env"
 missing_key_out="$missing_key_dir/missing-key.out"
 set +e
-( cd "$missing_key_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-reset-rebuild-start.sh ) >"$missing_key_out" 2>&1
+( cd "$missing_key_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_key_out" 2>&1
 missing_key_rc=$?
 set -e
 [[ "$missing_key_rc" -ne 0 ]] || fail "Missing required key should fail"
@@ -233,7 +244,7 @@ set +e
     ARGUS_TEST_INTERACTIVE=true \
     ARGUS_TEST_SECRET_KEY=GENERATED_SECRET_FOR_TEST \
     ARGUS_STUB_DOCKER=true \
-    ./argus-reset-rebuild-start.sh --wait-exit -- default
+    ./argus-bootstrap.sh --wait-exit -- default
 ) >"$interactive_out" 2>&1
 interactive_rc=$?
 set -e
@@ -259,7 +270,7 @@ valid_dir="$(new_fixture valid)"
 write_valid_config "$valid_dir"
 printf 'STALE_KEY=must_be_removed\n' > "$valid_dir/docker/env/backend/.env"
 valid_out="$valid_dir/valid.out"
-( cd "$valid_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-reset-rebuild-start.sh ) >"$valid_out" 2>&1
+( cd "$valid_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh ) >"$valid_out" 2>&1
 assert_contains "$valid_dir/docker/env/backend/.env" "STALE_KEY=must_be_removed"
 assert_not_contains "$valid_out" "SECRET_SENTINEL_SHOULD_NOT_PRINT"
 assert_banner_contact "$valid_out"
@@ -278,7 +289,7 @@ assert_not_contains "$valid_out" "IMPORT_TOKEN_SHOULD_NOT_PRINT"
 assert_not_contains "$valid_out" "curl -fsS http://127.0.0.1:13000"
 assert_no_global_prune_execution "$valid_out"
 banner_line="$(line_no "$valid_out" "happytraveller")"
-validation_line="$(line_no "$valid_out" "Config key AGENT_TIMEOUT is configured")"
+validation_line="$(line_no "$valid_out" "LLM env config is valid")"
 down_line="$(line_no "$valid_out" "down --remove-orphans")"
 up_line="$(line_no "$valid_out" "up -d --build")"
 backend_wait_line="$(line_no "$valid_out" "curl -fsS http://127.0.0.1:18000/health")"
@@ -290,7 +301,7 @@ logs_line="$(line_no "$valid_out" "logs -f")"
 default_dir="$(new_fixture explicit-default)"
 write_valid_config "$default_dir"
 default_out="$default_dir/default.out"
-( cd "$default_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-reset-rebuild-start.sh -- default ) >"$default_out" 2>&1
+( cd "$default_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh -- default ) >"$default_out" 2>&1
 assert_contains "$default_out" "Run mode: default"
 assert_contains "$default_out" "down --remove-orphans"
 assert_not_contains "$default_out" "down --volumes --remove-orphans"
@@ -300,7 +311,7 @@ assert_no_global_prune_execution "$default_out"
 keep_cache_dir="$(new_fixture keep-cache)"
 write_valid_config "$keep_cache_dir"
 keep_cache_out="$keep_cache_dir/keep-cache.out"
-( cd "$keep_cache_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-reset-rebuild-start.sh -- keep-cache ) >"$keep_cache_out" 2>&1
+( cd "$keep_cache_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=true ./argus-bootstrap.sh -- keep-cache ) >"$keep_cache_out" 2>&1
 assert_contains "$keep_cache_out" "Run mode: keep-cache"
 assert_contains "$keep_cache_out" "removing this Compose project's managed volumes"
 assert_contains "$keep_cache_out" "preserving Docker image/build cache"
@@ -311,7 +322,7 @@ assert_no_global_prune_execution "$keep_cache_out"
 aggressive_dir="$(new_fixture aggressive)"
 write_valid_config "$aggressive_dir"
 aggressive_out="$aggressive_dir/aggressive.out"
-( cd "$aggressive_dir" && ARGUS_STUB_DOCKER=true ./argus-reset-rebuild-start.sh -- aggressive ) >"$aggressive_out" 2>&1
+( cd "$aggressive_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh -- aggressive ) >"$aggressive_out" 2>&1
 assert_contains "$aggressive_out" "Run mode: aggressive"
 assert_contains "$aggressive_out" "WARNING: aggressive mode enabled"
 assert_contains "$aggressive_out" "down --volumes --remove-orphans"
@@ -324,7 +335,7 @@ aggressive_prune_line="$(line_no "$aggressive_out" "[stub] docker system prune -
 aggressive_skip_dir="$(new_fixture aggressive-skip)"
 write_valid_config "$aggressive_skip_dir"
 aggressive_skip_out="$aggressive_skip_dir/aggressive-skip.out"
-( cd "$aggressive_skip_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=false ./argus-reset-rebuild-start.sh -- aggressive ) >"$aggressive_skip_out" 2>&1
+( cd "$aggressive_skip_dir" && ARGUS_STUB_DOCKER=true ARGUS_DOCKER_SYSTEM_PRUNE=false ./argus-bootstrap.sh -- aggressive ) >"$aggressive_skip_out" 2>&1
 assert_contains "$aggressive_skip_out" "Run mode: aggressive"
 assert_contains "$aggressive_skip_out" "down --volumes --remove-orphans"
 assert_contains "$aggressive_skip_out" "Skipping global Docker prune because ARGUS_DOCKER_SYSTEM_PRUNE=false"
@@ -334,7 +345,7 @@ assert_no_global_prune_execution "$aggressive_skip_out"
 wait_dir="$(new_fixture wait)"
 write_valid_config "$wait_dir"
 wait_out="$wait_dir/wait.out"
-( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-reset-rebuild-start.sh --wait-exit -- default ) >"$wait_out" 2>&1
+( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-bootstrap.sh --wait-exit -- default ) >"$wait_out" 2>&1
 assert_contains "$wait_out" "up -d --build"
 assert_contains "$wait_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$wait_out" "curl -fsS -X POST"
@@ -342,19 +353,23 @@ assert_contains "$wait_out" "curl -fsS http://127.0.0.1:13099"
 assert_contains "$wait_out" "Complete. Frontend: http://127.0.0.1:13099"
 assert_no_global_prune_execution "$wait_out"
 
-# Sanitized HTTP 200 import-test failure warns but still exits successfully.
+# Sanitized HTTP 200 import-test failure exits before reporting frontend readiness.
 import_failure_dir="$(new_fixture import-failure)"
 write_valid_config "$import_failure_dir"
 import_failure_out="$import_failure_dir/import-failure.out"
-( cd "$import_failure_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_RESPONSE='{"success":false,"message":"mock failure","reasonCode":"llm_test_failed"}' ./argus-reset-rebuild-start.sh --wait-exit -- default ) >"$import_failure_out" 2>&1
+set +e
+( cd "$import_failure_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_RESPONSE='{"success":false,"message":"mock failure","reasonCode":"llm_test_failed"}' ./argus-bootstrap.sh --wait-exit -- default ) >"$import_failure_out" 2>&1
+import_failure_rc=$?
+set -e
+[[ "$import_failure_rc" -ne 0 ]] || fail "Import/test failure should stop bootstrap"
 assert_contains "$import_failure_out" '"success":false'
-assert_contains "$import_failure_out" "WARNING: backend LLM env import/test returned failure"
-assert_contains "$import_failure_out" "Complete. Frontend: http://127.0.0.1:13000"
+assert_contains "$import_failure_out" "backend LLM env import/test returned failure"
+assert_not_contains "$import_failure_out" "Complete. Frontend: http://127.0.0.1:13000"
 
 wait_aggressive_dir="$(new_fixture wait-aggressive)"
 write_valid_config "$wait_aggressive_dir"
 wait_aggressive_out="$wait_aggressive_dir/wait-aggressive.out"
-( cd "$wait_aggressive_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13100 ./argus-reset-rebuild-start.sh --wait-exit -- aggressive ) >"$wait_aggressive_out" 2>&1
+( cd "$wait_aggressive_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13100 ./argus-bootstrap.sh --wait-exit -- aggressive ) >"$wait_aggressive_out" 2>&1
 assert_contains "$wait_aggressive_out" "Run mode: aggressive"
 assert_contains "$wait_aggressive_out" "down --volumes --remove-orphans"
 assert_contains "$wait_aggressive_out" "[stub] docker system prune -af --volumes"
@@ -369,7 +384,7 @@ dry_dir="$(new_fixture dry)"
 write_valid_config "$dry_dir"
 printf 'STALE_KEY=still_here\n' > "$dry_dir/docker/env/backend/.env"
 dry_out="$dry_dir/dry.out"
-( cd "$dry_dir" && ./argus-reset-rebuild-start.sh --dry-run -- default ) >"$dry_out" 2>&1
+( cd "$dry_dir" && ./argus-bootstrap.sh --dry-run -- default ) >"$dry_out" 2>&1
 assert_not_contains "$dry_out" "[dry-run] cp"
 assert_contains "$dry_out" "[dry-run] docker compose"
 assert_contains "$dry_out" "[dry-run] curl -fsS -X POST"
@@ -381,7 +396,7 @@ assert_contains "$dry_dir/docker/env/backend/.env" "STALE_KEY=still_here"
 dry_aggressive_dir="$(new_fixture dry-aggressive)"
 write_valid_config "$dry_aggressive_dir"
 dry_aggressive_out="$dry_aggressive_dir/dry-aggressive.out"
-( cd "$dry_aggressive_dir" && ./argus-reset-rebuild-start.sh --dry-run -- aggressive ) >"$dry_aggressive_out" 2>&1
+( cd "$dry_aggressive_dir" && ./argus-bootstrap.sh --dry-run -- aggressive ) >"$dry_aggressive_out" 2>&1
 assert_contains "$dry_aggressive_out" "[dry-run] docker compose"
 assert_contains "$dry_aggressive_out" "[dry-run] docker system prune -af --volumes"
 
@@ -389,8 +404,8 @@ assert_contains "$dry_aggressive_out" "[dry-run] docker system prune -af --volum
 bare_dir="$(new_fixture bare-separator)"
 write_valid_config "$bare_dir"
 bare_out="$bare_dir/bare.out"
-( cd "$bare_dir" && ARGUS_STUB_DOCKER=true ./argus-reset-rebuild-start.sh -- ) >"$bare_out" 2>&1
+( cd "$bare_dir" && ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh -- ) >"$bare_out" 2>&1
 assert_contains "$bare_out" "Run mode: default"
 assert_no_global_prune_execution "$bare_out"
 
-echo "[test] argus-reset-rebuild-start tests passed"
+echo "[test] argus-bootstrap tests passed"

@@ -23,10 +23,10 @@
 3. 启动：
 
    ```bash
-   docker compose up --build
+   ./argus-bootstrap.sh --wait-exit -- default
    ```
 
-Compose 会通过 `ARGUS_INTELLIGENT_AUDIT_ENV` 指定的 env file（默认 `./.argus-intelligent-audit.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
+`argus-bootstrap.sh` 会先调用 `scripts/validate-llm-config.sh --env-file ./.argus-intelligent-audit.env` 校验 env/LLM 配置；缺文件、占位密钥、缺 `LLM_MODEL` / `LLM_BASE_URL` 等必填项、unsupported provider 或 backend import/test 失败都会中止启动并提示重新配置。Compose 会通过 `ARGUS_INTELLIGENT_AUDIT_ENV` 指定的 env file（默认 `./.argus-intelligent-audit.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
 
 ## API 契约
 
@@ -158,6 +158,7 @@ pnpm --dir frontend build
 cargo test --manifest-path backend/Cargo.toml system_config
 cargo test --manifest-path backend/Cargo.toml agent_preflight
 cargo test --manifest-path backend/Cargo.toml
+bash scripts/test-argus-bootstrap.sh
 git diff --check
 ```
 

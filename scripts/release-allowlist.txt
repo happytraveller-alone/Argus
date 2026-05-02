@@ -6,6 +6,8 @@ frontend/
 docker/frontend.Dockerfile
 docker/env/backend/env.example
 docker/env/frontend/.env.example
+argus-bootstrap.sh
+scripts/validate-llm-config.sh
 
 # Legal files retained in the generated release tree.
 LICENSE

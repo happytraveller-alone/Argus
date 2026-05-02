@@ -94,14 +94,13 @@
 
 ### `.argus-intelligent-audit.env`
 
-- **是什么**：智能引擎/LLM 配置的启动导入文件。`argus-reset-rebuild-start.sh` 和相关测试仍围绕该文件生成/校验配置，backend 启动导入后以 system-config 为运行时真源。
+- **是什么**：智能引擎/LLM 配置的启动导入文件。`argus-bootstrap.sh` 和相关测试仍围绕该文件生成/校验配置，backend 启动导入后以 system-config 为运行时真源。
 - **不是什么**：UI 写回目标；前端保存配置只写 system-config，不直接修改这个文件。
 
 ### repo-local Codex / OMX
 
 - **是什么**：本仓库内的 Codex/OMX 配置和 skills 目录，通常配合 `CODEX_HOME=$PWD/.codex` 使用。
 - **不是什么**：全局 `~/.codex` 的替代品；`.codex/` 当前被 `.gitignore` 忽略，跨环境复用 skill 需要重新安装或显式调整版本控制策略。
-- **MCP 注意**：claude-mem `mcp-search` 通过 `.codex/local-bin/claude-mem-mcp-search` 解析真实插件目录，并由 `.codex/config.toml` 的本地 `mcp-search` 覆盖引用；Codex MCP 配置里的 `args` 不会展开 `${CLAUDE_PLUGIN_ROOT}`。
 
 ## 阅读路线建议
 

@@ -8,7 +8,7 @@
 - `docker/argus-pip-wheel-group.sh:1` — wheel group helper entry.
 - `scripts/prepare-agentflow-wheelhouse.sh:1` — local wheelhouse prep script entry.
 - `docker/agentflow-runner.Dockerfile:1` — AgentFlow runner image definition entry.
-- `scripts/test-argus-reset-rebuild-start.sh:1` — reset script contract test entry.
+- `scripts/test-argus-bootstrap.sh:1` — bootstrap script contract test entry.
 
 ## Concrete findings
 
@@ -27,7 +27,7 @@ flowchart TD
   OpengrepImage --> OpengrepShell["run_opengrep_once<br/>docker/opengrep-scan.sh:182"]
   AgentImage --> WheelPrep["prepare wheelhouse<br/>scripts/prepare-agentflow-wheelhouse.sh:1"]
   WheelPrep --> WheelGroup["argus-pip-wheel-group<br/>docker/argus-pip-wheel-group.sh:1"]
-  ResetTest["reset script tests<br/>scripts/test-argus-reset-rebuild-start.sh:1"] --> Compose
+  ResetTest["bootstrap script tests<br/>scripts/test-argus-bootstrap.sh:1"] --> Compose
 ```
 
 ## Side effects

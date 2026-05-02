@@ -4,15 +4,18 @@
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
-This release branch keeps only the slim-source files required to run Argus:
+This release branch keeps only the slim-source files required to run Argus. Recommended startup:
 
 ```bash
-docker compose up --build
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
 ## Before You Start
 
 1. Make sure Docker Compose is installed and the Docker daemon is reachable.
+2. Fill `.argus-intelligent-audit.env`, or let `./argus-bootstrap.sh` create it interactively on first run.
+
+`argus-bootstrap.sh` calls `scripts/validate-llm-config.sh` before any Docker cleanup or startup action. If env/LLM validation fails, bootstrap exits and asks you to reconfigure.
 
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
 
@@ -38,10 +41,10 @@ The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launc
 ### 1. Default startup
 
 ```bash
-docker compose up --build
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
-Use this to build and start all services locally.
+Use this to validate LLM env, build and start all services, then exit after frontend/backend readiness checks pass.
 
 ## Endpoints
 

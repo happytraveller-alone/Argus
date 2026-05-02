@@ -4,10 +4,10 @@
   <strong>简体中文</strong> | <a href="README_EN.md">English</a>
 </p>
 
-该发布分支只保留 slim-source 运行所需文件，启动方式：
+该发布分支只保留 slim-source 运行所需文件。推荐启动方式：
 
 ```bash
-docker compose up --build
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
 当前 compose 链路已统一为 `Rust backend + TypeScript frontend`，不再包含旧的 Python backend 双后端链路。
@@ -15,6 +15,9 @@ docker compose up --build
 ## 启动前准备
 
 1. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
+2. 填写 `.argus-intelligent-audit.env` 中的 LLM 配置，或首次运行 `./argus-bootstrap.sh` 时按提示生成。
+
+`argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
@@ -40,11 +43,11 @@ docker compose up --build
 ### 1. 默认镜像启动
 
 ```bash
-docker compose up --build
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
 用途：
-全量本地构建并启动所有服务。
+校验 LLM env、构建并启动所有服务，等待前后端就绪后退出。
 
 ## 访问地址
 
