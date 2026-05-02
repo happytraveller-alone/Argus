@@ -75,7 +75,6 @@ pub struct ProjectManagementMetricsResponse {
     pub total_tasks: i64,
     pub completed_tasks: i64,
     pub running_tasks: i64,
-    pub agent_tasks: i64,
     pub opengrep_tasks: i64,
     pub gitleaks_tasks: i64,
     pub bandit_tasks: i64,
@@ -88,14 +87,6 @@ pub struct ProjectManagementMetricsResponse {
     pub static_high: i64,
     pub static_medium: i64,
     pub static_low: i64,
-    pub intelligent_critical: i64,
-    pub intelligent_high: i64,
-    pub intelligent_medium: i64,
-    pub intelligent_low: i64,
-    pub verified_critical: i64,
-    pub verified_high: i64,
-    pub verified_medium: i64,
-    pub verified_low: i64,
     pub last_completed_task_at: Option<String>,
     pub status: String,
     pub error_message: Option<String>,
@@ -768,18 +759,11 @@ pub async fn get_dashboard_snapshot(
         .await
         .map_err(internal_error)?;
     let task_status = build_dashboard_task_status(&task_snapshot);
-    let intelligent_verified_findings = dashboard_intelligent_verified_findings(&task_snapshot);
     let verified_cumulative_findings = dashboard_verified_cumulative_findings(&task_snapshot);
     let recent_task_limit = query.top_n.unwrap_or(10).clamp(1, 50);
     let all_recent_tasks = build_dashboard_recent_tasks(&task_snapshot, &project_names, 50);
     let recent_tasks = all_recent_tasks
         .iter()
-        .take(recent_task_limit)
-        .cloned()
-        .collect::<Vec<_>>();
-    let recent_intelligent_tasks = all_recent_tasks
-        .iter()
-        .filter(|task| task.task_type == "智能审计")
         .take(recent_task_limit)
         .cloned()
         .collect::<Vec<_>>();
@@ -801,7 +785,7 @@ pub async fn get_dashboard_snapshot(
             "total_projects": total_projects,
             "current_effective_findings": verified_cumulative_findings,
             "current_verified_vulnerability_total": verified_cumulative_findings,
-            "current_verified_findings": intelligent_verified_findings,
+            "current_verified_findings": 0,
             "total_model_tokens": 0,
             "false_positive_rate": 0.0,
             "scan_success_rate": 0.0,
@@ -841,7 +825,7 @@ pub async fn get_dashboard_snapshot(
         "language_risk": [],
         "recent_tasks": recent_tasks,
         "recent_tasks_by_scan_type": {
-            "intelligent": recent_intelligent_tasks,
+            "intelligent": Vec::<serde_json::Value>::new(),
             "static": recent_static_tasks
         },
         "project_risk_distribution": [],
@@ -853,39 +837,6 @@ pub async fn get_dashboard_snapshot(
 
 fn dashboard_verified_cumulative_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
     dashboard_static_verified_medium_plus_findings(snapshot)
-        + dashboard_intelligent_verified_findings(snapshot)
-}
-
-fn dashboard_intelligent_verified_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
-    snapshot
-        .agent_tasks
-        .values()
-        .map(agent_verified_dashboard_count)
-        .sum()
-}
-
-fn agent_verified_dashboard_count(record: &task_state::AgentTaskRecord) -> i64 {
-    let severity_total = non_negative_i64(record.verified_critical_count)
-        + non_negative_i64(record.verified_high_count)
-        + non_negative_i64(record.verified_medium_count)
-        + non_negative_i64(record.verified_low_count);
-    if severity_total > 0 {
-        return severity_total;
-    }
-    if record.verified_count > 0 {
-        return non_negative_i64(record.verified_count);
-    }
-    record
-        .findings
-        .iter()
-        .filter(|finding| {
-            let status = finding.status.trim().to_ascii_lowercase();
-            (finding.is_verified || status == "verified")
-                && status != "false_positive"
-                && status != "hidden"
-                && status != "deleted"
-        })
-        .count() as i64
 }
 
 fn dashboard_static_verified_medium_plus_findings(snapshot: &task_state::TaskStateSnapshot) -> i64 {
@@ -1013,11 +964,6 @@ fn dashboard_task_status_bucket(status: &str) -> DashboardTaskStatusBucket {
 fn build_dashboard_task_status(snapshot: &task_state::TaskStateSnapshot) -> DashboardTaskStatus {
     let mut status = DashboardTaskStatus::default();
 
-    for record in snapshot.agent_tasks.values() {
-        let bucket = dashboard_task_status_bucket(&record.status);
-        status.total.add(bucket);
-        status.intelligent.add(bucket);
-    }
     for record in snapshot.static_tasks.values() {
         let bucket = dashboard_task_status_bucket(&record.status);
         status.total.add(bucket);
@@ -1034,12 +980,12 @@ fn build_dashboard_recent_tasks(
 ) -> Vec<DashboardRecentTask> {
     let mut tasks = Vec::new();
 
-    for record in snapshot.agent_tasks.values() {
+    for record in snapshot.static_tasks.values() {
         let project_name = dashboard_project_name(project_names, &record.project_id);
         tasks.push(DashboardRecentTask {
             task_id: record.id.clone(),
-            task_type: "智能审计".to_string(),
-            title: format!("智能审计 · {project_name}"),
+            task_type: "静态审计".to_string(),
+            title: format!("静态审计 · {project_name}"),
             engine: "llm".to_string(),
             status: record.status.clone(),
             created_at: record.created_at.clone(),
@@ -1527,44 +1473,14 @@ fn build_metrics(
     let mut total_tasks = 0;
     let mut completed_tasks = 0;
     let mut running_tasks = 0;
-    let mut agent_tasks = 0;
     let mut opengrep_tasks = 0;
     let mut gitleaks_tasks = 0;
     let mut bandit_tasks = 0;
     let mut phpstan_tasks = 0;
     let mut static_counts = SeverityMetricCounts::default();
-    let mut intelligent_counts = SeverityMetricCounts::default();
-    let mut verified_counts = SeverityMetricCounts::default();
     let mut last_completed_task_at: Option<String> = None;
 
     if let Some(snapshot) = task_snapshot {
-        for record in snapshot.agent_tasks.values() {
-            if record.project_id != project.id {
-                continue;
-            }
-            total_tasks += 1;
-            agent_tasks += 1;
-            add_task_status_counts(&record.status, &mut completed_tasks, &mut running_tasks);
-            if is_completed_task_status(&record.status) {
-                update_latest_timestamp(
-                    &mut last_completed_task_at,
-                    record.completed_at.as_deref().unwrap_or(&record.created_at),
-                );
-            }
-            intelligent_counts.add(SeverityMetricCounts {
-                critical: non_negative_i64(record.critical_count),
-                high: non_negative_i64(record.high_count),
-                medium: non_negative_i64(record.medium_count),
-                low: non_negative_i64(record.low_count),
-            });
-            verified_counts.add(SeverityMetricCounts {
-                critical: non_negative_i64(record.verified_critical_count),
-                high: non_negative_i64(record.verified_high_count),
-                medium: non_negative_i64(record.verified_medium_count),
-                low: non_negative_i64(record.verified_low_count),
-            });
-        }
-
         for record in snapshot.static_tasks.values() {
             if record.project_id != project.id {
                 continue;
@@ -1590,8 +1506,7 @@ fn build_metrics(
         }
     }
 
-    let mut aggregate_counts = static_counts;
-    aggregate_counts.add(intelligent_counts);
+    let aggregate_counts = static_counts;
 
     ProjectManagementMetricsResponse {
         archive_size_bytes: archive.map(|item| item.file_size),
@@ -1600,7 +1515,6 @@ fn build_metrics(
         total_tasks,
         completed_tasks,
         running_tasks,
-        agent_tasks,
         opengrep_tasks,
         gitleaks_tasks,
         bandit_tasks,
@@ -1613,14 +1527,6 @@ fn build_metrics(
         static_high: static_counts.high,
         static_medium: static_counts.medium,
         static_low: static_counts.low,
-        intelligent_critical: intelligent_counts.critical,
-        intelligent_high: intelligent_counts.high,
-        intelligent_medium: intelligent_counts.medium,
-        intelligent_low: intelligent_counts.low,
-        verified_critical: verified_counts.critical,
-        verified_high: verified_counts.high,
-        verified_medium: verified_counts.medium,
-        verified_low: verified_counts.low,
         last_completed_task_at,
         status: if archive.is_some() {
             "ready"

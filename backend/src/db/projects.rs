@@ -86,8 +86,7 @@ pub async fn delete_project_with_related_tasks(
     let mut next_snapshot = original_snapshot.clone();
     let cleanup_summary =
         task_state::remove_project_tasks_from_snapshot(&mut next_snapshot, project_id);
-    let snapshot_changed =
-        cleanup_summary.removed_agent_tasks > 0 || cleanup_summary.removed_static_tasks > 0;
+    let snapshot_changed = cleanup_summary.removed_static_tasks > 0;
 
     if snapshot_changed {
         task_state::save_snapshot_unlocked(state, &next_snapshot).await?;

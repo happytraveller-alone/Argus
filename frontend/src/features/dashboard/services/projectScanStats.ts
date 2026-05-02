@@ -1,4 +1,4 @@
-import { getAgentTasks, type AgentTask } from "@/shared/api/agentTasks";
+import type { AgentTask } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
@@ -10,7 +10,6 @@ import {
 	resolveSourceModeFromTaskMeta,
 } from "@/features/tasks/services/taskActivities";
 
-const AGENT_TASK_PAGE_LIMIT = 100;
 const STATIC_TASK_PAGE_LIMIT = 200;
 const TASK_POOL_MAX_TOTAL = 1000;
 
@@ -40,22 +39,6 @@ function isCompletedStatus(status: string | null | undefined): boolean {
 	return String(status || "").trim().toLowerCase() === "completed";
 }
 
-async function fetchAgentTasksWithPagination(maxTotal: number): Promise<AgentTask[]> {
-	const tasks: AgentTask[] = [];
-	let skip = 0;
-	while (tasks.length < maxTotal) {
-		const batch = await getAgentTasks({
-			skip,
-			limit: AGENT_TASK_PAGE_LIMIT,
-		});
-		if (!Array.isArray(batch) || batch.length === 0) break;
-		tasks.push(...batch);
-		if (batch.length < AGENT_TASK_PAGE_LIMIT) break;
-		skip += batch.length;
-	}
-	return tasks.slice(0, maxTotal);
-}
-
 async function fetchOpengrepTasksWithPagination(
 	maxTotal: number,
 ): Promise<OpengrepScanTask[]> {
@@ -77,16 +60,15 @@ async function fetchOpengrepTasksWithPagination(
 export async function fetchTaskPoolsWithPagination(
 	maxTotal = TASK_POOL_MAX_TOTAL,
 ): Promise<TaskPoolsData> {
-	const [projects, agentTasks, opengrepTasks] =
+	const [projects, opengrepTasks] =
 		await Promise.all([
 		api.getProjects(),
-		fetchAgentTasksWithPagination(maxTotal),
 		fetchOpengrepTasksWithPagination(maxTotal),
 	]);
 
 	return {
 		projects: Array.isArray(projects) ? projects : [],
-		agentTasks,
+		agentTasks: [],
 		opengrepTasks,
 	};
 }
@@ -122,12 +104,7 @@ export function buildProjectScanRunsChartData(params: {
 		item.staticRuns += 1;
 	}
 
-	for (const task of agentTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		resolveSourceModeFromTaskMeta("intelligent_audit", task.name, task.description);
-		item.intelligentRuns += 1;
-	}
+	// Agent tasks removed - hardcode intelligentRuns to 0
 
 	return Array.from(aggregateMap.values())
 		.map((item) => ({
@@ -146,7 +123,7 @@ export function buildProjectVulnsChartData(params: {
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 }): ProjectVulnsChartItem[] {
-	const { projects, agentTasks, opengrepTasks } = params;
+	const { projects, opengrepTasks } = params;
 	const projectNameMap = new Map(
 		projects.map((project) => [project.id, project.name || "未知项目"]),
 	);
@@ -154,23 +131,20 @@ export function buildProjectVulnsChartData(params: {
 	for (const task of opengrepTasks) {
 		projectIdSet.add(task.project_id);
 	}
-	for (const task of agentTasks) {
-		projectIdSet.add(task.project_id);
-	}
 
 	return Array.from(projectIdSet)
 		.map((projectId) => {
 			const issueBreakdown = getProjectFoundIssuesBreakdown({
 				projectId,
-				agentTasks,
+				agentTasks: [],
 				opengrepTasks,
 			});
 			return {
 				projectId,
 				projectName: projectNameMap.get(projectId) || "未知项目",
 				staticVulns: issueBreakdown.staticIssues,
-				intelligentVulns: issueBreakdown.intelligentIssues,
-				totalVulns: issueBreakdown.totalIssues,
+				intelligentVulns: 0,
+				totalVulns: issueBreakdown.staticIssues,
 			};
 		})
 		.filter((item) => item.totalVulns > 0)

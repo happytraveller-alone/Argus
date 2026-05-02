@@ -184,33 +184,18 @@ async fn matched_tasks(
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     let mut tasks = snapshot
-        .agent_tasks
+        .static_tasks
         .into_values()
         .map(|task| SearchTaskItem {
             id: task.id,
             project_id: task.project_id,
-            name: task.name.unwrap_or_default(),
-            description: task.description.unwrap_or_default(),
-            task_type: task.task_type,
+            name: task.name,
+            description: task.target_path.clone(),
+            task_type: task.engine,
             status: task.status,
             created_at: task.created_at,
-            updated_at: task.completed_at.or(task.started_at),
+            updated_at: task.updated_at,
         })
-        .chain(
-            snapshot
-                .static_tasks
-                .into_values()
-                .map(|task| SearchTaskItem {
-                    id: task.id,
-                    project_id: task.project_id,
-                    name: task.name,
-                    description: task.target_path.clone(),
-                    task_type: task.engine,
-                    status: task.status,
-                    created_at: task.created_at,
-                    updated_at: task.updated_at,
-                }),
-        )
         .collect::<Vec<_>>();
     tasks.sort_by(|left, right| right.created_at.cmp(&left.created_at));
     let filtered = tasks
@@ -243,28 +228,15 @@ async fn matched_findings(
         .await
         .map_err(|error| ApiError::Internal(error.to_string()))?;
     let mut findings = snapshot
-        .agent_tasks
+        .static_tasks
         .into_values()
-        .flat_map(|task| task.findings.into_iter())
-        .map(|finding| SearchFindingItem {
-            id: finding.id,
-            task_id: finding.task_id,
-            title: finding.title,
-            description: finding.description.unwrap_or_default(),
-            vulnerability_type: finding.vulnerability_type,
-            severity: finding.severity,
-            file_path: finding.file_path.unwrap_or_default(),
-            status: finding.status,
-            created_at: finding.created_at,
-            search_blob: finding.code_snippet.unwrap_or_default(),
-        })
-        .chain(snapshot.static_tasks.into_values().flat_map(|task| {
+        .flat_map(|task| {
             let task_id = task.id;
             let task_created_at = task.created_at;
             task.findings
                 .into_iter()
                 .map(move |finding| static_finding_item(&task_id, &task_created_at, finding))
-        }))
+        })
         .collect::<Vec<_>>();
     findings.sort_by(|left, right| right.created_at.cmp(&left.created_at));
     let filtered = findings

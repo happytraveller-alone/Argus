@@ -6,6 +6,12 @@
 import { Bot, Zap, CheckCircle2, Clock, Shield, Code, Settings2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
@@ -193,82 +199,83 @@ export default function AgentModeSelector({
         </label>
 
         {/* Agent 扫描模式 */}
-        <label
-          className={cn(
-            "relative flex flex-col p-4 border cursor-pointer transition-all rounded",
-            isAgentSelected
-              ? "border-violet-500/50 bg-violet-50 dark:bg-violet-950/30"
-              : "border-border hover:border-border bg-muted/50",
-            disabled && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          <input
-            type="radio"
-            name="scanMode"
-            value="agent"
-            checked={value === "agent"}
-            onChange={() => onChange("agent")}
-            disabled={disabled}
-            className="sr-only"
-          />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <label
+                className={cn(
+                  "relative flex flex-col p-4 border transition-all rounded opacity-50 cursor-not-allowed",
+                  "border-border bg-muted/50"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="scanMode"
+                  value="agent"
+                  checked={false}
+                  onChange={() => {}}
+                  disabled={true}
+                  className="sr-only"
+                />
 
-          <div className="flex items-center gap-2 mb-2">
-            <div className={cn(
-              "p-1.5 rounded border",
-              isAgentSelected
-                ? "bg-violet-500/20 border-violet-500/50"
-                : "bg-muted border-border"
-            )}>
-              <Bot className={cn(
-                "w-4 h-4",
-                isAgentSelected ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground"
-              )} />
-            </div>
-            <span className={cn(
-              "font-bold text-sm font-mono uppercase",
-              isAgentSelected ? "text-violet-700 dark:text-violet-300" : "text-foreground/70"
-            )}>
-              智能审计
-            </span>
-            {isAgentSelected && (
-              <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 ml-auto" />
-            )}
-          </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={cn(
+                    "p-1.5 rounded border",
+                    "bg-muted border-border"
+                  )}>
+                    <Bot className={cn(
+                      "w-4 h-4",
+                      "text-muted-foreground"
+                    )} />
+                  </div>
+                  <span className={cn(
+                    "font-bold text-sm font-mono uppercase",
+                    "text-foreground/70"
+                  )}>
+                    智能审计
+                  </span>
+                </div>
 
-          <ul
-            className={cn(
-              "text-xs space-y-1 mb-3 font-mono",
-              isAgentSelected ? "text-violet-700 dark:text-violet-300" : "text-foreground/70",
-            )}
-          >
-            <li className="flex items-center gap-1">
-              <Bot className="w-3 h-3" />
-              AI Agent 自主分析
-            </li>
-            <li className="flex items-center gap-1">
-              <Code className="w-3 h-3" />
-              跨文件关联 + 结构化代码分析
-            </li>
-            <li className={cn(
-              "flex items-center gap-1",
-              isAgentSelected ? "text-violet-700 dark:text-violet-300 font-medium" : "text-foreground/70"
-            )}>
-              <Shield className="w-3 h-3" />
-              沙箱漏洞验证
-            </li>
-          </ul>
+                <ul
+                  className={cn(
+                    "text-xs space-y-1 mb-3 font-mono",
+                    "text-foreground/70",
+                  )}
+                >
+                  <li className="flex items-center gap-1">
+                    <Bot className="w-3 h-3" />
+                    AI Agent 自主分析
+                  </li>
+                  <li className="flex items-center gap-1">
+                    <Code className="w-3 h-3" />
+                    跨文件关联 + 结构化代码分析
+                  </li>
+                  <li className={cn(
+                    "flex items-center gap-1",
+                    "text-foreground/70"
+                  )}>
+                    <Shield className="w-3 h-3" />
+                    沙箱漏洞验证
+                  </li>
+                </ul>
 
-          <div className="mt-auto pt-2 border-t border-border">
-            <span
-              className={cn(
-                "text-xs uppercase tracking-wider font-bold font-mono",
-                isAgentSelected ? "text-violet-700 dark:text-violet-300" : "text-foreground/70",
-              )}
-            >
-              适合: 发版前扫描、深度安全评估
-            </span>
-          </div>
-        </label>
+                <div className="mt-auto pt-2 border-t border-border">
+                  <span
+                    className={cn(
+                      "text-xs uppercase tracking-wider font-bold font-mono",
+                      "text-foreground/70",
+                    )}
+                  >
+                    适合: 发版前扫描、深度安全评估
+                  </span>
+                </div>
+              </label>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>智能审计正在重构中，敬请期待</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {/* 模式说明 */}

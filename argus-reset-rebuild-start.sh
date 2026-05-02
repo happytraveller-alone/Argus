@@ -4,8 +4,6 @@ set -Eeuo pipefail
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
-CONFIG_FILE="${ARGUS_INTELLIGENT_AUDIT_ENV:-$ROOT_DIR/.argus-intelligent-audit.env}"
-CONFIG_TEMPLATE_FILE="${CONFIG_FILE}.example"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-argus}"
 DRY_RUN=false
 WAIT_EXIT=false
@@ -20,18 +18,6 @@ BACKEND_PORT="${Argus_BACKEND_PORT:-18000}"
 BACKEND_HEALTH_URL="${ARGUS_BACKEND_HEALTH_URL:-http://127.0.0.1:${BACKEND_PORT}/health}"
 BACKEND_IMPORT_URL="${ARGUS_BACKEND_IMPORT_URL:-http://127.0.0.1:${BACKEND_PORT}/api/v1/system-config/import-env}"
 ARGUS_RESET_IMPORT_TOKEN=""
-CACHE_SCOPE="argus-agentflow-$(date +%s)"
-
-REQUIRED_CONFIG_KEYS=(
-  SECRET_KEY
-  LLM_PROVIDER
-  LLM_API_KEY
-  LLM_MODEL
-  LLM_BASE_URL
-  AGENT_ENABLED
-  AGENT_MAX_ITERATIONS
-  AGENT_TIMEOUT
-)
 
 print_banner() {
   cat <<'BANNER'
@@ -62,14 +48,6 @@ Usage:
 Shell support:
   Compatible with both bash and zsh. Run as ./$SCRIPT_NAME or via
   bash $SCRIPT_NAME / zsh $SCRIPT_NAME.
-
-Configuration:
-  ARGUS_INTELLIGENT_AUDIT_ENV  Path to dedicated config file.
-                                Default: $ROOT_DIR/.argus-intelligent-audit.env
-  Interactive TTY runs copy/use the example config, prompt for required LLM values,
-  auto-generate SECRET_KEY, hide LLM_API_KEY input, then write the
-  dedicated config used directly by Compose/backend.
-  CI=true or non-TTY runs never prompt; missing or placeholder config fails before Docker cleanup.
 
 Run modes:
   default      Safe default. Preserve data volumes and Docker image/build cache.
@@ -134,17 +112,6 @@ redact_arg_for_log() {
   printf '%s' "$arg"
 }
 
-quote_cmd() {
-  local quoted=()
-  local arg redacted
-  for arg in "$@"; do
-    redacted="$(redact_arg_for_log "$arg")"
-    redacted="$(printf '%q' "$redacted")"
-    quoted+=("$redacted")
-  done
-  printf '%s' "${quoted[*]}"
-}
-
 run_cmd() {
   if "$DRY_RUN"; then
     printf '[dry-run] %s\n' "$(quote_cmd "$@")"
@@ -162,158 +129,6 @@ run_compose() {
   run_cmd "${cmd[@]}"
 }
 
-write_config_template() {
-  local target="$1"
-  mkdir -p "$(dirname "$target")"
-  cat > "$target" <<'TEMPLATE'
-# Argus intelligent-audit / AgentFlow backend environment
-# This file is the baseline for argus-reset-rebuild-start.sh interactive setup.
-# Compose injects this file directly into the backend runtime. The reset script
-# never copies it to docker/env/backend/.env as LLM authority.
-
-# Security: generated automatically by argus-reset-rebuild-start.sh in interactive mode.
-SECRET_KEY=REPLACE_ME_WITH_RANDOM_SECRET
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=11520
-
-# LLM / intelligent-audit required configuration.
-LLM_PROVIDER=openai_compatible
-LLM_API_KEY=REPLACE_ME_WITH_REAL_API_KEY
-LLM_MODEL=REPLACE_ME_WITH_MODEL
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_TIMEOUT=150
-LLM_TEMPERATURE=0.1
-LLM_MAX_TOKENS=4096
-
-# Agent audit defaults.
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
-AGENT_TIMEOUT=1800
-ENABLE_PARALLEL_ANALYSIS=true
-ENABLE_PARALLEL_VERIFICATION=true
-ANALYSIS_MAX_WORKERS=5
-VERIFICATION_MAX_WORKERS=3
-
-# Optional provider-specific settings can be added below when needed.
-# OPENAI_API_KEY=
-# OPENAI_BASE_URL=https://api.openai.com/v1
-# OLLAMA_BASE_URL=http://localhost:11434/v1
-TEMPLATE
-}
-
-ensure_template_file() {
-  if [[ ! -f "$CONFIG_TEMPLATE_FILE" ]]; then
-    write_config_template "$CONFIG_TEMPLATE_FILE"
-    log "Wrote config template: $CONFIG_TEMPLATE_FILE"
-  else
-    log "Config template already exists: $CONFIG_TEMPLATE_FILE"
-  fi
-}
-
-trim_value() {
-  local value="$1"
-  value="${value#${value%%[![:space:]]*}}"
-  value="${value%${value##*[![:space:]]}}"
-  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-    value="${value:1:${#value}-2}"
-  elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-    value="${value:1:${#value}-2}"
-  fi
-  printf '%s' "$value"
-}
-
-env_value_for_key() {
-  local file="$1" key="$2"
-  local line raw_key raw_value found=""
-  [[ -f "$file" ]] || { printf '%s' "$found"; return 0; }
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#${line%%[![:space:]]*}}"
-    [[ -z "$line" || "$line" == \#* ]] && continue
-    [[ "$line" == export\ * ]] && line="${line#export }"
-    [[ "$line" == *=* ]] || continue
-    raw_key="${line%%=*}"
-    raw_key="$(trim_value "$raw_key")"
-    [[ "$raw_key" != "$key" ]] && continue
-    raw_value="${line#*=}"
-    found="$(trim_value "$raw_value")"
-  done < "$file"
-  printf '%s' "$found"
-}
-
-config_value_for_key() {
-  env_value_for_key "$CONFIG_FILE" "$1"
-}
-
-template_value_for_key() {
-  env_value_for_key "$CONFIG_TEMPLATE_FILE" "$1"
-}
-
-is_secret_key_name() {
-  case "$1" in
-    *KEY*|*Key*|*key*|SECRET*|*SECRET*|*secret*|*TOKEN*|*token*|*PASSWORD*|*password*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_placeholder_value() {
-  local value="$(trim_value "$1")"
-  local lower
-  lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
-  [[ -z "$value" ]] && return 0
-  case "$lower" in
-    todo|tbd|replace_me|changeme|change_me|placeholder|dummy|example) return 0 ;;
-    your-*|*your-api-key*|*your_api_key*|*sk-your*|*replace-me*|*replace_me*|*change-this*|*change_this*|*changethis*|*todo*|*tbd*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-validate_config() {
-  [[ -f "$CONFIG_FILE" ]] || fail "Dedicated config is missing: $CONFIG_FILE. No Docker cleanup was performed."
-
-  local key value missing=0
-  for key in "${REQUIRED_CONFIG_KEYS[@]}"; do
-    value="$(config_value_for_key "$key")"
-    if is_placeholder_value "$value"; then
-      printf '[argus-reset] ERROR: required config key %s is missing or placeholder-valued\n' "$key" >&2
-      missing=1
-    else
-      if [[ "$key" == "LLM_PROVIDER" ]]; then
-        case "$value" in
-          openai_compatible|anthropic_compatible) ;;
-          *)
-            printf '[argus-reset] ERROR: LLM_PROVIDER must be canonical: openai_compatible or anthropic_compatible (got %s)\n' "$value" >&2
-            missing=1
-            continue
-            ;;
-        esac
-      fi
-      if is_secret_key_name "$key"; then
-        log "Config key $key is configured (redacted)."
-      else
-        log "Config key $key is configured."
-      fi
-    fi
-  done
-  [[ "$missing" -eq 0 ]] || fail "Invalid dedicated config: $CONFIG_FILE. No Docker cleanup was performed."
-}
-
-generate_secret_key() {
-  if [[ -n "${ARGUS_TEST_SECRET_KEY:-}" ]]; then
-    printf '%s' "$ARGUS_TEST_SECRET_KEY"
-    return 0
-  fi
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-    return 0
-  fi
-  if command -v od >/dev/null 2>&1 && [[ -r /dev/urandom ]]; then
-    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
-    return 0
-  fi
-  fail "Unable to generate SECRET_KEY: openssl or /dev/urandom+od is required"
-}
-
-
 generate_import_token() {
   if [[ -n "${ARGUS_TEST_IMPORT_TOKEN:-}" ]]; then
     ARGUS_RESET_IMPORT_TOKEN="$ARGUS_TEST_IMPORT_TOKEN"
@@ -326,130 +141,6 @@ generate_import_token() {
   fi
   [[ -n "$ARGUS_RESET_IMPORT_TOKEN" ]] || fail "Generated ARGUS_RESET_IMPORT_TOKEN is empty"
   log "Generated per-run ARGUS_RESET_IMPORT_TOKEN (redacted)."
-}
-
-interactive_config_allowed() {
-  if is_truthy "${ARGUS_TEST_INTERACTIVE:-false}"; then
-    return 0
-  fi
-  if is_truthy "${CI:-false}"; then
-    return 1
-  fi
-  [[ -t 0 && -t 1 ]]
-}
-
-prompt_default_for_key() {
-  local key="$1" value
-  value="$(config_value_for_key "$key")"
-  if [[ -n "$value" ]] && ! is_placeholder_value "$value"; then
-    printf '%s' "$value"
-    return 0
-  fi
-  value="$(template_value_for_key "$key")"
-  if [[ -n "$value" ]] && ! is_placeholder_value "$value"; then
-    printf '%s' "$value"
-  fi
-}
-
-prompt_value() {
-  local key="$1" default_value="$2" value=""
-  if [[ -n "$default_value" ]] && ! is_placeholder_value "$default_value"; then
-    printf '[argus-reset] %s [%s]: ' "$key" "$default_value" >&2
-  else
-    printf '[argus-reset] %s: ' "$key" >&2
-  fi
-  IFS= read -r value || value=""
-  value="$(trim_value "$value")"
-  if [[ -z "$value" && -n "$default_value" ]] && ! is_placeholder_value "$default_value"; then
-    value="$default_value"
-  fi
-  if is_placeholder_value "$value"; then
-    fail "Required config key $key is missing or placeholder-valued. No Docker cleanup was performed."
-  fi
-  printf '%s' "$value"
-}
-
-prompt_secret_value() {
-  local key="$1" existing_value="$2" value=""
-  if [[ -n "$existing_value" ]] && ! is_placeholder_value "$existing_value"; then
-    printf '[argus-reset] %s is already configured (redacted). Press Enter to keep it, or type a replacement: ' "$key" >&2
-  else
-    printf '[argus-reset] %s (hidden): ' "$key" >&2
-  fi
-  IFS= read -r -s value || value=""
-  printf '\n' >&2
-  value="$(trim_value "$value")"
-  if [[ -z "$value" && -n "$existing_value" ]] && ! is_placeholder_value "$existing_value"; then
-    value="$existing_value"
-  fi
-  if is_placeholder_value "$value"; then
-    fail "Required secret config key $key is missing or placeholder-valued. No Docker cleanup was performed."
-  fi
-  printf '%s' "$value"
-}
-
-write_generated_config() {
-  local tmp_file="$1"
-  shift
-  declare -A replacements=()
-  local pair key value line
-  for pair in "$@"; do
-    key="${pair%%=*}"
-    value="${pair#*=}"
-    replacements["$key"]="$value"
-  done
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    local stripped leading_ws
-    stripped="${line#"${line%%[![:space:]]*}"}"
-    leading_ws="${line%"$stripped"}"
-    if [[ "$stripped" == [A-Za-z_]*=* ]]; then
-      key="${stripped%%=*}"
-      if [[ -n "${replacements[$key]+x}" ]]; then
-        printf '%s%s=%s\n' "$leading_ws" "$key" "${replacements[$key]}"
-        continue
-      fi
-    fi
-    printf '%s\n' "$line"
-  done < "$CONFIG_TEMPLATE_FILE" > "$tmp_file"
-}
-
-run_interactive_config() {
-  ensure_template_file
-  log "Interactive TTY configuration enabled; required values will be written to $CONFIG_FILE."
-  log "SECRET_KEY will be generated automatically; LLM_API_KEY input is hidden."
-
-  local secret_key llm_provider llm_api_key llm_model llm_base_url
-  secret_key="$(generate_secret_key)"
-  llm_provider="$(prompt_value LLM_PROVIDER "$(prompt_default_for_key LLM_PROVIDER)")"
-  llm_api_key="$(prompt_secret_value LLM_API_KEY "$(config_value_for_key LLM_API_KEY || true)")"
-  llm_model="$(prompt_value LLM_MODEL "$(prompt_default_for_key LLM_MODEL)")"
-  llm_base_url="$(prompt_value LLM_BASE_URL "$(prompt_default_for_key LLM_BASE_URL)")"
-
-  local tmp_file
-  tmp_file="$(mktemp "${CONFIG_FILE}.tmp.XXXXXX")"
-  chmod 600 "$tmp_file" 2>/dev/null || true
-  write_generated_config "$tmp_file" \
-    "SECRET_KEY=$secret_key" \
-    "LLM_PROVIDER=$llm_provider" \
-    "LLM_API_KEY=$llm_api_key" \
-    "LLM_MODEL=$llm_model" \
-    "LLM_BASE_URL=$llm_base_url"
-  mv "$tmp_file" "$CONFIG_FILE"
-  chmod 600 "$CONFIG_FILE" 2>/dev/null || true
-  log "Wrote dedicated config: $CONFIG_FILE"
-}
-
-prepare_config() {
-  if interactive_config_allowed; then
-    run_interactive_config
-  else
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-      ensure_template_file
-      fail "Dedicated config is missing: $CONFIG_FILE. Fill it or run interactively from a TTY; no Docker cleanup was performed."
-    fi
-  fi
-  validate_config
 }
 
 require_real_tools() {
@@ -507,10 +198,8 @@ cleanup_for_run_mode() {
 }
 
 compose_up_detached() {
-  log "Starting Argus detached with fresh AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE"
+  log "Starting Argus detached"
   run_cmd env \
-    "AGENTFLOW_BUILD_CACHE_SCOPE=$CACHE_SCOPE" \
-    "ARGUS_INTELLIGENT_AUDIT_ENV=$CONFIG_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
 }
@@ -680,7 +369,6 @@ main() {
   log "Argus reset/rebuild/start beginning. Project: $PROJECT_NAME"
   log "Run mode: $RUN_MODE"
   require_real_tools
-  prepare_config
   generate_import_token
   cleanup_for_run_mode
   start_stack

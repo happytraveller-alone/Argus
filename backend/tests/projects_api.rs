@@ -230,28 +230,6 @@ async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
     let mut snapshot = task_state::load_snapshot(&state)
         .await
         .expect("snapshot should load");
-    snapshot.agent_tasks.insert(
-        "agent-target".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-target".to_string(),
-            project_id: target_project_id.clone(),
-            task_type: "agent".to_string(),
-            status: "running".to_string(),
-            created_at: "2026-04-24T00:00:00Z".to_string(),
-            ..Default::default()
-        },
-    );
-    snapshot.agent_tasks.insert(
-        "agent-other".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-other".to_string(),
-            project_id: other_project_id.clone(),
-            task_type: "agent".to_string(),
-            status: "running".to_string(),
-            created_at: "2026-04-24T00:00:00Z".to_string(),
-            ..Default::default()
-        },
-    );
     snapshot.static_tasks.insert(
         "static-target".to_string(),
         task_state::StaticTaskRecord {
@@ -300,9 +278,7 @@ async fn deleting_project_removes_related_scan_tasks_from_snapshot() {
     let snapshot = task_state::load_snapshot(&state)
         .await
         .expect("snapshot should reload");
-    assert!(!snapshot.agent_tasks.contains_key("agent-target"));
     assert!(!snapshot.static_tasks.contains_key("static-target"));
-    assert!(snapshot.agent_tasks.contains_key("agent-other"));
     assert!(snapshot.static_tasks.contains_key("static-other"));
 }
 
@@ -320,28 +296,6 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
     let mut snapshot = task_state::load_snapshot(&state)
         .await
         .expect("snapshot should load");
-    snapshot.agent_tasks.insert(
-        "agent-old".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-old".to_string(),
-            project_id: alpha_project_id.clone(),
-            task_type: "agent_audit".to_string(),
-            status: "running".to_string(),
-            created_at: "2026-04-24T10:00:00Z".to_string(),
-            ..Default::default()
-        },
-    );
-    snapshot.agent_tasks.insert(
-        "agent-cancelled".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-cancelled".to_string(),
-            project_id: beta_project_id.clone(),
-            task_type: "agent_audit".to_string(),
-            status: "cancelled".to_string(),
-            created_at: "2026-04-24T09:00:00Z".to_string(),
-            ..Default::default()
-        },
-    );
     snapshot.static_tasks.insert(
         "gitleaks-retired".to_string(),
         task_state::StaticTaskRecord {
@@ -401,26 +355,16 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
 
     assert_eq!(payload["summary"]["total_projects"], 2);
-    assert_eq!(payload["task_status_breakdown"]["running"], 1);
     assert_eq!(payload["task_status_breakdown"]["completed"], 2);
     assert_eq!(payload["task_status_breakdown"]["failed"], 1);
-    assert_eq!(payload["task_status_breakdown"]["cancelled"], 1);
     assert_eq!(
         payload["task_status_by_scan_type"]["completed"]["static"],
         2
     );
-    assert_eq!(
-        payload["task_status_by_scan_type"]["running"]["intelligent"],
-        1
-    );
     assert_eq!(payload["task_status_by_scan_type"]["failed"]["static"], 1);
-    assert_eq!(
-        payload["task_status_by_scan_type"]["cancelled"]["intelligent"],
-        1
-    );
 
     let recent_tasks = payload["recent_tasks"].as_array().unwrap();
-    assert_eq!(recent_tasks.len(), 3);
+    assert_eq!(recent_tasks.len(), 2);
     assert!(recent_tasks
         .iter()
         .all(|task| task["task_id"] != "gitleaks-retired"));
@@ -433,10 +377,6 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
     );
     assert_eq!(recent_tasks[1]["task_id"], "static-failed");
     assert_eq!(recent_tasks[1]["status"], "failed");
-    assert_eq!(recent_tasks[2]["task_id"], "agent-old");
-    assert_eq!(recent_tasks[2]["task_type"], "智能审计");
-    assert_eq!(recent_tasks[2]["title"], "智能审计 · Alpha Gateway");
-    assert_eq!(recent_tasks[2]["detail_path"], "/agent-audit/agent-old");
 }
 
 #[tokio::test]
@@ -503,21 +443,6 @@ async fn dashboard_snapshot_counts_cumulative_vulnerabilities_from_verified_only
             ..Default::default()
         },
     );
-    snapshot.agent_tasks.insert(
-        "agent-verified".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-verified".to_string(),
-            project_id: project_id.clone(),
-            task_type: "agent_audit".to_string(),
-            status: "completed".to_string(),
-            verified_high_count: 2,
-            verified_low_count: 1,
-            findings_count: 5,
-            created_at: "2026-04-24T11:00:00Z".to_string(),
-            completed_at: Some("2026-04-24T11:05:00Z".to_string()),
-            ..Default::default()
-        },
-    );
     task_state::save_snapshot(&state, &snapshot)
         .await
         .expect("snapshot should save");
@@ -536,11 +461,11 @@ async fn dashboard_snapshot_counts_cumulative_vulnerabilities_from_verified_only
 
     assert_eq!(
         payload["summary"]["current_verified_vulnerability_total"],
-        5
+        2
     );
-    assert_eq!(payload["summary"]["current_effective_findings"], 5);
-    assert_eq!(payload["summary"]["current_verified_findings"], 3);
-    assert_eq!(payload["verification_funnel"]["verified_findings"], 5);
+    assert_eq!(payload["summary"]["current_effective_findings"], 2);
+    assert_eq!(payload["summary"]["current_verified_findings"], 2);
+    assert_eq!(payload["verification_funnel"]["verified_findings"], 2);
 }
 
 #[tokio::test]
@@ -607,20 +532,6 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
                     payload: json!({"id": "static-finding-medium", "severity": "MEDIUM"}),
                 },
             ],
-            ..Default::default()
-        },
-    );
-    snapshot.agent_tasks.insert(
-        "agent-verified".to_string(),
-        task_state::AgentTaskRecord {
-            id: "agent-verified".to_string(),
-            project_id: project_id.clone(),
-            task_type: "agent_audit".to_string(),
-            status: "completed".to_string(),
-            high_count: 1,
-            verified_high_count: 1,
-            created_at: "2026-04-26T09:00:00Z".to_string(),
-            completed_at: Some("2026-04-26T09:05:00Z".to_string()),
             ..Default::default()
         },
     );

@@ -36,9 +36,9 @@
 
 ### 智能审计
 
-- **是什么**：以 `AgentTask` 为主任务模型，由 AgentFlow runner 完成侦察、分析、验证和报告生成的审计流程。
-- **不是什么**：静态审计的包装层，也不是直接复用静态 finding 的候选输入流程。
-- **主要入口**：`backend/src/routes/agent_tasks.rs`、`backend/src/runtime/agentflow/`、`frontend/src/pages/AgentAudit/TaskDetailPage.tsx`。
+- **是什么**：AI 驱动的安全审计功能。原 agentflow 实现已于 2026-05-01 退役，Codex 将提供新实现。
+- **当前状态**：在开发中。前端保留路由和菜单项作为占位，显示"在开发中"提示。
+- **历史参考**：原实现的 git 历史保留在退役前的提交中。详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
 
 ### Rust gateway
 
@@ -47,29 +47,11 @@
 
 ## 审计任务术语
 
-### `AgentTask`
+### `AgentTask` / `AgentEvent` / `AgentFinding` / AgentFlow runner（已退役）
 
-- **是什么**：智能审计的主任务实体。
-- **不是什么**：某一个子智能体的一次执行，也不是静态审计任务。
-- **主要入口**：`backend/src/routes/agent_tasks.rs`、`backend/src/db/task_state.rs`、`frontend/src/shared/api/agentTasks.ts`。
-
-### `AgentEvent`
-
-- **是什么**：智能审计运行过程中的事件记录，用于 REST 回放和前端实时流展示。
-- **不是什么**：最终漏洞结论；最终漏洞应看 `AgentFinding`。
-- **主要入口**：`backend/src/routes/agent_tasks.rs` 的 events / stream 路由、`frontend/src/shared/api/agentStream.ts`。
-
-### `AgentFinding`
-
-- **是什么**：AgentFlow 输出导入后沉淀的智能审计漏洞结果。
-- **不是什么**：Opengrep finding、bootstrap candidate 或未经验证的静态扫描输入。
-- **主要入口**：`backend/src/runtime/agentflow/importer.rs`、`frontend/src/shared/api/agentTasks.ts`。
-
-### AgentFlow runner
-
-- **是什么**：执行智能审计 pipeline 的隔离 runner，Compose 服务名是 `agentflow-runner`。
-- **不是什么**：前端页面的一部分，也不是后端进程内直接执行的普通函数。
-- **主要入口**：`docker/agentflow-runner.Dockerfile`、`docker/agentflow-runner.sh`、`backend/agentflow/pipelines/intelligent_audit.py`。后端预检也会通过 `backend/src/runtime/agentflow/pipeline_path.rs` 解析同一 pipeline，并要求后端镜像内存在 `/app/backend/agentflow/pipelines/intelligent_audit.py`。
+- **历史背景**：这些是原 agentflow 实现的核心对象，已于 2026-05-01 完全退役。
+- **当前状态**：代码已删除，数据已迁移。Codex 重新实现时将使用新的对象模型。
+- **参考**：详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
 
 ### Opengrep runner
 
@@ -77,11 +59,10 @@
 - **不是什么**：Bandit/Gitleaks/PHPStan 等多引擎调度器。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`。
 
-### agent preflight
+### agent preflight（已退役）
 
-- **是什么**：智能审计创建前的真实预检，检查保存的多行 LLM 配置、winning-row fingerprint、runner readiness 等条件，并可在 preflight 阶段按优先级 fallback 到下一条启用配置。
-- **不是什么**：系统设置页的普通 LLM 连通性测试；创建智能审计时不能只用 `/system-config/test-llm` 代替，也不能在任务启动后因为运行期 LLM 失败自动切换 provider。
-- **主要入口**：`backend/src/routes/system_config.rs`、`backend/src/routes/llm_config_set.rs`、`frontend/src/shared/api/agentPreflight.ts`、`frontend/src/components/scan/create-project-scan/llmGate.ts`。
+- **历史背景**：原 agentflow 智能审计创建前的预检机制，已随 agentflow 退役。
+- **当前状态**：相关代码已删除。未来 Codex 实现将定义新的预检流程。
 
 ### LLM config set
 
@@ -110,11 +91,10 @@
 
 ## 配置与运行术语
 
-### `.argus-intelligent-audit.env`
+### `.argus-intelligent-audit.env`（已废弃）
 
-- **是什么**：智能审计启动导入的 LLM / AgentFlow 配置源。
-- **不是什么**：前端或系统配置页面会直接写回的文件。
-- **维护提示**：启动导入、系统配置保存和 fingerprint 行为必须一起验证。
+- **历史背景**：原 agentflow 智能审计的 LLM 配置文件，已随 agentflow 退役。
+- **当前状态**：文件已删除。未来 Codex 实现将使用新的配置机制。
 
 ### repo-local Codex / OMX
 

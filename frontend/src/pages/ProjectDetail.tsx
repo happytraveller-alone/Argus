@@ -42,7 +42,6 @@ import {
 	type AgentFinding,
 	type AgentTask,
 	getAgentFindings,
-	getAgentTasks,
 } from "@/shared/api/agentTasks";
 import { api } from "@/shared/api/database";
 import {
@@ -236,7 +235,6 @@ export default function ProjectDetail() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [project, setProject] = useState<Project | null>(null);
-	const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
 	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
 	const [potentialFindings, setPotentialFindings] = useState<
 		ProjectDetailPotentialListItem[]
@@ -403,18 +401,12 @@ export default function ProjectDetail() {
 			setPotentialFindings([]);
 			setPotentialTotalFindings(0);
 
-			const [projectRes, agentTasksRes, staticTasksRes] =
+			const [projectRes, staticTasksRes] =
 				await Promise.allSettled([
 					api.getProjectById(id),
-					getAgentTasks({ project_id: id }),
 					getOpengrepScanTasks({ projectId: id }),
 				]);
 
-			const nextAgentTasks =
-				agentTasksRes.status === "fulfilled" &&
-				Array.isArray(agentTasksRes.value)
-					? agentTasksRes.value
-					: [];
 			const nextStaticTasks =
 				staticTasksRes.status === "fulfilled" &&
 				Array.isArray(staticTasksRes.value)
@@ -428,14 +420,10 @@ export default function ProjectDetail() {
 				setProject(null);
 			}
 
-			if (agentTasksRes.status !== "fulfilled") {
-				console.warn("Failed to load agent tasks:", agentTasksRes.reason);
-			}
 			if (staticTasksRes.status !== "fulfilled") {
 				console.warn("Failed to load static tasks:", staticTasksRes.reason);
 			}
 
-			setAgentTasks(nextAgentTasks);
 			setStaticTasks(nextStaticTasks);
 
 			const projectName =
@@ -445,7 +433,7 @@ export default function ProjectDetail() {
 			void fetchProjectPotentialVulnerabilities(
 				id,
 				projectName,
-				nextAgentTasks,
+				[],
 				nextStaticTasks,
 			);
 		} catch (error) {
@@ -550,11 +538,11 @@ export default function ProjectDetail() {
 		if (!id) return [];
 		return getProjectCardRecentTasks({
 			projectId: id,
-			agentTasks,
+			agentTasks: [],
 			opengrepTasks: staticTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, agentTasks, staticTasks]);
+	}, [id, staticTasks]);
 
 	const handleTaskCreated = () => {
 		toast.success("扫描任务已创建", {

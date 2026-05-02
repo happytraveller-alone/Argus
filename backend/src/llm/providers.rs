@@ -19,8 +19,6 @@ pub struct ProviderCatalogItem {
 const SUPPORTED_PROVIDER_IDS: &[&str] = &[
     "openai_compatible",
     "anthropic_compatible",
-    "kimi_compatible",
-    "pi_compatible",
 ];
 
 pub fn normalize_provider_id(provider: &str) -> String {
@@ -78,8 +76,6 @@ pub fn provider_catalog() -> Vec<ProviderCatalogItem> {
 pub fn provider_api_key_field(provider: &str) -> Option<&'static str> {
     match normalize_provider_id(provider).as_str() {
         "openai_compatible" | "anthropic_compatible" => Some("llmApiKey"),
-        "kimi_compatible" => Some("KIMI_API_KEY"),
-        "pi_compatible" => Some("PI_API_KEY"),
         _ => None,
     }
 }

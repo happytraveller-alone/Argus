@@ -3010,11 +3010,6 @@ async fn ai_analysis(
             });
             (url, body)
         }
-        "kimi_compatible" | "pi_compatible" => {
-            return Err(ApiError::Internal(
-                "kimi/pi 协议仅支持 CLI 模式，不支持通过 HTTP 静态任务路径调用。".to_string(),
-            ));
-        }
         _ => {
             return Err(ApiError::Internal("不支持的 LLM 协议".to_string()));
         }
@@ -3122,11 +3117,6 @@ async fn call_llm_json(
                 "max_tokens": runtime.llm_max_tokens
             });
             (url, body)
-        }
-        "kimi_compatible" | "pi_compatible" => {
-            return Err(ApiError::Internal(
-                "kimi/pi 协议仅支持 CLI 模式，不支持通过 HTTP 静态任务路径调用。".to_string(),
-            ));
         }
         _ => return Err(ApiError::Internal("不支持的 LLM 协议".to_string())),
     };

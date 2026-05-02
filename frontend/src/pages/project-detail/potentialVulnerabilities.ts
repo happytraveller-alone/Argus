@@ -514,65 +514,7 @@ export function buildProjectDetailPotentialTree(params: {
 
 	const candidateFindings: CandidateFinding[] = [];
 
-	for (const finding of params.agentFindings || []) {
-		const severity = normalizeSeverity(finding.severity);
-		const confidence = normalizeAgentConfidence(
-			finding.ai_confidence ?? finding.confidence ?? null,
-		);
-		if (!shouldIncludeFinding({ severity, confidence })) continue;
-
-		const task = taskInfo.get(String(finding.task_id || "").trim());
-		if (!task) continue;
-
-		const line =
-			typeof finding.line_start === "number" && Number.isFinite(finding.line_start)
-				? finding.line_start
-				: null;
-		const title =
-			String(finding.display_title || "").trim() ||
-			String(finding.title || "").trim() ||
-			String(finding.vulnerability_type || "").trim() ||
-			String(finding.description || "").trim() ||
-			"潜在漏洞";
-		const filePath = String(finding.file_path || "").trim() || "-";
-		const relativePath = toProjectRelativePotentialPath(filePath, projectName);
-		const cweDisplay = resolveCweDisplay({
-			cwe: finding.cwe_id,
-			fallbackLabel:
-				String(finding.vulnerability_type || "").trim() || title || "潜在漏洞",
-		});
-
-		candidateFindings.push({
-			type: "finding",
-			nodeKey: `task:${task.taskCategory}:${task.taskId}:finding:${finding.id}`,
-			id: finding.id,
-			title,
-			cweLabel: cweDisplay.label,
-			cweTooltip: cweDisplay.tooltip,
-			severity,
-			confidence,
-			location: formatProjectDetailPotentialLocation({
-				filePath,
-				line,
-				projectName,
-				source: "agent",
-			}),
-			route: isFalsePositiveAgentFinding(finding)
-				? null
-				: buildFindingDetailPath({
-						source: "agent",
-						taskId: task.taskId,
-						findingId: finding.id,
-					}),
-			taskCategory: task.taskCategory,
-			source: "agent",
-			line,
-			taskId: task.taskId,
-			taskCreatedAt: task.createdAt,
-			taskName: task.taskName,
-			relativePath,
-		});
-	}
+	// Agent findings removed - only static findings remain
 
 	for (const finding of params.opengrepFindings || []) {
 		const severity = normalizeSeverity(finding.severity);

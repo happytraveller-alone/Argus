@@ -379,15 +379,7 @@ export default function ProjectTaskFindingsDialog({
 								taskId,
 								await fetchAllStaticFindings(taskId),
 							)
-						: normalizeAgentFindings(
-								taskId,
-								await getAgentFindings(taskId, {
-									include_false_positive: false,
-								}),
-							).map((item) => ({
-								...item,
-								taskCategory,
-							}));
+						: [];
 
 				const sortedRows = sortTaskFindings(nextRows);
 				if (cancelled) return;

@@ -4,15 +4,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import type { I18nKey } from "@/shared/i18n";
 import type { SidebarNavGroupId } from "@/app/sidebarNavGroups";
 import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedirect";
+import InDevelopmentPlaceholder from "@/shared/components/InDevelopmentPlaceholder";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const DashboardMockPreview = lazy(() => import("@/pages/DashboardMockPreview"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectCodeBrowser = lazy(() => import("@/pages/ProjectCodeBrowser"));
-const AgentAuditHome = lazy(() => import("@/pages/AgentAudit"));
-const AgentAuditTaskDetail = lazy(
-	() => import("@/pages/AgentAudit/TaskDetailPage"),
-);
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const StaticAnalysis = lazy(() => import("@/pages/StaticAnalysis"));
 const AiAnalysisResult = lazy(() => import("@/pages/static-analysis/AiAnalysisResult"));
@@ -58,7 +55,7 @@ const routes: RouteConfig[] = [
 		name: "首页",
 		nameKey: "route.home",
 		path: "/",
-		element: <AgentAuditHome />,
+		element: <Navigate to="/dashboard" replace />,
 		visible: true,
 		navVisible: true,
 		navGroup: "main",
@@ -68,7 +65,7 @@ const routes: RouteConfig[] = [
 		name: "Agent扫描任务",
 		nameKey: "route.agentTask",
 		path: "/agent-audit/:taskId",
-		element: <AgentAuditTaskDetail />,
+		element: <InDevelopmentPlaceholder />,
 		visible: false,
 		navVisible: false,
 	},

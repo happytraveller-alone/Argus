@@ -16,23 +16,6 @@ struct RecoverySpec {
 
 const RECOVERY_SPECS: &[RecoverySpec] = &[
     RecoverySpec {
-        name: "agent",
-        table: "agent_tasks",
-        recoverable_statuses: &[
-            "pending",
-            "initializing",
-            "running",
-            "planning",
-            "indexing",
-            "analyzing",
-            "verifying",
-            "reporting",
-        ],
-        has_completed_at: true,
-        has_error_message: true,
-        has_error_count: false,
-    },
-    RecoverySpec {
         name: "opengrep",
         table: "opengrep_scan_tasks",
         recoverable_statuses: &["pending", "running"],
@@ -102,7 +85,6 @@ async fn fetch_present_tables(pool: &PgPool) -> Result<Vec<String>> {
          FROM information_schema.tables
          WHERE table_schema = 'public'
            AND table_name IN (
-             'agent_tasks',
              'opengrep_scan_tasks'
            )",
     )
@@ -156,16 +138,12 @@ mod tests {
             .iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["agent", "opengrep"]);
+        assert_eq!(names, vec!["opengrep"]);
     }
 
     #[test]
     fn recovery_sql_includes_optional_columns_only_when_needed() {
-        let agent_sql = build_recovery_update_sql(&RECOVERY_SPECS[0]);
-        assert!(agent_sql.contains("completed_at = COALESCE(completed_at, NOW())"));
-        assert!(agent_sql.contains("error_message = COALESCE(NULLIF(error_message, ''), $1)"));
-
-        let opengrep_sql = build_recovery_update_sql(&RECOVERY_SPECS[1]);
+        let opengrep_sql = build_recovery_update_sql(&RECOVERY_SPECS[0]);
         assert!(opengrep_sql.contains("error_count = COALESCE(error_count, 0) + 1"));
         assert!(!opengrep_sql.contains("completed_at = COALESCE(completed_at, NOW())"));
     }

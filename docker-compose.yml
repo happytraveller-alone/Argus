@@ -9,68 +9,6 @@
 
 services:
 
-  agentflow-runner:
-    image: ${ARGUS_AGENTFLOW_RUNNER_IMAGE:-argus/agentflow-runner:1667fa35}
-    pull_policy: never
-    build:
-      context: .
-      dockerfile: docker/agentflow-runner.Dockerfile
-      args:
-        DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        AGENTFLOW_REPOSITORY: ${AGENTFLOW_REPOSITORY:-https://v6.gh-proxy.org/https://github.com/berabuddies/agentflow.git}
-        AGENTFLOW_COMMIT: ${AGENTFLOW_COMMIT:-1667fa35ed99e3c1583a7d60cac8e3406cafd3ee}
-        AGENTFLOW_VERSION: ${AGENTFLOW_VERSION:-0.1.0}
-        AGENTFLOW_LOCAL_SOURCE: ${AGENTFLOW_LOCAL_SOURCE:-vendor/agentflow-src}
-        AGENTFLOW_BUILD_CACHE_SCOPE: ${AGENTFLOW_BUILD_CACHE_SCOPE:-argus-agentflow}
-        AGENTFLOW_WHEELHOUSE_DIR: ${AGENTFLOW_WHEELHOUSE_DIR:-docker/agentflow-wheelhouse}
-        AGENTFLOW_USE_LOCAL_WHEELHOUSE: ${AGENTFLOW_USE_LOCAL_WHEELHOUSE:-auto}
-        BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://pypi.tuna.tsinghua.edu.cn/simple}
-        BACKEND_PYPI_EXTRA_INDEX_URLS: ${BACKEND_PYPI_EXTRA_INDEX_URLS:-https://mirrors.aliyun.com/pypi/simple/}
-        BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
-        BACKEND_PIP_TIMEOUT_SECONDS: ${BACKEND_PIP_TIMEOUT_SECONDS:-45}
-        BACKEND_PIP_RETRIES: ${BACKEND_PIP_RETRIES:-2}
-        AGENTFLOW_P1_PYTHON_DEPS: ${AGENTFLOW_P1_PYTHON_DEPS:-jinja2>=3.1.6 pydantic>=2.11.0 PyYAML>=6.0.2 typer>=0.16.0}
-        CODEX_NPM_PACKAGE: ${CODEX_NPM_PACKAGE:-@openai/codex@latest}
-        CODEX_NPM_REGISTRY_PRIMARY: ${CODEX_NPM_REGISTRY_PRIMARY:-}
-        CODEX_NPM_REGISTRY: ${CODEX_NPM_REGISTRY:-}
-        CODEX_NPM_REGISTRY_DEFAULT: ${CODEX_NPM_REGISTRY_DEFAULT:-https://registry.npmmirror.com}
-        CODEX_NPM_REGISTRY_FALLBACK: ${CODEX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}
-        CODEX_NPM_INSTALL_TIMEOUT_SECONDS: ${CODEX_NPM_INSTALL_TIMEOUT_SECONDS:-120}
-    restart: "no"
-    mem_limit: 4g
-    cpus: "2.0"
-    pids_limit: 512
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /tmp:rw,nosuid,nodev,noexec,size=512m
-    volumes:
-      - .:/workspace/src:ro
-      - ./backend/agentflow:/app/backend/agentflow:ro
-      - agentflow_runner_work:/work
-    environment:
-      AGENTFLOW_RUNS_DIR: /work/agentflow-runs
-      AGENTFLOW_MAX_CONCURRENT_RUNS: ${AGENTFLOW_MAX_CONCURRENT_RUNS:-2}
-      ARGUS_AGENTFLOW_INPUT_PATH: ${ARGUS_AGENTFLOW_INPUT_PATH:-/work/input/runner_input.json}
-      ARGUS_AGENTFLOW_OUTPUT_DIR: ${ARGUS_AGENTFLOW_OUTPUT_DIR:-/work/outputs}
-      HOME: /tmp/argus-agentflow-home
-      HTTP_PROXY: ""
-      HTTPS_PROXY: ""
-      http_proxy: ""
-      https_proxy: ""
-      NO_PROXY: "*"
-    command:
-      - "agentflow"
-      - "--help"
-    networks:
-      - argus-network
   opengrep-runner:
     image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
     pull_policy: never
@@ -167,9 +105,6 @@ services:
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     ports:
       - "${Argus_BACKEND_PORT:-18000}:8000"
-    env_file:
-      - path: "${ARGUS_INTELLIGENT_AUDIT_ENV:-./.argus-intelligent-audit.env}"
-        required: true
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-Argus}
@@ -180,11 +115,7 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       ARGUS_RESET_IMPORT_TOKEN: "${ARGUS_RESET_IMPORT_TOKEN:-}"
-      ARGUS_AGENTFLOW_RUNNER_IMAGE: ${ARGUS_AGENTFLOW_RUNNER_IMAGE:-argus/agentflow-runner:1667fa35}
-      AGENTFLOW_RUNNER_WORK_VOLUME: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}
       ARGUS_CODEX_HOST_DIR: ${ARGUS_CODEX_HOST_DIR:-}
-      AGENTFLOW_RUNNER_NETWORK: ${AGENTFLOW_RUNNER_NETWORK:-}
-      AGENTFLOW_DEFAULT_RUNNER_ENABLED: ${AGENTFLOW_DEFAULT_RUNNER_ENABLED:-true}
       OPENGREP_SCAN_TIMEOUT_SECONDS: "${OPENGREP_SCAN_TIMEOUT_SECONDS:-0}"
       OPENGREP_SCAN_JOBS: "${OPENGREP_SCAN_JOBS:-0}"
       OPENGREP_SCAN_MAX_MEMORY_MB: "${OPENGREP_SCAN_MAX_MEMORY_MB:-2048}"
@@ -245,8 +176,6 @@ services:
       start_period: 180s
       retries: 120
     depends_on:
-      agentflow-runner:
-        condition: service_completed_successfully
       opengrep-runner:
         condition: service_completed_successfully
       codeql-runner:
@@ -329,8 +258,6 @@ networks:
     driver: bridge
 
 volumes:
-  agentflow_runner_work:
-    name: ${AGENTFLOW_RUNNER_WORK_VOLUME:-Argus_agentflow_runner_work}
   postgres_data:
   backend_uploads:
   backend_runtime_data:

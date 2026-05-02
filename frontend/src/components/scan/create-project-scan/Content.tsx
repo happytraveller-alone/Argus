@@ -18,6 +18,12 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
     Bot,
     CheckCircle2,
     Loader2,
@@ -295,24 +301,24 @@ export default function CreateProjectScanDialogContent({
                                         <Zap className="w-4 h-4 mr-2" />
                                         静态审计
                                     </Button>
-                                    <Button
-                                        type="button"
-                                        variant={
-                                            mode === "agent"
-                                                ? "default"
-                                                : "outline"
-                                        }
-                                        className={
-                                            mode === "agent"
-                                                ? "h-10 justify-start border border-violet-500/40 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30"
-                                                : "cyber-btn-outline h-10 justify-start"
-                                        }
-                                        onClick={() => setMode("agent")}
-                                        disabled={creating}
-                                    >
-                                        <Bot className="w-4 h-4 mr-2" />
-                                        智能审计
-                                    </Button>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="cyber-btn-outline h-10 justify-start opacity-50 cursor-not-allowed"
+                                                    disabled={true}
+                                                >
+                                                    <Bot className="w-4 h-4 mr-2" />
+                                                    智能审计
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>智能审计正在重构中，敬请期待</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                 </div>
                             </div>
                         )}

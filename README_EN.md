@@ -12,20 +12,11 @@ docker compose up --build
 
 ## Before You Start
 
-1. Copy the dedicated intelligent-audit environment file:
-
-```bash
-cp .argus-intelligent-audit.env.example .argus-intelligent-audit.env
-```
-
-2. Fill in at least:
-   `LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`. Compose injects `.argus-intelligent-audit.env` into the backend by default; set `ARGUS_INTELLIGENT_AUDIT_ENV=/path/to/env` to use another file.
-
-3. Make sure Docker Compose is installed and the Docker daemon is reachable.
+1. Make sure Docker Compose is installed and the Docker daemon is reachable.
 
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
 
-The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments. The intelligent-engine settings page uses a multi-provider configuration table; the startup env file is only an import source, and the UI/API do not write back to `.argus-intelligent-audit.env`. See `docs/intelligent-engine-config.md`.
+The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.
 
 ## Repo-local Codex / OMX
 

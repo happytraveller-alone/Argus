@@ -13,200 +13,11 @@ const MAX_TASK_EVENTS: usize = 2000;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct TaskStateSnapshot {
-    pub agent_tasks: BTreeMap<String, AgentTaskRecord>,
     pub static_tasks: BTreeMap<String, StaticTaskRecord>,
     pub opengrep_rules: BTreeMap<String, OpengrepRuleRecord>,
     pub phpstan_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
     #[serde(default)]
     pub codeql_build_plans: BTreeMap<String, CodeqlBuildPlanRecord>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct AgentTaskRecord {
-    pub id: String,
-    pub project_id: String,
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub task_type: String,
-    pub status: String,
-    pub current_phase: Option<String>,
-    pub current_step: Option<String>,
-    pub total_files: i64,
-    pub indexed_files: i64,
-    pub analyzed_files: i64,
-    pub files_with_findings: i64,
-    pub total_chunks: i64,
-    pub findings_count: i64,
-    pub verified_count: i64,
-    pub false_positive_count: i64,
-    pub total_iterations: i64,
-    pub tool_calls_count: i64,
-    pub tokens_used: i64,
-    pub critical_count: i64,
-    pub high_count: i64,
-    pub medium_count: i64,
-    pub low_count: i64,
-    pub verified_critical_count: i64,
-    pub verified_high_count: i64,
-    pub verified_medium_count: i64,
-    pub verified_low_count: i64,
-    pub quality_score: f64,
-    pub security_score: Option<f64>,
-    pub created_at: String,
-    pub started_at: Option<String>,
-    pub completed_at: Option<String>,
-    pub progress_percentage: f64,
-    pub audit_scope: Option<Value>,
-    pub target_vulnerabilities: Option<Vec<String>>,
-    pub verification_level: Option<String>,
-    pub tool_evidence_protocol: Option<String>,
-    pub exclude_patterns: Option<Vec<String>>,
-    pub target_files: Option<Vec<String>>,
-    pub error_message: Option<String>,
-    pub report: Option<String>,
-    #[serde(default)]
-    pub runtime: Option<String>,
-    #[serde(default)]
-    pub run_id: Option<String>,
-    #[serde(default)]
-    pub topology_version: Option<String>,
-    #[serde(default)]
-    pub input_digest: Option<String>,
-    #[serde(default)]
-    pub artifact_index: Option<Value>,
-    #[serde(default)]
-    pub report_snapshot: Option<Value>,
-    #[serde(default)]
-    pub feedback_bundle: Option<Value>,
-    #[serde(default)]
-    pub diagnostics: Option<Value>,
-    pub events: Vec<AgentEventRecord>,
-    pub findings: Vec<AgentFindingRecord>,
-    pub checkpoints: Vec<AgentCheckpointRecord>,
-    pub agent_tree: Vec<Value>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct AgentEventRecord {
-    pub id: String,
-    pub task_id: String,
-    pub event_type: String,
-    pub phase: Option<String>,
-    pub message: Option<String>,
-    pub tool_name: Option<String>,
-    pub tool_input: Option<Value>,
-    pub tool_output: Option<Value>,
-    pub tool_duration_ms: Option<i64>,
-    pub finding_id: Option<String>,
-    pub tokens_used: Option<i64>,
-    pub metadata: Option<Value>,
-    #[serde(default)]
-    pub role: Option<String>,
-    #[serde(default)]
-    pub visibility: Option<String>,
-    #[serde(default)]
-    pub correlation_id: Option<String>,
-    #[serde(default)]
-    pub topology_version: Option<String>,
-    #[serde(default)]
-    pub source_node_id: Option<String>,
-    pub sequence: i64,
-    pub timestamp: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct AgentFindingRecord {
-    pub id: String,
-    pub task_id: String,
-    pub vulnerability_type: String,
-    pub severity: String,
-    pub title: String,
-    pub display_title: Option<String>,
-    pub description: Option<String>,
-    pub description_markdown: Option<String>,
-    pub file_path: Option<String>,
-    pub line_start: Option<i64>,
-    pub line_end: Option<i64>,
-    pub resolved_file_path: Option<String>,
-    pub resolved_line_start: Option<i64>,
-    pub code_snippet: Option<String>,
-    pub code_context: Option<String>,
-    pub cwe_id: Option<String>,
-    pub cwe_name: Option<String>,
-    pub context_start_line: Option<i64>,
-    pub context_end_line: Option<i64>,
-    pub status: String,
-    pub is_verified: bool,
-    pub verdict: Option<String>,
-    pub reachability: Option<String>,
-    pub authenticity: Option<String>,
-    pub verification_evidence: Option<String>,
-    pub verification_todo_id: Option<String>,
-    pub verification_fingerprint: Option<String>,
-    pub reachability_file: Option<String>,
-    pub reachability_function: Option<String>,
-    pub reachability_function_start_line: Option<i64>,
-    pub reachability_function_end_line: Option<i64>,
-    pub flow_path_score: Option<f64>,
-    pub flow_call_chain: Option<Vec<String>>,
-    pub function_trigger_flow: Option<Vec<String>>,
-    pub flow_control_conditions: Option<Vec<String>>,
-    pub logic_authz_evidence: Option<Vec<String>>,
-    pub has_poc: bool,
-    pub poc_code: Option<String>,
-    pub trigger_flow: Option<Value>,
-    pub poc_trigger_chain: Option<Value>,
-    pub suggestion: Option<String>,
-    pub fix_code: Option<String>,
-    pub report: Option<String>,
-    pub ai_explanation: Option<String>,
-    pub ai_confidence: Option<f64>,
-    pub confidence: Option<f64>,
-    #[serde(default)]
-    pub source_node_id: Option<String>,
-    #[serde(default)]
-    pub source_role: Option<String>,
-    #[serde(default)]
-    pub artifact_refs: Option<Value>,
-    #[serde(default)]
-    pub risk_lifecycle: Option<Value>,
-    #[serde(default)]
-    pub discard_reason: Option<String>,
-    #[serde(default)]
-    pub confidence_history: Option<Value>,
-    #[serde(default)]
-    pub data_flow: Option<Value>,
-    #[serde(default)]
-    pub impact: Option<String>,
-    #[serde(default)]
-    pub remediation: Option<String>,
-    #[serde(default)]
-    pub verification: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct AgentCheckpointRecord {
-    pub id: String,
-    pub task_id: String,
-    pub agent_id: String,
-    pub agent_name: String,
-    pub agent_type: String,
-    pub parent_agent_id: Option<String>,
-    pub iteration: i64,
-    pub status: String,
-    pub total_tokens: i64,
-    pub tool_calls: i64,
-    pub findings_count: i64,
-    pub checkpoint_type: String,
-    pub checkpoint_name: Option<String>,
-    pub created_at: Option<String>,
-    pub state_data: Value,
-    pub metadata: Option<Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -351,7 +162,6 @@ pub async fn save_snapshot(state: &AppState, snapshot: &TaskStateSnapshot) -> Re
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ProjectTaskCleanupSummary {
-    pub removed_agent_tasks: usize,
     pub removed_static_tasks: usize,
 }
 
@@ -363,7 +173,7 @@ pub async fn remove_project_tasks(
     let mut snapshot = load_snapshot_unlocked(state).await?;
     let summary = remove_project_tasks_from_snapshot(&mut snapshot, project_id);
 
-    if summary.removed_agent_tasks > 0 || summary.removed_static_tasks > 0 {
+    if summary.removed_static_tasks > 0 {
         save_snapshot_unlocked(state, &snapshot).await?;
     }
 
@@ -374,17 +184,12 @@ pub(crate) fn remove_project_tasks_from_snapshot(
     snapshot: &mut TaskStateSnapshot,
     project_id: &str,
 ) -> ProjectTaskCleanupSummary {
-    let agent_before = snapshot.agent_tasks.len();
-    snapshot
-        .agent_tasks
-        .retain(|_, record| record.project_id != project_id);
     let static_before = snapshot.static_tasks.len();
     snapshot
         .static_tasks
         .retain(|_, record| record.project_id != project_id);
 
     ProjectTaskCleanupSummary {
-        removed_agent_tasks: agent_before.saturating_sub(snapshot.agent_tasks.len()),
         removed_static_tasks: static_before.saturating_sub(snapshot.static_tasks.len()),
     }
 }
@@ -402,63 +207,6 @@ pub(crate) async fn save_snapshot_unlocked(
     Ok(())
 }
 
-const TERMINAL_EVENT_TYPES: &[&str] = &[
-    "task_start",
-    "task_complete",
-    "runner_failed",
-    "runner_started",
-];
-
-fn cap_events(events: &mut Vec<AgentEventRecord>) {
-    if events.len() <= MAX_TASK_EVENTS {
-        return;
-    }
-    // Find the first non-terminal event from the front and remove it.
-    if let Some(pos) = events
-        .iter()
-        .position(|e| !TERMINAL_EVENT_TYPES.contains(&e.event_type.as_str()))
-    {
-        events.remove(pos);
-    }
-}
-
-pub fn append_streaming_event(
-    record: &mut AgentTaskRecord,
-    event: &crate::runtime::agentflow::streaming::StreamingEvent,
-) {
-    let sequence = record.events.len() as i64 + 1;
-    record.events.push(AgentEventRecord {
-        id: format!("{}-stream-{}", record.id, sequence),
-        task_id: record.id.clone(),
-        event_type: event.event_type.clone(),
-        phase: None,
-        message: if event.message.is_empty() {
-            None
-        } else {
-            Some(event.message.clone())
-        },
-        tool_name: event.tool_name.clone(),
-        tool_input: event.tool_input.clone(),
-        tool_output: event.tool_output.clone(),
-        tool_duration_ms: event.tool_duration_ms,
-        finding_id: None,
-        tokens_used: None,
-        metadata: Some(serde_json::json!({
-            "node": event.node_id.clone().unwrap_or_default(),
-            "role": event.role,
-            "topology_version": record.topology_version.clone().unwrap_or_default(),
-        })),
-        role: Some(event.role.clone()),
-        visibility: Some("user".to_string()),
-        correlation_id: None,
-        topology_version: record.topology_version.clone(),
-        source_node_id: event.node_id.clone(),
-        sequence,
-        timestamp: event.timestamp.clone(),
-    });
-    cap_events(&mut record.events);
-}
-
 fn task_state_file_path(state: &AppState) -> PathBuf {
     state.config.zip_storage_path.join(TASK_STATE_FILE_NAME)
 }
@@ -466,127 +214,4 @@ fn task_state_file_path(state: &AppState) -> PathBuf {
 async fn ensure_file_storage_root(state: &AppState) -> Result<()> {
     fs::create_dir_all(&state.config.zip_storage_path).await?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{cap_events, AgentEventRecord, AgentFindingRecord, AgentTaskRecord};
-    use serde_json::json;
-
-    #[test]
-    fn agent_task_state_defaults_legacy_snapshots_for_agentflow_fields() {
-        let record: AgentTaskRecord = serde_json::from_value(json!({
-            "id": "task-1",
-            "project_id": "project-1",
-            "task_type": "agent_audit",
-            "status": "completed",
-            "created_at": "2026-04-27T00:00:00Z"
-        }))
-        .expect("legacy task snapshot should deserialize");
-
-        assert_eq!(record.runtime, None);
-        assert_eq!(record.artifact_index, None);
-        assert_eq!(record.report_snapshot, None);
-        assert!(record.events.is_empty());
-    }
-
-    #[test]
-    fn agent_event_and_finding_state_accept_agentflow_view_fields() {
-        let event: AgentEventRecord = serde_json::from_value(json!({
-            "id": "event-1",
-            "task_id": "task-1",
-            "event_type": "node_completed",
-            "sequence": 1,
-            "timestamp": "2026-04-27T00:00:00Z",
-            "role": "vuln-reasoner",
-            "visibility": "user",
-            "correlation_id": "task-1",
-            "topology_version": "p1",
-            "source_node_id": "node-1"
-        }))
-        .expect("event envelope should deserialize");
-        assert_eq!(event.role.as_deref(), Some("vuln-reasoner"));
-        assert_eq!(event.visibility.as_deref(), Some("user"));
-
-        let finding: AgentFindingRecord = serde_json::from_value(json!({
-            "id": "finding-1",
-            "task_id": "task-1",
-            "vulnerability_type": "sql_injection",
-            "severity": "high",
-            "title": "SQL injection",
-            "status": "verified",
-            "is_verified": true,
-            "created_at": "2026-04-27T00:00:00Z",
-            "source_node_id": "node-1",
-            "source_role": "vuln-reasoner",
-            "artifact_refs": [{"path": "reports/finding.json"}],
-            "impact": "database disclosure",
-            "remediation": "use parameterized queries",
-            "verification": "confirmed by reasoning"
-        }))
-        .expect("finding view fields should deserialize");
-        assert_eq!(finding.source_role.as_deref(), Some("vuln-reasoner"));
-        assert_eq!(finding.impact.as_deref(), Some("database disclosure"));
-    }
-
-    fn make_event(event_type: &str, idx: usize) -> AgentEventRecord {
-        AgentEventRecord {
-            id: format!("evt-{}", idx),
-            task_id: "task-1".to_string(),
-            event_type: event_type.to_string(),
-            sequence: idx as i64,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn cap_events_drops_oldest_non_terminal() {
-        let mut events: Vec<AgentEventRecord> = Vec::new();
-
-        // Push 3000 events: first a task_start terminal, then mix of non-terminals,
-        // with task_complete terminal at the very end.
-        events.push(make_event("task_start", 0));
-        for i in 1..2999 {
-            events.push(make_event("node_output", i));
-        }
-        events.push(make_event("task_complete", 2999));
-
-        // Run cap_events once for each push (simulate the per-push cap)
-        // Actually, since cap_events only drops one per call, we need to call it
-        // repeatedly to trim 3000 down toward 2000. But the production code calls
-        // cap_events after each push. Simulate that here to match production behavior:
-        // rebuild with correct per-push behavior.
-        let mut events2: Vec<AgentEventRecord> = Vec::new();
-        for i in 0..3000usize {
-            let etype = match i {
-                0 => "task_start",
-                2999 => "task_complete",
-                _ => "node_output",
-            };
-            events2.push(make_event(etype, i));
-            cap_events(&mut events2);
-        }
-
-        // After per-push capping, length must not exceed MAX_TASK_EVENTS (2000)
-        assert!(
-            events2.len() <= 2000,
-            "events length {} exceeds 2000",
-            events2.len()
-        );
-
-        // Terminal events must be retained
-        let has_task_start = events2.iter().any(|e| e.event_type == "task_start");
-        let has_task_complete = events2.iter().any(|e| e.event_type == "task_complete");
-        assert!(has_task_start, "task_start terminal must be retained");
-        assert!(has_task_complete, "task_complete terminal must be retained");
-
-        // Verify the unused `events` Vec (built naively) also has correct length
-        // once we simulate cap on the whole slice — this tests bulk behavior too.
-        while events.len() > 2000 {
-            cap_events(&mut events);
-        }
-        assert!(events.len() <= 2000);
-        assert!(events.iter().any(|e| e.event_type == "task_start"));
-        assert!(events.iter().any(|e| e.event_type == "task_complete"));
-    }
 }

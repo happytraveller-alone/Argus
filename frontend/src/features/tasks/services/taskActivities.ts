@@ -1,4 +1,4 @@
-import { type AgentTask, getAgentTasks } from "@/shared/api/agentTasks";
+import type { AgentTask } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
@@ -330,37 +330,11 @@ function toRuleScanActivities(
 		.filter((item): item is TaskActivityItem => item !== null);
 }
 
-function toAgentActivities(
-	agentTasks: AgentTask[],
-	resolveProjectName: (projectId: string) => string,
-): TaskActivityItem[] {
-	return agentTasks.map((task) => ({
-		id: `agent-${task.id}`,
-		projectName: resolveProjectName(task.project_id),
-		kind: "intelligent_audit",
-		sourceMode: resolveSourceModeFromTaskMeta(
-			"intelligent_audit",
-			task.name,
-			task.description,
-		),
-		status: task.status,
-		agentFindingStats: getAgentTaskDefectSummaryStats(task),
-		createdAt: task.created_at,
-		startedAt: task.started_at,
-		completedAt: task.completed_at,
-		route: `/agent-audit/${task.id}?muteToast=1`,
-		cancelTarget: { mode: "intelligent", taskId: task.id },
-	}));
-}
-
 export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [agentTasks, opengrepTasks] = await Promise.all([
-		getAgentTasks({ limit }),
-		getOpengrepScanTasks({ limit }),
-	]);
+	const opengrepTasks = await getOpengrepScanTasks({ limit });
 
 	const projectNameMap = mapProjectNames(projects);
 	const resolveProjectName = (projectId: string) =>
@@ -368,7 +342,6 @@ export async function fetchTaskActivities(
 
 	const activities = [
 		...toRuleScanActivities(opengrepTasks, resolveProjectName),
-		...toAgentActivities(agentTasks, resolveProjectName),
 	].sort(
 		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 	);

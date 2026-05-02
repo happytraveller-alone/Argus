@@ -85,7 +85,6 @@ const LEGACY_MIRROR_TABLE_SPECS: &[LegacyMirrorTableSpec] = &[
             total_tasks integer not null default 0,
             completed_tasks integer not null default 0,
             running_tasks integer not null default 0,
-            agent_tasks integer not null default 0,
             opengrep_tasks integer not null default 0,
             gitleaks_tasks integer not null default 0,
             bandit_tasks integer not null default 0,

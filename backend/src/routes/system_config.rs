@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, path::Path, time::Duration};
+use std::{collections::BTreeMap, env, time::Duration};
 
 use axum::{
     body::Bytes,
@@ -24,10 +24,6 @@ use crate::{
         ProviderCatalogItem as LlmProviderItem,
     },
     routes::llm_config_set,
-    runtime::agentflow::{
-        codex_config::build_agentflow_llm_config,
-        pipeline_path::{display_candidates, resolve_agentflow_pipeline_path},
-    },
     state::{AppState, StoredSystemConfig},
 };
 
@@ -666,7 +662,7 @@ pub async fn fetch_llm_models(
         .await
         .map_err(internal_error)?;
     let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
-    let effective_llm_config = build_agentflow_llm_config(state.config.as_ref(), saved_llm_config);
+    let effective_llm_config = saved_llm_config.cloned().unwrap_or_else(|| json!({}));
     let saved_provider = read_string(&effective_llm_config, "llmProvider").unwrap_or_default();
     let requested_provider = request.provider.trim();
     let provider = normalize_provider_for_route(if requested_provider.is_empty() {
@@ -998,7 +994,7 @@ pub async fn agent_preflight(
                         .unwrap_or_else(|_| build_quick_snapshot(&runtime_config));
                 let runner_metadata = annotate_llm_preflight_metadata(
                     add_preflight_attempt_metadata(
-                        agentflow_runner_preflight_metadata(state.config.as_ref()),
+                        json!({}),
                         &attempted_row_ids,
                         Some(&row_id),
                         Some(&outcome.fingerprint),
@@ -1456,59 +1452,6 @@ fn add_preflight_attempt_metadata(
     metadata
 }
 
-fn agentflow_runner_preflight_metadata(config: &AppConfig) -> Value {
-    let compose_path = Path::new("docker-compose.yml");
-    let pipeline_resolution = resolve_agentflow_pipeline_path();
-    let compose_has_runner = std::fs::read_to_string(compose_path)
-        .map(|content| content.contains("agentflow-runner"))
-        .unwrap_or(false);
-    let runner_command_configured = std::env::var("AGENTFLOW_RUNNER_COMMAND")
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    let default_runner_enabled = env_flag_enabled("AGENTFLOW_DEFAULT_RUNNER_ENABLED", true);
-    let runner_ok = compose_has_runner || runner_command_configured || default_runner_enabled;
-    let pipeline_ok = pipeline_resolution.exists;
-    let pipeline_candidates = display_candidates(&pipeline_resolution.candidates);
-    let output_dir_ok = config
-        .zip_storage_path
-        .parent()
-        .map(|path| path.exists() || std::fs::create_dir_all(path).is_ok())
-        .unwrap_or(true);
-    let resource_ok =
-        config.runner_preflight_max_concurrency > 0 && config.agent_timeout_seconds > 0;
-
-    json!({
-        "llm": {
-            "ok": true,
-            "reason_code": Value::Null,
-        },
-        "runner": {
-            "ok": runner_ok,
-            "reason_code": if runner_ok { Value::Null } else { json!("runner_missing") },
-            "compose_has_agentflow_runner": compose_has_runner,
-            "runner_command_configured": runner_command_configured,
-            "default_runner_enabled": default_runner_enabled,
-        },
-        "pipeline": {
-            "ok": pipeline_ok,
-            "reason_code": if pipeline_ok { Value::Null } else { json!("pipeline_invalid") },
-            "path": pipeline_resolution.path.display().to_string(),
-            "checked_candidates": pipeline_candidates,
-        },
-        "output_dir": {
-            "ok": output_dir_ok,
-            "reason_code": if output_dir_ok { Value::Null } else { json!("output_dir_unwritable") },
-            "path": config.zip_storage_path.display().to_string(),
-        },
-        "resource": {
-            "ok": resource_ok,
-            "reason_code": if resource_ok { Value::Null } else { json!("resource_unavailable") },
-            "max_concurrency": config.runner_preflight_max_concurrency,
-            "agent_timeout_seconds": config.agent_timeout_seconds,
-        },
-    })
-}
-
 fn env_flag_enabled(key: &str, default: bool) -> bool {
     std::env::var(key)
         .ok()
@@ -1608,9 +1551,7 @@ fn prepare_legacy_user_config_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        agentflow_runner_preflight_metadata, default_config, prepare_legacy_user_config_payload,
-    };
+    use super::{default_config, prepare_legacy_user_config_payload};
     use crate::{config::AppConfig, core::encryption::decrypt_sensitive_string};
     use serde_json::json;
 
@@ -1691,37 +1632,5 @@ mod tests {
         )
         .expect("encrypted mirror field should decrypt");
         assert_eq!(decrypted, "sk-test-openai");
-    }
-
-    #[test]
-    fn agentflow_preflight_metadata_reports_shared_pipeline_candidates() {
-        let metadata = agentflow_runner_preflight_metadata(&AppConfig::for_tests());
-        let pipeline = &metadata["pipeline"];
-        let candidates = pipeline["checked_candidates"]
-            .as_array()
-            .expect("checked candidates should be reported");
-
-        assert_eq!(pipeline["ok"], true);
-        assert!(
-            pipeline["path"]
-                .as_str()
-                .unwrap_or_default()
-                .ends_with("agentflow/pipelines/intelligent_audit.py"),
-            "metadata should expose the selected shared resolver path: {pipeline:?}"
-        );
-        assert!(
-            candidates.iter().any(|path| path
-                .as_str()
-                .unwrap_or_default()
-                .contains("backend/agentflow/pipelines/intelligent_audit.py")),
-            "source checkout candidate should be reported: {candidates:?}"
-        );
-        assert!(
-            candidates.iter().any(|path| path
-                .as_str()
-                .unwrap_or_default()
-                .contains("/app/backend/agentflow/pipelines/intelligent_audit.py")),
-            "packaged runtime candidate should be reported: {candidates:?}"
-        );
     }
 }

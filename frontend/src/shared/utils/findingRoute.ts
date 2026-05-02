@@ -83,31 +83,6 @@ export function buildFindingDetailLocationState(
 	return baseState;
 }
 
-export function buildAgentFindingDetailRoute(params: {
-	taskId: string;
-	findingId: string;
-	currentRoute: string;
-}): string {
-	const targetPath = buildFindingDetailPath({
-		source: "agent",
-		taskId: params.taskId,
-		findingId: params.findingId,
-	});
-	return appendReturnTo(targetPath, sanitizeAgentAuditReturnTo(params.currentRoute));
-}
-
-export function buildAgentFindingDetailNavigation(params: {
-	taskId: string;
-	findingId: string;
-	currentRoute: string;
-	snapshot?: AgentFinding | null;
-}): { route: string; state: FindingDetailLocationState } {
-	return {
-		route: buildAgentFindingDetailRoute(params),
-		state: buildFindingDetailLocationState(params.snapshot),
-	};
-}
-
 export function buildProjectCodeBrowserRoute(params: {
 	projectId: string;
 	filePath?: string | null;

@@ -6,10 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::{Mutex, RwLock};
 
-use crate::{
-    config::AppConfig, project_file_cache::ProjectFileCache,
-    runtime::agentflow::streaming::TaskEventChannels,
-};
+use crate::{config::AppConfig, project_file_cache::ProjectFileCache};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum BootstrapStatus {
@@ -243,7 +240,6 @@ pub struct AppState {
     pub file_store_lock: Arc<Mutex<()>>,
     pub project_file_cache: Arc<Mutex<ProjectFileCache>>,
     pub bootstrap: Arc<RwLock<BootstrapReport>>,
-    pub task_event_channels: TaskEventChannels,
 }
 
 impl AppState {
@@ -279,7 +275,6 @@ impl AppState {
                 recovery: StartupRecoveryStatus::default(),
                 preflight: RunnerPreflightStatus::default(),
             })),
-            task_event_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
         })
     }
 

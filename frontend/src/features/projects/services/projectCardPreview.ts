@@ -402,49 +402,7 @@ export function getProjectCardRecentTasks(params: {
 			};
 		});
 
-	const intelligentItems: ProjectCardRecentTask[] = agentTasks
-		.filter((task) => task.project_id === projectId)
-		.map((task) => {
-			const dynamicTask = task as AgentTask & {
-				lines_scanned?: number | null;
-				total_lines?: number | null;
-				scanned_files?: number | null;
-			};
-
-			const analyzedFiles = toNullableNonNegativeNumber(task.analyzed_files);
-			const totalFiles = toNullableNonNegativeNumber(task.total_files);
-			const scanLabel = "智能审计";
-
-			return {
-				id: task.id,
-				projectId: task.project_id,
-				kind: "intelligent",
-				status: task.status,
-				progressPercent: clampPercent(
-					task.progress_percentage ?? getStatusProgressBaseline(task.status),
-				),
-				createdAt: task.created_at,
-				startedAt: task.started_at,
-				completedAt: task.completed_at,
-				durationMs: computeDurationMs(task.started_at, task.completed_at),
-				route: `/agent-audit/${task.id}`,
-				label: scanLabel,
-				scanTypeLabel: scanLabel,
-				scannedFiles:
-					analyzedFiles !== null && analyzedFiles > 0
-						? analyzedFiles
-						: (analyzedFiles ??
-							totalFiles ??
-							toNullableNonNegativeNumber(dynamicTask.scanned_files)),
-				scannedLines: toNullableNonNegativeNumber(
-					dynamicTask.lines_scanned ?? dynamicTask.total_lines,
-				),
-				vulnerabilities: toNullableNonNegativeNumber(task.verified_count),
-				taskCategory: "intelligent",
-				supportsFindingsDetail: true,
-				findingsButtonDisabledReason: null,
-			};
-		});
+	const intelligentItems: ProjectCardRecentTask[] = [];
 
 	return [...staticItems, ...intelligentItems]
 		.sort(
