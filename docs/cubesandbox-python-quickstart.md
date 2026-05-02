@@ -203,6 +203,11 @@ scripts/cubesandbox-quickstart.sh build-codeql-cpp-image
 scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
 ```
 
+The image build definition is stored in
+`oci/cubesandbox/codeql-cpp.Dockerfile`. The helper copies that OCI image
+configuration into the CubeSandbox VM and injects the local registry image and
+CodeQL bundle URL as build arguments.
+
 `build-codeql-cpp-image` keeps Docker Hub references in explicit DaoCloud
 replacement form and rewrites Debian 13 apt sources to Aliyun mirrors inside
 the image build. It installs:

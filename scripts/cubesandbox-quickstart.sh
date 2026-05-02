@@ -29,6 +29,7 @@ CUBE_CODEQL_VERSION="${CUBE_CODEQL_VERSION:-2.20.5}"
 CUBE_CODEQL_BUNDLE_URL="${CUBE_CODEQL_BUNDLE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CUBE_CODEQL_VERSION}/codeql-bundle-linux64.tar.zst}"
 CUBE_CODEQL_CPP_IMAGE="${CUBE_CODEQL_CPP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-codeql-cpp:latest}"
 CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4G}"
+CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
 CUBE_RELEASE_ASSET="${CUBE_RELEASE_ASSET:-cube-sandbox-one-click-aa8d642.tar.gz}"
 CUBE_RELEASE_URL="${CUBE_RELEASE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/${CUBE_RELEASE_VERSION}/${CUBE_RELEASE_ASSET}}"
@@ -363,54 +364,26 @@ REMOTE
 }
 
 build_codeql_cpp_image() {
-  local image_q bundle_url_q registry_image_q
+  [[ -f "$CUBE_CODEQL_CPP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_CODEQL_CPP_DOCKERFILE"
+  need_cmd base64
+  local image_q bundle_url_q registry_image_q dockerfile_q dockerfile_b64
   image_q="$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")"
   bundle_url_q="$(shell_quote "$CUBE_CODEQL_BUNDLE_URL")"
   registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
+  dockerfile_q="$(shell_quote "$(basename "$CUBE_CODEQL_CPP_DOCKERFILE")")"
+  dockerfile_b64="$(base64 -w 0 "$CUBE_CODEQL_CPP_DOCKERFILE")"
   remote_root "$(cat <<REMOTE
 set -Eeuo pipefail
 mkdir -p /root/cubesandbox-codeql-cpp-build
 cd /root/cubesandbox-codeql-cpp-build
-cat > Dockerfile <<'DOCKERFILE'
-FROM ${CUBE_LOCAL_REGISTRY_IMAGE} AS dockerhub_mirror_probe
-FROM ccr.ccs.tencentyun.com/ags-image/sandbox-code:latest
-
-ENV CODEQL_DIST_DIR=/opt/codeql
-ENV PATH=/opt/codeql/codeql:\${PATH}
-
-RUN set -eux; \\
-    mkdir -p /etc/apt/disabled-sources.list.d; \\
-    find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*cran*' -o -name '*r-project*' -o -name '*nodesource*' \\) -exec mv {} /etc/apt/disabled-sources.list.d/ \\; 2>/dev/null || true; \\
-    if [ -f /etc/apt/sources.list ]; then \\
-      sed -i \\
-        -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
-        -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
-        -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
-        -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
-        /etc/apt/sources.list; \\
-    fi; \\
-    find /etc/apt/sources.list.d -type f \\( -name '*.list' -o -name '*.sources' \\) -print0 2>/dev/null | xargs -0 -r sed -i \\
-      -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
-      -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
-      -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
-      -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g'; \\
-    grep -R "URIs:\\|^deb " /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true; \\
-    apt-get update; \\
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-      ca-certificates curl zstd xz-utils cmake make gcc g++ git bash file; \\
-    rm -rf /var/lib/apt/lists/*
-
-RUN set -eux; \\
-    mkdir -p "\${CODEQL_DIST_DIR}"; \\
-    curl -fL "${CUBE_CODEQL_BUNDLE_URL}" -o /tmp/codeql-bundle.tar.zst; \\
-    tar --use-compress-program=unzstd -xf /tmp/codeql-bundle.tar.zst -C "\${CODEQL_DIST_DIR}"; \\
-    rm -f /tmp/codeql-bundle.tar.zst; \\
-    codeql version; \\
-    codeql resolve languages
-DOCKERFILE
+printf '%s' '${dockerfile_b64}' | base64 -d > ${dockerfile_q}
 
 docker pull ${registry_image_q}
-DOCKER_BUILDKIT=0 docker build --pull=false -t ${image_q} .
+DOCKER_BUILDKIT=0 docker build --pull=false \\
+  --build-arg CUBE_LOCAL_REGISTRY_IMAGE=${registry_image_q} \\
+  --build-arg CUBE_CODEQL_BUNDLE_URL=${bundle_url_q} \\
+  -f ${dockerfile_q} \\
+  -t ${image_q} .
 docker push ${image_q}
 REMOTE
 )"
