@@ -7,45 +7,17 @@ import FindingDetailHeaderActions, {
 import FindingDetailView from "@/pages/finding-detail/FindingDetailView";
 import {
   buildAgentFindingDetailModel,
-  buildBanditFindingDetailModel,
-  buildGitleaksFindingDetailModel,
-  buildOpengrepFindingDetailModel,
-  buildPmdFindingDetailModel,
-  buildPhpstanFindingDetailModel,
+  buildCodeqlFindingDetailModel,
   getAgentFalsePositiveEvidence,
+  buildOpengrepFindingDetailModel,
   isAgentFalsePositiveFinding,
 } from "@/pages/finding-detail/viewModel";
-import {
-  getAgentFinding,
-  getAgentTask,
-  type AgentFinding,
-} from "@/shared/api/agentTasks";
-import {
-  getBanditFinding,
-  getBanditScanTask,
-  type BanditFinding,
-  type BanditScanTask,
-} from "@/shared/api/bandit";
-import {
-  getGitleaksFinding,
-  getGitleaksScanTask,
-  type GitleaksFinding,
-  type GitleaksScanTask,
-} from "@/shared/api/gitleaks";
-import {
-  getPhpstanFinding,
-  getPhpstanScanTask,
-  type PhpstanFinding,
-  type PhpstanScanTask,
-} from "@/shared/api/phpstan";
-import {
-  getPmdFinding,
-  getPmdScanTask,
-  type PmdFinding,
-  type PmdScanTask,
-} from "@/shared/api/pmd";
+import type { AgentFinding } from "@/shared/api/agentTasks";
 import {
   getOpengrepFindingContext,
+  getCodeqlFindingContext,
+  getCodeqlScanFinding,
+  getCodeqlScanTask,
   getOpengrepScanFinding,
   getOpengrepScanTask,
   type OpengrepFinding,
@@ -63,7 +35,7 @@ import {
 import SilentLoadingState from "@/components/performance/SilentLoadingState";
 
 type FindingSource = "static" | "agent";
-type StaticEngine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+type StaticEngine = "opengrep" | "codeql";
 
 function decodePathParam(raw: string | undefined): string {
   try {
@@ -81,10 +53,7 @@ function resolveFindingSource(raw: string | undefined): FindingSource | null {
 
 function resolveStaticEngine(raw: string | null): StaticEngine {
   const value = decodePathParam(raw ?? undefined).toLowerCase();
-  if (value === "gitleaks") return "gitleaks";
-  if (value === "bandit") return "bandit";
-  if (value === "phpstan") return "phpstan";
-  if (value === "pmd") return "pmd";
+  if (value === "codeql") return "codeql";
   return "opengrep";
 }
 
@@ -100,13 +69,6 @@ function getErrorMessage(error: unknown): string {
       apiError?.message ||
       "漏洞详情加载失败，请稍后重试",
   );
-}
-
-function getErrorStatus(error: unknown): number {
-  const apiError = error as {
-    response?: { status?: number };
-  };
-  return Number(apiError?.response?.status || 0);
 }
 
 function FindingDetailShell({
@@ -165,14 +127,6 @@ export default function FindingDetail() {
   const [staticTask, setStaticTask] = useState<OpengrepScanTask | null>(null);
   const [staticFinding, setStaticFinding] = useState<OpengrepFinding | null>(null);
   const [staticContext, setStaticContext] = useState<OpengrepFindingContext | null>(null);
-  const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
-  const [gitleaksFinding, setGitleaksFinding] = useState<GitleaksFinding | null>(null);
-  const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
-  const [banditFinding, setBanditFinding] = useState<BanditFinding | null>(null);
-  const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
-  const [phpstanFinding, setPhpstanFinding] = useState<PhpstanFinding | null>(null);
-  const [pmdTask, setPmdTask] = useState<PmdScanTask | null>(null);
-  const [pmdFinding, setPmdFinding] = useState<PmdFinding | null>(null);
   const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
   const [project, setProject] = useState<Project | null>(null);
 
@@ -191,61 +145,26 @@ export default function FindingDetail() {
       setStaticTask(null);
       setStaticFinding(null);
       setStaticContext(null);
-      setGitleaksTask(null);
-      setGitleaksFinding(null);
-      setBanditTask(null);
-      setBanditFinding(null);
-      setPhpstanTask(null);
-      setPhpstanFinding(null);
-      setPmdTask(null);
-      setPmdFinding(null);
       setAgentFinding(null);
       setProject(null);
 
       try {
         if (source === "static") {
-          if (staticEngine === "gitleaks") {
-            const [task, finding] = await Promise.all([
-              getGitleaksScanTask(taskId),
-              getGitleaksFinding({ taskId, findingId }),
+          if (staticEngine === "codeql") {
+            const [task, finding, context] = await Promise.all([
+              getCodeqlScanTask(taskId),
+              getCodeqlScanFinding({ taskId, findingId }),
+              getCodeqlFindingContext({
+                taskId,
+                findingId,
+                before: 5,
+                after: 5,
+              }),
             ]);
             if (cancelled) return;
-            setGitleaksTask(task);
-            setGitleaksFinding(finding);
-            const nextProject = await databaseApi.getProjectById(task.project_id);
-            if (cancelled) return;
-            setProject(nextProject);
-          } else if (staticEngine === "bandit") {
-            const [task, finding] = await Promise.all([
-              getBanditScanTask(taskId),
-              getBanditFinding({ taskId, findingId }),
-            ]);
-            if (cancelled) return;
-            setBanditTask(task);
-            setBanditFinding(finding);
-            const nextProject = await databaseApi.getProjectById(task.project_id);
-            if (cancelled) return;
-            setProject(nextProject);
-          } else if (staticEngine === "phpstan") {
-            // PHPStan integration: static finding detail fetch path.
-            const [task, finding] = await Promise.all([
-              getPhpstanScanTask(taskId),
-              getPhpstanFinding({ taskId, findingId }),
-            ]);
-            if (cancelled) return;
-            setPhpstanTask(task);
-            setPhpstanFinding(finding);
-            const nextProject = await databaseApi.getProjectById(task.project_id);
-            if (cancelled) return;
-            setProject(nextProject);
-          } else if (staticEngine === "pmd") {
-            const [task, finding] = await Promise.all([
-              getPmdScanTask(taskId),
-              getPmdFinding({ taskId, findingId }),
-            ]);
-            if (cancelled) return;
-            setPmdTask(task);
-            setPmdFinding(finding);
+            setStaticTask(task);
+            setStaticFinding(finding);
+            setStaticContext(context);
             const nextProject = await databaseApi.getProjectById(task.project_id);
             if (cancelled) return;
             setProject(nextProject);
@@ -268,56 +187,10 @@ export default function FindingDetail() {
             if (cancelled) return;
             setProject(nextProject);
           }
+        } else if (agentFindingSnapshot) {
+          setAgentFinding(agentFindingSnapshot);
         } else {
-          try {
-            const agentTask = await getAgentTask(taskId);
-            if (cancelled) return;
-            const nextProject = await databaseApi.getProjectById(agentTask.project_id);
-            if (cancelled) return;
-            setProject(nextProject);
-          } catch {
-            if (!cancelled) {
-              setProject(null);
-            }
-          }
-          const canUseSnapshot =
-            agentFindingSnapshot && isAgentFalsePositiveFinding(agentFindingSnapshot);
-          const retryDelaysMs = canUseSnapshot ? [0, 1200, 2400] : [0];
-          let resolved = false;
-
-          for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
-            if (attempt > 0) {
-              await new Promise((resolve) =>
-                window.setTimeout(resolve, retryDelaysMs[attempt]),
-              );
-              if (cancelled) return;
-            }
-
-            try {
-              const finding = await getAgentFinding(taskId, findingId, {
-                include_false_positive: true,
-              });
-              if (cancelled) return;
-              setAgentFinding(finding);
-              setError("");
-              resolved = true;
-              break;
-            } catch (agentLoadError) {
-              const status = getErrorStatus(agentLoadError);
-              if (status === 404 && canUseSnapshot) {
-                setAgentFinding(agentFindingSnapshot);
-                setError("");
-                setLoading(false);
-                continue;
-              }
-              throw agentLoadError;
-            }
-          }
-
-          if (!resolved && canUseSnapshot) {
-            if (cancelled) return;
-            setAgentFinding(agentFindingSnapshot);
-          }
+          setError("智能审计详情接口已退役，仅支持从历史任务列表携带快照打开。");
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -361,48 +234,13 @@ export default function FindingDetail() {
       });
     }
 
-    if (source === "static" && staticEngine === "gitleaks" && gitleaksFinding) {
-      return buildGitleaksFindingDetailModel({
-        finding: gitleaksFinding,
+    if (source === "static" && staticEngine === "codeql" && staticFinding) {
+      return buildCodeqlFindingDetailModel({
+        finding: staticFinding,
         taskId,
         findingId,
-        taskName: gitleaksTask?.name,
-        projectId: project?.id,
-        projectSourceType: project?.source_type,
-        projectName: project?.name,
-      });
-    }
-
-    if (source === "static" && staticEngine === "bandit" && banditFinding) {
-      return buildBanditFindingDetailModel({
-        finding: banditFinding,
-        taskId,
-        findingId,
-        taskName: banditTask?.name,
-        projectId: project?.id,
-        projectSourceType: project?.source_type,
-        projectName: project?.name,
-      });
-    }
-
-    if (source === "static" && staticEngine === "phpstan" && phpstanFinding) {
-      return buildPhpstanFindingDetailModel({
-        finding: phpstanFinding,
-        taskId,
-        findingId,
-        taskName: phpstanTask?.name,
-        projectId: project?.id,
-        projectSourceType: project?.source_type,
-        projectName: project?.name,
-      });
-    }
-
-    if (source === "static" && staticEngine === "pmd" && pmdFinding) {
-      return buildPmdFindingDetailModel({
-        finding: pmdFinding,
-        taskId,
-        findingId,
-        taskName: pmdTask?.name,
+        taskName: staticTask?.name,
+        context: staticContext,
         projectId: project?.id,
         projectSourceType: project?.source_type,
         projectName: project?.name,
@@ -412,15 +250,7 @@ export default function FindingDetail() {
     return null;
   }, [
     agentFinding,
-    banditFinding,
-    banditTask?.name,
     findingId,
-    gitleaksFinding,
-    gitleaksTask?.name,
-    pmdFinding,
-    pmdTask?.name,
-    phpstanFinding,
-    phpstanTask?.name,
     project?.id,
     project?.name,
     project?.source_type,

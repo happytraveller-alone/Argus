@@ -14,10 +14,7 @@ test("StaticAnalysisSummaryCards keeps the initial progress label pending while 
   const markup = renderToStaticMarkup(
     createElement(summaryCardsModule.StaticAnalysisSummaryCards, {
       opengrepTask: null,
-      gitleaksTask: null,
-      banditTask: null,
-      phpstanTask: null,
-      pmdTask: null,
+      codeqlTask: null,
       enabledEngines: ["opengrep"],
       loadingInitial: true,
     }),
@@ -57,11 +54,8 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
         created_at: "2026-03-23T10:00:00.000Z",
         updated_at: "2026-03-23T10:01:00.000Z",
       },
-      gitleaksTask: null,
-      banditTask: null,
-      phpstanTask: null,
-      pmdTask: null,
-      enabledEngines: ["opengrep", "gitleaks"],
+      codeqlTask: null,
+      enabledEngines: ["opengrep", "codeql"],
       loadingInitial: true,
     }),
   );
@@ -70,7 +64,7 @@ test("StaticAnalysisSummaryCards keeps all enabled engines pending while multi-e
   assert.match(markup, /任务待处理/);
   assert.doesNotMatch(markup, /0%/);
   assert.doesNotMatch(markup, /Opengrep · 任务待处理/);
-  assert.doesNotMatch(markup, /Gitleaks · 任务待处理/);
+  assert.doesNotMatch(markup, /CodeQL · 任务待处理/);
   assert.doesNotMatch(markup, /Opengrep · 任务完成/);
 });
 

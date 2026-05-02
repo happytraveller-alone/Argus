@@ -48,12 +48,12 @@ const openFinding: UnifiedFindingRow = {
 
 const verifiedFinding: UnifiedFindingRow = {
 	...openFinding,
-	key: "gl-1",
+	key: "cq-1",
 	id: "finding-2",
-	taskId: "task-2",
-	engine: "gitleaks",
-	rule: "hardcoded-secret",
-	filePath: ".env",
+	taskId: "task-codeql",
+	engine: "codeql",
+	rule: "codeql-rule",
+	filePath: "src/query.cpp",
 	line: 1,
 	status: "verified",
 };

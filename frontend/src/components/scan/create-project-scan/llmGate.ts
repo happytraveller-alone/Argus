@@ -214,19 +214,6 @@ export function getLlmQuickGateStatus({
 	};
 }
 
-export function mergeRetainedProjectForRetry<TProject extends { id: string }>(
-	projects: TProject[],
-	retainedProject: TProject,
-): TProject[] {
-	const existingIndex = projects.findIndex(
-		(project) => project.id === retainedProject.id,
-	);
-	if (existingIndex === -1) return [retainedProject, ...projects];
-	return projects.map((project, index) =>
-		index === existingIndex ? retainedProject : project,
-	);
-}
-
 export const CREATE_PROJECT_SCAN_PAGE_SIZE = 3;
 
 export function paginateProjectCards<T>(

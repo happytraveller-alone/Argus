@@ -15,7 +15,7 @@ test("buildScanConfigEngineSearchParams clears data-table state when switching e
     filters: '{"source":"builtin"}',
   });
 
-  const nextParams = buildScanConfigEngineSearchParams(currentParams, "pmd");
+  const nextParams = buildScanConfigEngineSearchParams(currentParams, "codeql");
 
   assert.equal(nextParams.get("tab"), "opengrep");
   assert.equal(nextParams.get("page"), null);
@@ -33,7 +33,7 @@ test("buildScanConfigEngineSearchParams preserves unrelated params", () => {
     page: "2",
   });
 
-  const nextParams = buildScanConfigEngineSearchParams(currentParams, "pmd");
+  const nextParams = buildScanConfigEngineSearchParams(currentParams, "codeql");
 
   assert.equal(nextParams.get("tab"), "opengrep");
   assert.equal(nextParams.get("foo"), "bar");

@@ -32,7 +32,6 @@ function createSnapshotFixture() {
 				total_findings: 3,
 				opengrep_findings: 1,
 				agent_findings: 2,
-				bandit_findings: 0,
 			},
 		],
 		summary: {
@@ -57,9 +56,6 @@ function createSnapshotFixture() {
 				completed_scans: 4,
 				agent_findings: 3,
 				opengrep_findings: 5,
-				gitleaks_findings: 2,
-				bandit_findings: 1,
-				phpstan_findings: 2,
 				static_findings: 11,
 				intelligent_verified_findings: 5,
 				total_new_findings: 16,
@@ -69,9 +65,6 @@ function createSnapshotFixture() {
 				completed_scans: 5,
 				agent_findings: 4,
 				opengrep_findings: 6,
-				gitleaks_findings: 3,
-				bandit_findings: 2,
-				phpstan_findings: 2,
 				static_findings: 14,
 				intelligent_verified_findings: 5,
 				total_new_findings: 19,
@@ -137,7 +130,7 @@ function createSnapshotFixture() {
 				success_rate: 1,
 			},
 			{
-				engine: "gitleaks",
+				engine: "codeql",
 				completed_scans: 4,
 				effective_findings: 9,
 				verified_findings: 2,
@@ -146,7 +139,7 @@ function createSnapshotFixture() {
 				success_rate: 1,
 			},
 			{
-				engine: "bandit",
+				engine: "opengrep",
 				completed_scans: 3,
 				effective_findings: 7,
 				verified_findings: 2,
@@ -155,7 +148,7 @@ function createSnapshotFixture() {
 				success_rate: 1,
 			},
 			{
-				engine: "phpstan",
+				engine: "codeql",
 				completed_scans: 2,
 				effective_findings: 5,
 				verified_findings: 1,
@@ -221,7 +214,7 @@ function createSnapshotFixture() {
 				task_id: "ps-1",
 				task_type: "静态审计",
 				title: "静态审计 · Delta PHP",
-				engine: "phpstan",
+				engine: "codeql",
 				status: "completed",
 				created_at: "2026-03-22T23:30:00.000Z",
 				detail_path: "/tasks/static",
@@ -253,9 +246,6 @@ function createSnapshotFixture() {
 		],
 		static_engine_rule_totals: [
 			{ engine: "opengrep", total_rules: 368 },
-			{ engine: "gitleaks", total_rules: 214 },
-			{ engine: "bandit", total_rules: 172 },
-			{ engine: "phpstan", total_rules: 129 },
 		],
 		language_loc_distribution: [
 			{ language: "TypeScript", loc_number: 182400, project_count: 4 },
@@ -502,14 +492,14 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 	const snapshot = createSnapshotFixture();
 	snapshot.recent_tasks = [
 		{
-			task_id: "gl-batch",
+			task_id: "cq-batch",
 			task_type: "静态审计",
 			title: "静态审计 · Gamma Portal",
-			engine: "gitleaks",
+			engine: "codeql",
 			status: "completed",
 			created_at: "2026-03-23T00:30:00.000Z",
 			detail_path:
-				"/static-analysis/gl-batch?gitleaksTaskId=gl-batch&banditTaskId=ba-batch",
+				"/static-analysis/cq-batch?codeqlTaskId=cq-batch&engine=codeql",
 		},
 	];
 
@@ -523,7 +513,7 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 
 	assert.match(
 		markup,
-		/href="\/static-analysis\/gl-batch\?gitleaksTaskId=gl-batch&amp;banditTaskId=ba-batch"/,
+		/href="\/static-analysis\/cq-batch\?codeqlTaskId=cq-batch&amp;engine=codeql"/,
 	);
 	assert.match(markup, /aria-label="查看 Gamma Portal 详情"/);
 	assert.match(markup, /完成/);

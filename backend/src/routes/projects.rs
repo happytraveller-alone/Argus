@@ -76,9 +76,6 @@ pub struct ProjectManagementMetricsResponse {
     pub completed_tasks: i64,
     pub running_tasks: i64,
     pub opengrep_tasks: i64,
-    pub gitleaks_tasks: i64,
-    pub bandit_tasks: i64,
-    pub phpstan_tasks: i64,
     pub critical: i64,
     pub high: i64,
     pub medium: i64,
@@ -1461,9 +1458,6 @@ fn build_metrics(
     let mut completed_tasks = 0;
     let mut running_tasks = 0;
     let mut opengrep_tasks = 0;
-    let mut gitleaks_tasks = 0;
-    let mut bandit_tasks = 0;
-    let mut phpstan_tasks = 0;
     let mut static_counts = SeverityMetricCounts::default();
     let mut last_completed_task_at: Option<String> = None;
 
@@ -1473,12 +1467,8 @@ fn build_metrics(
                 continue;
             }
             total_tasks += 1;
-            match record.engine.as_str() {
-                "opengrep" => opengrep_tasks += 1,
-                "gitleaks" => gitleaks_tasks += 1,
-                "bandit" => bandit_tasks += 1,
-                "phpstan" => phpstan_tasks += 1,
-                _ => {}
+            if record.engine == "opengrep" {
+                opengrep_tasks += 1;
             }
             add_task_status_counts(&record.status, &mut completed_tasks, &mut running_tasks);
             if is_completed_task_status(&record.status) {
@@ -1503,9 +1493,6 @@ fn build_metrics(
         completed_tasks,
         running_tasks,
         opengrep_tasks,
-        gitleaks_tasks,
-        bandit_tasks,
-        phpstan_tasks,
         critical: aggregate_counts.critical,
         high: aggregate_counts.high,
         medium: aggregate_counts.medium,
@@ -2145,13 +2132,13 @@ async fn sync_python_project_mirror(
         insert into project_management_metrics (
             project_id, archive_size_bytes, archive_original_filename, archive_uploaded_at,
             total_tasks, completed_tasks, running_tasks, agent_tasks, opengrep_tasks,
-            gitleaks_tasks, bandit_tasks, phpstan_tasks, critical, high, medium, low,
+            critical, high, medium, low,
             verified_critical, verified_high, verified_medium, verified_low,
             status, error_message
         )
         values (
             $1, $2, $3, $4::timestamptz,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             $5, null
         )
         on conflict (project_id) do update

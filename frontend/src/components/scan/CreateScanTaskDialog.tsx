@@ -23,13 +23,12 @@ import {
 	Shield,
 	Loader2,
 	Zap,
-	Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/api/database";
-import { createAgentTask, startAgentTask } from "@/shared/api/agentTasks";
 import {
 	createOpengrepScanTask,
+	createCodeqlScanTask,
 	getAllOpengrepRules,
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
@@ -61,7 +60,6 @@ import {
 	validateZipFile,
 } from "@/features/projects/services/repoZipScan";
 import { isZipProject } from "@/shared/utils/projectUtils";
-import { INTELLIGENT_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 import {
 	appendStaticScanBatchMarker,
@@ -69,13 +67,17 @@ import {
 } from "@/shared/utils/staticScanBatch";
 import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
 import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
+import {
+	hasSelectedPrimaryStaticEngine,
+	isPrimaryStaticEngine,
+	selectPrimaryStaticEngine,
+} from "@/shared/utils/staticEngineSelection";
 
 interface CreateScanTaskDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onTaskCreated: () => void;
 	preselectedProjectId?: string;
-	initialScanMode?: ScanMode;
 	navigateOnSuccess?: boolean;
 	showReturnButton?: boolean;
 	onReturn?: () => void;
@@ -90,7 +92,6 @@ export default function CreateScanTaskDialog({
 	onOpenChange,
 	onTaskCreated,
 	preselectedProjectId,
-	initialScanMode,
 	navigateOnSuccess = true,
 	showReturnButton = false,
 	onReturn,
@@ -114,14 +115,10 @@ export default function CreateScanTaskDialog({
 	const [newProjectFile, setNewProjectFile] = useState<File | null>(null);
 	const newProjectFileInputRef = useRef<HTMLInputElement>(null);
 
-	const [scanMode, setScanMode] = useState<ScanMode>("agent");
+	const [scanMode, setScanMode] = useState<ScanMode>("static");
 	const [staticTools, setStaticTools] = useState<StaticToolSelection>({
 		opengrep: true,
 		codeql: false,
-		gitleaks: false,
-		bandit: false,
-		phpstan: false,
-		pmd: false,
 	});
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
@@ -188,14 +185,10 @@ export default function CreateScanTaskDialog({
 			setSearchTerm("");
 			setShowAdvanced(false);
 			setSelectedRuleIds([]);
-			setScanMode(initialScanMode || "agent");
+			setScanMode("static");
 			setStaticTools({
 				opengrep: true,
 				codeql: false,
-				gitleaks: false,
-				bandit: false,
-				phpstan: false,
-				pmd: false,
 			});
 			setConfigEngine(null);
 			setSourceMode("existing");
@@ -203,7 +196,7 @@ export default function CreateScanTaskDialog({
 			setNewProjectFile(null);
 			zipState.reset();
 			}
-		}, [open, preselectedProjectId, initialScanMode, loadProjects]);
+		}, [open, preselectedProjectId, loadProjects]);
 
 	useEffect(() => {
 		if (!open || sourceMode !== "existing") return;
@@ -273,11 +266,12 @@ export default function CreateScanTaskDialog({
 		projectId: string,
 		projectName: string,
 	) => {
-		if (!staticTools.opengrep) {
+		if (!hasSelectedPrimaryStaticEngine(staticTools)) {
 			throw new Error("请选择至少一个静态分析工具");
 		}
 
 		let opengrepTask: { id: string } | null = null;
+		let codeqlTask: { id: string } | null = null;
 		const staticBatchId = createStaticScanBatchId();
 
 		if (staticTools.opengrep) {
@@ -335,7 +329,17 @@ export default function CreateScanTaskDialog({
 				});
 			}
 		}
-		const primaryTaskId = opengrepTask?.id;
+		if (staticTools.codeql) {
+			codeqlTask = await createCodeqlScanTask({
+				project_id: projectId,
+				name: appendStaticScanBatchMarker(
+					`静态分析-CodeQL-${projectName}`,
+					staticBatchId,
+				),
+				target_path: ".",
+			});
+		}
+		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态分析任务创建失败");
 		}
@@ -343,6 +347,10 @@ export default function CreateScanTaskDialog({
 		const params = new URLSearchParams();
 		if (opengrepTask) {
 			params.set("opengrepTaskId", opengrepTask.id);
+		}
+		if (codeqlTask) {
+			params.set("codeqlTaskId", codeqlTask.id);
+			params.set("engine", "codeql");
 		}
 
 		return {
@@ -374,30 +382,6 @@ export default function CreateScanTaskDialog({
 						programming_languages: [],
 					} as any, newProjectFile);
 
-					if (scanMode === "agent") {
-						const agentTask = await createAgentTask({
-							project_id: createdProject.id,
-							name: `智能审计-${createdProject.name}`,
-							description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
-							target_files:
-								effectiveTargetFiles.length > 0
-									? effectiveTargetFiles
-									: undefined,
-							use_prompt_skills: true,
-							verification_level: "analysis_with_poc_plan",
-						});
-						startAgentTask(agentTask.id).catch(console.error);
-
-						onOpenChange(false);
-						onTaskCreated();
-						toast.success("智能审计任务已创建");
-						if (navigateOnSuccess) {
-							navigate(`/agent-audit/${agentTask.id}`);
-						}
-						loadProjects();
-						return;
-					}
-
 					const staticResult = await createStaticScanTasksForProject(
 						createdProject.id,
 						createdProject.name,
@@ -423,28 +407,6 @@ export default function CreateScanTaskDialog({
 
 			if (!selectedProject) {
 				toast.error("请选择项目");
-				return;
-			}
-
-			if (scanMode === "agent") {
-				const agentTask = await createAgentTask({
-					project_id: selectedProject.id,
-					name: `智能审计-${selectedProject.name}`,
-					description: `${INTELLIGENT_TASK_NAME_MARKER}智能审计任务`,
-					exclude_patterns: excludePatterns,
-					target_files:
-						effectiveTargetFiles.length > 0 ? effectiveTargetFiles : undefined,
-					use_prompt_skills: true,
-					verification_level: "analysis_with_poc_plan",
-				});
-				startAgentTask(agentTask.id).catch(console.error);
-
-				onOpenChange(false);
-				onTaskCreated();
-				toast.success("智能审计任务已创建");
-				if (navigateOnSuccess) {
-					navigate(`/agent-audit/${agentTask.id}`);
-				}
 				return;
 			}
 
@@ -487,7 +449,7 @@ export default function CreateScanTaskDialog({
 		if (sourceMode === "upload") {
 			if (!newProjectName.trim() || !newProjectFile) return false;
 			if (scanMode === "static") {
-				return staticTools.opengrep;
+				return hasSelectedPrimaryStaticEngine(staticTools);
 			}
 			return true;
 		}
@@ -496,7 +458,7 @@ export default function CreateScanTaskDialog({
 			return (
 				isZipProject(selectedProject) &&
 				!!zipState.storedZipInfo?.has_file &&
-				staticTools.opengrep
+				hasSelectedPrimaryStaticEngine(staticTools)
 			);
 		}
 		if (!isZipProject(selectedProject)) return false;
@@ -514,7 +476,25 @@ export default function CreateScanTaskDialog({
 		scanMode,
 		effectiveTargetFiles,
 		staticTools.opengrep,
+		staticTools.codeql,
 	]);
+
+	const handleStaticToolsChange = (next: StaticToolSelection) => {
+		const changedPrimaryEngine = (["opengrep", "codeql"] as const).find(
+			(engine) => staticTools[engine] !== next[engine],
+		);
+		if (changedPrimaryEngine && isPrimaryStaticEngine(changedPrimaryEngine)) {
+			setStaticTools(
+				selectPrimaryStaticEngine(
+					staticTools,
+					changedPrimaryEngine,
+					next[changedPrimaryEngine],
+				),
+			);
+			return;
+		}
+		setStaticTools(next);
+	};
 
 	const handleOpenEngineConfig = (engine: StaticTool) => {
 		setConfigEngine(engine);
@@ -690,7 +670,7 @@ export default function CreateScanTaskDialog({
 								onChange={setScanMode}
 								disabled={creating}
 								staticTools={staticTools}
-								onStaticToolsChange={setStaticTools}
+								onStaticToolsChange={handleStaticToolsChange}
 								onOpenStaticToolConfig={handleOpenEngineConfig}
 							/>
 						)}
@@ -792,11 +772,6 @@ export default function CreateScanTaskDialog({
 								<>
 									<Loader2 className="w-4 h-4 animate-spin mr-2" />
 									启动中...
-								</>
-							) : scanMode === "agent" ? (
-								<>
-									<Bot className="w-4 h-4 mr-2" />
-									启动智能审计
 								</>
 							) : (
 								<>

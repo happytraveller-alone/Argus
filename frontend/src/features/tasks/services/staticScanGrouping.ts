@@ -12,18 +12,12 @@ export interface StaticScanTaskLike {
 
 export interface StaticScanGroup<
 	TOpengrepTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TGitleaksTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TBanditTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TPhpstanTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TPmdTask extends StaticScanTaskLike = StaticScanTaskLike,
+	TCodeqlTask extends StaticScanTaskLike = StaticScanTaskLike,
 > {
 	projectId: string;
 	createdAt: string;
 	opengrepTask?: TOpengrepTask;
-	gitleaksTask?: TGitleaksTask;
-	banditTask?: TBanditTask;
-	phpstanTask?: TPhpstanTask;
-	pmdTask?: TPmdTask;
+	codeqlTask?: TCodeqlTask;
 }
 
 export type StaticScanGroupStatus =
@@ -32,6 +26,10 @@ export type StaticScanGroupStatus =
 	| "pending"
 	| "failed"
 	| "interrupted";
+
+type EngineTask<TOpengrepTask, TCodeqlTask> =
+	| { engine: "opengrep"; task: TOpengrepTask }
+	| { engine: "codeql"; task: TCodeqlTask };
 
 function normalizeTimestamp(value: string): number {
 	const timestamp = new Date(value).getTime();
@@ -44,44 +42,26 @@ function normalizeStatus(value: string | null | undefined): string {
 
 export function buildStaticScanGroups<
 	TOpengrepTask extends StaticScanTaskLike,
-	TGitleaksTask extends StaticScanTaskLike,
-	TBanditTask extends StaticScanTaskLike,
-	TPhpstanTask extends StaticScanTaskLike,
-	TPmdTask extends StaticScanTaskLike,
+	TCodeqlTask extends StaticScanTaskLike,
 >(params: {
 	opengrepTasks: TOpengrepTask[];
-	gitleaksTasks: TGitleaksTask[];
-	banditTasks?: TBanditTask[];
-	phpstanTasks?: TPhpstanTask[];
-	pmdTasks?: TPmdTask[];
+	codeqlTasks?: TCodeqlTask[];
 	pairingWindowMs?: number;
-}): Array<
-	StaticScanGroup<
-		TOpengrepTask,
-		TGitleaksTask,
-		TBanditTask,
-		TPhpstanTask,
-		TPmdTask
-	>
-> {
+}): Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> {
 	const {
 		opengrepTasks,
-		gitleaksTasks,
-		banditTasks = [],
-		phpstanTasks = [],
-		pmdTasks = [],
+		codeqlTasks = [],
 		pairingWindowMs = STATIC_SCAN_PAIRING_WINDOW_MS,
 	} = params;
 
-	type EngineTask =
-		| { engine: "opengrep"; task: TOpengrepTask }
-		| { engine: "gitleaks"; task: TGitleaksTask }
-		| { engine: "bandit"; task: TBanditTask }
-	| { engine: "phpstan"; task: TPhpstanTask }
-	| { engine: "pmd"; task: TPmdTask };
-
-	const tasksByProject = new Map<string, EngineTask[]>();
-	const pushTask = (projectId: string, engineTask: EngineTask) => {
+	const tasksByProject = new Map<
+		string,
+		Array<EngineTask<TOpengrepTask, TCodeqlTask>>
+	>();
+	const pushTask = (
+		projectId: string,
+		engineTask: EngineTask<TOpengrepTask, TCodeqlTask>,
+	) => {
 		const list = tasksByProject.get(projectId) || [];
 		list.push(engineTask);
 		tasksByProject.set(projectId, list);
@@ -90,32 +70,17 @@ export function buildStaticScanGroups<
 	for (const task of opengrepTasks) {
 		pushTask(task.project_id, { engine: "opengrep", task });
 	}
-	for (const task of gitleaksTasks) {
-		pushTask(task.project_id, { engine: "gitleaks", task });
+	for (const task of codeqlTasks) {
+		pushTask(task.project_id, { engine: "codeql", task });
 	}
-	for (const task of banditTasks) {
-		pushTask(task.project_id, { engine: "bandit", task });
-	}
-	for (const task of phpstanTasks) {
-		pushTask(task.project_id, { engine: "phpstan", task });
-	}
-	for (const task of pmdTasks) {
-		pushTask(task.project_id, { engine: "pmd", task });
-	}
-	const groups: Array<
-		StaticScanGroup<
-			TOpengrepTask,
-			TGitleaksTask,
-			TBanditTask,
-			TPhpstanTask,
-			TPmdTask
-		>
-	> = [];
+
+	const groups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
 
 	for (const [projectId, list] of tasksByProject.entries()) {
 		const sorted = [...list].sort(
 			(a, b) =>
-				normalizeTimestamp(a.task.created_at) - normalizeTimestamp(b.task.created_at),
+				normalizeTimestamp(a.task.created_at) -
+				normalizeTimestamp(b.task.created_at),
 		);
 		const batchTaggedTasks = sorted.filter((item) =>
 			Boolean(extractStaticScanBatchId(item.task.name)),
@@ -123,28 +88,11 @@ export function buildStaticScanGroups<
 		const legacyTasks = sorted.filter(
 			(item) => !extractStaticScanBatchId(item.task.name),
 		);
-		const projectGroups: Array<
-			StaticScanGroup<
-				TOpengrepTask,
-				TGitleaksTask,
-				TBanditTask,
-				TPhpstanTask,
-				TPmdTask
-			>
-		> = [];
+		const projectGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
 
-		// Batch-first grouping: tasks created in one user action carry same batch marker.
 		const assignTaskToGroups = (
-			item: EngineTask,
-			candidateGroups: Array<
-				StaticScanGroup<
-					TOpengrepTask,
-					TGitleaksTask,
-					TBanditTask,
-					TPhpstanTask,
-					TPmdTask
-				>
-			>,
+			item: EngineTask<TOpengrepTask, TCodeqlTask>,
+			candidateGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>>,
 			ignoreWindow = false,
 		) => {
 			const taskTimestamp = normalizeTimestamp(item.task.created_at);
@@ -159,10 +107,7 @@ export function buildStaticScanGroups<
 
 				const hasSameEngineTask =
 					(item.engine === "opengrep" && Boolean(group.opengrepTask)) ||
-					(item.engine === "gitleaks" && Boolean(group.gitleaksTask)) ||
-					(item.engine === "bandit" && Boolean(group.banditTask)) ||
-					(item.engine === "phpstan" && Boolean(group.phpstanTask)) ||
-					(item.engine === "pmd" && Boolean(group.pmdTask));
+					(item.engine === "codeql" && Boolean(group.codeqlTask));
 				if (hasSameEngineTask) continue;
 
 				if (diff < bestDiff) {
@@ -172,26 +117,14 @@ export function buildStaticScanGroups<
 			}
 
 			if (bestGroupIndex === -1) {
-				const nextGroup: StaticScanGroup<
-					TOpengrepTask,
-					TGitleaksTask,
-					TBanditTask,
-					TPhpstanTask,
-					TPmdTask
-				> = {
+				const nextGroup: StaticScanGroup<TOpengrepTask, TCodeqlTask> = {
 					projectId,
 					createdAt: item.task.created_at,
 				};
 				if (item.engine === "opengrep") {
 					nextGroup.opengrepTask = item.task;
-				} else if (item.engine === "gitleaks") {
-					nextGroup.gitleaksTask = item.task;
-				} else if (item.engine === "bandit") {
-					nextGroup.banditTask = item.task;
-				} else if (item.engine === "phpstan") {
-					nextGroup.phpstanTask = item.task;
-				} else if (item.engine === "pmd") {
-					nextGroup.pmdTask = item.task;
+				} else {
+					nextGroup.codeqlTask = item.task;
 				}
 				candidateGroups.push(nextGroup);
 				return;
@@ -200,28 +133,14 @@ export function buildStaticScanGroups<
 			const targetGroup = candidateGroups[bestGroupIndex];
 			if (item.engine === "opengrep") {
 				targetGroup.opengrepTask = item.task;
-			} else if (item.engine === "gitleaks") {
-				targetGroup.gitleaksTask = item.task;
-			} else if (item.engine === "bandit") {
-				targetGroup.banditTask = item.task;
-			} else if (item.engine === "phpstan") {
-				targetGroup.phpstanTask = item.task;
-			} else if (item.engine === "pmd") {
-				targetGroup.pmdTask = item.task;
+			} else {
+				targetGroup.codeqlTask = item.task;
 			}
 		};
 
 		const groupsByBatch = new Map<
 			string,
-			Array<
-				StaticScanGroup<
-					TOpengrepTask,
-					TGitleaksTask,
-					TBanditTask,
-					TPhpstanTask,
-					TPmdTask
-				>
-			>
+			Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>>
 		>();
 		for (const item of batchTaggedTasks) {
 			const batchId = extractStaticScanBatchId(item.task.name);
@@ -234,16 +153,7 @@ export function buildStaticScanGroups<
 			projectGroups.push(...groupsOfBatch);
 		}
 
-		// Legacy fallback for historical tasks without batch markers.
-		const legacyGroups: Array<
-			StaticScanGroup<
-				TOpengrepTask,
-				TGitleaksTask,
-				TBanditTask,
-				TPhpstanTask,
-				TPmdTask
-			>
-		> = [];
+		const legacyGroups: Array<StaticScanGroup<TOpengrepTask, TCodeqlTask>> = [];
 		for (const item of legacyTasks) {
 			assignTaskToGroups(item, legacyGroups, false);
 		}
@@ -256,44 +166,18 @@ export function buildStaticScanGroups<
 }
 
 export function resolveStaticScanGroupStatus(
-	group: Pick<
-		StaticScanGroup,
-		"opengrepTask" | "gitleaksTask" | "banditTask" | "phpstanTask" | "pmdTask"
-	>,
+	group: Pick<StaticScanGroup, "opengrepTask" | "codeqlTask">,
 ): StaticScanGroupStatus {
-	const statuses = [
-			group.opengrepTask?.status,
-			group.gitleaksTask?.status,
-			group.banditTask?.status,
-			group.phpstanTask?.status,
-			group.pmdTask?.status,
-	]
+	const statuses = [group.opengrepTask?.status, group.codeqlTask?.status]
 		.map((status) => normalizeStatus(status))
 		.filter(Boolean);
 
-	if (statuses.length === 0) {
-		return "failed";
-	}
-
-	if (statuses.some((status) => status === "running")) {
-		return "running";
-	}
-
-	if (statuses.every((status) => status === "pending")) {
-		return "pending";
-	}
-
-	if (statuses.some((status) => status === "failed")) {
-		return "failed";
-	}
-
-	if (statuses.some((status) => status === "pending")) {
-		return "running";
-	}
-
-	if (statuses.every((status) => status === "completed")) {
-		return "completed";
-	}
+	if (statuses.length === 0) return "failed";
+	if (statuses.some((status) => status === "running")) return "running";
+	if (statuses.every((status) => status === "pending")) return "pending";
+	if (statuses.some((status) => status === "failed")) return "failed";
+	if (statuses.some((status) => status === "pending")) return "running";
+	if (statuses.every((status) => status === "completed")) return "completed";
 
 	const interruptedStatuses = new Set(["cancelled", "interrupted", "aborted"]);
 	if (statuses.some((status) => interruptedStatuses.has(status))) {

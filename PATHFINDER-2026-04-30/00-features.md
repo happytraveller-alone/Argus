@@ -60,7 +60,7 @@ flowchart TD
 - **Purpose**: Opengrep-only static audit tasks, rule management, runner invocation, result parsing, static finding updates, static analysis page.
 - **Entry points**: `backend/src/routes/static_tasks.rs:35`, `backend/src/routes/static_tasks.rs:656`, `frontend/src/shared/api/opengrep.ts:81`, `frontend/src/pages/StaticAnalysis.tsx:55`.
 - **Core files**: `backend/src/routes/static_tasks.rs`, `backend/src/scan/opengrep.rs`, `docker/opengrep-scan.sh`, `docker/opengrep-runner.Dockerfile`, `frontend/src/shared/api/opengrep.ts`, `frontend/src/pages/static-analysis/`, `frontend/src/pages/StaticAnalysis.tsx`.
-- **Boundary**: Current static task engine is Opengrep; retired Bandit/Gitleaks/PHPStan/PMD files are compatibility residue, not current feature entry points.
+- **Boundary**: Current static task engine is Opengrep; retired static-engine files are compatibility residue, not current feature entry points.
 
 ### 4. Intelligent Audit / AgentFlow
 

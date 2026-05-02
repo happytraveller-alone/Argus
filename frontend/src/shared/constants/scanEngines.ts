@@ -1,10 +1,6 @@
 export const SCAN_ENGINE_TABS = [
   "opengrep",
   "codeql",
-  "gitleaks",
-  "bandit",
-  "phpstan",
-  "pmd",
 ] as const;
 
 export type ScanEngineTab = (typeof SCAN_ENGINE_TABS)[number];
@@ -32,14 +28,6 @@ export function getScanEngineDisplayName(value: ScanEngineTab): string {
       return "Opengrep";
     case "codeql":
       return "CodeQL";
-    case "gitleaks":
-      return "Gitleaks";
-    case "bandit":
-      return "Bandit";
-    case "phpstan":
-      return "PHPStan";
-    case "pmd":
-      return "PMD";
   }
 }
 

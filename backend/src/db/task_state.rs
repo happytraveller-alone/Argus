@@ -13,7 +13,6 @@ const TASK_STATE_FILE_NAME: &str = "rust-task-state.json";
 pub struct TaskStateSnapshot {
     pub static_tasks: BTreeMap<String, StaticTaskRecord>,
     pub opengrep_rules: BTreeMap<String, OpengrepRuleRecord>,
-    pub phpstan_rule_overrides: BTreeMap<String, RuleOverrideRecord>,
     #[serde(default)]
     pub codeql_build_plans: BTreeMap<String, CodeqlBuildPlanRecord>,
 }
@@ -108,14 +107,6 @@ pub struct OpengrepRuleRecord {
     pub created_at: String,
     pub pattern_yaml: String,
     pub patch: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct RuleOverrideRecord {
-    pub id: String,
-    pub is_active: Option<bool>,
-    pub is_deleted: Option<bool>,
-    pub patch: Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

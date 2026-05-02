@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  getCodeqlScanFindings,
+  getCodeqlScanTask,
   getOpengrepScanFindings,
   getOpengrepScanTask,
   interruptOpengrepScanTask,
+  updateCodeqlFindingStatus,
   updateOpengrepFindingStatus,
   type OpengrepFinding,
   type OpengrepScanTask,
@@ -58,12 +61,16 @@ async function fetchAllOpengrepFindings(
 export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
+  codeqlTaskId,
 }: {
   hasEnabledEngine: boolean;
   opengrepTaskId: string;
+  codeqlTaskId?: string;
 }) {
   const [opengrepTask, setOpengrepTask] = useState<OpengrepScanTask | null>(null);
+  const [codeqlTask, setCodeqlTask] = useState<OpengrepScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
+  const [codeqlFindings, setCodeqlFindings] = useState<OpengrepFinding[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
@@ -73,6 +80,8 @@ export function useStaticAnalysisData({
 
   const opengrepSilentRefreshRef = useRef(false);
   const opengrepCompletionResultsRefreshRef = useRef<string | null>(null);
+  const codeqlSilentRefreshRef = useRef(false);
+  const codeqlCompletionResultsRefreshRef = useRef<string | null>(null);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
@@ -95,6 +104,27 @@ export function useStaticAnalysisData({
     }
   }, [opengrepTaskId]);
 
+  const loadCodeqlTask = useCallback(async (silent = false) => {
+    if (!codeqlTaskId) {
+      setCodeqlTask(null);
+      return null;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const task = await getCodeqlScanTask(codeqlTaskId);
+      setCodeqlTask(task);
+      return task;
+    } catch {
+      setCodeqlTask(null);
+      if (!silent) {
+        toast.error("加载 CodeQL 任务失败");
+      }
+      return null;
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [codeqlTaskId]);
+
   const loadOpengrepFindings = useCallback(async (silent = false, expectedTotal?: number | null) => {
     if (!opengrepTaskId) {
       setOpengrepFindings([]);
@@ -113,6 +143,34 @@ export function useStaticAnalysisData({
     }
   }, [opengrepTaskId]);
 
+  const loadCodeqlFindings = useCallback(async (silent = false, expectedTotal?: number | null) => {
+    if (!codeqlTaskId) {
+      setCodeqlFindings([]);
+      return;
+    }
+    try {
+      if (!silent) setLoadingFindings(true);
+      setCodeqlFindings(
+        await fetchFindingBatches(
+          ({ skip, limit }) =>
+            getCodeqlScanFindings({
+              taskId: codeqlTaskId,
+              skip,
+              limit,
+            }),
+          expectedTotal,
+        ),
+      );
+    } catch {
+      setCodeqlFindings([]);
+      if (!silent) {
+        toast.error("加载 CodeQL 漏洞失败");
+      }
+    } finally {
+      if (!silent) setLoadingFindings(false);
+    }
+  }, [codeqlTaskId]);
+
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -121,8 +179,10 @@ export function useStaticAnalysisData({
     if (!silent) setLoadingInitial(true);
     try {
       const nextOpengrepTask = await loadOpengrepTask(silent);
+      const nextCodeqlTask = await loadCodeqlTask(silent);
       await Promise.all([
         loadOpengrepFindings(silent, nextOpengrepTask?.total_findings),
+        loadCodeqlFindings(silent, nextCodeqlTask?.total_findings),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -131,6 +191,8 @@ export function useStaticAnalysisData({
     hasEnabledEngine,
     loadOpengrepFindings,
     loadOpengrepTask,
+    loadCodeqlFindings,
+    loadCodeqlTask,
   ]);
 
   const refreshOpengrepSilently = useCallback(async () => {
@@ -155,6 +217,30 @@ export function useStaticAnalysisData({
     loadOpengrepFindings,
     loadOpengrepTask,
     opengrepTaskId,
+  ]);
+
+  const refreshCodeqlSilently = useCallback(async () => {
+    if (!codeqlTaskId || codeqlSilentRefreshRef.current) return;
+    codeqlSilentRefreshRef.current = true;
+    try {
+      const nextCodeqlTask = await loadCodeqlTask(true);
+      if (
+        shouldRefreshStaticAnalysisResultsAfterCompletion({
+          taskId: codeqlTaskId,
+          status: nextCodeqlTask?.status,
+          refreshedTaskId: codeqlCompletionResultsRefreshRef.current,
+        })
+      ) {
+        codeqlCompletionResultsRefreshRef.current = codeqlTaskId;
+        await loadCodeqlFindings(true, nextCodeqlTask?.total_findings);
+      }
+    } finally {
+      codeqlSilentRefreshRef.current = false;
+    }
+  }, [
+    codeqlTaskId,
+    loadCodeqlFindings,
+    loadCodeqlTask,
   ]);
 
   const handleInterrupt = useCallback(async () => {
@@ -197,6 +283,16 @@ export function useStaticAnalysisData({
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
         );
+      } else if (row.engine === "codeql") {
+        await updateCodeqlFindingStatus({
+          findingId: row.id,
+          status: nextStatus,
+        });
+        setCodeqlFindings((prev) =>
+          prev.map((finding) =>
+            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
+          ),
+        );
       }
     } catch {
       toast.error("更新状态失败");
@@ -219,17 +315,21 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [opengrepTask?.status, opengrepTaskId, refreshOpengrepSilently]);
 
+  useEffect(() => {
+    if (!codeqlTaskId || !isStaticAnalysisPollableStatus(codeqlTask?.status)) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void refreshCodeqlSilently();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [codeqlTask?.status, codeqlTaskId, refreshCodeqlSilently]);
+
   return {
     opengrepTask,
-    gitleaksTask: null,
-    banditTask: null,
-    phpstanTask: null,
-    pmdTask: null,
+    codeqlTask,
     opengrepFindings,
-    gitleaksFindings: [],
-    banditFindings: [],
-    phpstanFindings: [],
-    pmdFindings: [],
+    codeqlFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -243,9 +343,6 @@ export function useStaticAnalysisData({
     canInterruptOpengrep: Boolean(
       opengrepTaskId && isStaticAnalysisInterruptibleStatus(opengrepTask?.status),
     ),
-    canInterruptGitleaks: false,
-    canInterruptBandit: false,
-    canInterruptPhpstan: false,
-    canInterruptPmd: false,
+    canInterruptCodeql: false,
   };
 }

@@ -30,9 +30,9 @@ test("TopNavigation renders the main routes and grouped dropdown triggers", asyn
 
 	assert.match(markup, /aria-label="Argus"/);
 	assert.match(markup, /src="\/argus\.png"/);
-	assert.match(markup, /首页/);
 	assert.match(markup, /仪表盘/);
 	assert.match(markup, /项目管理/);
+	assert.doesNotMatch(markup, />首页</);
 	assert.match(markup, /data-top-nav-group-trigger="task"/);
 	assert.match(markup, /data-top-nav-group-trigger="scanConfig"/);
 	assert.match(markup, /data-top-nav-group-trigger="devTest"/);
@@ -214,7 +214,7 @@ test("navigation model returns grouped routes in configured order", async () => 
 
 	assert.deepEqual(
 		model.mainRoutes.map((item) => item.route.path),
-		["/", "/dashboard", "/projects"],
+		["/dashboard", "/projects"],
 	);
 	assert.deepEqual(
 		model.groups.map((group) => ({

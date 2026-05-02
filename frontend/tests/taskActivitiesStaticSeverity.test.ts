@@ -10,9 +10,6 @@ test("fetchTaskActivities uses backend visible total for opengrep static defect 
 	const batchId = "static-batch-1";
 
 	apiClient.get = (async (url: string) => {
-		if (url.startsWith("/agent-tasks")) {
-			return { data: [] };
-		}
 		if (url.startsWith("/static-tasks/tasks")) {
 			return {
 				data: [
@@ -60,9 +57,6 @@ test("fetchTaskActivities uses backend visible opengrep severity buckets", async
 	const batchId = "static-batch-buckets";
 
 	apiClient.get = (async (url: string) => {
-		if (url.startsWith("/agent-tasks")) {
-			return { data: [] };
-		}
 		if (url.startsWith("/static-tasks/tasks")) {
 			return {
 				data: [
@@ -114,9 +108,6 @@ test("fetchTaskActivities keeps zero visible opengrep findings at zero despite s
 	const batchId = "static-batch-2";
 
 	apiClient.get = (async (url: string) => {
-		if (url.startsWith("/agent-tasks")) {
-			return { data: [] };
-		}
 		if (url.startsWith("/static-tasks/tasks")) {
 			return {
 				data: [
@@ -166,9 +157,6 @@ test("fetchTaskActivities does not request retired agent task or removed static 
 
 	apiClient.get = (async (url: string) => {
 		calls.push(url);
-		if (url.startsWith("/agent-tasks")) {
-			return { data: [] };
-		}
 		if (url.startsWith("/static-tasks/tasks")) {
 			return {
 				data: [

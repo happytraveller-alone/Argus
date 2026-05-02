@@ -13,24 +13,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/shared/utils/utils";
+import {
+  isPrimaryStaticEngine,
+  selectPrimaryStaticEngine,
+} from "@/shared/utils/staticEngineSelection";
 
 export type ScanMode = "static" | "agent";
 
 export type StaticTool =
   | "opengrep"
-  | "codeql"
-  | "gitleaks"
-  | "bandit"
-  | "phpstan"
-  | "pmd";
+  | "codeql";
 
 export interface StaticToolSelection {
   opengrep: boolean;
   codeql: boolean;
-  gitleaks: boolean;
-  bandit: boolean;
-  phpstan: boolean;
-  pmd: boolean;
 }
 
 interface AgentModeSelectorProps {
@@ -57,14 +53,14 @@ export default function AgentModeSelector({
 	const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
     codeql: false,
-    gitleaks: false,
-    bandit: false,
-    phpstan: false,
-    pmd: false,
   };
 
   const updateStaticTool = (tool: StaticTool, checked: boolean) => {
     if (!onStaticToolsChange) return;
+    if (isPrimaryStaticEngine(tool)) {
+      onStaticToolsChange(selectPrimaryStaticEngine(resolvedTools, tool, checked));
+      return;
+    }
     onStaticToolsChange({
       ...resolvedTools,
       [tool]: checked,
@@ -76,6 +72,7 @@ export default function AgentModeSelector({
     label: string;
   }> = [
     { key: "opengrep", label: "规则扫描" },
+    { key: "codeql", label: "CodeQL 语义扫描" },
   ];
 
   return (
@@ -286,28 +283,15 @@ export default function AgentModeSelector({
       </div>
 
       {/* 模式说明 */}
-      {value === "agent" ? (
-        <div className="p-3 bg-violet-50 dark:bg-violet-950/30 border border-violet-500/30 text-xs text-violet-700 dark:text-violet-300 rounded font-mono">
-          <p className="font-bold mb-1 uppercase text-violet-700 dark:text-violet-400">智能审计模式说明：</p>
-          <ul className="list-disc list-inside space-y-0.5 text-violet-600 dark:text-violet-300/80">
-            <li>AI Agent 会自主规划扫描策略</li>
-            <li>使用跨文件关联与结构化代码分析定位风险</li>
-            <li>在 Docker 沙箱中验证发现的漏洞</li>
-            <li>可生成可复现的 PoC（概念验证）代码</li>
-            <li>扫描时间较长，但结果更全面准确</li>
-          </ul>
-        </div>
-      ) : (
-        <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-500/30 text-xs text-sky-700 dark:text-sky-300 rounded font-mono">
-          <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
-          <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
-            <li>基于规则引擎快速扫描代码漏洞</li>
-            <li>静态引擎仅保留 Opengrep</li>
-            <li>基于规则的源码静态审计</li>
-            <li>结果稳定、反馈快，适合日常基线检查</li>
-          </ul>
-        </div>
-      )}
+      <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-500/30 text-xs text-sky-700 dark:text-sky-300 rounded font-mono">
+        <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
+        <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
+          <li>基于规则引擎快速扫描代码漏洞</li>
+              <li>Opengrep 与 CodeQL 互斥选择</li>
+          <li>基于规则的源码静态审计</li>
+          <li>结果稳定、反馈快，适合日常基线检查</li>
+        </ul>
+      </div>
     </div>
   );
 }

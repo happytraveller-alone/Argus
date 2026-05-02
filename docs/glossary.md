@@ -17,14 +17,14 @@
 ### 静态审计
 
 - **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。2026-05-01 CodeQL 隔离扫描已有基础骨架，并新增 C/C++ compile-sandbox 闭环切片；完整五语言 CodeQL 仍不是首版完成能力。
-- **不是什么**：Bandit/Gitleaks/PHPStan/PMD/YASA 等历史多引擎集合；这些名称若仍出现，多为退役兼容、防回归测试或旧前端 API 残留。CodeQL 计划也不是把旧多引擎路由复活。
+- **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
 
 ### CodeQL 隔离扫描计划
 
 - **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。
-- **不是什么**：Opengrep runner 的增强阶段，也不是旧 Bandit/Gitleaks/PHPStan/PMD 多引擎路由复活。当前 C/C++ compile-sandbox 切片不等于完整五语言首版。
+- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前 C/C++ compile-sandbox 切片不等于完整五语言首版。
 - **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`、`.omx/specs/deep-interview-codeql-compile-sandbox.md`。
 - **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 compile-sandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
 
@@ -38,7 +38,7 @@
 ### 智能审计
 
 - **是什么**：AI 驱动的安全审计产品方向。
-- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema/fixture、AgentFlow fixture/tests、`frontend/src/shared/api/agentTasks.ts`、`frontend/src/pages/AgentAudit/components/*` 和 `/api/v1/system-config/agent-preflight` 仍存在，不能写成“所有相关代码已删除”或“执行链已恢复”。
+- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema 资产、`frontend/src/shared/api/agentTasks.ts` 的历史快照类型和 `/api/v1/system-config/agent-preflight` 仍存在，不能写成“所有相关代码已删除”或“执行链已恢复”。
 - **维护提示**：如果要恢复或重建智能审计，先定义新的 route/runtime/runner/frontend contract；不要默认复用旧 AgentFlow runner 执行链。
 
 ### Rust gateway
@@ -51,13 +51,13 @@
 ### `AgentTask` / `AgentEvent` / `AgentFinding` / AgentFlow runner
 
 - **历史背景**：这些是旧 AgentFlow 智能审计执行链的核心对象。
-- **当前状态**：后端主路由不再挂载 `/api/v1/agent-tasks`，runtime 不再导出 `agentflow`；前端任务详情路由占位。代码库仍保留 AgentFlow pipeline、fixtures、tests、前端兼容 shim 和部分兼容/聚合字段，但不再保留 `vendor/` 下的 AgentFlow source。
+- **当前状态**：后端主路由不再挂载 `/api/v1/agent-tasks`，runtime 不再导出 `agentflow`；前端任务详情路由占位。代码库仍保留 AgentFlow pipeline/schema 资产、前端历史快照类型和部分兼容/聚合字段，但不再保留 `vendor/` 下的 AgentFlow source，也不再保留前端旧 `/agent-tasks` CRUD/report API 调用。
 - **维护提示**：处理相关引用前先确认它是活跃执行入口、兼容数据字段、测试资产还是待清理残留；不要基于记忆直接批量删除。
 
 ### Opengrep runner
 
 - **是什么**：执行静态审计规则扫描的隔离 runner；`docker-compose.yml` 中的 `opengrep-runner` 只是 `runner-build` profile 镜像构建目标，默认启动不会保留服务容器。
-- **不是什么**：Bandit/Gitleaks/PHPStan 等多引擎调度器。
+- **不是什么**：旧多引擎静态审计调度器。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`；backend 按任务动态创建临时 runner 容器，任务结束后删除。
 
 ### agent preflight

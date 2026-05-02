@@ -20,8 +20,8 @@ test("textIncludesFilter matches case-insensitive text", async () => {
     "../src/components/data-table/filterFns.ts",
   );
 
-  assert.equal(filterModule.textIncludesFilter("Bandit Rule", "bandit"), true);
-  assert.equal(filterModule.textIncludesFilter("Bandit Rule", "gitleaks"), false);
+  assert.equal(filterModule.textIncludesFilter("Critical Rule", "critical"), true);
+  assert.equal(filterModule.textIncludesFilter("Critical Rule", "missing"), false);
 });
 
 test("facetFilter supports single and multi values", async () => {

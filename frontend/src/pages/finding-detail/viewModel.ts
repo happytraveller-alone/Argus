@@ -1,10 +1,6 @@
 import type { FindingNarrativeInput } from "@/pages/AgentAudit/components/findingNarrative";
 import type { FindingCodeWindowDisplayLine } from "@/pages/AgentAudit/components/FindingCodeWindow";
 import type { AgentFinding } from "@/shared/api/agentTasks";
-import type { BanditFinding } from "@/shared/api/bandit";
-import type { GitleaksFinding } from "@/shared/api/gitleaks";
-import type { PhpstanFinding } from "@/shared/api/phpstan";
-import type { PmdFinding } from "@/shared/api/pmd";
 import type {
   OpengrepFinding,
   OpengrepFindingContext,
@@ -469,8 +465,8 @@ function buildAgentMarkdownNarrativeSections(
   return narrativeSections;
 }
 
-function buildAgentFlowSourceItems(finding: AgentFinding): FindingDetailTrackingItem[] {
-  const items: FindingDetailTrackingItem[] = [{ label: "来源", value: "AgentFlow 智能审计" }];
+function buildIntelligentAuditSourceItems(finding: AgentFinding): FindingDetailTrackingItem[] {
+  const items: FindingDetailTrackingItem[] = [{ label: "来源", value: "智能审计" }];
   const nodeName = String(finding.source_node_name || finding.source_node_id || "").trim();
   if (nodeName) {
     items.push({ label: "来源节点", value: nodeName, mono: Boolean(finding.source_node_id) });
@@ -736,72 +732,6 @@ export function buildOpengrepFindingCodeViews(
   ];
 }
 
-export function buildGitleaksFindingCodeViews(
-  finding: GitleaksFinding,
-): FindingDetailCodeView[] {
-  const resolvedFilePath = resolvePreferredFilePath(
-    finding.file_path,
-    finding.resolved_file_path,
-  );
-  const resolvedStartLine = resolvePreferredLineStart(
-    finding.start_line ?? null,
-    finding.resolved_line_start,
-  );
-  const content = String(finding.match || finding.secret || "").trim();
-  if (!content) return [];
-  return [
-    {
-      id: `gitleaks:${finding.id}`,
-      title: "命中内容",
-      filePath: resolvedFilePath || null,
-      code: content,
-      lineStart: resolvedStartLine ?? null,
-      lineEnd: finding.end_line ?? resolvedStartLine ?? null,
-      highlightStartLine: resolvedStartLine ?? null,
-      highlightEndLine: finding.end_line ?? resolvedStartLine ?? null,
-      focusLine: resolvedStartLine ?? null,
-    },
-  ];
-}
-
-export function buildBanditFindingCodeViews(finding: BanditFinding): FindingDetailCodeView[] {
-  const resolvedFilePath = resolvePreferredFilePath(
-    finding.file_path,
-    finding.resolved_file_path,
-  );
-  const resolvedStartLine = resolvePreferredLineStart(
-    finding.line_number ?? null,
-    finding.resolved_line_start,
-  );
-  const content = String(finding.code_snippet || "").trim();
-  if (!content) return [];
-  return [
-    {
-      id: `bandit:${finding.id}`,
-      title: "风险代码",
-      filePath: resolvedFilePath || null,
-      code: content,
-      lineStart: resolvedStartLine ?? null,
-      lineEnd: resolvedStartLine ?? null,
-      highlightStartLine: resolvedStartLine ?? null,
-      highlightEndLine: resolvedStartLine ?? null,
-      focusLine: resolvedStartLine ?? null,
-    },
-  ];
-}
-
-export function buildPhpstanFindingCodeViews(
-  _finding: PhpstanFinding,
-): FindingDetailCodeView[] {
-  return [];
-}
-
-export function buildPmdFindingCodeViews(
-  _finding: PmdFinding,
-): FindingDetailCodeView[] {
-  return [];
-}
-
 export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetailCodeView[] {
   const resolvedFilePath = resolvePreferredFilePath(
     finding.file_path,
@@ -892,13 +822,13 @@ export function buildAgentFindingDetailModel(params: {
   });
   const trackingItems = [
     ...buildTrackingItems({
-      sourceLabel: "AgentFlow 智能审计",
+      sourceLabel: "智能审计",
       taskId: params.taskId,
       findingId: params.findingId,
       location,
       includeSource: false,
     }),
-    ...buildAgentFlowSourceItems(finding),
+    ...buildIntelligentAuditSourceItems(finding),
   ];
   const overviewTrackingItems = trackingItems.filter((item) => item.label !== "来源");
   const codeSections = buildFindingDetailCodeSections(buildAgentFindingCodeViews(finding));
@@ -996,6 +926,39 @@ export function buildOpengrepFindingDetailModel(params: {
   projectSourceType?: ProjectSourceType | null;
   projectName?: string | null;
 }): FindingDetailPageModel {
+  return buildStaticFindingDetailModel({
+    ...params,
+    sourceLabel: "静态审计 · Opengrep",
+  });
+}
+
+export function buildCodeqlFindingDetailModel(params: {
+  finding: OpengrepFinding;
+  taskId: string;
+  findingId: string;
+  taskName?: string | null;
+  context?: OpengrepFindingContext | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
+}): FindingDetailPageModel {
+  return buildStaticFindingDetailModel({
+    ...params,
+    sourceLabel: "静态审计 · CodeQL",
+  });
+}
+
+function buildStaticFindingDetailModel(params: {
+  finding: OpengrepFinding;
+  taskId: string;
+  findingId: string;
+  taskName?: string | null;
+  context?: OpengrepFindingContext | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
+  sourceLabel: string;
+}): FindingDetailPageModel {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.severity);
   const confidence = resolveTextConfidenceDisplay(finding.confidence);
@@ -1013,7 +976,7 @@ export function buildOpengrepFindingDetailModel(params: {
     { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
   ];
   const trackingItems = buildTrackingItems({
-    sourceLabel: "静态审计 · Opengrep",
+    sourceLabel: params.sourceLabel,
     taskId: params.taskId,
     findingId: params.findingId,
     taskName: params.taskName,
@@ -1052,280 +1015,6 @@ export function buildOpengrepFindingDetailModel(params: {
     codeBrowserTarget: buildCodeBrowserTarget({
       filePath: finding.resolved_file_path ?? finding.file_path,
       line: finding.resolved_line_start ?? finding.start_line,
-    }),
-    projectId: params.projectId,
-    projectSourceType: params.projectSourceType,
-    projectName: params.projectName,
-  });
-}
-
-export function buildGitleaksFindingDetailModel(params: {
-  finding: GitleaksFinding;
-  taskId: string;
-  findingId: string;
-  taskName?: string | null;
-  projectId?: string | null;
-  projectSourceType?: ProjectSourceType | null;
-  projectName?: string | null;
-}): FindingDetailPageModel {
-  const { finding } = params;
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.start_line ?? null, finding.resolved_line_start),
-    lineEnd: finding.end_line,
-  });
-  const summaryStats: FindingDetailSummaryStat[] = [
-    { label: "漏洞危害", value: MISSING_SEVERITY, tone: "muted" },
-    { label: "漏洞置信度", value: MISSING_VALUE, tone: "muted" },
-  ];
-  const headlineValue = String(finding.rule_id || "").trim() || "gitleaks-rule";
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "静态审计 · Gitleaks",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    taskName: params.taskName,
-    location,
-  });
-
-  return buildBaseModel({
-    pageTitle: "统一漏洞详情",
-    codePanelTitle: "关联代码",
-    emptyCodeMessage: "暂无可展示的命中代码。",
-    narrativeSections: [
-      buildNarrativeSection({
-        id: `gitleaks:${finding.id}:summary`,
-        title: "扫描说明",
-        content: String(finding.description || "").trim() || MISSING_DESCRIPTION,
-      }),
-    ],
-    trackingItems,
-    overviewItems: buildMergedOverviewItems({
-      name: headlineValue,
-      overviewItems: buildOverviewItems({
-        headlineLabel: "漏洞类型",
-        headlineValue,
-        summaryStats,
-      }),
-      trackingItems,
-    }),
-    codeSections: buildFindingDetailCodeSections(buildGitleaksFindingCodeViews(finding)),
-    codeBrowserTarget: buildCodeBrowserTarget({
-      filePath: finding.resolved_file_path ?? finding.file_path,
-      line: finding.resolved_line_start ?? finding.start_line,
-    }),
-    projectId: params.projectId,
-    projectSourceType: params.projectSourceType,
-    projectName: params.projectName,
-  });
-}
-
-export function buildBanditFindingDetailModel(params: {
-  finding: BanditFinding;
-  taskId: string;
-  findingId: string;
-  taskName?: string | null;
-  projectId?: string | null;
-  projectSourceType?: ProjectSourceType | null;
-  projectName?: string | null;
-}): FindingDetailPageModel {
-  const { finding } = params;
-  const severity = resolveSeverityDisplay(finding.issue_severity);
-  const confidence = resolveTextConfidenceDisplay(finding.issue_confidence);
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.line_number ?? null, finding.resolved_line_start),
-    lineEnd: resolvePreferredLineStart(finding.line_number ?? null, finding.resolved_line_start),
-  });
-  const headlineValue = [
-    String(finding.test_id || "").trim(),
-    String(finding.test_name || "").trim(),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const summaryStats: FindingDetailSummaryStat[] = [
-    { label: "漏洞危害", value: severity.label, tone: severity.tone },
-    { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
-  ];
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "静态审计 · Bandit",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    taskName: params.taskName,
-    location,
-  });
-
-  return buildBaseModel({
-    pageTitle: "统一漏洞详情",
-    codePanelTitle: "关联代码",
-    emptyCodeMessage: "暂无可展示的命中代码。",
-    narrativeSections: [
-      buildNarrativeSection({
-        id: `bandit:${finding.id}:summary`,
-        title: "扫描说明",
-        content:
-          String(finding.issue_text || "").trim() ||
-          String(finding.more_info || "").trim() ||
-          MISSING_DESCRIPTION,
-      }),
-    ],
-    trackingItems,
-    overviewItems: buildMergedOverviewItems({
-      name: headlineValue || "bandit-rule",
-      overviewItems: buildOverviewItems({
-        headlineLabel: "漏洞类型",
-        headlineValue: headlineValue || "bandit-rule",
-        summaryStats,
-      }),
-      trackingItems,
-    }),
-    codeSections: buildFindingDetailCodeSections(buildBanditFindingCodeViews(finding)),
-    codeBrowserTarget: buildCodeBrowserTarget({
-      filePath: finding.resolved_file_path ?? finding.file_path,
-      line: finding.resolved_line_start ?? finding.line_number,
-    }),
-    projectId: params.projectId,
-    projectSourceType: params.projectSourceType,
-    projectName: params.projectName,
-  });
-}
-
-export function buildPhpstanFindingDetailModel(params: {
-  finding: PhpstanFinding;
-  taskId: string;
-  findingId: string;
-  taskName?: string | null;
-  projectId?: string | null;
-  projectSourceType?: ProjectSourceType | null;
-  projectName?: string | null;
-}): FindingDetailPageModel {
-  const { finding } = params;
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.line ?? null, finding.resolved_line_start),
-    lineEnd: resolvePreferredLineStart(finding.line ?? null, finding.resolved_line_start),
-  });
-  const summaryStats: FindingDetailSummaryStat[] = [
-    { label: "漏洞危害", value: "低危", tone: "success" },
-    { label: "漏洞置信度", value: "中", tone: "warning" },
-  ];
-  const headlineValue =
-    String(finding.identifier || "").trim() ||
-    String(finding.message || "").trim() ||
-    "phpstan-rule";
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "静态审计 · PHPStan",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    taskName: params.taskName,
-    location,
-  });
-
-  return buildBaseModel({
-    pageTitle: "统一漏洞详情",
-    codePanelTitle: "关联代码",
-    emptyCodeMessage: "当前来源未提供可展示的命中代码。",
-    narrativeSections: [
-      buildNarrativeSection({
-        id: `phpstan:${finding.id}:summary`,
-        title: "扫描说明",
-        content:
-          String(finding.message || "").trim() ||
-          String(finding.tip || "").trim() ||
-          MISSING_DESCRIPTION,
-      }),
-    ],
-    trackingItems,
-    overviewItems: buildMergedOverviewItems({
-      name: headlineValue,
-      overviewItems: buildOverviewItems({
-        headlineLabel: "漏洞类型",
-        headlineValue,
-        summaryStats,
-      }),
-      trackingItems,
-    }),
-    codeSections: buildFindingDetailCodeSections(buildPhpstanFindingCodeViews(finding)),
-    codeBrowserTarget: buildCodeBrowserTarget({
-      filePath: finding.resolved_file_path ?? finding.file_path,
-      line: finding.resolved_line_start ?? finding.line,
-    }),
-    projectId: params.projectId,
-    projectSourceType: params.projectSourceType,
-    projectName: params.projectName,
-  });
-}
-
-
-export function buildPmdFindingDetailModel(params: {
-  finding: PmdFinding;
-  taskId: string;
-  findingId: string;
-  taskName?: string | null;
-  projectId?: string | null;
-  projectSourceType?: ProjectSourceType | null;
-  projectName?: string | null;
-}): FindingDetailPageModel {
-  const { finding } = params;
-  const location = formatLocation({
-    filePath: resolvePreferredFilePath(finding.file_path, finding.resolved_file_path),
-    lineStart: resolvePreferredLineStart(finding.begin_line ?? null, finding.resolved_line_start),
-    lineEnd: finding.end_line ?? finding.begin_line ?? null,
-  });
-  const priority = Number(finding.priority);
-  const severityLabel =
-    Number.isFinite(priority) && priority > 0 && priority <= 2
-      ? "高危"
-      : Number.isFinite(priority) && priority === 3
-        ? "中危"
-        : "低危";
-  const severityTone: FindingDetailTone =
-    Number.isFinite(priority) && priority > 0 && priority <= 2
-      ? "danger"
-      : Number.isFinite(priority) && priority === 3
-        ? "warning"
-        : "success";
-  const headlineValue =
-    [String(finding.rule || "").trim(), String(finding.ruleset || "").trim()]
-      .filter(Boolean)
-      .join(" · ") ||
-    String(finding.message || "").trim() ||
-    "pmd-rule";
-  const trackingItems = buildTrackingItems({
-    sourceLabel: "静态审计 · PMD",
-    taskId: params.taskId,
-    findingId: params.findingId,
-    taskName: params.taskName,
-    location,
-  });
-
-  return buildBaseModel({
-    pageTitle: "统一漏洞详情",
-    codePanelTitle: "关联代码",
-    emptyCodeMessage: "当前来源未提供可展示的命中代码。",
-    narrativeSections: [
-      buildNarrativeSection({
-        id: `pmd:${finding.id}:summary`,
-        title: "扫描说明",
-        content: String(finding.message || "").trim() || MISSING_DESCRIPTION,
-      }),
-    ],
-    trackingItems,
-    overviewItems: buildMergedOverviewItems({
-      name: headlineValue,
-      overviewItems: buildOverviewItems({
-        headlineLabel: "漏洞类型",
-        headlineValue,
-        summaryStats: [
-          { label: "漏洞危害", value: severityLabel, tone: severityTone },
-          { label: "漏洞置信度", value: "中", tone: "warning" },
-        ],
-      }),
-      trackingItems,
-    }),
-    codeSections: buildFindingDetailCodeSections(buildPmdFindingCodeViews(finding)),
-    codeBrowserTarget: buildCodeBrowserTarget({
-      filePath: finding.resolved_file_path ?? finding.file_path,
-      line: finding.resolved_line_start ?? finding.begin_line,
     }),
     projectId: params.projectId,
     projectSourceType: params.projectSourceType,

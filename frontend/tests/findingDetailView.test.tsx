@@ -4,13 +4,9 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { AgentFinding } from "../src/shared/api/agentTasks.ts";
-import type { BanditFinding } from "../src/shared/api/bandit.ts";
-import type { GitleaksFinding } from "../src/shared/api/gitleaks.ts";
 import type { OpengrepFinding } from "../src/shared/api/opengrep.ts";
 import {
   buildAgentFindingDetailModel,
-  buildBanditFindingDetailModel,
-  buildGitleaksFindingDetailModel,
   buildOpengrepFindingDetailModel,
 } from "../src/pages/finding-detail/viewModel.ts";
 import FindingDetailView from "../src/pages/finding-detail/FindingDetailView.tsx";
@@ -130,39 +126,6 @@ const opengrepFinding: OpengrepFinding = {
   severity: "ERROR",
   status: "open",
   confidence: "HIGH",
-};
-
-const gitleaksFinding: GitleaksFinding = {
-  id: "gl-1",
-  scan_task_id: "task-gl",
-  rule_id: "generic-api-key",
-  description: "提交内容中包含疑似 API Key，请立即轮换并复核泄漏范围。",
-  file_path: "config/.env.production",
-  start_line: 8,
-  end_line: 8,
-  secret: "ghp_****************",
-  match: "ghp_example_secret",
-  commit: "abc123",
-  author: "dev",
-  email: "dev@example.com",
-  date: "2026-03-10",
-  fingerprint: "gl:1",
-  status: "open",
-};
-
-const banditFinding: BanditFinding = {
-  id: "bandit-1",
-  scan_task_id: "task-bandit",
-  test_id: "B602",
-  test_name: "subprocess_popen_with_shell_equals_true",
-  issue_text: "shell=True 会导致命令注入风险，应改为参数化调用。",
-  file_path: "app/tasks/run_cmd.py",
-  line_number: 41,
-  issue_severity: "HIGH",
-  issue_confidence: "HIGH",
-  code_snippet: "subprocess.Popen(command, shell=True)",
-  more_info: "https://bandit.readthedocs.io/en/latest/plugins/b602_subprocess_popen_with_shell_equals_true.html",
-  status: "open",
 };
 
 function renderMarkup(
@@ -301,44 +264,6 @@ test("FindingDetailView 渲染 opengrep 场景并将描述降级为扫描说明"
   assert.match(markup, /高/);
   assert.match(markup, /扫描说明/);
   assert.match(markup, /静态审计 . Opengrep/);
-});
-
-test("FindingDetailView 渲染 gitleaks 场景并补齐未提供字段文案", () => {
-  const markup = renderMarkup(
-    buildGitleaksFindingDetailModel({
-      finding: gitleaksFinding,
-      taskId: "task-gl",
-      findingId: "finding-gl",
-      taskName: "Gitleaks Scan",
-    }),
-  );
-
-  assert.match(markup, /generic-api-key/);
-  assert.match(markup, /未分级/);
-  assert.match(markup, /未提供/);
-  assert.match(markup, /扫描说明/);
-  assert.match(markup, /静态审计 . Gitleaks/);
-});
-
-test("FindingDetailView 渲染 bandit 场景并保留核心漏洞信息", () => {
-  const markup = renderMarkup(
-    buildBanditFindingDetailModel({
-      finding: banditFinding,
-      taskId: "task-bandit",
-      findingId: "finding-bandit",
-      taskName: "Bandit Scan",
-      projectId: "project-repo",
-      projectSourceType: "repository",
-      projectName: "demo",
-    }),
-  );
-
-  assert.match(markup, /B602/);
-  assert.match(markup, /高危/);
-  assert.match(markup, /高/);
-  assert.match(markup, /扫描说明/);
-  assert.match(markup, /静态审计 . Bandit/);
-  assert.match(markup, /当前项目暂不支持查看完整文件，仅展示漏洞相关代码/);
 });
 
 test("FindingDetailView 渲染可用的代码浏览按钮", () => {

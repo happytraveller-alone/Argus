@@ -156,6 +156,19 @@ Frontend task/finding display consistent with Opengrep
 - 后端 task record 用 `engine` 区分：`opengrep` 与 `codeql`。
 - CodeQL 规则、runner、配置、build plan、SARIF 解析完全独立。
 
+### 6.1.1 前端首版验收边界
+
+当前静态审计前端首版只保留两个主引擎：`Opengrep` 与 `CodeQL`。被删除或退休的静态引擎不得重新出现在创建入口、静态审计详情页、finding 详情路由或本轮相关测试契约中。
+
+前端验收要求：
+
+- 创建静态审计时必须展示 Opengrep 与 CodeQL 选择项。
+- Opengrep 与 CodeQL 是互斥选项；点选任一引擎时，另一引擎必须自动取消。
+- 选择 Opengrep 时调用 Opengrep 静态任务创建 API，并路由到 `/static-analysis/:taskId?opengrepTaskId=...`。
+- 选择 CodeQL 时调用 CodeQL 静态任务创建 API，并路由到 `/static-analysis/:taskId?codeqlTaskId=...&engine=codeql`。
+- `/static-analysis/:taskId` 必须按 query 中的 `engine=codeql` 和 `codeqlTaskId` 加载 CodeQL 任务与 findings；没有显式 task id 时，路径 task id 可作为对应 engine 的兼容兜底。
+- CodeQL finding 详情页复用 Opengrep 的静态 finding 详情布局、状态切换、代码定位、全文查看与追踪信息展示模型；差异只体现在来源标签为 `静态审计 · CodeQL` 以及 CodeQL API 路由。
+
 ### 6.2 路由策略
 
 可选两种实现，优先推荐 A：

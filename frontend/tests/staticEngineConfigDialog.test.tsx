@@ -7,10 +7,10 @@ import { StaticEngineConfigDialogContent } from "../src/components/scan/StaticEn
 
 globalThis.React = React;
 
-test("StaticEngineConfigDialogContent renders placeholder text and footer actions for PMD", () => {
+test("StaticEngineConfigDialogContent renders placeholder text and footer actions for CodeQL", () => {
   const markup = renderToStaticMarkup(
     createElement(StaticEngineConfigDialogContent, {
-      engine: "pmd",
+      engine: "codeql",
       scanMode: "static",
       enabled: true,
       creating: false,
@@ -20,7 +20,7 @@ test("StaticEngineConfigDialogContent renders placeholder text and footer action
     }),
   );
 
-  assert.match(markup, /PMD 配置/);
+  assert.match(markup, /CodeQL 配置/);
   assert.match(markup, /任务级配置即将开放/);
   assert.match(markup, /前往扫描引擎配置页/);
 });

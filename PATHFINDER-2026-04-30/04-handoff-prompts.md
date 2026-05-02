@@ -12,7 +12,7 @@ Target unified component and single entry point:
 
 Exact call sites/files to evaluate and rewrite/delete:
 - Current active static API: `frontend/src/shared/api/opengrep.ts:423-515`.
-- Retired/residual wrappers: `frontend/src/shared/api/bandit.ts:63-143`, `frontend/src/shared/api/gitleaks.ts:59-142`, `frontend/src/shared/api/phpstan.ts:61-147`, `frontend/src/shared/api/pmd.ts:77-152`.
+- Retired/residual wrappers: legacy `frontend/src/shared/api/<retired-engine>.ts` static-engine API files.
 - Confirm current docs boundary: `docs/architecture.md:32-41`.
 
 Relevant flowcharts:
@@ -20,7 +20,7 @@ Relevant flowcharts:
 - `PATHFINDER-2026-04-30/02-duplication-report.md#d1--parallel-static-engine-frontend-api-wrappers-accidental-residue-consolidate-by-deletionretirement-boundary`
 
 Plan requirements:
-1. First run an import/test usage search for `bandit.ts`, `gitleaks.ts`, `phpstan.ts`, `pmd.ts` exports.
+1. First run an import/test usage search for retired static-engine API exports.
 2. If unused by current app/tests, plan deletion.
 3. If legacy tests still need them, plan a quarantine/retired namespace with explicit docs and no active UI imports.
 4. Include frontend typecheck/test commands.

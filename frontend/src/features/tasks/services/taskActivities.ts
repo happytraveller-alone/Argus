@@ -45,7 +45,6 @@ export interface TaskActivityItem {
 	kind: TaskActivityKind;
 	sourceMode: TaskActivitySourceMode;
 	status: string;
-	gitleaksEnabled?: boolean;
 	staticFindingStats?: SeverityCounts;
 	agentFindingStats?: {
 		critical: number;
@@ -236,7 +235,6 @@ function toRuleScanActivities(
 	);
 	const groups = buildStaticScanGroups({
 		opengrepTasks: visibleOpengrepTasks,
-		gitleaksTasks: [],
 	});
 
 	return groups
@@ -289,7 +287,6 @@ function toRuleScanActivities(
 			kind: "rule_scan",
 			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", opengrepTask?.name),
 			status: resolveStaticScanGroupStatus(group),
-			gitleaksEnabled: false,
 			staticFindingStats,
 			createdAt: group.createdAt,
 			startedAt: group.createdAt,

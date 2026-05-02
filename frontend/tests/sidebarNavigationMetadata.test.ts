@@ -20,6 +20,18 @@ test("data management route is grouped under devTest navigation", () => {
 	assert.equal(dataManagementRoute.navGroup, "devTest");
 });
 
+test("home route remains a hidden redirect to the visible dashboard page", () => {
+	const homeRoute = routes.find((route) => route.path === "/");
+	const dashboardRoute = routes.find((route) => route.path === "/dashboard");
+
+	assert.ok(homeRoute);
+	assert.ok(dashboardRoute);
+	assert.equal(homeRoute.visible, false);
+	assert.equal(homeRoute.navVisible, false);
+	assert.equal(dashboardRoute.visible, true);
+	assert.equal(dashboardRoute.navVisible, true);
+});
+
 test("agent test route has been removed", () => {
 	const agentTestRoute = routes.find((route) => route.path === "/agent-test");
 	assert.equal(agentTestRoute, undefined);

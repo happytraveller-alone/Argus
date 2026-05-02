@@ -53,31 +53,30 @@ test("normalizeCreateProjectScanProvider and resolveCreateProjectScanEffectiveAp
   );
 });
 
-test("buildCreateProjectStaticTaskRoute preserves query params", () => {
+test("buildCreateProjectStaticTaskRoute preserves opengrep query params", () => {
   const params = new URLSearchParams();
   params.set("opengrepTaskId", "og-1");
-  params.set("gitleaksTaskId", "gl-1");
 
   assert.equal(
     buildCreateProjectStaticTaskRoute({
       primaryTaskId: "task-1",
       params,
     }),
-    "/static-analysis/task-1?opengrepTaskId=og-1&gitleaksTaskId=gl-1",
+    "/static-analysis/task-1?opengrepTaskId=og-1",
   );
 });
 
-test("buildCreateProjectStaticTaskRoute preserves phpstan-only query params", () => {
+test("buildCreateProjectStaticTaskRoute preserves codeql engine route params", () => {
   const params = new URLSearchParams();
-  params.set("phpstanTaskId", "ps-1");
-  params.set("tool", "phpstan");
+  params.set("codeqlTaskId", "cq-1");
+  params.set("engine", "codeql");
 
   assert.equal(
     buildCreateProjectStaticTaskRoute({
-      primaryTaskId: "task-phpstan",
+      primaryTaskId: "task-codeql",
       params,
     }),
-    "/static-analysis/task-phpstan?phpstanTaskId=ps-1&tool=phpstan",
+    "/static-analysis/task-codeql?codeqlTaskId=cq-1&engine=codeql",
   );
 });
 

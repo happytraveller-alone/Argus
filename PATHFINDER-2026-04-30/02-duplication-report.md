@@ -13,7 +13,7 @@ The mandated within-feature and cross-feature duplication subagents were both la
 - `backend/src/routes/projects.rs:1442-1479`, `backend/src/routes/agent_tasks.rs:1917-2013` — duplicate content-disposition / percent-encoding helpers.
 - `backend/src/routes/static_tasks.rs:656-741`, `backend/src/routes/static_tasks.rs:1468-1527`, `backend/src/routes/static_tasks.rs:1602-1627` — static task lifecycle mutation.
 - `backend/src/routes/agent_tasks.rs:144-303`, `backend/src/routes/agent_tasks.rs:357-408`, `backend/src/routes/agent_tasks.rs:705-731`, `backend/src/routes/agent_tasks.rs:870-928` — agent task lifecycle mutation.
-- `frontend/src/shared/api/bandit.ts:63-143`, `frontend/src/shared/api/gitleaks.ts:59-142`, `frontend/src/shared/api/phpstan.ts:61-147`, `frontend/src/shared/api/pmd.ts:77-152`, `frontend/src/shared/api/opengrep.ts:423-515` — parallel static engine API wrappers, including retired engines.
+- retired static-engine API wrappers and `frontend/src/shared/api/opengrep.ts:423-515` — parallel static engine API shapes, including retired engines.
 - `frontend/src/components/scan/CreateProjectScanDialog.tsx:302-328`, `frontend/src/components/scan/hooks/useTaskForm.ts:10-19`, `frontend/src/components/scan/CreateScanTaskDialog.tsx:158-176` — repeated project/rule loading patterns.
 - `backend/src/runtime/runner.rs:490-757`, `backend/src/runtime/agentflow/runner.rs:44-111`, `backend/src/routes/static_tasks.rs:1287-1365`, `backend/src/routes/agent_tasks.rs:2163-2365` — runner/workspace command scaffolding.
 
@@ -22,10 +22,7 @@ The mandated within-feature and cross-feature duplication subagents were both la
 ### Evidence
 
 - `frontend/src/shared/api/opengrep.ts:423-515` defines current Opengrep task create/get/interrupt/findings/list wrappers for `/static-tasks/tasks` and `/static-tasks/findings`.
-- `frontend/src/shared/api/bandit.ts:63-143` defines analogous create/get/interrupt/findings/status/rules wrappers for `/static-tasks/bandit/...`.
-- `frontend/src/shared/api/gitleaks.ts:59-142` defines analogous create/get/interrupt/findings/status/rules wrappers for `/static-tasks/gitleaks/...`.
-- `frontend/src/shared/api/phpstan.ts:61-147` defines analogous create/get/interrupt/findings/status/rules wrappers for `/static-tasks/phpstan/...`.
-- `frontend/src/shared/api/pmd.ts:77-152` defines analogous create/get/interrupt/findings/status/presets wrappers for `/static-tasks/pmd/...`.
+- Retired static-engine API wrappers defined analogous create/get/interrupt/findings/status/rules wrappers for unsupported `/static-tasks/<retired-engine>/...` routes.
 - `docs/architecture.md:32-41` says the current runnable static audit mainline is Opengrep-only and retired engines should not be treated as current entry points.
 
 ### Why they diverged
@@ -37,14 +34,12 @@ These wrappers likely predate the Rust gateway’s Opengrep-only mainline and re
 ```mermaid
 flowchart TD
   Current["Current Opengrep API<br/>frontend/src/shared/api/opengrep.ts:423"]
-  Bandit["Bandit wrapper residue<br/>frontend/src/shared/api/bandit.ts:63"]
-  Gitleaks["Gitleaks wrapper residue<br/>frontend/src/shared/api/gitleaks.ts:59"]
-  Phpstan["PHPStan wrapper residue<br/>frontend/src/shared/api/phpstan.ts:61"]
-  Pmd["PMD wrapper residue<br/>frontend/src/shared/api/pmd.ts:77"]
+  RetiredA["Retired wrapper residue<br/>frontend/src/shared/api/<retired-engine>.ts"]
+  RetiredB["Retired wrapper residue<br/>unsupported static task routes"]
   Docs["Opengrep-only docs<br/>docs/architecture.md:32"]
   Docs --> Current
-  Bandit -.duplicated static engine shape.-> Current
-  Gitleaks -.duplicated static engine shape.-> Current
+  RetiredA -.duplicated static engine shape.-> Current
+  RetiredB -.duplicated static engine shape.-> Current
   Phpstan -.duplicated static engine shape.-> Current
   Pmd -.duplicated static engine shape.-> Current
 ```

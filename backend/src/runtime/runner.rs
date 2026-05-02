@@ -924,7 +924,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("yasa/task-1");
+        let workspace_dir = workspace_root.join("generic/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
         let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
@@ -934,18 +934,18 @@ esac
         let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
-            scanner_type: "yasa".to_string(),
-            image: "Argus/yasa-runner:latest".to_string(),
+            scanner_type: "generic".to_string(),
+            image: "Argus/generic-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
-                "/opt/yasa/bin/yasa".to_string(),
+                "/opt/scanner/bin/scanner".to_string(),
                 "--project".to_string(),
                 "/scan/project".to_string(),
                 "--help".to_string(),
             ],
             timeout_seconds: 123,
             env: BTreeMap::from([(
-                "YASA_RESOURCE_DIR".to_string(),
+                "SCANNER_RESOURCE_DIR".to_string(),
                 "/scan/resource".to_string(),
             )]),
             expected_exit_codes: vec![0],
@@ -976,7 +976,7 @@ esac
             workspace_root.display()
         )));
         assert!(logged.contains(&format!(
-            "-e YASA_RESOURCE_DIR={}/resource",
+            "-e SCANNER_RESOURCE_DIR={}/resource",
             workspace_dir.display()
         )));
         assert!(logged.contains(&format!("-w {}", workspace_dir.display())));
@@ -1131,7 +1131,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("phpstan/task-1");
+        let workspace_dir = workspace_root.join("opengrep/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
         let long_stderr = "fatal stderr line ".repeat(1_200);
 
@@ -1144,12 +1144,12 @@ esac
         let _stderr = EnvVarGuard::set("FAKE_STDERR", &long_stderr);
 
         let result = execute(RunnerSpec {
-            scanner_type: "phpstan".to_string(),
-            image: "Argus/phpstan-runner:latest".to_string(),
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
-                "phpstan".to_string(),
-                "analyse".to_string(),
+                "opengrep".to_string(),
+                "scan".to_string(),
                 "/scan/project".to_string(),
             ],
             timeout_seconds: 90,
@@ -1186,7 +1186,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("phpstan/task-1");
+        let workspace_dir = workspace_root.join("opengrep/task-1");
         fs::create_dir_all(&workspace_dir).unwrap();
 
         let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
@@ -1199,12 +1199,12 @@ esac
         let _stderr = EnvVarGuard::set("FAKE_STDERR", "runner stderr");
 
         let result = execute(RunnerSpec {
-            scanner_type: "phpstan".to_string(),
-            image: "Argus/phpstan-runner:latest".to_string(),
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
             command: vec![
-                "phpstan".to_string(),
-                "analyse".to_string(),
+                "opengrep".to_string(),
+                "scan".to_string(),
                 "/scan/project".to_string(),
             ],
             timeout_seconds: 90,
@@ -1253,16 +1253,16 @@ esac
             EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
 
         let result = execute(RunnerSpec {
-            scanner_type: "phpstan".to_string(),
-            image: "Argus/phpstan-runner:latest".to_string(),
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner:latest".to_string(),
             workspace_dir: temp_dir
                 .path()
                 .join("elsewhere/task-1")
                 .display()
                 .to_string(),
             command: vec![
-                "phpstan".to_string(),
-                "analyse".to_string(),
+                "opengrep".to_string(),
+                "scan".to_string(),
                 "/scan/project".to_string(),
             ],
             timeout_seconds: 90,

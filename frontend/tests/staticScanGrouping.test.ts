@@ -19,21 +19,20 @@ test("groups engines with same static batch id", () => {
         name: appendStaticScanBatchMarker("静态分析-Opengrep-p1", batchId),
       },
     ] as any,
-    gitleaksTasks: [
+    codeqlTasks: [
       {
-        id: "gl-1",
+        id: "cq-1",
         project_id: "p1",
         status: "completed",
         created_at: "2026-03-13T10:05:00.000Z",
-        name: appendStaticScanBatchMarker("静态分析-Gitleaks-p1", batchId),
+        name: appendStaticScanBatchMarker("静态分析-CodeQL-p1", batchId),
       },
     ] as any,
-    banditTasks: [] as any,
   });
 
   assert.equal(groups.length, 1);
   assert.equal(groups[0]?.opengrepTask?.id, "og-1");
-  assert.equal(groups[0]?.gitleaksTask?.id, "gl-1");
+  assert.equal(groups[0]?.codeqlTask?.id, "cq-1");
 });
 
 test("does not merge different static batches even within pairing window", () => {
@@ -47,16 +46,15 @@ test("does not merge different static batches even within pairing window", () =>
         name: appendStaticScanBatchMarker("静态分析-Opengrep-p1", "batch-1"),
       },
     ] as any,
-    gitleaksTasks: [
+    codeqlTasks: [
       {
-        id: "gl-1",
+        id: "cq-1",
         project_id: "p1",
         status: "completed",
         created_at: "2026-03-13T10:00:20.000Z",
-        name: appendStaticScanBatchMarker("静态分析-Gitleaks-p1", "batch-2"),
+        name: appendStaticScanBatchMarker("静态分析-CodeQL-p1", "batch-2"),
       },
     ] as any,
-    banditTasks: [] as any,
   });
 
   assert.equal(groups.length, 2);
@@ -77,8 +75,8 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
 
   assert.equal(
     resolveStaticScanGroupStatus({
-      gitleaksTask: {
-        id: "gl-1",
+      codeqlTask: {
+        id: "cq-1",
         project_id: "p1",
         status: "interrupted",
         created_at: "2026-03-17T00:00:00.000Z",
@@ -89,14 +87,8 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
 
   assert.equal(
     resolveStaticScanGroupStatus({
-      banditTask: {
-        id: "ba-1",
-        project_id: "p1",
-        status: "pending",
-        created_at: "2026-03-17T00:00:00.000Z",
-      } as any,
-      phpstanTask: {
-        id: "ps-1",
+      codeqlTask: {
+        id: "cq-2",
         project_id: "p1",
         status: "pending",
         created_at: "2026-03-17T00:00:01.000Z",
@@ -119,8 +111,8 @@ test("resolveStaticScanGroupStatus returns failed/interrupted/pending without OT
 
   assert.equal(
     resolveStaticScanGroupStatus({
-      gitleaksTask: {
-        id: "gl-2",
+      codeqlTask: {
+        id: "cq-3",
         project_id: "p1",
         status: "completed",
         created_at: "2026-03-17T00:00:00.000Z",

@@ -152,9 +152,6 @@ export function normalizeSnapshot(
 			...item,
 			agent_findings: Math.max(Number(item.agent_findings || 0), 0),
 			opengrep_findings: Math.max(Number(item.opengrep_findings || 0), 0),
-			gitleaks_findings: Math.max(Number(item.gitleaks_findings || 0), 0),
-			bandit_findings: Math.max(Number(item.bandit_findings || 0), 0),
-			phpstan_findings: Math.max(Number(item.phpstan_findings || 0), 0),
 			static_findings: Math.max(Number(item.static_findings || 0), 0),
 			intelligent_verified_findings: Math.max(
 				Number(item.intelligent_verified_findings || 0),
@@ -174,7 +171,6 @@ export function normalizeSnapshot(
 				total_findings: Math.max(Number(item.total_findings || 0), 0),
 				opengrep_findings: Math.max(Number(item.opengrep_findings || 0), 0),
 				agent_findings: Math.max(Number(item.agent_findings || 0), 0),
-				bandit_findings: Math.max(Number(item.bandit_findings || 0), 0),
 			};
 		}),
 	};

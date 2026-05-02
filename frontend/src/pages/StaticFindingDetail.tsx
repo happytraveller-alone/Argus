@@ -17,16 +17,21 @@ export default function StaticFindingDetail() {
 			return "/projects";
 		}
 
+		const searchParams = new URLSearchParams(location.search);
+		const engine = searchParams.get("engine");
 		const targetPath = buildFindingDetailPath({
 			source: "static",
 			taskId: normalizedTaskId,
 			findingId: normalizedFindingId,
+			engine:
+				engine === "opengrep" ||
+				engine === "codeql"
+					? engine
+					: undefined,
 		});
-		const searchParams = new URLSearchParams(location.search);
 		const returnTo = normalizeReturnToPath(searchParams.get("returnTo"));
 		return appendReturnTo(targetPath, returnTo);
 	}, [findingId, location.search, taskId]);
 
 	return <Navigate to={redirectPath} replace />;
 }
-

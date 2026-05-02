@@ -27,10 +27,6 @@ export interface StaticEngineConfigDialogProps extends StaticEngineConfigDialogC
 const PLACEHOLDER_COPY: Record<ScanEngineTab, string> = {
   opengrep: "后续将支持按规则集、严重级别等任务级配置。",
   codeql: "后续将支持语言、查询包和构建命令等任务级配置。",
-  gitleaks: "后续将支持 no_git、规则集等任务级配置。",
-  bandit: "后续将支持 severity、confidence 等任务级配置。",
-  phpstan: "后续将支持 level 等任务级配置。",
-  pmd: "后续将支持 ruleset 等任务级配置。",
 };
 
 function getEngineTitle(engine: ScanEngineTab) {
@@ -39,14 +35,6 @@ function getEngineTitle(engine: ScanEngineTab) {
       return "Opengrep";
     case "codeql":
       return "CodeQL";
-    case "gitleaks":
-      return "Gitleaks";
-    case "bandit":
-      return "Bandit";
-    case "phpstan":
-      return "PHPStan";
-    case "pmd":
-      return "PMD";
   }
 }
 

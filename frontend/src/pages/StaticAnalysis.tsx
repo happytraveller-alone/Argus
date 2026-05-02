@@ -67,14 +67,26 @@ export default function StaticAnalysis() {
   const opengrepTaskId = useMemo(() => {
     const explicit = searchParams.get("opengrepTaskId");
     if (explicit) return explicit;
+    if (searchParams.get("engine") === "codeql") return "";
     return taskId;
   }, [searchParams, taskId]);
 
-  const usesPathTaskIdFallback = useMemo(() => {
-    return !searchParams.get("opengrepTaskId") && Boolean(taskId);
+  const codeqlTaskId = useMemo(() => {
+    const explicit = searchParams.get("codeqlTaskId");
+    if (explicit) return explicit;
+    if (searchParams.get("engine") === "codeql") return taskId;
+    return "";
   }, [searchParams, taskId]);
 
-  const hasEnabledEngine = Boolean(opengrepTaskId);
+  const usesPathTaskIdFallback = useMemo(() => {
+    return (
+      !searchParams.get("opengrepTaskId") &&
+      !searchParams.get("codeqlTaskId") &&
+      Boolean(taskId)
+    );
+  }, [searchParams, taskId]);
+
+  const hasEnabledEngine = Boolean(opengrepTaskId || codeqlTaskId);
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
   );
@@ -89,7 +101,9 @@ export default function StaticAnalysis() {
 
   const {
     opengrepTask,
+    codeqlTask,
     opengrepFindings,
+    codeqlFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -104,6 +118,7 @@ export default function StaticAnalysis() {
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
+    codeqlTaskId,
   });
 
   const isTaskCompleted = opengrepTask?.status === "completed";
@@ -113,8 +128,12 @@ export default function StaticAnalysis() {
       buildUnifiedFindingRows({
         opengrepFindings,
         opengrepTaskId,
+        codeqlFindings,
+        codeqlTaskId,
       }),
     [
+      codeqlFindings,
+      codeqlTaskId,
       opengrepFindings,
       opengrepTaskId,
     ],
@@ -123,42 +142,44 @@ export default function StaticAnalysis() {
   const enabledEngines = useMemo(() => {
     const engines: Engine[] = [];
     if (opengrepTaskId) engines.push("opengrep");
+    if (codeqlTaskId) engines.push("codeql");
     return engines;
-  }, [opengrepTaskId]);
+  }, [codeqlTaskId, opengrepTaskId]);
 
   const shouldTickClock = useMemo(
-    () => [opengrepTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
-    [opengrepTask],
+    () => [opengrepTask, codeqlTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
+    [codeqlTask, opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
-  const opengrepProjectId = String(opengrepTask?.project_id || "").trim();
-  const opengrepProjectName = String(opengrepTask?.project_name || "").trim();
+  const staticProjectId = String(
+    opengrepTask?.project_id || codeqlTask?.project_id || "",
+  ).trim();
+  const staticProjectName = String(
+    opengrepTask?.project_name || codeqlTask?.project_name || "",
+  ).trim();
   const fallbackProjectName = useMemo(
     () =>
       resolveStaticAnalysisProjectNameFallback({
-        taskProjectName: opengrepProjectName,
+        taskProjectName: staticProjectName,
         resolvedProjectName:
-          resolvedProjectName?.projectId === opengrepProjectId
+          resolvedProjectName?.projectId === staticProjectId
             ? resolvedProjectName.name
             : null,
-        projectId: opengrepProjectId,
+        projectId: staticProjectId,
       }),
-    [opengrepProjectId, opengrepProjectName, resolvedProjectName],
+    [resolvedProjectName, staticProjectId, staticProjectName],
   );
   const headerSummary = useMemo(
     () =>
       buildStaticAnalysisHeaderSummary({
         opengrepTask,
-        gitleaksTask: null,
-        banditTask: null,
-        phpstanTask: null,
-        pmdTask: null,
+        codeqlTask,
         enabledEngines,
         loadingInitial,
         nowMs,
         fallbackProjectName,
       }),
-    [enabledEngines, fallbackProjectName, loadingInitial, nowMs, opengrepTask],
+    [codeqlTask, enabledEngines, fallbackProjectName, loadingInitial, nowMs, opengrepTask],
   );
   const headerTags = useMemo(
     () => [
@@ -181,34 +202,35 @@ export default function StaticAnalysis() {
   }, [resolvedUrlState]);
 
   useEffect(() => {
-    if (!opengrepProjectId || opengrepProjectName) {
+    if (!staticProjectId || staticProjectName) {
       setResolvedProjectName(null);
       return;
     }
 
     let cancelled = false;
     setResolvedProjectName((current) =>
-      current?.projectId === opengrepProjectId ? current : null,
+      current?.projectId === staticProjectId ? current : null,
     );
 
-    void databaseApi.getProjectById(opengrepProjectId).then((project) => {
+    void databaseApi.getProjectById(staticProjectId).then((project) => {
       if (cancelled) return;
       const name = String(project?.name || "").trim();
-      setResolvedProjectName(name ? { projectId: opengrepProjectId, name } : null);
+      setResolvedProjectName(name ? { projectId: staticProjectId, name } : null);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [opengrepProjectId, opengrepProjectName]);
+  }, [staticProjectId, staticProjectName]);
 
   useEffect(() => {
     if (!usesPathTaskIdFallback) return;
+    const fallbackEngine = searchParams.get("engine") === "codeql" ? "codeql" : "opengrep";
     console.info(
       "[StaticAnalysis] Using path taskId fallback. Prefer explicit engine task ids in query params for stable detail resolution.",
-      { pathTaskId: taskId, toolParam: "opengrep" },
+      { pathTaskId: taskId, engine: fallbackEngine },
     );
-  }, [taskId, usesPathTaskIdFallback]);
+  }, [searchParams, taskId, usesPathTaskIdFallback]);
 
   const handleBack = () => {
     if (returnTo) {

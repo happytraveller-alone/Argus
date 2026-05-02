@@ -9,7 +9,7 @@ Source checklist: `plan/ai_audit/sourcecode_agent_audit_code_checklist.md` secti
 Lane contract:
 - Evidence-only verification lane.
 - No feature implementation file edits.
-- Preserve P1 prohibitions: no static/Opengrep/Bandit/Gitleaks/PHPStan/PMD/static scan or finding bootstrap input, no exposed `agentflow serve`, no remote target, no P2/P3 dynamic expert work.
+- Preserve P1 prohibitions: no static/Opengrep/retired static scan or finding bootstrap input, no exposed `agentflow serve`, no remote target, no P2/P3 dynamic expert work.
 
 ## Section 10 Verification Commands
 

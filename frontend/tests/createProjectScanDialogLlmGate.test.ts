@@ -330,13 +330,13 @@ test("agent preflight delegates to backend task preflight and does not fall back
 	}
 });
 
-test("dialog uses agent preflight gate while settings page keeps the LLM connection test", async () => {
+test("scan dialog no longer owns agent preflight while settings page keeps the LLM connection test", async () => {
 	const [dialogSource, systemConfigSource] = await Promise.all([
 		readFile("src/components/scan/CreateProjectScanDialog.tsx", "utf8"),
 		readFile("src/components/system/SystemConfig.tsx", "utf8"),
 	]);
 
-	assert.match(dialogSource, /runAgentPreflightCheck/);
+	assert.doesNotMatch(dialogSource, /runAgentPreflightCheck/);
 	assert.doesNotMatch(dialogSource, /\btestLLMConnection\b/);
 	assert.doesNotMatch(dialogSource, /\/system-config\/test-llm/);
 	assert.match(systemConfigSource, /\btestLLMConnection\b/);
@@ -365,41 +365,32 @@ test("LLM gate treats prefilled default config as unsaved until the user saves i
 	assert.match(status.testBlockMessage, /重新预检将先保存配置/);
 });
 
-test("create dialog retry preflight owns save plus preflight and does not render a separate quick-fix save button", async () => {
+test("create dialog exposes static engine selection without quick-fix preflight controls", async () => {
 	const [dialogSource, contentSource] = await Promise.all([
 		readFile("src/components/scan/CreateProjectScanDialog.tsx", "utf8"),
 		readFile("src/components/scan/create-project-scan/Content.tsx", "utf8"),
 	]);
 
-	assert.match(dialogSource, /const persistQuickFixConfig = async/);
-	assert.match(
-		dialogSource,
-		/if \(llmGateStatus\.hasUnsavedChanges\) \{\s*setLastPreflightMessage\("配置已修改，正在保存并重新预检。"\);\s*await persistQuickFixConfig\(\);/s,
-	);
-	assert.match(
-		dialogSource,
-		/const preflightResult = await runAgentPreflightCheck\(\);/,
-	);
+	assert.match(dialogSource, /createStaticTasksForProject/);
+	assert.match(contentSource, /Opengrep/);
+	assert.match(contentSource, /CodeQL/);
 	assert.doesNotMatch(contentSource, /handleQuickFixSave/);
 	assert.doesNotMatch(contentSource, /onClick=\{handleQuickFixSave\}/);
 	assert.doesNotMatch(contentSource, />\s*保存配置\s*</);
-	assert.match(contentSource, /保存并预检中/);
-	assert.match(contentSource, /\"重新预检\"/);
+	assert.doesNotMatch(contentSource, /保存并预检中/);
+	assert.doesNotMatch(contentSource, /\"重新预检\"/);
 });
 
-test("manual preflight path does not auto-create intelligent audit tasks", async () => {
+test("create dialog does not carry manual intelligent-audit preflight paths", async () => {
 	const dialogSource = await readFile(
 		"src/components/scan/CreateProjectScanDialog.tsx",
 		"utf8",
 	);
-	const quickFixTestBody = dialogSource.match(
-		/const handleQuickFixTest = async \(\) => \{(?<body>[\s\S]*?)\n\t\};/,
-	)?.groups?.body;
 
-	assert.ok(quickFixTestBody, "handleQuickFixTest body should be present");
-	assert.match(quickFixTestBody, /runAgentPreflightCheck/);
-	assert.doesNotMatch(quickFixTestBody, /createAgentTaskForProject/);
-	assert.doesNotMatch(quickFixTestBody, /handleCreateAgentTaskForProject/);
+	assert.doesNotMatch(dialogSource, /handleQuickFixTest/);
+	assert.doesNotMatch(dialogSource, /runAgentPreflightCheck/);
+	assert.doesNotMatch(dialogSource, /createAgentTaskForProject/);
+	assert.doesNotMatch(dialogSource, /handleCreateAgentTaskForProject/);
 });
 
 test("LLM gate treats redacted placeholders as inert and requires an explicit saved/imported source", async () => {
@@ -452,33 +443,6 @@ test("LLM gate accepts only preflight metadata carrying fingerprints", async () 
 	assert.equal(
 		llmGate.hasVerifiedLlmTestMetadata({ fingerprint: "sha256:abc" }),
 		true,
-	);
-});
-
-test("retained upload retry state adds or refreshes the uploaded project without duplication", async () => {
-	const llmGate = await importOrFail<any>(
-		"../src/components/scan/create-project-scan/llmGate.ts",
-	);
-
-	const existingProjects = [
-		{ id: "existing-project", name: "Existing Project" },
-		{ id: "retained-project", name: "Old Retained Name" },
-	];
-	const retainedProject = {
-		id: "retained-project",
-		name: "Retained Upload",
-	};
-
-	assert.deepEqual(
-		llmGate.mergeRetainedProjectForRetry(
-			[{ id: "existing-project", name: "Existing Project" }],
-			retainedProject,
-		),
-		[retainedProject, { id: "existing-project", name: "Existing Project" }],
-	);
-	assert.deepEqual(
-		llmGate.mergeRetainedProjectForRetry(existingProjects, retainedProject),
-		[{ id: "existing-project", name: "Existing Project" }, retainedProject],
 	);
 });
 

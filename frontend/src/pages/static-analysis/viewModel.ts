@@ -9,7 +9,7 @@ import {
 	type NormalizedSeverity,
 } from "@/shared/utils/staticAnalysisSeverity";
 
-export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+export type Engine = "opengrep" | "codeql";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive";
 export type StatusFilter = "all" | FindingStatus;
@@ -94,20 +94,13 @@ export function resolveStaticAnalysisProjectNameFallback(input: {
 
 function isStaticAnalysisBootstrapPending(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
-  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
-  banditTask: StaticAnalysisSummaryTaskLike | null;
-  phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  codeqlTask: StaticAnalysisSummaryTaskLike | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
 }): boolean {
-  const pmdTask = input.pmdTask ?? null;
   const tasksByEngine: Record<Engine, StaticAnalysisSummaryTaskLike | null> = {
     opengrep: input.opengrepTask,
-    gitleaks: input.gitleaksTask,
-    bandit: input.banditTask,
-    phpstan: input.phpstanTask,
-    pmd: pmdTask,
+    codeql: input.codeqlTask,
   };
   const hasAnyLoadedTask = Object.values(tasksByEngine).some(Boolean);
   const loadedEnabledEngineCount = input.enabledEngines.filter((engine) =>
@@ -329,10 +322,7 @@ function normalizeStaticAnalysisStatus(status?: string | null): string {
 
 function getEngineLabel(engine: Engine): string {
   if (engine === "opengrep") return "Opengrep";
-  if (engine === "gitleaks") return "Gitleaks";
-  if (engine === "bandit") return "Bandit";
-  if (engine === "phpstan") return "PHPStan";
-  return "PMD";
+  return "CodeQL";
 }
 
 function getStaticAnalysisStatusLabel(status: string): string {
@@ -434,36 +424,22 @@ export function getStaticAnalysisTaskDisplayDurationMs(
 
 export function getStaticAnalysisTotalDisplayDurationMs(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
-  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
-  banditTask: StaticAnalysisSummaryTaskLike | null;
-  phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  codeqlTask: StaticAnalysisSummaryTaskLike | null;
   nowMs?: number;
 }): number {
-  const pmdTask = input.pmdTask ?? null;
   return (
     getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(input.phpstanTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(pmdTask, input.nowMs)
+    getStaticAnalysisTaskDisplayDurationMs(input.codeqlTask, input.nowMs)
   );
 }
 
 export function buildStaticAnalysisTaskStatusSummary(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
-  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
-  banditTask: StaticAnalysisSummaryTaskLike | null;
-  phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  codeqlTask: StaticAnalysisSummaryTaskLike | null;
 }): StaticAnalysisTaskStatusSummary {
-  const pmdTask = input.pmdTask ?? null;
   const engineEntries = [
     { engine: "opengrep" as const, task: input.opengrepTask },
-    { engine: "gitleaks" as const, task: input.gitleaksTask },
-    { engine: "bandit" as const, task: input.banditTask },
-    { engine: "phpstan" as const, task: input.phpstanTask },
-    { engine: "pmd" as const, task: pmdTask },
+    { engine: "codeql" as const, task: input.codeqlTask },
   ].filter(
     (entry): entry is { engine: Engine; task: StaticAnalysisSummaryTaskLike } =>
       Boolean(entry.task),
@@ -473,10 +449,7 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
     engineEntries.length > 0
       ? resolveStaticScanGroupStatus({
           opengrepTask: input.opengrepTask ?? undefined,
-          gitleaksTask: input.gitleaksTask ?? undefined,
-          banditTask: input.banditTask ?? undefined,
-          phpstanTask: input.phpstanTask ?? undefined,
-          pmdTask: pmdTask ?? undefined,
+          codeqlTask: input.codeqlTask ?? undefined,
         })
       : "failed";
 
@@ -542,20 +515,12 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
 
 export function buildStaticAnalysisProgressSummary(input: {
   opengrepTask: StaticAnalysisProgressTaskLike | null;
-  gitleaksTask: StaticAnalysisProgressTaskLike | null;
-  banditTask: StaticAnalysisProgressTaskLike | null;
-  phpstanTask: StaticAnalysisProgressTaskLike | null;
-  pmdTask?: StaticAnalysisProgressTaskLike | null;
+  codeqlTask: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
-  const pmdTask = input.pmdTask ?? null;
-  const tasks = [
-    input.opengrepTask,
-    input.gitleaksTask,
-    input.banditTask,
-    input.phpstanTask,
-    pmdTask,
-  ].filter(Boolean) as StaticAnalysisProgressTaskLike[];
+  const tasks = [input.opengrepTask, input.codeqlTask].filter(
+    Boolean,
+  ) as StaticAnalysisProgressTaskLike[];
   if (tasks.length === 0) {
     return { progressPercent: 0 };
   }
@@ -569,10 +534,7 @@ export function buildStaticAnalysisProgressSummary(input: {
     })[0];
   const statusSummary = buildStaticAnalysisTaskStatusSummary({
     opengrepTask: input.opengrepTask,
-    gitleaksTask: input.gitleaksTask,
-    banditTask: input.banditTask,
-    phpstanTask: input.phpstanTask,
-    pmdTask,
+    codeqlTask: input.codeqlTask,
   });
 
   return {
@@ -589,16 +551,12 @@ export function buildStaticAnalysisProgressSummary(input: {
 
 export function buildStaticAnalysisHeaderSummary(input: {
   opengrepTask: StaticAnalysisSummaryTaskLike | null;
-  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
-  banditTask: StaticAnalysisSummaryTaskLike | null;
-  phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  pmdTask?: StaticAnalysisSummaryTaskLike | null;
+  codeqlTask: StaticAnalysisSummaryTaskLike | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
   nowMs?: number;
   fallbackProjectName?: string | null;
 }): StaticAnalysisHeaderSummary {
-  const pmdTask = input.pmdTask ?? null;
   const isBootstrapping = isStaticAnalysisBootstrapPending(input);
   const statusSummary = isBootstrapping
     ? {
@@ -607,42 +565,27 @@ export function buildStaticAnalysisHeaderSummary(input: {
       }
     : buildStaticAnalysisTaskStatusSummary({
         opengrepTask: input.opengrepTask,
-        gitleaksTask: input.gitleaksTask,
-        banditTask: input.banditTask,
-        phpstanTask: input.phpstanTask,
-        pmdTask,
+        codeqlTask: input.codeqlTask,
       });
   const progressSummary = isBootstrapping
     ? { progressPercent: 0 }
     : buildStaticAnalysisProgressSummary({
         opengrepTask: input.opengrepTask,
-        gitleaksTask: input.gitleaksTask,
-        banditTask: input.banditTask,
-        phpstanTask: input.phpstanTask,
-        pmdTask,
+        codeqlTask: input.codeqlTask,
         nowMs: input.nowMs,
       });
   const totalScanDurationMs = getStaticAnalysisTotalDisplayDurationMs({
     opengrepTask: input.opengrepTask,
-    gitleaksTask: input.gitleaksTask,
-    banditTask: input.banditTask,
-    phpstanTask: input.phpstanTask,
-    pmdTask,
+    codeqlTask: input.codeqlTask,
     nowMs: input.nowMs,
   });
   const totalFindings =
     toStaticAnalysisSafeMetric(input.opengrepTask?.total_findings) +
-    toStaticAnalysisSafeMetric(input.gitleaksTask?.total_findings) +
-    toStaticAnalysisSafeMetric(input.banditTask?.total_findings) +
-    toStaticAnalysisSafeMetric(input.phpstanTask?.total_findings) +
-    toStaticAnalysisSafeMetric(pmdTask?.total_findings);
+    toStaticAnalysisSafeMetric(input.codeqlTask?.total_findings);
   const projectName =
     String(
       input.opengrepTask?.project_name ||
-        input.gitleaksTask?.project_name ||
-        input.banditTask?.project_name ||
-        input.phpstanTask?.project_name ||
-        pmdTask?.project_name ||
+        input.codeqlTask?.project_name ||
         input.fallbackProjectName ||
         "-",
     ).trim() || "-";
@@ -671,16 +614,22 @@ export function getStaticAnalysisOpengrepRuleName(
 export function buildUnifiedFindingRows(input: {
   opengrepFindings: MinimalOpengrepFinding[];
   opengrepTaskId: string;
+  codeqlFindings?: MinimalOpengrepFinding[];
+  codeqlTaskId?: string;
 }): UnifiedFindingRow[] {
-  return input.opengrepFindings.flatMap((finding) => {
+  const buildRowsForEngine = (
+    engine: "opengrep" | "codeql",
+    findings: MinimalOpengrepFinding[],
+    fallbackTaskId: string,
+  ): UnifiedFindingRow[] => findings.flatMap((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
     if (!severity) return [];
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
     return {
-      key: `opengrep:${finding.id}`,
+      key: `${engine}:${finding.id}`,
       id: finding.id,
-      taskId: finding.scan_task_id || input.opengrepTaskId,
-      engine: "opengrep" as const,
+      taskId: finding.scan_task_id || fallbackTaskId,
+      engine,
       rule: getStaticAnalysisOpengrepRuleName(finding),
       filePath: normalizeStaticAnalysisPath(finding.file_path),
       line: toStaticAnalysisPositiveLine(finding.start_line),
@@ -691,6 +640,10 @@ export function buildUnifiedFindingRows(input: {
       status: String(finding.status || "open").trim().toLowerCase(),
     };
   });
+  return [
+    ...buildRowsForEngine("opengrep", input.opengrepFindings, input.opengrepTaskId),
+    ...buildRowsForEngine("codeql", input.codeqlFindings ?? [], input.codeqlTaskId ?? ""),
+  ];
 }
 
 export function buildStaticAnalysisListState(input: {

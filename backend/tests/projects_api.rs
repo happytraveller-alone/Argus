@@ -297,12 +297,12 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
         .await
         .expect("snapshot should load");
     snapshot.static_tasks.insert(
-        "gitleaks-retired".to_string(),
+        "unknown-static-old".to_string(),
         task_state::StaticTaskRecord {
-            id: "gitleaks-retired".to_string(),
-            engine: "gitleaks".to_string(),
+            id: "unknown-static-old".to_string(),
+            engine: "unknown-static".to_string(),
             project_id: beta_project_id.clone(),
-            name: "retired gitleaks".to_string(),
+            name: "unknown static old".to_string(),
             status: "completed".to_string(),
             target_path: ".".to_string(),
             created_at: "2026-04-24T13:00:00Z".to_string(),
@@ -367,7 +367,7 @@ async fn dashboard_snapshot_includes_recent_tasks_from_task_state() {
     assert_eq!(recent_tasks.len(), 2);
     assert!(recent_tasks
         .iter()
-        .all(|task| task["task_id"] != "gitleaks-retired"));
+        .all(|task| task["task_id"] != "unknown-static-old"));
     assert_eq!(recent_tasks[0]["task_id"], "static-new");
     assert_eq!(recent_tasks[0]["task_type"], "静态审计");
     assert_eq!(recent_tasks[0]["title"], "静态审计 · Beta API");

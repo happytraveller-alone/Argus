@@ -42,11 +42,11 @@ test("parseDataTableUrlState restores query state from search params", async () 
 
   const state = urlStateModule.parseDataTableUrlState(
     new URLSearchParams(
-      "q=phpstan&sort=createdAt&order=asc&page=4&pageSize=20&filters=%7B%22source%22%3A%22builtin%22%7D",
+      "q=critical&sort=createdAt&order=asc&page=4&pageSize=20&filters=%7B%22source%22%3A%22builtin%22%7D",
     ),
   );
 
-  assert.equal(state.globalFilter, "phpstan");
+  assert.equal(state.globalFilter, "critical");
   assert.deepEqual(state.sorting, [{ id: "createdAt", desc: false }]);
   assert.equal(state.pagination.pageIndex, 3);
   assert.equal(state.pagination.pageSize, 20);

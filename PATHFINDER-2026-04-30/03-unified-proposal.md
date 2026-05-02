@@ -11,17 +11,14 @@
 
 ### Problem
 
-The frontend still contains parallel Bandit/Gitleaks/PHPStan/PMD API wrappers that mirror Opengrep-era static task shapes even though current docs define Opengrep-only static auditing.
+The frontend still contains parallel retired static-engine API wrappers that mirror Opengrep-era static task shapes even though current docs define Opengrep-only static auditing.
 
 ### Simplest unified design
 
 - **Consolidated component**: `frontend/src/shared/api/opengrep.ts` remains the only active static audit API entry point.
 - **Single entry point**: `createOpengrepScanTask(...)` at `frontend/src/shared/api/opengrep.ts:423` for static task creation.
 - **Old call sites become**:
-  - `frontend/src/shared/api/bandit.ts:63` → removed or explicitly moved to a retired compatibility folder if tests require it.
-  - `frontend/src/shared/api/gitleaks.ts:59` → removed/quarantined.
-  - `frontend/src/shared/api/phpstan.ts:61` → removed/quarantined.
-  - `frontend/src/shared/api/pmd.ts:77` → removed/quarantined.
+  - retired static-engine API wrappers → removed or explicitly moved to a retired compatibility folder if tests require them.
 - **Loss of capability**: Removes active-looking wrappers for retired engines. Acceptable if no current route/page imports them; if tests import them solely for legacy compatibility, quarantine with clear naming instead of exposing them as active APIs.
 
 ### Anti-patterns rejected
@@ -96,7 +93,7 @@ Repeated `load/catch/toast` patterns are not worth a generic hook without a conc
 ```mermaid
 flowchart TD
   StaticUI["Static task creation<br/>frontend/src/shared/api/opengrep.ts:423"] --> OpengrepOnly["Only active static API<br/>frontend/src/shared/api/opengrep.ts:423"]
-  Retired["Retired wrappers removed/quarantined<br/>frontend/src/shared/api/bandit.ts:63"] -.delete/quarantine.-> OpengrepOnly
+  Retired["Retired wrappers removed/quarantined<br/>frontend/src/shared/api/<retired-engine>.ts"] -.delete/quarantine.-> OpengrepOnly
 
   ProjectDownload["Project archive download<br/>backend/src/routes/projects.rs:488"] --> DownloadUtil["attachment_content_disposition<br/>backend/src/http/download.rs:new"]
   ReportDownload["Agent report download<br/>backend/src/routes/agent_tasks.rs:1074"] --> DownloadUtil

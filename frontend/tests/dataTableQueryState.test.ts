@@ -57,7 +57,7 @@ test("resetDataTableFilters clears filters, selection and resets page index", as
 
   const state = {
     ...queryStateModule.createDefaultDataTableState(),
-    globalFilter: "bandit",
+    globalFilter: "critical",
     columnFilters: [{ id: "source", value: "builtin" }],
     rowSelection: { "row-1": true },
     pagination: { pageIndex: 3, pageSize: 20 },
@@ -78,7 +78,7 @@ test("resetDataTableFilters restores reset baseline while preserving page size a
   );
 
   const state = queryStateModule.createDefaultDataTableState({
-    globalFilter: "bandit",
+    globalFilter: "critical",
     columnFilters: [{ id: "status", value: "false" }],
     sorting: [{ id: "updatedAt", desc: true }],
     rowSelection: { "row-1": true },

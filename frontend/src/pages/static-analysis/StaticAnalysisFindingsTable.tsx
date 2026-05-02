@@ -33,27 +33,15 @@ const IDLE_FALSE_BUTTON_CLASS =
 
 function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
 	if (engine === "opengrep") return "Opengrep";
-	if (engine === "gitleaks") return "Gitleaks";
-	if (engine === "bandit") return "Bandit";
-	if (engine === "phpstan") return "PHPStan";
-	return "PMD";
+	return "CodeQL";
 }
 
 function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
 	if (engine === "opengrep") {
 		return "bg-sky-500/20 text-sky-300 border-sky-500/30";
 	}
-	if (engine === "gitleaks") {
-		return "bg-amber-500/20 text-amber-300 border-amber-500/30";
-	}
-	if (engine === "bandit") {
-		return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-	}
-	if (engine === "phpstan") {
-		return "bg-violet-500/20 text-violet-300 border-violet-500/30";
-	}
-	if (engine === "pmd") {
-		return "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30";
+	if (engine === "codeql") {
+		return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
 	}
 	return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
 }
@@ -97,10 +85,7 @@ export function getColumns(input: {
 				filterVariant: "select",
 				filterOptions: [
 					{ label: "Opengrep", value: "opengrep" },
-					{ label: "Gitleaks", value: "gitleaks" },
-					{ label: "Bandit", value: "bandit" },
-					{ label: "PHPStan", value: "phpstan" },
-					{ label: "PMD", value: "pmd" },
+					{ label: "CodeQL", value: "codeql" },
 				],
 			},
 			cell: ({ row }) => (

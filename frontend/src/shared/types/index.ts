@@ -36,9 +36,6 @@ export interface ProjectManagementMetrics {
   running_tasks: number;
   agent_tasks: number;
   opengrep_tasks: number;
-  gitleaks_tasks: number;
-  bandit_tasks: number;
-  phpstan_tasks: number;
   critical: number;
   high: number;
   medium: number;
@@ -148,7 +145,6 @@ export interface DashboardCweDistributionItem {
   total_findings: number;
   opengrep_findings: number;
   agent_findings: number;
-  bandit_findings: number;
 }
 
 export interface DashboardSummaryItem {
@@ -173,10 +169,6 @@ export interface DashboardDailyActivityItem {
   completed_scans: number;
   agent_findings: number;
   opengrep_findings: number;
-  gitleaks_findings: number;
-  bandit_findings: number;
-  phpstan_findings: number;
-  pmd_findings?: number;
   static_findings: number;
   intelligent_verified_findings: number;
   total_new_findings: number;
@@ -199,7 +191,7 @@ export interface DashboardTaskStatusBreakdownItem {
 }
 
 export interface DashboardEngineBreakdownItem {
-  engine: "llm" | "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+  engine: "llm" | "opengrep" | "codeql";
   completed_scans: number;
   effective_findings: number;
   verified_findings: number;
@@ -274,7 +266,7 @@ export interface DashboardVerifiedVulnerabilityTypeItem {
 }
 
 export interface DashboardStaticEngineRuleTotalItem {
-  engine: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+  engine: "opengrep" | "codeql";
   total_rules: number;
 }
 
@@ -316,9 +308,8 @@ export interface DashboardSnapshotResponse {
 export interface StaticScanOverviewItem {
   project_id: string;
   project_name: string;
-  last_scan_tool: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+  last_scan_tool: "opengrep" | "codeql";
   last_scan_task_id: string;
-  paired_gitleaks_task_id?: string | null;
   last_scan_at: string;
   severe_count: number;
   hint_count: number;

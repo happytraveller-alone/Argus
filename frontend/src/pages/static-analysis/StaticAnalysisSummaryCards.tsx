@@ -4,11 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
 import { getTaskDisplayStatusSummary } from "@/features/tasks/services/taskDisplay";
-import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
-import type { BanditScanTask } from "@/shared/api/bandit";
-import type { PhpstanScanTask } from "@/shared/api/phpstan";
-import type { PmdScanTask } from "@/shared/api/pmd";
 
 import type { Engine } from "./viewModel";
 import {
@@ -22,10 +18,7 @@ import {
 
 interface StaticAnalysisSummaryCardsProps {
   opengrepTask: OpengrepScanTask | null;
-  gitleaksTask: GitleaksScanTask | null;
-  banditTask: BanditScanTask | null;
-  phpstanTask: PhpstanScanTask | null;
-  pmdTask: PmdScanTask | null;
+  codeqlTask: OpengrepScanTask | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
 }
@@ -38,32 +31,18 @@ const SUMMARY_VALUE_BADGE_CLASSNAME =
 
 export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCards({
   opengrepTask,
-  gitleaksTask,
-  banditTask,
-  phpstanTask,
-  pmdTask,
+  codeqlTask,
   enabledEngines,
   loadingInitial = false,
 }: StaticAnalysisSummaryCardsProps) {
-  const hasAnyLoadedTask = Boolean(opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask);
+  const hasAnyLoadedTask = Boolean(opengrepTask || codeqlTask);
   const loadedEnabledEngineCount = useMemo(
     () =>
       enabledEngines.filter((engine) => {
         if (engine === "opengrep") return Boolean(opengrepTask);
-        if (engine === "gitleaks") return Boolean(gitleaksTask);
-        if (engine === "bandit") return Boolean(banditTask);
-        if (engine === "phpstan") return Boolean(phpstanTask);
-        if (engine === "pmd") return Boolean(pmdTask);
-        return false;
+        return Boolean(codeqlTask);
       }).length,
-    [
-      banditTask,
-      enabledEngines,
-      gitleaksTask,
-      opengrepTask,
-      phpstanTask,
-      pmdTask,
-    ],
+    [codeqlTask, enabledEngines, opengrepTask],
   );
   const isBootstrapping =
     loadingInitial &&
@@ -71,10 +50,10 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
     (!hasAnyLoadedTask || loadedEnabledEngineCount < enabledEngines.length);
   const shouldTickClock = useMemo(
     () =>
-        [opengrepTask, gitleaksTask, banditTask, phpstanTask, pmdTask].some((task) =>
+        [opengrepTask, codeqlTask].some((task) =>
           isStaticAnalysisPollableStatus(task?.status),
         ),
-    [banditTask, gitleaksTask, opengrepTask, phpstanTask, pmdTask],
+    [codeqlTask, opengrepTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
@@ -93,37 +72,27 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
 
       return buildStaticAnalysisTaskStatusSummary({
         opengrepTask,
-        gitleaksTask,
-        banditTask,
-        phpstanTask,
-        pmdTask,
+        codeqlTask,
       });
     },
-    [banditTask, gitleaksTask, isBootstrapping, opengrepTask, phpstanTask, pmdTask],
+    [codeqlTask, isBootstrapping, opengrepTask],
   );
 
   const totalScanDurationMs = useMemo(
     () =>
       getStaticAnalysisTotalDisplayDurationMs({
         opengrepTask,
-        gitleaksTask,
-        banditTask,
-        phpstanTask,
-        pmdTask,
+        codeqlTask,
         nowMs,
       }),
-    [banditTask, gitleaksTask, nowMs, opengrepTask, phpstanTask, pmdTask],
+    [codeqlTask, nowMs, opengrepTask],
   );
 
   const totalFindings = useMemo(
     () =>
       toStaticAnalysisSafeMetric(opengrepTask?.total_findings) +
-      toStaticAnalysisSafeMetric(gitleaksTask?.total_findings) +
-      toStaticAnalysisSafeMetric(banditTask?.total_findings) +
-      toStaticAnalysisSafeMetric(phpstanTask?.total_findings) +
-      toStaticAnalysisSafeMetric(pmdTask?.total_findings) +
-      0,
-    [banditTask?.total_findings, gitleaksTask?.total_findings, opengrepTask?.total_findings, phpstanTask?.total_findings, pmdTask?.total_findings],
+      toStaticAnalysisSafeMetric(codeqlTask?.total_findings),
+    [codeqlTask?.total_findings, opengrepTask?.total_findings],
   );
 
   const timeoutOnlyFailure = useMemo(

@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import type { AgentFinding } from "../src/shared/api/agentTasks.ts";
-import type { BanditFinding } from "../src/shared/api/bandit.ts";
 import type { OpengrepFinding } from "../src/shared/api/opengrep.ts";
 import {
   buildAgentFindingDetailModel,
-  buildBanditFindingDetailModel,
+  buildCodeqlFindingDetailModel,
   buildFullFileDisplayLines,
   buildFindingDetailCodeSections,
   buildOpengrepFindingDetailModel,
@@ -127,23 +126,6 @@ const opengrepFinding: OpengrepFinding = {
   confidence: "HIGH",
 };
 
-const banditFinding: BanditFinding = {
-  id: "bandit-1",
-  scan_task_id: "task-bandit",
-  test_id: "B602",
-  test_name: "subprocess_popen_with_shell_equals_true",
-  issue_text: "shell=True may trigger command injection",
-  file_path: "/tmp/Argus_project/archive-root/app/tasks/run_cmd.py",
-  line_number: 41,
-  resolved_file_path: "app/tasks/run_cmd.py",
-  resolved_line_start: 41,
-  issue_severity: "HIGH",
-  issue_confidence: "HIGH",
-  code_snippet: "subprocess.Popen(command, shell=True)",
-  more_info: "https://bandit.readthedocs.io/",
-  status: "open",
-};
-
 test("buildFindingDetailCodeSections 裁剪命中代码并插入省略占位", () => {
   const code = Array.from({ length: 21 }, (_, index) => `line ${20 + index}`).join("\n");
   const [section] = buildFindingDetailCodeSections([
@@ -243,17 +225,17 @@ test("buildFindingDetailCodeSections 对单行命中长片段保持原样", () =
   assert.equal(section.code, code);
 });
 
-test("buildFindingDetailPath 为 bandit 详情保留 engine 查询参数", () => {
+test("buildFindingDetailPath 为 codeql 详情保留 engine 查询参数", () => {
   const route = buildFindingDetailPath({
     source: "static",
-    taskId: "task-bandit",
-    findingId: "finding-bandit",
-    engine: "bandit",
+    taskId: "task-codeql",
+    findingId: "finding-codeql",
+    engine: "codeql",
   });
 
   assert.equal(
     route,
-    "/finding-detail/static/task-bandit/finding-bandit?engine=bandit",
+    "/finding-detail/static/task-codeql/finding-codeql?engine=codeql",
   );
 });
 
@@ -297,7 +279,7 @@ test("buildAgentFindingDetailModel 将概览信息直接收敛为 overviewItems"
   );
   assert.equal(
     model.trackingItems.find((item) => item.label === "来源")?.value,
-    "AgentFlow 智能审计",
+    "智能审计",
   );
   assert.equal(model.codePanelTitle, "关联代码");
   assert.equal(model.emptyCodeMessage, "暂无可展示的命中代码。");
@@ -345,27 +327,6 @@ test("isFindingDetailFullFilePathSupported 仅接受 ZIP 内相对路径", () =>
   assert.equal(isFindingDetailFullFilePathSupported(""), false);
 });
 
-test("buildBanditFindingDetailModel 在 ZIP 项目下遇到旧绝对路径时禁用全文查看", () => {
-  const model = buildBanditFindingDetailModel({
-    finding: banditFinding,
-    taskId: "task-bandit",
-    findingId: "finding-bandit",
-    taskName: "Bandit Scan",
-    projectId: "project-zip",
-    projectSourceType: "zip",
-  });
-
-  assert.equal(model.codeSections[0]?.fullFileAvailable, true);
-  assert.deepEqual(model.codeSections[0]?.fullFileRequest, {
-    projectId: "project-zip",
-    filePath: "app/tasks/run_cmd.py",
-  });
-  assert.deepEqual(model.codeBrowserTarget, {
-    filePath: "app/tasks/run_cmd.py",
-    line: 41,
-  });
-});
-
 test("buildOpengrepFindingDetailModel 在 ZIP 项目下遇到旧绝对路径时禁用全文查看", () => {
   const model = buildOpengrepFindingDetailModel({
     finding: opengrepFinding,
@@ -382,6 +343,38 @@ test("buildOpengrepFindingDetailModel 在 ZIP 项目下遇到旧绝对路径时�
     filePath: "src/app/db.py",
   });
   assert.equal(model.overviewItems[1]?.value, "CWE-89 SQL注入");
+  assert.deepEqual(model.codeBrowserTarget, {
+    filePath: "src/app/db.py",
+    line: 23,
+  });
+});
+
+test("buildCodeqlFindingDetailModel 复用静态详情模型并展示 CodeQL 来源", () => {
+  const model = buildCodeqlFindingDetailModel({
+    finding: {
+      ...opengrepFinding,
+      id: "cq-1",
+      scan_task_id: "task-codeql",
+      rule_name: "cpp/overflow-buffer",
+      description: "CodeQL detected a buffer overflow.",
+      severity: "HIGH",
+      confidence: null,
+    },
+    taskId: "task-codeql",
+    findingId: "finding-codeql",
+    taskName: "CodeQL Scan",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+  });
+
+  assert.equal(
+    model.trackingItems.find((item) => item.label === "来源")?.value,
+    "静态审计 · CodeQL",
+  );
+  assert.equal(
+    model.trackingItems.find((item) => item.label === "规则标识")?.value,
+    "cpp/overflow-buffer",
+  );
   assert.deepEqual(model.codeBrowserTarget, {
     filePath: "src/app/db.py",
     line: 23,

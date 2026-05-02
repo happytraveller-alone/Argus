@@ -175,7 +175,6 @@ test("dashboard page state ignores cwe buckets that only contain zero findings",
 			total_findings: 0,
 			opengrep_findings: 0,
 			agent_findings: 0,
-			bandit_findings: 0,
 		},
 	];
 
