@@ -1,6 +1,6 @@
 # 智能引擎多模型配置指南
 
-> 适用状态：2026-04-30 的 Rust backend / React frontend 主线。本文记录智能引擎配置页和后端 `/system-config` LLM 配置契约。
+> 适用状态：2026-05-02 的 Rust backend / React frontend 主线。本文记录智能引擎配置页、后端 `/system-config` LLM 配置契约，以及 claw-code 智能审计迁移的基础 LLM 配置适配层。
 
 ## 快速结论
 
@@ -94,6 +94,8 @@
 
 后端 helper `backend/src/routes/llm_config_set.rs` 负责旧单配置迁移、行优先级归一、row-id 密钥保留、公开脱敏、fallback 分类和 row 到 runtime config 的转换。`selected_enabled_runtime` 在所有已启用行均加载失败时会返回包含最后一条失败原因的详细错误消息（例如 "已启用 2 行均无法加载：LLM 配置缺失：`apiKey` 必填。"），而非泛化提示。路由层不要绕过 helper 直接拼写或修改 LLM row JSON。
 
+claw-code 迁移的基础适配层位于 `backend/src/runtime/intelligent/config.rs`。它消费同一套 saved `system-config` row，输出不序列化明文 API key 的 `IntelligentLlmConfig`：provider、model、base URL、fingerprint、超时/温度/token 参数和自定义 header 名称。Anthropic-compatible 配置会映射为 claw-code Anthropic API key 认证，OpenAI-compatible 配置会映射为 OpenAI-compatible bearer 认证；该适配层不是任务创建 API，也不会自行发起智能审计。
+
 ### POST `/api/v1/system-config/test-llm`
 
 系统设置页连接测试接口。请求可以带 `rowId`，表示测试指定配置行；测试成功或失败会更新该行 `preflight` 元数据和 `latestPreflightRun`。
@@ -162,6 +164,7 @@ pnpm --dir frontend type-check
 pnpm --dir frontend lint
 pnpm --dir frontend build
 cargo test --manifest-path backend/Cargo.toml system_config
+cargo test --manifest-path backend/Cargo.toml runtime::intelligent::config
 cargo test --manifest-path backend/Cargo.toml agent_preflight
 cargo test --manifest-path backend/Cargo.toml
 bash scripts/test-argus-bootstrap.sh

@@ -38,8 +38,8 @@
 ### 智能审计
 
 - **是什么**：AI 驱动的安全审计产品方向。
-- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema 资产、`frontend/src/shared/api/agentTasks.ts` 的历史快照类型和 `/api/v1/system-config/agent-preflight` 仍存在，不能写成“所有相关代码已删除”或“执行链已恢复”。
-- **维护提示**：如果要恢复或重建智能审计，先定义新的 route/runtime/runner/frontend contract；不要默认复用旧 AgentFlow runner 执行链。
+- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema 资产、`frontend/src/shared/api/agentTasks.ts` 的历史快照类型和 `/api/v1/system-config/agent-preflight` 仍存在。`backend/src/runtime/intelligent/config.rs` 已开始承接 claw-code 迁移的基础 LLM 配置适配，但还不是完整任务执行链。
+- **维护提示**：如果要恢复或重建智能审计，应继续沿 `runtime/intelligent/` 新边界补齐 route、task state、claw-code bridge、工具沙箱和前端 contract；不要默认复用旧 AgentFlow runner 执行链。
 
 ### Rust gateway
 
@@ -70,7 +70,7 @@
 
 - **是什么**：系统配置中的 schema v2 多 provider 配置表，公开形态是 `schemaVersion: 2`、`rows[]`、`latestPreflightRun`、`migration`；每行有稳定 id、priority、enabled、provider、baseUrl、model、密钥存在状态、高级参数和 latest preflight 状态。
 - **不是什么**：旧版单对象 `llmConfig` 响应，也不是前端本地状态；后端 helper 负责迁移、归一、密钥保留/脱敏和 fallback 分类。
-- **维护提示**：公开响应只能暴露 `hasApiKey` 等元数据，不能返回明文 API key；编辑时空 key 表示按 row id 保留旧密钥。设置页顶部"保存并验证"走 `/system-config/test-llm/batch`，只读取已保存配置，批量持久化 passed/failed/missing_fields 状态；创建智能审计仍走 agent preflight。
+- **维护提示**：公开响应只能暴露 `hasApiKey` 等元数据，不能返回明文 API key；编辑时空 key 表示按 row id 保留旧密钥。设置页顶部"保存并验证"走 `/system-config/test-llm/batch`，只读取已保存配置，批量持久化 passed/failed/missing_fields 状态；创建智能审计仍走 agent preflight。新的 `runtime/intelligent/config.rs` 只把 saved row 转成 claw-code 后续 bridge 的内部配置快照，并跳过明文密钥序列化。
 
 ## 前端 UI 术语
 
