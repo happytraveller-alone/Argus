@@ -56,9 +56,9 @@
 
 ### Opengrep runner
 
-- **是什么**：执行静态审计规则扫描的隔离 runner，Compose 服务名是 `opengrep-runner`。
+- **是什么**：执行静态审计规则扫描的隔离 runner；`docker-compose.yml` 中的 `opengrep-runner` 只是 `runner-build` profile 镜像构建目标，默认启动不会保留服务容器。
 - **不是什么**：Bandit/Gitleaks/PHPStan 等多引擎调度器。
-- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`。
+- **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`；backend 按任务动态创建临时 runner 容器，任务结束后删除。
 
 ### agent preflight
 

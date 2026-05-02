@@ -16,10 +16,7 @@ pub struct ProviderCatalogItem {
     pub supports_custom_headers: bool,
 }
 
-const SUPPORTED_PROVIDER_IDS: &[&str] = &[
-    "openai_compatible",
-    "anthropic_compatible",
-];
+const SUPPORTED_PROVIDER_IDS: &[&str] = &["openai_compatible", "anthropic_compatible"];
 
 pub fn normalize_provider_id(provider: &str) -> String {
     provider.trim().to_ascii_lowercase()

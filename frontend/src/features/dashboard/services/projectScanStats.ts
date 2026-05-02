@@ -6,9 +6,6 @@ import {
 import { api } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
 import { getProjectFoundIssuesBreakdown } from "@/features/projects/services/projectCardPreview";
-import {
-	resolveSourceModeFromTaskMeta,
-} from "@/features/tasks/services/taskActivities";
 
 const STATIC_TASK_PAGE_LIMIT = 200;
 const TASK_POOL_MAX_TOTAL = 1000;
@@ -78,7 +75,7 @@ export function buildProjectScanRunsChartData(params: {
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 }): ProjectScanRunsChartItem[] {
-	const { projects, agentTasks, opengrepTasks } = params;
+	const { projects, opengrepTasks } = params;
 	const projectNameMap = new Map(
 		projects.map((project) => [project.id, project.name || "未知项目"]),
 	);

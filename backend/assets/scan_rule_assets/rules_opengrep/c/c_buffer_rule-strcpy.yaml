@@ -3,8 +3,8 @@ rules:
   languages:
   - c
   message: |
-    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcpy）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
-    API，并以目标缓冲区大小作为边界。 保留的关键标识：https://linux.die.net/man/3/strncpy、`strcpy`、`strncpy`。
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcpy）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：优先使用 strlcpy(dst, src, sizeof(dst)) 或 snprintf(dst, sizeof(dst), "%s", src)；若使用 strncpy，需手动添加 NUL 终止符。对于路径拼接和偏移写入场景，务必先检查剩余空间。
+    保留的关键标识：https://linux.die.net/man/3/strncpy、`strcpy`、`strncpy`、`strlcpy`、`snprintf`。
   metadata:
     shortDescription: Insecure string processing function (strcpy)
     cwe: CWE-120

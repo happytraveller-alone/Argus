@@ -79,7 +79,7 @@ test("TaskActivitiesListTable uses compact table width and column minimums", () 
 	assert.match(source, /minWidth: 192/);
 	assert.match(source, /maxWidth: 240/);
 	assert.match(source, /align: "center"/);
-	assert.match(source, /width: 176/);
+	assert.match(source, /width: 260/);
 	assert.doesNotMatch(source, /tableClassName="min-w-\[880px\]"/);
 });
 
@@ -217,7 +217,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 	assert.match(markup, /style="width:100%;min-width:\d+px"/);
 	assert.match(markup, /style="width:136px;min-width:136px;max-width:136px"/);
 	assert.match(markup, /style="width:240px;min-width:240px;max-width:240px"/);
-	assert.match(markup, /style="width:176px;min-width:176px"/);
+	assert.match(markup, /style="width:152px;min-width:152px"/);
 	assert.match(markup, /data-align="center"/);
 	assert.match(markup, /border-b-2 border-border\/95 bg-muted\/75 text-center/);
 	assert.match(markup, /class="text-sm font-medium text-foreground"/);

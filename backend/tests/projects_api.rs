@@ -560,17 +560,17 @@ async fn project_management_metrics_include_cumulative_opengrep_findings() {
     let metrics = &project["management_metrics"];
 
     assert_eq!(metrics["status"], "ready");
-    assert_eq!(metrics["total_tasks"], 2);
-    assert_eq!(metrics["completed_tasks"], 2);
+    assert_eq!(metrics["total_tasks"], 1);
+    assert_eq!(metrics["completed_tasks"], 1);
     assert_eq!(metrics["opengrep_tasks"], 1);
-    assert_eq!(metrics["agent_tasks"], 1);
+    assert!(metrics.get("agent_tasks").is_none());
     assert_eq!(metrics["static_medium"], 0);
     assert_eq!(metrics["static_low"], 3);
-    assert_eq!(metrics["intelligent_high"], 1);
-    assert_eq!(metrics["high"], 1);
+    assert!(metrics.get("intelligent_high").is_none());
+    assert_eq!(metrics["high"], 0);
     assert_eq!(metrics["medium"], 0);
     assert_eq!(metrics["low"], 3);
-    assert_eq!(metrics["verified_high"], 1);
+    assert!(metrics.get("verified_high").is_none());
     assert_eq!(metrics["last_completed_task_at"], "2026-04-26T10:01:00Z");
 
     let metrics_response = app
@@ -1132,7 +1132,7 @@ async fn project_file_content_previews_utf8_text_without_language_extension() {
                 .unwrap();
         assert_eq!(payload["is_text"], true, "{file_path}");
         assert!(
-            payload["content"].as_str().unwrap_or_default().len() > 0,
+            !payload["content"].as_str().unwrap_or_default().is_empty(),
             "{file_path}"
         );
     }

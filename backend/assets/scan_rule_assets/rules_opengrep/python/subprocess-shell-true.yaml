@@ -1,15 +1,25 @@
 rules:
 - id: subprocess-shell-true
-  pattern: subprocess.$FUNC(..., shell=True, ...)
+  patterns:
+  - pattern: subprocess.$FUNC(..., shell=True, ...)
+  - pattern-not-inside: |
+      # Test/tool directories - lower risk
+      ...
   message: |
-    检测到命令注入风险（规则：subprocess-shell-true）。危害：外部输入可能被解释为系统命令或参数，导致任意命令执行、权限滥用或数据破坏。建议：避免拼接命令；使用固定命令、参数数组和严格白名单校验。
-    保留的关键标识：$FUNC、'$FUNC'。
+    检测到命令注入风险（规则：subprocess-shell-true）。危害：当命令字符串包含外部输入（字符串拼接、format、f-string、join、环境变量、命令行参数）时，可能导致任意命令执行。建议：1）改用参数数组形式 subprocess.run([cmd, arg1, arg2], shell=False)；2）若必须使用 shell=True，对动态参数使用 shlex.quote() 转义；3）对命令来源做严格白名单约束。
+    保留的关键标识：$FUNC、'$FUNC'、shlex.quote。
   metadata:
-    owasp: 'A1: Injection'
-    cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command (''OS Command Injection'')'
+    shortDescription: OS command injection via shell=True
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-78
+    security-severity: High
     references:
     - https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     - https://docs.python.org/3/library/subprocess.html
+    - https://docs.python.org/3/library/shlex.html#shlex.quote
   languages:
   - python
   severity: ERROR

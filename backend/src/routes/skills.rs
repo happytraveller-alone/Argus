@@ -25,7 +25,6 @@ use crate::{db::prompt_skills as prompt_skills_db, error::ApiError, state::AppSt
 const PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY: &str = "promptSkillBuiltinState";
 const PROMPT_SKILL_SCOPE_GLOBAL: &str = "global";
 const PROMPT_SKILL_SCOPE_AGENT_SPECIFIC: &str = "agent_specific";
-const PROMPT_SKILL_RUNTIME_SOURCE: &str = "rust_prompt_effective_snapshot";
 const PROMPT_SKILL_AGENT_KEYS: &[&str] = &[
     "recon",
     "business_logic_recon",
@@ -220,26 +219,6 @@ struct PromptEffectiveSkill {
     display_name: String,
     summary: String,
     selection_label: String,
-    runtime_ready: bool,
-    reason: String,
-    effective_content: String,
-    prompt_sources: Vec<PromptSourceDetail>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-struct PromptSkillRuntimeSnapshot {
-    source: String,
-    requested: bool,
-    enabled: bool,
-    reason: String,
-    agent_keys: Vec<String>,
-    effective_by_agent: BTreeMap<String, PromptEffectiveRuntimeEntry>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-struct PromptEffectiveRuntimeEntry {
     runtime_ready: bool,
     reason: String,
     effective_content: String,
@@ -1324,58 +1303,6 @@ fn prompt_effective_skill_detail(
         effective_content: Some(effective.effective_content),
         prompt_sources: Some(effective.prompt_sources),
     })
-}
-
-pub(crate) async fn prompt_skill_runtime_snapshot(
-    state: &AppState,
-    requested: bool,
-) -> Result<Value, ApiError> {
-    let agent_keys = prompt_agent_keys();
-    if !requested {
-        return serde_json::to_value(PromptSkillRuntimeSnapshot {
-            source: PROMPT_SKILL_RUNTIME_SOURCE.to_string(),
-            requested: false,
-            enabled: false,
-            reason: "disabled_by_request".to_string(),
-            agent_keys,
-            effective_by_agent: BTreeMap::new(),
-        })
-        .map_err(|error| ApiError::Internal(error.to_string()));
-    }
-
-    let custom_prompt_skills = load_prompt_skills(state).await?;
-    let builtin_state = load_builtin_prompt_state(state).await?;
-    let mut effective_by_agent = BTreeMap::new();
-    let mut enabled = false;
-
-    for agent_key in PROMPT_SKILL_AGENT_KEYS {
-        let effective =
-            build_prompt_effective_skill(agent_key, &custom_prompt_skills, &builtin_state)?;
-        enabled |= effective.runtime_ready;
-        effective_by_agent.insert(
-            (*agent_key).to_string(),
-            PromptEffectiveRuntimeEntry {
-                runtime_ready: effective.runtime_ready,
-                reason: effective.reason,
-                effective_content: effective.effective_content,
-                prompt_sources: effective.prompt_sources,
-            },
-        );
-    }
-
-    serde_json::to_value(PromptSkillRuntimeSnapshot {
-        source: PROMPT_SKILL_RUNTIME_SOURCE.to_string(),
-        requested: true,
-        enabled,
-        reason: if enabled {
-            "active_prompt_snapshot".to_string()
-        } else {
-            "no_active_prompt_sources".to_string()
-        },
-        agent_keys,
-        effective_by_agent,
-    })
-    .map_err(|error| ApiError::Internal(error.to_string()))
 }
 
 fn build_prompt_effective_skill(

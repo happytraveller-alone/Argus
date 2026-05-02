@@ -35,7 +35,7 @@ test("projectCardPreview 为潜在漏洞展示 编号+中文 的 CWE 文案", ()
 	assert.equal(items[0]?.cweLabel, "CWE-89 SQL注入");
 });
 
-test("projectCardPreview folds legacy agent tasks into intelligent preview state", () => {
+test("projectCardPreview ignores retired legacy agent tasks in summary and recent state", () => {
 	const agentTasks = [
 		{
 			id: "agent-legacy",
@@ -62,16 +62,15 @@ test("projectCardPreview folds legacy agent tasks into intelligent preview state
 		agentTasks,
 		opengrepTasks: [] as any,
 	});
-	assert.equal(breakdown.intelligentIssues, 3);
-	assert.equal(breakdown.totalIssues, 3);
+	assert.equal(breakdown.intelligentIssues, 0);
+	assert.equal(breakdown.totalIssues, 0);
 
 	const recentTasks = getProjectCardRecentTasks({
 		projectId: "project-1",
 		agentTasks,
 		opengrepTasks: [] as any,
 	});
-	assert.equal(recentTasks[0]?.label, "智能审计");
-	assert.equal(recentTasks[0]?.taskCategory, "intelligent");
+	assert.deepEqual(recentTasks, []);
 
 	const potential = getProjectCardPotentialVulnerabilities({
 		verifiedAgentFindings: [

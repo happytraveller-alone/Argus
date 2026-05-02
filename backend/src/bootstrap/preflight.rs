@@ -311,14 +311,14 @@ mod tests {
         ];
 
         for spec in cases {
-        let args = docker_run_args(&spec);
+            let args = docker_run_args(&spec);
 
-        assert_eq!(args.first().map(String::as_str), Some("run"));
-        assert!(
-            args.iter().any(|arg| arg == "--rm"),
-            "{} preflight must remove its validation container",
-            spec.name
-        );
+            assert_eq!(args.first().map(String::as_str), Some("run"));
+            assert!(
+                args.iter().any(|arg| arg == "--rm"),
+                "{} preflight must remove its validation container",
+                spec.name
+            );
         }
     }
 }

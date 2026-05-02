@@ -388,7 +388,10 @@ mod tests {
             let Some(value) = line.trim().strip_prefix("severity:") else {
                 return true;
             };
-            value.trim().trim_matches('"').trim_matches('\'') == "ERROR"
+            matches!(
+                value.trim().trim_matches('"').trim_matches('\''),
+                "ERROR" | "WARNING" | "INFO"
+            )
         })));
     }
 

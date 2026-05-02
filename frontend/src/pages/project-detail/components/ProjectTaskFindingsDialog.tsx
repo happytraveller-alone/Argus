@@ -15,7 +15,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { type AgentFinding, getAgentFindings } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanFindings,
 	type OpengrepFinding,
@@ -94,27 +93,6 @@ function toPositiveLine(value: unknown): number | null {
 	const line = Number(value);
 	if (!Number.isFinite(line) || line <= 0) return null;
 	return line;
-}
-
-function isFalsePositiveAgentFinding(finding: AgentFinding): boolean {
-	return (
-		String(finding.status || "")
-			.trim()
-			.toLowerCase() === "false_positive" ||
-		String(finding.authenticity || "")
-			.trim()
-			.toLowerCase() === "false_positive"
-	);
-}
-
-function resolveAgentFindingTitle(finding: AgentFinding): string {
-	return (
-		String(finding.display_title || "").trim() ||
-		String(finding.title || "").trim() ||
-		String(finding.vulnerability_type || "").trim() ||
-		String(finding.description || "").trim() ||
-		"未命名漏洞"
-	);
 }
 
 function resolveStaticFindingTitle(finding: OpengrepFinding): string {
@@ -229,43 +207,6 @@ async function fetchAllStaticFindings(
 		if (page.length < FINDING_BATCH_SIZE) break;
 	}
 	return findings;
-}
-
-function normalizeAgentFindings(
-	taskId: string,
-	findings: AgentFinding[],
-): TaskFindingRow[] {
-	return findings.map((finding) => {
-		const typeDisplay = resolveCweDisplay({
-			cwe: finding.cwe_id,
-			fallbackLabel:
-				String(finding.vulnerability_type || "").trim() ||
-				resolveAgentFindingTitle(finding),
-		});
-
-		return {
-			id: finding.id,
-			taskId,
-			taskCategory: "intelligent",
-			title: resolveAgentFindingTitle(finding),
-			typeLabel: typeDisplay.label,
-			typeTooltip: typeDisplay.tooltip,
-			filePath: String(finding.file_path || "").trim() || "-",
-			line: toPositiveLine(finding.line_start),
-			severity: normalizeTaskFindingSeverity(finding.severity),
-			confidence: normalizeTaskFindingConfidence(
-				finding.ai_confidence ?? finding.confidence ?? null,
-			),
-			route: isFalsePositiveAgentFinding(finding)
-				? null
-				: buildFindingDetailPath({
-						source: "agent",
-						taskId,
-						findingId: finding.id,
-					}),
-			createdAt: finding.created_at ?? null,
-		};
-	});
 }
 
 function normalizeStaticFindings(

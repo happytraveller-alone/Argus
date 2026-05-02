@@ -51,11 +51,10 @@ export default function AgentModeSelector({
   staticTools,
   onStaticToolsChange,
   disabledStaticTools,
-  onOpenStaticToolConfig,
+	onOpenStaticToolConfig,
 }: AgentModeSelectorProps) {
-  const isStaticSelected = value === "static";
-  const isAgentSelected = value === "agent";
-  const resolvedTools: StaticToolSelection = staticTools || {
+	const isStaticSelected = value === "static";
+	const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
     codeql: false,
     gitleaks: false,

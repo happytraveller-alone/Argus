@@ -3,7 +3,7 @@ rules:
   languages:
   - cpp
   message: |
-    检测到格式化字符串风险（规则：c_format_rule-snprintf-vsnprintf）。危害：用户可控格式串可能泄露内存、破坏内存或导致进程崩溃。建议：使用固定格式字符串，把用户输入作为普通参数传入。
+    检测到格式化字符串风险（规则：c_format_rule-snprintf-vsnprintf）。snprintf/vsnprintf 是带长度限制的安全接口，但仍需注意：1）格式串应为字面量常量；2）size 参数应为 sizeof(buf)；3）检查返回值以处理截断（ret < 0 或 ret >= size 表示截断/错误）。建议：对于安全敏感场景（认证、路径构造），务必检查返回值。
     保留的关键标识：https://linux.die.net/man/3/snprintf、https://owasp.org/www-community/attacks/Format_string_attack、`snprintf`。
   metadata:
     shortDescription: Potential format string vulnerability
@@ -39,4 +39,4 @@ rules:
     - metavariable-regex:
         metavariable: $FMT
         regex: '^[A-Za-z_]*[a-z][A-Za-z0-9_]*(\s*\[[^\]]+\])?$'
-  severity: ERROR
+  severity: WARNING

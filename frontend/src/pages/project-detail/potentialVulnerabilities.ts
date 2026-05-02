@@ -3,7 +3,6 @@ import {
 	type ProjectCardVulnerabilityConfidence,
 	type ProjectCardVulnerabilitySeverity,
 } from "@/features/projects/services/projectCardPreview";
-import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
@@ -140,16 +139,6 @@ function normalizeStaticConfidence(
 	return "UNKNOWN";
 }
 
-function normalizeAgentConfidence(
-	value: number | null | undefined,
-): ProjectCardVulnerabilityConfidence {
-	if (typeof value !== "number" || !Number.isFinite(value)) return "UNKNOWN";
-	if (value >= 0.8) return "HIGH";
-	if (value >= 0.5) return "MEDIUM";
-	if (value > 0) return "LOW";
-	return "UNKNOWN";
-}
-
 function severityRank(severity: ProjectCardVulnerabilitySeverity): number {
 	if (severity === "CRITICAL") return 4;
 	if (severity === "HIGH") return 3;
@@ -163,13 +152,6 @@ function confidenceRank(confidence: ProjectCardVulnerabilityConfidence): number 
 	if (confidence === "MEDIUM") return 2;
 	if (confidence === "LOW") return 1;
 	return 0;
-}
-
-function isFalsePositiveAgentFinding(finding: AgentFinding): boolean {
-	return (
-		String(finding.status || "").trim().toLowerCase() === "false_positive" ||
-		String(finding.authenticity || "").trim().toLowerCase() === "false_positive"
-	);
 }
 
 function shouldIncludeFinding(params: {
@@ -477,9 +459,7 @@ export function flattenProjectDetailPotentialFindings(
 
 export function buildProjectDetailPotentialTree(params: {
 	projectName: string;
-	agentTasks?: AgentTask[];
 	opengrepTasks?: OpengrepScanTask[];
-	agentFindings?: AgentFinding[];
 	opengrepFindings?: OpengrepFinding[];
 }): ProjectDetailPotentialTree {
 	const projectName = String(params.projectName || "");
@@ -493,16 +473,6 @@ export function buildProjectDetailPotentialTree(params: {
 		}
 	>();
 
-	for (const task of params.agentTasks || []) {
-		const taskCategory: ProjectCardTaskFindingCategory = "intelligent";
-		taskInfo.set(task.id, {
-			taskId: task.id,
-			taskCategory,
-			taskName: String(task.name || "").trim(),
-			createdAt: task.created_at,
-		});
-	}
-
 	for (const task of params.opengrepTasks || []) {
 		taskInfo.set(task.id, {
 			taskId: task.id,
@@ -513,8 +483,6 @@ export function buildProjectDetailPotentialTree(params: {
 	}
 
 	const candidateFindings: CandidateFinding[] = [];
-
-	// Agent findings removed - only static findings remain
 
 	for (const finding of params.opengrepFindings || []) {
 		const severity = normalizeSeverity(finding.severity);

@@ -3,8 +3,8 @@ rules:
   languages:
   - cpp
   message: |
-    检测到格式化字符串风险（规则：c_format_rule-printf-vprintf）。危害：用户可控格式串可能泄露内存、破坏内存或导致进程崩溃。建议：使用固定格式字符串，把用户输入作为普通参数传入。
-    保留的关键标识：https://linux.die.net/man/3/fprintf、https://owasp.org/www-community/attacks/Format_string_attack、`printf`。
+    检测到格式化字符串风险（规则：c_format_rule-printf-vprintf）。危害：当格式串参数为非字面量变量且来源不可信时，可能泄露内存、破坏内存或导致进程崩溃。建议：1）格式串必须为编译期常量字面量；2）若需输出外部内容，使用 printf("%s", user_input) 而非 printf(user_input)；3）测试/调试代码中的固定格式日志输出风险较低。
+    保留的关键标识：https://linux.die.net/man/3/printf、https://owasp.org/www-community/attacks/Format_string_attack、`printf`、`vprintf`、`wprintf`。
   metadata:
     shortDescription: Potential format string vulnerability
     cwe: CWE-134

@@ -464,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_assets_only_contain_error_rules() {
+    fn retained_assets_only_contain_supported_severities() {
         let assets = discover_rule_assets().expect("rule assets should load");
 
         for asset in assets
@@ -478,12 +478,14 @@ mod tests {
                 asset.asset_path
             );
             assert!(
-                severities.iter().all(|severity| severity == "ERROR"),
-                "expected only ERROR severities in {}, got {:?}",
+                severities
+                    .iter()
+                    .all(|severity| matches!(severity.as_str(), "ERROR" | "WARNING" | "INFO")),
+                "expected supported severities in {}, got {:?}",
                 asset.asset_path,
                 severities
                     .into_iter()
-                    .filter(|severity| severity != "ERROR")
+                    .filter(|severity| !matches!(severity.as_str(), "ERROR" | "WARNING" | "INFO"))
                     .collect::<Vec<_>>()
             );
         }

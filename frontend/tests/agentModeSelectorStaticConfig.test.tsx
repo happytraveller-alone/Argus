@@ -14,6 +14,7 @@ test("AgentModeSelector renders config buttons for static tools", () => {
       onChange: () => { },
       staticTools: {
         opengrep: true,
+        codeql: false,
         gitleaks: false,
         bandit: false,
         phpstan: false,

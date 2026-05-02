@@ -39,14 +39,11 @@ fn legacy_agent_runtime_surface_is_retired() {
     let repo = repo_root();
     let retired = retired_runtime_name();
     let retired_upper = retired.to_ascii_uppercase();
-    let dispatch_symbol = format!("try_{retired}_dispatch");
-    let module_path = format!("runtime::{retired}");
     let module_export = format!("pub mod {retired}");
     let container_name = format!("{retired}-recon");
     let agent_image = format!("{retired}-agent");
     let agents_path = ["backend/", "agents"].concat();
     let fixtures_path = format!("backend/tests/fixtures/{retired}");
-    let mock_completed_symbol = ["finalize_agent_task_", "mock", "_completed"].concat();
 
     assert_missing_path(&repo, format!("backend/src/runtime/{retired}"));
     assert_missing_path(&repo, &agents_path);
@@ -62,16 +59,7 @@ fn legacy_agent_runtime_surface_is_retired() {
             agent_image,
         ],
     );
-    assert_file_lacks(
-        repo.join("backend/src/routes/agent_tasks.rs"),
-        &[
-            module_path,
-            dispatch_symbol,
-            "DispatchOutcome".to_string(),
-            mock_completed_symbol,
-            "docker exec".to_string(),
-        ],
-    );
+    assert_missing_path(&repo, "backend/src/routes/agent_tasks.rs");
     assert_file_lacks(
         repo.join("scripts/generate-release-branch.sh"),
         &[agents_path],
@@ -89,8 +77,6 @@ fn retired_auxiliary_runtime_surface_is_removed() {
     let sandbox_dash = joined(&["sand", "box", "-runner"]);
     let flow_runner_env = joined(&["FLOW", "_PARSER", "_RUNNER"]);
     let retired_box_env = joined(&["SANDBOX", "_RUNNER"]);
-    let sandbox_env = joined(&["SANDBOX", "_"]);
-
     for relative_path in [
         format!("backend/src/runtime/{flow_snake}.rs"),
         format!("backend/src/runtime/{code_flow}.rs"),
@@ -127,18 +113,16 @@ fn retired_auxiliary_runtime_surface_is_removed() {
         assert_file_lacks(repo.join(relative_path), &backend_needles);
     }
 
-    let compose_needles = vec![
-        flow_dash,
-        sandbox_dash,
-        flow_runner_env,
-        retired_box_env,
-        sandbox_env,
-    ];
+    let compose_needles = vec![flow_dash, sandbox_dash, flow_runner_env, retired_box_env];
+
+    assert_missing_path(
+        &repo,
+        "frontend/tests/agentAuditToolEvidenceDialog.test.tsx",
+    );
 
     for relative_path in [
         "docker-compose.yml",
         "scripts/release-templates/docker-compose.release-slim.yml",
-        "frontend/tests/agentAuditToolEvidenceDialog.test.tsx",
         "frontend/tests/scanConfigExternalToolDetail.test.tsx",
         "frontend/tests/toolEvidenceRendering.test.tsx",
     ] {

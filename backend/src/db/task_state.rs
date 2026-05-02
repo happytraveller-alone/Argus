@@ -9,8 +9,6 @@ use crate::state::AppState;
 
 const TASK_STATE_FILE_NAME: &str = "rust-task-state.json";
 
-const MAX_TASK_EVENTS: usize = 2000;
-
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct TaskStateSnapshot {
     pub static_tasks: BTreeMap<String, StaticTaskRecord>,

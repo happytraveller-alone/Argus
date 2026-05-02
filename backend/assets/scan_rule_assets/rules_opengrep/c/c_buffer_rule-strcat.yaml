@@ -3,9 +3,8 @@ rules:
   languages:
   - c
   message: |
-    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcat）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
-    API，并以目标缓冲区大小作为边界。
-    保留的关键标识：https://linux.die.net/man/3/snprintf、https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strcat-s-wcscat-s-mbscat-s?view=msvc-170、`strcat`、`snprintf`。
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-strcat）。危害：strcat 不检查目标缓冲区剩余空间，循环追加或多段拼接时极易溢出。建议：1）使用 strlcat(dst, src, sizeof(dst)) 或 strncat(dst, src, sizeof(dst) - strlen(dst) - 1)；2）维护显式长度变量，避免反复 strlen 扫描；3）对于路径/消息拼接，使用 snprintf(dst + used, size - used, "%s", src) 并检查返回值。
+    保留的关键标识：https://linux.die.net/man/3/snprintf、https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strcat-s-wcscat-s-mbscat-s?view=msvc-170、`strcat`、`strlcat`、`strncat`、`snprintf`。
   metadata:
     shortDescription: Insecure string processing function
     cwe: CWE-120

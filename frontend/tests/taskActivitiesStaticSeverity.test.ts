@@ -159,7 +159,7 @@ test("fetchTaskActivities keeps zero visible opengrep findings at zero despite s
 	}
 });
 
-test("fetchTaskActivities does not request removed static engine task endpoints", async () => {
+test("fetchTaskActivities does not request retired agent task or removed static engine task endpoints", async () => {
 	const originalGet = apiClient.get;
 	const batchId = "static-batch-3";
 	const calls: string[] = [];
@@ -207,10 +207,7 @@ test("fetchTaskActivities does not request removed static engine task endpoints"
 			medium: 0,
 			low: 1,
 		});
-		assert.deepEqual(calls, [
-			"/agent-tasks/",
-			"/static-tasks/tasks?limit=20",
-		]);
+		assert.deepEqual(calls, ["/static-tasks/tasks?limit=20"]);
 	} finally {
 		apiClient.get = originalGet;
 	}

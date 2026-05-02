@@ -40,15 +40,18 @@ test("task management summary cards follow the dashboard compact card contract",
 });
 
 test("static and intelligent task pages use inline status badges instead of summary cards", () => {
-	for (const taskPagePath of [staticTaskPagePath, intelligentTaskPagePath]) {
-		const source = readFileSync(taskPagePath, "utf8");
+	const staticSource = readFileSync(staticTaskPagePath, "utf8");
+	const intelligentSource = readFileSync(intelligentTaskPagePath, "utf8");
 
-		assert.doesNotMatch(source, /TaskManagementSummaryCards/);
-		assert.match(source, /stats\.completed/);
-		assert.match(source, /stats\.running/);
-		assert.match(source, /stats\.failed/);
-		assert.match(source, /Badge/);
-	}
+	assert.doesNotMatch(staticSource, /TaskManagementSummaryCards/);
+	assert.match(staticSource, /stats\.completed/);
+	assert.match(staticSource, /stats\.running/);
+	assert.match(staticSource, /stats\.failed/);
+	assert.match(staticSource, /Badge/);
+
+	assert.doesNotMatch(intelligentSource, /TaskManagementSummaryCards/);
+	assert.match(intelligentSource, /InDevelopmentPlaceholder/);
+	assert.doesNotMatch(intelligentSource, /stats\.completed/);
 });
 
 test("static task management search input filters the visible task table", () => {

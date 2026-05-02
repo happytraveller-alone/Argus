@@ -40,11 +40,15 @@ test("buildScanConfigEngineSearchParams preserves unrelated params", () => {
   assert.equal(nextParams.get("page"), null);
 });
 
-test("scan engine selector options expose only opengrep", () => {
+test("scan engine selector options expose opengrep and codeql", () => {
   assert.deepEqual(SCAN_ENGINE_SELECTOR_OPTIONS, [
     {
       label: "opengrep",
       value: "opengrep",
+    },
+    {
+      label: "CodeQL",
+      value: "codeql",
     },
   ]);
 });

@@ -33,7 +33,7 @@ The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/doc
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
-- `.github/workflows/docker-publish.yml` now handles backend, frontend, OpenGrep runner, flow/parser runner, and sandbox runner image builds and publishing in one workflow.
+- `.github/workflows/docker-publish.yml` now handles backend, frontend, OpenGrep runner, and CodeQL runner image builds and publishing in one workflow.
 - GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls.
 - Human-triggered multi-image publishing also goes through `.github/workflows/docker-publish.yml`, where you select the images to build.
 

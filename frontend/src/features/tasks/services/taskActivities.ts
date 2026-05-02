@@ -206,33 +206,6 @@ export function getAgentSeverityCounts(
 	};
 }
 
-function getAgentTaskDefectSummaryStats(
-	task:
-		| Pick<
-				AgentTask,
-				| "findings_count"
-				| "critical_count"
-				| "high_count"
-				| "medium_count"
-				| "low_count"
-		  >
-		| null,
-): {
-	critical: number;
-	high: number;
-	medium: number;
-	low: number;
-	total: number;
-} {
-	return {
-		critical: toNonNegativeInt(task?.critical_count),
-		high: toNonNegativeInt(task?.high_count),
-		medium: toNonNegativeInt(task?.medium_count),
-		low: toNonNegativeInt(task?.low_count),
-		total: toNonNegativeInt(task?.findings_count),
-	};
-}
-
 export function mergeSeverityCounts(...counts: SeverityCounts[]): SeverityCounts {
 	return counts.reduce<SeverityCounts>(
 		(acc, item) => ({

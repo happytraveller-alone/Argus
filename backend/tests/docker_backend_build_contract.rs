@@ -76,7 +76,6 @@ fn backend_dockerfile_locks_cargo_cache_mounts_for_multi_platform_builds() {
     }
 }
 
-
 #[test]
 fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
@@ -92,7 +91,6 @@ fn opengrep_runner_packages_only_unified_rule_root() {
         "opengrep runner image must not reference the retired rules_from_patches root"
     );
 }
-
 
 #[test]
 fn opengrep_rebuild_verify_script_rebuilds_image_and_scans_in_container() {

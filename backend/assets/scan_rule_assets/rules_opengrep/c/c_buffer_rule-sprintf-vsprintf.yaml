@@ -3,9 +3,8 @@ rules:
   languages:
   - c
   message: |
-    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-sprintf-vsprintf）。危害：写入长度不受控或长度参数错误可能破坏内存，导致崩溃、数据破坏或代码执行。建议：使用带长度限制的安全
-    API，并以目标缓冲区大小作为边界。
-    保留的关键标识：https://linux.die.net/man/3/snprintf、https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/sprintf-s-sprintf-s-l-swprintf-s-swprintf-s-l?view=msvc-170、`sprintf`、`snprintf`。
+    检测到缓冲区溢出/越界访问风险（规则：c_buffer_rule-sprintf-vsprintf）。危害：sprintf/vsprintf 不检查目标缓冲区大小，格式化内容超长时会溢出。建议：1）优先替换为 snprintf(buf, sizeof(buf), fmt, ...) 并检查返回值；2）对于偏移写入（buf + offset），使用 snprintf(buf + offset, sizeof(buf) - offset, fmt, ...) 并先校验 offset < sizeof(buf)；3）vsprintf 必须改为 vsnprintf；4）对于纯整数格式化（如 sprintf(buf, "%d", num)），若缓冲区容量可证明充足，风险相对较低但仍建议改用 snprintf。
+    保留的关键标识：https://linux.die.net/man/3/snprintf、https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/sprintf-s-sprintf-s-l-swprintf-s-swprintf-s-l?view=msvc-170、`sprintf`、`vsprintf`、`snprintf`、`vsnprintf`。
   metadata:
     shortDescription: Insecure function unable to limit / check buffer sizes
     cwe: CWE-120

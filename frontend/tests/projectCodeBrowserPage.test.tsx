@@ -221,8 +221,8 @@ test("ProjectCodeBrowserContent preview header uses display path instead of sour
 		}),
 	);
 
-	assert.match(markup, /title="src\/main\.ts:1-1"/);
-	assert.doesNotMatch(markup, /title="demo\/src\/main\.ts:1-1"/);
+	assert.match(markup, /title="src\/main\.ts:1"/);
+	assert.doesNotMatch(markup, /title="demo\/src\/main\.ts:1"/);
 });
 
 test("ProjectCodeBrowserContent keeps preview pane full height for empty state", async () => {
@@ -452,5 +452,6 @@ test("ProjectCodeBrowserContent strengthens pane borders and code browser readab
 		/border-white\/14[\s\S]*shadow-\[0_0_0_1px_rgba\(255,255,255,0\.04\)\]/,
 	);
 	assert.match(markup, /text-\[15px\] leading-7/);
-	assert.match(markup, /bg-\[\#0a0d12\]/);
+	assert.match(markup, /data-appearance="native-explorer"/);
+	assert.match(markup, /bg-slate-950/);
 });

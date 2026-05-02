@@ -13,21 +13,15 @@ const dialogPath = path.join(
 	"src/pages/project-detail/components/ProjectTaskFindingsDialog.tsx",
 );
 
-test("ProjectTaskFindingsDialog 对智能和混合任务请求全部非误报漏洞并展示总数文案", () => {
+test("ProjectTaskFindingsDialog retires agent finding fetches and keeps static findings count copy", () => {
 	const source = readFileSync(dialogPath, "utf8");
 
-	assert.match(
-		source,
-		/getAgentFindings\(taskId,\s*\{\s*include_false_positive:\s*false,\s*\}\)/,
-	);
+	assert.doesNotMatch(source, /getAgentFindings/);
+	assert.match(source, /taskCategory === "static"/);
 	assert.match(source, /漏洞共 \{allRows\.length\.toLocaleString\(\)\} 条/);
 	assert.match(
 		source,
 		/title:\s*allRows\.length === 0\s*\?\s*"暂无漏洞"\s*:\s*"暂无符合条件的漏洞"/,
-	);
-	assert.match(
-		source,
-		/route: isFalsePositiveAgentFinding\(finding\)\s*\?\s*null\s*:/,
 	);
 	assert.match(source, /row\.original\.route \?/);
 });

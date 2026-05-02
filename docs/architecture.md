@@ -30,7 +30,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 - **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
 - **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`；CodeQL C/C++ compile-sandbox 的 accepted build plan 由 `rust_codeql_build_plans` 表承载，file/task-state 只作状态投影或 fallback。
-- **Runner**：Docker runner 负责隔离执行 Opengrep 和 CodeQL；Compose 服务在 `docker-compose.yml`。历史 AgentFlow runner service 当前不在 compose 主线中。
+- **Runner**：Docker runner 负责隔离执行 Opengrep 和 CodeQL；`docker-compose.yml` 中的 runner service 仅作为 `runner-build` profile 镜像构建目标，默认启动不保留 runner service 容器。backend 在 preflight 时用 `docker run --rm` 校验镜像，并在每个扫描任务执行时动态创建临时容器，任务结束后删除。历史 AgentFlow runner service 当前不在 compose 主线中。
 
 如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计，并把结果汇总回前端；智能审计执行链当前处于占位/重构过渡。**
 

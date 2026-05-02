@@ -3,10 +3,8 @@ rules:
   languages:
   - cpp
   message: |
-    检测到竞态条件/TOCTOU
-    风险（规则：c_race_rule-access）。危害：检查和使用之间的状态变化可能被攻击者利用，导致权限绕过或操作错误目标。建议：避免先检查后使用的分离流程，使用原子操作或基于文件描述符的安全
-    API。
-    保留的关键标识：https://wiki.sei.cmu.edu/confluence/display/c/FIO45-C.+Avoid+TOCTOU+race+conditions+while+accessing+files、`access`、`setuid`、`lstat`、`open`、`fstat`、`st_dev`、`st_ino`。
+    检测到竞态条件/TOCTOU 风险（规则：c_race_rule-access）。危害：access() 检查与后续文件操作之间的时间窗口可能被攻击者利用，导致权限绕过或操作错误目标。建议：1）创建文件时使用 open(path, O_CREAT|O_EXCL, mode) 原子操作；2）需要检查属性时先 open() 再 fstat() 同一文件描述符；3）替换/重命名时使用原子 rename() 流程；4）若 access() 结果仅用于用户提示而非安全决策，风险较低。
+    保留的关键标识：https://wiki.sei.cmu.edu/confluence/display/c/FIO45-C.+Avoid+TOCTOU+race+conditions+while+accessing+files、`access`、`open`、`O_CREAT`、`O_EXCL`、`fstat`、`rename`。
   metadata:
     shortDescription: Potential time of check time of use vulnerability (access)
     cwe: CWE-362

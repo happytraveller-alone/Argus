@@ -38,11 +38,6 @@ import {
 	getProjectDetailPotentialTaskCategoryText,
 	type ProjectDetailPotentialListItem,
 } from "@/pages/project-detail/potentialVulnerabilities";
-import {
-	type AgentFinding,
-	type AgentTask,
-	getAgentFindings,
-} from "@/shared/api/agentTasks";
 import { api } from "@/shared/api/database";
 import {
 	getOpengrepScanFindings,
@@ -302,7 +297,6 @@ export default function ProjectDetail() {
 		async (
 			projectId: string,
 			projectName: string,
-			sourceAgentTaskPool: AgentTask[],
 			sourceOpengrepTaskPool: OpengrepScanTask[],
 		) => {
 			setPotentialStatus("loading");
@@ -318,20 +312,7 @@ export default function ProjectDetail() {
 							new Date(a.created_at).getTime(),
 					);
 
-				const sourceAgentTasks = sourceAgentTaskPool
-					.filter((task) => {
-						if (task.project_id !== projectId) return false;
-						const verifiedCount = Math.max(Number(task.verified_count ?? 0), 0);
-						if (verifiedCount <= 0) return false;
-						return true;
-					})
-					.sort(
-						(a, b) =>
-							new Date(b.created_at).getTime() -
-							new Date(a.created_at).getTime(),
-					);
-
-				if (sourceOpengrepTasks.length === 0 && sourceAgentTasks.length === 0) {
+				if (sourceOpengrepTasks.length === 0) {
 					setPotentialStatus("empty");
 					return;
 				}
@@ -355,27 +336,9 @@ export default function ProjectDetail() {
 					},
 				);
 
-				const agentFindingsResult = await Promise.allSettled(
-					sourceAgentTasks.map((task) =>
-						getAgentFindings(task.id, {
-							include_false_positive: false,
-						}),
-					),
-				);
-
-				const verifiedAgentFindings: AgentFinding[] =
-					agentFindingsResult.flatMap((result) => {
-						if (result.status !== "fulfilled" || !Array.isArray(result.value)) {
-							return [];
-						}
-						return result.value;
-					});
-
 				const nextTree = buildProjectDetailPotentialTree({
 					projectName,
-					agentTasks: sourceAgentTasks,
 					opengrepTasks: sourceOpengrepTasks,
-					agentFindings: verifiedAgentFindings,
 					opengrepFindings: staticFindings,
 				});
 
@@ -433,7 +396,6 @@ export default function ProjectDetail() {
 			void fetchProjectPotentialVulnerabilities(
 				id,
 				projectName,
-				[],
 				nextStaticTasks,
 			);
 		} catch (error) {

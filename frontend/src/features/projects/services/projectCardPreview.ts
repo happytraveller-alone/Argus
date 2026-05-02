@@ -3,7 +3,6 @@ import type { AgentFinding } from "@/shared/api/agentTasks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import {
 	buildOpengrepSeverityCounts,
-	getAgentSeverityCounts,
 	getOpengrepVisibleFindingCount,
 	getSeverityCountTotal,
 	mergeSeverityCounts,
@@ -222,27 +221,6 @@ function normalizeStatus(status: string | undefined | null): string {
 		.toLowerCase();
 }
 
-function clampPercent(value: unknown): number {
-	const num = Number(value);
-	if (!Number.isFinite(num)) return 0;
-	if (num <= 0) return 0;
-	if (num >= 100) return 100;
-	return num;
-}
-
-function computeDurationMs(
-	startedAt: string | null | undefined,
-	completedAt: string | null | undefined,
-): number | null {
-	if (!startedAt || !completedAt) return null;
-	const startedMs = new Date(startedAt).getTime();
-	const completedMs = new Date(completedAt).getTime();
-	if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) return null;
-	const diff = completedMs - startedMs;
-	if (!Number.isFinite(diff) || diff < 0) return null;
-	return diff;
-}
-
 function getStatusProgressBaseline(status: string | undefined | null): number {
 	const normalized = normalizeStatus(status);
 	if (normalized === "completed") return 100;
@@ -264,27 +242,23 @@ export function getProjectCardSummaryStats(params: {
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 }): ProjectCardSummaryStats {
-	const { projectId, agentTasks, opengrepTasks } = params;
+	const { projectId, opengrepTasks } = params;
 
-	const projectAgentTasks = agentTasks.filter(
-		(task) => task.project_id === projectId,
-	);
 	const projectOpengrepTasks = opengrepTasks.filter(
 		(task) => task.project_id === projectId,
 	);
-	const totalTasks = projectAgentTasks.length + projectOpengrepTasks.length;
+	const totalTasks = projectOpengrepTasks.length;
 
-	const completedTasks =
-		projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
-		projectOpengrepTasks.filter((task) => isCompletedStatus(task.status))
-			.length;
-	const runningTasks =
-		projectAgentTasks.filter((task) => isRunningStatus(task.status)).length +
-		projectOpengrepTasks.filter((task) => isRunningStatus(task.status)).length;
+	const completedTasks = projectOpengrepTasks.filter((task) =>
+		isCompletedStatus(task.status),
+	).length;
+	const runningTasks = projectOpengrepTasks.filter((task) =>
+		isRunningStatus(task.status),
+	).length;
 
 	const severityBreakdown = getProjectSeverityBreakdown({
 		projectId,
-		agentTasks,
+		agentTasks: [],
 		opengrepTasks,
 	});
 
@@ -311,7 +285,7 @@ export function getProjectSeverityBreakdown(params: {
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 }): ProjectSeverityBreakdown {
-	const { projectId, agentTasks, opengrepTasks } = params;
+	const { projectId, opengrepTasks } = params;
 
 	const staticCounts = mergeSeverityCounts(
 		...opengrepTasks
@@ -319,15 +293,7 @@ export function getProjectSeverityBreakdown(params: {
 			.map((task) => buildOpengrepSeverityCounts(task)),
 	);
 
-	const agentCounts = mergeSeverityCounts(
-		...agentTasks
-			.filter((task) => task.project_id === projectId)
-			.map((task) => getAgentSeverityCounts(task)),
-	);
-
-	return toProjectSeverityBreakdown(
-		mergeSeverityCounts(staticCounts, agentCounts),
-	);
+	return toProjectSeverityBreakdown(staticCounts);
 }
 
 export function getProjectFoundIssuesBreakdown(params: {
@@ -335,7 +301,7 @@ export function getProjectFoundIssuesBreakdown(params: {
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 }): ProjectFoundIssuesBreakdown {
-	const { projectId, agentTasks, opengrepTasks } = params;
+	const { projectId, opengrepTasks } = params;
 
 	const staticIssues = getSeverityCountTotal(
 		mergeSeverityCounts(
@@ -345,20 +311,10 @@ export function getProjectFoundIssuesBreakdown(params: {
 		),
 	);
 
-	const projectAgentTasks = agentTasks.filter(
-		(task) => task.project_id === projectId,
-	);
-
-	let intelligentIssues = 0;
-	for (const task of projectAgentTasks) {
-		const total = getSeverityCountTotal(getAgentSeverityCounts(task));
-		intelligentIssues += total;
-	}
-
 	return {
 		staticIssues,
-		intelligentIssues,
-		totalIssues: staticIssues + intelligentIssues,
+		intelligentIssues: 0,
+		totalIssues: staticIssues,
 	};
 }
 
@@ -368,7 +324,7 @@ export function getProjectCardRecentTasks(params: {
 	opengrepTasks: OpengrepScanTask[];
 	limit?: number;
 }): ProjectCardRecentTask[] {
-	const { projectId, agentTasks, opengrepTasks } = params;
+	const { projectId, opengrepTasks } = params;
 	const limit = params.limit ?? 3;
 	const staticItems: ProjectCardRecentTask[] = opengrepTasks
 		.filter((task) => task.project_id === projectId)

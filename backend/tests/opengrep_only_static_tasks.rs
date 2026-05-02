@@ -281,7 +281,7 @@ async fn opengrep_rule_asset_sync_deactivates_removed_builtin_assets() {
 }
 
 #[tokio::test]
-async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
+async fn opengrep_builtin_rules_only_expose_supported_severities_from_assets() {
     let state = AppState::from_config(AppConfig::for_tests())
         .await
         .expect("state should build");
@@ -315,10 +315,13 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
     assert!(
         items.iter().all(|item| {
             item.get("is_active").and_then(Value::as_bool) == Some(true)
-                && item.get("severity").and_then(Value::as_str) == Some("ERROR")
+                && item
+                    .get("severity")
+                    .and_then(Value::as_str)
+                    .is_some_and(|severity| matches!(severity, "ERROR" | "WARNING" | "INFO"))
                 && item.get("source").and_then(Value::as_str) == Some("internal")
         }),
-        "expected builtin opengrep assets to expose only active internal ERROR-severity rules"
+        "expected builtin opengrep assets to expose only active internal rules with supported severities"
     );
     assert!(
         items.iter().all(|item| {
@@ -399,9 +402,13 @@ async fn opengrep_builtin_rules_only_expose_error_severity_from_assets() {
             .unwrap(),
     )
     .unwrap();
+    let error_rule_count = items
+        .iter()
+        .filter(|item| item.get("severity").and_then(Value::as_str) == Some("ERROR"))
+        .count();
     assert_eq!(
         stats_payload.get("total").and_then(Value::as_u64),
-        Some(items.len() as u64)
+        Some(error_rule_count as u64)
     );
     assert_eq!(
         stats_payload.get("inactive").and_then(Value::as_u64),

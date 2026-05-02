@@ -14,16 +14,14 @@ struct RecoverySpec {
     has_error_count: bool,
 }
 
-const RECOVERY_SPECS: &[RecoverySpec] = &[
-    RecoverySpec {
-        name: "opengrep",
-        table: "opengrep_scan_tasks",
-        recoverable_statuses: &["pending", "running"],
-        has_completed_at: false,
-        has_error_message: false,
-        has_error_count: true,
-    },
-];
+const RECOVERY_SPECS: &[RecoverySpec] = &[RecoverySpec {
+    name: "opengrep",
+    table: "opengrep_scan_tasks",
+    recoverable_statuses: &["pending", "running"],
+    has_completed_at: false,
+    has_error_message: false,
+    has_error_count: true,
+}];
 
 pub async fn run(state: &AppState, database_reachable: bool) -> Result<StartupRecoveryStatus> {
     if !state.config.startup_recovery_enabled {

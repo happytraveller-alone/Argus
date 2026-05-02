@@ -461,13 +461,32 @@ docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
 [[ "$runner_profile_count" -eq 2 ]] || fail "opengrep/codeql runner services must be profile-only image build targets"
 if awk '
-  /^  backend:/ { in_backend = 1; next }
-  /^  [a-zA-Z0-9_-]+:/ { in_backend = 0 }
-  in_backend && /opengrep-runner|codeql-runner|service_completed_successfully/ { found = 1 }
+  /^  backend:/ { in_backend = 1; in_depends = 0; next }
+  /^  [a-zA-Z0-9_-]+:/ { in_backend = 0; in_depends = 0 }
+  in_backend && /^    depends_on:/ { in_depends = 1; next }
+  in_backend && in_depends && /^    [a-zA-Z0-9_-]+:/ && $1 != "depends_on:" { in_depends = 0 }
+  in_backend && in_depends && /opengrep-runner|codeql-runner|service_completed_successfully/ { found = 1 }
   END { exit found ? 0 : 1 }
 ' "$compose_render_out"; then
   fail "backend must not depend on one-shot runner service containers"
 fi
+assert_contains "$compose_render_out" "SCANNER_CODEQL_IMAGE: Argus/codeql-runner-local:latest"
+assert_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE: Argus/codeql-runner-local:latest"
+
+release_compose_render_out="$TMP_ROOT/release-compose.out"
+docker compose \
+  --project-directory "$ROOT_DIR" \
+  --file "$ROOT_DIR/scripts/release-templates/docker-compose.release-slim.yml" \
+  config >"$release_compose_render_out"
+assert_contains "$release_compose_render_out" "SCANNER_OPENGREP_IMAGE: ghcr.io/happytraveller-alone/argus-opengrep-runner:latest"
+assert_contains "$release_compose_render_out" "SCANNER_CODEQL_IMAGE: ghcr.io/happytraveller-alone/argus-codeql-runner:latest"
+assert_contains "$release_compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE: ghcr.io/happytraveller-alone/argus-codeql-runner:latest"
+if grep -Eq '^  (opengrep-runner|codeql-runner):$' "$release_compose_render_out"; then
+  fail "release compose must not define runner service containers"
+fi
+
+assert_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "argus-codeql-runner"
+assert_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "docker/codeql-runner.Dockerfile"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

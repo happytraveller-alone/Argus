@@ -1550,20 +1550,10 @@ fn build_codeql_runner_spec(
     }
 }
 
-fn normalize_codeql_task_languages(project_languages: &[String]) -> Vec<String> {
-    let has_cpp = project_languages
-        .iter()
-        .map(|language| codeql::normalize_language(language))
-        .any(|language| language == "cpp");
+fn normalize_codeql_task_languages(_project_languages: &[String]) -> Vec<String> {
     // Current compile-sandbox slice is intentionally C/C++ only. Other CodeQL
     // languages remain future milestones and must not block this closed loop.
-    let mut languages = Vec::new();
-    if has_cpp || project_languages.is_empty() {
-        languages.push("cpp".to_string());
-    } else {
-        languages.push("cpp".to_string());
-    }
-    languages
+    vec!["cpp".to_string()]
 }
 
 async fn record_codeql_events(
@@ -2922,8 +2912,8 @@ async fn ai_analysis(
     )
     .map_err(|error| ApiError::BadRequest(error.message))?;
 
-    let mut rule_summary: BTreeMap<String, (usize, BTreeMap<String, usize>, Vec<String>)> =
-        BTreeMap::new();
+    type RuleSummary = (usize, BTreeMap<String, usize>, Vec<String>);
+    let mut rule_summary: BTreeMap<String, RuleSummary> = BTreeMap::new();
     for finding in &record.findings {
         let rule = finding
             .payload
@@ -3612,7 +3602,7 @@ async fn run_ai_analysis_background(state: AppState, task_id: String) {
         let (step3_text, model) = call_llm_json(&state, step3_system, &step3_user).await
             .map_err(|e| format!("Step 3 失败: {e}"))?;
 
-        let parsed: Value = (|| {
+        let parsed: Value = {
             let json_match = step3_text.find("```json")
                 .and_then(|start| {
                     let content_start = start + 7;
@@ -3623,7 +3613,7 @@ async fn run_ai_analysis_background(state: AppState, task_id: String) {
                     if trimmed.starts_with('{') { Some(trimmed) } else { None }
                 });
             json_match.and_then(|s| serde_json::from_str(s).ok())
-        })()
+        }
         .unwrap_or_else(|| json!({ "rules": [], "raw": step3_text }));
 
         Ok((parsed, model))

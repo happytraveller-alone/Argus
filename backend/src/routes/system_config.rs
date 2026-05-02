@@ -661,8 +661,12 @@ pub async fn fetch_llm_models(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let saved_llm_config = stored.as_ref().map(|saved| &saved.llm_config_json);
-    let effective_llm_config = saved_llm_config.cloned().unwrap_or_else(|| json!({}));
+    let effective_llm_config = stored
+        .as_ref()
+        .and_then(|saved| {
+            saved_fetch_models_config(&saved.llm_config_json, &request, &state.config)
+        })
+        .unwrap_or_else(|| json!({}));
     let saved_provider = read_string(&effective_llm_config, "llmProvider").unwrap_or_default();
     let requested_provider = request.provider.trim();
     let provider = normalize_provider_for_route(if requested_provider.is_empty() {
@@ -731,6 +735,27 @@ pub async fn fetch_llm_models(
         model_metadata,
         token_recommendation_source: "static_mapping".to_string(),
     }))
+}
+
+fn saved_fetch_models_config(
+    saved_llm_config: &Value,
+    request: &FetchModelsRequest,
+    config: &AppConfig,
+) -> Option<Value> {
+    let (envelope, _) = llm_config_set::normalize_envelope(saved_llm_config, config);
+    let rows = envelope.get("rows").and_then(Value::as_array)?;
+    let requested_row_id = request.row_id.as_deref().unwrap_or_default().trim();
+    let row = rows
+        .iter()
+        .find(|row| {
+            !requested_row_id.is_empty()
+                && read_string(row, "id").as_deref() == Some(requested_row_id)
+        })
+        .or_else(|| {
+            rows.iter()
+                .find(|row| row.get("enabled").and_then(Value::as_bool).unwrap_or(true))
+        })?;
+    Some(llm_config_set::row_to_legacy_config(row))
 }
 
 async fn fetch_openai_compatible_models(
@@ -994,7 +1019,7 @@ pub async fn agent_preflight(
                         .unwrap_or_else(|_| build_quick_snapshot(&runtime_config));
                 let runner_metadata = annotate_llm_preflight_metadata(
                     add_preflight_attempt_metadata(
-                        json!({}),
+                        agent_preflight_metadata("runner", "runner_missing", None),
                         &attempted_row_ids,
                         Some(&row_id),
                         Some(&outcome.fingerprint),
@@ -1450,19 +1475,6 @@ fn add_preflight_attempt_metadata(
         );
     }
     metadata
-}
-
-fn env_flag_enabled(key: &str, default: bool) -> bool {
-    std::env::var(key)
-        .ok()
-        .map(|value| {
-            let normalized = value.trim().to_ascii_lowercase();
-            !matches!(
-                normalized.as_str(),
-                "0" | "false" | "no" | "off" | "disabled"
-            )
-        })
-        .unwrap_or(default)
 }
 
 fn normalize_provider_for_route(provider: &str) -> String {

@@ -51,10 +51,6 @@ fn require_db_test_config(scope: &str) -> Option<AppConfig> {
     }
 }
 
-async fn create_project(app: &axum::Router) -> String {
-    create_project_with_name(app, "task-api-project").await
-}
-
 async fn spawn_openai_mock_server() -> String {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -142,104 +138,6 @@ async fn configure_verified_llm(app: &axum::Router) {
         .starts_with("sha256:"));
 }
 
-fn test_zip_bytes() -> Vec<u8> {
-    let mut bytes = Vec::new();
-    {
-        let cursor = std::io::Cursor::new(&mut bytes);
-        let mut writer = zip::ZipWriter::new(cursor);
-        let options = zip::write::SimpleFileOptions::default();
-        writer.start_file("src/main.py", options).unwrap();
-        writer.write_all(b"print('hello')\n").unwrap();
-        writer.finish().unwrap();
-    }
-    bytes
-}
-
-fn static_scan_test_fuzz_zip_bytes() -> Vec<u8> {
-    let mut bytes = Vec::new();
-    {
-        let cursor = std::io::Cursor::new(&mut bytes);
-        let mut writer = zip::ZipWriter::new(cursor);
-        let options = zip::write::SimpleFileOptions::default();
-        for (path, content) in [
-            ("src/main.py", b"print('prod')\n".as_slice()),
-            ("tests/test_api.py", b"print('test dir')\n".as_slice()),
-            ("src/service_test.py", b"print('test file')\n".as_slice()),
-            (
-                "fuzz/fuzz_target.c",
-                b"int LLVMFuzzerTestOneInput() { return 0; }\n".as_slice(),
-            ),
-            (
-                "src/fuzz_parser.c",
-                b"int fuzz_parser(void) { return 0; }\n".as_slice(),
-            ),
-        ] {
-            writer.start_file(path, options).unwrap();
-            writer.write_all(content).unwrap();
-        }
-        writer.finish().unwrap();
-    }
-    bytes
-}
-
-fn test_tar_bytes() -> Vec<u8> {
-    let mut bytes = Vec::new();
-    {
-        let mut builder = tar::Builder::new(&mut bytes);
-        let content = b"print('hello')\n";
-        let mut header = tar::Header::new_gnu();
-        header.set_size(content.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        builder
-            .append_data(&mut header, "src/main.py", &content[..])
-            .unwrap();
-        builder.finish().unwrap();
-    }
-    bytes
-}
-
-fn test_tar_xz_bytes() -> Vec<u8> {
-    let tar_bytes = test_tar_bytes();
-    let mut encoded = xz2::write::XzEncoder::new(Vec::new(), 6);
-    encoded.write_all(&tar_bytes).unwrap();
-    encoded.finish().unwrap()
-}
-
-type MultipartField<'a> = (&'a str, Option<&'a str>, Option<&'a str>, Vec<u8>);
-
-fn test_multipart_body(fields: Vec<MultipartField<'_>>) -> Vec<u8> {
-    let mut body = Vec::new();
-    for (name, filename, content_type, bytes) in fields {
-        body.extend_from_slice(b"--x-boundary\r\n");
-        body.extend_from_slice(
-            format!("Content-Disposition: form-data; name=\"{name}\"").as_bytes(),
-        );
-        if let Some(filename) = filename {
-            let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
-            body.extend_from_slice(format!("; filename=\"{escaped}\"").as_bytes());
-        }
-        body.extend_from_slice(b"\r\n");
-        if let Some(content_type) = content_type {
-            body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
-        }
-        body.extend_from_slice(b"\r\n");
-        body.extend_from_slice(&bytes);
-        body.extend_from_slice(b"\r\n");
-    }
-    body.extend_from_slice(b"--x-boundary--\r\n");
-    body
-}
-
-fn test_tar_xz_multipart_body() -> Vec<u8> {
-    test_multipart_body(vec![(
-        "file",
-        Some("demo.tar.xz"),
-        Some("application/x-xz"),
-        test_tar_xz_bytes(),
-    )])
-}
-
 struct EnvVarGuard {
     key: String,
     original: Option<String>,
@@ -249,15 +147,6 @@ impl EnvVarGuard {
     fn set(key: &str, value: &str) -> Self {
         let original = env::var(key).ok();
         env::set_var(key, value);
-        Self {
-            key: key.to_string(),
-            original,
-        }
-    }
-
-    fn remove(key: &str) -> Self {
-        let original = env::var(key).ok();
-        env::remove_var(key);
         Self {
             key: key.to_string(),
             original,
@@ -396,117 +285,6 @@ fn cpp_test_zip_bytes() -> Vec<u8> {
         writer.finish().unwrap();
     }
     bytes
-}
-
-fn fake_opengrep_task_docker(temp_dir: &TempDir) -> PathBuf {
-    let script_path = temp_dir.path().join("fake-opengrep-task-docker.sh");
-    let script = r#"#!/bin/sh
-set -eu
-log_file="${FAKE_DOCKER_LOG:?}"
-state_dir="${FAKE_TASK_DOCKER_STATE_DIR:?}"
-cmd="${1:-}"
-shift || true
-printf '%s|%s\n' "$cmd" "$*" >> "$log_file"
-case "$cmd" in
-  create)
-    output_path=""
-    summary_path=""
-    log_path=""
-    target_path=""
-    prev=""
-    for arg in "$@"; do
-      case "$prev" in
-        target)
-          target_path="$arg"
-          prev=""
-          ;;
-        output)
-          output_path="$arg"
-          prev=""
-          ;;
-        summary)
-          summary_path="$arg"
-          prev=""
-          ;;
-        log)
-          log_path="$arg"
-          prev=""
-          ;;
-        *)
-          case "$arg" in
-            --target) prev="target" ;;
-            --output) prev="output" ;;
-            --summary) prev="summary" ;;
-            --log) prev="log" ;;
-          esac
-          ;;
-      esac
-    done
-    printf '%s' "$output_path" > "$state_dir/output_path"
-    printf '%s' "$summary_path" > "$state_dir/summary_path"
-    printf '%s' "$log_path" > "$state_dir/log_path"
-    if [ -n "${FAKE_TASK_SOURCE_SNAPSHOT_PATH:-}" ] && [ -n "$target_path" ]; then
-      rm -rf "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}"
-      mkdir -p "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}"
-      cp -R "$target_path/." "${FAKE_TASK_SOURCE_SNAPSHOT_PATH}/"
-    fi
-    printf '%s\n' "${FAKE_CONTAINER_ID:-task-container-xyz}"
-    ;;
-  start)
-    output_path="$(cat "$state_dir/output_path" 2>/dev/null || true)"
-    summary_path="$(cat "$state_dir/summary_path" 2>/dev/null || true)"
-    log_path="$(cat "$state_dir/log_path" 2>/dev/null || true)"
-    if [ -n "$output_path" ] && [ "${FAKE_TASK_SKIP_RESULTS:-0}" != "1" ]; then
-      mkdir -p "$(dirname "$output_path")"
-      printf '%s\n' "${FAKE_TASK_RESULTS_JSON:-{\"results\":[]}}" > "$output_path"
-      if [ -n "${FAKE_TASK_RESULTS_COPY_PATH:-}" ]; then
-        mkdir -p "$(dirname "${FAKE_TASK_RESULTS_COPY_PATH}")"
-        cp "$output_path" "${FAKE_TASK_RESULTS_COPY_PATH}"
-      fi
-    fi
-    if [ -n "$log_path" ]; then
-      mkdir -p "$(dirname "$log_path")"
-      printf '%s\n' "${FAKE_TASK_LOG_BODY:-scan completed}" > "$log_path"
-    fi
-    if [ -n "$summary_path" ] && [ "${FAKE_TASK_SKIP_SUMMARY:-0}" != "1" ]; then
-      mkdir -p "$(dirname "$summary_path")"
-      printf '{"status":"%s","results_path":"%s","log_path":"%s"}\n' \
-        "${FAKE_TASK_SUMMARY_STATUS:-scan_completed}" "$output_path" "$log_path" > "$summary_path"
-    fi
-    ;;
-  wait)
-    printf '%s\n' "${FAKE_TASK_WAIT_EXIT_CODE:-0}"
-    ;;
-  logs)
-    if [ "${1:-}" = "--stdout" ]; then
-      printf '%s' "${FAKE_TASK_STDOUT:-}"
-      exit 0
-    fi
-    if [ "${1:-}" = "--stderr" ]; then
-      printf '%s' "${FAKE_TASK_STDERR:-}"
-      exit 0
-    fi
-    ;;
-  inspect)
-    if [ "${1:-}" = "--format" ]; then
-      printf '%s\n' "${FAKE_TASK_INSPECT_RUNNING:-false}"
-      exit 0
-    fi
-    printf '[]\n'
-    ;;
-  stop)
-    printf 'stopped\n'
-    ;;
-  rm)
-    printf 'removed\n'
-    ;;
-esac
-"#;
-    fs::write(&script_path, script).expect("write fake docker script");
-    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&script_path, permissions).unwrap();
-    script_path
 }
 
 async fn create_project_with_name(app: &axum::Router, name: &str) -> String {

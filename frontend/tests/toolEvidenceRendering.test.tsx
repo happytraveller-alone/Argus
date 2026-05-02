@@ -367,6 +367,7 @@ test("parseToolEvidence 支持 analysis_summary 严格解析", () => {
 
   assert.equal(parsed?.renderType, "analysis_summary");
   assert.ok(parsed && parsed.renderType === "analysis_summary");
+  assert.ok(parsed.entries);
   assert.equal(parsed.entries[0]?.hitCount, 3);
 });
 

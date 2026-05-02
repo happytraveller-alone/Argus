@@ -26,13 +26,22 @@ function toCamelKey(key: string): string {
 	return key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
+function normalizeRecord(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(normalizeRecord);
+	const record = objectSource(value);
+	if (!record) return value;
+	return Object.fromEntries(
+		Object.entries(record).map(([key, item]) => [toCamelKey(key), normalizeRecord(item)]),
+	);
+}
+
 function normalizeEvidencePayload(source: Record<string, unknown>): ToolEvidencePayload | null {
 	const renderType = String(source.render_type || source.renderType || "").trim();
 	if (!renderType) return null;
 
 	const payload: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(source)) {
-		payload[toCamelKey(key)] = value;
+		payload[toCamelKey(key)] = normalizeRecord(value);
 	}
 	payload.renderType = renderType;
 	if (source.display_command !== undefined) {
@@ -42,6 +51,17 @@ function normalizeEvidencePayload(source: Record<string, unknown>): ToolEvidence
 		payload.commandChain = source.command_chain;
 	}
 	return payload as ToolEvidencePayload;
+}
+
+function hasUsefulEvidence(payload: ToolEvidencePayload | null): payload is ToolEvidencePayload {
+	if (!payload) return false;
+	if (typeof payload.displayCommand === "string" && payload.displayCommand.trim()) {
+		return true;
+	}
+	if (Array.isArray(payload.commandChain) && payload.commandChain.length > 0) {
+		return true;
+	}
+	return Array.isArray(payload.entries) && payload.entries.length > 0;
 }
 
 function objectSource(value: unknown): Record<string, unknown> | null {
@@ -62,8 +82,9 @@ export function parseToolEvidence(params: {
 	if (!output) return null;
 	const nestedMetadata = objectSource(output.metadata);
 	const fromNested = nestedMetadata ? normalizeEvidencePayload(nestedMetadata) : null;
-	if (fromNested) return fromNested;
-	return normalizeEvidencePayload(output);
+	const fromOutput = normalizeEvidencePayload(output);
+	if (hasUsefulEvidence(fromNested)) return fromNested;
+	return fromOutput ?? fromNested;
 }
 
 export function parseToolEvidenceFromLog(params: {

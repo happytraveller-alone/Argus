@@ -785,7 +785,7 @@ pub async fn get_dashboard_snapshot(
             "total_projects": total_projects,
             "current_effective_findings": verified_cumulative_findings,
             "current_verified_vulnerability_total": verified_cumulative_findings,
-            "current_verified_findings": 0,
+            "current_verified_findings": verified_cumulative_findings,
             "total_model_tokens": 0,
             "false_positive_rate": 0.0,
             "scan_success_rate": 0.0,
@@ -979,19 +979,6 @@ fn build_dashboard_recent_tasks(
     limit: usize,
 ) -> Vec<DashboardRecentTask> {
     let mut tasks = Vec::new();
-
-    for record in snapshot.static_tasks.values() {
-        let project_name = dashboard_project_name(project_names, &record.project_id);
-        tasks.push(DashboardRecentTask {
-            task_id: record.id.clone(),
-            task_type: "静态审计".to_string(),
-            title: format!("静态审计 · {project_name}"),
-            engine: "llm".to_string(),
-            status: record.status.clone(),
-            created_at: record.created_at.clone(),
-            detail_path: format!("/agent-audit/{}", record.id),
-        });
-    }
 
     for record in snapshot.static_tasks.values() {
         if record.engine != "opengrep" {
@@ -1564,10 +1551,6 @@ fn update_latest_timestamp(current: &mut Option<String>, candidate: &str) {
     if current.as_deref().is_none_or(|value| candidate > value) {
         *current = Some(candidate.to_string());
     }
-}
-
-fn non_negative_i64(value: i64) -> i64 {
-    value.max(0)
 }
 
 fn static_task_severity_counts(record: &task_state::StaticTaskRecord) -> SeverityMetricCounts {
