@@ -10,7 +10,7 @@ This release branch is intended for end users. You only need to configure the ap
 
 ## 2. First-Time Setup
 
-Keep the root `env.example`. If root `.env` does not exist, bootstrap copies the template and exits:
+Keep the root `env.example`. If root `.env` does not exist, bootstrap copies the template, auto-generates `SECRET_KEY`, and exits:
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
@@ -21,7 +21,6 @@ Open the root `.env` and set at least:
 - `LLM_PROVIDER`
 - `LLM_API_KEY`
 - `LLM_MODEL`
-- `SECRET_KEY`
 
 Example:
 
@@ -29,7 +28,6 @@ Example:
 LLM_PROVIDER=openai
 LLM_API_KEY=your-api-key
 LLM_MODEL=gpt-4o-mini
-SECRET_KEY=change-this-to-a-random-string
 ```
 
 What these values mean:
@@ -37,7 +35,7 @@ What these values mean:
 - `LLM_PROVIDER`: the LLM provider you want to use
 - `LLM_API_KEY`: your API key for that provider
 - `LLM_MODEL`: the model name
-- `SECRET_KEY`: replace this with your own random secret
+- `SECRET_KEY`: bootstrap generates this automatically; you usually do not need to set it manually
 
 You can validate the LLM config before startup:
 

@@ -196,13 +196,75 @@ set +e
 missing_rc=$?
 set -e
 [[ "$missing_rc" -ne 0 ]] || fail "Missing .env should stop bootstrap after copying template"
-cmp -s "$missing_dir/env.example" "$missing_dir/.env" || fail "Missing .env should be copied from root env.example"
 assert_contains "$missing_out" "Created .env from env.example"
-assert_contains "$missing_out" "请填写 .env 后再次运行 ./argus-bootstrap.sh"
+assert_contains "$missing_out" "Generated SECRET_KEY in root .env"
 assert_contains "$missing_out" "scripts/validate-llm-config.sh --env-file ./.env"
 assert_not_contains "$missing_out" "docker compose"
 assert_not_contains "$missing_out" "docker system prune"
 assert_not_contains "$missing_out" "curl -fsS"
+missing_secret="$(grep '^SECRET_KEY=' "$missing_dir/.env" | cut -d= -f2-)"
+[[ -n "$missing_secret" ]] || fail "Missing .env should get a generated SECRET_KEY"
+[[ "$missing_secret" != "your-super-secret-key-change-this-in-production" ]] || fail "Generated .env should not keep SECRET_KEY placeholder"
+[[ "${#missing_secret}" -ge 64 ]] || fail "Generated SECRET_KEY should be at least 64 characters"
+
+# Existing root .env missing SECRET_KEY is repaired before validation so users only fill LLM settings manually.
+missing_secret_dir="$(new_fixture missing-secret)"
+cat > "$missing_secret_dir/.env" <<'ENV'
+DOCKER_SOCKET_PATH=/var/run/docker.sock
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=sk-your-api-key
+LLM_MODEL=gpt-5
+LLM_BASE_URL=https://api.openai.com/v1
+AGENT_ENABLED=true
+AGENT_MAX_ITERATIONS=5
+AGENT_TIMEOUT=1800
+ENV
+missing_secret_out="$missing_secret_dir/missing-secret.out"
+set +e
+( cd "$missing_secret_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_secret_out" 2>&1
+missing_secret_rc=$?
+set -e
+[[ "$missing_secret_rc" -ne 0 ]] || fail "Placeholder LLM config should still fail after SECRET_KEY repair"
+assert_contains "$missing_secret_out" "Generated SECRET_KEY in root .env"
+assert_contains "$missing_secret_out" "LLM_API_KEY still contains a placeholder value"
+assert_not_contains "$missing_secret_out" "Required env key SECRET_KEY is missing or empty"
+repaired_secret="$(grep '^SECRET_KEY=' "$missing_secret_dir/.env" | cut -d= -f2-)"
+[[ -n "$repaired_secret" ]] || fail "Existing .env missing SECRET_KEY should be repaired"
+[[ "${#repaired_secret}" -ge 64 ]] || fail "Repaired SECRET_KEY should be at least 64 characters"
+
+# Existing root .env with the template SECRET_KEY placeholder is repaired, but real values are preserved.
+placeholder_secret_dir="$(new_fixture placeholder-secret)"
+cat > "$placeholder_secret_dir/.env" <<'ENV'
+SECRET_KEY=your-super-secret-key-change-this-in-production
+DOCKER_SOCKET_PATH=/var/run/docker.sock
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=sk-your-api-key
+LLM_MODEL=gpt-5
+LLM_BASE_URL=https://api.openai.com/v1
+AGENT_ENABLED=true
+AGENT_MAX_ITERATIONS=5
+AGENT_TIMEOUT=1800
+ENV
+placeholder_secret_out="$placeholder_secret_dir/placeholder-secret.out"
+set +e
+( cd "$placeholder_secret_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$placeholder_secret_out" 2>&1
+placeholder_secret_rc=$?
+set -e
+[[ "$placeholder_secret_rc" -ne 0 ]] || fail "Placeholder LLM config should still fail after placeholder SECRET_KEY repair"
+assert_contains "$placeholder_secret_out" "Generated SECRET_KEY in root .env"
+assert_not_contains "$placeholder_secret_out" "SECRET_KEY still contains a placeholder value"
+placeholder_repaired_secret="$(grep '^SECRET_KEY=' "$placeholder_secret_dir/.env" | cut -d= -f2-)"
+[[ "$placeholder_repaired_secret" != "your-super-secret-key-change-this-in-production" ]] || fail "Template SECRET_KEY placeholder should be replaced"
+[[ "${#placeholder_repaired_secret}" -ge 64 ]] || fail "Placeholder SECRET_KEY replacement should be at least 64 characters"
+
+preserve_secret_dir="$(new_fixture preserve-secret)"
+write_valid_config "$preserve_secret_dir"
+before_secret="$(grep '^SECRET_KEY=' "$preserve_secret_dir/.env" | cut -d= -f2-)"
+preserve_secret_out="$preserve_secret_dir/preserve-secret.out"
+( cd "$preserve_secret_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh --wait-exit -- default ) >"$preserve_secret_out" 2>&1
+after_secret="$(grep '^SECRET_KEY=' "$preserve_secret_dir/.env" | cut -d= -f2-)"
+[[ "$before_secret" == "$after_secret" ]] || fail "Existing real SECRET_KEY should not be regenerated on every bootstrap"
+assert_not_contains "$preserve_secret_out" "Generated SECRET_KEY in root .env"
 
 # Placeholder config exits before Docker cleanup in non-interactive mode.
 placeholder_dir="$(new_fixture placeholder)"
@@ -252,6 +314,8 @@ assert_contains "$valid_out" "Run mode: default"
 assert_contains "$valid_out" "preserving data volumes and Docker image/build cache"
 assert_contains "$valid_out" "down --remove-orphans"
 assert_not_contains "$valid_out" "down --volumes --remove-orphans"
+assert_contains "$valid_out" "Building scanner runner images without starting runner service containers"
+assert_contains "$valid_out" "build opengrep-runner codeql-runner"
 assert_contains "$valid_out" "up -d --build"
 assert_contains "$valid_out" "ARGUS_ENV_FILE=$valid_dir/.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="
@@ -265,11 +329,12 @@ assert_no_global_prune_execution "$valid_out"
 banner_line="$(line_no "$valid_out" "happytraveller")"
 validation_line="$(line_no "$valid_out" "LLM env config is valid")"
 down_line="$(line_no "$valid_out" "down --remove-orphans")"
+runner_build_line="$(line_no "$valid_out" "build opengrep-runner codeql-runner")"
 up_line="$(line_no "$valid_out" "up -d --build")"
 backend_wait_line="$(line_no "$valid_out" "curl -fsS http://127.0.0.1:18000/health")"
 import_line="$(line_no "$valid_out" "curl -fsS -X POST")"
 logs_line="$(line_no "$valid_out" "logs -f")"
-[[ "$banner_line" -lt "$validation_line" && "$validation_line" -lt "$down_line" && "$down_line" -lt "$up_line" && "$up_line" -lt "$backend_wait_line" && "$backend_wait_line" -lt "$import_line" && "$import_line" -lt "$logs_line" ]] || fail "Expected banner -> validation -> down -> detached up -> backend readiness -> import -> logs order"
+[[ "$banner_line" -lt "$validation_line" && "$validation_line" -lt "$down_line" && "$down_line" -lt "$runner_build_line" && "$runner_build_line" -lt "$up_line" && "$up_line" -lt "$backend_wait_line" && "$backend_wait_line" -lt "$import_line" && "$import_line" -lt "$logs_line" ]] || fail "Expected banner -> validation -> down -> runner image build -> detached up -> backend readiness -> import -> logs order"
 
 # Explicit default matches no-mode safety, even when legacy prune env is true.
 default_dir="$(new_fixture explicit-default)"
@@ -320,6 +385,7 @@ wait_dir="$(new_fixture wait)"
 write_valid_config "$wait_dir"
 wait_out="$wait_dir/wait.out"
 ( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-bootstrap.sh --wait-exit -- default ) >"$wait_out" 2>&1
+assert_contains "$wait_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_out" "up -d --build"
 assert_contains "$wait_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$wait_out" "curl -fsS -X POST"
@@ -347,6 +413,7 @@ wait_aggressive_out="$wait_aggressive_dir/wait-aggressive.out"
 assert_contains "$wait_aggressive_out" "Run mode: aggressive"
 assert_contains "$wait_aggressive_out" "down --volumes --remove-orphans"
 assert_contains "$wait_aggressive_out" "[stub] docker system prune -af --volumes"
+assert_contains "$wait_aggressive_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_aggressive_out" "up -d --build"
 assert_contains "$wait_aggressive_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$wait_aggressive_out" "curl -fsS -X POST"
@@ -385,6 +452,21 @@ if rg -n "docker/env|\\.env\\.example" \
   >"$retired_env_out"; then
   cat "$retired_env_out" >&2
   fail "docker/env or per-directory .env.example references should be retired"
+fi
+
+# Runner services are image-build targets only; default compose startup must not keep
+# preflight service containers around after validation.
+compose_render_out="$TMP_ROOT/compose.out"
+docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
+runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
+[[ "$runner_profile_count" -eq 2 ]] || fail "opengrep/codeql runner services must be profile-only image build targets"
+if awk '
+  /^  backend:/ { in_backend = 1; next }
+  /^  [a-zA-Z0-9_-]+:/ { in_backend = 0 }
+  in_backend && /opengrep-runner|codeql-runner|service_completed_successfully/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$compose_render_out"; then
+  fail "backend must not depend on one-shot runner service containers"
 fi
 
 # Aggressive dry-run exposes the destructive plan without executing it.

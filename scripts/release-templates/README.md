@@ -10,7 +10,7 @@
 
 ## 2. 首次配置
 
-保留根目录 `env.example`。如果根目录 `.env` 不存在，运行 bootstrap 会复制模板并退出：
+保留根目录 `env.example`。如果根目录 `.env` 不存在，运行 bootstrap 会复制模板、自动生成 `SECRET_KEY` 并退出：
 
 ```bash
 ./argus-bootstrap.sh --wait-exit -- default
@@ -21,7 +21,6 @@
 - `LLM_PROVIDER`
 - `LLM_API_KEY`
 - `LLM_MODEL`
-- `SECRET_KEY`
 
 常见示例：
 
@@ -29,7 +28,6 @@
 LLM_PROVIDER=openai
 LLM_API_KEY=your-api-key
 LLM_MODEL=gpt-4o-mini
-SECRET_KEY=change-this-to-a-random-string
 ```
 
 说明：
@@ -37,7 +35,7 @@ SECRET_KEY=change-this-to-a-random-string
 - `LLM_PROVIDER`：选择你要使用的大模型提供方
 - `LLM_API_KEY`：对应提供方的 API Key
 - `LLM_MODEL`：模型名称
-- `SECRET_KEY`：建议替换成你自己的随机字符串
+- `SECRET_KEY`：bootstrap 会自动生成，通常不需要手动填写
 
 可先运行校验脚本确认 LLM 配置无误：
 

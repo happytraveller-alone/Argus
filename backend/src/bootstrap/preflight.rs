@@ -199,6 +199,15 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
             command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
             mounts: Vec::new(),
         },
+        RunnerPreflightSpec {
+            name: "codeql-compile-sandbox",
+            image: config.scanner_codeql_compile_sandbox_image.clone(),
+            command: vec![
+                "codeql-compile-sandbox".to_string(),
+                "--self-test".to_string(),
+            ],
+            mounts: Vec::new(),
+        },
     ];
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
@@ -239,8 +248,9 @@ mod tests {
             .await
             .expect("state should build");
         let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
-        let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
-        assert_eq!(names, vec!["opengrep", "codeql"]);
+        let mut names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(names, vec!["codeql", "codeql-compile-sandbox", "opengrep"]);
 
         let opengrep = specs
             .iter()
@@ -256,41 +266,59 @@ mod tests {
         assert_eq!(codeql.command, vec!["codeql-scan", "--self-test"]);
         assert!(codeql.mounts.is_empty());
 
+        let compile_sandbox = specs
+            .iter()
+            .find(|spec| spec.name == "codeql-compile-sandbox")
+            .expect("codeql compile sandbox spec should exist");
+        assert_eq!(
+            compile_sandbox.command,
+            vec!["codeql-compile-sandbox", "--self-test"]
+        );
+        assert!(compile_sandbox.mounts.is_empty());
+
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
         }
     }
 
     #[test]
-    fn opengrep_preflight_docker_run_uses_rm_cleanup() {
-        let spec = RunnerPreflightSpec {
-            name: "opengrep",
-            image: "opengrep-runner:test".to_string(),
-            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-            mounts: vec![(
-                PathBuf::from("/tmp/argus-preflight"),
-                "/workspace".to_string(),
-            )],
-        };
+    fn static_runner_preflight_docker_run_uses_rm_cleanup() {
+        let cases = [
+            RunnerPreflightSpec {
+                name: "opengrep",
+                image: "opengrep-runner:test".to_string(),
+                command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+                mounts: vec![(
+                    PathBuf::from("/tmp/argus-preflight"),
+                    "/workspace".to_string(),
+                )],
+            },
+            RunnerPreflightSpec {
+                name: "codeql",
+                image: "codeql-runner:test".to_string(),
+                command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
+                mounts: Vec::new(),
+            },
+            RunnerPreflightSpec {
+                name: "codeql-compile-sandbox",
+                image: "codeql-compile-sandbox:test".to_string(),
+                command: vec![
+                    "codeql-compile-sandbox".to_string(),
+                    "--self-test".to_string(),
+                ],
+                mounts: Vec::new(),
+            },
+        ];
 
+        for spec in cases {
         let args = docker_run_args(&spec);
 
         assert_eq!(args.first().map(String::as_str), Some("run"));
         assert!(
             args.iter().any(|arg| arg == "--rm"),
-            "opengrep preflight must remove the successful container"
+            "{} preflight must remove its validation container",
+            spec.name
         );
-        assert_eq!(
-            args,
-            vec![
-                "run",
-                "--rm",
-                "-v",
-                "/tmp/argus-preflight:/workspace",
-                "opengrep-runner:test",
-                "opengrep-scan",
-                "--self-test",
-            ]
-        );
+        }
     }
 }

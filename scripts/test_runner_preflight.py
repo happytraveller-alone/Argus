@@ -13,9 +13,9 @@ class FakeImages:
 
 
 class FakeContainer:
-    id = "preflight-container-1"
-
-    def __init__(self) -> None:
+    def __init__(self, status_code: int = 0) -> None:
+        self.id = "preflight-container-1"
+        self.status_code = status_code
         self.wait_calls = 0
         self.log_calls: list[tuple[bool, bool]] = []
         self.remove_calls: list[dict[str, bool]] = []
@@ -23,7 +23,7 @@ class FakeContainer:
     def wait(self, timeout: int) -> dict[str, int]:
         self.wait_calls += 1
         self.timeout = timeout
-        return {"StatusCode": 0}
+        return {"StatusCode": self.status_code}
 
     def logs(self, stdout: bool, stderr: bool) -> bytes:
         self.log_calls.append((stdout, stderr))
@@ -62,6 +62,8 @@ def load_runner_preflight_module(container: FakeContainer):
         settings=types.SimpleNamespace(
             RUNNER_PREFLIGHT_TIMEOUT_SECONDS=30,
             SCANNER_OPENGREP_IMAGE="opengrep-runner:test",
+            SCANNER_CODEQL_IMAGE="codeql-runner:test",
+            SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE="codeql-compile-sandbox:test",
             RUNNER_PREFLIGHT_ENABLED=True,
             RUNNER_PREFLIGHT_MAX_CONCURRENCY=2,
             RUNNER_PREFLIGHT_STRICT=False,
@@ -103,6 +105,24 @@ def load_runner_preflight_module(container: FakeContainer):
 
 
 class RunnerPreflightCleanupTest(unittest.TestCase):
+    def test_configured_preflights_cover_static_runner_images(self) -> None:
+        module = load_runner_preflight_module(FakeContainer())
+
+        specs = module.get_configured_runner_preflight_specs()
+
+        self.assertEqual(
+            [(spec.name, spec.image, spec.command) for spec in specs],
+            [
+                ("opengrep", "opengrep-runner:test", ["opengrep-scan", "--self-test"]),
+                ("codeql", "codeql-runner:test", ["codeql-scan", "--self-test"]),
+                (
+                    "codeql-compile-sandbox",
+                    "codeql-compile-sandbox:test",
+                    ["codeql-compile-sandbox", "--self-test"],
+                ),
+            ],
+        )
+
     def test_successful_opengrep_preflight_removes_container_after_logs(self) -> None:
         container = FakeContainer()
         module = load_runner_preflight_module(container)
@@ -117,6 +137,25 @@ class RunnerPreflightCleanupTest(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.container_id, "preflight-container-1")
+        self.assertEqual(container.wait_calls, 1)
+        self.assertEqual(container.log_calls, [(True, False), (False, True)])
+        self.assertEqual(container.remove_calls, [{"force": True}])
+
+    def test_failed_preflight_also_removes_container_after_logs(self) -> None:
+        container = FakeContainer(status_code=2)
+        module = load_runner_preflight_module(container)
+        spec = module.RunnerPreflightSpec(
+            "codeql",
+            "codeql-runner:test",
+            ["codeql-scan", "--self-test"],
+            30,
+        )
+
+        result = module.run_runner_preflight_sync(spec)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.exit_code, 2)
         self.assertEqual(result.container_id, "preflight-container-1")
         self.assertEqual(container.wait_calls, 1)
         self.assertEqual(container.log_calls, [(True, False), (False, True)])

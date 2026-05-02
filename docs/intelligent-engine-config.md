@@ -8,7 +8,7 @@
 
 ## 启动与导入
 
-1. 保留根目录 `env.example`。首次运行 bootstrap 时，如果根目录 `.env` 不存在，脚本会复制模板并退出：
+1. 保留根目录 `env.example`。首次运行 bootstrap 时，如果根目录 `.env` 不存在，脚本会复制模板、自动生成 `SECRET_KEY` 并退出：
 
    ```bash
    ./argus-bootstrap.sh --wait-exit -- default
@@ -32,7 +32,7 @@
    ./argus-bootstrap.sh --wait-exit -- default
    ```
 
-`argus-bootstrap.sh` 会先调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置；缺文件、占位密钥、缺 `LLM_MODEL` / `LLM_BASE_URL` 等必填项、unsupported provider 或 backend import/test 失败都会中止启动并提示重新配置。Compose 会通过 `ARGUS_ENV_FILE` 指定的 env file（默认 `./.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
+`argus-bootstrap.sh` 会先确保根目录 `.env` 存在且 `SECRET_KEY` 已自动生成，再调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置；缺文件、缺 `LLM_MODEL` / `LLM_BASE_URL` 等必填项、LLM 占位值、unsupported provider 或 backend import/test 失败都会中止启动并提示重新配置。Compose 会通过 `ARGUS_ENV_FILE` 指定的 env file（默认 `./.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
 
 ## API 契约
 

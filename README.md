@@ -15,7 +15,7 @@
 ## 启动前准备
 
 1. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
-2. 保留根目录 `env.example`。首次运行 `./argus-bootstrap.sh` 时，如果根目录 `.env` 不存在，脚本会复制 `env.example` 为 `.env`，提示你填写配置后退出。
+2. 保留根目录 `env.example`。首次运行 `./argus-bootstrap.sh` 时，如果根目录 `.env` 不存在，脚本会复制 `env.example` 为 `.env`，自动生成 `SECRET_KEY`，提示你填写配置后退出。
 3. 填写 `.env` 中的 LLM 配置后，再次运行 `./argus-bootstrap.sh`；也可以先运行 `./scripts/validate-llm-config.sh --env-file ./.env` 确认 LLM 配置无误。
 
 `argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。

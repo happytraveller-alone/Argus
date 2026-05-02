@@ -989,6 +989,98 @@ esac
     }
 
     #[test]
+    fn execute_removes_task_container_after_success() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("opengrep/task-success");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+        });
+
+        assert!(result.success);
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(logged.contains("create|"), "{logged}");
+        assert!(logged.contains("start|-a container-xyz"), "{logged}");
+        assert!(logged.contains("wait|container-xyz"), "{logged}");
+        assert!(
+            logged.contains("rm|-f container-xyz"),
+            "task runner containers must be removed after successful execution\n{logged}"
+        );
+    }
+
+    #[test]
+    fn execute_removes_task_container_after_failure() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let fake_log = temp_dir.path().join("docker.log");
+        let fake_docker = fake_docker_script(&temp_dir);
+        let workspace_root = temp_dir.path().join("scan-root");
+        let workspace_dir = workspace_root.join("codeql/task-failure");
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
+        let _docker_log = EnvVarGuard::set("FAKE_DOCKER_LOG", fake_log.to_str().unwrap());
+        let _workspace_root =
+            EnvVarGuard::set("SCAN_WORKSPACE_ROOT", workspace_root.to_str().unwrap());
+        let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
+        let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "2");
+
+        let result = execute(RunnerSpec {
+            scanner_type: "codeql".to_string(),
+            image: "Argus/codeql-runner:latest".to_string(),
+            workspace_dir: workspace_dir.display().to_string(),
+            command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
+            timeout_seconds: 30,
+            env: BTreeMap::new(),
+            expected_exit_codes: vec![0],
+            artifact_paths: vec![],
+            capture_stdout_path: None,
+            capture_stderr_path: None,
+            completion_summary_path: None,
+            workspace_root_override: None,
+            memory_limit_mb: None,
+            memory_swap_limit_mb: None,
+            cpu_limit: None,
+            pids_limit: None,
+            network_disabled: false,
+        });
+
+        assert!(!result.success);
+        let logged = fs::read_to_string(&fake_log).unwrap();
+        assert!(
+            logged.contains("rm|-f container-xyz"),
+            "task runner containers must be removed after failed execution\n{logged}"
+        );
+    }
+
+    #[test]
     fn execute_can_disable_container_network() {
         let _lock = ENV_LOCK.lock().unwrap();
         let temp_dir = TempDir::new().unwrap();

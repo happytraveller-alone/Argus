@@ -95,7 +95,7 @@
 
 ### `.env`
 
-- **是什么**：根目录运行时环境文件。`argus-bootstrap.sh` 首次运行会从根目录 `env.example` 复制生成它；后续启动前会校验其中的 LLM 配置，并在 backend 启动后导入 system-config。
+- **是什么**：根目录运行时环境文件。`argus-bootstrap.sh` 首次运行会从根目录 `env.example` 复制生成它并自动写入 `SECRET_KEY`；后续启动前会校验其中的 LLM 配置，并在 backend 启动后导入 system-config。
 - **不是什么**：UI 写回目标；前端保存配置只写 system-config，不直接修改这个文件。
 
 ### repo-local Codex / OMX

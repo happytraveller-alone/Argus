@@ -2,15 +2,16 @@
 # Argus Docker Compose — 全量本地构建
 # =============================================
 # 启动: docker compose up --build
-# backend 会在启动期通过 Docker SDK 执行 runner preflight。
-# opengrep-runner compose service 仅用于在 `docker compose up` 时构建/预热本地镜像，
-# 服务本身为一次性成功退出；真正执行扫描时，backend 仍按 SCANNER_*_IMAGE
-# 动态拉起临时 runner 容器，并在结束后清理。
+# backend 会在启动期通过 `docker run --rm` 执行 runner preflight。
+# runner services 只作为 profile=runner-build 的镜像构建目标存在；默认启动不创建
+# runner service 容器。真正执行扫描时，backend 按 SCANNER_*_IMAGE 动态创建临时
+# runner 容器，并在任务结束后删除。
 
 services:
 
   opengrep-runner:
     image: ${SCANNER_OPENGREP_IMAGE:-Argus/opengrep-runner-local:latest}
+    profiles: [ "runner-build" ]
     pull_policy: never
     build:
       context: .
@@ -38,6 +39,7 @@ services:
 
   codeql-runner:
     image: ${SCANNER_CODEQL_IMAGE:-Argus/codeql-runner-local:latest}
+    profiles: [ "runner-build" ]
     pull_policy: never
     build:
       context: .
@@ -179,10 +181,6 @@ services:
       start_period: 180s
       retries: 120
     depends_on:
-      opengrep-runner:
-        condition: service_completed_successfully
-      codeql-runner:
-        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:

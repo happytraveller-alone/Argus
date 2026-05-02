@@ -43,6 +43,8 @@ def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
     timeout_seconds = int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30))
     return [
         RunnerPreflightSpec("opengrep", str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "")), ["opengrep-scan", "--self-test"], timeout_seconds),
+        RunnerPreflightSpec("codeql", str(getattr(settings, "SCANNER_CODEQL_IMAGE", "")), ["codeql-scan", "--self-test"], timeout_seconds),
+        RunnerPreflightSpec("codeql-compile-sandbox", str(getattr(settings, "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE", getattr(settings, "SCANNER_CODEQL_IMAGE", ""))), ["codeql-compile-sandbox", "--self-test"], timeout_seconds),
     ]
 
 
@@ -66,7 +68,6 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
 def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResult:
     container = None
     container_id: str | None = None
-    remove_container = False
     try:
         client = docker.from_env()
         _ensure_runner_image(client, spec)
@@ -81,7 +82,6 @@ def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResul
         container_id = getattr(container, "id", None)
         wait_result = container.wait(timeout=max(1, int(spec.timeout_seconds)))
         exit_code = int((wait_result or {}).get("StatusCode", 1))
-        remove_container = exit_code == 0
         stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
         stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
         success = exit_code == 0
@@ -99,16 +99,13 @@ def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResul
             container_id=container_id,
         )
     except TimeoutError as exc:
-        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 124, "", "", str(exc), container_id)
     except DOCKER_EXCEPTION as exc:
-        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 1, "", "", str(exc), container_id)
     except Exception as exc:
-        remove_container = container is not None
         return RunnerPreflightResult(spec.name, spec.image, list(spec.command), spec.timeout_seconds, False, 1, "", "", str(exc), container_id)
     finally:
-        if container is not None and remove_container:
+        if container is not None:
             try:
                 container.remove(force=True)
             except Exception as exc:

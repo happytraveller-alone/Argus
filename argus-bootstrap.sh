@@ -133,6 +133,57 @@ redact_arg_for_log() {
   printf '%s' "$arg"
 }
 
+read_env_value() {
+  local key="$1"
+  [[ -f "$ARGUS_ENV_FILE" ]] || return 0
+  awk -v key="$key" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    index($0, "=") == 0 { next }
+    {
+      split($0, parts, "=")
+      k = parts[1]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (k == key) {
+        value = substr($0, index($0, "=") + 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
+            (substr(value, 1, 1) == "'"'"'" && substr(value, length(value), 1) == "'"'"'")) {
+          value = substr(value, 2, length(value) - 2)
+        }
+        found = value
+      }
+    }
+    END {
+      if (found != "") {
+        print found
+      }
+    }
+  ' "$ARGUS_ENV_FILE"
+}
+
+is_placeholder_value() {
+  local value="$1"
+  case "$value" in
+    ""|\
+    your-*|\
+    *your-api-key*|\
+    *your_proxy*|\
+    *your-proxy*|\
+    *change-this*|\
+    *change_this*|\
+    *CHANGE_ME*|\
+    *REPLACE_ME*|\
+    sk-your-api-key|\
+    your-super-secret-key-change-this-in-production)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 run_cmd() {
   if "$DRY_RUN"; then
     printf '[dry-run] %s\n' "$(quote_cmd "$@")"
@@ -158,17 +209,64 @@ validate_llm_config() {
 
 ensure_root_env_file() {
   if [[ -f "$ARGUS_ENV_FILE" ]]; then
+    ensure_secret_key
     return 0
   fi
   [[ -f "$ARGUS_ENV_EXAMPLE" ]] || fail "Root env template is missing: $ARGUS_ENV_EXAMPLE"
   cp "$ARGUS_ENV_EXAMPLE" "$ARGUS_ENV_FILE"
   chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+  ensure_secret_key
   log "Created .env from env.example: $ARGUS_ENV_FILE"
   cat >&2 <<MESSAGE
-[argus-bootstrap] 请填写 .env 后再次运行 ./argus-bootstrap.sh。
+[argus-bootstrap] 已自动生成 SECRET_KEY；请填写 .env 中的 LLM 配置后再次运行 ./argus-bootstrap.sh。
 [argus-bootstrap] 也可以先运行 ./scripts/validate-llm-config.sh --env-file ./.env 确认配置无误后再运行脚本。
 MESSAGE
   exit 1
+}
+
+generate_secret_key() {
+  local secret=""
+  if command -v openssl >/dev/null 2>&1; then
+    secret="$(openssl rand -hex 32)"
+  elif command -v od >/dev/null 2>&1 && [[ -r /dev/urandom ]]; then
+    secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  else
+    fail "Unable to generate SECRET_KEY: openssl or /dev/urandom+od is required"
+  fi
+  [[ -n "$secret" ]] || fail "Generated SECRET_KEY is empty"
+  printf '%s' "$secret"
+}
+
+write_secret_key() {
+  local secret="$1"
+  local tmp
+  tmp="$(mktemp "${ARGUS_ENV_FILE}.tmp.XXXXXX")"
+  awk -v secret="$secret" '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*SECRET_KEY[[:space:]]*=/ {
+      print "SECRET_KEY=" secret
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print "SECRET_KEY=" secret
+      }
+    }
+  ' "$ARGUS_ENV_FILE" > "$tmp"
+  mv "$tmp" "$ARGUS_ENV_FILE"
+  chmod 600 "$ARGUS_ENV_FILE" 2>/dev/null || true
+}
+
+ensure_secret_key() {
+  local existing
+  existing="$(read_env_value SECRET_KEY)"
+  if ! is_placeholder_value "$existing"; then
+    return 0
+  fi
+  write_secret_key "$(generate_secret_key)"
+  log "Generated SECRET_KEY in root .env (redacted)."
 }
 
 generate_import_token() {
@@ -245,6 +343,11 @@ compose_up_detached() {
     "ARGUS_ENV_FILE=$ARGUS_ENV_FILE" \
     "ARGUS_RESET_IMPORT_TOKEN=$ARGUS_RESET_IMPORT_TOKEN" \
     docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" up -d --build
+}
+
+build_runner_images() {
+  log "Building scanner runner images without starting runner service containers."
+  run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner codeql-runner
 }
 
 wait_for_backend() {
@@ -338,6 +441,7 @@ wait_for_frontend() {
 }
 
 start_stack() {
+  build_runner_images
   compose_up_detached
   wait_for_backend
   import_backend_env
