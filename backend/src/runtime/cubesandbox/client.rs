@@ -161,8 +161,17 @@ impl CubeSandboxClient {
         sandbox: &CubeSandboxSandbox,
         code: &str,
     ) -> Result<EnvdProcessOutput> {
+        self.run_command(sandbox, &format!("python3 -c {}", shell_quote(code)))
+            .await
+    }
+
+    pub async fn run_command(
+        &self,
+        sandbox: &CubeSandboxSandbox,
+        command: &str,
+    ) -> Result<EnvdProcessOutput> {
         let request = EnvdProcessRequest {
-            cmd: format!("python3 -c {}", shell_quote(code)),
+            cmd: command.to_string(),
         };
         let response = self
             .http_client

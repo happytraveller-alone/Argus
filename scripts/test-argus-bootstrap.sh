@@ -314,8 +314,9 @@ assert_contains "$valid_out" "Run mode: default"
 assert_contains "$valid_out" "preserving data volumes and Docker image/build cache"
 assert_contains "$valid_out" "down --remove-orphans"
 assert_not_contains "$valid_out" "down --volumes --remove-orphans"
-assert_contains "$valid_out" "Building scanner runner images without starting runner service containers"
-assert_contains "$valid_out" "build opengrep-runner codeql-runner"
+assert_contains "$valid_out" "Building Opengrep runner image without starting runner service containers"
+assert_contains "$valid_out" "build opengrep-runner"
+assert_not_contains "$valid_out" "build opengrep-runner codeql-runner"
 assert_contains "$valid_out" "up -d --build"
 assert_contains "$valid_out" "ARGUS_ENV_FILE=$valid_dir/.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="
@@ -329,7 +330,7 @@ assert_no_global_prune_execution "$valid_out"
 banner_line="$(line_no "$valid_out" "happytraveller")"
 validation_line="$(line_no "$valid_out" "LLM env config is valid")"
 down_line="$(line_no "$valid_out" "down --remove-orphans")"
-runner_build_line="$(line_no "$valid_out" "build opengrep-runner codeql-runner")"
+runner_build_line="$(line_no "$valid_out" "build opengrep-runner")"
 up_line="$(line_no "$valid_out" "up -d --build")"
 backend_wait_line="$(line_no "$valid_out" "curl -fsS http://127.0.0.1:18000/health")"
 import_line="$(line_no "$valid_out" "curl -fsS -X POST")"
@@ -385,7 +386,8 @@ wait_dir="$(new_fixture wait)"
 write_valid_config "$wait_dir"
 wait_out="$wait_dir/wait.out"
 ( cd "$wait_dir" && ARGUS_STUB_DOCKER=true Argus_FRONTEND_PORT=13099 ./argus-bootstrap.sh --wait-exit -- default ) >"$wait_out" 2>&1
-assert_contains "$wait_out" "build opengrep-runner codeql-runner"
+assert_contains "$wait_out" "build opengrep-runner"
+assert_not_contains "$wait_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_out" "up -d --build"
 assert_contains "$wait_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$wait_out" "curl -fsS -X POST"
@@ -413,7 +415,8 @@ wait_aggressive_out="$wait_aggressive_dir/wait-aggressive.out"
 assert_contains "$wait_aggressive_out" "Run mode: aggressive"
 assert_contains "$wait_aggressive_out" "down --volumes --remove-orphans"
 assert_contains "$wait_aggressive_out" "[stub] docker system prune -af --volumes"
-assert_contains "$wait_aggressive_out" "build opengrep-runner codeql-runner"
+assert_contains "$wait_aggressive_out" "build opengrep-runner"
+assert_not_contains "$wait_aggressive_out" "build opengrep-runner codeql-runner"
 assert_contains "$wait_aggressive_out" "up -d --build"
 assert_contains "$wait_aggressive_out" "curl -fsS http://127.0.0.1:18000/health"
 assert_contains "$wait_aggressive_out" "curl -fsS -X POST"
@@ -459,7 +462,7 @@ fi
 compose_render_out="$TMP_ROOT/compose.out"
 docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
-[[ "$runner_profile_count" -eq 2 ]] || fail "opengrep/codeql runner services must be profile-only image build targets"
+[[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
 if awk '
   /^  backend:/ { in_backend = 1; in_depends = 0; next }
   /^  [a-zA-Z0-9_-]+:/ { in_backend = 0; in_depends = 0 }
@@ -470,8 +473,9 @@ if awk '
 ' "$compose_render_out"; then
   fail "backend must not depend on one-shot runner service containers"
 fi
-assert_contains "$compose_render_out" "SCANNER_CODEQL_IMAGE: Argus/codeql-runner-local:latest"
-assert_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE: Argus/codeql-runner-local:latest"
+assert_not_contains "$compose_render_out" "codeql-runner"
+assert_not_contains "$compose_render_out" "SCANNER_CODEQL_IMAGE"
+assert_not_contains "$compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 
 release_compose_render_out="$TMP_ROOT/release-compose.out"
 docker compose \
@@ -479,14 +483,15 @@ docker compose \
   --file "$ROOT_DIR/scripts/release-templates/docker-compose.release-slim.yml" \
   config >"$release_compose_render_out"
 assert_contains "$release_compose_render_out" "SCANNER_OPENGREP_IMAGE: ghcr.io/happytraveller-alone/argus-opengrep-runner:latest"
-assert_contains "$release_compose_render_out" "SCANNER_CODEQL_IMAGE: ghcr.io/happytraveller-alone/argus-codeql-runner:latest"
-assert_contains "$release_compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE: ghcr.io/happytraveller-alone/argus-codeql-runner:latest"
+assert_not_contains "$release_compose_render_out" "codeql-runner"
+assert_not_contains "$release_compose_render_out" "SCANNER_CODEQL_IMAGE"
+assert_not_contains "$release_compose_render_out" "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE"
 if grep -Eq '^  (opengrep-runner|codeql-runner):$' "$release_compose_render_out"; then
   fail "release compose must not define runner service containers"
 fi
 
-assert_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "argus-codeql-runner"
-assert_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "docker/codeql-runner.Dockerfile"
+assert_not_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "argus-codeql-runner"
+assert_not_contains "$ROOT_DIR/.github/workflows/docker-publish.yml" "docker/codeql-runner.Dockerfile"
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

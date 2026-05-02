@@ -37,7 +37,7 @@ CubeSandbox needs WSL2-native KVM/QEMU and runs its E2B-compatible API inside a 
 
 - GHCR image paths use `ghcr.io/<GitHub user or organization>/<image>:<tag>`.
 - `audittool` is the repository name, not the GHCR owner; the default image namespace is the current repo owner `happytraveller-alone`.
-- `.github/workflows/docker-publish.yml` now handles backend, frontend, OpenGrep runner, and CodeQL runner image builds and publishing in one workflow.
+- `.github/workflows/docker-publish.yml` now handles backend, frontend, and OpenGrep runner image builds and publishing in one workflow; the active CodeQL scan path uses the CubeSandbox template instead of a published CodeQL runner container.
 - The OpenGrep runner publish path explicitly uses OCI image media types; local `runner-build` / `rebuild-opengrep-runner-verify.sh` still validate through Docker daemon-loaded images.
 - GitHub Actions defaults published GHCR packages to public and verifies anonymous pulls.
 - Human-triggered multi-image publishing also goes through `.github/workflows/docker-publish.yml`, where you select the images to build.

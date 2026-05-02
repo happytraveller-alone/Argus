@@ -26,6 +26,7 @@ import {
   useDataTableUrlState,
 } from "@/components/data-table";
 import { api as databaseApi } from "@/shared/api/database";
+import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
   createStaticAnalysisInitialTableState,
@@ -104,6 +105,7 @@ export default function StaticAnalysis() {
     codeqlTask,
     opengrepFindings,
     codeqlFindings,
+    codeqlExplorationEvents,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -111,10 +113,14 @@ export default function StaticAnalysis() {
     interruptTarget,
     setInterruptTarget,
     interrupting,
+    resettingCodeqlPlan,
     refreshAll,
     handleInterrupt,
+    handleResetCodeqlBuildPlan,
     handleToggleStatus,
     canInterruptOpengrep,
+    canInterruptCodeql,
+    canResetCodeqlBuildPlan,
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
@@ -287,6 +293,16 @@ export default function StaticAnalysis() {
               中止 Opengrep
             </Button>
           ) : null}
+          {canInterruptCodeql ? (
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => setInterruptTarget("codeql")}
+            >
+              <Ban className="w-3.5 h-3.5 mr-1.5" />
+              中止 CodeQL
+            </Button>
+          ) : null}
           {isTaskCompleted ? (
             <Button
               variant="outline"
@@ -315,6 +331,13 @@ export default function StaticAnalysis() {
         </div>
       </div>
 
+      <CodeqlExplorationPanel
+        events={codeqlExplorationEvents}
+        canReset={canResetCodeqlBuildPlan}
+        resetting={resettingCodeqlPlan}
+        onReset={handleResetCodeqlBuildPlan}
+      />
+
       <StaticAnalysisFindingsTable
           currentRoute={currentRoute}
           loadingInitial={loadingInitial}
@@ -335,7 +358,7 @@ export default function StaticAnalysis() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认中止任务？</AlertDialogTitle>
             <AlertDialogDescription>
-              即将中止 Opengrep 扫描任务。中止后任务状态将更新为已中断。
+              即将中止 {interruptTarget === "codeql" ? "CodeQL" : "Opengrep"} 扫描任务。中止后任务状态将更新为已中断。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

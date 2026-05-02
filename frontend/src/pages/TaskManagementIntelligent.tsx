@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -8,16 +8,13 @@ import { Input } from "@/components/ui/input";
 import DeferredSection from "@/components/performance/DeferredSection";
 import {
 	cancelIntelligentTask,
-	createIntelligentTask,
 	listIntelligentTasks,
 	type IntelligentTaskRecord,
 } from "@/shared/api/intelligentTasks";
-import { apiClient } from "@/shared/api/serverClient";
 
-interface ProjectOption {
-	id: string;
-	name: string;
-}
+const CreateProjectScanDialog = lazy(
+	() => import("@/components/scan/CreateProjectScanDialog"),
+);
 
 function StatusBadge({ status }: { status: string }) {
 	let className = "font-mono text-xs";
@@ -34,31 +31,12 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function TaskManagementIntelligent() {
-	const navigate = useNavigate();
-	const [projects, setProjects] = useState<ProjectOption[]>([]);
-	const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+	const [showCreateDialog, setShowCreateDialog] = useState(false);
 	const [tasks, setTasks] = useState<IntelligentTaskRecord[]>([]);
 	const [loadingTasks, setLoadingTasks] = useState(true);
-	const [creating, setCreating] = useState(false);
 	const [cancellingId, setCancellingId] = useState<string | null>(null);
 	const [keyword, setKeyword] = useState("");
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-	// Load projects once
-	useEffect(() => {
-		apiClient
-			.get<ProjectOption[]>("/projects/")
-			.then((res) => {
-				const list = Array.isArray(res.data) ? res.data : [];
-				setProjects(list);
-				if (list.length > 0) {
-					setSelectedProjectId((prev) => prev || list[0].id);
-				}
-			})
-			.catch(() => {
-				// silently ignore project load failure
-			});
-	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const fetchTasks = async () => {
 		try {
@@ -87,25 +65,6 @@ export default function TaskManagementIntelligent() {
 			}
 		};
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-	const handleCreate = async () => {
-		if (!selectedProjectId) {
-			toast.error("请先选择项目");
-			return;
-		}
-		setCreating(true);
-		try {
-			const task = await createIntelligentTask(selectedProjectId);
-			toast.success("智能审计任务已创建");
-			void navigate(`/agent-audit/${task.taskId}`);
-		} catch (err) {
-			toast.error(
-				`创建失败：${err instanceof Error ? err.message : "未知错误"}`,
-			);
-		} finally {
-			setCreating(false);
-		}
-	};
 
 	const handleCancel = async (task: IntelligentTaskRecord) => {
 		setCancellingId(task.taskId);
@@ -162,29 +121,13 @@ export default function TaskManagementIntelligent() {
 
 			{/* Create action row */}
 			<div className="relative flex flex-wrap items-center gap-3">
-				<select
-					value={selectedProjectId}
-					onChange={(e) => setSelectedProjectId(e.target.value)}
-					className="h-9 rounded-md border border-input bg-background px-3 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-				>
-					{projects.length === 0 ? (
-						<option value="">（暂无项目）</option>
-					) : (
-						projects.map((p) => (
-							<option key={p.id} value={p.id}>
-								{p.name}
-							</option>
-						))
-					)}
-				</select>
 				<Button
 					size="sm"
 					className="cyber-btn-primary h-8 px-3"
-					disabled={creating || !selectedProjectId}
-					onClick={() => void handleCreate()}
+					onClick={() => setShowCreateDialog(true)}
 				>
 					<Plus className="mr-1.5 h-3.5 w-3.5" />
-					新建智能审计任务
+					新建扫描任务
 				</Button>
 			</div>
 
@@ -328,6 +271,19 @@ export default function TaskManagementIntelligent() {
 					</div>
 				)}
 			</DeferredSection>
+
+			{showCreateDialog ? (
+				<Suspense fallback={null}>
+					<CreateProjectScanDialog
+						open={showCreateDialog}
+						onOpenChange={setShowCreateDialog}
+						onTaskCreated={() => {
+							void fetchTasks();
+						}}
+						initialMode="intelligent"
+					/>
+				</Suspense>
+			) : null}
 		</div>
 	);
 }

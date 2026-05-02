@@ -16,24 +16,25 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 compile-sandbox 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 进入 `codeql-scan --build-mode none`，Go 进入 `codeql-scan --build-mode autobuild`。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 CubeSandbox CodeQL capture 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 在 CubeSandbox 内进入 `build-mode=none`，Go 进入 `build-mode=autobuild`。
 - **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
 
 ### CodeQL 隔离扫描计划
 
-- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。C/C++ 走 compile-sandbox + DB-backed build plan；Python/JavaScript-TypeScript/Java 走 `build-mode=none`；Go 走 `build-mode=autobuild`。
-- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前语言分流和 C/C++ compile-sandbox 切片不等于完整五语言首版。
+- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用 CubeSandbox CodeQL 模板、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。C/C++ 走 CubeSandbox capture + DB-backed build plan；Python/JavaScript-TypeScript/Java 走 `build-mode=none`；Go 走 `build-mode=autobuild`。
+- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前语言分流和 C/C++ CubeSandbox 切片不等于完整五语言首版。
 - **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`、`.omx/specs/deep-interview-codeql-compile-sandbox.md`。
-- **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 compile-sandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
+- **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 CubeSandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
 
-### CodeQL compile sandbox
+### CodeQL CubeSandbox
 
-- **是什么**：2026-05-01 新增的 CodeQL C/C++ 建库前置沙箱，是双沙箱架构的第一阶段。它运行 `docker/codeql-compile-sandbox.sh`，在隔离 runner 内探索 C/C++ build command，验证命令安全边界，输出 events/summary/plan/evidence，并把 accepted build plan 持久化为 `rust_codeql_build_plans` 表真源。随后 CodeQL 扫描沙箱（`docker/codeql-scan.sh`）从 DB 读取 plan，在 `codeql database create` 阶段重放该命令。真实 CodeQL CLI 会按 argv 拆分 `--command`，因此持久化命令必须避免 shell-only 复合语法；Makefile 自动路径固定为 `make -B -j2`，CMake 路径先 configure 后重放 `cmake --build ...`。
+- **是什么**：CodeQL 扫描的当前主执行沙箱。后端通过 `backend/src/scan/codeql_cubesandbox.rs` 把源码、查询资产和 build plan 打包送入 CubeSandbox CodeQL 模板，在 envd `/process` 中执行 `codeql database create` / `database analyze`。只有该捕获验证完成后，后端才把 accepted build plan 持久化为 `rust_codeql_build_plans` 表 active accepted 真源。Makefile 自动路径固定为 `make -B -j2`。
 - **不是什么**：通用 CI/CD 构建平台，也不是把完整 build artifacts 直接喂给 CodeQL 的捷径；artifacts/evidence/cache 只能用于诊断和缓存信号。
-- **双沙箱数据流**：编译沙箱 → build plan 候选 → 后端验证 → DB 持久化 → CodeQL 扫描沙箱读取 → 重放构建 → 生成数据库 → 扫描。
-- **主要入口**：`backend/src/scan/codeql.rs`、`backend/src/routes/static_tasks.rs`、`backend/src/db/codeql_build_plans.rs`、`docker/codeql-compile-sandbox.sh`、`docker/test-codeql-diagnostics.sh`、`SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE`。
+- **数据流**：源码/查询/build plan 打包 → CubeSandbox CodeQL 模板 → `database_create` 捕获验证 → `database_analyze` → SARIF → DB sticky plan 持久化/复用 → findings。
+- **前端证据**：CodeQL 进度接口返回 typed exploration events，静态审计详情页展示复用检查、LLM reasoning summary、沙箱命令、stdout/stderr、exit code、dependency signal、捕获验证、reset/cancel 和脱敏状态。后端会在 saved system-config LLM 可用时请求结构化 build plan JSON，并在 validator 通过后交给 CubeSandbox；候选命令失败时，CubeSandbox 输出会脱敏后作为 `previous_failures` 输入下一轮 LLM prompt。无配置、请求失败或解析失败会记录原因并使用 deterministic fallback 候选继续捕获验证。多命令 manual plan 通过 `database init` + 多次 `trace-command` + `finalize` 捕获。
+- **主要入口**：`backend/src/scan/codeql_cubesandbox.rs`、`backend/src/scan/codeql.rs`、`backend/src/routes/static_tasks.rs`、`backend/src/db/codeql_build_plans.rs`、`oci/cubesandbox/codeql-cpp.Dockerfile`、`scripts/cubesandbox-quickstart.sh`。
 
 ### 智能审计
 
@@ -57,7 +58,7 @@
 ### Opengrep runner
 
 - **是什么**：执行静态审计规则扫描的隔离 runner；`docker-compose.yml` 中的 `opengrep-runner` 只是 `runner-build` profile 镜像构建目标，默认启动不会保留服务容器。
-- **不是什么**：旧多引擎静态审计调度器。
+- **不是什么**：旧多引擎静态审计调度器，也不是 CodeQL 扫描主路径。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`；backend 按任务动态创建临时 runner 容器，任务结束后删除。
 
 ### agent preflight

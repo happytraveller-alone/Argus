@@ -60,6 +60,8 @@ pub struct StaticTaskProgressRecord {
     pub started_at: Option<String>,
     pub updated_at: Option<String>,
     pub logs: Vec<StaticTaskProgressLogRecord>,
+    #[serde(default)]
+    pub events: Vec<StaticTaskProgressEventRecord>,
 }
 
 impl Default for StaticTaskProgressRecord {
@@ -71,6 +73,7 @@ impl Default for StaticTaskProgressRecord {
             started_at: None,
             updated_at: None,
             logs: Vec::new(),
+            events: Vec::new(),
         }
     }
 }
@@ -82,6 +85,20 @@ pub struct StaticTaskProgressLogRecord {
     pub message: String,
     pub progress: f64,
     pub level: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct StaticTaskProgressEventRecord {
+    pub timestamp: String,
+    pub event_type: String,
+    pub stage: String,
+    pub progress: f64,
+    #[serde(default)]
+    pub round: Option<i64>,
+    #[serde(default)]
+    pub redaction: Value,
+    #[serde(default)]
+    pub payload: Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

@@ -6,8 +6,13 @@ use std::{
     sync::{Arc, Condvar, LazyLock, Mutex},
 };
 
+use async_stream::stream;
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
@@ -24,8 +29,12 @@ use crate::{
     db::{codeql_build_plans, projects, system_config, task_state},
     error::ApiError,
     llm_rule,
+    runtime::intelligent::{
+        config::{resolve_intelligent_llm_config, IntelligentLlmConfig},
+        llm::{HttpIntelligentLlmInvoker, IntelligentLlmInvoker},
+    },
     runtime::runner::{self, RunnerSpec},
-    scan::{codeql, opengrep, scope_filters},
+    scan::{codeql, codeql_cubesandbox, opengrep, scope_filters},
     state::AppState,
 };
 
@@ -37,6 +46,7 @@ struct CodeqlTaskOptions {
     languages: Vec<String>,
     build_mode: Option<String>,
     allow_network: Option<bool>,
+    reset_build_plan: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -79,6 +89,11 @@ pub fn router() -> Router<AppState> {
             post(interrupt_codeql_task),
         )
         .route("/codeql/tasks/{task_id}/progress", get(get_codeql_progress))
+        .route("/codeql/tasks/{task_id}/stream", get(stream_codeql_task))
+        .route(
+            "/codeql/projects/{project_id}/build-plan/reset",
+            post(reset_codeql_project_build_plan),
+        )
         .route(
             "/codeql/tasks/{task_id}/findings",
             get(list_codeql_findings),
@@ -774,6 +789,7 @@ async fn create_static_task_for_engine(
                 progress: 0.0,
                 level: "info".to_string(),
             }],
+            events: Vec::new(),
         },
         findings: Vec::new(),
         ai_analysis_status: None,
@@ -813,6 +829,9 @@ async fn create_static_task_for_engine(
                     "requested_allow_network".to_string(),
                     Value::Bool(allow_network),
                 );
+            }
+            if options.reset_build_plan {
+                extra.insert("requested_build_plan_reset".to_string(), Value::Bool(true));
             }
         }
     }
@@ -885,6 +904,51 @@ async fn list_codeql_tasks(
     list_static_tasks(&state, "codeql", query).await
 }
 
+async fn stream_codeql_task(
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> impl IntoResponse {
+    // Load persisted events outside the stream block to avoid borrowing state inside stream!.
+    let replay_events: Vec<Value> = match find_static_task(&state, "codeql", &task_id).await {
+        Ok(record) => record
+            .progress
+            .events
+            .into_iter()
+            .map(|evt| {
+                let message = evt
+                    .payload
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .map(String::from);
+                json!({
+                    "kind": evt.event_type,
+                    "timestamp": evt.timestamp,
+                    "message": message,
+                    "data": {
+                        "stage": evt.stage,
+                        "progress": evt.progress,
+                        "round": evt.round,
+                        "payload": evt.payload,
+                    },
+                })
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
+    let output = stream! {
+        // Replay all persisted events in unified { kind, timestamp, message?, data? } shape.
+        for unified in replay_events {
+            if let Ok(data) = serde_json::to_string(&unified) {
+                yield Ok::<Event, std::convert::Infallible>(Event::default().data(data));
+            }
+        }
+        // CodeQL has no broadcast channel yet — replay-only SSE, stream closes after replay.
+    };
+
+    Sse::new(output).keep_alive(KeepAlive::default())
+}
+
 async fn get_codeql_task(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
@@ -903,6 +967,23 @@ async fn interrupt_codeql_task(
     State(state): State<AppState>,
     AxumPath(task_id): AxumPath<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let cleanup_result = codeql_cubesandbox::cancel_codeql_scan(&task_id)
+        .await
+        .map_err(internal_error)?;
+    append_codeql_exploration_event(
+        &state,
+        &task_id,
+        100.0,
+        "cancel",
+        "cancelled_cleanup_completed",
+        None,
+        json!({
+            "message": "CodeQL exploration interrupt requested; CubeSandbox cleanup attempted",
+            "cleanup": "requested",
+            "cubesandbox_cleanup": if cleanup_result { "deleted_active_sandbox" } else { "no_active_sandbox" },
+        }),
+    )
+    .await;
     interrupt_static_task(&state, "codeql", &task_id).await
 }
 
@@ -939,6 +1020,26 @@ async fn get_static_progress(
     } else {
         Vec::new()
     };
+    let events = if query.include_logs.unwrap_or(false) {
+        record
+            .progress
+            .events
+            .iter()
+            .map(|event| {
+                json!({
+                    "timestamp": event.timestamp,
+                    "event_type": event.event_type,
+                    "stage": event.stage,
+                    "progress": event.progress,
+                    "round": event.round,
+                    "redaction": event.redaction,
+                    "payload": event.payload,
+                })
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     Ok(Json(json!({
         "task_id": record.id,
         "engine": record.engine,
@@ -949,6 +1050,7 @@ async fn get_static_progress(
         "started_at": record.progress.started_at,
         "updated_at": record.progress.updated_at,
         "logs": logs,
+        "events": events,
     })))
 }
 
@@ -966,6 +1068,26 @@ async fn get_codeql_progress(
     Query(query): Query<ProgressQuery>,
 ) -> Result<Json<Value>, ApiError> {
     get_static_progress(&state, "codeql", &task_id, query).await
+}
+
+async fn reset_codeql_project_build_plan(
+    State(state): State<AppState>,
+    AxumPath(project_id): AxumPath<String>,
+) -> Result<Json<Value>, ApiError> {
+    projects::get_project(&state, &project_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::NotFound(format!("project not found: {project_id}")))?;
+    let reset_count = reset_codeql_build_plan_for_project(&state, &project_id, "cpp")
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(json!({
+        "message": "CodeQL project build plan reset",
+        "project_id": project_id,
+        "language": "cpp",
+        "reset_count": reset_count,
+        "manual_editing": false,
+    })))
 }
 
 async fn list_codeql_findings(
@@ -1181,7 +1303,6 @@ async fn run_codeql_scan_inner(
     options: CodeqlTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let started_at = std::time::Instant::now();
-
     update_scan_progress(
         state,
         task_id,
@@ -1192,18 +1313,15 @@ async fn run_codeql_scan_inner(
     .await;
     let (archive_path, archive_name) = resolve_project_archive_input(state, project_id).await?;
 
-    let workspace_root = scan_workspace_root();
-    let workspace_dir = workspace_root
+    let workspace_dir = scan_workspace_root()
         .join("codeql-runtime")
         .join(Uuid::new_v4().to_string());
     let source_dir = workspace_dir.join("source");
     let output_dir = workspace_dir.join("output");
     let build_plan_dir = workspace_dir.join("build-plan");
-    let evidence_dir = workspace_dir.join("evidence");
     tokio::fs::create_dir_all(&source_dir).await?;
     tokio::fs::create_dir_all(&output_dir).await?;
     tokio::fs::create_dir_all(&build_plan_dir).await?;
-    tokio::fs::create_dir_all(&evidence_dir).await?;
 
     let source_dir_clone = source_dir.clone();
     let archive_path_clone = archive_path.clone();
@@ -1250,238 +1368,226 @@ async fn run_codeql_scan_inner(
         return Err("no CodeQL query assets available for scan".into());
     };
 
-    let query_container_path = workspace_container_path(&workspace_dir, &query_dir)?;
-    let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
-    let codeql_summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
-    let codeql_events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
-    let compile_summary_rel_path = format!("output/compile-summary-{}.json", Uuid::new_v4());
-    let compile_events_rel_path = format!("output/compile-events-{}.jsonl", Uuid::new_v4());
-    let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
-    let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
-    let compile_stdout_rel_path = format!("output/compile-stdout-{}.txt", Uuid::new_v4());
-    let compile_stderr_rel_path = format!("output/compile-stderr-{}.txt", Uuid::new_v4());
-    let build_plan_rel_path = "build-plan/build-plan.json".to_string();
-    let compile_plan_rel_path = "build-plan/compile-sandbox-plan.json".to_string();
-
     if primary_language != "cpp" {
         return run_codeql_direct_scan_after_query_materialization(
             state,
             task_id,
             &workspace_dir,
             &source_dir,
+            &query_dir,
             &known_paths,
             files_scanned,
             files_extracted,
             &codeql_languages,
             &primary_language,
-            &query_container_path,
             options,
             started_at,
         )
         .await;
     }
 
-    update_scan_progress(
+    append_codeql_exploration_event(
         state,
         task_id,
-        30.0,
-        "compile_sandbox",
-        "running C/C++ compile sandbox to discover a DB-backed build recipe",
+        28.0,
+        "plan_reuse",
+        "build_plan_reuse_check",
+        None,
+        json!({
+            "message": "checking project-level CodeQL C/C++ build-plan reuse",
+            "project_id": project_id,
+            "language": primary_language,
+            "reuse_reason": if options.reset_build_plan {
+                "reset requested; sticky build plan will not be reused"
+            } else {
+                "checking for accepted sticky project plan"
+            },
+        }),
     )
     .await;
-    let compile_spec = build_codeql_compile_sandbox_runner_spec(
-        &state.config,
-        &workspace_dir,
-        CodeqlCompileSandboxPaths {
-            container_source_dir: "/scan/source",
-            summary_rel_path: &compile_summary_rel_path,
-            summary_container_path: &format!("/scan/{compile_summary_rel_path}"),
-            events_container_path: &format!("/scan/{compile_events_rel_path}"),
-            plan_container_path: &format!("/scan/{compile_plan_rel_path}"),
-            evidence_container_dir: "/scan/evidence",
-            stdout_rel_path: &compile_stdout_rel_path,
-            stderr_rel_path: &compile_stderr_rel_path,
-            language: &primary_language,
-        },
-    );
-    let compile_result = tokio::task::spawn_blocking(move || runner::execute(compile_spec)).await?;
-    record_codeql_events(
-        state,
-        task_id,
-        &workspace_dir.join(&compile_events_rel_path),
-        38.0,
-    )
-    .await;
-    if !compile_result.success {
-        let error_msg = format_codeql_runner_error(
-            &compile_result,
-            Some(&workspace_dir.join(&compile_events_rel_path)),
+
+    if options.reset_build_plan {
+        let reset_count =
+            reset_codeql_build_plan_for_project(state, project_id, &primary_language).await?;
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            29.0,
+            "plan_reset",
+            "build_plan_reset",
+            None,
+            json!({
+                "message": "CodeQL project build plan reset before re-explore",
+                "project_id": project_id,
+                "language": primary_language,
+                "reset_count": reset_count,
+            }),
         )
         .await;
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Err(format!("CodeQL compile sandbox failed: {error_msg}").into());
+    } else if let Some(sticky_plan) =
+        load_active_codeql_build_plan_for_project(state, project_id, &primary_language).await?
+    {
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            34.0,
+            "plan_reuse",
+            "build_plan_reused",
+            None,
+            json!({
+                "message": "reusing accepted project-level CodeQL C/C++ build plan",
+                "reuse_reason": "accepted project-level sticky build plan exists",
+                "build_plan_record_id": sticky_plan.id,
+                "commands": sticky_plan.commands,
+                "working_directory": sticky_plan.working_directory,
+                "capture_validation": sticky_plan.evidence_json.get("capture_validation").cloned().unwrap_or(Value::Null),
+            }),
+        )
+        .await;
+        return run_codeql_cpp_scan_with_build_plan(
+            state,
+            task_id,
+            &workspace_dir,
+            &source_dir,
+            &query_dir,
+            &known_paths,
+            files_scanned,
+            files_extracted,
+            &codeql_languages,
+            &primary_language,
+            codeql::build_plan_json_from_record(&sticky_plan),
+            "project_sticky_reuse",
+            Some(sticky_plan.id.clone()),
+            sticky_plan
+                .evidence_json
+                .get("fingerprint")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            Vec::new(),
+            None,
+            started_at,
+            None,
+        )
+        .await;
     }
 
-    let compile_plan_text = tokio::fs::read_to_string(workspace_dir.join(&compile_plan_rel_path))
-        .await
-        .map_err(|error| format!("missing compile sandbox build plan output: {error}"))?;
-    let compile_plan = codeql::parse_compile_sandbox_plan(&compile_plan_text)
-        .map_err(|error| format!("invalid compile sandbox build plan: {error}"))?;
-    if codeql::compile_sandbox_evidence_is_truth(&compile_plan.evidence_json) {
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Err("compile sandbox evidence cannot be marked as runtime truth".into());
-    }
-    let accepted_build_plan = codeql::build_plan_json_from_compile_plan(&compile_plan);
-    tokio::fs::write(
-        workspace_dir.join(&build_plan_rel_path),
-        serde_json::to_vec_pretty(&accepted_build_plan)?,
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        34.0,
+        "plan_reuse",
+        "build_plan_reuse_check",
+        None,
+        json!({
+            "message": "no accepted project-level CodeQL C/C++ build plan found; starting CubeSandbox exploration",
+            "reuse_reason": "miss:no_active_project_plan",
+        }),
     )
-    .await?;
+    .await;
+
+    let session = codeql_cubesandbox::CodeqlSandboxSession::start(state, task_id).await?;
+    session
+        .stage_workspace(&workspace_dir, &source_dir, &query_dir)
+        .await?;
+    let exploration_result = explore_codeql_cpp_build_plan(
+        state,
+        task_id,
+        &known_paths,
+        &session,
+        state.config.codeql_allow_network_during_build,
+    )
+    .await;
+    let candidate_plan = match exploration_result {
+        Ok(plan) => plan,
+        Err(error) => {
+            let cleanup_result = session.cleanup().await;
+            if let Err(cleanup_error) = cleanup_result {
+                append_codeql_exploration_event(
+                    state,
+                    task_id,
+                    100.0,
+                    "failure",
+                    "failed",
+                    None,
+                    json!({
+                        "message": "CodeQL CubeSandbox cleanup failed after exploration failure",
+                        "failure_category": "cleanup_failed",
+                        "stderr": cleanup_error.to_string(),
+                    }),
+                )
+                .await;
+            }
+            return Err(error);
+        }
+    };
+    let compile_plan = codeql::parse_compile_sandbox_plan(&candidate_plan.to_string())
+        .map_err(|error| format!("invalid CubeSandbox CodeQL candidate build plan: {error}"))?;
+    let scan_result = run_codeql_cpp_scan_with_build_plan(
+        state,
+        task_id,
+        &workspace_dir,
+        &source_dir,
+        &query_dir,
+        &known_paths,
+        files_scanned,
+        files_extracted,
+        &codeql_languages,
+        &primary_language,
+        candidate_plan,
+        "cubesandbox_pending_capture",
+        None,
+        None,
+        Vec::new(),
+        Some(json!({
+            "status": "completed",
+            "language_scope": "cpp_only",
+            "completion_scope": "cpp_slice_only_other_languages_deferred",
+            "evidence_role": "evidence_only",
+            "executor": "cubesandbox",
+        })),
+        started_at,
+        Some(session),
+    )
+    .await;
+    scan_result?;
+
     let now_for_plan = now_rfc3339();
-    let build_plan_record = codeql::build_plan_record_from_compile_plan(
+    let mut build_plan_record = codeql::build_plan_record_from_compile_plan(
         Uuid::new_v4().to_string(),
         project_id.to_string(),
         &compile_plan,
         now_for_plan,
     );
-    let build_plan_record_id = build_plan_record.id.clone();
-    let build_plan_fingerprint = build_plan_record
-        .evidence_json
-        .get("fingerprint")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
+    build_plan_record.evidence_json["capture_validation"] = json!({
+        "database_create": "completed",
+        "extractor": "cpp",
+        "source": "cubesandbox_codeql",
+        "validated_after_scan": true,
+    });
     let runtime_build_plan_record =
         persist_codeql_build_plan_record(state, build_plan_record).await?;
-    let runtime_build_plan_json = codeql::build_plan_json_from_record(&runtime_build_plan_record);
-    tokio::fs::write(
-        workspace_dir.join(&build_plan_rel_path),
-        serde_json::to_vec_pretty(&runtime_build_plan_json)?,
+    update_codeql_task_build_plan_metadata(
+        state,
+        task_id,
+        "compile_sandbox_db_truth",
+        &runtime_build_plan_record,
     )
     .await?;
-
-    update_scan_progress(
+    append_codeql_exploration_event(
         state,
         task_id,
-        50.0,
-        "database_create",
-        "running CodeQL database create/analyze runner with compile sandbox recipe",
+        96.0,
+        "capture_validation",
+        "build_plan_accepted",
+        None,
+        json!({
+            "message": "CodeQL C/C++ project build plan accepted after CubeSandbox database capture proof",
+            "build_plan_record_id": runtime_build_plan_record.id,
+            "commands": runtime_build_plan_record.commands,
+            "capture_validation": runtime_build_plan_record.evidence_json.get("capture_validation").cloned().unwrap_or(Value::Null),
+        }),
     )
     .await;
-    let spec = build_codeql_runner_spec(
-        &state.config,
-        &workspace_dir,
-        CodeqlRunnerPaths {
-            container_source_dir: "/scan/source",
-            query_container_path: &query_container_path,
-            database_container_path: "/scan/output/codeql-db",
-            sarif_container_path: &format!("/scan/{sarif_rel_path}"),
-            summary_rel_path: &codeql_summary_rel_path,
-            summary_container_path: &format!("/scan/{codeql_summary_rel_path}"),
-            events_container_path: &format!("/scan/{codeql_events_rel_path}"),
-            build_plan_container_path: Some(&format!("/scan/{build_plan_rel_path}")),
-            build_mode: None,
-            stdout_rel_path: &stdout_rel_path,
-            stderr_rel_path: &stderr_rel_path,
-            language: &primary_language,
-            allow_network: state.config.codeql_allow_network_during_build,
-        },
-    );
-
-    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
-    record_codeql_events(
-        state,
-        task_id,
-        &workspace_dir.join(&codeql_events_rel_path),
-        62.0,
-    )
-    .await;
-    if !runner_result.success {
-        let error_msg = format_codeql_runner_error(
-            &runner_result,
-            Some(&workspace_dir.join(&codeql_events_rel_path)),
-        )
-        .await;
-        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
-        return Err(format!("CodeQL scan failed: {error_msg}").into());
-    }
-
-    update_scan_progress(
-        state,
-        task_id,
-        75.0,
-        "parsing_sarif",
-        "parsing CodeQL SARIF results",
-    )
-    .await;
-    let sarif_path = workspace_dir.join(&sarif_rel_path);
-    let sarif_text = tokio::fs::read_to_string(&sarif_path)
-        .await
-        .map_err(|error| format!("missing CodeQL SARIF output: {error}"))?;
-    let findings = codeql::parse_sarif_output(
-        &sarif_text,
-        task_id,
-        source_dir.to_str(),
-        Some(&known_paths),
-    );
-
-    update_scan_progress(state, task_id, 90.0, "finalizing", "saving CodeQL findings").await;
-    let elapsed_ms = started_at.elapsed().as_millis() as i64;
-    let now = now_rfc3339();
-    let mut snapshot = task_state::load_snapshot(state).await?;
-    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
-        record.status = "completed".to_string();
-        record.total_findings = findings.len() as i64;
-        record.scan_duration_ms = elapsed_ms;
-        record.files_scanned = files_scanned as i64;
-        record.updated_at = Some(now.clone());
-        record.extra = json!({
-            "engine": "codeql",
-            "language": primary_language,
-            "languages": codeql_languages,
-            "files_extracted": files_extracted,
-            "lines_scanned": 0,
-            "build_plan_source": "compile_sandbox_db_truth",
-            "build_plan_record_id": build_plan_record_id,
-            "build_plan_fingerprint": build_plan_fingerprint,
-            "compile_sandbox": {
-                "status": "completed",
-                "language_scope": "cpp_only",
-                "completion_scope": "cpp_slice_only_other_languages_deferred",
-                "evidence_role": "evidence_only",
-                "events_path": compile_events_rel_path,
-                "summary_path": compile_summary_rel_path,
-            },
-            "first_version_complete": false,
-        });
-        let mut logs = record.progress.logs.clone();
-        logs.push(task_state::StaticTaskProgressLogRecord {
-            timestamp: now.clone(),
-            stage: "completed".to_string(),
-            message: format!(
-                "CodeQL C/C++ compile-sandbox scan completed: {} findings, {} files scanned",
-                findings.len(),
-                files_scanned
-            ),
-            progress: 100.0,
-            level: "info".to_string(),
-        });
-        record.progress = task_state::StaticTaskProgressRecord {
-            progress: 100.0,
-            current_stage: Some("completed".to_string()),
-            message: Some(format!(
-                "CodeQL C/C++ compile-sandbox scan completed: {} findings in {}ms",
-                findings.len(),
-                elapsed_ms
-            )),
-            started_at: record.progress.started_at.clone(),
-            updated_at: Some(now),
-            logs,
-        };
-        record.findings = findings;
-    }
-    let _ = task_state::save_snapshot(state, &snapshot).await;
-    let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
     Ok(())
 }
 
@@ -1501,18 +1607,323 @@ async fn persist_codeql_build_plan_record(
     Ok(runtime_truth)
 }
 
+async fn load_active_codeql_build_plan_for_project(
+    state: &AppState,
+    project_id: &str,
+    language: &str,
+) -> Result<Option<task_state::CodeqlBuildPlanRecord>, Box<dyn std::error::Error + Send + Sync>> {
+    if let Some(record) =
+        codeql_build_plans::load_active_project_build_plan(state, project_id, language).await?
+    {
+        return Ok(Some(record));
+    }
+    let snapshot = task_state::load_snapshot(state).await?;
+    let mut records = snapshot
+        .codeql_build_plans
+        .into_values()
+        .filter(|record| {
+            record.project_id == project_id
+                && record.language == language
+                && record.status == "accepted"
+        })
+        .collect::<Vec<_>>();
+    records.sort_by(|left, right| {
+        right
+            .updated_at
+            .as_deref()
+            .unwrap_or(&right.created_at)
+            .cmp(left.updated_at.as_deref().unwrap_or(&left.created_at))
+    });
+    if records.len() > 1 {
+        return Err(format!(
+            "ambiguous active CodeQL build plans for project {project_id} language {language}"
+        )
+        .into());
+    }
+    Ok(records.into_iter().next())
+}
+
+async fn reset_codeql_build_plan_for_project(
+    state: &AppState,
+    project_id: &str,
+    language: &str,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let db_reset =
+        codeql_build_plans::reset_active_project_build_plan(state, project_id, language).await?;
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    let now = now_rfc3339();
+    let mut file_reset = 0usize;
+    for record in snapshot.codeql_build_plans.values_mut() {
+        if record.project_id == project_id
+            && record.language == language
+            && record.status == "accepted"
+        {
+            record.status = "reset".to_string();
+            record.updated_at = Some(now.clone());
+            file_reset += 1;
+        }
+    }
+    if file_reset > 0 {
+        task_state::save_snapshot(state, &snapshot).await?;
+    }
+    Ok(file_reset.max(db_reset as usize))
+}
+
+async fn update_codeql_task_build_plan_metadata(
+    state: &AppState,
+    task_id: &str,
+    build_plan_source: &str,
+    record: &task_state::CodeqlBuildPlanRecord,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(task) = snapshot.static_tasks.get_mut(task_id) {
+        if let Some(extra) = task.extra.as_object_mut() {
+            extra.insert(
+                "build_plan_source".to_string(),
+                Value::String(build_plan_source.to_string()),
+            );
+            extra.insert(
+                "build_plan_record_id".to_string(),
+                Value::String(record.id.clone()),
+            );
+            extra.insert(
+                "build_plan_fingerprint".to_string(),
+                record
+                    .evidence_json
+                    .get("fingerprint")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+        }
+        task.updated_at = Some(now_rfc3339());
+    }
+    task_state::save_snapshot(state, &snapshot).await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_codeql_cpp_scan_with_build_plan(
+    state: &AppState,
+    task_id: &str,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    query_dir: &std::path::Path,
+    known_paths: &BTreeSet<String>,
+    files_scanned: usize,
+    files_extracted: usize,
+    codeql_languages: &[String],
+    primary_language: &str,
+    build_plan_json: Value,
+    build_plan_source: &str,
+    build_plan_record_id: Option<String>,
+    build_plan_fingerprint: Option<String>,
+    exploration_rounds: Vec<Value>,
+    compile_sandbox_extra: Option<Value>,
+    started_at: std::time::Instant,
+    existing_session: Option<codeql_cubesandbox::CodeqlSandboxSession>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
+    let codeql_summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
+    let codeql_events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
+
+    update_scan_progress(
+        state,
+        task_id,
+        50.0,
+        "database_create",
+        "running CodeQL database create/analyze in CubeSandbox with project build plan",
+    )
+    .await;
+
+    let scan_output = if let Some(session) = existing_session {
+        let result = run_codeql_cubesandbox_scan_in_session(
+            state,
+            task_id,
+            workspace_dir,
+            source_dir,
+            query_dir,
+            known_paths,
+            primary_language,
+            None,
+            Some(build_plan_json),
+            exploration_rounds,
+            state.config.codeql_allow_network_during_build,
+            &session,
+        )
+        .await;
+        let cleanup_result = session.cleanup().await;
+        if let Err(error) = cleanup_result {
+            return Err(format!("CubeSandbox cleanup failed after CodeQL scan: {error}").into());
+        }
+        let mut output = result?;
+        output.cleanup_completed = true;
+        output
+    } else {
+        run_codeql_cubesandbox_scan(
+            state,
+            task_id,
+            workspace_dir,
+            source_dir,
+            query_dir,
+            known_paths,
+            primary_language,
+            None,
+            Some(build_plan_json),
+            exploration_rounds,
+            state.config.codeql_allow_network_during_build,
+        )
+        .await?
+    };
+    tokio::fs::write(
+        workspace_dir.join(&sarif_rel_path),
+        scan_output.sarif_text.as_bytes(),
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(&codeql_events_rel_path),
+        scan_output.events_text.as_bytes(),
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(&codeql_summary_rel_path),
+        serde_json::to_vec_pretty(&scan_output.summary_json)?,
+    )
+    .await?;
+    record_codeql_events(
+        state,
+        task_id,
+        &workspace_dir.join(&codeql_events_rel_path),
+        62.0,
+    )
+    .await;
+    let codeql_events_text = tokio::fs::read_to_string(workspace_dir.join(&codeql_events_rel_path))
+        .await
+        .map_err(|error| format!("missing CodeQL event output: {error}"))?;
+    codeql::validate_codeql_capture_events(&codeql_events_text, primary_language)
+        .map_err(|error| format!("CodeQL capture validation failed: {error}"))?;
+
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        68.0,
+        "capture_validation",
+        "codeql_capture_validation",
+        None,
+        json!({
+            "message": "CodeQL database create/analyze completed with accepted build plan",
+            "build_plan_source": build_plan_source,
+            "build_plan_record_id": build_plan_record_id,
+            "build_plan_fingerprint": build_plan_fingerprint,
+            "capture_validation": {
+                "database_create": "completed",
+                "events_path": codeql_events_rel_path,
+                "summary_path": codeql_summary_rel_path,
+                "language": primary_language,
+                "executor": "cubesandbox",
+                "sandbox_id": scan_output.sandbox_id,
+            },
+        }),
+    )
+    .await;
+
+    update_scan_progress(
+        state,
+        task_id,
+        75.0,
+        "parsing_sarif",
+        "parsing CodeQL SARIF results",
+    )
+    .await;
+    let sarif_path = workspace_dir.join(&sarif_rel_path);
+    let sarif_text = tokio::fs::read_to_string(&sarif_path).await?;
+    let findings =
+        codeql::parse_sarif_output(&sarif_text, task_id, source_dir.to_str(), Some(known_paths));
+
+    update_scan_progress(state, task_id, 90.0, "finalizing", "saving CodeQL findings").await;
+    let elapsed_ms = started_at.elapsed().as_millis() as i64;
+    let now = now_rfc3339();
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        let final_build_plan_source = record
+            .extra
+            .get("build_plan_source")
+            .and_then(Value::as_str)
+            .unwrap_or(build_plan_source)
+            .to_string();
+        let final_build_plan_record_id = record
+            .extra
+            .get("build_plan_record_id")
+            .cloned()
+            .or_else(|| build_plan_record_id.clone().map(Value::String))
+            .unwrap_or(Value::Null);
+        let final_build_plan_fingerprint = record
+            .extra
+            .get("build_plan_fingerprint")
+            .cloned()
+            .or_else(|| build_plan_fingerprint.clone().map(Value::String))
+            .unwrap_or(Value::Null);
+        record.status = "completed".to_string();
+        record.total_findings = findings.len() as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.files_scanned = files_scanned as i64;
+        record.updated_at = Some(now.clone());
+        record.extra = json!({
+            "engine": "codeql",
+            "language": primary_language,
+            "languages": codeql_languages,
+            "files_extracted": files_extracted,
+            "lines_scanned": 0,
+            "build_plan_source": final_build_plan_source,
+            "build_plan_record_id": final_build_plan_record_id,
+            "build_plan_fingerprint": final_build_plan_fingerprint,
+            "compile_sandbox": compile_sandbox_extra,
+            "first_version_complete": false,
+        });
+        let mut logs = record.progress.logs.clone();
+        let events = record.progress.events.clone();
+        logs.push(task_state::StaticTaskProgressLogRecord {
+            timestamp: now.clone(),
+            stage: "completed".to_string(),
+            message: format!(
+                "CodeQL C/C++ scan completed: {} findings, {} files scanned",
+                findings.len(),
+                files_scanned
+            ),
+            progress: 100.0,
+            level: "info".to_string(),
+        });
+        record.progress = task_state::StaticTaskProgressRecord {
+            progress: 100.0,
+            current_stage: Some("completed".to_string()),
+            message: Some(format!(
+                "CodeQL C/C++ scan completed: {} findings in {}ms",
+                findings.len(),
+                elapsed_ms
+            )),
+            started_at: record.progress.started_at.clone(),
+            updated_at: Some(now),
+            logs,
+            events,
+        };
+        record.findings = findings;
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+    let _ = tokio::fs::remove_dir_all(workspace_dir).await;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_codeql_direct_scan_after_query_materialization(
     state: &AppState,
     task_id: &str,
     workspace_dir: &std::path::Path,
     source_dir: &std::path::Path,
+    query_dir: &std::path::Path,
     known_paths: &BTreeSet<String>,
     files_scanned: usize,
     files_extracted: usize,
     codeql_languages: &[String],
     primary_language: &str,
-    query_container_path: &str,
     options: CodeqlTaskOptions,
     started_at: std::time::Instant,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -1521,40 +1932,47 @@ async fn run_codeql_direct_scan_after_query_materialization(
     let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
     let codeql_summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
     let codeql_events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
-    let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
-    let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
 
     update_scan_progress(
         state,
         task_id,
         40.0,
         "database_create",
-        &format!("running CodeQL {build_mode} database create/analyze runner"),
+        &format!("running CodeQL {build_mode} database create/analyze in CubeSandbox"),
     )
     .await;
-    let spec = build_codeql_runner_spec(
-        &state.config,
-        workspace_dir,
-        CodeqlRunnerPaths {
-            container_source_dir: "/scan/source",
-            query_container_path,
-            database_container_path: "/scan/output/codeql-db",
-            sarif_container_path: &format!("/scan/{sarif_rel_path}"),
-            summary_rel_path: &codeql_summary_rel_path,
-            summary_container_path: &format!("/scan/{codeql_summary_rel_path}"),
-            events_container_path: &format!("/scan/{codeql_events_rel_path}"),
-            build_plan_container_path: None,
-            build_mode: Some(build_mode.as_str()),
-            stdout_rel_path: &stdout_rel_path,
-            stderr_rel_path: &stderr_rel_path,
-            language: primary_language,
-            allow_network: options
-                .allow_network
-                .unwrap_or(state.config.codeql_allow_network_during_build),
-        },
-    );
 
-    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+    let scan_output = run_codeql_cubesandbox_scan(
+        state,
+        task_id,
+        workspace_dir,
+        source_dir,
+        query_dir,
+        known_paths,
+        primary_language,
+        Some(build_mode.as_str()),
+        None,
+        Vec::new(),
+        options
+            .allow_network
+            .unwrap_or(state.config.codeql_allow_network_during_build),
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(&sarif_rel_path),
+        scan_output.sarif_text.as_bytes(),
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(&codeql_events_rel_path),
+        scan_output.events_text.as_bytes(),
+    )
+    .await?;
+    tokio::fs::write(
+        workspace_dir.join(&codeql_summary_rel_path),
+        serde_json::to_vec_pretty(&scan_output.summary_json)?,
+    )
+    .await?;
     record_codeql_events(
         state,
         task_id,
@@ -1562,15 +1980,6 @@ async fn run_codeql_direct_scan_after_query_materialization(
         62.0,
     )
     .await;
-    if !runner_result.success {
-        let error_msg = format_codeql_runner_error(
-            &runner_result,
-            Some(&workspace_dir.join(&codeql_events_rel_path)),
-        )
-        .await;
-        let _ = tokio::fs::remove_dir_all(workspace_dir).await;
-        return Err(format!("CodeQL scan failed: {error_msg}").into());
-    }
 
     update_scan_progress(
         state,
@@ -1608,6 +2017,7 @@ async fn run_codeql_direct_scan_after_query_materialization(
             "first_version_complete": false,
         });
         let mut logs = record.progress.logs.clone();
+        let events = record.progress.events.clone();
         logs.push(task_state::StaticTaskProgressLogRecord {
             timestamp: now.clone(),
             stage: "completed".to_string(),
@@ -1632,123 +2042,13 @@ async fn run_codeql_direct_scan_after_query_materialization(
             started_at: record.progress.started_at.clone(),
             updated_at: Some(now),
             logs,
+            events,
         };
         record.findings = findings;
     }
     let _ = task_state::save_snapshot(state, &snapshot).await;
     let _ = tokio::fs::remove_dir_all(workspace_dir).await;
     Ok(())
-}
-
-struct CodeqlCompileSandboxPaths<'a> {
-    container_source_dir: &'a str,
-    summary_rel_path: &'a str,
-    summary_container_path: &'a str,
-    events_container_path: &'a str,
-    plan_container_path: &'a str,
-    evidence_container_dir: &'a str,
-    stdout_rel_path: &'a str,
-    stderr_rel_path: &'a str,
-    language: &'a str,
-}
-
-struct CodeqlRunnerPaths<'a> {
-    container_source_dir: &'a str,
-    query_container_path: &'a str,
-    database_container_path: &'a str,
-    sarif_container_path: &'a str,
-    summary_rel_path: &'a str,
-    summary_container_path: &'a str,
-    events_container_path: &'a str,
-    build_plan_container_path: Option<&'a str>,
-    build_mode: Option<&'a str>,
-    stdout_rel_path: &'a str,
-    stderr_rel_path: &'a str,
-    language: &'a str,
-    allow_network: bool,
-}
-
-fn build_codeql_compile_sandbox_runner_spec(
-    config: &crate::config::AppConfig,
-    workspace_dir: &std::path::Path,
-    paths: CodeqlCompileSandboxPaths<'_>,
-) -> RunnerSpec {
-    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
-        Some(config.codeql_runner_cpu_limit)
-    } else {
-        None
-    };
-    RunnerSpec {
-        scanner_type: "codeql-compile-sandbox".to_string(),
-        image: config.scanner_codeql_compile_sandbox_image.clone(),
-        workspace_dir: workspace_dir.display().to_string(),
-        command: codeql::build_compile_sandbox_command(&codeql::CompileSandboxCommandArgs {
-            source_dir: paths.container_source_dir,
-            summary_path: paths.summary_container_path,
-            events_path: paths.events_container_path,
-            plan_path: paths.plan_container_path,
-            evidence_dir: paths.evidence_container_dir,
-            language: paths.language,
-            allow_network: config.codeql_allow_network_during_build,
-        }),
-        timeout_seconds: config.codeql_scan_timeout_seconds,
-        env: BTreeMap::new(),
-        expected_exit_codes: vec![0],
-        artifact_paths: Vec::new(),
-        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
-        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
-        completion_summary_path: Some(paths.summary_rel_path.to_string()),
-        workspace_root_override: None,
-        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        cpu_limit,
-        pids_limit: Some(1024),
-        network_disabled: !config.codeql_allow_network_during_build,
-    }
-}
-
-fn build_codeql_runner_spec(
-    config: &crate::config::AppConfig,
-    workspace_dir: &std::path::Path,
-    paths: CodeqlRunnerPaths<'_>,
-) -> RunnerSpec {
-    let cpu_limit = if config.codeql_runner_cpu_limit > 0.0 {
-        Some(config.codeql_runner_cpu_limit)
-    } else {
-        None
-    };
-    RunnerSpec {
-        scanner_type: "codeql".to_string(),
-        image: config.scanner_codeql_image.clone(),
-        workspace_dir: workspace_dir.display().to_string(),
-        command: codeql::build_scan_command(&codeql::ScanCommandArgs {
-            source_dir: paths.container_source_dir,
-            queries_dir: paths.query_container_path,
-            database_dir: paths.database_container_path,
-            sarif_path: paths.sarif_container_path,
-            summary_path: paths.summary_container_path,
-            events_path: paths.events_container_path,
-            build_plan_path: paths.build_plan_container_path,
-            build_mode: paths.build_mode,
-            language: paths.language,
-            threads: config.codeql_threads,
-            ram_mb: config.codeql_ram_mb,
-            allow_network: paths.allow_network,
-        }),
-        timeout_seconds: config.codeql_scan_timeout_seconds,
-        env: BTreeMap::new(),
-        expected_exit_codes: vec![0],
-        artifact_paths: Vec::new(),
-        capture_stdout_path: Some(paths.stdout_rel_path.to_string()),
-        capture_stderr_path: Some(paths.stderr_rel_path.to_string()),
-        completion_summary_path: Some(paths.summary_rel_path.to_string()),
-        workspace_root_override: None,
-        memory_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
-        cpu_limit,
-        pids_limit: Some(1024),
-        network_disabled: !paths.allow_network,
-    }
 }
 
 fn normalize_codeql_task_languages(
@@ -1792,6 +2092,7 @@ fn extract_codeql_task_options(payload: &Value) -> CodeqlTaskOptions {
         languages,
         build_mode,
         allow_network: optional_bool(payload, "allow_network"),
+        reset_build_plan: optional_bool(payload, "reset_build_plan").unwrap_or(false),
     }
 }
 
@@ -1804,6 +2105,593 @@ fn resolve_codeql_direct_build_mode(language: &str, requested: Option<&str>) -> 
         "go" => "autobuild".to_string(),
         _ => "none".to_string(),
     }
+}
+
+fn choose_cubesandbox_cpp_build_plan(known_paths: &BTreeSet<String>, allow_network: bool) -> Value {
+    let has_cmake = known_paths
+        .iter()
+        .any(|path| path.ends_with("CMakeLists.txt"));
+    let has_make = known_paths.iter().any(|path| {
+        path.rsplit('/')
+            .next()
+            .is_some_and(|name| name == "Makefile" || name == "makefile")
+    });
+    let commands = if has_cmake {
+        vec![
+            "cmake -S . -B build".to_string(),
+            "cmake --build build".to_string(),
+        ]
+    } else if has_make {
+        vec!["make -B -j2".to_string()]
+    } else {
+        let source_file = known_paths
+            .iter()
+            .find(|path| path.to_ascii_lowercase().ends_with(".c"))
+            .cloned()
+            .unwrap_or_else(|| "main.c".to_string());
+        vec![format!("cc -c {source_file}")]
+    };
+    json!({
+        "language": "cpp",
+        "target_path": ".",
+        "build_mode": "manual",
+        "commands": commands,
+        "working_directory": ".",
+        "allow_network": allow_network,
+        "query_suite": Value::Null,
+        "source_fingerprint": format!("sha256:{}", Uuid::new_v4()),
+        "dependency_fingerprint": "sha256:cubesandbox-auto",
+        "status": "accepted",
+        "evidence_json": {
+            "artifacts_role": "evidence_only",
+            "source": "cubesandbox_exploration",
+            "capture_validation": {
+                "database_create": "pending",
+                "executor": "cubesandbox"
+            }
+        }
+    })
+}
+
+async fn explore_codeql_cpp_build_plan(
+    state: &AppState,
+    task_id: &str,
+    known_paths: &BTreeSet<String>,
+    session: &codeql_cubesandbox::CodeqlSandboxSession,
+    allow_network: bool,
+) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    let mut fallback_plan = choose_cubesandbox_cpp_build_plan(known_paths, allow_network);
+    let llm_config = resolve_codeql_exploration_llm_config(state, &mut fallback_plan).await;
+    let mut previous_failures = Vec::new();
+    let max_rounds = state.config.codeql_max_build_inference_rounds.clamp(1, 50);
+
+    for round in 1..=max_rounds {
+        let round_i64 = i64::try_from(round).unwrap_or(50);
+        let mut candidate_plan = propose_codeql_cpp_build_plan_for_round(
+            state,
+            task_id,
+            known_paths,
+            &fallback_plan,
+            allow_network,
+            llm_config.as_ref(),
+            &previous_failures,
+            round_i64,
+        )
+        .await;
+        let compile_plan = match codeql::parse_compile_sandbox_plan(&candidate_plan.to_string()) {
+            Ok(plan) => plan,
+            Err(error) => {
+                previous_failures.push(json!({
+                    "round": round_i64,
+                    "failure_category": "plan_validation_failed",
+                    "stderr": codeql::redact_sensitive_text(&error.to_string()),
+                }));
+                append_codeql_exploration_event(
+                    state,
+                    task_id,
+                    35.0 + f64::from(round as u32),
+                    "failure",
+                    "failed",
+                    Some(round_i64),
+                    json!({
+                        "message": "CodeQL LLM build plan failed validation before CubeSandbox execution",
+                        "failure_category": "plan_validation_failed",
+                        "stderr": error.to_string(),
+                    }),
+                )
+                .await;
+                continue;
+            }
+        };
+
+        let mut round_outputs = Vec::new();
+        let mut round_success = true;
+        for command in &compile_plan.commands {
+            let output = session.run_exploration_command(command).await?;
+            append_codeql_exploration_event(
+                state,
+                task_id,
+                38.0 + f64::from(round as u32),
+                "sandbox_command",
+                "sandbox_command_completed",
+                Some(round_i64),
+                json!({
+                    "message": "CubeSandbox exploration command completed",
+                    "command": output.command,
+                    "stdout": output.stdout,
+                    "stderr": output.stderr,
+                    "exit_code": output.exit_code,
+                    "failure_category": output.failure_category,
+                    "dependency_installation": output.dependency_installation,
+                }),
+            )
+            .await;
+            if output.exit_code != 0 {
+                round_success = false;
+                round_outputs.push(json!({
+                    "round": round_i64,
+                    "command": output.command,
+                    "stdout": output.stdout,
+                    "stderr": output.stderr,
+                    "exit_code": output.exit_code,
+                    "failure_category": output.failure_category,
+                    "dependency_installation": output.dependency_installation,
+                }));
+                break;
+            }
+            round_outputs.push(json!({
+                "round": round_i64,
+                "command": output.command,
+                "stdout": output.stdout,
+                "stderr": output.stderr,
+                "exit_code": output.exit_code,
+                "failure_category": output.failure_category,
+                "dependency_installation": output.dependency_installation,
+            }));
+        }
+
+        if round_success {
+            candidate_plan["evidence_json"]["exploration_rounds"] = json!(round);
+            candidate_plan["evidence_json"]["last_command_outputs"] = json!(round_outputs);
+            append_codeql_exploration_event(
+                state,
+                task_id,
+                45.0,
+                "capture_validation",
+                "build_plan_accepted",
+                Some(round_i64),
+                json!({
+                    "message": "CodeQL C/C++ build-plan candidate passed CubeSandbox command exploration; proceeding to CodeQL capture validation",
+                    "commands": candidate_plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+                    "capture_validation": {"database_create": "pending", "executor": "cubesandbox"},
+                }),
+            )
+            .await;
+            return Ok(candidate_plan);
+        }
+
+        previous_failures.extend(round_outputs);
+    }
+
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        100.0,
+        "failure",
+        "failed",
+        None,
+        json!({
+            "message": "CodeQL C/C++ compile exploration exhausted configured LLM rounds without a successful build plan",
+            "failure_category": "round_exhaustion",
+            "rounds": max_rounds,
+            "previous_failures": previous_failures,
+        }),
+    )
+    .await;
+    Err("CodeQL C/C++ compile exploration exhausted without an accepted build plan".into())
+}
+
+async fn resolve_codeql_exploration_llm_config(
+    state: &AppState,
+    fallback_plan: &mut Value,
+) -> Option<IntelligentLlmConfig> {
+    let stored = match system_config::load_current(state).await {
+        Ok(Some(stored)) => stored,
+        Ok(None) => {
+            fallback_plan["evidence_json"]["llm_model"] = json!(state.config.llm_model.clone());
+            fallback_plan["evidence_json"]["llm_mode"] = json!("deterministic_offline_fallback");
+            return None;
+        }
+        Err(error) => {
+            fallback_plan["evidence_json"]["llm_model"] = json!(state.config.llm_model.clone());
+            fallback_plan["evidence_json"]["llm_mode"] = json!("deterministic_config_load_failed");
+            fallback_plan["evidence_json"]["llm_error"] =
+                json!(codeql::redact_sensitive_text(&error.to_string()));
+            return None;
+        }
+    };
+    match resolve_intelligent_llm_config(&stored, &state.config) {
+        Ok(config) => Some(config),
+        Err(error) => {
+            fallback_plan["evidence_json"]["llm_model"] = json!(state.config.llm_model.clone());
+            fallback_plan["evidence_json"]["llm_mode"] = json!("deterministic_config_invalid");
+            fallback_plan["evidence_json"]["llm_error"] =
+                json!(codeql::redact_sensitive_text(&error.message));
+            None
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn propose_codeql_cpp_build_plan_for_round(
+    state: &AppState,
+    task_id: &str,
+    known_paths: &BTreeSet<String>,
+    fallback_plan: &Value,
+    allow_network: bool,
+    llm_config: Option<&IntelligentLlmConfig>,
+    previous_failures: &[Value],
+    round: i64,
+) -> Value {
+    let Some(config) = llm_config else {
+        let plan = fallback_plan.clone();
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            35.0,
+            "llm_round",
+            "llm_round_started",
+            Some(round),
+            json!({
+                "message": "no saved LLM configuration; using deterministic CubeSandbox build-plan candidate",
+                "reasoning_summary": "selected a deterministic build command from project files because no saved system LLM config exists",
+                "llm_mode": plan["evidence_json"]["llm_mode"].clone(),
+                "commands": plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+                "previous_failures": previous_failures,
+            }),
+        )
+        .await;
+        return plan;
+    };
+
+    let prompt = build_codeql_build_plan_prompt(
+        known_paths,
+        fallback_plan,
+        allow_network,
+        previous_failures,
+    );
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        35.0,
+        "llm_round",
+        "llm_round_started",
+        Some(round),
+        json!({
+            "message": "requesting backend LLM build-plan proposal for CodeQL C/C++ CubeSandbox exploration",
+            "reasoning_summary": "backend LLM receives project inventory, previous CubeSandbox command failures, and a fallback candidate, then returns JSON build plan",
+            "llm_model": config.model,
+            "llm_mode": "saved_system_config",
+            "commands": fallback_plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+            "previous_failures": previous_failures,
+        }),
+    )
+    .await;
+
+    let invoker = HttpIntelligentLlmInvoker::default();
+    match invoker.invoke(&prompt, config).await {
+        Ok(invocation) => match parse_codeql_llm_build_plan_response(
+            &invocation.content,
+            fallback_plan,
+            allow_network,
+            &config.model,
+        ) {
+            Ok(mut plan) => {
+                plan["evidence_json"]["llm_model"] = json!(config.model.clone());
+                plan["evidence_json"]["llm_mode"] = json!("saved_system_config");
+                plan["evidence_json"]["llm_finished_at"] = json!(invocation.finished_at);
+                append_codeql_exploration_event(
+                    state,
+                    task_id,
+                    36.0,
+                    "llm_round",
+                    "llm_round_completed",
+                    Some(round),
+                    json!({
+                        "message": "backend LLM returned a valid CodeQL C/C++ build-plan candidate",
+                        "reasoning_summary": plan["evidence_json"]["llm_reasoning_summary"].clone(),
+                        "llm_model": config.model,
+                        "llm_mode": "saved_system_config",
+                        "commands": plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+                    }),
+                )
+                .await;
+                plan
+            }
+            Err(error) => {
+                let mut plan = fallback_plan.clone();
+                plan["evidence_json"]["llm_model"] = json!(config.model.clone());
+                plan["evidence_json"]["llm_mode"] = json!("deterministic_after_llm_parse_failure");
+                plan["evidence_json"]["llm_error"] = json!(codeql::redact_sensitive_text(&error));
+                append_codeql_exploration_event(
+                    state,
+                    task_id,
+                    36.0,
+                    "llm_round",
+                    "llm_round_completed",
+                    Some(round),
+                    json!({
+                        "message": "backend LLM response could not be parsed as a safe build plan; using deterministic CubeSandbox candidate",
+                        "reasoning_summary": "LLM proposal was rejected by the same build-plan parser used for execution",
+                        "failure_category": "llm_plan_parse_failed",
+                        "stderr": error,
+                        "llm_model": config.model,
+                        "llm_mode": "deterministic_after_llm_parse_failure",
+                        "commands": plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+                    }),
+                )
+                .await;
+                plan
+            }
+        },
+        Err(error) => {
+            let mut plan = fallback_plan.clone();
+            plan["evidence_json"]["llm_model"] = json!(config.model.clone());
+            plan["evidence_json"]["llm_mode"] = json!("deterministic_after_llm_failure");
+            plan["evidence_json"]["llm_error"] =
+                json!(codeql::redact_sensitive_text(&error.redacted_message));
+            append_codeql_exploration_event(
+                state,
+                task_id,
+                36.0,
+                "llm_round",
+                "llm_round_completed",
+                Some(round),
+                json!({
+                    "message": "backend LLM request failed; using deterministic CubeSandbox build-plan candidate",
+                    "reasoning_summary": "LLM request failed before command execution; deterministic candidate remains visible and will still be validated by CodeQL capture",
+                    "failure_category": error.stage,
+                    "stderr": error.redacted_message,
+                    "llm_model": config.model,
+                    "llm_mode": "deterministic_after_llm_failure",
+                    "commands": plan.get("commands").cloned().unwrap_or_else(|| json!([])),
+                }),
+            )
+            .await;
+            plan
+        }
+    }
+}
+
+fn build_codeql_build_plan_prompt(
+    known_paths: &BTreeSet<String>,
+    fallback_plan: &Value,
+    allow_network: bool,
+    previous_failures: &[Value],
+) -> String {
+    let files = known_paths
+        .iter()
+        .take(160)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "You are selecting a safe C/C++ build plan for CodeQL database capture inside CubeSandbox.\n\
+Return only JSON with keys reasoning_summary and commands.\n\
+Constraints: commands run inside the project root; use only relative paths; no docker, sudo, host mounts, ssh, curl pipe shell, or destructive host-control commands; allow_network={allow_network}.\n\
+The backend will validate commands and then run CodeQL database init/trace-command/finalize in CubeSandbox.\n\
+Fallback candidate: {fallback_plan}\n\
+Previous CubeSandbox command results: {}\n\
+Project files:\n{files}"
+        ,
+        Value::Array(previous_failures.to_vec())
+    )
+}
+
+fn parse_codeql_llm_build_plan_response(
+    content: &str,
+    fallback_plan: &Value,
+    allow_network: bool,
+    llm_model: &str,
+) -> Result<Value, String> {
+    let json_text = extract_first_json_object(content)
+        .ok_or_else(|| "LLM response did not contain a JSON object".to_string())?;
+    let parsed: Value =
+        serde_json::from_str(&json_text).map_err(|error| format!("invalid JSON: {error}"))?;
+    let commands = parsed
+        .get("commands")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "LLM response missing commands array".to_string())?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+                .ok_or_else(|| "LLM command entries must be non-empty strings".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if commands.is_empty() {
+        return Err("LLM response commands array is empty".to_string());
+    }
+    let reasoning_summary = parsed
+        .get("reasoning_summary")
+        .and_then(Value::as_str)
+        .unwrap_or("LLM selected C/C++ build commands for CodeQL capture")
+        .trim();
+    let mut plan = fallback_plan.clone();
+    plan["build_mode"] = json!("manual");
+    plan["commands"] = json!(commands);
+    plan["working_directory"] = json!(".");
+    plan["allow_network"] = json!(allow_network);
+    plan["status"] = json!("accepted");
+    plan["evidence_json"]["source"] = json!("llm_cubesandbox_exploration");
+    plan["evidence_json"]["llm_reasoning_summary"] = json!(reasoning_summary);
+    plan["evidence_json"]["llm_model"] = json!(llm_model);
+    plan["evidence_json"]["llm_mode"] = json!("saved_system_config");
+    codeql::parse_compile_sandbox_plan(&plan.to_string())
+        .map_err(|error| format!("LLM build plan rejected: {error}"))?;
+    Ok(plan)
+}
+
+fn extract_first_json_object(content: &str) -> Option<String> {
+    let start = content.find('{')?;
+    let mut depth = 0_i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, ch) in content[start..].char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(content[start..start + offset + ch.len_utf8()].to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_codeql_cubesandbox_scan_in_session(
+    state: &AppState,
+    task_id: &str,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    query_dir: &std::path::Path,
+    known_paths: &BTreeSet<String>,
+    language: &str,
+    build_mode: Option<&str>,
+    build_plan: Option<Value>,
+    exploration_rounds: Vec<Value>,
+    allow_network: bool,
+    session: &codeql_cubesandbox::CodeqlSandboxSession,
+) -> Result<codeql_cubesandbox::CubeSandboxCodeqlOutput, Box<dyn std::error::Error + Send + Sync>> {
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        42.0,
+        "sandbox_command",
+        "cubesandbox_scan_started",
+        None,
+        json!({
+            "message": "starting CodeQL scan inside existing CubeSandbox exploration session",
+            "language": language,
+            "build_mode": build_mode,
+            "has_build_plan": build_plan.is_some(),
+            "sandbox_id": session.sandbox_id(),
+        }),
+    )
+    .await;
+    let output = session
+        .run_scan(codeql_cubesandbox::CubeSandboxCodeqlInput {
+            task_id,
+            workspace_dir,
+            source_dir,
+            query_dir,
+            language,
+            build_mode,
+            build_plan,
+            exploration_rounds,
+            threads: state.config.codeql_threads,
+            ram_mb: state.config.codeql_ram_mb,
+            allow_network,
+        })
+        .await?;
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        62.0,
+        "capture_validation",
+        "cubesandbox_scan_completed",
+        None,
+        json!({
+            "message": "CodeQL scan completed inside CubeSandbox",
+            "sandbox_id": output.sandbox_id,
+            "cleanup_completed": output.cleanup_completed,
+            "capture_validation": codeql_cubesandbox::summarize_captured_files(&output.events_text, known_paths),
+        }),
+    )
+    .await;
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_codeql_cubesandbox_scan(
+    state: &AppState,
+    task_id: &str,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    query_dir: &std::path::Path,
+    known_paths: &BTreeSet<String>,
+    language: &str,
+    build_mode: Option<&str>,
+    build_plan: Option<Value>,
+    exploration_rounds: Vec<Value>,
+    allow_network: bool,
+) -> Result<codeql_cubesandbox::CubeSandboxCodeqlOutput, Box<dyn std::error::Error + Send + Sync>> {
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        42.0,
+        "sandbox_command",
+        "cubesandbox_scan_started",
+        None,
+        json!({
+            "message": "starting CodeQL scan inside CubeSandbox",
+            "language": language,
+            "build_mode": build_mode,
+            "has_build_plan": build_plan.is_some(),
+        }),
+    )
+    .await;
+    let output = codeql_cubesandbox::run_codeql_scan(
+        state,
+        codeql_cubesandbox::CubeSandboxCodeqlInput {
+            task_id,
+            workspace_dir,
+            source_dir,
+            query_dir,
+            language,
+            build_mode,
+            build_plan,
+            exploration_rounds,
+            threads: state.config.codeql_threads,
+            ram_mb: state.config.codeql_ram_mb,
+            allow_network,
+        },
+    )
+    .await?;
+    append_codeql_exploration_event(
+        state,
+        task_id,
+        62.0,
+        "capture_validation",
+        "cubesandbox_scan_completed",
+        None,
+        json!({
+            "message": "CodeQL scan completed inside CubeSandbox",
+            "sandbox_id": output.sandbox_id,
+            "cleanup_completed": output.cleanup_completed,
+            "capture_validation": codeql_cubesandbox::summarize_captured_files(&output.events_text, known_paths),
+        }),
+    )
+    .await;
+    Ok(output)
 }
 
 async fn record_codeql_events(
@@ -1820,39 +2708,50 @@ async fn record_codeql_events(
         .filter(|line| !line.trim().is_empty())
         .take(200)
     {
-        let event =
+        let raw_event =
             serde_json::from_str::<Value>(line).unwrap_or_else(|_| json!({ "message": line }));
+        let event = codeql::redact_sensitive_value(&raw_event);
         let stage = event
             .get("stage")
             .and_then(Value::as_str)
-            .unwrap_or("codeql_event");
+            .unwrap_or("codeql_event")
+            .to_string();
         let message = event
             .get("message")
             .and_then(Value::as_str)
             .or_else(|| event.get("event").and_then(Value::as_str))
-            .unwrap_or("CodeQL runner event");
-        update_scan_progress(state, task_id, progress, stage, message).await;
+            .unwrap_or("CodeQL runner event")
+            .to_string();
+        update_scan_progress(state, task_id, progress, &stage, &message).await;
+        append_codeql_exploration_event(
+            state,
+            task_id,
+            progress,
+            map_codeql_runner_event_type(&event),
+            &stage,
+            event.get("round").and_then(Value::as_i64),
+            event,
+        )
+        .await;
     }
 }
 
-async fn format_codeql_runner_error(
-    result: &runner::RunnerResult,
-    events_path: Option<&std::path::Path>,
-) -> String {
-    let mut parts = vec![result
-        .error
-        .clone()
-        .unwrap_or_else(|| format!("CodeQL runner exited with code {}", result.exit_code))];
-    if let Some(stdout_excerpt) = read_runner_output_excerpt(result.stdout_path.as_deref()).await {
-        parts.push(format!("stdout={stdout_excerpt}"));
+fn map_codeql_runner_event_type(event: &Value) -> &'static str {
+    let stage = event
+        .get("stage")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let event_name = event
+        .get("event")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if stage.contains("compile") || event_name.contains("command") {
+        "sandbox_command"
+    } else if stage.contains("database") || event_name.contains("database") {
+        "capture_validation"
+    } else {
+        "sandbox_command"
     }
-    if let Some(stderr_excerpt) = read_runner_output_excerpt(result.stderr_path.as_deref()).await {
-        parts.push(format!("stderr={stderr_excerpt}"));
-    }
-    if let Some(events_excerpt) = read_text_excerpt(events_path).await {
-        parts.push(format!("events={events_excerpt}"));
-    }
-    parts.join("; ")
 }
 
 async fn run_opengrep_scan_inner(
@@ -2102,6 +3001,7 @@ async fn run_opengrep_scan_inner(
             "files_extracted": files_extracted,
             "files_excluded": files_excluded,
         });
+        let events = record.progress.events.clone();
         record.progress = task_state::StaticTaskProgressRecord {
             progress: 100.0,
             current_stage: Some("completed".to_string()),
@@ -2127,6 +3027,7 @@ async fn run_opengrep_scan_inner(
                 });
                 logs
             },
+            events,
         };
         record.findings = findings;
     }
@@ -2371,6 +3272,9 @@ async fn update_scan_progress(
         return;
     };
     if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        if record.status == "interrupted" {
+            return;
+        }
         record.progress.progress = progress;
         record.progress.current_stage = Some(stage.to_string());
         record.progress.message = Some(message.to_string());
@@ -2390,6 +3294,76 @@ async fn update_scan_progress(
     let _ = task_state::save_snapshot(state, &snapshot).await;
 }
 
+async fn append_codeql_exploration_event(
+    state: &AppState,
+    task_id: &str,
+    progress: f64,
+    event_type: &str,
+    stage: &str,
+    round: Option<i64>,
+    payload: Value,
+) {
+    let redacted_payload = codeql::redact_sensitive_value(&payload);
+    let redaction = codeql::redaction_metadata(&payload, &redacted_payload);
+    let message = redacted_payload
+        .get("message")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            redacted_payload
+                .get("reasoning_summary")
+                .and_then(Value::as_str)
+        })
+        .or_else(|| redacted_payload.get("reuse_reason").and_then(Value::as_str))
+        .unwrap_or(stage)
+        .to_string();
+    let now = now_rfc3339();
+    let Ok(mut snapshot) = task_state::load_snapshot(state).await else {
+        return;
+    };
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        if record.status == "interrupted" {
+            return;
+        }
+        record.progress.progress = progress;
+        record.progress.current_stage = Some(stage.to_string());
+        record.progress.message = Some(message.clone());
+        record.progress.updated_at = Some(now.clone());
+        record.updated_at = Some(now.clone());
+        record
+            .progress
+            .logs
+            .push(task_state::StaticTaskProgressLogRecord {
+                timestamp: now.clone(),
+                stage: stage.to_string(),
+                message,
+                progress,
+                level: if event_type == "failure" {
+                    "error"
+                } else {
+                    "info"
+                }
+                .to_string(),
+            });
+        record
+            .progress
+            .events
+            .push(task_state::StaticTaskProgressEventRecord {
+                timestamp: now,
+                event_type: event_type.to_string(),
+                stage: stage.to_string(),
+                progress,
+                round,
+                redaction,
+                payload: redacted_payload,
+            });
+        if record.progress.events.len() > 500 {
+            let overflow = record.progress.events.len() - 500;
+            record.progress.events.drain(0..overflow);
+        }
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+}
+
 async fn update_scan_task_failed(
     state: &AppState,
     task_id: &str,
@@ -2399,6 +3373,14 @@ async fn update_scan_task_failed(
     let now = now_rfc3339();
     let mut snapshot = task_state::load_snapshot(state).await?;
     if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        if record.status == "interrupted" {
+            record.progress.progress = 100.0;
+            record.progress.current_stage = Some("interrupted".to_string());
+            record.progress.message = Some("codeql task interrupted in rust backend".to_string());
+            record.progress.updated_at = Some(now);
+            task_state::save_snapshot(state, &snapshot).await?;
+            return Ok(());
+        }
         record.status = "failed".to_string();
         record.error_message = Some(error_message.to_string());
         record.scan_duration_ms = elapsed_ms;
@@ -3941,11 +4923,10 @@ mod tests {
     use crate::db::task_state;
 
     use super::{
-        build_codeql_compile_sandbox_runner_spec, build_opengrep_runner_spec,
+        build_opengrep_runner_spec, choose_cubesandbox_cpp_build_plan,
         extract_highest_rule_severity, format_opengrep_runner_error,
         normalize_codeql_task_languages, read_opengrep_results_text, static_task_value,
-        CodeqlCompileSandboxPaths, OpengrepResourceScheduler, OpengrepRunnerPaths,
-        OpengrepRunnerResources,
+        OpengrepResourceScheduler, OpengrepRunnerPaths, OpengrepRunnerResources,
     };
     use serde_json::json;
     use std::{sync::mpsc, time::Duration};
@@ -4120,56 +5101,19 @@ rules:
     }
 
     #[test]
-    fn builds_codeql_compile_sandbox_runner_spec_with_cpp_recipe_outputs() {
-        let mut config = AppConfig::for_tests();
-        config.codeql_allow_network_during_build = false;
-        let spec = build_codeql_compile_sandbox_runner_spec(
-            &config,
-            std::path::Path::new("/tmp/codeql-runtime"),
-            CodeqlCompileSandboxPaths {
-                container_source_dir: "/scan/source",
-                summary_rel_path: "output/compile-summary.json",
-                summary_container_path: "/scan/output/compile-summary.json",
-                events_container_path: "/scan/output/compile-events.jsonl",
-                plan_container_path: "/scan/build-plan/compile-sandbox-plan.json",
-                evidence_container_dir: "/scan/evidence",
-                stdout_rel_path: "output/compile-stdout.txt",
-                stderr_rel_path: "output/compile-stderr.txt",
-                language: "cpp",
-            },
-        );
+    fn codeql_cpp_build_plan_is_selected_for_cubesandbox_not_docker_runner() {
+        let known_paths = ["Makefile".to_string(), "src/main.c".to_string()]
+            .into_iter()
+            .collect();
 
-        assert_eq!(spec.scanner_type, "codeql-compile-sandbox");
-        assert_eq!(spec.image, config.scanner_codeql_compile_sandbox_image);
+        let plan = choose_cubesandbox_cpp_build_plan(&known_paths, false);
+
+        assert_eq!(plan["build_mode"], "manual");
+        assert_eq!(plan["commands"][0], "make -B -j2");
+        assert_eq!(plan["evidence_json"]["source"], "cubesandbox_exploration");
         assert_eq!(
-            spec.command,
-            crate::scan::codeql::build_compile_sandbox_command(
-                &crate::scan::codeql::CompileSandboxCommandArgs {
-                    source_dir: "/scan/source",
-                    summary_path: "/scan/output/compile-summary.json",
-                    events_path: "/scan/output/compile-events.jsonl",
-                    plan_path: "/scan/build-plan/compile-sandbox-plan.json",
-                    evidence_dir: "/scan/evidence",
-                    language: "cpp",
-                    allow_network: false,
-                }
-            )
-        );
-        assert_eq!(
-            spec.completion_summary_path.as_deref(),
-            Some("output/compile-summary.json")
-        );
-        assert_eq!(
-            spec.capture_stdout_path.as_deref(),
-            Some("output/compile-stdout.txt")
-        );
-        assert_eq!(
-            spec.capture_stderr_path.as_deref(),
-            Some("output/compile-stderr.txt")
-        );
-        assert!(
-            spec.network_disabled,
-            "compile sandbox must receive Docker-level network isolation when build network is disabled"
+            plan["evidence_json"]["capture_validation"]["executor"],
+            "cubesandbox"
         );
     }
 

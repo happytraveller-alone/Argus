@@ -3,6 +3,10 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LlmReasoningPanel } from "@/components/scan/LlmReasoningPanel";
+import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
+import { useSseStream } from "@/hooks/useSseStream";
+import { getApiBaseUrl } from "@/shared/api/apiBase";
 import {
 	cancelIntelligentTask,
 	getIntelligentTask,
@@ -67,6 +71,16 @@ export default function AgentAuditDetail() {
 	const [fetchError, setFetchError] = useState<string | null>(null);
 	const [cancelling, setCancelling] = useState(false);
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	const taskTerminal = record ? isTerminal(record.status) : false;
+	const sseUrl = taskId
+		? `${getApiBaseUrl()}/intelligent-tasks/${taskId}/stream`
+		: "";
+	const {
+		events: sseEvents,
+		isConnected: sseConnected,
+		isComplete: sseComplete,
+	} = useSseStream(sseUrl, { enabled: Boolean(taskId) && !taskTerminal });
 
 	const fetchRecord = async () => {
 		if (!taskId) return;
@@ -234,6 +248,35 @@ export default function AgentAuditDetail() {
 					/>
 				</div>
 			</div>
+
+			{/* Step progress */}
+			{(sseEvents.length > 0 || (!taskTerminal && !sseComplete)) && (
+				<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
+					<SectionTitle>执行进度</SectionTitle>
+					<StepProgressIndicator
+						events={
+							sseEvents.length > 0
+								? sseEvents
+								: (eventLog as typeof sseEvents)
+						}
+					/>
+				</div>
+			)}
+
+			{/* LLM Reasoning */}
+			{(sseEvents.length > 0 || eventLog.length > 0) && (
+				<div className="relative rounded-lg border border-purple-500/20 bg-card/40 p-4">
+					<SectionTitle>LLM 推理过程</SectionTitle>
+					<LlmReasoningPanel
+						events={
+							sseEvents.length > 0
+								? sseEvents
+								: (eventLog as typeof sseEvents)
+						}
+						isStreaming={sseConnected && !sseComplete}
+					/>
+				</div>
+			)}
 
 			{/* Failure info */}
 			{record.status === "failed" && (

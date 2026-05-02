@@ -16,6 +16,22 @@ pub async fn upsert_accepted_build_plan(
 
     sqlx::query(
         r#"
+        update rust_codeql_build_plans
+        set status = 'superseded', updated_at = now()
+        where project_id = $1
+          and language = $2
+          and status = 'accepted'
+          and id <> $3
+        "#,
+    )
+    .bind(parse_uuid(&record.project_id)?)
+    .bind(&record.language)
+    .bind(parse_uuid(&record.id)?)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         insert into rust_codeql_build_plans (
             id, project_id, language, target_path, source_fingerprint,
             dependency_fingerprint, build_mode, commands_json, working_directory,
@@ -61,6 +77,64 @@ pub async fn upsert_accepted_build_plan(
     .await?;
 
     load_build_plan_by_id(state, &record.id).await
+}
+
+pub async fn load_active_project_build_plan(
+    state: &AppState,
+    project_id: &str,
+    language: &str,
+) -> Result<Option<CodeqlBuildPlanRecord>> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(None);
+    };
+    let rows = sqlx::query(
+        r#"
+        select id, project_id, language, target_path, source_fingerprint,
+            dependency_fingerprint, build_mode, commands_json, working_directory,
+            query_suite, status, llm_model, evidence_json, created_at, updated_at
+        from rust_codeql_build_plans
+        where project_id = $1
+          and language = $2
+          and status = 'accepted'
+        order by updated_at desc, created_at desc
+        limit 2
+        "#,
+    )
+    .bind(parse_uuid(project_id)?)
+    .bind(language)
+    .fetch_all(pool)
+    .await?;
+
+    if rows.len() > 1 {
+        anyhow::bail!(
+            "ambiguous active CodeQL build plans for project {project_id} language {language}"
+        );
+    }
+    rows.into_iter().next().map(record_from_row).transpose()
+}
+
+pub async fn reset_active_project_build_plan(
+    state: &AppState,
+    project_id: &str,
+    language: &str,
+) -> Result<u64> {
+    let Some(pool) = state.db_pool.as_ref() else {
+        return Ok(0);
+    };
+    let result = sqlx::query(
+        r#"
+        update rust_codeql_build_plans
+        set status = 'reset', updated_at = now()
+        where project_id = $1
+          and language = $2
+          and status = 'accepted'
+        "#,
+    )
+    .bind(parse_uuid(project_id)?)
+    .bind(language)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
 }
 
 pub async fn load_build_plan_by_id(

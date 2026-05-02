@@ -1,10 +1,16 @@
+use async_stream::stream;
 use axum::{
     extract::{Path, Query, State},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::broadcast;
 
 use crate::{
     db::intelligent_task_state, error::ApiError,
@@ -27,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list_tasks).post(create_task))
         .route("/{task_id}", get(get_task))
         .route("/{task_id}/cancel", post(cancel_task))
+        .route("/{task_id}/stream", get(stream_task))
 }
 
 async fn create_task(
@@ -88,6 +95,73 @@ async fn cancel_task(
         .map_err(internal_error)?
         .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
     Ok(Json(record))
+}
+
+async fn stream_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    // Subscribe to broadcast FIRST to avoid race window between replay and live events.
+    let live_rx: Option<broadcast::Receiver<_>> =
+        state.intelligent_task_manager.subscribe(&task_id).await;
+
+    // Load persisted record (may be None if task doesn't exist yet, treat as empty replay).
+    let persisted = intelligent_task_state::get_record(&state, &task_id)
+        .await
+        .unwrap_or(None);
+
+    let replay_events: Vec<_> = persisted
+        .as_ref()
+        .map(|r| r.event_log.clone())
+        .unwrap_or_default();
+    let is_terminal = persisted
+        .as_ref()
+        .map(|r| r.status.is_terminal())
+        .unwrap_or(false);
+    let replay_count = replay_events.len();
+
+    let output = stream! {
+        // Replay all persisted events.
+        for evt in replay_events {
+            if let Ok(data) = serde_json::to_string(&evt) {
+                yield Ok::<Event, std::convert::Infallible>(Event::default().data(data));
+            }
+        }
+
+        // If task was already terminal when we loaded it, close the stream.
+        if is_terminal {
+            return;
+        }
+
+        // If no broadcast receiver (task not live), nothing more to send.
+        let Some(mut rx) = live_rx else {
+            return;
+        };
+
+        // Drain live broadcast, skipping the first `replay_count` events that
+        // were already covered by the replay above.
+        let mut skipped = 0usize;
+        loop {
+            match rx.recv().await {
+                Ok(evt) => {
+                    if skipped < replay_count {
+                        skipped += 1;
+                        continue;
+                    }
+                    if let Ok(data) = serde_json::to_string(&evt) {
+                        yield Ok(Event::default().data(data));
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // Missed some events due to slow consumer; adjust skip counter.
+                    skipped = skipped.saturating_sub(n as usize);
+                }
+            }
+        }
+    };
+
+    Sse::new(output).keep_alive(KeepAlive::default())
 }
 
 fn internal_error(error: anyhow::Error) -> ApiError {

@@ -2,7 +2,10 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use anyhow::Result;
 use serde_json::json;
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{
+    sync::{broadcast, Mutex},
+    task::JoinHandle,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -16,8 +19,12 @@ use crate::{
     state::AppState,
 };
 
+const BROADCAST_CAPACITY: usize = 256;
+
+type IntelligentTaskHandle = (JoinHandle<()>, broadcast::Sender<IntelligentTaskEvent>);
+
 pub struct IntelligentTaskManager {
-    live_tasks: Mutex<HashMap<String, JoinHandle<()>>>,
+    live_tasks: Mutex<HashMap<String, IntelligentTaskHandle>>,
     invoker: Arc<dyn IntelligentLlmInvoker + Send + Sync>,
 }
 
@@ -78,7 +85,7 @@ impl IntelligentTaskManager {
                 );
                 record.mark_failed("llm_config", err_msg);
                 intelligent_task_state::save_record(&state, record.clone()).await?;
-                return Ok(record);
+                Ok(record)
             }
             Some(config) => {
                 let record = IntelligentTaskRecord::new_pending(
@@ -89,14 +96,16 @@ impl IntelligentTaskManager {
                 );
                 intelligent_task_state::save_record(&state, record.clone()).await?;
 
+                let (tx, _rx) = broadcast::channel(BROADCAST_CAPACITY);
                 let manager = Arc::clone(self);
                 let task_id_for_handle = task_id.clone();
+                let tx_for_task = tx.clone();
                 let handle = tokio::spawn(async move {
                     manager
-                        .run_task(state, task_id_for_handle, project_id, config)
+                        .run_task(state, task_id_for_handle, project_id, config, tx_for_task)
                         .await;
                 });
-                self.live_tasks.lock().await.insert(task_id, handle);
+                self.live_tasks.lock().await.insert(task_id, (handle, tx));
                 Ok(record)
             }
         }
@@ -108,7 +117,7 @@ impl IntelligentTaskManager {
         task_id: &str,
     ) -> Result<Option<IntelligentTaskRecord>> {
         // Abort any live handle
-        if let Some(handle) = self.live_tasks.lock().await.remove(task_id) {
+        if let Some((handle, _tx)) = self.live_tasks.lock().await.remove(task_id) {
             handle.abort();
         }
 
@@ -119,6 +128,19 @@ impl IntelligentTaskManager {
             }
         })
         .await
+    }
+
+    /// Subscribe to live events for a running task.
+    /// Returns `None` if the task is not currently live (already completed/cancelled).
+    pub async fn subscribe(
+        &self,
+        task_id: &str,
+    ) -> Option<broadcast::Receiver<IntelligentTaskEvent>> {
+        self.live_tasks
+            .lock()
+            .await
+            .get(task_id)
+            .map(|(_, tx)| tx.subscribe())
     }
 
     pub async fn reconcile_orphans(&self, state: &AppState) -> Result<()> {
@@ -148,27 +170,59 @@ impl IntelligentTaskManager {
         task_id: String,
         project_id: String,
         config: crate::runtime::intelligent::config::IntelligentLlmConfig,
+        tx: broadcast::Sender<IntelligentTaskEvent>,
     ) {
         let started = Instant::now();
+
+        // Helper: emit event to both persisted log and broadcast channel
+        macro_rules! emit {
+            ($evt:expr) => {{
+                let evt: IntelligentTaskEvent = $evt;
+                let _ = tx.send(evt.clone());
+                evt
+            }};
+        }
 
         // Transition to running
         let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
             r.mark_running();
-            r.append_event(IntelligentTaskEvent::new("run_started"));
+            r.append_event(emit!(IntelligentTaskEvent::new("run_started")));
         })
         .await;
+
+        // --- config_resolve step ---
+        let _ = tx.send(
+            IntelligentTaskEvent::new("step_started")
+                .with_data(json!({ "step": "config_resolve" })),
+        );
+        let _ = tx.send(
+            IntelligentTaskEvent::new("step_completed")
+                .with_data(json!({ "step": "config_resolve" })),
+        );
+
+        // --- input_read step ---
+        let _ = tx.send(
+            IntelligentTaskEvent::new("step_started").with_data(json!({ "step": "input_read" })),
+        );
 
         // Build input summary from project archive listing
         let input_summary = self.build_input_summary(&state, &project_id).await;
 
         let input_summary = match input_summary {
-            Ok(summary) => summary,
+            Ok(summary) => {
+                let _ = tx.send(
+                    IntelligentTaskEvent::new("step_completed")
+                        .with_data(json!({ "step": "input_read" })),
+                );
+                summary
+            }
             Err(err_msg) => {
+                let failed_evt =
+                    IntelligentTaskEvent::new("input_read_failed").with_message(err_msg.clone());
+                let _ = tx.send(failed_evt.clone());
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.mark_failed("input_read", &err_msg);
-                    r.append_event(
-                        IntelligentTaskEvent::new("input_read_failed").with_message(&err_msg),
-                    );
+                    r.append_event(failed_evt.clone());
                 })
                 .await;
                 self.live_tasks.lock().await.remove(&task_id);
@@ -187,6 +241,12 @@ impl IntelligentTaskManager {
             "You are a security auditor. Analyze the following project file inventory for potential security concerns.\n\n{input_summary}\n\nProvide a brief security summary."
         );
 
+        // --- llm_invoke step ---
+        let _ = tx.send(
+            IntelligentTaskEvent::new("step_started").with_data(json!({ "step": "llm_invoke" })),
+        );
+        let _ = tx.send(IntelligentTaskEvent::new("thinking_start"));
+
         // Invoke LLM (single attempt, no retry)
         let invoker = Arc::clone(&self.invoker);
         let invocation_result = invoker.invoke(&prompt, &config).await;
@@ -198,24 +258,41 @@ impl IntelligentTaskManager {
                 let report_summary = invocation.content.chars().take(500).collect::<String>();
                 let attempt_event = invocation.attempt_event;
 
+                // Emit thinking token (truncated to 500 chars) then thinking_end
+                let _ = tx.send(
+                    IntelligentTaskEvent::new("thinking_token").with_data(json!({
+                        "content": report_summary,
+                    })),
+                );
+                let _ = tx.send(IntelligentTaskEvent::new("thinking_end"));
+                let _ = tx.send(
+                    IntelligentTaskEvent::new("step_completed")
+                        .with_data(json!({ "step": "llm_invoke" })),
+                );
+
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
                     r.report_summary = report_summary.clone();
-                    r.append_event(attempt_event);
+                    r.append_event(attempt_event.clone());
                     // mark_completed validates proof fields
                     if let Err(validation_err) = r.mark_completed() {
                         r.mark_failed("completion_validation", validation_err);
                     }
                 })
                 .await;
+
+                let _ = tx.send(attempt_event);
             }
             Err(err) => {
+                let _ = tx.send(IntelligentTaskEvent::new("thinking_end"));
+                let fail_evt = IntelligentTaskEvent::new("llm_attempt").with_data(json!({
+                    "success": false,
+                    "redacted_error": err.redacted_message,
+                }));
+                let _ = tx.send(fail_evt.clone());
                 let _ = intelligent_task_state::update_record(&state, &task_id, |r| {
                     r.duration_ms = Some(duration_ms);
-                    r.append_event(IntelligentTaskEvent::new("llm_attempt").with_data(json!({
-                        "success": false,
-                        "redacted_error": err.redacted_message,
-                    })));
+                    r.append_event(fail_evt.clone());
                     r.mark_failed("llm_request", &err.redacted_message);
                 })
                 .await;
@@ -223,6 +300,7 @@ impl IntelligentTaskManager {
         }
 
         self.live_tasks.lock().await.remove(&task_id);
+        // tx is dropped here → all broadcast::Receivers will see RecvError::Closed
     }
 
     async fn build_input_summary(

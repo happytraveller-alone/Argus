@@ -39,7 +39,7 @@ CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compa
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
 - `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
-- `.github/workflows/docker-publish.yml` 统一处理 backend、frontend、OpenGrep runner 和 CodeQL runner 容器镜像的构建与发布。
+- `.github/workflows/docker-publish.yml` 统一处理 backend、frontend 和 OpenGrep runner 容器镜像的构建与发布；CodeQL 扫描主路径走 CubeSandbox 模板，不发布 CodeQL runner 容器。
 - OpenGrep runner 发布时显式使用 OCI image media types；本地 `runner-build` / `rebuild-opengrep-runner-verify.sh` 仍使用 Docker daemon 本地镜像路径验证运行能力。
 - GitHub Actions 默认会把 GHCR 包设为 public，并验证匿名拉取。
 - 人工触发的多镜像发布也统一通过 `.github/workflows/docker-publish.yml` 选择需要构建的镜像。

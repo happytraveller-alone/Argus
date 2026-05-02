@@ -11,9 +11,6 @@ on:
       - "docker/frontend.Dockerfile"
       - "docker/opengrep-runner.Dockerfile"
       - "docker/opengrep-scan.sh"
-      - "docker/codeql-runner.Dockerfile"
-      - "docker/codeql-scan.sh"
-      - "docker/codeql-compile-sandbox.sh"
       - "backend/Cargo.toml"
       - "backend/Cargo.lock"
       - "backend/assets/scan_rule_assets/**"
@@ -41,11 +38,6 @@ on:
         default: false
       build_opengrep_runner:
         description: "构建 OpenGrep runner 镜像"
-        required: false
-        type: boolean
-        default: false
-      build_codeql_runner:
-        description: "构建 CodeQL runner 镜像"
         required: false
         type: boolean
         default: false
@@ -109,13 +101,6 @@ jobs:
               - 'backend/src/**'
               - 'docker/opengrep-runner.Dockerfile'
               - 'docker/opengrep-scan.sh'
-            codeql_runner:
-              - '.github/workflows/docker-publish.yml'
-              - '.dockerignore'
-              - 'backend/assets/scan_rule_assets/**'
-              - 'docker/codeql-runner.Dockerfile'
-              - 'docker/codeql-scan.sh'
-              - 'docker/codeql-compile-sandbox.sh'
 
       - name: 生成发布矩阵
         id: plan
@@ -125,12 +110,10 @@ jobs:
           PUSH_BACKEND: ${{ steps.filter.outputs.backend || 'false' }}
           PUSH_FRONTEND: ${{ steps.filter.outputs.frontend || 'false' }}
           PUSH_OPENGREP_RUNNER: ${{ steps.filter.outputs.opengrep_runner || 'false' }}
-          PUSH_CODEQL_RUNNER: ${{ steps.filter.outputs.codeql_runner || 'false' }}
           DISPATCH_BUILD_ALL: ${{ inputs.build_all || false }}
           DISPATCH_BUILD_BACKEND: ${{ inputs.build_backend || false }}
           DISPATCH_BUILD_FRONTEND: ${{ inputs.build_frontend || false }}
           DISPATCH_BUILD_OPENGREP_RUNNER: ${{ inputs.build_opengrep_runner || false }}
-          DISPATCH_BUILD_CODEQL_RUNNER: ${{ inputs.build_codeql_runner || false }}
         run: |
           python3 - <<'PY'
           import json
@@ -172,17 +155,6 @@ jobs:
                   "outputs": "type=image,push=true,oci-mediatypes=true",
                   "push_env": "PUSH_OPENGREP_RUNNER",
                   "dispatch_env": "DISPATCH_BUILD_OPENGREP_RUNNER",
-              },
-              {
-                  "key": "codeql_runner",
-                  "image_name": "argus-codeql-runner",
-                  "context": ".",
-                  "file": "./docker/codeql-runner.Dockerfile",
-                  "platforms": "linux/amd64,linux/arm64",
-                  "build_args": "",
-                  "outputs": "",
-                  "push_env": "PUSH_CODEQL_RUNNER",
-                  "dispatch_env": "DISPATCH_BUILD_CODEQL_RUNNER",
               },
           ]
 

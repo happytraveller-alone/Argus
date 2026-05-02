@@ -365,8 +365,22 @@ export interface OpengrepScanProgressLog {
     level: string;
 }
 
+export interface CodeqlExplorationProgressEvent {
+    timestamp: string;
+    event_type: string;
+    stage: string;
+    progress: number;
+    round?: number | null;
+    redaction?: {
+        applied?: boolean;
+        patterns?: string[];
+    } | Record<string, unknown>;
+    payload?: Record<string, unknown>;
+}
+
 export interface OpengrepScanProgress {
     task_id: string;
+    engine?: StaticScanEngine;
     status: string;
     progress: number;
     current_stage?: string | null;
@@ -374,6 +388,7 @@ export interface OpengrepScanProgress {
     started_at?: string | null;
     updated_at?: string | null;
     logs: OpengrepScanProgressLog[];
+    events?: CodeqlExplorationProgressEvent[];
 }
 
 export interface OpengrepFinding {
@@ -464,6 +479,24 @@ export async function interruptOpengrepScanTask(
     taskId: string,
 ): Promise<{ message: string; task_id: string; status: string }> {
     const response = await apiClient.post(`/static-tasks/tasks/${taskId}/interrupt`);
+    return response.data;
+}
+
+export async function interruptCodeqlScanTask(
+    taskId: string,
+): Promise<{ message: string; task_id: string; status: string }> {
+    const response = await apiClient.post(
+        `/static-tasks/codeql/tasks/${taskId}/interrupt`,
+    );
+    return response.data;
+}
+
+export async function resetCodeqlProjectBuildPlan(
+    projectId: string,
+): Promise<{ message: string; project_id: string; language: string; reset_count: number }> {
+    const response = await apiClient.post(
+        `/static-tasks/codeql/projects/${projectId}/build-plan/reset`,
+    );
     return response.data;
 }
 

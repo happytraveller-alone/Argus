@@ -62,8 +62,6 @@ def load_runner_preflight_module(container: FakeContainer):
         settings=types.SimpleNamespace(
             RUNNER_PREFLIGHT_TIMEOUT_SECONDS=30,
             SCANNER_OPENGREP_IMAGE="opengrep-runner:test",
-            SCANNER_CODEQL_IMAGE="codeql-runner:test",
-            SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE="codeql-compile-sandbox:test",
             RUNNER_PREFLIGHT_ENABLED=True,
             RUNNER_PREFLIGHT_MAX_CONCURRENCY=2,
             RUNNER_PREFLIGHT_STRICT=False,
@@ -114,12 +112,6 @@ class RunnerPreflightCleanupTest(unittest.TestCase):
             [(spec.name, spec.image, spec.command) for spec in specs],
             [
                 ("opengrep", "opengrep-runner:test", ["opengrep-scan", "--self-test"]),
-                ("codeql", "codeql-runner:test", ["codeql-scan", "--self-test"]),
-                (
-                    "codeql-compile-sandbox",
-                    "codeql-compile-sandbox:test",
-                    ["codeql-compile-sandbox", "--self-test"],
-                ),
             ],
         )
 
@@ -146,9 +138,9 @@ class RunnerPreflightCleanupTest(unittest.TestCase):
         container = FakeContainer(status_code=2)
         module = load_runner_preflight_module(container)
         spec = module.RunnerPreflightSpec(
-            "codeql",
-            "codeql-runner:test",
-            ["codeql-scan", "--self-test"],
+            "opengrep",
+            "opengrep-runner:test",
+            ["opengrep-scan", "--self-test"],
             30,
         )
 

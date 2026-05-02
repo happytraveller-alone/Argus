@@ -32,8 +32,9 @@ import {
 	isSevereCreateProjectScanRule,
 	stripCreateProjectScanArchiveSuffix,
 } from "./create-project-scan/utils";
+import { createIntelligentTask } from "@/shared/api/intelligentTasks";
 
-export type ScanCreateMode = "static" | "agent";
+export type ScanCreateMode = "static" | "agent" | "intelligent";
 
 interface CreateProjectScanDialogProps {
 	open: boolean;
@@ -78,6 +79,9 @@ export default function CreateProjectScanDialog({
 	const navigate = useNavigate();
 	const location = useLocation();
 	const currentRoute = `${location.pathname}${location.search}`;
+	const [activeTab, setActiveTab] = useState<"static" | "intelligent">(
+		_initialMode === "intelligent" ? "intelligent" : "static",
+	);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [loadingProjects, setLoadingProjects] = useState(false);
 	const [creating, setCreating] = useState(false);
@@ -127,6 +131,7 @@ export default function CreateProjectScanDialog({
 
 	useEffect(() => {
 		if (!open) return;
+		setActiveTab(_initialMode === "intelligent" ? "intelligent" : "static");
 		setSearchTerm("");
 		setProjectPage(1);
 		previousSearchTermRef.current = "";
@@ -408,6 +413,29 @@ export default function CreateProjectScanDialog({
 		}
 	};
 
+	const handleIntelligentCreate = async () => {
+		if (!selectedProjectId) {
+			toast.error("请选择项目");
+			return;
+		}
+		try {
+			setCreating(true);
+			const task = await createIntelligentTask(selectedProjectId);
+			onOpenChange(false);
+			onTaskCreated?.();
+			toast.success("智能审计任务已创建");
+			if (navigateOnSuccess) {
+				void navigate(`/agent-audit/${task.taskId}`);
+			}
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : "未知错误";
+			toast.error(`创建失败: ${message}`);
+		} finally {
+			setCreating(false);
+		}
+	};
+
 	const handleNavigateToEngineConfig = (engine: StaticTool) => {
 		onOpenChange(false);
 		navigate(buildScanEngineConfigRoute(engine));
@@ -460,6 +488,9 @@ export default function CreateProjectScanDialog({
 			configEngine={configEngine}
 			setConfigEngine={setConfigEngine}
 			onNavigateToEngineConfig={handleNavigateToEngineConfig}
+			activeTab={activeTab}
+			setActiveTab={setActiveTab}
+			handleIntelligentCreate={handleIntelligentCreate}
 		/>
 	);
 }

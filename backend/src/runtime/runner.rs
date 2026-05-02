@@ -1042,7 +1042,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("codeql/task-failure");
+        let workspace_dir = workspace_root.join("opengrep/task-failure");
         fs::create_dir_all(&workspace_dir).unwrap();
 
         let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
@@ -1053,10 +1053,10 @@ esac
         let _wait_exit = EnvVarGuard::set("FAKE_WAIT_EXIT_CODE", "2");
 
         let result = execute(RunnerSpec {
-            scanner_type: "codeql".to_string(),
-            image: "Argus/codeql-runner:latest".to_string(),
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
-            command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 30,
             env: BTreeMap::new(),
             expected_exit_codes: vec![0],
@@ -1087,7 +1087,7 @@ esac
         let fake_log = temp_dir.path().join("docker.log");
         let fake_docker = fake_docker_script(&temp_dir);
         let workspace_root = temp_dir.path().join("scan-root");
-        let workspace_dir = workspace_root.join("codeql-compile-sandbox/task-network");
+        let workspace_dir = workspace_root.join("opengrep/task-network");
         fs::create_dir_all(&workspace_dir).unwrap();
 
         let _docker_bin = EnvVarGuard::set("Argus_DOCKER_BIN", fake_docker.to_str().unwrap());
@@ -1097,13 +1097,10 @@ esac
         let _workspace_volume = EnvVarGuard::set("SCAN_WORKSPACE_VOLUME", "Argus_scan_workspace");
 
         let result = execute(RunnerSpec {
-            scanner_type: "codeql-compile-sandbox".to_string(),
-            image: "Argus/codeql-runner-local:latest".to_string(),
+            scanner_type: "opengrep".to_string(),
+            image: "Argus/opengrep-runner-local:latest".to_string(),
             workspace_dir: workspace_dir.display().to_string(),
-            command: vec![
-                "codeql-compile-sandbox".to_string(),
-                "--self-test".to_string(),
-            ],
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
             timeout_seconds: 0,
             env: BTreeMap::new(),
             expected_exit_codes: vec![0],

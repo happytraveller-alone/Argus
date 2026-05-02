@@ -45,11 +45,6 @@ pub struct AppConfig {
     pub llm_concurrency: i64,
     pub llm_gap_ms: i64,
     pub scanner_opengrep_image: String,
-    pub scanner_codeql_image: String,
-    pub scanner_codeql_compile_sandbox_image: String,
-    pub codeql_scan_timeout_seconds: u64,
-    pub codeql_runner_memory_limit_mb: u64,
-    pub codeql_runner_cpu_limit: f64,
     pub codeql_threads: usize,
     pub codeql_ram_mb: u64,
     pub codeql_max_build_inference_rounds: u64,
@@ -142,18 +137,6 @@ impl AppConfig {
             llm_gap_ms: parse_i64_env("LLM_GAP_MS", 3_000),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
                 .unwrap_or_else(|_| "Argus/opengrep-runner:latest".to_string()),
-            scanner_codeql_image: env::var("SCANNER_CODEQL_IMAGE")
-                .unwrap_or_else(|_| "Argus/codeql-runner:latest".to_string()),
-            scanner_codeql_compile_sandbox_image: env::var("SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| {
-                    env::var("SCANNER_CODEQL_IMAGE")
-                        .unwrap_or_else(|_| "Argus/codeql-runner:latest".to_string())
-                }),
-            codeql_scan_timeout_seconds: parse_u64_env("CODEQL_SCAN_TIMEOUT_SECONDS", 0),
-            codeql_runner_memory_limit_mb: parse_u64_env("CODEQL_RUNNER_MEMORY_LIMIT_MB", 8192),
-            codeql_runner_cpu_limit: parse_f64_env("CODEQL_RUNNER_CPU_LIMIT", 0.0),
             codeql_threads: parse_usize_env("CODEQL_THREADS", 0),
             codeql_ram_mb: parse_u64_env("CODEQL_RAM_MB", 6144),
             codeql_max_build_inference_rounds: parse_u64_env(
@@ -266,11 +249,6 @@ impl AppConfig {
             llm_concurrency: 1,
             llm_gap_ms: 3_000,
             scanner_opengrep_image: "Argus/opengrep-runner:test".to_string(),
-            scanner_codeql_image: "Argus/codeql-runner:test".to_string(),
-            scanner_codeql_compile_sandbox_image: "Argus/codeql-runner:test".to_string(),
-            codeql_scan_timeout_seconds: 0,
-            codeql_runner_memory_limit_mb: 8192,
-            codeql_runner_cpu_limit: 0.0,
             codeql_threads: 0,
             codeql_ram_mb: 6144,
             codeql_max_build_inference_rounds: 3,

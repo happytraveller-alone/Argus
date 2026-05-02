@@ -2,13 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   getCodeqlScanFindings,
+  getCodeqlScanProgress,
   getCodeqlScanTask,
   getOpengrepScanFindings,
   getOpengrepScanTask,
+  interruptCodeqlScanTask,
   interruptOpengrepScanTask,
+  resetCodeqlProjectBuildPlan,
   updateCodeqlFindingStatus,
   updateOpengrepFindingStatus,
+  type CodeqlExplorationProgressEvent,
   type OpengrepFinding,
+  type OpengrepScanProgress,
   type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import type { Engine, FindingStatus, UnifiedFindingRow } from "./viewModel";
@@ -71,12 +76,14 @@ export function useStaticAnalysisData({
   const [codeqlTask, setCodeqlTask] = useState<OpengrepScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
   const [codeqlFindings, setCodeqlFindings] = useState<OpengrepFinding[]>([]);
+  const [codeqlProgress, setCodeqlProgress] = useState<OpengrepScanProgress | null>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
   const [updatingKey, setUpdatingKey] = useState<string | null>(null);
   const [interruptTarget, setInterruptTarget] = useState<Engine | null>(null);
   const [interrupting, setInterrupting] = useState(false);
+  const [resettingCodeqlPlan, setResettingCodeqlPlan] = useState(false);
 
   const opengrepSilentRefreshRef = useRef(false);
   const opengrepCompletionResultsRefreshRef = useRef<string | null>(null);
@@ -119,6 +126,24 @@ export function useStaticAnalysisData({
       if (!silent) {
         toast.error("加载 CodeQL 任务失败");
       }
+      return null;
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [codeqlTaskId]);
+
+  const loadCodeqlProgress = useCallback(async (silent = false) => {
+    if (!codeqlTaskId) {
+      setCodeqlProgress(null);
+      return null;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const progress = await getCodeqlScanProgress(codeqlTaskId, true);
+      setCodeqlProgress(progress);
+      return progress;
+    } catch {
+      setCodeqlProgress(null);
       return null;
     } finally {
       if (!silent) setLoadingTask(false);
@@ -183,6 +208,7 @@ export function useStaticAnalysisData({
       await Promise.all([
         loadOpengrepFindings(silent, nextOpengrepTask?.total_findings),
         loadCodeqlFindings(silent, nextCodeqlTask?.total_findings),
+        loadCodeqlProgress(silent),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -193,6 +219,7 @@ export function useStaticAnalysisData({
     loadOpengrepTask,
     loadCodeqlFindings,
     loadCodeqlTask,
+    loadCodeqlProgress,
   ]);
 
   const refreshOpengrepSilently = useCallback(async () => {
@@ -224,6 +251,7 @@ export function useStaticAnalysisData({
     codeqlSilentRefreshRef.current = true;
     try {
       const nextCodeqlTask = await loadCodeqlTask(true);
+      await loadCodeqlProgress(true);
       if (
         shouldRefreshStaticAnalysisResultsAfterCompletion({
           taskId: codeqlTaskId,
@@ -240,6 +268,7 @@ export function useStaticAnalysisData({
   }, [
     codeqlTaskId,
     loadCodeqlFindings,
+    loadCodeqlProgress,
     loadCodeqlTask,
   ]);
 
@@ -250,6 +279,9 @@ export function useStaticAnalysisData({
       if (interruptTarget === "opengrep" && opengrepTaskId) {
         await interruptOpengrepScanTask(opengrepTaskId);
         toast.success("Opengrep 任务已中止");
+      } else if (interruptTarget === "codeql" && codeqlTaskId) {
+        await interruptCodeqlScanTask(codeqlTaskId);
+        toast.success("CodeQL 任务已中止");
       }
       await refreshAll(true);
     } catch {
@@ -260,9 +292,25 @@ export function useStaticAnalysisData({
     }
   }, [
     interruptTarget,
+    codeqlTaskId,
     opengrepTaskId,
     refreshAll,
   ]);
+
+  const handleResetCodeqlBuildPlan = useCallback(async () => {
+    const projectId = String(codeqlTask?.project_id || "").trim();
+    if (!projectId) return;
+    setResettingCodeqlPlan(true);
+    try {
+      await resetCodeqlProjectBuildPlan(projectId);
+      toast.success("CodeQL 构建方案已重置");
+      await refreshAll(true);
+    } catch {
+      toast.error("重置 CodeQL 构建方案失败");
+    } finally {
+      setResettingCodeqlPlan(false);
+    }
+  }, [codeqlTask?.project_id, refreshAll]);
 
   const handleToggleStatus = useCallback(async (
     row: UnifiedFindingRow,
@@ -328,6 +376,8 @@ export function useStaticAnalysisData({
   return {
     opengrepTask,
     codeqlTask,
+    codeqlProgress,
+    codeqlExplorationEvents: (codeqlProgress?.events ?? []) as CodeqlExplorationProgressEvent[],
     opengrepFindings,
     codeqlFindings,
     loadingInitial,
@@ -337,12 +387,17 @@ export function useStaticAnalysisData({
     interruptTarget,
     setInterruptTarget,
     interrupting,
+    resettingCodeqlPlan,
     refreshAll,
     handleInterrupt,
+    handleResetCodeqlBuildPlan,
     handleToggleStatus,
     canInterruptOpengrep: Boolean(
       opengrepTaskId && isStaticAnalysisInterruptibleStatus(opengrepTask?.status),
     ),
-    canInterruptCodeql: false,
+    canInterruptCodeql: Boolean(
+      codeqlTaskId && isStaticAnalysisInterruptibleStatus(codeqlTask?.status),
+    ),
+    canResetCodeqlBuildPlan: Boolean(codeqlTask?.project_id),
   };
 }

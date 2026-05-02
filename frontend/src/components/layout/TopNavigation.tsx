@@ -98,11 +98,6 @@ function TopNavigationLink({
 			</span>
 			<span className="flex items-center gap-1.5">
 				{item.label}
-				{item.route.path === "/tasks/intelligent" && (
-					<span className="inline-flex items-center rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/30">
-						在开发中
-					</span>
-				)}
 			</span>
 		</Link>
 	);
@@ -148,11 +143,6 @@ const DropdownRouteLink = forwardRef<
 			</span>
 			<span className="flex items-center gap-1.5">
 				{item.label}
-				{item.route.path === "/tasks/intelligent" && (
-					<span className="inline-flex items-center rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/30">
-						在开发中
-					</span>
-				)}
 			</span>
 		</Link>
 	);

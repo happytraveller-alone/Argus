@@ -43,8 +43,6 @@ def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
     timeout_seconds = int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30))
     return [
         RunnerPreflightSpec("opengrep", str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "")), ["opengrep-scan", "--self-test"], timeout_seconds),
-        RunnerPreflightSpec("codeql", str(getattr(settings, "SCANNER_CODEQL_IMAGE", "")), ["codeql-scan", "--self-test"], timeout_seconds),
-        RunnerPreflightSpec("codeql-compile-sandbox", str(getattr(settings, "SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE", getattr(settings, "SCANNER_CODEQL_IMAGE", ""))), ["codeql-compile-sandbox", "--self-test"], timeout_seconds),
     ]
 
 

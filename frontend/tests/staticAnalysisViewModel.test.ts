@@ -7,6 +7,7 @@ import {
   buildStaticAnalysisListState,
   buildStaticAnalysisProgressSummary,
   buildStaticAnalysisTaskStatusSummary,
+  buildCodeqlExplorationTimelineRows,
   buildUnifiedFindingRows,
   formatStaticAnalysisDuration,
 } from "../src/pages/static-analysis/viewModel.ts";
@@ -447,4 +448,45 @@ test("StaticAnalysis page performs cancellable display-only project lookup for i
   assert.match(staticAnalysisPageSource, /staticProjectName/);
   assert.match(staticAnalysisPageSource, /fallbackProjectName/);
   assert.match(staticAnalysisPageSource, /codeqlTaskId/);
+});
+
+test("buildCodeqlExplorationTimelineRows exposes CodeQL evidence and redaction state", () => {
+  const rows = buildCodeqlExplorationTimelineRows([
+    {
+      timestamp: "2026-05-02T00:00:00Z",
+      event_type: "plan_reuse",
+      stage: "build_plan_reused",
+      progress: 34,
+      redaction: { applied: false },
+      payload: {
+        reuse_reason: "accepted project-level sticky build plan exists",
+        commands: ["make -j2"],
+      },
+    },
+    {
+      timestamp: "2026-05-02T00:00:01Z",
+      event_type: "sandbox_command",
+      stage: "sandbox_command_completed",
+      progress: 38,
+      redaction: { applied: true, patterns: ["api_key"] },
+      payload: {
+        command: "make -j2",
+        stdout: "api_key=[REDACTED]",
+        stderr: "compile failed",
+        exit_code: 2,
+        failure_category: "compile_error",
+        dependency_installation: { detected: false },
+      },
+    },
+  ]);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0]?.label, "复用构建方案");
+  assert.equal(rows[0]?.reuseReason, "accepted project-level sticky build plan exists");
+  assert.equal(rows[1]?.label, "沙箱命令");
+  assert.equal(rows[1]?.command, "make -j2");
+  assert.equal(rows[1]?.exitCode, 2);
+  assert.equal(rows[1]?.failureCategory, "compile_error");
+  assert.equal(rows[1]?.redacted, true);
+  assert.match(rows[1]?.stdout || "", /\[REDACTED\]/);
 });

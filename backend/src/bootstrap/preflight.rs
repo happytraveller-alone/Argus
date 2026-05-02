@@ -186,29 +186,12 @@ fn ensure_runner_image(image: &str) -> Result<()> {
 async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>, Vec<PathBuf>)> {
     let config = &state.config;
     let mut cleanup_dirs = Vec::new();
-    let mut specs = vec![
-        RunnerPreflightSpec {
-            name: "opengrep",
-            image: config.scanner_opengrep_image.clone(),
-            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
-            name: "codeql",
-            image: config.scanner_codeql_image.clone(),
-            command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
-            mounts: Vec::new(),
-        },
-        RunnerPreflightSpec {
-            name: "codeql-compile-sandbox",
-            image: config.scanner_codeql_compile_sandbox_image.clone(),
-            command: vec![
-                "codeql-compile-sandbox".to_string(),
-                "--self-test".to_string(),
-            ],
-            mounts: Vec::new(),
-        },
-    ];
+    let mut specs = vec![RunnerPreflightSpec {
+        name: "opengrep",
+        image: config.scanner_opengrep_image.clone(),
+        command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+        mounts: Vec::new(),
+    }];
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
         if let Some((workspace_dir, command, mounts)) =
@@ -250,7 +233,7 @@ mod tests {
         let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
         let mut names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
         names.sort_unstable();
-        assert_eq!(names, vec!["codeql", "codeql-compile-sandbox", "opengrep"]);
+        assert_eq!(names, vec!["opengrep"]);
 
         let opengrep = specs
             .iter()
@@ -259,23 +242,6 @@ mod tests {
         assert_eq!(opengrep.command, vec!["opengrep-scan", "--self-test"]);
         assert!(opengrep.mounts.is_empty());
 
-        let codeql = specs
-            .iter()
-            .find(|spec| spec.name == "codeql")
-            .expect("codeql spec should exist");
-        assert_eq!(codeql.command, vec!["codeql-scan", "--self-test"]);
-        assert!(codeql.mounts.is_empty());
-
-        let compile_sandbox = specs
-            .iter()
-            .find(|spec| spec.name == "codeql-compile-sandbox")
-            .expect("codeql compile sandbox spec should exist");
-        assert_eq!(
-            compile_sandbox.command,
-            vec!["codeql-compile-sandbox", "--self-test"]
-        );
-        assert!(compile_sandbox.mounts.is_empty());
-
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
         }
@@ -283,32 +249,15 @@ mod tests {
 
     #[test]
     fn static_runner_preflight_docker_run_uses_rm_cleanup() {
-        let cases = [
-            RunnerPreflightSpec {
-                name: "opengrep",
-                image: "opengrep-runner:test".to_string(),
-                command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
-                mounts: vec![(
-                    PathBuf::from("/tmp/argus-preflight"),
-                    "/workspace".to_string(),
-                )],
-            },
-            RunnerPreflightSpec {
-                name: "codeql",
-                image: "codeql-runner:test".to_string(),
-                command: vec!["codeql-scan".to_string(), "--self-test".to_string()],
-                mounts: Vec::new(),
-            },
-            RunnerPreflightSpec {
-                name: "codeql-compile-sandbox",
-                image: "codeql-compile-sandbox:test".to_string(),
-                command: vec![
-                    "codeql-compile-sandbox".to_string(),
-                    "--self-test".to_string(),
-                ],
-                mounts: Vec::new(),
-            },
-        ];
+        let cases = [RunnerPreflightSpec {
+            name: "opengrep",
+            image: "opengrep-runner:test".to_string(),
+            command: vec!["opengrep-scan".to_string(), "--self-test".to_string()],
+            mounts: vec![(
+                PathBuf::from("/tmp/argus-preflight"),
+                "/workspace".to_string(),
+            )],
+        }];
 
         for spec in cases {
             let args = docker_run_args(&spec);

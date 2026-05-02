@@ -77,6 +77,34 @@ export interface StaticAnalysisHeaderSummary {
   aggregateStatus: StaticAnalysisAggregateStatus | "pending";
 }
 
+export interface CodeqlExplorationProgressEventLike {
+  timestamp?: string | null;
+  event_type?: string | null;
+  stage?: string | null;
+  progress?: number | null;
+  round?: number | null;
+  redaction?: {
+    applied?: boolean;
+    patterns?: string[];
+  } | Record<string, unknown> | null;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface CodeqlExplorationTimelineRow {
+  key: string;
+  timestamp: string;
+  label: string;
+  detail: string;
+  command: string | null;
+  stdout: string | null;
+  stderr: string | null;
+  exitCode: number | null;
+  failureCategory: string | null;
+  dependencyInstallation: string | null;
+  reuseReason: string | null;
+  redacted: boolean;
+}
+
 export function resolveStaticAnalysisProjectNameFallback(input: {
   taskProjectName?: string | null;
   resolvedProjectName?: string | null;
@@ -323,6 +351,99 @@ function normalizeStaticAnalysisStatus(status?: string | null): string {
 function getEngineLabel(engine: Engine): string {
   if (engine === "opengrep") return "Opengrep";
   return "CodeQL";
+}
+
+function stringifyTimelineValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getTimelinePayloadString(
+  payload: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = stringifyTimelineValue(payload[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function getCodeqlExplorationStageLabel(event: CodeqlExplorationProgressEventLike): string {
+  const stage = String(event.stage || event.event_type || "").trim();
+  switch (stage) {
+    case "build_plan_reuse_check":
+      return "复用检查";
+    case "build_plan_reused":
+      return "复用构建方案";
+    case "build_plan_reset":
+      return "重置构建方案";
+    case "llm_round_started":
+      return "LLM 轮次";
+    case "sandbox_command_completed":
+    case "compile_sandbox":
+      return "沙箱命令";
+    case "dependency_installation_detected":
+      return "依赖安装";
+    case "codeql_capture_validation":
+    case "database_create":
+      return "捕获验证";
+    case "build_plan_accepted":
+      return "方案接受";
+    case "cancelled_cleanup_completed":
+      return "取消清理";
+    case "failed":
+      return "失败";
+    default:
+      return stage || "CodeQL 探索";
+  }
+}
+
+export function buildCodeqlExplorationTimelineRows(
+  events: CodeqlExplorationProgressEventLike[] = [],
+): CodeqlExplorationTimelineRow[] {
+  return events.map((event, index) => {
+    const payload = event.payload ?? {};
+    const label = getCodeqlExplorationStageLabel(event);
+    const detail =
+      getTimelinePayloadString(payload, [
+        "reasoning_summary",
+        "message",
+        "reuse_reason",
+        "failure_category",
+      ]) || label;
+    const dependencyInstallation = getTimelinePayloadString(payload, [
+      "dependency_installation",
+      "dependency_installation_detected",
+    ]);
+    const exitCodeValue = payload.exit_code;
+    const exitCode =
+      typeof exitCodeValue === "number" && Number.isFinite(exitCodeValue)
+        ? exitCodeValue
+        : null;
+    const redaction = event.redaction as { applied?: boolean } | null | undefined;
+
+    return {
+      key: `${event.timestamp || "event"}:${index}`,
+      timestamp: String(event.timestamp || ""),
+      label,
+      detail,
+      command: getTimelinePayloadString(payload, ["command", "commands"]),
+      stdout: getTimelinePayloadString(payload, ["stdout"]),
+      stderr: getTimelinePayloadString(payload, ["stderr"]),
+      exitCode,
+      failureCategory: getTimelinePayloadString(payload, ["failure_category"]),
+      dependencyInstallation,
+      reuseReason: getTimelinePayloadString(payload, ["reuse_reason"]),
+      redacted: Boolean(redaction?.applied),
+    };
+  });
 }
 
 function getStaticAnalysisStatusLabel(status: string): string {

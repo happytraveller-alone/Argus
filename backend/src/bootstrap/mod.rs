@@ -359,6 +359,38 @@ async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
 
     sqlx::query(
         r#"
+        update rust_codeql_build_plans active
+        set status = 'superseded', updated_at = now()
+        where active.status = 'accepted'
+          and exists (
+              select 1
+              from rust_codeql_build_plans newer
+              where newer.project_id = active.project_id
+                and newer.language = active.language
+                and newer.status = 'accepted'
+                and (
+                    newer.updated_at > active.updated_at
+                    or (newer.updated_at = active.updated_at and newer.created_at > active.created_at)
+                    or (newer.updated_at = active.updated_at and newer.created_at = active.created_at and newer.id > active.id)
+                )
+          )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create unique index if not exists ux_rust_codeql_build_plans_active_project_language
+            on rust_codeql_build_plans (project_id, language)
+            where status = 'accepted'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         create table if not exists rust_prompt_skills (
             owner_id text not null,
             id text not null,

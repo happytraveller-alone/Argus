@@ -346,8 +346,8 @@ compose_up_detached() {
 }
 
 build_runner_images() {
-  log "Building scanner runner images without starting runner service containers."
-  run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner codeql-runner
+  log "Building Opengrep runner image without starting runner service containers."
+  run_cmd docker compose --project-directory "$ROOT_DIR" --file "$COMPOSE_FILE" --project-name "$PROJECT_NAME" build opengrep-runner
 }
 
 wait_for_backend() {

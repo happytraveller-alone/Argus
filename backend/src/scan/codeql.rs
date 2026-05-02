@@ -55,33 +55,6 @@ pub struct CommandValidationResult {
     pub reason: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-pub struct ScanCommandArgs<'a> {
-    pub source_dir: &'a str,
-    pub queries_dir: &'a str,
-    pub database_dir: &'a str,
-    pub sarif_path: &'a str,
-    pub summary_path: &'a str,
-    pub events_path: &'a str,
-    pub build_plan_path: Option<&'a str>,
-    pub build_mode: Option<&'a str>,
-    pub language: &'a str,
-    pub threads: usize,
-    pub ram_mb: u64,
-    pub allow_network: bool,
-}
-
-#[derive(Clone, Debug)]
-pub struct CompileSandboxCommandArgs<'a> {
-    pub source_dir: &'a str,
-    pub summary_path: &'a str,
-    pub events_path: &'a str,
-    pub plan_path: &'a str,
-    pub evidence_dir: &'a str,
-    pub language: &'a str,
-    pub allow_network: bool,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompileSandboxPlan {
     pub language: String,
@@ -151,64 +124,6 @@ pub async fn materialize_query_directory_for_languages(
 ) -> Result<Option<PathBuf>> {
     let assets = load_query_assets_for_languages(state, languages).await?;
     materialize_query_assets(workspace_dir, assets).await
-}
-
-pub fn build_scan_command(args: &ScanCommandArgs<'_>) -> Vec<String> {
-    let mut command = vec![
-        "codeql-scan".to_string(),
-        "--source".to_string(),
-        args.source_dir.to_string(),
-        "--queries".to_string(),
-        args.queries_dir.to_string(),
-        "--database".to_string(),
-        args.database_dir.to_string(),
-        "--sarif".to_string(),
-        args.sarif_path.to_string(),
-        "--summary".to_string(),
-        args.summary_path.to_string(),
-        "--events".to_string(),
-        args.events_path.to_string(),
-        "--language".to_string(),
-        normalize_language(args.language),
-        "--threads".to_string(),
-        args.threads.to_string(),
-        "--ram".to_string(),
-        args.ram_mb.to_string(),
-    ];
-    if let Some(build_plan_path) = args.build_plan_path {
-        command.push("--build-plan".to_string());
-        command.push(build_plan_path.to_string());
-    }
-    if let Some(build_mode) = args.build_mode {
-        command.push("--build-mode".to_string());
-        command.push(build_mode.to_string());
-    }
-    if args.allow_network {
-        command.push("--allow-network".to_string());
-    }
-    command
-}
-
-pub fn build_compile_sandbox_command(args: &CompileSandboxCommandArgs<'_>) -> Vec<String> {
-    let mut command = vec![
-        "codeql-compile-sandbox".to_string(),
-        "--source".to_string(),
-        args.source_dir.to_string(),
-        "--summary".to_string(),
-        args.summary_path.to_string(),
-        "--events".to_string(),
-        args.events_path.to_string(),
-        "--plan".to_string(),
-        args.plan_path.to_string(),
-        "--evidence".to_string(),
-        args.evidence_dir.to_string(),
-        "--language".to_string(),
-        normalize_language(args.language),
-    ];
-    if args.allow_network {
-        command.push("--allow-network".to_string());
-    }
-    command
 }
 
 pub fn parse_compile_sandbox_plan(plan_text: &str) -> Result<CompileSandboxPlan> {
@@ -331,6 +246,163 @@ pub fn build_plan_json_from_compile_plan(plan: &CompileSandboxPlan) -> Value {
         "status": "accepted",
         "evidence_role": "evidence_only",
     })
+}
+
+pub fn validate_compile_plan_capture(plan: &CompileSandboxPlan) -> Result<()> {
+    if plan.status != "accepted" {
+        anyhow::bail!("compile sandbox plan status is not accepted");
+    }
+    if plan.build_mode == "manual" && plan.commands.is_empty() {
+        anyhow::bail!("manual compile sandbox plan requires commands");
+    }
+    let evidence_text = plan.evidence_json.to_string().to_ascii_lowercase();
+    let has_database_proof = [
+        "database",
+        "database_create",
+        "database created",
+        "codeql database",
+        "capture",
+        "extractor",
+        "extraction",
+    ]
+    .iter()
+    .any(|needle| evidence_text.contains(needle));
+    let has_cpp_proof = ["cpp", "c-cpp", "c/c++", "cxx", "clang", "gcc", "cc "]
+        .iter()
+        .any(|needle| evidence_text.contains(needle));
+    if !(has_database_proof && has_cpp_proof) {
+        anyhow::bail!("compile sandbox plan missing CodeQL C/C++ capture validation proof");
+    }
+    Ok(())
+}
+
+pub fn validate_codeql_capture_events(events_text: &str, language: &str) -> Result<()> {
+    let normalized_language = normalize_language(language);
+    let mut saw_database_create = false;
+    for line in events_text.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(event) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let stage = event
+            .get("stage")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let event_name = event
+            .get("event")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let message = event
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if stage == "database_create" && event_name == "completed" {
+            saw_database_create = true;
+        }
+        if stage == "database_create"
+            && (event_name == "failed"
+                || event_name == "command_exit"
+                || message.contains("failed"))
+        {
+            anyhow::bail!("CodeQL database create failed");
+        }
+    }
+    if !saw_database_create {
+        anyhow::bail!("missing CodeQL database create completion event");
+    }
+    if normalized_language != "cpp" {
+        anyhow::bail!("capture validation only applies to C/C++ in this slice");
+    }
+    Ok(())
+}
+
+pub fn redaction_metadata(original: &Value, redacted: &Value) -> Value {
+    let applied = original != redacted;
+    json!({
+        "applied": applied,
+        "patterns": if applied { vec!["api_key", "token"] } else { Vec::<&str>::new() },
+    })
+}
+
+pub fn redact_sensitive_value(value: &Value) -> Value {
+    match value {
+        Value::String(text) => Value::String(redact_sensitive_text(text)),
+        Value::Array(values) => Value::Array(values.iter().map(redact_sensitive_value).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| {
+                    if is_sensitive_key(key) {
+                        (key.clone(), Value::String("[REDACTED]".to_string()))
+                    } else {
+                        (key.clone(), redact_sensitive_value(value))
+                    }
+                })
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+pub fn redact_sensitive_text(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut word = String::new();
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !word.is_empty() {
+                output.push_str(&redact_sensitive_word(&word));
+                word.clear();
+            }
+            output.push(ch);
+        } else {
+            word.push(ch);
+        }
+    }
+    if !word.is_empty() {
+        output.push_str(&redact_sensitive_word(&word));
+    }
+    output
+}
+
+fn redact_sensitive_word(word: &str) -> String {
+    let trimmed = word.trim_matches(|ch: char| matches!(ch, '"' | '\'' | ',' | ';'));
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some((key, _)) = trimmed.split_once('=').or_else(|| trimmed.split_once(':')) {
+        if is_sensitive_key(key) {
+            return format!("{key}=[REDACTED]");
+        }
+    }
+    if lower.starts_with("sk-")
+        || lower.starts_with("ghp_")
+        || lower.starts_with("gho_")
+        || lower.starts_with("ghu_")
+        || lower.starts_with("ghs_")
+        || lower.starts_with("ghr_")
+        || looks_like_jwt(trimmed)
+    {
+        return word.replace(trimmed, "[REDACTED]");
+    }
+    word.to_string()
+}
+
+fn looks_like_jwt(value: &str) -> bool {
+    let parts = value.split('.').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| part.len() >= 8 && part.chars().all(is_base64_urlish))
+}
+
+fn is_base64_urlish(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '=')
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
+    normalized.contains("token")
+        || normalized.contains("api_key")
+        || normalized.contains("apikey")
+        || normalized.contains("secret")
+        || normalized == "authorization"
 }
 
 pub fn build_plan_json_from_record(record: &task_state::CodeqlBuildPlanRecord) -> Value {
@@ -763,28 +835,6 @@ mod tests {
     }
 
     #[test]
-    fn builds_codeql_scan_command_with_events_and_build_plan() {
-        let command = build_scan_command(&ScanCommandArgs {
-            source_dir: "/scan/source",
-            queries_dir: "/scan/codeql-queries",
-            database_dir: "/scan/output/db",
-            sarif_path: "/scan/output/results.sarif",
-            summary_path: "/scan/output/summary.json",
-            events_path: "/scan/output/events.jsonl",
-            build_plan_path: Some("/scan/build-plan/build-plan.json"),
-            build_mode: None,
-            language: "TypeScript",
-            threads: 0,
-            ram_mb: 6144,
-            allow_network: true,
-        });
-        assert_eq!(command[0], "codeql-scan");
-        assert!(command.contains(&"javascript-typescript".to_string()));
-        assert!(command.contains(&"--events".to_string()));
-        assert!(command.contains(&"--allow-network".to_string()));
-    }
-
-    #[test]
     fn parses_codeql_sarif_into_static_findings() {
         let sarif = r#"{
           "version": "2.1.0",
@@ -813,24 +863,6 @@ mod tests {
     }
 
     #[test]
-    fn builds_compile_sandbox_command_for_cpp_only_recipe_discovery() {
-        let command = build_compile_sandbox_command(&CompileSandboxCommandArgs {
-            source_dir: "/scan/source",
-            summary_path: "/scan/output/compile-summary.json",
-            events_path: "/scan/output/compile-events.jsonl",
-            plan_path: "/scan/build-plan/compile-sandbox-plan.json",
-            evidence_dir: "/scan/evidence",
-            language: "C++",
-            allow_network: true,
-        });
-        assert_eq!(command[0], "codeql-compile-sandbox");
-        assert!(command.contains(&"cpp".to_string()));
-        assert!(command.contains(&"--plan".to_string()));
-        assert!(command.contains(&"/scan/build-plan/compile-sandbox-plan.json".to_string()));
-        assert!(command.contains(&"--allow-network".to_string()));
-    }
-
-    #[test]
     fn compile_sandbox_plan_becomes_db_backed_build_plan_without_evidence_truth() {
         let plan = parse_compile_sandbox_plan(
             r#"{
@@ -843,7 +875,7 @@ mod tests {
               "source_fingerprint":"sha256:source",
               "dependency_fingerprint":"sha256:deps",
               "status":"accepted",
-              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/stdout.txt"}
+              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/stdout.txt","capture_validation":{"database_create":"completed","extractor":"cpp","captured_files":["main.c"]}}
             }"#,
         )
         .expect("compile sandbox plan should parse");
@@ -881,7 +913,7 @@ mod tests {
               "source_fingerprint":"sha256:source",
               "dependency_fingerprint":"sha256:deps",
               "status":"accepted",
-              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/deleted-stdout.txt"}
+              "evidence_json":{"artifacts_role":"evidence_only","stdout_path":"/scan/evidence/deleted-stdout.txt","capture_validation":{"database_create":"completed","extractor":"cpp","captured_files":["main.c"]}}
             }"#,
         )
         .expect("compile sandbox plan should parse");
@@ -917,6 +949,66 @@ mod tests {
         .to_string();
 
         assert!(error.contains("denied token"), "{error}");
+    }
+
+    #[test]
+    fn capture_validation_requires_database_and_cpp_extraction_proof() {
+        let plan = parse_compile_sandbox_plan(
+            r#"{
+              "language":"cpp",
+              "target_path":".",
+              "build_mode":"manual",
+              "commands":["make -j2"],
+              "working_directory":".",
+              "allow_network":false,
+              "source_fingerprint":"sha256:source",
+              "dependency_fingerprint":"sha256:deps",
+              "status":"accepted",
+              "evidence_json":{"compile_exit_code":0}
+            }"#,
+        )
+        .expect("plan should parse");
+
+        let error = validate_compile_plan_capture(&plan)
+            .expect_err("plain compile success is not capture proof")
+            .to_string();
+
+        assert!(error.contains("capture validation proof"), "{error}");
+    }
+
+    #[test]
+    fn codeql_capture_events_require_database_create_completion() {
+        validate_codeql_capture_events(
+            r#"{"stage":"database_create","event":"completed","message":"CodeQL database created"}"#,
+            "cpp",
+        )
+        .expect("database create completion proves capture stage reached");
+
+        let error = validate_codeql_capture_events(
+            r#"{"stage":"database_create","event":"command_exit","message":"database create failed"}"#,
+            "cpp",
+        )
+        .expect_err("database create failure cannot be accepted")
+        .to_string();
+        assert!(error.contains("failed"), "{error}");
+    }
+
+    #[test]
+    fn redacts_token_like_values_in_progress_payloads() {
+        let original = json!({
+            "stdout": "api_key=sk-testsecretvalue token=ghp_abcdefghijklmnopqrstuvwxyz",
+            "nested": {"authorization": "Bearer secret-token"},
+        });
+
+        let redacted = redact_sensitive_value(&original);
+
+        let serialized = redacted.to_string();
+        assert!(!serialized.contains("sk-testsecretvalue"), "{serialized}");
+        assert!(
+            !serialized.contains("ghp_abcdefghijklmnopqrstuvwxyz"),
+            "{serialized}"
+        );
+        assert!(serialized.contains("[REDACTED]"), "{serialized}");
     }
 
     #[test]

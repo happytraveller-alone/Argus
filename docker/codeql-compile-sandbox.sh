@@ -6,7 +6,7 @@ usage() {
 Usage:
   codeql-compile-sandbox --self-test
   codeql-compile-sandbox --source DIR --summary FILE --events FILE --plan FILE --evidence DIR
-                         --language cpp [--allow-network]
+                         --language cpp [--candidate-command COMMAND] [--allow-network]
 USAGE
 }
 
@@ -163,6 +163,14 @@ raise SystemExit('no C/C++ build inputs detected')
 PY
 }
 
+detect_or_use_candidate_command() {
+  if [ -n "$candidate_command" ]; then
+    printf '%s\n' "$candidate_command"
+    return 0
+  fi
+  detect_cpp_command
+}
+
 self_test() {
   command -v python3 >/dev/null
   command -v sh >/dev/null
@@ -192,7 +200,7 @@ run_compile_sandbox() {
     return 2
   fi
   local command
-  if ! command="$(detect_cpp_command 2>&1)"; then
+  if ! command="$(detect_or_use_candidate_command 2>&1)"; then
     write_event "compile_sandbox" "failed" "$command"
     write_failure_summary "$command" "dependency_setup_failure"
     return 1
@@ -251,8 +259,8 @@ plan = {
     "target_path": ".",
     "build_mode": "manual",
     "commands": [command],
-    "working_directory": ".",
-    "allow_network": allow_network == "true",
+  "working_directory": ".",
+  "allow_network": allow_network == "true",
     "query_suite": None,
     "source_fingerprint": source_fp,
     "dependency_fingerprint": dep_fp,
@@ -277,6 +285,7 @@ plan_path=""
 evidence_dir=""
 language=""
 allow_network="false"
+candidate_command=""
 
 if [ "${1:-}" = "--self-test" ]; then
   self_test
@@ -291,6 +300,7 @@ while [ "$#" -gt 0 ]; do
     --plan) plan_path="$2"; shift 2 ;;
     --evidence) evidence_dir="$2"; shift 2 ;;
     --language) language="$2"; shift 2 ;;
+    --candidate-command) candidate_command="$2"; shift 2 ;;
     --allow-network) allow_network="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;

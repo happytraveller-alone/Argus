@@ -31,6 +31,7 @@ const TaskManagementIntelligent = lazy(
 );
 const DataManagementPage = lazy(() => import("@/pages/DataManagement"));
 const AgentAuditDetail = lazy(() => import("@/pages/AgentAuditDetail"));
+const CodeqlScanDetail = lazy(() => import("@/pages/CodeqlScanDetail"));
 
 function LegacyOpengrepRulesRedirect() {
 	const location = useLocation();
@@ -199,6 +200,13 @@ const routes: RouteConfig[] = [
 		nameKey: "route.staticAnalysis",
 		path: "/static-analysis/:taskId",
 		element: <StaticAnalysis />,
+		visible: false,
+		navVisible: false,
+	},
+	{
+		name: "CodeQL分析结果",
+		path: "/codeql-analysis/:taskId",
+		element: <CodeqlScanDetail />,
 		visible: false,
 		navVisible: false,
 	},
