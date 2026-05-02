@@ -30,6 +30,7 @@ const TaskManagementIntelligent = lazy(
 	() => import("@/pages/TaskManagementIntelligent"),
 );
 const DataManagementPage = lazy(() => import("@/pages/DataManagement"));
+const AgentAuditDetail = lazy(() => import("@/pages/AgentAuditDetail"));
 
 function LegacyOpengrepRulesRedirect() {
 	const location = useLocation();
@@ -65,7 +66,7 @@ const routes: RouteConfig[] = [
 		name: "Agent扫描任务",
 		nameKey: "route.agentTask",
 		path: "/agent-audit/:taskId",
-		element: <InDevelopmentPlaceholder />,
+		element: <AgentAuditDetail />,
 		visible: false,
 		navVisible: false,
 	},

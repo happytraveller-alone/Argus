@@ -1,3 +1,6 @@
 [submodule "third_party/cubesandbox"]
 	path = third_party/cubesandbox
 	url = https://v6.gh-proxy.org/https://github.com/TencentCloud/CubeSandbox.git
+[submodule "third_party/claw-code"]
+	path = third_party/claw-code
+	url = https://v6.gh-proxy.org/https://github.com/ultraworkers/claw-code

@@ -4,6 +4,7 @@ import {
 	fetchTaskActivities,
 	type TaskActivityItem,
 } from "@/features/tasks/services/taskActivities";
+import { cancelIntelligentTask } from "@/shared/api/intelligentTasks";
 
 const STALE_MS = 30_000;
 const MAX_AGE_MS = 5 * 60_000;
@@ -158,4 +159,23 @@ export function subscribeTaskActivitiesStore(
 	return () => {
 		listeners.delete(listener);
 	};
+}
+
+/**
+ * Cancel a task activity. Dispatches to the correct API based on cancelTarget.mode.
+ * After cancellation, refreshes the snapshot.
+ */
+export async function cancelTaskActivity(
+	activity: TaskActivityItem,
+): Promise<void> {
+	const target = activity.cancelTarget;
+	if (!target) {
+		throw new Error("该任务无可取消目标");
+	}
+	if (target.mode === "intelligent") {
+		await cancelIntelligentTask(target.taskId);
+	} else {
+		throw new Error(`不支持的取消模式：${target.mode}`);
+	}
+	await refreshTaskActivitiesSnapshot();
 }

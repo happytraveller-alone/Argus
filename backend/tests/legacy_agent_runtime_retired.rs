@@ -129,3 +129,38 @@ fn retired_auxiliary_runtime_surface_is_removed() {
         assert_file_lacks(repo.join(relative_path), &compose_needles);
     }
 }
+
+#[test]
+fn claw_code_runtime_subprocess_is_forbidden() {
+    let repo = repo_root();
+    let backend_src = repo.join("backend/src");
+    let forbidden_needles: Vec<String> = vec![
+        r#"Command::new("claw-code""#.to_string(),
+        r#"Command::new(\"claw-code\""#.to_string(),
+        r#"Command::new("third_party/claw-code"#.to_string(),
+        r#""third_party/claw-code/"#.to_string(),
+    ];
+    walk_and_assert_no_needles(&backend_src, &forbidden_needles);
+}
+
+fn walk_and_assert_no_needles(dir: &std::path::Path, needles: &[String]) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk_and_assert_no_needles(&path, needles);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            let content = fs::read_to_string(&path).expect("read source file");
+            for needle in needles {
+                assert!(
+                    !content.contains(needle),
+                    "{} must not invoke claw-code as a subprocess (matched {needle:?})",
+                    path.display()
+                );
+            }
+        }
+    }
+}

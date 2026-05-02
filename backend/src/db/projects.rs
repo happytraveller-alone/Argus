@@ -8,7 +8,7 @@ use tokio::fs;
 use uuid::Uuid;
 
 use crate::{
-    db::task_state,
+    db::{intelligent_task_state, task_state},
     state::{AppState, StoredProject, StoredProjectArchive},
 };
 
@@ -92,9 +92,36 @@ pub async fn delete_project_with_related_tasks(
         task_state::save_snapshot_unlocked(state, &next_snapshot).await?;
     }
 
+    let original_intelligent_snapshot =
+        intelligent_task_state::load_snapshot_unlocked(state).await?;
+    let mut next_intelligent_snapshot = original_intelligent_snapshot.clone();
+    let removed_intelligent = intelligent_task_state::remove_project_records_from_snapshot(
+        &mut next_intelligent_snapshot,
+        project_id,
+    );
+    let intelligent_changed = removed_intelligent > 0;
+
+    if intelligent_changed {
+        if let Err(error) =
+            intelligent_task_state::save_snapshot_unlocked(state, &next_intelligent_snapshot).await
+        {
+            if snapshot_changed {
+                let _ = task_state::save_snapshot_unlocked(state, &original_snapshot).await;
+            }
+            return Err(error);
+        }
+    }
+
     if let Err(error) = delete_project_while_locked(state, project_id).await {
         if snapshot_changed {
             let _ = task_state::save_snapshot_unlocked(state, &original_snapshot).await;
+        }
+        if intelligent_changed {
+            let _ = intelligent_task_state::save_snapshot_unlocked(
+                state,
+                &original_intelligent_snapshot,
+            )
+            .await;
         }
         return Err(error);
     }

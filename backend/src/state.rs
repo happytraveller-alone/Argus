@@ -9,6 +9,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::{
     config::AppConfig, project_file_cache::ProjectFileCache,
     runtime::cubesandbox::task::CubeSandboxTaskManager,
+    runtime::intelligent::task::IntelligentTaskManager,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -244,6 +245,7 @@ pub struct AppState {
     pub project_file_cache: Arc<Mutex<ProjectFileCache>>,
     pub bootstrap: Arc<RwLock<BootstrapReport>>,
     pub cube_sandbox_task_manager: Arc<CubeSandboxTaskManager>,
+    pub intelligent_task_manager: Arc<IntelligentTaskManager>,
 }
 
 impl AppState {
@@ -266,6 +268,7 @@ impl AppState {
             file_store_lock: Arc::new(Mutex::new(())),
             project_file_cache: Arc::new(Mutex::new(ProjectFileCache::new())),
             cube_sandbox_task_manager: Arc::new(CubeSandboxTaskManager::new()),
+            intelligent_task_manager: Arc::new(IntelligentTaskManager::new()),
             bootstrap: Arc::new(RwLock::new(BootstrapReport {
                 overall: BootstrapStatus::NotRun.as_str().to_string(),
                 file_store: FileStoreBootstrapStatus::default(),
