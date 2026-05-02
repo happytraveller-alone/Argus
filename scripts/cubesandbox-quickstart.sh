@@ -467,21 +467,26 @@ PY
 
 codeql_cpp_smoke() {
   CUBE_PYTHON_CODE="$(cat <<'PY'
+import json
 import pathlib
 import subprocess
 
 def run(cmd, cwd=None, shell=False):
     print("$", cmd if isinstance(cmd, str) else " ".join(cmd))
-    out = subprocess.check_output(
+    result = subprocess.run(
         cmd,
         cwd=cwd,
         shell=shell,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         timeout=240,
     )
+    out = result.stdout
     if out.strip():
         print(out.strip())
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd, out)
     return out
 
 for cmd in [
@@ -540,6 +545,25 @@ run(
     cwd=work,
 )
 print("CODEQL_DB_OK", (work / "codeql-db").exists())
+run(
+    [
+        "codeql",
+        "database",
+        "analyze",
+        "codeql-db",
+        "codeql/cpp-queries:Security/CWE/CWE-120/BadlyBoundedWrite.ql",
+        "--format=sarifv2.1.0",
+        "--output",
+        "results.sarif",
+        "--threads=1",
+        "--ram=2048",
+    ],
+    cwd=work,
+)
+sarif_path = work / "results.sarif"
+print("CODEQL_ANALYZE_OK", sarif_path.exists() and sarif_path.stat().st_size > 0)
+sarif = json.loads(sarif_path.read_text())
+print("CODEQL_SARIF_OK", sarif.get("version") == "2.1.0" and bool(sarif.get("runs")))
 PY
 )" python_smoke
 }

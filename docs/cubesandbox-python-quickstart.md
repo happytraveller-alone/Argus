@@ -311,6 +311,8 @@ The smoke verifies:
 - C++ Makefile build and run
 - CMake configure/build and run
 - `codeql database create --language=cpp --command "cmake --build build"`
+- `codeql database analyze` against a bundled C/C++ query pack query
+- SARIF `2.1.0` output with at least one run
 
 Expected success markers include:
 
@@ -318,4 +320,6 @@ Expected success markers include:
 C_OK:42
 CPP_OK:10
 CODEQL_DB_OK True
+CODEQL_ANALYZE_OK True
+CODEQL_SARIF_OK True
 ```

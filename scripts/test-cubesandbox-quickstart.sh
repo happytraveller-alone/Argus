@@ -60,6 +60,8 @@ assert_contains "$SCRIPT" "CUBE_CODEQL_CPP_WSL_IMAGE"
 assert_contains "$SCRIPT" "codeql-cpp.Dockerfile"
 assert_not_contains "$SCRIPT" "cat > Dockerfile <<'DOCKERFILE'"
 assert_contains "$SCRIPT" "CODEQL_DB_OK"
+assert_contains "$SCRIPT" "CODEQL_ANALYZE_OK"
+assert_contains "$SCRIPT" "CODEQL_SARIF_OK"
 
 assert_contains "$OCI_DOCKERFILE" "FROM ccr.ccs.tencentyun.com/ags-image/sandbox-code:latest"
 assert_contains "$OCI_DOCKERFILE" 'ARG CUBE_LOCAL_REGISTRY_IMAGE'

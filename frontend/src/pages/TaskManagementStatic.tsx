@@ -10,7 +10,7 @@ import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesL
 import { Badge } from "@/components/ui/badge";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
-import { interruptOpengrepScanTask } from "@/shared/api/opengrep";
+import { interruptCodeqlScanTask, interruptOpengrepScanTask } from "@/shared/api/opengrep";
 import {
 	filterActivitiesByKind,
 	type TaskActivityItem,
@@ -78,7 +78,11 @@ export default function TaskManagementStatic() {
 		}
 		setCancellingActivityId(activity.id);
 		try {
-			await interruptOpengrepScanTask(activity.cancelTarget.taskId);
+			if (activity.cancelTarget.engine === "codeql") {
+				await interruptCodeqlScanTask(activity.cancelTarget.taskId);
+			} else {
+				await interruptOpengrepScanTask(activity.cancelTarget.taskId);
+			}
 			toast.success("已提交静态任务中止请求");
 			await refresh();
 		} catch (error) {
