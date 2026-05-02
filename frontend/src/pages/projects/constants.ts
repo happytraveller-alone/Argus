@@ -1,6 +1,7 @@
 import type { CreateProjectForm } from "@/shared/types";
 import { SUPPORTED_LANGUAGES } from "@/shared/constants";
 import { stripSupportedArchiveSuffix } from "@/features/projects/services/repoZipScan";
+export { normalizeProgrammingLanguages } from "@/shared/utils/programmingLanguages";
 
 export const PROJECT_PAGE_SIZE = 10;
 export const PROJECTS_TABLE_HEADER_HEIGHT = 48;
@@ -59,30 +60,4 @@ export function createEmptyProjectForm(): CreateProjectForm {
 		default_branch: "main",
 		programming_languages: [],
 	};
-}
-
-export function normalizeProgrammingLanguages(value: unknown): string[] {
-	if (Array.isArray(value)) {
-		return value.filter((item): item is string => typeof item === "string");
-	}
-
-	if (typeof value !== "string") return [];
-
-	const trimmed = value.trim();
-	if (!trimmed) return [];
-	if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-		try {
-			const parsed = JSON.parse(trimmed);
-			if (Array.isArray(parsed)) {
-				return parsed.filter((item): item is string => typeof item === "string");
-			}
-		} catch {
-			return [];
-		}
-	}
-
-	return trimmed
-		.split(",")
-		.map((item) => item.trim())
-		.filter(Boolean);
 }

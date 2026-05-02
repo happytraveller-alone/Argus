@@ -16,15 +16,15 @@
 
 ### 静态审计
 
-- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。2026-05-01 CodeQL 隔离扫描已有基础骨架，并新增 C/C++ compile-sandbox 闭环切片；完整五语言 CodeQL 仍不是首版完成能力。
+- **是什么**：当前稳定主线由 Opengrep 承担的规则扫描体验，产品层显示为“静态审计”。CodeQL 隔离扫描已有基础骨架：C/C++ 使用 compile-sandbox 闭环，Python/JavaScript-TypeScript/Java 可通过显式 `languages` payload 进入 `codeql-scan --build-mode none`，Go 进入 `codeql-scan --build-mode autobuild`。
 - **不是什么**：历史多引擎静态审计集合；退役兼容、防回归测试或旧前端 API 残留不应重新成为当前入口。CodeQL 计划也不是把旧多引擎路由复活。
 - **主要入口**：`backend/src/routes/static_tasks.rs`、`frontend/src/shared/api/opengrep.ts`、`frontend/src/pages/StaticAnalysis.tsx`。
 
 
 ### CodeQL 隔离扫描计划
 
-- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。
-- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前 C/C++ compile-sandbox 切片不等于完整五语言首版。
+- **是什么**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md` 中规划并已开始落地的静态审计扩展：在静态审计/Opengrep 产品入口下增加 `engine="codeql"`，但使用独立 CodeQL runner、`rules_codeql` 查询资产、SARIF 解析和项目级 build plan 固化机制。C/C++ 走 compile-sandbox + DB-backed build plan；Python/JavaScript-TypeScript/Java 走 `build-mode=none`；Go 走 `build-mode=autobuild`。
+- **不是什么**：Opengrep runner 的增强阶段，也不是旧多引擎静态审计路由复活。当前语言分流和 C/C++ compile-sandbox 切片不等于完整五语言首版。
 - **主要计划入口**：`plan/codeql_security/codeql_opengrep_isolated_scan_plan.md`、`.omx/specs/deep-interview-codeql-opengrep-isolated-scan-plan.md`、`.omx/specs/deep-interview-codeql-compile-sandbox.md`。
 - **strict-zero 决策**：完整 CodeQL 首版仍以五语言全绿为总计划口径；当前 compile-sandbox 切片只以 C/C++ 闭环为完成。LLM/自动候选命令必须 validator-gated 且只能在沙箱内执行；build plan、指纹和证据索引以 DB/task-state 为运行时真源；artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL `database create` 捕获。
 

@@ -6,7 +6,7 @@ usage() {
 Usage:
   codeql-scan --self-test
   codeql-scan --source DIR --queries DIR --database DIR --sarif FILE --summary FILE --events FILE
-              --language LANG [--build-plan FILE] [--threads N] [--ram MB] [--allow-network]
+              --language LANG [--build-plan FILE] [--build-mode MODE] [--threads N] [--ram MB] [--allow-network]
 USAGE
 }
 
@@ -79,6 +79,7 @@ summary_path=""
 events_path=""
 build_plan_path=""
 language=""
+requested_build_mode=""
 threads="0"
 ram_mb="6144"
 allow_network="false"
@@ -97,6 +98,7 @@ while [ "$#" -gt 0 ]; do
     --summary) summary_path="$2"; shift 2 ;;
     --events) events_path="$2"; shift 2 ;;
     --build-plan) build_plan_path="$2"; shift 2 ;;
+    --build-mode) requested_build_mode="$2"; shift 2 ;;
     --language) language="$2"; shift 2 ;;
     --threads) threads="$2"; shift 2 ;;
     --ram) ram_mb="$2"; shift 2 ;;
@@ -147,7 +149,10 @@ with open(sys.argv[1], encoding='utf-8') as handle:
     payload=json.load(handle)
 print(payload.get('working_directory') or '.')
 PY
-)"
+  )"
+fi
+if [ -n "$requested_build_mode" ]; then
+  build_mode="$requested_build_mode"
 fi
 
 validate_manual_build_command() {

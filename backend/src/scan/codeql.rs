@@ -64,6 +64,7 @@ pub struct ScanCommandArgs<'a> {
     pub summary_path: &'a str,
     pub events_path: &'a str,
     pub build_plan_path: Option<&'a str>,
+    pub build_mode: Option<&'a str>,
     pub language: &'a str,
     pub threads: usize,
     pub ram_mb: u64,
@@ -177,6 +178,10 @@ pub fn build_scan_command(args: &ScanCommandArgs<'_>) -> Vec<String> {
     if let Some(build_plan_path) = args.build_plan_path {
         command.push("--build-plan".to_string());
         command.push(build_plan_path.to_string());
+    }
+    if let Some(build_mode) = args.build_mode {
+        command.push("--build-mode".to_string());
+        command.push(build_mode.to_string());
     }
     if args.allow_network {
         command.push("--allow-network".to_string());
@@ -767,6 +772,7 @@ mod tests {
             summary_path: "/scan/output/summary.json",
             events_path: "/scan/output/events.jsonl",
             build_plan_path: Some("/scan/build-plan/build-plan.json"),
+            build_mode: None,
             language: "TypeScript",
             threads: 0,
             ram_mb: 6144,

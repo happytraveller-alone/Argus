@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     env,
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -31,6 +31,13 @@ use crate::{
 
 static OPENGREP_RESOURCE_SCHEDULER: LazyLock<OpengrepResourceScheduler> =
     LazyLock::new(OpengrepResourceScheduler::from_environment);
+
+#[derive(Clone, Debug, Default)]
+struct CodeqlTaskOptions {
+    languages: Vec<String>,
+    build_mode: Option<String>,
+    allow_network: Option<bool>,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -727,6 +734,11 @@ async fn create_static_task_for_engine(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let codeql_options = if engine.eq_ignore_ascii_case("codeql") {
+        Some(extract_codeql_task_options(&payload))
+    } else {
+        None
+    };
 
     let mut record = task_state::StaticTaskRecord {
         id: task_id.clone(),
@@ -788,6 +800,21 @@ async fn create_static_task_for_engine(
             "project_name".to_string(),
             Value::String(project.name.clone()),
         );
+        if let Some(options) = &codeql_options {
+            extra.insert("requested_languages".to_string(), json!(options.languages));
+            if let Some(build_mode) = &options.build_mode {
+                extra.insert(
+                    "requested_build_mode".to_string(),
+                    Value::String(build_mode.clone()),
+                );
+            }
+            if let Some(allow_network) = options.allow_network {
+                extra.insert(
+                    "requested_allow_network".to_string(),
+                    Value::Bool(allow_network),
+                );
+            }
+        }
     }
     let mut snapshot = task_state::load_snapshot_unlocked(&state)
         .await
@@ -806,7 +833,15 @@ async fn create_static_task_for_engine(
     let engine_for_task = engine.to_string();
     tokio::spawn(async move {
         if engine_for_task == "codeql" {
-            run_codeql_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
+            run_codeql_scan(
+                bg_state,
+                bg_task_id,
+                project_id,
+                target_path,
+                rule_ids,
+                codeql_options.unwrap_or_default(),
+            )
+            .await;
         } else {
             run_opengrep_scan(bg_state, bg_task_id, project_id, target_path, rule_ids).await;
         }
@@ -1127,9 +1162,12 @@ async fn run_codeql_scan(
     project_id: String,
     target_path: String,
     _rule_ids: Vec<String>,
+    options: CodeqlTaskOptions,
 ) {
     let started_at = std::time::Instant::now();
-    if let Err(error) = run_codeql_scan_inner(&state, &task_id, &project_id, &target_path).await {
+    if let Err(error) =
+        run_codeql_scan_inner(&state, &task_id, &project_id, &target_path, options).await
+    {
         let elapsed_ms = started_at.elapsed().as_millis() as i64;
         let _ = update_scan_task_failed(&state, &task_id, &error.to_string(), elapsed_ms).await;
     }
@@ -1140,6 +1178,7 @@ async fn run_codeql_scan_inner(
     task_id: &str,
     project_id: &str,
     _target_path: &str,
+    options: CodeqlTaskOptions,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let started_at = std::time::Instant::now();
 
@@ -1198,7 +1237,7 @@ async fn run_codeql_scan_inner(
         }
         _ => Vec::new(),
     };
-    let codeql_languages = normalize_codeql_task_languages(&project_languages);
+    let codeql_languages = normalize_codeql_task_languages(&options.languages, &project_languages);
     let primary_language = codeql_languages
         .first()
         .cloned()
@@ -1223,6 +1262,24 @@ async fn run_codeql_scan_inner(
     let compile_stderr_rel_path = format!("output/compile-stderr-{}.txt", Uuid::new_v4());
     let build_plan_rel_path = "build-plan/build-plan.json".to_string();
     let compile_plan_rel_path = "build-plan/compile-sandbox-plan.json".to_string();
+
+    if primary_language != "cpp" {
+        return run_codeql_direct_scan_after_query_materialization(
+            state,
+            task_id,
+            &workspace_dir,
+            &source_dir,
+            &known_paths,
+            files_scanned,
+            files_extracted,
+            &codeql_languages,
+            &primary_language,
+            &query_container_path,
+            options,
+            started_at,
+        )
+        .await;
+    }
 
     update_scan_progress(
         state,
@@ -1322,10 +1379,12 @@ async fn run_codeql_scan_inner(
             summary_rel_path: &codeql_summary_rel_path,
             summary_container_path: &format!("/scan/{codeql_summary_rel_path}"),
             events_container_path: &format!("/scan/{codeql_events_rel_path}"),
-            build_plan_container_path: &format!("/scan/{build_plan_rel_path}"),
+            build_plan_container_path: Some(&format!("/scan/{build_plan_rel_path}")),
+            build_mode: None,
             stdout_rel_path: &stdout_rel_path,
             stderr_rel_path: &stderr_rel_path,
             language: &primary_language,
+            allow_network: state.config.codeql_allow_network_during_build,
         },
     );
 
@@ -1442,6 +1501,145 @@ async fn persist_codeql_build_plan_record(
     Ok(runtime_truth)
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn run_codeql_direct_scan_after_query_materialization(
+    state: &AppState,
+    task_id: &str,
+    workspace_dir: &std::path::Path,
+    source_dir: &std::path::Path,
+    known_paths: &BTreeSet<String>,
+    files_scanned: usize,
+    files_extracted: usize,
+    codeql_languages: &[String],
+    primary_language: &str,
+    query_container_path: &str,
+    options: CodeqlTaskOptions,
+    started_at: std::time::Instant,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let build_mode =
+        resolve_codeql_direct_build_mode(primary_language, options.build_mode.as_deref());
+    let sarif_rel_path = format!("output/results-{}.sarif", Uuid::new_v4());
+    let codeql_summary_rel_path = format!("output/summary-{}.json", Uuid::new_v4());
+    let codeql_events_rel_path = format!("output/events-{}.jsonl", Uuid::new_v4());
+    let stdout_rel_path = format!("output/stdout-{}.txt", Uuid::new_v4());
+    let stderr_rel_path = format!("output/stderr-{}.txt", Uuid::new_v4());
+
+    update_scan_progress(
+        state,
+        task_id,
+        40.0,
+        "database_create",
+        &format!("running CodeQL {build_mode} database create/analyze runner"),
+    )
+    .await;
+    let spec = build_codeql_runner_spec(
+        &state.config,
+        workspace_dir,
+        CodeqlRunnerPaths {
+            container_source_dir: "/scan/source",
+            query_container_path,
+            database_container_path: "/scan/output/codeql-db",
+            sarif_container_path: &format!("/scan/{sarif_rel_path}"),
+            summary_rel_path: &codeql_summary_rel_path,
+            summary_container_path: &format!("/scan/{codeql_summary_rel_path}"),
+            events_container_path: &format!("/scan/{codeql_events_rel_path}"),
+            build_plan_container_path: None,
+            build_mode: Some(build_mode.as_str()),
+            stdout_rel_path: &stdout_rel_path,
+            stderr_rel_path: &stderr_rel_path,
+            language: primary_language,
+            allow_network: options
+                .allow_network
+                .unwrap_or(state.config.codeql_allow_network_during_build),
+        },
+    );
+
+    let runner_result = tokio::task::spawn_blocking(move || runner::execute(spec)).await?;
+    record_codeql_events(
+        state,
+        task_id,
+        &workspace_dir.join(&codeql_events_rel_path),
+        62.0,
+    )
+    .await;
+    if !runner_result.success {
+        let error_msg = format_codeql_runner_error(
+            &runner_result,
+            Some(&workspace_dir.join(&codeql_events_rel_path)),
+        )
+        .await;
+        let _ = tokio::fs::remove_dir_all(workspace_dir).await;
+        return Err(format!("CodeQL scan failed: {error_msg}").into());
+    }
+
+    update_scan_progress(
+        state,
+        task_id,
+        75.0,
+        "parsing_sarif",
+        "parsing CodeQL SARIF results",
+    )
+    .await;
+    let sarif_path = workspace_dir.join(&sarif_rel_path);
+    let sarif_text = tokio::fs::read_to_string(&sarif_path)
+        .await
+        .map_err(|error| format!("missing CodeQL SARIF output: {error}"))?;
+    let findings =
+        codeql::parse_sarif_output(&sarif_text, task_id, source_dir.to_str(), Some(known_paths));
+
+    update_scan_progress(state, task_id, 90.0, "finalizing", "saving CodeQL findings").await;
+    let elapsed_ms = started_at.elapsed().as_millis() as i64;
+    let now = now_rfc3339();
+    let mut snapshot = task_state::load_snapshot(state).await?;
+    if let Some(record) = snapshot.static_tasks.get_mut(task_id) {
+        record.status = "completed".to_string();
+        record.total_findings = findings.len() as i64;
+        record.scan_duration_ms = elapsed_ms;
+        record.files_scanned = files_scanned as i64;
+        record.updated_at = Some(now.clone());
+        record.extra = json!({
+            "engine": "codeql",
+            "language": primary_language,
+            "languages": codeql_languages,
+            "build_mode": build_mode,
+            "files_extracted": files_extracted,
+            "lines_scanned": 0,
+            "build_plan_source": "direct_codeql_build_mode",
+            "first_version_complete": false,
+        });
+        let mut logs = record.progress.logs.clone();
+        logs.push(task_state::StaticTaskProgressLogRecord {
+            timestamp: now.clone(),
+            stage: "completed".to_string(),
+            message: format!(
+                "CodeQL {} scan completed: {} findings, {} files scanned",
+                primary_language,
+                findings.len(),
+                files_scanned
+            ),
+            progress: 100.0,
+            level: "info".to_string(),
+        });
+        record.progress = task_state::StaticTaskProgressRecord {
+            progress: 100.0,
+            current_stage: Some("completed".to_string()),
+            message: Some(format!(
+                "CodeQL {} scan completed: {} findings in {}ms",
+                primary_language,
+                findings.len(),
+                elapsed_ms
+            )),
+            started_at: record.progress.started_at.clone(),
+            updated_at: Some(now),
+            logs,
+        };
+        record.findings = findings;
+    }
+    let _ = task_state::save_snapshot(state, &snapshot).await;
+    let _ = tokio::fs::remove_dir_all(workspace_dir).await;
+    Ok(())
+}
+
 struct CodeqlCompileSandboxPaths<'a> {
     container_source_dir: &'a str,
     summary_rel_path: &'a str,
@@ -1462,10 +1660,12 @@ struct CodeqlRunnerPaths<'a> {
     summary_rel_path: &'a str,
     summary_container_path: &'a str,
     events_container_path: &'a str,
-    build_plan_container_path: &'a str,
+    build_plan_container_path: Option<&'a str>,
+    build_mode: Option<&'a str>,
     stdout_rel_path: &'a str,
     stderr_rel_path: &'a str,
     language: &'a str,
+    allow_network: bool,
 }
 
 fn build_codeql_compile_sandbox_runner_spec(
@@ -1528,11 +1728,12 @@ fn build_codeql_runner_spec(
             sarif_path: paths.sarif_container_path,
             summary_path: paths.summary_container_path,
             events_path: paths.events_container_path,
-            build_plan_path: Some(paths.build_plan_container_path),
+            build_plan_path: paths.build_plan_container_path,
+            build_mode: paths.build_mode,
             language: paths.language,
             threads: config.codeql_threads,
             ram_mb: config.codeql_ram_mb,
-            allow_network: config.codeql_allow_network_during_build,
+            allow_network: paths.allow_network,
         }),
         timeout_seconds: config.codeql_scan_timeout_seconds,
         env: BTreeMap::new(),
@@ -1546,14 +1747,63 @@ fn build_codeql_runner_spec(
         memory_swap_limit_mb: Some(config.codeql_runner_memory_limit_mb),
         cpu_limit,
         pids_limit: Some(1024),
-        network_disabled: !config.codeql_allow_network_during_build,
+        network_disabled: !paths.allow_network,
     }
 }
 
-fn normalize_codeql_task_languages(_project_languages: &[String]) -> Vec<String> {
-    // Current compile-sandbox slice is intentionally C/C++ only. Other CodeQL
-    // languages remain future milestones and must not block this closed loop.
-    vec!["cpp".to_string()]
+fn normalize_codeql_task_languages(
+    requested_languages: &[String],
+    _project_languages: &[String],
+) -> Vec<String> {
+    let mut languages = requested_languages
+        .iter()
+        .map(|language| codeql::normalize_language(language))
+        .filter(|language| is_supported_codeql_language(language))
+        .collect::<Vec<_>>();
+    languages.sort();
+    languages.dedup();
+    if languages.is_empty() {
+        vec!["cpp".to_string()]
+    } else {
+        languages
+    }
+}
+
+fn is_supported_codeql_language(language: &str) -> bool {
+    matches!(
+        language,
+        "cpp" | "javascript-typescript" | "python" | "java" | "go"
+    )
+}
+
+fn extract_codeql_task_options(payload: &Value) -> CodeqlTaskOptions {
+    let languages = payload
+        .get("languages")
+        .and_then(string_array)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|language| codeql::normalize_language(&language))
+        .filter(|language| is_supported_codeql_language(language))
+        .collect::<Vec<_>>();
+    let build_mode = optional_string(payload, "build_mode")
+        .map(|mode| mode.to_ascii_lowercase())
+        .filter(|mode| matches!(mode.as_str(), "none" | "autobuild" | "manual"));
+    CodeqlTaskOptions {
+        languages,
+        build_mode,
+        allow_network: optional_bool(payload, "allow_network"),
+    }
+}
+
+fn resolve_codeql_direct_build_mode(language: &str, requested: Option<&str>) -> String {
+    if let Some(build_mode) = requested.filter(|mode| matches!(*mode, "none" | "autobuild")) {
+        return build_mode.to_string();
+    }
+    match language {
+        "python" | "javascript-typescript" | "java" => "none".to_string(),
+        "go" => "autobuild".to_string(),
+        _ => "none".to_string(),
+    }
 }
 
 async fn record_codeql_events(
@@ -3924,18 +4174,21 @@ rules:
     }
 
     #[test]
-    fn codeql_language_scope_is_cpp_only_for_current_compile_sandbox_slice() {
-        assert_eq!(normalize_codeql_task_languages(&[]), vec!["cpp"]);
+    fn codeql_language_scope_uses_task_payload_or_cpp_default() {
+        assert_eq!(normalize_codeql_task_languages(&[], &[]), vec!["cpp"]);
         assert_eq!(
-            normalize_codeql_task_languages(&[
-                "python".to_string(),
-                "java".to_string(),
-                "go".to_string()
-            ]),
+            normalize_codeql_task_languages(
+                &["python".to_string(), "typescript".to_string()],
+                &["go".to_string()]
+            ),
+            vec!["javascript-typescript", "python"]
+        );
+        assert_eq!(
+            normalize_codeql_task_languages(&[], &["go".to_string()]),
             vec!["cpp"]
         );
         assert_eq!(
-            normalize_codeql_task_languages(&["C++".to_string()]),
+            normalize_codeql_task_languages(&["C++".to_string()], &[]),
             vec!["cpp"]
         );
     }

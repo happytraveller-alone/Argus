@@ -8,7 +8,9 @@
 > 1. **编译沙箱** (`codeql-compile-sandbox`)：探索并验证 C/C++ 构建命令，把 accepted build plan / fingerprint / evidence index 持久化为 DB (`rust_codeql_build_plans` 表) 真源
 > 2. **CodeQL 扫描沙箱** (`codeql-scan`)：从 DB 读取 build plan，在 `database create` 阶段重放该命令，生成 CodeQL 数据库并执行扫描
 > 
-> Build recipe 必须是 CodeQL `database create --command` 可按 argv 拆分重放的简单命令（例如 Makefile 使用 `make -B -j2`），不依赖 shell-only `${...}` 展开、`||`、`;` 或管道语法；CMake 由编译沙箱先 configure，再持久化 `cmake --build ...` 重放命令。Artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL 捕获。JS/TS、Python、Java、Go 仍是后续里程碑，不阻塞这个 C/C++ 切片。
+> Build recipe 必须是 CodeQL `database create --command` 可按 argv 拆分重放的简单命令（例如 Makefile 使用 `make -B -j2`），不依赖 shell-only `${...}` 展开、`||`、`;` 或管道语法；CMake 由编译沙箱先 configure，再持久化 `cmake --build ...` 重放命令。Artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL 捕获。
+>
+> 2026-05-02 CodeQL 语言分流补充：CodeQL 任务现在会读取创建 payload 中的 `languages`。显式 `python`、`javascript-typescript`、`java` 走 `codeql-scan --build-mode none`；显式 `go` 走 `codeql-scan --build-mode autobuild`；显式或默认 `cpp` 继续走 C/C++ compile-sandbox + DB-backed build plan。前端创建静态审计时会把项目已识别语言归一化后传给 CodeQL API。该能力是五语言上线矩阵的路由/runner 合同基础；真实 CLI smoke 已覆盖 Python、JavaScript/TypeScript、Java no-build、Go autobuild 和 C/C++ manual replay。
 >
 > 2026-05-02 智能审计过渡状态：当前 Rust gateway 不再挂载 `/api/v1/agent-tasks`，`backend/src/runtime/mod.rs` 也不再导出 `runtime/agentflow`；前端 `/agent-audit/:taskId` 已改为 `InDevelopmentPlaceholder` 占位。`vendor/agentflow-src/` 删除已提交但尚未推送；`backend/agentflow/` 仅保留历史 pipeline/schema/fixture 资产，`/api/v1/system-config/agent-preflight` 仍作为 LLM 配置与 runner readiness 门禁存在。不要把保留的历史资产写成 AgentFlow 执行链已重新接入。
 
@@ -55,7 +57,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
    - 生成 CodeQL 查询数据库
    - 执行扫描并输出 SARIF 结果
 
-SARIF 解析映射到现有静态 finding 形态。当前可执行切片只承诺 C/C++ 闭环；CodeQL 五类语言端到端全绿前，不得标记为完整首版完成。
+SARIF 解析映射到现有静态 finding 形态。当前可执行能力包括：C/C++ compile-sandbox 闭环、以及 Python/JavaScript-TypeScript/Java/Go 的显式语言 payload 到 `codeql-scan` build-mode 分流。CodeQL 五类语言真实 CLI 样例端到端全绿前，不得标记为完整首版完成。
 
 - 后端路由：`backend/src/routes/static_tasks.rs`
 - 前端 API：`frontend/src/shared/api/opengrep.ts`

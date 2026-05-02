@@ -17,6 +17,7 @@ import {
 	appendStaticScanBatchMarker,
 	createStaticScanBatchId,
 } from "@/shared/utils/staticScanBatch";
+import { normalizeCodeqlLanguages } from "@/shared/utils/programmingLanguages";
 import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import CreateProjectScanDialogContent from "./create-project-scan/Content";
 import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
@@ -262,6 +263,9 @@ export default function CreateProjectScanDialog({
 			});
 		}
 		if (codeqlEnabled) {
+			const codeqlLanguages = normalizeCodeqlLanguages(
+				project.programming_languages,
+			);
 			codeqlTask = await createCodeqlScanTask({
 				project_id: project.id,
 				name: appendStaticScanBatchMarker(
@@ -269,6 +273,7 @@ export default function CreateProjectScanDialog({
 					staticBatchId,
 				),
 				target_path: ".",
+				languages: codeqlLanguages.length > 0 ? codeqlLanguages : undefined,
 			});
 		}
 		const primaryTaskId = opengrepTask?.id ?? codeqlTask?.id;
