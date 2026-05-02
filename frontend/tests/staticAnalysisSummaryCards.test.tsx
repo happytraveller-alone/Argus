@@ -103,3 +103,15 @@ test("StaticAnalysis detail renders header tags instead of standalone summary-ca
   assert.doesNotMatch(source, /headerSummary\.statusLabel\} \$\{Math\.round\(headerSummary\.progressPercent\)\}%/);
   assert.doesNotMatch(source, /扫描时间 \$\{headerSummary\.durationLabel/);
 });
+
+test("StaticAnalysis uses the CodeQL-only 6:4 split for first-run task detail", async () => {
+  const source = await readFile(
+    new URL("../src/pages/StaticAnalysis.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /isCodeqlOnlyDetail/);
+  assert.match(source, /lg:grid-cols-\[minmax\(0,6fr\)_minmax\(0,4fr\)\]/);
+  assert.match(source, /showEngineColumn=\{!isCodeqlOnlyDetail\}/);
+  assert.match(source, /lg:h-\[calc\(100vh-11rem\)\]/);
+});

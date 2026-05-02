@@ -9,7 +9,10 @@ import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesL
 import { Badge } from "@/components/ui/badge";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
-import { cancelIntelligentTask } from "@/shared/api/intelligentTasks";
+import {
+	cancelIntelligentTask,
+	deleteIntelligentTask,
+} from "@/shared/api/intelligentTasks";
 import {
 	filterActivitiesByKind,
 	type TaskActivityItem,
@@ -28,6 +31,7 @@ export default function TaskManagementIntelligent() {
 	const [keyword, setKeyword] = useState("");
 	const [showCreateDialog, setShowCreateDialog] = useState(false);
 	const [cancellingActivityId, setCancellingActivityId] = useState<string | null>(null);
+	const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
 	const errorRef = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -72,6 +76,23 @@ export default function TaskManagementIntelligent() {
 			toast.error(`中止任务失败：${error instanceof Error ? error.message : "未知错误"}`);
 		} finally {
 			setCancellingActivityId(null);
+		}
+	};
+
+	const handleDeleteActivity = async (activity: TaskActivityItem) => {
+		if (activity.cancelTarget?.mode !== "intelligent") {
+			toast.error("当前智能审计任务缺少可删除目标");
+			return;
+		}
+		setDeletingActivityId(activity.id);
+		try {
+			await deleteIntelligentTask(activity.cancelTarget.taskId);
+			toast.success("智能审计任务已删除");
+			await refresh();
+		} catch (error) {
+			toast.error(`删除任务失败：${error instanceof Error ? error.message : "未知错误"}`);
+		} finally {
+			setDeletingActivityId(null);
 		}
 	};
 
@@ -140,7 +161,9 @@ export default function TaskManagementIntelligent() {
 					nowMs={nowMs}
 					emptyText="暂无智能审计任务"
 					onCancelActivity={handleCancelActivity}
+					onDeleteActivity={handleDeleteActivity}
 					cancellingActivityId={cancellingActivityId}
+					deletingActivityId={deletingActivityId}
 				/>
 			</DeferredSection>
 

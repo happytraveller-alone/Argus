@@ -49,7 +49,7 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 3. CubeSandbox 内执行 `codeql database create` / `database analyze`，输出 events、summary 和 SARIF；后端解析 SARIF 并写回现有 `StaticFindingRecord`。
 4. 只有 CubeSandbox CodeQL `database_create` 捕获验证成功后，后端才把 C/C++ build plan 持久化为 `rust_codeql_build_plans` active accepted 运行时真源。
 
-CodeQL C/C++ 任务进度除 legacy logs 外，还会投影 typed exploration events 到 `/static-tasks/codeql/tasks/{task_id}/progress?include_logs=true`。前端 `StaticAnalysis` 页面消费这些事件显示 LLM/沙箱/捕获验证时间线，并提供 CodeQL 任务中止和项目级 build plan reset/re-explore 操作；所有 stdout/stderr、LLM response、事件 payload 和展示证据进入 task-state 前会做 token/API-key 形态脱敏。
+CodeQL C/C++ 任务进度除 legacy logs 外，还会投影 typed exploration events 到 `/static-tasks/codeql/tasks/{task_id}/progress?include_logs=true`。前端 `StaticAnalysis` 与 `CodeqlScanDetail` 页面消费这些事件显示 LLM/沙箱/捕获验证时间线，并提供 CodeQL 任务中止和项目级 build plan reset/re-explore 操作；专用 CodeQL 详情页左侧 6/10 展示漏洞列表，右侧 4/10 展示可自动跟随最新事件且支持手动滚动的编译探索历史。所有 stdout/stderr、LLM response、事件 payload 和展示证据进入 task-state 前会做 token/API-key 形态脱敏。
 
 当前 C/C++ 探索由后端拥有 LLM reasoning contract：有可用 saved system-config LLM 时，后端会调用 LLM 生成结构化 build plan JSON，并用 `backend/src/scan/codeql.rs` 的同一套命令 validator 过滤后再交给 CubeSandbox；每个候选命令都在同一个 CubeSandbox 会话中执行，失败的 stdout/stderr、exit code、dependency signal 和 failure category 会作为 `previous_failures` 进入下一轮 LLM prompt，而不是让静态任务立即失败。无可用 LLM、LLM 请求失败或响应无法解析时，事件流会记录失败原因，并使用 deterministic fallback 候选命令继续进入 CubeSandbox 捕获验证。CubeSandbox 模板会记录每轮 reasoning summary、命令、stdout/stderr、exit code、dependency signal 和 failure category；manual 多命令计划通过 `codeql database init`、逐命令 `trace-command`、`finalize` 捕获，而不是只重放第一条命令。CodeQL interrupt route 会通过 task-id keyed registry 尝试删除 active CubeSandbox，再写入取消/清理证据。
 
@@ -134,7 +134,7 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 - DataTable 表头筛选触发器必须在共享表头控件内，并且不能用 `preventDefault()` 阻断 Radix Popover / Dropdown 打开。
 - Dashboard 图表选择栏属于图表区顶部；右侧任务状态边栏必须继续作为主 grid 的兄弟列存在。
-- 静态任务管理页使用 `TaskActivitiesListTable`，表格视觉对齐项目管理表格时不得改变详情路由、取消行为、过滤或分页语义。
+- 静态/智能任务管理页共用 `TaskActivitiesListTable`，表格视觉对齐项目管理表格时不得改变详情路由、中止/删除行为、过滤或分页语义；操作列的“删除”是最右侧文字按钮，静态任务“结果分析”保持文字入口。
 
 相关回归测试：
 

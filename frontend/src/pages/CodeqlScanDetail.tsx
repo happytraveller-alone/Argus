@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+	areDataTableQueryStatesEqual,
 	type DataTableQueryState,
 	useDataTableUrlState,
 } from "@/components/data-table";
@@ -101,13 +102,12 @@ export default function CodeqlScanDetail() {
 
 	const resolvedUrlState = useMemo(
 		() =>
-			resolveStaticAnalysisTableState(
-				initialState,
-				createStaticAnalysisInitialTableState(),
-			),
+			resolveStaticAnalysisTableState(initialState),
 		[initialState],
 	);
-	const [tableState, setTableState] = useState<DataTableQueryState>(resolvedUrlState);
+	const [tableState, setTableState] = useState<DataTableQueryState>(() =>
+		createStaticAnalysisInitialTableState(initialState),
+	);
 
 	const unifiedRows = useMemo(
 		() =>
@@ -198,6 +198,14 @@ export default function CodeqlScanDetail() {
 	useEffect(() => {
 		syncStateToUrl(tableState);
 	}, [syncStateToUrl, tableState]);
+
+	useEffect(() => {
+		setTableState((current) =>
+			areDataTableQueryStatesEqual(current, resolvedUrlState)
+				? current
+				: resolvedUrlState,
+		);
+	}, [resolvedUrlState]);
 
 	useEffect(() => {
 		if (!staticProjectId || staticProjectName) {
@@ -295,22 +303,23 @@ export default function CodeqlScanDetail() {
 			</div>
 
 			{/* 60/40 split layout */}
-			<div className="flex flex-col gap-5 lg:flex-row">
-				{/* Left panel: 60% — Findings table */}
-				<div className="min-w-0 lg:basis-[60%]">
+			<div className="grid min-h-0 gap-5 lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
+				{/* Left panel: 60% - Findings table */}
+				<div className="min-h-[28rem] min-w-0 overflow-y-auto rounded-md pr-1 lg:h-full">
 					<StaticAnalysisFindingsTable
 						currentRoute={currentRoute}
 						loadingInitial={loadingInitial}
 						rows={unifiedRows}
 						state={tableState}
+						showEngineColumn={false}
 						onStateChange={setTableState}
 						updatingKey={updatingKey}
 						onToggleStatus={handleToggleStatus}
 					/>
 				</div>
 
-				{/* Right panel: 40% — Exploration + LLM reasoning */}
-				<div className="min-w-0 lg:basis-[40%] flex flex-col gap-5">
+				{/* Right panel: 40% - Exploration + LLM reasoning */}
+				<div className="min-h-[28rem] min-w-0 overflow-y-auto pr-1 lg:h-full">
 					<CodeqlExplorationPanel
 						events={codeqlExplorationEvents}
 						canReset={canResetCodeqlBuildPlan}
@@ -319,14 +328,14 @@ export default function CodeqlScanDetail() {
 					/>
 
 					{sseEvents.length > 0 && (
-						<section className="rounded border border-border bg-card/40 p-4">
+						<section className="mt-5 rounded border border-border bg-card/40 p-4">
 							<h2 className="mb-2 text-sm font-semibold text-foreground">执行进度</h2>
 							<StepProgressIndicator events={sseEvents} />
 						</section>
 					)}
 
 					{(sseEvents.length > 0 || isStreaming) && (
-						<section className="rounded border border-purple-500/20 bg-card/40 p-4">
+						<section className="mt-5 rounded border border-purple-500/20 bg-card/40 p-4">
 							<h2 className="mb-2 text-sm font-semibold text-foreground">LLM 推理过程</h2>
 							<LlmReasoningPanel events={sseEvents} isStreaming={isStreaming} />
 						</section>

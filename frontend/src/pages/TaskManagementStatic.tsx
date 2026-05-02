@@ -10,7 +10,11 @@ import TaskActivitiesListTable from "@/features/tasks/components/TaskActivitiesL
 import { Badge } from "@/components/ui/badge";
 import { useTaskActivitiesSnapshot } from "@/features/tasks/hooks/useTaskActivitiesSnapshot";
 import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
-import { interruptCodeqlScanTask, interruptOpengrepScanTask } from "@/shared/api/opengrep";
+import {
+	deleteStaticScanTask,
+	interruptCodeqlScanTask,
+	interruptOpengrepScanTask,
+} from "@/shared/api/opengrep";
 import {
 	filterActivitiesByKind,
 	type TaskActivityItem,
@@ -29,6 +33,7 @@ export default function TaskManagementStatic() {
 	const [keyword, setKeyword] = useState("");
 	const [showCreateStaticDialog, setShowCreateStaticDialog] = useState(false);
 	const [cancellingActivityId, setCancellingActivityId] = useState<string | null>(null);
+	const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
 	const [searchParams, setSearchParams] = useSearchParams();
 	const errorRef = useRef<string | null>(null);
 	const autoOpenHandledRef = useRef(false);
@@ -89,6 +94,26 @@ export default function TaskManagementStatic() {
 			toast.error(`中止任务失败：${error instanceof Error ? error.message : "未知错误"}`);
 		} finally {
 			setCancellingActivityId(null);
+		}
+	};
+
+	const handleDeleteActivity = async (activity: TaskActivityItem) => {
+		if (activity.cancelTarget?.mode !== "static") {
+			toast.error("当前静态任务缺少可删除目标");
+			return;
+		}
+		setDeletingActivityId(activity.id);
+		try {
+			await deleteStaticScanTask(
+				activity.cancelTarget.engine,
+				activity.cancelTarget.taskId,
+			);
+			toast.success("静态审计任务已删除");
+			await refresh();
+		} catch (error) {
+			toast.error(`删除任务失败：${error instanceof Error ? error.message : "未知错误"}`);
+		} finally {
+			setDeletingActivityId(null);
 		}
 	};
 
@@ -157,7 +182,9 @@ export default function TaskManagementStatic() {
 					nowMs={nowMs}
 					emptyText="暂无静态审计任务"
 					onCancelActivity={handleCancelActivity}
+					onDeleteActivity={handleDeleteActivity}
 					cancellingActivityId={cancellingActivityId}
+					deletingActivityId={deletingActivityId}
 				/>
 			</DeferredSection>
 

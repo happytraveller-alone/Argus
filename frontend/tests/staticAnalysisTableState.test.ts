@@ -39,6 +39,19 @@ test("createStaticAnalysisInitialTableState applies default sorting, pagination,
   assert.equal(state.columnVisibility.engine, true);
 });
 
+test("createStaticAnalysisInitialTableState can build CodeQL detail defaults without URL state", async () => {
+  const tableStateModule = await importOrFail<any>(
+    "../src/pages/static-analysis/tableState.ts",
+  );
+
+  const state = tableStateModule.createStaticAnalysisInitialTableState();
+
+  assert.deepEqual(state.sorting, [{ id: "severity", desc: true }]);
+  assert.equal(state.pagination.pageIndex, 0);
+  assert.equal(state.pagination.pageSize, 15);
+  assert.equal(state.columnVisibility.location, false);
+});
+
 test("createStaticAnalysisInitialTableState keeps explicit sorting and page size", async () => {
   const tableStateModule = await importOrFail<any>(
     "../src/pages/static-analysis/tableState.ts",

@@ -89,3 +89,10 @@ export async function cancelIntelligentTask(
 	);
 	return response.data;
 }
+
+export async function deleteIntelligentTask(
+	taskId: string,
+): Promise<{ deleted: boolean; taskId: string; terminalStatus: IntelligentTaskStatus }> {
+	const response = await apiClient.delete(`/intelligent-tasks/${taskId}`);
+	return response.data;
+}

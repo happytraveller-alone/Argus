@@ -492,6 +492,16 @@ export async function interruptCodeqlScanTask(
     return response.data;
 }
 
+export async function deleteStaticScanTask(
+    engine: StaticScanEngine,
+    taskId: string,
+): Promise<{ message: string; task_id: string }> {
+    const basePath =
+        engine === "codeql" ? "/static-tasks/codeql/tasks" : "/static-tasks/tasks";
+    const response = await apiClient.delete(`${basePath}/${taskId}`);
+    return response.data;
+}
+
 export async function resetCodeqlProjectBuildPlan(
     projectId: string,
 ): Promise<{ message: string; project_id: string; language: string; reset_count: number }> {

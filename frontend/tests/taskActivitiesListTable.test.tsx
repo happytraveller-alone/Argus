@@ -336,3 +336,51 @@ test("TaskActivitiesListTable shows row-level cancel only for cancellable tasks"
 		/appendReturnTo\(row\.original\.route, input\.currentRoute\)/,
 	);
 });
+
+test("TaskActivitiesListTable appends a text-only delete action at the far right", async () => {
+	const tableModule = await import(
+		"../src/features/tasks/components/TaskActivitiesListTable.tsx"
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(
+			SsrRouter,
+			{},
+			createElement(tableModule.default, {
+				activities: [
+					{
+						id: "static-completed",
+						projectName: "Completed Static",
+						kind: "rule_scan",
+						sourceMode: "static",
+						status: "completed",
+						createdAt: "2026-03-13T11:00:00.000Z",
+						startedAt: "2026-03-13T11:01:00.000Z",
+						completedAt: "2026-03-13T11:05:00.000Z",
+						route: "/static-analysis/static-completed",
+						cancelTarget: {
+							mode: "static",
+							engine: "opengrep",
+							taskId: "static-completed",
+						},
+					},
+				],
+				loading: false,
+				nowMs: Date.parse("2026-03-13T12:05:00.000Z"),
+			}),
+		),
+	);
+
+	assert.match(markup, /Completed Static[\s\S]*?详情[\s\S]*?结果分析[\s\S]*?删除/);
+	assert.doesNotMatch(markup, /sparkles|Sparkles/);
+
+	const source = readFileSync(taskActivitiesListTablePath, "utf8");
+	assert.match(source, /onDeleteActivity/);
+	assert.match(source, /确认删除任务/);
+	assert.match(source, /TASK_ACTIVITIES_TABLE_DELETE_BUTTON_CLASSNAME/);
+	assert.doesNotMatch(source, /Sparkles/);
+	assert.match(
+		source,
+		/结果分析[\s\S]*?\{canCancel \?[\s\S]*?\{deleting \? "删除中\.\.\." : "删除"\}/,
+	);
+});

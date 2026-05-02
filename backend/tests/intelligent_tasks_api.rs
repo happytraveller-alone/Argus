@@ -481,6 +481,68 @@ async fn cancel_pending_task_persists_cancelled_status() {
 }
 
 #[tokio::test]
+async fn delete_completed_task_removes_record() {
+    let state = build_state_default("delete-completed").await;
+    let mut record = IntelligentTaskRecord::new_pending(
+        "task-delete".to_string(),
+        "proj-delete".to_string(),
+        "model".to_string(),
+        "fp".to_string(),
+    );
+    record.status = IntelligentTaskStatus::Completed;
+    intelligent_task_state::save_record(&state, record)
+        .await
+        .expect("save completed task");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("/api/v1/intelligent-tasks/task-delete")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["deleted"].as_bool(), Some(true));
+    assert_eq!(payload["taskId"].as_str(), Some("task-delete"));
+    assert!(read_record(&state, "task-delete").await.is_none());
+}
+
+#[tokio::test]
+async fn delete_running_task_returns_conflict() {
+    let state = build_state_default("delete-running").await;
+    let mut record = IntelligentTaskRecord::new_pending(
+        "task-running".to_string(),
+        "proj-running".to_string(),
+        "model".to_string(),
+        "fp".to_string(),
+    );
+    record.status = IntelligentTaskStatus::Running;
+    intelligent_task_state::save_record(&state, record)
+        .await
+        .expect("save running task");
+
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("/api/v1/intelligent-tasks/task-running")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(read_record(&state, "task-running").await.is_some());
+}
+
+#[tokio::test]
 async fn missing_project_id_field_returns_bad_request() {
     let state = build_state_default("missing-project-id").await;
     let app = build_router(state);

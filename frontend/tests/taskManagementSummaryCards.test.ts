@@ -50,8 +50,10 @@ test("static and intelligent task pages use inline status badges instead of summ
 	assert.match(staticSource, /Badge/);
 
 	assert.doesNotMatch(intelligentSource, /TaskManagementSummaryCards/);
-	assert.match(intelligentSource, /InDevelopmentPlaceholder/);
-	assert.doesNotMatch(intelligentSource, /stats\.completed/);
+	assert.match(intelligentSource, /stats\.completed/);
+	assert.match(intelligentSource, /stats\.running/);
+	assert.match(intelligentSource, /stats\.failed/);
+	assert.match(intelligentSource, /Badge/);
 });
 
 test("static task management search input filters the visible task table", () => {
@@ -63,4 +65,19 @@ test("static task management search input filters the visible task table", () =>
 	);
 	assert.match(source, /activities=\{filteredStaticActivities\}/);
 	assert.doesNotMatch(source, /activities=\{staticActivities\}/);
+});
+
+test("static and intelligent task pages wire delete actions through task APIs", () => {
+	const staticSource = readFileSync(staticTaskPagePath, "utf8");
+	const intelligentSource = readFileSync(intelligentTaskPagePath, "utf8");
+
+	assert.match(staticSource, /deleteStaticScanTask/);
+	assert.match(staticSource, /const handleDeleteActivity = async/);
+	assert.match(staticSource, /onDeleteActivity=\{handleDeleteActivity\}/);
+	assert.match(staticSource, /deletingActivityId=\{deletingActivityId\}/);
+
+	assert.match(intelligentSource, /deleteIntelligentTask/);
+	assert.match(intelligentSource, /const handleDeleteActivity = async/);
+	assert.match(intelligentSource, /onDeleteActivity=\{handleDeleteActivity\}/);
+	assert.match(intelligentSource, /deletingActivityId=\{deletingActivityId\}/);
 });

@@ -26,6 +26,7 @@ import {
   useDataTableUrlState,
 } from "@/components/data-table";
 import { api as databaseApi } from "@/shared/api/database";
+import { cn } from "@/shared/utils/utils";
 import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
@@ -151,6 +152,7 @@ export default function StaticAnalysis() {
     if (codeqlTaskId) engines.push("codeql");
     return engines;
   }, [codeqlTaskId, opengrepTaskId]);
+  const isCodeqlOnlyDetail = Boolean(codeqlTaskId && !opengrepTaskId);
 
   const shouldTickClock = useMemo(
     () => [opengrepTask, codeqlTask].some((task) => isStaticAnalysisPollableStatus(task?.status)),
@@ -331,22 +333,51 @@ export default function StaticAnalysis() {
         </div>
       </div>
 
-      <CodeqlExplorationPanel
-        events={codeqlExplorationEvents}
-        canReset={canResetCodeqlBuildPlan}
-        resetting={resettingCodeqlPlan}
-        onReset={handleResetCodeqlBuildPlan}
-      />
-
-      <StaticAnalysisFindingsTable
+      <div
+        className={cn(
+          "grid min-h-0 gap-5",
+          isCodeqlOnlyDetail
+            ? "lg:h-[calc(100vh-11rem)] lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]"
+            : "grid-cols-1",
+        )}
+      >
+        <div
+          className={cn(
+            "min-w-0",
+            isCodeqlOnlyDetail &&
+              "min-h-[28rem] overflow-y-auto rounded-md pr-1 lg:h-full",
+          )}
+        >
+          <StaticAnalysisFindingsTable
           currentRoute={currentRoute}
           loadingInitial={loadingInitial}
           rows={unifiedRows}
           state={tableState}
+          showEngineColumn={!isCodeqlOnlyDetail}
           onStateChange={setTableState}
           updatingKey={updatingKey}
           onToggleStatus={handleToggleStatus}
         />
+        </div>
+
+        {isCodeqlOnlyDetail ? (
+          <div className="min-h-[28rem] min-w-0 overflow-y-auto pr-1 lg:h-full">
+            <CodeqlExplorationPanel
+              events={codeqlExplorationEvents}
+              canReset={canResetCodeqlBuildPlan}
+              resetting={resettingCodeqlPlan}
+              onReset={handleResetCodeqlBuildPlan}
+            />
+          </div>
+        ) : (
+          <CodeqlExplorationPanel
+            events={codeqlExplorationEvents}
+            canReset={canResetCodeqlBuildPlan}
+            resetting={resettingCodeqlPlan}
+            onReset={handleResetCodeqlBuildPlan}
+          />
+        )}
+      </div>
 
       <AlertDialog
         open={Boolean(interruptTarget)}

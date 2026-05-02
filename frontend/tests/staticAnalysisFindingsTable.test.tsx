@@ -70,6 +70,7 @@ function renderTable(
 	overrides: Partial<{
 		rows: UnifiedFindingRow[];
 		state: DataTableQueryState;
+		showEngineColumn: boolean;
 		updatingKey: string | null;
 	}> = {},
 ) {
@@ -170,6 +171,28 @@ test("StaticAnalysisFindingsTable keeps severity and confidence columns non-hide
 
 	assert.equal(severityColumn?.enableHiding, false);
 	assert.equal(confidenceColumn?.enableHiding, false);
+});
+
+test("StaticAnalysisFindingsTable can hide the engine column for CodeQL-only details", async () => {
+	const tableModule = await loadTableModule();
+
+	const columns = tableModule.getColumns({
+		currentRoute: "/static-analysis/task-codeql?engine=codeql",
+		showEngineColumn: false,
+		updatingKey: null,
+		onToggleStatus: (_row: UnifiedFindingRow, _target: FindingStatus) => {},
+	});
+
+	assert.equal(columns.some((column) => column.id === "engine"), false);
+
+	const markup = renderTable(tableModule.default, {
+		rows: [verifiedFinding],
+		showEngineColumn: false,
+	});
+
+	assert.doesNotMatch(markup, />引擎</);
+	assert.doesNotMatch(markup, /CodeQL<\/span>|CodeQL<\/div>|CodeQL<\/td>/);
+	assert.match(markup, /codeql-rule/);
 });
 
 test("StaticAnalysisFindingsTable narrows rule column and fills the page width", async () => {

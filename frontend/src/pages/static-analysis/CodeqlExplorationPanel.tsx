@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { RefreshCw, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CodeqlExplorationProgressEvent } from "@/shared/api/opengrep";
@@ -67,10 +68,27 @@ export default function CodeqlExplorationPanel({
   onReset: () => void;
 }) {
   const rows = buildCodeqlExplorationTimelineRows(events);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea || !shouldAutoScrollRef.current) return;
+    scrollArea.scrollTop = scrollArea.scrollHeight;
+  }, [rows.length]);
+
   if (rows.length === 0 && !canReset) return null;
 
+  const handleTimelineScroll = () => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+    const distanceToBottom =
+      scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight;
+    shouldAutoScrollRef.current = distanceToBottom < 24;
+  };
+
   return (
-    <section className="rounded border border-border bg-card/40 p-4">
+    <section className="flex max-h-full min-h-0 flex-col rounded border border-border bg-card/40 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">CodeQL 编译探索</h2>
@@ -94,7 +112,11 @@ export default function CodeqlExplorationPanel({
           </Button>
         ) : null}
       </div>
-      <div className="mt-3">
+      <div
+        ref={scrollAreaRef}
+        className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
+        onScroll={handleTimelineScroll}
+      >
         {rows.length > 0 ? (
           rows.map((row) => <TimelineRow key={row.key} row={row} />)
         ) : (

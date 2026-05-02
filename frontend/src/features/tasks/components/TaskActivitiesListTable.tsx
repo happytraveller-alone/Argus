@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +38,9 @@ interface TaskActivitiesListTableProps {
 	emptyText?: string;
 	pageSize?: number;
 	onCancelActivity?: (activity: TaskActivityItem) => void | Promise<void>;
+	onDeleteActivity?: (activity: TaskActivityItem) => void | Promise<void>;
 	cancellingActivityId?: string | null;
+	deletingActivityId?: string | null;
 	cancelDisabledReason?: string | null;
 }
 
@@ -51,6 +53,8 @@ const TASK_ACTIVITIES_TABLE_BODY_TEXT_CLASSNAME = "text-sm";
 const TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME =
 	"cyber-btn-ghost h-8 px-2.5";
 const TASK_ACTIVITIES_TABLE_CANCEL_BUTTON_CLASSNAME =
+	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100";
+const TASK_ACTIVITIES_TABLE_DELETE_BUTTON_CLASSNAME =
 	"cyber-btn-ghost h-8 border-rose-500/35 px-2.5 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100";
 const DEFECT_SUMMARY_ITEMS = [
 	{ key: "critical", label: "严重" },
@@ -88,7 +92,9 @@ function getColumns(input: {
 	nowMs: number;
 	currentRoute: string;
 	onRequestCancel: (activity: TaskActivityItem) => void;
+	onRequestDelete: (activity: TaskActivityItem) => void;
 	cancellingActivityId?: string | null;
+	deletingActivityId?: string | null;
 	cancelDisabledReason?: string | null;
 }): AppColumnDef<TaskActivityItem, unknown>[] {
 	return [
@@ -248,6 +254,7 @@ function getColumns(input: {
 			cell: ({ row }) => {
 				const canCancel = isTaskActivityCancellable(row.original);
 				const cancelling = input.cancellingActivityId === row.original.id;
+				const deleting = input.deletingActivityId === row.original.id;
 				const isCompletedScan = row.original.kind === "rule_scan" && row.original.status === "completed";
 				const scanTaskId = row.original.cancelTarget?.mode === "static" ? row.original.cancelTarget.taskId : null;
 				return (
@@ -270,7 +277,6 @@ function getColumns(input: {
 								className={TASK_ACTIVITIES_TABLE_ACTION_BUTTON_CLASSNAME}
 							>
 								<Link to={`/static-analysis/${scanTaskId}/ai-result`}>
-									<Sparkles className="mr-1 h-3 w-3" />
 									结果分析
 								</Link>
 							</Button>
@@ -289,6 +295,16 @@ function getColumns(input: {
 								中止
 							</Button>
 						) : null}
+						<Button
+							type="button"
+							size="lg"
+							variant="outline"
+							className={TASK_ACTIVITIES_TABLE_DELETE_BUTTON_CLASSNAME}
+							disabled={deleting}
+							onClick={() => input.onRequestDelete(row.original)}
+						>
+							{deleting ? "删除中..." : "删除"}
+						</Button>
 					</div>
 				);
 			},
@@ -303,12 +319,16 @@ export default function TaskActivitiesListTable({
 	emptyText = "暂无任务",
 	pageSize = 10,
 	onCancelActivity,
+	onDeleteActivity,
 	cancellingActivityId = null,
+	deletingActivityId = null,
 	cancelDisabledReason = null,
 }: TaskActivitiesListTableProps) {
 	const location = useLocation();
 	const currentRoute = `${location.pathname}${location.search}`;
 	const [pendingCancelActivity, setPendingCancelActivity] =
+		useState<TaskActivityItem | null>(null);
+	const [pendingDeleteActivity, setPendingDeleteActivity] =
 		useState<TaskActivityItem | null>(null);
 
 	const columns = useMemo<ColumnDef<TaskActivityItem>[]>(
@@ -317,10 +337,18 @@ export default function TaskActivitiesListTable({
 				nowMs,
 				currentRoute,
 				onRequestCancel: setPendingCancelActivity,
+				onRequestDelete: setPendingDeleteActivity,
 				cancellingActivityId,
+				deletingActivityId,
 				cancelDisabledReason,
 			}),
-		[currentRoute, nowMs, cancellingActivityId, cancelDisabledReason],
+		[
+			currentRoute,
+			nowMs,
+			cancellingActivityId,
+			deletingActivityId,
+			cancelDisabledReason,
+		],
 	);
 
 	const defaultState = useMemo<Partial<DataTableQueryState>>(
@@ -397,6 +425,41 @@ export default function TaskActivitiesListTable({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
+			) : null}
+			{pendingDeleteActivity ? (
+				<AlertDialog
+					open={Boolean(pendingDeleteActivity)}
+					onOpenChange={(open) => {
+						if (!open) setPendingDeleteActivity(null);
+					}}
+				>
+					<AlertDialogContent className="cyber-dialog border-border">
+						<AlertDialogHeader>
+							<AlertDialogTitle>确认删除任务？</AlertDialogTitle>
+							<AlertDialogDescription>
+								即将删除 {pendingDeleteActivity.projectName || "当前"} 任务记录。删除后列表将刷新。
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel disabled={Boolean(deletingActivityId)}>
+								取消
+							</AlertDialogCancel>
+							<AlertDialogAction
+								disabled={Boolean(deletingActivityId)}
+								className="bg-rose-600 hover:bg-rose-500"
+								onClick={(event) => {
+									event.preventDefault();
+									if (!pendingDeleteActivity || !onDeleteActivity) return;
+									void Promise.resolve(onDeleteActivity(pendingDeleteActivity)).finally(
+										() => setPendingDeleteActivity(null),
+									);
+								}}
+							>
+								{deletingActivityId ? "删除中..." : "确认删除"}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 			) : null}
 		</div>
 	);

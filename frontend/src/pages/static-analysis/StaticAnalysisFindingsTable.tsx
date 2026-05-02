@@ -48,10 +48,11 @@ function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
 
 export function getColumns(input: {
 	currentRoute: string;
+	showEngineColumn?: boolean;
 	updatingKey: string | null;
 	onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
 }): AppColumnDef<UnifiedFindingRow, unknown>[] {
-	return [
+	const columns: AppColumnDef<UnifiedFindingRow, unknown>[] = [
 		{
 			id: "rowNumber",
 			header: "序号",
@@ -309,6 +310,9 @@ export function getColumns(input: {
 			},
 		},
 	];
+	return input.showEngineColumn === false
+		? columns.filter((column) => column.id !== "engine")
+		: columns;
 }
 
 export default function StaticAnalysisFindingsTable({
@@ -316,6 +320,7 @@ export default function StaticAnalysisFindingsTable({
 	loadingInitial,
 	rows,
 	state,
+	showEngineColumn = true,
 	onStateChange,
 	updatingKey,
 	onToggleStatus,
@@ -324,12 +329,14 @@ export default function StaticAnalysisFindingsTable({
 	loadingInitial: boolean;
 	rows: UnifiedFindingRow[];
 	state: DataTableQueryState;
+	showEngineColumn?: boolean;
 	onStateChange: (state: DataTableQueryState) => void;
 	updatingKey: string | null;
 	onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
 }) {
 	const columns = getColumns({
 		currentRoute,
+		showEngineColumn,
 		updatingKey,
 		onToggleStatus,
 	}) as ColumnDef<UnifiedFindingRow>[];
@@ -362,7 +369,8 @@ export default function StaticAnalysisFindingsTable({
 						table.getState().pagination.pageIndex + 1
 					} / ${Math.max(1, table.getPageCount())} 页`,
 			}}
-			className="border border-border rounded-md"
+			className="h-full border border-border rounded-md"
+			containerClassName="h-full"
 			fillContainerWidth
 		/>
 	);

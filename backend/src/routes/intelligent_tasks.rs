@@ -31,7 +31,7 @@ struct ListQuery {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_tasks).post(create_task))
-        .route("/{task_id}", get(get_task))
+        .route("/{task_id}", get(get_task).delete(delete_task))
         .route("/{task_id}/cancel", post(cancel_task))
         .route("/{task_id}/stream", get(stream_task))
 }
@@ -95,6 +95,30 @@ async fn cancel_task(
         .map_err(internal_error)?
         .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
     Ok(Json(record))
+}
+
+async fn delete_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let record = intelligent_task_state::get_record(&state, &task_id)
+        .await
+        .map_err(internal_error)?
+        .ok_or_else(|| ApiError::NotFound(format!("Intelligent task not found: {task_id}")))?;
+    if !record.status.is_terminal() {
+        return Err(ApiError::Conflict(
+            "cannot delete non-terminal intelligent task".to_string(),
+        ));
+    }
+
+    let deleted = intelligent_task_state::delete_record(&state, &task_id)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(json!({
+        "deleted": deleted.is_some(),
+        "taskId": task_id,
+        "terminalStatus": record.status,
+    })))
 }
 
 async fn stream_task(
