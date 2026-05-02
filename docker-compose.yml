@@ -85,6 +85,8 @@ services:
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/Argus/scans
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${Argus_BACKEND_PORT:-18000}:8000"
     environment:

@@ -19,7 +19,7 @@ use crate::{
             CubeSandboxClient, CubeSandboxClientConfig, CubeSandboxSandbox, EnvdProcessOutput,
         },
         config::CubeSandboxConfig,
-        helper::{run_helper_command, CubeSandboxHelperCommand},
+        helper::{run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand},
     },
     scan::codeql,
     state::AppState,
@@ -268,17 +268,19 @@ fn take_cancel_request(task_id: &str) -> bool {
 }
 
 async fn prepare_client(config: &CubeSandboxConfig) -> Result<CubeSandboxClient> {
-    if config.auto_install {
+    if should_run_local_lifecycle(config)? && config.auto_install {
         let output = run_helper_command(config, CubeSandboxHelperCommand::Install).await?;
         ensure_helper_success(CubeSandboxHelperCommand::Install, &output)?;
     }
-    let status_output = run_helper_command(config, CubeSandboxHelperCommand::Status).await?;
-    if !status_output.success && config.auto_start {
-        let start_output =
-            run_helper_command(config, CubeSandboxHelperCommand::RunVmBackground).await?;
-        ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
-    } else {
-        ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+    if should_run_local_lifecycle(config)? {
+        let status_output = run_helper_command(config, CubeSandboxHelperCommand::Status).await?;
+        if !status_output.success && config.auto_start {
+            let start_output =
+                run_helper_command(config, CubeSandboxHelperCommand::RunVmBackground).await?;
+            ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
+        } else {
+            ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+        }
     }
     let client = CubeSandboxClient::new(CubeSandboxClientConfig {
         api_base_url: config.api_base_url.clone(),

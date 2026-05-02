@@ -105,6 +105,18 @@ export interface CodeqlExplorationTimelineRow {
   redacted: boolean;
 }
 
+export function countCodeqlReasoningRounds(
+  events: CodeqlExplorationProgressEventLike[],
+): number {
+  const seen = new Set<number>();
+  for (const event of events) {
+    if (event.round != null) {
+      seen.add(event.round);
+    }
+  }
+  return seen.size;
+}
+
 export function resolveStaticAnalysisProjectNameFallback(input: {
   taskProjectName?: string | null;
   resolvedProjectName?: string | null;

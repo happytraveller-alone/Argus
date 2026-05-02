@@ -1040,6 +1040,26 @@ async fn get_static_progress(
     } else {
         Vec::new()
     };
+    let llm_model: Option<String> = if engine == "codeql" {
+        if let Some(pool) = state.db_pool.as_ref() {
+            if let Ok(project_uuid) = Uuid::parse_str(&record.project_id) {
+                sqlx::query_scalar(
+                    "SELECT llm_model FROM rust_codeql_build_plans WHERE project_id = $1 AND llm_model IS NOT NULL ORDER BY updated_at DESC NULLS LAST LIMIT 1",
+                )
+                .bind(project_uuid)
+                .fetch_optional(pool)
+                .await
+                .unwrap_or(None)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     Ok(Json(json!({
         "task_id": record.id,
         "engine": record.engine,
@@ -1051,6 +1071,7 @@ async fn get_static_progress(
         "updated_at": record.progress.updated_at,
         "logs": logs,
         "events": events,
+        "llm_model": llm_model,
     })))
 }
 

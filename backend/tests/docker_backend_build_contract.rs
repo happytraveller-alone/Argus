@@ -28,6 +28,25 @@ fn compose_passes_backend_cargo_network_build_args() {
 }
 
 #[test]
+fn compose_and_backend_image_support_host_cubesandbox_runtime() {
+    assert!(
+        ROOT_COMPOSE.contains("\"host.docker.internal:host-gateway\""),
+        "backend container must be able to reach a host-managed CubeSandbox service"
+    );
+    assert!(
+        BACKEND_DOCKERFILE
+            .contains("COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"),
+        "backend image should include the CubeSandbox helper for local lifecycle diagnostics"
+    );
+    for package in ["git", "iproute2", "openssh-client", "python3"] {
+        assert!(
+            BACKEND_DOCKERFILE.contains(package) && RELEASE_BACKEND_DOCKERFILE.contains(package),
+            "backend runtime images must include {package} for CubeSandbox helper diagnostics"
+        );
+    }
+}
+
+#[test]
 fn backend_dockerfiles_configure_cargo_mirror_before_building() {
     for (name, dockerfile) in [
         ("docker/backend.Dockerfile", BACKEND_DOCKERFILE),

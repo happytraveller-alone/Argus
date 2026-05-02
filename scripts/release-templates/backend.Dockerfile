@@ -41,17 +41,18 @@ FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS runtime-base
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && apt-get install -y --no-install-recommends ca-certificates curl git iproute2 openssh-client python3 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
+  && mkdir -p /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
 
 WORKDIR /app
 
 COPY --from=builder /app/target/release/backend-rust /usr/local/bin/backend
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
+COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh
 
 RUN chown -R appuser:appgroup /app
 

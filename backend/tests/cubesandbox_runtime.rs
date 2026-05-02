@@ -10,7 +10,7 @@ use backend_rust::{
     runtime::cubesandbox::{
         client::{CubeSandboxClient, CubeSandboxClientConfig},
         config::CubeSandboxConfig,
-        helper::{build_helper_invocation, CubeSandboxHelperCommand},
+        helper::{build_helper_invocation, should_run_local_lifecycle, CubeSandboxHelperCommand},
         types::CubeSandboxTaskStatus,
     },
     state::AppState,
@@ -159,9 +159,44 @@ fn cubesandbox_helper_allowlist_and_env_mapping_are_bounded() {
         api_base_url: "http://example.com:23000".to_string(),
         ..config
     };
+    assert!(
+        !should_run_local_lifecycle(&remote_config).expect("remote lifecycle check should parse")
+    );
     let error = build_helper_invocation(&remote_config, CubeSandboxHelperCommand::Status)
         .expect_err("remote lifecycle must be rejected");
     assert!(error.to_string().contains("remote_lifecycle_not_supported"));
+}
+
+#[test]
+fn cubesandbox_lifecycle_runs_only_for_local_control_and_data_plane_urls() {
+    let local = CubeSandboxConfig {
+        enabled: true,
+        api_base_url: "http://127.0.0.1:23000".to_string(),
+        data_plane_base_url: "https://localhost:21443".to_string(),
+        template_id: "tpl-test".to_string(),
+        helper_path: "scripts/cubesandbox-quickstart.sh".to_string(),
+        work_dir: ".cubesandbox-test".to_string(),
+        auto_start: true,
+        auto_install: false,
+        helper_timeout_seconds: 600,
+        execution_timeout_seconds: 120,
+        sandbox_cleanup_timeout_seconds: 30,
+        stdout_limit_bytes: 65_536,
+        stderr_limit_bytes: 65_536,
+    };
+    assert!(should_run_local_lifecycle(&local).expect("local urls should parse"));
+
+    let remote_control = CubeSandboxConfig {
+        api_base_url: "http://cubesandbox.internal:23000".to_string(),
+        ..local.clone()
+    };
+    assert!(!should_run_local_lifecycle(&remote_control).expect("remote control url should parse"));
+
+    let remote_data_plane = CubeSandboxConfig {
+        data_plane_base_url: "https://cube-proxy.internal:21443".to_string(),
+        ..local
+    };
+    assert!(!should_run_local_lifecycle(&remote_data_plane).expect("remote data url should parse"));
 }
 
 #[tokio::test]
@@ -459,6 +494,81 @@ async fn cubesandbox_task_route_smoke_returns_45() {
 }
 
 #[tokio::test]
+async fn cubesandbox_task_route_uses_remote_api_without_local_helper() {
+    let mut config = isolated_test_config("cubesandbox-remote-api");
+    let control_seen = RecordedRequests::default();
+    let data_seen = RecordedRequests::default();
+    let control_addr = spawn_wildcard_json_server(
+        control_seen,
+        vec![
+            (StatusCode::OK, r#"{"status":"ok"}"#.to_string()),
+            (
+                StatusCode::CREATED,
+                r#"{"sandboxID":"sbx-remote","templateID":"tpl-test","clientID":"client-1","envdVersion":"0.1","domain":"cube.app"}"#.to_string(),
+            ),
+            (StatusCode::OK, r#"{"connected":true}"#.to_string()),
+            (StatusCode::NO_CONTENT, String::new()),
+        ],
+    );
+    let data_addr = spawn_wildcard_json_server(
+        data_seen,
+        vec![(
+            StatusCode::OK,
+            r#"{"stdout":"45\n","stderr":"","exitCode":0}"#.to_string(),
+        )],
+    );
+    config.cubesandbox_api_base_url = format!("http://{control_addr}");
+    config.cubesandbox_data_plane_base_url = format!("http://{data_addr}");
+    config.cubesandbox_template_id = "tpl-test".to_string();
+    config.cubesandbox_helper_path = "/missing/cubesandbox-helper.sh".to_string();
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    system_config::save_current(
+        &state,
+        json!({}),
+        json!({
+            "cubeSandbox": {
+                "enabled": true,
+                "apiBaseUrl": format!("http://{control_addr}"),
+                "dataPlaneBaseUrl": format!("http://{data_addr}"),
+                "templateId": "tpl-test",
+                "helperPath": "/missing/cubesandbox-helper.sh",
+                "autoStart": true,
+                "autoInstall": true
+            }
+        }),
+        json!({}),
+    )
+    .await
+    .expect("config should save");
+    let app = build_router(state.clone());
+
+    let submit_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/cubesandbox-tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"code":"print(sum(range(10)))"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .expect("submit should complete");
+    assert_eq!(submit_response.status(), StatusCode::OK);
+    let submitted = response_json(submit_response).await;
+    let task_id = submitted["taskId"].as_str().expect("task id");
+
+    let record = poll_task(&app, task_id).await;
+    assert_eq!(record["status"], "completed", "{record}");
+    assert_eq!(record["stdout"], "45\n");
+    assert_eq!(record["helperLogTail"], "");
+}
+
+#[tokio::test]
 async fn cubesandbox_delete_rejects_non_terminal_and_deletes_terminal() {
     let state = AppState::from_config(isolated_test_config("cubesandbox-delete"))
         .await
@@ -698,4 +808,53 @@ fn spawn_json_server(seen: RecordedRequests, responses: Vec<(StatusCode, String)
         }
     });
     address
+}
+
+fn spawn_wildcard_json_server(
+    seen: RecordedRequests,
+    responses: Vec<(StatusCode, String)>,
+) -> SocketAddr {
+    let listener = TcpListener::bind("0.0.0.0:0").expect("bind wildcard test server");
+    let address = listener.local_addr().expect("test server address");
+    let responses = Arc::new(Mutex::new(responses.into_iter()));
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                break;
+            };
+            let mut buffer = [0_u8; 8192];
+            let read = stream.read(&mut buffer).unwrap_or(0);
+            let raw = String::from_utf8_lossy(&buffer[..read]);
+            let first = raw.lines().next().unwrap_or_default();
+            let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
+            let host = raw.lines().find_map(|line| {
+                line.strip_prefix("Host:")
+                    .or_else(|| line.strip_prefix("host:"))
+                    .map(|value| value.trim().to_string())
+            });
+            seen.push(RecordedRequest { path, host });
+            let (status, body) = responses
+                .lock()
+                .unwrap()
+                .next()
+                .unwrap_or((StatusCode::OK, "{}".to_string()));
+            let response = if status == StatusCode::NO_CONTENT {
+                format!(
+                    "HTTP/1.1 {} {}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+                    status.as_u16(),
+                    status.canonical_reason().unwrap_or("")
+                )
+            } else {
+                format!(
+                    "HTTP/1.1 {} {}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    status.as_u16(),
+                    status.canonical_reason().unwrap_or(""),
+                    body.len(),
+                    body
+                )
+            };
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+    SocketAddr::from(([127, 0, 0, 2], address.port()))
 }

@@ -14,7 +14,10 @@ use crate::{
     runtime::cubesandbox::{
         client::{CubeSandboxClient, CubeSandboxClientConfig},
         config::CubeSandboxConfig,
-        helper::{run_helper_command, CubeSandboxHelperCommand, CubeSandboxHelperOutput},
+        helper::{
+            run_helper_command, should_run_local_lifecycle, CubeSandboxHelperCommand,
+            CubeSandboxHelperOutput,
+        },
         types::{
             now_rfc3339, CubeSandboxCleanupStatus, CubeSandboxTaskRecord, CubeSandboxTaskStatus,
         },
@@ -150,24 +153,28 @@ impl CubeSandboxTaskManager {
             stdout_limit_bytes: config.stdout_limit_bytes,
             stderr_limit_bytes: config.stderr_limit_bytes,
         })?;
-        if config.auto_install {
+        let use_local_lifecycle = should_run_local_lifecycle(&config)?;
+        if use_local_lifecycle && config.auto_install {
             let install_output =
                 run_helper_command(&config, CubeSandboxHelperCommand::Install).await?;
             self.persist_helper_output(state, task_id, &install_output)
                 .await?;
             ensure_helper_success(CubeSandboxHelperCommand::Install, &install_output)?;
         }
-        let status_output = run_helper_command(&config, CubeSandboxHelperCommand::Status).await?;
-        self.persist_helper_output(state, task_id, &status_output)
-            .await?;
-        if !status_output.success && config.auto_start {
-            let start_output =
-                run_helper_command(&config, CubeSandboxHelperCommand::RunVmBackground).await?;
-            self.persist_helper_output(state, task_id, &start_output)
+        if use_local_lifecycle {
+            let status_output =
+                run_helper_command(&config, CubeSandboxHelperCommand::Status).await?;
+            self.persist_helper_output(state, task_id, &status_output)
                 .await?;
-            ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
-        } else {
-            ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+            if !status_output.success && config.auto_start {
+                let start_output =
+                    run_helper_command(&config, CubeSandboxHelperCommand::RunVmBackground).await?;
+                self.persist_helper_output(state, task_id, &start_output)
+                    .await?;
+                ensure_helper_success(CubeSandboxHelperCommand::RunVmBackground, &start_output)?;
+            } else {
+                ensure_helper_success(CubeSandboxHelperCommand::Status, &status_output)?;
+            }
         }
         client.health().await?;
 

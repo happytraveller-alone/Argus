@@ -74,6 +74,7 @@ impl CubeSandboxClient {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(config.execution_timeout_seconds.max(1)))
             .danger_accept_invalid_certs(true)
+            .no_proxy()
             .build()?;
         Ok(Self {
             http_client,

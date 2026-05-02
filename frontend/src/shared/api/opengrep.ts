@@ -389,6 +389,7 @@ export interface OpengrepScanProgress {
     updated_at?: string | null;
     logs: OpengrepScanProgressLog[];
     events?: CodeqlExplorationProgressEvent[];
+    llm_model?: string | null;
 }
 
 export interface OpengrepFinding {

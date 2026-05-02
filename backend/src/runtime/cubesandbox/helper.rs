@@ -91,6 +91,11 @@ pub fn build_helper_invocation(
     })
 }
 
+pub fn should_run_local_lifecycle(config: &CubeSandboxConfig) -> Result<bool> {
+    Ok(url_targets_localhost(&config.api_base_url)?
+        && url_targets_localhost(&config.data_plane_base_url)?)
+}
+
 pub async fn run_helper_command(
     config: &CubeSandboxConfig,
     helper_command: CubeSandboxHelperCommand,
@@ -136,6 +141,14 @@ fn local_url_port(value: &str, require_https: bool) -> Result<Option<u16>> {
         return Ok(None);
     }
     Ok(parsed.port())
+}
+
+fn url_targets_localhost(value: &str) -> Result<bool> {
+    let parsed = Url::parse(value)?;
+    let Some(host) = parsed.host_str() else {
+        return Ok(false);
+    };
+    Ok(matches!(host, "127.0.0.1" | "localhost" | "::1"))
 }
 
 fn bounded_tail(value: &str, limit: usize) -> String {

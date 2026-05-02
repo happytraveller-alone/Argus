@@ -463,6 +463,15 @@ compose_render_out="$TMP_ROOT/compose.out"
 docker compose --project-directory "$ROOT_DIR" --file "$ROOT_DIR/docker-compose.yml" config >"$compose_render_out"
 runner_profile_count="$(grep -F -c 'profiles: [ "runner-build" ]' "$ROOT_DIR/docker-compose.yml" || true)"
 [[ "$runner_profile_count" -eq 1 ]] || fail "only opengrep runner service should be a profile-only image build target"
+assert_contains "$ROOT_DIR/docker-compose.yml" "\"host.docker.internal:host-gateway\""
+assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000"
+assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443"
+assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh"
+assert_contains "$ROOT_DIR/env.example" "CUBESANDBOX_AUTO_START=false"
+assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_contains "$ROOT_DIR/docker/backend.Dockerfile" "openssh-client"
+assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh"
+assert_contains "$ROOT_DIR/scripts/release-templates/backend.Dockerfile" "openssh-client"
 if awk '
   /^  backend:/ { in_backend = 1; in_depends = 0; next }
   /^  [a-zA-Z0-9_-]+:/ { in_backend = 0; in_depends = 0 }

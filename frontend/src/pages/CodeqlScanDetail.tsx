@@ -1,329 +1,375 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+	ArrowLeft,
+	Ban,
+	Loader2,
+	RefreshCw,
+} from "lucide-react";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	type DataTableQueryState,
+	useDataTableUrlState,
+} from "@/components/data-table";
 import { LlmReasoningPanel } from "@/components/scan/LlmReasoningPanel";
 import { StepProgressIndicator } from "@/components/scan/StepProgressIndicator";
 import { useSseStream } from "@/hooks/useSseStream";
 import { getApiBaseUrl } from "@/shared/api/apiBase";
+import { api as databaseApi } from "@/shared/api/database";
+import CodeqlExplorationPanel from "./static-analysis/CodeqlExplorationPanel";
+import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import {
-	getCodeqlScanTask,
-	getCodeqlScanFindings,
-	interruptCodeqlScanTask,
-	type OpengrepScanTask,
-	type OpengrepFinding,
-} from "@/shared/api/opengrep";
+	createStaticAnalysisInitialTableState,
+	resolveStaticAnalysisTableState,
+} from "./static-analysis/tableState";
+import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
+import { useTaskClock } from "@/features/tasks/hooks/useTaskClock";
+import {
+	buildStaticAnalysisHeaderSummary,
+	buildUnifiedFindingRows,
+	countCodeqlReasoningRounds,
+	formatStaticAnalysisDuration,
+	getStaticAnalysisTaskDisplayDurationMs,
+	isStaticAnalysisPollableStatus,
+	resolveStaticAnalysisProjectNameFallback,
+	type FindingStatus,
+} from "./static-analysis/viewModel";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);
 
-function isTerminal(status: string): boolean {
-	return TERMINAL_STATUSES.has(status);
-}
-
-function StatusPill({ status }: { status: string }) {
-	let className = "font-mono text-xs";
-	if (status === "completed") {
-		className += " border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-	} else if (status === "running" || status === "pending" || status === "queued") {
-		className += " border-sky-500/30 bg-sky-500/10 text-sky-300";
-	} else if (status === "failed" || status === "interrupted") {
-		className += " border-rose-500/30 bg-rose-500/10 text-rose-300";
-	} else {
-		className += " border-orange-500/30 bg-orange-500/10 text-orange-300";
-	}
-	return <Badge className={className}>{status}</Badge>;
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-	return (
-		<h3 className="mb-2 font-mono text-xs font-semibold uppercase tracking-widest text-foreground/60">
-			{children}
-		</h3>
-	);
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-	return (
-		<div className="flex min-w-0 flex-col gap-0.5">
-			<span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-				{label}
-			</span>
-			<span className="font-mono text-sm text-foreground">{value ?? "-"}</span>
-		</div>
-	);
-}
-
-function SeverityBadge({ severity }: { severity: string }) {
-	const sev = severity.toUpperCase();
-	let className = "font-mono text-xs";
-	if (sev === "ERROR" || sev === "CRITICAL" || sev === "HIGH") {
-		className += " border-rose-500/40 bg-rose-500/10 text-rose-300";
-	} else if (sev === "WARNING" || sev === "MEDIUM") {
-		className += " border-orange-500/40 bg-orange-500/10 text-orange-300";
-	} else {
-		className += " border-sky-500/40 bg-sky-500/10 text-sky-300";
-	}
-	return (
-		<Badge variant="outline" className={className}>
-			{severity}
-		</Badge>
-	);
-}
-
 export default function CodeqlScanDetail() {
-	const { taskId } = useParams<{ taskId: string }>();
-	const [task, setTask] = useState<OpengrepScanTask | null>(null);
-	const [findings, setFindings] = useState<OpengrepFinding[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [fetchError, setFetchError] = useState<string | null>(null);
-	const [cancelling, setCancelling] = useState(false);
-	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const { taskId: rawTaskId } = useParams<{ taskId: string }>();
+	const location = useLocation();
+	const navigate = useNavigate();
 
-	const taskTerminal = task ? isTerminal(task.status) : false;
+	const searchParams = useMemo(
+		() => new URLSearchParams(location.search),
+		[location.search],
+	);
 
-	const sseUrl = taskId
-		? `${getApiBaseUrl()}/static-tasks/codeql/tasks/${taskId}/stream`
+	const taskId = rawTaskId ?? "";
+	const codeqlTaskId = useMemo(() => {
+		const explicit = searchParams.get("codeqlTaskId");
+		return explicit || taskId;
+	}, [searchParams, taskId]);
+
+	const returnToParam = searchParams.get("returnTo") || "";
+	const returnTo =
+		returnToParam.startsWith("/") && !returnToParam.startsWith("//")
+			? returnToParam
+			: "";
+	const currentRoute = `${location.pathname}${location.search}`;
+	const { initialState, syncStateToUrl } = useDataTableUrlState(true);
+
+	const hasEnabledEngine = Boolean(codeqlTaskId);
+
+	const {
+		codeqlTask,
+		codeqlProgress,
+		codeqlExplorationEvents,
+		codeqlFindings,
+		loadingInitial,
+		loadingTask,
+		loadingFindings,
+		updatingKey,
+		interruptTarget,
+		setInterruptTarget,
+		interrupting,
+		resettingCodeqlPlan,
+		refreshAll,
+		handleInterrupt,
+		handleResetCodeqlBuildPlan,
+		handleToggleStatus,
+		canInterruptCodeql,
+		canResetCodeqlBuildPlan,
+	} = useStaticAnalysisData({
+		hasEnabledEngine,
+		opengrepTaskId: "",
+		codeqlTaskId,
+	});
+
+	const resolvedUrlState = useMemo(
+		() =>
+			resolveStaticAnalysisTableState(
+				initialState,
+				createStaticAnalysisInitialTableState(),
+			),
+		[initialState],
+	);
+	const [tableState, setTableState] = useState<DataTableQueryState>(resolvedUrlState);
+
+	const unifiedRows = useMemo(
+		() =>
+			buildUnifiedFindingRows({
+				opengrepFindings: [],
+				opengrepTaskId: "",
+				codeqlFindings,
+				codeqlTaskId,
+			}),
+		[codeqlFindings, codeqlTaskId],
+	);
+
+	const taskTerminal = codeqlTask ? TERMINAL_STATUSES.has(codeqlTask.status) : false;
+
+	const sseUrl = codeqlTaskId
+		? `${getApiBaseUrl()}/static-tasks/codeql/tasks/${codeqlTaskId}/stream`
 		: "";
 
 	const { events: sseEvents, isConnected, isComplete } = useSseStream(sseUrl, {
-		enabled: Boolean(taskId) && !taskTerminal,
+		enabled: Boolean(codeqlTaskId) && !taskTerminal,
 	});
-
-	const fetchTask = async () => {
-		if (!taskId) return;
-		try {
-			const data = await getCodeqlScanTask(taskId);
-			setTask(data);
-			setFetchError(null);
-			// Fetch findings once we have a task
-			try {
-				const foundFindings = await getCodeqlScanFindings({ taskId });
-				setFindings(foundFindings);
-			} catch {
-				// findings fetch failure is non-fatal
-			}
-		} catch (err) {
-			setFetchError(err instanceof Error ? err.message : "获取任务详情失败");
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	useEffect(() => {
-		void fetchTask();
-	}, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	// Poll every 3s while non-terminal
-	useEffect(() => {
-		if (!task) return;
-		if (isTerminal(task.status)) {
-			if (pollingRef.current) {
-				clearInterval(pollingRef.current);
-				pollingRef.current = null;
-			}
-			return;
-		}
-		pollingRef.current = setInterval(() => {
-			void fetchTask();
-		}, 3000);
-		return () => {
-			if (pollingRef.current) {
-				clearInterval(pollingRef.current);
-				pollingRef.current = null;
-			}
-		};
-	}, [task?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	const handleCancel = async () => {
-		if (!taskId) return;
-		setCancelling(true);
-		try {
-			await interruptCodeqlScanTask(taskId);
-			toast.success("已提交取消请求");
-			void fetchTask();
-		} catch (err) {
-			toast.error(`取消失败：${err instanceof Error ? err.message : "未知错误"}`);
-		} finally {
-			setCancelling(false);
-		}
-	};
-
-	if (loading) {
-		return (
-			<div className="flex h-screen items-center justify-center bg-background">
-				<span className="font-mono text-sm text-muted-foreground">加载中…</span>
-			</div>
-		);
-	}
-
-	if (fetchError || !task) {
-		return (
-			<div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
-				<span className="font-mono text-sm text-rose-400">
-					{fetchError ?? "任务不存在"}
-				</span>
-				<Button
-					size="sm"
-					variant="outline"
-					className="font-mono text-xs"
-					onClick={() => {
-						setLoading(true);
-						void fetchTask();
-					}}
-				>
-					重试
-				</Button>
-			</div>
-		);
-	}
-
-	const canCancel = task.status === "pending" || task.status === "running" || task.status === "queued";
-
-	// Derive severity summary from findings
-	const findingsBySeverity = findings.reduce<Record<string, number>>(
-		(acc, f) => {
-			const sev = (f.severity ?? "unknown").toUpperCase();
-			acc[sev] = (acc[sev] ?? 0) + 1;
-			return acc;
-		},
-		{},
-	);
 
 	const isStreaming = isConnected && !isComplete;
 
-	return (
-		<div className="relative flex min-h-screen flex-col gap-6 bg-background p-6 font-mono">
-			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+	const shouldTickClock = useMemo(
+		() => isStaticAnalysisPollableStatus(codeqlTask?.status),
+		[codeqlTask],
+	);
+	const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
-			{/* Header */}
-			<div className="relative flex flex-wrap items-start justify-between gap-3">
-				<div className="flex flex-col gap-1">
-					<h1 className="text-lg font-semibold tracking-tight text-foreground">
-						CodeQL 扫描任务详情
-					</h1>
-					<p className="font-mono text-xs text-muted-foreground">{task.id}</p>
-				</div>
-				{canCancel && (
-					<Button
-						size="sm"
-						variant="outline"
-						className="cyber-btn-ghost h-8 border-rose-500/35 px-3 text-rose-200 hover:border-rose-500/55 hover:bg-rose-500/10 hover:text-rose-100"
-						disabled={cancelling}
-						onClick={() => void handleCancel()}
-					>
-						{cancelling ? "取消中…" : "取消任务"}
-					</Button>
-				)}
-			</div>
+	const [resolvedProjectName, setResolvedProjectName] = useState<{
+		projectId: string;
+		name: string;
+	} | null>(null);
 
-			{/* Metadata card */}
-			<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-				<SectionTitle>基本信息</SectionTitle>
-				<div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
-					<Field label="任务 ID" value={task.id} />
-					<Field label="项目 ID" value={task.project_id} />
-					<div className="flex flex-col gap-0.5">
-						<span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-							状态
-						</span>
-						<StatusPill status={task.status} />
-					</div>
-					<Field label="任务名称" value={task.name} />
-					<Field label="目标路径" value={task.target_path} />
-					<Field label="创建时间" value={task.created_at} />
-					<Field label="更新时间" value={task.updated_at ?? "-"} />
-					<Field label="扫描文件数" value={String(task.files_scanned)} />
-					<Field label="扫描行数" value={String(task.lines_scanned)} />
-					<Field
-						label="耗时 (ms)"
-						value={task.scan_duration_ms ? String(task.scan_duration_ms) : "-"}
-					/>
-					<Field label="发现总数" value={String(task.total_findings)} />
-				</div>
-			</div>
+	const staticProjectId = String(codeqlTask?.project_id || "").trim();
+	const staticProjectName = String(codeqlTask?.project_name || "").trim();
+	const fallbackProjectName = useMemo(
+		() =>
+			resolveStaticAnalysisProjectNameFallback({
+				taskProjectName: staticProjectName,
+				resolvedProjectName:
+					resolvedProjectName?.projectId === staticProjectId
+						? resolvedProjectName.name
+						: null,
+				projectId: staticProjectId,
+			}),
+		[resolvedProjectName, staticProjectId, staticProjectName],
+	);
 
-			{/* Step progress */}
-			{sseEvents.length > 0 && (
-				<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-					<SectionTitle>执行进度</SectionTitle>
-					<StepProgressIndicator events={sseEvents} />
-				</div>
-			)}
+	const headerSummary = useMemo(
+		() =>
+			buildStaticAnalysisHeaderSummary({
+				opengrepTask: null,
+				codeqlTask,
+				enabledEngines: ["codeql"],
+				loadingInitial,
+				nowMs,
+				fallbackProjectName,
+			}),
+		[codeqlTask, fallbackProjectName, loadingInitial, nowMs],
+	);
 
-			{/* LLM Reasoning */}
-			{(sseEvents.length > 0 || isStreaming) && (
-				<div className="relative rounded-lg border border-purple-500/20 bg-card/40 p-4">
-					<SectionTitle>LLM 推理过程</SectionTitle>
-					<LlmReasoningPanel events={sseEvents} isStreaming={isStreaming} />
-				</div>
-			)}
+	const reasoningCount = useMemo(
+		() => countCodeqlReasoningRounds(codeqlExplorationEvents),
+		[codeqlExplorationEvents],
+	);
 
-			{/* Failure info */}
-			{(task.status === "failed" || task.status === "interrupted") && (
-				<div className="relative rounded-lg border border-rose-500/30 bg-rose-500/5 p-4">
-					<SectionTitle>失败信息</SectionTitle>
-					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						<Field label="错误数" value={String(task.error_count)} />
-						<Field label="警告数" value={String(task.warning_count)} />
-					</div>
-				</div>
-			)}
+	const llmModel = codeqlProgress?.llm_model || null;
 
-			{/* Findings */}
-			<div className="relative rounded-lg border border-border/60 bg-card/40 p-4">
-				<SectionTitle>发现问题 ({findings.length})</SectionTitle>
-				{findings.length === 0 ? (
-					<p className="font-mono text-xs text-muted-foreground">
-						{taskTerminal ? "0 findings" : "扫描进行中，等待结果…"}
+	const durationMs = useMemo(
+		() => getStaticAnalysisTaskDisplayDurationMs(codeqlTask, nowMs),
+		[codeqlTask, nowMs],
+	);
+
+	const headerTags = useMemo(
+		() => [
+			headerSummary.projectName,
+			`${Math.round(headerSummary.progressPercent)}%`,
+			formatStaticAnalysisDuration(durationMs),
+			`发现漏洞 ${headerSummary.totalFindings.toLocaleString()}`,
+			...(llmModel ? [`模型 ${llmModel}`] : []),
+			`推理 ${reasoningCount}次`,
+		],
+		[headerSummary, durationMs, llmModel, reasoningCount],
+	);
+
+	useEffect(() => {
+		syncStateToUrl(tableState);
+	}, [syncStateToUrl, tableState]);
+
+	useEffect(() => {
+		if (!staticProjectId || staticProjectName) {
+			setResolvedProjectName(null);
+			return;
+		}
+
+		let cancelled = false;
+		setResolvedProjectName((current) =>
+			current?.projectId === staticProjectId ? current : null,
+		);
+
+		void databaseApi.getProjectById(staticProjectId).then((project) => {
+			if (cancelled) return;
+			const name = String(project?.name || "").trim();
+			setResolvedProjectName(name ? { projectId: staticProjectId, name } : null);
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [staticProjectId, staticProjectName]);
+
+	const handleBack = () => {
+		if (returnTo) {
+			navigate(returnTo);
+			return;
+		}
+		navigate(-1);
+	};
+
+	if (!hasEnabledEngine) {
+		return (
+			<div className="min-h-screen bg-background p-6">
+				<div className="cyber-card p-8 text-center space-y-4">
+					<p className="text-sm text-muted-foreground">
+						CodeQL 任务参数无效，无法加载详情。
 					</p>
-				) : (
-					<>
-						{/* Severity summary */}
-						{Object.keys(findingsBySeverity).length > 0 && (
-							<div className="mb-3 flex flex-wrap gap-2">
-								{Object.entries(findingsBySeverity).map(([sev, count]) => (
-									<Badge key={sev} variant="outline" className="font-mono text-xs">
-										{sev}: {count}
-									</Badge>
-								))}
-							</div>
-						)}
-						<div className="flex flex-col gap-2">
-							{findings.map((finding) => (
-								<div
-									key={finding.id}
-									className="rounded border border-border/50 bg-muted/20 p-3"
-								>
-									<div className="flex flex-wrap items-center gap-2">
-										<SeverityBadge severity={finding.severity} />
-										{finding.confidence && (
-											<Badge variant="outline" className="font-mono text-xs text-muted-foreground">
-												{finding.confidence}
-											</Badge>
-										)}
-										<span className="font-mono text-xs text-muted-foreground">
-											{finding.id}
-										</span>
-									</div>
-									{finding.rule_name && (
-										<p className="mt-1 font-mono text-xs text-foreground/80">
-											{finding.rule_name}
-										</p>
-									)}
-									<p className="mt-1 font-mono text-xs text-muted-foreground">
-										{finding.file_path}
-										{finding.start_line ? `:${finding.start_line}` : ""}
-									</p>
-									{finding.description && (
-										<p className="mt-1 text-sm text-foreground/90">{finding.description}</p>
-									)}
-								</div>
-							))}
-						</div>
-					</>
-				)}
+					<Button variant="outline" className="cyber-btn-outline" onClick={handleBack}>
+						<ArrowLeft className="w-4 h-4 mr-2" />
+						返回
+					</Button>
+				</div>
 			</div>
+		);
+	}
+
+	return (
+		<div className="space-y-5 p-6 bg-background min-h-screen">
+			{/* Header */}
+			<div className="flex items-center justify-between gap-3 flex-wrap">
+				<div className="flex min-w-0 flex-wrap items-center gap-3">
+					<h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
+						CodeQL 审计详情
+					</h1>
+					<div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="CodeQL审计概要标签">
+						{headerTags.map((tag, index) => (
+							<Badge
+								key={`${index}:${tag}`}
+								className="cyber-badge cyber-badge-info max-w-[18rem] truncate normal-case tracking-normal"
+								title={tag}
+							>
+								{tag}
+							</Badge>
+						))}
+					</div>
+				</div>
+				<div className="flex items-center gap-2">
+					{canInterruptCodeql ? (
+						<Button
+							variant="outline"
+							className="cyber-btn-outline h-8"
+							onClick={() => setInterruptTarget("codeql")}
+						>
+							<Ban className="w-3.5 h-3.5 mr-1.5" />
+							中止 CodeQL
+						</Button>
+					) : null}
+					<Button
+						variant="outline"
+						className="cyber-btn-outline h-8"
+						onClick={() => void refreshAll(false)}
+						disabled={loadingInitial || loadingTask || loadingFindings}
+					>
+						<RefreshCw
+							className={`w-3.5 h-3.5 mr-1.5 ${loadingInitial ? "animate-spin" : ""}`}
+						/>
+						刷新
+					</Button>
+					<Button variant="outline" className="cyber-btn-outline h-8" onClick={handleBack}>
+						<ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+						返回
+					</Button>
+				</div>
+			</div>
+
+			{/* 60/40 split layout */}
+			<div className="flex flex-col gap-5 lg:flex-row">
+				{/* Left panel: 60% — Findings table */}
+				<div className="min-w-0 lg:basis-[60%]">
+					<StaticAnalysisFindingsTable
+						currentRoute={currentRoute}
+						loadingInitial={loadingInitial}
+						rows={unifiedRows}
+						state={tableState}
+						onStateChange={setTableState}
+						updatingKey={updatingKey}
+						onToggleStatus={handleToggleStatus}
+					/>
+				</div>
+
+				{/* Right panel: 40% — Exploration + LLM reasoning */}
+				<div className="min-w-0 lg:basis-[40%] flex flex-col gap-5">
+					<CodeqlExplorationPanel
+						events={codeqlExplorationEvents}
+						canReset={canResetCodeqlBuildPlan}
+						resetting={resettingCodeqlPlan}
+						onReset={handleResetCodeqlBuildPlan}
+					/>
+
+					{sseEvents.length > 0 && (
+						<section className="rounded border border-border bg-card/40 p-4">
+							<h2 className="mb-2 text-sm font-semibold text-foreground">执行进度</h2>
+							<StepProgressIndicator events={sseEvents} />
+						</section>
+					)}
+
+					{(sseEvents.length > 0 || isStreaming) && (
+						<section className="rounded border border-purple-500/20 bg-card/40 p-4">
+							<h2 className="mb-2 text-sm font-semibold text-foreground">LLM 推理过程</h2>
+							<LlmReasoningPanel events={sseEvents} isStreaming={isStreaming} />
+						</section>
+					)}
+				</div>
+			</div>
+
+			{/* Interrupt confirmation dialog */}
+			<AlertDialog
+				open={Boolean(interruptTarget)}
+				onOpenChange={(open) => {
+					if (!open) setInterruptTarget(null);
+				}}
+			>
+				<AlertDialogContent className="cyber-dialog border-border">
+					<AlertDialogHeader>
+						<AlertDialogTitle>确认中止任务？</AlertDialogTitle>
+						<AlertDialogDescription>
+							即将中止 CodeQL 扫描任务。中止后任务状态将更新为已中断。
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={interrupting}>取消</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={interrupting}
+							onClick={(event) => {
+								event.preventDefault();
+								void handleInterrupt();
+							}}
+							className="bg-rose-600 hover:bg-rose-500"
+						>
+							{interrupting ? (
+								<span className="inline-flex items-center gap-1.5">
+									<Loader2 className="w-3.5 h-3.5 animate-spin" />
+									处理中...
+								</span>
+							) : (
+								"确认中止"
+							)}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }

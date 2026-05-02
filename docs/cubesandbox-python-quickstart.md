@@ -187,14 +187,20 @@ Runtime defaults are seeded from `env.example`, then saved
 
 ```text
 CUBESANDBOX_ENABLED=false
-CUBESANDBOX_API_BASE_URL=http://127.0.0.1:23000
-CUBESANDBOX_DATA_PLANE_BASE_URL=https://127.0.0.1:21443
+CUBESANDBOX_API_BASE_URL=http://host.docker.internal:23000
+CUBESANDBOX_DATA_PLANE_BASE_URL=https://host.docker.internal:21443
 CUBESANDBOX_TEMPLATE_ID=
-CUBESANDBOX_HELPER_PATH=scripts/cubesandbox-quickstart.sh
+CUBESANDBOX_HELPER_PATH=/app/scripts/cubesandbox-quickstart.sh
 CUBESANDBOX_WORK_DIR=.cubesandbox
-CUBESANDBOX_AUTO_START=true
+CUBESANDBOX_AUTO_START=false
 CUBESANDBOX_AUTO_INSTALL=false
 ```
+
+The Docker Compose backend service maps `host.docker.internal` to the Docker
+host gateway so a containerized backend can call a host-managed CubeSandbox VM.
+Keep `CUBESANDBOX_AUTO_START=false` for that deployment shape; local lifecycle
+helper commands are only used when both CubeSandbox control and data-plane URLs
+target localhost.
 
 In the System Config page, enable CubeSandbox and save the `templateId`
 created above. Then submit a Python task:

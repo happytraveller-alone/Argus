@@ -157,7 +157,11 @@ RUN --mount=type=cache,id=argus-backend-runtime-apt-lists,target=/var/lib/apt/li
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   ca-certificates \
-  curl; \
+  curl \
+  git \
+  iproute2 \
+  openssh-client \
+  python3; \
   }; \
   main_host="${BACKEND_APT_MIRROR_PRIMARY}"; \
   security_host="${BACKEND_APT_SECURITY_PRIMARY}"; \
@@ -174,12 +178,13 @@ RUN --mount=type=cache,id=argus-backend-runtime-apt-lists,target=/var/lib/apt/li
 
 RUN groupadd --gid 1001 appgroup \
   && useradd --uid 1001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
-  && mkdir -p /app/assets /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config \
+  && mkdir -p /app/assets /app/scripts /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config \
   && chown -R appuser:appgroup /app/uploads /app/data
 
 WORKDIR /app
 
 COPY --chmod=755 docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
+COPY --chmod=755 scripts/cubesandbox-quickstart.sh /app/scripts/cubesandbox-quickstart.sh
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
 COPY --from=stripped-runtime-artifacts /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
