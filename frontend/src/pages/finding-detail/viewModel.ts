@@ -1,5 +1,6 @@
 import type { FindingNarrativeInput } from "@/pages/AgentAudit/components/findingNarrative";
 import type { FindingCodeWindowDisplayLine } from "@/pages/AgentAudit/components/FindingCodeWindow";
+import type { AgentFinding } from "@/shared/api/agentTasks";
 import type { BanditFinding } from "@/shared/api/bandit";
 import type { GitleaksFinding } from "@/shared/api/gitleaks";
 import type { PhpstanFinding } from "@/shared/api/phpstan";

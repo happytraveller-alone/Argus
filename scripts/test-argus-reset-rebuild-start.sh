@@ -54,11 +54,6 @@ new_fixture() {
   chmod +x "$dir/argus-reset-rebuild-start.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
 services:
-  agentflow-runner:
-    build:
-      context: .
-    volumes:
-      - agentflow_runner_work:/work
   opengrep-runner:
     build:
       context: .
@@ -95,7 +90,6 @@ services:
   adminer:
     image: adminer:latest
 volumes:
-  agentflow_runner_work:
   postgres_data:
   backend_uploads:
   backend_runtime_data:
@@ -140,9 +134,9 @@ assert_contains "$help_out" "Run modes:"
 assert_contains "$help_out" "default"
 assert_contains "$help_out" "keep-cache"
 assert_contains "$help_out" "aggressive"
-assert_contains "$help_out" "Run directly from bash, zsh, or another shell"
-assert_contains "$help_out" "Interactive TTY runs"
-assert_contains "$help_out" "CI=true or non-TTY runs never prompt"
+assert_contains "$help_out" "Compatible with both bash and zsh"
+assert_contains "$help_out" "Start modes:"
+assert_contains "$help_out" "ARGUS_TEST_INTERACTIVE=true"
 assert_contains "$help_out" "docker system prune -af --volumes"
 assert_contains "$help_out" "docker compose up -d --build"
 assert_contains "$help_out" "--wait-exit"
@@ -273,7 +267,6 @@ assert_contains "$valid_out" "Run mode: default"
 assert_contains "$valid_out" "preserving data volumes and Docker image/build cache"
 assert_contains "$valid_out" "down --remove-orphans"
 assert_not_contains "$valid_out" "down --volumes --remove-orphans"
-assert_contains "$valid_out" "AGENTFLOW_BUILD_CACHE_SCOPE=argus-agentflow-"
 assert_contains "$valid_out" "up -d --build"
 assert_contains "$valid_out" "ARGUS_INTELLIGENT_AUDIT_ENV=$valid_dir/.argus-intelligent-audit.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="

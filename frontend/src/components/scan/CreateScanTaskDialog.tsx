@@ -117,6 +117,7 @@ export default function CreateScanTaskDialog({
 	const [scanMode, setScanMode] = useState<ScanMode>("agent");
 	const [staticTools, setStaticTools] = useState<StaticToolSelection>({
 		opengrep: true,
+		codeql: false,
 		gitleaks: false,
 		bandit: false,
 		phpstan: false,
@@ -188,7 +189,14 @@ export default function CreateScanTaskDialog({
 			setShowAdvanced(false);
 			setSelectedRuleIds([]);
 			setScanMode(initialScanMode || "agent");
-			setStaticTools({ opengrep: true, gitleaks: false, bandit: false, phpstan: false, pmd: false });
+			setStaticTools({
+				opengrep: true,
+				codeql: false,
+				gitleaks: false,
+				bandit: false,
+				phpstan: false,
+				pmd: false,
+			});
 			setConfigEngine(null);
 			setSourceMode("existing");
 			setNewProjectName("");

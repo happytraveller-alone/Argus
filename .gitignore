@@ -282,7 +282,3 @@ AGENTS.md
 # Argus local intelligent-audit secrets
 .argus-intelligent-audit.env
 !.argus-intelligent-audit.env.example
-# AgentFlow runner local wheelhouse (generated; keep .gitkeep tracked)
-docker/agentflow-wheelhouse/*.whl
-!docker/agentflow-wheelhouse/.gitkeep
-

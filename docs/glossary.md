@@ -36,9 +36,9 @@
 
 ### 智能审计
 
-- **是什么**：AI 驱动的安全审计功能。原 agentflow 实现已于 2026-05-01 退役，Codex 将提供新实现。
-- **当前状态**：在开发中。前端保留路由和菜单项作为占位，显示"在开发中"提示。
-- **历史参考**：原实现的 git 历史保留在退役前的提交中。详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
+- **是什么**：AI 驱动的安全审计产品方向。
+- **当前状态**：占位/重构过渡。Rust gateway 当前不挂载 `/api/v1/agent-tasks`，runtime 不导出 `agentflow`，前端 `/agent-audit/:taskId` 显示 `InDevelopmentPlaceholder`。`vendor/agentflow-src/` 已删除；`backend/agentflow/` 历史 pipeline/schema/fixture、AgentFlow fixture/tests、`frontend/src/shared/api/agentTasks.ts`、`frontend/src/pages/AgentAudit/components/*` 和 `/api/v1/system-config/agent-preflight` 仍存在，不能写成“所有相关代码已删除”或“执行链已恢复”。
+- **维护提示**：如果要恢复或重建智能审计，先定义新的 route/runtime/runner/frontend contract；不要默认复用旧 AgentFlow runner 执行链。
 
 ### Rust gateway
 
@@ -47,11 +47,11 @@
 
 ## 审计任务术语
 
-### `AgentTask` / `AgentEvent` / `AgentFinding` / AgentFlow runner（已退役）
+### `AgentTask` / `AgentEvent` / `AgentFinding` / AgentFlow runner
 
-- **历史背景**：这些是原 agentflow 实现的核心对象，已于 2026-05-01 完全退役。
-- **当前状态**：代码已删除，数据已迁移。Codex 重新实现时将使用新的对象模型。
-- **参考**：详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
+- **历史背景**：这些是旧 AgentFlow 智能审计执行链的核心对象。
+- **当前状态**：后端主路由不再挂载 `/api/v1/agent-tasks`，runtime 不再导出 `agentflow`；前端任务详情路由占位。代码库仍保留 AgentFlow pipeline、fixtures、tests、前端兼容 shim 和部分兼容/聚合字段，但不再保留 `vendor/` 下的 AgentFlow source。
+- **维护提示**：处理相关引用前先确认它是活跃执行入口、兼容数据字段、测试资产还是待清理残留；不要基于记忆直接批量删除。
 
 ### Opengrep runner
 
@@ -59,10 +59,11 @@
 - **不是什么**：Bandit/Gitleaks/PHPStan 等多引擎调度器。
 - **主要入口**：`docker/opengrep-runner.Dockerfile`、`docker/opengrep-scan.sh`、`backend/src/scan/opengrep.rs`。
 
-### agent preflight（已退役）
+### agent preflight
 
-- **历史背景**：原 agentflow 智能审计创建前的预检机制，已随 agentflow 退役。
-- **当前状态**：相关代码已删除。未来 Codex 实现将定义新的预检流程。
+- **是什么**：`/api/v1/system-config/agent-preflight`，当前仍存在于 `backend/src/routes/system_config.rs`，用于按 LLM 配置优先级做连接测试并检查 runner readiness。
+- **当前状态**：保留为智能审计配置门禁。若 LLM 通过但 runner 未配置，响应会以 `runner_missing` 类原因说明智能审计初始化失败。
+- **不是什么**：完整 AgentTask 创建或执行 API；当前 Rust gateway 不挂载 `/api/v1/agent-tasks`。
 
 ### LLM config set
 
@@ -91,10 +92,10 @@
 
 ## 配置与运行术语
 
-### `.argus-intelligent-audit.env`（已废弃）
+### `.argus-intelligent-audit.env`
 
-- **历史背景**：原 agentflow 智能审计的 LLM 配置文件，已随 agentflow 退役。
-- **当前状态**：文件已删除。未来 Codex 实现将使用新的配置机制。
+- **是什么**：智能引擎/LLM 配置的启动导入文件。`argus-reset-rebuild-start.sh` 和相关测试仍围绕该文件生成/校验配置，backend 启动导入后以 system-config 为运行时真源。
+- **不是什么**：UI 写回目标；前端保存配置只写 system-config，不直接修改这个文件。
 
 ### repo-local Codex / OMX
 

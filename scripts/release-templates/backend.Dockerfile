@@ -52,7 +52,6 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/backend-rust /usr/local/bin/backend
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
-COPY backend/agentflow /app/backend/agentflow
 
 RUN chown -R appuser:appgroup /app
 

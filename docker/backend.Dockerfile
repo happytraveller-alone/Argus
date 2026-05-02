@@ -183,7 +183,6 @@ COPY --chmod=755 docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.
 COPY --from=builder /usr/local/bin/backend-rust /usr/local/bin/backend
 COPY --from=stripped-runtime-artifacts /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=backend-assets-archive /opt/backend-assets/scan_rule_assets.tar.gz /app/assets/scan_rule_assets.tar.gz
-COPY backend/agentflow /app/backend/agentflow
 
 ENV BIND_ADDR=0.0.0.0:8000
 ENV ZIP_STORAGE_PATH=/app/uploads/zip_files

@@ -16,10 +16,17 @@ import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
 
-export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "pmd";
+export type StaticTool =
+  | "opengrep"
+  | "codeql"
+  | "gitleaks"
+  | "bandit"
+  | "phpstan"
+  | "pmd";
 
 export interface StaticToolSelection {
   opengrep: boolean;
+  codeql: boolean;
   gitleaks: boolean;
   bandit: boolean;
   phpstan: boolean;
@@ -50,6 +57,7 @@ export default function AgentModeSelector({
   const isAgentSelected = value === "agent";
   const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
+    codeql: false,
     gitleaks: false,
     bandit: false,
     phpstan: false,

@@ -6,7 +6,7 @@
 >
 > 2026-05-01 CodeQL 编译沙箱切片：当前已新增 C/C++ 专用 compile sandbox 闭环。该切片先运行 `codeql-compile-sandbox` 探索并验证 C/C++ 构建命令，把 accepted build plan / fingerprint / evidence index 持久化为 DB/task-state 真源，再让 `codeql-scan` 在 `database create` 阶段重放该命令。Artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL 捕获；JS/TS、Python、Java、Go 仍是后续里程碑，不阻塞这个 C/C++ 切片。
 >
-> 2026-05-01 智能审计退役：原 agentflow 实现已完全退役。前端保留路由和菜单项作为占位，显示"在开发中"提示。Codex 将提供新实现。详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
+> 2026-05-02 智能审计过渡状态：当前 Rust gateway 不再挂载 `/api/v1/agent-tasks`，`backend/src/runtime/mod.rs` 也不再导出 `runtime/agentflow`；前端 `/agent-audit/:taskId` 已改为 `InDevelopmentPlaceholder` 占位。`vendor/` 下的 AgentFlow 供应商源码已删除；`backend/agentflow/` 仅保留历史 pipeline/schema/fixture 资产，`/api/v1/system-config/agent-preflight` 仍作为 LLM 配置与 runner readiness 门禁存在。不要把保留的历史资产写成 AgentFlow 执行链已重新接入。
 
 这份文档面向第一次接手 Argus 的开发者：先建立系统主线，再告诉你从哪些文件开始读代码。接口字段逐项说明、数据库逐表说明和未来规划不放在这里。
 
@@ -26,9 +26,9 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 - **Frontend**：`frontend/`，React + Vite + TypeScript，页面路由在 `frontend/src/app/routes.tsx`。
 - **Backend**：`backend/`，Rust + Axum，服务入口在 `backend/src/main.rs`，路由聚合在 `backend/src/routes/mod.rs`。
 - **Database**：PostgreSQL，通过 `sqlx` 访问，主要状态代码在 `backend/src/db/`；CodeQL C/C++ compile-sandbox 的 accepted build plan 由 `rust_codeql_build_plans` 表承载，file/task-state 只作状态投影或 fallback。
-- **Runner**：Docker runner 负责隔离执行 Opengrep 和 CodeQL；Compose 服务在 `docker-compose.yml`。
+- **Runner**：Docker runner 负责隔离执行 Opengrep 和 CodeQL；Compose 服务在 `docker-compose.yml`。历史 AgentFlow runner service 当前不在 compose 主线中。
 
-如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计，并把结果汇总回前端。**
+如果只记一句话：**Argus 把一个 ZIP 项目归档成 `Project`，再围绕它启动静态审计，并把结果汇总回前端；智能审计执行链当前处于占位/重构过渡。**
 
 ## 审计模式
 
@@ -49,15 +49,23 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 历史 Bandit、Gitleaks、PHPStan、PMD 等前端 API 文件仍可能存在，用于迁移、防回归或退役路由测试；不要把它们当作新增静态引擎的当前入口。`backend/tests/opengrep_only_static_tasks.rs` 明确锁定这些退役静态路由不再由 Rust gateway 拥有。CodeQL 是新的隔离例外：它按 `StaticTaskRecord.engine="codeql"`、`rules_codeql`、独立 `codeql-runner` 和 SARIF 到 `StaticFindingRecord` 映射推进，不复活旧多引擎路由。
 
-### 智能审计（已退役）
+### 智能审计（占位/重构过渡）
 
-原 agentflow 实现已于 2026-05-01 完全退役。前端保留路由和菜单项作为占位，显示"在开发中"提示。Codex 将提供新实现。详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
+当前智能审计不是可运行的端到端产品主线。代码状态是：
+
+- 后端 API 主路由 `backend/src/routes/mod.rs` 只挂载 system-config、projects、search、skills 和 static-tasks，不挂载 `/api/v1/agent-tasks`。
+- 后端 runtime 主导出 `backend/src/runtime/mod.rs` 不包含 `agentflow` 模块。
+- 前端 `/agent-audit/:taskId` 路由渲染 `frontend/src/shared/components/InDevelopmentPlaceholder.tsx`。
+- `vendor/agentflow-src/` 已删除；`backend/agentflow/`、AgentFlow fixture/tests、部分前端智能审计测试和 `/api/v1/system-config/agent-preflight` 仍存在，属于过渡期资产或配置门禁，不代表 AgentFlow 执行链已重新接入。
+- `frontend/src/shared/api/agentTasks.ts` 与 `frontend/src/pages/AgentAudit/components/*` 当前是前端兼容 shim，用来让项目详情、统一漏洞详情、代码浏览和工具证据页继续编译；这些 shim 仍指向旧 `/agent-tasks` URL contract 或只提供展示组件，不代表后端执行 API 已恢复。
+
+因此，新增功能不要从旧 AgentFlow runner 执行路径开始；如果要恢复或重建智能审计，需要先明确新的 backend route、runtime、runner 和 frontend contract。
 
 ## 核心对象
 
 ### `Project`
 
-`Project` 是系统中心对象：项目元数据、ZIP 归档、文件浏览、静态任务、智能任务和聚合统计都挂在它下面。
+`Project` 是系统中心对象：项目元数据、ZIP 归档、文件浏览、静态任务和聚合统计都挂在它下面。历史/过渡智能任务字段可能仍出现在兼容数据或前端聚合里，但当前后端主路由不提供 AgentTask 执行 API。
 
 关键入口：
 
@@ -159,5 +167,5 @@ Opengrep 静态任务和 finding 由 Rust backend 管理，前端在产品层把
 
 - 旧 Python/FastAPI backend 不是当前运行主线。
 - 非 Opengrep 静态引擎路由不应重新接入当前 Rust gateway，除非先有新的计划和迁移说明。
-- 原 agentflow 智能审计已完全退役，详见 `docs/decisions/2026-05-01-agentflow-retired.md`。
+- AgentFlow 智能审计执行链当前未挂载在 Rust gateway/runtime/compose 主线中，`vendor/` 下的 AgentFlow 供应商源码已删除，但历史 pipeline/fixture、前端兼容 shim 与部分前端测试资产仍在；不要引用不存在的 `docs/decisions/2026-05-01-agentflow-retired.md` 作为当前真源。
 - 归档文档、历史测试和旧前端 API 文件可能保留旧名词；新增代码和新文档应优先使用当前主线术语。

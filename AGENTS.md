@@ -381,3 +381,71 @@ Do not manually duplicate hook-owned activation state unless recovering from mis
 ## Setup
 
 Execute `omx setup` to install all components. Execute `omx doctor` to verify installation.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [argus] recent context, 2026-05-02 8:46am GMT+8
+
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 50 obs (16,842t read) | 825,811t work | 98% savings
+
+### May 2, 2026
+80 6:14a ✅ Tooltip Components Imported into Content.tsx; Ready for Mode Button Modification
+82 6:26a 🔵 ProjectManagementMetricsResponse structure tracks intelligent and verified findings
+83 " ⚖️ Systematic removal of agent task execution infrastructure planned
+84 6:27a ✅ Agentflow module and agent routes deleted from backend
+85 " ✅ Agent task and agent test routes removed from API router
+86 " ✅ Agent task recovery specification removed from startup recovery system
+87 6:28a ✅ Agent tasks column removed from project_management_metrics legacy schema
+88 " ✅ Agent task record structs removed from task state module
+89 " ✅ Task state module cleaned up to remove agent task infrastructure
+93 6:30a ✅ Dashboard snapshot endpoint hardcoded to return zero intelligent findings
+94 " ✅ Removed intelligent task reporting from dashboard snapshot endpoint
+95 6:31a 🔄 Agentflow Runtime Retirement - Backend Phase 4 Complete
+96 7:17a ✅ Test Suite Updated - Agent Task Fixtures Removed
+97 7:40a ✅ Agentflow Infrastructure Retirement - Data Migration and Cleanup
+98 " 🔵 Agentflow Data Migration Script Failed Silently - agent_tasks Key Not Removed
+99 7:41a 🔴 Fixed Agentflow Data Migration Script - Replaced jq with Python3 JSON Handler
+100 " ✅ Removed Agentflow Runner Service from Docker Compose Configuration
+101 " ✅ Removed Agentflow Service Dependencies and Environment File Reference from Docker Compose
+102 " ✅ Updated Data Migration Script - Replaced Python3 with sed for JSON Manipulation
+103 " ✅ Removed Agentflow-Related Environment Variables and Volume Definition from Docker Compose
+104 7:42a 🔵 Agentflow Data Migration Script Successfully Executed - agent_tasks Key Removed
+105 " ✅ Removed Configuration File Handling from Reset/Rebuild/Start Script
+106 " ✅ Removed CACHE_SCOPE Variable from Reset/Rebuild/Start Script
+107 " 🔴 Agentflow Data Migration Verified - All Cleanup Complete
+108 7:43a ✅ Agentflow intelligent audit system retired from documentation
+109 7:51a ✅ Documentation cleanup completed for agentflow retirement
+110 " ✅ Architecture guide terminology section updated to remove retired agentflow references
+111 " ✅ Documentation index updated to reflect agentflow retirement and system changes
+112 " 🔵 All active agentflow references removed from documentation
+113 " 🔵 ADR document confirms agentflow retirement decision and implementation scope
+114 7:52a 🟣 Agentflow retirement documentation and ADR completed
+115 " 🔵 Agentflow retirement project completed successfully
+116 " 🔵 Final verification reveals 3 blockers preventing acceptance
+117 7:53a 🔵 Decision document exists - verification report was incomplete
+118 " 🔵 InDevelopmentPlaceholder import is correct in routes.tsx
+119 " 🔴 Fixed TypeScript export mismatch in InDevelopmentPlaceholder component
+120 " 🔴 Fixed all import statements to match default export
+121 " 🔵 TypeScript compilation now passes successfully
+122 7:54a 🔵 Agentflow retirement project completed with all acceptance criteria passing
+123 " 🔵 Comprehensive file deletion count confirms thorough agentflow removal
+124 " 🔵 Complete change summary for agentflow retirement project
+125 7:56a 🟣 Agentflow retirement autopilot project completed with comprehensive summary
+126 7:58a 🔴 Agentflow retirement autopilot project successfully completed
+127 " 🔵 Session resumed after agentflow retirement autopilot completion
+S15 AgentFlow retirement autopilot project - complete removal of intelligent audit subsystem from Argus codebase (May 2, 8:03 AM)
+130 8:22a ⚖️ Intelligent Audit Feature Retired
+134 " ✅ Documentation reconciliation for AgentFlow intelligent audit transitional state
+131 8:24a 🔵 AgentFlow Intelligent Audit Retirement Status and Cleanup State
+132 " 🔵 Argus System Architecture: Backend Rust Gateway with Multi-Scanner Runtime
+133 " 🔵 CodeQL Isolated Scan Plan: C/C++ Compile Sandbox Integration
+135 8:34a ✅ Project documentation and agent knowledge reconciliation via neat-freak
+
+Access 826k tokens of past work via get_observations([IDs]) or mem-search skill.
+</claude-mem-context>
