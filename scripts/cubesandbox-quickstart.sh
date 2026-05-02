@@ -28,6 +28,7 @@ CUBE_LOCAL_REGISTRY_PORT="${CUBE_LOCAL_REGISTRY_PORT:-5000}"
 CUBE_CODEQL_VERSION="${CUBE_CODEQL_VERSION:-2.20.5}"
 CUBE_CODEQL_BUNDLE_URL="${CUBE_CODEQL_BUNDLE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CUBE_CODEQL_VERSION}/codeql-bundle-linux64.tar.zst}"
 CUBE_CODEQL_CPP_IMAGE="${CUBE_CODEQL_CPP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-codeql-cpp:latest}"
+CUBE_CODEQL_CPP_WSL_IMAGE="${CUBE_CODEQL_CPP_WSL_IMAGE:-argus/cubesandbox-codeql-cpp:latest}"
 CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4G}"
 CUBE_CODEQL_CPP_DOCKERFILE="${CUBE_CODEQL_CPP_DOCKERFILE:-${ROOT_DIR}/oci/cubesandbox/codeql-cpp.Dockerfile}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
@@ -52,6 +53,8 @@ Usage:
   scripts/cubesandbox-quickstart.sh start-local-registry
   scripts/cubesandbox-quickstart.sh create-template
   scripts/cubesandbox-quickstart.sh build-codeql-cpp-image
+  scripts/cubesandbox-quickstart.sh build-codeql-cpp-image-wsl
+  scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
   scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
   scripts/cubesandbox-quickstart.sh watch-template <job_id>
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh python-smoke
@@ -389,6 +392,24 @@ REMOTE
 )"
 }
 
+build_codeql_cpp_image_wsl() {
+  [[ -f "$CUBE_CODEQL_CPP_DOCKERFILE" ]] || fail "missing OCI image config: $CUBE_CODEQL_CPP_DOCKERFILE"
+  need_cmd docker
+  docker build --pull=false \
+    --build-arg CUBE_LOCAL_REGISTRY_IMAGE="$CUBE_LOCAL_REGISTRY_IMAGE" \
+    --build-arg CUBE_CODEQL_BUNDLE_URL="$CUBE_CODEQL_BUNDLE_URL" \
+    -f "$CUBE_CODEQL_CPP_DOCKERFILE" \
+    -t "$CUBE_CODEQL_CPP_WSL_IMAGE" \
+    "$ROOT_DIR"
+}
+
+shell_codeql_cpp_image_wsl() {
+  need_cmd docker
+  docker run --rm -it \
+    --entrypoint /bin/bash \
+    "$CUBE_CODEQL_CPP_WSL_IMAGE"
+}
+
 create_codeql_cpp_template() {
   remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999"
 }
@@ -580,6 +601,14 @@ case "$cmd" in
   build-codeql-cpp-image)
     no_extra_args "${@:2}"
     build_codeql_cpp_image
+    ;;
+  build-codeql-cpp-image-wsl)
+    no_extra_args "${@:2}"
+    build_codeql_cpp_image_wsl
+    ;;
+  shell-codeql-cpp-image-wsl)
+    no_extra_args "${@:2}"
+    shell_codeql_cpp_image_wsl
     ;;
   create-codeql-cpp-template)
     no_extra_args "${@:2}"

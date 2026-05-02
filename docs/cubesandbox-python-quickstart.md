@@ -208,6 +208,17 @@ The image build definition is stored in
 configuration into the CubeSandbox VM and injects the local registry image and
 CodeQL bundle URL as build arguments.
 
+To build and enter the same CodeQL C++ image directly from WSL without using
+the CubeSandbox VM-local registry:
+
+```bash
+scripts/cubesandbox-quickstart.sh build-codeql-cpp-image-wsl
+scripts/cubesandbox-quickstart.sh shell-codeql-cpp-image-wsl
+```
+
+The WSL-local image defaults to `argus/cubesandbox-codeql-cpp:latest`; override
+it with `CUBE_CODEQL_CPP_WSL_IMAGE=...` when needed.
+
 `build-codeql-cpp-image` keeps Docker Hub references in explicit DaoCloud
 replacement form and rewrites Debian 13 apt sources to Aliyun mirrors inside
 the image build. It installs:

@@ -51,9 +51,12 @@ assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/Tencen
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/tencentcloud/CubeSandbox/raw/master/deploy/one-click/online-install.sh'
 assert_contains "$SCRIPT" "configure-docker-mirror"
 assert_contains "$SCRIPT" "build-codeql-cpp-image"
+assert_contains "$SCRIPT" "build-codeql-cpp-image-wsl"
+assert_contains "$SCRIPT" "shell-codeql-cpp-image-wsl"
 assert_contains "$SCRIPT" "create-codeql-cpp-template"
 assert_contains "$SCRIPT" "codeql-cpp-smoke"
 assert_contains "$SCRIPT" "CUBE_CODEQL_CPP_DOCKERFILE"
+assert_contains "$SCRIPT" "CUBE_CODEQL_CPP_WSL_IMAGE"
 assert_contains "$SCRIPT" "codeql-cpp.Dockerfile"
 assert_not_contains "$SCRIPT" "cat > Dockerfile <<'DOCKERFILE'"
 assert_contains "$SCRIPT" "CODEQL_DB_OK"
@@ -67,6 +70,8 @@ assert_contains "$OCI_DOCKERFILE" "codeql resolve languages"
 assert_contains "$OCI_README" ".cubesandbox/CubeSandbox/dev-env/README.md"
 assert_contains "$OCI_README" ".cubesandbox/CubeSandbox/docker/README.md"
 assert_contains "$OCI_README" "docs/cubesandbox-python-quickstart.md"
+assert_contains "$OCI_README" "localhost/e2bdev/code-interpreter:ags"
+assert_contains "$OCI_README" 'No matching Dockerfile for `sandbox-code:latest`'
 
 set +e
 "$SCRIPT" prepare-vm --toolbox >"$help_out" 2>&1
@@ -79,6 +84,8 @@ assert_contains "$DOC" "WSL2"
 assert_contains "$DOC" "m.daocloud.io/docker.io"
 assert_contains "$DOC" "configure-docker-mirror"
 assert_contains "$DOC" "oci/cubesandbox/codeql-cpp.Dockerfile"
+assert_contains "$DOC" "build-codeql-cpp-image-wsl"
+assert_contains "$DOC" "shell-codeql-cpp-image-wsl"
 assert_contains "$DOC" "codeql-cpp-smoke"
 assert_contains "$DOC" "tpl-a4d03d6bf9ac406e9fb6a457"
 assert_not_contains "$DOC" "toolbox"
