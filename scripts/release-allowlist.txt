@@ -3,9 +3,8 @@ backend/
 frontend/
 
 # Runtime Docker files and env templates needed by the release tree.
+env.example
 docker/frontend.Dockerfile
-docker/env/backend/env.example
-docker/env/frontend/.env.example
 argus-bootstrap.sh
 scripts/validate-llm-config.sh
 

@@ -50,9 +50,10 @@ line_no() {
 new_fixture() {
   local name="$1"
   local dir="$TMP_ROOT/$name"
-  mkdir -p "$dir/docker/env/backend" "$dir/scripts"
+  mkdir -p "$dir/scripts"
   cp "$SCRIPT_SRC" "$dir/argus-bootstrap.sh"
   cp "$VALIDATOR_SRC" "$dir/scripts/validate-llm-config.sh"
+  cp "$ROOT_DIR/env.example" "$dir/env.example"
   chmod +x "$dir/argus-bootstrap.sh"
   chmod +x "$dir/scripts/validate-llm-config.sh"
   cat > "$dir/docker-compose.yml" <<'COMPOSE'
@@ -64,7 +65,7 @@ services:
     build:
       context: .
     env_file:
-      - path: "${ARGUS_INTELLIGENT_AUDIT_ENV:-./.argus-intelligent-audit.env}"
+      - path: "${ARGUS_ENV_FILE:-./.env}"
         required: true
     environment:
       ARGUS_RESET_IMPORT_TOKEN: "${ARGUS_RESET_IMPORT_TOKEN:-}"
@@ -106,10 +107,11 @@ COMPOSE
 
 write_valid_config() {
   local dir="$1"
-  cat > "$dir/.argus-intelligent-audit.env" <<'ENV'
+  cat > "$dir/.env" <<'ENV'
 SECRET_KEY=local_test_secret_0123456789abcdef
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=11520
+DOCKER_SOCKET_PATH=/var/run/docker.sock
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=SECRET_SENTINEL_SHOULD_NOT_PRINT
 LLM_MODEL=gpt-5
@@ -139,7 +141,8 @@ assert_contains "$help_out" "keep-cache"
 assert_contains "$help_out" "aggressive"
 assert_contains "$help_out" "Compatible with both bash and zsh"
 assert_contains "$help_out" "Start modes:"
-assert_contains "$help_out" "ARGUS_TEST_INTERACTIVE=true"
+assert_contains "$help_out" "env.example"
+assert_contains "$help_out" ".env"
 assert_contains "$help_out" "docker system prune -af --volumes"
 assert_contains "$help_out" "docker compose up -d --build"
 assert_contains "$help_out" "--wait-exit"
@@ -150,7 +153,7 @@ assert_contains "$help_out" "scripts/validate-llm-config.sh --env-file"
 validator_dir="$(new_fixture validator)"
 write_valid_config "$validator_dir"
 validator_out="$validator_dir/validator.out"
-( cd "$validator_dir" && ./scripts/validate-llm-config.sh --env-file ./.argus-intelligent-audit.env ) >"$validator_out" 2>&1
+( cd "$validator_dir" && ./scripts/validate-llm-config.sh --env-file ./.env ) >"$validator_out" 2>&1
 assert_contains "$validator_out" "LLM env config is valid"
 
 # Parser rejects invalid post-separator modes before config or Docker work.
@@ -185,23 +188,27 @@ set -e
 assert_contains "$flag_after_out" "Unknown run mode: --wait-exit"
 assert_not_contains "$flag_after_out" "docker compose"
 
-# Missing config in CI/non-TTY exits before Docker cleanup and creates a template/example.
+# Missing root .env exits before Docker cleanup after copying env.example.
 missing_dir="$(new_fixture missing)"
 missing_out="$missing_dir/missing.out"
 set +e
 ( cd "$missing_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_out" 2>&1
 missing_rc=$?
 set -e
-[[ "$missing_rc" -ne 0 ]] || fail "Missing config should fail in CI/non-TTY"
-[[ -f "$missing_dir/.argus-intelligent-audit.env.example" ]] || fail "Missing config should create template/example"
+[[ "$missing_rc" -ne 0 ]] || fail "Missing .env should stop bootstrap after copying template"
+cmp -s "$missing_dir/env.example" "$missing_dir/.env" || fail "Missing .env should be copied from root env.example"
+assert_contains "$missing_out" "Created .env from env.example"
+assert_contains "$missing_out" "请填写 .env 后再次运行 ./argus-bootstrap.sh"
+assert_contains "$missing_out" "scripts/validate-llm-config.sh --env-file ./.env"
 assert_not_contains "$missing_out" "docker compose"
 assert_not_contains "$missing_out" "docker system prune"
 assert_not_contains "$missing_out" "curl -fsS"
 
 # Placeholder config exits before Docker cleanup in non-interactive mode.
 placeholder_dir="$(new_fixture placeholder)"
-cat > "$placeholder_dir/.argus-intelligent-audit.env" <<'ENV'
+cat > "$placeholder_dir/.env" <<'ENV'
 SECRET_KEY=local_test_secret_0123456789abcdef
+DOCKER_SOCKET_PATH=/var/run/docker.sock
 LLM_PROVIDER=openai_compatible
 LLM_API_KEY=sk-your-api-key
 LLM_MODEL=gpt-5
@@ -222,8 +229,8 @@ assert_not_contains "$placeholder_out" "docker system prune"
 # Missing required key exits before Docker cleanup in non-interactive mode.
 missing_key_dir="$(new_fixture missing-key)"
 write_valid_config "$missing_key_dir"
-grep -v '^LLM_MODEL=' "$missing_key_dir/.argus-intelligent-audit.env" > "$missing_key_dir/.argus-intelligent-audit.env.tmp"
-mv "$missing_key_dir/.argus-intelligent-audit.env.tmp" "$missing_key_dir/.argus-intelligent-audit.env"
+grep -v '^LLM_MODEL=' "$missing_key_dir/.env" > "$missing_key_dir/.env.tmp"
+mv "$missing_key_dir/.env.tmp" "$missing_key_dir/.env"
 missing_key_out="$missing_key_dir/missing-key.out"
 set +e
 ( cd "$missing_key_dir" && CI=true ARGUS_STUB_DOCKER=true ./argus-bootstrap.sh ) >"$missing_key_out" 2>&1
@@ -234,44 +241,11 @@ assert_contains "$missing_key_out" "LLM_MODEL"
 assert_not_contains "$missing_key_out" "docker compose"
 assert_not_contains "$missing_key_out" "docker system prune"
 
-# Interactive setup generates config from template, redacts secrets, does not copy backend env, imports after backend readiness, and wait-exit polls frontend.
-interactive_dir="$(new_fixture interactive)"
-interactive_out="$interactive_dir/interactive.out"
-set +e
-(
-  cd "$interactive_dir"
-  printf 'openai_compatible\nINTERACTIVE_API_KEY_SHOULD_NOT_PRINT\ngpt-5.5\nhttps://api.openai.com/v1\n' | \
-    ARGUS_TEST_INTERACTIVE=true \
-    ARGUS_TEST_SECRET_KEY=GENERATED_SECRET_FOR_TEST \
-    ARGUS_STUB_DOCKER=true \
-    ./argus-bootstrap.sh --wait-exit -- default
-) >"$interactive_out" 2>&1
-interactive_rc=$?
-set -e
-[[ "$interactive_rc" -eq 0 ]] || fail "Interactive setup should pass; output: $(cat "$interactive_out")"
-[[ -f "$interactive_dir/.argus-intelligent-audit.env" ]] || fail "Interactive config should be written"
-[[ ! -f "$interactive_dir/docker/env/backend/.env" ]] || fail "backend .env should not be generated/copied"
-assert_contains "$interactive_dir/.argus-intelligent-audit.env" "SECRET_KEY=GENERATED_SECRET_FOR_TEST"
-assert_contains "$interactive_dir/.argus-intelligent-audit.env" "LLM_API_KEY=INTERACTIVE_API_KEY_SHOULD_NOT_PRINT"
-assert_contains "$interactive_dir/.argus-intelligent-audit.env" "LLM_MODEL=gpt-5.5"
-assert_contains "$interactive_dir/.argus-intelligent-audit.env" "AGENT_ENABLED=true"
-assert_not_contains "$interactive_out" "INTERACTIVE_API_KEY_SHOULD_NOT_PRINT"
-assert_not_contains "$interactive_out" "GENERATED_SECRET_FOR_TEST"
-assert_contains "$interactive_out" "up -d --build"
-assert_contains "$interactive_out" "curl -fsS http://127.0.0.1:18000/health"
-assert_contains "$interactive_out" "redacted-import-token"
-assert_contains "$interactive_out" "curl -fsS -X POST"
-assert_contains "$interactive_out" "curl -fsS http://127.0.0.1:13000"
-assert_not_contains "$interactive_out" "ARGUS_TEST_IMPORT_TOKEN_SHOULD_NOT_PRINT"
-assert_no_global_prune_execution "$interactive_out"
-
-# Valid config preserves existing backend .env, redacts secrets/tokens, preserves volumes/cache by default, imports after backend readiness, and follows logs in foreground.
+# Valid root .env redacts secrets/tokens, preserves volumes/cache by default, imports after backend readiness, and follows logs in foreground.
 valid_dir="$(new_fixture valid)"
 write_valid_config "$valid_dir"
-printf 'STALE_KEY=must_be_removed\n' > "$valid_dir/docker/env/backend/.env"
 valid_out="$valid_dir/valid.out"
 ( cd "$valid_dir" && ARGUS_STUB_DOCKER=true ARGUS_TEST_IMPORT_TOKEN=IMPORT_TOKEN_SHOULD_NOT_PRINT ./argus-bootstrap.sh ) >"$valid_out" 2>&1
-assert_contains "$valid_dir/docker/env/backend/.env" "STALE_KEY=must_be_removed"
 assert_not_contains "$valid_out" "SECRET_SENTINEL_SHOULD_NOT_PRINT"
 assert_banner_contact "$valid_out"
 assert_contains "$valid_out" "Run mode: default"
@@ -279,7 +253,7 @@ assert_contains "$valid_out" "preserving data volumes and Docker image/build cac
 assert_contains "$valid_out" "down --remove-orphans"
 assert_not_contains "$valid_out" "down --volumes --remove-orphans"
 assert_contains "$valid_out" "up -d --build"
-assert_contains "$valid_out" "ARGUS_INTELLIGENT_AUDIT_ENV=$valid_dir/.argus-intelligent-audit.env"
+assert_contains "$valid_out" "ARGUS_ENV_FILE=$valid_dir/.env"
 assert_contains "$valid_out" "ARGUS_RESET_IMPORT_TOKEN="
 assert_contains "$valid_out" "redacted-import-token"
 assert_contains "$valid_out" "curl -fsS http://127.0.0.1:18000/health"
@@ -382,7 +356,6 @@ assert_contains "$wait_aggressive_out" "Complete. Frontend: http://127.0.0.1:131
 # Dry-run keeps backend env non-mutating while showing the safe default command plan and redacted import call.
 dry_dir="$(new_fixture dry)"
 write_valid_config "$dry_dir"
-printf 'STALE_KEY=still_here\n' > "$dry_dir/docker/env/backend/.env"
 dry_out="$dry_dir/dry.out"
 ( cd "$dry_dir" && ./argus-bootstrap.sh --dry-run -- default ) >"$dry_out" 2>&1
 assert_not_contains "$dry_out" "[dry-run] cp"
@@ -390,7 +363,29 @@ assert_contains "$dry_out" "[dry-run] docker compose"
 assert_contains "$dry_out" "[dry-run] curl -fsS -X POST"
 assert_contains "$dry_out" "redacted-import-token"
 assert_no_global_prune_execution "$dry_out"
-assert_contains "$dry_dir/docker/env/backend/.env" "STALE_KEY=still_here"
+
+# docker/env is retired; root env.example is the only environment template surface.
+retired_env_out="$TMP_ROOT/docker-env-retired.out"
+while IFS= read -r tracked_env_path; do
+  if [ -e "$ROOT_DIR/$tracked_env_path" ]; then
+    echo "$tracked_env_path" >&2
+    fail "docker/env should not contain tracked environment templates"
+  fi
+done < <(git -C "$ROOT_DIR" ls-files docker/env)
+if rg -n "docker/env|\\.env\\.example" \
+  "$ROOT_DIR/argus-bootstrap.sh" \
+  "$ROOT_DIR/docker-compose.yml" \
+  "$ROOT_DIR/scripts/validate-llm-config.sh" \
+  "$ROOT_DIR/scripts/release-allowlist.txt" \
+  "$ROOT_DIR/scripts/generate-release-branch.sh" \
+  "$ROOT_DIR/scripts/release-templates" \
+  "$ROOT_DIR/frontend/vite.config.ts" \
+  "$ROOT_DIR/frontend/scripts/setup.cjs" \
+  "$ROOT_DIR/frontend/scripts/setup.sh" \
+  >"$retired_env_out"; then
+  cat "$retired_env_out" >&2
+  fail "docker/env or per-directory .env.example references should be retired"
+fi
 
 # Aggressive dry-run exposes the destructive plan without executing it.
 dry_aggressive_dir="$(new_fixture dry-aggressive)"

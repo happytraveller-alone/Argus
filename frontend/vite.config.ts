@@ -12,7 +12,7 @@ export default defineConfig(({ mode }: ConfigEnv) => {
   const obfuscatorPlugin = isProduction ? createChunkObfuscatorPlugin() : null;
 
   return {
-  envDir: path.resolve(__dirname, "../docker/env/frontend"),
+  envDir: path.resolve(__dirname, ".."),
   plugins: [
     react(),
     svgr({

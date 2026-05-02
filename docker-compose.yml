@@ -98,6 +98,9 @@ services:
     mem_limit: 4g
     pids_limit: 1024
     working_dir: /app
+    env_file:
+      - path: ${ARGUS_ENV_FILE:-./.env}
+        required: true
     volumes:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime

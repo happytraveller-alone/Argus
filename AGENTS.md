@@ -386,16 +386,15 @@ Execute `omx setup` to install all components. Execute `omx doctor` to verify in
 <claude-mem-context>
 # Memory Context
 
-# [argus] recent context, 2026-05-02 8:54am GMT+8
+# [argus] recent context, 2026-05-02 9:10am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (16,842t read) | 825,811t work | 98% savings
+Stats: 50 obs (16,919t read) | 826,469t work | 98% savings
 
 ### May 2, 2026
-80 6:14a ✅ Tooltip Components Imported into Content.tsx; Ready for Mode Button Modification
 82 6:26a 🔵 ProjectManagementMetricsResponse structure tracks intelligent and verified findings
 83 " ⚖️ Systematic removal of agent task execution infrastructure planned
 84 6:27a ✅ Agentflow module and agent routes deleted from backend
@@ -446,6 +445,8 @@ S15 AgentFlow retirement autopilot project - complete removal of intelligent aud
 132 " 🔵 Argus System Architecture: Backend Rust Gateway with Multi-Scanner Runtime
 133 " 🔵 CodeQL Isolated Scan Plan: C/C++ Compile Sandbox Integration
 135 8:34a ✅ Project documentation and agent knowledge reconciliation via neat-freak
+S16 neat-freak skill execution: reconcile project documentation with current codebase state regarding agentflow retirement (May 2, 8:54 AM)
+140 8:56a ✅ Clarified dual-sandbox responsibility separation in CodeQL architecture
 
 Access 826k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

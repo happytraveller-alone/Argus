@@ -138,7 +138,6 @@ fn retired_auxiliary_runtime_surface_is_removed() {
     for relative_path in [
         "docker-compose.yml",
         "scripts/release-templates/docker-compose.release-slim.yml",
-        "docker/env/backend/env.example",
         "frontend/tests/agentAuditToolEvidenceDialog.test.tsx",
         "frontend/tests/scanConfigExternalToolDetail.test.tsx",
         "frontend/tests/toolEvidenceRendering.test.tsx",

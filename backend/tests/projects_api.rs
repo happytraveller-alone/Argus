@@ -1087,6 +1087,78 @@ async fn project_file_content_reports_actual_encoding_instead_of_requested_encod
 }
 
 #[tokio::test]
+async fn project_file_content_previews_utf8_text_without_language_extension() {
+    let config = isolated_test_config("projects-file-content-text-detection");
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+    let project_id = create_project_named(&app, "text-detection-project").await;
+
+    let upload_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/zip"))
+                .header("content-type", "multipart/form-data; boundary=x-boundary")
+                .body(Body::from(test_mixed_text_zip_multipart_body()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_response.status(), StatusCode::OK);
+
+    for file_path in [
+        "Dockerfile",
+        ".env",
+        "config/app.yaml",
+        "package.json",
+        "LICENSE",
+        "README",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/projects/{project_id}/files/{file_path}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{file_path}");
+        let payload: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(payload["is_text"], true, "{file_path}");
+        assert!(
+            payload["content"].as_str().unwrap_or_default().len() > 0,
+            "{file_path}"
+        );
+    }
+
+    let binary_response = app
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/projects/{project_id}/files/assets/logo.png"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(binary_response.status(), StatusCode::OK);
+    let binary_payload: Value = serde_json::from_slice(
+        &to_bytes(binary_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(binary_payload["is_text"], false);
+    assert_eq!(binary_payload["content"], "");
+}
+
+#[tokio::test]
 async fn projects_domain_endpoints_cover_files_stats_and_transfer() {
     let source_config = isolated_test_config("projects-domain-source");
     let source_state = AppState::from_config(source_config.clone())
@@ -1511,6 +1583,39 @@ fn test_zip_bytes() -> Vec<u8> {
         writer.finish().unwrap();
     }
     bytes
+}
+
+fn test_mixed_text_zip_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let cursor = std::io::Cursor::new(&mut bytes);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::SimpleFileOptions::default();
+        for (path, content) in [
+            ("Dockerfile", b"FROM rust:1.75\n".as_slice()),
+            (".env", b"RUST_LOG=info\n"),
+            ("config/app.yaml", b"name: argus\n"),
+            ("package.json", b"{\"scripts\":{}}\n"),
+            ("LICENSE", b"MIT License\n"),
+            ("README", b"plain text without extension\n"),
+        ] {
+            writer.start_file(path, options).unwrap();
+            writer.write_all(content).unwrap();
+        }
+        writer.start_file("assets/logo.png", options).unwrap();
+        writer.write_all(b"\x89PNG\r\n\x1a\n\0binary").unwrap();
+        writer.finish().unwrap();
+    }
+    bytes
+}
+
+fn test_mixed_text_zip_multipart_body() -> Vec<u8> {
+    test_zip_multipart_bytes(vec![(
+        "file",
+        Some("mixed-text.zip"),
+        Some("application/zip"),
+        test_mixed_text_zip_bytes(),
+    )])
 }
 
 fn test_large_zip_bytes() -> Vec<u8> {

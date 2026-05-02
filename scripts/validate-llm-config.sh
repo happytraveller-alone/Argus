@@ -3,10 +3,9 @@ set -Eeuo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_ENV_FILE="$ROOT_DIR/.argus-intelligent-audit.env"
-TEMPLATE_FILE="$ROOT_DIR/.argus-intelligent-audit.env.example"
-SOURCE_TEMPLATE="$ROOT_DIR/docker/env/backend/env.example"
-ENV_FILE="${ARGUS_INTELLIGENT_AUDIT_ENV:-$DEFAULT_ENV_FILE}"
+DEFAULT_ENV_FILE="$ROOT_DIR/.env"
+TEMPLATE_FILE="$ROOT_DIR/env.example"
+ENV_FILE="${ARGUS_ENV_FILE:-$DEFAULT_ENV_FILE}"
 
 usage() {
   cat <<USAGE
@@ -60,22 +59,7 @@ ensure_template() {
   if [[ -f "$TEMPLATE_FILE" ]]; then
     return 0
   fi
-  if [[ -f "$SOURCE_TEMPLATE" ]]; then
-    cp "$SOURCE_TEMPLATE" "$TEMPLATE_FILE"
-    log "Created template: $TEMPLATE_FILE"
-    return 0
-  fi
-  cat > "$TEMPLATE_FILE" <<'ENV'
-SECRET_KEY=your-super-secret-key-change-this-in-production
-LLM_PROVIDER=openai_compatible
-LLM_API_KEY=sk-your-api-key
-LLM_MODEL=gpt-5
-LLM_BASE_URL=https://api.openai.com/v1
-AGENT_ENABLED=true
-AGENT_MAX_ITERATIONS=5
-AGENT_TIMEOUT=1800
-ENV
-  log "Created minimal template: $TEMPLATE_FILE"
+  fail "Root env template does not exist: $TEMPLATE_FILE"
 }
 
 read_env_value() {

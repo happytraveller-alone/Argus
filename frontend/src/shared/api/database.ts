@@ -314,6 +314,61 @@ function readBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function hasTextFileName(filePath: string): boolean {
+  const lowerPath = filePath.toLowerCase();
+  const fileName = lowerPath.split("/").filter(Boolean).pop() ?? lowerPath;
+  if (
+    [
+      "dockerfile",
+      "makefile",
+      "license",
+      "readme",
+      ".env",
+      ".gitignore",
+      ".dockerignore",
+      ".editorconfig",
+    ].includes(fileName)
+  ) {
+    return true;
+  }
+  return /\.(md|txt|jsonl?|ya?ml|toml|xml|html?|css|scss|sql|sh|bash|zsh|env|ini|conf|config|lock|csv|tsv)$/i.test(
+    lowerPath,
+  );
+}
+
+function hasBinaryFileName(filePath: string): boolean {
+  return /\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|tar|gz|tgz|xz|bz2|zst|7z|rar|jar|war|class|wasm|exe|dll|so|dylib|bin|dat|db|sqlite|mp[34]|mov|avi|webm|woff2?|ttf|otf)$/i.test(
+    filePath,
+  );
+}
+
+function inferProjectFileContentIsText(
+  filePath: string,
+  content: string,
+  encoding: string,
+): boolean {
+  if (/^(base64|binary)$/i.test(encoding)) {
+    return false;
+  }
+  if (content.includes("\0")) {
+    return false;
+  }
+  if (hasBinaryFileName(filePath)) {
+    return false;
+  }
+  if (hasTextFileName(filePath)) {
+    return true;
+  }
+  const characterCount = Math.max(content.length, 1);
+  const controlCount = Array.from(content).filter((character) => {
+    if (character === "\n" || character === "\r" || character === "\t" || character === "\f") {
+      return false;
+    }
+    return /[\u0000-\u001f\u007f-\u009f]/u.test(character);
+  }).length;
+  return controlCount * 100 <= characterCount * 5;
+}
+
 export function normalizeProjectFileContentResponse(
   payload: unknown,
   options?: ProjectFileContentResponseNormalizationOptions,
@@ -334,7 +389,8 @@ export function normalizeProjectFileContentResponse(
     readString(record.encoding) ??
     readString(record.charset) ??
     "utf-8";
-  const isText = readBoolean(record.is_text ?? record.isText);
+  const explicitIsText = record.is_text ?? record.isText;
+  const isText = readBoolean(explicitIsText);
   const size =
     readFiniteNumber(record.size) ??
     readFiniteNumber(record.file_size) ??
@@ -344,7 +400,7 @@ export function normalizeProjectFileContentResponse(
   if (!filePath || typeof content !== "string" || !encoding || size === null) {
     return null;
   }
-  if (typeof isText !== "boolean") {
+  if (explicitIsText !== undefined && typeof isText !== "boolean") {
     return null;
   }
 
@@ -353,7 +409,7 @@ export function normalizeProjectFileContentResponse(
     content,
     size,
     encoding,
-    is_text: isText,
+    is_text: isText ?? inferProjectFileContentIsText(filePath, content, encoding),
   };
 
   const isCached = readBoolean(record.is_cached);

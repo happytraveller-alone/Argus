@@ -13,13 +13,14 @@ This release branch keeps only the slim-source files required to run Argus. Reco
 ## Before You Start
 
 1. Make sure Docker Compose is installed and the Docker daemon is reachable.
-2. Fill `.argus-intelligent-audit.env`, or let `./argus-bootstrap.sh` create it interactively on first run.
+2. Keep the root `env.example`. On first run, if root `.env` does not exist, `./argus-bootstrap.sh` copies `env.example` to `.env`, tells you to fill it, and exits.
+3. Fill the LLM settings in `.env`, then run `./argus-bootstrap.sh` again. You can also run `./scripts/validate-llm-config.sh --env-file ./.env` first to confirm the LLM config.
 
-`argus-bootstrap.sh` calls `scripts/validate-llm-config.sh` before any Docker cleanup or startup action. If env/LLM validation fails, bootstrap exits and asks you to reconfigure.
+`argus-bootstrap.sh` calls `scripts/validate-llm-config.sh --env-file ./.env` before any Docker cleanup or startup action. If env/LLM validation fails, bootstrap exits and asks you to reconfigure.
 
 By default, Compose publishes the frontend on host port `13000` and the backend on `18000` to avoid collisions with common local development services on `3000` / `8000`. Set `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000` when starting the stack if you need the old host ports.
 
-The backend mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.
+The backend reads the root `.env` and mounts `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` so it can launch scan runners. This workspace can override it to `/run/docker-local.sock` through the local `.env`; set `DOCKER_SOCKET_PATH` as needed in other environments.
 
 ## Repo-local Codex / OMX
 

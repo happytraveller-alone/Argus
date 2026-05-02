@@ -10,13 +10,13 @@
 
 ## 2. 首次配置
 
-复制后端环境文件：
+保留根目录 `env.example`。如果根目录 `.env` 不存在，运行 bootstrap 会复制模板并退出：
 
 ```bash
-cp docker/env/backend/env.example docker/env/backend/.env
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
-打开 `docker/env/backend/.env`，至少填写以下配置：
+打开根目录 `.env`，至少填写以下配置：
 
 - `LLM_PROVIDER`
 - `LLM_API_KEY`
@@ -39,6 +39,12 @@ SECRET_KEY=change-this-to-a-random-string
 - `LLM_MODEL`：模型名称
 - `SECRET_KEY`：建议替换成你自己的随机字符串
 
+可先运行校验脚本确认 LLM 配置无误：
+
+```bash
+./scripts/validate-llm-config.sh --env-file ./.env
+```
+
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
 ## 3. 启动服务
@@ -46,7 +52,7 @@ SECRET_KEY=change-this-to-a-random-string
 推荐直接使用默认命令：
 
 ```bash
-docker compose up --build
+./argus-bootstrap.sh --wait-exit -- default
 ```
 
 首次启动会拉取镜像并初始化数据库，时间可能较长。

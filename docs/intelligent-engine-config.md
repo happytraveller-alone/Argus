@@ -8,25 +8,31 @@
 
 ## 启动与导入
 
-1. 复制专用智能审计环境文件：
-
-   ```bash
-   cp .argus-intelligent-audit.env.example .argus-intelligent-audit.env
-   ```
-
-2. 至少填写：
-   - `LLM_PROVIDER`：canonical provider，例如 `openai_compatible` 或 `anthropic_compatible`
-   - `LLM_API_KEY`
-   - `LLM_MODEL`
-   - `LLM_BASE_URL`
-
-3. 启动：
+1. 保留根目录 `env.example`。首次运行 bootstrap 时，如果根目录 `.env` 不存在，脚本会复制模板并退出：
 
    ```bash
    ./argus-bootstrap.sh --wait-exit -- default
    ```
 
-`argus-bootstrap.sh` 会先调用 `scripts/validate-llm-config.sh --env-file ./.argus-intelligent-audit.env` 校验 env/LLM 配置；缺文件、占位密钥、缺 `LLM_MODEL` / `LLM_BASE_URL` 等必填项、unsupported provider 或 backend import/test 失败都会中止启动并提示重新配置。Compose 会通过 `ARGUS_INTELLIGENT_AUDIT_ENV` 指定的 env file（默认 `./.argus-intelligent-audit.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
+2. 填写根目录 `.env`，至少包括：
+   - `LLM_PROVIDER`：canonical provider，例如 `openai_compatible` 或 `anthropic_compatible`
+   - `LLM_API_KEY`
+   - `LLM_MODEL`
+   - `LLM_BASE_URL`
+
+3. 可先校验 LLM 配置：
+
+   ```bash
+   ./scripts/validate-llm-config.sh --env-file ./.env
+   ```
+
+4. 校验通过后再次启动：
+
+   ```bash
+   ./argus-bootstrap.sh --wait-exit -- default
+   ```
+
+`argus-bootstrap.sh` 会先调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置；缺文件、占位密钥、缺 `LLM_MODEL` / `LLM_BASE_URL` 等必填项、unsupported provider 或 backend import/test 失败都会中止启动并提示重新配置。Compose 会通过 `ARGUS_ENV_FILE` 指定的 env file（默认 `./.env`）注入 backend。UI/API 不写回这个文件；启动导入只负责把环境里的初始 LLM 配置导入 system-config。
 
 ## API 契约
 

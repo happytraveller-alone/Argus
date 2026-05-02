@@ -451,7 +451,73 @@ fn is_probably_text(path: &str, bytes: &[u8]) -> bool {
     if bytes.contains(&0) {
         return false;
     }
-    detect_language(path).is_some() || path.ends_with(".md") || path.ends_with(".txt")
+    if detect_language(path).is_some() || is_known_text_path(path) {
+        return true;
+    }
+    looks_like_utf8_text(bytes)
+}
+
+fn is_known_text_path(path: &str) -> bool {
+    let lower_path = path.to_ascii_lowercase();
+    let file_name = Path::new(&lower_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+
+    matches!(
+        file_name,
+        "dockerfile"
+            | "makefile"
+            | "license"
+            | "readme"
+            | ".env"
+            | ".gitignore"
+            | ".dockerignore"
+            | ".editorconfig"
+    ) || matches!(
+        Path::new(&lower_path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default(),
+        "md" | "txt"
+            | "json"
+            | "jsonl"
+            | "yaml"
+            | "yml"
+            | "toml"
+            | "xml"
+            | "html"
+            | "css"
+            | "scss"
+            | "sql"
+            | "sh"
+            | "bash"
+            | "zsh"
+            | "env"
+            | "ini"
+            | "conf"
+            | "config"
+            | "lock"
+            | "csv"
+            | "tsv"
+    )
+}
+
+fn looks_like_utf8_text(bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return true;
+    }
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let control_count = text
+        .chars()
+        .filter(|character| {
+            character.is_control() && !matches!(*character, '\n' | '\r' | '\t' | '\x0c')
+        })
+        .count();
+    let char_count = text.chars().count().max(1);
+    control_count * 100 <= char_count * 5
 }
 
 fn detect_language(path: &str) -> Option<&'static str> {

@@ -40,9 +40,8 @@ jobs:
             release_carrying:
               - 'backend/**'
               - 'frontend/**'
+              - 'env.example'
               - 'docker/frontend.Dockerfile'
-              - 'docker/env/backend/env.example'
-              - 'docker/env/frontend/.env.example'
               - 'LICENSE'
               - 'scripts/generate-release-branch.sh'
               - 'scripts/release-allowlist.txt'

@@ -30,8 +30,9 @@
 
 ### CodeQL compile sandbox
 
-- **是什么**：2026-05-01 新增的 CodeQL C/C++ 建库前置沙箱。它运行 `docker/codeql-compile-sandbox.sh`，在隔离 runner 内探索 C/C++ build command，验证命令安全边界，输出 events/summary/plan/evidence，并把 accepted build plan 持久化为 DB/task-state 真源。随后 `docker/codeql-scan.sh` 在 `codeql database create` 阶段重放该命令。真实 CodeQL CLI 会按 argv 拆分 `--command`，因此持久化命令必须避免 shell-only 复合语法；Makefile 自动路径固定为 `make -B -j2`，CMake 路径先 configure 后重放 `cmake --build ...`。
+- **是什么**：2026-05-01 新增的 CodeQL C/C++ 建库前置沙箱，是双沙箱架构的第一阶段。它运行 `docker/codeql-compile-sandbox.sh`，在隔离 runner 内探索 C/C++ build command，验证命令安全边界，输出 events/summary/plan/evidence，并把 accepted build plan 持久化为 `rust_codeql_build_plans` 表真源。随后 CodeQL 扫描沙箱（`docker/codeql-scan.sh`）从 DB 读取 plan，在 `codeql database create` 阶段重放该命令。真实 CodeQL CLI 会按 argv 拆分 `--command`，因此持久化命令必须避免 shell-only 复合语法；Makefile 自动路径固定为 `make -B -j2`，CMake 路径先 configure 后重放 `cmake --build ...`。
 - **不是什么**：通用 CI/CD 构建平台，也不是把完整 build artifacts 直接喂给 CodeQL 的捷径；artifacts/evidence/cache 只能用于诊断和缓存信号。
+- **双沙箱数据流**：编译沙箱 → build plan 候选 → 后端验证 → DB 持久化 → CodeQL 扫描沙箱读取 → 重放构建 → 生成数据库 → 扫描。
 - **主要入口**：`backend/src/scan/codeql.rs`、`backend/src/routes/static_tasks.rs`、`backend/src/db/codeql_build_plans.rs`、`docker/codeql-compile-sandbox.sh`、`docker/test-codeql-diagnostics.sh`、`SCANNER_CODEQL_COMPILE_SANDBOX_IMAGE`。
 
 ### 智能审计
@@ -92,9 +93,9 @@
 
 ## 配置与运行术语
 
-### `.argus-intelligent-audit.env`
+### `.env`
 
-- **是什么**：智能引擎/LLM 配置的启动导入文件。`argus-bootstrap.sh` 和相关测试仍围绕该文件生成/校验配置，backend 启动导入后以 system-config 为运行时真源。
+- **是什么**：根目录运行时环境文件。`argus-bootstrap.sh` 首次运行会从根目录 `env.example` 复制生成它；后续启动前会校验其中的 LLM 配置，并在 backend 启动后导入 system-config。
 - **不是什么**：UI 写回目标；前端保存配置只写 system-config，不直接修改这个文件。
 
 ### repo-local Codex / OMX

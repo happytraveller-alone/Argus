@@ -15,13 +15,14 @@
 ## 启动前准备
 
 1. 确保本机已安装 Docker Compose，并且 Docker daemon 可访问。
-2. 填写 `.argus-intelligent-audit.env` 中的 LLM 配置，或首次运行 `./argus-bootstrap.sh` 时按提示生成。
+2. 保留根目录 `env.example`。首次运行 `./argus-bootstrap.sh` 时，如果根目录 `.env` 不存在，脚本会复制 `env.example` 为 `.env`，提示你填写配置后退出。
+3. 填写 `.env` 中的 LLM 配置后，再次运行 `./argus-bootstrap.sh`；也可以先运行 `./scripts/validate-llm-config.sh --env-file ./.env` 确认 LLM 配置无误。
 
-`argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
+`argus-bootstrap.sh` 会在任何 Docker 清理或启动动作前调用 `scripts/validate-llm-config.sh --env-file ./.env` 校验 env/LLM 配置。校验失败时脚本会退出并提示重新配置。
 
 默认情况下，Compose 会把前端发布到宿主机 `13000` 端口、后端发布到 `18000` 端口，以避免和常见本地开发服务的 `3000` / `8000` 端口冲突。如需恢复旧端口，启动时设置 `Argus_FRONTEND_PORT=3000 Argus_BACKEND_PORT=8000`。
 
-后端会把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。
+后端会读取根目录 `.env`，并把 `${DOCKER_SOCKET_PATH:-/var/run/docker.sock}` 挂载给扫描 runner。本工作区的本地 `.env` 可将它覆盖为 `/run/docker-local.sock`；其他环境按需设置 `DOCKER_SOCKET_PATH`。
 
 ## Repo-local Codex / OMX
 

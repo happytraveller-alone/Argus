@@ -123,10 +123,10 @@ validate_release_tree() {
     "README.md"
     "README_EN.md"
     "docker-compose.yml"
+    "env.example"
 
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"
-    "docker/env/backend/env.example"
     "backend/Cargo.toml"
     "backend/Cargo.lock"
     "backend/src/main.rs"

@@ -4,7 +4,11 @@
 >
 > 2026-04-30 实施补充：CodeQL 隔离扫描已进入基础实施阶段：后端已有 `engine="codeql"` 静态任务骨架、`rules_codeql` 查询资产发现、独立 `codeql-runner` 镜像/脚本和 SARIF 解析基础。它仍不是完整首版；五类语言端到端全绿前只能称为里程碑基础能力。
 >
-> 2026-05-01 CodeQL 编译沙箱切片：当前已新增 C/C++ 专用 compile sandbox 闭环。该切片先运行 `codeql-compile-sandbox` 探索并验证 C/C++ 构建命令，把 accepted build plan / fingerprint / evidence index 持久化为 DB/task-state 真源，再让 `codeql-scan` 在 `database create` 阶段重放该命令。Artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL 捕获；JS/TS、Python、Java、Go 仍是后续里程碑，不阻塞这个 C/C++ 切片。
+> 2026-05-01 CodeQL 双沙箱切片：当前已新增 C/C++ 专用双沙箱闭环。该切片使用两个独立沙箱：
+> 1. **编译沙箱** (`codeql-compile-sandbox`)：探索并验证 C/C++ 构建命令，把 accepted build plan / fingerprint / evidence index 持久化为 DB (`rust_codeql_build_plans` 表) 真源
+> 2. **CodeQL 扫描沙箱** (`codeql-scan`)：从 DB 读取 build plan，在 `database create` 阶段重放该命令，生成 CodeQL 数据库并执行扫描
+> 
+> Build recipe 必须是 CodeQL `database create --command` 可按 argv 拆分重放的简单命令（例如 Makefile 使用 `make -B -j2`），不依赖 shell-only `${...}` 展开、`||`、`;` 或管道语法；CMake 由编译沙箱先 configure，再持久化 `cmake --build ...` 重放命令。Artifacts/evidence/cache 只作诊断与缓存信号，不替代 CodeQL 捕获。JS/TS、Python、Java、Go 仍是后续里程碑，不阻塞这个 C/C++ 切片。
 >
 > 2026-05-02 智能审计过渡状态：当前 Rust gateway 不再挂载 `/api/v1/agent-tasks`，`backend/src/runtime/mod.rs` 也不再导出 `runtime/agentflow`；前端 `/agent-audit/:taskId` 已改为 `InDevelopmentPlaceholder` 占位。`vendor/agentflow-src/` 删除已提交但尚未推送；`backend/agentflow/` 仅保留历史 pipeline/schema/fixture 资产，`/api/v1/system-config/agent-preflight` 仍作为 LLM 配置与 runner readiness 门禁存在。不要把保留的历史资产写成 AgentFlow 执行链已重新接入。
 
@@ -34,7 +38,24 @@ Argus 是一个以 `Project` 为中心的代码安全审计工作台。
 
 ### 静态审计
 
-当前稳定静态审计主线仍是 **Opengrep**。CodeQL 隔离扫描已有基础骨架：`StaticTaskRecord.engine` 可分流 `codeql`，查询资产位于 `backend/assets/scan_rule_assets/rules_codeql`，runner 使用 `docker/codeql-runner.Dockerfile` + `docker/codeql-scan.sh`，SARIF 解析映射到现有静态 finding 形态。2026-05-01 的当前可执行切片只承诺 C/C++ compile-sandbox 闭环：先由 `docker/codeql-compile-sandbox.sh` 在隔离 runner 中发现/验证 build recipe 并持久化，再由 CodeQL runner 重放 recipe 建库。该 build recipe 必须是 CodeQL `database create --command` 可按 argv 拆分重放的简单命令（例如 Makefile 路径使用 `make -B -j2`），不要依赖 shell-only `${...}` 默认展开、`||`、`;` 或管道语法；需要 CMake 时由编译沙箱先完成 configure，再持久化 `cmake --build ...` 重放命令。CodeQL 五类语言端到端全绿前，不得标记为完整首版完成。
+当前稳定静态审计主线仍是 **Opengrep**。CodeQL 隔离扫描已有基础骨架：`StaticTaskRecord.engine` 可分流 `codeql`，查询资产位于 `backend/assets/scan_rule_assets/rules_codeql`。
+
+**CodeQL 双沙箱架构**（2026-05-01 C/C++ 切片）：
+
+1. **编译沙箱** (`docker/codeql-compile-sandbox.sh`)：
+   - 探索项目构建系统（Makefile、CMake 等）
+   - 验证候选构建命令的安全性
+   - 在沙箱内执行验证通过的构建命令
+   - 输出 build plan 候选、事件流、构建证据
+   - 后端持久化 accepted build plan 到 `rust_codeql_build_plans` 表（运行时真源）
+
+2. **CodeQL 扫描沙箱** (`docker/codeql-scan.sh`)：
+   - 从 DB 读取已固化的 build plan
+   - 使用 CodeQL 编译器在 `database create` 阶段重放构建
+   - 生成 CodeQL 查询数据库
+   - 执行扫描并输出 SARIF 结果
+
+SARIF 解析映射到现有静态 finding 形态。当前可执行切片只承诺 C/C++ 闭环；CodeQL 五类语言端到端全绿前，不得标记为完整首版完成。
 
 - 后端路由：`backend/src/routes/static_tasks.rs`
 - 前端 API：`frontend/src/shared/api/opengrep.ts`

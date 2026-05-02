@@ -6,9 +6,8 @@ const { spawnSync } = require('child_process');
 const frontendDir = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(frontendDir, '..');
 const dockerSetupScript = path.join(frontendDir, 'scripts', 'run-in-dev-container.sh');
-const envDir = path.join(repoRoot, 'backend', 'docker', 'env', 'frontend');
-const envExamplePath = path.join(envDir, '.env.example');
-const envPath = path.join(envDir, '.env');
+const envExamplePath = path.join(repoRoot, 'env.example');
+const envPath = path.join(repoRoot, '.env');
 
 function run(command, args, cwd = frontendDir) {
   const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
@@ -23,10 +22,9 @@ function hasCommand(command, args = ['--version']) {
 }
 
 function ensureEnvFile() {
-  fs.mkdirSync(envDir, { recursive: true });
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, envPath);
-    console.log('已从 backend/docker/env/frontend/.env.example 创建 backend/docker/env/frontend/.env');
+    console.log('已从根目录 env.example 创建 .env');
   }
 }
 

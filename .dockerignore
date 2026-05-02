@@ -12,8 +12,6 @@ dist
 # 环境变量（保留 .env 用于构建）
 .env.local
 .env.*.local
-docker/env/backend/.env
-docker/env/frontend/.env
 
 # 日志
 logs

@@ -36,12 +36,12 @@ test("normalizeProjectFileContentResponse normalizes variant payloads to a stabl
 	});
 });
 
-test("normalizeProjectFileContentResponse returns null when is_text is missing or invalid", async () => {
+test("normalizeProjectFileContentResponse infers text when is_text is missing from textual payloads", async () => {
 	const database = await importOrFail<any>("../src/shared/api/database.ts");
 
 	const missingIsText = database.normalizeProjectFileContentResponse({
-		file_path: "src/main.ts",
-		content: "const x = 1;",
+		file_path: "Dockerfile",
+		content: "FROM node:22\n",
 		size: 13,
 		encoding: "utf-8",
 	});
@@ -53,11 +53,17 @@ test("normalizeProjectFileContentResponse returns null when is_text is missing o
 		is_text: "yes",
 	});
 
-	assert.equal(missingIsText, null);
+	assert.deepEqual(missingIsText, {
+		file_path: "Dockerfile",
+		content: "FROM node:22\n",
+		size: 13,
+		encoding: "utf-8",
+		is_text: true,
+	});
 	assert.equal(invalidIsText, null);
 });
 
-test("normalizeProjectFileContentResponse treats binary-like payloads as non-highlightable without is_text", async () => {
+test("normalizeProjectFileContentResponse treats binary-like payloads as non-highlightable", async () => {
 	const database = await importOrFail<any>("../src/shared/api/database.ts");
 
 	const missingIsTextBinary = database.normalizeProjectFileContentResponse({
@@ -74,7 +80,13 @@ test("normalizeProjectFileContentResponse treats binary-like payloads as non-hig
 		is_text: false,
 	});
 
-	assert.equal(missingIsTextBinary, null);
+	assert.deepEqual(missingIsTextBinary, {
+		file_path: "assets/logo.png",
+		content: "AAECAwQ=",
+		size: 8,
+		encoding: "base64",
+		is_text: false,
+	});
 	assert.deepEqual(explicitBinary, {
 		file_path: "assets/logo.png",
 		content: "AAECAwQ=",
@@ -83,4 +95,3 @@ test("normalizeProjectFileContentResponse treats binary-like payloads as non-hig
 		is_text: false,
 	});
 });
-

@@ -15,7 +15,6 @@ use std::{
 const DEFAULT_VENV_PATH: &str = "/opt/backend-venv";
 const DEFAULT_APP_ROOT: &str = "/app";
 const DEFAULT_BACKEND_SERVER_BIN: &str = "/usr/local/bin/backend";
-const DEFAULT_BACKEND_DOCKER_ENV_DIR: &str = "/docker/env/backend";
 const LOCK_STAMP_FILENAME: &str = ".argus-dev-lock.sha256";
 const DEFAULT_PYPI_INDEX_CANDIDATES: &str = concat!(
     "https://mirrors.aliyun.com/pypi/simple/,",
@@ -433,34 +432,14 @@ pub fn sync_backend_env_if_needed(app_root: &Path) -> Result<()> {
 }
 
 pub fn ensure_backend_env_files(app_root: &Path) -> Result<()> {
-    let docker_env_dir = PathBuf::from(
-        env::var("BACKEND_DOCKER_ENV_DIR")
-            .unwrap_or_else(|_| DEFAULT_BACKEND_DOCKER_ENV_DIR.into()),
-    );
-    let docker_env_file = docker_env_dir.join(".env");
-    let docker_env_example = docker_env_dir.join("env.example");
     let app_env_file = app_root.join(".env");
 
-    let source_for_app_env = if docker_env_file.exists() {
-        Some(docker_env_file.clone())
-    } else if docker_env_example.exists() {
-        fs::create_dir_all(&docker_env_dir).context("create docker env dir")?;
-        fs::copy(&docker_env_example, &docker_env_file)
-            .context("bootstrap docker env from example")?;
+    if !app_env_file.exists() {
+        fs::write(&app_env_file, b"").context("prepare backend app env file")?;
         println!(
-            "Bootstrapped backend Docker env from template: {}",
-            docker_env_file.display()
+            "Prepared empty backend app env file: {}",
+            app_env_file.display()
         );
-        Some(docker_env_file.clone())
-    } else {
-        None
-    };
-
-    if let Some(source) = source_for_app_env {
-        if !app_env_file.exists() {
-            fs::copy(source, &app_env_file).context("prepare backend app env file")?;
-            println!("Prepared backend app env file: {}", app_env_file.display());
-        }
     }
 
     Ok(())
