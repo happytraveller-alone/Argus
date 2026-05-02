@@ -20,6 +20,15 @@ CUBE_TEMPLATE_IMAGE="${CUBE_TEMPLATE_IMAGE:-ccr.ccs.tencentyun.com/ags-image/san
 CUBE_TEMPLATE_WRITABLE_LAYER_SIZE="${CUBE_TEMPLATE_WRITABLE_LAYER_SIZE:-1G}"
 CUBE_TEMPLATE_ID="${CUBE_TEMPLATE_ID:-}"
 CUBE_PYTHON_CODE="${CUBE_PYTHON_CODE:-print('Hello from Cube Sandbox, safely isolated!')}"
+CUBE_DOCKER_REGISTRY_MIRROR_URL="${CUBE_DOCKER_REGISTRY_MIRROR_URL:-https://docker.m.daocloud.io}"
+CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX="${CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX:-m.daocloud.io/docker.io}"
+CUBE_LOCAL_REGISTRY_IMAGE="${CUBE_LOCAL_REGISTRY_IMAGE:-${CUBE_DOCKERHUB_MIRROR_IMAGE_PREFIX}/library/registry:2}"
+CUBE_LOCAL_REGISTRY_NAME="${CUBE_LOCAL_REGISTRY_NAME:-cube-local-registry}"
+CUBE_LOCAL_REGISTRY_PORT="${CUBE_LOCAL_REGISTRY_PORT:-5000}"
+CUBE_CODEQL_VERSION="${CUBE_CODEQL_VERSION:-2.20.5}"
+CUBE_CODEQL_BUNDLE_URL="${CUBE_CODEQL_BUNDLE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CUBE_CODEQL_VERSION}/codeql-bundle-linux64.tar.zst}"
+CUBE_CODEQL_CPP_IMAGE="${CUBE_CODEQL_CPP_IMAGE:-127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/cubesandbox-codeql-cpp:latest}"
+CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE="${CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE:-4G}"
 CUBE_RELEASE_VERSION="${CUBE_RELEASE_VERSION:-v0.1.2}"
 CUBE_RELEASE_ASSET="${CUBE_RELEASE_ASSET:-cube-sandbox-one-click-aa8d642.tar.gz}"
 CUBE_RELEASE_URL="${CUBE_RELEASE_URL:-${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/${CUBE_RELEASE_VERSION}/${CUBE_RELEASE_ASSET}}"
@@ -38,10 +47,15 @@ Usage:
   scripts/cubesandbox-quickstart.sh run-vm-background
   scripts/cubesandbox-quickstart.sh login
   scripts/cubesandbox-quickstart.sh install
+  scripts/cubesandbox-quickstart.sh configure-docker-mirror
+  scripts/cubesandbox-quickstart.sh start-local-registry
   scripts/cubesandbox-quickstart.sh create-template
+  scripts/cubesandbox-quickstart.sh build-codeql-cpp-image
+  scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
   scripts/cubesandbox-quickstart.sh watch-template <job_id>
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh python-smoke
   CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh cc-smoke
+  CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh codeql-cpp-smoke
   scripts/cubesandbox-quickstart.sh status
 
 Defaults avoid Argus's frontend port:
@@ -280,6 +294,10 @@ EOF
   return "$ssh_status"
 }
 
+shell_quote() {
+  printf '%q' "$1"
+}
+
 install_cube() {
   local install_cmd
   if [[ "${CUBE_MIRROR:-}" == "cn" ]]; then
@@ -292,6 +310,114 @@ install_cube() {
 
 create_template() {
   remote_root "cubemastercli tpl create-from-image --image '$CUBE_TEMPLATE_IMAGE' --writable-layer-size '$CUBE_TEMPLATE_WRITABLE_LAYER_SIZE' --expose-port 49999 --expose-port 49983 --probe 49999"
+}
+
+configure_docker_mirror() {
+  local mirror_q
+  mirror_q="$(shell_quote "$CUBE_DOCKER_REGISTRY_MIRROR_URL")"
+  remote_root "$(cat <<REMOTE
+set -Eeuo pipefail
+mkdir -p /etc/docker
+if [[ -f /etc/docker/daemon.json ]]; then
+  cp /etc/docker/daemon.json "/etc/docker/daemon.json.bak.\$(date +%s)"
+fi
+python3 - ${mirror_q} <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path("/etc/docker/daemon.json")
+data = {}
+if path.exists() and path.read_text().strip():
+    data = json.loads(path.read_text())
+mirror = sys.argv[1]
+mirrors = data.get("registry-mirrors", [])
+if mirror not in mirrors:
+    mirrors.insert(0, mirror)
+data["registry-mirrors"] = mirrors
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\\n")
+print(path.read_text(), end="")
+PY
+systemctl restart docker
+sleep 3
+docker info 2>/dev/null | sed -n '/Registry Mirrors:/,/Live Restore Enabled:/p'
+REMOTE
+)"
+}
+
+start_local_registry() {
+  local image_q name_q port_q
+  image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
+  name_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_NAME")"
+  port_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_PORT")"
+  remote_root "$(cat <<REMOTE
+set -Eeuo pipefail
+docker pull ${image_q}
+docker rm -f ${name_q} >/dev/null 2>&1 || true
+docker run -d --restart unless-stopped --name ${name_q} -p ${port_q}:5000 ${image_q}
+sleep 2
+curl -fsS "http://127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/v2/" >/dev/null
+printf '%s\\n' "LOCAL_REGISTRY_OK http://127.0.0.1:${CUBE_LOCAL_REGISTRY_PORT}/v2/"
+REMOTE
+)"
+}
+
+build_codeql_cpp_image() {
+  local image_q bundle_url_q registry_image_q
+  image_q="$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")"
+  bundle_url_q="$(shell_quote "$CUBE_CODEQL_BUNDLE_URL")"
+  registry_image_q="$(shell_quote "$CUBE_LOCAL_REGISTRY_IMAGE")"
+  remote_root "$(cat <<REMOTE
+set -Eeuo pipefail
+mkdir -p /root/cubesandbox-codeql-cpp-build
+cd /root/cubesandbox-codeql-cpp-build
+cat > Dockerfile <<'DOCKERFILE'
+FROM ${CUBE_LOCAL_REGISTRY_IMAGE} AS dockerhub_mirror_probe
+FROM ccr.ccs.tencentyun.com/ags-image/sandbox-code:latest
+
+ENV CODEQL_DIST_DIR=/opt/codeql
+ENV PATH=/opt/codeql/codeql:\${PATH}
+
+RUN set -eux; \\
+    mkdir -p /etc/apt/disabled-sources.list.d; \\
+    find /etc/apt/sources.list.d -maxdepth 1 -type f \\( -name '*cran*' -o -name '*r-project*' -o -name '*nodesource*' \\) -exec mv {} /etc/apt/disabled-sources.list.d/ \\; 2>/dev/null || true; \\
+    if [ -f /etc/apt/sources.list ]; then \\
+      sed -i \\
+        -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
+        -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
+        -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
+        -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
+        /etc/apt/sources.list; \\
+    fi; \\
+    find /etc/apt/sources.list.d -type f \\( -name '*.list' -o -name '*.sources' \\) -print0 2>/dev/null | xargs -0 -r sed -i \\
+      -e 's#http://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
+      -e 's#https://deb.debian.org/debian#https://mirrors.aliyun.com/debian#g' \\
+      -e 's#http://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g' \\
+      -e 's#https://security.debian.org/debian-security#https://mirrors.aliyun.com/debian-security#g'; \\
+    grep -R "URIs:\\|^deb " /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true; \\
+    apt-get update; \\
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
+      ca-certificates curl zstd xz-utils cmake make gcc g++ git bash file; \\
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \\
+    mkdir -p "\${CODEQL_DIST_DIR}"; \\
+    curl -fL "${CUBE_CODEQL_BUNDLE_URL}" -o /tmp/codeql-bundle.tar.zst; \\
+    tar --use-compress-program=unzstd -xf /tmp/codeql-bundle.tar.zst -C "\${CODEQL_DIST_DIR}"; \\
+    rm -f /tmp/codeql-bundle.tar.zst; \\
+    codeql version; \\
+    codeql resolve languages
+DOCKERFILE
+
+docker pull ${registry_image_q}
+DOCKER_BUILDKIT=0 docker build --pull=false -t ${image_q} .
+docker push ${image_q}
+REMOTE
+)"
+}
+
+create_codeql_cpp_template() {
+  remote_root "cubemastercli tpl create-from-image --image '$(shell_quote "$CUBE_CODEQL_CPP_IMAGE")' --writable-layer-size '$(shell_quote "$CUBE_CODEQL_CPP_WRITABLE_LAYER_SIZE")' --expose-port 49999 --expose-port 49983 --probe 49999"
 }
 
 watch_template() {
@@ -345,6 +471,85 @@ PY
 )" python_smoke
 }
 
+codeql_cpp_smoke() {
+  CUBE_PYTHON_CODE="$(cat <<'PY'
+import pathlib
+import subprocess
+
+def run(cmd, cwd=None, shell=False):
+    print("$", cmd if isinstance(cmd, str) else " ".join(cmd))
+    out = subprocess.check_output(
+        cmd,
+        cwd=cwd,
+        shell=shell,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=240,
+    )
+    if out.strip():
+        print(out.strip())
+    return out
+
+for cmd in [
+    ["gcc", "--version"],
+    ["g++", "--version"],
+    ["make", "--version"],
+    ["cmake", "--version"],
+    ["codeql", "version"],
+]:
+    out = run(cmd)
+    print("VERSION_OK", cmd[0], out.splitlines()[0])
+
+work = pathlib.Path("/tmp/cube-codeql-cpp-smoke")
+if work.exists():
+    subprocess.run(["rm", "-rf", str(work)], check=True)
+work.mkdir()
+
+(work / "hello.c").write_text(
+    '#include <stdio.h>\nint main(void){ printf("C_OK:%d\\n", 6*7); return 0; }\n'
+)
+run(["gcc", "hello.c", "-o", "hello_c"], cwd=work)
+print(run(["./hello_c"], cwd=work).strip())
+
+(work / "CMakeLists.txt").write_text(
+    "cmake_minimum_required(VERSION 3.16)\n"
+    "project(cube_codeql_cpp LANGUAGES CXX)\n"
+    "add_executable(cube_cpp main.cpp)\n"
+)
+(work / "main.cpp").write_text(
+    '#include <iostream>\n'
+    '#include <vector>\n'
+    'int main(){ std::vector<int> v{1,2,3,4}; int s=0; '
+    'for(int x:v) s+=x; std::cout << "CPP_OK:" << s << "\\n"; return 0; }\n'
+)
+(work / "Makefile").write_text(
+    "make_cpp: main.cpp\n\tg++ -std=c++17 main.cpp -o make_cpp\n"
+)
+run(["make", "make_cpp"], cwd=work)
+print(run(["./make_cpp"], cwd=work).strip())
+run(["cmake", "-S", ".", "-B", "build"], cwd=work)
+run(["cmake", "--build", "build"], cwd=work)
+print(run(["./build/cube_cpp"], cwd=work).strip())
+run(["rm", "-rf", "build", "codeql-db"], cwd=work)
+run(["cmake", "-S", ".", "-B", "build"], cwd=work)
+run(
+    [
+        "codeql",
+        "database",
+        "create",
+        "codeql-db",
+        "--language=cpp",
+        "--command",
+        "cmake --build build",
+        "--overwrite",
+    ],
+    cwd=work,
+)
+print("CODEQL_DB_OK", (work / "codeql-db").exists())
+PY
+)" python_smoke
+}
+
 status() {
   if curl -fsS --max-time 5 "http://127.0.0.1:${CUBE_API_PORT}/health" >/dev/null; then
     log "CubeSandbox API is healthy on http://127.0.0.1:${CUBE_API_PORT}"
@@ -387,9 +592,25 @@ case "$cmd" in
     no_extra_args "${@:2}"
     install_cube
     ;;
+  configure-docker-mirror)
+    no_extra_args "${@:2}"
+    configure_docker_mirror
+    ;;
+  start-local-registry)
+    no_extra_args "${@:2}"
+    start_local_registry
+    ;;
   create-template)
     no_extra_args "${@:2}"
     create_template
+    ;;
+  build-codeql-cpp-image)
+    no_extra_args "${@:2}"
+    build_codeql_cpp_image
+    ;;
+  create-codeql-cpp-template)
+    no_extra_args "${@:2}"
+    create_codeql_cpp_template
     ;;
   watch-template)
     shift
@@ -402,6 +623,10 @@ case "$cmd" in
   cc-smoke)
     no_extra_args "${@:2}"
     cc_smoke
+    ;;
+  codeql-cpp-smoke)
+    no_extra_args "${@:2}"
+    codeql_cpp_smoke
     ;;
   status)
     no_extra_args "${@:2}"

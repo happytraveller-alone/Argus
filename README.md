@@ -31,15 +31,16 @@
 - 项目级 agent 指令由 `AGENTS.md` 统一承载；repo-local skills 从 `.codex/skills/` 加载。里程碑收尾可使用 `neat-freak` 同步项目文档与 agent 知识。
 - `.gitignore` 会忽略 `.codex/`；如果需要让其他环境复用某个本地 skill，请重新安装该 skill 或显式调整版本控制策略。
 
-## CubeSandbox Python 试运行
+## CubeSandbox Python / C++ / CodeQL 试运行
 
-CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++ smoke。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像。
+CubeSandbox 需要 WSL2 原生 KVM/QEMU，并通过独立开发 VM 跑 E2B-compatible API；它不属于 Argus 默认 compose 主线，也不再通过 Docker helper 容器运行 QEMU。按 [docs/cubesandbox-python-quickstart.md](docs/cubesandbox-python-quickstart.md) 使用 `scripts/cubesandbox-quickstart.sh` 配置和运行 Python、C、C++、Make、CMake、CodeQL smoke。脚本默认把 CubeSandbox API 转发到 `127.0.0.1:23000`，避免占用 Argus 前端默认端口 `13000`；所有 GitHub 地址默认走 `https://v6.gh-proxy.org/https://github.com/...` 镜像，Docker Hub 镜像可显式替换为 `m.daocloud.io/docker.io/...`。
 
 ## GHCR 镜像命名
 
 - GHCR 镜像地址格式是 `ghcr.io/<GitHub用户或组织>/<image>:<tag>`。
 - `audittool` 是仓库名，不是 GHCR owner；默认镜像前缀使用当前仓库 owner `happytraveller-alone`。
 - `.github/workflows/docker-publish.yml` 统一处理 backend、frontend、OpenGrep runner 和 CodeQL runner 容器镜像的构建与发布。
+- OpenGrep runner 发布时显式使用 OCI image media types；本地 `runner-build` / `rebuild-opengrep-runner-verify.sh` 仍使用 Docker daemon 本地镜像路径验证运行能力。
 - GitHub Actions 默认会把 GHCR 包设为 public，并验证匿名拉取。
 - 人工触发的多镜像发布也统一通过 `.github/workflows/docker-publish.yml` 选择需要构建的镜像。
 

@@ -1,5 +1,6 @@
 const ROOT_COMPOSE: &str = include_str!("../../docker-compose.yml");
 const BACKEND_DOCKERFILE: &str = include_str!("../../docker/backend.Dockerfile");
+const DOCKER_PUBLISH_WORKFLOW: &str = include_str!("../../.github/workflows/docker-publish.yml");
 const OPENGREP_RUNNER_DOCKERFILE: &str = include_str!("../../docker/opengrep-runner.Dockerfile");
 const OPENGREP_REBUILD_VERIFY_SCRIPT: &str =
     include_str!("../../scripts/rebuild-opengrep-runner-verify.sh");
@@ -89,6 +90,24 @@ fn opengrep_runner_packages_only_unified_rule_root() {
     assert!(
         !OPENGREP_RUNNER_DOCKERFILE.contains("rules_from_patches"),
         "opengrep runner image must not reference the retired rules_from_patches root"
+    );
+}
+
+#[test]
+fn opengrep_runner_publish_uses_oci_image_media_types() {
+    assert!(
+        DOCKER_PUBLISH_WORKFLOW.contains(
+            "\"outputs\": \"type=image,push=true,oci-mediatypes=true\""
+        ),
+        "opengrep runner publish matrix must export an OCI image container instead of relying on Docker media defaults"
+    );
+    assert!(
+        DOCKER_PUBLISH_WORKFLOW.contains("outputs: ${{ matrix.outputs }}"),
+        "docker-publish workflow must pass per-image exporter settings to buildx"
+    );
+    assert!(
+        DOCKER_PUBLISH_WORKFLOW.contains("push: ${{ matrix.outputs == '' }}"),
+        "images without explicit exporter settings should keep the normal build-push-action push path"
     );
 }
 

@@ -110,7 +110,35 @@ Check the API health through the Argus-safe forwarded port:
 scripts/cubesandbox-quickstart.sh status
 ```
 
-## 4. Create the Python Code Template
+## 4. Configure Docker Mirrors in the VM
+
+Configure the VM Docker daemon to prefer DaoCloud for Docker Hub traffic:
+
+```bash
+scripts/cubesandbox-quickstart.sh configure-docker-mirror
+```
+
+The helper writes `/etc/docker/daemon.json` with:
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io"
+  ]
+}
+```
+
+For image references that must bypass Docker's transparent registry mirror
+behavior, use the explicit Docker Hub replacement form:
+
+```text
+m.daocloud.io/docker.io/<namespace>/<image>:<tag>
+```
+
+The helper uses that explicit form for the local registry image:
+`m.daocloud.io/docker.io/library/registry:2`.
+
+## 5. Create the Python Code Template
 
 ```bash
 scripts/cubesandbox-quickstart.sh create-template
@@ -124,7 +152,7 @@ scripts/cubesandbox-quickstart.sh watch-template <job_id>
 
 Record the printed `template_id`.
 
-## 5. Run Python in CubeSandbox
+## 6. Run Python in CubeSandbox
 
 ```bash
 CUBE_TEMPLATE_ID=<template_id> scripts/cubesandbox-quickstart.sh python-smoke
@@ -146,7 +174,7 @@ CUBE_PYTHON_CODE="print(sum(range(10)))" \
 scripts/cubesandbox-quickstart.sh python-smoke
 ```
 
-## 6. Verify C/C++ Compilation in CubeSandbox
+## 7. Verify C/C++ Compilation in CubeSandbox
 
 The upstream `sandbox-code` image currently includes `gcc` and `g++`. Verify
 that the template can compile and run both C and C++ programs:
@@ -160,4 +188,76 @@ Expected sandbox stdout includes:
 ```text
 C_OK:42
 CPP_OK:10
+```
+
+## 8. Build a CMake/Make/CodeQL C++ Template
+
+The base Python template does not include `cmake` or `codeql`. Build a local
+CodeQL C++ image inside the CubeSandbox VM, push it to the VM-local registry,
+and create a CubeSandbox template from it:
+
+```bash
+scripts/cubesandbox-quickstart.sh configure-docker-mirror
+scripts/cubesandbox-quickstart.sh start-local-registry
+scripts/cubesandbox-quickstart.sh build-codeql-cpp-image
+scripts/cubesandbox-quickstart.sh create-codeql-cpp-template
+```
+
+`build-codeql-cpp-image` keeps Docker Hub references in explicit DaoCloud
+replacement form and rewrites Debian 13 apt sources to Aliyun mirrors inside
+the image build. It installs:
+
+- `gcc` / `g++`
+- `make`
+- `cmake`
+- `git`, `curl`, `zstd`, and related build utilities
+- CodeQL CLI from the mirrored GitHub bundle URL
+
+Defaults:
+
+- Local registry image: `m.daocloud.io/docker.io/library/registry:2`
+- Built image: `127.0.0.1:5000/cubesandbox-codeql-cpp:latest`
+- CodeQL bundle: `https://v6.gh-proxy.org/https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.20.5/codeql-bundle-linux64.tar.zst`
+- Writable layer size: `4G`
+
+Watch the printed `job_id` until the template reaches `READY`:
+
+```bash
+scripts/cubesandbox-quickstart.sh watch-template <job_id>
+```
+
+Verified local result on 2026-05-02:
+
+```text
+job_id: 6404e1a4-1749-4f31-94fd-85f7fe19295f
+template_id: tpl-a4d03d6bf9ac406e9fb6a457
+artifact_id: rfs-29298e35a03e8e46b702482c
+template_status: READY
+```
+
+Run the full C/C++/Make/CMake/CodeQL smoke:
+
+```bash
+CUBE_TEMPLATE_ID=tpl-a4d03d6bf9ac406e9fb6a457 \
+  scripts/cubesandbox-quickstart.sh codeql-cpp-smoke
+```
+
+The smoke verifies:
+
+- `gcc --version`
+- `g++ --version`
+- `make --version`
+- `cmake --version`
+- `codeql version`
+- C compile and run
+- C++ Makefile build and run
+- CMake configure/build and run
+- `codeql database create --language=cpp --command "cmake --build build"`
+
+Expected success markers include:
+
+```text
+C_OK:42
+CPP_OK:10
+CODEQL_DB_OK True
 ```

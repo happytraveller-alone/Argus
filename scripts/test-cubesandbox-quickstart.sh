@@ -39,9 +39,17 @@ assert_not_contains "$SCRIPT" "toolbox_run"
 assert_not_contains "$SCRIPT" "toolbox"
 assert_not_contains "$SCRIPT" "--toolbox"
 assert_contains "$SCRIPT" "https://v6.gh-proxy.org/"
+assert_contains "$SCRIPT" "https://docker.m.daocloud.io"
+assert_contains "$SCRIPT" "m.daocloud.io/docker.io"
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox.git'
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/TencentCloud/CubeSandbox/releases/download/'
 assert_contains "$SCRIPT" '${CUBE_GITHUB_MIRROR_PREFIX}https://github.com/tencentcloud/CubeSandbox/raw/master/deploy/one-click/online-install.sh'
+assert_contains "$SCRIPT" "configure-docker-mirror"
+assert_contains "$SCRIPT" "build-codeql-cpp-image"
+assert_contains "$SCRIPT" "create-codeql-cpp-template"
+assert_contains "$SCRIPT" "codeql-cpp-smoke"
+assert_contains "$SCRIPT" "mirrors.aliyun.com/debian"
+assert_contains "$SCRIPT" "CODEQL_DB_OK"
 
 set +e
 "$SCRIPT" prepare-vm --toolbox >"$help_out" 2>&1
@@ -51,5 +59,9 @@ set -e
 assert_contains "$help_out" "unexpected extra argument(s): --toolbox"
 
 assert_contains "$DOC" "WSL2"
+assert_contains "$DOC" "m.daocloud.io/docker.io"
+assert_contains "$DOC" "configure-docker-mirror"
+assert_contains "$DOC" "codeql-cpp-smoke"
+assert_contains "$DOC" "tpl-a4d03d6bf9ac406e9fb6a457"
 assert_not_contains "$DOC" "toolbox"
 assert_not_contains "$DOC" "--toolbox"
